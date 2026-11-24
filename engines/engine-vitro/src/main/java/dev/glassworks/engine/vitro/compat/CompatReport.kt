@@ -61,18 +61,44 @@ object CompatChecker {
         return CompatReport(out)
     }
 
-    /** [holdsGenerated]: [card] is auto-entities' inner card under `card_param: cards`, whose `cards:` it generates. */
-    private fun walk(card: CardConfig, path: String, scripts: IslandScripts, out: MutableList<CompatEntry>, holdsGenerated: Boolean = false) {
+    /**
+     * The [CompatReport.islands] of [check] for [view], without checking the cards that can only stay native
+     * ([CardCompat.staysNative]): what a view logs after it builds, at the cost of routing it.
+     */
+    fun islands(view: ViewConfig, scripts: IslandScripts = IslandScripts.ANY): List<CompatEntry> {
+        val out = ArrayList<CompatEntry>()
+        val viewName = view.path ?: view.title
+        for (root in CardRouter.viewRoots(view)) {
+            val where = root.section?.let { "$viewName › section ${it + 1} › card ${root.index + 1}" } ?: "$viewName › card ${root.index + 1}"
+            walk(root.card, where, scripts, out, islandsOnly = true)
+        }
+        return out
+    }
+
+    /**
+     * [holdsGenerated]: [card] is auto-entities' inner card under `card_param: cards`, whose `cards:` it generates.
+     * [islandsOnly]: list only the cards that fall back, skipping the check of those that can only stay native.
+     */
+    private fun walk(
+        card: CardConfig,
+        path: String,
+        scripts: IslandScripts,
+        out: MutableList<CompatEntry>,
+        holdsGenerated: Boolean = false,
+        islandsOnly: Boolean = false,
+    ) {
         val here = "$path (${card.type})"
-        val verdict = card.compat.effective(scripts)
-        out += CompatEntry(here, verdict)
-        if (!verdict.isNative) return
+        if (!(islandsOnly && CardCompat.staysNative(card))) {
+            val verdict = card.compat.effective(scripts)
+            if (!islandsOnly || !verdict.isNative) out += CompatEntry(here, verdict)
+            if (!verdict.isNative) return
+        }
         // auto-entities' inner card is checked with its generated cards, but those aren't listed: they depend on live
         // states. They only fill its `cards:`, so its other children (a conditional's `card:`) are listed as usual.
         if (holdsGenerated && card.type in LovelaceParser.CARDS_FIELD_TYPES) return
         val generates = CardRouter.generatesCards(card)
         CardRouter.producedCards(card, perEntity = false).forEach { (i, child) ->
-            walk(child, "$here › card ${i + 1}", scripts, out, holdsGenerated = generates)
+            walk(child, "$here › card ${i + 1}", scripts, out, holdsGenerated = generates, islandsOnly = islandsOnly)
         }
     }
 }

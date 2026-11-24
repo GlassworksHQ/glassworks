@@ -418,6 +418,13 @@ data class CardConfig(
      */
     val compat: CardVerdict by lazy { CardCompat.check(this) }
 
+    /**
+     * Whether this card goes to an island ([CardVerdict.inIsland]). A card [CardCompat.staysNative] says can only be
+     * native is answered without the full check, which then runs only when a report asks for its notes.
+     */
+    fun inIsland(scripts: IslandScripts = IslandScripts.ANY): Boolean =
+        !CardCompat.staysNative(this) && compat.inIsland(scripts)
+
     fun entities(): List<EntityRowConfig> {
         val arr = raw.optJSONArray("entities") ?: return emptyList()
         val out = ArrayList<EntityRowConfig>(arr.length())
@@ -481,7 +488,7 @@ object CardRouter {
      * [VitroSupport] ([CardConfig.compat]).
      */
     fun tier(card: CardConfig, scripts: IslandScripts = IslandScripts.ANY): CardTier = when {
-        card.compat.inIsland(scripts) -> CardTier.WEB_ISLAND
+        card.inIsland(scripts) -> CardTier.WEB_ISLAND
         card.type in NATIVE_CORE_TYPES -> CardTier.NATIVE_CORE
         card.type in NATIVE_HACS_TYPES -> CardTier.NATIVE_HACS
         else -> CardTier.WEB_ISLAND
@@ -495,7 +502,7 @@ object CardRouter {
             CardTier.WEB_ISLAND to 0,
         )
         fun walk(c: CardConfig) {
-            if (c.childCards.isNotEmpty() && c.type in CONTAINER_TYPES && !c.compat.inIsland(scripts)) {
+            if (c.childCards.isNotEmpty() && c.type in CONTAINER_TYPES && !c.inIsland(scripts)) {
                 builtChildren(c).forEach { walk(it.value) }
             } else {
                 val t = tier(c, scripts)

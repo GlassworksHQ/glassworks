@@ -130,6 +130,15 @@ object CardCompat {
         )
     }
 
+    /**
+     * True when [check] can only route [card] native, whatever else its config holds: a built-in card, or a custom card
+     * Vitro draws that needs HA's frontend for a built-in card inside it (the island would draw those as summaries).
+     * [check] keeps such a card native and turns any reasons into notes, so routing ([CardConfig.inIsland]) can skip
+     * the full check for it: on a slow panel that check is most of what a view's card_mod costs to build.
+     */
+    fun staysNative(card: CardConfig): Boolean =
+        card.type in VitroSupport.CORE_CARD_TYPES || (card.type in VitroSupport.HACS_CARD_TYPES && needsHaFrontend(card))
+
     /** The types of every card [card] produces, at any depth ([CardRouter.producedCards]). */
     private fun innerTypes(card: CardConfig): Set<String> {
         val out = LinkedHashSet<String>()

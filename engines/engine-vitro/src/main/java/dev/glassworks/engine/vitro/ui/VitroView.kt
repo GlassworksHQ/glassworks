@@ -510,7 +510,7 @@ class VitroView(
         val elapsed = SystemClock.elapsedRealtime() - t0
         // The report follows the tree on screen: a cached tree keeps the card-mod state it was built with.
         val scripts = builtScripts[index] ?: IslandScripts.of(resourcesList)
-        val compat = CompatChecker.check(viewCfg, scripts)
+        val islands = CompatChecker.islands(viewCfg, scripts)
         val tiers = CardRouter.tierCounts(viewCfg, scripts)
         val entities = CardRouter.referencedEntities(viewCfg)
         val metrics = VitroMetrics(
@@ -522,7 +522,7 @@ class VitroView(
             webIslandCards = tiers[CardTier.WEB_ISLAND] ?: 0,
             subscribedEntities = entities.size,
             cacheHit = cached != null,
-            islands = compat.islands.map { "${it.path}: ${it.verdict.reasons.joinToString("; ")}" },
+            islands = islands.map { "${it.path}: ${it.verdict.reasons.joinToString("; ")}" },
         )
         lastMetrics = metrics
         Log.i(
@@ -980,7 +980,7 @@ class VitroView(
             }
         }
         // Anything outside Vitro's supported set goes to an island on purpose (CardCompat), decided once per card.
-        val built: View = if (card.compat.inIsland(IslandScripts.of(ctx.resources))) {
+        val built: View = if (card.inIsland(IslandScripts.of(ctx.resources))) {
             WebIslandCardView(ctx, card, fillViewport = fillViewport)
         } else when (card.type) {
             // Layout containers

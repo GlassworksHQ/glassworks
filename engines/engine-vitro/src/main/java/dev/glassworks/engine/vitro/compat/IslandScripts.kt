@@ -45,8 +45,17 @@ class IslandScripts private constructor(private val files: Set<String>?) {
         /** Every script there: what the offline checker assumes, since a config export has no resource list. */
         val ANY = IslandScripts(null)
 
-        fun of(resources: List<LovelaceResource>): IslandScripts =
-            IslandScripts(resources.filter { it.type != "css" }.map { fileName(it.url) }.toSet())
+        /**
+         * The scripts among [resources]. Every card a view builds asks with the dashboard's one resource list, which
+         * never changes once parsed: the last answer is kept for that list.
+         */
+        fun of(resources: List<LovelaceResource>): IslandScripts {
+            last?.let { (list, scripts) -> if (list === resources) return scripts }
+            return IslandScripts(resources.filter { it.type != "css" }.map { fileName(it.url) }.toSet())
+                .also { last = resources to it }
+        }
+
+        @Volatile private var last: Pair<List<LovelaceResource>, IslandScripts>? = null
 
         /** The file name of a resource URL, without its query or fragment (`/hacsfiles/x/mushroom.js?hacstag=1`). */
         fun fileName(url: String): String =

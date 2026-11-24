@@ -64,6 +64,23 @@ class CompatCheckerTest {
     // ---- Real dashboard idioms: must stay native ----
 
     @Test
+    fun routingSkipsTheCheckOnlyForCardsThatCanOnlyStayNative() {
+        // A built-in card with card_mod Vitro can't apply, a stack-in-card holding one, a Mushroom card with an
+        // unsupported option and a custom card: the shortcut must route each exactly as the full check does.
+        val dashboard = LovelaceParser.parseDashboard(JSONObject("""{"views": [{"title": "Home", "type": "sections", "sections": [
+            {"type": "grid", "cards": [
+              {"type": "markdown", "content": "x", "card_mod": {"style": "ha-card::before { content: 'x' } ha-card { filter: blur(2px) }"}},
+              {"type": "custom:stack-in-card", "cards": [{"type": "tile", "entity": "light.a", "card_mod": {"style": "ha-card:hover { color: red }"}}]},
+              {"type": "custom:mushroom-template-card", "primary": "x", "card_mod": {"style": "ha-card::after { color: red }"}},
+              {"type": "custom:my-own-card"},
+              {"type": "vertical-stack", "cards": [{"type": "custom:mushroom-chips-card", "chips": [], "card_mod": {"style": "@media (max-width: 1px) { ha-card { color: red } }"}}]}
+            ]}]}]}"""))
+        assertRoutingShortcutHolds(dashboard)
+        val islands = CompatChecker.islands(dashboard.views.single())
+        assertTrue("the custom card still falls back", islands.any { "custom:my-own-card" in it.path })
+    }
+
+    @Test
     fun aRepeatedSheetGivesTheSameVerdictAsAFreshCheck() {
         // The sheet check is kept per text; a cached answer must be the fresh one, reasons and notes in order, and a
         // sheet that reports into the same set twice (reasons and property reasons) must too.
@@ -873,11 +890,33 @@ class CompatCheckerLocalDashboardsTest {
         assertTrue("no *-new.json files in $dir", files.isNotEmpty())
         val withIslands = ArrayList<String>()
         for (f in files) {
-            val report = CompatChecker.check(LovelaceParser.parseDashboard(JSONObject(f.readText())))
+            val dashboard = LovelaceParser.parseDashboard(JSONObject(f.readText()))
+            val report = CompatChecker.check(dashboard)
             assertTrue("${f.name} has no cards", report.entries.isNotEmpty())
+            assertRoutingShortcutHolds(dashboard)
             println("== ${f.name}\n${report.format()}\n")
             if (report.islands.isNotEmpty()) withIslands += f.name
         }
         assertTrue("islands in $withIslands", withIslands.isEmpty())
     }
 }
+
+/**
+ * The routing shortcut ([CardCompat.staysNative], [CardConfig.inIsland], [CompatChecker.islands]) against the full
+ * check, for every card [dashboard] builds: a card the shortcut keeps native is native in the full check, every card
+ * routes the same, and each view lists the same islands.
+ */
+internal fun assertRoutingShortcutHolds(dashboard: dev.glassworks.engine.vitro.model.DashboardConfig) {
+    for (view in dashboard.views) {
+        val full = CompatChecker.check(view)
+        assertEquals("islands of ${view.title}", full.islands, CompatChecker.islands(view))
+        fun walk(c: dev.glassworks.engine.vitro.model.CardConfig) {
+            val verdict = CardCompat.check(c)
+            if (CardCompat.staysNative(c)) assertTrue("${c.type} kept native by the shortcut is native", verdict.isNative)
+            assertEquals("${c.type} routes the same", verdict.inIsland(), c.inIsland())
+            CardRouter.producedCards(c).forEach { (_, child) -> walk(child) }
+        }
+        CardRouter.viewRoots(view).forEach { walk(it.card) }
+    }
+}
+
