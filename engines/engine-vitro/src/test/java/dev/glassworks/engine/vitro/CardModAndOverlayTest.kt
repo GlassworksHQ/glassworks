@@ -314,7 +314,9 @@ class CardModAndOverlayTest {
                 is ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { find(v.getChildAt(it)) }
                 else -> null
             }
-            return assertNotNull(find(vv)).parent as? ViewGroup
+            val island = find(vv)
+            assertNotNull(island)
+            return island!!.parent as? ViewGroup
         }
         val dp = activity.resources.displayMetrics.density
         // card-mod in the island draws the margin there, so the native frame adds no padding around it.
