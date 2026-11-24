@@ -364,7 +364,8 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         while (VitroCardContext.pendingImageLoads.get() > 0 || WebFonts.pending.get() > 0) {
             if (System.nanoTime() > deadline) {
                 throw IllegalStateException(
-                    "${VitroCardContext.pendingImageLoads.get()} image and ${WebFonts.pending.get()} font load(s) still pending after $IMAGE_TIMEOUT_MS ms",
+                    "${VitroCardContext.pendingImageLoads.get()} image and ${WebFonts.pending.get()} font load(s) still pending after $IMAGE_TIMEOUT_MS ms" +
+                        (if (WebFonts.pending.get() > 0) "; fonts: ${WebFonts.describe()}" else ""),
                 )
             }
             step(view)

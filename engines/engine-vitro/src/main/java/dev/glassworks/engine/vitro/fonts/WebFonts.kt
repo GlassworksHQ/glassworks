@@ -476,10 +476,27 @@ object WebFonts {
 
     private fun fetch(url: String, maxBytes: Int): Fetched? {
         if (url.startsWith("data:", ignoreCase = true)) return decodeDataUri(url, maxBytes)?.let { Fetched(it, url) }
-        return fetcher.fetch(url, maxBytes)
+        val t0 = System.nanoTime()
+        return fetcher.fetch(url, maxBytes).also {
+            note("fetch …${url.substringAfterLast('/').take(24)}: ${it?.bytes?.size ?: "failed"} in ${(System.nanoTime() - t0) / 1_000_000} ms")
+        }
     }
 
+    /** The last few things the loader did, with no address in them: what [describe] shows when a test times out. */
+    private val trace = ArrayDeque<String>()
+
+    private fun note(what: String) = synchronized(trace) {
+        trace.addLast("${System.nanoTime() / 1_000_000 % 100_000} ${Thread.currentThread().name}: $what")
+        while (trace.size > 40) trace.removeFirst()
+    }
+
+    /** The loader's state, for a test that waited too long: sheets, each face, what's waiting, and the last steps. */
+    fun describe(): String =
+        "sheets=$sheets faces=${faces.keys} loads=${loads.values.map { it.javaClass.simpleName }} waiting=${waiting.keys} " +
+            "pending=${pending.get()} notifyQueued=$notifyQueued trace=" + synchronized(trace) { trace.joinToString(" | ") }
+
     private fun notifyChanged() {
+        note("notify (queued already: $notifyQueued)")
         if (notifyQueued) return
         notifyQueued = true
         // Counted until the listeners have run: the redraw it starts (images included) is part of the font's work.
@@ -500,14 +517,19 @@ object WebFonts {
      */
     private fun submit(work: () -> (() -> Unit), onError: () -> Unit) {
         pending.incrementAndGet()
+        val queuedAt = System.nanoTime()
         try {
             executor.execute {
+                val startedAt = System.nanoTime()
+                note("job started after ${(startedAt - queuedAt) / 1_000_000} ms in the queue")
                 val done = try {
                     work()
                 } catch (t: Throwable) {
                     Log.w(TAG, "Web font work failed: ${t.javaClass.simpleName}")
+                    note("job threw ${t.javaClass.simpleName}")
                     onError
                 }
+                note("job ran ${(System.nanoTime() - startedAt) / 1_000_000} ms, result posted")
                 postToMain(Runnable {
                     try {
                         done()
