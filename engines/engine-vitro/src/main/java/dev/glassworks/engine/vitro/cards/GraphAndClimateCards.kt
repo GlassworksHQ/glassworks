@@ -43,6 +43,9 @@ import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.bindHoldAction
 import dev.glassworks.ui.Inter
 import dev.glassworks.engine.vitro.ui.VitroFonts
+import org.json.JSONArray
+import kotlin.math.roundToInt
+import dev.glassworks.engine.vitro.theme.ThemeResolver
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -378,68 +381,164 @@ private class SparklineCanvasView(
     }
 }
 
-/** Native HA `gauge` card (`hui-gauge-card`): a thick, flat-ended half ring drawn on Canvas. */
-class GaugeCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
-    private val minVal = config.raw.optDouble("min", 0.0)
-    private val maxVal = config.raw.optDouble("max", 100.0)
+/**
+ * Native HA `gauge` card, as HA 2026's `hui-gauge-card` and `ha-gauge` draw it: 12 px padding, the gauge (at most
+ * 250 px wide) over the name on a 28 px line. The gauge is a half ring of radius 40 and stroke 12 in a 100 x 55 box:
+ * the track in `--primary-background-color`, the value arc in the severity color (`--info-color` without one), or,
+ * with `needle: true`, the severity levels as arcs under a needle. The value is fitted into 55% of the gauge's width
+ * and 40% of its height, its box ending 10% above the bottom.
+ */
+class GaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
+    private val raw = config.raw
+    private val minVal = raw.optDouble("min", 0.0).takeIf { !it.isNaN() } ?: 0.0
+    private val maxVal = raw.optDouble("max", 100.0).takeIf { !it.isNaN() } ?: 100.0
+    private val needle = raw.optBoolean("needle", false)
+    private val info = themeColor("info-color", INFO)
+    private val segments = parseSegments(raw.optJSONArray("segments"))
+    private val severity = parseSeverity(raw.optJSONObject("severity"), ::severityColorOf)
     private val dial = GaugeCanvasView(
         ctx.context,
-        ctx.theme.primaryColor,
-        if (ctx.theme.dark) GAUGE_TRACK_DARK else GAUGE_TRACK_LIGHT,
-        ctx.theme.primaryTextColor,
+        track = ctx.theme.backgroundColor,
+        textColor = ctx.theme.primaryTextColor,
+        needleStroke = ctx.theme.cardBackgroundColor,
     )
-    private val nameView = label(ctx, 14f, ctx.theme.primaryTextColor).apply { gravity = Gravity.CENTER }
-    private val severity = parseSeverity(config.raw.optJSONObject("severity"))
+    private val nameView = label(ctx, 14f, ctx.theme.primaryTextColor).apply {
+        gravity = Gravity.CENTER
+        maxLines = 1
+        ellipsize = android.text.TextUtils.TruncateAt.END
+    }
+    private val col = LinearLayout(ctx.context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+    }
 
     init {
-        val col = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(ctx.px(12f), ctx.px(16f), ctx.px(12f), ctx.px(14f))
-        }
-        col.addView(dial, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(116f)))
-        col.addView(nameView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(8f) })
-        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        // `ha-card { padding: var(--ha-space-3); justify-content: center }`.
+        col.setPadding(ctx.px(12f), ctx.px(12f), ctx.px(12f), ctx.px(12f))
+        col.addView(dial, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        col.addView(nameView, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(28f)))
+        addView(col, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        dial.setLevels(if (needle) levels() else null, minVal, maxVal)
 
         val eid = config.entity
         if (eid != null) {
             isClickable = true
-            setOnClickListener { ctx.performAction(ActionConfig.parse(config.raw.optJSONObject("tap_action")), eid) }
-            bindHoldAction(holdFor(config.raw, eid), eid)
-            observe(eid) { s ->
-                val v = s?.state?.toDoubleOrNull() ?: minVal
-                val frac = ((v - minVal) / (maxVal - minVal).coerceAtLeast(1e-6)).toFloat().coerceIn(0f, 1f)
-                val unit = config.raw.optString("unit", "").ifEmpty { s?.unit.orEmpty() }
-                val arcColor = s?.state?.toDoubleOrNull()?.let { severityColor(severity, it) } ?: ctx.theme.primaryColor
-                val rawVal = s?.state ?: "–"
-                val formatted = when {
-                    unit.isEmpty() -> rawVal
-                    unit == "%" -> "$rawVal%"
-                    else -> "$rawVal $unit"
-                }
-                dial.update(frac, formatted, arcColor)
-                nameView.text = config.name ?: s?.friendlyName ?: eid
-            }
+            setOnClickListener { ctx.performAction(ActionConfig.parse(raw.optJSONObject("tap_action")), eid) }
+            bindHoldAction(holdFor(raw, eid), eid)
+            observe(eid) { s -> render(s) }
         }
     }
 
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        // A fixed grid height: the gauge also fits the height the name leaves (`100cqh * 100 / 55`).
+        dial.maxHeightPx = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
+            (MeasureSpec.getSize(heightMeasureSpec) - paddingTop - paddingBottom - ctx.px(12f) * 2 - ctx.px(28f)).coerceAtLeast(0)
+        } else {
+            Int.MAX_VALUE
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    private fun render(s: EntityState?) {
+        nameView.text = config.name ?: s?.displayName ?: config.entity
+        val attribute = raw.optString("attribute", "").ifEmpty { null }
+        val rawValue = if (attribute != null) s?.attributes?.get(attribute) else s?.state
+        val value = (rawValue as? Number)?.toDouble() ?: rawValue?.toString()?.toDoubleOrNull()
+        if (s == null || value == null) {
+            dial.update(minVal, s?.formattedState() ?: "–", info, null)
+            return
+        }
+        val customUnit = raw.optString("unit", "").ifEmpty { null }
+        val text = when {
+            // A custom unit can't keep a locale's position: the number, then the unit (HA's ha-gauge `label`).
+            customUnit != null -> numberText(rawValue) + if (customUnit == "%") "%" else " $customUnit"
+            attribute != null -> numberText(rawValue)
+            else -> s.formattedState()
+        }
+        val segmentLabel = if (needle) segmentLabel(value) else null
+        dial.update(value, segmentLabel ?: text, if (needle) info else severityOf(value), segmentLabel)
+    }
+
+    private fun numberText(v: Any?): String {
+        val d = (v as? Number)?.toDouble() ?: v?.toString()?.toDoubleOrNull() ?: return v?.toString().orEmpty()
+        return java.text.DecimalFormat("#,##0.###", java.text.DecimalFormatSymbols(java.util.Locale.US)).format(d)
+    }
+
+    /** HA's `_computeSeverity`: the segment (or old severity threshold) the value is in, else `--info-color`. */
+    internal fun severityOf(v: Double): Int {
+        if (segments != null) return segments.lastOrNull { v >= it.from }?.color ?: info
+        if (severity.isEmpty()) return raw.optString("color", "").ifEmpty { null }?.let(::cssColor) ?: info
+        return severityColor(severity, v) ?: info
+    }
+
+    /** HA's `_severityLevels` for the needle: the segments, the severity thresholds, or one level in `color`. */
+    internal fun levels(): List<GaugeLevel> {
+        val out = when {
+            segments != null -> segments.map { GaugeLevel(it.from, it.color, it.label) }
+            raw.optJSONObject("severity") != null -> {
+                val sev = raw.optJSONObject("severity")!!
+                sev.keys().asSequence().mapNotNull { k ->
+                    val level = sev.optDouble(k).takeIf { !it.isNaN() } ?: return@mapNotNull null
+                    GaugeLevel(level, severityColorOf(k) ?: return@mapNotNull null, null)
+                }.toList()
+            }
+            else -> listOf(GaugeLevel(minVal, raw.optString("color", "").ifEmpty { null }?.let(::cssColor) ?: info, null))
+        }.sortedBy { it.level }
+        // ha-gauge: a first level that doesn't start at min gets one in `--info-color` before it.
+        return if (out.isNotEmpty() && out[0].level != minVal) listOf(GaugeLevel(minVal, info, null)) + out else out
+    }
+
+    private fun segmentLabel(v: Double): String? =
+        levels().lastOrNull { v >= it.level }?.label?.takeIf { it.isNotEmpty() }
+
+    private fun severityColorOf(key: String): Int? = when (key) {
+        "green" -> themeColor("success-color", SEVERITY_GREEN)
+        "yellow" -> themeColor("warning-color", SEVERITY_YELLOW)
+        "red" -> themeColor("error-color", SEVERITY_RED)
+        else -> null
+    }
+
+    /** HA's `computeCssColor`: a theme color name is its `--<name>-color`, anything else a CSS color. */
+    private fun cssColor(c: String): Int? =
+        ThemeResolver.parseColor(ctx.theme.vars["$c-color"]) ?: MushroomColors.parse(c, ctx.theme)
+
+    private fun themeColor(name: String, fallback: Int): Int = ThemeResolver.parseColor(ctx.theme.vars[name]) ?: fallback
+
+    private fun parseSegments(arr: JSONArray?): List<Segment>? {
+        if (arr == null) return null
+        return (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            val from = o.optDouble("from").takeIf { !it.isNaN() } ?: return@mapNotNull null
+            Segment(from, o.optString("color", "").ifEmpty { null }?.let(::cssColor) ?: info, o.optString("label", "").ifEmpty { null })
+        }.sortedBy { it.from }
+    }
+
+    private class Segment(val from: Double, val color: Int, val label: String?)
+
     companion object {
-        /** HA's gauge severity colors (`hui-gauge-card`). */
+        /** HA's gauge severity colors (`--success-color`, `--warning-color`, `--error-color`, `--info-color`). */
         const val SEVERITY_GREEN = 0xFF43A047.toInt()
         const val SEVERITY_YELLOW = 0xFFFFA600.toInt()
         const val SEVERITY_RED = 0xFFDB4437.toInt()
-        private const val GAUGE_TRACK_LIGHT = 0xFFF0F0F0.toInt()
-        private const val GAUGE_TRACK_DARK = 0xFF2C2C2C.toInt()
+        const val INFO = 0xFF039BE5.toInt()
 
         /** Reads `severity: { green, yellow, red }` into `(threshold, color)` pairs, highest threshold first. */
-        fun parseSeverity(raw: JSONObject?): List<Pair<Double, Int>> {
+        fun parseSeverity(raw: JSONObject?, color: (String) -> Int? = ::defaultSeverityColor): List<Pair<Double, Int>> {
             if (raw == null) return emptyList()
-            return listOf("green" to SEVERITY_GREEN, "yellow" to SEVERITY_YELLOW, "red" to SEVERITY_RED)
-                .mapNotNull { (key, color) ->
+            return listOf("green", "yellow", "red")
+                .mapNotNull { key ->
                     if (!raw.has(key) || raw.isNull(key)) return@mapNotNull null
-                    raw.optDouble(key).takeIf { !it.isNaN() }?.let { it to color }
+                    val c = color(key) ?: return@mapNotNull null
+                    raw.optDouble(key).takeIf { !it.isNaN() }?.let { it to c }
                 }
                 .sortedByDescending { it.first }
+        }
+
+        private fun defaultSeverityColor(key: String): Int? = when (key) {
+            "green" -> SEVERITY_GREEN
+            "yellow" -> SEVERITY_YELLOW
+            "red" -> SEVERITY_RED
+            else -> null
         }
 
         /** HA's rule: the color of the highest threshold at or below [value], or null below every threshold. */
@@ -448,75 +547,167 @@ class GaugeCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
     }
 }
 
-private class GaugeCanvasView(context: Context, private var activeColor: Int, private val trackColor: Int, textColor: Int) : View(context) {
+/** One of `ha-gauge`'s levels: from [level] to the end of the arc, in [color]; [label] replaces the value there. */
+internal class GaugeLevel(val level: Double, val color: Int, val label: String?)
+
+/**
+ * `ha-gauge`: the 100 x 55 SVG box (radius 40, stroke 12, centered at 50, 50), as wide as the card allows up to 250
+ * px, plus the 6.4 px the inline SVG's line box adds under it; the value text fitted over it.
+ */
+private class GaugeCanvasView(
+    context: Context,
+    private val track: Int,
+    textColor: Int,
+    needleStroke: Int,
+) : View(context) {
     private val dp = resources.displayMetrics.density
-    private val stroke = 22f * dp
     private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = stroke
         strokeCap = Paint.Cap.BUTT
+    }
+    private val needleFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = textColor }
+    private val needleLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = needleStroke
+        strokeCap = Paint.Cap.ROUND
     }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = textColor
-        textSize = spToPx(context, 34f)
-        typeface = VitroFonts.typeface(context, Inter.REGULAR, 34f)
+        typeface = VitroFonts.typeface(context, Inter.REGULAR, 16f)
         textAlign = Paint.Align.CENTER
     }
     private val oval = RectF()
-    private var fraction = 0f
-    private var targetFraction = -1f
+    private val needlePath = Path()
+    private var levels: List<GaugeLevel>? = null
+    private var min = 0.0
+    private var max = 100.0
+    private var value = 0.0
+    private var color = 0
+    private var angle = 0f
+    private var targetAngle = -1f
     private var animator: ValueAnimator? = null
     private var text = "–"
 
-    /** `hui-gauge-card`'s needle sweep: the arc eases to [frac] over 240 ms on screen and snaps before attach. */
-    fun update(frac: Float, label: String, color: Int = activeColor) {
+    /** The fixed height a grid row leaves the gauge, or none. */
+    var maxHeightPx = Int.MAX_VALUE
+        set(v) { if (field != v) { field = v; requestLayout() } }
+
+    fun setLevels(levels: List<GaugeLevel>?, min: Double, max: Double) {
+        this.levels = levels
+        this.min = min
+        this.max = max
+    }
+
+    /** The value, its text, the arc's color, and the level label shown instead of the value (if any). */
+    fun update(v: Double, label: String, arcColor: Int, segmentLabel: String?) {
         text = label
-        // The value it draws, as HA's page has it as text: for TalkBack and the parity harness.
+        // The value as HA's page has it as text: for TalkBack and the parity harness.
         if (contentDescription?.toString() != label) contentDescription = label
-        activeColor = color
-        val to = frac.coerceIn(0f, 1f)
-        if (to == targetFraction) {
+        value = v
+        color = arcColor
+        val to = angleOf(v)
+        if (to == targetAngle) {
             invalidate()
             return
         }
-        targetFraction = to
+        targetAngle = to
         animator?.cancel()
-        val from = fraction
+        val from = angle
+        // `transition: stroke-dashoffset 1s ease` (the needle: `all 1s ease`).
         animator = HaMotion.run(this, SWEEP_MS) { t ->
-            fraction = HaMotion.lerp(from, to, t)
+            angle = HaMotion.lerp(from, to, t)
             invalidate()
         }
         invalidate()
     }
 
+    /** `getAngle`: the value's place on the half ring, 0 to 180 degrees from the left. */
+    private fun angleOf(v: Double): Float {
+        if (max <= min) return 0f
+        return (((v.coerceIn(min, max) - min) / (max - min)) * 180.0).toFloat()
+    }
+
     override fun onDetachedFromWindow() {
         animator?.cancel()
         animator = null
-        if (targetFraction >= 0f) fraction = targetFraction
+        if (targetAngle >= 0f) angle = targetAngle
         super.onDetachedFromWindow()
     }
 
+    private fun gaugeWidth(available: Int): Float {
+        var w = minOf(available.toFloat(), MAX_WIDTH * dp)
+        if (maxHeightPx != Int.MAX_VALUE) w = minOf(w, maxHeightPx * 100f / 55f)
+        return w.coerceAtLeast(0f)
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val w = MeasureSpec.getSize(widthMeasureSpec)
+        val gw = gaugeWidth(w)
+        setMeasuredDimension(w, (gw * 0.55f + LINE_GAP * dp).roundToInt())
+    }
+
     override fun onDraw(canvas: Canvas) {
-        // The flat ends sit on the bottom edge, so the ring's centre is the bottom of the view.
-        val r = minOf(width / 2f - stroke / 2f - 2f * dp, height - stroke / 2f - 2f * dp).coerceAtLeast(24f)
-        val cx = width / 2f
-        val cy = height.toFloat()
+        val gw = gaugeWidth(width)
+        if (gw <= 0f) return
+        val u = gw / 100f
+        val left = (width - gw) / 2f
+        val cx = left + 50f * u
+        val cy = 50f * u
+        val r = 40f * u
         oval.set(cx - r, cy - r, cx + r, cy + r)
-        arcPaint.color = trackColor
+        arcPaint.strokeWidth = 12f * u
+        arcPaint.color = track
         canvas.drawArc(oval, 180f, 180f, false, arcPaint)
-        arcPaint.color = activeColor
-        if (fraction > 0f) canvas.drawArc(oval, 180f, 180f * fraction, false, arcPaint)
-        // Shrink long values so they stay inside the inner radius.
-        val inner = (r - stroke / 2f) * 1.7f
-        val base = spToPx(context, 34f)
-        textPaint.textSize = base
-        val w = textPaint.measureText(text)
-        if (w > inner && w > 0f) textPaint.textSize = base * inner / w
-        canvas.drawText(text, cx, cy - 4f * dp, textPaint)
+        val lv = levels
+        if (lv == null) {
+            arcPaint.color = color
+            if (angle > 0f) canvas.drawArc(oval, 180f, angle, false, arcPaint)
+        } else {
+            // Each level from its start to the end of the ring, the later ones over the earlier; the last one again
+            // over its final half degree, as ha-gauge does.
+            for ((i, level) in lv.withIndex()) {
+                val start = angleOf(level.level)
+                arcPaint.color = level.color
+                canvas.drawArc(oval, 180f + start, 180f - start, false, arcPaint)
+                if (i == lv.size - 1) canvas.drawArc(oval, 180f + 179.5f, 0.5f, false, arcPaint)
+            }
+            // The needle: "M -34,-3 L -40,-1 A 1,1 0 0 0 -40,1 L -34,3 A 2,2 0 0 0 -34,-3 Z" (that last radius too
+            // small for its chord, so SVG draws it at 3), turned by the value's angle.
+            needlePath.reset()
+            needlePath.moveTo(-34f, -3f)
+            needlePath.lineTo(-40f, -1f)
+            needlePath.arcTo(RectF(-41f, -1f, -39f, 1f), 270f, -180f)
+            needlePath.lineTo(-34f, 3f)
+            needlePath.arcTo(RectF(-37f, -3f, -31f, 3f), 90f, -180f)
+            needlePath.close()
+            canvas.save()
+            canvas.translate(cx, cy)
+            canvas.scale(u, u)
+            canvas.rotate(angle)
+            canvas.drawPath(needlePath, needleFill)
+            needleLine.strokeWidth = 1f
+            canvas.drawPath(needlePath, needleLine)
+            canvas.restore()
+        }
+        // The value: HA measures it at 16 px and scales that box into 55% x 40% of the gauge, its bottom at 90%.
+        val h = height.toFloat()
+        textPaint.textSize = 16f * dp
+        val w16 = textPaint.measureText(text)
+        if (w16 <= 0f) return
+        val h16 = BOX_EM * 16f * dp
+        val k = minOf(0.55f * gw / w16, 0.4f * h / h16)
+        textPaint.textSize = 16f * dp * k
+        canvas.drawText(text, width / 2f, 0.9f * h - DESCENT_EM * textPaint.textSize, textPaint)
     }
 
     private companion object {
-        const val SWEEP_MS = 240L
+        const val SWEEP_MS = 1_000L
+        const val MAX_WIDTH = 250f
+        /** The inline SVG's line box: ha-gauge is 143.9 px tall for a 137.5 px SVG. */
+        const val LINE_GAP = 6.4f
+        /** The value text's box (SVG getBBox) at 16 px: 19.02 px tall, its baseline 4.02 px above the bottom. */
+        const val BOX_EM = 19.02f / 16f
+        const val DESCENT_EM = 4.02f / 16f
     }
 }
 
