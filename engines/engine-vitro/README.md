@@ -81,7 +81,7 @@ Some things never send a card to an island:
 - **Things that don't change the look on a touch panel**, such as `cursor`, `transition`, `user-select`, `pointer-events`, `will-change`, `-webkit-tap-highlight-color`, `outline: none`, and `:hover`, `:focus` and `:active` rules. Each one is listed with its reason in `VitroSupport`.
 - **Known gaps** that Vitro still draws natively, because an island wouldn't do better or the native work is underway: `backdrop-filter` (an island can't blur the native view behind it either), `text-overflow` and `white-space: nowrap` (they only show when text doesn't fit), small `position: relative` nudges, inline tile features, the Mushroom chips card's own card-mod, and card variables a native card doesn't read. The checker lists these as notes.
 
-A built-in card that falls back runs in the same island as a custom card. The island doesn't include HA's own card code yet, so for now a built-in card there shows a simple summary of its entities.
+The island runs a custom card's own code, so a custom card there looks exactly as it does in Home Assistant. It doesn't include Home Assistant's own built-in cards yet, so a built-in card Vitro draws (a `tile`, say) stays native even when its config has something outside the supported set, and the checker notes what it would have fallen back for. Built-in cards Vitro has no renderer for at all, such as `map` or the `energy-*` cards, still go to the island.
 
 ### The compatibility checker
 

@@ -55,6 +55,14 @@ object CardCompat {
             checkCardMod(card, reasons, notes)
             if (type == "markdown") checkMarkdownContent(card.raw.optString("content", ""), reasons)
         }
+        // The island runs a custom card's own JavaScript, so it draws that card as HA does. It has no HA frontend for
+        // built-in cards, so a built-in card there would be a plain summary: further from HA than Vitro's native
+        // card. Until the island can run HA's card code, a built-in card Vitro draws stays native and the checker
+        // says what it would have fallen back for.
+        if (reasons.isNotEmpty() && type in VitroSupport.CORE_CARD_TYPES) {
+            reasons.forEach { notes += "would fall back for $it, but the island can't draw built-in cards yet" }
+            return CardVerdict(type = type, route = CardRoute.NATIVE, notes = notes.toList())
+        }
         return CardVerdict(
             type = type,
             route = if (reasons.isEmpty()) CardRoute.NATIVE else CardRoute.ISLAND,

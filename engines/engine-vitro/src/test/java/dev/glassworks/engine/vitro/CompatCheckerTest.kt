@@ -39,10 +39,20 @@ class CompatCheckerTest {
         return v
     }
 
+    /**
+     * Something outside the supported set. A custom card (Mushroom, Bubble, …) goes to an island, which runs its own
+     * code. A built-in card Vitro draws stays native, because the island can't draw built-in cards yet, and the
+     * checker notes what it would have fallen back for.
+     */
     private fun assertIsland(json: String, reasonPart: String): CardVerdict {
         val v = verdict(json)
-        assertEquals("expected an island", CardRoute.ISLAND, v.route)
-        assertTrue("no reason mentions '$reasonPart': ${v.reasons}", v.reasons.any { reasonPart in it })
+        if (v.type in VitroSupport.CORE_CARD_TYPES) {
+            assertEquals("a built-in card stays native", CardRoute.NATIVE, v.route)
+            assertTrue("no note mentions '$reasonPart': ${v.notes}", v.notes.any { reasonPart in it && "built-in" in it })
+        } else {
+            assertEquals("expected an island", CardRoute.ISLAND, v.route)
+            assertTrue("no reason mentions '$reasonPart': ${v.reasons}", v.reasons.any { reasonPart in it })
+        }
         return v
     }
 
@@ -290,9 +300,13 @@ class CompatCheckerTest {
 
     @Test
     fun aNativeTypeOutsideTheSetIsTierThree() {
-        val c = card("""{"type": "tile", "entity": "light.a", "card_mod": {"style": {"ha-tile-icon$": ".x { color: red }"}}}""")
+        val c = card("""{"type": "custom:mushroom-template-card", "card_mod": {"style": {"mushroom-shape-icon$": ".shape { color: red }"}}}""")
         assertEquals(CardTier.WEB_ISLAND, CardRouter.tier(c))
-        assertEquals(CardTier.NATIVE_CORE, CardRouter.tier(card("""{"type": "tile", "entity": "light.a"}""")))
+        assertEquals(CardTier.NATIVE_HACS, CardRouter.tier(card("""{"type": "custom:mushroom-template-card"}""")))
+        // A built-in card stays native: the island has no HA frontend to draw it.
+        val tile = card("""{"type": "tile", "entity": "light.a", "card_mod": {"style": {"ha-tile-icon$": ".x { color: red }"}}}""")
+        assertEquals(CardTier.NATIVE_CORE, CardRouter.tier(tile))
+        assertTrue(tile.compat.notes.toString(), tile.compat.notes.any { "built-in" in it })
     }
 
     @Test
@@ -302,7 +316,7 @@ class CompatCheckerTest {
             JSONObject(
                 """{"cards": [
                   {"type": "vertical-stack", "cards": [{"type": "tile", "entity": "light.a"}, {"type": "custom:acme-card"}]},
-                  {"type": "vertical-stack", "card_mod": {"style": "@media (min-width: 1px) { :host { margin: 0 } }"},
+                  {"type": "custom:stack-in-card", "card_mod": {"style": "@media (min-width: 1px) { :host { margin: 0 } }"},
                    "cards": [{"type": "tile", "entity": "light.b"}, {"type": "tile", "entity": "light.c"}]}
                 ]}""",
             ),
@@ -313,10 +327,10 @@ class CompatCheckerTest {
         val report = CompatChecker.check(view)
         // The first stack and its two cards, then the second stack alone: the island draws what's inside it.
         assertEquals(4, report.entries.size)
-        assertEquals(listOf("View 1 › card 1 (vertical-stack) › card 2 (custom:acme-card)", "View 1 › card 2 (vertical-stack)"), report.islands.map { it.path })
+        assertEquals(listOf("View 1 › card 1 (vertical-stack) › card 2 (custom:acme-card)", "View 1 › card 2 (custom:stack-in-card)"), report.islands.map { it.path })
         val text = report.format()
         assertTrue(text, text.startsWith("4 cards: 2 native, 2 island"))
-        assertTrue(text, "ISLAND View 1 › card 2 (vertical-stack)\n  - card_mod `@media` rules aren't evaluated natively" in text)
+        assertTrue(text, "ISLAND View 1 › card 2 (custom:stack-in-card)\n  - card_mod `@media` rules aren't evaluated natively" in text)
     }
 
     @Test
