@@ -2,9 +2,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs, pick } from '../lib/args.mjs';
 import { assetDestination } from '../lib/assets.mjs';
-import { scrubStates, scrubText } from '../lib/scrub.mjs';
+import { denyPattern, scrubStates, scrubText } from '../lib/scrub.mjs';
 
 test('parseArgs takes known options with values', () => {
   assert.deepEqual(parseArgs(['capture', '--frames', 's1,tablet', '--root', '/tmp/x']), { cmd: 'capture', frames: 's1,tablet', root: '/tmp/x' });
@@ -75,7 +76,7 @@ test('loadCredentials warns, without the origin, when HA is not https', async ()
   const run = (origin) => {
     writeFileSync(join(dir, 'ha.json'), JSON.stringify({ origin, token: 't' }));
     return spawnSync(process.execPath, ['-e', "import('./lib/ha.mjs').then((m) => m.loadCredentials())"], {
-      cwd: new URL('..', import.meta.url).pathname, env: { ...process.env, VITRO_PARITY_HA: join(dir, 'ha.json') }, encoding: 'utf8',
+      cwd: fileURLToPath(new URL('..', import.meta.url)), env: { ...process.env, VITRO_PARITY_HA: join(dir, 'ha.json') }, encoding: 'utf8',
     });
   };
   const plain = run('http://ha.example.test:8123');
@@ -87,7 +88,7 @@ test('loadCredentials warns, without the origin, when HA is not https', async ()
 
 test('run.sh rejects an empty or missing operand instead of selecting everything', async () => {
   const { spawnSync } = await import('node:child_process');
-  const script = new URL('../run.sh', import.meta.url).pathname;
+  const script = fileURLToPath(new URL('../run.sh', import.meta.url));
   for (const args of [['--cases', ''], ['--frames'], ['--frames', '--cases', 'x'], ['--out', '']]) {
     const r = spawnSync('bash', [script, ...args], { encoding: 'utf8' });
     assert.equal(r.status, 2, JSON.stringify(args));
@@ -130,7 +131,7 @@ test('the HA origin is canonical, so the browser origin check matches it', async
   const load = (origin) => {
     writeFileSync(join(dir, 'ha.json'), JSON.stringify({ origin, token: 't' }));
     return spawnSync(process.execPath, ['-e', "import('./lib/ha.mjs').then((m) => { try { process.stdout.write(m.loadCredentials().origin) } catch (e) { process.stdout.write('ERR ' + e.message) } })"], {
-      cwd: new URL('..', import.meta.url).pathname, env: { ...process.env, VITRO_PARITY_HA: join(dir, 'ha.json') }, encoding: 'utf8',
+      cwd: fileURLToPath(new URL('..', import.meta.url)), env: { ...process.env, VITRO_PARITY_HA: join(dir, 'ha.json') }, encoding: 'utf8',
     }).stdout;
   };
   assert.equal(load('https://homeassistant.local:443/'), 'https://homeassistant.local');
@@ -146,7 +147,7 @@ test('scrub drops private keys at every depth', async () => {
 
 test('run.sh rejects an explicitly empty --local path', async () => {
   const { spawnSync } = await import('node:child_process');
-  const r = spawnSync('bash', [new URL('../run.sh', import.meta.url).pathname, '--refresh', '--local', ''], { encoding: 'utf8' });
+  const r = spawnSync('bash', [fileURLToPath(new URL('../run.sh', import.meta.url)), '--refresh', '--local', ''], { encoding: 'utf8' });
   assert.equal(r.status, 2);
   assert.match(r.stderr, /--local needs a path/);
 });
@@ -296,6 +297,15 @@ test('scrubGraphCalls drops private attributes from recorded history, nothing el
   const out = scrubGraphCalls(calls);
   assert.deepEqual(out[0].events[0].states['climate.x'][0].a, { temperature: 21 });
   assert.deepEqual(out[1], calls[1]);
+});
+
+test('a denylisted word matches whole, at any edge and with non-ASCII letters', () => {
+  assert.ok(denyPattern('José').test('José is home'));
+  assert.ok(denyPattern('Élodie').test('Bonjour Élodie'));
+  assert.ok(denyPattern('123 Main St.').test('123 Main St. Springfield'));
+  assert.ok(denyPattern('max').test('Hi MAX!'));
+  assert.ok(!denyPattern('Max').test('Maxwell'));
+  assert.ok(!denyPattern('José').test('Joséka'));
 });
 
 test('unmetExpectations names the entities not in the state a case expects', async () => {

@@ -1033,15 +1033,37 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         addView(col, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
+    /** Whether the card showed the last time its visibility was looked at: only a hidden → shown change refetches. */
+    private var statsShown = false
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        fetch()
+        statsShown = isShown
+        if (isShown) fetch()
     }
 
     override fun onDetachedFromWindow() {
         ctx.main.removeCallbacks(refresh)
         generation++
         super.onDetachedFromWindow()
+    }
+
+    /**
+     * A cached view another one hides stays attached: it stops polling Home Assistant (an answer still on its way is
+     * dropped), and asks once again when it shows. Attaching already fetched, so it doesn't ask twice.
+     */
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (!isAttachedToWindow) return
+        val shown = isShown
+        if (shown == statsShown) return
+        statsShown = shown
+        if (shown) {
+            fetch()
+        } else {
+            ctx.main.removeCallbacks(refresh)
+            generation++
+        }
     }
 
     private fun fetch() {
@@ -1086,7 +1108,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
             ctx.main.post {
                 if (gen != generation) return@post
                 if (ok && result is JSONObject) render(result, metadata, unit)
-                if (isAttachedToWindow) ctx.main.postDelayed(refresh, if (period == "5minute") 5 * 60_000L else 60 * 60_000L)
+                if (isAttachedToWindow && isShown) ctx.main.postDelayed(refresh, if (period == "5minute") 5 * 60_000L else 60 * 60_000L)
             }
         }
     }

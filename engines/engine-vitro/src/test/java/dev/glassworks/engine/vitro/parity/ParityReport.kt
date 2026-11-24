@@ -141,11 +141,25 @@ object ParityCompare {
         val used = HashMap<VitroText, Int>()
         for (t in ref.texts) {
             val needle = t.text.replace(Regex("\\s+"), " ").trim()
+            // A run of only whitespace matches anywhere and consumes nothing (and at 0 would read offsets[-1]).
+            if (needle.isEmpty()) continue
             val candidates = vitroTexts[t.slot].orEmpty()
+            val haCut = haCuts(t, ref.slots.getOrNull(t.slot))
+            // The first visible match; an elided one only when no visible one exists (the view holds the whole text
+            // even when its layout cuts it, and a cut HA doesn't make is a missing text).
             var hit: Pair<VitroText, Int>? = null
+            var elidedHit: Pair<VitroText, Int>? = null
             for (vt in candidates) {
                 val idx = indexOfFolded(vt.normalized, needle, used[vt] ?: 0)
-                if (idx >= 0) { hit = vt to idx; break }
+                if (idx < 0) continue
+                val cut = ParityViews.elided(vt.view, vt.offsets[idx], vt.offsets[idx + needle.length - 1] + 1) && !haCut
+                if (!cut) { hit = vt to idx; break }
+                if (elidedHit == null) elidedHit = vt to idx
+            }
+            if (hit == null && elidedHit != null) {
+                used[elidedHit.first] = elidedHit.second + needle.length
+                texts += TextCheck(t.text, t.size, null, null, null, elided = true)
+                continue
             }
             if (hit == null) {
                 val drawn = describedTexts[t.slot].orEmpty().any { indexOfFolded(it, needle) >= 0 }
@@ -154,13 +168,7 @@ object ParityCompare {
             }
             val (vt, idx) = hit
             used[vt] = idx + needle.length
-            // The view holds the whole text even when its layout cuts it: a cut HA doesn't make is a missing text.
             val start = vt.offsets[idx]
-            val end = vt.offsets[idx + needle.length - 1] + 1
-            if (ParityViews.elided(vt.view, start, end) && !haCuts(t, ref.slots.getOrNull(t.slot))) {
-                texts += TextCheck(t.text, t.size, null, null, null, elided = true)
-                continue
-            }
             val (x, center, size) = render.textMetrics(vt.view, start)
             val slotV = render.slots[t.slot]
             texts += TextCheck(t.text, t.size, size, (x - slotV.x) - t.box.x, (center - slotV.y) - (t.box.y + t.box.h / 2))

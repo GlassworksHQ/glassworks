@@ -139,6 +139,13 @@ class VitroTestActivity : Activity() {
     }
 
     @Deprecated("Back closes Vitro's more-info sheet or goes back one dashboard; Home leaves the app.")
+    override fun onDestroy() {
+        // This activity owns its engine: a recreate (`--ez dark`) makes a new one, so the old island server (its
+        // listener holds the old engine and this activity) stops here. A page reload keeps it running.
+        engine.islandServer.stop()
+        super.onDestroy()
+    }
+
     override fun onBackPressed() {
         page?.goBack()
     }

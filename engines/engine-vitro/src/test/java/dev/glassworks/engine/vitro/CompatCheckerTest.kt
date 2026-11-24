@@ -61,6 +61,63 @@ class CompatCheckerTest {
 
     private fun style(css: String) = JSONObject.quote(css)
 
+    @Test
+    fun autoEntitiesFilterKeysVitroDoesNotEvaluateAreNoted() {
+        val v = assertNative(
+            """{"type": "custom:auto-entities", "filter": {"include": [{"area": "kitchen", "domain": "light"},
+                {"or": [{"device": "Lamp"}, {"domain": "switch"}]}], "exclude": [{"integration": "hue"}]}}""",
+        )
+        val note = v.notes.single { "auto-entities filter" in it }
+        assertTrue(note, "`area`" in note && "`device`" in note && "`integration`" in note)
+        assertFalse(note, "`domain`" in note)
+        assertTrue(assertNative("""{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light"}]}}""").notes.none { "auto-entities filter" in it })
+    }
+
+    @Test
+    fun anInteractionStateInsideNotStillMatchesAtRest() {
+        // `:not(:hover)` matches the card at rest: the rule isn't harmless, even if every alternative mentions :hover.
+        val css = "ha-card:is(:hover, :not(:hover)) .x { opacity: .2 }"
+        val v = verdict("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(css)}}}""")
+        assertTrue(v.reasons.toString(), v.reasons.isNotEmpty())
+        // `:is(:hover, :focus)` still only matches while touched.
+        assertNative("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card:is(:hover, :focus) .x { opacity: .2 }")}}}""")
+    }
+
+    @Test
+    fun selectorDiagnosticsLeaveAttributeValuesOut() {
+        val css = "img[src^=\"https://cam.example/signed?token=secret-value\"] { opacity: 0 }"
+        val v = verdict("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(css)}}}""")
+        val all = (v.reasons + v.notes).joinToString()
+        assertFalse(all, "secret-value" in all)
+        assertTrue(all, "img[src^=…]" in all)
+        assertEquals("a[href=…] b[x]", CardCompat.redactAttributeValues("a[href=\"/x?y=1\"] b[x]"))
+        // A `]` inside the quoted value doesn't end the selector early (the token after it stayed in the text).
+        assertEquals("img[src^=…]", CardCompat.redactAttributeValues("img[src^=\"/image?part=]&token=demo-token\"]"))
+        // An escaped quote inside the value doesn't end it either.
+        assertEquals("img[src=…]", CardCompat.redactAttributeValues("img[src=\"/image?q=\\\"]&token=example\"]"))
+        // An escaped line break inside the value doesn't stop the match either.
+        assertEquals("img[src=…]", CardCompat.redactAttributeValues("img[src=\"/a\\\nb?token=example\"]"))
+        val quoted = verdict("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("img[src^=\"/image?part=]&token=demo-token\"] { opacity: 0 }")}}}""")
+        assertFalse((quoted.reasons + quoted.notes).joinToString(), "demo-token" in (quoted.reasons + quoted.notes).joinToString())
+    }
+
+    @Test
+    fun deeplyNestedInteractionSelectorsAreDecidedQuickly() {
+        // 25 nested :is() around :hover used to take millions of recursive checks.
+        val nested = "ha-card" + ":is(".repeat(25) + ":hover" + ")".repeat(25) + " .x { opacity: .2 }"
+        val started = System.nanoTime()
+        assertNative("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(nested)}}}""")
+        assertTrue("took ${(System.nanoTime() - started) / 1_000_000} ms", System.nanoTime() - started < 2_000_000_000L)
+    }
+
+    @Test
+    fun theReportsNotesHeadingFitsIslandWarningsToo() {
+        val view = LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "tile", "entity": "light.a", "features_position": "inline", "features": [{"type": "toggle"}]}]}"""))
+        val text = CompatChecker.check(view).format()
+        assertTrue(text, "Compatibility notes:" in text)
+        assertFalse(text, "Known gaps (native" in text)
+    }
+
     // ---- Real dashboard idioms: must stay native ----
 
     @Test
@@ -660,7 +717,8 @@ class CompatCheckerTest {
             CompatChecker.check(view).entries.map { it.path },
         )
         // `card_param: cards`: the inner card is checked with the cards auto-entities puts in it, and what the config
-        // wrote in that field is replaced, so it doesn't count. Neither the generated cards nor the replaced ones are listed.
+        // wrote in that field is replaced, so it doesn't count. The explicit `entities:` entries are listed (they are
+        // built whatever the states); the cards a filter matches and the replaced ones aren't.
         val generated = LovelaceParser.parseView(
             0,
             JSONObject(
@@ -671,9 +729,23 @@ class CompatCheckerTest {
         val genReport = CompatChecker.check(generated)
         assertTrue(genReport.format(), genReport.islands.isEmpty())
         assertEquals(
-            listOf("View 1 › card 1 (custom:auto-entities)", "View 1 › card 1 (custom:auto-entities) › card 1 (custom:layout-card)"),
+            listOf(
+                "View 1 › card 1 (custom:auto-entities)",
+                "View 1 › card 1 (custom:auto-entities) › card 1 (custom:layout-card)",
+                "View 1 › card 1 (custom:auto-entities) › card 1 (custom:layout-card) › entity 1 (tile)",
+            ),
             genReport.entries.map { it.path },
         )
+        // An explicit custom card among them is an island in the report, not "fully native".
+        val explicitIsland = LovelaceParser.parseView(
+            0,
+            JSONObject(
+                """{"cards": [{"type": "custom:auto-entities", "card_param": "cards", "card": {"type": "grid"},
+                    "entities": [{"entity": "light.a", "type": "custom:acme-card"}], "filter": {"include": [{"domain": "light"}]}}]}""",
+            ),
+        )
+        val explicitReport = CompatChecker.check(explicitIsland)
+        assertEquals(listOf("View 1 › card 1 (custom:auto-entities) › card 1 (grid) › entity 1 (custom:acme-card)"), explicitReport.islands.map { it.path })
         // Static children of the inner card are listed: a conditional's `card:` isn't generated.
         val conditional = LovelaceParser.parseView(
             0,

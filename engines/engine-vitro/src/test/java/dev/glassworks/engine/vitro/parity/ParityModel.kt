@@ -91,6 +91,16 @@ data class CssRect(val x: Double, val y: Double, val w: Double, val h: Double) {
 
     companion object {
         fun of(o: JSONObject) = CssRect(o.optDouble("x"), o.optDouble("y"), o.optDouble("w", o.optDouble("width")), o.optDouble("h", o.optDouble("height")))
+
+        /**
+         * [of] for a reference's rectangles, read inside the per-case handler: a missing coordinate (NaN) would pass
+         * every threshold check (`NaN > t` is false) and then break the report's JSON for every case.
+         */
+        fun finite(o: JSONObject, what: String): CssRect {
+            val r = of(o)
+            require(r.x.isFinite() && r.y.isFinite() && r.w.isFinite() && r.h.isFinite()) { "reference $what has a missing or invalid x, y, w or h" }
+            return r
+        }
     }
 }
 
@@ -167,7 +177,7 @@ data class RefText(
 /** What capture.mjs recorded for one case on one frame. */
 class ParityReference(val png: File, val json: JSONObject) {
     val now: Long get() = json.getLong("now")
-    val clip: CssRect get() = CssRect.of(json.getJSONObject("clip"))
+    val clip: CssRect get() = CssRect.finite(json.getJSONObject("clip"), "clip")
     val stable: Boolean get() = json.optBoolean("stable", true)
     val states: JSONObject get() = json.optJSONObject("states") ?: JSONObject()
 
@@ -182,7 +192,7 @@ class ParityReference(val png: File, val json: JSONObject) {
 
     /** What HaDisplay held for the case's entities (registry entries, device names, icons, state labels), or null. */
     val display: JSONObject? get() = json.optJSONObject("display")
-    val slots: List<CssRect> get() = json.getJSONArray("slots").let { a -> (0 until a.length()).map { CssRect.of(a.getJSONObject(it)) } }
+    val slots: List<CssRect> get() = json.getJSONArray("slots").let { a -> (0 until a.length()).map { CssRect.finite(a.getJSONObject(it), "slot $it") } }
     val slotTypes: List<String> get() = json.getJSONArray("slots").let { a -> (0 until a.length()).map { a.getJSONObject(it).optString("type") } }
 
     /** Template string -> what HA rendered for it when the reference was taken. */

@@ -47,6 +47,16 @@ describe("the published compatibility manifest", () => {
     expect(published.containerTypes).toHaveLength(7);
   });
 
+  it("lists the configurations the engine draws natively, as the engine and the audit script do", () => {
+    expect(published.configDependentTypes["custom:bubble-card"].native).toEqual(kotlinSet("BUBBLE_CARD_TYPES"));
+    expect(published.configDependentTypes["custom:layout-card"].native).toEqual(kotlinSet("LAYOUT_CARD_TYPES"));
+    for (const [type, rule] of Object.entries(published.configDependentTypes) as [string, { option: string; default: string; native: string[] }][]) {
+      const line = python.match(new RegExp(`"${type}": \\("${rule.option}", "${rule.default}", \\{([^}]*)\\}\\)`))?.[1];
+      expect(line, `${type} in audit_vitro_dashboard.py`).toBeDefined();
+      expect(new Set([...line!.matchAll(/"([^"]+)"/g)].map((m) => m[1]))).toEqual(new Set(rule.native));
+    }
+  });
+
   it("walks the same containers the engine flattens", () => {
     expect(published.containerTypes).toEqual(kotlinSet("CONTAINER_TYPES"));
     expect(kotlin).toContain("c.type in CONTAINER_TYPES");
@@ -284,5 +294,52 @@ describe("parseYaml", () => {
   it("refuses tabs and stray indentation", () => {
     expect(() => parseYaml("a:\n\t- 1\n")).toThrow(/tabs/);
     expect(() => parseYaml("a: 1\n  b: 2\n")).toThrow(/YAML line 2/);
+  });
+});
+
+describe("auditDashboard and the cards built from a configuration", () => {
+  it("flags a Bubble Card pop-up and an unknown layout, and passes the native variants", () => {
+    const r = auditDashboard(
+      JSON.stringify({
+        views: [{ cards: [
+          { type: "custom:bubble-card", card_type: "pop-up" },
+          { type: "custom:bubble-card", card_type: "separator" },
+          { type: "custom:bubble-card", card_type: "custom:separator" },
+          { type: "custom:bubble-card" },
+          { type: "custom:layout-card", layout_type: "custom:grid-layout", cards: [{ type: "tile" }] },
+          { type: "custom:layout-card", layout_type: "custom:my-layout", cards: [{ type: "tile" }] },
+        ] }],
+      }),
+    );
+    expect(r.triggers.map((t) => t.type)).toEqual([
+      "custom:bubble-card (card_type: pop-up)",
+      "custom:bubble-card (card_type: custom:separator)",
+      "custom:layout-card (layout_type: my-layout)",
+    ]);
+  });
+
+  it("treats a type named like an inherited property as an unknown card", () => {
+    const r = auditDashboard(JSON.stringify({ views: [{ cards: [{ type: "constructor" }, { type: "__proto__" }] }] }));
+    expect(r.ok).toBe(true);
+    expect(r.totals.tier3).toBe(2);
+  });
+
+  it("inspects what auto-entities builds: its inner card and explicit card entries", () => {
+    const island = auditDashboard(
+      JSON.stringify({ views: [{ cards: [{ type: "custom:auto-entities", card: { type: "custom:button-card" } }] }] }),
+    );
+    expect(island.isFullyNative).toBe(false);
+    const explicit = auditDashboard(
+      JSON.stringify({ views: [{ cards: [{
+        type: "custom:auto-entities", card_param: "cards", card: { type: "grid" },
+        entities: ["light.kitchen", { entity: "light.lamp", type: "custom:button-card" }],
+      }] }] }),
+    );
+    expect(explicit.triggers.map((t) => t.path)).toEqual(["view_0/card[0].entities[1]"]);
+    // The default inner card (entities) and plain entries stay native.
+    const plain = auditDashboard(
+      JSON.stringify({ views: [{ cards: [{ type: "custom:auto-entities", filter: { include: [{ domain: "light" }] } }] }] }),
+    );
+    expect(plain.isFullyNative).toBe(true);
   });
 });

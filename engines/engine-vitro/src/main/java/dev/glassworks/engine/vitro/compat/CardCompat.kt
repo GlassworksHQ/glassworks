@@ -245,6 +245,29 @@ object CardCompat {
                 val t = raw.optString("card_type", "button").ifEmpty { "button" }
                 if (t !in VitroSupport.BUBBLE_CARD_TYPES) reasons += "Bubble Card `card_type: $t` isn't drawn natively"
             }
+            "custom:auto-entities" -> {
+                // Filter keys Vitro doesn't evaluate (`area`, `device`, `integration`, …), nested rules included: the
+                // child stays native, but the entities those keys would match are left out of it.
+                val unknown = LinkedHashSet<String>()
+                fun scan(rule: JSONObject) {
+                    for (k in rule.keys()) {
+                        if (k !in dev.glassworks.engine.vitro.cards.AutoEntitiesFilter.RULE_KEYS) unknown += k
+                        when (k) {
+                            "not" -> rule.optJSONObject(k)?.let(::scan)
+                            "or", "and" -> objects(rule.optJSONArray(k)).forEach(::scan)
+                        }
+                    }
+                }
+                raw.optJSONObject("filter")?.let { f ->
+                    objects(f.optJSONArray("include")).forEach(::scan)
+                    objects(f.optJSONArray("exclude")).forEach(::scan)
+                    if (f.has("template")) unknown += "template"
+                }
+                if (unknown.isNotEmpty()) {
+                    notes += "auto-entities filter ${unknown.joinToString { "`$it`" }} isn't evaluated natively: entities an include rule " +
+                        "matches are left out, and an exclude rule can't remove its matches"
+                }
+            }
             "custom:layout-card" -> {
                 val t = raw.optString("layout_type", "masonry-layout").removePrefix("custom:").ifEmpty { "masonry-layout" }
                 if (t !in VitroSupport.LAYOUT_CARD_TYPES) reasons += "layout-card `layout_type: $t` isn't drawn natively"
@@ -403,8 +426,9 @@ object CardCompat {
             if (sheet != Sheet.CARD && sheet != Sheet.STACK && important.any { it.third } && verdicts.any { it is Sel.Honored }) {
                 notes += gap("!important", "card_mod `$key` `!important`")
             }
-            verdicts.filterIsInstance<Sel.Unsupported>().forEach { reasons += "card_mod `$key` selector `${it.selector}`: ${it.why}" }
-            verdicts.filterIsInstance<Sel.Unchecked>().forEach { notes += gap("templated selector", "card_mod `$key` `${it.selector}`") }
+            // Attribute values left out of what is reported (and logged): one can hold a signed URL or a name.
+            verdicts.filterIsInstance<Sel.Unsupported>().forEach { reasons += "card_mod `$key` selector `${redactAttributeValues(it.selector)}`: ${it.why}" }
+            verdicts.filterIsInstance<Sel.Unchecked>().forEach { notes += gap("templated selector", "card_mod `$key` `${redactAttributeValues(it.selector)}`") }
             val honored = verdicts.filterIsInstance<Sel.Honored>()
             if (honored.isEmpty()) continue
             val host = honored.any { it.host }
@@ -451,6 +475,7 @@ object CardCompat {
         var benign = false
         val stripped = stripAttributeValues(norm)
         val groups = functionalGroups(stripped)
+        val interactionMemo = HashMap<String, Boolean>()
         for (m in PSEUDO.findAll(stripped)) {
             val name = m.groupValues[2]
             val element = m.groupValues[1] == "::" || name in LEGACY_PSEUDO_ELEMENTS
@@ -459,7 +484,7 @@ object CardCompat {
                 element -> return Sel.Unsupported(sel, "pseudo-element `::$name` isn't drawn natively")
                 // An interaction state makes the rule inactive at rest only when it rules out every way to match:
                 // `:not(:hover)` matches at rest, and so does `:is(:hover, ha-card)` through its other alternative.
-                name in VitroSupport.BENIGN_PSEUDO_CLASSES -> if (rulesOutRest(stripped, m.range.first, groups)) benign = true
+                name in VitroSupport.BENIGN_PSEUDO_CLASSES -> if (rulesOutRest(stripped, m.range.first, groups, interactionMemo)) benign = true
                 name in VitroSupport.PSEUDO_CLASSES -> Unit
                 name == "host" -> return Sel.Unsupported(sel, "`:host` with a selector isn't modeled")
                 else -> return Sel.Unsupported(sel, "`:$name` isn't evaluated natively")
@@ -483,9 +508,21 @@ object CardCompat {
 
     private fun stripAttributeValues(sel: String): String = sel.replace(ATTRIBUTE_VALUE, "[]")
 
+    /** [sel] with each attribute selector's value replaced by `…`, its name and operator kept (`[src^=…]`). */
+    internal fun redactAttributeValues(sel: String): String = sel.replace(ATTRIBUTE_VALUE) { m ->
+        val inner = m.value.substring(1, m.value.length - 1)
+        val op = ATTRIBUTE_OPERATOR.find(inner) ?: return@replace m.value
+        "[" + inner.substring(0, op.range.last + 1) + "…]"
+    }
+
+    private val ATTRIBUTE_OPERATOR = Regex("""[~|^$*]?=""")
+
     // Compiled once: every card's selectors pass through here when a view builds.
     private val SELECTOR_SPACES = Regex("""\s+""")
-    private val ATTRIBUTE_VALUE = Regex("""\[[^\]]*\]""")
+    // Quote- and escape-aware: a `]` inside a quoted value (`[src^="/x?a=]&token=…"]`), an escaped quote inside one
+    // (`"/x?q=\"]&token=…"`) or an escaped `]` doesn't end the attribute selector.
+    // An escape takes any next character, a line break included (`.` wouldn't).
+    private val ATTRIBUTE_VALUE = Regex("""\[(?:"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|\\[\s\S]|[^\]"'\\])*\]""")
 
     private val FUNCTIONAL = Regex(""":(not|is|where|matches|-webkit-any|has)\(""")
 
@@ -507,14 +544,27 @@ object CardCompat {
      * True when the interaction state at [at] keeps the selector from matching at rest: it isn't inside a `:not()`
      * or `:has()`, and inside each enclosing `:is()` / `:where()` every alternative has an interaction state too.
      */
-    private fun rulesOutRest(sel: String, at: Int, groups: List<Pair<String, IntRange>>): Boolean {
+    private fun rulesOutRest(sel: String, at: Int, groups: List<Pair<String, IntRange>>, memo: HashMap<String, Boolean>): Boolean {
         for ((name, range) in groups) {
             if (at !in range) continue
             if (name == "not" || name == "has") return false
             val alternatives = CssSelector.splitTopLevel(sel.substring(range.first + 1, range.last), ',')
-            if (alternatives.any { alt -> PSEUDO.findAll(alt).none { it.groupValues[2] in VitroSupport.BENIGN_PSEUDO_CLASSES } }) return false
+            // Each alternative must *require* an interaction state: `:not(:hover)` contains one and matches at rest.
+            if (alternatives.any { alt -> !requiresInteraction(alt.trim(), memo) }) return false
         }
         return true
+    }
+
+    /** True when [sel] can only match in an interaction state: one of its states rules out the card at rest. */
+    /**
+     * Each distinct alternative is decided once per selector ([memo]): nested `:is()` groups share their inner
+     * alternatives, and deciding them again for every enclosing group grows exponentially with the nesting.
+     */
+    private fun requiresInteraction(sel: String, memo: HashMap<String, Boolean>): Boolean = memo[sel] ?: run {
+        val groups = functionalGroups(sel)
+        PSEUDO.findAll(sel).any { m ->
+            m.groupValues[1] == ":" && m.groupValues[2] in VitroSupport.BENIGN_PSEUDO_CLASSES && rulesOutRest(sel, m.range.first, groups, memo)
+        }.also { memo[sel] = it }
     }
 
     /**

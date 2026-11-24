@@ -95,7 +95,8 @@ class HaGridLayout(
             rowTop[r] = y
             y += rowHeight[r] + if (r < rowHeight.lastIndex) rowGap else 0
         }
-        setMeasuredDimension(width, y + paddingBottom)
+        // The parent's height constraint holds (EXACTLY, AT_MOST); UNSPECIFIED (a scroller) gets the whole content.
+        setMeasuredDimension(width, resolveSize(y + paddingBottom, heightMeasureSpec))
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {

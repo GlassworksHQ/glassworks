@@ -153,7 +153,7 @@ To check your own dashboards without a panel, save each Lovelace config (`lovela
 VITRO_PARITY_DIR=/path/to/folder ./gradlew :engine-vitro:testDebugUnitTest --tests '*CompatCheckerLocal*' -i
 ```
 
-The report covers the cards in the dashboard config, auto-entities' own `card:` included. The cards `auto-entities` builds at runtime for each matched entity aren't in it, so an island one of them opens doesn't show in the counts or the log. This check reads only the exported configs, not the resource list, so it assumes every card's script and card-mod are Lovelace resources the islands can load. On the panel, a card whose script or card-mod isn't a resource stays native even though the check lists it as an island.
+The report covers the cards in the dashboard config, auto-entities' own `card:` included. The cards `auto-entities` builds at runtime for each matched entity aren't in it, so an island one of them opens doesn't show in the counts or the log. This check reads only the exported configs, not the resource list, so it assumes every card's script and card-mod are Lovelace resources the islands can load. On the panel, a card that Vitro draws natively stays native when its script or card-mod isn't a resource, even though the check lists it as an island. A custom card Vitro has no native renderer for still goes to an island, and without its script that island has nothing to draw: a missing resource is never a native fallback for it.
 
 ## Key optimizations
 
@@ -199,6 +199,16 @@ The dashboard has seven views:
 | `panel-custom` | A full-screen custom card in a Tier 3 island |
 | `mixed-island` | Native cards next to a custom card served from `/local` |
 | `advanced` | A floorplan with `picture-elements`, all six inline tile features, a humidifier, a calendar, a logbook, and a HACS-style wrapper card |
+
+The `hacs` view names Mushroom, Bubble Card, mini-graph-card and clock-weather-card, but the showcase doesn't ship their scripts. Without them Home Assistant's frontend can't draw those cards, so the side-by-side has nothing to compare there. To compare them, download each card's release bundle (the `.js` file from its GitHub release or your HACS folder) into one folder, then serve that folder and register each bundle as a resource:
+
+```sh
+python3 tools/vitro/showcase_ha.py --port 8091 --local-dir ~/hacs-bundles \
+  --resource /local/mushroom.js --resource /local/bubble-card.js \
+  --resource /local/mini-graph-card-bundle.js --resource /local/clock-weather-card.js
+```
+
+Use the file names the folder actually has. A `.css` resource is loaded as a stylesheet, and anything else as a module.
 
 The standalone `:vitro-test` debug APK is Vitro on its own, with no GeckoView linked, so it draws Tier 1 and Tier 2 cards only. Point it at the showcase through `adb reverse`, so the device's loopback reaches this computer:
 
