@@ -56,6 +56,7 @@ import dev.glassworks.engine.vitro.cards.MoreInfoSheet
 import dev.glassworks.engine.vitro.cards.MushroomChipsCardView
 import dev.glassworks.engine.vitro.cards.PictureCardView
 import dev.glassworks.engine.vitro.cards.PictureElementsCardView
+import dev.glassworks.engine.vitro.cards.HistoryGraphCardView
 import dev.glassworks.engine.vitro.cards.SensorGraphCardView
 import dev.glassworks.engine.vitro.cards.StatisticsGraphCardView
 import dev.glassworks.engine.vitro.cards.ThermostatCardView
@@ -1084,7 +1085,7 @@ class VitroView(
             "heading" -> HeadingCardView(ctx, card)
             "clock" -> ClockCardView(ctx, card)
             "sensor" -> EntityCardView(ctx, card)
-            "history-graph" -> SensorGraphCardView(ctx, card)
+            "history-graph" -> HistoryGraphCardView(ctx, card)
             "gauge" -> GaugeCardView(ctx, card)
             "thermostat" -> ThermostatCardView(ctx, card)
             "weather-forecast" -> WeatherCardView(ctx, card)

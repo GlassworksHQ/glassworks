@@ -66,7 +66,11 @@ private fun label(ctx: VitroCardContext, sp: Float, color: Int, weight: Int = In
         includeFontPadding = false
     }
 
-/** Native Canvas sparkline / multi-series line graph for `sensor`, `history-graph`, and `custom:mini-graph-card`. */
+/**
+ * Native Canvas sparkline / multi-series line graph for `custom:mini-graph-card`. HA's own `sensor` and
+ * `history-graph` cards are drawn as HA draws them: [EntityCardView] with [GraphFooterView], and
+ * [HistoryGraphCardView].
+ */
 class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
     private val titleView = label(ctx, 14f, ctx.theme.secondaryTextColor, Inter.MEDIUM)
     private val valueView = label(ctx, 24f, ctx.theme.primaryTextColor, Inter.LIGHT)
@@ -108,18 +112,14 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
         val primaryId = entityIds.firstOrNull()
         val hours = config.raw.optInt("hours_to_show", 24).coerceIn(1, 168)
 
-        if (config.type == "history-graph") {
-            titleView.text = config.title ?: "History"
-            valueView.visibility = GONE
-            icon.setIcon("mdi:gauge", ctx.theme.primaryColor)
-            if (entityIds.size > 1) buildLegend(legend, entityIds)
-        } else if (primaryId != null) {
+        if (primaryId != null) {
             observe(primaryId) { s ->
                 titleView.text = config.name ?: config.title ?: s?.friendlyName ?: primaryId
                 valueView.text = s?.formattedState() ?: "…"
                 icon.setIcon(MdiIcons.resolveIconName(config.icon, s), ctx.theme.primaryColor)
             }
         }
+        if (entityIds.size > 1) buildLegend(legend, entityIds)
 
         if (entityIds.isNotEmpty()) {
             val showGraph = config.raw.optString("graph", "line") != "none"
@@ -138,7 +138,7 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
         }
     }
 
-    /** HA's history-graph legend: a colored dot and name per series; tapping one opens its more-info. */
+    /** mini-graph-card's legend: a colored dot and name per series; tapping one opens its more-info. */
     private fun buildLegend(legend: LinearLayout, entityIds: List<String>) {
         legend.visibility = VISIBLE
         entityIds.forEachIndexed { idx, id ->

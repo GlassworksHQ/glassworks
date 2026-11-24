@@ -7,6 +7,20 @@
   "missingText": 0,
   "reason": "the date line and layout match HA (its start cut off at the large size, as HA's marquee rests); what is left is glyph antialiasing on the 64 px digits and 24 px date, just over the 2% line"
  },
+ "mirror/history-graph-timeline": {
+  "pixel": 0.0544,
+  "bounds": 0.7,
+  "font": 0,
+  "missingText": 0,
+  "reason": "as on the tablet (the name measured in the capture host's fallback font, bars ~2 px further left), plus at density 1.5 Vitro's card insets its content by a 1 px border truncated to 1 device px (CardSurface), not 1.5: the 20 px bars sit half a device pixel higher, so HA's blended bar edges are hard edges in Vitro (2026-11-24)"
+ },
+ "mirror/history-graph-two": {
+  "pixel": 0.0334,
+  "bounds": 0.2,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the chart's geometry follows HA (grid, ECharts 6 nice axis, 4 h ticks, step lines, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"1,018.5\": 41 px), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
+ },
  "mirror/markdown-cardmod": {
   "pixel": 0.0202,
   "bounds": 2.7,
@@ -35,6 +49,13 @@
   "missingText": 0,
   "reason": "both cut the primary with an ellipsis (the capture flags HA's since the flat-tree walk); Vitro cuts one glyph earlier (\"door \u2026\" vs \"door a\u2026\") and its row is ~1.3 px taller (2026-11-24)"
  },
+ "mirror/statistics-graph": {
+  "pixel": 0.0395,
+  "bounds": 0.2,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the chart's geometry follows HA (band, smoothing 0.4, daily ticks, axis line, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"28\"), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
+ },
  "mirror/thermostat": {
   "pixel": 0.0015,
   "bounds": 0.7,
@@ -48,6 +69,20 @@
   "font": 0,
   "missingText": 0,
   "reason": "the date line and layout match HA (its start cut off at the large size, as HA's marquee rests); what is left is glyph antialiasing on the 64 px digits and 24 px date, just over the 2% line"
+ },
+ "s1/history-graph-timeline": {
+  "pixel": 0.0545,
+  "bounds": 0.7,
+  "font": 0,
+  "missingText": 0,
+  "reason": "as on the tablet (the name measured in the capture host's fallback font, bars ~2 px further left), plus at density 1.5 Vitro's card insets its content by a 1 px border truncated to 1 device px (CardSurface), not 1.5: the 20 px bars sit half a device pixel higher, so HA's blended bar edges are hard edges in Vitro (2026-11-24)"
+ },
+ "s1/history-graph-two": {
+  "pixel": 0.0334,
+  "bounds": 0.2,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the chart's geometry follows HA (grid, ECharts 6 nice axis, 4 h ticks, step lines, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"1,018.5\": 41 px), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
  },
  "s1/markdown-cardmod": {
   "pixel": 0.0148,
@@ -77,6 +112,13 @@
   "missingText": 0,
   "reason": "both cut the primary with an ellipsis (the capture flags HA's since the flat-tree walk); Vitro cuts one glyph earlier (\"door \u2026\" vs \"door a\u2026\") and its row is ~1.3 px taller (2026-11-24)"
  },
+ "s1/statistics-graph": {
+  "pixel": 0.0395,
+  "bounds": 0.2,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the chart's geometry follows HA (band, smoothing 0.4, daily ticks, axis line, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"28\"), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
+ },
  "s1/thermostat": {
   "pixel": 0.0015,
   "bounds": 0.7,
@@ -90,6 +132,20 @@
   "font": 0,
   "missingText": 0,
   "reason": "the date line and layout match HA (its start cut off at the large size, as HA's marquee rests); what is left is glyph antialiasing on the 64 px digits and 24 px date, just over the 2% line"
+ },
+ "tablet/history-graph-timeline": {
+  "pixel": 0.0271,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "bars, labels and 4 h ticks follow HA; left: the row's name width is measured as in history-graph-two (the capture host's Chrome measures \"Occupancy\" in its sans-serif fallback, 61 px; Vitro in Roboto), so the bars start ~2 px further left (2026-11-24)"
+ },
+ "tablet/history-graph-two": {
+  "pixel": 0.0404,
+  "bounds": 0.7,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the chart's geometry follows HA (grid, ECharts 6 nice axis, 4 h ticks, step lines, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"1,018.5\": 41 px), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
  },
  "tablet/markdown-cardmod": {
   "pixel": 0.0097,
@@ -111,6 +167,13 @@
   "font": 0,
   "missingText": 0,
   "reason": "both cut the primary with an ellipsis (the capture flags HA's since the flat-tree walk); Vitro cuts one glyph earlier (\"door \u2026\" vs \"door a\u2026\") and its row is ~2 px taller, which moves the bottom border (2026-11-24)"
+ },
+ "tablet/statistics-graph": {
+  "pixel": 0.0433,
+  "bounds": 0.7,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the chart's geometry follows HA (band, smoothing 0.4, daily ticks, axis line, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"28\"), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
  },
  "tablet/thermostat": {
   "pixel": 0.0019,

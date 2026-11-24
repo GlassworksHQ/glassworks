@@ -15,7 +15,10 @@ import kotlin.math.ceil
 import kotlin.math.floor
 
 /** One entry of a `history/stream` answer, minimal and compressed (HA's `EntityHistoryState`): state, `lu` in seconds. */
-class HistoryState(val s: String, var lu: Double, val a: JSONObject? = null)
+class HistoryState(val s: String, var lu: Double, val a: JSONObject? = null) {
+    /** `lc` in seconds, when it differs from [lu]; NaN when absent. */
+    var lc: Double = Double.NaN
+}
 
 /**
  * The data side of Home Assistant's graphs, ported from its frontend (home-assistant/frontend 20261028.4, the release
@@ -83,6 +86,7 @@ object HaGraph {
             val o = arr.optJSONObject(i) ?: continue
             val s = o.opt("s")
             out += HistoryState(if (s == null || s == JSONObject.NULL) "null" else s.toString(), o.optDouble("lu", o.optDouble("lc", 0.0)), o.optJSONObject("a"))
+                .also { it.lc = o.optDouble("lc", Double.NaN) }
         }
         return out
     }
@@ -126,6 +130,7 @@ object HaGraph {
                 next[id] = kept
                 if (kept.isNotEmpty() && kept[0].lu == purgeBefore) return
                 lastExpired.lu = purgeBefore
+                lastExpired.lc = Double.NaN
                 kept.add(0, lastExpired)
             }
             for (id in combined.keys.toList()) processEntity(id)
