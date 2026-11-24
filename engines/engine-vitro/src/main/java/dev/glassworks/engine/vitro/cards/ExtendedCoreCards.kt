@@ -1422,14 +1422,11 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
 
     private fun stateIcon(el: PictureElement): View {
         val icon = MdiIconView(ctx.context)
+        // hui-state-icon-element: a bare 40 px state-badge, its 24 px icon in the middle, nothing behind it.
         val halo = FrameLayout(ctx.context).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(overlayColor(0.55f))
-            }
-            addView(icon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
+            addView(icon, LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
         }
-        halo.layoutParams = LayoutParams(ctx.px(36f), ctx.px(36f))
+        halo.layoutParams = LayoutParams(ctx.px(40f), ctx.px(40f))
         bindActions(halo, el, if (VitroCardContext.isToggleable(el.entity)) "toggle" else "more-info")
         val eid = el.entity
         if (eid != null) {
@@ -1441,10 +1438,13 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
     }
 
     private fun stateLabel(el: PictureElement): View {
-        val label = extLabel(ctx, 12f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+        // hui-state-label-element: `div { padding: 8px; white-space: nowrap }` in the card's 14 px / 400 on a 22.4 px
+        // line, nothing behind it.
+        val label = extLabel(ctx, 14f, ctx.theme.primaryTextColor).apply {
             maxLines = 1
-            setPadding(ctx.px(8f), ctx.px(3f), ctx.px(8f), ctx.px(3f))
-            background = pillBackground(overlayColor(0.75f))
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(ctx.px(8f), ctx.px(8f), ctx.px(8f), ctx.px(8f))
+            minHeight = (38.4f * ctx.dp).roundToInt()
         }
         bindActions(label, el, "more-info")
         val eid = el.entity
