@@ -42,13 +42,18 @@ HA access comes from `~/.t3/glassworks-m1/vitro-parity/ha.json` (`{"origin": …
 | Path | What |
 |---|---|
 | `engines/engine-vitro/src/test/parity/frames.json` | The panels: S1 960×480 CSS at 1.5, Pixel Tablet 1280×800 at 2, Mirror 720×1280 at 1.5 |
-| `…/corpus/<case>.json` | One card per file: `card`, and optionally `title`, `frames`, `dark` (default true), `theme` (a view theme), `span` (section columns), `threshold`, `masks` (CSS px regions relative to the card, each with a `why`), and `expect` (`{entity_id: state}`: a refresh writes no reference for the case while an entity is in another state, so a case about a light that is on never quietly becomes one about a light that is off) |
+| `…/corpus/<case>.json` | One card per file: `card`, and optionally `title`, `frames`, `dark` (default true), `theme` (a view theme), `span` (section columns), `threshold`, `masks` (CSS px regions relative to the card, each with a `why`), `resources` (Lovelace resources of type `css` from `fixtures/`, see below), and `expect` (`{entity_id: state}`: a refresh writes no reference for the case while an entity is in another state, so a case about a light that is on never quietly becomes one about a light that is off) |
 | `…/refs/<frame>/<case>.png` and `.json` | Home Assistant's render and what came with it |
 | `…/refs/shared.json` | HA's version, the config fields Vitro reads, and the themes |
 | `…/assets/` | Images the fixture server hands Vitro, standing in for HA's `/static` |
+| `…/fixtures/` | A case's own stylesheets and fonts, at `/local/vitro-harness-fixtures/` on HA's origin. The capture answers those requests in the browser and adds each sheet to HA's page the way HA loads a `type: css` resource, so nothing is added to Home Assistant. Vitro gets the same files from the fixture server |
 | `…/baseline.json` | Known drift per `frame/case`, with a `reason` |
 
 A local corpus (`--local [dir]`, default `~/.t3/glassworks-m1/vitro-parity/harness-local`) has the same layout. Its cases name a real dashboard view instead of a card, `{"dashboard": "s1-home-vitro", "view": "home", "frames": ["s1"]}`, and compare the whole view: every card slot in order, plus the full page.
+
+### Cases with their own stylesheets
+
+Home Assistant is read-only for the harness, apart from its own dashboard, so a case that needs a stylesheet (a web font, say) doesn't add a Lovelace resource. It lists the sheet instead: `"resources": [{"type": "css", "url": "/local/vitro-harness-fixtures/fonts/cardmod.css"}]`, with the file in `fixtures/fonts/cardmod.css`. Only `type: css` under that path is accepted. Such a case gets a page of its own in the capture, and the next case a fresh one, because what a sheet declares stays in the page. The font cases (`font-*`) use fonts under the SIL Open Font License; their licences sit next to them.
 
 ### Adding a case
 

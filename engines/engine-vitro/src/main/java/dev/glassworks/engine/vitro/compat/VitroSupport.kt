@@ -161,6 +161,8 @@ object VitroSupport {
         "transition", "position", "top", "right", "bottom", "left", "width", "height", "transform",
         // Android views are always border-box, which is what this sets.
         "box-sizing",
+        // Inherited by every text in the card, web fonts from `type: css` resources included (VitroFonts).
+        "font-family",
     )
 
     /** Of [CARD_PROPERTIES]' typography cousins, the ones only [FONT_SIZE_TYPES] read. */

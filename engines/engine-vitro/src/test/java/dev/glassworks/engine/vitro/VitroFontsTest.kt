@@ -42,4 +42,11 @@ class VitroFontsTest {
         assertEquals(Face.INTER, VitroFonts.faceFor(theme("""{"primary-font-family": "Inter"}""")))
         assertEquals(Face.SYSTEM, VitroFonts.faceFor(theme("""{"ha-font-family-body": "Roboto", "primary-font-family": "Inter"}""")))
     }
+
+    @Test
+    fun aThemeOfColorsOnlyDeclaresNoFont() {
+        // A card's color-only theme keeps the font in force outside the card (VitroView).
+        assertEquals(null, VitroFonts.declaredFamily(theme("""{"primary-color": "#ff0000"}""")))
+        assertEquals("Lora, serif", VitroFonts.declaredFamily(theme("""{"ha-font-family-body": "Lora, serif"}""")))
+    }
 }

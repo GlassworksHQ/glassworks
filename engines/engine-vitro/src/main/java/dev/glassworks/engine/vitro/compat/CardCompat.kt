@@ -601,7 +601,6 @@ object CardCompat {
     private val TRANSLATE = Regex("""^(translate[xy]?)\((.*)\)$""")
     private val CENTER_OR_ZERO = setOf("-50%", "0", "0px", "0%")
     private val BORDER_STYLE_WORDS = setOf("dashed", "dotted", "double", "groove", "ridge", "inset", "outset")
-    private val FONT_FAMILY_OK = Regex("""^(inherit|initial|unset|revert|monospace|sans-serif|system-ui|inter|roboto)$""")
     private val GLOW = Regex("""^0(px)?\s+0(px)?\s""")
     private val OFFSETS = setOf("top", "right", "bottom", "left")
 
@@ -759,10 +758,6 @@ object CardCompat {
         "display" -> if (sheet == Sheet.CLOCK_CARD || sheet == Sheet.CLOCK_DIGITAL || value in VitroSupport.MARKDOWN_DISPLAY) null
         else "isn't laid out natively"
         "background", "background-color" -> backgroundProblem(value, allowGradient = false)
-        "font-family" -> {
-            val families = CssSelector.splitTopLevel(value, ',').map { it.trim().trim('"', '\'') }
-            if (families.any { FONT_FAMILY_OK.matches(it) || "mono" in it }) null else "uses a font Vitro doesn't bundle"
-        }
         "white-space" -> {
             if (value == "nowrap") notes += gap("white-space: nowrap", shown())
             null

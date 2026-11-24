@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro.parity
 import android.app.Activity
 import android.app.Application
 import android.graphics.Bitmap
+import android.view.View
 import dev.glassworks.testing.RepoFiles
 import dev.glassworks.ui.Inter
 import org.json.JSONArray
@@ -85,6 +86,9 @@ class VitroParityHarnessTest {
                         val r = runCase(label, root, frame, case, renderer, baseline, outDir, wanted)
                         mine += r
                     }
+                    // The last case's view leaves the window: a view still on screen would answer the next frame's
+                    // font notices (WebFonts) with its own dashboard and server.
+                    activity.setContentView(View(activity))
                 }
                 if (ParityFiles.collect) writeWanted(label, wanted)
                 if (ParityFiles.updateBaseline && !ParityFiles.collect) staged += baseline to mine

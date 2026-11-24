@@ -73,6 +73,7 @@ import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
+import dev.glassworks.engine.vitro.fonts.WebFonts
 import dev.glassworks.engine.vitro.compat.CompatChecker
 import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.model.CardRouter
@@ -266,7 +267,53 @@ class VitroView(
         }
     }
 
+    /**
+     * A web font arrived (or the stylesheets changed what a drawn family resolves to): text drawn in the fallback
+     * meanwhile draws again, as the browser swaps a `font-display: swap` font in. Weakly held: the font loader lives
+     * as long as the process.
+     */
+    private val fontListener: () -> Unit = run {
+        val self = java.lang.ref.WeakReference(this)
+        lateinit var listener: () -> Unit
+        listener = {
+            val view = self.get()
+            if (view == null) WebFonts.removeListener(listener) else view.redrawForFonts()
+        }
+        listener
+    }
+
+    /** A font arrived while this view wasn't on screen: it draws again when it's attached. */
+    private var fontsStale = false
+
+    /** The server and resources this view last set the font loader up for. */
+    private var fontsFor: Pair<String, List<LovelaceResource>>? = null
+
+    private fun redrawForFonts() {
+        // Only the view on screen redraws (and so asks for fonts), and only for its own dashboard's fonts: a redraw
+        // sets the loader up for this view, which would take it away from the view that asked. Another view catches
+        // up when it's attached again.
+        val mine = fontsFor ?: return
+        if (!isAttachedToWindow || !WebFonts.isConfiguredFor(mine.first, mine.second)) {
+            fontsStale = true
+            return
+        }
+        rebuildForFonts()
+    }
+
+    /** Builds the current view again, which also sets the font loader up for this view's dashboard. */
+    private fun rebuildForFonts() {
+        fontsStale = false
+        val cfg = dashboard ?: return
+        if (cfg.views.getOrNull(currentViewIndex) == null) return
+        viewCache.clear()
+        builtScripts.clear()
+        contentHost.removeAllViews()
+        clearOverlay()
+        renderView(currentViewIndex, forceRebuild = true)
+    }
+
     init {
+        WebFonts.addListener(fontListener)
         MdiIcons.init(context)
         setBackgroundColor(neutralBackground)
         addView(backdrop, LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -486,7 +533,7 @@ class VitroView(
         hideStatus()
 
         val theme = ThemeResolver.resolve(themeCatalog, darkMode, viewCfg.theme ?: userThemeName, viewCfg.background)
-        VitroFonts.face = VitroFonts.faceFor(theme)
+        VitroFonts.family = VitroFonts.familyFor(theme)
         applyBackdrop(theme)
         highlightTab(index, theme)
         onThemeResolved?.invoke(theme)
@@ -496,7 +543,12 @@ class VitroView(
         val viewRoot = if (cached != null) {
             cached
         } else {
-            val cardCtx = contextFactory?.invoke(theme) ?: return
+            // The view's body font rides on the cards' context, not only on VitroFonts.family: a card that builds a
+            // child later (auto-entities' refresh) while another view is shown still gets this view's font.
+            val cardCtx = contextFactory?.invoke(theme)?.withFontFamily(VitroFonts.familyFor(theme)) ?: return
+            // The fonts the dashboard's stylesheets declare: read only once a card draws a family Vitro doesn't have.
+            WebFonts.configure(cardCtx.haBase, cardCtx.resources, context.cacheDir)
+            fontsFor = cardCtx.haBase to cardCtx.resources
             val pinned = ArrayList<Pair<View, FrameLayout.LayoutParams>>()
             pendingPinned = pinned
             val built = try {
@@ -1020,18 +1072,24 @@ class VitroView(
 
     /** [layout] is HA's `layout` for this card ([VitroCardContext.cardLayout]): `"grid"` straight in a section. */
     private fun buildCard(card: CardConfig, parentCtx: VitroCardContext, fillViewport: Boolean, layout: String? = null): View {
-        val ctx = if (card.theme != null && card.theme != parentCtx.theme.name) {
+        val themedCtx = if (card.theme != null && card.theme != parentCtx.theme.name) {
             val overrideTheme = ThemeResolver.resolve(themeCatalog, darkMode, card.theme)
-            contextFactory?.invoke(overrideTheme) ?: parentCtx
+            contextFactory?.invoke(overrideTheme)?.let { themed ->
+                // The card's theme sets the body font for the text inside it only if it sets one; a theme of colors
+                // only keeps the font in force outside the card.
+                themed.withFontFamily(VitroFonts.declaredFamily(overrideTheme) ?: VitroFonts.familyOf(parentCtx.context))
+            } ?: parentCtx
         } else {
             parentCtx
         }
         // Custom properties set on a card (`ha-card { --vertical-stack-card-gap: 8px }`) inherit into the cards
         // inside it, as they do through the browser's shadow roots; `var()` in them sees the inherited ones.
         val outerVars = inheritedCardVars
-        val outerCtxVars = ctx.cardVars
         // With nothing inherited, the theme's own map: the same scope, and the parse is shared with the card's surface.
-        val stackMod = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), if (outerVars.isEmpty()) ctx.theme.vars else ctx.theme.vars + outerVars)
+        val stackMod = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), if (outerVars.isEmpty()) themedCtx.theme.vars else themedCtx.theme.vars + outerVars)
+        // `font-family` on the card: every text inside it, the cards it stacks included, inherits it (as from ha-card).
+        val ctx = stackMod.fontFamily?.let(themedCtx::withFontFamily) ?: themedCtx
+        val outerCtxVars = ctx.cardVars
         val scope = if (stackMod.customProperties.isEmpty()) outerVars else outerVars + stackMod.customProperties
         // Children built later (a refresh, a filter that changes) re-enter this card's scope.
         val childBuilder: CardBuilder = { child ->
@@ -1362,6 +1420,10 @@ class VitroView(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         scheduleTick()
+        // Back on screen after fonts changed elsewhere, or after another dashboard took the font loader (which drops
+        // the loads this view was waiting for, with no notice): build again, taking the loader back.
+        val retired = fontsFor?.let { !WebFonts.isConfiguredFor(it.first, it.second) } == true
+        if (fontsStale || retired) rebuildForFonts()
     }
 
     override fun onDetachedFromWindow() {
