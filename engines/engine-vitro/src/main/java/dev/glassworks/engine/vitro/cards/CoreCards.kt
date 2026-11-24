@@ -1041,7 +1041,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val shapeBox = ctx.px(48f)
         val shapeSize = ctx.px(36f)
         val primaryText = ctx.theme.primaryTextColor
-        val iconAction = ActionConfig.parse(raw.optJSONObject("icon_tap_action"), "none")
+        // Mushroom 5's default icon action: toggle for an entity of a toggling domain, else none.
+        val iconAction = ActionConfig.parse(raw.optJSONObject("icon_tap_action"), mushroomIconDefault(config.entity))
         val interactiveIcon = iconAction.action != "none"
 
         val avatarBg = GradientDrawable().apply {
@@ -1343,6 +1344,15 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     companion object {
         const val MUSHROOM_TEMPLATE = "custom:mushroom-template-card"
+
+        /** The domains whose entity's icon Mushroom's template card toggles by default (its `_e` and buttons). */
+        private val MUSHROOM_TOGGLE_DOMAINS = setOf(
+            "fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve", "button", "input_button", "scene",
+        )
+
+        /** Mushroom 5's template card: `icon_tap_action` defaults to `toggle` for [MUSHROOM_TOGGLE_DOMAINS], else none. */
+        internal fun mushroomIconDefault(entity: String?): String =
+            if (entity != null && entity.substringBefore('.') in MUSHROOM_TOGGLE_DOMAINS) "toggle" else "none"
         private val BARE_ICON_DOMAINS = setOf("sensor", "weather", "text", "select")
         /** HA's `STATE_COLORED_DOMAIN`: the domains whose tiles take a state color. */
         private val STATE_COLORED_DOMAINS = setOf(
