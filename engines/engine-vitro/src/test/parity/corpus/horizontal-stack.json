@@ -1,0 +1,10 @@
+{
+  "title": "Horizontal stack: two buttons",
+  "card": {
+    "type": "horizontal-stack",
+    "cards": [
+      { "type": "button", "entity": "light.window_accent" },
+      { "type": "button", "entity": "light.sunset_lamp" }
+    ]
+  }
+}

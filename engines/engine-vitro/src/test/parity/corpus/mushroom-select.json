@@ -1,0 +1,4 @@
+{
+  "title": "Mushroom select card: an input select",
+  "card": { "type": "custom:mushroom-select-card", "entity": "input_select.kitchen_blind_position" }
+}

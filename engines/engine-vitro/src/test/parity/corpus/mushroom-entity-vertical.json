@@ -1,0 +1,4 @@
+{
+  "title": "Mushroom entity card: a sensor, vertical layout",
+  "card": { "type": "custom:mushroom-entity-card", "entity": "sensor.epson_et_2800_series_black_ink", "name": "Black ink", "layout": "vertical" }
+}

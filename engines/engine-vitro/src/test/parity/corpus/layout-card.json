@@ -1,0 +1,15 @@
+{
+  "title": "layout-card: a two-column grid layout of tiles",
+  "span": 2,
+  "card": {
+    "type": "custom:layout-card",
+    "layout_type": "custom:grid-layout",
+    "layout": { "grid-template-columns": "1fr 1fr" },
+    "cards": [
+      { "type": "tile", "entity": "light.window_accent" },
+      { "type": "tile", "entity": "light.sunset_lamp" },
+      { "type": "tile", "entity": "cover.kitchen_blind" },
+      { "type": "tile", "entity": "fan.air_purifier" }
+    ]
+  }
+}

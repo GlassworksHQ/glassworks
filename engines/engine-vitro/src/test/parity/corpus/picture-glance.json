@@ -1,0 +1,7 @@
+{
+  "title": "Picture glance: an image with a title and two lights",
+  "card": {
+    "type": "picture-glance", "title": "Living room", "image": "/static/icons/favicon-192x192.png",
+    "entities": ["light.window_accent", "light.sunset_lamp"]
+  }
+}

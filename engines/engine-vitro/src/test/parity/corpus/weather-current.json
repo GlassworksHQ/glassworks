@@ -1,0 +1,4 @@
+{
+  "title": "Weather forecast: current conditions only",
+  "card": { "type": "weather-forecast", "entity": "weather.forecast_home", "show_forecast": false }
+}

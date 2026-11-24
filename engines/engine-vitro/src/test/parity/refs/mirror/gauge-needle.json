@@ -1,0 +1,122 @@
+{
+ "case": "gauge-needle",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1795543680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 214
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 197.89,
+   "type": "hui-gauge-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "74%",
+   "x": 204.66,
+   "y": 85.4,
+   "w": 90.69,
+   "h": 57,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Black ink",
+   "x": 222.08,
+   "y": 162.89,
+   "w": 55.84,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.epson_et_2800_series_black_ink": {
+   "s": "74",
+   "a": {
+    "state_class": "measurement",
+    "marker_high_level": 100,
+    "marker_low_level": 15,
+    "marker_type": "ink",
+    "unit_of_measurement": "%",
+    "friendly_name": "EPSON ET-2800 Series Black ink"
+   },
+   "lc": 1795504913.216327
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.epson_et_2800_series_black_ink",
+    "pl": "ipp",
+    "tk": "marker",
+    "di": "device-1",
+    "en": "Black ink"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "EPSON ET-2800 Series"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": [
+    "ipp"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     }
+    }
+   },
+   "entity": {
+    "ipp": {
+     "sensor": {
+      "marker": {
+       "default": "mdi:water"
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

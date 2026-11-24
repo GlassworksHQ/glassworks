@@ -1,0 +1,7 @@
+{
+  "title": "Gauge: needle with severity segments",
+  "card": {
+    "type": "gauge", "entity": "sensor.epson_et_2800_series_black_ink", "name": "Black ink", "min": 0, "max": 100, "needle": true,
+    "severity": { "green": 50, "yellow": 20, "red": 0 }
+  }
+}

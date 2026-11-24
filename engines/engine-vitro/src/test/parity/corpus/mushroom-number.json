@@ -1,0 +1,4 @@
+{
+  "title": "Mushroom number card: an input number as a slider",
+  "card": { "type": "custom:mushroom-number-card", "entity": "input_number.pre_cool_target" }
+}
