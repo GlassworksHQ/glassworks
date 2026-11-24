@@ -315,6 +315,31 @@ class MarkdownEngineTest {
         parsed.draw(android.graphics.Canvas(bmp), 100f, 100f, activity)
     }
 
+    @Test
+    fun svgPathsEndAtAnOperandAfterClosepathAndKeepSupplementaryCharacters() {
+        // `Z 5` used to loop forever on the UI thread.
+        val svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M0 0 L5 5 Z 5 L 9 9'/></svg>"
+        assertNotNull(MdSvg.parse(svg))
+        assertEquals("a\uD83D\uDE00 b", MdSvg.percentDecode("a\uD83D\uDE00%20b"))
+    }
+
+    @Test
+    fun markdownKeepsParenthesesInImageDestinationsAndIndentedFencesInCode() {
+        assertTrue(MarkedLite.toHtml("![Plan](/local/plan(v2).png)").contains("src=\"/local/plan(v2).png\""))
+        val html = MarkedLite.toHtml("```\ncode\n    ```\nstill code\n```")
+        assertTrue(html, html.contains("still code"))
+        assertTrue(html, html.indexOf("still code") < html.indexOf("</code>"))
+    }
+
+    @Test
+    fun outOfRangeNthNumbersDropTheSelectorNotTheSheet() {
+        val root = styled(
+            "<p>a</p>",
+            "ha-markdown-element p:nth-child(2147483648n+1) { opacity: 0.1 } ha-markdown-element p { opacity: 0.5 }",
+        )
+        assertEquals(0.5f, root.findAll("p")[0].style!!.opacity)
+    }
+
     // ---- sections grid ----
 
     @Test

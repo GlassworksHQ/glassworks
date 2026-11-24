@@ -178,12 +178,14 @@ class CssSelector private constructor(
             if (s == "even") return 2 to 0
             s.toIntOrNull()?.let { return 0 to it }
             val m = NTH.matchEntire(s) ?: return null
+            // Out-of-range numbers make the selector unsupported instead of aborting the sheet.
             val a = when (m.groupValues[1]) {
                 "", "+" -> 1
                 "-" -> -1
-                else -> m.groupValues[1].toInt()
+                else -> m.groupValues[1].toIntOrNull() ?: return null
             }
-            val b = m.groupValues[3].toIntOrNull()?.let { if (m.groupValues[2] == "-") -it else it } ?: 0
+            val bRaw = m.groupValues[3]
+            val b = if (bRaw.isEmpty()) 0 else (bRaw.toIntOrNull() ?: return null).let { if (m.groupValues[2] == "-") -it else it }
             return a to b
         }
 
@@ -199,7 +201,8 @@ class CssSelector private constructor(
             var pendingComb: Char? = null
             while (i < sel.length) {
                 val c = sel[i]
-                if (c.isWhitespace()) {
+                // CSS whitespace only: a non-breaking space is no combinator.
+                if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\u000C') {
                     if (parts.isNotEmpty() && pendingComb == null) pendingComb = ' '
                     i++
                     continue
@@ -494,11 +497,17 @@ object MdCascade {
 
         // 2. Everything else as longhands; later declarations win.
         val specified = LinkedHashMap<String, String>()
+        // The user-agent values, for an author `revert` (HA's `var(--markdown-list-indent, revert)`) to roll back to.
+        val uaSpecified = HashMap<String, String>()
         for (d in decls) {
             if (d.name.startsWith("--")) continue
-            val v = resolveVars(d.value, custom, ctx.themeVars)
-            if (v == null) { specified[d.name] = "unset"; continue }
-            expand(d.name, v).forEach { (n, value) -> specified[n] = value }
+            // A failed substitution makes the declaration `unset`, for each longhand of a shorthand too.
+            val v = resolveVars(d.value, custom, ctx.themeVars) ?: "unset"
+            val pairs = expand(d.name, v)
+            if (d.origin == 0) pairs.forEach { (n, value) -> uaSpecified[n] = value }
+            pairs.forEach { (n, value) ->
+                specified[n] = if (d.origin > 0 && value.trim().equals("revert", ignoreCase = true)) uaSpecified[n] ?: value else value
+            }
         }
         applySpecified(s, parent, specified)
         return s
