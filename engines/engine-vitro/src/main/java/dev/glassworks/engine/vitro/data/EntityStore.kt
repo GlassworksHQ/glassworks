@@ -38,11 +38,12 @@ data class EntityState(
             "light", "switch", "fan", "input_boolean", "automation", "script" -> state == "on"
             "binary_sensor" -> state == "on"
             "lock" -> state == "unlocked"
-            "cover" -> state == "open" || state == "opening"
+            // HA's stateActive(): anything but closed / standby / idle-docked-paused, once it isn't off or unavailable.
+            "cover" -> state != "closed" && !isUnavailable
             "climate" -> state != "off" && !isUnavailable
-            "media_player" -> state == "playing" || state == "buffering"
+            "media_player" -> state != "standby" && state != "off" && !isUnavailable
             "person", "device_tracker" -> state == "home"
-            "vacuum" -> state == "cleaning" || state == "returning"
+            "vacuum" -> state !in setOf("idle", "docked", "paused", "off") && !isUnavailable
             else -> state == "on" || state == "active" || state == "open"
         }
 
@@ -70,12 +71,25 @@ data class EntityState(
     fun formattedState(): String {
         if (isUnavailable) return state.replaceFirstChar { it.titlecase(Locale.ROOT) }
         val u = unit
+        // HA's computeStateDisplay: numeric states (a unit, a state class, or a number domain) go through
+        // formatNumber with the registry's display precision; "%" takes no space.
+        val numeric = u != null || attributes["state_class"] != null || domain in NUMBER_DOMAINS
+        if (numeric && state.trim().toBigDecimalOrNull() != null) {
+            val n = HaDisplay.formatState(state, HaDisplay.displayPrecision(entityId), (attributes["step"] as? Number)?.toDouble())
+            return when (u) { null -> n; "%" -> "$n%"; else -> "$n $u" }
+        }
         if (u != null) return if (u == "%") "$state$u" else "$state $u"
+        if (domain != "light" && domain != "cover" && domain != "climate" && domain != "fan") HaDisplay.stateLabel(this)?.let { return it }
+        // Options and text are the user's own strings: HA shows them as they are, never capitalized.
+        if (domain in VERBATIM_DOMAINS) return state
         return when (domain) {
             "light" -> {
                 val pct = brightnessPct
                 if (state == "on" && pct != null) "$pct%" else state.replaceFirstChar { it.titlecase(Locale.ROOT) }
             }
+            // HA's tile shows a running fan's speed instead of "On".
+            "fan" -> (attributes["percentage"] as? Number)?.toInt()?.takeIf { state == "on" }?.let { "$it%" }
+                ?: HaDisplay.stateLabel(this) ?: state.replaceFirstChar { it.titlecase(Locale.ROOT) }
             "binary_sensor" -> when (deviceClass) {
                 "door", "window", "garage_door", "opening" -> if (state == "on") "Open" else "Closed"
                 "motion", "occupancy", "presence" -> if (state == "on") "Detected" else "Clear"
@@ -138,6 +152,9 @@ data class EntityState(
  * the page), [EntityStore] maintains per-entity subscriber lists so a sensor tick only wakes the exact
  * cards bound to that `entity_id`.
  */
+private val NUMBER_DOMAINS = setOf("number", "input_number", "counter")
+private val VERBATIM_DOMAINS = setOf("select", "input_select", "text", "input_text")
+
 class EntityStore {
     private val states = ConcurrentHashMap<String, EntityState>()
     private val listeners = ConcurrentHashMap<String, CopyOnWriteArrayList<(EntityState?) -> Unit>>()
@@ -155,6 +172,40 @@ class EntityStore {
         val list = listeners.computeIfAbsent(entityId) { CopyOnWriteArrayList() }
         list += listener
         return { list -= listener }
+    }
+
+    /**
+     * The entity ids the current `subscribe_entities` asked for (empty means every entity), once its first event
+     * has arrived; null before that. An id it covers that has no state then doesn't exist in HA.
+     */
+    @Volatile
+    private var snapshotFilter: Set<String>? = null
+
+    /** True when HA has answered for [entityId] and has no such entity: HA's cards show "Entity not found". */
+    fun isMissing(entityId: String): Boolean {
+        val f = snapshotFilter ?: return false
+        return (f.isEmpty() || entityId in f) && states[entityId] == null
+    }
+
+    /** A new subscription is on its way: nothing counts as missing until its first event. */
+    fun resetSnapshot() {
+        snapshotFilter = null
+    }
+
+    /** The first event of the subscription for [filter] has been applied: tells the missing ids' listeners. */
+    fun markSnapshot(filter: Set<String>) {
+        snapshotFilter = filter
+        for ((id, list) in listeners) {
+            if (states[id] == null && (filter.isEmpty() || id in filter)) list.forEach { it(null) }
+        }
+    }
+
+    /** Calls every listener again with its entity's current state (HA's display data arrived: re-render). */
+    fun renotifyAll() {
+        for ((id, list) in listeners) {
+            val st = states[id]
+            list.forEach { it(st) }
+        }
     }
 
     /** Subscribes to any batch of changed entity IDs (used for visibility / islands). */

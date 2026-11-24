@@ -32,6 +32,7 @@ import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
 import dev.glassworks.engine.vitro.data.EntityState
+import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.EntityRowConfig
@@ -173,7 +174,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     private val iconBadge = MdiIconView(ctx.context)
     private val iconWrap = LinearLayout(ctx.context)
     private val titleView = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM)
-    private val stateView = textView(ctx, 12f, withAlpha(ctx.theme.primaryTextColor, 0.8f), Inter.REGULAR)
+    private val stateView = textView(ctx, 12f, ctx.theme.primaryTextColor, Inter.REGULAR)
 
     /** The 20% oval behind the badge icon, kept so its tint can cross-fade instead of being replaced. */
     private val badgeOval = GradientDrawable().apply { shape = GradientDrawable.OVAL }
@@ -186,6 +187,65 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     /** The Mushroom template card's views, when this tile renders `custom:mushroom-template-card`. */
     internal var mushroom: MushroomTemplateViews? = null
         private set
+
+    private val unavailableBadge = FrameLayout(ctx.context).apply {
+        visibility = GONE
+        background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xFFFF9800.toInt()) }
+        addView(MdiIconView(ctx.context).apply { setIcon("mdi:exclamation-thick", Color.WHITE) },
+            LayoutParams(ctx.px(12f), ctx.px(12f), Gravity.CENTER))
+    }
+
+    /** HA draws the tile icon's tinted shape only when the icon has an action. */
+    private var iconInteractive = true
+
+    /** The tile's own content, hidden while HA would show "Entity not found" instead. */
+    private var tileBody: View? = null
+    /** HA's `hui-warning` for a tile whose entity doesn't exist, built the first time it's needed. */
+    internal var missingWarning: View? = null
+        private set
+
+    /** The features slot beside the info (`features_position: inline`), sized to HA's half-card width. */
+    private var inlineFeatures: View? = null
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        inlineFeatures?.let { slot ->
+            if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+                // hui-card-features beside the content: calc(50% - var(--column-gap) / 2 - 12px), 12 px end padding.
+                val w = (MeasureSpec.getSize(widthMeasureSpec) / 2 - ctx.px(16f)).coerceAtLeast(0)
+                if (slot.layoutParams.width != w) slot.layoutParams.width = w
+            }
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    /** Shows HA's "Entity not found" warning in place of the tile while [missing]. */
+    private fun showMissing(missing: Boolean) {
+        if (!missing && missingWarning == null) return
+        val warning = missingWarning ?: LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val pad = ctx.px(16f)
+            setPadding(pad, pad, pad, pad)
+            minimumHeight = ctx.px(56f)
+            val color = ThemeResolver.parseColor(ctx.theme.vars["warning-color"]) ?: WARNING_ORANGE
+            // hui-error-card's warning: the card's surface washed with --warning-color at 12%.
+            background = GradientDrawable().apply {
+                cornerRadius = ctx.theme.cardBorderRadiusDp * ctx.dp
+                setColor(withAlpha(color, 0.12f))
+            }
+            addView(MdiIconView(ctx.context).apply { setIcon("mdi:alert-outline", color) },
+                LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply { marginEnd = ctx.px(8f) })
+            addView(textView(ctx, 14f, ctx.theme.primaryTextColor, 700).apply {
+                text = "Entity not found"
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            this@TileCardView.addView(this, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            missingWarning = this
+        }
+        warning.visibility = if (missing) VISIBLE else GONE
+        tileBody?.visibility = if (missing) INVISIBLE else VISIBLE
+    }
 
     init {
         if (config.type == MUSHROOM_TEMPLATE) buildMushroomTemplate() else buildTile()
@@ -206,6 +266,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             titleView.typeface = Inter.typeface(ctx.context, Inter.MEDIUM, scaled)
             stateView.textSize = sub
             stateView.typeface = Inter.typeface(ctx.context, Inter.REGULAR, sub)
+            // The line boxes grow with the text (line-height 1.6 and 1.2).
+            titleView.layoutParams?.let { it.height = (scaled * 1.6f * ctx.dp).roundToInt(); titleView.layoutParams = it }
+            stateView.layoutParams?.let { it.height = (sub * 1.2f * ctx.dp).roundToInt(); stateView.layoutParams = it }
         }
     }
 
@@ -226,8 +289,19 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             setPadding(iconPad, iconPad, iconPad, iconPad)
             addView(iconBadge, LinearLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         }
-        row.addView(iconWrap, LinearLayout.LayoutParams(badgeSize, badgeSize).apply {
-            if (vertical) bottomMargin = ctx.px(8f) else marginEnd = ctx.px(12f)
+        // ha-tile-badge: a 16 px orange disc with a 12 px exclamation over the shape's top-right while unavailable.
+        val iconFrame = FrameLayout(ctx.context).apply {
+            clipChildren = false
+            clipToPadding = false
+            addView(iconWrap, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            addView(unavailableBadge, LayoutParams(ctx.px(16f), ctx.px(16f), Gravity.TOP or Gravity.END).apply {
+                topMargin = -ctx.px(3f); rightMargin = -ctx.px(3f)
+            })
+        }
+        row.clipChildren = false
+        row.clipToPadding = false
+        row.addView(iconFrame, LinearLayout.LayoutParams(badgeSize, badgeSize).apply {
+            if (vertical) bottomMargin = ctx.px(8f) else marginEnd = ctx.px(10f)
         })
 
         val labels = LinearLayout(ctx.context).apply {
@@ -237,8 +311,13 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             titleView.ellipsize = TextUtils.TruncateAt.END
             stateView.maxLines = 1
             stateView.ellipsize = TextUtils.TruncateAt.END
-            addView(titleView)
-            addView(stateView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(1f) })
+            // ha-tile-info: 14 px / 500 on a 22.4 px line over 12 px on a 14.4 px line, both centered in their box.
+            titleView.gravity = Gravity.CENTER_VERTICAL or (if (vertical) Gravity.CENTER_HORIZONTAL else Gravity.START)
+            stateView.gravity = titleView.gravity
+            titleView.letterSpacing = 0.1f / 14f
+            stateView.letterSpacing = 0.4f / 12f
+            addView(titleView, LinearLayout.LayoutParams(if (vertical) WRAP_CONTENT else MATCH_PARENT, (22.4f * ctx.dp).roundToInt()))
+            addView(stateView, LinearLayout.LayoutParams(if (vertical) WRAP_CONTENT else MATCH_PARENT, (14.4f * ctx.dp).roundToInt()))
         }
         row.addView(labels, LinearLayout.LayoutParams(if (vertical) WRAP_CONTENT else 0, WRAP_CONTENT, if (vertical) 0f else 1f))
 
@@ -258,45 +337,48 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         if ("light-brightness" in featureTypes && entityId != null) {
             brightnessSlider = HaHorizontalSliderView(
                 ctx = ctx,
-                accentColor = if (ctx.theme.dark) BRIGHTNESS_DARK else BRIGHTNESS_LIGHT,
+                accentColor = ctx.theme.activeColor("light"),
                 onCommit = { frac ->
                     val bri = (frac * 255f).toInt().coerceIn(0, 255)
                     if (bri <= 0) ctx.callService("light", "turn_off", JSONObject().put("entity_id", entityId), null)
                     else ctx.callService("light", "turn_on", JSONObject().put("entity_id", entityId).put("brightness", bri), null)
                 },
             )
+            brightnessSlider.tag = FEATURE_TAG + "light-brightness"
             rootCol.addView(brightnessSlider, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(42f)).apply {
-                leftMargin = pad; rightMargin = pad; bottomMargin = ctx.px(10f)
+                leftMargin = ctx.px(12f); rightMargin = ctx.px(12f); bottomMargin = ctx.px(12f)
             })
         }
         if ("select-options" in featureTypes && entityId != null) {
             // HA 2026's select feature: a filled dropdown box showing the current option; tap for the list.
-            val current = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
+            // ha-control-select-menu: a button's 13.33 px text, 20 px in, a 20 px arrow 10 px from the end.
+            val current = textView(ctx, 40f / 3f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             }
             val box = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(ctx.px(12f), 0, ctx.px(8f), 0)
+                setPadding(ctx.px(20f), 0, ctx.px(10f), 0)
                 background = featureFill(ctx)
                 applyHaRipple(this, 10f * ctx.dp, ctx.theme.dark)
                 isClickable = true
                 addView(current, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 addView(MdiIconView(ctx.context).apply { setIcon("mdi:menu-down", ctx.theme.primaryTextColor) },
-                    LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)))
+                    LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)).apply { marginStart = ctx.px(10f) })
                 setOnClickListener { v -> showSelectMenu(v, entityId) }
             }
             selectBox = current
+            box.tag = FEATURE_TAG + "select-options"
             rootCol.addView(box, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(42f)).apply {
-                leftMargin = pad; rightMargin = pad; bottomMargin = ctx.px(10f)
+                leftMargin = ctx.px(12f); rightMargin = ctx.px(12f); bottomMargin = ctx.px(12f)
             })
         }
         if ("cover-open-close" in featureTypes && entityId != null) {
             // HA 2026's cover feature: three icon-only rounded squares (open, stop, close).
             val coverRow = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
-                setPadding(pad, 0, pad, ctx.px(10f))
+                setPadding(ctx.px(12f), 0, ctx.px(12f), ctx.px(12f))
             }
             listOf("mdi:arrow-up" to "open_cover", "mdi:stop" to "stop_cover", "mdi:arrow-down" to "close_cover")
                 .forEachIndexed { idx, (iconName, service) ->
@@ -316,33 +398,60 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         if (idx > 0) marginStart = ctx.px(8f)
                     })
                 }
+            coverRow.tag = FEATURE_TAG + "cover-open-close"
             rootCol.addView(coverRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
         if (entityId != null) {
             addExtraFeatures(rootCol, featuresArr, featureTypes, entityId, pad)
         }
-        addView(rootCol, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        // `features_position: inline`: HA shows the first feature beside the info, 36 px tall and centered.
+        if (!vertical && config.raw.optString("features_position") == "inline" && rootCol.childCount > 1) {
+            // HA shows only the first configured feature inline (the others aren't drawn).
+            val built = (1 until rootCol.childCount).map { rootCol.getChildAt(it) }
+            val first = featureTypes.firstNotNullOfOrNull { t -> built.firstOrNull { it.tag == FEATURE_TAG + t } } ?: built.first()
+            while (rootCol.childCount > 1) rootCol.removeViewAt(1)
+            if (first.paddingBottom == ctx.px(12f)) first.setPadding(0, 0, 0, 0)
+            val slot = FrameLayout(ctx.context).apply {
+                setPadding(0, 0, ctx.px(12f), 0)
+                addView(first, LayoutParams(MATCH_PARENT, ctx.px(36f), Gravity.CENTER_VERTICAL))
+            }
+            row.setPadding(pad, pad, 0, pad)
+            (labels.layoutParams as LinearLayout.LayoutParams).marginEnd = pad
+            row.addView(slot, LinearLayout.LayoutParams(0, ctx.px(36f)))
+            inlineFeatures = slot
+        }
+        // HA's tile centers the info row and its features in the card's grid rows.
+        addView(rootCol, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
+        tileBody = rootCol
 
         // HA's `hui-tile-card`: the body opens more-info; the icon toggles what can be toggled.
         val tapAction = ActionConfig.parse(config.raw.optJSONObject("tap_action"), "more-info")
-        val iconDefault = if (VitroCardContext.isToggleable(entityId)) "toggle" else "more-info"
+        // HA's tile icon acts (and draws its tinted shape) only when it has an action: its icon_tap_action, or a
+        // toggle / press for the domains that have one. Otherwise a tap on it is a tap on the card.
+        val iconDefault = if (entityId?.substringBefore('.') in ICON_TOGGLE_DOMAINS || entityId?.substringBefore('.') in PRESS_DOMAINS) "toggle" else "none"
         val iconTapAction = ActionConfig.parse(config.raw.optJSONObject("icon_tap_action"), iconDefault)
+        iconInteractive = iconTapAction.action != "none"
         val holdAction = holdActionFor(config.raw, entityId)
 
         isClickable = true
         setOnClickListener { ctx.performAction(tapAction, entityId) }
         bindHoldAction(holdAction, entityId)
         applyHaRipple(this, ctx.theme.cardBorderRadiusDp * ctx.dp, ctx.theme.dark)
-        iconWrap.isClickable = true
-        applyHaRipple(iconWrap, 999f, ctx.theme.dark)
-        iconWrap.setOnClickListener { ctx.performAction(iconTapAction, entityId) }
-        iconWrap.bindHoldAction(ctx, holdAction, entityId)
+        if (iconInteractive) {
+            iconWrap.isClickable = true
+            applyHaRipple(iconWrap, 999f, ctx.theme.dark)
+            iconWrap.setOnClickListener { ctx.performAction(iconTapAction, entityId) }
+            iconWrap.bindHoldAction(ctx, holdAction, entityId)
+        }
 
         if (entityId != null) {
             observe(entityId) { s ->
+                showMissing(s == null && ctx.store.isMissing(entityId))
+                unavailableBadge.visibility = if (s?.state == "unavailable") VISIBLE else GONE
                 renderState(s)
                 brightnessSlider?.let { sb ->
-                    sb.setAccentColor(s?.lightTintColor() ?: if (ctx.theme.dark) BRIGHTNESS_DARK else BRIGHTNESS_LIGHT)
+                    // HA's feature color: the light's own color, else --state-light-active-color.
+                    sb.setAccentColor(s?.lightTintColor() ?: ctx.theme.activeColor("light"))
                     val on = s?.isActive == true
                     val bri = (s?.attributes?.get("brightness") as? Number)?.toInt()?.takeIf { it in 1..255 }
                     when {
@@ -356,7 +465,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         else -> sb.setValue(lastBrightness?.let { it / 255f } ?: sb.value, active = true)
                     }
                 }
-                selectBox?.text = s?.state ?: "…"
+                selectBox?.text = s?.let { HaDisplay.stateLabel(it) ?: it.state } ?: "…"
                 featureBinders.forEach { it(s) }
             }
         } else {
@@ -378,8 +487,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         entityId: String,
         pad: Int,
     ) {
-        fun lp() = LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f)).apply {
-            leftMargin = pad; rightMargin = pad; bottomMargin = ctx.px(10f)
+        // hui-card-features: 42 px features, 12 px in from the sides and the bottom.
+        fun lp() = LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(42f)).apply {
+            leftMargin = ctx.px(12f); rightMargin = ctx.px(12f); bottomMargin = ctx.px(12f)
         }
         fun data() = JSONObject().put("entity_id", entityId)
         fun featureConfig(type: String): JSONObject? = featuresArr?.let { arr ->
@@ -421,6 +531,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val domain = entityId.substringBefore('.')
 
         for (type in featureTypes.distinct()) {
+            val before = rootCol.childCount
             when (type) {
                 "climate-hvac-modes" -> {
                     val configured = featureConfig(type)?.optJSONArray("hvac_modes")
@@ -559,15 +670,35 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                     }
                 }
                 "media-player-volume-slider" -> {
-                    val slider = HaHorizontalSliderView(ctx, ctx.theme.primaryColor) { frac ->
+                    // HA's feature: the slider in the player's state color, then a 36 px mute button 12 px after it.
+                    val slider = HaHorizontalSliderView(ctx, ctx.theme.activeColor("media_player")) { frac ->
                         val vol = (frac * 100f).roundToInt() / 100.0
                         ctx.callService("media_player", "volume_set", data().put("volume_level", vol), null)
                     }
-                    rootCol.addView(slider, lp())
+                    val muteIcon = MdiIconView(ctx.context)
+                    val mute = FrameLayout(ctx.context).apply {
+                        background = featureFill(ctx)
+                        applyHaRipple(this, 12f * ctx.dp, ctx.theme.dark)
+                        isClickable = true
+                        contentDescription = "Mute"
+                        addView(muteIcon, LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
+                        setOnClickListener {
+                            val muted = ctx.store[entityId]?.attributes?.get("is_volume_muted") == true
+                            ctx.callService("media_player", "volume_mute", data().put("is_volume_muted", !muted), null)
+                        }
+                    }
+                    val bar = LinearLayout(ctx.context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        addView(slider, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+                        addView(mute, LinearLayout.LayoutParams(ctx.px(36f), MATCH_PARENT).apply { marginStart = ctx.px(12f) })
+                    }
+                    rootCol.addView(bar, lp())
                     featureBinders += { s ->
                         val vol = num(s, "volume_level")
                         val live = s != null && s.state != "off" && !s.isUnavailable && vol != null
                         slider.setValue(vol?.toFloat() ?: 0f, active = live)
+                        val muted = s?.attributes?.get("is_volume_muted") == true
+                        muteIcon.setIcon(if (muted) "mdi:volume-off" else "mdi:volume-high", ctx.theme.primaryTextColor)
                     }
                 }
                 "toggle" -> {
@@ -584,38 +715,49 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         in TOGGLE_FEATURE_DOMAINS -> domain to if (on) "turn_on" else "turn_off"
                         else -> "homeassistant" to if (on) "turn_on" else "turn_off"
                     }
-                    val bar = segmentBar()
-                    val halves = listOf(false to offLabel, true to onLabel).map { (on, label) ->
-                        val labelView = textView(ctx, 13f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply { text = label }
-                        val half = LinearLayout(ctx.context).apply {
-                            gravity = Gravity.CENTER
-                            isClickable = true
-                            applyHaRipple(this, 8f * ctx.dp, ctx.theme.dark)
-                            contentDescription = label
-                            addView(labelView)
+                    // ha-control-switch: the state color at 20% under a half-width knob in that color, holding the
+                    // white 20 px icon of the state it shows (the domain's icon, not the entity's own).
+                    val knob = FrameLayout(ctx.context).apply {
+                        background = GradientDrawable().apply { cornerRadius = 12f * ctx.dp }
+                    }
+                    val bar = object : FrameLayout(ctx.context) {
+                        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                            knob.layoutParams.width = MeasureSpec.getSize(widthMeasureSpec) / 2
+                            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
                         }
-                        bar.addView(half, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
-                        Triple(on, half, labelView)
+                    }
+                    val track = GradientDrawable().apply { cornerRadius = 12f * ctx.dp }
+                    bar.background = track
+                    val knobIcon = MdiIconView(ctx.context)
+                    knob.addView(knobIcon, LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
+                    bar.addView(knob, LayoutParams(0, MATCH_PARENT))
+                    val hits = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
+                    bar.addView(hits, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                    val halves = listOf(false to offLabel, true to onLabel).map { (on, label) ->
+                        val half = LinearLayout(ctx.context).apply {
+                            isClickable = true
+                            applyHaRipple(this, 12f * ctx.dp, ctx.theme.dark)
+                            contentDescription = label
+                        }
+                        hits.addView(half, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+                        on to half
                     }
                     fun paint(on: Boolean) {
-                        val onColor = when (domain) {
-                            "lock" -> UNLOCKED_RED
-                            else -> ctx.store[entityId]?.lightTintColor() ?: ctx.theme.activeColor(domain)
+                        val st = ctx.store[entityId]
+                        val color = when {
+                            domain == "lock" -> if (on) UNLOCKED_RED else LOCKED_GREEN
+                            on -> st?.lightTintColor() ?: ctx.theme.activeColor(domain)
+                            else -> ctx.theme.stateInactiveColor
                         }
-                        val offColor = if (domain == "lock") LOCKED_GREEN else withAlpha(ctx.theme.primaryTextColor, 0.18f)
-                        halves.forEach { (isOn, half, text) ->
-                            val selected = isOn == on
-                            half.background = if (selected) GradientDrawable().apply {
-                                cornerRadius = 8f * ctx.dp
-                                setColor(if (isOn) onColor else offColor)
-                            } else null
-                            half.isSelected = selected
-                            text.setTextColor(
-                                if (selected && (isOn || domain == "lock")) Color.WHITE else ctx.theme.primaryTextColor,
-                            )
-                        }
+                        track.setColor(withAlpha(color, 0.2f))
+                        (knob.background as GradientDrawable).setColor(color)
+                        (knob.layoutParams as LayoutParams).gravity = if (on) Gravity.END else Gravity.START
+                        knob.requestLayout()
+                        val probe = EntityState(entityId, if (on) "on" else "off", st?.attributes?.filterKeys { it == "device_class" } ?: emptyMap())
+                        knobIcon.setIcon(HaDisplay.domainIcon(probe) ?: toggleIcon(domain, on), Color.WHITE)
+                        halves.forEach { (isOn, half) -> half.isSelected = isOn == on }
                     }
-                    halves.forEach { (on, half, _) ->
+                    halves.forEach { (on, half) ->
                         half.setOnClickListener {
                             paint(on)
                             val (d, svc) = service(on)
@@ -700,10 +842,15 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         highOf(st)?.let { out = out.coerceAtMost(it) }
                         return out
                     }
+                    // HA's ha-control-number-buttons: formatNumber with the registry's precision, no decimals for a
+                    // whole step and value, else up to two with trailing zeros dropped ("1 x", "0.9").
                     fun format(v: Double, st: EntityState?): String {
-                        val step = stepOf(st)
-                        val decimals = if (step % 1.0 == 0.0) 0 else step.toBigDecimal().stripTrailingZeros().scale().coerceIn(1, 4)
-                        val n = String.format(Locale.US, "%.${decimals}f", v)
+                        val dp = HaDisplay.displayPrecision(entityId)
+                        val n = when {
+                            dp != null -> HaDisplay.formatState(v.toBigDecimal().toPlainString(), dp, null)
+                            stepOf(st) % 1.0 == 0.0 && v % 1.0 == 0.0 -> HaDisplay.formatValue(v, 0)
+                            else -> HaDisplay.formatValue(v)
+                        }
                         return st?.unit?.let { "$n $it" } ?: n
                     }
                     fun setValue(v: Double) {
@@ -749,22 +896,20 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         fun stepButton(iconName: String, sign: Int, label: String) = LinearLayout(ctx.context).apply {
                             gravity = Gravity.CENTER
                             isClickable = true
-                            applyHaRipple(this, 10f * ctx.dp, ctx.theme.dark)
+                            applyHaRipple(this, 12f * ctx.dp, ctx.theme.dark)
                             contentDescription = label
                             addView(MdiIconView(ctx.context).apply { setIcon(iconName, ctx.theme.primaryTextColor) },
-                                LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)))
+                                LinearLayout.LayoutParams(ctx.px(16f), ctx.px(16f)))
                             setOnClickListener { step(sign) }
                         }
+                        // ha-control-number-buttons: 35 px buttons with 16 px glyphs on the feature fill.
                         val stepper = LinearLayout(ctx.context).apply {
                             orientation = LinearLayout.HORIZONTAL
                             gravity = Gravity.CENTER_VERTICAL
-                            background = GradientDrawable().apply {
-                                cornerRadius = 10f * ctx.dp
-                                setColor(if (ctx.theme.dark) SEGMENT_DARK else SEGMENT_LIGHT)
-                            }
-                            addView(stepButton("mdi:minus", -1, "Decrease"), LinearLayout.LayoutParams(ctx.px(48f), MATCH_PARENT))
+                            background = featureFill(ctx)
+                            addView(stepButton("mdi:minus", -1, "Decrease"), LinearLayout.LayoutParams(ctx.px(35f), MATCH_PARENT))
                             addView(value, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-                            addView(stepButton("mdi:plus", 1, "Increase"), LinearLayout.LayoutParams(ctx.px(48f), MATCH_PARENT))
+                            addView(stepButton("mdi:plus", 1, "Increase"), LinearLayout.LayoutParams(ctx.px(35f), MATCH_PARENT))
                         }
                         rootCol.addView(stepper, lp())
                         featureBinders += { s ->
@@ -803,6 +948,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                     }
                 }
             }
+            // Tag what this feature added, so `features_position: inline` can pick the first configured one.
+            for (c in before until rootCol.childCount) rootCol.getChildAt(c).tag = FEATURE_TAG + type
         }
     }
 
@@ -1026,7 +1173,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     }
 
     private fun renderState(s: EntityState?) {
-        titleView.text = config.name ?: s?.friendlyName ?: config.entity.orEmpty()
+        // HA's tile names an entity on a device "<device> <entity>" (the device alone for its main entity).
+        titleView.text = config.name ?: config.entity?.let(HaDisplay::deviceEntityName) ?: s?.friendlyName ?: config.entity.orEmpty()
         val hideState = config.raw.optBoolean("hide_state", false)
         stateView.visibility = if (hideState) GONE else VISIBLE
         stateView.text = s?.formattedState() ?: "…"
@@ -1051,15 +1199,27 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             iconBadge.setIcon(iconName, ctx.theme.stateIconColor)
             return
         }
-        val inset = ctx.px(8f)
+        // ha-tile-icon: a 24 px glyph in the 36 px shape.
+        val inset = ctx.px(6f)
         iconWrap.setPadding(inset, inset, inset, inset)
         val color = when {
             domain == "lock" && s?.state == "locked" -> LOCKED_GREEN
             domain == "lock" && (s?.state == "unlocked" || s?.state == "open") -> UNLOCKED_RED
+            // HA colors a tile only for its state-colored domains; the rest keep --state-icon-color.
+            domain !in STATE_COLORED_DOMAINS -> ctx.theme.stateIconColor
             active -> s?.lightTintColor() ?: ctx.theme.activeColor(domain)
             else -> ctx.theme.stateInactiveColor
         }
         iconBadge.setIcon(iconName, iconBadge.tintColor)
+        // No tinted shape while the icon has no action, or the entity is unavailable (HA disables the icon).
+        if (!iconInteractive || s?.state == "unavailable") {
+            badgeAnimator?.cancel()
+            badgeAnimator = null
+            badgeColor = null
+            iconWrap.background = null
+            iconBadge.tintColor = color
+            return
+        }
         tintBadge(color)
     }
 
@@ -1140,12 +1300,34 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             }
         }
         private val BARE_ICON_DOMAINS = setOf("sensor", "weather", "text", "select")
+        /** HA's `STATE_COLORED_DOMAIN`: the domains whose tiles take a state color. */
+        private val STATE_COLORED_DOMAINS = setOf(
+            "alarm_control_panel", "alert", "automation", "binary_sensor", "calendar", "camera", "climate", "cover",
+            "device_tracker", "fan", "group", "humidifier", "input_boolean", "lawn_mower", "light", "lock",
+            "media_player", "person", "plant", "remote", "schedule", "script", "siren", "sun", "switch", "timer",
+            "update", "vacuum", "valve", "water_heater", "weather",
+        )
+        /** The toggle knob's icon before HA's icon data arrives. */
+        fun toggleIcon(domain: String, on: Boolean): String = when (domain) {
+            "light" -> if (on) "mdi:lightbulb" else "mdi:lightbulb-off"
+            "switch" -> if (on) "mdi:toggle-switch-variant" else "mdi:toggle-switch-variant-off"
+            "fan" -> if (on) "mdi:fan" else "mdi:fan-off"
+            "lock" -> if (on) "mdi:lock-open-variant" else "mdi:lock"
+            else -> if (on) "mdi:power" else "mdi:power-off"
+        }
+
+        /** View tag prefix naming the feature type a feature view was built for. */
+        private const val FEATURE_TAG = "tile-feature:"
+
+        /** HA's `DOMAINS_TOGGLE`: the domains whose tile icon toggles by default (not covers or locks). */
+        private val ICON_TOGGLE_DOMAINS = setOf("fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve")
+
+        /** Domains whose tile icon presses by default (`toggle` on them presses / activates). */
+        private val PRESS_DOMAINS = setOf("button", "input_button", "scene")
         const val LOCKED_GREEN = 0xFF4CAF50.toInt()
         const val UNLOCKED_RED = 0xFFF44336.toInt()
-        private const val BRIGHTNESS_LIGHT = 0xFFFF9800.toInt()
-        private const val BRIGHTNESS_DARK = 0xFFFFAA55.toInt()
-        private const val FEATURE_FILL_LIGHT = 0x0F000000
-        private const val FEATURE_FILL_DARK = 0x16FFFFFF
+        /** HA's default `--warning-color`. */
+        const val WARNING_ORANGE = 0xFFFFA600.toInt()
         private const val SEGMENT_LIGHT = 0xFFF0F0F0.toInt()
         private const val SEGMENT_DARK = 0xFF2A2A2A.toInt()
         private const val HVAC_HEAT = 0xFFFF6F22.toInt()
@@ -1178,9 +1360,12 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         private const val BADGE_FADE_MS = 180L
 
         /** The 10 dp rounded fill under HA 2026's tile features (dropdowns, cover buttons). */
+        /** HA's feature controls' fill: `--disabled-color` (#464646 dark, #bdbdbd light) at 20%, 12 px corners. */
         fun featureFill(ctx: VitroCardContext) = GradientDrawable().apply {
-            cornerRadius = 10f * ctx.dp
-            setColor(if (ctx.theme.dark) FEATURE_FILL_DARK else FEATURE_FILL_LIGHT)
+            cornerRadius = 12f * ctx.dp
+            val base = ThemeResolver.parseColor(ctx.theme.vars["disabled-color"]?.let { ThemeResolver.resolveValue(it, ctx.theme.vars, 0) })
+                ?: if (ctx.theme.dark) 0xFF464646.toInt() else 0xFFBDBDBD.toInt()
+            setColor(withAlpha(base, 0.2f))
         }
     }
 }
@@ -1826,24 +2011,28 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
 
     init {
         orientation = VERTICAL
-        setPadding(ctx.px(4f), ctx.px(10f), ctx.px(4f), ctx.px(4f))
         val heading = config.raw.optString("heading", config.raw.optString("title", "")).ifEmpty { config.name.orEmpty() }
         val subtitle = config.raw.optString("subtitle", "")
         val isSubtitle = config.raw.optString("heading_style", "title") == "subtitle"
+        // hui-heading-card: `0 4px` around a row with 8 px gaps and an 18 px icon; the title is 16 px / 400 on a
+        // 25.6 px line, the subtitle 14 px / 500 on an 18 px row, 6 px under the card's top (measured in HA).
+        setPadding(ctx.px(4f), if (isSubtitle) ctx.px(6f) else 0, ctx.px(4f), 0)
         val textColor = if (isSubtitle) ctx.theme.secondaryTextColor else ctx.theme.primaryTextColor
 
         // HA's `hui-heading-card`: [icon] heading ........ [entity badges]
         val row = LinearLayout(ctx.context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = if (isSubtitle) ctx.px(18f) else (25.6f * ctx.dp).roundToInt()
         }
         config.icon?.takeIf { it.isNotBlank() }?.let { iconName ->
             row.addView(MdiIconView(ctx.context).apply { setIcon(iconName, textColor) },
-                LayoutParams(ctx.px(20f), ctx.px(20f)).apply { marginEnd = ctx.px(8f) })
+                LayoutParams(ctx.px(18f), ctx.px(18f)).apply { marginEnd = ctx.px(8f) })
         }
-        val hView = textView(ctx, if (isSubtitle) 14f else 16f, textColor, Inter.MEDIUM).apply {
+        val hView = textView(ctx, if (isSubtitle) 14f else 16f, textColor, if (isSubtitle) Inter.MEDIUM else Inter.REGULAR).apply {
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
+            letterSpacing = 0.1f / (if (isSubtitle) 14f else 16f)
         }
         if ("{{" in heading) {
             unsubs += ctx.subscribeTemplate(heading) { rendered -> ctx.main.post { hView.text = rendered } }
@@ -1934,7 +2123,14 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         dropSurfaceIfTextOnly()
         // Content taller than the card's slot overflows visibly, as `ha-markdown` does in the browser (its padding
         // box is no clip): a 56 px text-only card with a big heading keeps its descenders.
-        val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL; unclip() }
+        val col = object : LinearLayout(ctx.context) {
+            // Laid out at its natural height even when the card's slot is shorter: a squeezed last line would
+            // lose its descenders, where the browser lets the content overflow.
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val h = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.AT_MOST) MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED) else heightMeasureSpec
+                super.onMeasure(widthMeasureSpec, h)
+            }
+        }.apply { orientation = LinearLayout.VERTICAL; unclip() }
         if (textOnly) unclip()
         if (hasHeader) {
             col.addView(TextView(ctx.context).apply {
@@ -2039,7 +2235,7 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
 /**
  * Native HA `picture`, `picture-entity`, and `picture-glance` card.
  * With `camera_view: live` (or a `camera.*` entity) it plays HA's MJPEG stream while attached, falling back to a
- * snapshot every [LiveCameraFeed.POLL_MS] when the stream isn't available, and shows a green "LIVE" badge.
+ * snapshot every [LiveCameraFeed.POLL_MS] when the stream isn't available (no badge: HA draws none).
  * A `picture-glance` with `entities` gets HA's row of tappable entity icons on the right of its caption bar.
  */
 class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
@@ -2048,23 +2244,55 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
     }
+    /** The footer's state, at the end when the name shows too. */
+    private val stateCaption = textView(ctx, 16f, Color.WHITE, Inter.REGULAR).apply {
+        maxLines = 1
+        gravity = Gravity.CENTER_VERTICAL or Gravity.END
+    }
     private val liveEntityId: String? = (config.entity ?: config.raw.optString("camera_image", "").ifEmpty { null })
         ?.takeIf { config.raw.optString("camera_view") == "live" || it.startsWith("camera.") }
     private val isLive = liveEntityId != null
     private var latestPicture: String? = null
     private val feed: LiveCameraFeed? = liveEntityId?.let { id ->
-        LiveCameraFeed(ctx, id, { latestPicture }) { bmp -> img.setImageBitmap(bmp) }
+        LiveCameraFeed(ctx, id, { latestPicture }) { bmp -> showBitmap(bmp) }
     }
 
     /** Width / height, from `aspect_ratio` (`16:9`, `4:3`, `50%` = height as % of width, or a decimal). */
     private val aspect: Float = parseAspectRatio(config.raw.opt("aspect_ratio")?.toString())
+    /** Without `aspect_ratio`, HA's picture-entity takes the image's own shape once it has loaded. */
+    private val naturalAspect = config.type == "picture-entity" && !config.raw.has("aspect_ratio")
+    private var imageAspect: Float? = null
+
+    private fun showBitmap(bmp: android.graphics.Bitmap) {
+        img.setImageBitmap(bmp)
+        if (naturalAspect && bmp.height > 0) {
+            val a = bmp.width.toFloat() / bmp.height
+            if (imageAspect == null || kotlin.math.abs(imageAspect!! - a) > 0.01f) {
+                imageAspect = a
+                requestLayout()
+            }
+        }
+    }
 
     init {
         addView(img, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         val showName = config.raw.optBoolean("show_name", true)
         val showState = config.raw.optBoolean("show_state", true)
         val glanceEntities = if (config.type == "picture-glance") config.entities().filter { it.isEntity } else emptyList()
-        if (config.type != "picture" && (showName || showState || glanceEntities.isNotEmpty())) {
+        if (config.type == "picture-entity" && (showName || showState)) {
+            // hui-picture-entity-card's footer: 16 px white text on rgba(0,0,0,.3), 16 px padding; name and state
+            // spread apart, or one of them centered (`.single`).
+            caption.textSize = ctx.scaledSp(16f)
+            caption.typeface = Inter.typeface(ctx.context, Inter.REGULAR, ctx.scaledSp(16f))
+            caption.gravity = Gravity.CENTER_VERTICAL or if (showName && showState) Gravity.START else Gravity.CENTER_HORIZONTAL
+            val bar = FrameLayout(ctx.context).apply {
+                setBackgroundColor(0x4D000000)
+                setPadding(ctx.px(16f), 0, ctx.px(16f), 0)
+                addView(caption, LayoutParams(MATCH_PARENT, ctx.px(48f)))
+                if (showName && showState) addView(stateCaption, LayoutParams(MATCH_PARENT, ctx.px(48f)))
+            }
+            addView(bar, LayoutParams(MATCH_PARENT, ctx.px(48f), Gravity.BOTTOM))
+        } else if (config.type != "picture" && (showName || showState || glanceEntities.isNotEmpty())) {
             val bar = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -2078,13 +2306,10 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             }
             addView(bar, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
         }
-        if (isLive && showState) addView(buildLiveBadge(), LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
-            topMargin = ctx.px(8f); marginEnd = ctx.px(8f)
-        })
 
         val staticImage = config.raw.optString("image", "").ifEmpty { null }
         if (staticImage != null) {
-            ctx.loadImage(staticImage) { bmp -> if (bmp != null) img.setImageBitmap(bmp) }
+            ctx.loadImage(staticImage) { bmp -> if (bmp != null) showBitmap(bmp) }
         }
         // HA's picture-glance labels its bar with `title`; the other picture cards use `name`.
         val label = if (config.type == "picture-glance") config.title ?: config.name else config.name
@@ -2095,16 +2320,21 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             setOnClickListener { ctx.performAction(ActionConfig.parse(config.raw.optJSONObject("tap_action")), eid) }
             bindHoldAction(holdActionFor(config.raw, eid), eid)
             observe(eid) { s ->
-                val parts = buildList {
-                    if (showName) add(label ?: s?.friendlyName ?: eid)
-                    if (showState && s != null && glanceEntities.isEmpty()) add(s.formattedState())
+                if (config.type == "picture-entity" && showName && showState) {
+                    caption.text = label ?: s?.friendlyName ?: eid
+                    stateCaption.text = s?.formattedState().orEmpty()
+                } else {
+                    val parts = buildList {
+                        if (showName) add(label ?: s?.friendlyName ?: eid)
+                        if (showState && s != null && glanceEntities.isEmpty()) add(s.formattedState())
+                    }
+                    caption.text = parts.joinToString(" · ")
                 }
-                caption.text = parts.joinToString(" · ")
                 if (staticImage == null) {
                     latestPicture = s?.entityPicture
                     // Live cards are refreshed by the feed; others load once per state change.
                     if (!isLive) latestPicture?.let { pic ->
-                        ctx.loadImage(pic) { bmp -> if (bmp != null) img.setImageBitmap(bmp) }
+                        ctx.loadImage(pic) { bmp -> if (bmp != null) showBitmap(bmp) }
                     }
                 }
             }
@@ -2144,29 +2374,8 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             super.onMeasure(widthMeasureSpec, heightMeasureSpec)
             return
         }
-        val height = (width / aspect).toInt().coerceAtLeast(1)
+        val height = (width / (imageAspect ?: aspect)).toInt().coerceAtLeast(1)
         super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
-    }
-
-    private fun buildLiveBadge(): LinearLayout = LinearLayout(ctx.context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(ctx.px(7f), ctx.px(3f), ctx.px(8f), ctx.px(3f))
-        background = GradientDrawable().apply {
-            cornerRadius = 999f
-            setColor(0x88000000.toInt())
-        }
-        val dot = View(ctx.context).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0xFF4CAF50.toInt())
-            }
-        }
-        addView(dot, LinearLayout.LayoutParams(ctx.px(6f), ctx.px(6f)).apply { marginEnd = ctx.px(5f) })
-        addView(textView(ctx, 10f, Color.WHITE, Inter.MEDIUM).apply {
-            text = "LIVE"
-            letterSpacing = 0.08f
-        })
     }
 
     override fun onAttachedToWindow() {
@@ -2216,7 +2425,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
  */
 class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfig) : ViewGroup(ctx.context) {
     private val subscriptions = ArrayList<() -> Unit>()
-    private val style = ChipStyle.resolve(ctx, ThemeResolver.parseCardMod(config.raw.optJSONObject("card_mod"), ctx.theme.vars).customProperties)
+    private val style = ChipStyle.resolve(ctx, ownVars(ctx, config))
     private val alignment = config.raw.optString("alignment")
     private val spacingPx = ctx.px(style.spacing)
     private val spacers = HashSet<View>()
@@ -2230,6 +2439,17 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         if (chips != null) {
             for (i in 0 until chips.length()) chips.optJSONObject(i)?.let(::addChip)
         }
+    }
+
+    /**
+     * The card's own custom properties, with `var()` resolved against the theme, the enclosing cards' variables
+     * and the card's other declarations (a second pass, so `--a: var(--b)` on the same card works).
+     */
+    private fun ownVars(ctx: VitroCardContext, config: CardConfig): Map<String, String> {
+        val mod = config.raw.optJSONObject("card_mod")
+        val outer = ctx.theme.vars + ctx.cardVars
+        val first = ThemeResolver.parseCardMod(mod, outer).customProperties
+        return ThemeResolver.parseCardMod(mod, outer + first).customProperties
     }
 
     private fun addChip(c: JSONObject) {

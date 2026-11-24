@@ -572,7 +572,9 @@ class HaDashboardClientTest {
         // FIFO: ids go out in the order the calls were made, across the reader's and the caller's requests.
         val ids = server.received.drop(1).map { it.getInt("id") }
         assertEquals(ids.sorted(), ids)
-        val after = server.received.drop(1).filter { it.getInt("id") > 11 }.map {
+        // Display data (registry, icons, translations) can interleave: it isn't what this test orders.
+        val display = setOf("config/entity_registry/list_for_display", "config/device_registry/list", "frontend/get_icons", "frontend/get_translations")
+        val after = server.received.drop(1).filter { it.getInt("id") > 11 && it.getString("type") !in display }.map {
             if (it.getString("type") == "call_service") it.getString("service") else it.getString("type")
         }
         assertEquals(listOf("turn_on", "turn_off", "history/stream", "toggle"), after.take(4))

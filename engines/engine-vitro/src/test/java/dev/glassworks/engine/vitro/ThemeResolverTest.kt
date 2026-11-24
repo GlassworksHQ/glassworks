@@ -17,6 +17,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.roundToInt
 
 /** Theme catalog parsing, `var()` resolution, CSS color/background parsing and card-mod extraction. Pure JVM. */
 class ThemeResolverTest {
@@ -530,6 +531,26 @@ class ThemeResolverTest {
     }
 
     @Test
+    fun gradientStopsFollowCssOrderAcrossLinesAndFunctionalColors() {
+        // An explicit position under an earlier one is raised first; the missing ones then spread between them.
+        val bg = ThemeResolver.parseBackground("linear-gradient(red 90%, green, white 50%, black, blue 100%), #000000", 0)
+            as ThemeBackground.Layers
+        val layer = bg.css.layers.single()
+        val geo = bg.css.geometry(layer, 100f, 100f, 1f)!!
+        assertEquals(listOf(0.9f, 0.9f, 0.9f, 0.95f, 1f), geo.positions.toList().map { (it * 100).roundToInt() / 100f })
+        // A theme can fold the value over lines.
+        val folded = ThemeResolver.parseBackground("radial-gradient(\n  circle at top left,\n  #112233,\n  #445566\n)", 0)
+        assertTrue(folded is ThemeBackground.Layers)
+        // A first stop written as rgba() with spaces is a color stop, not a shape.
+        val functional = CssBackground.parse("radial-gradient(rgba(0, 0, 0, 0.5) 10%, transparent)")!!.layers.single()
+        assertEquals(2, functional.stops.size)
+        assertEquals(0.1f, functional.stops[0].pos)
+        // A single linear gradient keeps its stop positions for painting.
+        val single = ThemeResolver.parseBackground("linear-gradient(90deg, red 20%, blue 80%)", 0) as ThemeBackground.LinearGradient
+        assertEquals(listOf(0.2f, 0.8f), single.stops!!.map { it.pos })
+    }
+
+    @Test
     fun layeredBackgroundsKeepEveryLayerTheColorAndTheirGeometry() {
         val bg = ThemeResolver.parseBackground(
             "radial-gradient(1200px 700px at -10% -20%, rgba(56, 189, 248, 0.13), transparent 60%), " +
@@ -558,14 +579,18 @@ class ThemeResolverTest {
     }
 
     @Test
-    fun stateActiveColorOverridesApplyToEveryDomain() {
+    fun stateActiveColorReachesOnlyDomainsHaLeavesUncolored() {
         val t = resolveWith("""{"state-light-active-color": "#ff00ff", "state-active-color": "#00ff00"}""")
         assertEquals(argb(0xFFFF00FF), t.activeColor("light")) // the domain key wins
-        assertEquals(argb(0xFF00FF00), t.activeColor("switch")) // the theme-wide key beats the built-in default
-        assertEquals(argb(0xFF00FF00), t.activeColor("fan"))
-        assertEquals(argb(0xFF00FF00), t.activeColor("cover"))
-        assertEquals(argb(0xFF00FF00), t.activeColor("climate"))
-        assertEquals(argb(0xFF00FF00), t.activeColor("binary_sensor"))
+        // HA's base theme colors these domains itself, so the theme-wide key never reaches them (measured in HA).
+        assertEquals(argb(0xFFFFC107), t.activeColor("switch"))
+        assertEquals(argb(0xFF00BCD4), t.activeColor("fan"))
+        assertEquals(argb(0xFF9C27B0), t.activeColor("cover"))
+        assertEquals(argb(0xFFFF8100), t.activeColor("climate"))
+        assertEquals(argb(0xFFFFC107), t.activeColor("binary_sensor"))
+        assertEquals(argb(0xFF03A9F4), t.activeColor("media_player"))
+        assertEquals(argb(0xFF00FF00), t.activeColor("automation")) // no base color: the theme-wide key applies
+        assertEquals(argb(0xFF123456), resolveWith("""{"state-climate-heat-color": "#123456"}""").activeColor("climate"))
         assertEquals(argb(0xFF2196F3), t.activeColor("sensor")) // sensors and people keep their own colors
         assertEquals(argb(0xFF4CAF50), t.activeColor("person"))
     }

@@ -333,7 +333,7 @@ class VitroIslandServerTest {
     @Test
     fun stopTearsDownSocketsAndTheListener() {
         val slot = RecordingSlot()
-        val (id, url) = island.registerSlot(slot)
+        val (id, _) = island.registerSlot(slot)
         val ws = WsClient.connect(wsUrl(id), readTimeoutMs = 5_000)
         try {
             ws.line()
@@ -346,10 +346,8 @@ class VitroIslandServerTest {
             assertNull("the socket is closed", after)
             assertEquals(-1, island.port)
             assertNull(island.origin)
-            // The slot's page is gone: the connection is refused, or, if another server has since been given the
-            // same ephemeral port (tests run in parallel on CI), that server doesn't know the slot.
-            val reply = try { get(url) } catch (_: IOException) { null }
-            assertTrue("the stopped island still serves its slot", reply == null || reply.code != 200)
+            // No request to the old port: another island server in a parallel test can be given the same ephemeral
+            // port and serve a slot with the same id and page. That the slot is cleared is checked after the restart below.
         } finally {
             ws.abort()
         }

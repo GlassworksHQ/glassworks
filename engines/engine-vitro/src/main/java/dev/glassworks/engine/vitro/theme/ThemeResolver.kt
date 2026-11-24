@@ -13,7 +13,7 @@ import kotlin.math.roundToInt
 sealed class ThemeBackground {
     data class Solid(val color: Int) : ThemeBackground()
     /** CSS `linear-gradient(...)`: the angle plus every parsed color stop, in order. */
-    data class LinearGradient(val angleDeg: Float, val colors: IntArray) : ThemeBackground()
+    data class LinearGradient(val angleDeg: Float, val colors: IntArray, val stops: List<CssBackground.Stop>? = null) : ThemeBackground()
 
     /** CSS `radial-gradient(...)`: every parsed color stop, center to edge. Shape and position keywords are ignored. */
     data class RadialGradient(val colors: IntArray) : ThemeBackground()
@@ -43,6 +43,8 @@ data class CardModStyle(
     val hasComplexSelectors: Boolean = false,
     /** `background:` / `background-image:` holding a `linear-gradient(...)`. */
     val backgroundGradient: ThemeBackground.LinearGradient? = null,
+    /** `background:` / `background-image:` holding any gradient, every layer and stop position as CSS paints it. */
+    val backgroundLayers: CssBackground? = null,
     /** `padding:` top value in dp (kept for callers checking uniform / zero padding); full sides live in [paddingInsets]. */
     val paddingDp: Float? = null,
     /** Full CSS `padding` / `padding-{top,right,bottom,left}` box in dp. */
@@ -83,6 +85,14 @@ data class CardModStyle(
     /** CSS `margin` on the card (an inset inside its grid cell or stack slot), in dp. */
     val marginInsets: EdgeInsetsDp? = null,
 )
+
+/** HA's base theme (`color.globals`): the domains whose `--state-<domain>-active-color` it defines itself. */
+private val HA_BASE_ACTIVE: Map<String, Int> = mapOf(
+    "light" to 0xFFFFC107, "switch" to 0xFFFFC107, "input_boolean" to 0xFFFFC107, "binary_sensor" to 0xFFFFC107,
+    "fan" to 0xFF00BCD4, "cover" to 0xFF9C27B0, "media_player" to 0xFF03A9F4, "vacuum" to 0xFF009688,
+    "valve" to 0xFF2196F3, "siren" to 0xFFF44336, "update" to 0xFFFF9800, "lawn_mower" to 0xFF4CAF50,
+    "climate" to 0xFFFF8100,
+).mapValues { it.value.toInt() }
 
 /** Resolved, native-ready Home Assistant theme for one view or card. */
 data class ResolvedTheme(
@@ -128,13 +138,20 @@ data class ResolvedTheme(
         vars[key]?.takeIf { themeVarNames == null || key in themeVarNames }
 
     /**
-     * Domain active color following HA's convention: `--state-<domain>-active-color`, then
-     * `--state-<domain>-on-color`, then the theme-wide `--state-active-color`, then HA's own default.
+     * Domain active color following HA's `stateColorCss`: `--state-<domain>-active-color` (or `-on-color`) from the
+     * theme, then HA's base-theme color for the domains it defines (lights and switches amber, media players light
+     * blue, ...), which a theme-wide `--state-active-color` can't reach, then `--state-active-color`, then defaults.
      */
     fun activeColor(domain: String): Int {
         val d = domain.lowercase(Locale.ROOT)
         ThemeResolver.parseColor(themeVar("state-$d-active-color"))?.let { return it }
         ThemeResolver.parseColor(themeVar("state-$d-on-color"))?.let { return it }
+        HA_BASE_ACTIVE[d]?.let { base ->
+            ThemeResolver.parseColor(vars["state-$d-active-color"])?.let { return it }
+            // A climate's active color is its heat color, which a theme may set on its own.
+            if (d == "climate") ThemeResolver.parseColor(vars["state-climate-heat-color"])?.let { return it }
+            return base
+        }
         if (d != "sensor" && d != "person" && d != "device_tracker") {
             ThemeResolver.parseColor(themeVar("state-active-color"))?.let { return it }
         }
@@ -486,7 +503,8 @@ object ThemeResolver {
         URL_PATTERN.find(spec)?.let { m ->
             return ThemeBackground.ImageUrl(m.groupValues[1].trim(), fallbackColor)
         }
-        CssBackground.parse(spec)?.takeIf { it.layers.size > 1 || it.color != null || it.layers[0] is CssBackground.Radial }
+        val css = CssBackground.parse(spec)
+        css?.takeIf { it.layers.size > 1 || it.color != null || it.layers[0] is CssBackground.Radial }
             ?.let { return ThemeBackground.Layers(it, fallbackColor) }
         LINEAR_GRADIENT_PATTERN.find(spec)?.let { m ->
             val parts = splitTopLevelCommas(m.groupValues[2])
@@ -499,7 +517,8 @@ object ThemeResolver {
                 val cleaned = stop.trim().replace(Regex("""\s+[\d.]+%$"""), "")
                 parseColor(cleaned)
             }
-            if (stops.size >= 2) return ThemeBackground.LinearGradient(angle, stops.toIntArray())
+            // Keep the parsed stops (with their positions) for painting; `colors` stays the plain list.
+            if (stops.size >= 2) return ThemeBackground.LinearGradient(angle, stops.toIntArray(), (css?.layers?.singleOrNull() as? CssBackground.Linear)?.stops)
         }
         RADIAL_GRADIENT_PATTERN.find(spec)?.let { m ->
             val stops = splitTopLevelCommas(m.groupValues[1]).mapNotNull { stop ->
@@ -557,10 +576,12 @@ object ThemeResolver {
         val bgShort = prop("background")
         val gradient = listOfNotNull(bgImage, bgShort).firstOrNull { "linear-gradient" in it.lowercase(Locale.ROOT) }
             ?.let { parseBackground(it, 0) as? ThemeBackground.LinearGradient }
+        val layers = listOfNotNull(bgImage, bgShort).firstOrNull { "gradient(" in it.lowercase(Locale.ROOT) }
+            ?.let(CssBackground::parse)
         // `background: none` (the dashboard's usual "bare card") is a transparent fill.
         fun fill(v: String): Int? = if (v.trim().equals("none", ignoreCase = true)) 0 else parseColor(v)
         val bg = prop("background-color")?.let(::fill)
-            ?: bgShort?.takeIf { gradient == null || "gradient" !in it.lowercase(Locale.ROOT) }?.let(::fill)
+            ?: bgShort?.takeIf { (gradient == null && layers == null) || "gradient" !in it.lowercase(Locale.ROOT) }?.let(::fill)
         val radius = prop("border-radius")?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }
         val opacity = prop("opacity")?.let { o ->
             if (o.endsWith("%")) o.dropLast(1).toFloatOrNull()?.div(100f) else o.toFloatOrNull()
@@ -618,6 +639,7 @@ object ThemeResolver {
             blurRadiusDp = blur,
             hasComplexSelectors = otherRules,
             backgroundGradient = gradient,
+            backgroundLayers = layers,
             paddingDp = padding,
             paddingInsets = paddingInsets,
             gapDp = gap,

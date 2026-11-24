@@ -94,7 +94,9 @@ object MdiIcons {
     /** The official catalog, loading it on first use; null when there's no [Context] or no asset. */
     private fun catalog(): Catalog? {
         catalog?.let { return it }
-        if (catalogTried) return null
+        // While the loader thread holds the lock, wait for it: an icon asked for mid-load would otherwise fall
+        // back to `home` and keep that glyph (the view holds the Path it got).
+        if (catalogTried) return synchronized(catalogLock) { catalog }
         synchronized(catalogLock) {
             catalog?.let { return it }
             if (catalogTried) return null
@@ -140,6 +142,8 @@ object MdiIcons {
     fun resolveIconName(explicitIcon: String?, entity: EntityState?): String {
         if (!explicitIcon.isNullOrBlank()) return explicitIcon.lowercase()
         entity?.icon?.let { return it.lowercase() }
+        // HA's own icon data (registry, integration and domain icons) once it has arrived.
+        entity?.let { dev.glassworks.engine.vitro.data.HaDisplay.icon(it) }?.let { return it }
         val domain = entity?.domain.orEmpty()
         val dc = entity?.deviceClass.orEmpty()
         val on = entity?.isActive == true
