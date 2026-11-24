@@ -68,6 +68,7 @@ import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
+import dev.glassworks.engine.vitro.compat.CompatChecker
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.CardTier
 import dev.glassworks.engine.vitro.model.DashboardConfig
@@ -94,6 +95,8 @@ data class VitroMetrics(
     val webIslandCards: Int = 0,
     val subscribedEntities: Int = 0,
     val cacheHit: Boolean = false,
+    /** Every card in the view that falls back to an island, with why (`CompatChecker`). */
+    val islands: List<String> = emptyList(),
 )
 
 /**
@@ -449,6 +452,7 @@ class VitroView(
         }
 
         val elapsed = SystemClock.elapsedRealtime() - t0
+        val compat = CompatChecker.check(viewCfg)
         val tiers = CardRouter.tierCounts(viewCfg)
         val entities = CardRouter.referencedEntities(viewCfg)
         val metrics = VitroMetrics(
@@ -460,6 +464,7 @@ class VitroView(
             webIslandCards = tiers[CardTier.WEB_ISLAND] ?: 0,
             subscribedEntities = entities.size,
             cacheHit = cached != null,
+            islands = compat.islands.map { "${it.path}: ${it.verdict.reasons.joinToString("; ")}" },
         )
         lastMetrics = metrics
         Log.i(
@@ -468,6 +473,8 @@ class VitroView(
                 "(cache=${metrics.cacheHit}, core=${metrics.nativeCoreCards}, hacs=${metrics.nativeHacsCards}, " +
                 "islands=${metrics.webIslandCards}, entities=${metrics.subscribedEntities})",
         )
+        // The checker's answer for this view, once per build: why each island falls back.
+        if (cached == null) metrics.islands.forEach { Log.i(TAG, "Island $it") }
         onMetrics?.invoke(metrics)
     }
 

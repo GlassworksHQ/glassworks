@@ -220,6 +220,9 @@ class VitroTestActivity : Activity() {
                 appendLine("view ${m.viewTitle.ifEmpty { "-" }} ${m.viewType}".trimEnd())
                 appendLine("build ${m.buildTimeMs}ms  cache ${if (m.cacheHit) "hit" else "miss"}")
                 appendLine("cards core ${m.nativeCoreCards}  hacs ${m.nativeHacsCards}  island ${m.webIslandCards}")
+                // Why each island falls back (the compatibility checker); the full list is in logcat (VitroView).
+                m.islands.take(MAX_HUD_ISLANDS).forEach { appendLine("· ${it.takeLast(120)}") }
+                if (m.islands.size > MAX_HUD_ISLANDS) appendLine("· +${m.islands.size - MAX_HUD_ISLANDS} more in logcat")
                 append("entities ${m.subscribedEntities}  loads $loads")
             }
         }
@@ -268,6 +271,7 @@ class VitroTestActivity : Activity() {
         const val KEY_URL = "url"
         const val KEY_TOKEN = "token"
         const val KEY_HUD = "hud"
+        const val MAX_HUD_ISLANDS = 4
         const val KEY_DARK = "dark"
         const val EXTRA_URL = "url"
         const val EXTRA_TOKEN = "token"
