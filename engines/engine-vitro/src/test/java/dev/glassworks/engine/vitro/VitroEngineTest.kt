@@ -351,10 +351,16 @@ class VitroEngineTest {
             page.load("$base/auth/authorize?client_id=abc&redirect_uri=def")
             page.load("$base/config")
             page.load("https://example.com/config/blueprint/import")
+            // Through the server's entry route, which hands the browser the proxy's capability and redirects.
             assertEquals(
-                listOf("$loopback/auth/authorize?client_id=abc&redirect_uri=def", "$loopback/config", "https://example.com/config/blueprint/import"),
+                listOf(
+                    engine.islandServer.entryUrl("/auth/authorize?client_id=abc&redirect_uri=def"),
+                    engine.islandServer.entryUrl("/config"),
+                    "https://example.com/config/blueprint/import",
+                ),
                 legacy.pages.single().loads.toList(),
             )
+            assertTrue(legacy.pages.single().loads.first().startsWith("$loopback/__vitro/enter?c="))
         } finally {
             engine.islandServer.stop()
         }
@@ -778,7 +784,7 @@ class VitroEngineTest {
         island.seedInitialStates { sent += it }
         assertEquals(1, sent.size)
         val seed = sent.single().getJSONObject("states")
-        assertEquals("patch", sent.single().getString("type"))
+        assertEquals("snapshot", sent.single().getString("type"))
         assertEquals(setOf("light.kitchen", "light.porch", "sensor.studio_power"), seed.keys().asSequence().toSet())
         assertEquals("on", seed.getJSONObject("light.kitchen").getString("state"))
 
@@ -806,6 +812,32 @@ class VitroEngineTest {
         // A watched entity that is removed goes out as null too.
         island.handleIslandMessage(JSONObject().put("type", "watch").put("entity_id", "light.gone")) {}
         assertTrue(island.patchFor(setOf("light.gone"))!!.getJSONObject("states").isNull("light.gone"))
+    }
+
+    @Test
+    fun aConnectGetsASnapshotEvenWhenTheStoreIsEmpty() {
+        // The island replaces its states with it: an entity removed while the bridge was down doesn't linger.
+        val island = islandWith(storeWith(), """{"type": "custom:button-card", "entity": "light.gone"}""")
+        val sent = mutableListOf<JSONObject>()
+        island.seedInitialStates { sent += it }
+        assertEquals("snapshot", sent.single().getString("type"))
+        assertEquals(0, sent.single().getJSONObject("states").length())
+        val html = WebIslandCardView.buildIslandHtml(cardContext(), islandCard())
+        assertTrue("the page replaces its states on a snapshot", html.contains("m.type === 'snapshot'"))
+    }
+
+    @Test
+    fun anInlineModuleWithAMixedCaseScriptEndStaysOneScript() {
+        val inline = "const a = \"</SCRIPT>\"; const b = \"</Script >\"; export const marker = \"mixed-case-end\";"
+        val resources = listOf(LovelaceResource("data:text/javascript;base64," + b64(inline), "module"))
+        val html = WebIslandCardView.buildIslandHtml(cardContext(resources = resources), islandCard())
+        // Where an HTML parser ends the module's script: the first `</script` in any case after its start.
+        val start = html.indexOf("<script type=\"module\">\n")
+        assertTrue(start >= 0)
+        val end = html.indexOf("</script", start, ignoreCase = true)
+        val body = html.substring(start, end)
+        assertTrue("the whole module is inside its script element", body.contains("export const marker = \"mixed-case-end\";"))
+        assertTrue(body.contains("<\\/SCRIPT>") && body.contains("<\\/Script >"))
     }
 
     @Test

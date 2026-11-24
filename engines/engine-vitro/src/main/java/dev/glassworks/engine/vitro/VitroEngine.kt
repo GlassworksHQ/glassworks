@@ -462,7 +462,8 @@ class VitroEngine(
 
         private fun openInFallback(url: String) {
             val target = loopbackUrl(url)
-            Log.i(logTag, "Routing non-dashboard URL to fallback engine: $target")
+            // The URL asked for, not [target]: an entry URL carries the proxy's capability.
+            Log.i(logTag, "Routing non-dashboard URL to fallback engine: $url")
             val fp = fallbackPage ?: fallback.open(activity, host, backgroundColor).also { created ->
                 fallbackPage = created
                 container.addView(created.view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -474,14 +475,15 @@ class VitroEngine(
 
         /**
          * A locked-down fallback loads only one origin, the island server's. A Home Assistant URL (`/auth/authorize`)
-         * moves to it, so the server proxies it to [currentOrigin], and to nothing else.
+         * moves to it, so the server proxies it to [currentOrigin], and to nothing else. It goes in through the
+         * server's entry route, which gives the browser the proxy's capability cookie and redirects to the path.
          */
         private fun loopbackUrl(url: String): String {
             val ha = proxyOrigin ?: return url
             if (!fallback.lockedDown || OAuth.origin(url) != ha) return url
             val afterScheme = url.trim().substringAfter("://")
             val rest = afterScheme.indexOfFirst { it == '/' || it == '?' || it == '#' }.let { if (it < 0) "" else afterScheme.substring(it) }
-            return islandServer.ensureStarted() + (if (rest.startsWith("/")) rest else "/$rest")
+            return islandServer.entryUrl(if (rest.startsWith("/")) rest else "/$rest")
         }
 
         private fun signalReady(why: String) {

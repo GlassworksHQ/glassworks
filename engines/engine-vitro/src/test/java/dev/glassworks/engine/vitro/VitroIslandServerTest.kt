@@ -107,14 +107,35 @@ class VitroIslandServerTest {
         }
     }
 
-    private class Reply(val code: Int, val contentType: String?, val body: ByteArray) {
+    private class Reply(
+        val code: Int,
+        val contentType: String?,
+        val body: ByteArray,
+        val setCookie: String? = null,
+        val location: String? = null,
+    ) {
         val text get() = String(body, Charsets.UTF_8)
     }
 
-    private fun get(url: String, method: String = "GET", body: String? = null, headers: Map<String, String> = emptyMap()): Reply {
+    /** The proxy's capability cookie (`vitro_cap=…`), as the entry route hands it to a browser. */
+    private val capability: String by lazy {
+        get(island.entryUrl("/"), capability = false).setCookie!!.substringBefore(';')
+    }
+
+    /** [capability]: send the proxy's cookie, as the island page or the legacy engine's browser has it. */
+    private fun get(
+        url: String,
+        method: String = "GET",
+        body: String? = null,
+        headers: Map<String, String> = emptyMap(),
+        capability: Boolean = true,
+    ): Reply {
+        val cookie = if (capability) this.capability else null
         val conn = URL(url).openConnection() as HttpURLConnection
         try {
             conn.requestMethod = method
+            conn.instanceFollowRedirects = false
+            cookie?.let { conn.setRequestProperty("Cookie", it) }
             headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
             conn.connectTimeout = 5_000
             conn.readTimeout = 10_000
@@ -125,7 +146,10 @@ class VitroIslandServerTest {
             }
             val code = conn.responseCode
             val stream = if (code in 200..399) conn.inputStream else conn.errorStream
-            return Reply(code, conn.contentType, stream?.use { it.readBytes() } ?: ByteArray(0))
+            return Reply(
+                code, conn.contentType, stream?.use { it.readBytes() } ?: ByteArray(0),
+                conn.getHeaderField("Set-Cookie"), conn.getHeaderField("Location"),
+            )
         } finally {
             conn.disconnect()
         }
@@ -254,6 +278,38 @@ class VitroIslandServerTest {
         assertEquals("""{"reason":"done"}""", seen.body)
         assertEquals("XMLHttpRequest", seen.requestedWith)
         assertEquals("Bearer fake-token-0001", seen.authorization)
+    }
+
+    @Test
+    fun theProxyRefusesACallerWithoutTheCapability() {
+        // Any app on the device can reach loopback: without the cookie it never gets the panel's token spent for it.
+        val base = island.ensureStarted()
+        assertEquals(403, get("$base/api/services/light/turn_on", "POST", "{}", capability = false).code)
+        assertEquals(403, get("$base/local/custom-card.js", capability = false).code)
+        assertEquals(403, get("$base/local/custom-card.js", headers = mapOf("Cookie" to "vitro_cap=guess"), capability = false).code)
+        assertTrue("Home Assistant heard nothing", haSeen.isEmpty())
+        assertEquals(200, get("$base/local/custom-card.js").code)
+    }
+
+    @Test
+    fun theIslandPageAndTheEntryRouteHandOutTheCapability() {
+        val (_, url) = island.registerSlot(RecordingSlot())
+        val page = get(url, capability = false)
+        assertEquals(200, page.code)
+        assertTrue(page.setCookie!!, page.setCookie.startsWith(capability + ";"))
+        assertTrue(page.setCookie.contains("HttpOnly"))
+        assertTrue(page.setCookie.contains("SameSite=Strict"))
+
+        val entry = get(island.entryUrl("/config?tab=1"), capability = false)
+        assertEquals(302, entry.code)
+        assertEquals("/config?tab=1", entry.location)
+        assertTrue(entry.setCookie!!.startsWith(capability + ";"))
+
+        val base = island.ensureStarted()
+        assertEquals(403, get("$base/__vitro/enter?c=guess&to=%2Fconfig", capability = false).code)
+        val cap = capability.substringAfter('=')
+        assertEquals("never off the origin", 400, get("$base/__vitro/enter?c=$cap&to=%2F%2Fexample.com", capability = false).code)
+        assertEquals(400, get("$base/__vitro/enter?c=$cap&to=https%3A%2F%2Fexample.com", capability = false).code)
     }
 
     @Test

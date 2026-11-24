@@ -44,6 +44,58 @@ class HttpServerTest {
         }
     }
 
+    private fun statusLine(sock: Socket): String {
+        val sb = StringBuilder()
+        val inp = sock.getInputStream()
+        while (true) {
+            val c = inp.read()
+            if (c < 0 || c == '\n'.code) return sb.toString().trim()
+            sb.append(c.toChar())
+        }
+    }
+
+    private fun upgrade(port: Int): Socket = Socket(loopback, port).apply {
+        soTimeout = 3_000
+        getOutputStream().write(
+            ("GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+                "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").toByteArray(),
+        )
+    }
+
+    @Test fun upgradedConnectionsRunOffTheWorkersUpToTheirOwnLimit() {
+        val release = CountDownLatch(1)
+        val running = CountDownLatch(1)
+        val server = HttpServer(0, { req ->
+            if (req.path == "/ws") {
+                HttpResponse.webSocket(req.headers["sec-websocket-key"]!!, 5_000) { running.countDown(); release.await(5, TimeUnit.SECONDS) }
+            } else {
+                HttpResponse.text(200, "ok")
+            }
+        }, bindAddress = loopback, workers = 1, queued = 1, upgradeThreads = 1)
+        server.start()
+        try {
+            val ws = upgrade(server.localPort)
+            assertTrue(statusLine(ws).startsWith("HTTP/1.1 101"))
+            assertTrue(running.await(3, TimeUnit.SECONDS))
+            // The one worker is free while the socket stays open: a plain request is answered at once.
+            val plain = open(server.localPort)
+            assertTrue(plain.getInputStream().readBytes().toString(Charsets.UTF_8).startsWith("HTTP/1.1 200"))
+            // Past the upgrade limit: refused, not queued behind the open socket.
+            val second = upgrade(server.localPort)
+            assertTrue(statusLine(second).startsWith("HTTP/1.1 503"))
+            release.countDown()
+            // The first socket's thread ends and closes it; its slot is free again.
+            ws.getInputStream().readBytes() // the rest of the 101 headers, then the close
+            Thread.sleep(100)
+            val third = upgrade(server.localPort)
+            assertTrue(statusLine(third).startsWith("HTTP/1.1 101"))
+            listOf(ws, plain, second, third).forEach { it.close() }
+        } finally {
+            release.countDown()
+            server.stop()
+        }
+    }
+
     @Test fun aClientThatTricklesItsRequestIsCutOffAndTheWorkerFreed() {
         var handled = 0
         val server = HttpServer(0, { handled++; HttpResponse.text(200, "ok") }, bindAddress = loopback, workers = 1, queued = 4,
