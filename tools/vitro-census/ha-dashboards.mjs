@@ -24,6 +24,7 @@ if (!/^wss:/i.test(wsUrl)) {
   console.error('warning: the connection is not wss://, so the token is sent unencrypted; use https:// when Home Assistant serves it');
 }
 const ws = new WebSocket(wsUrl);
+let done = false;
 ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
   if (m.type === 'auth_required') ws.send(JSON.stringify({ type: 'auth', access_token: HA_TOKEN }));
@@ -31,9 +32,15 @@ ws.onmessage = (e) => {
   else if (m.type === 'auth_invalid') { console.error('auth invalid'); process.exit(1); }
   else if (m.id === 1) {
     if (!m.success) { console.error(JSON.stringify(m.error)); process.exit(1); }
+    done = true;
     ws.close();
-    // Exit only once stdout has flushed: a large dashboard written to a pipe would otherwise be cut short.
-    process.stdout.write(JSON.stringify(m.result, null, 1) + '\n', () => process.exit(0));
+    // Exit only once stdout has flushed (a large dashboard written to a pipe would otherwise be cut short), and
+    // fail if the write did (the reader went away).
+    process.stdout.write(JSON.stringify(m.result, null, 1) + '\n', (err) => {
+      if (err) { console.error('could not write the result: ' + err.message); process.exit(1); }
+      process.exit(0);
+    });
   }
 };
 ws.onerror = () => { console.error('websocket error'); process.exit(1); };
+ws.onclose = () => { if (!done) { console.error('connection closed before the result'); process.exit(1); } };
