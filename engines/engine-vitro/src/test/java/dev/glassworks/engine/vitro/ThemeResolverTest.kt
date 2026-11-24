@@ -388,6 +388,16 @@ class ThemeResolverTest {
     }
 
     @Test
+    fun cardCustomPropertiesHonorImportant() {
+        // Per name, the last `!important` declaration wins, else the last one, as in HA.
+        val m = ThemeResolver.parseCardMod(
+            "ha-card { --vertical-stack-card-gap: 12px !important; --vertical-stack-card-gap: 4px; --grid-card-gap: 2px; --grid-card-gap: 6px }",
+        )
+        assertEquals("12px", m.customProperties["vertical-stack-card-gap"])
+        assertEquals("6px", m.customProperties["grid-card-gap"])
+    }
+
+    @Test
     fun cardModBackgroundColorBeatsBackgroundShorthand() {
         val m = ThemeResolver.parseCardMod(mapOf("card-mod-card" to "ha-card { background: #111111; background-color: #222222; }"))
         assertEquals(argb(0xFF222222), m.backgroundColor)

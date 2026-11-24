@@ -566,8 +566,13 @@ object ThemeResolver {
         val cleaned = JINJA_PATTERN.replace(CSS_COMMENT.replace(css, " "), " ")
         if (cleaned.isBlank()) return CardModStyle()
         val (decls, otherRules) = hostDeclarations(cleaned)
+        // Custom properties cascade like any other: per name, the last `!important` declaration wins, else the last.
         val custom = Regex("""(?:^|[;\n{])\s*--([\w-]+)\s*:\s*([^;\n]+)""").findAll(decls)
-            .associate { it.groupValues[1] to resolveValue(it.groupValues[2].replace(IMPORTANT, "").trim(), vars, 0) }
+            .groupBy({ it.groupValues[1] }, { it.groupValues[2] })
+            .mapValues { (_, values) ->
+                val winner = values.lastOrNull { IMPORTANT.containsMatchIn(it) } ?: values.last()
+                resolveValue(winner.replace(IMPORTANT, "").trim(), vars, 0)
+            }
         // As in the browser: the last `!important` declaration wins, else the last one. card-mod keeps the flag.
         fun prop(name: String): String? {
             val values = Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;\n]+)""", RegexOption.IGNORE_CASE).findAll(decls)
