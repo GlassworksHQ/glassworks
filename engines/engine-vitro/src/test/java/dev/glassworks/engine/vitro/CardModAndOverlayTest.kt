@@ -199,10 +199,14 @@ class CardModAndOverlayTest {
         )
         val tile = TileCardView(ctx, config)
         tile.applyCardMod(config)
-        val bg = tile.background as GradientDrawable
-        assertEquals(GradientDrawable.Orientation.LEFT_RIGHT, bg.orientation)
-        assertArrayEquals(intArrayOf(0xFF102030.toInt(), 0xFF405060.toInt()), bg.colors)
-        assertEquals(40f * ctx.dp, bg.cornerRadius)
+        // The gradient paints like CSS (CssBackgroundDrawable) under a rounded, bordered layer.
+        val layers = tile.background as android.graphics.drawable.LayerDrawable
+        assertTrue(layers.getDrawable(0) is dev.glassworks.engine.vitro.ui.CssBackgroundDrawable)
+        val border = layers.getDrawable(1) as GradientDrawable
+        assertEquals(40f * ctx.dp, border.cornerRadius)
+        val gradient = tile.activeCardMod.backgroundLayers!!.layers.single() as dev.glassworks.engine.vitro.theme.CssBackground.Linear
+        assertEquals(90f, gradient.angleDeg)
+        assertEquals(listOf(0xFF102030.toInt(), 0xFF405060.toInt()), gradient.stops.map { it.color })
         assertEquals(0.5f, tile.alpha)
         assertEquals(0xFFFF0000.toInt(), tile.activeCardMod.borderColor)
         assertEquals(3f, tile.activeCardMod.borderWidthDp)
