@@ -103,6 +103,9 @@ class HaDashboardClient(
     /** Held while an id is taken and its message queued, so ids reach the wire in order (HA rejects a lower id later). */
     private val queueLock = Any()
 
+    /** Held while an entity event is applied to [store] and by [close]: no write lands after close() returns. */
+    private val storeWriteLock = Any()
+
     /** Guards the whole replacement of the entity subscription (startup and view changes race otherwise). */
     private val entitySubLock = Any()
 
@@ -138,7 +141,7 @@ class HaDashboardClient(
                 done(false, null, res.optJSONObject("error"))
             }
         }
-        if (sent <= 0) done(false, null, JSONObject().put("code", "disconnected").put("message", "Not connected"))
+        if (sent <= 0) done(false, null, JSONObject().put("code", DISCONNECTED).put("message", "Not connected"))
     }
 
     fun start(dashboardUrlPath: String?) {
@@ -150,7 +153,8 @@ class HaDashboardClient(
     }
 
     fun close() {
-        closed.set(true)
+        // Under the store lock: an entity event already past its `closed` check finishes before this returns.
+        synchronized(storeWriteLock) { closed.set(true) }
         runCatching { socket?.close() }
         socket = null
         sendExecutor.shutdownNow()
@@ -164,6 +168,11 @@ class HaDashboardClient(
         resubscribeEntities()
     }
 
+    /** The page shows [urlPath] again without asking: an answer still on its way for another path is dropped. */
+    fun claimDashboard(urlPath: String?) {
+        requestedDashboardPath = urlPath
+    }
+
     /** Loads a different Lovelace dashboard config over the live socket. */
     fun fetchDashboard(urlPath: String?) {
         requestedDashboardPath = urlPath
@@ -172,6 +181,9 @@ class HaDashboardClient(
         request(msg) { res ->
             // An answer for a dashboard the page has since moved away from must not replace the current one.
             if (closed.get() || urlPath != requestedDashboardPath) return@request
+            // The connection, not Home Assistant, failed: the reconnect asks again (onAuthenticated). Reporting it
+            // would send a dashboard that exists to the fallback as "not found".
+            if (isTransportError(res)) return@request
             if (res.optBoolean("success", false)) {
                 val cfgObj = res.optJSONObject("result") ?: JSONObject()
                 listener.onDashboardConfig(urlPath, LovelaceParser.parseDashboard(cfgObj))
@@ -357,27 +369,29 @@ class HaDashboardClient(
      * caller (an island's `callWS` promise) settles. Nothing is replayed: HA may have run it already.
      */
     private fun failOutstanding() {
-        val orphaned: List<Pair<Int, (JSONObject) -> Unit>>
+        val orphaned: List<Int>
         synchronized(queueLock) {
             authenticated = false
             socket = null
             entitySubId = null
-            orphaned = pending.entries.map { it.key to it.value }
-            pending.clear()
+            orphaned = pending.keys.toList()
             subscriptions.clear()
-            // The next connection asks for its display data afresh; a request lost here never decrements.
-            displayRequested.clear()
-            displayPending.set(0)
-            displayChanged.set(false)
         }
-        for ((id, cb) in orphaned) {
+        for (id in orphaned) {
+            // Claimed with remove: the writer's send_failed path may have taken it already, and only one may call it.
+            val cb = pending.remove(id) ?: continue
             runCatching {
                 cb(
                     JSONObject().put("id", id).put("type", "result").put("success", false)
-                        .put("error", JSONObject().put("code", "disconnected").put("message", "Connection to Home Assistant lost")),
+                        .put("error", JSONObject().put("code", DISCONNECTED).put("message", "Connection to Home Assistant lost")),
                 )
             }
         }
+        // After the callbacks (display requests among them decrement the counter): the next connection asks for its
+        // display data afresh.
+        displayRequested.clear()
+        displayPending.set(0)
+        displayChanged.set(false)
     }
 
     /** Closes [ws] if Home Assistant hasn't greeted and accepted the token within [authTimeoutMs]. */
@@ -543,7 +557,8 @@ class HaDashboardClient(
         // The first event is the subscription's snapshot: an entity of [filter] missing from it is gone (deleted while
         // the panel was offline) and leaves the store. Later events are diffs.
         val first = AtomicBoolean(true)
-        entitySubId = subscribe(msg) { ev ->
+        entitySubId = subscribe(msg) { ev -> synchronized(storeWriteLock) {
+            // Checked under the lock close() takes: a closed client never writes to the (shared) store again.
             if (closed.get()) return@subscribe
             val isFirst = first.getAndSet(false)
             store.applyCompressedEvent(ev, snapshotScope = if (isFirst) filter else null)
@@ -551,7 +566,7 @@ class HaDashboardClient(
                 store.markSnapshot(filter.toSet())
                 loadDisplayFor(displayIds())
             }
-        }.takeIf { it > 0 }
+        } }.takeIf { it > 0 }
     }
 
     private fun handleIncoming(msg: JSONObject) {
@@ -616,7 +631,7 @@ class HaDashboardClient(
                     if (!closed.get()) {
                         pending.remove(id)?.invoke(
                             JSONObject().put("id", id).put("type", "result").put("success", false)
-                                .put("error", JSONObject().put("code", "send_failed").put("message", e.message ?: "Send failed")),
+                                .put("error", JSONObject().put("code", SEND_FAILED).put("message", e.message ?: "Send failed")),
                         )
                         subscriptions.remove(id)
                         runCatching { ws.close() } // a dead write ends the connection; the reader loop reconnects
@@ -641,6 +656,14 @@ class HaDashboardClient(
     }
 
     companion object {
+        /** Error codes this client makes up when the connection fails (HA never sent them). */
+        const val DISCONNECTED = "disconnected"
+        const val SEND_FAILED = "send_failed"
+
+        /** A result the client made up for a failed connection, not an answer from Home Assistant. */
+        fun isTransportError(res: JSONObject): Boolean =
+            !res.optBoolean("success", false) && res.optJSONObject("error")?.optString("code") in setOf(DISCONNECTED, SEND_FAILED)
+
         /** Default bound on the greeting and auth exchange; after `auth_ok` reads may idle for as long as they like. */
         const val AUTH_TIMEOUT_MS = 20_000L
 

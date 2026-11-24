@@ -30,13 +30,19 @@ import java.util.concurrent.CopyOnWriteArraySet
  * - `GET /__vitro/ws/<id>` upgrades to a loopback WebSocket bridging `hass.states` (Proxy-filtered),
  *   `hass.callWS`, `hass.callService`, `hass-more-info`, and auto-resize straight to Kotlin.
  * - Every other path (`/local/...`, `/hacsfiles/...`, `/api/...`) is strictly reverse-proxied to the
- *   panel's single configured [haBase] with the panel's Bearer token injected.
+ *   panel's single configured Home Assistant ([session]) with the panel's Bearer token injected.
  */
 class VitroIslandServer(
-    private val haBase: () -> String?,
-    private val accessToken: () -> String?,
+    /**
+     * The Home Assistant origin and the token for it, read together once per proxied request: a page that moves to
+     * another origin mid-request can't pair the old origin with the new token.
+     */
+    private val session: () -> Pair<String?, String?>,
     private val log: (String) -> Unit = {},
 ) {
+    constructor(haBase: () -> String?, accessToken: () -> String?, log: (String) -> Unit = {}) :
+        this({ haBase() to accessToken() }, log)
+
     interface SlotHandler {
         val html: String
         fun onConnected(send: (JSONObject) -> Unit)
@@ -167,12 +173,13 @@ class VitroIslandServer(
     }
 
     /**
-     * Strictly proxies HA static assets and API paths (`/local/...`, `/hacsfiles/...`, `/api/...`) to [haBase]:
+     * Strictly proxies HA static assets and API paths (`/local/...`, `/hacsfiles/...`, `/api/...`) to the [session]'s origin:
      * `GET`, `POST`, `PUT`, `PATCH` and `DELETE` (what `hass.callApi` / `hass.fetchWithAuth` send), with the
      * panel's Bearer token injected. A `204 No Content` comes back with an empty body.
      */
     private fun proxyToHa(req: HttpRequest): HttpResponse {
-        val base = haBase()?.trimEnd('/') ?: return HttpResponse.text(503, "Home Assistant not configured")
+        val (origin, token) = session()
+        val base = origin?.trimEnd('/') ?: return HttpResponse.text(503, "Home Assistant not configured")
         if (!req.path.startsWith("/")) return HttpResponse.text(400, "Invalid path")
         var targetUrl = base + req.target
         return runCatching {
@@ -186,7 +193,8 @@ class VitroIslandServer(
                         readTimeout = 15_000
                         // Redirects are followed below, and only within Home Assistant's own origin.
                         instanceFollowRedirects = false
-                        accessToken()?.takeIf { it.isNotEmpty() }?.let { setRequestProperty("Authorization", "Bearer $it") }
+                        // The token read with [base], on every hop: never one read later for another origin.
+                        token?.takeIf { it.isNotEmpty() }?.let { setRequestProperty("Authorization", "Bearer $it") }
                         req.headers["content-type"]?.let { setRequestProperty("Content-Type", it) }
                         req.headers["accept"]?.let { setRequestProperty("Accept", it) }
                         req.headers["x-requested-with"]?.let { setRequestProperty("X-Requested-With", it) }

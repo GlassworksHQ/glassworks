@@ -740,6 +740,30 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun aDashboardRequestCutOffByADroppedConnectionIsAskedAgainNotReportedMissing() {
+        // The first connection never answers `lovelace/config` for "slow"; it then drops.
+        val firstSocket = java.util.concurrent.atomic.AtomicBoolean(true)
+        val c = connected(connect = { url ->
+            val inner = server.connect(url)
+            val swallow = firstSocket.getAndSet(false)
+            object : HaSocket by inner {
+                override fun send(text: String) {
+                    val m = JSONObject(text)
+                    if (swallow && m.optString("type") == "lovelace/config" && m.optString("url_path") == "slow") return
+                    inner.send(text)
+                }
+            }
+        })
+        c.fetchDashboard("slow")
+        awaitCondition("asked") { server.commands("lovelace/config").isNotEmpty() }
+        Thread.sleep(50) // the writer is past it
+        server.dropConnection()
+        // The reconnect asks for the same dashboard and gets it; nothing reports it as missing.
+        awaitCondition("config after reconnect") { listener.configs.any { it.first == "slow" } }
+        assertTrue(listener.failedConfigs.toString(), listener.failedConfigs.isEmpty())
+    }
+
+    @Test
     fun aDashboardHaRejectsIsReported() {
         val c = connected()
         c.fetchDashboard("missing")
@@ -750,7 +774,7 @@ class HaDashboardClientTest {
     @Test
     fun aNewEntitySubscriptionDropsEntitiesThatAreGone() {
         val c = connected()
-        assertTrue(store["binary_sensor.front_door"] != null)
+        awaitCondition("snapshot applied") { store["binary_sensor.front_door"] != null }
         // The door sensor was deleted while the panel was away; the next subscription's snapshot lacks it.
         server.initialEntities = JSONObject(FakeHaServer.ENTITIES_JSON).apply { remove("binary_sensor.front_door") }
         c.subscribeViewEntities(setOf("light.lounge_lamp", "binary_sensor.front_door"))

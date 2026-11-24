@@ -69,8 +69,7 @@ class VitroEngine(
      * (a locked-down [fallback]) is held to one origin, so [fallbackDashboardOrigin] gives it this one up front.
      */
     val islandServer: VitroIslandServer = VitroIslandServer(
-        haBase = { activePage?.proxyOrigin },
-        accessToken = { activePage?.cachedToken },
+        session = { activePage?.islandSession() ?: (null to null) },
         log = { msg -> Log.d(logTag, "island: $msg") },
     )
 
@@ -169,6 +168,16 @@ class VitroEngine(
         }
         private var pendingViewPath: String? = null
         @Volatile var cachedToken: String? = null
+
+        /** The token with the origin it was issued for, published as one value. */
+        @Volatile private var cachedSession: Pair<String, String>? = null
+
+        /** The island proxy's origin and its token: the token only when it was issued for that very origin. */
+        fun islandSession(): Pair<String?, String?> {
+            val origin = proxyOrigin
+            val session = cachedSession
+            return origin to session?.takeIf { it.first == origin }?.second
+        }
         private val history = ArrayDeque<String>()
         private var firstPaintReported = false
 
@@ -270,6 +279,9 @@ class VitroEngine(
             // Same HA origin + same dashboard already shown -> instant in-memory view switch! The shown config's own key
             // counts, not the last request's: that one may still be loading while the old dashboard is on screen.
             if (origin == currentOrigin && displayedDashboard == (origin to dashPath) && vitroView.dashboard != null && client != null) {
+                // Back to the dashboard on screen: a request for another one still on its way no longer owns the page.
+                currentDashboardPath = dashPath
+                client?.claimDashboard(dashPath)
                 vitroView.navigateToView(viewPath)
                 signalReady("view")
                 return
@@ -284,8 +296,11 @@ class VitroEngine(
 
             // New HA origin: start (or restart) the native WebSocket data plane.
             if (origin != currentOrigin) {
-                // Nothing of the previous Home Assistant carries over: not its token, entity states or images.
+                // Nothing of the previous Home Assistant carries over: not its token, entity states or images. Its
+                // client closes first: once close() returns it writes nothing more, so the clear below sticks.
+                client?.close()
                 cachedToken = null
+                cachedSession = null
                 store.clear()
                 VitroCardContext.clearImageCache()
             }
@@ -305,7 +320,10 @@ class VitroEngine(
                         done(null)
                     } else {
                         tokenProvider(force) { tok ->
-                            if (tok != null && generation == clientGeneration) cachedToken = tok
+                            if (tok != null && generation == clientGeneration) {
+                                cachedToken = tok
+                                cachedSession = origin to tok
+                            }
                             done(tok)
                         }
                     }
@@ -517,6 +535,8 @@ class VitroEngine(
                 Log.w(logTag, "Home Assistant has no dashboard config for ${urlPath ?: "the default dashboard"}: $code")
                 post {
                     if (urlPath != currentDashboardPath) return@post
+                    // Only an answer from Home Assistant: a dropped connection reconnects and asks again.
+                    if (code == HaDashboardClient.DISCONNECTED || code == HaDashboardClient.SEND_FAILED) return@post
                     // HA's own frontend decides what such a dashboard shows (an auto-generated one, or its error page).
                     currentUrl?.let(::openInFallback)
                 }
