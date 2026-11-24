@@ -1,0 +1,4 @@
+{
+  "title": "Sensor: a line graph of a sensor with a state class",
+  "card": { "type": "sensor", "entity": "sensor.living_room_airdot_living_room_pressure", "name": "Pressure", "graph": "line" }
+}

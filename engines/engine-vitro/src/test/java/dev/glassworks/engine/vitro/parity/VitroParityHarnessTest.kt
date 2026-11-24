@@ -127,6 +127,11 @@ class VitroParityHarnessTest {
                 return ParityResult(label, frame, case, ParityStatus.ERROR, null,
                     listOf("capture input missing: Vitro asked for ${gaps.joinToString()}, which the capture didn't save (rerun tools/vitro-parity/run.sh --refresh)"), notes, null)
             }
+            // A history or statistics call HA's page never made: Vitro asked for other data than HA drew.
+            if (render.wsUnmatched.isNotEmpty()) {
+                return ParityResult(label, frame, case, ParityStatus.ERROR, null,
+                    listOf("Vitro's graph call differs from every call HA made (or the capture predates it): ${render.wsUnmatched.distinct().joinToString(" | ").take(600)}"), notes, null)
+            }
             val (m, side) = ParityCompare.measure(case, frame, ref, render)
             if (m.slotsHa != m.slotsVitro) notes += "HA shows ${m.slotsHa} card slot(s), Vitro ${m.slotsVitro}"
             val img = "img/$label/${frame.id}/${case.id}.png"

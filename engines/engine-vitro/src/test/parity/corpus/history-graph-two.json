@@ -1,0 +1,11 @@
+{
+  "title": "History graph: two numeric sensors with one unit",
+  "card": {
+    "type": "history-graph",
+    "title": "Pressure",
+    "entities": [
+      { "entity": "sensor.living_room_airdot_living_room_pressure", "name": "Living room" },
+      { "entity": "sensor.secondary_room_airdot_secondary_room_pressure", "name": "Secondary room" }
+    ]
+  }
+}

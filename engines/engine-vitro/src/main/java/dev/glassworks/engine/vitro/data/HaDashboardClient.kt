@@ -312,6 +312,15 @@ class HaDashboardClient(
         return 0.0
     }
 
+    /**
+     * Subscribes [msg] (any subscription command, e.g. `history/stream`) and hands each of its events to [onEvent], on
+     * the socket's thread. Returns the unsubscribe handle.
+     */
+    fun subscribeWs(msg: JSONObject, onEvent: (JSONObject) -> Unit): () -> Unit {
+        val subId = subscribe(JSONObject(msg.toString()), onEvent)
+        return { if (subId > 0) unsubscribe(subId) }
+    }
+
     /** Subscribes to HA's server-side Jinja2 `render_template` (for markdown & mushroom-template-card). */
     fun subscribeTemplate(template: String, onRendered: (String) -> Unit): () -> Unit {
         val msg = JSONObject()

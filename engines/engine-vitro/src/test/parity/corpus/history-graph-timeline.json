@@ -1,0 +1,7 @@
+{
+  "title": "History graph: a binary sensor as a timeline",
+  "card": {
+    "type": "history-graph",
+    "entities": [{ "entity": "binary_sensor.living_room_occupancy", "name": "Occupancy" }]
+  }
+}

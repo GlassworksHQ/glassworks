@@ -260,3 +260,25 @@ test('noteSaved reports one path saved with two different images in a run', asyn
   assert.match(noteSaved(seen, '/static/x.png', 'bbb'), /changed during the run/);
   assert.equal(noteSaved(seen, '/static/y.png', 'bbb'), null);
 });
+
+test('wsRecorder keeps the graph calls of the current case with their answers, nothing else', async () => {
+  const { wsRecorder, snapshotCalls } = await import('../lib/wsdata.mjs');
+  const r = wsRecorder();
+  r.sent({ id: 3, type: 'history/stream', entity_ids: ['sensor.a'], start_time: 'T' });
+  r.sent({ id: 4, type: 'subscribe_entities' });
+  r.sent({ id: 5, type: 'recorder/statistics_during_period', statistic_ids: ['sensor.a'] });
+  r.received({ id: 3, type: 'result', success: true, result: null });
+  r.received({ id: 3, type: 'event', event: { states: { 'sensor.a': [{ s: '1', lu: 1 }] } } });
+  r.received({ id: 4, type: 'event', event: { a: {} } });
+  r.received({ id: 5, type: 'result', success: false, error: { code: 'x' } });
+  assert.deepEqual(r.calls, [
+    { request: { type: 'history/stream', entity_ids: ['sensor.a'], start_time: 'T' }, result: null, events: [{ states: { 'sensor.a': [{ s: '1', lu: 1 }] } }] },
+    { request: { type: 'recorder/statistics_during_period', statistic_ids: ['sensor.a'] }, error: { code: 'x' }, events: [] },
+  ]);
+  const snap = snapshotCalls(r.calls);
+  // A new case drops the old ids: a late event for an earlier card isn't this case's data.
+  r.reset();
+  r.received({ id: 3, type: 'event', event: { states: {} } });
+  assert.deepEqual(r.calls, []);
+  assert.equal(snap[0].events.length, 1);
+});
