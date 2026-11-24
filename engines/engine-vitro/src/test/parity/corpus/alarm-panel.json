@@ -1,0 +1,4 @@
+{
+  "title": "Alarm panel: the home alarm, disarmed, with HA's default arm buttons and keypad",
+  "card": { "type": "alarm-panel", "entity": "alarm_control_panel.home_alarm", "name": "Alarm" }
+}

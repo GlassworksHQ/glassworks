@@ -1,0 +1,4 @@
+{
+  "title": "Mushroom light card: a light that is on, with brightness control",
+  "card": { "type": "custom:mushroom-light-card", "entity": "light.u7_pro_xg_wall_led", "name": "AP LED", "show_brightness_control": true, "use_light_color": true }
+}

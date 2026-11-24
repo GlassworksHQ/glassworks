@@ -1,0 +1,4 @@
+{
+  "title": "Mushroom light card: vertical layout, off",
+  "card": { "type": "custom:mushroom-light-card", "entity": "light.sunset_lamp", "layout": "vertical" }
+}

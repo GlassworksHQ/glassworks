@@ -1,0 +1,4 @@
+{
+  "title": "Light: a dimmable light, off",
+  "card": { "type": "light", "entity": "light.window_accent" }
+}

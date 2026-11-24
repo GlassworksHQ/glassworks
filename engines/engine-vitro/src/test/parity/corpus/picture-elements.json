@@ -1,0 +1,11 @@
+{
+  "title": "Picture elements: an image with a state icon and a state label",
+  "card": {
+    "type": "picture-elements",
+    "image": "/static/icons/favicon-192x192.png",
+    "elements": [
+      { "type": "state-icon", "entity": "light.window_accent", "style": { "top": "30%", "left": "30%" } },
+      { "type": "state-label", "entity": "sensor.epson_et_2800_series_black_ink", "style": { "top": "70%", "left": "70%" } }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "title": "Gauge: a percentage sensor, default arc",
+  "card": { "type": "gauge", "entity": "sensor.epson_et_2800_series_black_ink", "name": "Black ink" }
+}

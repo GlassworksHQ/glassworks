@@ -1,0 +1,8 @@
+{
+  "title": "Conditional: a tile shown while the light is off",
+  "card": {
+    "type": "conditional",
+    "conditions": [{ "condition": "state", "entity": "light.window_accent", "state": "off" }],
+    "card": { "type": "tile", "entity": "light.window_accent" }
+  }
+}

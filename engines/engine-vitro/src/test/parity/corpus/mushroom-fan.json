@@ -1,0 +1,4 @@
+{
+  "title": "Mushroom fan card: a running purifier with percentage control",
+  "card": { "type": "custom:mushroom-fan-card", "entity": "fan.air_purifier", "show_percentage_control": true }
+}

@@ -1,0 +1,4 @@
+{
+  "title": "Mushroom vacuum card: docked, with start and return buttons",
+  "card": { "type": "custom:mushroom-vacuum-card", "entity": "vacuum.max", "commands": ["start_pause", "return_home"] }
+}
