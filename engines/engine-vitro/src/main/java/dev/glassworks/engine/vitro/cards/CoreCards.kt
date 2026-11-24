@@ -299,6 +299,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             })
         }
         row.clipChildren = false
+        row.clipToPadding = false
         row.addView(iconFrame, LinearLayout.LayoutParams(badgeSize, badgeSize).apply {
             if (vertical) bottomMargin = ctx.px(8f) else marginEnd = ctx.px(10f)
         })
@@ -414,7 +415,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             row.addView(slot, LinearLayout.LayoutParams(0, ctx.px(36f)))
             inlineFeatures = slot
         }
-        addView(rootCol, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        // HA's tile centers the info row and its features in the card's grid rows.
+        addView(rootCol, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
         tileBody = rootCol
 
         // HA's `hui-tile-card`: the body opens more-info; the icon toggles what can be toggled.
@@ -1163,7 +1165,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     }
 
     private fun renderState(s: EntityState?) {
-        titleView.text = config.name ?: s?.friendlyName ?: config.entity.orEmpty()
+        // HA's tile names an entity on a device "<device> <entity>" (the device alone for its main entity).
+        titleView.text = config.name ?: config.entity?.let(HaDisplay::deviceEntityName) ?: s?.friendlyName ?: config.entity.orEmpty()
         val hideState = config.raw.optBoolean("hide_state", false)
         stateView.visibility = if (hideState) GONE else VISIBLE
         stateView.text = s?.formattedState() ?: "…"
@@ -1200,7 +1203,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             else -> ctx.theme.stateInactiveColor
         }
         iconBadge.setIcon(iconName, iconBadge.tintColor)
-        if (!iconInteractive) {
+        // No tinted shape while the icon has no action, or the entity is unavailable (HA disables the icon).
+        if (!iconInteractive || s?.state == "unavailable") {
             badgeAnimator?.cancel()
             badgeAnimator = null
             badgeColor = null

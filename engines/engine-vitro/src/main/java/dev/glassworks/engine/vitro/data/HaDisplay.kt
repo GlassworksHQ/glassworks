@@ -23,7 +23,19 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object HaDisplay {
     /** One `list_for_display` entry. */
-    data class Entry(val platform: String?, val translationKey: String?, val displayPrecision: Int?, val icon: String?)
+    data class Entry(
+        val platform: String?,
+        val translationKey: String?,
+        val displayPrecision: Int?,
+        val icon: String?,
+        val deviceId: String? = null,
+        /** The entity's own name (`en`): null for a device's main entity, which takes the device's name. */
+        val name: String? = null,
+    )
+
+    /** Device id to its name (`name_by_user`, else `name`), from `config/device_registry/list`. */
+    @Volatile var devices: Map<String, String> = emptyMap()
+        private set
 
     @Volatile var registry: Map<String, Entry> = emptyMap()
         private set
@@ -39,6 +51,7 @@ object HaDisplay {
     /** Forgets everything (a new connection, or tests). */
     fun reset() {
         registry = emptyMap()
+        devices = emptyMap()
         componentIcons.clear(); platformIcons.clear(); stateLabels.clear()
         translatedDomains.clear(); translatedPlatforms.clear(); iconDomains.clear(); iconPlatforms.clear()
     }
@@ -56,9 +69,35 @@ object HaDisplay {
                 translationKey = e.optString("tk").ifEmpty { null },
                 displayPrecision = if (e.has("dp") && !e.isNull("dp")) e.optInt("dp") else null,
                 icon = e.optString("ic").ifEmpty { null },
+                deviceId = e.optString("di").ifEmpty { null },
+                name = if (e.has("en") && !e.isNull("en")) e.optString("en").ifEmpty { null } else null,
             )
         }
         registry = out
+    }
+
+    /** Reads `config/device_registry/list`'s result, keeping each device's display name. */
+    fun applyDevices(result: org.json.JSONArray) {
+        val out = HashMap<String, String>(result.length() * 2)
+        for (i in 0 until result.length()) {
+            val d = result.optJSONObject(i) ?: continue
+            val name = d.optString("name_by_user").takeIf { it.isNotEmpty() && !d.isNull("name_by_user") }
+                ?: d.optString("name").takeIf { it.isNotEmpty() && !d.isNull("name") } ?: continue
+            out[d.optString("id")] = name
+        }
+        devices = out
+    }
+
+    /**
+     * HA's tile name for an entity on a device: the device's name, then the entity's own name with the device's
+     * name taken off its front ("Sunset Lamp Sunset"), or the device's name alone for its main entity. Null when
+     * the entity has no device (or the registries haven't arrived): callers use the friendly name.
+     */
+    fun deviceEntityName(entityId: String): String? {
+        val entry = registry[entityId] ?: return null
+        val device = entry.deviceId?.let { devices[it] } ?: return null
+        val own = entry.name?.let { n -> if (n.startsWith(device, ignoreCase = true)) n.substring(device.length).trim() else n }
+        return if (own.isNullOrEmpty()) device else "$device $own"
     }
 
     /** The domains and platforms among [entityIds] whose icons and translations aren't loaded yet. */

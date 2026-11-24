@@ -434,6 +434,12 @@ class HaDashboardClient(
             if (res.optBoolean("success", false)) res.optJSONObject("result")?.let(HaDisplay::applyRegistry)
             loadDisplayFor(displayIds())
         }
+        // Device names, for HA's default tile names ("<device> <entity>").
+        displayPending.incrementAndGet()
+        request(JSONObject().put("type", "config/device_registry/list")) { res ->
+            if (res.optBoolean("success", false)) res.optJSONArray("result")?.let(HaDisplay::applyDevices)
+            if (displayPending.decrementAndGet() == 0) store.renotifyAll()
+        }
     }
 
     /** Reads `selectedTheme` (a theme name, or `{theme, dark}`) out of the `core` user data and tells the listener. */
