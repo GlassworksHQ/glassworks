@@ -633,11 +633,15 @@ object LovelaceParser {
         return out
     }
 
+    /** Card types whose children are their `cards:` list (a conditional's is its `card:`). */
+    val CARDS_FIELD_TYPES: Set<String> = setOf(
+        "grid", "horizontal-stack", "vertical-stack", "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card",
+    )
+
     fun parseCard(raw: JSONObject): CardConfig {
         val type = raw.optString("type", "entities").ifEmpty { "entities" }
         val children = when (type) {
-            "grid", "horizontal-stack", "vertical-stack",
-            "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card" -> parseCards(raw.optJSONArray("cards"))
+            in CARDS_FIELD_TYPES -> parseCards(raw.optJSONArray("cards"))
             "conditional" -> listOfNotNull(raw.optJSONObject("card")?.let(::parseCard))
             else -> emptyList()
         }

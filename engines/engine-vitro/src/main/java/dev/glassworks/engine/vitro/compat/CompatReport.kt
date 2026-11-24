@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro.compat
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.DashboardConfig
+import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.model.ViewConfig
 
 /** One card as Vitro builds it, where it sits in the dashboard, and its verdict. */
@@ -60,15 +61,18 @@ object CompatChecker {
         return CompatReport(out)
     }
 
-    private fun walk(card: CardConfig, path: String, scripts: IslandScripts, out: MutableList<CompatEntry>, descend: Boolean = true) {
+    /** [holdsGenerated]: [card] is auto-entities' inner card under `card_param: cards`, whose `cards:` it generates. */
+    private fun walk(card: CardConfig, path: String, scripts: IslandScripts, out: MutableList<CompatEntry>, holdsGenerated: Boolean = false) {
         val here = "$path (${card.type})"
         val verdict = card.compat.effective(scripts)
         out += CompatEntry(here, verdict)
-        if (!verdict.isNative || !descend) return
-        // auto-entities' inner card is checked with its generated cards, but those aren't listed: they depend on states.
-        val generated = CardRouter.generatesCards(card)
+        if (!verdict.isNative) return
+        // auto-entities' inner card is checked with its generated cards, but those aren't listed: they depend on live
+        // states. They only fill its `cards:`, so its other children (a conditional's `card:`) are listed as usual.
+        if (holdsGenerated && card.type in LovelaceParser.CARDS_FIELD_TYPES) return
+        val generates = CardRouter.generatesCards(card)
         CardRouter.producedCards(card, perEntity = false).forEach { (i, child) ->
-            walk(child, "$here › card ${i + 1}", scripts, out, descend = !generated)
+            walk(child, "$here › card ${i + 1}", scripts, out, holdsGenerated = generates)
         }
     }
 }

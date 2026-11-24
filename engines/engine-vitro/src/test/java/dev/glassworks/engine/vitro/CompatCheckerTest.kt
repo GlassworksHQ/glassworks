@@ -640,6 +640,22 @@ class CompatCheckerTest {
             listOf("View 1 › card 1 (custom:auto-entities)", "View 1 › card 1 (custom:auto-entities) › card 1 (custom:layout-card)"),
             genReport.entries.map { it.path },
         )
+        // Static children of the inner card are listed: a conditional's `card:` isn't generated.
+        val conditional = LovelaceParser.parseView(
+            0,
+            JSONObject(
+                """{"cards": [{"type": "custom:auto-entities", "card_param": "cards", "entities": ["light.a"],
+                    "card": {"type": "conditional", "conditions": [], "card": {"type": "custom:acme-card"}}}]}""",
+            ),
+        )
+        assertEquals(
+            listOf(
+                "View 1 › card 1 (custom:auto-entities)",
+                "View 1 › card 1 (custom:auto-entities) › card 1 (conditional)",
+                "View 1 › card 1 (custom:auto-entities) › card 1 (conditional) › card 1 (custom:acme-card)",
+            ),
+            CompatChecker.check(conditional).entries.map { it.path },
+        )
         val replaced = card(
             """{"type": "custom:auto-entities", "card_param": "cards", "entities": [{"entity": "light.a", "type": "custom:mushroom-entity-card"}],
                 "card": {"type": "custom:layout-card", "cards": [{"type": "custom:acme-card"}]}}""",
