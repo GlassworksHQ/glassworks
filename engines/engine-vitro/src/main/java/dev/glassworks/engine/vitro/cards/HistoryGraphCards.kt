@@ -523,16 +523,16 @@ object HaTimelineChart {
     const val ROW_HEIGHT = 30f
     const val GRID_BOTTOM = 30f
 
-    /** `labelWidth` of a narrow card: each name's width + 5, at most 105. */
-    fun labelWidth(rows: List<TimelineRow>, names: Map<String, String>): Float =
-        rows.maxOfOrNull { r -> min(ChartView.measure(names[r.entityId] ?: r.name) + 5f, 105f) } ?: 0f
+    /** `labelWidth` of a narrow card: each name's width + 5, at most 105; none when names are hidden (`show_names`). */
+    fun labelWidth(rows: List<TimelineRow>, names: Map<String, String>, showNames: Boolean = true): Float =
+        if (!showNames) 0f else rows.maxOfOrNull { r -> min(ChartView.measure(names[r.entityId] ?: r.name) + 5f, 105f) } ?: 0f
 
     fun height(rows: Int) = rows * ROW_HEIGHT + GRID_BOTTOM
 
-    fun scene(rows: List<TimelineRow>, names: Map<String, String>, start: Long, end: Long, paddingYAxis: Float, widthCss: Float, ctx: VitroCardContext): ChartScene {
+    fun scene(rows: List<TimelineRow>, names: Map<String, String>, start: Long, end: Long, paddingYAxis: Float, widthCss: Float, ctx: VitroCardContext, showNames: Boolean = true): ChartScene {
         val t = theme(ctx)
         val s = ChartScene()
-        val labelW = max(paddingYAxis, labelWidth(rows, names))
+        val labelW = if (showNames) max(paddingYAxis, labelWidth(rows, names)) else paddingYAxis
         val h = height(rows.size)
         val grid = RectF(labelW, 10f, widthCss - 1f, h - GRID_BOTTOM)
         val span = (end - start).toDouble().coerceAtLeast(1.0)
@@ -557,7 +557,7 @@ object HaTimelineChart {
                     s.text(ChartScene.Text(label, r.left + 4f, cy, Paint.Align.LEFT, fg, false))
                 }
             }
-            s.text(ChartScene.Text(names[row.entityId] ?: row.name, grid.left - 5f, cy, Paint.Align.RIGHT, t.primaryTextColor, false, maxWidth = labelW))
+            if (showNames) s.text(ChartScene.Text(names[row.entityId] ?: row.name, grid.left - 5f, cy, Paint.Align.RIGHT, t.primaryTextColor, false, maxWidth = labelW))
         }
         val ticks = ECharts.timeTicks(start, end)
         val tickPath = Path()
@@ -643,14 +643,40 @@ object HaTimelineChart {
         }
     }
 
-    /** `computeTimelineColor` for the states Vitro's theme colors: unavailable, unknown, active and inactive. */
+    /** The domains HA colors by state (`STATE_COLORED_DOMAIN`, `common/entity/state_color.ts`). */
+    private val STATE_COLORED = setOf(
+        "alarm_control_panel", "alert", "automation", "binary_sensor", "calendar", "camera", "climate", "cover",
+        "device_tracker", "fan", "group", "humidifier", "input_boolean", "lawn_mower", "light", "lock", "media_player",
+        "person", "plant", "remote", "schedule", "script", "siren", "sun", "switch", "timer", "update", "vacuum",
+        "valve", "water_heater", "weather",
+    )
+
+    /** Whether HA gives [s] a state color (`stateColorProperties`): a state-colored domain, or a battery sensor. */
+    fun isStateColored(s: EntityState): Boolean =
+        s.domain in STATE_COLORED || (s.domain == "sensor" && s.deviceClass == "battery")
+
+    /** `computeTimelineColor`'s generic colors: one graph color per state value, in the order they're first seen. */
+    private val genericColors = HashMap<String, Int>()
+
+    /**
+     * `computeTimelineColor`: unavailable and unknown; a state-colored domain's active or inactive color; an option of
+     * an `input_select`, `select` or enum sensor by its index among the options; any other value a graph color of its
+     * own.
+     */
     fun stateColor(ctx: VitroCardContext, entityId: String, state: String): Int {
         val st = ctx.store[entityId] ?: return Color.TRANSPARENT
-        return when (state) {
-            "unavailable" -> Color.TRANSPARENT
-            "unknown" -> 0xFF606060.toInt()
-            else -> if (st.copy(state = state).isActive) ctx.theme.activeColor(st.domain) else ctx.theme.stateInactiveColor
+        if (state == "unavailable") return Color.TRANSPARENT
+        if (state == "unknown") return 0xFF606060.toInt()
+        if (st.domain in STATE_COLORED) {
+            return if (st.copy(state = state).isActive) ctx.theme.activeColor(st.domain) else ctx.theme.stateInactiveColor
         }
+        val enumLike = st.domain == "select" || st.domain == "input_select" || (st.domain == "sensor" && st.deviceClass == "enum")
+        val options = (st.attributes["options"] as? List<*>)?.map { it.toString() }
+        if (enumLike && options != null) {
+            val i = options.indexOf(state)
+            if (i >= 0) return HaGraphColors.byIndex(ctx.theme, i)
+        }
+        return synchronized(genericColors) { genericColors.getOrPut(state) { HaGraphColors.byIndex(ctx.theme, genericColors.size) } }
     }
 }
 
@@ -673,6 +699,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
     }.toMap()
     private val hours: Double = config.raw.optDouble("hours_to_show", 24.0).takeIf { !it.isNaN() && it != 0.0 } ?: 24.0
     private val charts = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+    private val showNames = config.raw.optBoolean("show_names", true)
     private val info = cssText(ctx, 14f, ctx.theme.secondaryTextColor).apply { gravity = Gravity.CENTER }
 
     private var stream: HaGraph.Stream? = null
@@ -822,13 +849,13 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         // The charts share the widest y axis (paddingYAxis).
         val padding = max(
             lineSpecs.maxOfOrNull { HaLineChart.yAxis(it.first).third } ?: 0f,
-            if (history.timeline.isNotEmpty()) HaTimelineChart.labelWidth(history.timeline, names) else 0f,
+            if (history.timeline.isNotEmpty()) HaTimelineChart.labelWidth(history.timeline, names, showNames) else 0f,
         )
         var index = 0
         if (history.timeline.isNotEmpty()) {
             val chart = ChartView(ctx.context, ctx.dp).apply { heightCss = HaTimelineChart.height(history.timeline.size) }
             val rows = history.timeline
-            chart.setScene { w -> HaTimelineChart.scene(rows, names, start, end, padding, w, ctx) }
+            chart.setScene { w -> HaTimelineChart.scene(rows, names, start, end, padding, w, ctx, showNames) }
             charts.addView(entry(chart, timeline = true, first = index++ == 0))
         }
         for ((spec, legend) in lineSpecs) {
@@ -836,7 +863,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
             val box = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
             val chart = LineChartHost(ctx, withPad)
             box.addView(chart, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            if (config.raw.optBoolean("show_names", true)) {
+            if (showNames) {
                 box.addView(ChartLegendView(ctx).apply {
                     setItems(legend)
                     onLabel = { id -> ctx.openMoreInfo(id) }
@@ -964,6 +991,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
     private val statTypes: List<String> = readStatTypes(config.raw.opt("stat_types"))
     private val chart = ChartView(ctx.context, ctx.dp)
     private val legend = ChartLegendView(ctx)
+    private val info = cssText(ctx, 14f, ctx.theme.secondaryTextColor)
     private var generation = 0
     private val refresh = Runnable { fetch() }
 
@@ -979,6 +1007,10 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
             setPadding(ctx.px(16f), if (config.title != null) 0 else ctx.px(16f), ctx.px(16f), ctx.px(16f))
         }
         chart.heightCss = 233f
+        // statistics-chart's `.info`: centered on a 60 px line.
+        info.gravity = Gravity.CENTER
+        info.visibility = GONE
+        content.addView(info, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(60f * ctx.dp)))
         content.addView(chart, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         content.addView(legend, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         legend.onLabel = { id -> ctx.openMoreInfo(id.substringBeforeLast('-').takeIf { ctx.store[it] != null } ?: id) }
@@ -1014,9 +1046,20 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         val now = ctx.now()
         val cal = Calendar.getInstance().apply { timeInMillis = now }
         cal.add(Calendar.HOUR_OF_DAY, -(24 * days + 1).toInt())
-        val first = metadata[ids[0]]
-        val unitClass = first?.optString("unit_class")?.takeIf { it.isNotEmpty() && it != "null" }
-        val unit = if (unitClass != null) displayUnit(ids[0], first) else null
+        // The card's `unit` picks the statistic whose display unit it is; else the first statistic's unit class.
+        fun classOf(m: JSONObject?) = m?.optString("unit_class")?.takeIf { it.isNotEmpty() && it != "null" }
+        val cfgUnit = config.raw.optString("unit").takeIf { it.isNotEmpty() }
+        val matching = cfgUnit?.let { u -> metadata.entries.firstOrNull { (id, m) -> displayUnit(id, m) == u } }
+        val unitClass: String?
+        val unit: String?
+        if (matching != null && classOf(matching.value) != null) {
+            unitClass = classOf(matching.value)
+            unit = cfgUnit
+        } else {
+            val first = metadata[ids[0]]
+            unitClass = classOf(first)
+            unit = if (unitClass != null) displayUnit(ids[0], first) else null
+        }
         val msg = JSONObject()
             .put("type", "recorder/statistics_during_period")
             .put("start_time", HaGraph.isoString(cal.timeInMillis))
@@ -1122,11 +1165,16 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
             }
         }
         if (lines.isEmpty()) {
-            // A successful answer with nothing in the window: nothing left to show.
+            // A successful answer with nothing in the window: HA's "No statistics found." in place of the chart.
             legend.setItems(emptyList())
             chart.setScene { ChartScene() }
+            chart.visibility = GONE
+            info.text = "No statistics found."
+            info.visibility = VISIBLE
             return
         }
+        chart.visibility = VISIBLE
+        info.visibility = GONE
         // One statistic: the base chart's legend lists every series; several: one entry per statistic.
         legend.setItems(if (ids.size > 1) statLegend else legendItems)
         // ha-chart-base: differenceInMinutes(axis.max || new Date(), axis.min); the statistics chart sets no max.

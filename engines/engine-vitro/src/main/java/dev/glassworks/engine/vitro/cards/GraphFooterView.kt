@@ -45,7 +45,7 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
         strokeJoin = Paint.Join.ROUND
     }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val errorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val errorPaint = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = ctx.theme.secondaryTextColor
         textSize = 14f * dp
         textAlign = Paint.Align.CENTER
@@ -163,7 +163,9 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
 
     override fun onDraw(canvas: Canvas) {
         error?.let {
-            canvas.drawText(it, width / 2f, height / 2f - (errorPaint.ascent() + errorPaint.descent()) / 2f, errorPaint)
+            // Cut to the footer's width (its start first, so "Unable to load history" stays); the description keeps it all.
+            val fit = android.text.TextUtils.ellipsize(it, errorPaint, (width - 16f * dp).coerceAtLeast(0f), android.text.TextUtils.TruncateAt.END)
+            canvas.drawText(fit, 0, fit.length, width / 2f, height / 2f - (errorPaint.ascent() + errorPaint.descent()) / 2f, errorPaint)
             return
         }
         if (builtFor != width) rebuild()

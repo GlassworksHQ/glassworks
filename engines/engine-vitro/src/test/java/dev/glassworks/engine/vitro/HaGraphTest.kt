@@ -218,4 +218,24 @@ class HaGraphTest {
         chart.layout(0, 0, 300, chart.measuredHeight)
         assertEquals("Occupancy, 12:00 PM", chart.contentDescription.toString())
     }
+
+    @Test
+    fun entityAndSensorCardsKeepTheirMinimumSizeInASection() {
+        fun size(json: String) = dev.glassworks.engine.vitro.ui.HaGridSize.of(dev.glassworks.engine.vitro.model.LovelaceParser.parseCard(JSONObject(json)))
+        // HA clamps grid_options to the card's min_columns / min_rows (6 x 2 for the entity and sensor cards).
+        assertEquals(dev.glassworks.engine.vitro.ui.HaGridSize(6, 2), size("""{"type": "sensor", "entity": "sensor.a", "grid_options": {"columns": 3, "rows": 1}}"""))
+        assertEquals(dev.glassworks.engine.vitro.ui.HaGridSize(9, 3), size("""{"type": "entity", "entity": "sensor.a", "grid_options": {"columns": 9, "rows": 3}}"""))
+        // Full width and auto rows stay as they are.
+        assertEquals(dev.glassworks.engine.vitro.ui.HaGridSize(null, null), size("""{"type": "history-graph", "entities": ["sensor.a"], "grid_options": {"columns": "full", "rows": "auto"}}"""))
+    }
+
+    @Test
+    fun onlyStateColoredDomainsHaveAStateColor() {
+        val sensor = dev.glassworks.engine.vitro.data.EntityState("sensor.pressure", "1017", mapOf("unit_of_measurement" to "hPa"))
+        val battery = dev.glassworks.engine.vitro.data.EntityState("sensor.battery", "40", mapOf("device_class" to "battery"))
+        val light = dev.glassworks.engine.vitro.data.EntityState("light.a", "on", emptyMap())
+        assertEquals(false, HaTimelineChart.isStateColored(sensor))
+        assertEquals(true, HaTimelineChart.isStateColored(battery))
+        assertEquals(true, HaTimelineChart.isStateColored(light))
+    }
 }

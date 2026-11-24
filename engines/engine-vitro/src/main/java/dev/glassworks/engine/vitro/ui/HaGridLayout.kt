@@ -131,12 +131,16 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
             var maxRows: Int? = null
             val g = raw.optJSONObject("grid_options")
             val legacy = raw.optJSONObject("layout_options")
+            // The minimums the card type reports with its defaults (getGridOptions' min_columns / min_rows).
+            val typeMin = minimums(card)
+            minCols = typeMin.columns
+            minRows = typeMin.rows
             if (g != null) {
                 if (g.has("columns")) cols = g.opt("columns")
                 if (g.has("rows")) rows = g.opt("rows")
-                minCols = g.optInt("min_columns", 0).takeIf { it > 0 }
+                minCols = g.optInt("min_columns", 0).takeIf { it > 0 } ?: typeMin.columns
                 maxCols = g.optInt("max_columns", 0).takeIf { it > 0 }
-                minRows = g.optInt("min_rows", 0).takeIf { it > 0 }
+                minRows = g.optInt("min_rows", 0).takeIf { it > 0 } ?: typeMin.rows
                 maxRows = g.optInt("max_rows", 0).takeIf { it > 0 }
             } else if (legacy != null) {
                 if (legacy.has("grid_columns")) cols = legacy.opt("grid_columns").let { (it as? Number)?.toInt()?.times(3) ?: it }
@@ -151,6 +155,13 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                 else -> null
             }
             return HaGridSize(c, r?.takeIf { it > 0 })
+        }
+
+        /** The minimum size a card type reports from `getGridOptions()`: entity and sensor 6 x 2, the graphs 6 wide. */
+        fun minimums(card: CardConfig): HaGridSize = when (card.type) {
+            "entity", "sensor", "history-graph" -> HaGridSize(6, 2)
+            "statistics-graph" -> HaGridSize(6, 3)
+            else -> HaGridSize(null, null)
         }
 
         /** What each card type reports from `getGridOptions()` (HA 2026.11, Mushroom 5). */
