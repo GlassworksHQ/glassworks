@@ -68,6 +68,11 @@ SUPPORTED_TILE_FEATURES = {
     "target-temperature",
     "select-options",
     "media-player-volume-slider",
+    "toggle",
+    "media-player-playback",
+    "light-color-favorites",
+    "numeric-input",
+    "vacuum-commands",
 }
 
 CONTAINER_TYPES = {"grid", "horizontal-stack", "vertical-stack", "conditional"}

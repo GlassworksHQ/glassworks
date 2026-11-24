@@ -12,6 +12,15 @@ import android.graphics.Path
 import android.view.View
 import dev.glassworks.engine.vitro.data.EntityState
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.math.tan
 
 /**
  * Crisp 24x24 Material Design Icon vector renderer with zero icon-font overhead.
@@ -19,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object MdiIcons {
     private val cache = ConcurrentHashMap<String, Path>()
+    private val registered = ConcurrentHashMap<String, String>()
 
     /** Picks the best built-in MDI icon name for [explicitIcon] or [entity]. */
     fun resolveIconName(explicitIcon: String?, entity: EntityState?): String {
@@ -96,20 +106,69 @@ object MdiIcons {
     }
 
     /** Returns the raw 24x24 SVG path data string for [name] (also served to Tier 3 `<ha-icon>` shims). */
-    fun pathDataFor(name: String): String {
-        val key = name.lowercase().removePrefix("mdi:").removePrefix("hass:")
-        return PATHS[key] ?: PATHS.getValue("home")
+    fun pathDataFor(name: String): String = pathDataOrNull(name) ?: PATHS.getValue("home")
+
+    /** The path data for [name], or null when neither the built-in set nor [register] knows it. */
+    fun pathDataOrNull(name: String): String? {
+        val key = keyOf(name)
+        return registered[key] ?: PATHS[key]
+    }
+
+    /** True when [name] (with or without `mdi:`/`hass:`) has a glyph, so callers can fall back before drawing `home`. */
+    fun has(name: String): Boolean = pathDataOrNull(name) != null
+
+    /** Every icon name Vitro can draw: the built-in set plus anything [register]ed. */
+    fun names(): Set<String> = PATHS.keys + registered.keys
+
+    /**
+     * Adds or replaces the glyph for [name] with 24x24 SVG [pathData] (M/L/H/V/C/S/Q/T/A/Z, absolute or
+     * relative). Registered glyphs win over built-in ones.
+     */
+    fun register(name: String, pathData: String) {
+        val key = keyOf(name)
+        require(key.isNotEmpty()) { "icon name is empty" }
+        registered[key] = pathData
+        cache.remove(key)
     }
 
     fun pathFor(name: String): Path {
-        val key = name.lowercase().removePrefix("mdi:").removePrefix("hass:")
-        return cache.computeIfAbsent(key) { parseSvgPath(PATHS[it] ?: PATHS.getValue("home")) }
+        val key = keyOf(name)
+        return cache.computeIfAbsent(key) { parseSvgPath(pathDataFor(it)) }
     }
 
-    /** Minimal SVG path data parser (M/m/L/l/H/h/V/v/C/c/Q/q/Z/z) for 24x24 MDI paths. */
+    private fun keyOf(name: String): String = name.trim().lowercase().removePrefix("mdi:").removePrefix("hass:")
+
+    /** Receives the drawing commands [parseSvgPathInto] emits. Pure, so path data can be checked off-device. */
+    interface PathSink {
+        fun moveTo(x: Float, y: Float)
+        fun lineTo(x: Float, y: Float)
+        fun quadTo(x1: Float, y1: Float, x: Float, y: Float)
+        fun cubicTo(x1: Float, y1: Float, x2: Float, y2: Float, x: Float, y: Float)
+        fun close()
+    }
+
+    /** Parses SVG path data into an even-odd Android [Path] for 24x24 MDI glyphs. */
     fun parseSvgPath(d: String): Path {
         // Even-odd so nested sub-paths (door panes, glyph cut-outs) render as holes regardless of winding.
         val path = Path().apply { fillType = Path.FillType.EVEN_ODD }
+        parseSvgPathInto(
+            d,
+            object : PathSink {
+                override fun moveTo(x: Float, y: Float) = path.moveTo(x, y)
+                override fun lineTo(x: Float, y: Float) = path.lineTo(x, y)
+                override fun quadTo(x1: Float, y1: Float, x: Float, y: Float) = path.quadTo(x1, y1, x, y)
+                override fun cubicTo(x1: Float, y1: Float, x2: Float, y2: Float, x: Float, y: Float) = path.cubicTo(x1, y1, x2, y2, x, y)
+                override fun close() = path.close()
+            },
+        )
+        return path
+    }
+
+    /**
+     * SVG path data parser (M/L/H/V/C/S/Q/T/A/Z, upper and lower case) feeding [sink]. Arcs become cubic
+     * Béziers, so MDI paths copied from the web render with round curves rather than straight chords.
+     */
+    fun parseSvgPathInto(d: String, sink: PathSink) {
         val tokens = tokenize(d)
         var i = 0
         var cmd = ' '
@@ -117,9 +176,25 @@ object MdiIcons {
         var cy = 0f
         var sx = 0f
         var sy = 0f
+        // Last control point, for the smooth S/T forms; reset by every other command.
+        var lastCtrlX = 0f
+        var lastCtrlY = 0f
+        var lastWasCubic = false
+        var lastWasQuad = false
 
         fun nextF(): Float = if (i < tokens.size) tokens[i++].toFloatOrNull() ?: 0f else 0f
         fun hasNum(): Boolean = i < tokens.size && tokens[i].firstOrNull()?.let { it.isDigit() || it == '-' || it == '.' || it == '+' } == true
+        // Arc flags may be packed against the next number ("0 01 1" = 0, 0, 1, 1); take one digit.
+        fun nextFlag(): Boolean {
+            if (i >= tokens.size) return false
+            val t = tokens[i]
+            if (t.length > 1 && (t[0] == '0' || t[0] == '1')) {
+                tokens[i] = t.substring(1)
+                return t[0] == '1'
+            }
+            i++
+            return (t.toFloatOrNull() ?: 0f) != 0f
+        }
 
         while (i < tokens.size) {
             val tok = tokens[i]
@@ -127,65 +202,138 @@ object MdiIcons {
                 cmd = tok[0]
                 i++
                 if (cmd == 'Z' || cmd == 'z') {
-                    path.close()
+                    sink.close()
                     cx = sx; cy = sy
+                    lastWasCubic = false; lastWasQuad = false
                     continue
                 }
+            } else if (!hasNum()) {
+                i++
+                continue
             }
+            var cubic = false
+            var quad = false
             when (cmd) {
-                'M' -> {
-                    cx = nextF(); cy = nextF(); sx = cx; sy = cy
-                    path.moveTo(cx, cy)
-                    cmd = 'L'
+                'M', 'm' -> {
+                    val x = nextF(); val y = nextF()
+                    if (cmd == 'm') { cx += x; cy += y } else { cx = x; cy = y }
+                    sx = cx; sy = cy
+                    sink.moveTo(cx, cy)
+                    cmd = if (cmd == 'm') 'l' else 'L'
                 }
-                'm' -> {
-                    cx += nextF(); cy += nextF(); sx = cx; sy = cy
-                    path.moveTo(cx, cy)
-                    cmd = 'l'
+                'L' -> { cx = nextF(); cy = nextF(); sink.lineTo(cx, cy) }
+                'l' -> { cx += nextF(); cy += nextF(); sink.lineTo(cx, cy) }
+                'H' -> { cx = nextF(); sink.lineTo(cx, cy) }
+                'h' -> { cx += nextF(); sink.lineTo(cx, cy) }
+                'V' -> { cy = nextF(); sink.lineTo(cx, cy) }
+                'v' -> { cy += nextF(); sink.lineTo(cx, cy) }
+                'C', 'c', 'S', 's' -> {
+                    val rel = cmd.isLowerCase()
+                    val ox = if (rel) cx else 0f
+                    val oy = if (rel) cy else 0f
+                    val x1: Float
+                    val y1: Float
+                    if (cmd == 'S' || cmd == 's') {
+                        x1 = if (lastWasCubic) 2 * cx - lastCtrlX else cx
+                        y1 = if (lastWasCubic) 2 * cy - lastCtrlY else cy
+                    } else {
+                        x1 = ox + nextF(); y1 = oy + nextF()
+                    }
+                    val x2 = ox + nextF(); val y2 = oy + nextF()
+                    cx = ox + nextF(); cy = oy + nextF()
+                    sink.cubicTo(x1, y1, x2, y2, cx, cy)
+                    lastCtrlX = x2; lastCtrlY = y2
+                    cubic = true
                 }
-                'L' -> { cx = nextF(); cy = nextF(); path.lineTo(cx, cy) }
-                'l' -> { cx += nextF(); cy += nextF(); path.lineTo(cx, cy) }
-                'H' -> { cx = nextF(); path.lineTo(cx, cy) }
-                'h' -> { cx += nextF(); path.lineTo(cx, cy) }
-                'V' -> { cy = nextF(); path.lineTo(cx, cy) }
-                'v' -> { cy += nextF(); path.lineTo(cx, cy) }
-                'C' -> {
-                    val x1 = nextF(); val y1 = nextF()
-                    val x2 = nextF(); val y2 = nextF()
-                    cx = nextF(); cy = nextF()
-                    path.cubicTo(x1, y1, x2, y2, cx, cy)
-                }
-                'c' -> {
-                    val x1 = cx + nextF(); val y1 = cy + nextF()
-                    val x2 = cx + nextF(); val y2 = cy + nextF()
-                    cx += nextF(); cy += nextF()
-                    path.cubicTo(x1, y1, x2, y2, cx, cy)
-                }
-                'Q' -> {
-                    val x1 = nextF(); val y1 = nextF()
-                    cx = nextF(); cy = nextF()
-                    path.quadTo(x1, y1, cx, cy)
-                }
-                'q' -> {
-                    val x1 = cx + nextF(); val y1 = cy + nextF()
-                    cx += nextF(); cy += nextF()
-                    path.quadTo(x1, y1, cx, cy)
+                'Q', 'q', 'T', 't' -> {
+                    val rel = cmd.isLowerCase()
+                    val ox = if (rel) cx else 0f
+                    val oy = if (rel) cy else 0f
+                    val x1: Float
+                    val y1: Float
+                    if (cmd == 'T' || cmd == 't') {
+                        x1 = if (lastWasQuad) 2 * cx - lastCtrlX else cx
+                        y1 = if (lastWasQuad) 2 * cy - lastCtrlY else cy
+                    } else {
+                        x1 = ox + nextF(); y1 = oy + nextF()
+                    }
+                    cx = ox + nextF(); cy = oy + nextF()
+                    sink.quadTo(x1, y1, cx, cy)
+                    lastCtrlX = x1; lastCtrlY = y1
+                    quad = true
                 }
                 'A', 'a' -> {
-                    // Approximate arc endpoint with a smooth line for compact icon shapes.
-                    nextF(); nextF(); nextF(); nextF(); nextF()
-                    if (cmd == 'A') { cx = nextF(); cy = nextF() } else { cx += nextF(); cy += nextF() }
-                    path.lineTo(cx, cy)
+                    val rx = nextF(); val ry = nextF(); val rot = nextF()
+                    val large = nextFlag(); val sweep = nextFlag()
+                    val x = nextF(); val y = nextF()
+                    val ex = if (cmd == 'a') cx + x else x
+                    val ey = if (cmd == 'a') cy + y else y
+                    arcTo(sink, cx, cy, rx, ry, rot, large, sweep, ex, ey)
+                    cx = ex; cy = ey
                 }
-                else -> {
-                    if (!hasNum()) i++ else nextF()
-                }
+                else -> nextF() // Unknown command: skip its numbers.
             }
+            lastWasCubic = cubic
+            lastWasQuad = quad
         }
-        return path
     }
 
-    private fun tokenize(d: String): List<String> {
+    /** SVG elliptical arc (endpoint form, SVG 1.1 F.6.5) as at most four cubic Béziers per full turn. */
+    private fun arcTo(
+        sink: PathSink, x0: Float, y0: Float, rxIn: Float, ryIn: Float, angleDeg: Float,
+        largeArc: Boolean, sweep: Boolean, x: Float, y: Float,
+    ) {
+        if (x0 == x && y0 == y) return
+        var rx = abs(rxIn.toDouble())
+        var ry = abs(ryIn.toDouble())
+        if (rx == 0.0 || ry == 0.0) { sink.lineTo(x, y); return }
+        val phi = Math.toRadians(angleDeg.toDouble())
+        val cosPhi = cos(phi)
+        val sinPhi = sin(phi)
+        val dx2 = (x0 - x) / 2.0
+        val dy2 = (y0 - y) / 2.0
+        val x1p = cosPhi * dx2 + sinPhi * dy2
+        val y1p = -sinPhi * dx2 + cosPhi * dy2
+        val lambda = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry)
+        if (lambda > 1.0) { val s = sqrt(lambda); rx *= s; ry *= s }
+        val num = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p
+        val den = rx * rx * y1p * y1p + ry * ry * x1p * x1p
+        var coef = if (den == 0.0) 0.0 else sqrt(max(0.0, num / den))
+        if (largeArc == sweep) coef = -coef
+        val cxp = coef * rx * y1p / ry
+        val cyp = -coef * ry * x1p / rx
+        val ccx = cosPhi * cxp - sinPhi * cyp + (x0 + x) / 2.0
+        val ccy = sinPhi * cxp + cosPhi * cyp + (y0 + y) / 2.0
+        val theta1 = atan2((y1p - cyp) / ry, (x1p - cxp) / rx)
+        var dTheta = atan2((-y1p - cyp) / ry, (-x1p - cxp) / rx) - theta1
+        if (sweep && dTheta < 0) dTheta += 2 * PI else if (!sweep && dTheta > 0) dTheta -= 2 * PI
+        val segments = ceil(abs(dTheta) / (PI / 2) - 1e-9).toInt().coerceAtLeast(1)
+        val delta = dTheta / segments
+        val t = 4.0 / 3.0 * tan(delta / 4)
+        var th = theta1
+        repeat(segments) { n ->
+            val th2 = th + delta
+            val c1 = cos(th); val s1 = sin(th)
+            val c2 = cos(th2); val s2 = sin(th2)
+            val p1x = ccx + rx * cosPhi * c1 - ry * sinPhi * s1
+            val p1y = ccy + rx * sinPhi * c1 + ry * cosPhi * s1
+            val d1x = -rx * cosPhi * s1 - ry * sinPhi * c1
+            val d1y = -rx * sinPhi * s1 + ry * cosPhi * c1
+            val last = n == segments - 1
+            val p2x = if (last) x.toDouble() else ccx + rx * cosPhi * c2 - ry * sinPhi * s2
+            val p2y = if (last) y.toDouble() else ccy + rx * sinPhi * c2 + ry * cosPhi * s2
+            val d2x = -rx * cosPhi * s2 - ry * sinPhi * c2
+            val d2y = -rx * sinPhi * s2 + ry * cosPhi * c2
+            sink.cubicTo(
+                (p1x + t * d1x).toFloat(), (p1y + t * d1y).toFloat(),
+                (p2x - t * d2x).toFloat(), (p2y - t * d2y).toFloat(),
+                p2x.toFloat(), p2y.toFloat(),
+            )
+            th = th2
+        }
+    }
+
+    private fun tokenize(d: String): MutableList<String> {
         val out = ArrayList<String>(64)
         var i = 0
         val n = d.length
@@ -328,6 +476,119 @@ object MdiIcons {
         "arrow-up" to "M13 20H11V8L5.5 13.5L4.1 12.1L12 4.2L19.9 12.1L18.5 13.5L13 8V20Z",
         "arrow-down" to "M11 4H13V16L18.5 10.5L19.9 11.9L12 19.8L4.1 11.9L5.5 10.5L11 16V4Z",
         "chart-box-outline" to "M5 3H19Q21 3 21 5V19Q21 21 19 21H5Q3 21 3 19V5Q3 3 5 3ZM5 5H19V19H5ZM7 12H9V17H7ZM11 7H13V17H11ZM15 10H17V17H15Z",
+        // Status, climate, appliances and navigation glyphs drawn on the same 24x24 grid (original geometry).
+        "information" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM11 10.5L13 10.5L13 17L11 17ZM13.2 7.8C13.2 8.46 12.66 9 12 9C11.34 9 10.8 8.46 10.8 7.8C10.8 7.14 11.34 6.6 12 6.6C12.66 6.6 13.2 7.14 13.2 7.8Z",
+        "information-outline" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM20.2 12C20.2 16.53 16.53 20.2 12 20.2C7.47 20.2 3.8 16.53 3.8 12C3.8 7.47 7.47 3.8 12 3.8C16.53 3.8 20.2 7.47 20.2 12ZM11 10.5L13 10.5L13 17L11 17ZM13.2 7.8C13.2 8.46 12.66 9 12 9C11.34 9 10.8 8.46 10.8 7.8C10.8 7.14 11.34 6.6 12 6.6C12.66 6.6 13.2 7.14 13.2 7.8Z",
+        "alert-circle" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM11 6.5L13 6.5L13 13.5L11 13.5ZM13.2 16.6C13.2 17.26 12.66 17.8 12 17.8C11.34 17.8 10.8 17.26 10.8 16.6C10.8 15.94 11.34 15.4 12 15.4C12.66 15.4 13.2 15.94 13.2 16.6Z",
+        "alert-circle-outline" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM20.2 12C20.2 16.53 16.53 20.2 12 20.2C7.47 20.2 3.8 16.53 3.8 12C3.8 7.47 7.47 3.8 12 3.8C16.53 3.8 20.2 7.47 20.2 12ZM11 6.5L13 6.5L13 13.5L11 13.5ZM13.2 16.6C13.2 17.26 12.66 17.8 12 17.8C11.34 17.8 10.8 17.26 10.8 16.6C10.8 15.94 11.34 15.4 12 15.4C12.66 15.4 13.2 15.94 13.2 16.6Z",
+        "alert-outline" to "M12 2L23 21L1 21ZM12 6L19.5 19L4.5 19ZM11 9.5L13 9.5L13 14.5L11 14.5ZM11 15.8L13 15.8L13 17.8L11 17.8Z",
+        "check-circle-outline" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM20.2 12C20.2 16.53 16.53 20.2 12 20.2C7.47 20.2 3.8 16.53 3.8 12C3.8 7.47 7.47 3.8 12 3.8C16.53 3.8 20.2 7.47 20.2 12ZM10.6 16.6L6.6 12.6L8 11.2L10.6 13.8L16.4 8L17.8 9.4L10.6 16.6Z",
+        "close-circle" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM16.34 8.53L15.47 7.66L12 11.13L8.53 7.66L7.66 8.53L11.13 12L7.66 15.47L8.53 16.34L12 12.87L15.47 16.34L16.34 15.47L12.87 12Z",
+        "close-circle-outline" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM20.2 12C20.2 16.53 16.53 20.2 12 20.2C7.47 20.2 3.8 16.53 3.8 12C3.8 7.47 7.47 3.8 12 3.8C16.53 3.8 20.2 7.47 20.2 12ZM15.85 8.92L15.08 8.15L12 11.23L8.92 8.15L8.15 8.92L11.23 12L8.15 15.08L8.92 15.85L12 12.77L15.08 15.85L15.85 15.08L12.77 12Z",
+        "help-circle" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM9.6 8.6C9.6 6.83 11.03 5.4 12.8 5.4C14.57 5.4 16 6.83 16 8.6C16 10.37 14.57 11.8 12.8 11.8L12.8 13.9L11.2 13.9L11.2 10.2L12.8 10.2C13.68 10.2 14.4 9.48 14.4 8.6C14.4 7.72 13.68 7 12.8 7C11.92 7 11.2 7.72 11.2 8.6ZM13.15 15.9C13.15 16.54 12.64 17.05 12 17.05C11.36 17.05 10.85 16.54 10.85 15.9C10.85 15.26 11.36 14.75 12 14.75C12.64 14.75 13.15 15.26 13.15 15.9Z",
+        "help-circle-outline" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM20.2 12C20.2 16.53 16.53 20.2 12 20.2C7.47 20.2 3.8 16.53 3.8 12C3.8 7.47 7.47 3.8 12 3.8C16.53 3.8 20.2 7.47 20.2 12ZM9.6 8.6C9.6 6.83 11.03 5.4 12.8 5.4C14.57 5.4 16 6.83 16 8.6C16 10.37 14.57 11.8 12.8 11.8L12.8 13.9L11.2 13.9L11.2 10.2L12.8 10.2C13.68 10.2 14.4 9.48 14.4 8.6C14.4 7.72 13.68 7 12.8 7C11.92 7 11.2 7.72 11.2 8.6ZM13.15 15.9C13.15 16.54 12.64 17.05 12 17.05C11.36 17.05 10.85 16.54 10.85 15.9C10.85 15.26 11.36 14.75 12 14.75C12.64 14.75 13.15 15.26 13.15 15.9Z",
+        "eye" to "M2 12C4.5 7 8 5 12 5C16 5 19.5 7 22 12C19.5 17 16 19 12 19C8 19 4.5 17 2 12ZM16.2 12C16.2 14.32 14.32 16.2 12 16.2C9.68 16.2 7.8 14.32 7.8 12C7.8 9.68 9.68 7.8 12 7.8C14.32 7.8 16.2 9.68 16.2 12ZM14.3 12C14.3 13.27 13.27 14.3 12 14.3C10.73 14.3 9.7 13.27 9.7 12C9.7 10.73 10.73 9.7 12 9.7C13.27 9.7 14.3 10.73 14.3 12Z",
+        "eye-off" to "M2 12C4.5 7 8 5 12 5C16 5 19.5 7 22 12C19.5 17 16 19 12 19C8 19 4.5 17 2 12ZM16.2 12C16.2 14.32 14.32 16.2 12 16.2C9.68 16.2 7.8 14.32 7.8 12C7.8 9.68 9.68 7.8 12 7.8C14.32 7.8 16.2 9.68 16.2 12ZM14.3 12C14.3 13.27 13.27 14.3 12 14.3C10.73 14.3 9.7 13.27 9.7 12C9.7 10.73 10.73 9.7 12 9.7C13.27 9.7 14.3 10.73 14.3 12ZM2.33 3.87L20.33 21.87L21.67 20.53L3.67 2.53Z",
+        "bell-outline" to "M12 2C10.9 2 10 2.9 10 4V4.3C7.7 5.1 6 7.3 6 10V16L4 18V19H20V18L18 16V10C18 7.3 16.3 5.1 14 4.3V4C14 2.9 13.1 2 12 2ZM10 20C10 21.1 10.9 22 12 22C13.1 22 14 21.1 14 20H10ZM12 5.8C9.8 5.8 8 7.6 8 9.8V16.9H16V9.8C16 7.6 14.2 5.8 12 5.8Z",
+        "bell-off" to "M12 2C10.9 2 10 2.9 10 4V4.3C7.7 5.1 6 7.3 6 10V16L4 18V19H20V18L18 16V10C18 7.3 16.3 5.1 14 4.3V4C14 2.9 13.1 2 12 2ZM10 20C10 21.1 10.9 22 12 22C13.1 22 14 21.1 14 20H10ZM2.33 3.87L20.33 21.87L21.67 20.53L3.67 2.53Z",
+        "bell-ring" to "M12 2C10.9 2 10 2.9 10 4V4.3C7.7 5.1 6 7.3 6 10V16L4 18V19H20V18L18 16V10C18 7.3 16.3 5.1 14 4.3V4C14 2.9 13.1 2 12 2ZM10 20C10 21.1 10.9 22 12 22C13.1 22 14 21.1 14 20H10ZM1.76 7.26C2.41 4.85 3.88 2.75 5.92 1.32L6.84 2.63C5.1 3.84 3.85 5.63 3.31 7.67ZM18.08 1.32C20.12 2.75 21.59 4.85 22.24 7.26L20.69 7.67C20.15 5.63 18.9 3.84 17.16 2.63Z",
+        "alarm" to "M20.5 13C20.5 17.69 16.69 21.5 12 21.5C7.31 21.5 3.5 17.69 3.5 13C3.5 8.31 7.31 4.5 12 4.5C16.69 4.5 20.5 8.31 20.5 13ZM18.8 13C18.8 16.76 15.76 19.8 12 19.8C8.24 19.8 5.2 16.76 5.2 13C5.2 9.24 8.24 6.2 12 6.2C15.76 6.2 18.8 9.24 18.8 13ZM11.2 8.5L12.8 8.5L12.8 13.8L11.2 13.8ZM11.56 14.17L14.56 16.17L15.44 14.83L12.44 12.83ZM3.22 6.65L6.82 3.25L5.58 1.95L1.98 5.35ZM22.02 5.35L18.42 1.95L17.18 3.25L20.78 6.65Z",
+        "timer-outline" to "M20.5 13.5C20.5 18.19 16.69 22 12 22C7.31 22 3.5 18.19 3.5 13.5C3.5 8.81 7.31 5 12 5C16.69 5 20.5 8.81 20.5 13.5ZM18.8 13.5C18.8 17.26 15.76 20.3 12 20.3C8.24 20.3 5.2 17.26 5.2 13.5C5.2 9.74 8.24 6.7 12 6.7C15.76 6.7 18.8 9.74 18.8 13.5ZM9.5 1.5L14.5 1.5L14.5 3.3L9.5 3.3ZM11.2 3.3L12.8 3.3L12.8 5L11.2 5ZM11.2 9L12.8 9L12.8 14.3L11.2 14.3ZM18.77 6.77L20.37 5.17L19.23 4.03L17.63 5.63Z",
+        "air-humidifier" to "M8 10H16Q18 10 18 12V20Q18 22 16 22H8Q6 22 6 20V12Q6 10 8 10ZM14.4 16C14.4 17.33 13.33 18.4 12 18.4C10.67 18.4 9.6 17.33 9.6 16C9.6 14.67 10.67 13.6 12 13.6C13.33 13.6 14.4 14.67 14.4 16ZM12 1.5C11 3.25 9.5 4.65 9.5 6.26C9.5 7.8 10.6 8.5 12 8.5C13.4 8.5 14.5 7.8 14.5 6.26C14.5 4.65 13 3.25 12 1.5Z",
+        "fan-off" to "M12 11C11.4 11 11 11.4 11 12C11 12.6 11.4 13 12 13C12.6 13 13 12.6 13 12C13 11.4 12.6 11 12 11ZM12 3C9.5 3 8.5 5.2 9.5 7.5L10.8 10.2C11.2 10 11.6 9.9 12 9.9L14.5 6C15.5 4.3 14.2 3 12 3ZM21 12C21 9.5 18.8 8.5 16.5 9.5L13.8 10.8C14 11.2 14.1 11.6 14.1 12L18 14.5C19.7 15.5 21 14.2 21 12ZM12 21C14.5 21 15.5 18.8 14.5 16.5L13.2 13.8C12.8 14 12.4 14.1 12 14.1L9.5 18C8.5 19.7 9.8 21 12 21ZM3 12C3 14.5 5.2 15.5 7.5 14.5L10.2 13.2C10 12.8 9.9 12.4 9.9 12L6 9.5C4.3 8.5 3 9.8 3 12ZM2.33 3.87L20.33 21.87L21.67 20.53L3.67 2.53Z",
+        "thermometer-lines" to "M11.5 13V5C11.5 3.3 10.2 2 8.5 2C6.8 2 5.5 3.3 5.5 5V13C4.3 14 3.5 15.4 3.5 17C3.5 19.8 5.7 22 8.5 22C11.3 22 13.5 19.8 13.5 17C13.5 15.4 12.7 14 11.5 13ZM7.5 5C7.5 4.4 7.9 4 8.5 4C9.1 4 9.5 4.4 9.5 5V11H7.5V5ZM15 5L21 5L21 6.6L15 6.6ZM15 9L19 9L19 10.6L15 10.6ZM15 13L21 13L21 14.6L15 14.6Z",
+        "water-alert" to "M8.5 2.5C6 5.6 1.5 10.2 1.5 15C1.5 18.9 4.6 22 8.5 22C12.4 22 15.5 18.9 15.5 15C15.5 10.2 11 5.6 8.5 2.5ZM19 7L21 7L21 15L19 15ZM19 16L21 16L21 18L19 18Z",
+        "water-off" to "M12 2.5C9.5 5.6 5 10.2 5 15C5 18.9 8.1 22 12 22C15.9 22 19 18.9 19 15C19 10.2 14.5 5.6 12 2.5ZM2.33 3.87L20.33 21.87L21.67 20.53L3.67 2.53Z",
+        "smoke-detector" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM20.3 12C20.3 16.58 16.58 20.3 12 20.3C7.42 20.3 3.7 16.58 3.7 12C3.7 7.42 7.42 3.7 12 3.7C16.58 3.7 20.3 7.42 20.3 12ZM16.5 12C16.5 14.49 14.49 16.5 12 16.5C9.51 16.5 7.5 14.49 7.5 12C7.5 9.51 9.51 7.5 12 7.5C14.49 7.5 16.5 9.51 16.5 12ZM13.6 12C13.6 12.88 12.88 13.6 12 13.6C11.12 13.6 10.4 12.88 10.4 12C10.4 11.12 11.12 10.4 12 10.4C12.88 10.4 13.6 11.12 13.6 12ZM17.8 12.6L19.2 12.6L19.2 11.4L17.8 11.4ZM14.38 17.32L15.08 18.54L16.12 17.94L15.42 16.72ZM8.58 16.72L7.88 17.94L8.92 18.54L9.62 17.32ZM6.2 11.4L4.8 11.4L4.8 12.6L6.2 12.6ZM9.62 6.68L8.92 5.46L7.88 6.06L8.58 7.28ZM15.42 7.28L16.12 6.06L15.08 5.46L14.38 6.68Z",
+        "fire-alert" to "M9.5 3C9.5 3 11.3 5.7 11.3 7.95C12.47 7.32 13.46 6.24 14 4.8C16.16 7.05 17.15 9.3 17.15 12.45C17.15 16.68 13.73 20.1 9.5 20.1C5.27 20.1 1.85 16.68 1.85 12.45C1.85 9.75 3.38 7.32 5.36 5.7C5.36 7.23 6.08 8.58 7.25 9.3C7.34 6.96 8.15 4.8 9.5 3ZM9.5 18.3C11.03 18.3 12.2 17.13 12.2 15.6C12.2 14.16 11.12 12.9 9.5 11.1C7.88 12.9 6.8 14.16 6.8 15.6C6.8 17.13 7.97 18.3 9.5 18.3ZM19.5 7L21.5 7L21.5 15L19.5 15ZM19.5 16L21.5 16L21.5 18L19.5 18Z",
+        "weather-sunrise" to "M7.2 16.5C7.2 13.85 9.35 11.7 12 11.7C14.65 11.7 16.8 13.85 16.8 16.5ZM6.03 14.07L3.51 13.4L3.1 14.94L5.61 15.62ZM8.5 11.08L6.83 9.09L5.6 10.12L7.27 12.11ZM12.8 10.1L12.8 7.5L11.2 7.5L11.2 10.1ZM16.73 12.11L18.4 10.12L17.17 9.09L15.5 11.08ZM18.39 15.62L20.9 14.94L20.49 13.4L17.97 14.07ZM2 17.5L22 17.5L22 19.3L2 19.3ZM8.5 23L12 19.8L15.5 23Z",
+        "weather-sunset" to "M7.2 16.5C7.2 13.85 9.35 11.7 12 11.7C14.65 11.7 16.8 13.85 16.8 16.5ZM6.03 14.07L3.51 13.4L3.1 14.94L5.61 15.62ZM8.5 11.08L6.83 9.09L5.6 10.12L7.27 12.11ZM12.8 10.1L12.8 7.5L11.2 7.5L11.2 10.1ZM16.73 12.11L18.4 10.12L17.17 9.09L15.5 11.08ZM18.39 15.62L20.9 14.94L20.49 13.4L17.97 14.07ZM2 17.5L22 17.5L22 19.3L2 19.3ZM8.5 20L15.5 20L12 23.2Z",
+        "weather-lightning" to "M6 15.5H19C21.2 15.5 23 13.7 23 11.5C23 9.4 21.4 7.7 19.3 7.5C18.6 4.1 15.6 1.5 12 1.5C9.1 1.5 6.6 3.1 5.4 5.5C2.9 5.8 1 7.9 1 10.5C1 13.3 3.2 15.5 6 15.5ZM11.5 12L8.5 18L11.2 18L10.2 23L15.5 16L12.7 16L14 12Z",
+        "weather-snowy" to "M6 15H19C21.2 15 23 13.2 23 11C23 8.9 21.4 7.2 19.3 7C18.6 3.6 15.6 1 12 1C9.1 1 6.6 2.6 5.4 5C2.9 5.3 1 7.4 1 10C1 12.8 3.2 15 6 15ZM9.2 18C9.2 18.66 8.66 19.2 8 19.2C7.34 19.2 6.8 18.66 6.8 18C6.8 17.34 7.34 16.8 8 16.8C8.66 16.8 9.2 17.34 9.2 18ZM17.2 18C17.2 18.66 16.66 19.2 16 19.2C15.34 19.2 14.8 18.66 14.8 18C14.8 17.34 15.34 16.8 16 16.8C16.66 16.8 17.2 17.34 17.2 18ZM13.2 20.3C13.2 20.96 12.66 21.5 12 21.5C11.34 21.5 10.8 20.96 10.8 20.3C10.8 19.64 11.34 19.1 12 19.1C12.66 19.1 13.2 19.64 13.2 20.3ZM9.1 22.4C9.1 23.01 8.61 23.5 8 23.5C7.39 23.5 6.9 23.01 6.9 22.4C6.9 21.79 7.39 21.3 8 21.3C8.61 21.3 9.1 21.79 9.1 22.4ZM17.1 22.4C17.1 23.01 16.61 23.5 16 23.5C15.39 23.5 14.9 23.01 14.9 22.4C14.9 21.79 15.39 21.3 16 21.3C16.61 21.3 17.1 21.79 17.1 22.4Z",
+        "weather-pouring" to "M6 15H19C21.2 15 23 13.2 23 11C23 8.9 21.4 7.2 19.3 7C18.6 3.6 15.6 1 12 1C9.1 1 6.6 2.6 5.4 5C2.9 5.3 1 7.4 1 10C1 12.8 3.2 15 6 15ZM6.73 16.77L5.23 21.77L6.77 22.23L8.27 17.23ZM10.73 16.77L9.23 21.77L10.77 22.23L12.27 17.23ZM14.73 16.77L13.23 21.77L14.77 22.23L16.27 17.23ZM18.73 16.77L17.23 21.77L18.77 22.23L20.27 17.23Z",
+        "battery-alert" to "M6 2H12V4H14V22H4V4H6V2ZM6 6V20H12V6H6ZM18.5 8L20.5 8L20.5 15L18.5 15ZM18.5 16L20.5 16L20.5 18L18.5 18Z",
+        "battery-outline" to "M9 2H15V4H17V22H7V4H9V2ZM9 6V20H15V6H9Z",
+        "battery-20" to "M9 2H15V4H17V22H7V4H9V2ZM9 6V20H15V6H9ZM10 16.6L14 16.6L14 19L10 19Z",
+        "battery-50" to "M9 2H15V4H17V22H7V4H9V2ZM9 6V20H15V6H9ZM10 13L14 13L14 19L10 19Z",
+        "battery-80" to "M9 2H15V4H17V22H7V4H9V2ZM9 6V20H15V6H9ZM10 9.4L14 9.4L14 19L10 19Z",
+        "wifi-off" to "M2 8.5Q12 -0.5 22 8.5L20.3 10.2Q12 3 3.7 10.2ZM5 12.2Q12 6.3 19 12.2L17.4 13.8Q12 9.3 6.6 13.8ZM8.4 16Q12 13.2 15.6 16L12 20ZM2.33 3.87L20.33 21.87L21.67 20.53L3.67 2.53Z",
+        "bluetooth" to "M11 2L12 2L17.7 7.7L13.4 12L17.7 16.3L12 22L11 22L11 14.4L6.4 19L5 17.6L10.6 12L5 6.4L6.4 5L11 9.6ZM13 5.8L14.9 7.7L13 9.6ZM13 14.4L14.9 16.3L13 18.2Z",
+        "bluetooth-off" to "M11 2L12 2L17.7 7.7L13.4 12L17.7 16.3L12 22L11 22L11 14.4L6.4 19L5 17.6L10.6 12L5 6.4L6.4 5L11 9.6ZM13 5.8L14.9 7.7L13 9.6ZM13 14.4L14.9 16.3L13 18.2ZM2.33 3.87L20.33 21.87L21.67 20.53L3.67 2.53Z",
+        "motion-sensor-off" to "M13.5 5.5C14.6 5.5 15.5 4.6 15.5 3.5C15.5 2.4 14.6 1.5 13.5 1.5C12.4 1.5 11.5 2.4 11.5 3.5C11.5 4.6 12.4 5.5 13.5 5.5ZM9.8 8.9L7 23H9.1L10.9 15L13 17V23H15V15.5L12.9 13.5L13.5 10.5C14.8 12 16.8 13 19 13V11C17.1 11 15.5 10 14.7 8.6L13.7 7C13.3 6.4 12.7 6 12 6C11.7 6 11.5 6.1 11.2 6.2L6 8.3V13H8V9.6L9.8 8.9ZM2.33 3.87L20.33 21.87L21.67 20.53L3.67 2.53Z",
+        "home-battery" to "M12 3L2 12L5 12L5 21L19 21L19 12L22 12ZM10 11.5L14 11.5L14 18.5L10 18.5ZM11 10.5L13 10.5L13 11.5L11 11.5Z",
+        "lightning-bolt" to "M11 15L6 15L13 1L13 9L18 9L11 23Z",
+        "leaf" to "M4.5 19.5C4.5 10 10.5 4 21 3C20 13.5 14 19.5 4.5 19.5ZM6.96 17.96L15.96 8.96L15.04 8.04L6.04 17.04ZM2.87 22.27L4.97 20.17L3.83 19.03L1.73 21.13Z",
+        "led-strip-variant" to "M3.5 8.5H20.5Q22 8.5 22 10V14Q22 15.5 20.5 15.5H3.5Q2 15.5 2 14V10Q2 8.5 3.5 8.5ZM4 10.75L6.5 10.75L6.5 13.25L4 13.25ZM8.5 10.75L11 10.75L11 13.25L8.5 13.25ZM13 10.75L15.5 10.75L15.5 13.25L13 13.25ZM17.5 10.75L20 10.75L20 13.25L17.5 13.25Z",
+        "lightbulb-outline" to "M9 21H15V19H9V21ZM12 2C8.1 2 5 5.1 5 9C5 11.4 6.2 13.5 8 14.7V17H16V14.7C17.8 13.5 19 11.4 19 9C19 5.1 15.9 2 12 2ZM12 4C9.2 4 7 6.2 7 9C7 10.7 7.9 12.3 9.3 13.2L10 13.7V15H14V13.7L14.7 13.2C16.1 12.3 17 10.7 17 9C17 6.2 14.8 4 12 4Z",
+        "lightbulb-off" to "M9 21H15V19H9V21ZM12 2C8.1 2 5 5.1 5 9C5 11.4 6.2 13.5 8 14.7V17H16V14.7C17.8 13.5 19 11.4 19 9C19 5.1 15.9 2 12 2ZM2.33 3.87L20.33 21.87L21.67 20.53L3.67 2.53Z",
+        "power-plug" to "M8 2L10 2L10 7L8 7ZM14 2L16 2L16 7L14 7ZM6 7H18V12C18 14.8 16 17 13 17.4V22H11V17.4C8 17 6 14.8 6 12Z",
+        "power-plug-off" to "M8 2L10 2L10 7L8 7ZM14 2L16 2L16 7L14 7ZM6 7H18V12C18 14.8 16 17 13 17.4V22H11V17.4C8 17 6 14.8 6 12ZM2.33 3.87L20.33 21.87L21.67 20.53L3.67 2.53Z",
+        "outlet" to "M6.5 3H17.5Q21 3 21 6.5V17.5Q21 21 17.5 21H6.5Q3 21 3 17.5V6.5Q3 3 6.5 3ZM8 7L9.8 7L9.8 12L8 12ZM14.2 7L16 7L16 12L14.2 12ZM13.6 16C13.6 16.88 12.88 17.6 12 17.6C11.12 17.6 10.4 16.88 10.4 16C10.4 15.12 11.12 14.4 12 14.4C12.88 14.4 13.6 15.12 13.6 16Z",
+        "speaker-wireless" to "M5.6 5.4H13.6C14.48 5.4 15.2 6.12 15.2 7V18.2C15.2 19.08 14.48 19.8 13.6 19.8H5.6C4.72 19.8 4 19.08 4 18.2V7C4 6.12 4.72 5.4 5.6 5.4ZM9.6 11C7.84 11 6.4 12.44 6.4 14.2C6.4 15.96 7.84 17.4 9.6 17.4C11.36 17.4 12.8 15.96 12.8 14.2C12.8 12.44 11.36 11 9.6 11ZM14.59 6.47C17.27 9.67 17.27 14.33 14.59 17.53L13.44 16.56C15.65 13.92 15.65 10.08 13.44 7.44ZM16.2 3.8C20.73 8.33 20.73 15.67 16.2 20.2L15.14 19.14C19.09 15.2 19.09 8.8 15.14 4.86Z",
+        "cast" to "M1 9.5V5Q1 3 3 3H21Q23 3 23 5V19Q23 21 21 21H14V19H21V5H3V9.5ZM1 21V17.5C2.93 17.5 4.5 19.07 4.5 21ZM1 13.8C4.98 13.8 8.2 17.02 8.2 21L6.5 21C6.5 17.96 4.04 15.5 1 15.5ZM1 10C7.08 10 12 14.92 12 21L10.3 21C10.3 15.86 6.14 11.7 1 11.7Z",
+        "music-note" to "M12 3H14C14 5.5 16.5 6.5 18.5 7.5L17.6 9.3C16.2 8.6 15 8 14 7.2V17C14 19.2 12.2 21 10 21C7.8 21 6 19.2 6 17C6 14.8 7.8 13 10 13C10.7 13 11.4 13.2 12 13.6Z",
+        "volume-mute" to "M3 9V15H7L12 20V4L7 9H3ZM21 9.2L20.3 8.5L17.5 11.3L14.7 8.5L14 9.2L16.8 12L14 14.8L14.7 15.5L17.5 12.7L20.3 15.5L21 14.8L18.2 12Z",
+        "volume-low" to "M3 9V15H7L12 20V4L7 9H3ZM14.97 9.03C16.61 10.67 16.61 13.33 14.97 14.97L13.84 13.84C14.85 12.82 14.85 11.18 13.84 10.16Z",
+        "volume-medium" to "M3 9V15H7L12 20V4L7 9H3ZM14.97 9.03C16.61 10.67 16.61 13.33 14.97 14.97L13.84 13.84C14.85 12.82 14.85 11.18 13.84 10.16ZM16.76 6.33C18.43 7.74 19.4 9.81 19.4 12C19.4 14.19 18.43 16.26 16.76 17.67L15.73 16.44C17.04 15.34 17.8 13.71 17.8 12C17.8 10.29 17.04 8.66 15.73 7.56Z",
+        "play-pause" to "M3 5L11 12L3 19ZM13 5L16 5L16 19L13 19ZM18 5L21 5L21 19L18 19Z",
+        "play-circle" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM10 7.5L16.5 12L10 16.5Z",
+        "pause-circle" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM8.8 7.5L11 7.5L11 16.5L8.8 16.5ZM13 7.5L15.2 7.5L15.2 16.5L13 16.5Z",
+        "stop-circle" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM8.5 8.5L15.5 8.5L15.5 15.5L8.5 15.5Z",
+        "washing-machine" to "M6 2H18Q20 2 20 4V20Q20 22 18 22H6Q4 22 4 20V4Q4 2 6 2ZM17 13.5C17 16.26 14.76 18.5 12 18.5C9.24 18.5 7 16.26 7 13.5C7 10.74 9.24 8.5 12 8.5C14.76 8.5 17 10.74 17 13.5ZM15.4 13.5C15.4 15.38 13.88 16.9 12 16.9C10.12 16.9 8.6 15.38 8.6 13.5C8.6 11.62 10.12 10.1 12 10.1C13.88 10.1 15.4 11.62 15.4 13.5ZM8.5 5C8.5 5.55 8.05 6 7.5 6C6.95 6 6.5 5.55 6.5 5C6.5 4.45 6.95 4 7.5 4C8.05 4 8.5 4.45 8.5 5ZM11.5 5C11.5 5.55 11.05 6 10.5 6C9.95 6 9.5 5.55 9.5 5C9.5 4.45 9.95 4 10.5 4C11.05 4 11.5 4.45 11.5 5ZM14 4.2L18 4.2L18 5.8L14 5.8Z",
+        "dishwasher" to "M6 2H18Q20 2 20 4V20Q20 22 18 22H6Q4 22 4 20V4Q4 2 6 2ZM6 6.5L18 6.5L18 7.7L6 7.7ZM8.9 4.3C8.9 4.8 8.5 5.2 8 5.2C7.5 5.2 7.1 4.8 7.1 4.3C7.1 3.8 7.5 3.4 8 3.4C8.5 3.4 8.9 3.8 8.9 4.3ZM11.9 4.3C11.9 4.8 11.5 5.2 11 5.2C10.5 5.2 10.1 4.8 10.1 4.3C10.1 3.8 10.5 3.4 11 3.4C11.5 3.4 11.9 3.8 11.9 4.3ZM9 9.2L15 9.2L15 10.6L9 10.6ZM6 12L18 12L18 20L6 20Z",
+        "fridge" to "M7 2H17Q19 2 19 4V20Q19 22 17 22H7Q5 22 5 20V4Q5 2 7 2ZM5 9L19 9L19 10.4L5 10.4ZM7 4.5L8.5 4.5L8.5 7.5L7 7.5ZM7 12L8.5 12L8.5 16.5L7 16.5Z",
+        "coffee-maker" to "M5 2L19 2L19 6L5 6ZM15 6L19 6L19 20L15 20ZM5 20L19 20L19 22L5 22ZM9 6L11 6L11 8.5L9 8.5ZM6.5 12H13.5V15.5C13.5 17.4 12 19 10 19C8 19 6.5 17.4 6.5 15.5Z",
+        "garage-open" to "M12 2L1 8.5V22H23V8.5L12 2ZM4 10H20V22H4ZM5.5 12H18.5V13.5H5.5Z",
+        "gate" to "M2 4L4.5 4L4.5 21L2 21ZM19.5 4L22 4L22 21L19.5 21ZM4.5 7L19.5 7L19.5 8.6L4.5 8.6ZM4.5 15L19.5 15L19.5 16.6L4.5 16.6ZM8 8.6L9.6 8.6L9.6 15L8 15ZM11.2 8.6L12.8 8.6L12.8 15L11.2 15ZM14.4 8.6L16 8.6L16 15L14.4 15Z",
+        "gate-open" to "M2 4L4.5 4L4.5 21L2 21ZM19.5 4L22 4L22 21L19.5 21ZM4.5 6.5L9 9L9 18L4.5 16.5ZM6 9L7.5 9.8L7.5 15.8L6 15.2ZM19.5 6.5L15 9L15 18L19.5 16.5ZM18 9L16.5 9.8L16.5 15.8L18 15.2Z",
+        "door" to "M6 3L18 3L18 21L6 21ZM16.2 12C16.2 12.55 15.75 13 15.2 13C14.65 13 14.2 12.55 14.2 12C14.2 11.45 14.65 11 15.2 11C15.75 11 16.2 11.45 16.2 12ZM4 21L20 21L20 22.5L4 22.5Z",
+        "window-shutter" to "M3 3L21 3L21 6L3 6ZM4 7.5L20 7.5L20 9.7L4 9.7ZM4 11L20 11L20 13.2L4 13.2ZM4 14.5L20 14.5L20 16.7L4 16.7ZM4 18L20 18L20 20.2L4 20.2Z",
+        "window-shutter-open" to "M3 3L21 3L21 6L3 6ZM4 7L20 7L20 9.2L4 9.2ZM4 10.5L20 10.5L20 21L4 21ZM6 12.5L18 12.5L18 19L6 19Z",
+        "blinds-open" to "M3 3L21 3L21 5L3 5ZM4 6.5L20 6.5L20 8.5L4 8.5ZM11.2 8.5L12.8 8.5L12.8 19.5L11.2 19.5ZM13.3 20.8C13.3 21.52 12.72 22.1 12 22.1C11.28 22.1 10.7 21.52 10.7 20.8C10.7 20.08 11.28 19.5 12 19.5C12.72 19.5 13.3 20.08 13.3 20.8Z",
+        "car-electric" to "M6.8 9.1H17.2C17.76 9.1 18.24 9.42 18.48 9.9L20 13.9V21.1C20 21.58 19.68 21.9 19.2 21.9H18.4C17.92 21.9 17.6 21.58 17.6 21.1V20.3H6.4V21.1C6.4 21.58 6.08 21.9 5.6 21.9H4.8C4.32 21.9 4 21.58 4 21.1V13.9L5.52 9.9C5.76 9.42 6.24 9.1 6.8 9.1ZM6.96 10.7H17.04L18.16 13.5H5.84L6.96 10.7ZM8.8 17.1C8.8 17.76 8.26 18.3 7.6 18.3C6.94 18.3 6.4 17.76 6.4 17.1C6.4 16.44 6.94 15.9 7.6 15.9C8.26 15.9 8.8 16.44 8.8 17.1ZM17.6 17.1C17.6 17.76 17.06 18.3 16.4 18.3C15.74 18.3 15.2 17.76 15.2 17.1C15.2 16.44 15.74 15.9 16.4 15.9C17.06 15.9 17.6 16.44 17.6 17.1ZM11.6 0.8L8.6 5.4L11 5.4L10 8.2L14.2 3.4L11.8 3.4L13 0.8Z",
+        "doorbell-video" to "M8.5 2H15.5Q18 2 18 4.5V19.5Q18 22 15.5 22H8.5Q6 22 6 19.5V4.5Q6 2 8.5 2ZM14.2 7C14.2 8.22 13.22 9.2 12 9.2C10.78 9.2 9.8 8.22 9.8 7C9.8 5.78 10.78 4.8 12 4.8C13.22 4.8 14.2 5.78 14.2 7ZM15 15.5C15 17.16 13.66 18.5 12 18.5C10.34 18.5 9 17.16 9 15.5C9 13.84 10.34 12.5 12 12.5C13.66 12.5 15 13.84 15 15.5ZM13.6 15.5C13.6 16.38 12.88 17.1 12 17.1C11.12 17.1 10.4 16.38 10.4 15.5C10.4 14.62 11.12 13.9 12 13.9C12.88 13.9 13.6 14.62 13.6 15.5Z",
+        "shield-check" to "M12 1L3 5V11C3 16.5 6.8 21.7 12 23C17.2 21.7 21 16.5 21 11V5L12 1ZM10.6 16.6L6.6 12.6L8 11.2L10.6 13.8L16.4 8L17.8 9.4L10.6 16.6Z",
+        "shield-alert" to "M12 1L3 5V11C3 16.5 6.8 21.7 12 23C17.2 21.7 21 16.5 21 11V5L12 1ZM11 6.5L13 6.5L13 14.5L11 14.5ZM11 16L13 16L13 18L11 18Z",
+        "arrow-right" to "M4 11V13H16L10.5 18.5L11.9 19.9L19.8 12L11.9 4.1L10.5 5.5L16 11H4Z",
+        "chevron-left" to "M15.4 16.6L10.8 12L15.4 7.4L14 6L8 12L14 18L15.4 16.6Z",
+        "dots-horizontal" to "M8 12C8 13.1 7.1 14 6 14C4.9 14 4 13.1 4 12C4 10.9 4.9 10 6 10C7.1 10 8 10.9 8 12ZM14 12C14 13.1 13.1 14 12 14C10.9 14 10 13.1 10 12C10 10.9 10.9 10 12 10C13.1 10 14 10.9 14 12ZM20 12C20 13.1 19.1 14 18 14C16.9 14 16 13.1 16 12C16 10.9 16.9 10 18 10C19.1 10 20 10.9 20 12Z",
+        "cog-outline" to "M10.16 4.63L10.44 2.12L13.56 2.12L13.84 4.63L15.91 5.49L17.88 3.91L20.09 6.12L18.51 8.09L19.37 10.16L21.88 10.44L21.88 13.56L19.37 13.84L18.51 15.91L20.09 17.88L17.88 20.09L15.91 18.51L13.84 19.37L13.56 21.88L10.44 21.88L10.16 19.37L8.09 18.51L6.12 20.09L3.91 17.88L5.49 15.91L4.63 13.84L2.12 13.56L2.12 10.44L4.63 10.16L5.49 8.09L3.91 6.12L6.12 3.91L8.09 5.49ZM10.53 6.1L10.75 4.1L13.25 4.1L13.47 6.1L15.13 6.79L16.7 5.53L18.47 7.3L17.21 8.87L17.9 10.53L19.9 10.75L19.9 13.25L17.9 13.47L17.21 15.13L18.47 16.7L16.7 18.47L15.13 17.21L13.47 17.9L13.25 19.9L10.75 19.9L10.53 17.9L8.87 17.21L7.3 18.47L5.53 16.7L6.79 15.13L6.1 13.47L4.1 13.25L4.1 10.75L6.1 10.53L6.79 8.87L5.53 7.3L7.3 5.53L8.87 6.79ZM16 12C16 14.21 14.21 16 12 16C9.79 16 8 14.21 8 12C8 9.79 9.79 8 12 8C14.21 8 16 9.79 16 12ZM14.2 12C14.2 13.22 13.22 14.2 12 14.2C10.78 14.2 9.8 13.22 9.8 12C9.8 10.78 10.78 9.8 12 9.8C13.22 9.8 14.2 10.78 14.2 12Z",
+        "sync" to "M4.48 9.26C5.46 6.58 7.8 4.62 10.61 4.12C13.43 3.63 16.29 4.67 18.13 6.86L16.83 7.95C15.38 6.23 13.12 5.4 10.91 5.8C8.69 6.19 6.85 7.73 6.08 9.85ZM19.47 5.73L19.65 9.99L15.49 9.08ZM19.52 14.74C18.54 17.42 16.2 19.38 13.39 19.88C10.57 20.37 7.71 19.33 5.87 17.14L7.17 16.05C8.62 17.77 10.88 18.6 13.09 18.2C15.31 17.81 17.15 16.27 17.92 14.15ZM4.53 18.27L4.35 14.01L8.51 14.92Z",
+        "key" to "M11.88 13.1C11.32 15.58 8.98 17.25 6.45 16.97C3.92 16.69 2 14.55 2 12C2 9.45 3.92 7.31 6.45 7.03C8.98 6.75 11.32 8.42 11.88 10.9L22 10.9L22 13.1L20.5 13.1L20.5 16L18.5 16L18.5 13.1L16.5 13.1L16.5 15L14.5 15L14.5 13.1ZM9 12C9 13.1 8.1 14 7 14C5.9 14 5 13.1 5 12C5 10.9 5.9 10 7 10C8.1 10 9 10.9 9 12Z",
+        "magnify" to "M16 9.5C16 13.09 13.09 16 9.5 16C5.91 16 3 13.09 3 9.5C3 5.91 5.91 3 9.5 3C13.09 3 16 5.91 16 9.5ZM14.3 9.5C14.3 12.15 12.15 14.3 9.5 14.3C6.85 14.3 4.7 12.15 4.7 9.5C4.7 6.85 6.85 4.7 9.5 4.7C12.15 4.7 14.3 6.85 14.3 9.5ZM13.52 15.08L20.02 21.58L21.58 20.02L15.08 13.52Z",
+        "map-marker" to "M12 2C8.1 2 5 5.1 5 9C5 14.2 12 22 12 22C12 22 19 14.2 19 9C19 5.1 15.9 2 12 2ZM14.5 9C14.5 10.38 13.38 11.5 12 11.5C10.62 11.5 9.5 10.38 9.5 9C9.5 7.62 10.62 6.5 12 6.5C13.38 6.5 14.5 7.62 14.5 9Z",
+        "star" to "M12 2.2L14.53 9.12L21.89 9.39L16.09 13.93L18.11 21.01L12 16.9L5.89 21.01L7.91 13.93L2.11 9.39L9.47 9.12Z",
+        "star-outline" to "M12 2.2L14.53 9.12L21.89 9.39L16.09 13.93L18.11 21.01L12 16.9L5.89 21.01L7.91 13.93L2.11 9.39L9.47 9.12ZM12 6.3L13.62 10.68L18.28 10.86L14.62 13.75L15.88 18.24L12 15.65L8.12 18.24L9.38 13.75L5.72 10.86L10.38 10.68Z",
+        "heart-outline" to "M12 21L10.5 19.7C5.4 15.1 2 12 2 8.5C2 5.4 4.4 3 7.5 3C9.2 3 10.9 3.8 12 5.1C13.1 3.8 14.8 3 16.5 3C19.6 3 22 5.4 22 8.5C22 12 18.6 15.1 13.5 19.7L12 21ZM12 18.74L10.92 17.8C7.25 14.49 4.8 12.26 4.8 9.74C4.8 7.51 6.53 5.78 8.76 5.78C9.98 5.78 11.21 6.36 12 7.29C12.79 6.36 14.02 5.78 15.24 5.78C17.47 5.78 19.2 7.51 19.2 9.74C19.2 12.26 16.75 14.49 13.08 17.8L12 18.74Z",
+        "account-circle" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM15.2 9C15.2 10.77 13.77 12.2 12 12.2C10.23 12.2 8.8 10.77 8.8 9C8.8 7.23 10.23 5.8 12 5.8C13.77 5.8 15.2 7.23 15.2 9ZM6.2 17.6C7.5 15.6 9.6 14.5 12 14.5C14.4 14.5 16.5 15.6 17.8 17.6C16.3 19.1 14.3 20 12 20C9.7 20 7.7 19.1 6.2 17.6Z",
+        "account-group" to "M15.2 7.5C15.2 9.27 13.77 10.7 12 10.7C10.23 10.7 8.8 9.27 8.8 7.5C8.8 5.73 10.23 4.3 12 4.3C13.77 4.3 15.2 5.73 15.2 7.5ZM6.2 19C6.2 15.8 9 14 12 14C15 14 17.8 15.8 17.8 19ZM7.3 9.5C7.3 10.77 6.27 11.8 5 11.8C3.73 11.8 2.7 10.77 2.7 9.5C2.7 8.23 3.73 7.2 5 7.2C6.27 7.2 7.3 8.23 7.3 9.5ZM0.8 18.5C0.8 16.2 2.6 14.9 5 14.9C5.4 14.9 5.7 14.9 6 15C5.2 16 4.8 17.2 4.8 18.5ZM21.3 9.5C21.3 10.77 20.27 11.8 19 11.8C17.73 11.8 16.7 10.77 16.7 9.5C16.7 8.23 17.73 7.2 19 7.2C20.27 7.2 21.3 8.23 21.3 9.5ZM23.2 18.5C23.2 16.2 21.4 14.9 19 14.9C18.6 14.9 18.3 14.9 18 15C18.8 16 19.2 17.2 19.2 18.5Z",
+        "home-outline" to "M12 3L2 12L5 12L5 20L19 20L19 12L22 12ZM12 5.7L17 10.2L17 18L7 18L7 10.2ZM10 12.5L14 12.5L14 18L10 18Z",
+        "robot-vacuum-variant" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM4.21 8.37C5.62 5.34 8.66 3.4 12 3.4C15.34 3.4 18.38 5.34 19.79 8.37L18.53 8.96C17.34 6.42 14.8 4.8 12 4.8C9.2 4.8 6.66 6.42 5.47 8.96ZM14.2 13C14.2 14.22 13.22 15.2 12 15.2C10.78 15.2 9.8 14.22 9.8 13C9.8 11.78 10.78 10.8 12 10.8C13.22 10.8 14.2 11.78 14.2 13Z",
+        "brightness-7" to "M19.6 12.9L22.2 12.9L22.2 11.1L19.6 11.1ZM16.74 18.01L18.58 19.85L19.85 18.58L18.01 16.74ZM11.1 19.6L11.1 22.2L12.9 22.2L12.9 19.6ZM5.99 16.74L4.15 18.58L5.42 19.85L7.26 18.01ZM4.4 11.1L1.8 11.1L1.8 12.9L4.4 12.9ZM7.26 5.99L5.42 4.15L4.15 5.42L5.99 7.26ZM12.9 4.4L12.9 1.8L11.1 1.8L11.1 4.4ZM18.01 7.26L19.85 5.42L18.58 4.15L16.74 5.99ZM18 12C18 15.31 15.31 18 12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C15.31 6 18 8.69 18 12ZM16.4 12C16.4 14.43 14.43 16.4 12 16.4C9.57 16.4 7.6 14.43 7.6 12C7.6 9.57 9.57 7.6 12 7.6C14.43 7.6 16.4 9.57 16.4 12ZM15 12C15 13.66 13.66 15 12 15C10.34 15 9 13.66 9 12C9 10.34 10.34 9 12 9C13.66 9 15 10.34 15 12Z",
+        "theme-light-dark" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM20.3 12C20.3 16.58 16.58 20.3 12 20.3C7.42 20.3 3.7 16.58 3.7 12C3.7 7.42 7.42 3.7 12 3.7C16.58 3.7 20.3 7.42 20.3 12ZM12 3.7C16.58 3.7 20.3 7.42 20.3 12C20.3 16.58 16.58 20.3 12 20.3Z",
+        "clock-outline" to "M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12ZM20.2 12C20.2 16.53 16.53 20.2 12 20.2C7.47 20.2 3.8 16.53 3.8 12C3.8 7.47 7.47 3.8 12 3.8C16.53 3.8 20.2 7.47 20.2 12ZM11 6.5H12.5V11.6L16.6 14L15.9 15.3L11 12.4V6.5Z",
+        "calendar-outline" to "M5 3H7V1.5H9V3H15V1.5H17V3H19C20.1 3 21 3.9 21 5V20C21 21.1 20.1 22 19 22H5C3.9 22 3 21.1 3 20V5C3 3.9 3.9 3 5 3ZM5 9L19 9L19 20L5 20ZM7 11L11 11L11 15L7 15Z",
+        "chart-line" to "M3 3H5V19H21V21H3ZM7.24 16.52L10.17 12.33L13.59 15.27L20.68 7.09L19.32 5.91L13.41 12.73L9.83 9.67L5.76 15.48Z",
+        "chart-bar" to "M3 13L7 13L7 21L3 21ZM10 8L14 8L14 21L10 21ZM17 3L21 3L21 21L17 21Z",
+        "table" to "M4.5 3H19.5Q21 3 21 4.5V19.5Q21 21 19.5 21H4.5Q3 21 3 19.5V4.5Q3 3 4.5 3ZM5 9L11 9L11 13.5L5 13.5ZM13 9L19 9L19 13.5L13 13.5ZM5 15.5L11 15.5L11 19L5 19ZM13 15.5L19 15.5L19 19L13 19Z",
+        "pencil" to "M3 17.25L3 21L6.75 21L17.4 10.35L13.65 6.6ZM15.06 5.19L18.81 8.94L20.6 7.15L16.85 3.4Z",
+        "delete" to "M5 4L19 4L19 6L5 6ZM9 2.5L15 2.5L15 4L9 4ZM6 7L18 7L17 21L7 21Z",
+        "trash-can" to "M5 4L19 4L19 6L5 6ZM9 2.5L15 2.5L15 4L9 4ZM6 7L18 7L17 21L7 21ZM9.2 9.5L10.8 9.5L10.8 18.5L9.2 18.5ZM13.2 9.5L14.8 9.5L14.8 18.5L13.2 18.5Z",
+        "fullscreen" to "M3 3L10 3L10 5L5 5L5 10L3 10ZM3 21L10 21L10 19L5 19L5 14L3 14ZM21 3L14 3L14 5L19 5L19 10L21 10ZM21 21L14 21L14 19L19 19L19 14L21 14Z",
+        "fullscreen-exit" to "M8 3L10 3L10 10L3 10L3 8L8 8ZM8 21L10 21L10 14L3 14L3 16L8 16ZM16 3L14 3L14 10L21 10L21 8L16 8ZM16 21L14 21L14 14L21 14L21 16L16 16Z",
+        "microphone-off" to "M12 2C10.3 2 9 3.3 9 5V11C9 12.7 10.3 14 12 14C13.7 14 15 12.7 15 11V5C15 3.3 13.7 2 12 2ZM5 10.5H6.8C6.8 13.6 9.1 15.8 12 15.8C14.9 15.8 17.2 13.6 17.2 10.5H19C19 14.2 16.2 17.3 12.9 17.8V21H11.1V17.8C7.8 17.3 5 14.2 5 10.5ZM2.33 3.87L20.33 21.87L21.67 20.53L3.67 2.53Z",
+        "video" to "M4 6H13Q15 6 15 8V16Q15 18 13 18H4Q2 18 2 16V8Q2 6 4 6ZM16 10L22 6L22 18L16 14Z",
+        "video-off" to "M4 6H13Q15 6 15 8V16Q15 18 13 18H4Q2 18 2 16V8Q2 6 4 6ZM16 10L22 6L22 18L16 14ZM2.33 3.87L20.33 21.87L21.67 20.53L3.67 2.53Z",
+        "camera" to "M4 7H7.5L9 5H15L16.5 7H20Q22 7 22 9V19Q22 21 20 21H4Q2 21 2 19V9Q2 7 4 7ZM16.2 14C16.2 16.32 14.32 18.2 12 18.2C9.68 18.2 7.8 16.32 7.8 14C7.8 11.68 9.68 9.8 12 9.8C14.32 9.8 16.2 11.68 16.2 14ZM14.6 14C14.6 15.44 13.44 16.6 12 16.6C10.56 16.6 9.4 15.44 9.4 14C9.4 12.56 10.56 11.4 12 11.4C13.44 11.4 14.6 12.56 14.6 14Z",
+        "laptop" to "M5.5 4H18.5Q20 4 20 5.5V13.5Q20 15 18.5 15H5.5Q4 15 4 13.5V5.5Q4 4 5.5 4ZM6 6L18 6L18 13L6 13ZM1 16.5H23V18Q23 19.5 21.5 19.5H2.5Q1 19.5 1 18Z",
+        "cellphone" to "M8.5 1H15.5Q18 1 18 3.5V20.5Q18 23 15.5 23H8.5Q6 23 6 20.5V3.5Q6 1 8.5 1ZM7.8 4L16.2 4L16.2 18.5L7.8 18.5ZM12.9 20.6C12.9 21.1 12.5 21.5 12 21.5C11.5 21.5 11.1 21.1 11.1 20.6C11.1 20.1 11.5 19.7 12 19.7C12.5 19.7 12.9 20.1 12.9 20.6Z",
+        "router-wireless" to "M4.5 14H19.5Q21 14 21 15.5V19.5Q21 21 19.5 21H4.5Q3 21 3 19.5V15.5Q3 14 4.5 14ZM8 17.5C8 18.05 7.55 18.5 7 18.5C6.45 18.5 6 18.05 6 17.5C6 16.95 6.45 16.5 7 16.5C7.55 16.5 8 16.95 8 17.5ZM11.5 17.5C11.5 18.05 11.05 18.5 10.5 18.5C9.95 18.5 9.5 18.05 9.5 17.5C9.5 16.95 9.95 16.5 10.5 16.5C11.05 16.5 11.5 16.95 11.5 17.5ZM16 9.5L17.6 9.5L17.6 14L16 14ZM14.25 6.45C15.66 5.05 17.94 5.05 19.35 6.45L18.36 7.44C17.5 6.59 16.1 6.59 15.24 7.44ZM12.13 4.33C14.71 1.76 18.89 1.76 21.47 4.33L20.48 5.32C18.45 3.29 15.15 3.29 13.12 5.32Z",
+        "server" to "M4 2.5H20Q21 2.5 21 3.5V6.5Q21 7.5 20 7.5H4Q3 7.5 3 6.5V3.5Q3 2.5 4 2.5ZM7.5 5C7.5 5.55 7.05 6 6.5 6C5.95 6 5.5 5.55 5.5 5C5.5 4.45 5.95 4 6.5 4C7.05 4 7.5 4.45 7.5 5ZM10 4.5L18 4.5L18 5.5L10 5.5ZM4 9.5H20Q21 9.5 21 10.5V13.5Q21 14.5 20 14.5H4Q3 14.5 3 13.5V10.5Q3 9.5 4 9.5ZM7.5 12C7.5 12.55 7.05 13 6.5 13C5.95 13 5.5 12.55 5.5 12C5.5 11.45 5.95 11 6.5 11C7.05 11 7.5 11.45 7.5 12ZM10 11.5L18 11.5L18 12.5L10 12.5ZM4 16.5H20Q21 16.5 21 17.5V20.5Q21 21.5 20 21.5H4Q3 21.5 3 20.5V17.5Q3 16.5 4 16.5ZM7.5 19C7.5 19.55 7.05 20 6.5 20C5.95 20 5.5 19.55 5.5 19C5.5 18.45 5.95 18 6.5 18C7.05 18 7.5 18.45 7.5 19ZM10 18.5L18 18.5L18 19.5L10 19.5Z",
+        "paw" to "M7.7 10.5C7.7 11.72 6.72 12.7 5.5 12.7C4.28 12.7 3.3 11.72 3.3 10.5C3.3 9.28 4.28 8.3 5.5 8.3C6.72 8.3 7.7 9.28 7.7 10.5ZM11.5 5.8C11.5 7.02 10.52 8 9.3 8C8.08 8 7.1 7.02 7.1 5.8C7.1 4.58 8.08 3.6 9.3 3.6C10.52 3.6 11.5 4.58 11.5 5.8ZM16.9 5.8C16.9 7.02 15.92 8 14.7 8C13.48 8 12.5 7.02 12.5 5.8C12.5 4.58 13.48 3.6 14.7 3.6C15.92 3.6 16.9 4.58 16.9 5.8ZM20.7 10.5C20.7 11.72 19.72 12.7 18.5 12.7C17.28 12.7 16.3 11.72 16.3 10.5C16.3 9.28 17.28 8.3 18.5 8.3C19.72 8.3 20.7 9.28 20.7 10.5ZM12 11.5C8.5 11.5 6.5 15.5 6.5 17.8C6.5 19.5 8 20.5 9.5 20.2C10.5 20 11.2 19.6 12 19.6C12.8 19.6 13.5 20 14.5 20.2C16 20.5 17.5 19.5 17.5 17.8C17.5 15.5 15.5 11.5 12 11.5Z",
+        "pool" to "M7 3L8.8 3L8.8 16L7 16ZM15.2 3L17 3L17 16L15.2 16ZM8.8 6.5L15.2 6.5L15.2 8.1L8.8 8.1ZM8.8 10.5L15.2 10.5L15.2 12.1L8.8 12.1ZM2 17.4L2.5 17.87L3 18.16L3.5 18.16L4 17.87L4.5 17.4L5 16.93L5.5 16.64L6 16.64L6.5 16.93L7 17.4L7.5 17.87L8 18.16L8.5 18.16L9 17.87L9.5 17.4L10 16.93L10.5 16.64L11 16.64L11.5 16.93L12 17.4L12.5 17.87L13 18.16L13.5 18.16L14 17.87L14.5 17.4L15 16.93L15.5 16.64L16 16.64L16.5 16.93L17 17.4L17.5 17.87L18 18.16L18.5 18.16L19 17.87L19.5 17.4L20 16.93L20.5 16.64L21 16.64L21.5 16.93L22 17.4L22 19L21.5 18.53L21 18.24L20.5 18.24L20 18.53L19.5 19L19 19.47L18.5 19.76L18 19.76L17.5 19.47L17 19L16.5 18.53L16 18.24L15.5 18.24L15 18.53L14.5 19L14 19.47L13.5 19.76L13 19.76L12.5 19.47L12 19L11.5 18.53L11 18.24L10.5 18.24L10 18.53L9.5 19L9 19.47L8.5 19.76L8 19.76L7.5 19.47L7 19L6.5 18.53L6 18.24L5.5 18.24L5 18.53L4.5 19L4 19.47L3.5 19.76L3 19.76L2.5 19.47L2 19ZM2 20.8L2.5 21.27L3 21.56L3.5 21.56L4 21.27L4.5 20.8L5 20.33L5.5 20.04L6 20.04L6.5 20.33L7 20.8L7.5 21.27L8 21.56L8.5 21.56L9 21.27L9.5 20.8L10 20.33L10.5 20.04L11 20.04L11.5 20.33L12 20.8L12.5 21.27L13 21.56L13.5 21.56L14 21.27L14.5 20.8L15 20.33L15.5 20.04L16 20.04L16.5 20.33L17 20.8L17.5 21.27L18 21.56L18.5 21.56L19 21.27L19.5 20.8L20 20.33L20.5 20.04L21 20.04L21.5 20.33L22 20.8L22 22.4L21.5 21.93L21 21.64L20.5 21.64L20 21.93L19.5 22.4L19 22.87L18.5 23.16L18 23.16L17.5 22.87L17 22.4L16.5 21.93L16 21.64L15.5 21.64L15 21.93L14.5 22.4L14 22.87L13.5 23.16L13 23.16L12.5 22.87L12 22.4L11.5 21.93L11 21.64L10.5 21.64L10 21.93L9.5 22.4L9 22.87L8.5 23.16L8 23.16L7.5 22.87L7 22.4L6.5 21.93L6 21.64L5.5 21.64L5 21.93L4.5 22.4L4 22.87L3.5 23.16L3 23.16L2.5 22.87L2 22.4Z",
+        "fireplace" to "M1 3L23 3L23 5.5L1 5.5ZM3 5.5L21 5.5L21 21L3 21ZM6 9L18 9L18 21L6 21ZM12 12.52C12 12.52 12.84 13.78 12.84 14.83C13.39 14.54 13.85 14.03 14.1 13.36C15.11 14.41 15.57 15.46 15.57 16.93C15.57 18.9 13.97 20.5 12 20.5C10.03 20.5 8.43 18.9 8.43 16.93C8.43 15.67 9.14 14.54 10.07 13.78C10.07 14.49 10.4 15.12 10.95 15.46C10.99 14.37 11.37 13.36 12 12.52ZM12 19.66C12.71 19.66 13.26 19.11 13.26 18.4C13.26 17.73 12.76 17.14 12 16.3C11.24 17.14 10.74 17.73 10.74 18.4C10.74 19.11 11.29 19.66 12 19.66Z",
+        "broom" to "M18.79 1.64L12.59 9.54L14.01 10.66L20.21 2.76ZM10.5 9.5L14.5 13.5L10 20.5L3.5 20.5L3.5 16ZM5.85 18.85L11.85 12.85L11.15 12.15L5.15 18.15Z",
+        "lock-outline" to "M6 8H18Q20 8 20 10V20Q20 22 18 22H6Q4 22 4 20V10Q4 8 6 8ZM6 10L18 10L18 20L6 20ZM13.7 15C13.7 15.94 12.94 16.7 12 16.7C11.06 16.7 10.3 15.94 10.3 15C10.3 14.06 11.06 13.3 12 13.3C12.94 13.3 13.7 14.06 13.7 15ZM7 8V6C7 3.24 9.24 1 12 1C14.76 1 17 3.24 17 6V8H15V6C15 4.34 13.66 3 12 3C10.34 3 9 4.34 9 6V8Z",
     )
 }
 

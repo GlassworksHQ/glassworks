@@ -41,7 +41,7 @@ describe("the published compatibility manifest", () => {
     expect(new Set(published.nativeHacsTypes)).toEqual(new Set(pythonSet("NATIVE_HACS_TYPES")));
     expect(new Set(published.supportedTileFeatures)).toEqual(new Set(pythonSet("SUPPORTED_TILE_FEATURES")));
     expect(new Set(published.containerTypes)).toEqual(new Set(pythonSet("CONTAINER_TYPES")));
-    expect(published.supportedTileFeatures).toHaveLength(9);
+    expect(published.supportedTileFeatures).toHaveLength(14);
     expect(published.containerTypes).toHaveLength(4);
   });
 

@@ -7,6 +7,8 @@ package dev.glassworks.engine.vitro.model
 import dev.glassworks.engine.vitro.data.EntityState
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Calendar
+import java.util.Locale
 
 /** Rendering tier assigned by [CardRouter] for each Lovelace card. */
 enum class CardTier {
@@ -116,37 +118,91 @@ data class EntityRowConfig(
 }
 
 sealed class VisibilityCondition {
-    data class State(val entity: String, val state: String?, val stateNot: String?) : VisibilityCondition()
+    /**
+     * HA's `state` condition. [states] and [statesNot] take one value or a list (`state: [playing, paused]`).
+     * The single-value constructor keeps older call sites working.
+     */
+    data class State(val entity: String, val states: List<String>? = null, val statesNot: List<String>? = null) : VisibilityCondition() {
+        constructor(entity: String, state: String?, stateNot: String?) :
+            this(entity, state?.let { listOf(it) }, stateNot?.let { listOf(it) })
+    }
     data class NumericState(val entity: String, val above: Double?, val below: Double?) : VisibilityCondition()
     data class Screen(val mediaQuery: String) : VisibilityCondition()
     data class And(val conditions: List<VisibilityCondition>) : VisibilityCondition()
     data class Or(val conditions: List<VisibilityCondition>) : VisibilityCondition()
     data class Not(val conditions: List<VisibilityCondition>) : VisibilityCondition()
+    /** HA's `user` condition: visible only to the listed user ids. */
+    data class User(val users: List<String>) : VisibilityCondition()
+    /**
+     * HA's `time` condition. [after] and [before] are minutes from local midnight (0..1439); a window with
+     * `after > before` runs overnight. [weekdays] holds [Calendar] day constants (null means every day).
+     */
+    data class Time(val after: Int?, val before: Int?, val weekdays: Set<Int>?) : VisibilityCondition()
+    /**
+     * A condition Vitro can't evaluate (`sun`, `template`, a malformed `state`, …). It always hides the card:
+     * a hidden camera or alarm card must never appear because a condition was not understood.
+     */
+    data class Unknown(val condition: String) : VisibilityCondition()
 
-    fun evaluate(lookup: (String) -> EntityState?, widthDp: Int = 1024): Boolean = when (this) {
+    fun evaluate(
+        lookup: (String) -> EntityState?,
+        widthDp: Int = 1024,
+        userId: String? = null,
+        nowMinutes: Int = currentLocalMinutes(),
+        weekday: Int = currentLocalWeekday(),
+    ): Boolean = when (this) {
         is State -> {
-            val cur = lookup(entity)?.state
-            when {
-                state != null -> cur == state
-                stateNot != null -> cur != stateNot
-                else -> true
-            }
+            // Like HA's frontend, a missing entity reads as "unavailable": `state_not: off` still shows it.
+            val cur = lookup(entity)?.state ?: UNAVAILABLE
+            (states == null || cur in states) && (statesNot == null || cur !in statesNot)
         }
         is NumericState -> {
             val v = lookup(entity)?.state?.toDoubleOrNull() ?: return false
             (above == null || v > above) && (below == null || v < below)
         }
         is Screen -> evaluateMediaQuery(mediaQuery, widthDp)
-        is And -> conditions.all { it.evaluate(lookup, widthDp) }
-        is Or -> conditions.any { it.evaluate(lookup, widthDp) }
-        is Not -> conditions.none { it.evaluate(lookup, widthDp) }
+        is And -> conditions.all { it.evaluate(lookup, widthDp, userId, nowMinutes, weekday) }
+        is Or -> conditions.any { it.evaluate(lookup, widthDp, userId, nowMinutes, weekday) }
+        is Not -> conditions.none { it.evaluate(lookup, widthDp, userId, nowMinutes, weekday) }
+        is User -> userId != null && userId in users
+        is Time -> evaluateTime(nowMinutes, weekday)
+        is Unknown -> false
+    }
+
+    private fun Time.evaluateTime(nowMinutes: Int, weekday: Int): Boolean {
+        if (weekdays != null && weekday !in weekdays) return false
+        return when {
+            after != null && before != null ->
+                if (after <= before) nowMinutes in after until before else nowMinutes >= after || nowMinutes < before
+            after != null -> nowMinutes >= after
+            before != null -> nowMinutes < before
+            else -> true
+        }
+    }
+
+    /** True when this condition (or one nested in it) depends on the clock, so the view must re-check it. */
+    fun dependsOnTime(): Boolean = when (this) {
+        is Time -> true
+        is And -> conditions.any { it.dependsOnTime() }
+        is Or -> conditions.any { it.dependsOnTime() }
+        is Not -> conditions.any { it.dependsOnTime() }
+        else -> false
+    }
+
+    /** True when this condition (or one nested in it) depends on who is signed in. */
+    fun dependsOnUser(): Boolean = when (this) {
+        is User -> true
+        is And -> conditions.any { it.dependsOnUser() }
+        is Or -> conditions.any { it.dependsOnUser() }
+        is Not -> conditions.any { it.dependsOnUser() }
+        else -> false
     }
 
     fun referencedEntities(out: MutableSet<String>) {
         when (this) {
             is State -> out += entity
             is NumericState -> out += entity
-            is Screen -> Unit
+            is Screen, is User, is Time, is Unknown -> Unit
             is And -> conditions.forEach { it.referencedEntities(out) }
             is Or -> conditions.forEach { it.referencedEntities(out) }
             is Not -> conditions.forEach { it.referencedEntities(out) }
@@ -154,8 +210,18 @@ sealed class VisibilityCondition {
     }
 
     companion object {
+        private const val UNAVAILABLE = "unavailable"
         private val MIN_W = Regex("""min-width\s*:\s*(\d+)px""")
         private val MAX_W = Regex("""max-width\s*:\s*(\d+)px""")
+        private val HHMM = Regex("""^\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*$""")
+        private val WEEKDAYS = mapOf(
+            "mon" to Calendar.MONDAY, "tue" to Calendar.TUESDAY, "wed" to Calendar.WEDNESDAY,
+            "thu" to Calendar.THURSDAY, "fri" to Calendar.FRIDAY, "sat" to Calendar.SATURDAY, "sun" to Calendar.SUNDAY,
+        )
+
+        fun currentLocalMinutes(): Int = Calendar.getInstance().let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) }
+
+        fun currentLocalWeekday(): Int = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
 
         private fun evaluateMediaQuery(q: String, widthDp: Int): Boolean {
             val min = MIN_W.find(q)?.groupValues?.get(1)?.toIntOrNull()
@@ -163,34 +229,71 @@ sealed class VisibilityCondition {
             return (min == null || widthDp >= min) && (max == null || widthDp <= max)
         }
 
+        /** `HH:MM` or `HH:MM:SS` as minutes from midnight, or null when it isn't a valid time of day. */
+        fun parseTimeOfDay(raw: String?): Int? {
+            val m = HHMM.find(raw ?: return null) ?: return null
+            val h = m.groupValues[1].toInt()
+            val min = m.groupValues[2].toInt()
+            if (h !in 0..23 || min !in 0..59) return null
+            return h * 60 + min
+        }
+
+        /** Reads [key] as either one string or a JSON array of strings; null when absent or empty. */
+        fun parseStringList(o: JSONObject, key: String): List<String>? {
+            if (!o.has(key) || o.isNull(key)) return null
+            val out = when (val v = o.opt(key)) {
+                null -> emptyList()
+                is JSONArray -> (0 until v.length()).mapNotNull { i -> v.opt(i)?.takeIf { it != JSONObject.NULL }?.toString() }
+                else -> listOf(v.toString())
+            }
+            return out.ifEmpty { null }
+        }
+
         fun parseList(arr: JSONArray?): List<VisibilityCondition> {
             if (arr == null) return emptyList()
             val out = ArrayList<VisibilityCondition>(arr.length())
             for (i in 0 until arr.length()) {
-                arr.optJSONObject(i)?.let { parse(it) }?.let { out += it }
+                // A non-object entry is a condition we can't read: fail closed rather than drop it.
+                out += arr.optJSONObject(i)?.let { parse(it) } ?: Unknown(arr.opt(i)?.toString().orEmpty())
             }
             return out
         }
 
-        fun parse(o: JSONObject): VisibilityCondition? {
-            return when (o.optString("condition", "state")) {
+        /** Parses one condition. Anything Vitro can't evaluate becomes [Unknown], which hides the card. */
+        fun parse(o: JSONObject): VisibilityCondition {
+            val condName = o.optString("condition", "state")
+            return when (condName) {
                 "state" -> {
-                    val entity = o.optString("entity", "").ifEmpty { return null }
-                    val st = if (o.has("state") && !o.isNull("state")) o.optString("state") else null
-                    val not = if (o.has("state_not") && !o.isNull("state_not")) o.optString("state_not") else null
+                    val entity = o.optString("entity", "").ifEmpty { return Unknown(condName) }
+                    val st = parseStringList(o, "state")
+                    val not = parseStringList(o, "state_not")
+                    if (st == null && not == null) return Unknown(condName)
                     State(entity, st, not)
                 }
                 "numeric_state" -> {
-                    val entity = o.optString("entity", "").ifEmpty { return null }
+                    val entity = o.optString("entity", "").ifEmpty { return Unknown(condName) }
                     val above = if (o.has("above") && !o.isNull("above")) o.optDouble("above") else null
                     val below = if (o.has("below") && !o.isNull("below")) o.optDouble("below") else null
                     NumericState(entity, above?.takeIf { !it.isNaN() }, below?.takeIf { !it.isNaN() })
                 }
                 "screen" -> Screen(o.optString("media_query", ""))
+                "user" -> {
+                    val users = parseStringList(o, "users") ?: return Unknown(condName)
+                    User(users)
+                }
+                "time" -> {
+                    // `after`/`before` may also name an input_datetime; Vitro can't read those yet, so they fail closed.
+                    val after = o.optString("after", "").ifBlank { null }?.let { parseTimeOfDay(it) ?: return Unknown(condName) }
+                    val before = o.optString("before", "").ifBlank { null }?.let { parseTimeOfDay(it) ?: return Unknown(condName) }
+                    val weekdays = parseStringList(o, "weekdays")?.let { days ->
+                        days.map { WEEKDAYS[it.trim().lowercase(Locale.ROOT)] ?: return Unknown(condName) }.toSet()
+                    }
+                    Time(after, before, weekdays)
+                }
                 "and" -> And(parseList(o.optJSONArray("conditions")))
                 "or" -> Or(parseList(o.optJSONArray("conditions")))
                 "not" -> Not(parseList(o.optJSONArray("conditions")))
-                else -> null
+                else -> Unknown(condName)
             }
         }
     }

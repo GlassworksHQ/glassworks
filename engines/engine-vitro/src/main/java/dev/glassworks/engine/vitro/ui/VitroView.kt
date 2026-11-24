@@ -175,6 +175,15 @@ class VitroView(
     var onThemeResolved: ((ResolvedTheme) -> Unit)? = null
     var contextFactory: ((ResolvedTheme) -> VitroCardContext)? = null
 
+    /** Visibility re-checks for `time` and `user` conditions, run just after each minute boundary. */
+    private val periodicChecks = LinkedHashSet<() -> Unit>()
+    private val periodicTick = object : Runnable {
+        override fun run() {
+            periodicChecks.toList().forEach { it() }
+            scheduleTick()
+        }
+    }
+
     init {
         setBackgroundColor(backgroundColor)
         tabScroll.addView(tabBar, LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
@@ -794,27 +803,72 @@ class VitroView(
     private fun wrapVisibility(card: CardConfig, view: View, ctx: VitroCardContext): View =
         wrapConditions(card.visibility + VisibilityCondition.parseList(card.raw.optJSONArray("conditions")), view, ctx)
 
-    /** Shows [view] only while every condition holds, re-checking live as the referenced entities change. */
+    /**
+     * Shows [view] only while every condition holds, re-checking live as the referenced entities change, once a
+     * minute for `time` conditions, and until the signed-in user is known for `user` conditions.
+     */
     private fun wrapConditions(conds: List<VisibilityCondition>, view: View, ctx: VitroCardContext): View {
         if (conds.isEmpty()) return view
         val widthDp = (resources.displayMetrics.widthPixels / dp).toInt()
         val update = {
-            val visible = conds.all { it.evaluate(store::get, widthDp) }
+            val userId = ctx.haUser().optString("id", "").ifEmpty { null }
+            val visible = conds.all { it.evaluate(store::get, widthDp, userId) }
             view.visibility = if (visible) VISIBLE else GONE
         }
         update()
         val refs = LinkedHashSet<String>()
         conds.forEach { it.referencedEntities(refs) }
         val unsubs = refs.map { eid -> store.subscribe(eid) { ctx.main.post(update) } }
+        // HA's user arrives after the first render, so user-gated cards re-check on the same tick as time-gated ones.
+        val ticks = conds.any { it.dependsOnTime() || it.dependsOnUser() }
         view.addOnAttachStateChangeListener(object : OnAttachStateChangeListener {
-            override fun onViewAttachedToWindow(v: View) {}
-            override fun onViewDetachedFromWindow(v: View) { unsubs.forEach { it() } }
+            override fun onViewAttachedToWindow(v: View) {
+                if (ticks) {
+                    update() // The clock may have moved on while detached.
+                    addPeriodicCheck(update)
+                }
+            }
+            override fun onViewDetachedFromWindow(v: View) {
+                unsubs.forEach { it() }
+                if (ticks) removePeriodicCheck(update)
+            }
         })
         return view
     }
 
+    // ---- Periodic visibility re-checks (`time` and `user` conditions) ----
+
+    private fun addPeriodicCheck(check: () -> Unit) {
+        periodicChecks += check
+        if (isAttachedToWindow) scheduleTick()
+    }
+
+    private fun removePeriodicCheck(check: () -> Unit) {
+        periodicChecks -= check
+        if (periodicChecks.isEmpty()) removeCallbacks(periodicTick)
+    }
+
+    /** Next tick just after the coming minute boundary, so `after: "07:00"` flips at 07:00, not up to 60 s late. */
+    private fun scheduleTick() {
+        removeCallbacks(periodicTick)
+        if (periodicChecks.isEmpty()) return
+        val now = System.currentTimeMillis()
+        postDelayed(periodicTick, PERIODIC_CHECK_MS - now % PERIODIC_CHECK_MS + 250L)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        scheduleTick()
+    }
+
+    override fun onDetachedFromWindow() {
+        removeCallbacks(periodicTick)
+        super.onDetachedFromWindow()
+    }
+
     companion object {
         private const val TAG = "Glassworks.Vitro"
+        private const val PERIODIC_CHECK_MS = 60_000L
 
         /** A badge's text: `name · state` when the name shows, else the formatted state (`21.5 °C`, `Closed`). */
         fun badgeText(badge: CardConfig, s: EntityState?): String {

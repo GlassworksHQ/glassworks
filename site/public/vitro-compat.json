@@ -57,6 +57,11 @@
     "climate-hvac-modes",
     "target-temperature",
     "select-options",
-    "media-player-volume-slider"
+    "media-player-volume-slider",
+    "toggle",
+    "media-player-playback",
+    "light-color-favorites",
+    "numeric-input",
+    "vacuum-commands"
   ]
 }

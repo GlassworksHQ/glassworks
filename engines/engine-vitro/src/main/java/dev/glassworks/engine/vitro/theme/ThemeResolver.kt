@@ -64,6 +64,11 @@ data class ResolvedTheme(
      * of [vars] as set by the theme. It lets `--state-active-color` beat the built-in per-domain defaults.
      */
     val themeVarNames: Set<String>? = null,
+    /**
+     * Text size multiplier: `--vitro-font-scale`, else HA's `--ha-font-size-m` over its 14 px default,
+     * clamped to 0.7..2.2. Cards apply it through [dev.glassworks.engine.vitro.ui.VitroCardContext.scaledSp].
+     */
+    val fontScale: Float = 1f,
 ) {
     private fun themeVar(key: String): String? =
         vars[key]?.takeIf { themeVarNames == null || key in themeVarNames }
@@ -176,6 +181,9 @@ object ThemeResolver {
     private val URL_PATTERN = Regex("""url\(\s*['"]?([^'")]+)['"]?\s*\)""", RegexOption.IGNORE_CASE)
     private val LINEAR_GRADIENT_PATTERN = Regex("""linear-gradient\(\s*(?:([\d.]+)deg\s*,)?\s*(.+)\)""", RegexOption.IGNORE_CASE)
     private val RADIAL_GRADIENT_PATTERN = Regex("""radial-gradient\(\s*(.+)\)""", RegexOption.IGNORE_CASE)
+    private const val HA_DEFAULT_FONT_SIZE_PX = 14f
+    private const val MIN_FONT_SCALE = 0.7f
+    private const val MAX_FONT_SCALE = 2.2f
     private val DIM_PX = Regex("""([\d.]+)\s*(px|rem|em)?""", RegexOption.IGNORE_CASE)
     private val SHADOW_COLOR = Regex("""(?:rgba?|hsla?)\([^)]*\)""", RegexOption.IGNORE_CASE)
     private val SHADOW_LENGTH = Regex("""(?<![\w#.])(-?[\d.]+)(?:px)?(?=\s|$)""", RegexOption.IGNORE_CASE)
@@ -309,7 +317,21 @@ object ThemeResolver {
             cardGapDp = (resolved["masonry-view-card-margin"] ?: resolved["ha-view-sections-column-gap"])
                 ?.let { parseDimensionDp(it, 8f) }?.coerceIn(4f, 24f) ?: 8f,
             themeVarNames = themeVarNames,
+            fontScale = parseFontScale(resolved),
         )
+    }
+
+    /**
+     * Reads the theme's text scale: `--vitro-font-scale` (a plain multiplier such as `1.25`), else HA's
+     * `--ha-font-size-m` (px or rem) divided by HA's default of 14 px. Clamped to 0.7..2.2; 1 when neither is set.
+     */
+    fun parseFontScale(vars: Map<String, String>): Float {
+        vars["vitro-font-scale"]?.trim()?.removeSuffix("x")?.toFloatOrNull()
+            ?.takeIf { it.isFinite() && it > 0f }
+            ?.let { return it.coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE) }
+        val px = parseDimensionDp(vars["ha-font-size-m"], -1f)
+        if (!px.isFinite() || px <= 0f) return 1f
+        return (px / HA_DEFAULT_FONT_SIZE_PX).coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE)
     }
 
     /**

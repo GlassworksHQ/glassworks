@@ -23,6 +23,9 @@ import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.CardTier
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.model.VisibilityCondition
+import dev.glassworks.engine.vitro.theme.ThemeCatalog
+import dev.glassworks.engine.vitro.theme.ThemeResolver
+import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroView
 import org.json.JSONArray
 import org.json.JSONObject
@@ -396,7 +399,7 @@ class LovelaceModelTest {
         assertTrue(notOff.evaluate(states())) // missing is "not off"
 
         // Neither `state` nor `state_not`: nothing to compare, so it shows.
-        assertTrue(VisibilityCondition.State("light.lounge_lamp", null, null).evaluate(states()))
+        assertTrue(VisibilityCondition.State("light.lounge_lamp").evaluate(states()))
     }
 
     @Test
@@ -491,12 +494,14 @@ class LovelaceModelTest {
                 VisibilityCondition.And(listOf(VisibilityCondition.State("light.a", "on", null))),
                 VisibilityCondition.Or(emptyList()),
                 VisibilityCondition.Not(listOf(VisibilityCondition.Screen("(max-width: 400px)"))),
+                VisibilityCondition.User(listOf("abc")),
+                VisibilityCondition.Unknown("state"), // no entity: kept, and it hides the card
+                VisibilityCondition.Unknown("junk"), // not an object
             ),
             parsed,
         )
-        // Unsupported conditions (user), an entity-less state and non-objects are skipped, not fatal.
         assertTrue(VisibilityCondition.parseList(null).isEmpty())
-        assertNull(VisibilityCondition.parse(JSONObject("""{"condition": "user"}""")))
+        assertEquals(VisibilityCondition.Unknown("user"), VisibilityCondition.parse(JSONObject("""{"condition": "user"}""")))
         assertNotNull(VisibilityCondition.parse(JSONObject("""{"condition": "screen"}""")))
     }
 
@@ -906,5 +911,251 @@ class LovelaceModelTest {
         assertEquals("Alex", real.getString("name"))
         assertTrue(real.getBoolean("is_admin"))
         assertFalse(real.has("credentials"))
+    }
+
+    // ---- Visibility: fail closed, lists, user, time ----
+
+    @Test
+    fun unknownConditionsHideTheCard() {
+        val anyState = states("sun.sun" to "above_horizon", "light.a" to "on")
+        for (json in listOf(
+            """{"condition": "sun", "after": "sunset"}""",
+            """{"condition": "template", "value_template": "{{ true }}"}""",
+            """{"condition": "made_up_by_a_hacs_card"}""",
+            """{"condition": "state", "state": "on"}""", // malformed: no entity
+            """{"condition": "state", "entity": "light.a"}""", // malformed: nothing to compare
+            """{"condition": "numeric_state", "above": 3}""", // malformed: no entity
+            """{"condition": "time", "after": "25:99"}""", // malformed time
+            """{"condition": "time", "weekdays": ["mon", "funday"]}""", // malformed weekday
+        )) {
+            val c = VisibilityCondition.parse(JSONObject(json))
+            assertTrue("$json should be Unknown, was $c", c is VisibilityCondition.Unknown)
+            assertFalse("$json must fail closed", c.evaluate(anyState, userId = "abc", nowMinutes = 600, weekday = java.util.Calendar.MONDAY))
+        }
+
+        val lampOn = VisibilityCondition.State("light.a", "on", null)
+        val sun = VisibilityCondition.Unknown("sun")
+        assertFalse(VisibilityCondition.And(listOf(lampOn, sun)).evaluate(anyState))
+        // Inside `or` it can't make a card visible on its own, but a known branch that holds still shows it.
+        assertFalse(VisibilityCondition.Or(listOf(sun, VisibilityCondition.Unknown("template"))).evaluate(anyState))
+        assertTrue(VisibilityCondition.Or(listOf(sun, lampOn)).evaluate(anyState))
+
+        // A card config with one unknown condition among known ones is hidden.
+        val camera = card(
+            """{"type": "picture-entity", "entity": "camera.porch",
+                "visibility": [{"condition": "state", "entity": "light.a", "state": "on"}, {"condition": "sun", "before": "sunrise"}]}""",
+        )
+        assertEquals(2, camera.visibility.size)
+        assertFalse(camera.visibility.all { it.evaluate(anyState) })
+        val parsedOr = VisibilityCondition.parse(JSONObject("""{"condition": "or", "conditions": [{"condition": "sun"}, {"condition": "template"}]}"""))
+        assertFalse(parsedOr.evaluate(anyState))
+    }
+
+    @Test
+    fun stateAndStateNotTakeAValueOrAList() {
+        val parsed = VisibilityCondition.parseList(
+            JSONArray(
+                """[
+                  {"condition": "state", "entity": "media_player.lounge", "state": ["playing", "paused"]},
+                  {"condition": "state", "entity": "media_player.lounge", "state_not": ["off", "unavailable"]},
+                  {"condition": "state", "entity": "media_player.lounge", "state": "playing"},
+                  {"condition": "state", "entity": "media_player.lounge", "state_not": "off"}
+                ]""",
+            ),
+        )
+        val (anyOf, noneOf, one, notOne) = parsed
+        assertEquals(VisibilityCondition.State("media_player.lounge", states = listOf("playing", "paused")), anyOf)
+        assertEquals(VisibilityCondition.State("media_player.lounge", statesNot = listOf("off", "unavailable")), noneOf)
+        assertEquals(VisibilityCondition.State("media_player.lounge", "playing", null), one)
+        assertEquals(VisibilityCondition.State("media_player.lounge", null, "off"), notOne)
+
+        fun at(s: String) = states("media_player.lounge" to s)
+        assertTrue(anyOf.evaluate(at("playing")))
+        assertTrue(anyOf.evaluate(at("paused")))
+        assertFalse(anyOf.evaluate(at("idle")))
+        assertFalse(anyOf.evaluate(states()))
+
+        assertTrue(noneOf.evaluate(at("playing")))
+        assertFalse(noneOf.evaluate(at("off")))
+        assertFalse(noneOf.evaluate(at("unavailable")))
+        assertFalse(noneOf.evaluate(states())) // missing reads as "unavailable", which is excluded
+
+        assertTrue(one.evaluate(at("playing")))
+        assertFalse(one.evaluate(at("paused")))
+        assertTrue(notOne.evaluate(at("idle")))
+        assertFalse(notOne.evaluate(at("off")))
+
+        val unavailable = VisibilityCondition.parse(JSONObject("""{"entity": "sensor.gone", "state": "unavailable"}"""))
+        assertTrue(unavailable.evaluate(states()))
+    }
+
+    @Test
+    fun userConditionMatchesTheSignedInUser() {
+        val c = VisibilityCondition.parse(JSONObject("""{"condition": "user", "users": ["u-alex", "u-sam"]}"""))
+        assertEquals(VisibilityCondition.User(listOf("u-alex", "u-sam")), c)
+        assertTrue(c.evaluate(states(), userId = "u-alex"))
+        assertTrue(c.evaluate(states(), userId = "u-sam"))
+        assertFalse(c.evaluate(states(), userId = "u-guest"))
+        assertFalse(c.evaluate(states(), userId = null)) // user not known yet: hidden
+        assertFalse(c.evaluate(states())) // older callers pass no user
+        assertTrue(c.dependsOnUser())
+        assertTrue(VisibilityCondition.Not(listOf(c)).dependsOnUser())
+        assertFalse(VisibilityCondition.Screen("").dependsOnUser())
+        assertTrue(VisibilityCondition.parse(JSONObject("""{"condition": "user", "users": []}""")) is VisibilityCondition.Unknown)
+    }
+
+    @Test
+    fun timeConditionHandlesWindowsOvernightAndWeekdays() {
+        val mon = java.util.Calendar.MONDAY
+        val sat = java.util.Calendar.SATURDAY
+        fun t(h: Int, m: Int = 0) = h * 60 + m
+
+        val day = VisibilityCondition.parse(JSONObject("""{"condition": "time", "after": "08:00", "before": "17:30:00"}"""))
+        assertEquals(VisibilityCondition.Time(t(8), t(17, 30), null), day)
+        assertFalse(day.evaluate(states(), nowMinutes = t(7, 59), weekday = mon))
+        assertTrue(day.evaluate(states(), nowMinutes = t(8), weekday = mon))
+        assertTrue(day.evaluate(states(), nowMinutes = t(17, 29), weekday = mon))
+        assertFalse(day.evaluate(states(), nowMinutes = t(17, 30), weekday = mon))
+
+        val night = VisibilityCondition.parse(JSONObject("""{"condition": "time", "after": "22:00", "before": "06:00"}"""))
+        assertTrue(night.evaluate(states(), nowMinutes = t(23), weekday = mon))
+        assertTrue(night.evaluate(states(), nowMinutes = t(0), weekday = mon))
+        assertTrue(night.evaluate(states(), nowMinutes = t(5, 59), weekday = mon))
+        assertFalse(night.evaluate(states(), nowMinutes = t(6), weekday = mon))
+        assertFalse(night.evaluate(states(), nowMinutes = t(12), weekday = mon))
+
+        val afterOnly = VisibilityCondition.Time(t(18), null, null)
+        assertTrue(afterOnly.evaluate(states(), nowMinutes = t(18), weekday = mon))
+        assertFalse(afterOnly.evaluate(states(), nowMinutes = t(17, 59), weekday = mon))
+        val beforeOnly = VisibilityCondition.Time(null, t(9), null)
+        assertTrue(beforeOnly.evaluate(states(), nowMinutes = t(8, 59), weekday = mon))
+        assertFalse(beforeOnly.evaluate(states(), nowMinutes = t(9), weekday = mon))
+
+        val weekend = VisibilityCondition.parse(JSONObject("""{"condition": "time", "weekdays": ["sat", "sun"]}"""))
+        assertEquals(VisibilityCondition.Time(null, null, setOf(sat, java.util.Calendar.SUNDAY)), weekend)
+        assertTrue(weekend.evaluate(states(), nowMinutes = t(12), weekday = sat))
+        assertFalse(weekend.evaluate(states(), nowMinutes = t(12), weekday = mon))
+
+        val weekdayMornings = VisibilityCondition.parse(
+            JSONObject("""{"condition": "time", "after": "06:30", "before": "09:00", "weekdays": ["mon", "tue", "wed", "thu", "fri"]}"""),
+        )
+        assertTrue(weekdayMornings.evaluate(states(), nowMinutes = t(7), weekday = mon))
+        assertFalse(weekdayMornings.evaluate(states(), nowMinutes = t(7), weekday = sat))
+        assertFalse(weekdayMornings.evaluate(states(), nowMinutes = t(10), weekday = mon))
+
+        assertTrue(day.dependsOnTime())
+        assertTrue(VisibilityCondition.And(listOf(VisibilityCondition.Or(listOf(night)))).dependsOnTime())
+        assertFalse(VisibilityCondition.State("light.a", "on", null).dependsOnTime())
+        assertEquals(t(7, 5), VisibilityCondition.parseTimeOfDay("7:05"))
+        assertNull(VisibilityCondition.parseTimeOfDay("24:00"))
+        assertNull(VisibilityCondition.parseTimeOfDay("noon"))
+    }
+
+    // ---- Theme font scale ----
+
+    @Test
+    fun themeFontScaleComesFromVitroScaleOrHaFontSize() {
+        fun scale(vars: String): Float =
+            ThemeResolver.resolve(ThemeCatalog.parse(JSONObject("""{"themes": {"t": $vars}}""")), true, "t").fontScale
+
+        assertEquals(1f, scale("""{}"""), 0.001f)
+        assertEquals(1.25f, scale("""{"vitro-font-scale": "1.25"}"""), 0.001f)
+        assertEquals(2.2f, scale("""{"vitro-font-scale": "5"}"""), 0.001f)
+        assertEquals(0.7f, scale("""{"vitro-font-scale": "0.2"}"""), 0.001f)
+        assertEquals(1.5f, scale("""{"ha-font-size-m": "21px"}"""), 0.001f)
+        assertEquals(1f, scale("""{"ha-font-size-m": "0.875rem"}"""), 0.001f)
+        assertEquals(2.2f, scale("""{"ha-font-size-m": "64px"}"""), 0.001f)
+        assertEquals(0.7f, scale("""{"ha-font-size-m": "4px"}"""), 0.001f)
+        // The Vitro multiplier wins over HA's size; garbage falls through to HA's size, then to 1.
+        assertEquals(1.1f, scale("""{"vitro-font-scale": "1.1", "ha-font-size-m": "28px"}"""), 0.001f)
+        assertEquals(2f, scale("""{"vitro-font-scale": "big", "ha-font-size-m": "28px"}"""), 0.001f)
+        assertEquals(1f, scale("""{"ha-font-size-m": "large"}"""), 0.001f)
+        // var() chains resolve first.
+        assertEquals(1.5f, scale("""{"my-size": "21px", "ha-font-size-m": "var(--my-size)"}"""), 0.001f)
+    }
+
+    // ---- Icons ----
+
+    private class BoundsSink : MdiIcons.PathSink {
+        var commands = 0
+        var moves = 0
+        var minC = Float.MAX_VALUE
+        var maxC = -Float.MAX_VALUE
+        private fun see(vararg v: Float) {
+            for (x in v) {
+                assertTrue("non-finite coordinate", x.isFinite())
+                minC = minOf(minC, x); maxC = maxOf(maxC, x)
+            }
+            commands++
+        }
+        override fun moveTo(x: Float, y: Float) { moves++; see(x, y) }
+        override fun lineTo(x: Float, y: Float) = see(x, y)
+        override fun quadTo(x1: Float, y1: Float, x: Float, y: Float) = see(x1, y1, x, y)
+        override fun cubicTo(x1: Float, y1: Float, x2: Float, y2: Float, x: Float, y: Float) = see(x1, y1, x2, y2, x, y)
+        override fun close() { commands++ }
+    }
+
+    @Test
+    fun everyBuiltInIconParsesInsideTheGrid() {
+        val names = MdiIcons.names()
+        assertTrue("expected the extended set, got ${names.size}", names.size >= 200)
+        for (name in names) {
+            val sink = BoundsSink()
+            MdiIcons.parseSvgPathInto(MdiIcons.pathDataFor(name), sink)
+            assertTrue("$name drew nothing", sink.moves > 0 && sink.commands > 2)
+            assertTrue("$name leaves the 24x24 grid: ${sink.minC}..${sink.maxC}", sink.minC >= -1.5f && sink.maxC <= 25.5f)
+        }
+    }
+
+    @Test
+    fun iconLookupHasRegisterAndCommonDashboardNames() {
+        for (n in listOf(
+            "information-outline", "information", "alert-circle-outline", "help-circle", "eye-off", "bell-ring",
+            "timer-outline", "air-humidifier", "battery-50", "bluetooth", "solar-power", "lightning-bolt", "leaf",
+            "power-plug", "television", "washing-machine", "garage-open", "shield-check", "car-electric",
+            "chevron-left", "dots-horizontal", "cog-outline", "sync", "map-marker", "star-outline", "account-group",
+            "theme-light-dark", "chart-line", "pencil", "trash-can", "fullscreen-exit", "video-off", "router-wireless",
+            "paw", "pool", "fireplace", "broom",
+        )) {
+            assertTrue("missing $n", MdiIcons.has(n))
+        }
+        assertTrue(MdiIcons.has("mdi:information-outline"))
+        assertTrue(MdiIcons.has("hass:INFORMATION-OUTLINE"))
+        assertFalse(MdiIcons.has("mdi:definitely-not-an-icon"))
+        assertEquals(MdiIcons.pathDataFor("home"), MdiIcons.pathDataFor("mdi:definitely-not-an-icon"))
+
+        val tri = "M12 2L22 20H2Z"
+        MdiIcons.register("mdi:vitro-test-triangle", tri)
+        assertTrue(MdiIcons.has("vitro-test-triangle"))
+        assertEquals(tri, MdiIcons.pathDataFor("mdi:vitro-test-triangle"))
+        assertTrue("vitro-test-triangle" in MdiIcons.names())
+    }
+
+    @Test
+    fun pathParserHandlesArcsSmoothCurvesAndPackedFlags() {
+        // A full circle as two arcs (the way MDI writes circles) becomes cubics that stay on the circle.
+        val circle = BoundsSink()
+        MdiIcons.parseSvgPathInto("M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2Z", circle)
+        assertEquals(2f, circle.minC, 0.05f)
+        assertEquals(22f, circle.maxC, 0.05f)
+
+        // Packed flags ("0 01 1") and relative arcs parse to the same end point as the spaced form.
+        val ends = ArrayList<Pair<Float, Float>>()
+        val endSink = object : MdiIcons.PathSink {
+            override fun moveTo(x: Float, y: Float) { ends += x to y }
+            override fun lineTo(x: Float, y: Float) { ends += x to y }
+            override fun quadTo(x1: Float, y1: Float, x: Float, y: Float) { ends += x to y }
+            override fun cubicTo(x1: Float, y1: Float, x2: Float, y2: Float, x: Float, y: Float) { ends += x to y }
+            override fun close() {}
+        }
+        MdiIcons.parseSvgPathInto("M2 12a10 10 0 0110 10", endSink)
+        assertEquals(12f, ends.last().first, 0.01f)
+        assertEquals(22f, ends.last().second, 0.01f)
+
+        // S and T reflect the previous control point; lower-case forms are relative.
+        val smooth = BoundsSink()
+        MdiIcons.parseSvgPathInto("M2 12C2 6 8 2 12 2S22 6 22 12s-4 10-10 10Q6 22 4 18T2 12Z", smooth)
+        assertTrue(smooth.commands >= 6)
+        assertTrue(smooth.minC >= 1.5f && smooth.maxC <= 22.5f)
     }
 }

@@ -5,11 +5,11 @@ Every card below renders 100% natively in Vitro with **zero GeckoView**.
 ## Tier 1: Native Core Lovelace Cards (31)
 
 - **Controls & summaries:** `tile`, `entities`, `glance`, `button`, `entity`, `light`, `thermostat`, `humidifier`, `alarm-panel`, `media-control`, `todo-list`, `area`
-- **Information & media:** `heading`, `clock`, `sensor`, `gauge`, `weather-forecast`, `history-graph`, `statistics-graph`, `calendar`, `logbook`, `markdown` (supports HA server-side Jinja2 templates via `render_template`)
+- **Information & media:** `heading`, `clock`, `sensor`, `gauge`, `weather-forecast`, `history-graph`, `statistics-graph`, `calendar`, `logbook`, `markdown` (rendered natively: headings, tables, lists, quotes, rules, `<font color>`, `<center>` and inline `<ha-icon>`, with HA server-side Jinja2 templates via `render_template`)
 - **Images & floorplans:** `picture`, `picture-entity`, `picture-glance`, `picture-elements` (`state-icon`, `state-label`, `state-badge`, `icon`, `service-button`)
 - **Layout & filtering:** `grid`, `horizontal-stack`, `vertical-stack`, `conditional`, `entity-filter`
 
-### Supported Inline `tile` Features (9)
+### Supported Inline `tile` Features (14)
 
 - `light-brightness`
 - `light-color-temp`
@@ -20,6 +20,11 @@ Every card below renders 100% natively in Vitro with **zero GeckoView**.
 - `target-temperature`
 - `select-options`
 - `media-player-volume-slider`
+- `toggle`
+- `media-player-playback`
+- `light-color-favorites`
+- `numeric-input`
+- `vacuum-commands`
 
 ### Supported Views & Conditions
 
@@ -32,8 +37,8 @@ Every card below renders 100% natively in Vitro with **zero GeckoView**.
 - `custom:mushroom-entity-card`
 - `custom:mushroom-light-card`
 - `custom:mushroom-title-card`
-- `custom:mushroom-chips-card`
-- `custom:mushroom-template-card`
+- `custom:mushroom-chips-card` (entity, template, weather, conditional and per-chip `visibility`)
+- `custom:mushroom-template-card` (templated `icon_color`, `badge_icon`, `badge_color`, `picture`, `layout`, `multiline_secondary`)
 - `custom:mushroom-climate-card`
 - `custom:mushroom-fan-card`
 - `custom:mushroom-cover-card`

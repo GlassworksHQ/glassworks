@@ -34,6 +34,7 @@ import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.EntityRowConfig
+import dev.glassworks.engine.vitro.model.VisibilityCondition
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
@@ -109,11 +110,46 @@ private fun holdActionFor(raw: JSONObject, entityId: String?): ActionConfig =
 
 private fun textView(ctx: VitroCardContext, sp: Float, color: Int, weight: Int = Inter.REGULAR): TextView =
     TextView(ctx.context).apply {
-        textSize = sp
+        val scaled = ctx.scaledSp(sp)
+        textSize = scaled
         setTextColor(color)
-        typeface = Inter.typeface(ctx.context, weight, sp)
+        typeface = Inter.typeface(ctx.context, weight, scaled)
         includeFontPadding = false
     }
+
+/** True when [s] holds Jinja2 that has to go through HA's `render_template`. */
+internal fun isTemplate(s: String?): Boolean = s != null && ("{{" in s || "{%" in s)
+
+private val ENTITY_VARIABLE = Regex("""\bentity\b""")
+
+/**
+ * Mushroom templates see the card's `entity` as a variable. HA's `render_template` has no card context, so a
+ * `{% set entity = … %}` prefix supplies it when the template uses it.
+ */
+internal fun withEntityVariable(template: String, entityId: String?): String =
+    if (entityId != null && ENTITY_VARIABLE.containsMatchIn(template)) "{% set entity = '$entityId' %}$template" else template
+
+/** Mushroom's color names (`--rgb-<name>`), plus `primary` / `accent` from the theme and any CSS color. */
+internal object MushroomColors {
+    private val NAMED = mapOf(
+        "red" to 0xFFF44336, "pink" to 0xFFE91E63, "purple" to 0xFF926BC7, "deep-purple" to 0xFF6E41AB,
+        "indigo" to 0xFF3F51B5, "blue" to 0xFF2196F3, "light-blue" to 0xFF03A9F4, "cyan" to 0xFF00BCD4,
+        "teal" to 0xFF009688, "green" to 0xFF4CAF50, "light-green" to 0xFF8BC34A, "lime" to 0xFFCDDC39,
+        "yellow" to 0xFFFFEB3B, "amber" to 0xFFFFC107, "orange" to 0xFFFF9800, "deep-orange" to 0xFFFF6F22,
+        "brown" to 0xFF795548, "grey" to 0xFF9E9E9E, "gray" to 0xFF9E9E9E, "blue-grey" to 0xFF607D8B,
+        "black" to 0xFF000000, "white" to 0xFFFFFFFF, "disabled" to 0xFFBDBDBD,
+    ).mapValues { it.value.toInt() }
+
+    /** The color [raw] names, or null for blank / unknown values (the caller's default applies). */
+    fun parse(raw: String?, theme: dev.glassworks.engine.vitro.theme.ResolvedTheme): Int? {
+        val s = raw?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() && it != "none" } ?: return null
+        return when (s) {
+            "primary" -> theme.primaryColor
+            "accent" -> theme.accentColor
+            else -> NAMED[s] ?: MarkdownInline.parseCssColor(s)
+        }
+    }
+}
 
 /**
  * Native HA `tile` card + Tier 2 HACS fast-path for `custom:mushroom-entity-card`,
@@ -136,7 +172,15 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     /** The last real `brightness` (1..255) this tile saw, so an optimistic `on` restores it instead of 100%. */
     private var lastBrightness: Int? = null
 
+    /** The Mushroom template card's views, when this tile renders `custom:mushroom-template-card`. */
+    internal var mushroom: MushroomTemplateViews? = null
+        private set
+
     init {
+        if (config.type == MUSHROOM_TEMPLATE) buildMushroomTemplate() else buildTile()
+    }
+
+    private fun buildTile() {
         val pad = ctx.px(10f)
         val vertical = config.raw.optBoolean("vertical", false) || config.raw.optString("layout") == "vertical"
         val row = LinearLayout(ctx.context).apply {
@@ -265,9 +309,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         iconWrap.setOnClickListener { ctx.performAction(iconTapAction, entityId) }
         iconWrap.bindHoldAction(ctx, holdAction, entityId)
 
-        if (config.type == "custom:mushroom-template-card") {
-            bindMushroomTemplate()
-        } else if (entityId != null) {
+        if (entityId != null) {
             observe(entityId) { s ->
                 renderState(s)
                 brightnessSlider?.let { sb ->
@@ -297,7 +339,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     /**
      * HA 2026's other inline tile features: `climate-hvac-modes`, `target-temperature`, `fan-speed`,
-     * `cover-position`, `light-color-temp` and `media-player-volume-slider`, in the order the card lists them.
+     * `cover-position`, `light-color-temp`, `media-player-volume-slider`, `toggle`, `media-player-playback`,
+     * `light-color-favorites`, `numeric-input` and `vacuum-commands`, in the order the card lists them.
      */
     private fun addExtraFeatures(
         rootCol: LinearLayout,
@@ -314,6 +357,39 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }.firstOrNull { it.optString("type") == type }
         }
         fun num(s: EntityState?, key: String): Double? = (s?.attributes?.get(key) as? Number)?.toDouble()
+
+        fun segmentBar() = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(ctx.px(3f), ctx.px(3f), ctx.px(3f), ctx.px(3f))
+            background = GradientDrawable().apply {
+                cornerRadius = 10f * ctx.dp
+                setColor(if (ctx.theme.dark) SEGMENT_DARK else SEGMENT_LIGHT)
+            }
+        }
+        /** One icon segment of a bar: `paint(selected, color)` fills it like HA's selected segment. */
+        class Segment(val button: LinearLayout, val icon: MdiIconView) {
+            fun paint(selected: Boolean, color: Int, textColor: Int) {
+                icon.tintColor = if (selected) Color.WHITE else textColor
+                button.background = if (selected) GradientDrawable().apply {
+                    cornerRadius = 8f * button.resources.displayMetrics.density
+                    setColor(color)
+                } else null
+            }
+        }
+        fun segment(bar: LinearLayout, iconName: String, label: String, onTap: () -> Unit): Segment {
+            val icon = MdiIconView(ctx.context).apply { setIcon(iconName, ctx.theme.primaryTextColor) }
+            val btn = LinearLayout(ctx.context).apply {
+                gravity = Gravity.CENTER
+                isClickable = true
+                applyHaRipple(this, 8f * ctx.dp, ctx.theme.dark)
+                contentDescription = label
+                addView(icon, LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)))
+                setOnClickListener { onTap() }
+            }
+            bar.addView(btn, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+            return Segment(btn, icon)
+        }
+        val domain = entityId.substringBefore('.')
 
         for (type in featureTypes.distinct()) {
             when (type) {
@@ -465,8 +541,271 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         slider.setValue(vol?.toFloat() ?: 0f, active = live)
                     }
                 }
+                "toggle" -> {
+                    // HA's `ha-control-switch` as two halves; the half matching the state fills with its color.
+                    val (offLabel, onLabel) = when (domain) {
+                        "lock" -> "Lock" to "Unlock"
+                        "cover", "valve" -> "Close" to "Open"
+                        else -> "Off" to "On"
+                    }
+                    fun service(on: Boolean): Pair<String, String> = when (domain) {
+                        "lock" -> "lock" to if (on) "unlock" else "lock"
+                        "cover" -> "cover" to if (on) "open_cover" else "close_cover"
+                        "valve" -> "valve" to if (on) "open_valve" else "close_valve"
+                        in TOGGLE_FEATURE_DOMAINS -> domain to if (on) "turn_on" else "turn_off"
+                        else -> "homeassistant" to if (on) "turn_on" else "turn_off"
+                    }
+                    val bar = segmentBar()
+                    val halves = listOf(false to offLabel, true to onLabel).map { (on, label) ->
+                        val labelView = textView(ctx, 13f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply { text = label }
+                        val half = LinearLayout(ctx.context).apply {
+                            gravity = Gravity.CENTER
+                            isClickable = true
+                            applyHaRipple(this, 8f * ctx.dp, ctx.theme.dark)
+                            contentDescription = label
+                            addView(labelView)
+                        }
+                        bar.addView(half, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+                        Triple(on, half, labelView)
+                    }
+                    fun paint(on: Boolean) {
+                        val onColor = when (domain) {
+                            "lock" -> UNLOCKED_RED
+                            else -> ctx.store[entityId]?.lightTintColor() ?: ctx.theme.activeColor(domain)
+                        }
+                        val offColor = if (domain == "lock") LOCKED_GREEN else withAlpha(ctx.theme.primaryTextColor, 0.18f)
+                        halves.forEach { (isOn, half, text) ->
+                            val selected = isOn == on
+                            half.background = if (selected) GradientDrawable().apply {
+                                cornerRadius = 8f * ctx.dp
+                                setColor(if (isOn) onColor else offColor)
+                            } else null
+                            half.isSelected = selected
+                            text.setTextColor(
+                                if (selected && (isOn || domain == "lock")) Color.WHITE else ctx.theme.primaryTextColor,
+                            )
+                        }
+                    }
+                    halves.forEach { (on, half, _) ->
+                        half.setOnClickListener {
+                            paint(on)
+                            val (d, svc) = service(on)
+                            ctx.callService(d, svc, data(), null)
+                        }
+                    }
+                    rootCol.addView(bar, lp())
+                    featureBinders += { s -> paint(s?.isActive == true) }
+                }
+                "media-player-playback" -> {
+                    val bar = segmentBar()
+                    segment(bar, "mdi:skip-previous", "Previous") {
+                        ctx.callService("media_player", "media_previous_track", data(), null)
+                    }
+                    val playPause = segment(bar, "mdi:play", "Play") {
+                        ctx.callService("media_player", "media_play_pause", data(), null)
+                    }
+                    segment(bar, "mdi:skip-next", "Next") {
+                        ctx.callService("media_player", "media_next_track", data(), null)
+                    }
+                    segment(bar, "mdi:stop", "Stop") {
+                        ctx.callService("media_player", "media_stop", data(), null)
+                    }
+                    rootCol.addView(bar, lp())
+                    featureBinders += { s ->
+                        val playing = s?.state == "playing"
+                        playPause.icon.setIcon(if (playing) "mdi:pause" else "mdi:play")
+                        playPause.button.contentDescription = if (playing) "Pause" else "Play"
+                        playPause.paint(playing, ctx.theme.primaryColor, ctx.theme.primaryTextColor)
+                    }
+                }
+                "light-color-favorites" -> {
+                    val cfg = featureConfig(type)
+                    val configured = (cfg?.optJSONArray("favorites") ?: cfg?.optJSONArray("favorite_colors")
+                        ?: cfg?.optJSONArray("color_favorites"))
+                        ?.let { arr -> (0 until arr.length()).mapNotNull { arr.optJSONObject(it) } }
+                        ?.takeIf { it.isNotEmpty() }
+                    val row = LinearLayout(ctx.context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    var shown: List<JSONObject>? = null
+                    rootCol.addView(row, lp())
+                    featureBinders += { s ->
+                        val favs = configured ?: defaultFavorites(s)
+                        if (favs.map { it.toString() } != shown?.map { it.toString() }) {
+                            shown = favs
+                            row.removeAllViews()
+                            favs.take(MAX_FAVORITES).forEachIndexed { i, fav ->
+                                val swatch = View(ctx.context).apply {
+                                    background = GradientDrawable().apply {
+                                        shape = GradientDrawable.OVAL
+                                        setColor(favoriteColor(fav))
+                                        setStroke(ctx.px(1f).coerceAtLeast(1), ctx.theme.dividerColor)
+                                    }
+                                    isClickable = true
+                                    applyHaRipple(this, 999f, ctx.theme.dark)
+                                    contentDescription = "Favorite color ${i + 1}"
+                                    setOnClickListener {
+                                        val d = data()
+                                        for (key in FAVORITE_KEYS) if (fav.has(key)) d.put(key, fav.get(key))
+                                        ctx.callService("light", "turn_on", d, null)
+                                    }
+                                }
+                                val cell = FrameLayout(ctx.context).apply {
+                                    addView(swatch, FrameLayout.LayoutParams(ctx.px(32f), ctx.px(32f), Gravity.CENTER))
+                                }
+                                row.addView(cell, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+                            }
+                        }
+                        row.alpha = if (s?.state == "on") 1f else 0.6f
+                    }
+                }
+                "numeric-input" -> {
+                    val isCounter = domain == "counter"
+                    fun lowOf(st: EntityState?) = num(st, if (isCounter) "minimum" else "min") ?: if (isCounter) null else 0.0
+                    fun highOf(st: EntityState?) = num(st, if (isCounter) "maximum" else "max") ?: if (isCounter) null else 100.0
+                    fun stepOf(st: EntityState?) = num(st, "step")?.takeIf { it > 0 } ?: 1.0
+                    fun clamp(v: Double, st: EntityState?): Double {
+                        var out = v
+                        lowOf(st)?.let { out = out.coerceAtLeast(it) }
+                        highOf(st)?.let { out = out.coerceAtMost(it) }
+                        return out
+                    }
+                    fun format(v: Double, st: EntityState?): String {
+                        val step = stepOf(st)
+                        val decimals = if (step % 1.0 == 0.0) 0 else step.toBigDecimal().stripTrailingZeros().scale().coerceIn(1, 4)
+                        val n = String.format(Locale.US, "%.${decimals}f", v)
+                        return st?.unit?.let { "$n $it" } ?: n
+                    }
+                    fun setValue(v: Double) {
+                        ctx.callService(domain, "set_value", data().put("value", if (v % 1.0 == 0.0) v.toLong() else v), null)
+                    }
+                    if (featureConfig(type)?.optString("style") == "slider" && !isCounter) {
+                        val slider = HaHorizontalSliderView(ctx, ctx.theme.primaryColor) { frac ->
+                            val st = ctx.store[entityId]
+                            val lo = lowOf(st) ?: 0.0
+                            val hi = highOf(st) ?: 100.0
+                            val step = stepOf(st)
+                            setValue(clamp(lo + Math.round(frac * (hi - lo) / step) * step, st))
+                        }
+                        rootCol.addView(slider, lp())
+                        featureBinders += { s ->
+                            val v = s?.state?.toDoubleOrNull()
+                            val lo = lowOf(s) ?: 0.0
+                            val hi = highOf(s) ?: 100.0
+                            slider.setValue(if (v != null && hi > lo) ((v - lo) / (hi - lo)).toFloat() else 0f, active = v != null)
+                        }
+                    } else {
+                        val value = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+                            gravity = Gravity.CENTER
+                            fontFeatureSettings = "tnum"
+                        }
+                        var pending: Double? = null
+                        fun step(sign: Int) {
+                            val st = ctx.store[entityId]
+                            if (isCounter) {
+                                ctx.callService("counter", if (sign > 0) "increment" else "decrement", data(), null)
+                                val cur = pending ?: st?.state?.toDoubleOrNull() ?: return
+                                pending = clamp(cur + sign * stepOf(st), st)
+                                value.text = format(pending!!, st)
+                                return
+                            }
+                            val cur = pending ?: st?.state?.toDoubleOrNull() ?: return
+                            val step = stepOf(st)
+                            val next = clamp(Math.round((cur + sign * step) / step) * step, st)
+                            pending = next
+                            value.text = format(next, st)
+                            setValue(next)
+                        }
+                        fun stepButton(iconName: String, sign: Int, label: String) = LinearLayout(ctx.context).apply {
+                            gravity = Gravity.CENTER
+                            isClickable = true
+                            applyHaRipple(this, 10f * ctx.dp, ctx.theme.dark)
+                            contentDescription = label
+                            addView(MdiIconView(ctx.context).apply { setIcon(iconName, ctx.theme.primaryTextColor) },
+                                LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)))
+                            setOnClickListener { step(sign) }
+                        }
+                        val stepper = LinearLayout(ctx.context).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = Gravity.CENTER_VERTICAL
+                            background = GradientDrawable().apply {
+                                cornerRadius = 10f * ctx.dp
+                                setColor(if (ctx.theme.dark) SEGMENT_DARK else SEGMENT_LIGHT)
+                            }
+                            addView(stepButton("mdi:minus", -1, "Decrease"), LinearLayout.LayoutParams(ctx.px(48f), MATCH_PARENT))
+                            addView(value, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                            addView(stepButton("mdi:plus", 1, "Increase"), LinearLayout.LayoutParams(ctx.px(48f), MATCH_PARENT))
+                        }
+                        rootCol.addView(stepper, lp())
+                        featureBinders += { s ->
+                            pending = null
+                            value.text = s?.state?.toDoubleOrNull()?.let { format(it, s) } ?: "–"
+                        }
+                    }
+                }
+                "vacuum-commands" -> {
+                    val commands = featureConfig(type)?.optJSONArray("commands")
+                        ?.let { arr -> (0 until arr.length()).map { arr.optString(it) }.filter { it in VACUUM_COMMANDS } }
+                        ?.takeIf { it.isNotEmpty() }
+                        ?: VACUUM_COMMANDS.keys.toList()
+                    val bar = segmentBar()
+                    var startPause: Segment? = null
+                    commands.forEach { cmd ->
+                        val (iconName, label) = VACUUM_COMMANDS.getValue(cmd)
+                        val seg = segment(bar, iconOr(iconName, VACUUM_FALLBACK_ICONS[cmd] ?: "mdi:robot-vacuum"), label) {
+                            val svc = when (cmd) {
+                                "start_pause" -> if (ctx.store[entityId]?.state == "cleaning") "pause" else "start"
+                                "return_home" -> "return_to_base"
+                                else -> cmd
+                            }
+                            ctx.callService("vacuum", svc, data(), null)
+                        }
+                        if (cmd == "start_pause") startPause = seg
+                    }
+                    rootCol.addView(bar, lp())
+                    featureBinders += { s ->
+                        val cleaning = s?.state == "cleaning"
+                        startPause?.let { seg ->
+                            seg.icon.setIcon(if (cleaning) "mdi:pause" else "mdi:play")
+                            seg.button.contentDescription = if (cleaning) "Pause" else "Start"
+                            seg.paint(cleaning, ctx.theme.activeColor("vacuum"), ctx.theme.primaryTextColor)
+                        }
+                    }
+                }
             }
         }
+    }
+
+    /** HA's default favorites when the light has none: color temperatures for white-only lights, else six hues. */
+    private fun defaultFavorites(s: EntityState?): List<JSONObject> {
+        val modes = (s?.attributes?.get("supported_color_modes") as? List<*>)?.map { it.toString() }.orEmpty()
+        val colorModes = setOf("hs", "rgb", "rgbw", "rgbww", "xy")
+        val hasColor = modes.isEmpty() || modes.any { it in colorModes }
+        if (!hasColor && "color_temp" in modes) {
+            val lo = (s?.attributes?.get("min_color_temp_kelvin") as? Number)?.toInt() ?: HaColorTempBarView.DEFAULT_MIN_K
+            val hi = (s?.attributes?.get("max_color_temp_kelvin") as? Number)?.toInt() ?: HaColorTempBarView.DEFAULT_MAX_K
+            return (0 until 6).map { i -> JSONObject().put("color_temp_kelvin", lo + (hi - lo) * i / 5) }
+        }
+        return DEFAULT_RGB_FAVORITES.map { (r, g, b) -> JSONObject().put("rgb_color", JSONArray(listOf(r, g, b))) }
+    }
+
+    private fun favoriteColor(fav: JSONObject): Int {
+        fun ints(key: String) = fav.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.optDouble(it) } }
+        ints("rgb_color")?.takeIf { it.size >= 3 }?.let { return dev.glassworks.engine.vitro.data.LightColor.pack(it[0].toInt(), it[1].toInt(), it[2].toInt()) }
+        ints("rgbw_color")?.takeIf { it.size >= 3 }?.let { return dev.glassworks.engine.vitro.data.LightColor.pack(it[0].toInt(), it[1].toInt(), it[2].toInt()) }
+        ints("rgbww_color")?.takeIf { it.size >= 3 }?.let { return dev.glassworks.engine.vitro.data.LightColor.pack(it[0].toInt(), it[1].toInt(), it[2].toInt()) }
+        ints("hs_color")?.takeIf { it.size >= 2 }?.let {
+            return dev.glassworks.engine.vitro.data.LightColor.hsvToArgb(it[0].toFloat(), (it[1] / 100.0).toFloat(), 1f)
+        }
+        if (fav.has("color_temp_kelvin")) return dev.glassworks.engine.vitro.data.LightColor.kelvinToArgb(fav.optInt("color_temp_kelvin"))
+        return ctx.theme.stateInactiveColor
+    }
+
+    /** [preferred] when [MdiIcons] knows it, else [fallback] (an unknown name would draw the home glyph). */
+    private fun iconOr(preferred: String, fallback: String): String {
+        val key = preferred.removePrefix("mdi:")
+        return if (key != "home" && MdiIcons.pathDataFor(preferred) == MdiIcons.pathDataFor("home")) fallback else preferred
     }
 
     private fun hvacModeColor(mode: String): Int = when (mode) {
@@ -481,31 +820,151 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     private fun formatTemp(t: Double, unit: String): String =
         if (t % 1.0 == 0.0) String.format(Locale.US, "%.0f %s", t, unit) else String.format(Locale.US, "%.1f %s", t, unit)
 
-    private fun bindMushroomTemplate() {
-        val primaryTpl = config.raw.optString("primary", config.name.orEmpty())
-        val secondaryTpl = config.raw.optString("secondary", "")
-        val iconTpl = config.raw.optString("icon", config.icon ?: "mdi:home")
+    /**
+     * `custom:mushroom-template-card`: a 40 dp shape avatar (icon tinted by `icon_color`, or a round `picture`)
+     * with an optional 16 dp `badge_icon` on its bottom-right, then `primary` / `secondary`. Every field can be a
+     * live Jinja2 template; `layout: vertical` stacks the avatar over centered text, and `multiline_secondary`
+     * lets the secondary line wrap.
+     */
+    private fun buildMushroomTemplate() {
+        val raw = config.raw
+        val vertical = raw.optString("layout") == "vertical"
+        val multiline = raw.optBoolean("multiline_secondary", false)
+        val pad = ctx.px(12f)
+        val avatarSize = ctx.px(40f)
+        val primaryText = ctx.theme.primaryTextColor
 
-        fun bindTpl(tpl: String, apply: (String) -> Unit) {
-            if ("{{" in tpl || "{%" in tpl) {
-                track(ctx.subscribeTemplate(tpl) { rendered -> ctx.main.post { apply(rendered) } })
+        val avatarBg = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(withAlpha(primaryText, 0.05f))
+        }
+        val icon = MdiIconView(ctx.context)
+        val picture = ImageView(ctx.context).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            visibility = GONE
+            outlineProvider = OVAL_OUTLINE
+            clipToOutline = true
+        }
+        val avatar = FrameLayout(ctx.context).apply {
+            background = avatarBg
+            addView(icon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
+            addView(picture, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        }
+        val badgeIcon = MdiIconView(ctx.context)
+        val badgeOvalBg = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(ctx.theme.primaryColor)
+        }
+        val badge = FrameLayout(ctx.context).apply {
+            background = badgeOvalBg
+            visibility = GONE
+            addView(badgeIcon, LayoutParams(ctx.px(10f), ctx.px(10f), Gravity.CENTER))
+        }
+        val avatarFrame = FrameLayout(ctx.context).apply {
+            clipChildren = false
+            clipToPadding = false
+            addView(avatar, LayoutParams(avatarSize, avatarSize))
+            addView(badge, LayoutParams(ctx.px(16f), ctx.px(16f), Gravity.BOTTOM or Gravity.END).apply {
+                rightMargin = -ctx.px(3f)
+                bottomMargin = -ctx.px(3f)
+            })
+        }
+        val primary = textView(ctx, 14f, primaryText, INTER_SEMIBOLD).apply {
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        val secondary = textView(ctx, 12f, ctx.theme.secondaryTextColor, Inter.MEDIUM).apply {
+            maxLines = if (multiline) Int.MAX_VALUE else 1
+            ellipsize = if (multiline) null else TextUtils.TruncateAt.END
+            setLineSpacing(ctx.px(2f).toFloat(), 1f)
+        }
+        if (vertical) {
+            primary.gravity = Gravity.CENTER_HORIZONTAL
+            secondary.gravity = Gravity.CENTER_HORIZONTAL
+            primary.textAlignment = TEXT_ALIGNMENT_CENTER
+            secondary.textAlignment = TEXT_ALIGNMENT_CENTER
+        }
+        val labels = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = if (vertical) Gravity.CENTER_HORIZONTAL else Gravity.START
+            addView(primary, LinearLayout.LayoutParams(if (vertical) MATCH_PARENT else WRAP_CONTENT, WRAP_CONTENT))
+            addView(secondary, LinearLayout.LayoutParams(if (vertical) MATCH_PARENT else WRAP_CONTENT, WRAP_CONTENT).apply {
+                topMargin = ctx.px(2f)
+            })
+        }
+        val row = LinearLayout(ctx.context).apply {
+            orientation = if (vertical) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            gravity = if (vertical) Gravity.CENTER else Gravity.CENTER_VERTICAL
+            clipChildren = false
+            clipToPadding = false
+            setPadding(pad, pad, pad, pad)
+            minimumHeight = ctx.px(56f)
+            addView(avatarFrame, LinearLayout.LayoutParams(avatarSize, avatarSize).apply {
+                if (vertical) bottomMargin = ctx.px(10f) else marginEnd = ctx.px(12f)
+            })
+            addView(labels, LinearLayout.LayoutParams(if (vertical) MATCH_PARENT else 0, WRAP_CONTENT, if (vertical) 0f else 1f))
+        }
+        addView(row, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        mushroom = MushroomTemplateViews(row, avatar, icon, picture, badge, badgeIcon, primary, secondary)
+
+        val entityId = config.entity
+        val tapAction = ActionConfig.parse(raw.optJSONObject("tap_action"), if (entityId != null) "more-info" else "none")
+        isClickable = true
+        setOnClickListener { ctx.performAction(tapAction, entityId) }
+        bindHoldAction(holdActionFor(raw, entityId), entityId)
+        applyHaRipple(this, ctx.theme.cardBorderRadiusDp * ctx.dp, ctx.theme.dark)
+
+        var iconName = ""
+        var iconColor: Int? = null
+        var pictureUrl = ""
+        var badgeIconName = ""
+        var badgeColorValue: Int? = null
+        fun refreshAvatar() {
+            val showPicture = pictureUrl.isNotBlank()
+            picture.visibility = if (showPicture) VISIBLE else GONE
+            icon.visibility = if (showPicture) GONE else VISIBLE
+            avatar.background = if (showPicture) null else avatarBg
+            val tint = iconColor ?: primaryText
+            avatarBg.setColor(if (iconColor != null) withAlpha(tint, 0.2f) else withAlpha(primaryText, 0.05f))
+            icon.setIcon(iconName.trim().ifBlank { "mdi:home" }, tint)
+            mushroom?.iconColor = tint
+        }
+        fun refreshBadge() {
+            badge.visibility = if (badgeIconName.isBlank()) GONE else VISIBLE
+            val bg = badgeColorValue ?: ctx.theme.primaryColor
+            badgeOvalBg.setColor(bg)
+            badgeIcon.setIcon(badgeIconName.trim().ifBlank { "mdi:home" }, Color.WHITE)
+            mushroom?.badgeColor = bg
+        }
+
+        fun bindTpl(key: String, fallback: String, apply: (String) -> Unit) {
+            val tpl = raw.optString(key, fallback)
+            if (isTemplate(tpl)) {
+                track(ctx.subscribeTemplate(withEntityVariable(tpl, entityId)) { rendered -> ctx.main.post { apply(rendered.trim()) } })
             } else {
                 apply(tpl)
             }
         }
-        bindTpl(primaryTpl) { titleView.text = it }
-        if (secondaryTpl.isNotEmpty()) {
-            stateView.visibility = VISIBLE
-            bindTpl(secondaryTpl) { stateView.text = it }
-        } else {
-            stateView.visibility = GONE
+        bindTpl("primary", config.name.orEmpty()) { v ->
+            primary.text = v
+            primary.visibility = if (v.isEmpty()) GONE else VISIBLE
         }
-        bindTpl(iconTpl) { iconName ->
-            val accent = ctx.theme.primaryColor
-            iconBadge.setIcon(iconName.ifBlank { "mdi:home" }, accent)
-            tintBadge(accent)
+        bindTpl("secondary", "") { v ->
+            secondary.text = v
+            secondary.visibility = if (v.isEmpty()) GONE else VISIBLE
         }
-        config.entity?.let { eid -> observe(eid) { /* keep entity warm for tap actions */ } }
+        bindTpl("icon", config.icon ?: "") { v -> iconName = v; refreshAvatar() }
+        bindTpl("icon_color", "") { v -> iconColor = MushroomColors.parse(v, ctx.theme); refreshAvatar() }
+        bindTpl("picture", "") { v ->
+            pictureUrl = v
+            refreshAvatar()
+            if (v.isNotBlank()) ctx.loadImage(v) { bmp -> if (bmp != null && pictureUrl == v) picture.setImageBitmap(bmp) }
+        }
+        bindTpl("badge_icon", "") { v -> badgeIconName = v; refreshBadge() }
+        bindTpl("badge_color", "") { v -> badgeColorValue = MushroomColors.parse(v, ctx.theme); refreshBadge() }
+        refreshAvatar()
+        refreshBadge()
+        entityId?.let { eid -> observe(eid) { /* keep the entity warm for tap actions */ } }
     }
 
     private fun renderState(s: EntityState?) {
@@ -600,7 +1059,28 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         menu.show()
     }
 
+    /** The views of a Mushroom template tile, for live updates and tests. */
+    internal class MushroomTemplateViews(
+        val row: LinearLayout,
+        val avatar: FrameLayout,
+        val icon: MdiIconView,
+        val picture: ImageView,
+        val badge: FrameLayout,
+        val badgeIcon: MdiIconView,
+        val primary: TextView,
+        val secondary: TextView,
+    ) {
+        var iconColor: Int = 0
+        var badgeColor: Int = 0
+    }
+
     companion object {
+        const val MUSHROOM_TEMPLATE = "custom:mushroom-template-card"
+        private val OVAL_OUTLINE = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: android.graphics.Outline) {
+                outline.setOval(0, 0, view.width, view.height)
+            }
+        }
         private val BARE_ICON_DOMAINS = setOf("sensor", "weather", "text", "select")
         const val LOCKED_GREEN = 0xFF4CAF50.toInt()
         const val UNLOCKED_RED = 0xFFF44336.toInt()
@@ -615,6 +1095,28 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         private const val HVAC_OFF = 0xFF757575.toInt()
         private const val HVAC_DRY = 0xFFEFBD07.toInt()
         private val DEFAULT_HVAC_MODES = listOf("off", "heat", "cool")
+        private val TOGGLE_FEATURE_DOMAINS = setOf(
+            "light", "switch", "fan", "input_boolean", "automation", "siren", "humidifier", "climate",
+            "media_player", "remote", "water_heater", "script",
+        )
+        private const val MAX_FAVORITES = 8
+        private val FAVORITE_KEYS = listOf("rgb_color", "rgbw_color", "rgbww_color", "hs_color", "xy_color", "color_temp_kelvin")
+
+        /** HA's six default favorite hues, as `rgb_color`. */
+        private val DEFAULT_RGB_FAVORITES = listOf(
+            Triple(127, 172, 255), Triple(215, 150, 255), Triple(255, 158, 243),
+            Triple(255, 110, 84), Triple(255, 202, 84), Triple(184, 255, 84),
+        )
+
+        /** HA's vacuum commands, in its order: icon and label. */
+        private val VACUUM_COMMANDS = linkedMapOf(
+            "start_pause" to ("mdi:play" to "Start"),
+            "stop" to ("mdi:stop" to "Stop"),
+            "clean_spot" to ("mdi:target-variant" to "Clean spot"),
+            "locate" to ("mdi:map-marker" to "Locate"),
+            "return_home" to ("mdi:home-map-marker" to "Return home"),
+        )
+        private val VACUUM_FALLBACK_ICONS = mapOf("clean_spot" to "mdi:robot-vacuum", "locate" to "mdi:bell", "return_home" to "mdi:home")
         private const val BADGE_FADE_MS = 180L
 
         /** The 10 dp rounded fill under HA 2026's tile features (dropdowns, cover buttons). */
@@ -1480,11 +1982,21 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
     }
 }
 
-/** Native HA `markdown` card with live Jinja2 template support via `render_template`. */
+/**
+ * Native HA `markdown` card with live Jinja2 template support via `render_template`. The content is rendered as
+ * real views by [MarkdownRenderer] (headings, tables, lists, quotes, rules, colored text, inline `<ha-icon>`) and
+ * rebuilt on every template update. `text_only: true` drops the card background like HA does.
+ */
 class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
-    private val body = textView(ctx, 14f, ctx.theme.primaryTextColor)
+    /** The rendered blocks, rebuilt on each update. */
+    val body = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+    private val renderer = MarkdownRenderer(ctx)
 
     init {
+        if (config.raw.optBoolean("text_only", false)) {
+            background = null
+            elevation = 0f
+        }
         val col = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ctx.px(16f), ctx.px(14f), ctx.px(16f), ctx.px(14f))
@@ -1495,26 +2007,19 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 setPadding(0, 0, 0, ctx.px(8f))
             })
         }
-        body.setLineSpacing(ctx.px(3f).toFloat(), 1f)
-        col.addView(body)
+        col.addView(body, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
         val rawContent = config.raw.optString("content", "")
         if ("{{" in rawContent || "{%" in rawContent) {
-            body.text = "…"
+            renderer.render("…", body)
             track(ctx.subscribeTemplate(rawContent) { rendered ->
-                ctx.main.post { body.text = stripMarkdownSyntax(rendered) }
+                ctx.main.post { renderer.render(rendered, body) }
             })
         } else {
-            body.text = stripMarkdownSyntax(rawContent)
+            renderer.render(rawContent, body)
         }
     }
-
-    private fun stripMarkdownSyntax(md: String): String =
-        md.replace(Regex("""^#{1,6}\s+""", RegexOption.MULTILINE), "")
-            .replace(Regex("""\*\*(.+?)\*\*"""), "$1")
-            .replace(Regex("""`([^`]+)`"""), "$1")
-            .trim()
 }
 
 /**
@@ -1688,56 +2193,167 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     }
 }
 
-/** Native Tier 2 fast-path for `custom:mushroom-chips-card`. */
-class MushroomChipsCardView(ctx: VitroCardContext, config: CardConfig) : LinearLayout(ctx.context) {
+/**
+ * Native Tier 2 fast-path for `custom:mushroom-chips-card`: entity, template, weather, light, action, menu, back
+ * and spacer chips. Template chips render `content`, `icon` and `icon_color` live through `render_template`;
+ * `conditional` chips and any chip's `visibility` show and hide with the entities they reference.
+ */
+class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfig) : LinearLayout(ctx.context) {
+    private val subscriptions = ArrayList<() -> Unit>()
+
     init {
         orientation = HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
+        gravity = Gravity.CENTER_VERTICAL or when (config.raw.optString("alignment")) {
+            "center" -> Gravity.CENTER_HORIZONTAL
+            "end" -> Gravity.END
+            else -> Gravity.START
+        }
         setPadding(0, ctx.px(4f), 0, ctx.px(4f))
         val chips = config.raw.optJSONArray("chips")
         if (chips != null) {
-            for (i in 0 until chips.length()) {
-                val c = chips.optJSONObject(i) ?: continue
-                val chip = LinearLayout(ctx.context).apply {
-                    orientation = HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    background = GradientDrawable().apply {
-                        cornerRadius = 999f
-                        setColor(ctx.theme.cardBackgroundColor)
-                        setStroke(ctx.px(1f).coerceAtLeast(1), ctx.theme.cardBorderColor)
-                    }
-                    setPadding(ctx.px(12f), ctx.px(8f), ctx.px(12f), ctx.px(8f))
-                    isClickable = true
-                    applyHaRipple(this, 999f, ctx.theme.dark)
-                }
-                val icon = MdiIconView(ctx.context)
-                val label = textView(ctx, 12f, ctx.theme.primaryTextColor, Inter.MEDIUM)
-                chip.addView(icon, LayoutParams(ctx.px(16f), ctx.px(16f)).apply { marginEnd = ctx.px(6f) })
-                chip.addView(label)
+            for (i in 0 until chips.length()) chips.optJSONObject(i)?.let(::addChip)
+        }
+    }
 
-                val eid = c.optString("entity", "").ifEmpty { null }
-                val tap = ActionConfig.parse(c.optJSONObject("tap_action"), "more-info")
-                chip.setOnClickListener { ctx.performAction(tap, eid) }
-                if (eid != null) {
-                    val render: (EntityState?) -> Unit = { s ->
-                        val active = s?.isActive == true
-                        icon.setIcon(MdiIcons.resolveIconName(c.optString("icon", "").ifEmpty { null }, s),
-                            if (active) ctx.theme.activeColor(s.domain) else ctx.theme.secondaryTextColor)
-                        label.text = s?.formattedState() ?: "…"
-                    }
-                    render(ctx.store[eid])
-                    val unsub = ctx.store.subscribe(eid) { s -> ctx.main.post { render(s) } }
-                    chip.addOnAttachStateChangeListener(object : OnAttachStateChangeListener {
-                        override fun onViewAttachedToWindow(v: View) {}
-                        override fun onViewDetachedFromWindow(v: View) { unsub() }
-                    })
-                } else {
-                    icon.setIcon(c.optString("icon", "mdi:home"), ctx.theme.primaryColor)
-                    label.text = c.optString("content", c.optString("type", "Chip"))
-                }
-                addView(chip, LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = ctx.px(8f) })
+    private fun addChip(c: JSONObject) {
+        val conditional = c.optString("type") == "conditional"
+        val inner = if (conditional) c.optJSONObject("chip") ?: return else c
+        val conditions = buildList {
+            if (conditional) addAll(VisibilityCondition.parseList(c.optJSONArray("conditions")))
+            addAll(VisibilityCondition.parseList(c.optJSONArray("visibility")))
+            if (inner !== c) addAll(VisibilityCondition.parseList(inner.optJSONArray("visibility")))
+        }
+        val view = if (inner.optString("type") == "spacer") {
+            View(ctx.context).also { addView(it, LayoutParams(0, 1, 1f)) }
+        } else {
+            buildChip(inner).also {
+                addView(it, LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = ctx.px(8f) })
             }
         }
+        if (conditions.isEmpty()) return
+        val widthDp = ctx.context.resources.configuration.screenWidthDp.takeIf { it > 0 } ?: 1024
+        fun refresh() {
+            val uid = ctx.haUser().optString("id", "").ifEmpty { null }
+            val show = conditions.all { it.evaluate({ id -> ctx.store[id] }, widthDp, userId = uid) }
+            view.visibility = if (show) VISIBLE else GONE
+        }
+        refresh()
+        val ids = LinkedHashSet<String>()
+        conditions.forEach { it.referencedEntities(ids) }
+        ids.forEach { id -> subscriptions += ctx.store.subscribe(id) { ctx.main.post { refresh() } } }
+    }
+
+    private fun buildChip(c: JSONObject): LinearLayout {
+        val type = c.optString("type", "entity")
+        val chip = LinearLayout(ctx.context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = GradientDrawable().apply {
+                cornerRadius = 999f
+                setColor(ctx.theme.cardBackgroundColor)
+                setStroke(ctx.px(1f).coerceAtLeast(1), ctx.theme.cardBorderColor)
+            }
+            minimumHeight = ctx.px(36f)
+            setPadding(ctx.px(10f), ctx.px(8f), ctx.px(12f), ctx.px(8f))
+            isClickable = true
+            applyHaRipple(this, 999f, ctx.theme.dark)
+        }
+        val icon = MdiIconView(ctx.context)
+        val label = textView(ctx, 12f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply { maxLines = 1 }
+        chip.addView(icon, LayoutParams(ctx.px(18f), ctx.px(18f)))
+        chip.addView(label, LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(6f) })
+        fun setLabel(text: String) {
+            label.text = text
+            label.visibility = if (text.isEmpty()) GONE else VISIBLE
+            chip.setPadding(ctx.px(10f), ctx.px(8f), ctx.px(if (text.isEmpty()) 10f else 12f), ctx.px(8f))
+        }
+
+        val eid = c.optString("entity", "").ifEmpty { null }
+        val defaultTap = when {
+            type == "back" || type == "menu" || type == "action" -> "none"
+            eid != null -> "more-info"
+            else -> "none"
+        }
+        val tap = ActionConfig.parse(c.optJSONObject("tap_action"), defaultTap)
+        chip.setOnClickListener { ctx.performAction(tap, eid) }
+        chip.bindHoldAction(ctx, ActionConfig.parse(c.optJSONObject("hold_action"), "none"), eid)
+        val staticColor = MushroomColors.parse(c.optString("icon_color", "").takeUnless(::isTemplate), ctx.theme)
+
+        when (type) {
+            "template" -> {
+                var iconName = "mdi:home"
+                var iconColor: Int? = null
+                fun paintIcon() = icon.setIcon(iconName.ifBlank { "mdi:home" }, iconColor ?: ctx.theme.primaryTextColor)
+                bindChipField(c, "content", eid) { setLabel(it) }
+                bindChipField(c, "icon", eid) { iconName = it; icon.visibility = if (it.isBlank()) GONE else VISIBLE; paintIcon() }
+                bindChipField(c, "icon_color", eid) { iconColor = MushroomColors.parse(it, ctx.theme); paintIcon() }
+                if (c.optString("icon").isBlank()) icon.visibility = GONE
+                paintIcon()
+            }
+            "back", "menu", "action" -> {
+                val fallback = when (type) {
+                    "back" -> "mdi:arrow-left"
+                    "menu" -> "mdi:menu"
+                    else -> "mdi:flash"
+                }
+                icon.setIcon(c.optString("icon", "").ifEmpty { fallback }, staticColor ?: ctx.theme.primaryTextColor)
+                setLabel("")
+            }
+            else -> if (eid != null) {
+                val render: (EntityState?) -> Unit = { s ->
+                    val active = s?.isActive == true
+                    if (type == "weather") {
+                        icon.setIcon(MdiIcons.weatherIcon(s?.state.orEmpty()), staticColor ?: ctx.theme.stateIconColor)
+                        val temp = s?.attributes?.get("temperature")?.toString()
+                        val unit = s?.attributes?.get("temperature_unit")?.toString().orEmpty()
+                        val parts = buildList {
+                            if (c.optBoolean("show_temperature", true) && temp != null) add("$temp $unit".trim())
+                            if (c.optBoolean("show_conditions", false) && s != null) add(s.state.replace('-', ' '))
+                        }
+                        setLabel(parts.joinToString(" · "))
+                    } else {
+                        val tint = staticColor ?: when {
+                            !active -> ctx.theme.secondaryTextColor
+                            else -> s.lightTintColor() ?: ctx.theme.activeColor(s.domain)
+                        }
+                        icon.setIcon(MdiIcons.resolveIconName(c.optString("icon", "").ifEmpty { null }, s), tint)
+                        setLabel(
+                            when (c.optString("content_info", "state")) {
+                                "name" -> c.optString("name", "").ifEmpty { s?.friendlyName ?: eid }
+                                "last-changed", "last-updated" -> s?.relativeLastChanged().orEmpty()
+                                "none" -> ""
+                                else -> s?.formattedState() ?: "…"
+                            },
+                        )
+                    }
+                }
+                render(ctx.store[eid])
+                subscriptions += ctx.store.subscribe(eid) { s -> ctx.main.post { render(s) } }
+            } else {
+                icon.setIcon(c.optString("icon", "mdi:home"), staticColor ?: ctx.theme.primaryColor)
+                setLabel(c.optString("content", "").takeUnless(::isTemplate).orEmpty())
+            }
+        }
+        return chip
+    }
+
+    /** Applies a chip field now when static, or every time HA re-renders it when it is a template. */
+    private fun bindChipField(c: JSONObject, key: String, entityId: String?, apply: (String) -> Unit) {
+        val raw = c.optString(key, "")
+        if (isTemplate(raw)) {
+            apply("")
+            subscriptions += ctx.subscribeTemplate(withEntityVariable(raw, entityId)) { rendered ->
+                ctx.main.post { apply(rendered.trim()) }
+            }
+        } else {
+            apply(raw)
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        subscriptions.forEach { runCatching { it() } }
+        subscriptions.clear()
     }
 }
 

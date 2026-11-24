@@ -69,6 +69,9 @@ class VitroCardContext(
 
     fun px(dpVal: Float): Int = (dpVal * dp).toInt()
 
+    /** [sp] scaled by the theme's text size ([ResolvedTheme.fontScale]); pass the result to `setTextSize(SP, …)`. */
+    fun scaledSp(sp: Float): Float = sp * theme.fontScale
+
     /**
      * Dispatches a standard HA Lovelace `tap_action` / `hold_action` / `double_tap_action`. When the action carries
      * a `confirmation`, a native dialog asks first and the action only runs on Confirm.

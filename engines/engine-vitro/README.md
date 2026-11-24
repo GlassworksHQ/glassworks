@@ -32,7 +32,7 @@ Tapping or holding a tile opens a native More-Info dialog styled after Home Assi
 | Switch | A toggle pill |
 | Alarm panel | A PIN pad |
 
-Tiles can also carry the inline features Home Assistant adds under the card: `climate-hvac-modes`, `target-temperature`, `fan-speed`, `cover-position`, `light-color-temp` and `media-player-volume-slider`, next to the brightness, select and open/close controls.
+Tiles can also carry the inline features Home Assistant adds under the card: `climate-hvac-modes`, `target-temperature`, `fan-speed`, `cover-position`, `light-color-temp`, `media-player-volume-slider`, `toggle`, `media-player-playback`, `light-color-favorites`, `numeric-input` and `vacuum-commands`, next to the brightness, select and open/close controls.
 
 ## Themes
 
