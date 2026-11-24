@@ -126,7 +126,17 @@ sealed class VisibilityCondition {
         constructor(entity: String, state: String?, stateNot: String?) :
             this(entity, state?.let { listOf(it) }, stateNot?.let { listOf(it) })
     }
-    data class NumericState(val entity: String, val above: Double?, val below: Double?) : VisibilityCondition()
+    /**
+     * HA's `numeric_state` condition. A bound may name an entity instead of a number ([aboveEntity], [belowEntity]):
+     * its state is the bound then, and like HA a bound that isn't a number is ignored.
+     */
+    data class NumericState(
+        val entity: String,
+        val above: Double?,
+        val below: Double?,
+        val aboveEntity: String? = null,
+        val belowEntity: String? = null,
+    ) : VisibilityCondition()
     data class Screen(val mediaQuery: String) : VisibilityCondition()
     data class And(val conditions: List<VisibilityCondition>) : VisibilityCondition()
     data class Or(val conditions: List<VisibilityCondition>) : VisibilityCondition()
@@ -134,7 +144,7 @@ sealed class VisibilityCondition {
     /** HA's `user` condition: visible only to the listed user ids. */
     data class User(val users: List<String>) : VisibilityCondition()
     /**
-     * HA's `time` condition. [after] and [before] are minutes from local midnight (0..1439); a window with
+     * HA's `time` condition. [after] and [before] are seconds from local midnight (0..86399); a window with
      * `after > before` runs overnight. [weekdays] holds [Calendar] day constants (null means every day).
      */
     data class Time(val after: Int?, val before: Int?, val weekdays: Set<Int>?) : VisibilityCondition()
@@ -144,38 +154,61 @@ sealed class VisibilityCondition {
      */
     data class Unknown(val condition: String) : VisibilityCondition()
 
+    /** True only when the condition definitely holds: one Vitro can't evaluate never shows a card. */
     fun evaluate(
         lookup: (String) -> EntityState?,
         widthDp: Int = 1024,
         userId: String? = null,
-        nowMinutes: Int = currentLocalMinutes(),
+        nowSeconds: Int = currentLocalSeconds(),
         weekday: Int = currentLocalWeekday(),
-    ): Boolean = when (this) {
-        is State -> {
-            // Like HA's frontend, a missing entity reads as "unavailable": `state_not: off` still shows it.
-            val cur = lookup(entity)?.state ?: UNAVAILABLE
-            (states == null || cur in states) && (statesNot == null || cur !in statesNot)
-        }
-        is NumericState -> {
-            val v = lookup(entity)?.state?.toDoubleOrNull() ?: return false
-            (above == null || v > above) && (below == null || v < below)
-        }
-        is Screen -> evaluateMediaQuery(mediaQuery, widthDp)
-        is And -> conditions.all { it.evaluate(lookup, widthDp, userId, nowMinutes, weekday) }
-        is Or -> conditions.any { it.evaluate(lookup, widthDp, userId, nowMinutes, weekday) }
-        is Not -> conditions.none { it.evaluate(lookup, widthDp, userId, nowMinutes, weekday) }
-        is User -> userId != null && userId in users
-        is Time -> evaluateTime(nowMinutes, weekday)
-        is Unknown -> false
-    }
+    ): Boolean = evaluate3(lookup, widthDp, userId, nowSeconds, weekday) == true
 
-    private fun Time.evaluateTime(nowMinutes: Int, weekday: Int): Boolean {
+    /**
+     * Three-valued: null when Vitro can't tell ([Unknown], a media query it can't read). Null stays null through `not`,
+     * so negating a condition Vitro doesn't understand never turns it into permission to show a card; `and` with a
+     * false branch is false, `or` with a true branch is true.
+     */
+    private fun evaluate3(lookup: (String) -> EntityState?, widthDp: Int, userId: String?, nowSeconds: Int, weekday: Int): Boolean? =
+        when (this) {
+            is State -> {
+                // Like HA's frontend, a missing entity reads as "unavailable": `state_not: off` still shows it.
+                val cur = lookup(entity)?.state ?: UNAVAILABLE
+                (states == null || cur in states) && (statesNot == null || cur !in statesNot)
+            }
+            is NumericState -> {
+                val v = lookup(entity)?.state?.toDoubleOrNull()
+                if (v == null) {
+                    false
+                } else {
+                    // An entity bound reads that entity's state; a bound that isn't a number (yet) is ignored, as in HA.
+                    val lo = above ?: aboveEntity?.let { lookup(it)?.state?.toDoubleOrNull() }
+                    val hi = below ?: belowEntity?.let { lookup(it)?.state?.toDoubleOrNull() }
+                    (lo == null || v > lo) && (hi == null || v < hi)
+                }
+            }
+            is Screen -> evaluateMediaQuery(mediaQuery, widthDp)
+            is And -> and3(conditions.map { it.evaluate3(lookup, widthDp, userId, nowSeconds, weekday) })
+            is Or -> {
+                val r = conditions.map { it.evaluate3(lookup, widthDp, userId, nowSeconds, weekday) }
+                if (r.any { it == true }) true else if (r.any { it == null }) null else false
+            }
+            // HA negates the conjunction of the children (`!checkConditionsMet(conditions)`).
+            is Not -> and3(conditions.map { it.evaluate3(lookup, widthDp, userId, nowSeconds, weekday) })?.not()
+            is User -> userId != null && userId in users
+            is Time -> evaluateTime(nowSeconds, weekday)
+            is Unknown -> null
+        }
+
+    private fun and3(results: List<Boolean?>): Boolean? =
+        if (results.any { it == false }) false else if (results.any { it == null }) null else true
+
+    private fun Time.evaluateTime(nowSeconds: Int, weekday: Int): Boolean {
         if (weekdays != null && weekday !in weekdays) return false
         return when {
             after != null && before != null ->
-                if (after <= before) nowMinutes in after until before else nowMinutes >= after || nowMinutes < before
-            after != null -> nowMinutes >= after
-            before != null -> nowMinutes < before
+                if (after <= before) nowSeconds in after until before else nowSeconds >= after || nowSeconds < before
+            after != null -> nowSeconds >= after
+            before != null -> nowSeconds < before
             else -> true
         }
     }
@@ -201,7 +234,11 @@ sealed class VisibilityCondition {
     fun referencedEntities(out: MutableSet<String>) {
         when (this) {
             is State -> out += entity
-            is NumericState -> out += entity
+            is NumericState -> {
+                out += entity
+                aboveEntity?.let { out += it }
+                belowEntity?.let { out += it }
+            }
             is Screen, is User, is Time, is Unknown -> Unit
             is And -> conditions.forEach { it.referencedEntities(out) }
             is Or -> conditions.forEach { it.referencedEntities(out) }
@@ -211,31 +248,64 @@ sealed class VisibilityCondition {
 
     companion object {
         private const val UNAVAILABLE = "unavailable"
-        private val MIN_W = Regex("""min-width\s*:\s*(\d+)px""")
-        private val MAX_W = Regex("""max-width\s*:\s*(\d+)px""")
+        /** One `(min-width: Npx)` / `(max-width: Npx)` feature: the only media features Vitro evaluates. */
+        private val WIDTH_FEATURE = Regex("""^\(\s*(min|max)-width\s*:\s*(\d+(?:\.\d+)?)px\s*\)$""")
+        private val MEDIA_AND = Regex("""\s+and\s+""")
+        private val ENTITY_ID = Regex("""^\w+\.\w+$""")
         private val HHMM = Regex("""^\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*$""")
         private val WEEKDAYS = mapOf(
             "mon" to Calendar.MONDAY, "tue" to Calendar.TUESDAY, "wed" to Calendar.WEDNESDAY,
             "thu" to Calendar.THURSDAY, "fri" to Calendar.FRIDAY, "sat" to Calendar.SATURDAY, "sun" to Calendar.SUNDAY,
         )
 
-        fun currentLocalMinutes(): Int = Calendar.getInstance().let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) }
+        fun currentLocalSeconds(): Int = Calendar.getInstance().let {
+            it.get(Calendar.HOUR_OF_DAY) * 3_600 + it.get(Calendar.MINUTE) * 60 + it.get(Calendar.SECOND)
+        }
 
         fun currentLocalWeekday(): Int = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
 
-        private fun evaluateMediaQuery(q: String, widthDp: Int): Boolean {
-            val min = MIN_W.find(q)?.groupValues?.get(1)?.toIntOrNull()
-            val max = MAX_W.find(q)?.groupValues?.get(1)?.toIntOrNull()
-            return (min == null || widthDp >= min) && (max == null || widthDp <= max)
+        /**
+         * A media query of `(min-width: Npx)` / `(max-width: Npx)` features joined with `and` (optionally after
+         * `screen and` / `all and`), evaluated at [widthDp]. Anything else (orientation, lists, `not`, other features)
+         * is null: Vitro can't tell, and the card stays hidden. An empty query is false, as in HA.
+         */
+        private fun evaluateMediaQuery(q: String, widthDp: Int): Boolean? {
+            val query = q.trim().lowercase(Locale.ROOT)
+            if (query.isEmpty()) return false
+            val parts = query.split(MEDIA_AND).toMutableList()
+            if (parts.first() == "screen" || parts.first() == "all") parts.removeAt(0)
+            if (parts.isEmpty()) return null
+            var ok = true
+            for (part in parts) {
+                val m = WIDTH_FEATURE.matchEntire(part.trim()) ?: return null
+                val px = m.groupValues[2].toDouble()
+                ok = ok && if (m.groupValues[1] == "min") widthDp >= px else widthDp <= px
+            }
+            return ok
         }
 
-        /** `HH:MM` or `HH:MM:SS` as minutes from midnight, or null when it isn't a valid time of day. */
+        /** `HH:MM` or `HH:MM:SS` as seconds from midnight, or null when it isn't a valid time of day. */
         fun parseTimeOfDay(raw: String?): Int? {
             val m = HHMM.find(raw ?: return null) ?: return null
             val h = m.groupValues[1].toInt()
             val min = m.groupValues[2].toInt()
-            if (h !in 0..23 || min !in 0..59) return null
-            return h * 60 + min
+            val sec = m.groupValues[3].ifEmpty { "0" }.toInt()
+            if (h !in 0..23 || min !in 0..59 || sec !in 0..59) return null
+            return h * 3_600 + min * 60 + sec
+        }
+
+        /** The condition's target: core's `entity_id` before Lovelace's `entity`, as HA's frontend reads it. */
+        private fun conditionEntity(o: JSONObject): String =
+            o.optString("entity_id", "").trim().ifEmpty { o.optString("entity", "").trim() }
+
+        /** A numeric bound: a number (or numeric string), or else the entity id whose state is the bound. */
+        private fun bound(o: JSONObject, key: String): Pair<Double?, String?> {
+            if (!o.has(key) || o.isNull(key)) return null to null
+            val v = o.opt(key)
+            if (v is Number) return v.toDouble().takeIf { !it.isNaN() } to null
+            val text = v.toString().trim()
+            text.toDoubleOrNull()?.let { return it to null }
+            return null to text.takeIf { ENTITY_ID.matches(it) }
         }
 
         /** Reads [key] as either one string or a JSON array of strings; null when absent or empty. */
@@ -264,17 +334,17 @@ sealed class VisibilityCondition {
             val condName = o.optString("condition", "state")
             return when (condName) {
                 "state" -> {
-                    val entity = o.optString("entity", "").ifEmpty { return Unknown(condName) }
+                    val entity = conditionEntity(o).ifEmpty { return Unknown(condName) }
                     val st = parseStringList(o, "state")
                     val not = parseStringList(o, "state_not")
                     if (st == null && not == null) return Unknown(condName)
                     State(entity, st, not)
                 }
                 "numeric_state" -> {
-                    val entity = o.optString("entity", "").ifEmpty { return Unknown(condName) }
-                    val above = if (o.has("above") && !o.isNull("above")) o.optDouble("above") else null
-                    val below = if (o.has("below") && !o.isNull("below")) o.optDouble("below") else null
-                    NumericState(entity, above?.takeIf { !it.isNaN() }, below?.takeIf { !it.isNaN() })
+                    val entity = conditionEntity(o).ifEmpty { return Unknown(condName) }
+                    val (above, aboveEntity) = bound(o, "above")
+                    val (below, belowEntity) = bound(o, "below")
+                    NumericState(entity, above, below, aboveEntity, belowEntity)
                 }
                 "screen" -> Screen(o.optString("media_query", ""))
                 "user" -> {

@@ -429,8 +429,15 @@ class LovelaceModelTest {
         assertFalse(band.evaluate(states(), widthDp = 1000))
         assertFalse(band.evaluate(states(), widthDp = 500))
 
-        assertTrue(VisibilityCondition.Screen("").evaluate(states(), widthDp = 320)) // nothing to restrict
-        assertTrue(VisibilityCondition.Screen("(prefers-color-scheme: dark)").evaluate(states(), widthDp = 320)) // unknown queries do not hide
+        assertTrue(VisibilityCondition.Screen("screen and (max-width: 767.5px)").evaluate(states(), widthDp = 600))
+        // HA's `media_query ? matchMedia(…).matches : false`: an empty query hides.
+        assertFalse(VisibilityCondition.Screen("").evaluate(states(), widthDp = 320))
+        // A query Vitro can't evaluate whole (other features, a list) hides the card rather than ignoring the rest.
+        assertFalse(VisibilityCondition.Screen("(prefers-color-scheme: dark)").evaluate(states(), widthDp = 320))
+        assertFalse(VisibilityCondition.Screen("(min-width: 100px) and (orientation: portrait)").evaluate(states(), widthDp = 1024))
+        assertFalse(VisibilityCondition.Screen("(max-width: 100px), (min-width: 200px)").evaluate(states(), widthDp = 1024))
+        // ...also under `not`: not knowing is never permission to show.
+        assertFalse(VisibilityCondition.Not(listOf(VisibilityCondition.Screen("(orientation: portrait)"))).evaluate(states(), widthDp = 1024))
     }
 
     @Test
@@ -449,19 +456,21 @@ class LovelaceModelTest {
         assertTrue(or.evaluate(lampOnly))
         assertFalse(or.evaluate(neither))
 
+        // HA negates the conjunction: `not [a, b]` shows the card unless both hold.
         val not = VisibilityCondition.Not(listOf(lampOn, doorOpen))
         assertTrue(not.evaluate(neither))
-        assertFalse(not.evaluate(lampOnly))
+        assertTrue(not.evaluate(lampOnly))
+        assertFalse(not.evaluate(both))
 
         // Nesting.
         val nested = VisibilityCondition.And(listOf(VisibilityCondition.Or(listOf(lampOn, doorOpen)), VisibilityCondition.Not(listOf(VisibilityCondition.Screen("(max-width: 500px)")))))
         assertTrue(nested.evaluate(lampOnly, widthDp = 1024))
         assertFalse(nested.evaluate(lampOnly, widthDp = 400))
 
-        // Empty groups: And is vacuously true, Or false, Not true.
+        // Empty groups: And is vacuously true, Or false, Not the negation of an empty And.
         assertTrue(VisibilityCondition.And(emptyList()).evaluate(neither))
         assertFalse(VisibilityCondition.Or(emptyList()).evaluate(neither))
-        assertTrue(VisibilityCondition.Not(emptyList()).evaluate(neither))
+        assertFalse(VisibilityCondition.Not(emptyList()).evaluate(neither))
     }
 
     @Test
@@ -490,7 +499,8 @@ class LovelaceModelTest {
                 VisibilityCondition.State("light.lounge_lamp", null, "off"),
                 VisibilityCondition.State("light.no_condition_key", "on", null), // `state` is the default condition
                 VisibilityCondition.NumericState("sensor.kitchen_temp", 18.5, 26.0),
-                VisibilityCondition.NumericState("sensor.kitchen_temp", null, null), // a non-number bound is dropped
+                // An entity id bound reads that entity's state when the condition is evaluated.
+                VisibilityCondition.NumericState("sensor.kitchen_temp", null, null, aboveEntity = "sensor.not_a_number"),
                 VisibilityCondition.Screen("(min-width: 768px)"),
                 VisibilityCondition.And(listOf(VisibilityCondition.State("light.a", "on", null))),
                 VisibilityCondition.Or(emptyList()),
@@ -936,7 +946,7 @@ class LovelaceModelTest {
         )) {
             val c = VisibilityCondition.parse(JSONObject(json))
             assertTrue("$json should be Unknown, was $c", c is VisibilityCondition.Unknown)
-            assertFalse("$json must fail closed", c.evaluate(anyState, userId = "abc", nowMinutes = 600, weekday = java.util.Calendar.MONDAY))
+            assertFalse("$json must fail closed", c.evaluate(anyState, userId = "abc", nowSeconds = 36_000, weekday = java.util.Calendar.MONDAY))
         }
 
         val lampOn = VisibilityCondition.State("light.a", "on", null)
@@ -955,6 +965,37 @@ class LovelaceModelTest {
         assertFalse(camera.visibility.all { it.evaluate(anyState) })
         val parsedOr = VisibilityCondition.parse(JSONObject("""{"condition": "or", "conditions": [{"condition": "sun"}, {"condition": "template"}]}"""))
         assertFalse(parsedOr.evaluate(anyState))
+        // Negating a condition Vitro can't evaluate doesn't show the card either.
+        assertFalse(VisibilityCondition.Not(listOf(sun)).evaluate(anyState))
+        assertFalse(VisibilityCondition.Not(listOf(lampOn, sun)).evaluate(anyState))
+        assertTrue(VisibilityCondition.Not(listOf(VisibilityCondition.State("light.a", "off", null), sun)).evaluate(anyState))
+    }
+
+    @Test
+    fun conditionsReadHaCoreEntityIdAndEntityBounds() {
+        val byEntityId = VisibilityCondition.parse(JSONObject("""{"condition": "state", "entity_id": "light.desk", "state": "on"}"""))
+        assertEquals(VisibilityCondition.State("light.desk", "on", null), byEntityId)
+        assertTrue(byEntityId.evaluate(states("light.desk" to "on")))
+
+        val bounded = VisibilityCondition.parse(
+            JSONObject("""{"condition": "numeric_state", "entity_id": "sensor.room", "above": "input_number.minimum", "below": "30"}"""),
+        )
+        assertEquals(VisibilityCondition.NumericState("sensor.room", null, 30.0, aboveEntity = "input_number.minimum"), bounded)
+        assertFalse(bounded.evaluate(states("sensor.room" to "19", "input_number.minimum" to "21")))
+        assertTrue(bounded.evaluate(states("sensor.room" to "22", "input_number.minimum" to "21")))
+        // A bound entity with no number is ignored, as HA does with NaN.
+        assertTrue(bounded.evaluate(states("sensor.room" to "19", "input_number.minimum" to "unavailable")))
+        val watched = LinkedHashSet<String>()
+        bounded.referencedEntities(watched)
+        assertEquals(setOf("sensor.room", "input_number.minimum"), watched)
+    }
+
+    @Test
+    fun timeConditionsKeepSeconds() {
+        val c = VisibilityCondition.parse(JSONObject("""{"condition": "time", "after": "08:00:30"}"""))
+        assertFalse(c.evaluate(states(), nowSeconds = 8 * 3_600 + 10))
+        assertTrue(c.evaluate(states(), nowSeconds = 8 * 3_600 + 30))
+        assertTrue(VisibilityCondition.parse(JSONObject("""{"condition": "time", "after": "08:00:60"}""")) is VisibilityCondition.Unknown)
     }
 
     @Test
@@ -1014,40 +1055,40 @@ class LovelaceModelTest {
     fun timeConditionHandlesWindowsOvernightAndWeekdays() {
         val mon = java.util.Calendar.MONDAY
         val sat = java.util.Calendar.SATURDAY
-        fun t(h: Int, m: Int = 0) = h * 60 + m
+        fun t(h: Int, m: Int = 0, sec: Int = 0) = h * 3_600 + m * 60 + sec
 
         val day = VisibilityCondition.parse(JSONObject("""{"condition": "time", "after": "08:00", "before": "17:30:00"}"""))
         assertEquals(VisibilityCondition.Time(t(8), t(17, 30), null), day)
-        assertFalse(day.evaluate(states(), nowMinutes = t(7, 59), weekday = mon))
-        assertTrue(day.evaluate(states(), nowMinutes = t(8), weekday = mon))
-        assertTrue(day.evaluate(states(), nowMinutes = t(17, 29), weekday = mon))
-        assertFalse(day.evaluate(states(), nowMinutes = t(17, 30), weekday = mon))
+        assertFalse(day.evaluate(states(), nowSeconds = t(7, 59), weekday = mon))
+        assertTrue(day.evaluate(states(), nowSeconds = t(8), weekday = mon))
+        assertTrue(day.evaluate(states(), nowSeconds = t(17, 29), weekday = mon))
+        assertFalse(day.evaluate(states(), nowSeconds = t(17, 30), weekday = mon))
 
         val night = VisibilityCondition.parse(JSONObject("""{"condition": "time", "after": "22:00", "before": "06:00"}"""))
-        assertTrue(night.evaluate(states(), nowMinutes = t(23), weekday = mon))
-        assertTrue(night.evaluate(states(), nowMinutes = t(0), weekday = mon))
-        assertTrue(night.evaluate(states(), nowMinutes = t(5, 59), weekday = mon))
-        assertFalse(night.evaluate(states(), nowMinutes = t(6), weekday = mon))
-        assertFalse(night.evaluate(states(), nowMinutes = t(12), weekday = mon))
+        assertTrue(night.evaluate(states(), nowSeconds = t(23), weekday = mon))
+        assertTrue(night.evaluate(states(), nowSeconds = t(0), weekday = mon))
+        assertTrue(night.evaluate(states(), nowSeconds = t(5, 59), weekday = mon))
+        assertFalse(night.evaluate(states(), nowSeconds = t(6), weekday = mon))
+        assertFalse(night.evaluate(states(), nowSeconds = t(12), weekday = mon))
 
         val afterOnly = VisibilityCondition.Time(t(18), null, null)
-        assertTrue(afterOnly.evaluate(states(), nowMinutes = t(18), weekday = mon))
-        assertFalse(afterOnly.evaluate(states(), nowMinutes = t(17, 59), weekday = mon))
+        assertTrue(afterOnly.evaluate(states(), nowSeconds = t(18), weekday = mon))
+        assertFalse(afterOnly.evaluate(states(), nowSeconds = t(17, 59), weekday = mon))
         val beforeOnly = VisibilityCondition.Time(null, t(9), null)
-        assertTrue(beforeOnly.evaluate(states(), nowMinutes = t(8, 59), weekday = mon))
-        assertFalse(beforeOnly.evaluate(states(), nowMinutes = t(9), weekday = mon))
+        assertTrue(beforeOnly.evaluate(states(), nowSeconds = t(8, 59), weekday = mon))
+        assertFalse(beforeOnly.evaluate(states(), nowSeconds = t(9), weekday = mon))
 
         val weekend = VisibilityCondition.parse(JSONObject("""{"condition": "time", "weekdays": ["sat", "sun"]}"""))
         assertEquals(VisibilityCondition.Time(null, null, setOf(sat, java.util.Calendar.SUNDAY)), weekend)
-        assertTrue(weekend.evaluate(states(), nowMinutes = t(12), weekday = sat))
-        assertFalse(weekend.evaluate(states(), nowMinutes = t(12), weekday = mon))
+        assertTrue(weekend.evaluate(states(), nowSeconds = t(12), weekday = sat))
+        assertFalse(weekend.evaluate(states(), nowSeconds = t(12), weekday = mon))
 
         val weekdayMornings = VisibilityCondition.parse(
             JSONObject("""{"condition": "time", "after": "06:30", "before": "09:00", "weekdays": ["mon", "tue", "wed", "thu", "fri"]}"""),
         )
-        assertTrue(weekdayMornings.evaluate(states(), nowMinutes = t(7), weekday = mon))
-        assertFalse(weekdayMornings.evaluate(states(), nowMinutes = t(7), weekday = sat))
-        assertFalse(weekdayMornings.evaluate(states(), nowMinutes = t(10), weekday = mon))
+        assertTrue(weekdayMornings.evaluate(states(), nowSeconds = t(7), weekday = mon))
+        assertFalse(weekdayMornings.evaluate(states(), nowSeconds = t(7), weekday = sat))
+        assertFalse(weekdayMornings.evaluate(states(), nowSeconds = t(10), weekday = mon))
 
         assertTrue(day.dependsOnTime())
         assertTrue(VisibilityCondition.And(listOf(VisibilityCondition.Or(listOf(night)))).dependsOnTime())
