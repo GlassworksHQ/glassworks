@@ -342,13 +342,14 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         var brightnessSlider: HaHorizontalSliderView? = null
         var selectBox: TextView? = null
         if ("light-brightness" in featureTypes && entityId != null) {
+            // HA's brightness feature is a 1..100 slider of brightness_pct.
             brightnessSlider = HaHorizontalSliderView(
                 ctx = ctx,
                 accentColor = ctx.theme.activeColor("light"),
+                haGeometry = true,
                 onCommit = { frac ->
-                    val bri = (frac * 255f).toInt().coerceIn(0, 255)
-                    if (bri <= 0) ctx.callService("light", "turn_off", JSONObject().put("entity_id", entityId), null)
-                    else ctx.callService("light", "turn_on", JSONObject().put("entity_id", entityId).put("brightness", bri), null)
+                    val pct = (1f + frac * 99f).roundToInt().coerceIn(1, 100)
+                    ctx.callService("light", "turn_on", JSONObject().put("entity_id", entityId).put("brightness_pct", pct), null)
                 },
             )
             brightnessSlider.tag = FEATURE_TAG + "light-brightness"
@@ -458,20 +459,29 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 unavailableBadge.visibility = if (s?.state == "unavailable") VISIBLE else GONE
                 renderState(s)
                 brightnessSlider?.let { sb ->
+                    // HA draws the feature only for a light that can dim (supportsLightBrightnessCardFeature); without
+                    // it the info row takes the whole card, centred.
+                    sb.visibility = if (s != null && lightSupportsBrightness(s)) VISIBLE else GONE
+                    // HA's features box stays, empty, with its 12 px bottom padding: the info centres above it.
+                    (sb.parent as? LinearLayout)?.let { col ->
+                        val anyShown = (1 until col.childCount).any { col.getChildAt(it).visibility == VISIBLE }
+                        col.setPadding(0, 0, 0, if (anyShown) 0 else ctx.px(12f))
+                    }
                     // HA's feature color: the light's own color, else --state-light-active-color.
                     sb.setAccentColor(s?.lightTintColor() ?: ctx.theme.activeColor("light"))
                     sb.inactiveColor = if (s?.state == "unavailable") ctx.theme.disabledTextColor else ctx.theme.stateInactiveColor
                     val on = s?.isActive == true
+                    sb.showHandle = on
                     val bri = (s?.attributes?.get("brightness") as? Number)?.toInt()?.takeIf { it in 1..255 }
                     when {
                         !on -> sb.setValue(0f, active = false)
                         bri != null -> {
                             lastBrightness = bri
-                            sb.setValue(bri / 255f, active = true)
+                            sb.setValue(brightnessFraction(bri), active = true)
                         }
                         // An optimistic `on` before HA reports `brightness`: restore the last level, or hold
                         // still until the real value lands, never flash to 100%.
-                        else -> sb.setValue(lastBrightness?.let { it / 255f } ?: sb.value, active = true)
+                        else -> sb.setValue(lastBrightness?.let { brightnessFraction(it) } ?: sb.value, active = true)
                     }
                 }
                 selectBox?.text = s?.let { HaDisplay.stateLabel(it) ?: it.state } ?: "…"
@@ -635,7 +645,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                     }
                 }
                 "fan-speed" -> {
-                    val slider = HaHorizontalSliderView(ctx, ctx.theme.activeColor("fan")) { frac ->
+                    val slider = HaHorizontalSliderView(ctx, ctx.theme.activeColor("fan"), haGeometry = true) { frac ->
                         val pct = (frac * 100f).roundToInt().coerceIn(0, 100)
                         if (pct <= 0) ctx.callService("fan", "turn_off", data(), null)
                         else ctx.callService("fan", "set_percentage", data().put("percentage", pct), null)
@@ -680,7 +690,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 }
                 "media-player-volume-slider" -> {
                     // HA's feature: the slider in the player's state color, then a 36 px mute button 12 px after it.
-                    val slider = HaHorizontalSliderView(ctx, ctx.theme.activeColor("media_player")) { frac ->
+                    val slider = HaHorizontalSliderView(ctx, ctx.theme.activeColor("media_player"), haGeometry = true) { frac ->
                         val vol = (frac * 100f).roundToInt() / 100.0
                         ctx.callService("media_player", "volume_set", data().put("volume_level", vol), null)
                     }
@@ -1389,6 +1399,13 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 internal class HaHorizontalSliderView(
     private val ctx: VitroCardContext,
     private var accentColor: Int,
+    /**
+     * HA's `ha-control-slider` geometry, as the tile features draw it: a 12 px track, the value bar a full-width
+     * 8 px-rounded rectangle slid so its end sits at `v·W`, or with [showHandle] at `v·S + 2m + 4` (`m` = thickness / 8,
+     * `S` = width - 2m - 4), and a 4 px white handle `m` inside that end at half the height. Off, Mushroom's and older
+     * sliders keep the plain fill.
+     */
+    private val haGeometry: Boolean = false,
     private val onCommit: (Float) -> Unit,
 ) : View(ctx.context) {
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
@@ -1402,6 +1419,10 @@ internal class HaHorizontalSliderView(
     private val handleRect = RectF()
     private var fraction = 0f
     private var active = false
+
+    /** `show-handle`: the bar keeps room for the handle at 0 (HA's brightness feature while the light is on). */
+    var showHandle: Boolean = false
+        set(v) { if (field != v) { field = v; invalidate() } }
 
     /** The track's color while off: `--state-inactive-color`, or the unavailable color. */
     var inactiveColor: Int = ctx.theme.stateInactiveColor
@@ -1503,7 +1524,7 @@ internal class HaHorizontalSliderView(
         val w = width.toFloat()
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
-        val r = 10f * ctx.dp
+        val r = (if (haGeometry) 12f else 10f) * ctx.dp
         bounds.set(0f, 0f, w, h)
         clipPath.reset()
         clipPath.addRoundRect(bounds, r, r, Path.Direction.CW)
@@ -1512,6 +1533,21 @@ internal class HaHorizontalSliderView(
         // ha-control-slider: the track is the slider's color at 20%; off, that's the state's inactive color.
         trackPaint.color = CardSurface.withAlpha(if (active) accentColor else inactiveColor, 0.20f)
         canvas.drawRect(bounds, trackPaint)
+        if (haGeometry) {
+            if (active) {
+                val m = h / 8f
+                val hs = 4f * ctx.dp
+                val v = fraction.coerceIn(0f, 1f)
+                val end = if (showHandle) v * (w - 2f * m - hs) + 2f * m + hs else v * w
+                fillPaint.color = accentColor
+                val br = 8f * ctx.dp
+                canvas.drawRoundRect(end - w, 0f, end, h, br, br, fillPaint)
+                handleRect.set(end - m - hs, h / 4f, end - m, h * 3f / 4f)
+                canvas.drawRoundRect(handleRect, hs, hs, handlePaint)
+            }
+            canvas.restore()
+            return
+        }
         val fillW = (w * fraction).coerceIn(0f, w)
         if (fillW > 0f) {
             fillPaint.color = accentColor
@@ -2795,6 +2831,19 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         subscriptions.clear()
     }
 }
+
+/**
+ * Where HA's brightness slider sits for a `brightness` (0..255): `max(round(b * 100 / 255), 1)` percent on a 1..100
+ * slider, so 5 % is (5 - 1) / 99 of the way.
+ */
+internal fun brightnessFraction(brightness: Int): Float =
+    (maxOf((brightness * 100f / 255f).roundToInt(), 1) - 1) / 99f
+
+/** HA's `lightSupportsBrightness`: a supported color mode other than `onoff` (and `unknown`). */
+internal fun lightSupportsBrightness(s: EntityState): Boolean =
+    (s.attributes["supported_color_modes"] as? List<*>)?.any { it in BRIGHTNESS_MODES } == true
+
+private val BRIGHTNESS_MODES = setOf("brightness", "color_temp", "hs", "xy", "rgb", "rgbw", "rgbww", "white")
 
 /**
  * Mushroom's weather chip label: HA's state display when `show_conditions`, then the temperature attribute as HA's

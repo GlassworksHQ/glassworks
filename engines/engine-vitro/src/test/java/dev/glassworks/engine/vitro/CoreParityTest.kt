@@ -391,6 +391,22 @@ class CoreParityTest {
     }
 
     @Test
+    fun brightnessFeatureFollowsHa() {
+        // HA's 1..100 brightness_pct slider: brightness 13 is 5 %, (5 - 1) / 99 of the way; 1 is the floor.
+        assertEquals(4f / 99f, dev.glassworks.engine.vitro.cards.brightnessFraction(13), 1e-6f)
+        assertEquals(0f, dev.glassworks.engine.vitro.cards.brightnessFraction(1), 1e-6f)
+        assertEquals(1f, dev.glassworks.engine.vitro.cards.brightnessFraction(255), 1e-6f)
+        // A light that can only switch has no brightness feature, as in HA.
+        val store = EntityStore()
+        store.putLocal(EntityState("light.plain", "off", mapOf("supported_color_modes" to listOf("onoff"))))
+        store.putLocal(EntityState("light.dim", "on", mapOf("supported_color_modes" to listOf("brightness"), "brightness" to 13)))
+        fun feature(id: String) = tile(store, ArrayList(), id, """{"type": "light-brightness"}""").all()
+            .single { it.tag?.toString()?.endsWith("light-brightness") == true }
+        assertEquals(View.GONE, feature("light.plain").visibility)
+        assertEquals(View.VISIBLE, feature("light.dim").visibility)
+    }
+
+    @Test
     fun weatherChipFollowsMushroom() {
         val fog = EntityState("weather.home", "fog", mapOf("temperature" to 8.7, "temperature_unit" to "°C"))
         // Conditions first, then the temperature, each only when asked for, joined by Mushroom's " ⸱ ".
