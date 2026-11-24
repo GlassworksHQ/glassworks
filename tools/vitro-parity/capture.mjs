@@ -1,0 +1,420 @@
+#!/usr/bin/env node
+// Vitro parity harness, Home Assistant side (#793): renders every corpus case in HA's real frontend, in
+// headless Chromium at each panel's CSS size and density, and writes the reference renders that
+// VitroParityHarnessTest compares Vitro against.
+//
+// What it touches:
+//   - Home Assistant, through the credentials in ha.json (VITRO_PARITY_HA, default
+//     ~/.t3/glassworks-m1/vitro-parity/ha.json). It WRITES ONE DASHBOARD ONLY: `vitro-harness` (admin-only,
+//     not in the sidebar), created if missing and overwritten on every run. It never changes an entity
+//     state or any other dashboard; everything else is read-only (states, themes, config, render_template).
+//   - The corpus folder (default engines/engine-vitro/src/test/parity, or --root): writes refs/<frame>/<case>.png
+//     and .json, refs/shared.json, and assets/ (HA's own /static images a case shows). For --root pointing
+//     at a local corpus, also dashboards/<url_path>.json (the real dashboards' configs).
+//   - Chromium with a throwaway profile (playwright-core; Playwright's own Chromium if installed, else
+//     Google Chrome, or CHROME=<path>).
+// The token and the HA origin are never printed or written: logs go through redact(), and the files hold
+// only scrubbed entity states, rendered templates and themes (see scrub.mjs).
+//
+//   node tools/vitro-parity/capture.mjs prepare [--root <dir>]          save vitro-harness, fetch real dashboards' configs and assets
+//   node tools/vitro-parity/capture.mjs capture [--root <dir>] [--frames s1,tablet] [--cases a,b] [--templates <file>]
+//
+// tools/vitro-parity/run.sh runs both with the Gradle steps in between; see the README.
+import { chromium } from 'playwright-core';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { connect, loadCredentials, redact } from './lib/ha.mjs';
+import { referencedEntities, scrubStates, scrubText, checkDenylist } from './lib/scrub.mjs';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const DEFAULT_CORPUS = join(ROOT, 'engines', 'engine-vitro', 'src', 'test', 'parity');
+const HARNESS = 'vitro-harness';
+/** CSS px of page around each card in the reference crop, so an offset card still shows. */
+const MARGIN = 8;
+
+// The kiosk's own CSS (engines/engine-gecko/src/main/assets/extension/content.js, HUI_CSS): no header.
+const HUI_CSS = ':host { --header-height: 0px !important; } .header { display: none !important; } #view { padding-top: 0 !important; min-height: 100vh !important; }';
+
+function parseArgs(argv) {
+  const [cmd, ...rest] = argv;
+  const o = { cmd };
+  for (let i = 0; i < rest.length; i++) {
+    const k = rest[i];
+    if (!k.startsWith('--')) throw new Error(`unexpected argument ${k}`);
+    o[k.slice(2)] = rest[i + 1] && !rest[i + 1].startsWith('--') ? rest[++i] : true;
+  }
+  return o;
+}
+
+const args = parseArgs(process.argv.slice(2));
+const creds = loadCredentials();
+const log = (...a) => console.log(redact(a.join(' '), creds));
+
+function fail(msg) {
+  console.error(redact(msg, creds));
+  process.exit(1);
+}
+
+if (!['prepare', 'capture'].includes(args.cmd)) fail('usage: capture.mjs prepare|capture [--root <dir>] [--frames ...] [--cases ...]');
+if (!creds) fail('no Home Assistant credentials (set VITRO_PARITY_HA or create ~/.t3/glassworks-m1/vitro-parity/ha.json); the CI-safe part needs none: ./gradlew :engine-vitro:testDebugUnitTest');
+
+const corpusRoot = resolve(args.root || DEFAULT_CORPUS);
+const committed = corpusRoot === DEFAULT_CORPUS;
+const frames = JSON.parse(readFileSync(join(DEFAULT_CORPUS, 'frames.json'), 'utf8')).frames
+  .filter((f) => !args.frames || args.frames.split(',').includes(f.id));
+
+function loadCases() {
+  const dir = join(corpusRoot, 'corpus');
+  const cases = readdirSync(dir).filter((f) => f.endsWith('.json')).sort().map((f) => ({ id: f.replace(/\.json$/, ''), ...JSON.parse(readFileSync(join(dir, f), 'utf8')) }));
+  return cases.filter((c) => !args.cases || args.cases.split(',').includes(c.id));
+}
+
+/** The harness dashboard: one sections view per card case, one section holding the one card. */
+function harnessConfig(cases) {
+  return {
+    title: 'Vitro harness',
+    views: cases.filter((c) => c.card).map((c) => {
+      const span = c.span || 1;
+      return {
+        title: c.id,
+        path: c.id,
+        type: 'sections',
+        max_columns: span,
+        ...(c.theme ? { theme: c.theme } : {}),
+        sections: [{ type: 'grid', ...(span > 1 ? { column_span: span } : {}), cards: [c.card] }],
+      };
+    }),
+  };
+}
+
+async function saveHarness(ha, config) {
+  const list = await ha.call({ type: 'lovelace/dashboards/list' });
+  if (!list.some((d) => d.url_path === HARNESS)) {
+    log(`creating dashboard ${HARNESS} (admin-only, hidden from the sidebar)`);
+    await ha.call({ type: 'lovelace/dashboards/create', url_path: HARNESS, title: 'Vitro harness', icon: 'mdi:test-tube', show_in_sidebar: false, require_admin: true, mode: 'storage' });
+  }
+  // The only write this tool makes to Home Assistant.
+  await ha.call({ type: 'lovelace/config/save', url_path: HARNESS, config });
+}
+
+/** HA's own static images a card shows (`image: /static/...`), saved so Vitro's fixture server can serve them. */
+function imagePaths(card) {
+  const out = new Set();
+  const walk = (o) => {
+    if (Array.isArray(o)) o.forEach(walk);
+    else if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) {
+      if (/image$/.test(k) && typeof v === 'string' && v.startsWith('/')) out.add(v.split('?')[0]);
+      else walk(v);
+    }
+  };
+  walk(card);
+  return [...out];
+}
+
+async function fetchAsset(path) {
+  if (committed && !path.startsWith('/static/')) fail(`${path}: the committed corpus may only show HA's own /static images`);
+  const res = await fetch(creds.origin + path, { headers: { Authorization: `Bearer ${creds.token}` } });
+  if (!res.ok) fail(`asset ${path}: HTTP ${res.status}`);
+  const out = join(corpusRoot, 'assets', path.replace(/^\//, ''));
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, Buffer.from(await res.arrayBuffer()));
+  log(`asset ${path}`);
+}
+
+async function prepare() {
+  const ha = await connect(creds);
+  const cases = loadCases();
+  const cardCases = cases.filter((c) => c.card);
+  if (cardCases.length) {
+    await saveHarness(ha, harnessConfig(loadCasesAll()));
+    log(`saved ${HARNESS}: ${cardCases.length} card views`);
+  }
+  for (const c of cases) for (const p of c.card ? imagePaths(c.card) : []) await fetchAsset(p);
+  for (const c of cases.filter((c) => c.dashboard)) {
+    if (committed) fail(`${c.id}: real dashboards belong in a local corpus (--root), never in the committed one`);
+    const cfg = await ha.call({ type: 'lovelace/config', url_path: c.dashboard, force: true });
+    mkdirSync(join(corpusRoot, 'dashboards'), { recursive: true });
+    writeFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), JSON.stringify(cfg, null, 1) + '\n');
+    log(`dashboard ${c.dashboard}`);
+  }
+  ha.close();
+}
+
+// prepare saves every card case so a later --cases capture still finds its view.
+function loadCasesAll() {
+  const dir = join(corpusRoot, 'corpus');
+  return readdirSync(dir).filter((f) => f.endsWith('.json')).sort().map((f) => ({ id: f.replace(/\.json$/, ''), ...JSON.parse(readFileSync(join(dir, f), 'utf8')) }));
+}
+
+function launchOptions() {
+  if (process.env.CHROME) return { executablePath: process.env.CHROME };
+  return {};
+}
+
+async function launch() {
+  try {
+    return await chromium.launch({ headless: true, ...launchOptions() });
+  } catch (e) {
+    if (process.env.CHROME) throw e;
+    return chromium.launch({ headless: true, channel: 'chrome' });
+  }
+}
+
+/** Runs in the page: the top-level card slots (grid cells of each grid section), in order, document px. */
+const SLOTS_JS = () => {
+  const all = [];
+  const walk = (r) => r.querySelectorAll('*').forEach((e) => { all.push(e); if (e.shadowRoot) walk(e.shadowRoot); });
+  walk(document);
+  const slots = [];
+  for (const sec of all.filter((e) => e.localName === 'hui-grid-section')) {
+    for (const cell of sec.shadowRoot.querySelectorAll('.container > .card')) {
+      if (cell.classList.contains('hidden')) continue;
+      const r = cell.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      const card = cell.querySelector('hui-card');
+      const inner = card && [...(card.children)].find((c) => c.localName !== 'style');
+      slots.push({ x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height, type: inner ? inner.localName : null });
+    }
+  }
+  return { slots, docW: document.documentElement.scrollWidth, docH: document.documentElement.scrollHeight };
+};
+
+/** Runs in the page: the text a slot shows, with its box and font, relative to the slot (CSS px). */
+const TEXTS_JS = (slot) => {
+  const out = [];
+  const within = (r) => r.width > 0 && r.height > 0 && r.right > slot.x - scrollX - 1 && r.left < slot.x - scrollX + slot.w + 1 && r.bottom > slot.y - scrollY - 1 && r.top < slot.y - scrollY + slot.h + 1;
+  const visible = (el) => {
+    for (let e = el; e && e.nodeType === 1; e = e.parentElement || (e.getRootNode && e.getRootNode().host)) {
+      const s = getComputedStyle(e);
+      if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity === 0) return false;
+    }
+    return true;
+  };
+  const walk = (root) => {
+    for (const n of root.childNodes) {
+      if (n.nodeType === 3) {
+        const text = n.textContent.replace(/\s+/g, ' ').trim();
+        if (!text || !n.parentElement) continue;
+        const range = document.createRange();
+        range.selectNodeContents(n);
+        const r = range.getBoundingClientRect();
+        if (!within(r) || !visible(n.parentElement)) continue;
+        const s = getComputedStyle(n.parentElement);
+        out.push({
+          text, x: r.x + scrollX - slot.x, y: r.y + scrollY - slot.y, w: r.width, h: r.height,
+          size: parseFloat(s.fontSize), weight: +s.fontWeight || 400, color: s.color, transform: s.textTransform,
+        });
+      } else if (n.nodeType === 1) {
+        if (n.localName === 'style' || n.localName === 'script') continue;
+        if (n.shadowRoot) walk(n.shadowRoot);
+        walk(n);
+      }
+    }
+  };
+  walk(document.body);
+  return out.slice(0, 300);
+};
+
+/** Follows HA's subscribe_entities stream on the page's own socket, so the states are exactly what it drew. */
+function recordStates(page) {
+  const states = {};
+  const entitySubs = new Set();
+  page.on('websocket', (ws) => {
+    if (!ws.url().endsWith('/api/websocket')) return;
+    const each = (payload, fn) => {
+      let m;
+      try { m = JSON.parse(payload); } catch { return; }
+      (Array.isArray(m) ? m : [m]).forEach(fn);
+    };
+    ws.on('framesent', (f) => each(f.payload, (m) => { if (m.type === 'subscribe_entities') entitySubs.add(m.id); }));
+    ws.on('framereceived', (f) => each(f.payload, (m) => {
+      if (m.type !== 'event' || !entitySubs.has(m.id)) return;
+      const ev = m.event || {};
+      for (const [id, s] of Object.entries(ev.a || {})) states[id] = { ...s };
+      for (const [id, d] of Object.entries(ev.c || {})) {
+        const cur = states[id] || (states[id] = { s: '', a: {} });
+        const plus = d['+'] || {};
+        if ('s' in plus) cur.s = plus.s;
+        if ('lc' in plus) { cur.lc = plus.lc; delete cur.lu; }
+        if ('lu' in plus) cur.lu = plus.lu;
+        if (plus.a) cur.a = { ...(cur.a || {}), ...plus.a };
+        for (const k of (d['-'] || {}).a || []) delete cur.a[k];
+      }
+      for (const id of ev.r || []) delete states[id];
+    }));
+  });
+  return states;
+}
+
+async function newPage(browser, frame, dark, now, cardModUrl, tz) {
+  const ctx = await browser.newContext({
+    viewport: { width: frame.width, height: frame.height }, deviceScaleFactor: frame.density,
+    colorScheme: dark ? 'dark' : 'light', timezoneId: tz, locale: 'en-US', reducedMotion: 'reduce',
+  });
+  await ctx.addInitScript(([origin, token, dark, now, cardModUrl, css]) => {
+    // Vitro's clock gets the same instant (refs/*.json "now"): the page's clock stands still.
+    const RealDate = Date;
+    class FixedDate extends RealDate {
+      constructor(...a) { if (a.length) super(...a); else super(now); }
+      static now() { return now; }
+    }
+    window.Date = FixedDate;
+    try {
+      localStorage.setItem('hassTokens', JSON.stringify({ access_token: token, token_type: 'Bearer', expires_in: 1e9, hassUrl: origin, clientId: origin + '/', expires: RealDate.now() + 1e12, refresh_token: 'x' }));
+      localStorage.setItem('dockedSidebar', '"always_hidden"');
+      localStorage.setItem('selectedTheme', JSON.stringify({ theme: 'default', dark }));
+    } catch (e) {}
+    // card-mod first, as `frontend: extra_module_url` loads it on the panels: otherwise styling races.
+    if (cardModUrl) {
+      const add = () => { const sc = document.createElement('script'); sc.type = 'module'; sc.src = cardModUrl; (document.head || document.documentElement).appendChild(sc); };
+      if (document.documentElement) add(); else document.addEventListener('DOMContentLoaded', add);
+    }
+    setInterval(() => {
+      const sr = (el) => el && el.shadowRoot;
+      const ha = document.querySelector('home-assistant');
+      const main = sr(ha) && sr(ha).querySelector('home-assistant-main');
+      const panel = sr(main) && sr(main).querySelector('ha-panel-lovelace');
+      const hui = sr(sr(panel) && sr(panel).querySelector('hui-root'));
+      if (hui && !hui.querySelector('style#gw-kiosk')) {
+        const st = document.createElement('style'); st.id = 'gw-kiosk'; st.textContent = css; hui.appendChild(st);
+      }
+    }, 100);
+  }, [creds.origin, creds.token, dark, now, cardModUrl, HUI_CSS]);
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => log(`  pageerror: ${scrubText(e.message, creds).slice(0, 200)}`));
+  const states = recordStates(page);
+  return { ctx, page, states };
+}
+
+/** The element HA renders a card type as: hui-tile-card, or the custom element's own name. */
+const cardElement = (card) => (card.type.startsWith('custom:') ? card.type.slice(7) : `hui-${card.type}-card`);
+
+/** Waits until the slots exist and two screenshots 400 ms apart are the same (animations, images, fonts). */
+async function settle(page, expectType, timeoutMs) {
+  const t0 = Date.now();
+  let info;
+  while (Date.now() - t0 < timeoutMs) {
+    info = await page.evaluate(SLOTS_JS);
+    // After an in-app navigation the last view's card can linger for a moment: wait for this case's card.
+    if (info.slots.length && (!expectType || info.slots[0].type === expectType)) break;
+    await page.waitForTimeout(250);
+  }
+  if (expectType && info.slots[0]?.type !== expectType) throw new Error(`expected <${expectType}>, the page shows <${info.slots[0]?.type}>`);
+  await page.evaluate(async () => { await document.fonts.ready; });
+  await page.waitForTimeout(800);
+  let prev = null;
+  for (let i = 0; i < 8; i++) {
+    const shot = await page.screenshot({ fullPage: true });
+    if (prev && shot.equals(prev)) return { info: await page.evaluate(SLOTS_JS), stable: true };
+    prev = shot;
+    await page.waitForTimeout(400);
+  }
+  return { info: await page.evaluate(SLOTS_JS), stable: false };
+}
+
+function clipFor(slot, info) {
+  const x = Math.max(0, Math.floor(slot.x - MARGIN));
+  const y = Math.max(0, Math.floor(slot.y - MARGIN));
+  const r = Math.min(info.docW, Math.ceil(slot.x + slot.w + MARGIN));
+  const b = Math.min(info.docH, Math.ceil(slot.y + slot.h + MARGIN));
+  return { x, y, width: r - x, height: b - y };
+}
+
+const round = (v) => Math.round(v * 100) / 100;
+const roundRect = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === 'number' ? round(v) : v]));
+
+async function capture() {
+  const ha = await connect(creds);
+  const [haConfig, themes, resources] = await Promise.all([
+    ha.call({ type: 'get_config' }), ha.call({ type: 'frontend/get_themes' }), ha.call({ type: 'lovelace/resources' }),
+  ]);
+  const cardModUrl = resources.map((r) => r.url).find((u) => /card-mod\.js/.test(u)) || null;
+  if (!cardModUrl) log('card-mod is not a Lovelace resource: card_mod styles will not apply in HA');
+  const cases = loadCases();
+  const wantedFile = args.templates || join(ROOT, 'engines', 'engine-vitro', 'build', 'vitro-parity', committed ? 'templates-wanted.json' : 'templates-wanted-local.json');
+  const wanted = existsSync(wantedFile) ? JSON.parse(readFileSync(wantedFile, 'utf8')) : {};
+  if (!existsSync(wantedFile)) log(`no ${wantedFile}: Vitro's templates stay unrendered (run.sh runs the collect step first)`);
+
+  const refs = join(corpusRoot, 'refs');
+  mkdirSync(refs, { recursive: true });
+  const shared = {
+    _comment: 'What every reference shares: HA version, the config fields Vitro reads, and the themes (scrubbed). Written by tools/vitro-parity/capture.mjs.',
+    haVersion: haConfig.version,
+    haConfig: { time_zone: haConfig.time_zone, unit_system: haConfig.unit_system, language: haConfig.language, location_name: 'Home' },
+    themes,
+  };
+  const sharedText = scrubText(JSON.stringify(shared, null, 1), creds);
+  checkDenylist(sharedText, 'refs/shared.json');
+  writeFileSync(join(refs, 'shared.json'), sharedText + '\n');
+
+  const browser = await launch();
+  const now = Date.now();
+  let failures = 0;
+  for (const frame of frames) {
+    const mine = cases.filter((c) => !c.frames || c.frames.includes(frame.id));
+    for (const dark of [true, false]) {
+      const group = mine.filter((c) => (c.dark ?? true) === dark);
+      if (!group.length) continue;
+      const { ctx, page, states } = await newPage(browser, frame, dark, now, cardModUrl, haConfig.time_zone);
+      let loaded = false;
+      for (const c of group) {
+        const t0 = Date.now();
+        try {
+          const path = c.card ? `/${HARNESS}/${c.id}` : `/${c.dashboard}/${c.view}`;
+          if (!loaded || c.dashboard) {
+            await page.goto(creds.origin + path, { waitUntil: 'load', timeout: 45000 });
+            loaded = !c.dashboard;
+          } else {
+            await page.evaluate((p) => { history.pushState(null, '', p); window.dispatchEvent(new CustomEvent('location-changed', { detail: { replace: false } })); scrollTo(0, 0); }, path);
+          }
+          const { info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000);
+          if (!info.slots.length) throw new Error('no card on the page');
+          const outDir = join(refs, frame.id);
+          mkdirSync(outDir, { recursive: true });
+          let clip, slots;
+          if (c.card) {
+            slots = [info.slots[0]];
+            clip = clipFor(slots[0], info);
+          } else {
+            slots = info.slots;
+            clip = { x: 0, y: 0, width: info.docW, height: info.docH };
+          }
+          await page.screenshot({ path: join(outDir, `${c.id}.png`), clip, fullPage: true });
+          const texts = [];
+          for (const [i, s] of slots.entries()) for (const t of await page.evaluate(TEXTS_JS, s)) texts.push({ slot: i, ...roundRect(t) });
+          // The states HA drew with, for the entities the case reads; the templates Vitro asks for, rendered now.
+          const config = c.card ?? JSON.parse(readFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), 'utf8'));
+          const ids = referencedEntities(config, states);
+          const caseStates = scrubStates(Object.fromEntries([...ids].sort().filter((id) => states[id]).map((id) => [id, states[id]])), creds);
+          const templates = {};
+          for (const tpl of wanted[c.id] || []) {
+            const r = await ha.renderTemplate(tpl);
+            templates[tpl] = r.error ? { error: String(r.error) } : { result: typeof r.result === 'string' ? r.result : JSON.stringify(r.result) };
+          }
+          const ref = {
+            case: c.id, frame: frame.id, haVersion: haConfig.version, now, stable,
+            viewport: { width: frame.width, height: frame.height, density: frame.density },
+            clip, docSize: { width: info.docW, height: info.docH }, slots: slots.map(roundRect), texts,
+            states: caseStates, templates,
+          };
+          const text = scrubText(JSON.stringify(ref, null, 1), creds);
+          checkDenylist(text, `refs/${frame.id}/${c.id}.json`);
+          writeFileSync(join(outDir, `${c.id}.json`), text + '\n');
+          log(`${frame.id}/${c.id}: ${slots.length} card(s), ${texts.length} texts, ${Object.keys(caseStates).length} states, ${Object.keys(templates).length} templates${stable ? '' : ' (still moving)'} in ${Date.now() - t0} ms`);
+        } catch (e) {
+          failures++;
+          log(`${frame.id}/${c.id}: FAILED ${scrubText(String(e.message || e), creds).slice(0, 300)}`);
+        }
+      }
+      await ctx.close();
+    }
+  }
+  await browser.close();
+  ha.close();
+  if (failures) fail(`${failures} capture(s) failed`);
+}
+
+if (args.cmd === 'prepare') await prepare();
+else await capture();
+process.exit(0);
