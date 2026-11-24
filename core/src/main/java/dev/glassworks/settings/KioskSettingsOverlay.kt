@@ -207,7 +207,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
      */
     fun show(m: Model) {
         model = m
-        if (!isShowing) { overviewPage.reset(); listUp = true; if (overview != null) current = SettingsNav.OVERVIEW }
+        if (!isShowing) { overviewPage.reset(); listUp = true; place(); if (overview != null) current = SettingsNav.OVERVIEW }
         // The Manage page stopped since the last opening: no Overview to draw.
         if (current == SettingsNav.OVERVIEW && overview == null) current = firstPage(m)
         if (current != SettingsNav.OVERVIEW && m.sections.none { it.id == current }) current = firstPage(m)

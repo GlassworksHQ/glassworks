@@ -93,6 +93,8 @@ class SettingsPhoneTest {
         o.show(MenuFixture.model(o.context, radioDefinition(o.context, FixedReadout(null, running = true))))
         Mockup.idle(); lay(o)
         assertFalse(o.pageShown)
+        assertTrue("the list on screen", row(o, "Screen").isShown)
+        assertFalse("no page bar", shown(o, "‹  Settings"))
     }
 
     /** The S1's 960 dp: the sidebar and the page side by side, no bar. */
