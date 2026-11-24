@@ -11,7 +11,7 @@ import java.util.Locale
 
 /**
  * The settings sections the app has itself, before and after the panes': Home Assistant & dashboard, Screen, Appearance, Log,
- * Security and About (#63). Network has nothing yet. Durations are picked, the
+ * Security, Labs and About (#63). Network has nothing yet. Durations are picked, the
  * presence range is a slider: nothing on the Screen page is typed (#63 round 2). Values are read when the menu opens; each change
  * applies on its own. The ones Gecko reads at start (the dashboard's address, zoom, secure hosts) ask
  * for a restart, as their adb extras always did.
@@ -78,15 +78,6 @@ class CoreSettings(
                 "Secure hosts", "Other addresses the dashboard loads over HTTP, like a camera", TextKind.ADDRESS,
                 value = { prefs.extraSecureHosts }, restartsApp = true,
             ) { prefs.extraSecureHosts = it },
-            SettingsItem.Switch(
-                "Vitro renderer",
-                "Experimental native dashboard engine for faster loads and lower memory",
-                { prefs.vitroEnabled },
-                restartsApp = true,
-            ) { v, done ->
-                prefs.vitroEnabled = v
-                done(null)
-            },
         )),
         SettingsPlace.SCREEN to SettingsSection(SCREEN, "Screen", presence() + listOfNotNull(
             idle(),
@@ -112,6 +103,11 @@ class CoreSettings(
             setupOverNetwork(),
             if (prefs.lanSetupArmed) closeSetup() else null,
             live.factoryReset?.let(::factoryReset),
+        )),
+        // Experimental features, off until someone turns them on, the same on the panel and on the Manage page.
+        SettingsPlace.LABS to SettingsSection(LABS, LABS_TITLE, listOf(
+            SettingsItem.Note { LABS_NOTE },
+            vitro(),
         )),
         SettingsPlace.ABOUT to SettingsSection("about", "About", listOf(
             SettingsItem.Info(title = { "$product $version" }, detail = { "" }),
@@ -218,6 +214,15 @@ class CoreSettings(
         needsCode = true,
         run = reset,
     )
+
+    /**
+     * Vitro, the native dashboard renderer: off by default. The app picks its engine once, when it starts (KioskApp,
+     * GenericApp), so the change waits for a restart, as `--ez vitro` always did.
+     */
+    private fun vitro() = SettingsItem.Switch(VITRO_TITLE, VITRO_DETAIL, { prefs.vitroEnabled }, restartsApp = true) { v, done ->
+        prefs.vitroEnabled = v
+        done(null)
+    }
 
     /** Where the dashboard loads from when its address is automatic. */
     private fun found(): String = prefs.haBase?.let { b ->
@@ -341,6 +346,14 @@ class CoreSettings(
             "Remove the lock in Android's settings, or keep the screen always on."
         const val LOCK_ALWAYS_ON = "This panel has a screen lock. If Home Assistant turns the screen off, someone will " +
             "need to unlock it. Remove the lock in Android's settings."
+        /** The Labs page's id: a System page on both surfaces, before About. */
+        const val LABS = "labs"
+        const val LABS_TITLE = "Labs"
+        const val LABS_NOTE = "Experimental features that are still in the works. They may not handle every dashboard " +
+            "yet, and they can change between updates."
+        const val VITRO_TITLE = "Vitro renderer"
+        const val VITRO_DETAIL = "Draws your dashboard with the panel's own views instead of a browser. Cards it can't " +
+            "draw yet show in a small browser view."
         const val LICENCES_TITLE = "Open source licenses"
         const val LICENCES_DETAIL = "Third-party software included with Glassworks"
 

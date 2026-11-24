@@ -84,7 +84,8 @@ class GenericSettingsMockups {
 
     @Test fun mockups() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", dir != null)
-        for ((name, section) in listOf("01-panes" to "diagnostics", "02-notifications" to "notifications", "03-bluetooth-proxy" to "bluetooth-proxy")) {
+        for ((name, section) in listOf("01-panes" to "diagnostics", "02-notifications" to "notifications", "03-bluetooth-proxy" to "bluetooth-proxy",
+                "06-dashboard" to "dashboard", "07-labs" to "labs")) {
             menu(section)?.let { save(name, it) }
         }
         // Turned on, as from the page's switch: each page as the S1 app draws it.

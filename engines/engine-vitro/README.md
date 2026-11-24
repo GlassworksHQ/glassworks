@@ -1,8 +1,58 @@
-# Vitro (`engines/engine-vitro`)
+<p align="center">
+  <a href="https://www.glassworks.dev">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/banner-vitro-on-dark.svg">
+      <img alt="Glassworks Vitro" src="https://www.glassworks.dev/brand/banner-vitro-on-light.svg" width="640">
+    </picture>
+  </a>
+</p>
 
-> **Experimental (`0.0.1`).** Off by default (`KioskPrefs.vitroEnabled`). Enable via **Settings → Home Assistant & dashboard → Vitro renderer** or `adb shell am start ... --ez vitro true`.
+<h1 align="center">Vitro</h1>
 
-Vitro is an experimental native Android Lovelace rendering engine for Glassworks, built behind [`dev.glassworks.engine.Engine`](../../core/src/main/java/dev/glassworks/engine/Engine.kt). Its goal is to deliver native Android startup speed, frame pacing, and ~35–50 MB RAM footprints on low-powered hardware (such as the 952 MB Android 6 lululemon Studio Mirror and the 32-bit Aqara Panel Hub S1 Plus) **without changing how dashboards are authored in Home Assistant and without installing anything in Home Assistant**.
+<p align="center">
+  <b>Your Home Assistant dashboard, drawn natively on the panel.</b><br>
+  An experimental renderer for Glassworks. Nothing to install in Home Assistant.
+</p>
+
+<p align="center">
+  <a href="https://www.glassworks.dev/brand#parts">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-vitro-on-dark.svg">
+      <img alt="Glassworks Vitro" src="https://www.glassworks.dev/brand/badge-vitro-on-light.svg" height="30">
+    </picture>
+  </a>
+  <a href="../../LICENSES/MPL-2.0.txt">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-license-on-dark.svg">
+      <img alt="License: MPL-2.0" src="https://www.glassworks.dev/brand/badge-license-on-light.svg" height="30">
+    </picture>
+  </a>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-alpha-on-dark.svg">
+    <img alt="Status: alpha" src="https://www.glassworks.dev/brand/badge-status-alpha-on-light.svg" height="30">
+  </picture>
+  <a href="https://github.com/orgs/GlassworksHQ/projects/1">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-roadmap-on-dark.svg">
+      <img alt="Roadmap" src="https://www.glassworks.dev/brand/badge-roadmap-on-light.svg" height="30">
+    </picture>
+  </a>
+</p>
+
+---
+
+Vitro is an experimental renderer for Home Assistant dashboards. Instead of loading the dashboard in a browser, it reads the
+dashboard you already have from Home Assistant and draws it with native Android views. It's built for low-power panels, such
+as the Aqara Panel Hub S1 Plus (32-bit Android 10) and the lululemon Studio Mirror (Android 6 with under 1 GB of RAM), where
+a full browser is the heaviest thing on the device. Dashboards are written in Home Assistant the same way as before, and
+nothing gets installed there.
+
+> **Experimental, and off by default.** Turn it on under **Settings → Labs → Vitro renderer**, on the panel or on its
+> Manage page. The change takes effect after the app restarts. With Vitro off, the app runs on GeckoView alone, exactly as
+> it did before Vitro existed. Developers can also use `adb shell am start ... --ez vitro true` (or `false`), which
+> restarts the app.
+>
+> Vitro hasn't been benchmarked against GeckoView yet, so this page makes no speed or memory claims.
 
 ## How it works
 

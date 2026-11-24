@@ -51,7 +51,7 @@ class AppBuildTest {
     @After fun tearDown() = stops.forEach { runCatching { it() } }
 
     @Test fun theApkHandsInItsBuildConfig() {
-        val kiosk = KioskApp()
+        val kiosk = attachedKioskApp()
         assertEquals(AppBuild(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.DEBUG, BuildConfig.TEST_BUILD,
             notificationIcon = R.drawable.ic_notification), kiosk.build)
         assertSame(kiosk.build, kiosk.glassworks.build)

@@ -857,6 +857,8 @@ open class MainActivity : Activity() {
     //   --ef zoom 1.25          CSS px ratio (0 = auto); restarts the process
     //   --es secure_hosts a,b   extra secure-context hosts; restarts the process
     //   --ez remote_debug true  Gecko remote debugging; restarts the process (ignored on the legacy engine, #29)
+    //   --ez vitro true         Vitro, the native dashboard renderer (Settings → Labs); restarts the process, also on a
+    //                           cold start when it changes the setting (the engine is picked when the runtime is made)
     //   --ez reload true        reload the page
     //   --ez restart true       restart the app process
     //   --es api_key <base64>   ESPHome API encryption key (32 bytes); --ez api_encryption true|false
@@ -891,8 +893,13 @@ open class MainActivity : Activity() {
             prefs.zoom = intent.getFloatExtra("zoom", 0f)
             needsRestart = true
         }
+        // The app picks its engine when its runtime is made, before this runs even on a cold start: a change to Vitro
+        // restarts then too, so the extra takes effect at once, as it did when Vitro read it at the first page.
+        var engineChoiceChanged = false
         if (intent.hasExtra("vitro")) {
-            prefs.vitroEnabled = intent.getBooleanExtra("vitro", false)
+            val on = intent.getBooleanExtra("vitro", false)
+            engineChoiceChanged = on != prefs.vitroEnabled
+            prefs.vitroEnabled = on
             needsRestart = true
         }
         intent.getStringExtra("secure_hosts")?.let {
@@ -940,7 +947,7 @@ open class MainActivity : Activity() {
             intent.removeExtra(SettingsMenu.LEGACY_EXTRA) // not again when the activity is recreated
             handler.post { if (::settingsOverlay.isInitialized) showSettings() }
         }
-        if (fromNewIntent && (needsRestart || intent.getBooleanExtra("restart", false))) {
+        if (engineChoiceChanged || (fromNewIntent && (needsRestart || intent.getBooleanExtra("restart", false)))) {
             restartProcess()
             return
         }

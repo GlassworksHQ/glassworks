@@ -35,7 +35,8 @@ class GenericApp : Application(), GlassworksApp {
     override val glassworks: GlassworksRuntime by lazy {
         val frame = frame(this)
         Log.i(TAG, "Frame: ${frame.board} (${frame.hardware.manufacturer} ${frame.hardware.model})")
-        runtime(frame, build)
+        // Vitro is read once, here: the engine is chosen for the whole process, so a change waits for a restart.
+        runtime(frame, build, vitro = KioskPrefs(this).vitroEnabled)
     }
 
     companion object {
@@ -53,9 +54,12 @@ class GenericApp : Application(), GlassworksApp {
         fun frame(app: Application): GenericAndroid =
             GenericAndroid(app, presence = ProximityPresence("Glassworks.Screen"), light = AmbientLight("Glassworks.Screen"))
 
-        /** The runtime on [frame]: GeckoView with the kiosk's extension, and this app's panes ([GenericParts]). */
-        internal fun runtime(frame: Frame, build: AppBuild): GlassworksRuntime =
-            GlassworksRuntime(frame, build, engine(build), GenericParts(), releases = releaseLine(BuildConfig.APPLICATION_ID))
+        /**
+         * The runtime on [frame]: GeckoView with the kiosk's extension, and this app's panes ([GenericParts]). [vitro]:
+         * Settings → Labs had Vitro on when the process started ([engine]).
+         */
+        internal fun runtime(frame: Frame, build: AppBuild, vitro: Boolean = false): GlassworksRuntime =
+            GlassworksRuntime(frame, build, engine(build, vitro = vitro), GenericParts(), releases = releaseLine(BuildConfig.APPLICATION_ID))
 
         /**
          * The releases this build updates from: the legacy build's own line (#198), its debug build's
@@ -81,39 +85,40 @@ class GenericApp : Application(), GlassworksApp {
             }
 
         /**
-         * What GeckoView starts with. As [engineSettings], except on the legacy build with Vitro on: its engine holds
-         * pages to one origin (#198), and Vitro's fallback pages (sign-in) come through the loopback island server, so
-         * that origin is the dashboard it is told. Vitro itself keeps the real Home Assistant settings.
+         * What GeckoView starts with. As [engineSettings], except on the legacy build under Vitro ([vitro] gives the
+         * engine, null without one): its engine holds pages to one origin (#198), and Vitro's fallback pages (sign-in)
+         * come through the loopback island server, so that origin is the dashboard it is told. Vitro itself keeps the
+         * real Home Assistant settings.
          */
         internal fun geckoSettings(
-            context: Context, build: AppBuild, applicationId: String, vitro: () -> VitroEngine,
+            context: Context, build: AppBuild, applicationId: String, vitro: () -> VitroEngine?,
         ): EngineSettings {
             val settings = engineSettings(context, build, applicationId)
-            return if (legacy(applicationId) && KioskPrefs(context).vitroEnabled) {
-                settings.copy(dashboard = vitro().fallbackDashboardOrigin())
-            } else {
-                settings
-            }
+            val v = if (legacy(applicationId)) vitro() else null
+            return if (v != null) settings.copy(dashboard = v.fallbackDashboardOrigin()) else settings
         }
 
-        /** Vitro wrapping GeckoView (with the kiosk's helper extension): native Lovelace when opt-in enabled, else GeckoView. */
-        internal fun engine(build: AppBuild, applicationId: String = BuildConfig.APPLICATION_ID): Engine {
-            lateinit var vitro: VitroEngine
+        /**
+         * GeckoView with the kiosk's helper extension: the same engine, extension and page API as the S1 app's. With
+         * [vitro] on (Settings → Labs, at process start), Vitro wraps it and draws Lovelace dashboards natively; off,
+         * no [VitroEngine] is made and the app runs on GeckoView alone.
+         */
+        internal fun engine(build: AppBuild, applicationId: String = BuildConfig.APPLICATION_ID, vitro: Boolean = false): Engine {
+            var wrapper: VitroEngine? = null
             val gecko = GeckoEngine(
-                settings = { context -> geckoSettings(context, build, applicationId) { vitro } },
+                settings = { context -> geckoSettings(context, build, applicationId) { wrapper } },
                 extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "glassworks"),
                 logTag = TAG,
                 generatedBy = PRODUCT,
             )
-            vitro = VitroEngine(
+            if (!vitro) return gecko
+            return VitroEngine(
                 fallback = gecko,
                 settings = { context -> engineSettings(context, build, applicationId) },
-                enabled = { context -> KioskPrefs(context).vitroEnabled },
                 tokenProvider = { force, done ->
                     HaAuth.accessToken(force) { a -> done((a as? HaAuth.Access.Ok)?.accessToken) }
                 },
-            )
-            return vitro
+            ).also { wrapper = it }
         }
     }
 }

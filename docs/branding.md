@@ -32,6 +32,7 @@ image follows GitHub's theme.
 | The Glassworks core (`dev.glassworks.*`), including the pane API | **Core banner** (`banner-core-on-*.svg`) as the header, and the **core badge** (`badge-core-on-*.svg`) | `pane-api/src/main/java/dev/glassworks/README.md` |
 | A pane | **Pane badge** (`badge-pane-on-*.svg`) | The pane's README |
 | [Clarity](perf.md), the perf test and grade every frame follows | **Core badge** (`badge-core-on-*.svg`) alone, under the title. No banner | `docs/perf.md`. Its tools in `tools/perf` stay plain, like every dev tool |
+| Vitro, the native dashboard renderer (`engines/engine-vitro`) | **Vitro banner** (`banner-vitro-on-*.svg`), then the **Vitro badge** (`badge-vitro-on-*.svg`) and the MPL-2.0 licence, status and roadmap badges | Top of [engines/engine-vitro/README.md](../engines/engine-vitro/README.md) |
 | The installer (`kiln/`, `frames/aqara-s1-plus/tools/install.sh`) | **Kiln badge** (`badge-kiln-on-*.svg`) | Kiln's README. The S1 installer is still S1-branded until it moves into Kiln |
 | A frame (`frames/<id>/`) | **Frame banner** (`banner-frame-<id>-on-*.svg`), then the Built on Glassworks badge, the Kiln badge if Kiln installs it, and the status, roadmap and Clarity badges | Top of `frames/<id>/README.md`. glassworks.dev draws it from the frame's `frame.json` (see [Adding a frame banner](#adding-a-frame-banner)) |
 
