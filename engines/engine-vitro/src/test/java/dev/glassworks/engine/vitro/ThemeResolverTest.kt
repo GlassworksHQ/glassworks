@@ -759,4 +759,15 @@ class ThemeResolverTest {
         val theme = resolveWith("""{"brand": "#ff0000", "card-mod-card": ${org.json.JSONObject.quote(sheet)}}""")
         assertEquals(0xFFFF0000.toInt(), theme.cardMod.backgroundColor)
     }
+
+    @Test
+    fun cardModFontFamily() {
+        // A list that runs over a line break is read whole.
+        assertEquals("Missing, Pacifico, serif", ThemeResolver.parseCardMod("ha-card { font-family: Missing,\n    Pacifico, serif; }").fontFamily)
+        // inherit (and unset) keeps the font the card would get anyway; initial is the browser's default font.
+        assertEquals(null, ThemeResolver.parseCardMod("ha-card { font-family: inherit; }").fontFamily)
+        assertEquals(null, ThemeResolver.parseCardMod("ha-card { font-family: unset; }").fontFamily)
+        assertEquals(ThemeResolver.INITIAL_FONT_FAMILY, ThemeResolver.parseCardMod("ha-card { font-family: initial; }").fontFamily)
+        assertEquals("Pacifico, cursive", ThemeResolver.parseCardMod("ha-card { font-family: Pacifico, cursive; color: red }").fontFamily)
+    }
 }

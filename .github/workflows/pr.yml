@@ -184,6 +184,18 @@ jobs:
       - name: Unit tests
         run: ./gradlew --no-daemon --parallel test
 
+      # When the Vitro parity harness fails, its report says which card drifted and how (HA, Vitro and the diff side
+      # by side), and the test's XML lists every failing case: the log only shows the assertion's line.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: vitro-parity-report
+          path: |
+            engines/engine-vitro/build/reports/vitro-parity/
+            engines/engine-vitro/build/test-results/testDebugUnitTest/TEST-dev.glassworks.engine.vitro.parity.*.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
       # Saved only when the tests fetched a jar the restored copy didn't have, and never by a PR.
       - name: Robolectric's jars, what changed
         id: robolectric-new

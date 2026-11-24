@@ -74,6 +74,16 @@ class VitroCardContext(
      * stream, so [startCameraStream] reports a fallback straight away and cards poll snapshots instead.
      */
     val cameraStream: ((entityId: String, entityPicture: String?, onFrame: (Bitmap) -> Unit, onFallback: () -> Unit) -> () -> Unit)? = null,
+    /**
+     * A WebSocket subscription (`history/stream`, say): every event of [msg]'s subscription reaches `onEvent`, on any
+     * thread, until the returned handle is called; `onError` runs once, on any thread, if Home Assistant rejects it, the
+     * connection drops before it starts (its `error`) or it can't be sent (null). A delivery already under way when the
+     * handle is called may still finish, so a consumer checks on its own thread that the subscription is still its
+     * current one before using an event. The default (tests, no engine) never delivers anything.
+     */
+    val subscribeWs: (msg: JSONObject, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit) -> () -> Unit = { _, _, _ -> {} },
+    /** The wall clock, ms since the epoch: what HA's frontend reads as `new Date()` for its time windows. */
+    val now: () -> Long = System::currentTimeMillis,
 ) {
     val dp: Float = context.resources.displayMetrics.density
     val main: Handler = Handler(Looper.getMainLooper())
@@ -93,6 +103,37 @@ class VitroCardContext(
     var cardLayout: String? = null
 
     fun px(dpVal: Float): Int = (dpVal * dp).toInt()
+
+    /**
+     * This context for a card that sets its own `font-family` (card-mod): the same in every way, but its views are
+     * built on a [VitroFontContext], so every text the card draws (and the cards inside it) uses [fontFamily].
+     */
+    fun withFontFamily(fontFamily: String): VitroCardContext = VitroCardContext(
+        context = VitroFontContext(context, fontFamily),
+        haBase = haBase,
+        store = store,
+        theme = theme,
+        resources = resources,
+        accessToken = accessToken,
+        haConfig = haConfig,
+        callService = callService,
+        callServiceThen = callServiceThen,
+        callWs = callWs,
+        navigate = navigate,
+        openMoreInfo = openMoreInfo,
+        fetchHistory = fetchHistory,
+        subscribeTemplate = subscribeTemplate,
+        islandServer = islandServer,
+        openIslandPage = openIslandPage,
+        fetchForecast = fetchForecast,
+        haUser = haUser,
+        cameraStream = cameraStream,
+        subscribeWs = subscribeWs,
+        now = now,
+    ).also {
+        it.cardVars = cardVars
+        it.cardLayout = cardLayout
+    }
 
     /** [sp] scaled by the theme's text size ([ResolvedTheme.fontScale]); pass the result to `setTextSize(SP, …)`. */
     fun scaledSp(sp: Float): Float = sp * theme.fontScale

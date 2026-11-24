@@ -189,7 +189,7 @@ class MdSvg private constructor(
             paint.style = Paint.Style.FILL
             paint.color = st.fill ?: 0
             paint.textSize = st.textSize
-            paint.typeface = MdFonts.typeface(context, st.textWeight, false, false, st.textSize)
+            paint.typeface = MdFonts.typeface(context, st.textWeight, false, null, st.textSize)
             paint.textAlign = st.textAlign
             canvas.drawText(shape.text, st.x, st.y, paint)
             canvas.restore()

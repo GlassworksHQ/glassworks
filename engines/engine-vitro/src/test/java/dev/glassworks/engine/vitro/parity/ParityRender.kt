@@ -20,6 +20,7 @@ import com.sun.net.httpserver.HttpServer
 import dev.glassworks.engine.vitro.cards.ClockCardView
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDisplay
+import dev.glassworks.engine.vitro.fonts.WebFonts
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.ui.HaGridLayout
@@ -48,6 +49,8 @@ class VitroRender(
     val templatesAsked: List<String>,
     val templatesMissing: List<String>,
     val assetsMissing: List<String>,
+    /** History or statistics calls Vitro made that HA's page didn't (ParityWs.canonical form). */
+    val wsUnmatched: List<String> = emptyList(),
 ) {
     /**
      * The texts slot [i] draws on a canvas (a thermostat dial, a gauge), from the content description those views set
@@ -179,19 +182,26 @@ object ParityViews {
     }
 }
 
-/** Serves a corpus's assets/ folder on 127.0.0.1, as Home Assistant serves /static: what Vitro's image loader fetches. */
+/**
+ * Serves a corpus's assets/ folder on 127.0.0.1, as Home Assistant serves /static: what Vitro's image loader fetches.
+ * Paths under [ParityCase.FIXTURE_PREFIX] come from [fixtures] instead (a case's own stylesheets and fonts).
+ */
 class FixtureHttp(
     private val assets: File,
     /** Paths HA's page couldn't load (the reference's imagesHaMissing): never served, even if a file is there. */
     private val haMissing: Set<String> = emptySet(),
+    private val fixtures: File? = null,
 ) : Closeable {
     val missing = CopyOnWriteArrayList<String>()
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { ex ->
             val path = ex.requestURI.path
-            val f = File(assets, path.removePrefix("/")).canonicalFile
+            val fixture = fixtures != null && path.startsWith(ParityCase.FIXTURE_PREFIX)
+            val dir = if (fixture) fixtures!! else assets
+            val rel = if (fixture) path.removePrefix(ParityCase.FIXTURE_PREFIX) else path.removePrefix("/")
+            val f = File(dir, rel).canonicalFile
             // Contained by path component, not by string prefix: `assets-other/x` isn't inside `assets`.
-            if (path !in haMissing && f.isFile && f.toPath().startsWith(assets.canonicalFile.toPath())) {
+            if (path !in haMissing && f.isFile && f.toPath().startsWith(dir.canonicalFile.toPath())) {
                 val bytes = f.readBytes()
                 ex.sendResponseHeaders(200, bytes.size.toLong())
                 ex.responseBody.use { it.write(bytes) }
@@ -258,7 +268,9 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         val asked = CopyOnWriteArrayList<String>()
         val missing = CopyOnWriteArrayList<String>()
         val haConfig = shared?.haConfig ?: JSONObject()
-        FixtureHttp(File(root, "assets"), ref?.imagesHaMissing.orEmpty()).use { http ->
+        val ws = ParityWs(ref?.ws)
+        val main = android.os.Handler(Looper.getMainLooper())
+        FixtureHttp(File(root, "assets"), ref?.imagesHaMissing.orEmpty(), File(root, "fixtures")).use { http ->
             val view = VitroView(activity, store, Color.BLACK)
             view.cardLayers = VitroView.CardLayers.forTotalMem(frame.memTotalKb * 1024)
             view.contextFactory = { theme ->
@@ -267,7 +279,7 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
                     haBase = http.base,
                     store = store,
                     theme = theme,
-                    resources = emptyList(),
+                    resources = case.resources,
                     accessToken = { null },
                     haConfig = { haConfig },
                     haUser = { JSONObject().put("is_admin", true).put("name", "Harness") },
@@ -275,6 +287,10 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
                     navigate = {},
                     openMoreInfo = {},
                     fetchHistory = { _, _, done -> done(emptyMap()) },
+                    callWs = { msg, done -> ws.call(msg) { ok, result, error -> main.post { done(ok, result, error) } } },
+                    subscribeWs = { msg, onEvent, onError -> ws.subscribe(msg, { main.post(it) }, onEvent, onError) },
+                    // HA's page drew at the pinned instant (refs/*.json "now"): the graphs' time windows end there too.
+                    now = { ref?.now ?: System.currentTimeMillis() },
                     subscribeTemplate = { tpl, onRendered ->
                         if (tpl !in asked) asked += tpl
                         val r = templates[tpl]
@@ -317,7 +333,7 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
                 val (x, y) = ParityViews.offsetIn(view, s)
                 CssRect(x / frame.density.toDouble(), y / frame.density.toDouble(), s.width / frame.density.toDouble(), s.height / frame.density.toDouble())
             }
-            return VitroRender(bmp, frame.density, slots, slotViews, view, asked.toList(), missing.toList(), http.missing.toList())
+            return VitroRender(bmp, frame.density, slots, slotViews, view, asked.toList(), missing.toList(), http.missing.toList(), ws.unmatched.toList())
         }
     }
 
@@ -355,9 +371,13 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         // Images load on a pool and reach their card through the main looper: run it until none is in flight, so a
         // late image can't leave a card drawn without its picture.
         val deadline = System.nanoTime() + IMAGE_TIMEOUT_MS * 1_000_000L
-        while (VitroCardContext.pendingImageLoads.get() > 0) {
+        // Web fonts too: the view draws again in a font once it has arrived, as HA's page swaps it in.
+        while (VitroCardContext.pendingImageLoads.get() > 0 || WebFonts.pending.get() > 0) {
             if (System.nanoTime() > deadline) {
-                throw IllegalStateException("${VitroCardContext.pendingImageLoads.get()} image load(s) still pending after $IMAGE_TIMEOUT_MS ms")
+                throw IllegalStateException(
+                    "${VitroCardContext.pendingImageLoads.get()} image and ${WebFonts.pending.get()} font load(s) still pending after $IMAGE_TIMEOUT_MS ms" +
+                        (if (WebFonts.pending.get() > 0) "; fonts: ${WebFonts.describe()}" else ""),
+                )
             }
             step(view)
         }

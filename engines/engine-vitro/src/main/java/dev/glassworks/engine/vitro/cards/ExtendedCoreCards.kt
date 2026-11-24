@@ -78,43 +78,59 @@ private fun iconColorFor(ctx: VitroCardContext, s: EntityState?): Int =
 // entity
 // ---------------------------------------------------------------------------------------------
 
-/** Native HA `entity` card (`hui-entity-card`): name and icon on top, the big live value and unit below. */
+/**
+ * Native HA `entity` card (`hui-entity-card`), and the `sensor` card, which is an entity card with a graph footer
+ * (`hui-sensor-card`): the name (16 px, medium, secondary) on a 40 px line under 8 px of padding with the icon on
+ * its right, the value (28 px) and its unit (16 px, secondary) on one baseline 4 px higher, 16 px in from the
+ * sides and above the bottom. A `footer: {type: graph}` (or the sensor card's `graph: line`) draws
+ * [GraphFooterView] along the bottom: pinned to it in a sections grid, where the card fills its slot (2 rows by
+ * default), and below the value elsewhere.
+ */
 class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
     private val nameView = extLabel(ctx, 16f, ctx.theme.secondaryTextColor, Inter.MEDIUM).apply {
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
+        gravity = Gravity.CENTER_VERTICAL
     }
     private val iconView = MdiIconView(ctx.context)
     private val valueView = extLabel(ctx, 28f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
     }
-    private val unitView = extLabel(ctx, 16f, ctx.theme.secondaryTextColor)
+    private val unitView = extLabel(ctx, 16f, ctx.theme.secondaryTextColor).apply { maxLines = 1 }
+    private val footerConfig: JSONObject? =
+        if (config.type == "sensor") GraphFooterView.sensorFooter(config.raw)
+        else config.raw.optJSONObject("footer")?.takeIf { it.optString("type") == "graph" }
+    private val footer: GraphFooterView? = footerConfig?.let { GraphFooterView(ctx, it) }
+
+    /** HA pins the footer to the bottom only in a sections grid (`layout === "grid"`), where the card fills its slot. */
+    private val fixedFooter = footer != null && ctx.cardLayout == "grid"
 
     init {
-        val pad = ctx.px(16f)
-        val col = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
-        }
+        val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
         val header = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(nameView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            addView(iconView, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply { marginStart = ctx.px(8f) })
+            setPadding(ctx.px(16f), ctx.px(8f), ctx.px(16f), 0)
+            addView(nameView, LinearLayout.LayoutParams(0, ctx.px(40f), 1f))
+            addView(iconView, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)))
         }
         col.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        val valueRow = LinearLayout(ctx.context).apply {
+        // `.info`: baseline-aligned value and unit, line-height 1.2, 4 px up into the header's padding.
+        valueView.setLineSpacing(0f, 1f)
+        val info = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.BOTTOM
+            isBaselineAligned = true
+            setPadding(ctx.px(16f), 0, ctx.px(16f), ctx.px(16f))
             addView(valueView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, 0f))
-            addView(unitView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
-                marginStart = ctx.px(4f)
-                bottomMargin = ctx.px(3f)
-            })
+            addView(unitView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(4f) })
         }
-        col.addView(valueRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(12f) })
+        lineBox(valueView, 28f)
+        lineBox(unitView, 16f)
+        col.addView(info, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = -ctx.px(4f) })
+        if (footer != null && !fixedFooter) col.addView(footer, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        if (footer != null && fixedFooter) addView(footer, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
 
         val eid = config.entity
         isClickable = true
@@ -124,13 +140,53 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
         if (eid != null) observe(eid, ::render) else render(null)
     }
 
+    /** A line box of `--ha-line-height-condensed` (1.2) around [tv]'s [sizeCss] px text, as `.info` sets it. */
+    private fun lineBox(tv: TextView, sizeCss: Float) {
+        val fm = tv.paint.fontMetrics
+        val content = fm.descent - fm.ascent
+        val half = ((1.2f * sizeCss * ctx.dp * ctx.theme.fontScale - content) / 2f).coerceAtLeast(0f).toInt()
+        tv.setPadding(0, half, 0, half)
+    }
+
+    /** HA's `_getStateColor`: `color`, `state_color`, or (the entity card's default) a light; never for the sensor card. */
+    private fun colored(s: EntityState?): Boolean {
+        if (s == null) return false
+        val raw = config.raw
+        if (raw.optString("color").isNotEmpty()) return true
+        if (raw.has("state_color")) return raw.optBoolean("state_color")
+        return config.type != "sensor" && s.domain == "light"
+    }
+
+    /**
+     * HA's `_computeColor`: an explicit `color` (a theme color name or any CSS color) while the entity is active, else
+     * none; `color: state` (or no color) the state's own color.
+     */
+    private fun stateColor(s: EntityState?): Int? {
+        if (s == null) return null
+        val cfg = config.raw.optString("color").trim()
+        if (cfg.isNotEmpty() && cfg != "state") {
+            if (!s.isActive) return null
+            return ThemeResolver.parseColor(ctx.theme.vars["$cfg-color"]) ?: MushroomColors.parse(cfg, ctx.theme)
+        }
+        // A domain HA doesn't color by state (a plain sensor; a battery sensor is) has no state color.
+        if (!HaTimelineChart.isStateColored(s)) return null
+        // The reported color comes before the domain's (`rgb_color`, as a light reports it).
+        val rgb = (s.attributes["rgb_color"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
+        if (rgb != null && rgb.size >= 3) return android.graphics.Color.rgb(rgb[0], rgb[1], rgb[2])
+        return iconColorFor(ctx, s)
+    }
+
     private fun render(s: EntityState?) {
         nameView.text = config.name ?: s?.displayName ?: config.entity.orEmpty()
-        iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), iconColorFor(ctx, s))
+        val color = if (colored(s)) stateColor(s) else null
+        iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color ?: ctx.theme.stateIconColor)
         val (value, unit) = valueAndUnit(config.raw, s)
         valueView.text = value
         unitView.text = unit
         unitView.visibility = if (unit.isEmpty()) GONE else VISIBLE
+        // The footer takes the card's color only when the card sets `color` and has one (HA's `--accent-color`
+        // override); otherwise, on every render, the theme's accent.
+        footer?.color = color?.takeIf { config.raw.optString("color").isNotEmpty() } ?: ctx.theme.accentColor
     }
 
     companion object {
@@ -144,7 +200,13 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
                 return v to unitCfg
             }
             val unit = unitCfg.ifEmpty { s.unit.orEmpty() }
-            if (unit.isNotEmpty() && !s.isUnavailable) return s.state to unit
+            if (unit.isNotEmpty() && !s.isUnavailable) {
+                // formatEntityStateToParts: the number as HA formats it (display precision, grouping), the unit apart.
+                val number = s.state.trim().toBigDecimalOrNull()?.let {
+                    HaDisplay.formatState(s.state, HaDisplay.displayPrecision(s.entityId), (s.attributes["step"] as? Number)?.toDouble())
+                }
+                return (number ?: s.state) to unit
+            }
             return s.formattedState() to ""
         }
     }
@@ -939,255 +1001,6 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             }
         }
     }
-}
-
-// ---------------------------------------------------------------------------------------------
-// statistics-graph
-// ---------------------------------------------------------------------------------------------
-
-/** One line of a statistics chart: a label, a color and `(epochMs, value)` points. */
-data class StatSeries(val label: String, val color: Int, val points: List<Pair<Double, Double>>)
-
-/** Native HA `statistics-graph` card (`hui-statistics-graph-card`) drawn from `recorder/statistics_during_period`. */
-class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
-    private val titleView = extLabel(ctx, 16f, ctx.theme.primaryTextColor, Inter.MEDIUM)
-    private val legend = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
-    private val chart = StatisticsChartView(ctx.context, ctx.theme.dividerColor, ctx.theme.secondaryTextColor)
-    private val ids: List<String> = statisticIds(config)
-    private val days = config.raw.optInt("days_to_show", 30).coerceIn(1, 365)
-    private val period = config.raw.optString("period", "hour").ifEmpty { "hour" }
-    private val statTypes: List<String> = readStatTypes(config.raw.optJSONArray("stat_types"))
-    private val refresh = Runnable { fetch() }
-
-    init {
-        val pad = ctx.px(16f)
-        val col = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
-        }
-        titleView.text = config.title ?: ""
-        titleView.visibility = if (config.title == null) GONE else VISIBLE
-        col.addView(titleView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = ctx.px(8f) })
-        col.addView(legend, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = ctx.px(8f) })
-        col.addView(chart, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(160f)))
-        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-    }
-
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        fetch()
-    }
-
-    override fun onDetachedFromWindow() {
-        ctx.main.removeCallbacks(refresh)
-        generation++
-        super.onDetachedFromWindow()
-    }
-
-    /**
-     * A cached view another one hides stays attached: it stops polling Home Assistant (an answer still on its way is
-     * dropped), and asks once again when it shows.
-     */
-    override fun onVisibilityChanged(changedView: View, visibility: Int) {
-        super.onVisibilityChanged(changedView, visibility)
-        if (!isAttachedToWindow) return
-        if (isShown) {
-            fetch()
-        } else {
-            ctx.main.removeCallbacks(refresh)
-            generation++
-        }
-    }
-
-    /** Bumped per request and on detach: an answer from an earlier attachment doesn't overwrite a newer one. */
-    private var generation = 0
-
-    private fun fetch() {
-        ctx.main.removeCallbacks(refresh)
-        if (ids.isEmpty()) return
-        val gen = ++generation
-        val start = Date(System.currentTimeMillis() - days * 86_400_000L)
-        val msg = JSONObject()
-            .put("type", "recorder/statistics_during_period")
-            .put("start_time", isoUtc(start))
-            .put("statistic_ids", JSONArray(ids))
-            .put("period", period)
-            .put("types", JSONArray(statTypes))
-        ctx.callWs(msg) { ok, result, _ ->
-            val res = if (ok) result as? JSONObject else null
-            ctx.main.post {
-                if (gen != generation) return@post
-                if (res != null) render(res)
-                if (isAttachedToWindow && isShown) ctx.main.postDelayed(refresh, REFRESH_MS)
-            }
-        }
-    }
-
-    private fun render(result: JSONObject) {
-        val series = ArrayList<StatSeries>()
-        ids.forEachIndexed { idx, id ->
-            val name = config.entities().firstOrNull { it.entity == id }?.name ?: ctx.store[id]?.friendlyName ?: id
-            for ((tIdx, type) in statTypes.withIndex()) {
-                val pts = parsePoints(result.optJSONArray(id), type)
-                if (pts.isEmpty()) continue
-                val label = if (statTypes.size > 1) "$name ($type)" else name
-                series += StatSeries(label, PALETTE[(idx * statTypes.size + tIdx) % PALETTE.size], pts)
-            }
-        }
-        legend.removeAllViews()
-        series.forEach { s ->
-            val item = LinearLayout(ctx.context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-            item.addView(View(ctx.context).apply { background = pillBackground(s.color) }, LinearLayout.LayoutParams(ctx.px(10f), ctx.px(10f)))
-            item.addView(extLabel(ctx, 12f, ctx.theme.secondaryTextColor).apply {
-                text = s.label
-                maxLines = 1
-                ellipsize = TextUtils.TruncateAt.END
-            }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(5f) })
-            legend.addView(item, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = ctx.px(12f) })
-        }
-        val unit = ids.firstNotNullOfOrNull { ctx.store[it]?.unit }.orEmpty()
-        chart.update(series, unit)
-    }
-
-    companion object {
-        private const val REFRESH_MS = 5 * 60_000L
-        private val VALID_TYPES = setOf("mean", "min", "max", "sum", "state", "change")
-        private val PALETTE = intArrayOf(
-            0xFF44739E.toInt(), 0xFF984315.toInt(), 0xFF00A28C.toInt(), 0xFFB84B8A.toInt(),
-            0xFFC48A00.toInt(), 0xFF6A5ACD.toInt(), 0xFF2E7D32.toInt(), 0xFFD84315.toInt(),
-        )
-
-        fun statisticIds(config: CardConfig): List<String> {
-            val fromList = config.entities().filter { it.isEntity }.map { it.entity }
-            return (fromList.ifEmpty { listOfNotNull(config.entity) }).distinct()
-        }
-
-        fun readStatTypes(arr: JSONArray?): List<String> {
-            if (arr == null) return listOf("mean")
-            val out = (0 until arr.length()).mapNotNull { arr.optString(it, "").takeIf { t -> t in VALID_TYPES } }
-            return out.ifEmpty { listOf("mean") }
-        }
-
-        fun isoUtc(date: Date): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT)
-            .apply { timeZone = TimeZone.getTimeZone("UTC") }
-            .format(date)
-
-        /** Points of one stat type from a statistic's rows; `start` is epoch ms (or an ISO string on old cores). */
-        fun parsePoints(rows: JSONArray?, type: String): List<Pair<Double, Double>> {
-            if (rows == null) return emptyList()
-            val out = ArrayList<Pair<Double, Double>>(rows.length())
-            for (i in 0 until rows.length()) {
-                val row = rows.optJSONObject(i) ?: continue
-                if (!row.has(type) || row.isNull(type)) continue
-                val v = row.optDouble(type)
-                if (v.isNaN()) continue
-                val st = row.opt("start")
-                val t = (st as? Number)?.toDouble() ?: (st as? String)?.let(::parseIso) ?: continue
-                out += t to v
-            }
-            return out
-        }
-
-        private fun parseIso(s: String): Double? = runCatching {
-            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.ROOT)
-                .apply { timeZone = TimeZone.getTimeZone("UTC") }
-                .parse(s.take(19))?.time?.toDouble()
-        }.getOrNull()
-    }
-}
-
-/** Canvas multi-series line chart with min/max labels and faint gridlines. */
-internal class StatisticsChartView(context: Context, private val gridColor: Int, private val labelColor: Int) : View(context) {
-    private val dp = resources.displayMetrics.density
-    private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 2f * dp
-        strokeJoin = Paint.Join.ROUND
-        strokeCap = Paint.Cap.ROUND
-    }
-    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1f * dp
-    }
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 10f * dp }
-    private var series: List<StatSeries> = emptyList()
-    private var unit = ""
-
-    // Built once per data or size change, never in onDraw: one path per series and the two labels.
-    private val paths = ArrayList<Path>()
-    private val pathColors = ArrayList<Int>()
-    private var maxText = ""
-    private var minText = ""
-    private var empty = true
-    private var builtW = -1
-    private var builtH = -1
-
-    fun update(s: List<StatSeries>, unitLabel: String) {
-        series = s
-        unit = unitLabel
-        builtW = -1
-        invalidate()
-    }
-
-    private fun rebuild(top: Float, bottom: Float) {
-        builtW = width
-        builtH = height
-        paths.clear()
-        pathColors.clear()
-        val all = series.flatMap { it.points }
-        empty = all.isEmpty()
-        if (empty) return
-        val minT = all.minOf { it.first }
-        val maxT = all.maxOf { it.first }
-        var minV = all.minOf { it.second }
-        var maxV = all.maxOf { it.second }
-        if (maxV - minV < 1e-9) { minV -= 1.0; maxV += 1.0 }
-        val spanT = (maxT - minT).coerceAtLeast(1.0)
-        val spanV = maxV - minV
-        for (s in series) {
-            val path = Path()
-            s.points.forEachIndexed { i, (t, v) ->
-                val x = ((t - minT) / spanT * width).toFloat()
-                val y = (bottom - (v - minV) / spanV * (bottom - top)).toFloat()
-                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-            }
-            paths += path
-            pathColors += s.color
-        }
-        val suffix = if (unit.isEmpty()) "" else " $unit"
-        maxText = formatNum(maxV) + suffix
-        minText = formatNum(minV) + suffix
-    }
-
-    override fun onDraw(canvas: Canvas) {
-        gridPaint.color = gridColor
-        textPaint.color = labelColor
-        val top = 6f * dp
-        val bottom = height - 4f * dp
-        if (builtW != width || builtH != height) rebuild(top, bottom)
-        for (i in 0..3) {
-            val y = top + (bottom - top) * i / 3f
-            canvas.drawLine(0f, y, width.toFloat(), y, gridPaint)
-        }
-        if (empty) {
-            textPaint.textAlign = Paint.Align.CENTER
-            canvas.drawText("No statistics", width / 2f, height / 2f, textPaint)
-            return
-        }
-        for (i in paths.indices) {
-            linePaint.color = pathColors[i]
-            canvas.drawPath(paths[i], linePaint)
-        }
-        textPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText(maxText, 2f * dp, top + textPaint.textSize, textPaint)
-        canvas.drawText(minText, 2f * dp, bottom - 3f * dp, textPaint)
-    }
-
-    private fun formatNum(v: Double): String =
-        if (kotlin.math.abs(v) >= 100) v.roundToInt().toString() else String.format(Locale.ROOT, "%.1f", v)
 }
 
 // ---------------------------------------------------------------------------------------------

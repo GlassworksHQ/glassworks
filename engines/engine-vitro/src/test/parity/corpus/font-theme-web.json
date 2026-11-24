@@ -1,0 +1,6 @@
+{
+  "title": "Fonts: the theme's body font is a web font from a type: css resource",
+  "theme": "Vitro Glass",
+  "resources": [{ "type": "css", "url": "/local/vitro-harness-fixtures/fonts/theme-body.css" }],
+  "card": { "type": "tile", "entity": "light.entryway_ceiling_halo", "features": [{ "type": "light-brightness" }] }
+}

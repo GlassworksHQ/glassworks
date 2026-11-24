@@ -694,24 +694,15 @@ class LovelaceModelTest {
     }
 
     @Test
-    fun statisticsGraphReadsIdsTypesAndPoints() {
+    fun statisticsGraphReadsIdsAndTypes() {
         val c = card("""{"type": "statistics-graph", "entities": ["sensor.a", {"entity": "sensor.b"}]}""")
         assertEquals(listOf("sensor.a", "sensor.b"), StatisticsGraphCardView.statisticIds(c))
         assertEquals(listOf("sensor.c"), StatisticsGraphCardView.statisticIds(card("""{"type": "statistics-graph", "entity": "sensor.c"}""")))
-        assertEquals(listOf("mean"), StatisticsGraphCardView.readStatTypes(null))
+        // HA's default asks for every type; the chart draws the ones the statistic has.
+        assertEquals(listOf("change", "state", "sum", "min", "max", "mean"), StatisticsGraphCardView.readStatTypes(null))
         assertEquals(listOf("max", "min"), StatisticsGraphCardView.readStatTypes(JSONArray("""["max", "bogus", "min"]""")))
-        val rows = JSONArray(
-            """[
-              {"start": 1700000000000, "mean": 20.5, "max": 22},
-              {"start": "2023-11-14T23:13:20+00:00", "mean": 21.0},
-              {"start": 1700007200000, "mean": null}
-            ]""",
-        )
-        val pts = StatisticsGraphCardView.parsePoints(rows, "mean")
-        assertEquals(2, pts.size)
-        assertEquals(1700000000000.0 to 20.5, pts[0])
-        assertEquals(1700003600000.0, pts[1].first, 0.5)
-        assertEquals(1, StatisticsGraphCardView.parsePoints(rows, "max").size)
+        assertEquals(listOf("mean"), StatisticsGraphCardView.readStatTypes("mean"))
+        assertEquals(listOf("min", "change", "mean", "max"), StatisticsGraphCardView.sortBandTypes(listOf("change", "min", "max", "mean")))
     }
 
     @Test

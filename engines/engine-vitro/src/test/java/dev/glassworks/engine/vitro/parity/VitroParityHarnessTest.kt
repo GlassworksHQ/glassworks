@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro.parity
 import android.app.Activity
 import android.app.Application
 import android.graphics.Bitmap
+import android.view.View
 import dev.glassworks.testing.RepoFiles
 import dev.glassworks.ui.Inter
 import org.json.JSONArray
@@ -85,6 +86,9 @@ class VitroParityHarnessTest {
                         val r = runCase(label, root, frame, case, renderer, baseline, outDir, wanted)
                         mine += r
                     }
+                    // The last case's view leaves the window: a view still on screen would answer the next frame's
+                    // font notices (WebFonts) with its own dashboard and server.
+                    activity.setContentView(View(activity))
                 }
                 if (ParityFiles.collect) writeWanted(label, wanted)
                 if (ParityFiles.updateBaseline && !ParityFiles.collect) staged += baseline to mine
@@ -141,6 +145,11 @@ class VitroParityHarnessTest {
             if (gaps.isNotEmpty()) {
                 return ParityResult(label, frame, case, ParityStatus.ERROR, null,
                     listOf("capture input missing: Vitro asked for ${gaps.joinToString()}, which the capture didn't save (rerun tools/vitro-parity/run.sh --refresh)"), notes, null)
+            }
+            // A history or statistics call HA's page never made: Vitro asked for other data than HA drew.
+            if (render.wsUnmatched.isNotEmpty()) {
+                return ParityResult(label, frame, case, ParityStatus.ERROR, null,
+                    listOf("Vitro's graph call differs from every call HA made (or the capture predates it): ${render.wsUnmatched.distinct().joinToString(" | ").take(600)}"), notes, null)
             }
             val (m, side) = ParityCompare.measure(case, frame, ref, render)
             if (m.slotsHa != m.slotsVitro) notes += "HA shows ${m.slotsHa} card slot(s), Vitro ${m.slotsVitro}"

@@ -96,6 +96,29 @@ Vitro reads the themes Home Assistant already has, so a dashboard looks the same
 
 The resolved variables are also exported to Tier 3 islands, so native and custom cards match.
 
+## Fonts
+
+Text draws in the font Home Assistant's page would use. Vitro reads a `font-family` list the way a browser does and uses the first family it can draw:
+
+| Family | Where Vitro gets it |
+|---|---|
+| A font a Lovelace resource of type `css` declares with `@font-face` (also through `@import`, such as a Google Fonts stylesheet) | Downloaded from the same address the browser would use, then kept on the panel |
+| Inter | Bundled with the app |
+| Roboto, Noto, `sans-serif`, `system-ui` and the usual system names | Android's own sans-serif, which is Roboto |
+| `serif`, `monospace`, `cursive` | Android's own serif, monospace and cursive fonts. Other generic names, such as `fantasy`, use its sans-serif |
+| Anything else | Skipped, so the next family in the list is used, just as a browser skips a font it can't load |
+
+The list comes from the theme's `--ha-font-family-body` (or `--primary-font-family`), from a card's own `theme:`, or from a card-mod `font-family` on the card (`ha-card { font-family: Lora, serif; }`), which every text in the card and in the cards stacked inside it inherits. Markdown follows its sheets' `font-family` element by element.
+
+A few details keep this light on a small panel:
+
+- **Nothing is downloaded until it's needed.** A dashboard with no `type: css` resources makes no request at all. Otherwise Vitro reads the stylesheets the first time it draws text, as the browser loads them with the dashboard, but fetches a font only once some text uses it.
+- **Text never waits for a font.** While a font downloads, the text draws in the next family of the list, then draws again once the font arrives, as a browser does with `font-display: swap`. After a restart, fonts load from the panel's storage before the first view is drawn.
+- **There are limits.** Vitro reads up to 8 stylesheets of 512 KB and loads up to 12 font files of 4 MB each, and keeps 24 MB on the panel. A font past a limit draws in its fallback, like a font that failed to load.
+- **Formats:** TrueType, OpenType and WOFF. WOFF2 isn't decoded, so a face that offers only WOFF2 is skipped. Most stylesheets list a WOFF or TTF file next to it, and Google Fonts sends TrueType to Vitro.
+- **Weights** are matched the way CSS matches them, and a missing bold or italic is synthesized, as a browser does. A variable font is drawn at the exact weight on Android 8 and later. On older versions, Vitro uses the family's nearest static face if the stylesheet has one, and otherwise the variable font's default weight.
+- **Character ranges:** when a family is split into `unicode-range` subsets (as Google Fonts does for Latin, Greek or Cyrillic), Vitro uses the Latin subset. Characters outside it are drawn in Android's own fonts, not in the family's other subsets.
+
 ## Rendering like Home Assistant does
 
 Vitro follows Home Assistant's own rules, so a dashboard never looks right only in Vitro:
@@ -108,6 +131,7 @@ Vitro follows Home Assistant's own rules, so a dashboard never looks right only 
 | HTML tables | `<table role="presentation">` rows and proportional bars: `<td width="N%" align valign>`, `border-spacing`, `table-layout: fixed`, cell backgrounds, and a rounded `overflow: hidden` table. |
 | Images | `<img width height>`, block images (`display: block`, `width: 100%`), and `data:image/svg+xml` images built with Jinja, drawn natively from a small SVG subset. |
 | Sections | HA's grid: the `--ha-view-sections-*` gaps and column widths, 12 columns per section with `--ha-section-grid-*` gaps, and each card's `grid_options` (or the size its type reports, such as a large clock's 6 x 2). Hidden cards and sections leave no gap. |
+| Graphs | The sensor card, the history graph and the statistics graph ask Home Assistant for the same history and statistics its frontend does and draw them its way: the sensor card's hourly averages as a smooth line along the bottom, and full charts for the other two, with time and value axes, gridlines, a legend, timeline bars for entities without a unit, and the statistics' min-to-max band. The paths are built when the data or the size changes, never while drawing. |
 | Cards | The clock reads `clock_size`, `time_format`, `time_zone`, `no_background` and the `--ha-clock-card-digital-font-size-*` variables. Mushroom chips honor `conditional` chips and ignore a chip's own `visibility` and `card_mod`, like Mushroom does. stack-in-card follows version 0.2.0. A card's `margin` insets it in its slot. |
 
 ## What Vitro draws natively
@@ -121,7 +145,7 @@ The supported set lives in one place in the code, [`compat/VitroSupport.kt`](src
 | Card types | The built-in and HACS cards in the tier table above | Any other `custom:` card, and built-in cards Vitro doesn't have yet (such as `map` or `energy-*`) |
 | Card options | Tile features `light-brightness`, `select-options`, `cover-open-close`, `climate-hvac-modes`, `target-temperature`, `fan-speed`, `cover-position`, `light-color-temp`, `media-player-volume-slider`, `toggle`, `media-player-playback`, `light-color-favorites`, `numeric-input` and `vacuum-commands`. Entity rows, `divider` and `section` rows. `picture-elements` icons, labels, badges and service buttons. Mushroom chips: entity, template, weather, light, action, menu, back, spacer and conditional. Bubble Card buttons and separators. layout-card's masonry, horizontal, vertical and grid layouts | Any other tile feature, entity row type (`buttons`, `attribute`, custom rows, ...), `picture-elements` element, chip, Bubble Card type or layout. Entities headers and footers |
 | card-mod sheets | `"."` (or a plain string) on every card, `"ha-markdown$"` on Markdown cards and `"hui-clock-card-digital$"` on the clock | Any other path, such as `"mushroom-shape-icon$"`, and nested selector maps |
-| The card's own rule | `ha-card { }`, `:host { }`, `:host ha-card { }` with backgrounds (colors and linear gradients), solid borders, `border-radius`, `box-shadow`, `opacity`, `padding`, `margin`, `height: 100%`, the opacity `transition`, a pinned card (`position: fixed` with offsets, `width`, and a `translate(-50%)` that centers it at `left: 50%` or `top: 50%`), and `font-size` on tile and Mushroom cards. A stack's `:host { }` with `padding`, `margin` and its gap variables | Background images, radial gradients, dashed borders, inset shadows, other transforms, filters, animations, fixed heights, `color` on cards other than Markdown and the clock |
+| The card's own rule | `ha-card { }`, `:host { }`, `:host ha-card { }` with backgrounds (colors and linear gradients), solid borders, `border-radius`, `box-shadow`, `opacity`, `padding`, `margin`, `height: 100%`, the opacity `transition`, a pinned card (`position: fixed` with offsets, `width`, and a `translate(-50%)` that centers it at `left: 50%` or `top: 50%`), `font-family` on every card (see [Fonts](#fonts)), and `font-size` on tile and Mushroom cards. A stack's `:host { }` with `padding`, `margin` and its gap variables | Background images, radial gradients, dashed borders, inset shadows, other transforms, filters, animations, fixed heights, `color` on cards other than Markdown and the clock |
 | Selectors | Inside Markdown and the clock, the selectors listed under "Markdown sheets" in the table above, matched against the elements Vitro rebuilds | Selectors that reach inside a card Vitro doesn't rebuild (`ha-card .primary`), `::before` and `::after`, `:has()`, `:host()`, and `@media` or `@supports` rules |
 | Markdown | Everything HA's sanitizer keeps, except the tags in the next column | `<ha-alert>`, `<ha-qr-code>`, `<ha-svg-icon>`, `<details>`, `<audio>`, `<video>`, `<picture>`, checkboxes and image maps |
 
