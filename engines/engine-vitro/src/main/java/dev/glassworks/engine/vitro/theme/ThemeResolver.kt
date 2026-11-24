@@ -231,7 +231,6 @@ data class ThemeCatalog(
  * CSS gradients, background URLs, and basic `card-mod-card` container rules) into [ResolvedTheme].
  */
 object ThemeResolver {
-    private val VAR_PATTERN = Regex("""var\(\s*--([a-zA-Z0-9_-]+)\s*(?:,\s*([^)]+))?\)""")
     private val RGBA_PATTERN = Regex("""rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)""", RegexOption.IGNORE_CASE)
     private val HSLA_PATTERN = Regex("""hsla?\(\s*([\d.]+)(?:deg)?\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%(?:\s*[,/]\s*([\d.]+%?))?\s*\)""", RegexOption.IGNORE_CASE)
     private val URL_PATTERN = Regex("""url\(\s*['"]?([^'")]+)['"]?\s*\)""", RegexOption.IGNORE_CASE)
@@ -418,12 +417,57 @@ object ThemeResolver {
     /** Recursively substitutes `var(--name, fallback)` up to depth 8. */
     fun resolveValue(input: String, map: Map<String, String>, depth: Int): String {
         if (depth >= 8 || "var(" !in input) return input.trim()
-        val replaced = VAR_PATTERN.replace(input) { m ->
-            val key = m.groupValues[1]
-            val fallback = m.groupValues.getOrNull(2)?.trim().orEmpty()
-            map[key] ?: fallback
-        }
+        val replaced = substituteVars(input) { key, fallback -> map[key] ?: fallback }
         return if (replaced == input) replaced.trim() else resolveValue(replaced, map, depth + 1)
+    }
+
+    /**
+     * Replaces each outermost `var(--name, fallback)` in [s] with [value] of its name and fallback. The whole
+     * expression is found by balanced parentheses, so a nested fallback (`var(--a, var(--b))`) isn't cut short.
+     */
+    private fun substituteVars(s: String, value: (key: String, fallback: String) -> String): String {
+        val out = StringBuilder(s.length)
+        var i = 0
+        while (i < s.length) {
+            val at = s.indexOf("var(", i)
+            if (at < 0) {
+                out.append(s, i, s.length)
+                break
+            }
+            out.append(s, i, at)
+            var j = at + 4
+            var depth = 1
+            while (j < s.length && depth > 0) {
+                when (s[j]) {
+                    '(' -> depth++
+                    ')' -> depth--
+                }
+                j++
+            }
+            if (depth != 0) {
+                out.append(s, at, s.length) // unbalanced: left as it is
+                break
+            }
+            val inner = s.substring(at + 4, j - 1)
+            var comma = -1
+            var d = 0
+            for (k in inner.indices) {
+                when (inner[k]) {
+                    '(' -> d++
+                    ')' -> d--
+                    ',' -> if (d == 0) { comma = k; break }
+                }
+            }
+            val name = (if (comma < 0) inner else inner.substring(0, comma)).trim()
+            if (!name.startsWith("--")) {
+                out.append(s, at, j) // not a custom property reference: left as it is
+                i = j
+                continue
+            }
+            out.append(value(name.removePrefix("--"), if (comma < 0) "" else inner.substring(comma + 1).trim()))
+            i = j
+        }
+        return out.toString()
     }
 
     /** Parses CSS colors (`#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()`, `hsl()`, `hsla()`, named) to Android ARGB. */
@@ -475,7 +519,11 @@ object ThemeResolver {
     }
 
     fun parseDimensionDp(raw: String?, defaultDp: Float): Float {
-        val m = DIM_PX.find(raw.orEmpty()) ?: return defaultDp
+        val text = raw.orEmpty()
+        val m = DIM_PX.find(text) ?: return defaultDp
+        // A negative length or a percentage isn't a positive dp: leave it unapplied rather than guess.
+        if (m.range.first > 0 && text[m.range.first - 1] == '-') return defaultDp
+        if (m.range.last + 1 < text.length && text[m.range.last + 1] == '%') return defaultDp
         val value = m.groupValues[1].toFloatOrNull() ?: return defaultDp
         return when (m.groupValues[2].lowercase(Locale.ROOT)) {
             "rem", "em" -> value * 16f
@@ -550,10 +598,12 @@ object ThemeResolver {
         val (decls, otherRules) = hostDeclarations(cleaned)
         val custom = Regex("""(?:^|[;\n{])\s*--([\w-]+)\s*:\s*([^;\n]+)""").findAll(decls)
             .associate { it.groupValues[1] to resolveValue(it.groupValues[2].trim(), vars, 0) }
+        // The card's own custom properties come before the theme's, as they would on its ha-card.
+        val scope = if (custom.isEmpty()) vars else vars + custom
         fun prop(name: String): String? =
             Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;!\n]+)""", RegexOption.IGNORE_CASE).findAll(decls)
                 .lastOrNull()?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
-                ?.let { resolveValue(it, vars, 0) }
+                ?.let { resolveValue(it, scope, 0) }
 
         val bgImage = prop("background-image")
         val bgShort = prop("background")

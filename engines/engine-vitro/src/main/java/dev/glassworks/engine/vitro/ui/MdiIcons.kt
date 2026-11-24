@@ -99,11 +99,13 @@ object MdiIcons {
             catalog?.let { return it }
             if (catalogTried) return null
             val am = assets ?: return null
-            catalogTried = true
+            // Marked tried only once loaded: a reader meanwhile waits on the lock instead of taking "no catalog"
+            // (and a fallback glyph its view would keep).
             val loaded = sequenceOf(CATALOG_ASSET_PACKAGED, CATALOG_ASSET).firstNotNullOfOrNull { name ->
                 runCatching { am.open(name).use(::parseCatalog) }.getOrNull()
             }
             catalog = loaded
+            catalogTried = true
             if (loaded != null) cache.clear() // drop built-in glyphs parsed before the official ones arrived
             return loaded
         }
