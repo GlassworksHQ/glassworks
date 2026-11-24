@@ -491,7 +491,9 @@ object MarkedLite {
         while (k < to) {
             // A quoted title after the destination (`"Floor (draft"`): its parentheses don't count.
             if ((s[k] == '"' || s[k] == '\'') && k > 0 && (s[k - 1] == ' ' || s[k - 1] == '\t')) {
-                val end = s.indexOf(s[k], k + 1)
+                // The closing quote, past any escaped one (`\"`).
+                var end = k + 1
+                while (end < to && s[end] != s[k]) end += if (s[end] == '\\') 2 else 1
                 if (end in 0 until to) {
                     k = end + 1
                     continue

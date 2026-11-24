@@ -745,10 +745,16 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         observe(eid) { _ -> fetch(eid) }
     }
 
-    private fun fetch(eid: String) {
+    private fun fetch(eid: String, retry: Boolean = true) {
         val gen = ++fetchGeneration
         ctx.callWs(JSONObject().put("type", "todo/item/list").put("entity_id", eid)) { ok, result, _ ->
-            if (!ok) return@callWs
+            if (!ok) {
+                // A row added here waits for this list to get its uid: ask once more rather than leave it untoggleable.
+                if (retry) ctx.main.postDelayed({
+                    if (gen == fetchGeneration && isAttachedToWindow && items.any { it.pending }) fetch(eid, retry = false)
+                }, RETRY_MS)
+                return@callWs
+            }
             val parsed = parseItems(result as? JSONObject)
             ctx.main.post {
                 if (gen != fetchGeneration) return@post
@@ -867,6 +873,9 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     companion object {
         /** The uid prefix of a row added here that Home Assistant hasn't listed yet. */
         private const val LOCAL_UID = "local-"
+
+        /** The wait before a failed list read is tried again (once). */
+        private const val RETRY_MS = 2_000L
         /** HA's checked checkbox: its brand fill (#009ac7, measured). */
         private const val CHECKED = 0xFF009AC7.toInt()
 

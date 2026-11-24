@@ -2504,12 +2504,18 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
 
     /** Conditional chips whose rules read the clock or the user: re-checked on a timer while attached. */
     private val timedRefreshes = ArrayList<() -> Unit>()
+
+    /** The chips' conditions with `time` rules: the next check also comes just after their next bound. */
+    private val timedConditions = ArrayList<VisibilityCondition>()
     private val timedTick = object : Runnable {
         override fun run() {
             timedRefreshes.forEach { it() }
-            postDelayed(this, TIMED_CHECK_MS)
+            postDelayed(this, nextTimedCheck())
         }
     }
+
+    private fun nextTimedCheck(): Long =
+        minOf(TIMED_CHECK_MS, VisibilityCondition.msUntilNextTimeBound(timedConditions) ?: TIMED_CHECK_MS)
 
     private fun bind(binder: () -> (() -> Unit)) {
         binders += binder
@@ -2569,6 +2575,7 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
             }
         }
         if (conditions.any { it.dependsOnTime() || it.dependsOnUser() }) timedRefreshes += ::refresh
+        conditions.filterTo(timedConditions) { it.dependsOnTime() }
     }
 
     /** The visible children split into flex lines, as `flex-wrap: wrap` breaks them for [innerWidth]. */
@@ -2780,7 +2787,7 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         if (timedRefreshes.isNotEmpty()) {
             timedRefreshes.forEach { it() }
             removeCallbacks(timedTick)
-            postDelayed(timedTick, TIMED_CHECK_MS)
+            postDelayed(timedTick, nextTimedCheck())
         }
     }
 

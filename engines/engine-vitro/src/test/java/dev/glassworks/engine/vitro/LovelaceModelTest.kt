@@ -993,6 +993,18 @@ class LovelaceModelTest {
     }
 
     @Test
+    fun theNextTimeBoundIsJustAfterIt() {
+        val c = VisibilityCondition.parse(JSONObject("""{"condition": "time", "after": "12:00:01", "before": "12:00:05"}"""))
+        val noon = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 12); set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        assertEquals(1_250L, VisibilityCondition.msUntilNextTimeBound(listOf(c), noon))
+        assertEquals(2_250L, VisibilityCondition.msUntilNextTimeBound(listOf(c), noon + 3_000))
+        assertEquals(null, VisibilityCondition.msUntilNextTimeBound(listOf(VisibilityCondition.User(listOf("u")))))
+    }
+
+    @Test
     fun timeConditionsKeepSeconds() {
         val c = VisibilityCondition.parse(JSONObject("""{"condition": "time", "after": "08:00:30"}"""))
         assertFalse(c.evaluate(states(), nowSeconds = 8 * 3_600 + 10))

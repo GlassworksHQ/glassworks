@@ -435,7 +435,7 @@ class VitroEngine(
          */
         private fun leaveNativeDashboard() {
             currentDashboardPath = NO_DASHBOARD
-            client?.claimDashboard(NO_DASHBOARD)
+            client?.releaseDashboard()
         }
 
         private fun showVitroLayer() {

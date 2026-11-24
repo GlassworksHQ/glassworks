@@ -262,6 +262,32 @@ sealed class VisibilityCondition {
             it.get(Calendar.HOUR_OF_DAY) * 3_600 + it.get(Calendar.MINUTE) * 60 + it.get(Calendar.SECOND)
         }
 
+        /**
+         * Milliseconds from [nowMillis] (local time) until just after the next `after`/`before` bound of a `time`
+         * condition in [conds] (nested ones too), or null when they have none: a check then sees the change on time.
+         */
+        fun msUntilNextTimeBound(conds: List<VisibilityCondition>, nowMillis: Long = System.currentTimeMillis()): Long? {
+            val bounds = ArrayList<Int>()
+            fun walk(c: VisibilityCondition) {
+                when (c) {
+                    is Time -> listOfNotNull(c.after, c.before).forEach { bounds += it }
+                    is And -> c.conditions.forEach(::walk)
+                    is Or -> c.conditions.forEach(::walk)
+                    is Not -> c.conditions.forEach(::walk)
+                    else -> Unit
+                }
+            }
+            conds.forEach(::walk)
+            if (bounds.isEmpty()) return null
+            val cal = Calendar.getInstance().apply { timeInMillis = nowMillis }
+            val nowSec = cal.get(Calendar.HOUR_OF_DAY) * 3_600 + cal.get(Calendar.MINUTE) * 60 + cal.get(Calendar.SECOND)
+            val ms = cal.get(Calendar.MILLISECOND)
+            return bounds.minOf { b ->
+                val ahead = ((b - nowSec) % 86_400 + 86_400) % 86_400
+                (if (ahead == 0) 86_400 else ahead) * 1_000L - ms + 250L
+            }
+        }
+
         fun currentLocalWeekday(): Int = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
 
         /**

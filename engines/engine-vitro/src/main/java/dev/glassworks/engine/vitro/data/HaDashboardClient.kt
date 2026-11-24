@@ -171,19 +171,37 @@ class HaDashboardClient(
         resubscribeEntities()
     }
 
+    /**
+     * False while the page shows a fallback (non-dashboard) page: no dashboard is fetched on a reconnect or a
+     * `lovelace_updated`, and an answer still on its way is dropped.
+     */
+    @Volatile private var dashboardActive = true
+
     /** The page shows [urlPath] again without asking: an answer still on its way for another path is dropped. */
     fun claimDashboard(urlPath: String?) {
         requestedDashboardPath = urlPath
+        dashboardActive = true
+    }
+
+    /** The page left the dashboards for the fallback; the next [fetchDashboard] or [claimDashboard] takes them back. */
+    fun releaseDashboard() {
+        dashboardActive = false
+    }
+
+    /** Fetches the requested dashboard again (reconnect, `lovelace_updated`), unless the page has left the dashboards. */
+    private fun refetchDashboard() {
+        if (dashboardActive) fetchDashboard(requestedDashboardPath)
     }
 
     /** Loads a different Lovelace dashboard config over the live socket. */
     fun fetchDashboard(urlPath: String?) {
         requestedDashboardPath = urlPath
+        dashboardActive = true
         val msg = JSONObject().put("type", "lovelace/config")
         if (!urlPath.isNullOrEmpty()) msg.put("url_path", urlPath)
         request(msg) { res ->
             // An answer for a dashboard the page has since moved away from must not replace the current one.
-            if (closed.get() || urlPath != requestedDashboardPath) return@request
+            if (closed.get() || !dashboardActive || urlPath != requestedDashboardPath) return@request
             // The connection, not Home Assistant, failed: the reconnect asks again (onAuthenticated). Reporting it
             // would send a dashboard that exists to the fallback as "not found".
             if (isTransportError(res)) return@request
@@ -374,6 +392,9 @@ class HaDashboardClient(
     private fun failOutstanding() {
         val orphaned: List<Int>
         synchronized(queueLock) {
+            // The display requests of this connection settle no more: their callbacks (below, or a late send_failed)
+            // see an older generation than the next connection's.
+            connectionGen.incrementAndGet()
             authenticated = false
             socket = null
             entitySubId = null
@@ -414,6 +435,9 @@ class HaDashboardClient(
     private val displayRequested: MutableSet<String> = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
     private val displayPending = java.util.concurrent.atomic.AtomicInteger(0)
 
+    /** Bumped when a connection ends: display callbacks of an earlier one leave the counters alone. */
+    private val connectionGen = AtomicInteger(0)
+
     /** Some display data arrived since the last re-render; without it (all refused) there is nothing to redraw. */
     private val displayChanged = AtomicBoolean(false)
 
@@ -448,7 +472,9 @@ class HaDashboardClient(
             val msg = JSONObject().put("type", type).put("category", category).put("integration", JSONArray(names))
             if (type == "frontend/get_translations") msg.put("language", "en")
             displayPending.incrementAndGet()
+            val gen = connectionGen.get()
             request(msg) { res ->
+                if (gen != connectionGen.get()) return@request
                 if (res.optBoolean("success", false)) res.optJSONObject("result")?.let { r -> applyDisplay { apply(r) } }
                 settleDisplay()
             }
@@ -518,9 +544,9 @@ class HaDashboardClient(
             }
         }
         // 4. Active dashboard config (and live lovelace_updated notifications)
-        fetchDashboard(requestedDashboardPath)
+        refetchDashboard()
         subscribe(JSONObject().put("type", "subscribe_events").put("event_type", "lovelace_updated")) {
-            fetchDashboard(requestedDashboardPath)
+            refetchDashboard()
         }
         // 5. Initial entity subscription (refined to view's entities once config arrives)
         resubscribeEntities()
@@ -541,8 +567,10 @@ class HaDashboardClient(
         // 7. Display data, after everything the first paint needs: the entity registry, then the icons and state
         // translations for the view's entities.
         // The registry counts as one display request: when it is the only one that succeeds, cards still re-render.
+        val gen = connectionGen.get()
         displayPending.incrementAndGet()
         request(JSONObject().put("type", "config/entity_registry/list_for_display")) { res ->
+            if (gen != connectionGen.get()) return@request
             if (res.optBoolean("success", false)) res.optJSONObject("result")?.let { r -> applyDisplay { HaDisplay.applyRegistry(r) } }
             loadDisplayFor(displayIds())
             settleDisplay()
@@ -550,6 +578,7 @@ class HaDashboardClient(
         // Device names, for HA's default tile names ("<device> <entity>").
         displayPending.incrementAndGet()
         request(JSONObject().put("type", "config/device_registry/list")) { res ->
+            if (gen != connectionGen.get()) return@request
             if (res.optBoolean("success", false)) res.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyDevices(r) } }
             settleDisplay()
         }

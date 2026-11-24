@@ -789,6 +789,20 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun aReleasedDashboardIsNotFetchedOnLovelaceUpdatedOrReconnect() {
+        val c = connected()
+        c.releaseDashboard()
+        server.pushEvent(server.eventSubscriptionId("lovelace_updated")!!, JSONObject().put("event_type", "lovelace_updated"))
+        server.dropConnection()
+        awaitCondition("reconnected") { server.connectUrls.size == 2 && server.commands("subscribe_entities").size == 2 }
+        // Only the first connection's startup request: nothing for the fallback page's "dashboard".
+        assertEquals(1, server.commands("lovelace/config").size)
+        // Taking the dashboards back fetches again.
+        c.fetchDashboard("wall-test")
+        awaitCondition("fetched") { listener.configs.any { it.first == "wall-test" } }
+    }
+
+    @Test
     fun aDashboardHaRejectsIsReported() {
         val c = connected()
         c.fetchDashboard("missing")

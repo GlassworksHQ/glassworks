@@ -268,6 +268,7 @@ describe("parseYaml", () => {
     expect(() => parseYaml("base: &b\n  type: custom:button-card\nviews:\n  - cards: [*b]\n")).toThrow(/alias \*b/);
     expect(() => parseYaml("k: &k type\nviews:\n  - cards: [{*k : custom:button-card}]\n")).toThrow(/alias \*k/);
     expect(() => parseYaml("k: &k type\nviews:\n  - cards: [*k : custom:button-card]\n")).toThrow(/alias \*k/);
+    expect(() => parseYaml("k: &k custom:button-card\nviews:\n  - cards: [type: *k]\n")).toThrow(/alias/);
   });
 
     it("reads only the first document and ignores a leading marker", () => {
