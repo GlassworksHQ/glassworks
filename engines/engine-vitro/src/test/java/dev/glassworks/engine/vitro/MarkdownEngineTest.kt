@@ -315,6 +315,18 @@ class MarkdownEngineTest {
         parsed.draw(android.graphics.Canvas(bmp), 100f, 100f, activity)
     }
 
+    @Test
+    fun svgArcsDrawAsArcsNotLines() {
+        // A half circle from (0,50) to (100,50), sweeping through the top; flags written together as "01".
+        val arc = MdSvg.pathData("M0 50 A50 50 0 01100 50")
+        val bounds = android.graphics.RectF()
+        @Suppress("DEPRECATION") arc.computeBounds(bounds, true)
+        assertEquals(0f, bounds.top, 0.5f)
+        assertEquals(100f, bounds.right, 0.5f)
+        val length = android.graphics.PathMeasure(arc, false).length
+        assertEquals((Math.PI * 50).toFloat(), length, 1.5f)
+    }
+
     // ---- sections grid ----
 
     @Test
