@@ -282,7 +282,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val row = LinearLayout(ctx.context).apply {
             orientation = if (vertical) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             gravity = if (vertical) Gravity.CENTER else Gravity.CENTER_VERTICAL
-            setPadding(pad, pad, pad, pad)
+            // hui-tile-card's `.content`: `min-height: 56px; padding: 0 10px`, children centred, so the 36.8 px info
+            // column fits in 56 px (a 10 px top and bottom padding would make the tile 56.8).
+            if (vertical) setPadding(pad, pad, pad, pad) else setPadding(pad, 0, pad, 0)
             minimumHeight = ctx.px(56f)
         }
 
@@ -2131,22 +2133,26 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
         }
     }
 
-    /** One right-side heading badge: a 16 dp icon and the live formatted state; tapping opens more-info. */
+    /**
+     * One right-side heading badge, as hui-entity-heading-badge measures in HA: a 16 px icon, 3 px, then the state
+     * (HA's state display, 14 px / 400 with 0.1 px letter spacing) on a 20 px row, badges 8 px apart.
+     */
     private fun buildBadge(eid: String, explicitIcon: String?): View {
         val icon = MdiIconView(ctx.context)
-        val state = textView(ctx, 13f, ctx.theme.secondaryTextColor).apply { maxLines = 1 }
+        val state = textView(ctx, 14f, ctx.theme.secondaryTextColor).apply { maxLines = 1; letterSpacing = 0.1f / 14f }
         val item = LinearLayout(ctx.context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(12f) }
+            minimumHeight = ctx.px(20f)
+            layoutParams = LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(8f) }
             isClickable = true
             setOnClickListener { ctx.performAction(ActionConfig("more-info"), eid) }
-            addView(icon, LayoutParams(ctx.px(16f), ctx.px(16f)).apply { marginEnd = ctx.px(4f) })
+            addView(icon, LayoutParams(ctx.px(16f), ctx.px(16f)).apply { marginEnd = ctx.px(3f) })
             addView(state)
         }
         val render = { s: EntityState? ->
             icon.setIcon(MdiIcons.resolveIconName(explicitIcon, s), ctx.theme.secondaryTextColor)
-            state.text = s?.formattedState() ?: "…"
+            state.text = s?.plainState() ?: "…"
         }
         render(ctx.store[eid])
         unsubs += ctx.store.subscribe(eid) { s -> ctx.main.post { render(s) } }
