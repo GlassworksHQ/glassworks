@@ -191,5 +191,11 @@ test('findPrivate flags a MAC fragment but not a colour or a model id', async ()
   const { findPrivate } = await import('../lib/scrub.mjs');
   assert.deepEqual(findPrivate('AirDot 4c83f8', null), ['a MAC fragment']);
   assert.deepEqual(findPrivate('esp-a1b2c3d4e5f6', null), ['a MAC fragment']);
+  // `_` sets a fragment off too: it's a word character, so a \w boundary missed it.
+  assert.deepEqual(findPrivate('AirDot_a1b2c3d4e5f6', null), ['a MAC fragment']);
+  assert.deepEqual(findPrivate('esp_4C83F8.local', null), ['a MAC fragment']);
+  const { hasMacFragment } = await import('../lib/scrub.mjs');
+  assert.ok(hasMacFragment('{"friendly_name": "airdot_4bb0c0 Temperature"}'));
+  assert.ok(!hasMacFragment('{"color": "#a1b2c3", "lc": 1795504930.063075}'));
   for (const ok of ['#34d399', 'TS0501B', '_TZB210_gumjktrw', 'abcdef', '123456', 'Fog 8.3 °C']) assert.deepEqual(findPrivate(ok, null), [], ok);
 });

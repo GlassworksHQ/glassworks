@@ -20,6 +20,13 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /** The harness's own checks: the diff measures what it claims, and the committed fixtures hold nothing private. */
+/**
+ * The end of a MAC as device names and hostnames carry it ("AirDot 4c83f8", "AirDot_a1b2c3d4e5f6"): a 6- or
+ * 12-hex-digit run mixing digits and letters, set off by anything but a letter or digit (so `_` and `-` too), and
+ * not a CSS colour. tools/vitro-parity/lib/scrub.mjs's MAC_FRAGMENT is the same pattern.
+ */
+internal val MAC_FRAGMENT = Regex("""(?<![#0-9A-Za-z])(?=[0-9a-fA-F]*\d)(?=[0-9a-fA-F]*[a-fA-F])(?:[0-9a-fA-F]{12}|[0-9a-fA-F]{6})(?![0-9A-Za-z])""")
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -254,6 +261,16 @@ class ParityHarnessSelfTest {
         assertEquals("anchored 16 px above the panel's bottom: $card", 480.0 - 16.0, card.bottom, 1.5)
     }
 
+    @Test
+    fun aMacFragmentIsCaughtWhateverSetsItOff() {
+        for (bad in listOf("AirDot 4c83f8", "airdot-4c83f8", "AirDot_a1b2c3d4e5f6", "esp_4C83F8.local", "(a1b2c3)")) {
+            assertTrue(bad, MAC_FRAGMENT.containsMatchIn(bad))
+        }
+        for (ok in listOf("#34d399", "color: #a1b2c3", "TS0501B", "_TZB210_gumjktrw", "abcdef", "123456", "1795504930.063075", "Fog 9.1 °C")) {
+            assertTrue(ok, !MAC_FRAGMENT.containsMatchIn(ok))
+        }
+    }
+
     /** CLAUDE.md hard rule 2: no tokens, addresses, MACs or serials in fixtures, references or reports. */
     @Test
     fun committedFixturesHoldNothingPrivate() {
@@ -276,9 +293,8 @@ class ParityHarnessSelfTest {
             if (jwt.containsMatchIn(text)) problems += "$rel: a token"
             // HA's device and config-entry ids: 32 hex chars, unique to one HA (the fixtures use device-1, ...).
             if (Regex("""\b[0-9a-f]{32}\b""").containsMatchIn(text)) problems += "$rel: an HA registry id"
-            // The end of a MAC in a device name or hostname ("AirDot 4c83f8"); a CSS colour (#34d399) is fine.
-            Regex("""(?<![#\w])(?=[0-9a-fA-F]*\d)(?=[0-9a-fA-F]*[a-fA-F])(?:[0-9a-fA-F]{12}|[0-9a-fA-F]{6})(?!\w)""").find(text)
-                ?.let { problems += "$rel: a MAC fragment" }
+            // The end of a MAC in a device name or hostname; a CSS colour (#34d399) is fine.
+            if (MAC_FRAGMENT.containsMatchIn(text)) problems += "$rel: a MAC fragment"
             if (tokenParam.containsMatchIn(text)) problems += "$rel: a token parameter"
             privateKeys.find(text)?.let { problems += "$rel: a private attribute (${it.groupValues[1]})" }
             if (Regex("""https?://(?!127\.0\.0\.1|homeassistant\.local)[a-z0-9.-]+[:/]""").containsMatchIn(text)) problems += "$rel: an absolute URL to a host"

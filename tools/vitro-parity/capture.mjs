@@ -25,7 +25,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect, loadCredentials, redact } from './lib/ha.mjs';
-import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate } from './lib/scrub.mjs';
+import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate, hasMacFragment } from './lib/scrub.mjs';
 import { parseArgs, pick } from './lib/args.mjs';
 import { assetDestination, canonicalPath } from './lib/assets.mjs';
 import { applyEntityEvent } from './lib/states.mjs';
@@ -535,7 +535,12 @@ async function capture() {
             }
           }
           const text = scrubText(JSON.stringify(ref, null, 1), creds);
-          if (committed) checkDenylist(text, `refs/${frame.id}/${c.id}`);
+          if (committed) {
+            checkDenylist(text, `refs/${frame.id}/${c.id}`);
+            // scrubText replaces whole addresses, not the end of a MAC in a name: check everything that's written
+            // (states, texts, templates, display data), not just what the card draws.
+            if (hasMacFragment(text)) throw new Error('the reference holds a MAC fragment (a device or entity name?): neither file is written');
+          }
           writeFileSync(join(outDir, `${c.id}.png`), png);
           writeFileSync(join(outDir, `${c.id}.json`), text + '\n');
           log(`${frame.id}/${c.id}: ${slots.length} card(s), ${texts.length} texts, ${Object.keys(caseStates).length} states, ${Object.keys(templates).length} templates${stable ? '' : ' (still moving)'} in ${Date.now() - t0} ms`);
