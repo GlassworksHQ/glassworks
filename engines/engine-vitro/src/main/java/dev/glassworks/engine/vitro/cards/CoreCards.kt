@@ -1033,6 +1033,11 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val raw = config.raw
         val vertical = raw.optString("layout") == "vertical" || raw.optBoolean("vertical", false)
         val multiline = raw.optBoolean("multiline_secondary", false)
+        // Mushroom 5's `fixed-info-height` (HA 2026.8+, a card straight in a sections grid whose rows aren't "auto"):
+        // a vertical card's primary sits on a 16 px line in a 32 px box, with 2 px gaps. Anywhere else (in a stack,
+        // a grid card) the vertical info keeps ha-tile-info's own lines, 10 px under the icon.
+        val fixedInfo = vertical && ctx.cardLayout == "grid" && haAtLeast(2026, 8) &&
+            raw.optJSONObject("grid_options")?.opt("rows") != "auto"
         val shapeBox = ctx.px(48f)
         val shapeSize = ctx.px(36f)
         val primaryText = ctx.theme.primaryTextColor
@@ -1080,8 +1085,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         fun infoStyle(size: Float, weight: Int, lh: Float, ls: Float) = MdStyle().apply {
             fontSize = size; fontWeight = weight; lineHeight = lh; letterSpacing = ls; color = primaryText
         }
-        // Vertical (`fixed-info-height`): the primary sits on a 16 px line, centered in a 32 px box.
-        val primary = MarkdownRenderer.cssLine(ctx.context, dp, "", infoStyle(14f, 500, if (vertical) 16f else 22.4f, 0.1f)).apply {
+        // `fixed-info-height`: the primary sits on a 16 px line, centered in a 32 px box.
+        val primary = MarkdownRenderer.cssLine(ctx.context, dp, "", infoStyle(14f, 500, if (fixedInfo) 16f else 22.4f, 0.1f)).apply {
             ellipsize = TextUtils.TruncateAt.END
         }
         val secondary = MarkdownRenderer.cssLine(ctx.context, dp, "", infoStyle(12f, 400, 14.4f, 0.4f)).apply {
@@ -1097,7 +1102,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val labels = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = if (vertical) Gravity.CENTER_HORIZONTAL else Gravity.START
-            if (vertical) {
+            if (fixedInfo) {
                 addView(FrameLayout(ctx.context).apply {
                     addView(primary, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
                 }, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(32f)).apply { bottomMargin = ctx.px(2f) })
@@ -1116,14 +1121,20 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             if (vertical) setPadding(ctx.px(8f), ctx.px(10f), ctx.px(8f), ctx.px(10f)) else setPadding(gap, 0, ctx.px(10f), 0)
             minimumHeight = ctx.px(56f)
             addView(avatarFrame, LinearLayout.LayoutParams(shapeBox, shapeBox).apply {
-                if (vertical) bottomMargin = ctx.px(2f) else marginEnd = gap
+                when {
+                    fixedInfo -> bottomMargin = ctx.px(2f)
+                    // ha-tile-icon's 6 px padding is taken back by a -6 px margin: the column lays out the 36 px
+                    // shape, then the content's 10 px gap.
+                    vertical -> { topMargin = -ctx.px(6f); bottomMargin = ctx.px(10f - 6f) }
+                    else -> marginEnd = gap
+                }
             })
             addView(labels, LinearLayout.LayoutParams(if (vertical) MATCH_PARENT else 0, WRAP_CONTENT, if (vertical) 0f else 1f))
             // HA's vertical tile draws its info 6 px into the icon's 48 px box (measured in HA's DOM: the info
             // starts 44 px under the icon box's top while the column is centered as if it didn't).
-            if (vertical) labels.translationY = -6f * ctx.dp
+            if (fixedInfo) labels.translationY = -6f * ctx.dp
         }
-        // Mushroom 5's horizontal container (`fixed-height`) is 56 px tall from the card's padding down: card-mod padding
+        // Mushroom 5's horizontal content (`.content`, min-height 56 px) starts at the card's padding: card-mod padding
         // moves it, it doesn't shrink it (HA's DOM: `padding: 8px` puts it 8 px lower and lets it run 8 px past the
         // bottom). A 56 px card with that padding has 40 px inside, so the height is set, not left to the content.
         val fixedHeight = !vertical && !multiline
@@ -1197,6 +1208,14 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         refreshAvatar()
         refreshBadge()
         entityId?.let { eid -> observe(eid) { /* keep the entity warm for tap actions */ } }
+    }
+
+    /** True when the HA this card shows is [year].[month] or later (or doesn't say: the current one). */
+    private fun haAtLeast(year: Int, month: Int): Boolean {
+        val parts = ctx.haConfig().optString("version", "").split('.')
+        val y = parts.getOrNull(0)?.toIntOrNull() ?: return true
+        val m = parts.getOrNull(1)?.toIntOrNull() ?: return true
+        return y > year || (y == year && m >= month)
     }
 
     private fun renderState(s: EntityState?) {

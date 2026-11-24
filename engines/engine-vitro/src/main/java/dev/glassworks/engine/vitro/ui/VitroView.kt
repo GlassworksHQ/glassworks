@@ -555,12 +555,17 @@ class VitroView(
      * Sends a `position: fixed` card to the current view's overlay instead of the scrolling layout. False (and
      * nothing happens) for every other card, or outside a view build.
      */
-    private fun pinIfFixed(card: CardConfig, ctx: VitroCardContext, sectionVisibility: List<VisibilityCondition> = emptyList()): Boolean {
+    private fun pinIfFixed(
+        card: CardConfig,
+        ctx: VitroCardContext,
+        sectionVisibility: List<VisibilityCondition> = emptyList(),
+        layout: String? = null,
+    ): Boolean {
         val sink = pendingPinned ?: return false
         val mod = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), ctx.theme.vars)
         if (!mod.positionFixed) return false
         // A fixed card still lives in its section: when the section hides, so does the card.
-        val view = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx, sectionVisibility)
+        val view = wrapVisibility(card, buildCard(card, ctx, fillViewport = false, layout = layout), ctx, sectionVisibility)
         sink += view to pinnedLayoutParams(mod)
         return true
     }
@@ -833,13 +838,13 @@ class VitroView(
             }, HaGridLayout.LayoutParams(columns))
         }
         for (card in section.cards) {
-            if (pinIfFixed(card, ctx, section.visibility)) {
+            if (pinIfFixed(card, ctx, section.visibility, layout = "grid")) {
                 // HA keeps the fixed card's grid slot (empty, but it still takes a row gap) while it's shown.
                 grid.addView(wrapVisibility(card, View(context), ctx), HaGridLayout.LayoutParams(columns))
                 continue
             }
             val size = HaGridSize.of(card)
-            val cardView = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
+            val cardView = wrapVisibility(card, buildCard(card, ctx, fillViewport = false, layout = "grid"), ctx)
             cacheBigCardAsLayer(cardView, ctx)
             val fixed = size.rows?.let { r -> px(r * (rowHeight + rowGap) - rowGap) }
             grid.addView(cardView, HaGridLayout.LayoutParams(size.columns?.coerceAtMost(columns) ?: columns, fixed))
@@ -916,7 +921,8 @@ class VitroView(
         }
     }
 
-    private fun buildCard(card: CardConfig, parentCtx: VitroCardContext, fillViewport: Boolean): View {
+    /** [layout] is HA's `layout` for this card ([VitroCardContext.cardLayout]): `"grid"` straight in a section. */
+    private fun buildCard(card: CardConfig, parentCtx: VitroCardContext, fillViewport: Boolean, layout: String? = null): View {
         val ctx = if (card.theme != null && card.theme != parentCtx.theme.name) {
             val overrideTheme = ThemeResolver.resolve(themeCatalog, darkMode, card.theme)
             contextFactory?.invoke(overrideTheme) ?: parentCtx
@@ -943,13 +949,16 @@ class VitroView(
                 ctx.cardVars = savedCtxVars
             }
         }
+        val outerLayout = ctx.cardLayout
         inheritedCardVars = scope
         ctx.cardVars = scope
+        ctx.cardLayout = layout
         try {
             return buildCardWithVars(card, ctx, fillViewport, childBuilder, stackMod)
         } finally {
             inheritedCardVars = outerVars
             ctx.cardVars = outerCtxVars
+            ctx.cardLayout = outerLayout
         }
     }
 
@@ -1023,7 +1032,8 @@ class VitroView(
             }
             "conditional" -> {
                 val child = card.childCards.firstOrNull()
-                if (child == null) View(context) else buildCard(child, ctx, fillViewport)
+                // The conditional card stands in for its card, in the grid as anywhere else.
+                if (child == null) View(context) else buildCard(child, ctx, fillViewport, layout = ctx.cardLayout)
             }
             // Tier 1: Built-in HA cards
             "tile" -> TileCardView(ctx, card)

@@ -78,6 +78,13 @@ class VitroCardContext(
      */
     var cardVars: Map<String, String> = emptyMap()
 
+    /**
+     * HA's `layout` property on the card being built (hui-card's): `"grid"` for a card placed straight in a sections
+     * view's grid section, null anywhere else (inside a stack, a grid card, masonry). Set around each card's
+     * construction like [cardVars]; Mushroom 5 sizes its vertical info differently in a grid.
+     */
+    var cardLayout: String? = null
+
     fun px(dpVal: Float): Int = (dpVal * dp).toInt()
 
     /** [sp] scaled by the theme's text size ([ResolvedTheme.fontScale]); pass the result to `setTextSize(SP, …)`. */
