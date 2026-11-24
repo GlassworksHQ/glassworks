@@ -4,12 +4,20 @@
  * a sweep of the part's light. generate.mjs draws the core, pane, Kiln, library and principles
  * banners with it, and frame.mjs each frame's.
  */
-import { kilnPlates, markPlates } from "../../src/lib/markGeometry.ts";
+import { kilnPlates, markPlates, vitroMark } from "../../src/lib/markGeometry.ts";
 import { measure, text } from "./text.mjs";
 import { C, backCorner, guide, svg } from "./draw.mjs";
 
 export const markIcon = (t, x, y, size, lit = "url(#lit)", kiln = false) =>
   `<g transform="translate(${x} ${y}) scale(${(size / 120).toFixed(4)})">${markBody({ ink: t.fg, lit, cut: kiln ? "full" : "small", kiln })}</g>`;
+
+/** Vitro's mark at a size, the small cut under 40 px. */
+export const vitroIcon = (x, y, size) =>
+  `<g transform="translate(${x} ${y}) scale(${(size / 120).toFixed(4)})">${vitroBody({ cut: size < 40 ? "small" : "full" })}</g>`;
+
+/** The mark a part's badge and banner carry: Kiln's ember floor, Vitro's cast slab, or the Glassworks mark. */
+export const partMark = (t, id, x, y, size) =>
+  id === "vitro" ? vitroIcon(x, y, size) : markIcon(t, x, y, size, PART[id]?.lit ?? "url(#lit)", id === "kiln");
 
 export const PART = {
   core: {
@@ -30,6 +38,13 @@ export const PART = {
     strength: 1,
     rim: { dark: ["#fed7aa", "#fda4af"], light: ["#fb923c", "#e11d48"] },
     lit: "url(#ember)",
+  },
+  // Vitro draws the dashboard, so it carries the dashboard's light, sky to violet
+  vitro: {
+    name: "Vitro",
+    sweep: ["#38bdf8", "#a78bfa"],
+    strength: 1,
+    rim: { dark: ["#7dd3fc", "#c4b5fd"], light: ["#0ea5e9", "#8b5cf6"] },
   },
   // libraries are pieces of the core: its pale glass, under their own name
   library: {
@@ -52,6 +67,21 @@ export function markBody({ ink = "#f4f4f5", inkClass, lit = "url(#lit)", cut = "
     .join("");
 }
 
+/*
+ * Vitro's mark (vitroMark in markGeometry.ts): the lit face, a darker edge in the
+ * same two hues, and the cards as sheets of lighter glass. The edge gradient is
+ * declared here, so the body works in any file that has #lit.
+ */
+export const VITRO_EDGE = `<linearGradient id="vitroEdge" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0e7490"/><stop offset=".5" stop-color="#4c3d99"/><stop offset="1" stop-color="#6d28d9"/></linearGradient>`;
+
+export function vitroBody({ cut = "full", lit = "url(#lit)" } = {}) {
+  const m = vitroMark(cut);
+  return (
+    `<defs>${VITRO_EDGE}</defs><path d="${m.edge}" fill="url(#vitroEdge)"/><path d="${m.face}" fill="${lit}"/>` +
+    m.cards.map((c) => `<path d="${c.d}" fill="#fff" fill-opacity="${c.opacity}"/>`).join("")
+  );
+}
+
 /* ---------- banners ---------- */
 
 /*
@@ -70,6 +100,7 @@ export const BANNER_LIGHT = {
   core: PART.core,
   pane: PART.pane,
   kiln: PART.kiln,
+  vitro: PART.vitro,
   library: PART.library,
   principles: PART.core, // the rules: the stack drawn before the light comes on
   // a frame is hardware, the bottom plate: neutral glass with no hue of its own (frame.mjs)
@@ -110,7 +141,7 @@ export function partBanner(t, id, label, drawing, { kicker, nameA, nameB, code, 
       text(nameB, { font: "semibold", size, ls: -0.6, x: TX + wa + 9, y: 92, fill: t.fg })
     : text(nameA, { font: "semibold", size, ls: -0.6, x: TX, y: 92, fill: t.fg });
   const words =
-    markIcon(t, TX, 40, 16, id === "kiln" ? "url(#ember)" : "url(#lit)", id === "kiln") +
+    partMark(t, id, TX, 40, 16) +
     text(kicker, { font: "medium", size: 9, ls: 2, x: TX + 22, y: 52, fill: t.fa }) +
     title +
     text(code, { font: "mono", size: 12, x: TX + 1, y: 118, fill: t.mu }) +
