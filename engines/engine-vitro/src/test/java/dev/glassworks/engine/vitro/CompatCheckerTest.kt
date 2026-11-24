@@ -91,6 +91,19 @@ class CompatCheckerTest {
         assertFalse(all, "secret-value" in all)
         assertTrue(all, "img[src^=…]" in all)
         assertEquals("a[href=…] b[x]", CardCompat.redactAttributeValues("a[href=\"/x?y=1\"] b[x]"))
+        // A `]` inside the quoted value doesn't end the selector early (the token after it stayed in the text).
+        assertEquals("img[src^=…]", CardCompat.redactAttributeValues("img[src^=\"/image?part=]&token=demo-token\"]"))
+        val quoted = verdict("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("img[src^=\"/image?part=]&token=demo-token\"] { opacity: 0 }")}}}""")
+        assertFalse((quoted.reasons + quoted.notes).joinToString(), "demo-token" in (quoted.reasons + quoted.notes).joinToString())
+    }
+
+    @Test
+    fun deeplyNestedInteractionSelectorsAreDecidedQuickly() {
+        // 25 nested :is() around :hover used to take millions of recursive checks.
+        val nested = "ha-card" + ":is(".repeat(25) + ":hover" + ")".repeat(25) + " .x { opacity: .2 }"
+        val started = System.nanoTime()
+        assertNative("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(nested)}}}""")
+        assertTrue("took ${(System.nanoTime() - started) / 1_000_000} ms", System.nanoTime() - started < 2_000_000_000L)
     }
 
     @Test

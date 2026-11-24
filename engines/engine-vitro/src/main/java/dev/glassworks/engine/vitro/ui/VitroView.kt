@@ -243,6 +243,12 @@ class VitroView(
 
     /** A tab tap is about to switch views: the page records where it was, in the same history as its loads. */
     var onTabNavigation: (() -> Unit)? = null
+
+    /**
+     * The owning page's back (its one history of loads and tabs): true when it went back. A subview's back arrow
+     * uses it, so the arrow and the host's back key walk the same history. Null on a view with no page.
+     */
+    var pageBack: (() -> Boolean)? = null
     var onThemeResolved: ((ResolvedTheme) -> Unit)? = null
     var contextFactory: ((ResolvedTheme) -> VitroCardContext)? = null
 
@@ -665,7 +671,12 @@ class VitroView(
             setPadding(pad, pad, pad, px(4f))
             isClickable = true
             setOnClickListener {
-                if (view.backPath == null && viewBackStack.isNotEmpty()) goBack() else ctx.navigate(view.backPath ?: "/")
+                when {
+                    view.backPath != null -> ctx.navigate(view.backPath)
+                    pageBack?.invoke() == true -> Unit
+                    viewBackStack.isNotEmpty() -> goBack()
+                    else -> ctx.navigate("/")
+                }
             }
         }
         backRow.addView(TextView(context).apply {

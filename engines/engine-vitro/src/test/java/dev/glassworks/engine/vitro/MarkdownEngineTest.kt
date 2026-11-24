@@ -264,6 +264,17 @@ class MarkdownEngineTest {
         MarkdownRenderer(ctx).render("[Wall](/lovelace/wall) and [docs](https://example.com)", into, MarkdownRenderer(ctx).defaultRootStyle(), MdSheet.parse(""))
         val tv = into.all().filterIsInstance<TextView>().single()
         val links = (tv.text as Spanned).getSpans(0, tv.text.length, dev.glassworks.engine.vitro.cards.MdLinkSpan::class.java)
+        // A hidden part of a link takes no tap; a part that is visible again does.
+        val hiddenInto = LinearLayout(activity)
+        MarkdownRenderer(ctx).render(
+            "<a href=\"/lovelace/x\">gone <b>back</b></a>", hiddenInto, MarkdownRenderer(ctx).defaultRootStyle(),
+            MdSheet.parse("ha-markdown-element a { visibility: hidden } ha-markdown-element b { visibility: visible }"),
+        )
+        val htv = hiddenInto.all().filterIsInstance<TextView>().single()
+        val hs = htv.text as Spanned
+        val linked = hs.getSpans(0, hs.length, dev.glassworks.engine.vitro.cards.MdLinkSpan::class.java)
+            .joinToString("") { hs.subSequence(hs.getSpanStart(it), hs.getSpanEnd(it)).toString() }
+        assertEquals("back", linked.trim())
         // Only the dashboard path is a link; the external one stays text.
         assertEquals(listOf("/lovelace/wall"), links.map { it.href })
         links.single().onClick(tv)

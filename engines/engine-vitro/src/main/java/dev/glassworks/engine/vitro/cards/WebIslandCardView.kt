@@ -43,6 +43,20 @@ class WebIslandCardView(
     private var islandPage: Page? = null
     @Volatile private var sendToIsland: ((JSONObject) -> Unit)? = null
 
+    /**
+     * Orders a connection's snapshot before any patch for it. Declared before `init`: the bridge may connect while
+     * the constructor still runs (init registers the slot and loads the page).
+     */
+    private val seedLock = Any()
+
+    /**
+     * Whether the card picks its entities at runtime (`auto-entities` filters, `button-card` JS templates, a card
+     * that names none up front): such a card follows every entity in the store, not only the ones it read.
+     */
+    internal val followsAllEntities: Boolean by lazy {
+        config.raw.has("filter") || referencedEntities().isEmpty()
+    }
+
     // An inline island sits in Vitro's vertical scroller: a vertical drag belongs to the scroller, while taps and
     // horizontal drags (sliders, carousels, charts) stay inside the island.
     private val touchSlop = ViewConfiguration.get(ctx.context).scaledTouchSlop
@@ -120,21 +134,11 @@ class WebIslandCardView(
         addView(note, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
     }
 
-    /**
-     * Whether the card picks its entities at runtime (`auto-entities` filters, `button-card` JS templates, a card
-     * that names none up front): such a card follows every entity in the store, not only the ones it read.
-     */
-    internal val followsAllEntities: Boolean by lazy {
-        config.raw.has("filter") || referencedEntities().isEmpty()
-    }
 
     private fun referencedEntities(): Set<String> {
         val syntheticView = ViewConfig(0, "", null, null, "panel", null, null, 1, emptyList(), listOf(config), emptyList())
         return CardRouter.referencedEntities(syntheticView)
     }
-
-    /** Orders a connection's snapshot before any patch for it. */
-    private val seedLock = Any()
 
     /**
      * The `snapshot` an island gets when its socket connects, empty too: every entity in the store, as HA's own

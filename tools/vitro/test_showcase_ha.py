@@ -887,3 +887,20 @@ class HubTest(unittest.TestCase):
             with self.assertRaises(S.TemplateError, msg=tpl):
                 S.render_template(hub, tpl)
         self.assertEqual(S.render_template(hub, "{{ 'ab' ~ 'cd' | replace('c', 'C') }}")[0], "abCd")
+
+
+class HubMemoryTest(unittest.TestCase):
+    def test_a_failed_batch_keeps_the_lights_remembered_settings(self):
+        hub = S.Hub()
+        hub.call_service("light", "turn_on", {"brightness": 180}, ["light.desk_lamp"])
+        hub.call_service("light", "turn_off", {}, ["light.desk_lamp"])
+        before = dict(hub.memory)
+        hub.call_service("light", "turn_on", {}, ["light.desk_lamp"])
+        with self.assertRaises(S.ServiceError):
+            # The lamp's turn_off saves its settings; the blind then fails: the save goes with the rollback.
+            hub.call_service("homeassistant", "turn_off", {}, ["light.desk_lamp", "cover.studio_blind"])
+        self.assertEqual(hub.states["light.desk_lamp"]["state"], "on")
+        hub.call_service("light", "turn_off", {}, ["light.desk_lamp"])
+        hub.call_service("light", "turn_on", {}, ["light.desk_lamp"])
+        self.assertEqual(hub.states["light.desk_lamp"]["attributes"].get("brightness"), 180)
+        self.assertEqual(set(before), set(hub.memory))

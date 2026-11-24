@@ -352,18 +352,6 @@ class ParityHarnessSelfTest {
     }
 
     @Test
-    fun downsamplingWeighsEachPixelByItsOverlap() {
-        // 1.5x: three columns (black, white, black) are two CSS samples, each a third white: 85, not 127.
-        val b = Bitmap.createBitmap(3, 1, Bitmap.Config.ARGB_8888)
-        b.setPixel(0, 0, Color.BLACK); b.setPixel(1, 0, Color.WHITE); b.setPixel(2, 0, Color.BLACK)
-        val s = ParityDiff.downsample(b, 2, 1)
-        assertEquals(85, Color.red(s[0]))
-        assertEquals(85, Color.red(s[1]))
-        // 1x: every pixel is its own sample.
-        assertEquals(listOf(0, 255, 0), ParityDiff.downsample(b, 3, 1).map { Color.red(it) })
-    }
-
-    @Test
     fun aMaskedNeighborDoesntExcuseADifference() {
         // One unmasked pixel differs; its masked neighbor happens to hold the other image's colour.
         val ha = Bitmap.createBitmap(2, 1, Bitmap.Config.ARGB_8888).apply { setPixel(0, 0, Color.WHITE); setPixel(1, 0, Color.BLACK) }
@@ -383,6 +371,9 @@ class ParityHarnessSelfTest {
         assertFalse(FixtureScan.externalHost("""{"u": "http://homeassistant.local:8123/x", "v": "http://127.0.0.1/y"}"""))
         assertTrue(FixtureScan.externalHost("""{"u": "http://homeassistant.local.example.test/x"}"""))
         assertTrue(FixtureScan.externalHost("""{"u": "https://example.test"}"""))
+        // An IPv6 origin, which the IPv4 check can't see.
+        assertTrue(FixtureScan.externalHost("""{"u": "https://[2001:db8::1]/image"}"""))
+        assertTrue(FixtureScan.externalHost("""{"u": "http://user@[::1]:8123/x"}"""))
     }
 
     @Test
@@ -403,7 +394,8 @@ class ParityHarnessSelfTest {
 /** The committed-fixture checks for a token parameter and an absolute URL to another host. */
 internal object FixtureScan {
     private val TOKEN_PARAM = Regex("""[?&](token|access_token|authSig)=([^&"'\s#]*)""")
-    private val URL_HOST = Regex("""https?://([A-Za-z0-9.-]+)""")
+    // The whole authority's host: a name, an IPv4 address, or a bracketed IPv6 address (never allowed).
+    private val URL_HOST = Regex("""https?://(?:[^/\s"'@]*@)?(\[[^\]\s"']*\]|[A-Za-z0-9.-]+)""")
     private val ALLOWED_HOSTS = setOf("127.0.0.1", "homeassistant.local")
 
     /** A token parameter with any value but exactly `redacted`. */

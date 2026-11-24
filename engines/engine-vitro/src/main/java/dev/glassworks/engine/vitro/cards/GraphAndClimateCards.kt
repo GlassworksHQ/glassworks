@@ -153,13 +153,15 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
         if (historyIds.isEmpty()) return
         val ids = historyIds
         val gen = ++historyGeneration
+        // The next read is set now, not when this one answers: a failed request (which answers nothing) mustn't stop
+        // the refresh while the card shows.
+        if (isAttachedToWindow && isShown) ctx.main.postDelayed(historyRefresh, HISTORY_REFRESH_MS)
         ctx.fetchHistory(ids, historyHours) { map ->
             // One slot per entity, empty when it has too little history, so each keeps its legend color.
             val series = ids.map { id -> map[id]?.takeIf { it.size >= 2 } ?: emptyList() }
             ctx.main.post {
                 if (gen != historyGeneration) return@post
                 chart.setSeries(if (series.all { it.isEmpty() }) emptyList() else series)
-                if (isAttachedToWindow && isShown) ctx.main.postDelayed(historyRefresh, HISTORY_REFRESH_MS)
             }
         }
     }

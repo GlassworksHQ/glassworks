@@ -757,23 +757,46 @@ class HaDashboardClient(
 
         /**
          * Long-lived RFC 6455 socket for the dashboard WebSocket. The upgrade answer must come within
-         * [upgradeTimeoutMs] (a proxy that accepts TCP and then stalls can't hold the attempt forever); after it reads
-         * may idle (an idle dashboard doesn't disconnect every 15 s like one-shot `WsHaSocket.connect`), with the
-         * greeting and auth bounded by the client's watchdog. [HaSocket.close] aborts: it drops TCP without waiting on
-         * a write that holds the socket's write lock (the page disposes on the main thread).
+         * [upgradeTimeoutMs] (a proxy that accepts TCP and then stalls can't hold the attempt forever): a timer closes
+         * the TCP socket if it doesn't, which ends the blocked read. No read timeout is set at all, so an idle dashboard
+         * stays connected on `ws` and `wss` alike (a TLS socket keeps the timeout set on it, not on the TCP below);
+         * the greeting and auth are bounded by the client's watchdog. [HaSocket.close] aborts: it drops TCP without
+         * waiting on a write that holds the socket's write lock (the page disposes on the main thread).
          */
         fun connectLongLived(url: String, upgradeTimeoutMs: Int = UPGRADE_TIMEOUT_MS): HaSocket {
             val connector = HappyEyeballs()
+            val lock = Any()
             var tcp: java.net.Socket? = null
-            val ws = WsClient.connect(url, connectTimeoutMs = 8_000, readTimeoutMs = upgradeTimeoutMs) { host, port, timeoutMs ->
-                connector.connect(host, port, timeoutMs).also { tcp = it }
+            var expired = false
+            var finished = false
+            val timer = Thread({
+                try {
+                    Thread.sleep(upgradeTimeoutMs.toLong())
+                    synchronized(lock) {
+                        if (!finished) {
+                            expired = true
+                            runCatching { tcp?.close() }
+                        }
+                    }
+                } catch (_: InterruptedException) {
+                }
+            }, "vitro-ha-upgrade-timeout").apply { isDaemon = true; start() }
+            val ws = try {
+                WsClient.connect(url, connectTimeoutMs = 8_000, readTimeoutMs = 0) { host, port, timeoutMs ->
+                    val s = connector.connect(host, port, timeoutMs)
+                    synchronized(lock) {
+                        tcp = s
+                        if (expired) { runCatching { s.close() }; throw java.net.SocketTimeoutException("upgrade took too long") }
+                    }
+                    s
+                }
+            } finally {
+                synchronized(lock) { finished = true }
+                timer.interrupt()
             }
-            // The TCP socket carries the reads (a TLS socket layered on it reads through it): no timeout from here on.
-            try {
-                tcp?.soTimeout = 0
-            } catch (e: java.net.SocketException) {
+            if (synchronized(lock) { expired }) {
                 ws.abort()
-                throw e
+                throw java.net.SocketTimeoutException("upgrade took too long")
             }
             return object : HaSocket {
                 override fun send(text: String) = ws.sendText(text)

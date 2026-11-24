@@ -1770,7 +1770,7 @@ class Hub:
                     raise ServiceError(f"{eid} is not a {domain} entity")
             # A target can still fail once dispatched (`homeassistant.turn_off` on a cover, a missing field): the
             # call then changes nothing at all, so no earlier target is left changed but unannounced.
-            saved = (copy.deepcopy(self.states), copy.deepcopy(self.todos), self.todo_n)
+            saved = (copy.deepcopy(self.states), copy.deepcopy(self.todos), self.todo_n, copy.deepcopy(self.memory))
             try:
                 for eid in entity_ids:
                     if domain == "todo":
@@ -1791,6 +1791,9 @@ class Hub:
                 self.todos.clear()
                 self.todos.update(saved[1])
                 self.todo_n = saved[2]
+                # Remembered light settings too: a turn_off inside the failed batch mustn't keep what it saved.
+                self.memory.clear()
+                self.memory.update(saved[3])
                 self._pending = []
                 raise
             for eid in todo_touched:

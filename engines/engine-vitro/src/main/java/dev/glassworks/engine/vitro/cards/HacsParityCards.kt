@@ -1564,7 +1564,13 @@ class LayoutCardView(
             Regex("""^minmax\(\s*([^,]+)\s*,\s*(.+)\)$""").find(tok)?.let { m ->
                 val lo = parseTrack(m.groupValues[1].trim(), widthDp)
                 val hi = parseTrack(m.groupValues[2].trim(), widthDp)
-                return if (hi.fr > 0f) Track(hi.fr, 0f, lo.fixedDp) else lo
+                // A flexible maximum shares the free space above the minimum; a fixed one (`50%`, `200px`) sizes
+                // the track up to it (never below the minimum).
+                return when {
+                    hi.fr > 0f -> Track(hi.fr, 0f, lo.fixedDp)
+                    hi.fixedDp > 0f -> Track(0f, maxOf(lo.fixedDp, hi.fixedDp))
+                    else -> lo
+                }
             }
             val fr = Regex("""^(\d+(?:\.\d+)?)fr$""").find(tok)?.groupValues?.get(1)?.toFloatOrNull()
             if (fr != null) return Track(fr, 0f)

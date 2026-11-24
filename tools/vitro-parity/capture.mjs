@@ -132,6 +132,9 @@ const savedDigests = new Map();
 
 /** Asset paths this run saved or found unchanged; a full, clean refresh deletes every other file in assets/. */
 const keptAssets = new Set();
+/** Files a capture run writes, held until every capture succeeded ([stage]): [path, data]. */
+const staged = [];
+const stage = (path, data) => staged.push([path, data]);
 
 /** Every file under assets/, as the HA path it stands for (`/static/icons/x.png`). */
 function existingAssets() {
@@ -404,8 +407,7 @@ async function saveDrawnImages(images, drawn) {
     if (conflict) throw new Error(conflict);
     keptAssets.add(path);
     if (existsSync(out) && readFileSync(out).equals(bytes)) continue;
-    mkdirSync(dirname(out), { recursive: true });
-    writeFileSync(out, bytes);
+    stage(out, bytes);
     log(`asset ${path} (HA drew it)`);
   }
   return [...paths].filter((p) => images.failed.has(p)).sort();
@@ -463,6 +465,21 @@ function snapshotStates(states, ids) {
 const cardElement = (card) => (card.type.startsWith('custom:') ? card.type.slice(7) : `hui-${card.type}-card`);
 
 /** Waits until the slots exist and two screenshots 400 ms apart are the same (animations, images, fonts). */
+/**
+ * Stops the page's CSS animations, transitions and Web Animations, shadow roots included (document.getAnimations()
+ * reaches them): a finite one jumps to its end, an infinite one is cancelled. Run before the card is measured and
+ * again before each screenshot and text read, so the PNG, the slots and the texts show one still frame (the
+ * screenshot's own `animations: 'disabled'` resumes them afterwards).
+ */
+const FREEZE_JS = () => {
+  for (const a of document.getAnimations()) {
+    try {
+      const t = a.effect && a.effect.getComputedTiming();
+      if (t && t.iterations === Infinity) a.cancel(); else a.finish();
+    } catch {}
+  }
+};
+
 async function settle(page, expectType, timeoutMs) {
   const t0 = Date.now();
   let info;
@@ -479,13 +496,18 @@ async function settle(page, expectType, timeoutMs) {
   await page.waitForTimeout(800);
   let prev = null;
   for (let i = 0; i < 8; i++) {
+    await page.evaluate(FREEZE_JS);
     // CSS animations, transitions and Web Animations stopped at their end state, so a card that animates despite
     // reduced motion doesn't leave an arbitrary frame (timers and requestAnimationFrame still run).
     const shot = await page.screenshot({ fullPage: true, animations: 'disabled' });
-    if (prev && shot.equals(prev)) return { info: await page.evaluate(SLOTS_JS), stable: true };
+    if (prev && shot.equals(prev)) {
+      await page.evaluate(FREEZE_JS);
+      return { info: await page.evaluate(SLOTS_JS), stable: true };
+    }
     prev = shot;
     await page.waitForTimeout(400);
   }
+  await page.evaluate(FREEZE_JS);
   return { info: await page.evaluate(SLOTS_JS), stable: false };
 }
 
@@ -617,7 +639,9 @@ async function capture() {
             // states): saved for Vitro's fixture server after the checks.
             drawn = await page.evaluate(DRAWN_IMAGES_JS, slots);
             // Kept in memory until every check passes: a failed case leaves no PNG behind.
+            await page.evaluate(FREEZE_JS);
             png = await page.screenshot({ clip, fullPage: true, animations: 'disabled' });
+            await page.evaluate(FREEZE_JS);
             texts = [];
             for (const [i, s] of slots.entries()) for (const t of await page.evaluate(TEXTS_JS, s)) texts.push({ slot: i, ...roundRect(t) });
             // The templates Vitro asks for, rendered now.
@@ -687,8 +711,8 @@ async function capture() {
             if (hasMacFragment(text)) throw new Error('the reference holds a MAC fragment (a device or entity name?): neither file is written');
           }
           await saveDrawnImages(images, drawn.drawn.filter((url) => !failedDrawn.includes(onHa(url))));
-          writeFileSync(join(outDir, `${c.id}.png`), png);
-          writeFileSync(join(outDir, `${c.id}.json`), text + '\n');
+          stage(join(outDir, `${c.id}.png`), png);
+          stage(join(outDir, `${c.id}.json`), text + '\n');
           log(`${frame.id}/${c.id}: ${slots.length} card(s), ${texts.length} texts, ${Object.keys(caseStates).length} states, ${Object.keys(templates).length} templates${stable ? '' : ' (still moving)'} in ${Date.now() - t0} ms`);
         } catch (e) {
           failures++;
@@ -700,7 +724,13 @@ async function capture() {
   }
   await browser.close();
   ha.close();
-  if (failures) fail(`${failures} capture(s) failed`);
+  // One generation: the cases' files, their images and the shared inputs are written together, and only when every
+  // selected capture succeeded. A failure leaves the corpus as it was (a retry then compares against the same inputs).
+  if (failures) fail(`${failures} capture(s) failed: nothing was written`);
+  for (const [path, data] of staged) {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, data);
+  }
   writeFileSync(sharedFile, sharedText + '\n');
   // Only a full refresh that captured everything knows what no reference uses anymore: an image HA stopped loading
   // or drawing must not stay in assets/, where the fixture server would keep handing it to Vitro.

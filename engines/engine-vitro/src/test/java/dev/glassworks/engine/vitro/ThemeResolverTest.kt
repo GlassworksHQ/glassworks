@@ -398,6 +398,8 @@ class ThemeResolverTest {
     fun aCyclicThemeVariableTakesItsFallback() {
         val t = resolveWith("""{"a": "var(--a)", "primary-color": "var(--a, #123456)"}""")
         assertEquals(argb(0xFF123456), t.primaryColor)
+        // Left out of what islands get, not exported empty (`--a: ;` would be valid and hide the fallback).
+        assertFalse(t.toCssRootBlock(), "--a:" in t.toCssRootBlock())
     }
 
     @Test
@@ -409,6 +411,9 @@ class ThemeResolverTest {
         // A long value that doesn't grow stays whole.
         val long = "a".repeat(100_000) + " var(--c)"
         assertEquals("a".repeat(100_000) + " red", ThemeResolver.resolveValue(long, mapOf("c" to "red"), 0))
+        // A big substitution that a later, shrinking part of the same value pays back is fine.
+        val shrinks = "var(--big) var(--drop, ${"y".repeat(30_000)})"
+        assertEquals("x".repeat(20_000), ThemeResolver.resolveValue(shrinks, mapOf("big" to "x".repeat(20_000), "drop" to ""), 0))
     }
 
     @Test

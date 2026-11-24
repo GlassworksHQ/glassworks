@@ -123,6 +123,23 @@ class CoreParityTest {
         answers.removeAt(0)(true)
         ShadowLooper.idleMainLooper()
         assertEquals("off", store["switch.locked_out"]!!.state)
+
+        // Two overlapping writes, both refused: back to the state HA confirmed, not the first write's "on".
+        ctx.toggleEntity("switch.locked_out") // on
+        ctx.toggleEntity("switch.locked_out") // off again, before HA answers the first
+        answers.removeAt(0)(false)
+        ShadowLooper.idleMainLooper()
+        answers.removeAt(0)(false)
+        ShadowLooper.idleMainLooper()
+        assertEquals("off", store["switch.locked_out"]!!.state)
+        // The first accepted, the second refused: the accepted one stands.
+        ctx.toggleEntity("switch.locked_out") // on
+        ctx.toggleEntity("switch.locked_out") // off
+        answers.removeAt(0)(true)
+        ShadowLooper.idleMainLooper()
+        answers.removeAt(0)(false)
+        ShadowLooper.idleMainLooper()
+        assertEquals("on", store["switch.locked_out"]!!.state)
     }
 
     private fun ViewGroup.all(): List<View> {

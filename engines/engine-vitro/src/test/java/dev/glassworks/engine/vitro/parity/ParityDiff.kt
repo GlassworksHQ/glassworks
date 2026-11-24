@@ -40,11 +40,7 @@ object ParityDiff {
     const val MAX_DELTA = THRESHOLD * THRESHOLD
     private const val MAX_YIQ = 35215.0
 
-    /**
-     * Box-filters [b] to [w] x [h] samples (premultiplied over [bg], so transparent edges compare as the page). Each
-     * source pixel counts by how much of it the sample covers: at 1.5x, a column split between two samples counts
-     * half in each (at a whole density every weight is 1).
-     */
+    /** Box-filters [b] to [w] x [h] samples (premultiplied over [bg], so transparent edges compare as the page). */
     fun downsample(b: Bitmap, w: Int, h: Int, bg: Int = Color.BLACK): IntArray {
         val src = IntArray(b.width * b.height)
         b.getPixels(src, 0, b.width, 0, 0, b.width, b.height)
@@ -52,25 +48,18 @@ object ParityDiff {
         val sx = b.width.toDouble() / w
         val sy = b.height.toDouble() / h
         for (y in 0 until h) for (x in 0 until w) {
-            val fx0 = x * sx; val fx1 = min(b.width.toDouble(), (x + 1) * sx)
-            val fy0 = y * sy; val fy1 = min(b.height.toDouble(), (y + 1) * sy)
-            var r = 0.0; var g = 0.0; var bl = 0.0; var n = 0.0
-            for (yy in fy0.toInt() until max(fy0.toInt() + 1, kotlin.math.ceil(fy1).toInt()).coerceAtMost(b.height)) {
-                val wy = min(yy + 1.0, fy1) - max(yy.toDouble(), fy0)
-                if (wy <= 0.0) continue
-                for (xx in fx0.toInt() until max(fx0.toInt() + 1, kotlin.math.ceil(fx1).toInt()).coerceAtMost(b.width)) {
-                    val wx = min(xx + 1.0, fx1) - max(xx.toDouble(), fx0)
-                    if (wx <= 0.0) continue
-                    val wgt = wx * wy
-                    val p = src[yy * b.width + xx]
-                    val a = Color.alpha(p) / 255.0
-                    r += (Color.red(p) * a + Color.red(bg) * (1 - a)) * wgt
-                    g += (Color.green(p) * a + Color.green(bg) * (1 - a)) * wgt
-                    bl += (Color.blue(p) * a + Color.blue(bg) * (1 - a)) * wgt
-                    n += wgt
-                }
+            val x0 = (x * sx).toInt(); val x1 = max(x0 + 1, min(b.width, ((x + 1) * sx).roundToInt()))
+            val y0 = (y * sy).toInt(); val y1 = max(y0 + 1, min(b.height, ((y + 1) * sy).roundToInt()))
+            var r = 0L; var g = 0L; var bl = 0L; var n = 0
+            for (yy in y0 until y1) for (xx in x0 until x1) {
+                val p = src[yy * b.width + xx]
+                val a = Color.alpha(p) / 255.0
+                r += (Color.red(p) * a + Color.red(bg) * (1 - a)).toLong()
+                g += (Color.green(p) * a + Color.green(bg) * (1 - a)).toLong()
+                bl += (Color.blue(p) * a + Color.blue(bg) * (1 - a)).toLong()
+                n++
             }
-            out[y * w + x] = if (n <= 0.0) bg else Color.rgb((r / n).roundToInt().coerceIn(0, 255), (g / n).roundToInt().coerceIn(0, 255), (bl / n).roundToInt().coerceIn(0, 255))
+            out[y * w + x] = Color.rgb((r / n).toInt(), (g / n).toInt(), (bl / n).toInt())
         }
         return out
     }

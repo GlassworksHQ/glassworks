@@ -1070,6 +1070,10 @@ class LovelaceModelTest {
         assertTrue(number.evaluate(look)) // compared as JavaScript's String(150)
         val missing = VisibilityCondition.parse(JSONObject("""{"condition": "state", "entity": "light.desk", "attribute": "nope", "state": "unknown"}"""))
         assertTrue(missing.evaluate(look))
+        // A list compares as JavaScript's String() writes it: "off,heat".
+        val climate = EntityState("climate.den", "heat", mapOf("hvac_modes" to listOf("off", "heat", null)))
+        val modes = VisibilityCondition.parse(JSONObject("""{"condition": "state", "entity": "climate.den", "attribute": "hvac_modes", "state": "off,heat,"}"""))
+        assertTrue(modes.evaluate({ if (it == "climate.den") climate else null }))
     }
 
     @Test

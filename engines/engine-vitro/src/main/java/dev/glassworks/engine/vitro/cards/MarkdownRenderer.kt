@@ -303,7 +303,8 @@ class MdImageView(
         var w = cssWidth?.let { l -> if (l.percent && mode == MeasureSpec.UNSPECIFIED) null else (l.resolve(avail / dp) * dp).roundToInt() }
             ?: if (hPx != null && r != null) (hPx * r).roundToInt() else null
             ?: picture.svg?.intrinsicWidth?.let { (it * dp).roundToInt() }
-            ?: picture.bitmap?.let { (it.width * dp).roundToInt() }
+            // The image's own width (an embedded picture past the budget is drawn from a smaller bitmap).
+            ?: picture.bitmap?.let { ((picture.intrinsicWidth.takeIf { w -> w > 0 } ?: it.width) * dp).roundToInt() }
             ?: (300 * dp).roundToInt()
         if (mode != MeasureSpec.UNSPECIFIED) w = minOf(w, avail)
         val h = hPx ?: if (r != null && r > 0f) (w / r).roundToInt() else (150 * dp).roundToInt()
@@ -994,11 +995,17 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             }
         }
         if (images.isNotEmpty()) tv.tag = IMAGE_TAG
-        if (sb.getSpans(0, sb.length, MdLinkSpan::class.java).isNotEmpty()) tv.setOnTouchListener(MdLinkSpan.Touch())
+        // On every inline text view: an in-place update can give one its first link later (it only swaps the text).
+        tv.setOnTouchListener(MdLinkSpan.Touch())
         return tv
     }
 
-    private class InlineState { var lastSpace = true }
+    private class InlineState {
+        var lastSpace = true
+
+        /** Text ranges of `visibility: hidden` content: painted invisible, so a link there takes no taps either. */
+        val hidden = ArrayList<IntRange>()
+    }
 
     private fun inline(
         n: MdNode,
@@ -1015,6 +1022,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             if (sb.length > start) {
                 styleRun(sb, start, s, alphaMul)
                 runs += lineBox(s, start, sb.length)
+                if (s.hidden) st.hidden += start until sb.length
             }
             return
         }
@@ -1092,7 +1100,14 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                 // https, …) stay text: the panel has no browser to send them to.
                 val href = if (n.tag == "a") n.attrs["href"]?.trim() else null
                 if (href != null && href.startsWith("/") && !href.startsWith("//") && sb.length > start) {
-                    sb.setSpan(MdLinkSpan(href, ctx.navigate), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    // Only the visible parts: hidden text keeps its room but takes no tap (a descendant that is
+                    // visible again does).
+                    var from = start
+                    for (h in st.hidden.filter { it.first >= start }.sortedBy { it.first }) {
+                        if (h.first > from) sb.setSpan(MdLinkSpan(href, ctx.navigate), from, h.first, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        from = maxOf(from, h.last + 1)
+                    }
+                    if (sb.length > from) sb.setSpan(MdLinkSpan(href, ctx.navigate), from, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
                 inlineMargin(sb, s.margin[1])
                 if (s.background != null && !s.hidden && sb.length > start) {
@@ -1392,8 +1407,13 @@ internal class MdLinkSpan(val href: String, private val navigate: (String) -> Un
             val text = tv.text as? Spanned ?: return false
             val layout = tv.layout ?: return false
             fun spanAt(x: Float, y: Float): MdLinkSpan? {
-                val line = layout.getLineForVertical((y - tv.totalPaddingTop + tv.scrollY).toInt())
-                val off = layout.getOffsetForHorizontal(line, x - tv.totalPaddingLeft + tv.scrollX)
+                val lx = x - tv.totalPaddingLeft + tv.scrollX
+                val ly = y - tv.totalPaddingTop + tv.scrollY
+                // Off the text (above, below, or beside a line's glyphs): no link, whatever offset is nearest.
+                if (ly < 0f || ly > layout.height) return null
+                val line = layout.getLineForVertical(ly.toInt())
+                if (lx < layout.getLineLeft(line) || lx > layout.getLineRight(line)) return null
+                val off = layout.getOffsetForHorizontal(line, lx)
                 return text.getSpans(off, off, MdLinkSpan::class.java).firstOrNull()
             }
             return when (ev.actionMasked) {

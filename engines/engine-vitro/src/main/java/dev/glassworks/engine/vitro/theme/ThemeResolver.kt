@@ -378,9 +378,11 @@ object ThemeResolver {
         // fallback (as the card parser does).
         val cyclic = cyclicNames(raw)
         val scope: Map<String, String> = if (cyclic.isEmpty()) raw else raw - cyclic
+        // A cyclic name is left out entirely (invalid, as in CSS), not exported empty: `--a: ;` would be a valid empty
+        // value, and an island's `var(--a, fallback)` would then never take its fallback.
         val resolved = LinkedHashMap<String, String>(raw.size)
         for (k in raw.keys) {
-            resolved[k] = if (k in cyclic) "" else resolveValue(raw[k].orEmpty(), scope, 0)
+            if (k !in cyclic) resolved[k] = resolveValue(raw[k].orEmpty(), scope, 0)
         }
 
         val bg = parseColor(resolved["primary-background-color"]) ?: if (dark) 0xFF111111.toInt() else 0xFFFAFAFA.toInt()
@@ -552,11 +554,13 @@ object ThemeResolver {
                 continue
             }
             val v = value(name.removePrefix("--"), if (comma < 0) "" else inner.substring(comma + 1).trim())
-            // Growth so far: what was written minus what of [s] it stands for (through j).
-            if (out.length.toLong() + v.length - j > maxGrowth) return null
+            // The output so far is bounded by the whole input plus the budget at every append (so a later part that
+            // shrinks it can still count), and the finished value by its net growth.
+            if (out.length.toLong() + v.length > s.length.toLong() + maxGrowth) return null
             out.append(v)
             i = j
         }
+        if (out.length.toLong() - s.length > maxGrowth) return null
         return out.toString()
     }
 

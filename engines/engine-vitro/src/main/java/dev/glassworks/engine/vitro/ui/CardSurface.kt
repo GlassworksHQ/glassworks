@@ -158,15 +158,34 @@ class VitroCardContext(
     }
 
     /**
-     * An optimistic write: shows [next] at once and calls the service. If HA turns the call down, the state from
-     * before comes back, unless a newer state replaced [next] meanwhile (that one is the truth): an entity HA didn't
-     * change sends no event that would correct it. With no [next] (nothing to show) it only calls.
+     * An optimistic write: shows [next] at once and calls the service. If HA turns the call down, the entity goes back
+     * to its last confirmed state (what HA reported, or what it accepted since), unless a newer state replaced the
+     * optimistic one meanwhile (that one is the truth): an entity HA didn't change sends no event that would correct
+     * it. Overlapping writes to one entity share that confirmed state, so a refused write never restores another
+     * write's refused value. With no [next] (nothing to show) it only calls. Main thread only.
      */
     fun callOptimistic(next: EntityState?, domain: String, service: String, data: JSONObject?, target: JSONObject? = null) {
-        val before = next?.let { store[it.entityId] }
-        if (next != null) store.putLocal(next)
+        if (next == null) {
+            callServiceThen(domain, service, data, target) {}
+            return
+        }
+        val id = next.entityId
+        val writes = optimisticWrites.getOrPut(store) { HashMap() }
+        val pending = writes[id] ?: store[id]?.let { PendingWrites(it).also { p -> writes[id] = p } }
+        pending?.let { it.latest = next; it.outstanding++ }
+        store.putLocal(next)
         callServiceThen(domain, service, data, target) { ok ->
-            if (!ok && next != null && before != null) main.post { if (store[next.entityId] === next) store.putLocal(before) }
+            main.post {
+                val p = pending ?: return@post
+                if (ok) {
+                    // HA accepted it: this is what the entity becomes, the state a later refusal goes back to.
+                    p.confirmed = next
+                } else if (p.latest === next && store[id] === next) {
+                    // The newest write was refused and nothing newer replaced it: back to the confirmed state.
+                    store.putLocal(p.confirmed)
+                }
+                if (--p.outstanding == 0) writes.remove(id)
+            }
         }
     }
 
@@ -379,6 +398,14 @@ class VitroCardContext(
         }
 
         @Volatile private var cacheGeneration = 0
+
+        /** The optimistic writes still waiting for HA, per store and entity ([callOptimistic]); main thread only. */
+        private class PendingWrites(var confirmed: EntityState) {
+            var latest: EntityState? = null
+            var outstanding = 0
+        }
+
+        private val optimisticWrites = java.util.WeakHashMap<EntityStore, HashMap<String, PendingWrites>>()
 
         /** Who the cached images were fetched as: the sign-in ([tokenSignIn]) of the last token used. */
         private var imageSignIn: String? = null

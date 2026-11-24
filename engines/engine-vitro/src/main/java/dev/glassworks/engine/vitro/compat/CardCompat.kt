@@ -264,7 +264,8 @@ object CardCompat {
                     if (f.has("template")) unknown += "template"
                 }
                 if (unknown.isNotEmpty()) {
-                    notes += "auto-entities filter ${unknown.joinToString { "`$it`" }} isn't evaluated natively: the entities it matches are left out"
+                    notes += "auto-entities filter ${unknown.joinToString { "`$it`" }} isn't evaluated natively: entities an include rule " +
+                        "matches are left out, and an exclude rule can't remove its matches"
                 }
             }
             "custom:layout-card" -> {
@@ -474,6 +475,7 @@ object CardCompat {
         var benign = false
         val stripped = stripAttributeValues(norm)
         val groups = functionalGroups(stripped)
+        val interactionMemo = HashMap<String, Boolean>()
         for (m in PSEUDO.findAll(stripped)) {
             val name = m.groupValues[2]
             val element = m.groupValues[1] == "::" || name in LEGACY_PSEUDO_ELEMENTS
@@ -482,7 +484,7 @@ object CardCompat {
                 element -> return Sel.Unsupported(sel, "pseudo-element `::$name` isn't drawn natively")
                 // An interaction state makes the rule inactive at rest only when it rules out every way to match:
                 // `:not(:hover)` matches at rest, and so does `:is(:hover, ha-card)` through its other alternative.
-                name in VitroSupport.BENIGN_PSEUDO_CLASSES -> if (rulesOutRest(stripped, m.range.first, groups)) benign = true
+                name in VitroSupport.BENIGN_PSEUDO_CLASSES -> if (rulesOutRest(stripped, m.range.first, groups, interactionMemo)) benign = true
                 name in VitroSupport.PSEUDO_CLASSES -> Unit
                 name == "host" -> return Sel.Unsupported(sel, "`:host` with a selector isn't modeled")
                 else -> return Sel.Unsupported(sel, "`:$name` isn't evaluated natively")
@@ -517,7 +519,8 @@ object CardCompat {
 
     // Compiled once: every card's selectors pass through here when a view builds.
     private val SELECTOR_SPACES = Regex("""\s+""")
-    private val ATTRIBUTE_VALUE = Regex("""\[[^\]]*\]""")
+    // Quote-aware: a `]` inside a quoted value (`[src^="/x?a=]&token=…"]`) doesn't end the attribute selector.
+    private val ATTRIBUTE_VALUE = Regex("""\[(?:"[^"]*"|'[^']*'|[^\]"'])*\]""")
 
     private val FUNCTIONAL = Regex(""":(not|is|where|matches|-webkit-any|has)\(""")
 
@@ -539,23 +542,27 @@ object CardCompat {
      * True when the interaction state at [at] keeps the selector from matching at rest: it isn't inside a `:not()`
      * or `:has()`, and inside each enclosing `:is()` / `:where()` every alternative has an interaction state too.
      */
-    private fun rulesOutRest(sel: String, at: Int, groups: List<Pair<String, IntRange>>): Boolean {
+    private fun rulesOutRest(sel: String, at: Int, groups: List<Pair<String, IntRange>>, memo: HashMap<String, Boolean>): Boolean {
         for ((name, range) in groups) {
             if (at !in range) continue
             if (name == "not" || name == "has") return false
             val alternatives = CssSelector.splitTopLevel(sel.substring(range.first + 1, range.last), ',')
             // Each alternative must *require* an interaction state: `:not(:hover)` contains one and matches at rest.
-            if (alternatives.any { alt -> !requiresInteraction(alt) }) return false
+            if (alternatives.any { alt -> !requiresInteraction(alt.trim(), memo) }) return false
         }
         return true
     }
 
     /** True when [sel] can only match in an interaction state: one of its states rules out the card at rest. */
-    private fun requiresInteraction(sel: String): Boolean {
+    /**
+     * Each distinct alternative is decided once per selector ([memo]): nested `:is()` groups share their inner
+     * alternatives, and deciding them again for every enclosing group grows exponentially with the nesting.
+     */
+    private fun requiresInteraction(sel: String, memo: HashMap<String, Boolean>): Boolean = memo[sel] ?: run {
         val groups = functionalGroups(sel)
-        return PSEUDO.findAll(sel).any { m ->
-            m.groupValues[1] == ":" && m.groupValues[2] in VitroSupport.BENIGN_PSEUDO_CLASSES && rulesOutRest(sel, m.range.first, groups)
-        }
+        PSEUDO.findAll(sel).any { m ->
+            m.groupValues[1] == ":" && m.groupValues[2] in VitroSupport.BENIGN_PSEUDO_CLASSES && rulesOutRest(sel, m.range.first, groups, memo)
+        }.also { memo[sel] = it }
     }
 
     /**

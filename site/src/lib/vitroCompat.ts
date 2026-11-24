@@ -496,7 +496,8 @@ function walkCard(card: unknown, loc: string, view: ViewAudit) {
 
   // A native card type in a configuration Vitro doesn't draw (a Bubble Card pop-up) is a web card when its script
   // is installed, as the engine routes it.
-  const rule = CONFIG_DEPENDENT[type];
+  // Own keys only: a card typed `constructor` or `__proto__` is an unknown card, not an inherited rule.
+  const rule = Object.prototype.hasOwnProperty.call(CONFIG_DEPENDENT, type) ? CONFIG_DEPENDENT[type] : undefined;
   if (rule) {
     const raw = card[rule.option];
     const value = (typeof raw === "string" && raw.trim() ? raw.trim() : rule.default).replace(/^custom:/, "");

@@ -886,6 +886,37 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun anIdleConnectionOutlivesTheUpgradeDeadline() {
+        // The deadline bounds the upgrade only: no read timeout is left on the socket afterwards.
+        java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
+            val accepted = Thread {
+                runCatching {
+                    val s = server.accept()
+                    val r = s.getInputStream().bufferedReader(Charsets.ISO_8859_1)
+                    var key = ""
+                    while (true) {
+                        val line = r.readLine() ?: break
+                        if (line.isEmpty()) break
+                        if (line.startsWith("Sec-WebSocket-Key:", ignoreCase = true)) key = line.substringAfter(':').trim()
+                    }
+                    val accept = java.util.Base64.getEncoder().encodeToString(
+                        java.security.MessageDigest.getInstance("SHA-1").digest((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").toByteArray()),
+                    )
+                    s.getOutputStream().write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: $accept\r\n\r\n".toByteArray())
+                    Thread.sleep(900) // idle for three upgrade deadlines
+                    s.getOutputStream().write(byteArrayOf(0x81.toByte(), 2, 'h'.code.toByte(), 'i'.code.toByte()))
+                    Thread.sleep(500)
+                    s.close()
+                }
+            }.apply { isDaemon = true; start() }
+            val ws = HaDashboardClient.connectLongLived("ws://127.0.0.1:${server.localPort}/api/websocket", upgradeTimeoutMs = 300)
+            assertEquals("hi", ws.receive())
+            ws.close()
+            accepted.join(5_000)
+        }
+    }
+
+    @Test
     fun aPingThroughCallWsSettlesOnPong() {
         val c = connected()
         val done = CompletableFuture<Boolean>()

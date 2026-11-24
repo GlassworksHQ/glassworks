@@ -316,6 +316,12 @@ describe("auditDashboard and the cards built from a configuration", () => {
     ]);
   });
 
+  it("treats a type named like an inherited property as an unknown card", () => {
+    const r = auditDashboard(JSON.stringify({ views: [{ cards: [{ type: "constructor" }, { type: "__proto__" }] }] }));
+    expect(r.ok).toBe(true);
+    expect(r.totals.tier3).toBe(2);
+  });
+
   it("inspects what auto-entities builds: its inner card and explicit card entries", () => {
     const island = auditDashboard(
       JSON.stringify({ views: [{ cards: [{ type: "custom:auto-entities", card: { type: "custom:button-card" } }] }] }),

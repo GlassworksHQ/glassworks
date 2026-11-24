@@ -1315,7 +1315,12 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
     }
 
     private fun load(url: String) {
-        if (url == shownUrl || url == loadingUrl) return
+        if (url == loadingUrl) return
+        if (url == shownUrl) {
+            // Back to the picture on screen: a different load still on its way no longer owns the image.
+            loadingUrl = null
+            return
+        }
         loadingUrl = url
         ctx.loadImage(url, this) { bmp ->
             // Only the newest request lands: an older one's answer never replaces it.

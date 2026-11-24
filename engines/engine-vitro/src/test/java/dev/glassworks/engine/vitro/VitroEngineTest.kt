@@ -476,6 +476,15 @@ class VitroEngineTest {
     }
 
     @Test
+    fun logLinesLeaveOutQueriesAndProxiedPaths() {
+        assertEquals("http://192.0.2.10:8123/auth/…?…", VitroEngine.forLog("http://192.0.2.10:8123/auth/authorize?client_id=a&state=secret"))
+        assertEquals("[3] GET /api/… -> 200", VitroEngine.forLog("[3] GET /api/states/sensor.private_thing -> 200"))
+        assertEquals("GET /__vitro/enter?…", VitroEngine.forLog("GET /__vitro/enter?c=capability&to=%2F"))
+        assertEquals("GET /__vitro/island/… -> 200", VitroEngine.forLog("GET /__vitro/island/s0123abcd -> 200"))
+        assertEquals("Connection reset", VitroEngine.forLog("Connection reset"))
+    }
+
+    @Test
     fun backFollowsTabTapsAndLoadsInTheOrderTheyHappened() {
         val page = readyPage()
         val vv = vitroView(page)

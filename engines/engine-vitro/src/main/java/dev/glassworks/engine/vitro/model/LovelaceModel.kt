@@ -294,10 +294,16 @@ sealed class VisibilityCondition {
     companion object {
         private const val UNKNOWN = "unknown"
 
-        /** An attribute value as JavaScript's `String()` writes it (`150`, not `150.0`), as HA compares it. */
-        private fun jsString(v: Any): String = when (v) {
+        /**
+         * An attribute value as JavaScript's `String()` writes it, as HA compares it: `150`, not `150.0`; a list as
+         * its elements joined by commas (`off,heat`, a null element empty); an object as `[object Object]`.
+         */
+        private fun jsString(v: Any?): String = when (v) {
+            null -> ""
             is Double -> if (v % 1.0 == 0.0 && kotlin.math.abs(v) < 1e15) v.toLong().toString() else v.toString()
             is Float -> jsString(v.toDouble())
+            is List<*> -> v.joinToString(",") { jsString(it) }
+            is Map<*, *> -> "[object Object]"
             else -> v.toString()
         }
 

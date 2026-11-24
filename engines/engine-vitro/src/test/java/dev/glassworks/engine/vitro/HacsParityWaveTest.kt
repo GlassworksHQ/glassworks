@@ -465,6 +465,10 @@ class HacsParityWaveTest {
             LayoutCardView.parseColumns("200px 1fr", 1280),
         )
         assertEquals(4, LayoutCardView.parseColumns("repeat(auto-fill, minmax(300px, 1fr))", 1280).size)
+        // A percentage is of the grid's width, a fixed size; as a minmax maximum it still sizes the track.
+        assertEquals(listOf(LayoutCardView.Track(0f, 200f), LayoutCardView.Track(1f, 0f)), LayoutCardView.parseColumns("25% 1fr", 800))
+        assertEquals(LayoutCardView.Track(0f, 400f), LayoutCardView.parseColumns("minmax(0px, 50%) 1fr", 800)[0])
+        assertEquals(LayoutCardView.Track(1f, 0f, 100f), LayoutCardView.parseColumns("minmax(100px, 1fr)", 800)[0])
 
         val horizontal = LayoutCardView(
             context(st),
