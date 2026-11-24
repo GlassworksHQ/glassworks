@@ -359,10 +359,10 @@ class CompatCheckerTest {
         assertIsland(tileWith("ha-card { color: red }"), "`color: red` isn't supported here")
         // The same `color` on a Markdown card flows into its text through the cascade.
         assertNative("""{"type": "markdown", "content": "x", "card_mod": {"style": ${style("ha-card { color: red; font-size: 18px }")}}}""")
-        assertIsland(
-            """{"type": "markdown", "content": "x", "card_mod": {"style": {"ha-markdown$": ${style("p { font-family: 'Comic Sans MS' }")}}}}""",
-            "font Vitro doesn't bundle",
-        )
+        // Any font family draws natively: a web font a `type: css` resource declares, else the next family, as in
+        // the browser (VitroFonts).
+        assertNative("""{"type": "markdown", "content": "x", "card_mod": {"style": {"ha-markdown$": ${style("p { font-family: 'Comic Sans MS' }")}}}}""")
+        assertNative(tileWith("ha-card { font-family: Lobster, cursive }"))
         assertIsland(
             """{"type": "markdown", "content": "x", "card_mod": {"style": {"ha-markdown$": ${style("div { display: grid }")}}}}""",
             "isn't laid out natively",

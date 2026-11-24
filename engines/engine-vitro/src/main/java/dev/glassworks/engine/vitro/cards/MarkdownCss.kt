@@ -22,7 +22,8 @@ class MdStyle {
     var fontSize = 14f
     var fontWeight = 400
     var italic = false
-    var mono = false
+    /** `font-family` as a CSS list, or null for the card's own font ([dev.glassworks.engine.vitro.ui.VitroFonts]). */
+    var fontFamily: String? = null
 
     /** Line height in px, or -1 for `normal`. */
     var lineHeight = -1f
@@ -601,7 +602,7 @@ object MdCascade {
         s.fontSize = p.fontSize
         s.fontWeight = p.fontWeight
         s.italic = p.italic
-        s.mono = p.mono
+        s.fontFamily = p.fontFamily
         s.lineHeightFactor = p.lineHeightFactor
         s.lineHeight = p.lineHeight
         s.letterSpacing = p.letterSpacing
@@ -671,7 +672,12 @@ object MdCascade {
                     else -> lower.toFloatOrNull()?.toInt()?.coerceIn(1, 1000) ?: s.fontWeight
                 }
                 "font-style" -> s.italic = if (inheritKw) p.italic else lower == "italic" || lower == "oblique"
-                "font-family" -> s.mono = if (inheritKw) p.mono else "monospace" in lower || "mono" in lower
+                "font-family" -> s.fontFamily = when {
+                    inheritKw -> p.fontFamily
+                    // The browser's default font, not the card's: initial isn't inherit.
+                    initialKw -> dev.glassworks.engine.vitro.theme.ThemeResolver.INITIAL_FONT_FAMILY
+                    else -> lower
+                }
                 "line-height" -> when {
                     inheritKw -> { s.lineHeightFactor = p.lineHeightFactor; s.lineHeight = if (p.lineHeightFactor >= 0f) p.lineHeightFactor * s.fontSize else p.lineHeight }
                     initialKw || lower == "normal" -> { s.lineHeightFactor = -1f; s.lineHeight = -1f }

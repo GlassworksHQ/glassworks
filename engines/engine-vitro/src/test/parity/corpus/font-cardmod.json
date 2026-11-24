@@ -1,0 +1,10 @@
+{
+  "title": "Fonts: card-mod font-family on a card, a web font from a type: css resource",
+  "resources": [{ "type": "css", "url": "/local/vitro-harness-fixtures/fonts/cardmod.css" }],
+  "card": {
+    "type": "tile",
+    "entity": "light.entryway_ceiling_halo",
+    "features": [{ "type": "light-brightness" }],
+    "card_mod": { "style": "ha-card { font-family: Pacifico, cursive; }" }
+  }
+}

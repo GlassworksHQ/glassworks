@@ -94,6 +94,35 @@ class VitroCardContext(
 
     fun px(dpVal: Float): Int = (dpVal * dp).toInt()
 
+    /**
+     * This context for a card that sets its own `font-family` (card-mod): the same in every way, but its views are
+     * built on a [VitroFontContext], so every text the card draws (and the cards inside it) uses [fontFamily].
+     */
+    fun withFontFamily(fontFamily: String): VitroCardContext = VitroCardContext(
+        context = VitroFontContext(context, fontFamily),
+        haBase = haBase,
+        store = store,
+        theme = theme,
+        resources = resources,
+        accessToken = accessToken,
+        haConfig = haConfig,
+        callService = callService,
+        callServiceThen = callServiceThen,
+        callWs = callWs,
+        navigate = navigate,
+        openMoreInfo = openMoreInfo,
+        fetchHistory = fetchHistory,
+        subscribeTemplate = subscribeTemplate,
+        islandServer = islandServer,
+        openIslandPage = openIslandPage,
+        fetchForecast = fetchForecast,
+        haUser = haUser,
+        cameraStream = cameraStream,
+    ).also {
+        it.cardVars = cardVars
+        it.cardLayout = cardLayout
+    }
+
     /** [sp] scaled by the theme's text size ([ResolvedTheme.fontScale]); pass the result to `setTextSize(SP, …)`. */
     fun scaledSp(sp: Float): Float = sp * theme.fontScale
 

@@ -112,6 +112,12 @@ open class PlatformApi(
     /** `Font.Builder` can load a variable font from memory (Android 10). */
     val hasFontBuilder: Boolean get() = apiLevel >= 29
 
+    /**
+     * `Typeface.Builder` can open a font file at a variation (`'wght' 500`) (Android 8). Below it, a variable font
+     * loads at its default instance only, and other weights are the nearest static face or a synthesized bold.
+     */
+    val hasTypefaceBuilder: Boolean get() = apiLevel >= 26
+
     /** `WindowInsetsController` and `setDecorFitsSystemWindows` exist (Android 11). */
     val hasWindowInsetsController: Boolean get() = apiLevel >= 30
 
