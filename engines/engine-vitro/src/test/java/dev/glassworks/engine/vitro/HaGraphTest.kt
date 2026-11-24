@@ -238,4 +238,16 @@ class HaGraphTest {
         assertEquals(true, HaTimelineChart.isStateColored(battery))
         assertEquals(true, HaTimelineChart.isStateColored(light))
     }
+
+    @Test
+    fun unitlessBackfillJoinsItsEntitysLine() {
+        // The statistics came before the entity's state (no unit then); the history knows it as °C.
+        val stats = JSONObject().put("sensor.a", JSONArray().put(JSONObject().put("start", 0).put("end", 3_600_000).put("mean", 5.0)))
+        val lts = HaHistory.statisticsToHistory({ null }, stats, listOf("sensor.a"))
+        val st = dev.glassworks.engine.vitro.data.EntityState("sensor.a", "7", mapOf("unit_of_measurement" to "°C"))
+        val history = HaHistory.compute({ if (it == "sensor.a") st else null }, mapOf("sensor.a" to listOf(HistoryState("7", 5000.0))), listOf("sensor.a"), null)
+        val merged = HaHistory.merge(history, lts)
+        assertEquals(listOf("°C"), merged.line.map { it.unit })
+        assertEquals(listOf("5"), merged.line.single().data.single().statistics!!.map { it.state })
+    }
 }

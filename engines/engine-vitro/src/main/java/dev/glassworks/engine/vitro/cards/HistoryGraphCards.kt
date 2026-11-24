@@ -86,6 +86,8 @@ object HaHistory {
             } else when (domain) {
                 "climate", "water_heater" -> temperatureUnit
                 "humidifier" -> "%"
+                // A zone's state is how many people are in it (`ui.dialogs.more_info_control.zone.graph_unit`).
+                "zone" -> "People in zone"
                 else -> null
             }
             if (unit == null) {
@@ -159,11 +161,19 @@ object HaHistory {
         if (lts == null) return history
         val lookup = LinkedHashMap<String, Pair<LineUnit?, LineUnit?>>()
         for (u in history.line) lookup[u.unit + "_"] = u to null
-        for (u in lts.line) {
+        fun addLts(u: LineUnit) {
             val key = u.unit + "_"
             val e = lookup[key]
             if (e?.second != null) e.second!!.data.addAll(u.data)
             else lookup[key] = (e?.first) to LineUnit(u.unit, u.data.toMutableList())
+        }
+        // Statistics fetched before an entity's state arrived have no unit: each takes the unit of the history line
+        // its entity is in (or stays apart when there is none).
+        val historyUnitOf = HashMap<String, String>()
+        for (u in history.line) for (e in u.data) historyUnitOf[e.entityId] = u.unit
+        for (u in lts.line) {
+            if (u.unit != BLANK_UNIT) { addLts(u); continue }
+            for (e in u.data) addLts(LineUnit(historyUnitOf[e.entityId] ?: u.unit, mutableListOf(e)))
         }
         val out = ArrayList<LineUnit>()
         for ((h, l) in lookup.values) {
@@ -996,6 +1006,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
     private val chart = ChartView(ctx.context, ctx.dp)
     private val legend = ChartLegendView(ctx)
     private val info = cssText(ctx, 14f, ctx.theme.secondaryTextColor)
+    private val hideLegend = config.raw.optBoolean("hide_legend", false)
     private var generation = 0
     private val refresh = Runnable { fetch() }
 
@@ -1156,7 +1167,8 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
             for (t in types) {
                 val band = drawBands && (t == bandTop || t == bandBottom)
                 val dim = (band && hasMin && hasMax && hasMean)
-                val lineColor = if (dim) CardSurface.withAlpha(color, 0x7F / 255f) else color
+                // A hidden legend hides the band's edges too (`color + "00"`); shown, they're at half opacity.
+                val lineColor = if (dim) CardSurface.withAlpha(color, if (hideLegend) 0f else 0x7F / 255f) else color
                 val line = ChartLine(xs.getValue(t).toDoubleArray(), ys.getValue(t).toDoubleArray(), lineColor, 1.5f, smooth = 0.4,
                     bandBottom = if (band && t == bandTop && bandTop != bandBottom) built[bandBottom] else null,
                     areaColor = CardSurface.withAlpha(color, 0x3F / 255f))
@@ -1180,7 +1192,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         chart.visibility = VISIBLE
         info.visibility = GONE
         // One statistic: the base chart's legend lists every series; several: one entry per statistic.
-        legend.setItems(if (ids.size > 1) statLegend else legendItems)
+        legend.setItems(if (hideLegend) emptyList() else if (ids.size > 1) statLegend else legendItems)
         // ha-chart-base: differenceInMinutes(axis.max || new Date(), axis.min); the statistics chart sets no max.
         val minutes = floor((ctx.now() - minX) / 60000.0)
         val dayDiff = minutes / 60 / 24
