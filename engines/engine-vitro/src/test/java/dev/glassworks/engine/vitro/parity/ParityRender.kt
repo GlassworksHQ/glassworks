@@ -245,6 +245,7 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         val haConfig = shared?.haConfig ?: JSONObject()
         FixtureHttp(File(root, "assets"), ref?.imagesHaMissing.orEmpty()).use { http ->
             val view = VitroView(activity, store, Color.BLACK)
+            view.cardLayers = VitroView.CardLayers.forTotalMem(frame.memTotalKb * 1024)
             view.contextFactory = { theme ->
                 VitroCardContext(
                     context = activity,

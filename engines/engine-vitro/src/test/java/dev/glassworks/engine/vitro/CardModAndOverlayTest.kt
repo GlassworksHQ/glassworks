@@ -460,7 +460,7 @@ class CardModAndOverlayTest {
     }
 
     @Test
-    fun bigCardsAreCachedLayersUnlessTheyCastShadows() {
+    fun cardsAreCachedLayersUnlessTheyCastShadows() {
         // A shadow (the theme's card elevation, or the card's own) would be clipped to the layer's bounds.
         assertTrue(VitroView.cardLayerWanted(0f, 0f))
         assertFalse(VitroView.cardLayerWanted(2f, 0f))
@@ -475,8 +475,9 @@ class CardModAndOverlayTest {
         val dash = """{"views": [{"title": "Home", "type": "sections", "theme": "t", "sections": [{"type": "grid", "cards": [
             {"type": "tile", "entity": "light.lounge"},
             {"type": "markdown", "content": "# Big\n\nA\n\nB\n\nC\n\nD\n\nE\n\nF\n\nG"}]}]}]}"""
-        fun layers(theme: String): Map<String, Int> {
+        fun layers(theme: String, mode: VitroView.CardLayers = VitroView.CardLayers.BIG): Map<String, Int> {
             val vv = vitroView(store, """{"views": []}""")
+            vv.cardLayers = mode
             vv.setThemes(ThemeCatalog.parse(JSONObject("""{"themes": {"t": $theme}}""")))
             vv.setDashboard(LovelaceParser.parseDashboard(JSONObject(dash)), null)
             vv.measure(View.MeasureSpec.makeMeasureSpec(1280, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY))
@@ -491,6 +492,24 @@ class CardModAndOverlayTest {
         assertEquals(mapOf("tile" to View.LAYER_TYPE_NONE, "markdown" to View.LAYER_TYPE_HARDWARE), layers("{}"))
         assertEquals(mapOf("tile" to View.LAYER_TYPE_NONE, "markdown" to View.LAYER_TYPE_NONE),
             layers("""{"ha-card-box-shadow": "0 2px 8px rgba(0,0,0,0.3)"}"""))
+
+        // With RAM to spare every card gets a layer, the tile too; a shadow still keeps them all off it.
+        val all = VitroView.CardLayers.ALL
+        assertEquals(mapOf("tile" to View.LAYER_TYPE_HARDWARE, "markdown" to View.LAYER_TYPE_HARDWARE), layers("{}", all))
+        assertEquals(mapOf("tile" to View.LAYER_TYPE_NONE, "markdown" to View.LAYER_TYPE_NONE),
+            layers("""{"ha-card-box-shadow": "0 2px 8px rgba(0,0,0,0.3)"}""", all))
+    }
+
+    @Test
+    fun everyCardGetsALayerFromTwoGibibytesOfRam() {
+        // MemTotal as the devices read it: the Pixel Tablet's 8 GB and a 3 GB device get every card on a layer; the
+        // S1's 2 GB and the Mirror's 1 GB keep the big-card rule.
+        assertEquals(VitroView.CardLayers.ALL, VitroView.CardLayers.forTotalMem(7_802_585_088L))
+        assertEquals(VitroView.CardLayers.ALL, VitroView.CardLayers.forTotalMem(2_800_000_000L))
+        assertEquals(VitroView.CardLayers.ALL, VitroView.CardLayers.forTotalMem(2_147_483_648L))
+        assertEquals(VitroView.CardLayers.BIG, VitroView.CardLayers.forTotalMem(2_071_752_704L))
+        assertEquals(VitroView.CardLayers.BIG, VitroView.CardLayers.forTotalMem(975_106_048L))
+        assertEquals(VitroView.CardLayers.BIG, VitroView.CardLayers.forTotalMem(0L)) // unknown: the cautious rule
     }
 
     @Test

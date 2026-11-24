@@ -46,8 +46,19 @@ object ParityFiles {
             frames.orEmpty().filter { it !in frameIds }.map { "no frame \"$it\" in frames.json (vitroParityFrames); known: ${frameIds.sorted().joinToString()}" }
 }
 
-/** One panel: CSS size and density. The same numbers drive Chromium and Robolectric's qualifiers. */
-data class ParityFrame(val id: String, val name: String, val width: Int, val height: Int, val density: Float, val qualifiers: String) {
+/**
+ * One panel: CSS size and density. The same numbers drive Chromium and Robolectric's qualifiers. [memTotalKb] is the
+ * RAM the panel reports, which picks Vitro's card layers as on the panel (0: not known, the low-RAM rule).
+ */
+data class ParityFrame(
+    val id: String,
+    val name: String,
+    val width: Int,
+    val height: Int,
+    val density: Float,
+    val qualifiers: String,
+    val memTotalKb: Long = 0,
+) {
     val pxWidth: Int get() = Math.round(width * density)
     val pxHeight: Int get() = Math.round(height * density)
 
@@ -56,7 +67,7 @@ data class ParityFrame(val id: String, val name: String, val width: Int, val hei
             val arr = JSONObject(File(ParityFiles.committed, "frames.json").readText()).getJSONArray("frames")
             return (0 until arr.length()).map { arr.getJSONObject(it) }.map {
                 ParityFrame(it.getString("id"), it.getString("name"), it.getInt("width"), it.getInt("height"),
-                    it.getDouble("density").toFloat(), it.getString("qualifiers"))
+                    it.getDouble("density").toFloat(), it.getString("qualifiers"), it.optLong("memTotalKb", 0))
             }
         }
     }
