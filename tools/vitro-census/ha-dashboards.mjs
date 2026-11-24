@@ -19,10 +19,11 @@ if (!HA_URL || !HA_TOKEN || !['list', 'get'].includes(cmd) || (cmd === 'get' && 
 const msg = cmd === 'list'
   ? { type: 'lovelace/dashboards/list' }
   : { type: 'lovelace/config', url_path: urlPath === 'lovelace' ? null : urlPath, force: true };
-if (!/^https:/i.test(HA_URL)) {
-  console.error('warning: HA_URL is not https://, so the token is sent unencrypted; use https:// when Home Assistant serves it');
+const wsUrl = HA_URL.replace(/^http/i, 'ws').replace(/\/$/, '') + '/api/websocket';
+if (!/^wss:/i.test(wsUrl)) {
+  console.error('warning: the connection is not wss://, so the token is sent unencrypted; use https:// when Home Assistant serves it');
 }
-const ws = new WebSocket(HA_URL.replace(/^http/, 'ws').replace(/\/$/, '') + '/api/websocket');
+const ws = new WebSocket(wsUrl);
 ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
   if (m.type === 'auth_required') ws.send(JSON.stringify({ type: 'auth', access_token: HA_TOKEN }));
