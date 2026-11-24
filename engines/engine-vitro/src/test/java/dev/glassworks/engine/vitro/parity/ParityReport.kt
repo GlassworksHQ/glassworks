@@ -45,6 +45,9 @@ data class ParityMeasure(
         if (bounds > t.bounds) add("bounds Δ${num(bounds)} px > ${num(t.bounds)}")
         if (fontDelta > t.font) add("font Δ${num(fontDelta)} px > ${num(t.font)}")
         if (missingTexts.size > t.missingText) add("${missingTexts.size} HA text(s) not found in Vitro's views")
+        // A card Vitro adds (or drops) can sit outside the reference crop, where neither the pixels nor the
+        // common slots' bounds see it: a different number of cards is itself a failure.
+        if (slotsHa != slotsVitro) add("HA shows $slotsHa card slot(s), Vitro $slotsVitro")
     }
 }
 
@@ -59,6 +62,14 @@ data class ParityResult(
     val image: String?,
 ) {
     val key get() = "${frame.id}/${case.id}"
+}
+
+/**
+ * The results that fail the run. A render error or a missing reference always does; a regression does unless
+ * [acceptDrift] (a baseline update or a collect run, which record drift rather than judge it).
+ */
+fun fatalResults(results: List<ParityResult>, acceptDrift: Boolean): List<ParityResult> = results.filter {
+    it.status == ParityStatus.ERROR || it.status == ParityStatus.NO_REFERENCE || (!acceptDrift && it.status == ParityStatus.REGRESSION)
 }
 
 internal fun pct(v: Double) = String.format(Locale.ROOT, "%.1f%%", v * 100)
@@ -124,7 +135,7 @@ object ParityCompare {
 
 /** baseline.json: the drift a corpus is known to have, per frame/case, with why. A case may not get worse than this. */
 class ParityBaseline(private val file: File) {
-    private val json: JSONObject = if (file.isFile) JSONObject(file.readText()) else JSONObject()
+    private val json: JSONObject = file.takeIf { it.isFile }?.readText()?.takeIf { it.isNotBlank() }?.let(::JSONObject) ?: JSONObject()
 
     fun entry(key: String): JSONObject? = json.optJSONObject(key)
 
@@ -133,7 +144,8 @@ class ParityBaseline(private val file: File) {
         val b = entry(key) ?: return listOf("not in baseline.json")
         return buildList {
             if (m.pixel.tolerant > b.optDouble("pixel", 0.0) + PIXEL_SLACK) add("pixels ${pct(m.pixel.tolerant)} > baseline ${pct(b.optDouble("pixel"))}")
-            if (m.bounds > b.optDouble("bounds", 0.0) + BOUNDS_SLACK) add("bounds Δ${num(m.bounds)} > baseline ${num(b.optDouble("bounds"))}")
+            val known = boundsOf(b)
+            if (m.bounds > known + BOUNDS_SLACK) add("bounds Δ${num(m.bounds)} > baseline ${num(known)}")
             if (m.fontDelta > b.optDouble("font", 0.0) + FONT_SLACK) add("font Δ${num(m.fontDelta)} > baseline ${num(b.optDouble("font"))}")
             if (m.missingTexts.size > b.optInt("missingText", 0)) add("${m.missingTexts.size} texts missing > baseline ${b.optInt("missingText")}")
         }
@@ -142,7 +154,8 @@ class ParityBaseline(private val file: File) {
     /** Rewrites the entries of the cases in [results]; entries for cases that didn't run stay as they are. */
     fun write(results: List<ParityResult>) {
         if (results.isEmpty()) return
-        val ran = results.map { it.key }.toSet()
+        // Only measured cases replace (or drop) their entry: a render error or a missing reference keeps the old one.
+        val ran = results.filter { it.measure != null }.map { it.key }.toSet()
         val out = JSONObject()
         out.put("_comment", "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: " +
             "${pct(PIXEL_SLACK)} pixels, $BOUNDS_SLACK px bounds, $FONT_SLACK px font). Regenerate with " +
@@ -152,9 +165,8 @@ class ParityBaseline(private val file: File) {
         for (r in results) {
             val m = r.measure ?: continue
             if (m.over(r.case.threshold).isEmpty()) continue
-            val bounds = if (m.bounds.isInfinite()) 1e9 else m.bounds
             entries[r.key] = JSONObject()
-                .put("pixel", round(m.pixel.tolerant, 4)).put("bounds", round(bounds, 1))
+                .put("pixel", round(m.pixel.tolerant, 4)).put("bounds", if (m.bounds.isInfinite()) UNBOUNDED else round(m.bounds, 1))
                 .put("font", round(m.fontDelta, 1)).put("missingText", m.missingTexts.size)
                 .put("reason", entry(r.key)?.optString("reason")?.takeIf { it.isNotBlank() } ?: "not triaged yet (#794)")
         }
@@ -163,6 +175,16 @@ class ParityBaseline(private val file: File) {
     }
 
     companion object {
+        /** baseline.json's bounds for a card Vitro doesn't draw at all (no slot to measure). */
+        const val UNBOUNDED = "unbounded"
+
+        /** An entry's bounds: [UNBOUNDED] (and the 1e9 older files wrote for it) reads as infinite. */
+        fun boundsOf(entry: JSONObject): Double {
+            if (entry.optString("bounds") == UNBOUNDED) return Double.POSITIVE_INFINITY
+            val v = entry.optDouble("bounds", 0.0)
+            return if (v >= 1e9) Double.POSITIVE_INFINITY else v
+        }
+
         const val PIXEL_SLACK = 0.02
         const val BOUNDS_SLACK = 1.0
         const val FONT_SLACK = 0.5

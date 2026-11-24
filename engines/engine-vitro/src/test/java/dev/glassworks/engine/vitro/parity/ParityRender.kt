@@ -183,6 +183,11 @@ class FixtureHttp(private val assets: File) : Closeable {
  * config, and the templates HA rendered, laid out at the frame's px size (taller when the content scrolls).
  */
 class ParityRenderer(private val activity: Activity, private val frame: ParityFrame, private val root: File, private val shared: ParityShared?) {
+    companion object {
+        /** How long a case's images may take to load from the fixture server before the case fails. */
+        const val IMAGE_TIMEOUT_MS = 10_000L
+    }
+
     fun render(case: ParityCase, ref: ParityReference?): VitroRender {
         val store = EntityStore()
         ref?.states?.let { if (it.length() > 0) store.applyCompressedEvent(JSONObject().put("a", it)) }
@@ -257,13 +262,27 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         v.layout(0, 0, w, h)
     }
 
-    /** Runs the main looper (animations end, posted work runs) and gives image loads on the pool time to land. */
+    /**
+     * Runs the main looper (animations end, posted work runs), then keeps running it until every image load has
+     * reached its card, or fails the case after [IMAGE_TIMEOUT_MS].
+     */
+    private fun step(view: View) {
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(400))
+        Thread.sleep(25)
+        view.measure(View.MeasureSpec.makeMeasureSpec(view.width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(view.height, View.MeasureSpec.EXACTLY))
+        view.layout(0, 0, view.width, view.height)
+    }
+
     private fun settle(view: View, ref: ParityReference?) {
-        repeat(8) {
-            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(400))
-            Thread.sleep(25)
-            view.measure(View.MeasureSpec.makeMeasureSpec(view.width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(view.height, View.MeasureSpec.EXACTLY))
-            view.layout(0, 0, view.width, view.height)
+        repeat(8) { step(view) }
+        // Images load on a pool and reach their card through the main looper: run it until none is in flight, so a
+        // late image can't leave a card drawn without its picture.
+        val deadline = System.nanoTime() + IMAGE_TIMEOUT_MS * 1_000_000L
+        while (VitroCardContext.pendingImageLoads.get() > 0) {
+            if (System.nanoTime() > deadline) {
+                throw IllegalStateException("${VitroCardContext.pendingImageLoads.get()} image load(s) still pending after $IMAGE_TIMEOUT_MS ms")
+            }
+            step(view)
         }
         // The clock shows the instant HA's page was frozen at (refs/*.json "now").
         ref?.let { r -> ParityViews.all(view).filterIsInstance<ClockCardView>().forEach { it.renderAt(Date(r.now)) } }

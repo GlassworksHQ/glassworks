@@ -36,6 +36,14 @@ object ParityFiles {
     /** -PvitroParityCases=a,b and -PvitroParityFrames=s1: run part of the corpus. */
     val onlyCases: Set<String>? get() = System.getProperty("vitro.parity.cases")?.takeIf { it.isNotBlank() }?.split(',')?.toSet()
     val onlyFrames: Set<String>? get() = System.getProperty("vitro.parity.frames")?.takeIf { it.isNotBlank() }?.split(',')?.toSet()
+
+    /**
+     * What's wrong with a selection: each requested case id in none of [caseIds] and each requested frame id not in
+     * [frameIds]. A typo would otherwise select nothing, and a run that compares nothing passes.
+     */
+    fun unknownSelections(cases: Set<String>?, caseIds: Set<String>, frames: Set<String>?, frameIds: Set<String>): List<String> =
+        cases.orEmpty().filter { it !in caseIds }.map { "no case \"$it\" in any corpus (vitroParityCases)" } +
+            frames.orEmpty().filter { it !in frameIds }.map { "no frame \"$it\" in frames.json (vitroParityFrames); known: ${frameIds.sorted().joinToString()}" }
 }
 
 /** One panel: CSS size and density. The same numbers drive Chromium and Robolectric's qualifiers. */

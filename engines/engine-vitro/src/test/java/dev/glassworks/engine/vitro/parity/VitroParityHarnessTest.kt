@@ -43,12 +43,18 @@ class VitroParityHarnessTest {
         val fontFile = File(RepoFiles.root, "core/src/main/res/font/inter.ttf")
         Inter.load = { fontFile.readBytes() }
         val roots = listOfNotNull("committed" to ParityFiles.committed, ParityFiles.local?.let { "local" to it })
-        val frames = ParityFrame.load().filter { ParityFiles.onlyFrames == null || it.id in ParityFiles.onlyFrames!! }
+        val allFrames = ParityFrame.load()
+        val unknown = ParityFiles.unknownSelections(
+            ParityFiles.onlyCases, roots.flatMap { (_, root) -> ParityCase.loadAll(root).map { it.id } }.toSet(),
+            ParityFiles.onlyFrames, allFrames.map { it.id }.toSet(),
+        )
+        if (unknown.isNotEmpty()) fail("Vitro parity: " + unknown.joinToString("; "))
+        val frames = allFrames.filter { ParityFiles.onlyFrames == null || it.id in ParityFiles.onlyFrames!! }
         val outDir = ParityFiles.out
         val tz = TimeZone.getDefault()
         val locale = Locale.getDefault()
         val results = ArrayList<ParityResult>()
-        val failures = ArrayList<String>()
+
         var haVersion = "?"
         try {
             Locale.setDefault(Locale.US)
@@ -70,9 +76,6 @@ class VitroParityHarnessTest {
                     for (case in runs) {
                         val r = runCase(label, root, frame, case, renderer, baseline, outDir, wanted)
                         mine += r
-                        if (r.status in setOf(ParityStatus.REGRESSION, ParityStatus.ERROR, ParityStatus.NO_REFERENCE)) {
-                            failures += "${r.key} [$label]: ${r.status.label}: ${(r.reasons + r.notes).joinToString("; ")}"
-                        }
                     }
                 }
                 if (ParityFiles.collect) writeWanted(label, wanted)
@@ -85,9 +88,12 @@ class VitroParityHarnessTest {
         }
         if (!ParityFiles.collect) ParityReportWriter.write(outDir, results, haVersion)
         println("Vitro parity: ${results.count { it.status == ParityStatus.MATCH }} match, " +
-            "${results.count { it.status == ParityStatus.DRIFT }} known drift, ${failures.size} failing; report: ${File(outDir, "index.html")}")
-        if (!ParityFiles.collect && !ParityFiles.updateBaseline && failures.isNotEmpty()) {
-            fail("Vitro parity: ${failures.size} case(s) failed (report: ${File(outDir, "index.html")}):\n" + failures.joinToString("\n"))
+            "${results.count { it.status == ParityStatus.DRIFT }} known drift, ${fatalResults(results, false).size} failing; report: ${File(outDir, "index.html")}")
+        // A baseline update (and a collect run) accepts visual drift, never a case it couldn't measure.
+        val fatal = fatalResults(results, acceptDrift = ParityFiles.collect || ParityFiles.updateBaseline)
+            .map { r -> "${r.key} [${r.corpus}]: ${r.status.label}: ${(r.reasons + r.notes).joinToString("; ")}" }
+        if (fatal.isNotEmpty()) {
+            fail("Vitro parity: ${fatal.size} case(s) failed (report: ${File(outDir, "index.html")}):\n" + fatal.joinToString("\n"))
         }
     }
 

@@ -69,6 +69,77 @@ class ParityHarnessSelfTest {
         assertEquals(Color.MAGENTA, c.getPixel(9, 9))
     }
 
+    // ---- verdicts and the baseline ----
+
+    private val frame = ParityFrame("s1", "S1", 960, 480, 1.5f, "w960dp-h480dp-land-hdpi")
+
+    private fun case(id: String = "c") = ParityCase(id, id, JSONObject().put("type", "tile"), null, null, null, true, null, 1, Threshold(), emptyList())
+
+    private val slot = CssRect(0.0, 0.0, 100.0, 50.0)
+
+    private fun measure(pixel: Double = 0.0, bounds: Double = 0.0, ha: Int = 1, vitro: Int = 1) = ParityMeasure(
+        PixelDiff(pixel, pixel, 0.0, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)), bounds,
+        List(ha) { slot }, List(vitro) { slot }, emptyList(),
+    )
+
+    private fun result(status: ParityStatus, m: ParityMeasure?, c: ParityCase = case()) =
+        ParityResult("committed", frame, c, status, m, emptyList(), emptyList(), null)
+
+    private fun entry(pixel: Double, bounds: Any, reason: String? = null) = JSONObject().put("pixel", pixel).put("bounds", bounds)
+        .put("font", 0).put("missingText", 0).apply { reason?.let { put("reason", it) } }
+
+    @Test
+    fun aDifferentNumberOfCardsIsAStructuralFailure() {
+        assertTrue(measure(ha = 3, vitro = 3).over(Threshold()).isEmpty())
+        val over = measure(ha = 3, vitro = 4).over(Threshold())
+        assertTrue(over.toString(), over.any { "card slot" in it })
+    }
+
+    @Test
+    fun anUnmeasuredCaseKeepsItsBaselineEntry() {
+        val f = File.createTempFile("baseline", ".json")
+        f.writeText(JSONObject().put("s1/c", entry(0.5, 3, "known")).toString())
+        ParityBaseline(f).write(listOf(result(ParityStatus.ERROR, null), result(ParityStatus.MATCH, measure(), case("other"))))
+        val kept = JSONObject(f.readText()).getJSONObject("s1/c")
+        assertEquals("known", kept.getString("reason"))
+        assertEquals(0.5, kept.getDouble("pixel"), 0.0)
+    }
+
+    @Test
+    fun aMissingCardStaysKnownDriftAcrossABaselineRoundTrip() {
+        val f = File.createTempFile("baseline", ".json")
+        val gone = measure(pixel = 0.5, bounds = Double.POSITIVE_INFINITY)
+        ParityBaseline(f).write(listOf(result(ParityStatus.REGRESSION, gone)))
+        assertEquals(ParityBaseline.UNBOUNDED, JSONObject(f.readText()).getJSONObject("s1/c").getString("bounds"))
+        assertTrue(ParityBaseline(f).worse("s1/c", gone).isEmpty())
+        // Older files wrote 1e9 for the same thing.
+        f.writeText(JSONObject().put("s1/c", entry(0.5, 1e9)).toString())
+        assertTrue(ParityBaseline(f).worse("s1/c", gone).isEmpty())
+        // A finite baseline still catches a card that disappears.
+        f.writeText(JSONObject().put("s1/c", entry(0.5, 3)).toString())
+        assertTrue(ParityBaseline(f).worse("s1/c", gone).isNotEmpty())
+    }
+
+    @Test
+    fun aBaselineUpdateStillFailsOnErrorsAndMissingReferences() {
+        val results = listOf(
+            result(ParityStatus.REGRESSION, measure(pixel = 0.5)),
+            result(ParityStatus.ERROR, null, case("e")),
+            result(ParityStatus.NO_REFERENCE, null, case("n")),
+            result(ParityStatus.MATCH, measure(), case("m")),
+        )
+        assertEquals(listOf("c", "e", "n"), fatalResults(results, acceptDrift = false).map { it.case.id })
+        assertEquals(listOf("e", "n"), fatalResults(results, acceptDrift = true).map { it.case.id })
+    }
+
+    @Test
+    fun anUnknownCaseOrFrameIsRejected() {
+        assertTrue(ParityFiles.unknownSelections(setOf("clock"), setOf("clock", "tile-light"), setOf("s1"), setOf("s1", "tablet")).isEmpty())
+        assertTrue(ParityFiles.unknownSelections(null, setOf("clock"), null, setOf("s1")).isEmpty())
+        assertEquals(1, ParityFiles.unknownSelections(setOf("clokc"), setOf("clock"), null, setOf("s1")).size)
+        assertEquals(1, ParityFiles.unknownSelections(null, setOf("clock"), setOf("s2"), setOf("s1")).size)
+    }
+
     /** CLAUDE.md hard rule 2: no tokens, addresses, MACs or serials in fixtures, references or reports. */
     @Test
     fun committedFixturesHoldNothingPrivate() {

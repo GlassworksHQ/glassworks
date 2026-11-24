@@ -23,6 +23,8 @@ tools/vitro-parity/run.sh --local --refresh  # the real dashboards, from a local
 
 Options: `--frames s1,tablet`, `--cases tile-light,clock`, `--out <dir>`, and `--update-baseline`, which rewrites `baseline.json` with the drift found now. The Gradle properties behind them are `-PvitroParityFrames`, `-PvitroParityCases`, `-PvitroParityOut`, `-PvitroParityUpdateBaseline=true`, `-PvitroParityLocal=<dir>` and `-PvitroParityCollect=true`.
 
+The capture tool's helpers (options, asset paths, scrubbing) have their own tests, which need nothing but Node: `npm test --prefix tools/vitro-parity`.
+
 The report is `engines/engine-vitro/build/reports/vitro-parity/index.html`, with `report.md` and `report.json` next to it for scripts and issues.
 
 ## What a refresh does

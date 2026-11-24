@@ -569,7 +569,8 @@ renders above:
   Design Icons and Roboto it serves. One frontend file is kept as it is, for a card that shows it:
   `engines/engine-vitro/src/test/parity/assets/static/icons/favicon-192x192.png`, the frontend's app icon
   (Apache-2.0, Copyright Home Assistant contributors, [`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt)).
-  Neither is in an APK, the bundle or a web page.
+  Unlike the rest of this section, both **are distributed, in the source tree**, under Apache-2.0 with this
+  notice. Neither is in an APK, the bundle or a web page.
 - **FFmpeg with libx264** (GPL-2.0-or-later as built with libx264). Clarity's camera streams
   (`tools/perf/camera.py`) run the ffmpeg already on the computer that runs the test, to encode its
   built-in test pattern into the test's HLS segments. Those segments are test data, served to the panel

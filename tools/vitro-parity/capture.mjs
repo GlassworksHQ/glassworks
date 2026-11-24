@@ -26,6 +26,8 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect, loadCredentials, redact } from './lib/ha.mjs';
 import { referencedEntities, scrubStates, scrubText, checkDenylist } from './lib/scrub.mjs';
+import { parseArgs, pick } from './lib/args.mjs';
+import { assetDestination } from './lib/assets.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEFAULT_CORPUS = join(ROOT, 'engines', 'engine-vitro', 'src', 'test', 'parity');
@@ -36,18 +38,6 @@ const MARGIN = 8;
 // The kiosk's own CSS (engines/engine-gecko/src/main/assets/extension/content.js, HUI_CSS): no header.
 const HUI_CSS = ':host { --header-height: 0px !important; } .header { display: none !important; } #view { padding-top: 0 !important; min-height: 100vh !important; }';
 
-function parseArgs(argv) {
-  const [cmd, ...rest] = argv;
-  const o = { cmd };
-  for (let i = 0; i < rest.length; i++) {
-    const k = rest[i];
-    if (!k.startsWith('--')) throw new Error(`unexpected argument ${k}`);
-    o[k.slice(2)] = rest[i + 1] && !rest[i + 1].startsWith('--') ? rest[++i] : true;
-  }
-  return o;
-}
-
-const args = parseArgs(process.argv.slice(2));
 const creds = loadCredentials();
 const log = (...a) => console.log(redact(a.join(' '), creds));
 
@@ -56,18 +46,40 @@ function fail(msg) {
   process.exit(1);
 }
 
-if (!['prepare', 'capture'].includes(args.cmd)) fail('usage: capture.mjs prepare|capture [--root <dir>] [--frames ...] [--cases ...]');
+// Whatever escapes still goes through redact(): the token and the origin never reach stderr.
+process.on('uncaughtException', (e) => fail(`capture.mjs: ${e?.stack || e}`));
+process.on('unhandledRejection', (e) => fail(`capture.mjs: ${e?.stack || e}`));
+
+const USAGE = 'usage: capture.mjs prepare|capture [--root <dir>] [--frames s1,tablet] [--cases a,b] [--templates <file>]';
+let args;
+try {
+  args = parseArgs(process.argv.slice(2));
+} catch (e) {
+  fail(`${e.message}\n${USAGE}`);
+}
+if (!['prepare', 'capture'].includes(args.cmd)) fail(USAGE);
 if (!creds) fail('no Home Assistant credentials (set VITRO_PARITY_HA or create ~/.t3/glassworks-m1/vitro-parity/ha.json); the CI-safe part needs none: ./gradlew :engine-vitro:testDebugUnitTest');
 
 const corpusRoot = resolve(args.root || DEFAULT_CORPUS);
 const committed = corpusRoot === DEFAULT_CORPUS;
-const frames = JSON.parse(readFileSync(join(DEFAULT_CORPUS, 'frames.json'), 'utf8')).frames
-  .filter((f) => !args.frames || args.frames.split(',').includes(f.id));
+const allFrames = JSON.parse(readFileSync(join(DEFAULT_CORPUS, 'frames.json'), 'utf8')).frames;
+let frameIds;
+try {
+  frameIds = pick(args.frames, allFrames.map((f) => f.id), 'frame');
+} catch (e) {
+  fail(e.message);
+}
+const frames = allFrames.filter((f) => frameIds.has(f.id));
 
 function loadCases() {
-  const dir = join(corpusRoot, 'corpus');
-  const cases = readdirSync(dir).filter((f) => f.endsWith('.json')).sort().map((f) => ({ id: f.replace(/\.json$/, ''), ...JSON.parse(readFileSync(join(dir, f), 'utf8')) }));
-  return cases.filter((c) => !args.cases || args.cases.split(',').includes(c.id));
+  const cases = loadCasesAll();
+  let ids;
+  try {
+    ids = pick(args.cases, cases.map((c) => c.id), `case in ${join(corpusRoot, 'corpus')}:`);
+  } catch (e) {
+    fail(e.message);
+  }
+  return cases.filter((c) => ids.has(c.id));
 }
 
 /** The harness dashboard: one sections view per card case, one section holding the one card. */
@@ -114,10 +126,11 @@ function imagePaths(card) {
 
 /** Saves an image HA serves at [path] (fetched from [url], default the path) under assets/. */
 async function fetchAsset(path, url = path) {
-  if (committed && !path.startsWith('/static/')) fail(`${path}: the committed corpus may only show HA's own /static images`);
+  // Checked before the fetch: a path that leaves assets/ (or /static/, for the committed corpus) is never requested.
+  const out = assetDestination(join(corpusRoot, 'assets'), path, committed);
+  if (url !== path && !url.startsWith(path + '?')) throw new Error(`asset ${path}: fetch URL is another path`);
   const res = await fetch(creds.origin + url, { headers: { Authorization: `Bearer ${creds.token}` } });
   if (!res.ok) throw new Error(`asset ${path}: HTTP ${res.status}`);
-  const out = join(corpusRoot, 'assets', path.replace(/^\//, ''));
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, Buffer.from(await res.arrayBuffer()));
   log(`asset ${path}`);
@@ -269,6 +282,8 @@ async function newPage(browser, frame, dark, now, cardModUrl, tz) {
       static now() { return now; }
     }
     window.Date = FixedDate;
+    // Everything below is for HA's own page: never a frame a dashboard embeds (an iframe or webpage card).
+    if (window.top !== window || location.origin !== origin) return;
     try {
       localStorage.setItem('hassTokens', JSON.stringify({ access_token: token, token_type: 'Bearer', expires_in: 1e9, hassUrl: origin, clientId: origin + '/', expires: RealDate.now() + 1e12, refresh_token: 'x' }));
       localStorage.setItem('dockedSidebar', '"always_hidden"');
@@ -405,7 +420,8 @@ async function capture() {
             slots = info.slots;
             clip = { x: 0, y: 0, width: info.docW, height: info.docH };
           }
-          await page.screenshot({ path: join(outDir, `${c.id}.png`), clip, fullPage: true });
+          // Kept in memory until the JSON passes the checks: a failed case leaves no PNG behind.
+          const png = await page.screenshot({ clip, fullPage: true });
           const texts = [];
           for (const [i, s] of slots.entries()) for (const t of await page.evaluate(TEXTS_JS, s)) texts.push({ slot: i, ...roundRect(t) });
           // The states HA drew with, for the entities the case reads; the templates Vitro asks for, rendered now.
@@ -439,7 +455,8 @@ async function capture() {
             }
           }
           const text = scrubText(JSON.stringify(ref, null, 1), creds);
-          if (committed) checkDenylist(text, `refs/${frame.id}/${c.id}.json`);
+          if (committed) checkDenylist(text, `refs/${frame.id}/${c.id}`);
+          writeFileSync(join(outDir, `${c.id}.png`), png);
           writeFileSync(join(outDir, `${c.id}.json`), text + '\n');
           log(`${frame.id}/${c.id}: ${slots.length} card(s), ${texts.length} texts, ${Object.keys(caseStates).length} states, ${Object.keys(templates).length} templates${stable ? '' : ' (still moving)'} in ${Date.now() - t0} ms`);
         } catch (e) {
@@ -455,6 +472,10 @@ async function capture() {
   if (failures) fail(`${failures} capture(s) failed`);
 }
 
-if (args.cmd === 'prepare') await prepare();
-else await capture();
+try {
+  if (args.cmd === 'prepare') await prepare();
+  else await capture();
+} catch (e) {
+  fail(`capture.mjs ${args.cmd}: ${e?.stack || e}`);
+}
 process.exit(0);

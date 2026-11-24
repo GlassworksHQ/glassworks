@@ -34,7 +34,7 @@ while [ $# -gt 0 ]; do
     --cases) cases="$2"; shift ;;
     --update-baseline) update=1 ;;
     --out) out="$2"; shift ;;
-    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
