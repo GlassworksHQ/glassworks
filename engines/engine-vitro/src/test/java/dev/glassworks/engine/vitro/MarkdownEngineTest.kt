@@ -343,6 +343,44 @@ class MarkdownEngineTest {
     }
 
     @Test
+    fun horizontalStackInCardLaysOutMarkdownThatArrivesAfterTheFirstPass() {
+        // The tablet's Home card: a horizontal stack-in-card with a text-only Markdown (templated) and a chips card.
+        val templates = ArrayList<(String) -> Unit>()
+        val ctx = VitroCardContext(
+            context = activity, haBase = FakeHaServer.BASE, store = EntityStore(),
+            theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
+            accessToken = { FakeHaServer.TOKEN }, haConfig = { JSONObject() }, callService = { _, _, _, _ -> },
+            navigate = {}, openMoreInfo = {}, fetchHistory = { _, _, _ -> },
+            subscribeTemplate = { _, cb -> templates += cb; {} },
+        )
+        val cfg = card(
+            """{"type": "custom:stack-in-card", "mode": "horizontal", "card_mod": {"style": "ha-card { height: 100%; box-sizing: border-box; }"},
+               "cards": [
+                 {"type": "markdown", "text_only": true, "content": "###### Home\n## {{ 'All lights off' }}",
+                  "card_mod": {"style": {".": "ha-card { padding: 30px 20px 0; } ha-card ha-markdown { padding: 0; }",
+                    "ha-markdown$": "ha-markdown-element h2 { font-size: 24px; font-weight: 500; line-height: 1.5; margin: 2px 0 0; }"}}},
+                 {"type": "custom:mushroom-chips-card", "alignment": "end", "chips": [{"type": "template", "content": "All off"}]}]}""",
+        )
+        val stack = StackInCardView(ctx, cfg, { child: CardConfig ->
+            if (child.type == "markdown") MarkdownCardView(ctx, child).also { it.applyCardMod(child) }
+            else dev.glassworks.engine.vitro.cards.MushroomChipsCardView(ctx, child)
+        })
+        stack.applyCardMod(cfg)
+        val host = android.widget.FrameLayout(activity)
+        host.addView(stack, android.widget.FrameLayout.LayoutParams(400, 120))
+        activity.setContentView(host)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val md = stack.children[0] as MarkdownCardView
+        // An ancestor still holding a layout request from an earlier pass: requestLayout stops there.
+        (md.parent as View).forceLayout()
+        templates.forEach { it("###### Home\n## All lights off") }
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val text = md.body.all().filterIsInstance<TextView>().first { it.text.toString() == "All lights off" }
+        assertTrue("the Markdown body is laid out: ${md.body.height}", md.body.height > 0)
+        assertTrue("its text has a size: ${text.width}x${text.height}", text.width > 0 && text.height > 0)
+    }
+
+    @Test
     fun relativePositionNudgesWithoutMovingTheLine() {
         val icon = styled("##### <ha-icon icon=\"mdi:weather-fog\"></ha-icon> 9°", "ha-markdown-element h5 ha-icon { position: relative; top: -2px; }")
             .find("ha-icon")!!.style!!

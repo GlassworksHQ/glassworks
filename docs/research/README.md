@@ -222,6 +222,7 @@ This page is the index of every note. Notes about one device live with its frame
 | [bringup.md](bringup.md) | The method: how to break into a device step by step, and what the S1 taught us about FEL, U-Boot, fastboot and Android 10 |
 | [TEMPLATE.md](TEMPLATE.md) | Start a new note from this |
 | [microwakeword.md](microwakeword.md) | Replacing openWakeWord with microWakeWord: the Kotlin port of TFLite Micro's audio frontend, the models, test speech, and what is left for the panel |
+| [vitro-island-census.md](vitro-island-census.md) | Which dashboard cards still need a web island in Vitro: counts from our dashboards and a sample of 60 community ones, the top cards left, and whether to add native paths or spike a JS island engine (#798) |
 | [android-ca-roots.md](android-ca-roots.md) | Which CA roots Android 6 and 7.0 lack for GitHub's download hosts (ISRG Root X1), checked against AOSP's stores, and the bundled root that fixes the wake word download and updates there (#456) |
 | [gecko-turn.md](gecko-turn.md) | Gecko won't use a TURN server at a loopback IP or a relayed candidate on loopback (Chrome does): why the S1 never connected to Clarity's WebRTC camera, and the fix (#202) |
 | [ha-esphome-actions-events.md](ha-esphome-actions-events.md) | What a notification can carry over ESPHome each way: why `notify` takes one JSON `data` argument, and why a tapped button goes to HA as a bus event, not an event entity (#118) |

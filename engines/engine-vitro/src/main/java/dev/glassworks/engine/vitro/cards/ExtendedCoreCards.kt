@@ -694,9 +694,10 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         addRow.addView(field, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(56f)))
         col.addView(addRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
+        // The list starts 24 px under the field (measured: 8 px under the add row, then 16 to the first header).
         val list = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, ctx.px(8f), 0, ctx.px(8f))
+            setPadding(0, ctx.px(16f), 0, ctx.px(8f))
         }
         list.addView(activeHeader, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(48f)))
         list.addView(activeBox, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
