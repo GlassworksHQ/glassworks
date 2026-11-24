@@ -43,7 +43,7 @@ export function imagePaths(card) {
       if (/(image|picture)$/.test(k) && typeof v === 'string' && v.startsWith('/')) out.add(v.split('?')[0]);
       else walk(v);
     }
-    else if (typeof o === 'string') for (const m of o.matchAll(/<img\b[^>]*\bsrc=(["'])(\/[^"'?]*)\1?/gi)) out.add(m[2]);
+    else if (typeof o === 'string') for (const m of o.matchAll(/<img\b[^>]*?\ssrc\s*=\s*(["'])(\/[^"'?]*)/gi)) out.add(m[2]);
   };
   walk(card);
   return [...out];
