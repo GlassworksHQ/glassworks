@@ -4,13 +4,15 @@ import { describe, expect, it } from "vitest";
 import { SAMPLE_DASHBOARD, VITRO_COMPAT, auditDashboard, parseYaml } from "./vitroCompat";
 
 const repo = join(import.meta.dirname, "../../..");
-const kotlin = readFileSync(join(repo, "engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/model/LovelaceModel.kt"), "utf8");
+// The engine's supported card types live in compat/VitroSupport.kt since #801; CONTAINER_TYPES stays in the model.
+const vitroDir = join(repo, "engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro");
+const kotlin = readFileSync(join(vitroDir, "compat/VitroSupport.kt"), "utf8") + "\n" + readFileSync(join(vitroDir, "model/LovelaceModel.kt"), "utf8");
 const python = readFileSync(join(repo, ".agents/skills/vitro-native-dashboard/scripts/audit_vitro_dashboard.py"), "utf8");
 const published = JSON.parse(readFileSync(join(import.meta.dirname, "../../public/vitro-compat.json"), "utf8"));
 
 function kotlinSet(name: string): string[] {
-  const body = kotlin.match(new RegExp(`val ${name} = setOf\\(([\\s\\S]*?)\\n\\s*\\)`))?.[1];
-  if (!body) throw new Error(`${name} not found in LovelaceModel.kt`);
+  const body = kotlin.match(new RegExp(`val ${name}(?::[^=]+)? = setOf\\(([\\s\\S]*?)\\)\\n`))?.[1];
+  if (!body) throw new Error(`${name} not found in VitroSupport.kt or LovelaceModel.kt`);
   return [...body.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
 }
 
@@ -27,12 +29,12 @@ describe("the published compatibility manifest", () => {
   });
 
   it("lists the core types the Vitro engine draws natively, verbatim", () => {
-    expect(published.nativeCoreTypes).toEqual(kotlinSet("NATIVE_CORE_TYPES"));
+    expect(published.nativeCoreTypes).toEqual(kotlinSet("CORE_CARD_TYPES"));
     expect(published.nativeCoreTypes).toHaveLength(31);
   });
 
   it("lists the HACS cards the Vitro engine draws natively, verbatim", () => {
-    expect(published.nativeHacsTypes).toEqual(kotlinSet("NATIVE_HACS_TYPES"));
+    expect(published.nativeHacsTypes).toEqual(kotlinSet("HACS_CARD_TYPES"));
     expect(published.nativeHacsTypes).toHaveLength(26);
   });
 
