@@ -1,0 +1,17 @@
+{
+  "name": "@glassworks/vitro-parity",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Vitro parity harness, Home Assistant side: renders the corpus in HA's real frontend (headless Chromium) and writes the reference renders the Robolectric harness compares Vitro against (#793).",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.56.1"
+  }
+}

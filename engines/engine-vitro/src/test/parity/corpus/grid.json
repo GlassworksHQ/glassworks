@@ -1,0 +1,14 @@
+{
+  "title": "Grid card: three buttons in a row",
+  "span": 2,
+  "card": {
+    "type": "grid",
+    "columns": 3,
+    "square": false,
+    "cards": [
+      { "type": "button", "entity": "light.living_room_cactus", "name": "Cactus" },
+      { "type": "button", "entity": "light.window_accent", "name": "Window" },
+      { "type": "button", "entity": "light.led_wood_slats", "name": "Slats" }
+    ]
+  }
+}

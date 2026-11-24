@@ -1,0 +1,11 @@
+{
+  "title": "Vertical stack: heading, then two tiles",
+  "card": {
+    "type": "vertical-stack",
+    "cards": [
+      { "type": "heading", "heading": "Kitchen", "icon": "mdi:silverware-fork-knife" },
+      { "type": "tile", "entity": "cover.kitchen_blind" },
+      { "type": "tile", "entity": "sensor.kitchen_fridge_power", "name": "Fridge power" }
+    ]
+  }
+}

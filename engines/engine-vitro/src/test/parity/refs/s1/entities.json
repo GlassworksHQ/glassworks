@@ -1,0 +1,201 @@
+{
+ "case": "entities",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1795457280000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 340
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 323.8,
+   "type": "hui-entities-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Kitchen",
+   "x": 17,
+   "y": 21,
+   "w": 78.44,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Fridge Fridge temperature",
+   "x": 73,
+   "y": 77.59,
+   "w": 160.59,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "1.1 °C",
+   "x": 445.78,
+   "y": 77.59,
+   "w": 37.22,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Fridge Power",
+   "x": 73,
+   "y": 125.59,
+   "w": 81.73,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "61 W",
+   "x": 451.39,
+   "y": 125.59,
+   "w": 31.61,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Fridge Fridge door open",
+   "x": 73,
+   "y": 173.59,
+   "w": 147.72,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Closed",
+   "x": 439.97,
+   "y": 173.59,
+   "w": 43.03,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Guest mode",
+   "x": 73,
+   "y": 230.59,
+   "w": 75.5,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Window",
+   "x": 73,
+   "y": 278.59,
+   "w": 49.95,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "binary_sensor.kitchen_fridge_fridge_door_open": {
+   "s": "off",
+   "a": {
+    "device_class": "door",
+    "friendly_name": "Fridge Fridge door open"
+   },
+   "lc": 1795504918.0336182
+  },
+  "input_boolean.guest_mode": {
+   "s": "off",
+   "a": {
+    "editable": true,
+    "icon": "mdi:account-multiple",
+    "friendly_name": "Guest mode"
+   },
+   "lc": 1795504897.1536012
+  },
+  "light.window_accent": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "xy"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "hs_color": null,
+    "rgb_color": null,
+    "xy_color": null,
+    "off_with_transition": false,
+    "off_brightness": 254,
+    "icon": "mdi:window-open",
+    "friendly_name": "Window",
+    "supported_features": 40
+   },
+   "lc": 1795507611.0189574
+  },
+  "sensor.kitchen_fridge_fridge_temperature": {
+   "s": "1.11111111111111",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "icon": "mdi:thermometer",
+    "friendly_name": "Fridge Fridge temperature"
+   },
+   "lc": 1795504918.0331674
+  },
+  "sensor.kitchen_fridge_power": {
+   "s": "61.0",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "W",
+    "device_class": "power",
+    "friendly_name": "Fridge Power"
+   },
+   "lc": 1795511218.9105065
+  }
+ },
+ "templates": {}
+}

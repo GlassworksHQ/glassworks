@@ -171,9 +171,11 @@ class VitroCardContext(
     fun loadImage(rawUrl: String, done: (Bitmap?) -> Unit) {
         val fullUrl = absoluteUrl(rawUrl)
         val cacheable = !LIVE_PARAM.containsMatchIn(fullUrl)
+        pendingImageLoads.incrementAndGet()
+        val deliver = { bmp: Bitmap? -> main.post { try { done(bmp) } finally { pendingImageLoads.decrementAndGet() } } }
         if (cacheable) {
             IMAGE_CACHE.get(fullUrl)?.takeIf { !it.isRecycled }?.let { hit ->
-                main.post { done(hit) }
+                deliver(hit)
                 return
             }
         }
@@ -191,7 +193,7 @@ class VitroCardContext(
                 }
             }.getOrNull()
             if (bmp != null && cacheable) IMAGE_CACHE.put(fullUrl, bmp)
-            main.post { done(bmp) }
+            deliver(bmp)
         }
     }
 
@@ -238,6 +240,12 @@ class VitroCardContext(
     }
 
     companion object {
+        /**
+         * [loadImage] calls whose bitmap hasn't reached its card yet. A testability hook: the parity harness waits
+         * for zero before it draws (#793), so a late image can't leave a card half drawn.
+         */
+        internal val pendingImageLoads = java.util.concurrent.atomic.AtomicInteger()
+
         /** Domains HA's `toggle` action (and a tile's icon) can switch. */
         val TOGGLE_DOMAINS = setOf(
             "light", "switch", "fan", "input_boolean", "cover", "lock",

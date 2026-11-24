@@ -1,0 +1,15 @@
+{
+  "title": "Entities: title, sensors, a toggle row, a divider",
+  "card": {
+    "type": "entities",
+    "title": "Kitchen",
+    "entities": [
+      "sensor.kitchen_fridge_fridge_temperature",
+      "sensor.kitchen_fridge_power",
+      "binary_sensor.kitchen_fridge_fridge_door_open",
+      { "type": "divider" },
+      "input_boolean.guest_mode",
+      { "entity": "light.window_accent", "name": "Window" }
+    ]
+  }
+}

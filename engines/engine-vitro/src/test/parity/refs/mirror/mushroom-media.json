@@ -1,0 +1,77 @@
+{
+ "case": "mushroom-media",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1795457280000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 72
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 56,
+   "type": "mushroom-media-player-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Living Room",
+   "x": 56,
+   "y": 12,
+   "w": 78.83,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Idle",
+   "x": 56,
+   "y": 31,
+   "w": 20.91,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "media_player.living_room_living_room": {
+   "s": "idle",
+   "a": {
+    "group_members": [
+     "media_player.living_room_living_room"
+    ],
+    "volume_level": 0.31,
+    "is_volume_muted": false,
+    "media_content_type": "music",
+    "shuffle": false,
+    "repeat": "off",
+    "device_class": "speaker",
+    "friendly_name": "Sonos Living Room",
+    "supported_features": 8321599
+   },
+   "lc": 1795504932.6927228
+  }
+ },
+ "templates": {}
+}

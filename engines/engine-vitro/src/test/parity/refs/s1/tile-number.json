@@ -1,0 +1,99 @@
+{
+ "case": "tile-number",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1795457280000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Pre-cool target",
+   "x": 56,
+   "y": 17.61,
+   "w": 94.81,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "22.0 °C",
+   "x": 56,
+   "y": 37,
+   "w": 41.44,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "22",
+   "x": 106.06,
+   "y": 79,
+   "w": 15.92,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "°C",
+   "x": 121.98,
+   "y": 79,
+   "w": 17.95,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "input_number.pre_cool_target": {
+   "s": "22.0",
+   "a": {
+    "min": 18,
+    "max": 26,
+    "step": 0.5,
+    "mode": "box",
+    "initial": null,
+    "editable": true,
+    "unit_of_measurement": "°C",
+    "icon": "mdi:thermometer",
+    "friendly_name": "Pre-cool target"
+   },
+   "lc": 1795504897.1546495
+  }
+ },
+ "templates": {}
+}

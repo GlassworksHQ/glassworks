@@ -1,0 +1,11 @@
+{
+  "title": "Mushroom chips: entity, template and weather chips",
+  "card": {
+    "type": "custom:mushroom-chips-card",
+    "chips": [
+      { "type": "entity", "entity": "sensor.living_room_airdot_living_room_temperature" },
+      { "type": "template", "icon": "mdi:water-percent", "icon_color": "blue", "content": "{{ states('sensor.living_room_airdot_living_room_humidity') | float(0) | round(0) | int }}%" },
+      { "type": "weather", "entity": "weather.forecast_home", "show_conditions": true, "show_temperature": true }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "title": "Thermostat: the AC, off",
+  "card": { "type": "thermostat", "entity": "climate.ac" }
+}

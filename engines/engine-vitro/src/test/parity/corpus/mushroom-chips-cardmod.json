@@ -1,0 +1,12 @@
+{
+  "title": "Mushroom chips with card-mod pill styling (the real dashboards' alert chip)",
+  "theme": "Vitro Glass",
+  "card": {
+    "type": "custom:mushroom-chips-card",
+    "alignment": "start",
+    "chips": [
+      { "type": "template", "icon": "mdi:circle", "content": "CO2 {{ states('sensor.living_room_airdot_living_room_co2') | int(0) }}", "icon_color": "#34d399" }
+    ],
+    "card_mod": { "style": "ha-card { padding: 4px 0 0 8px; --chip-height: 32px; --chip-border-radius: 99px; --chip-background: rgba(52,211,153,0.16); --primary-text-color: #34d399; }" }
+  }
+}
