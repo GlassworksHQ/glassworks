@@ -175,7 +175,48 @@ class VitroCardContext(
      * Images are downsampled to at most [MAX_IMAGE_DIM] px on the long edge and decoded as RGB_565, and kept
      * in a shared 12 MB LRU cache. URLs carrying a `t=` query parameter (live camera polls) are never cached.
      */
-    fun loadImage(rawUrl: String, done: (Bitmap?) -> Unit) {
+    fun loadImage(rawUrl: String, owner: View? = null, done: (Bitmap?) -> Unit) {
+        if (owner == null) fetchImage(rawUrl, done) else whenShown(owner) { fetchImage(rawUrl, done) }
+    }
+
+    /**
+     * Runs [action] once [view] is on screen, as HA's page never loads a hidden card's images: now when it's shown,
+     * at the first frame that shows it when it's attached but hidden (its visibility conditions, a cached view that
+     * isn't the current one). A view not attached yet decides on the next turn of the main loop (the build attaches
+     * a card in the turn that creates it); one never attached (built on its own) runs it then.
+     */
+    private fun whenShown(view: View, action: () -> Unit) {
+        fun decide() = if (view.isAttachedToWindow && !view.isShown) awaitShown(view, action) else action()
+        if (view.isAttachedToWindow) decide() else main.post(::decide)
+    }
+
+    private fun awaitShown(view: View, action: () -> Unit) {
+        val observer = view.viewTreeObserver
+        lateinit var detach: View.OnAttachStateChangeListener
+        val preDraw = object : android.view.ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                if (view.isShown) {
+                    stop()
+                    action()
+                }
+                return true
+            }
+
+            fun stop() {
+                if (observer.isAlive) observer.removeOnPreDrawListener(this)
+                view.removeOnAttachStateChangeListener(detach)
+            }
+        }
+        // A card taken off screen (its view rebuilt) never shows: its wait ends with it.
+        detach = object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) = Unit
+            override fun onViewDetachedFromWindow(v: View) = preDraw.stop()
+        }
+        observer.addOnPreDrawListener(preDraw)
+        view.addOnAttachStateChangeListener(detach)
+    }
+
+    private fun fetchImage(rawUrl: String, done: (Bitmap?) -> Unit) {
         val fullUrl = absoluteUrl(rawUrl)
         val cacheable = !LIVE_PARAM.containsMatchIn(fullUrl)
         pendingImageLoads.incrementAndGet()

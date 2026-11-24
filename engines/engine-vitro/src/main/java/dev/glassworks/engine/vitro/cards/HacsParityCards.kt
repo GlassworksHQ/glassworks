@@ -229,7 +229,7 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
             if (round) shape = GradientDrawable.OVAL else cornerRadius = ctx.px(8f).toFloat()
             setColor(CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.08f))
         }
-        ctx.loadImage(url) { bmp ->
+        ctx.loadImage(url, this) { bmp ->
             if (pictureUrl != url) return@loadImage
             shapePicture.setImageBitmap(bmp)
             shapePicture.visibility = if (bmp != null) VISIBLE else GONE
@@ -962,7 +962,7 @@ class MiniMediaPlayerCardView(ctx: VitroCardContext, private val config: CardCon
         thumb.setImageDrawable(null); thumb.visibility = GONE; iconView.visibility = VISIBLE
         iconBox.background = null
         if (url == null) return
-        ctx.loadImage(url) { bmp ->
+        ctx.loadImage(url, this) { bmp ->
             if (artUrl != url) return@loadImage
             if (bmp == null) return@loadImage
             if (artworkMode == "default") {

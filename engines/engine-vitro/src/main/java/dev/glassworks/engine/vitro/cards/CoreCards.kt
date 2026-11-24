@@ -1201,7 +1201,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         bindTpl("picture", "") { v ->
             pictureUrl = v
             refreshAvatar()
-            if (v.isNotBlank()) ctx.loadImage(v) { bmp -> if (bmp != null && pictureUrl == v) picture.setImageDrawable(CircleCropDrawable(bmp)) }
+            if (v.isNotBlank()) ctx.loadImage(v, this) { bmp -> if (bmp != null && pictureUrl == v) picture.setImageDrawable(CircleCropDrawable(bmp)) }
         }
         bindTpl("badge_icon", "") { v -> badgeIconName = v; refreshBadge() }
         bindTpl("badge_color", "") { v -> badgeColorValue = MushroomColors.parse(v, ctx.theme); refreshBadge() }
@@ -2521,7 +2521,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
 
         val staticImage = config.raw.optString("image", "").ifEmpty { null }
         if (staticImage != null) {
-            ctx.loadImage(staticImage) { bmp -> if (bmp != null) showBitmap(bmp) }
+            ctx.loadImage(staticImage, this) { bmp -> if (bmp != null) showBitmap(bmp) }
         }
         // HA's picture-glance labels its bar with `title`; the other picture cards use `name`.
         val label = if (config.type == "picture-glance") config.title ?: config.name else config.name
@@ -2539,7 +2539,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 img.setImageDrawable(null)
                 return
             }
-            ctx.loadImage(pic) { bmp -> if (bmp != null && generation == pictureGeneration) showBitmap(bmp) }
+            ctx.loadImage(pic, this) { bmp -> if (bmp != null && generation == pictureGeneration) showBitmap(bmp) }
         }
         if (staticImage == null && pictureSource != null && pictureSource != eid) {
             observe(pictureSource) { s -> showPicture(s?.entityPicture) }
@@ -3272,7 +3272,7 @@ class MediaControlCardView(ctx: VitroCardContext, config: CardConfig) : CardSurf
             scrim.visibility = GONE
             return
         }
-        ctx.loadImage(url) { bmp ->
+        ctx.loadImage(url, this) { bmp ->
             if (artUrl != url) return@loadImage
             if (bmp != null) {
                 artwork.setImageBitmap(bmp)
