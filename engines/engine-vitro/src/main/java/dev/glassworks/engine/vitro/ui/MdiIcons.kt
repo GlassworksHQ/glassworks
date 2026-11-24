@@ -773,8 +773,11 @@ class MdiIconView(context: Context) : View(context) {
 
     fun setIcon(name: String, color: Int = tintColor) {
         iconName = name
+        // Read before the lookup: a catalog that finishes during it still redraws this view (redrawWhenReady
+        // re-checks), and one already loaded costs no registration.
+        val mayBeStandIn = MdiIcons.isLoading
         iconPath = MdiIcons.pathFor(name)
-        if (MdiIcons.isLoading) MdiIcons.redrawWhenReady(this)
+        if (mayBeStandIn) MdiIcons.redrawWhenReady(this)
         tintColor = color
         paint.color = color
         invalidate()

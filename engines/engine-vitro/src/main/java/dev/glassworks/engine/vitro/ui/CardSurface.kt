@@ -356,6 +356,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     private var baseBackground: android.graphics.drawable.Drawable? = null
     private var baseClip = false
     private var basePadding: IntArray? = null
+    private var baseChildPadding: IntArray? = null
     private var restyled = false
 
     /** Parses one rendered `card_mod` CSS string and restyles the surface from it. */
@@ -400,16 +401,26 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         }
         val pad = mod.paddingInsets ?: mod.paddingDp?.let { dev.glassworks.engine.vitro.theme.EdgeInsetsDp(it, it, it, it) }
         if (pad != null) {
-            if (basePadding == null) basePadding = intArrayOf(paddingLeft, paddingTop, paddingRight, paddingBottom)
+            if (basePadding == null) {
+                basePadding = intArrayOf(paddingLeft, paddingTop, paddingRight, paddingBottom)
+                // The padding clearDefaultInnerPadding takes from a sole child, to give back with the outer one.
+                baseChildPadding = (getChildAt(0) as? android.view.ViewGroup)?.takeIf { childCount == 1 }
+                    ?.let { intArrayOf(it.paddingLeft, it.paddingTop, it.paddingRight, it.paddingBottom) }
+            }
             setPadding(ctx.px(pad.left), ctx.px(pad.top), ctx.px(pad.right), ctx.px(pad.bottom))
             clearDefaultInnerPadding()
         } else {
             basePadding?.let { setPadding(it[0], it[1], it[2], it[3]) }
+            baseChildPadding?.let { p ->
+                (getChildAt(0) as? android.view.ViewGroup)?.takeIf { childCount == 1 }?.setPadding(p[0], p[1], p[2], p[3])
+            }
             basePadding = null
+            baseChildPadding = null
         }
         when {
             mod.opacity != null -> alpha = mod.opacity.coerceIn(0f, 1f)
-            previous.opacity != null -> alpha = 1f // the template dropped its `opacity`
+            // The template dropped its `opacity`: back to the theme's card opacity, or opaque.
+            previous.opacity != null -> alpha = ctx.theme.cardMod.opacity?.coerceIn(0f, 1f) ?: 1f
         }
         onCardModApplied(mod)
     }

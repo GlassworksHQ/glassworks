@@ -326,6 +326,8 @@ class MarkdownEngineTest {
     @Test
     fun markdownKeepsParenthesesInImageDestinationsAndIndentedFencesInCode() {
         assertTrue(MarkedLite.toHtml("![Plan](/local/plan(v2).png)").contains("src=\"/local/plan(v2).png\""))
+        // A `<…>` destination takes its parentheses as they are, balanced or not.
+        assertTrue(MarkedLite.toHtml("![Plan](</local/plan(v2.png>)").contains("src=\"/local/plan(v2.png\""))
         val html = MarkedLite.toHtml("```\ncode\n    ```\nstill code\n```")
         assertTrue(html, html.contains("still code"))
         assertTrue(html, html.indexOf("still code") < html.indexOf("</code>"))

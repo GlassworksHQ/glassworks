@@ -606,9 +606,12 @@ object ThemeResolver {
         val cleaned = JINJA_PATTERN.replace(CSS_COMMENT.replace(css, " "), " ")
         if (cleaned.isBlank()) return CardModStyle()
         val (decls, otherRules) = hostDeclarations(cleaned)
-        val custom = Regex("""(?:^|[;\n{])\s*--([\w-]+)\s*:\s*([^;\n]+)""").findAll(decls)
-            .associate { it.groupValues[1] to resolveValue(it.groupValues[2].trim(), vars, 0) }
-        // The card's own custom properties come before the theme's, as they would on its ha-card.
+        val rawCustom = Regex("""(?:^|[;\n{])\s*--([\w-]+)\s*:\s*([^;\n]+)""").findAll(decls)
+            .associate { it.groupValues[1] to it.groupValues[2].trim() }
+        // The card's own custom properties come before the theme's, as they would on its ha-card, and they may refer
+        // to each other (`--inset: var(--spacing)`): resolved against that whole scope.
+        val rawScope = if (rawCustom.isEmpty()) vars else vars + rawCustom
+        val custom = rawCustom.mapValues { resolveValue(it.value, rawScope, 0) }
         val scope = if (custom.isEmpty()) vars else vars + custom
         fun prop(name: String): String? =
             Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;!\n]+)""", RegexOption.IGNORE_CASE).findAll(decls)
@@ -828,7 +831,12 @@ object ThemeResolver {
         left: String?,
     ): EdgeInsetsDp? {
         val base = shorthand?.let { raw ->
-            val vals = splitTopLevelSpaces(raw).mapNotNull { parseDimensionDp(it, -1f).takeIf { v -> v >= 0f } }
+            // Positions name the sides, so one value Vitro can't take (a percentage, a negative length) rejects the
+            // whole shorthand instead of shifting the others; `auto` keeps its place as 0.
+            val vals = splitTopLevelSpaces(raw).map { tok ->
+                if (tok.trim().equals("auto", ignoreCase = true)) 0f
+                else parseDimensionDp(tok, -1f).takeIf { v -> v >= 0f } ?: return@let null
+            }
             when (vals.size) {
                 0 -> null
                 1 -> EdgeInsetsDp(vals[0], vals[0], vals[0], vals[0])

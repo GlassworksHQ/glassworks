@@ -590,4 +590,19 @@ class ThemeResolverTest {
         assertEquals(4f, resolveWith("""{"masonry-view-card-margin": "0px"}""").cardGapDp, 0.001f)
         assertEquals(24f, resolveWith("""{"masonry-view-card-margin": "60px"}""").cardGapDp, 0.001f)
     }
+
+    @Test
+    fun aShorthandWithAValueVitroCantTakeIsDroppedWholeNotShifted() {
+        val all = ThemeResolver.parseCardMod("ha-card { padding: 4px 8px 12px 16px; }").paddingInsets!!
+        assertEquals(listOf(16f, 4f, 8f, 12f), listOf(all.left, all.top, all.right, all.bottom))
+        // `10%` can't become dp: the whole padding stays unapplied rather than read as top 4, right 12, …
+        assertEquals(null, ThemeResolver.parseCardMod("ha-card { padding: 4px 10% 12px 16px; }").paddingInsets)
+    }
+
+    @Test
+    fun cardCustomPropertiesReferToEachOther() {
+        val mod = ThemeResolver.parseCardMod("ha-card { --spacing: 16px; --inset: var(--spacing, 4px); padding: var(--inset); }")
+        assertEquals(16f, mod.paddingInsets!!.top, 0.001f)
+        assertEquals("16px", mod.customProperties["inset"])
+    }
 }

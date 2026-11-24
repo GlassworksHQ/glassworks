@@ -1034,7 +1034,7 @@ class VitroView(
                 }
                 if (ticks) {
                     update() // The clock may have moved on while detached.
-                    addPeriodicCheck(update)
+                    addPeriodicCheck(update, secondBoundaries(conds))
                 }
             }
             override fun onViewDetachedFromWindow(v: View) {
@@ -1087,22 +1087,57 @@ class VitroView(
 
     // ---- Periodic visibility re-checks (`time` and `user` conditions) ----
 
-    private fun addPeriodicCheck(check: () -> Unit) {
+    /** Seconds of the day that `time` conditions start or end at off the minute (`08:00:30`), per check. */
+    private val checkBoundaries = HashMap<() -> Unit, List<Int>>()
+
+    private fun addPeriodicCheck(check: () -> Unit, boundaries: List<Int> = emptyList()) {
         periodicChecks += check
+        if (boundaries.isNotEmpty()) checkBoundaries[check] = boundaries
         if (isAttachedToWindow) scheduleTick()
     }
 
     private fun removePeriodicCheck(check: () -> Unit) {
         periodicChecks -= check
+        checkBoundaries -= check
         if (periodicChecks.isEmpty()) removeCallbacks(periodicTick)
     }
 
-    /** Next tick just after the coming minute boundary, so `after: "07:00"` flips at 07:00, not up to 60 s late. */
+    /** The `time` bounds in [conds] (nested ones too) that don't fall on a minute: the minute tick would miss them. */
+    private fun secondBoundaries(conds: List<VisibilityCondition>): List<Int> {
+        val out = ArrayList<Int>()
+        fun walk(c: VisibilityCondition) {
+            when (c) {
+                is VisibilityCondition.Time -> listOfNotNull(c.after, c.before).filterTo(out) { it % 60 != 0 }
+                is VisibilityCondition.And -> c.conditions.forEach(::walk)
+                is VisibilityCondition.Or -> c.conditions.forEach(::walk)
+                is VisibilityCondition.Not -> c.conditions.forEach(::walk)
+                else -> Unit
+            }
+        }
+        conds.forEach(::walk)
+        return out
+    }
+
+    /**
+     * Next tick just after the coming minute boundary, so `after: "07:00"` flips at 07:00, not up to 60 s late; or
+     * sooner, just after a bound with seconds (`08:00:30`) when one comes first.
+     */
     private fun scheduleTick() {
         removeCallbacks(periodicTick)
         if (periodicChecks.isEmpty()) return
         val now = System.currentTimeMillis()
-        postDelayed(periodicTick, PERIODIC_CHECK_MS - now % PERIODIC_CHECK_MS + 250L)
+        var delay = PERIODIC_CHECK_MS - now % PERIODIC_CHECK_MS + 250L
+        if (checkBoundaries.isNotEmpty()) {
+            val cal = java.util.Calendar.getInstance().apply { timeInMillis = now }
+            val nowSec = VisibilityCondition.currentLocalSeconds()
+            val msInSecond = cal.get(java.util.Calendar.MILLISECOND)
+            for (b in checkBoundaries.values.flatten()) {
+                val ahead = ((b - nowSec) % 86_400 + 86_400) % 86_400
+                val ms = (if (ahead == 0) 86_400 else ahead) * 1_000L - msInSecond + 250L
+                if (ms in 1 until delay) delay = ms
+            }
+        }
+        postDelayed(periodicTick, delay)
     }
 
     override fun onAttachedToWindow() {

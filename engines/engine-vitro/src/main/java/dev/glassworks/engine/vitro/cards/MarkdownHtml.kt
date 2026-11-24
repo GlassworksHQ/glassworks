@@ -481,11 +481,18 @@ object MarkedLite {
         var close = -1
         var parens = 0
         var k = j + 2
+        while (k < to && (s[k] == ' ' || s[k] == '\t')) k++
+        if (k < to && s[k] == '<') {
+            // `<…>` destination: anything up to `>` is the URL (parentheses too), then the `)` that ends the link.
+            val gt = s.indexOf('>', k).takeIf { it in 0 until to } ?: return null
+            k = gt + 1
+            parens = -1 // no balancing after the `<…>`: the next `)` closes
+        }
         while (k < to) {
             when (s[k]) {
                 '\\' -> k++
-                '(' -> parens++
-                ')' -> if (parens == 0) { close = k; break } else parens--
+                '(' -> if (parens >= 0) parens++
+                ')' -> if (parens <= 0) { close = k; break } else parens--
             }
             k++
         }
