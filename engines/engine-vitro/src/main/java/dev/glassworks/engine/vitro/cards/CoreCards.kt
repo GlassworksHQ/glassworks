@@ -352,8 +352,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         }
         if ("select-options" in featureTypes && entityId != null) {
             // HA 2026's select feature: a filled dropdown box showing the current option; tap for the list.
-            // ha-control-select-menu: a button's 13.33 px text, 20 px in, a 20 px arrow 10 px from the end.
-            val current = textView(ctx, 40f / 3f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
+            // ha-control-select-menu: the value (p.value) is 14 px, 20 px in, centered; a 20 px arrow 10 px from the end.
+            val current = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             }
@@ -368,6 +368,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 addView(MdiIconView(ctx.context).apply { setIcon("mdi:menu-down", ctx.theme.primaryTextColor) },
                     LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)).apply { marginStart = ctx.px(10f) })
                 setOnClickListener { v -> showSelectMenu(v, entityId) }
+                // HA's visually hidden "Option" label, for TalkBack.
+                contentDescription = "Option"
             }
             selectBox = current
             box.tag = FEATURE_TAG + "select-options"
