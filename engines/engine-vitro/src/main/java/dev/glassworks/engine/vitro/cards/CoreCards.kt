@@ -2478,8 +2478,11 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     private val aspect: Float = parseAspectRatio(config.raw.opt("aspect_ratio")?.toString())
     /** `state_filter`: a CSS filter per state. */
     private val stateFilters: JSONObject? = config.raw.optJSONObject("state_filter")
-    /** Without `aspect_ratio`, HA's picture-entity takes the image's own shape once it has loaded. */
-    private val naturalAspect = config.type == "picture-entity" && !config.raw.has("aspect_ratio")
+    /**
+     * Without `aspect_ratio`, hui-image is the image at full width and its own shape once it has loaded: picture,
+     * picture-entity and picture-glance alike.
+     */
+    private val naturalAspect = !config.raw.has("aspect_ratio")
     private var imageAspect: Float? = null
 
     /**
@@ -2523,15 +2526,19 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             }
             addView(bar, LayoutParams(MATCH_PARENT, ctx.px(48f), Gravity.BOTTOM))
         } else if (config.type != "picture" && (showName || showState || glanceEntities.isNotEmpty())) {
+            // hui-picture-glance-card's .box: rgba(0,0,0,.3), 4 px 8 px padding, 48 px tall; the title 16 px / 500 on
+            // a 32 px line 8 px in; the entities' 40 px icon buttons side by side at the end.
+            caption.textSize = ctx.scaledSp(16f)
+            caption.typeface = VitroFonts.typeface(ctx.context, Inter.MEDIUM, ctx.scaledSp(16f))
             val bar = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setBackgroundColor(0x88000000.toInt())
-                setPadding(ctx.px(12f), ctx.px(8f), ctx.px(8f), ctx.px(8f))
+                setBackgroundColor(0x4D000000)
+                setPadding(ctx.px(16f), ctx.px(4f), ctx.px(8f), ctx.px(4f))
+                minimumHeight = ctx.px(48f)
                 addView(caption, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             }
             if (glanceEntities.isNotEmpty()) {
-                bar.setPadding(ctx.px(12f), ctx.px(2f), ctx.px(4f), ctx.px(2f))
                 bar.addView(buildGlanceIcons(glanceEntities), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
             }
             addView(bar, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
@@ -2587,7 +2594,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     private fun buildGlanceIcons(entries: List<EntityRowConfig>): LinearLayout = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL or Gravity.END
-        entries.forEachIndexed { index, entry ->
+        entries.forEach { entry ->
             val icon = MdiIconView(ctx.context)
             val target = FrameLayout(ctx.context).apply {
                 isClickable = true
@@ -2597,9 +2604,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 setOnClickListener { ctx.performAction(glanceTapAction(entry), entry.entity) }
                 bindHoldAction(ctx, entry.holdAction ?: ActionConfig("more-info"), entry.entity)
             }
-            addView(target, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)).apply {
-                if (index > 0) marginStart = ctx.px(4f)
-            })
+            addView(target, LinearLayout.LayoutParams(ctx.px(40f), ctx.px(40f)))
             observe(entry.entity) { s ->
                 val name = s?.friendlyName ?: entry.entity
                 target.contentDescription = entry.name ?: name
