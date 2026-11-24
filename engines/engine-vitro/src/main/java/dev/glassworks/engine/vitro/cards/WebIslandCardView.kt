@@ -247,6 +247,21 @@ class WebIslandCardView(
          * Builds the ~5 KB self-contained Lovelace card Micro-Host HTML for [config].
          * Runs inside GeckoView over [VitroIslandServer] with zero HA SPA overhead.
          */
+        /**
+         * `hass.user` for an island: the signed-in HA user's `id`, `name`, `is_admin` and `is_owner` (nothing else,
+         * so no credentials reach card code), or null while `auth/current_user` hasn't answered, which leaves the
+         * island on its anonymous `{ id: 'vitro', name: 'Panel' }` user.
+         */
+        fun islandUser(user: JSONObject): JSONObject? {
+            val id = user.optString("id", "")
+            if (id.isEmpty()) return null
+            return JSONObject()
+                .put("id", id)
+                .put("name", user.optString("name", "").ifEmpty { "Panel" })
+                .put("is_admin", user.optBoolean("is_admin", false))
+                .put("is_owner", user.optBoolean("is_owner", false))
+        }
+
         fun buildIslandHtml(
             ctx: VitroCardContext,
             config: CardConfig,
@@ -266,6 +281,7 @@ class WebIslandCardView(
             }
             val cfgJson = config.raw.toString()
             val haCfgJson = ctx.haConfig().toString()
+            val haUserJson = islandUser(ctx.haUser())?.toString() ?: "null"
             val tokenJson = JSONObject.quote(ctx.accessToken().orEmpty())
             val heightRule = if (fillViewport) "height: 100vh; width: 100vw;" else ""
             return """
@@ -388,6 +404,7 @@ $resourceScripts
 <script type="module">
 const rawStates = {};
 const haConfig = $haCfgJson;
+const haUser = $haUserJson;
 const accessToken = $tokenJson;
 const wsPending = new Map();
 const outQueue = [];
@@ -508,6 +525,7 @@ const hassBase = {
   formatEntityAttributeName(stateObj, attr) { return vitroTitle(attr); },
   connection: { sendMessagePromise: (msg) => vitroCallWS(msg) },
 };
+if (haUser) hassBase.user = haUser;
 
 // A new object on every patch: Lit cards compare hass by reference to decide whether to re-render.
 function makeHass() {

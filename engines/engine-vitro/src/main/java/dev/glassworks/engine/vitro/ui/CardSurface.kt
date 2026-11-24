@@ -30,6 +30,7 @@ import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.LovelaceResource
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
 import org.json.JSONObject
+import org.json.JSONTokener
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
@@ -55,6 +56,8 @@ class VitroCardContext(
     val openIslandPage: ((url: String) -> Page?)? = null,
     /** One-shot `weather/subscribe_forecast` read (`daily`, `hourly` or `twice_daily`). */
     val fetchForecast: (entityId: String, forecastType: String, done: (List<ForecastDay>) -> Unit) -> Unit = { _, _, _ -> },
+    /** HA's `auth/current_user` result (`id`, `name`, `is_admin`, `is_owner`), empty until it arrives. */
+    val haUser: () -> JSONObject = { JSONObject() },
 ) {
     val dp: Float = context.resources.displayMetrics.density
     val main: Handler = Handler(Looper.getMainLooper())
@@ -125,11 +128,7 @@ class VitroCardContext(
      * in a shared 12 MB LRU cache. URLs carrying a `t=` query parameter (live camera polls) are never cached.
      */
     fun loadImage(rawUrl: String, done: (Bitmap?) -> Unit) {
-        val fullUrl = when {
-            rawUrl.startsWith("http://") || rawUrl.startsWith("https://") -> rawUrl
-            rawUrl.startsWith("/") -> haBase.trimEnd('/') + rawUrl
-            else -> haBase.trimEnd('/') + "/" + rawUrl
-        }
+        val fullUrl = absoluteUrl(rawUrl)
         val cacheable = !LIVE_PARAM.containsMatchIn(fullUrl)
         if (cacheable) {
             IMAGE_CACHE.get(fullUrl)?.takeIf { !it.isRecycled }?.let { hit ->
@@ -153,6 +152,41 @@ class VitroCardContext(
             if (bmp != null && cacheable) IMAGE_CACHE.put(fullUrl, bmp)
             main.post { done(bmp) }
         }
+    }
+
+    /**
+     * `GET`s an HA REST path (e.g. `/api/calendars/calendar.home?start=…&end=…`) with the panel's bearer token on
+     * the shared daemon pool and delivers the parsed [JSONObject] / [JSONArray] on the main thread, or null on any
+     * failure (network, non-2xx, bad JSON).
+     */
+    fun fetchJson(path: String, done: (Any?) -> Unit) {
+        val fullUrl = absoluteUrl(path)
+        IMAGE_POOL.execute {
+            val parsed = runCatching {
+                val conn = (URL(fullUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 5_000
+                    readTimeout = 8_000
+                    setRequestProperty("Accept", "application/json")
+                    accessToken()?.takeIf { it.isNotEmpty() }?.let { setRequestProperty("Authorization", "Bearer $it") }
+                }
+                try {
+                    if (conn.responseCode in 200..299) {
+                        JSONTokener(conn.inputStream.bufferedReader().use { it.readText() }).nextValue()
+                    } else {
+                        null
+                    }
+                } finally {
+                    conn.disconnect()
+                }
+            }.getOrNull()
+            main.post { done(parsed) }
+        }
+    }
+
+    private fun absoluteUrl(raw: String): String = when {
+        raw.startsWith("http://") || raw.startsWith("https://") -> raw
+        raw.startsWith("/") -> haBase.trimEnd('/') + raw
+        else -> haBase.trimEnd('/') + "/" + raw
     }
 
     companion object {

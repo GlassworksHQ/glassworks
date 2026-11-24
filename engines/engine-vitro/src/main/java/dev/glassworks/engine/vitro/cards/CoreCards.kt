@@ -4,17 +4,23 @@
 
 package dev.glassworks.engine.vitro.cards
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
+import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.text.format.DateFormat
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.PathInterpolator
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.FrameLayout
@@ -42,6 +48,60 @@ import kotlin.math.roundToInt
 /** Inter's semibold weight (the variable font takes any weight; core's [Inter] names only up to medium). */
 private const val INTER_SEMIBOLD = 600
 
+/**
+ * HA 2026's motion tokens (Material Web): the standard ease for state changes, the decelerate ease for things
+ * entering and the accelerate ease for things leaving.
+ */
+internal object HaMotion {
+    fun standard() = PathInterpolator(0.4f, 0f, 0.2f, 1f)
+    fun decelerate() = PathInterpolator(0f, 0f, 0.2f, 1f)
+    fun accelerate() = PathInterpolator(0.4f, 0f, 1f, 1f)
+
+    /** Straight per-channel ARGB blend from [from] (t = 0) to [to] (t = 1). */
+    fun lerpColor(from: Int, to: Int, t: Float): Int {
+        if (t <= 0f) return from
+        if (t >= 1f) return to
+        fun ch(shift: Int): Int {
+            val a = (from ushr shift) and 0xFF
+            val b = (to ushr shift) and 0xFF
+            return ((a + (b - a) * t).roundToInt() and 0xFF) shl shift
+        }
+        return ch(24) or ch(16) or ch(8) or ch(0)
+    }
+
+    fun lerp(from: Float, to: Float, t: Float): Float = from + (to - from) * t
+
+    /**
+     * Runs [onFrame] with 0 → 1 over [durationMs] and returns the animator, or calls `onFrame(1f)` straight away
+     * (and returns null) when [view] isn't on screen, so binds before attach never animate.
+     */
+    fun run(view: View, durationMs: Long, onFrame: (Float) -> Unit): ValueAnimator? {
+        if (!view.isAttachedToWindow) {
+            onFrame(1f)
+            return null
+        }
+        return ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = durationMs
+            interpolator = standard()
+            addUpdateListener { onFrame(it.animatedValue as Float) }
+            start()
+        }
+    }
+}
+
+/**
+ * HA's `mwc-ripple` / `ha-ripple`: a Material ripple clipped to [cornerRadiusPx] (999 for pills and circles), set
+ * as the view's foreground so it draws over whatever background the view already has. Cards never scale on press.
+ */
+internal fun applyHaRipple(view: View, cornerRadiusPx: Float, isDark: Boolean) {
+    val mask = GradientDrawable().apply {
+        cornerRadius = cornerRadiusPx
+        setColor(Color.WHITE)
+    }
+    val tint = ColorStateList.valueOf(if (isDark) 0x22FFFFFF else 0x1A000000)
+    view.foreground = RippleDrawable(tint, null, mask)
+}
+
 /** HA's `hold_action` for a card: the configured one, else `more-info` when there's an entity to show. */
 private fun holdActionFor(raw: JSONObject, entityId: String?): ActionConfig =
     ActionConfig.parse(raw.optJSONObject("hold_action"), if (entityId != null) "more-info" else "none")
@@ -66,6 +126,14 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     private val iconWrap = LinearLayout(ctx.context)
     private val titleView = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM)
     private val stateView = textView(ctx, 12f, withAlpha(ctx.theme.primaryTextColor, 0.8f), Inter.REGULAR)
+
+    /** The 20% oval behind the badge icon, kept so its tint can cross-fade instead of being replaced. */
+    private val badgeOval = GradientDrawable().apply { shape = GradientDrawable.OVAL }
+    private var badgeColor: Int? = null
+    private var badgeAnimator: ValueAnimator? = null
+
+    /** The last real `brightness` (1..255) this tile saw, so an optimistic `on` restores it instead of 100%. */
+    private var lastBrightness: Int? = null
 
     init {
         val pad = ctx.px(10f)
@@ -138,6 +206,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(ctx.px(12f), 0, ctx.px(8f), 0)
                 background = featureFill(ctx)
+                applyHaRipple(this, 10f * ctx.dp, ctx.theme.dark)
                 isClickable = true
                 addView(current, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                 addView(MdiIconView(ctx.context).apply { setIcon("mdi:menu-down", ctx.theme.primaryTextColor) },
@@ -160,6 +229,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                     val btn = LinearLayout(ctx.context).apply {
                         gravity = Gravity.CENTER
                         background = featureFill(ctx)
+                        applyHaRipple(this, 10f * ctx.dp, ctx.theme.dark)
                         isClickable = true
                         contentDescription = service.substringBefore('_').replaceFirstChar { it.titlecase(Locale.ROOT) }
                         addView(MdiIconView(ctx.context).apply { setIcon(iconName, ctx.theme.primaryTextColor) },
@@ -188,8 +258,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         isClickable = true
         setOnClickListener { ctx.performAction(tapAction, entityId) }
         bindHoldAction(holdAction, entityId)
-        enablePressFeedback()
+        applyHaRipple(this, ctx.theme.cardBorderRadiusDp * ctx.dp, ctx.theme.dark)
         iconWrap.isClickable = true
+        applyHaRipple(iconWrap, 999f, ctx.theme.dark)
         iconWrap.setOnClickListener { ctx.performAction(iconTapAction, entityId) }
         iconWrap.bindHoldAction(ctx, holdAction, entityId)
 
@@ -199,9 +270,19 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             observe(entityId) { s ->
                 renderState(s)
                 brightnessSlider?.let { sb ->
-                    val bri = (s?.attributes?.get("brightness") as? Number)?.toInt() ?: if (s?.isActive == true) 255 else 0
                     sb.setAccentColor(s?.lightTintColor() ?: if (ctx.theme.dark) BRIGHTNESS_DARK else BRIGHTNESS_LIGHT)
-                    sb.setValue(bri / 255f, active = s?.isActive == true)
+                    val on = s?.isActive == true
+                    val bri = (s?.attributes?.get("brightness") as? Number)?.toInt()?.takeIf { it in 1..255 }
+                    when {
+                        !on -> sb.setValue(0f, active = false)
+                        bri != null -> {
+                            lastBrightness = bri
+                            sb.setValue(bri / 255f, active = true)
+                        }
+                        // An optimistic `on` before HA reports `brightness`: restore the last level, or hold
+                        // still until the real value lands, never flash to 100%.
+                        else -> sb.setValue(lastBrightness?.let { it / 255f } ?: sb.value, active = true)
+                    }
                 }
                 selectBox?.text = s?.state ?: "…"
                 featureBinders.forEach { it(s) }
@@ -262,6 +343,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                                 val btn = LinearLayout(ctx.context).apply {
                                     gravity = Gravity.CENTER
                                     isClickable = true
+                                    applyHaRipple(this, 8f * ctx.dp, ctx.theme.dark)
                                     contentDescription = mode.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
                                     addView(icon, LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)))
                                     setOnClickListener {
@@ -303,6 +385,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                     fun stepButton(iconName: String, sign: Int, label: String) = LinearLayout(ctx.context).apply {
                         gravity = Gravity.CENTER
                         isClickable = true
+                        applyHaRipple(this, 10f * ctx.dp, ctx.theme.dark)
                         contentDescription = label
                         addView(MdiIconView(ctx.context).apply { setIcon(iconName, ctx.theme.primaryTextColor) },
                             LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)))
@@ -332,10 +415,19 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         else ctx.callService("fan", "set_percentage", data().put("percentage", pct), null)
                     }
                     rootCol.addView(slider, lp())
+                    var lastPct: Double? = null
                     featureBinders += { s ->
                         val on = s?.state == "on"
-                        val pct = num(s, "percentage") ?: if (on) 100.0 else 0.0
-                        slider.setValue(if (on) pct.toFloat() / 100f else 0f, active = on)
+                        val pct = num(s, "percentage")?.takeIf { it > 0.0 }
+                        when {
+                            !on -> slider.setValue(0f, active = false)
+                            pct != null -> {
+                                lastPct = pct
+                                slider.setValue(pct.toFloat() / 100f, active = true)
+                            }
+                            // Optimistic `on` before HA reports `percentage`: no flash to 100%.
+                            else -> slider.setValue(lastPct?.let { it.toFloat() / 100f } ?: slider.value, active = true)
+                        }
                     }
                 }
                 "cover-position" -> {
@@ -410,10 +502,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         bindTpl(iconTpl) { iconName ->
             val accent = ctx.theme.primaryColor
             iconBadge.setIcon(iconName.ifBlank { "mdi:home" }, accent)
-            iconWrap.background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(withAlpha(accent, 0.2f))
-            }
+            tintBadge(accent)
         }
         config.entity?.let { eid -> observe(eid) { /* keep entity warm for tap actions */ } }
     }
@@ -437,6 +526,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         if (domain in BARE_ICON_DOMAINS) {
             val bare = ctx.px(6f)
             iconWrap.setPadding(bare, bare, bare, bare)
+            badgeAnimator?.cancel()
+            badgeAnimator = null
+            badgeColor = null
             iconWrap.background = null
             iconBadge.setIcon(iconName, ctx.theme.stateIconColor)
             return
@@ -449,11 +541,48 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             active -> s?.lightTintColor() ?: ctx.theme.activeColor(domain)
             else -> ctx.theme.stateInactiveColor
         }
-        iconBadge.setIcon(iconName, color)
-        iconWrap.background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(withAlpha(color, 0.2f))
+        iconBadge.setIcon(iconName, iconBadge.tintColor)
+        tintBadge(color)
+    }
+
+    /**
+     * Tints the badge icon and its 20% oval, cross-fading over 180 ms on screen (`hui-tile-card`'s
+     * `transition: color 180ms, background-color 180ms`) and snapping before the card is attached.
+     */
+    private fun tintBadge(color: Int) {
+        iconWrap.background = badgeOval
+        val from = badgeColor
+        if (from == color && badgeAnimator == null) return
+        badgeAnimator?.cancel()
+        badgeAnimator = null
+        badgeColor = color
+        if (from == null || !isAttachedToWindow) {
+            iconBadge.tintColor = color
+            badgeOval.setColor(withAlpha(color, 0.2f))
+            return
         }
+        val start = iconBadge.tintColor
+        badgeAnimator = HaMotion.run(this, BADGE_FADE_MS) { t ->
+            val c = HaMotion.lerpColor(start, color, t)
+            iconBadge.tintColor = c
+            badgeOval.setColor(withAlpha(c, 0.2f))
+        }?.apply {
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (badgeAnimator === animation) badgeAnimator = null
+                }
+            })
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        badgeAnimator?.cancel()
+        badgeAnimator = null
+        badgeColor?.let { c ->
+            iconBadge.tintColor = c
+            badgeOval.setColor(withAlpha(c, 0.2f))
+        }
+        super.onDetachedFromWindow()
     }
 
     /** HA's select dropdown: a popup with every option; picking one calls `select.select_option`. */
@@ -485,6 +614,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         private const val HVAC_OFF = 0xFF757575.toInt()
         private const val HVAC_DRY = 0xFFEFBD07.toInt()
         private val DEFAULT_HVAC_MODES = listOf("off", "heat", "cool")
+        private const val BADGE_FADE_MS = 180L
 
         /** The 10 dp rounded fill under HA 2026's tile features (dropdowns, cover buttons). */
         fun featureFill(ctx: VitroCardContext) = GradientDrawable().apply {
@@ -517,20 +647,63 @@ internal class HaHorizontalSliderView(
     private var active = false
     private var dragging = false
 
-    /** Re-tints the fill, e.g. when a light's RGB color or color temperature changes. */
+    /** Where the fill is heading: the last value set or dragged to, even while it is still animating there. */
+    private var targetFraction = 0f
+    private var targetColor = accentColor
+    private var fractionAnimator: ValueAnimator? = null
+    private var colorAnimator: ValueAnimator? = null
+
+    /** The level (0..1) the slider shows, or is animating to. */
+    val value: Float get() = targetFraction
+
+    /** Re-tints the fill, e.g. when a light's RGB color or color temperature changes; cross-fades over 180 ms. */
     fun setAccentColor(color: Int) {
-        if (color == accentColor) return
-        accentColor = color
-        invalidate()
+        if (color == targetColor) return
+        targetColor = color
+        colorAnimator?.cancel()
+        val from = accentColor
+        colorAnimator = HaMotion.run(this, COLOR_MS) { t ->
+            accentColor = HaMotion.lerpColor(from, color, t)
+            invalidate()
+        }
     }
 
+    /** Moves the fill to [value]: animated over 160 ms on screen, snapped before attach. Ignored mid-drag. */
     fun setValue(value: Float, active: Boolean) {
         if (dragging) return
         val clamped = value.coerceIn(0f, 1f)
-        if (clamped == fraction && active == this.active) return
-        fraction = clamped
+        if (clamped == targetFraction && active == this.active) return
         this.active = active
+        if (clamped == targetFraction) {
+            invalidate()
+            return
+        }
+        targetFraction = clamped
+        fractionAnimator?.cancel()
+        val from = fraction
+        fractionAnimator = HaMotion.run(this, VALUE_MS) { t ->
+            fraction = HaMotion.lerp(from, clamped, t)
+            invalidate()
+        }
+    }
+
+    private fun dragTo(x: Float, w: Float) {
+        fractionAnimator?.cancel()
+        fractionAnimator = null
+        fraction = (x / w).coerceIn(0f, 1f)
+        targetFraction = fraction
+        active = fraction > 0f
         invalidate()
+    }
+
+    override fun onDetachedFromWindow() {
+        fractionAnimator?.cancel()
+        fractionAnimator = null
+        colorAnimator?.cancel()
+        colorAnimator = null
+        fraction = targetFraction
+        accentColor = targetColor
+        super.onDetachedFromWindow()
     }
 
     @android.annotation.SuppressLint("ClickableViewAccessibility")
@@ -540,20 +713,15 @@ internal class HaHorizontalSliderView(
             MotionEvent.ACTION_DOWN -> {
                 parent?.requestDisallowInterceptTouchEvent(true)
                 dragging = true
-                fraction = (event.x / w).coerceIn(0f, 1f)
-                active = fraction > 0f
-                invalidate()
+                dragTo(event.x, w)
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
-                fraction = (event.x / w).coerceIn(0f, 1f)
-                active = fraction > 0f
-                invalidate()
+                dragTo(event.x, w)
                 return true
             }
             MotionEvent.ACTION_UP -> {
-                fraction = (event.x / w).coerceIn(0f, 1f)
-                active = fraction > 0f
+                dragTo(event.x, w)
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
                 invalidate()
@@ -593,6 +761,11 @@ internal class HaHorizontalSliderView(
             canvas.drawRoundRect(handleRect, barW / 2f, barW / 2f, handlePaint)
         }
         canvas.restore()
+    }
+
+    private companion object {
+        const val VALUE_MS = 160L
+        const val COLOR_MS = 180L
     }
 }
 
@@ -714,12 +887,30 @@ internal class HaSwitchView(private val ctx: VitroCardContext) : View(ctx.contex
     private val rect = RectF()
     private var on = false
 
+    /** 0 = off, 1 = on; animated between them as `ha-switch` slides its thumb. */
+    private var progress = 0f
+    private var animator: ValueAnimator? = null
+
     val isOn: Boolean get() = on
 
+    /** Slides to [value] over 180 ms on screen; snaps on the first bind before the row is attached. */
     fun setOn(value: Boolean) {
         if (value == on) return
         on = value
-        invalidate()
+        animator?.cancel()
+        val from = progress
+        val to = if (value) 1f else 0f
+        animator = HaMotion.run(this, SLIDE_MS) { t ->
+            progress = HaMotion.lerp(from, to, t)
+            invalidate()
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        animator?.cancel()
+        animator = null
+        progress = if (on) 1f else 0f
+        super.onDetachedFromWindow()
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -730,26 +921,26 @@ internal class HaSwitchView(private val ctx: VitroCardContext) : View(ctx.contex
         val w = width.toFloat()
         val h = height.toFloat()
         val theme = ctx.theme
-        fill.color = if (on) CardSurface.withAlpha(theme.primaryColor, 0.18f) else CardSurface.withAlpha(theme.secondaryTextColor, 0.08f)
-        stroke.color = if (on) theme.primaryColor else CardSurface.withAlpha(theme.secondaryTextColor, 0.40f)
-        thumb.color = when {
-            on -> theme.primaryColor
-            theme.dark -> OFF_THUMB_DARK
-            else -> OFF_THUMB_LIGHT
-        }
+        val p = progress
+        fill.color = HaMotion.lerpColor(
+            CardSurface.withAlpha(theme.secondaryTextColor, 0.08f), CardSurface.withAlpha(theme.primaryColor, 0.18f), p,
+        )
+        stroke.color = HaMotion.lerpColor(CardSurface.withAlpha(theme.secondaryTextColor, 0.40f), theme.primaryColor, p)
+        thumb.color = HaMotion.lerpColor(if (theme.dark) OFF_THUMB_DARK else OFF_THUMB_LIGHT, theme.primaryColor, p)
         val half = stroke.strokeWidth / 2f
         rect.set(half, half, w - half, h - half)
         val radius = rect.height() / 2f
         canvas.drawRoundRect(rect, radius, radius, fill)
         canvas.drawRoundRect(rect, radius, radius, stroke)
         val thumbR = ctx.dp * 8.2f
-        val cx = if (on) w - h / 2f else h / 2f
+        val cx = HaMotion.lerp(h / 2f, w - h / 2f, p)
         canvas.drawCircle(cx, h / 2f, thumbR, thumb)
     }
 
     private companion object {
         const val OFF_THUMB_LIGHT = 0xFF757575.toInt()
         const val OFF_THUMB_DARK = 0xFF9E9E9E.toInt()
+        const val SLIDE_MS = 180L
     }
 }
 
@@ -857,6 +1048,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 minimumHeight = ctx.px(44f)
                 setPadding(ctx.px(16f), 0, ctx.px(16f), 0)
                 isClickable = true
+                applyHaRipple(this, 4f * ctx.dp, ctx.theme.dark)
             }
             rowViews += row
             rowVisible += (stateFilter == null)
@@ -903,6 +1095,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                             shape = GradientDrawable.OVAL
                             setColor(Color.TRANSPARENT)
                         }
+                        applyHaRipple(this, 999f, ctx.theme.dark)
                         addView(MdiIconView(ctx.context).apply { setIcon(iconName, ctx.theme.primaryTextColor) },
                             android.widget.FrameLayout.LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
                         setOnClickListener {
@@ -990,6 +1183,7 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                     gravity = Gravity.CENTER_HORIZONTAL
                     setPadding(ctx.px(4f), ctx.px(6f), ctx.px(4f), ctx.px(6f))
                     isClickable = true
+                    applyHaRipple(this, 8f * ctx.dp, ctx.theme.dark)
                 }
                 val icon = MdiIconView(ctx.context)
                 val name = textView(ctx, 13f, ctx.theme.primaryTextColor).apply {
@@ -1050,7 +1244,7 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
         isClickable = true
         setOnClickListener { ctx.performAction(tap, eid) }
         bindHoldAction(holdActionFor(config.raw, eid), eid)
-        enablePressFeedback()
+        applyHaRipple(this, ctx.theme.cardBorderRadiusDp * ctx.dp, ctx.theme.dark)
         if (eid != null) {
             observe(eid) { s ->
                 val active = s?.isActive == true
@@ -1487,6 +1681,7 @@ class MushroomChipsCardView(ctx: VitroCardContext, config: CardConfig) : LinearL
                     }
                     setPadding(ctx.px(12f), ctx.px(8f), ctx.px(12f), ctx.px(8f))
                     isClickable = true
+                    applyHaRipple(this, 999f, ctx.theme.dark)
                 }
                 val icon = MdiIconView(ctx.context)
                 val label = textView(ctx, 12f, ctx.theme.primaryTextColor, Inter.MEDIUM)
@@ -1569,7 +1764,7 @@ class BubbleCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
             val tap = ActionConfig.parse(config.raw.optJSONObject("tap_action"), "toggle")
             isClickable = true
             setOnClickListener { ctx.performAction(tap, eid) }
-            enablePressFeedback()
+            applyHaRipple(this, 999f, ctx.theme.dark)
             if (eid != null) {
                 observe(eid) { s ->
                     val active = s?.isActive == true
@@ -1735,7 +1930,7 @@ class MediaControlCardView(ctx: VitroCardContext, config: CardConfig) : CardSurf
         val attrs = s?.attributes.orEmpty()
         val off = s == null || s.state == "off" || s.isUnavailable
         val playing = s?.state == "playing"
-        val picture = if (off) null else s?.entityPicture
+        val picture = if (off) null else s.entityPicture
         setArtwork(picture)
         val onArt = picture != null && artwork.drawable != null
 

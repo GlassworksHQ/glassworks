@@ -25,18 +25,22 @@ import dev.glassworks.engine.vitro.cards.AlarmPanelCardView
 import dev.glassworks.engine.vitro.cards.AreaCardView
 import dev.glassworks.engine.vitro.cards.BubbleCardView
 import dev.glassworks.engine.vitro.cards.ButtonCardView
+import dev.glassworks.engine.vitro.cards.CalendarCardView
 import dev.glassworks.engine.vitro.cards.ClockCardView
 import dev.glassworks.engine.vitro.cards.EntitiesCardView
 import dev.glassworks.engine.vitro.cards.EntityCardView
 import dev.glassworks.engine.vitro.cards.GaugeCardView
 import dev.glassworks.engine.vitro.cards.GlanceCardView
 import dev.glassworks.engine.vitro.cards.HeadingCardView
+import dev.glassworks.engine.vitro.cards.HumidifierCardView
 import dev.glassworks.engine.vitro.cards.LightCardView
+import dev.glassworks.engine.vitro.cards.LogbookCardView
 import dev.glassworks.engine.vitro.cards.MarkdownCardView
 import dev.glassworks.engine.vitro.cards.MediaControlCardView
 import dev.glassworks.engine.vitro.cards.MoreInfoSheet
 import dev.glassworks.engine.vitro.cards.MushroomChipsCardView
 import dev.glassworks.engine.vitro.cards.PictureCardView
+import dev.glassworks.engine.vitro.cards.PictureElementsCardView
 import dev.glassworks.engine.vitro.cards.SensorGraphCardView
 import dev.glassworks.engine.vitro.cards.StatisticsGraphCardView
 import dev.glassworks.engine.vitro.cards.ThermostatCardView
@@ -255,9 +259,8 @@ class VitroView(
 
     fun closeMoreInfo(): Boolean {
         val sheet = moreInfo ?: return false
-        sheet.dismiss()
-        removeView(sheet)
         moreInfo = null
+        sheet.dismiss()
         return true
     }
 
@@ -266,10 +269,14 @@ class VitroView(
         val cfg = dashboard?.views?.getOrNull(currentViewIndex)
         val theme = ThemeResolver.resolve(themeCatalog, darkMode, cfg?.theme ?: userThemeName, cfg?.background)
         val cardCtx = contextFactory?.invoke(theme) ?: return
+        var sheetRef: MoreInfoSheet? = null
         val sheet = MoreInfoSheet(cardCtx) {
-            moreInfo?.let { removeView(it) }
-            moreInfo = null
+            sheetRef?.let {
+                removeView(it)
+                if (moreInfo === it) moreInfo = null
+            }
         }
+        sheetRef = sheet
         sheet.show(entityId)
         moreInfo = sheet
         addView(sheet, LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -691,7 +698,8 @@ class VitroView(
         "entities" -> (card.entities().size * 2).coerceAtLeast(3)
         "history-graph", "thermostat", "picture", "picture-entity" -> 6
         "clock", "sensor", "gauge", "weather-forecast", "entity", "area" -> 4
-        "light", "statistics-graph", "todo-list" -> 6
+        "light", "statistics-graph", "todo-list", "picture-elements", "calendar", "logbook" -> 6
+        "humidifier" -> 7
         "alarm-panel" -> 8
         "grid" -> card.childCards.size * 2
         else -> 2
@@ -761,6 +769,10 @@ class VitroView(
             "todo-list" -> TodoListCardView(ctx, card)
             "statistics-graph" -> StatisticsGraphCardView(ctx, card)
             "area" -> AreaCardView(ctx, card)
+            "picture-elements" -> PictureElementsCardView(ctx, card)
+            "humidifier" -> HumidifierCardView(ctx, card)
+            "calendar" -> CalendarCardView(ctx, card)
+            "logbook" -> LogbookCardView(ctx, card)
             // Tier 2: Popular HACS Fast-Paths
             "custom:mushroom-entity-card",
             "custom:mushroom-light-card",

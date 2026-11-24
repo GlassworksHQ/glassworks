@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.cards
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -349,10 +350,34 @@ private class GaugeCanvasView(context: Context, private var activeColor: Int, pr
     }
     private val oval = RectF()
     private var fraction = 0f
+    private var targetFraction = -1f
+    private var animator: ValueAnimator? = null
     private var text = "–"
 
+    /** `hui-gauge-card`'s needle sweep: the arc eases to [frac] over 240 ms on screen and snaps before attach. */
     fun update(frac: Float, label: String, color: Int = activeColor) {
-        fraction = frac; text = label; activeColor = color; invalidate()
+        text = label
+        activeColor = color
+        val to = frac.coerceIn(0f, 1f)
+        if (to == targetFraction) {
+            invalidate()
+            return
+        }
+        targetFraction = to
+        animator?.cancel()
+        val from = fraction
+        animator = HaMotion.run(this, SWEEP_MS) { t ->
+            fraction = HaMotion.lerp(from, to, t)
+            invalidate()
+        }
+        invalidate()
+    }
+
+    override fun onDetachedFromWindow() {
+        animator?.cancel()
+        animator = null
+        if (targetFraction >= 0f) fraction = targetFraction
+        super.onDetachedFromWindow()
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -372,6 +397,10 @@ private class GaugeCanvasView(context: Context, private var activeColor: Int, pr
         val w = textPaint.measureText(text)
         if (w > inner && w > 0f) textPaint.textSize = base * inner / w
         canvas.drawText(text, cx, cy - 4f * dp, textPaint)
+    }
+
+    private companion object {
+        const val SWEEP_MS = 240L
     }
 }
 
@@ -416,6 +445,7 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
         })
         val dots = FrameLayout(ctx.context).apply {
             isClickable = true
+            applyHaRipple(this, 999f, ctx.theme.dark)
             contentDescription = "More info"
             addView(MdiIconView(ctx.context).apply { setIcon("mdi:dots-vertical", ctx.theme.primaryTextColor) },
                 LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
@@ -441,6 +471,7 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                 setStroke(ctx.px(1f).coerceAtLeast(1), withAlpha(ctx.theme.secondaryTextColor, 0.5f))
             }
             isClickable = true
+            applyHaRipple(this, 999f, ctx.theme.dark)
             setOnClickListener { dial.nudge(sign) }
         }
         val btn = ctx.px(42f)
@@ -488,6 +519,7 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                 val icon = MdiIconView(ctx.context)
                 val cell = FrameLayout(ctx.context).apply {
                     isClickable = true
+                    applyHaRipple(this, 10f * ctx.dp, ctx.theme.dark)
                     contentDescription = m.replace('_', ' ')
                     addView(icon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
                     setOnClickListener {
@@ -580,6 +612,10 @@ internal class ThermostatDialView(
     private var step = 0.5
     private var current: Double? = null
     private var target: Double? = null
+
+    /** The target as drawn on the ring; eases towards [target] when it changes from a nudge or from HA. */
+    private var shownTarget: Double? = null
+    private var targetAnimator: ValueAnimator? = null
     private var mode = "off"
     private var action: String? = null
     private var dragging = false
@@ -595,7 +631,7 @@ internal class ThermostatDialView(
         this.max = if (max > min) max else min + 1.0
         this.step = step
         this.current = current
-        if (!dragging) this.target = target
+        if (!dragging) setTarget(target)
         this.mode = mode
         this.action = action
         invalidate()
@@ -606,9 +642,41 @@ internal class ThermostatDialView(
         val t = target ?: return
         val next = snap(t + sign * step)
         if (next == t) return
-        target = next
+        setTarget(next)
         invalidate()
         onCommit(next)
+    }
+
+    /** Sets the target and eases the thumb there over 200 ms on screen; snaps before attach or from nothing. */
+    private fun setTarget(value: Double?) {
+        if (value == target && (targetAnimator != null || shownTarget == value)) return
+        target = value
+        targetAnimator?.cancel()
+        targetAnimator = null
+        val from = shownTarget
+        if (value == null || from == null || !isAttachedToWindow) {
+            shownTarget = value
+            return
+        }
+        targetAnimator = HaMotion.run(this, TARGET_MS) { t ->
+            shownTarget = from + (value - from) * t
+            invalidate()
+        }
+    }
+
+    /** The target from a finger on the ring: follows it exactly, with no easing. */
+    private fun dragTarget(value: Double) {
+        targetAnimator?.cancel()
+        targetAnimator = null
+        target = value
+        shownTarget = value
+    }
+
+    override fun onDetachedFromWindow() {
+        targetAnimator?.cancel()
+        targetAnimator = null
+        shownTarget = target
+        super.onDetachedFromWindow()
     }
 
     private fun snap(v: Double): Double {
@@ -665,7 +733,7 @@ internal class ThermostatDialView(
         canvas.drawArc(oval, 135f, 270f, false, arcPaint)
 
         val cur = current
-        val tgt = target
+        val tgt = shownTarget ?: target
         if (accent != null && tgt != null && !isAutoIdle) {
             val (solid, soft) = accent
             val low = if (cur != null) minOf(cur, tgt) else tgt
@@ -703,12 +771,13 @@ internal class ThermostatDialView(
         bigPaint.color = ctx.theme.primaryTextColor
         unitPaint.color = ctx.theme.primaryTextColor
         decPaint.color = ctx.theme.primaryTextColor
-        if (tgt == null) {
+        val shownValue = target
+        if (shownValue == null) {
             bigPaint.textAlign = Paint.Align.CENTER
             canvas.drawText("–", cx, baseline, bigPaint)
         } else {
             bigPaint.textAlign = Paint.Align.LEFT
-            val (whole, dec) = splitTemp(tgt, step)
+            val (whole, dec) = splitTemp(shownValue, step)
             val wholeW = bigPaint.measureText(whole)
             val sideW = maxOf(unitPaint.measureText(unit), if (dec.isEmpty()) 0f else decPaint.measureText(dec))
             val gap = 2f * dp
@@ -762,13 +831,13 @@ internal class ThermostatDialView(
                 if (d < radius - 32f * dp || d > radius + 24f * dp) return false
                 dragging = true
                 parent?.requestDisallowInterceptTouchEvent(true)
-                target = valueAt(event.x, event.y)
+                dragTarget(valueAt(event.x, event.y))
                 invalidate()
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
                 if (!dragging) return false
-                target = valueAt(event.x, event.y)
+                dragTarget(valueAt(event.x, event.y))
                 invalidate()
                 return true
             }
@@ -776,7 +845,7 @@ internal class ThermostatDialView(
                 if (!dragging) return false
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
-                target = valueAt(event.x, event.y)
+                dragTarget(valueAt(event.x, event.y))
                 invalidate()
                 target?.let(onCommit)
                 return true
@@ -795,6 +864,7 @@ internal class ThermostatDialView(
         private const val TRACK_DARK = 0xFF333333.toInt()
         private const val AUTO_COLOR = 0xFFFFC107.toInt()
         private const val AUTO_SOFT = 0xFFFFE082.toInt()
+        private const val TARGET_MS = 200L
 
         /** `21.5` → `("21", ".5")`; whole steps drop the decimal. */
         fun splitTemp(v: Double, step: Double): Pair<String, String> {

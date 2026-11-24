@@ -6,16 +6,20 @@ Needs no network and no device: HA's real frontend is used only if it is already
 cache (tools/perf/hafrontend.py); otherwise a one-page stub stands in, as in Clarity's off-device tests.
 """
 import base64
+import datetime
 import json
 import os
 import re
 import socket
+import struct
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
+import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -150,6 +154,50 @@ class ShowcaseTest(unittest.TestCase):
         self.assertEqual(http(self.port, "/local/vitro-demo/missing.js")[0], 404)
         self.assertEqual(http(self.port, "/local/../showcase_ha.py")[0], 404)
 
+    def test_local_wrapper_card_module(self):
+        status, headers, body = http(self.port, "/local/vitro-demo/wrapper-card.js")
+        self.assertEqual(status, 200)
+        self.assertIn("javascript", headers["Content-Type"])
+        text = body.decode()
+        for needle in ('customElements.define("vitro-wrapper-card"', "attachShadow", "window.loadCardHelpers()",
+                       "createCardElement", "hass.localize(", "hass.formatEntityState(", 'callApi("GET", "config")'):
+            self.assertIn(needle, text)
+
+    def test_floorplan_png(self):
+        status, headers, png = http(self.port, "/local/vitro-demo/floorplan.png")
+        self.assertEqual((status, headers["Content-Type"]), (200, "image/png"))
+        self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
+        w, h = struct.unpack(">II", png[16:24])
+        self.assertEqual((w, h), (S.PLAN_W, S.PLAN_H))
+        idat = png.index(b"IDAT")
+        raw = zlib.decompress(png[idat + 4:png.index(b"IEND") - 8])
+        self.assertEqual(len(raw), (1 + 3 * w) * h)
+        px = lambda x, y: tuple(raw[y * (1 + 3 * w) + 1 + x * 3:][:3])  # noqa: E731
+        self.assertEqual(px(100, 44), (71, 85, 105))          # an outer wall
+        self.assertEqual(px(410, 305), (247, 249, 253))        # open floor, between two grid lines
+        self.assertEqual(px(10, 10), (233, 238, 246))          # outside the plan
+        self.assertEqual(len({px(x, y) for x in range(0, w, 7) for y in range(0, h, 7)}) >= 6, True)    # walls, floor, furniture, labels
+        self.assertEqual(png, http(self.port, "/local/vitro-demo/floorplan.png")[2])                     # the same bytes every time
+
+    def test_calendar_events_are_upcoming(self):
+        status, headers, body = http(self.port, "/api/calendars/calendar.studio_schedule?start=2026-11-01T00:00:00Z&end=2026-12-01T00:00:00Z")
+        self.assertEqual((status, headers["Content-Type"]), (200, "application/json"))
+        events = json.loads(body)
+        self.assertEqual(len(events), 4)
+        now = time.time()
+        for e in events:
+            start = datetime.datetime.fromisoformat(e["start"]["dateTime"]).timestamp()
+            end = datetime.datetime.fromisoformat(e["end"]["dateTime"]).timestamp()
+            self.assertTrue(now < start < end, e)
+            self.assertTrue(e["summary"] and e["description"])
+        self.assertEqual(events[0]["summary"], self.state("calendar.studio_schedule")["attributes"]["message"])
+        self.assertEqual([e["start"]["dateTime"] for e in events], sorted(e["start"]["dateTime"] for e in events))
+        fixed = S.calendar_events(now=1_000_000_000.0)                                  # anchored to the time it is given
+        self.assertEqual(fixed[0]["start"]["dateTime"], "2001-09-09T03:00:00+00:00")
+        self.assertEqual(json.loads(http(self.port, "/api/calendars")[2])[0]["entity_id"], "calendar.studio_schedule")
+        self.assertEqual(http(self.port, "/api/calendars/calendar.nope")[0], 404)
+        self.assertEqual(http(self.port, "/api/calendars/light.desk_lamp")[0], 404)
+
     def test_camera_still_is_a_moving_png(self):
         status, headers, a = http(self.port, "/api/camera_proxy/camera.studio_front?frame=0")
         self.assertEqual((status, headers["Content-Type"]), (200, "image/png"))
@@ -271,6 +319,7 @@ class ShowcaseTest(unittest.TestCase):
         res = self.ws.call("lovelace/resources")["result"]
         urls = {r["url"]: r["type"] for r in res}
         self.assertEqual(urls["/local/vitro-demo/energy-ring-card.js"], "module")
+        self.assertEqual(urls["/local/vitro-demo/wrapper-card.js"], "module")
         data = [u for u in urls if u.startswith("data:text/javascript;base64,")]
         self.assertEqual(len(data), 1)
         js = base64.b64decode(data[0].split(",", 1)[1]).decode()
@@ -278,15 +327,15 @@ class ShowcaseTest(unittest.TestCase):
                        'customElements.define("vitro-panel-card"'):
             self.assertIn(needle, js)
 
-    def test_lovelace_config_six_views(self):
+    def test_lovelace_config_seven_views(self):
         cfg = self.ws.call("lovelace/config", url_path="vitro-parity", force=False)["result"]
         self.assertEqual(self.ws.call("lovelace/config", url_path=None)["result"], cfg)
         self.assertEqual(self.ws.call("lovelace/config", url_path="nope")["error"]["code"], "config_not_found")
         views = {v["path"]: v for v in cfg["views"]}
-        self.assertEqual(list(views), ["sections", "room-detail", "themed", "hacs", "panel-custom", "mixed-island"])
+        self.assertEqual(list(views), ["sections", "room-detail", "themed", "hacs", "panel-custom", "mixed-island", "advanced"])
         types = {p: v["type"] for p, v in views.items()}
         self.assertEqual(types, {"sections": "sections", "room-detail": "masonry", "themed": "sections", "hacs": "sections",
-                                 "panel-custom": "panel", "mixed-island": "sections"})
+                                 "panel-custom": "panel", "mixed-island": "sections", "advanced": "sections"})
 
         def cards(view):
             out = []
@@ -364,10 +413,36 @@ class ShowcaseTest(unittest.TestCase):
         m = {c["type"] for c in cards(views["mixed-island"])}
         self.assertTrue({"tile", "entities", "custom:vitro-energy-ring-card"} <= m)
 
+        a = views["advanced"]
+        self.assertEqual((a["title"], a["max_columns"], len(a["sections"])), ("Advanced", 3, 3))
+        ac = cards(a)
+        self.assertEqual([c["heading"] for c in ac if c["type"] == "heading"],
+                         ["Floorplan & Environment", "Inline Tile Features", "Agenda, Activity & Wrapper Card"])
+        plan = next(c for c in ac if c["type"] == "picture-elements")
+        self.assertEqual(plan["image"], "/local/vitro-demo/floorplan.png")
+        spots = {(e["type"], e["entity"]): (e["style"]["left"], e["style"]["top"]) for e in plan["elements"]}
+        self.assertEqual(spots, {("state-icon", "light.desk_lamp"): ("30%", "40%"),
+                                 ("state-icon", "binary_sensor.front_door"): ("80%", "25%"),
+                                 ("state-label", "sensor.studio_power"): ("55%", "70%"),
+                                 ("state-badge", "sensor.outdoor_temp"): ("20%", "75%")})
+        self.assertEqual(next(c for c in ac if c["type"] == "humidifier")["entity"], "humidifier.studio_humidifier")
+        feats = {c["entity"]: [f["type"] for f in c["features"]] for c in ac if c["type"] == "tile"}
+        self.assertEqual(feats, {"climate.living_room": ["climate-hvac-modes", "target-temperature"],
+                                 "fan.studio_fan": ["fan-speed"], "cover.studio_blind": ["cover-position"],
+                                 "light.ceiling_strip": ["light-color-temp"],
+                                 "media_player.studio_speaker": ["media-player-volume-slider"]})
+        self.assertTrue(all(c["grid_options"]["columns"] == 6 for c in ac if c["type"] == "tile"))      # half width
+        self.assertEqual(next(c for c in ac if c["type"] == "calendar")["entities"], ["calendar.studio_schedule"])
+        log = next(c for c in ac if c["type"] == "logbook")
+        self.assertEqual((log["entities"], log["hours_to_show"]),
+                         (["light.desk_lamp", "switch.studio_fan_plug", "cover.studio_blind"], 24))
+        wrap = next(c for c in ac if c["type"] == "custom:vitro-wrapper-card")
+        self.assertEqual((wrap["entity"], wrap["title"]), ("sensor.studio_power", "HACS Wrapper Test"))
+
     def test_every_entity_the_dashboard_names_exists(self):
         cfg = self.ws.call("lovelace/config", url_path="vitro-parity")["result"]
         pat = re.compile(r"^(?:person|sensor|binary_sensor|light|switch|input_boolean|fan|cover|lock|select|input_select|climate|weather|"
-                         r"media_player|alarm_control_panel|todo|camera|button|script|scene|sun)\.[a-z0-9_]+$")
+                         r"media_player|alarm_control_panel|todo|camera|button|script|scene|sun|humidifier|calendar)\.[a-z0-9_]+$")
         found = set()
 
         def walk(o, key=None):
@@ -497,6 +572,58 @@ class ShowcaseTest(unittest.TestCase):
         self.assertEqual((self.state("light.desk_lamp")["attributes"]["brightness"], self.state("light.ceiling_strip")["state"]), (60, "off"))
         self.assertEqual(self.ws.call("call_service", domain="light", service="explode", target={"entity_id": "light.desk_lamp"})["error"]["code"],
                          "service_not_found")
+
+    def test_humidifier_services(self):
+        mid, snap = self.subscribe(entity_ids=["humidifier.studio_humidifier"])
+        h = snap["a"]["humidifier.studio_humidifier"]
+        self.assertEqual((h["s"], h["a"]["humidity"], h["a"]["current_humidity"], h["a"]["mode"], h["a"]["action"]),
+                         ("on", 50, 44, "comfort", "humidifying"))
+        self.assertEqual(h["a"]["available_modes"], ["eco", "comfort", "boost"])
+        call = lambda s, **data: self.ws.call("call_service", domain="humidifier", service=s, service_data=data,  # noqa: E731
+                                              target={"entity_id": "humidifier.studio_humidifier"})
+        self.assertTrue(call("set_humidity", humidity=60)["success"])
+        self.assertEqual(self.next_diff(mid)["humidifier.studio_humidifier"]["+"]["a"]["humidity"], 60)
+        call("set_humidity", humidity=95)
+        self.assertEqual(self.state("humidifier.studio_humidifier")["attributes"]["humidity"], 80)        # clamped to max
+        call("set_humidity", humidity=40)
+        self.assertEqual((self.state("humidifier.studio_humidifier")["attributes"]["humidity"],
+                          self.state("humidifier.studio_humidifier")["attributes"]["action"]), (40, "idle"))   # 44% is already above
+        call("set_mode", mode="boost")
+        self.assertEqual(self.state("humidifier.studio_humidifier")["attributes"]["mode"], "boost")
+        self.assertFalse(call("set_mode", mode="turbo")["success"])
+        call("toggle")
+        self.assertEqual((self.state("humidifier.studio_humidifier")["state"],
+                          self.state("humidifier.studio_humidifier")["attributes"]["action"]), ("off", "off"))
+        call("turn_on")
+        self.assertEqual(self.state("humidifier.studio_humidifier")["state"], "on")
+        call("turn_off")
+        self.assertEqual(self.state("humidifier.studio_humidifier")["state"], "off")
+        svcs = self.ws.call("get_services")["result"]["humidifier"]
+        self.assertEqual(set(svcs), {"toggle", "turn_on", "turn_off", "set_humidity", "set_mode"})
+
+    def test_logbook_get_events(self):
+        events = self.ws.call("logbook/get_events", start_time="2026-11-12T00:00:00+00:00", end_time="2026-11-13T00:00:00+00:00")["result"]
+        self.assertEqual(len(events), 6)
+        now = time.time()
+        for e in events:
+            self.assertEqual(set(e), {"when", "name", "state", "entity_id", "domain", "message"})
+            self.assertIsInstance(e["when"], float)
+            self.assertTrue(now - 86400 < e["when"] < now, e)                                # recent, inside a day
+            self.assertEqual(e["domain"], e["entity_id"].split(".")[0])
+            self.assertIn(e["entity_id"], self.hub.states)
+        self.assertEqual([e["when"] for e in events], sorted(e["when"] for e in events))
+        last = {e["entity_id"]: e["state"] for e in events}                                  # the log ends where the home starts
+        for eid, state in last.items():
+            self.assertEqual(self.state(eid)["state"], state, eid)
+        only = self.ws.call("logbook/get_events", entity_ids=["cover.studio_blind"])["result"]
+        self.assertEqual({e["entity_id"] for e in only}, {"cover.studio_blind"})
+        self.ws.n += 1
+        mid = self.ws.n
+        self.ws.send({"id": mid, "type": "logbook/event_stream", "start_time": "2026-11-12T00:00:00+00:00",
+                      "entity_ids": ["light.desk_lamp"]})
+        self.assertTrue(self.ws.until(lambda m: m.get("id") == mid and m["type"] == "result")["success"])
+        ev = self.ws.until(lambda m: m.get("id") == mid and m["type"] == "event")["event"]
+        self.assertEqual({e["entity_id"] for e in ev["events"]}, {"light.desk_lamp"})
 
     def test_scene_arrives_as_one_diff(self):
         mid, _ = self.subscribe()

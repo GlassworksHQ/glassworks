@@ -162,6 +162,7 @@ class VitroEngine(
                     resources = vitroView.resourcesList,
                     accessToken = { cachedToken },
                     haConfig = { client?.haConfig ?: JSONObject() },
+                    haUser = { client?.currentUser ?: JSONObject() },
                     callService = { domain, service, data, target ->
                         client?.callService(domain, service, data, target)
                     },
@@ -440,7 +441,7 @@ class VitroEngine(
     }
 
     companion object {
-        const val VERSION_NAME = "Vitro 0.1 (experimental)"
+        const val VERSION_NAME = "Vitro 0.0.1 (experimental)"
 
         internal fun buildViewUrl(origin: String?, dashPath: String?, viewPath: String): String? {
             if (origin.isNullOrBlank()) return null

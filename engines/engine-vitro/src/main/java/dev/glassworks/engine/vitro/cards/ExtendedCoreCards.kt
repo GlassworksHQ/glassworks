@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro.cards
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
@@ -14,6 +15,7 @@ import android.graphics.RectF
 import android.graphics.drawable.GradientDrawable
 import android.text.InputType
 import android.text.TextUtils
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -21,9 +23,13 @@ import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.TextView
 import dev.glassworks.engine.vitro.data.EntityState
+import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.ui.CardSurface
@@ -34,7 +40,9 @@ import dev.glassworks.engine.vitro.ui.bindHoldAction
 import dev.glassworks.ui.Inter
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -193,14 +201,18 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         ctx.callService("light", "turn_on", JSONObject().put("entity_id", eid).put("brightness", bri), null)
     }
 
+    private var lastPct: Int? = null
+
     private fun render(s: EntityState?) {
         nameView.text = config.name ?: s?.friendlyName ?: config.entity.orEmpty()
         val on = s?.state == "on"
-        val pct = s?.brightnessPct ?: if (on) 100 else 0
+        val reportedPct = s?.brightnessPct
+        if (reportedPct != null && reportedPct > 0) lastPct = reportedPct
+        val pct = reportedPct ?: if (on) (lastPct ?: 100) else 0
         stateView.text = when {
             s == null -> "–"
             s.isUnavailable -> s.formattedState()
-            on -> "$pct%"
+            on -> if (reportedPct != null || lastPct != null) "$pct%" else "On"
             else -> "Off"
         }
         dial.update(on, if (on) pct / 100f else 0f, MdiIcons.resolveIconName(config.icon, s))
@@ -991,5 +1003,943 @@ class AreaCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             }
             return out.toList()
         }
+    }
+}
+
+private fun extSpPx(ctx: VitroCardContext, sp: Float): Float =
+    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, ctx.context.resources.displayMetrics)
+
+/** The header both dial cards share: the name centered, a `⋮` More-Info button pinned to the end. */
+private fun dialHeader(ctx: VitroCardContext, title: TextView, onMore: () -> Unit): FrameLayout {
+    val header = FrameLayout(ctx.context)
+    header.addView(title, FrameLayout.LayoutParams(MATCH_PARENT, ctx.px(36f)).apply {
+        leftMargin = ctx.px(40f); rightMargin = ctx.px(40f)
+    })
+    val dots = FrameLayout(ctx.context).apply {
+        isClickable = true
+        contentDescription = "More info"
+        addView(MdiIconView(ctx.context).apply { setIcon("mdi:dots-vertical", ctx.theme.primaryTextColor) },
+            FrameLayout.LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
+        setOnClickListener { onMore() }
+    }
+    header.addView(dots, FrameLayout.LayoutParams(ctx.px(36f), ctx.px(36f), Gravity.END or Gravity.CENTER_VERTICAL))
+    return header
+}
+
+// ---------------------------------------------------------------------------------------------
+// picture-elements
+// ---------------------------------------------------------------------------------------------
+
+/** One overlay of a `picture-elements` card, positioned by its `style.left` / `style.top` percentages. */
+data class PictureElement(
+    val type: String,
+    val entity: String?,
+    val icon: String?,
+    val title: String?,
+    val prefix: String,
+    val suffix: String,
+    val xFrac: Float,
+    val yFrac: Float,
+    val raw: JSONObject,
+)
+
+/**
+ * Native HA `picture-elements` card (`hui-picture-elements-card`): a floorplan image with live `state-icon`,
+ * `state-label`, `state-badge`, `icon` and `service-button` overlays centered on their `left` / `top` percentages.
+ * The image is `image`, else the `camera_image` entity's picture. `conditional` and `image` elements are not drawn.
+ */
+class PictureElementsCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
+    private val floorplan = FloorplanLayout(ctx.context)
+    private val imageView = ImageView(ctx.context).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+    private val fixedRatio: Float? = parseAspectRatio(config.raw.optString("aspect_ratio", ""))
+    private var loadedUrl: String? = null
+
+    init {
+        floorplan.ratio = fixedRatio ?: DEFAULT_RATIO
+        floorplan.addView(imageView, FloorplanLayout.Params(fill = true))
+        addView(floorplan, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+
+        val image = config.raw.optString("image", "").ifEmpty { null }
+        val camera = config.raw.optString("camera_image", "").ifEmpty { null }
+        when {
+            image != null -> load(image)
+            camera != null -> observe(camera) { s -> s?.entityPicture?.let(::load) }
+        }
+        parseElements(config.raw.optJSONArray("elements")).forEach(::addElement)
+    }
+
+    private fun load(url: String) {
+        if (url == loadedUrl) return
+        loadedUrl = url
+        ctx.loadImage(url) { bmp ->
+            if (bmp == null || url != loadedUrl) return@loadImage
+            imageView.setImageBitmap(bmp)
+            if (fixedRatio == null && bmp.width > 0) {
+                // No aspect_ratio: follow the picture's own shape, so FIT_XY is exact and nothing is cropped.
+                imageView.scaleType = ImageView.ScaleType.FIT_XY
+                floorplan.ratio = bmp.height.toFloat() / bmp.width
+                floorplan.requestLayout()
+            }
+        }
+    }
+
+    private fun addElement(el: PictureElement) {
+        val view: View = when (el.type) {
+            "state-icon" -> stateIcon(el)
+            "state-label" -> stateLabel(el)
+            "state-badge" -> stateBadge(el)
+            "icon" -> plainIcon(el)
+            "service-button" -> serviceButton(el)
+            else -> return
+        }
+        el.title?.let { view.contentDescription = it }
+        floorplan.addView(view, FloorplanLayout.Params(el.xFrac, el.yFrac))
+    }
+
+    private fun bindActions(view: View, el: PictureElement, defaultTap: String) {
+        val tap = ActionConfig.parse(el.raw.optJSONObject("tap_action"), defaultTap)
+        val hold = ActionConfig.parse(el.raw.optJSONObject("hold_action"), "more-info")
+        view.isClickable = true
+        view.setOnClickListener { ctx.performAction(tap, el.entity) }
+        view.bindHoldAction(ctx, hold, el.entity)
+    }
+
+    private fun overlayColor(alpha: Float) = CardSurface.withAlpha(ctx.theme.cardBackgroundColor, alpha)
+
+    private fun tintFor(s: EntityState?): Int = s?.lightTintColor() ?: iconColorFor(ctx, s)
+
+    private fun stateIcon(el: PictureElement): View {
+        val icon = MdiIconView(ctx.context)
+        val halo = FrameLayout(ctx.context).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(overlayColor(0.55f))
+            }
+            addView(icon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
+        }
+        halo.layoutParams = LayoutParams(ctx.px(36f), ctx.px(36f))
+        bindActions(halo, el, if (VitroCardContext.isToggleable(el.entity)) "toggle" else "more-info")
+        val eid = el.entity
+        if (eid != null) {
+            observe(eid) { s -> icon.setIcon(MdiIcons.resolveIconName(el.icon, s), tintFor(s)) }
+        } else {
+            icon.setIcon(el.icon ?: "mdi:home", ctx.theme.stateIconColor)
+        }
+        return halo
+    }
+
+    private fun stateLabel(el: PictureElement): View {
+        val label = extLabel(ctx, 12f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+            maxLines = 1
+            setPadding(ctx.px(8f), ctx.px(3f), ctx.px(8f), ctx.px(3f))
+            background = pillBackground(overlayColor(0.75f))
+        }
+        bindActions(label, el, "more-info")
+        val eid = el.entity
+        if (eid != null) {
+            observe(eid) { s -> label.text = labelText(el, s) }
+        } else {
+            label.text = labelText(el, null)
+        }
+        return label
+    }
+
+    private fun stateBadge(el: PictureElement): View {
+        val value = extLabel(ctx, 11f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+            gravity = Gravity.CENTER
+            maxLines = 1
+        }
+        val icon = MdiIconView(ctx.context)
+        val ring = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(overlayColor(0.85f))
+        }
+        val badge = FrameLayout(ctx.context).apply {
+            background = ring
+            addView(value, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            addView(icon, LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
+        }
+        badge.layoutParams = LayoutParams(ctx.px(40f), ctx.px(40f))
+        bindActions(badge, el, "more-info")
+        val eid = el.entity ?: return badge
+        observe(eid) { s ->
+            val color = if (s?.isActive == true) ctx.theme.activeColor(s.domain) else ctx.theme.dividerColor
+            ring.setStroke(ctx.px(2f).coerceAtLeast(1), s?.lightTintColor() ?: color)
+            val shown = s?.takeIf { !it.isUnavailable && (it.unit != null || it.state.toDoubleOrNull() != null) }
+            value.visibility = if (shown != null) VISIBLE else GONE
+            icon.visibility = if (shown != null) GONE else VISIBLE
+            if (shown != null) {
+                value.text = "${shown.state}${shown.unit.orEmpty()}"
+            } else {
+                icon.setIcon(MdiIcons.resolveIconName(el.icon, s), tintFor(s))
+            }
+        }
+        return badge
+    }
+
+    private fun plainIcon(el: PictureElement): View {
+        val icon = MdiIconView(ctx.context)
+        icon.layoutParams = LayoutParams(ctx.px(24f), ctx.px(24f))
+        bindActions(icon, el, "more-info")
+        val eid = el.entity
+        if (eid != null) {
+            observe(eid) { s -> icon.setIcon(MdiIcons.resolveIconName(el.icon, s), tintFor(s)) }
+        } else {
+            icon.setIcon(el.icon ?: "mdi:home", ctx.theme.primaryTextColor)
+        }
+        return icon
+    }
+
+    private fun serviceButton(el: PictureElement): View {
+        val button = extLabel(ctx, 13f, ctx.theme.primaryColor, Inter.MEDIUM).apply {
+            text = el.title ?: "Run"
+            gravity = Gravity.CENTER
+            maxLines = 1
+            setPadding(ctx.px(12f), ctx.px(6f), ctx.px(12f), ctx.px(6f))
+            background = pillBackground(overlayColor(0.85f), 8f * ctx.dp)
+            isClickable = true
+        }
+        val service = el.raw.optString("service", "").ifEmpty { el.raw.optString("action", "") }
+        if (service.contains('.') && !el.raw.has("tap_action")) {
+            val data = el.raw.optJSONObject("service_data") ?: el.raw.optJSONObject("data")
+            val call = ActionConfig("perform-action", service = service, serviceData = data, target = el.raw.optJSONObject("target"))
+            button.setOnClickListener { ctx.performAction(call, el.entity) }
+        } else {
+            bindActions(button, el, "none")
+        }
+        return button
+    }
+
+    companion object {
+        /** HA's 16:9 until the image tells us its own shape. */
+        private const val DEFAULT_RATIO = 9f / 16f
+
+        /** `"35%"` → `0.35`; anything that isn't a 0–100 percentage → `0.5` (the center). */
+        fun parsePercent(v: String?): Float {
+            val t = v?.trim().orEmpty()
+            if (!t.endsWith("%")) return 0.5f
+            val n = t.dropLast(1).trim().toFloatOrNull() ?: return 0.5f
+            return if (n in 0f..100f) n / 100f else 0.5f
+        }
+
+        /** HA's `aspect_ratio` (`16:9`, `16x9`, `1.78` or `56%`) as height ÷ width, or null when unset or invalid. */
+        fun parseAspectRatio(v: String?): Float? {
+            val t = v?.trim().orEmpty()
+            if (t.isEmpty()) return null
+            if (t.endsWith("%")) return t.dropLast(1).trim().toFloatOrNull()?.takeIf { it > 0f }?.div(100f)
+            val parts = t.split(':', 'x', 'X')
+            if (parts.size == 2) {
+                val w = parts[0].trim().toFloatOrNull() ?: return null
+                val h = parts[1].trim().toFloatOrNull() ?: return null
+                return if (w > 0f && h > 0f) h / w else null
+            }
+            return t.toFloatOrNull()?.takeIf { it > 0f }?.let { 1f / it }
+        }
+
+        /** The drawable `elements[]` of a card, in order, each with its fractional position. */
+        fun parseElements(arr: JSONArray?): List<PictureElement> {
+            if (arr == null) return emptyList()
+            val out = ArrayList<PictureElement>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val style = o.optJSONObject("style")
+                out += PictureElement(
+                    type = o.optString("type", ""),
+                    entity = o.optString("entity", "").ifEmpty { null },
+                    icon = o.optString("icon", "").ifEmpty { null },
+                    title = o.optString("title", "").ifEmpty { null },
+                    prefix = o.optString("prefix", ""),
+                    suffix = o.optString("suffix", ""),
+                    xFrac = parsePercent(style?.optString("left", "")),
+                    yFrac = parsePercent(style?.optString("top", "")),
+                    raw = o,
+                )
+            }
+            return out
+        }
+
+        /** A `state-label`'s text: `prefix`, the state (or `attribute`), `suffix`; `…` while the state is unknown. */
+        fun labelText(el: PictureElement, s: EntityState?): String {
+            val attr = el.raw.optString("attribute", "")
+            val value = when {
+                s == null -> "…"
+                attr.isNotEmpty() -> s.attributes[attr]?.toString() ?: "…"
+                else -> s.formattedState()
+            }
+            return "${el.prefix}$value${el.suffix}"
+        }
+    }
+}
+
+/**
+ * The floorplan box: as tall as [ratio] × its width, the image filling it, and every other child centered on its
+ * fractional `(x, y)` point.
+ */
+internal class FloorplanLayout(context: Context) : FrameLayout(context) {
+    var ratio: Float = 9f / 16f
+
+    class Params(val xFrac: Float = 0.5f, val yFrac: Float = 0.5f, val fill: Boolean = false) :
+        FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
+
+    override fun addView(child: View, params: android.view.ViewGroup.LayoutParams) {
+        // Keep an element's own size (set when it was built) and add its position.
+        val own = child.layoutParams
+        val p = params as? Params ?: Params()
+        if (own != null && !p.fill) {
+            p.width = own.width
+            p.height = own.height
+        }
+        super.addView(child, p)
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val w = MeasureSpec.getSize(widthMeasureSpec)
+        val h = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
+            MeasureSpec.getSize(heightMeasureSpec)
+        } else {
+            (w * ratio).roundToInt()
+        }
+        for (i in 0 until childCount) {
+            val c = getChildAt(i)
+            val p = c.layoutParams as? Params
+            if (p?.fill == true) {
+                c.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY))
+            } else {
+                measureChild(c, MeasureSpec.makeMeasureSpec(w, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(h, MeasureSpec.AT_MOST))
+            }
+        }
+        setMeasuredDimension(w, h)
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        val w = right - left
+        val h = bottom - top
+        for (i in 0 until childCount) {
+            val c = getChildAt(i)
+            val p = c.layoutParams as? Params ?: Params()
+            if (p.fill) {
+                c.layout(0, 0, w, h)
+                continue
+            }
+            val cx = (p.xFrac * w).roundToInt()
+            val cy = (p.yFrac * h).roundToInt()
+            val l = cx - c.measuredWidth / 2
+            val t = cy - c.measuredHeight / 2
+            c.layout(l, t, l + c.measuredWidth, t + c.measuredHeight)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// humidifier
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Native HA `humidifier` card (`hui-humidifier-card`): the thermostat's 270° dial for the target humidity, `−` / `+`
+ * in its opening, and a bar with the power button and the mode picker below.
+ */
+class HumidifierCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
+    private val titleView = extLabel(ctx, 16f, ctx.theme.primaryTextColor).apply {
+        gravity = Gravity.CENTER
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+    }
+    private val dial = HumidityDialView(ctx)
+    private val powerIcon = MdiIconView(ctx.context)
+    private val powerCell = FrameLayout(ctx.context)
+    private val modePill = extLabel(ctx, 13f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+        gravity = Gravity.CENTER
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        setPadding(ctx.px(12f), 0, ctx.px(12f), 0)
+    }
+
+    init {
+        val col = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ctx.px(12f), ctx.px(8f), ctx.px(12f), ctx.px(12f))
+        }
+        val eid = config.entity
+        col.addView(dialHeader(ctx, titleView) { eid?.let { ctx.performAction(ActionConfig("more-info"), it) } },
+            LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(36f)))
+
+        val dialFrame = FrameLayout(ctx.context)
+        dialFrame.addView(dial, LayoutParams(MATCH_PARENT, ctx.px(220f)))
+        val steppers = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        fun stepBtn(symbol: String, sign: Int) = extLabel(ctx, 22f, ctx.theme.primaryTextColor).apply {
+            text = symbol
+            gravity = Gravity.CENTER
+            contentDescription = if (sign > 0) "Raise target humidity" else "Lower target humidity"
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.TRANSPARENT)
+                setStroke(ctx.px(1f).coerceAtLeast(1), CardSurface.withAlpha(ctx.theme.secondaryTextColor, 0.5f))
+            }
+            isClickable = true
+            setOnClickListener { dial.nudge(sign) }
+        }
+        val btn = ctx.px(42f)
+        steppers.addView(stepBtn("−", -1), LinearLayout.LayoutParams(btn, btn).apply { marginEnd = ctx.px(16f) })
+        steppers.addView(stepBtn("+", 1), LinearLayout.LayoutParams(btn, btn))
+        dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
+        col.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(220f)))
+
+        val bar = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val inset = ctx.px(4f)
+            setPadding(inset, inset, inset, inset)
+            background = pillBackground(if (ctx.theme.dark) BAR_DARK else BAR_LIGHT, 12f * ctx.dp)
+        }
+        powerCell.apply {
+            isClickable = true
+            contentDescription = "Power"
+            addView(powerIcon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
+        }
+        bar.addView(powerCell, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+        bar.addView(modePill, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { marginStart = ctx.px(4f) })
+        col.addView(bar, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(46f)).apply { topMargin = ctx.px(8f) })
+        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+
+        if (eid != null) {
+            bindHoldAction(ActionConfig.parse(config.raw.optJSONObject("hold_action"), "more-info"), eid)
+            dial.onCommit = { target ->
+                ctx.callService("humidifier", "set_humidity", JSONObject().put("entity_id", eid).put("humidity", target), null)
+            }
+            powerCell.setOnClickListener { ctx.callService("humidifier", "toggle", JSONObject().put("entity_id", eid), null) }
+            modePill.isClickable = true
+            modePill.setOnClickListener { showModes(it, eid) }
+            observe(eid, ::render)
+        } else {
+            render(null)
+        }
+    }
+
+    private fun render(s: EntityState?) {
+        titleView.text = config.name ?: s?.friendlyName ?: config.entity.orEmpty()
+        val attrs = s?.attributes.orEmpty()
+        val on = s?.state == "on"
+        dial.bind(
+            min = (attrs["min_humidity"] as? Number)?.toDouble() ?: 0.0,
+            max = (attrs["max_humidity"] as? Number)?.toDouble() ?: 100.0,
+            current = (attrs["current_humidity"] as? Number)?.toDouble(),
+            target = (attrs["humidity"] as? Number)?.toDouble(),
+            on = on,
+            status = statusLabel(s),
+        )
+        powerCell.background = if (on) pillBackground(HUMID_COLOR, 10f * ctx.dp) else null
+        powerIcon.setIcon("mdi:power", if (on) Color.WHITE else ctx.theme.primaryTextColor)
+        val modes = availableModes(s)
+        modePill.visibility = if (modes.isEmpty()) GONE else VISIBLE
+        modePill.text = (attrs["mode"] as? String)?.let(::modeLabel) ?: "Mode"
+    }
+
+    private fun showModes(anchor: View, eid: String) {
+        val modes = availableModes(ctx.store[eid])
+        if (modes.isEmpty()) return
+        val menu = PopupMenu(ctx.context, anchor)
+        modes.forEachIndexed { i, m -> menu.menu.add(0, i, i, modeLabel(m)) }
+        menu.setOnMenuItemClickListener { item ->
+            ctx.callService("humidifier", "set_mode", JSONObject().put("entity_id", eid).put("mode", modes[item.itemId]), null)
+            true
+        }
+        menu.show()
+    }
+
+    companion object {
+        /** HA's humidifier accent. */
+        const val HUMID_COLOR = 0xFF03A9F4.toInt()
+        private const val BAR_LIGHT = 0xFFF4F4F4.toInt()
+        private const val BAR_DARK = 0xFF2A2A2A.toInt()
+
+        /** The line above the big number: what the humidifier is doing, else On / Off. */
+        fun statusLabel(s: EntityState?): String = when {
+            s == null -> "–"
+            s.isUnavailable -> s.formattedState()
+            s.state == "off" -> "Off"
+            else -> when (s.attributes["action"] as? String) {
+                "humidifying" -> "Humidifying"
+                "drying" -> "Drying"
+                "idle" -> "Idle"
+                "off" -> "Off"
+                else -> "On"
+            }
+        }
+
+        fun availableModes(s: EntityState?): List<String> =
+            (s?.attributes?.get("available_modes") as? List<*>)?.mapNotNull { it?.toString() }.orEmpty()
+
+        fun modeLabel(mode: String): String = mode.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
+
+        /** A target humidity snapped to whole [step]s inside `min..max`. */
+        fun snapHumidity(v: Double, min: Double, max: Double, step: Double = 1.0): Int {
+            val snapped = min + Math.round((v - min) / step) * step
+            return snapped.coerceIn(min, max).roundToInt()
+        }
+    }
+}
+
+/** The humidifier's 270° dial: track, the target arc in [HumidifierCardView.HUMID_COLOR], a current-humidity dot. */
+internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.context) {
+    private val dp = ctx.dp
+    private val strokeW = 14f * dp
+    private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = strokeW
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private fun textPaint(sp: Float, weight: Int, color: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = extSpPx(ctx, sp)
+        typeface = Inter.typeface(ctx.context, weight, sp)
+        textAlign = Paint.Align.CENTER
+        this.color = color
+    }
+    private val statusPaint = textPaint(14f, Inter.MEDIUM, ctx.theme.secondaryTextColor)
+    private val bigPaint = textPaint(44f, Inter.REGULAR, ctx.theme.primaryTextColor)
+    private val subPaint = textPaint(13f, Inter.REGULAR, ctx.theme.secondaryTextColor)
+    private val oval = RectF()
+
+    private var min = 0.0
+    private var max = 100.0
+    private var current: Double? = null
+    private var target: Double? = null
+    private var on = false
+    private var status = ""
+    private var dragTarget: Double? = null
+
+    var onCommit: (Int) -> Unit = {}
+
+    fun bind(min: Double, max: Double, current: Double?, target: Double?, on: Boolean, status: String) {
+        this.min = min
+        this.max = if (max > min) max else min + 1.0
+        this.current = current
+        this.target = target
+        this.on = on
+        this.status = status
+        if (dragTarget == null) invalidate()
+    }
+
+    fun nudge(sign: Int) {
+        val t = target ?: return
+        val next = HumidifierCardView.snapHumidity(t + sign, min, max)
+        if (next.toDouble() == t) return
+        target = next.toDouble()
+        invalidate()
+        onCommit(next)
+    }
+
+    private val radius: Float get() = (minOf(width, height) / 2f - strokeW).coerceAtLeast(8f * dp)
+
+    private fun fracOf(v: Double): Float = ((v - min) / (max - min)).toFloat().coerceIn(0f, 1f)
+
+    private fun pointAt(frac: Float, r: Float): Pair<Float, Float> {
+        val a = Math.toRadians((START_ANGLE + SWEEP * frac).toDouble())
+        return (width / 2f + r * cos(a).toFloat()) to (height / 2f + r * sin(a).toFloat())
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val cx = width / 2f
+        val cy = height / 2f
+        val r = radius
+        oval.set(cx - r, cy - r, cx + r, cy + r)
+        arcPaint.color = ctx.theme.dividerColor
+        canvas.drawArc(oval, START_ANGLE, SWEEP, false, arcPaint)
+        val accent = if (on) HumidifierCardView.HUMID_COLOR else CardSurface.withAlpha(ctx.theme.secondaryTextColor, 0.6f)
+        val shown = dragTarget ?: target
+        if (shown != null) {
+            val f = fracOf(shown)
+            arcPaint.color = accent
+            if (f > 0f) canvas.drawArc(oval, START_ANGLE, SWEEP * f, false, arcPaint)
+        }
+        current?.let { c ->
+            val (x, y) = pointAt(fracOf(c), r)
+            fill.color = ctx.theme.cardBackgroundColor
+            canvas.drawCircle(x, y, strokeW * 0.3f, fill)
+            fill.color = ctx.theme.primaryTextColor
+            canvas.drawCircle(x, y, strokeW * 0.18f, fill)
+        }
+        if (shown != null) {
+            val (x, y) = pointAt(fracOf(shown), r)
+            fill.color = Color.WHITE
+            canvas.drawCircle(x, y, strokeW * 0.42f, fill)
+        }
+        canvas.drawText(status, cx, cy - 30f * dp, statusPaint)
+        canvas.drawText(shown?.let { "${it.roundToInt()}%" } ?: "–", cx, cy + 14f * dp, bigPaint)
+        current?.let { canvas.drawText("Currently ${it.roundToInt()}%", cx, cy + 36f * dp, subPaint) }
+    }
+
+    private fun valueAt(x: Float, y: Float): Double {
+        val deg = Math.toDegrees(atan2((y - height / 2f).toDouble(), (x - width / 2f).toDouble())).toFloat()
+        val rel = ((deg - START_ANGLE) % 360f + 360f) % 360f
+        val clamped = if (rel > SWEEP) (if (rel > SWEEP + (360f - SWEEP) / 2f) 0f else SWEEP) else rel
+        return min + (max - min) * (clamped / SWEEP)
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        val d = hypot(event.x - width / 2f, event.y - height / 2f)
+        val r = radius
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                if (target == null || d < r * 0.65f || d > r * 1.35f) return false
+                parent?.requestDisallowInterceptTouchEvent(true)
+                dragTarget = HumidifierCardView.snapHumidity(valueAt(event.x, event.y), min, max).toDouble()
+                invalidate()
+            }
+            MotionEvent.ACTION_MOVE -> if (dragTarget != null) {
+                dragTarget = HumidifierCardView.snapHumidity(valueAt(event.x, event.y), min, max).toDouble()
+                invalidate()
+            }
+            MotionEvent.ACTION_UP -> {
+                dragTarget?.let { t ->
+                    target = t
+                    performClick()
+                    onCommit(t.roundToInt())
+                }
+                dragTarget = null
+                parent?.requestDisallowInterceptTouchEvent(false)
+                invalidate()
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                dragTarget = null
+                invalidate()
+            }
+        }
+        return true
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
+    }
+
+    companion object {
+        private const val START_ANGLE = 135f
+        private const val SWEEP = 270f
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// calendar
+// ---------------------------------------------------------------------------------------------
+
+/** One event from `GET /api/calendars/<entity_id>`: times in epoch ms, all-day events from local midnight. */
+data class CalendarEvent(
+    val summary: String,
+    val startMs: Long,
+    val endMs: Long,
+    val allDay: Boolean,
+    val calendarId: String,
+)
+
+/**
+ * Native HA `calendar` card as an agenda: the next 7 days of the named `calendar.*` entities, one row per event
+ * with a date badge, the calendar's color dot, the summary and the time range. Read over HA's REST calendar API.
+ */
+class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
+    private val titleView = extLabel(ctx, 16f, ctx.theme.primaryTextColor, Inter.MEDIUM)
+    private val list = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+    private val ids: List<String> = calendarIds(config)
+    private val refresh = Runnable { fetch() }
+    private var generation = 0
+
+    init {
+        val pad = ctx.px(16f)
+        val col = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, pad)
+        }
+        titleView.text = config.title ?: ""
+        titleView.visibility = if (config.title == null) GONE else VISIBLE
+        col.addView(titleView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = ctx.px(10f) })
+        col.addView(list, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        render(emptyList())
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        fetch()
+    }
+
+    override fun onDetachedFromWindow() {
+        ctx.main.removeCallbacks(refresh)
+        generation++
+        super.onDetachedFromWindow()
+    }
+
+    private fun fetch() {
+        ctx.main.removeCallbacks(refresh)
+        if (ids.isEmpty()) return
+        val gen = ++generation
+        val startCal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        val start = StatisticsGraphCardView.isoUtc(startCal.time)
+        val end = StatisticsGraphCardView.isoUtc(Date(startCal.timeInMillis + DAYS * 86_400_000L))
+        val results = arrayOfNulls<List<CalendarEvent>>(ids.size)
+        var pending = ids.size
+        ids.forEachIndexed { i, eid ->
+            val path = "/api/calendars/$eid?start=${URLEncoder.encode(start, "UTF-8")}&end=${URLEncoder.encode(end, "UTF-8")}"
+            ctx.fetchJson(path) { json ->
+                if (gen != generation) return@fetchJson
+                results[i] = parseEvents(json as? JSONArray, eid)
+                if (--pending == 0) {
+                    render(upcoming(results.filterNotNull().flatten(), System.currentTimeMillis()))
+                    if (isAttachedToWindow) ctx.main.postDelayed(refresh, REFRESH_MS)
+                }
+            }
+        }
+    }
+
+    private fun render(events: List<CalendarEvent>) {
+        list.removeAllViews()
+        if (events.isEmpty()) {
+            list.addView(extLabel(ctx, 14f, ctx.theme.secondaryTextColor).apply { text = "No upcoming events" })
+            return
+        }
+        val tz = TimeZone.getDefault()
+        var lastDay = ""
+        events.forEachIndexed { idx, ev ->
+            val (weekday, day) = dateBadge(ev.startMs, tz)
+            val dayKey = "$weekday $day"
+            val row = LinearLayout(ctx.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                isClickable = true
+                setOnClickListener { ctx.openMoreInfo(ev.calendarId) }
+            }
+            val badge = LinearLayout(ctx.context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
+            if (dayKey != lastDay) {
+                badge.addView(extLabel(ctx, 12f, ctx.theme.secondaryTextColor, Inter.MEDIUM).apply { text = weekday })
+                badge.addView(extLabel(ctx, 20f, ctx.theme.primaryTextColor).apply { text = day })
+                lastDay = dayKey
+            }
+            row.addView(badge, LinearLayout.LayoutParams(ctx.px(44f), WRAP_CONTENT))
+            val color = PALETTE[ids.indexOf(ev.calendarId).coerceAtLeast(0) % PALETTE.size]
+            row.addView(View(ctx.context).apply { background = pillBackground(color) },
+                LinearLayout.LayoutParams(ctx.px(8f), ctx.px(8f)).apply { marginEnd = ctx.px(10f) })
+            val text = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+            text.addView(extLabel(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+                this.text = ev.summary
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+            })
+            text.addView(extLabel(ctx, 12f, ctx.theme.secondaryTextColor).apply { this.text = timeRange(ev, tz) },
+                LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(3f) })
+            row.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            list.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (idx > 0) topMargin = ctx.px(10f) })
+        }
+    }
+
+    companion object {
+        private const val DAYS = 7
+        private const val MAX_EVENTS = 20
+        private const val REFRESH_MS = 15 * 60_000L
+        private val PALETTE = intArrayOf(
+            0xFF03A9F4.toInt(), 0xFFFF9800.toInt(), 0xFF4CAF50.toInt(), 0xFFE91E63.toInt(),
+            0xFF9C27B0.toInt(), 0xFF009688.toInt(), 0xFFFFC107.toInt(), 0xFF795548.toInt(),
+        )
+
+        /** The card's `entities` (ids or `{entity}` objects), else its single `entity`; only `calendar.*` ids. */
+        fun calendarIds(config: CardConfig): List<String> {
+            val fromList = config.entities().filter { it.isEntity }.map { it.entity }
+            return fromList.ifEmpty { listOfNotNull(config.entity) }.filter { it.startsWith("calendar.") }.distinct()
+        }
+
+        /** Events of one calendar from the REST result; `start` / `end` are `{dateTime}`, `{date}` or bare strings. */
+        fun parseEvents(arr: JSONArray?, calendarId: String, tz: TimeZone = TimeZone.getDefault()): List<CalendarEvent> {
+            if (arr == null) return emptyList()
+            val out = ArrayList<CalendarEvent>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val (start, allDay) = parseWhen(o.opt("start"), tz) ?: continue
+                val end = parseWhen(o.opt("end"), tz)?.first ?: start
+                out += CalendarEvent(o.optString("summary", "").ifEmpty { "Untitled" }, start, end, allDay, calendarId)
+            }
+            return out
+        }
+
+        /** Events still to come (or under way) at [nowMs], soonest first, capped for the card. */
+        fun upcoming(events: List<CalendarEvent>, nowMs: Long): List<CalendarEvent> =
+            events.filter { it.endMs > nowMs || it.startMs >= nowMs }
+                .sortedWith(compareBy({ it.startMs }, { !it.allDay }))
+                .take(MAX_EVENTS)
+
+        private fun parseWhen(v: Any?, tz: TimeZone): Pair<Long, Boolean>? {
+            val text = when (v) {
+                is JSONObject -> v.optString("dateTime", "").ifEmpty { v.optString("date", "") }
+                is String -> v
+                else -> ""
+            }.trim()
+            if (text.isEmpty()) return null
+            if (DATE_ONLY.matches(text)) {
+                val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply { timeZone = tz; isLenient = false }
+                return runCatching { fmt.parse(text)?.time }.getOrNull()?.let { it to true }
+            }
+            val sec = EntityStore.parseIsoEpochSeconds(text) ?: return null
+            return (sec * 1000.0).toLong() to false
+        }
+
+        private val DATE_ONLY = Regex("""^\d{4}-\d{2}-\d{2}$""")
+
+        /** `("Mon", "24")` for the date badge. */
+        fun dateBadge(ms: Long, tz: TimeZone): Pair<String, String> {
+            val wd = SimpleDateFormat("EEE", Locale.US).apply { timeZone = tz }.format(Date(ms))
+            val d = SimpleDateFormat("d", Locale.US).apply { timeZone = tz }.format(Date(ms))
+            return wd to d
+        }
+
+        /** `10:00 – 11:00`, or `All day`. */
+        fun timeRange(ev: CalendarEvent, tz: TimeZone): String {
+            if (ev.allDay) return "All day"
+            val fmt = SimpleDateFormat("HH:mm", Locale.ROOT).apply { timeZone = tz }
+            val s = fmt.format(Date(ev.startMs))
+            return if (ev.endMs > ev.startMs) "$s – ${fmt.format(Date(ev.endMs))}" else s
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// logbook
+// ---------------------------------------------------------------------------------------------
+
+/** One `logbook/get_events` row. [whenSec] is epoch seconds. */
+data class LogbookEntry(
+    val entityId: String,
+    val name: String?,
+    val message: String,
+    val state: String?,
+    val whenSec: Double,
+)
+
+/**
+ * Native HA `logbook` card: the newest 12 logbook rows of the card's `entities` over `hours_to_show`, each with
+ * the domain icon, "<name> turned on" and how long ago. A row opens that entity's More-Info.
+ */
+class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
+    private val list = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+    private val ids: List<String> = config.entities().filter { it.isEntity }.map { it.entity }
+        .ifEmpty { listOfNotNull(config.entity) }.distinct()
+    private val hours = config.raw.optInt("hours_to_show", 24).coerceIn(1, 24 * 30)
+    private val refresh = Runnable { fetch() }
+    private var generation = 0
+
+    init {
+        val pad = ctx.px(16f)
+        val col = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, pad)
+        }
+        col.addView(extLabel(ctx, 16f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply { text = config.title ?: "Logbook" },
+            LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = ctx.px(10f) })
+        col.addView(list, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        render(emptyList())
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        fetch()
+    }
+
+    override fun onDetachedFromWindow() {
+        ctx.main.removeCallbacks(refresh)
+        generation++
+        super.onDetachedFromWindow()
+    }
+
+    private fun fetch() {
+        ctx.main.removeCallbacks(refresh)
+        if (ids.isEmpty()) return
+        val gen = ++generation
+        val now = System.currentTimeMillis()
+        val msg = JSONObject()
+            .put("type", "logbook/get_events")
+            .put("start_time", StatisticsGraphCardView.isoUtc(Date(now - hours * 3_600_000L)))
+            .put("end_time", StatisticsGraphCardView.isoUtc(Date(now)))
+            .put("entity_ids", JSONArray(ids))
+        ctx.callWs(msg) { ok, result, _ ->
+            val rows = if (ok) parseEntries(result as? JSONArray) else null
+            ctx.main.post {
+                if (gen != generation) return@post
+                if (rows != null) render(rows)
+                if (isAttachedToWindow) ctx.main.postDelayed(refresh, REFRESH_MS)
+            }
+        }
+    }
+
+    private fun render(entries: List<LogbookEntry>) {
+        list.removeAllViews()
+        if (entries.isEmpty()) {
+            list.addView(extLabel(ctx, 14f, ctx.theme.secondaryTextColor).apply { text = "No logbook events found" })
+            return
+        }
+        val nowSec = System.currentTimeMillis() / 1000.0
+        entries.forEachIndexed { idx, e ->
+            val live = ctx.store[e.entityId]
+            val iconState = EntityState(e.entityId, e.state ?: live?.state.orEmpty(), live?.attributes.orEmpty())
+            val row = LinearLayout(ctx.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                isClickable = true
+                setOnClickListener { ctx.openMoreInfo(e.entityId) }
+            }
+            row.addView(MdiIconView(ctx.context).apply {
+                setIcon(MdiIcons.resolveIconName(null, iconState), iconColorFor(ctx, iconState))
+            }, LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)).apply { marginEnd = ctx.px(12f) })
+            val text = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+            val name = e.name ?: live?.friendlyName ?: e.entityId
+            text.addView(extLabel(ctx, 13f, ctx.theme.primaryTextColor).apply {
+                this.text = "$name ${e.message}"
+                maxLines = 2
+                ellipsize = TextUtils.TruncateAt.END
+            })
+            text.addView(extLabel(ctx, 11f, ctx.theme.secondaryTextColor).apply {
+                this.text = relativeTime(e.whenSec, nowSec)
+            }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(3f) })
+            row.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            list.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (idx > 0) topMargin = ctx.px(10f) })
+        }
+    }
+
+    companion object {
+        private const val MAX_ROWS = 12
+        private const val REFRESH_MS = 60_000L
+
+        /** The newest [MAX_ROWS] rows with an entity, newest first. */
+        fun parseEntries(arr: JSONArray?): List<LogbookEntry> {
+            if (arr == null) return emptyList()
+            val out = ArrayList<LogbookEntry>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val eid = o.optString("entity_id", "").ifEmpty { continue }
+                val state = if (o.has("state") && !o.isNull("state")) o.optString("state") else null
+                val message = o.optString("message", "").ifEmpty { stateMessage(state) }
+                out += LogbookEntry(eid, o.optString("name", "").ifEmpty { null }, message, state, EntityStore.parseTimestamp(o.opt("when")))
+            }
+            return out.sortedByDescending { it.whenSec }.take(MAX_ROWS)
+        }
+
+        /** HA's wording for a state change with no `message`. */
+        fun stateMessage(state: String?): String = when (state) {
+            null -> "changed"
+            "on" -> "turned on"
+            "off" -> "turned off"
+            "unavailable" -> "became unavailable"
+            "unknown" -> "became unknown"
+            else -> "changed to ${state.replace('_', ' ')}"
+        }
+
+        /** "5 minutes ago", by the same rules as an entity's last-changed line. */
+        fun relativeTime(whenSec: Double, nowSec: Double): String =
+            EntityState("logbook.entry", "", emptyMap(), lastChanged = whenSec).relativeLastChanged(nowSec) ?: ""
     }
 }

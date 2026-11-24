@@ -273,6 +273,10 @@ object CardRouter {
         "todo-list",
         "statistics-graph",
         "area",
+        "picture-elements",
+        "humidifier",
+        "calendar",
+        "logbook",
     )
 
     /** Keys besides `entity` / `entities` where core cards name an entity id. */
@@ -321,6 +325,16 @@ object CardRouter {
 
     private val ENTITY_ID_PATTERN = Regex("""^[a-z][a-z0-9_]*\.[a-z0-9_]+$""")
 
+    private fun scanElements(arr: JSONArray?, out: MutableSet<String>) {
+        if (arr == null) return
+        for (i in 0 until arr.length()) {
+            val el = arr.optJSONObject(i) ?: continue
+            el.optString("entity", "").takeIf { ENTITY_ID_PATTERN.matches(it) }?.let { out += it }
+            VisibilityCondition.parseList(el.optJSONArray("conditions")).forEach { it.referencedEntities(out) }
+            scanElements(el.optJSONArray("elements"), out)
+        }
+    }
+
     /** Every `entity_id` referenced anywhere in [view], for view-scoped `subscribe_entities`. */
     fun referencedEntities(view: ViewConfig): Set<String> {
         val out = LinkedHashSet<String>()
@@ -358,6 +372,8 @@ object CardRouter {
                     if (ENTITY_ID_PATTERN.matches(id)) out += id
                 }
             }
+            // picture-elements: every overlay's entity, including those nested in `conditional` elements.
+            scanElements(c.raw.optJSONArray("elements"), out)
             c.childCards.forEach(::walkCard)
         }
         view.sections.forEach { s ->

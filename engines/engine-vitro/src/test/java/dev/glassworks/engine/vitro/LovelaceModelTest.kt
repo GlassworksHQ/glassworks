@@ -6,11 +6,16 @@ package dev.glassworks.engine.vitro
 
 import dev.glassworks.engine.vitro.cards.AlarmPanelCardView
 import dev.glassworks.engine.vitro.cards.AreaCardView
+import dev.glassworks.engine.vitro.cards.CalendarCardView
 import dev.glassworks.engine.vitro.cards.EntityCardView
 import dev.glassworks.engine.vitro.cards.GaugeCardView
+import dev.glassworks.engine.vitro.cards.HumidifierCardView
+import dev.glassworks.engine.vitro.cards.LogbookCardView
+import dev.glassworks.engine.vitro.cards.PictureElementsCardView
 import dev.glassworks.engine.vitro.cards.StatisticsGraphCardView
 import dev.glassworks.engine.vitro.cards.TodoItem
 import dev.glassworks.engine.vitro.cards.TodoListCardView
+import dev.glassworks.engine.vitro.cards.WebIslandCardView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
@@ -27,6 +32,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.TimeZone
 
 /** The Lovelace parser, the tier router and the visibility conditions. Pure JVM. */
 class LovelaceModelTest {
@@ -757,5 +763,148 @@ class LovelaceModelTest {
         assertTrue(rows[0].isEntity && !rows[1].isEntity && !rows[2].isEntity)
         assertEquals("last-changed", rows[4].secondaryInfo)
         assertEquals(setOf("light.desk", "cover.office"), CardRouter.referencedEntities(view("""{"cards": [${c.raw}]}""")))
+    }
+
+    // ---- v1.0: picture-elements, humidifier, calendar, logbook, hass.user ----
+
+    @Test
+    fun finalCoreCardsRouteNative() {
+        for (t in listOf("picture-elements", "humidifier", "calendar", "logbook")) {
+            assertTrue("$t is native core", t in CardRouter.NATIVE_CORE_TYPES)
+            assertEquals(t, CardTier.NATIVE_CORE, CardRouter.tier(card("""{"type": "$t"}""")))
+        }
+    }
+
+    @Test
+    fun referencedEntitiesScanPictureElements() {
+        val v = view(
+            """{"cards": [{
+              "type": "picture-elements", "image": "/local/floorplan.png", "camera_image": "camera.porch",
+              "elements": [
+                {"type": "state-icon", "entity": "light.kitchen", "style": {"left": "35%", "top": "60%"}},
+                {"type": "state-label", "entity": "sensor.kitchen_t", "prefix": "T ", "style": {"left": "40%", "top": "20%"}},
+                {"type": "service-button", "title": "Party", "service": "scene.turn_on", "style": {"left": "50%", "top": "90%"}},
+                {"type": "conditional",
+                 "conditions": [{"entity": "input_boolean.guest", "state": "on"}],
+                 "elements": [{"type": "state-badge", "entity": "binary_sensor.door"}]}
+              ]
+            }]}""",
+        )
+        assertEquals(
+            setOf("light.kitchen", "sensor.kitchen_t", "input_boolean.guest", "binary_sensor.door", "camera.porch"),
+            CardRouter.referencedEntities(v),
+        )
+    }
+
+    @Test
+    fun pictureElementsParsePercentagesAspectRatioAndLabels() {
+        assertEquals(0.35f, PictureElementsCardView.parsePercent("35%"), 1e-6f)
+        assertEquals(0.125f, PictureElementsCardView.parsePercent(" 12.5 % "), 1e-6f)
+        assertEquals(0f, PictureElementsCardView.parsePercent("0%"), 1e-6f)
+        for (bad in listOf(null, "", "35", "120px", "abc%", "150%", "-5%")) {
+            assertEquals("$bad", 0.5f, PictureElementsCardView.parsePercent(bad), 1e-6f)
+        }
+        assertEquals(9f / 16f, PictureElementsCardView.parseAspectRatio("16:9")!!, 1e-6f)
+        assertEquals(0.75f, PictureElementsCardView.parseAspectRatio("4x3")!!, 1e-6f)
+        assertEquals(0.56f, PictureElementsCardView.parseAspectRatio("56%")!!, 1e-6f)
+        assertEquals(0.5f, PictureElementsCardView.parseAspectRatio("2")!!, 1e-6f)
+        assertNull(PictureElementsCardView.parseAspectRatio(""))
+        assertNull(PictureElementsCardView.parseAspectRatio("wide"))
+
+        val els = PictureElementsCardView.parseElements(
+            JSONArray("""[{"type": "state-label", "entity": "sensor.t", "prefix": "~", "suffix": "!",
+                           "style": {"left": "35%", "top": "60%"}}, {"type": "icon", "icon": "mdi:home"}, 7]"""),
+        )
+        assertEquals(2, els.size)
+        assertEquals(0.35f, els[0].xFrac, 1e-6f)
+        assertEquals(0.6f, els[0].yFrac, 1e-6f)
+        assertEquals(0.5f, els[1].xFrac, 1e-6f)
+        assertEquals("~…!", PictureElementsCardView.labelText(els[0], null))
+        assertEquals("~21 °C!", PictureElementsCardView.labelText(els[0], EntityState("sensor.t", "21", mapOf("unit_of_measurement" to "°C"))))
+    }
+
+    @Test
+    fun humidifierStatusModesAndSnapping() {
+        assertEquals("Off", HumidifierCardView.statusLabel(EntityState("humidifier.h", "off", mapOf("action" to "humidifying"))))
+        assertEquals("Humidifying", HumidifierCardView.statusLabel(EntityState("humidifier.h", "on", mapOf("action" to "humidifying"))))
+        assertEquals("On", HumidifierCardView.statusLabel(EntityState("humidifier.h", "on", emptyMap())))
+        assertEquals("Unavailable", HumidifierCardView.statusLabel(EntityState("humidifier.h", "unavailable", emptyMap())))
+        assertEquals(listOf("normal", "eco"), HumidifierCardView.availableModes(EntityState("humidifier.h", "on", mapOf("available_modes" to listOf("normal", "eco")))))
+        assertEquals("Boost mode", HumidifierCardView.modeLabel("boost_mode"))
+        assertEquals(51, HumidifierCardView.snapHumidity(50.6, 0.0, 100.0))
+        assertEquals(30, HumidifierCardView.snapHumidity(12.0, 30.0, 80.0))
+        assertEquals(55, HumidifierCardView.snapHumidity(53.0, 0.0, 100.0, 5.0))
+    }
+
+    @Test
+    fun calendarReadsIdsEventsAndFormatsRows() {
+        val utc = TimeZone.getTimeZone("UTC")
+        assertEquals(
+            listOf("calendar.home", "calendar.work"),
+            CalendarCardView.calendarIds(card("""{"type": "calendar", "entities": ["calendar.home", {"entity": "calendar.work"}, "sensor.x"]}""")),
+        )
+        assertEquals(listOf("calendar.solo"), CalendarCardView.calendarIds(card("""{"type": "calendar", "entity": "calendar.solo"}""")))
+
+        val events = CalendarCardView.parseEvents(
+            JSONArray(
+                """[
+                  {"summary": "Standup", "start": {"dateTime": "2026-11-24T10:00:00+00:00"}, "end": {"dateTime": "2026-11-24T11:00:00+00:00"}},
+                  {"summary": "Holiday", "start": {"date": "2026-11-23"}, "end": {"date": "2026-11-24"}},
+                  {"start": "2026-11-25T08:30:00Z", "end": "2026-11-25T09:00:00Z"},
+                  {"summary": "Broken", "start": {}}
+                ]""",
+            ),
+            "calendar.home",
+            utc,
+        )
+        assertEquals(listOf("Standup", "Holiday", "Untitled"), events.map { it.summary })
+        assertTrue(events[1].allDay && !events[0].allDay)
+        assertEquals("10:00 – 11:00", CalendarCardView.timeRange(events[0], utc))
+        assertEquals("All day", CalendarCardView.timeRange(events[1], utc))
+        assertEquals("Tue" to "24", CalendarCardView.dateBadge(events[0].startMs, utc))
+
+        val now = events[1].startMs + 3_600_000L // 01:00 on the 23rd: the all-day event is under way
+        assertEquals(listOf("Holiday", "Standup", "Untitled"), CalendarCardView.upcoming(events, now).map { it.summary })
+        assertEquals(listOf("Untitled"), CalendarCardView.upcoming(events, events[0].endMs + 1).map { it.summary })
+        assertTrue(CalendarCardView.parseEvents(null, "calendar.home").isEmpty())
+    }
+
+    @Test
+    fun logbookEntriesNewestFirstWithMessages() {
+        val rows = LogbookCardView.parseEntries(
+            JSONArray(
+                """[
+                  {"when": 1000.5, "entity_id": "light.desk", "state": "on"},
+                  {"when": "1970-01-01T00:33:20+00:00", "entity_id": "light.desk", "state": "off", "name": "Desk"},
+                  {"when": 1500, "entity_id": "automation.wake", "message": "triggered by time"},
+                  {"when": 1600, "message": "no entity"}
+                ]""",
+            ),
+        )
+        assertEquals(listOf(2000.0, 1500.0, 1000.5), rows.map { it.whenSec })
+        assertEquals(listOf("turned off", "triggered by time", "turned on"), rows.map { it.message })
+        assertEquals("Desk", rows[0].name)
+        assertNull(rows[1].name)
+        val many = JSONArray((0 until 20).map { JSONObject().put("when", it).put("entity_id", "switch.s").put("state", "on") })
+        assertEquals(12, LogbookCardView.parseEntries(many).size)
+        assertEquals(19.0, LogbookCardView.parseEntries(many).first().whenSec, 0.0)
+        assertEquals("changed to heat cool", LogbookCardView.stateMessage("heat_cool"))
+        assertEquals("became unavailable", LogbookCardView.stateMessage("unavailable"))
+        assertEquals("5 minutes ago", LogbookCardView.relativeTime(1_000.0, 1_300.0))
+        assertEquals("Just now", LogbookCardView.relativeTime(1_000.0, 1_010.0))
+    }
+
+    @Test
+    fun islandUserIsTheSignedInUserOrThePanel() {
+        // No user yet: the island keeps its anonymous `{ id: 'vitro', name: 'Panel' }` default.
+        assertNull(WebIslandCardView.islandUser(JSONObject()))
+
+        val real = WebIslandCardView.islandUser(
+            JSONObject("""{"id": "abc123", "name": "Alex", "is_admin": true, "is_owner": false, "credentials": [{"auth_provider_type": "homeassistant"}]}"""),
+        )!!
+        assertEquals("abc123", real.getString("id"))
+        assertEquals("Alex", real.getString("name"))
+        assertTrue(real.getBoolean("is_admin"))
+        assertFalse(real.has("credentials"))
     }
 }

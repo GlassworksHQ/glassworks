@@ -13,6 +13,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.text.format.DateFormat
@@ -21,7 +22,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-import android.view.animation.DecelerateInterpolator
+import android.view.ViewTreeObserver
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
@@ -88,6 +89,11 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     private var showingHistory = false
     private var dismissed = false
 
+    /** The dimmed backdrop; its alpha fades with the sheet. */
+    private val scrim = ColorDrawable(SCRIM)
+    private var scrimAnimator: ValueAnimator? = null
+    private var enterListener: ViewTreeObserver.OnPreDrawListener? = null
+
     /** Refreshes "X minutes ago" while the sheet is open. */
     private val clockTick = object : Runnable {
         override fun run() {
@@ -99,7 +105,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     }
 
     init {
-        setBackgroundColor(SCRIM)
+        background = scrim
         isClickable = true
         setOnClickListener { dismiss() }
 
@@ -142,6 +148,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         historyButton.setOnClickListener {
             showingHistory = !showingHistory
             buildBody()
+            fadeIn(body)
         }
         header.addView(historyButton, LinearLayout.LayoutParams(ctx.px(40f), ctx.px(40f)))
         panel.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -174,23 +181,119 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         ctx.main.removeCallbacks(clockTick)
         ctx.main.postDelayed(clockTick, TIME_REFRESH_MS)
 
-        // Slide up and fade in.
-        alpha = 0f
-        panel.translationY = ctx.dp * if (wide) 24f else 96f
-        animate().alpha(1f).setDuration(ENTER_MS).setInterpolator(DecelerateInterpolator()).start()
-        panel.animate().translationY(0f).setDuration(ENTER_MS).setInterpolator(DecelerateInterpolator()).start()
+        playEnter()
     }
 
+    /**
+     * HA 2026's `ha-dialog` / `ha-bottom-sheet` entrance. Narrow: the sheet slides up from its own height over
+     * 240 ms (decelerate) while the scrim fades in. Wide: the card scales 0.94 → 1 and fades in over 200 ms.
+     */
+    private fun playEnter() {
+        cancelMotion()
+        panel.alpha = 1f
+        panel.scaleX = 1f
+        panel.scaleY = 1f
+        panel.translationY = 0f
+        scrim.alpha = 0
+        val duration = if (wide) ENTER_WIDE_MS else ENTER_SHEET_MS
+        if (wide) {
+            panel.alpha = 0f
+            panel.scaleX = ENTER_SCALE
+            panel.scaleY = ENTER_SCALE
+        } else {
+            panel.translationY = SHEET_FALLBACK_DP * ctx.dp
+        }
+        // Wait for the first layout so the sheet starts exactly one sheet-height below its resting place.
+        val listener = object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                panel.viewTreeObserver.removeOnPreDrawListener(this)
+                if (enterListener === this) enterListener = null
+                if (dismissed) return true
+                if (!wide && panel.height > 0) panel.translationY = panel.height.toFloat()
+                val anim = panel.animate().setDuration(duration).setInterpolator(HaMotion.decelerate())
+                if (wide) anim.alpha(1f).scaleX(1f).scaleY(1f) else anim.translationY(0f)
+                anim.start()
+                fadeScrim(255, duration, HaMotion.decelerate())
+                return true
+            }
+        }
+        enterListener = listener
+        panel.viewTreeObserver.addOnPreDrawListener(listener)
+    }
+
+    private fun fadeScrim(to: Int, duration: Long, interpolator: android.animation.TimeInterpolator, onEnd: (() -> Unit)? = null) {
+        scrimAnimator?.cancel()
+        scrimAnimator = ValueAnimator.ofInt(scrim.alpha, to).apply {
+            this.duration = duration
+            this.interpolator = interpolator
+            addUpdateListener { scrim.alpha = it.animatedValue as Int }
+            if (onEnd != null) {
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    private var cancelled = false
+                    override fun onAnimationCancel(animation: android.animation.Animator) { cancelled = true }
+                    override fun onAnimationEnd(animation: android.animation.Animator) { if (!cancelled) onEnd() }
+                })
+            }
+            start()
+        }
+    }
+
+    /**
+     * Closes the sheet. On screen it slides down (narrow) or fades and shrinks to 0.94 (wide) over 180 ms with the
+     * accelerate ease while the scrim fades out, then calls `onDismiss`; off screen it tears down at once.
+     */
     fun dismiss() {
         if (dismissed) return
         dismissed = true
         release()
-        onDismiss()
+        if (!isAttachedToWindow) {
+            cancelMotion()
+            onDismiss()
+            return
+        }
+        cancelMotion()
+        val anim = panel.animate().setDuration(EXIT_MS).setInterpolator(HaMotion.accelerate())
+        if (wide) {
+            anim.alpha(0f).scaleX(ENTER_SCALE).scaleY(ENTER_SCALE)
+        } else {
+            anim.translationY(panel.height.toFloat().coerceAtLeast(EXIT_MIN_DP * ctx.dp)).alpha(0f)
+        }
+        anim.start()
+        fadeScrim(0, EXIT_MS, HaMotion.accelerate()) {
+            // The host may already have removed us (and opened another sheet): only report while still attached.
+            if (isAttachedToWindow) onDismiss()
+        }
+    }
+
+    /** Swallows touches while the sheet is closing so nothing under the fading panel reacts. */
+    override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = dismissed || super.onInterceptTouchEvent(ev)
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean = if (dismissed) true else super.onTouchEvent(event)
+
+    private fun cancelMotion() {
+        enterListener?.let { panel.viewTreeObserver.removeOnPreDrawListener(it) }
+        enterListener = null
+        panel.animate().cancel()
+        scrimAnimator?.cancel()
+        scrimAnimator = null
     }
 
     override fun onDetachedFromWindow() {
+        cancelMotion()
         release()
         super.onDetachedFromWindow()
+    }
+
+    /** HA's tab / mode cross-fade: the incoming view fades 0 → 1 over 150 ms (standard ease) on screen. */
+    private fun fadeIn(v: View) {
+        v.animate().cancel()
+        if (!v.isAttachedToWindow) {
+            v.alpha = 1f
+            return
+        }
+        v.alpha = 0f
+        v.animate().alpha(1f).setDuration(CROSS_FADE_MS).setInterpolator(HaMotion.standard()).start()
     }
 
     private fun release() {
@@ -259,6 +362,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
         }
 
+        // The last real brightness (1..100 %) seen, so an optimistic `on` restores it instead of flashing 100%.
+        var lastPct: Int? = initial?.takeIf { it.state == "on" }?.let { brightnessOf(it) }
+
         // The three center controls share one frame; the dock below switches between them.
         val center = FrameLayout(ctx.context)
         val slider = VerticalSliderPillView(ctx.context, initial?.lightTintColor() ?: fallback).apply {
@@ -315,6 +421,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             powerIcon.setIcon("mdi:power", theme.primaryTextColor)
             addView(powerIcon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
             isClickable = true
+            ripple(this)
             contentDescription = "Toggle"
             setOnClickListener {
                 val cur = ctx.store[id]
@@ -335,16 +442,25 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
             kinds.forEachIndexed { i, k ->
                 val b = LightModeButton(ctx.context, k, theme)
+                ripple(b)
                 modeButtons += k to b
                 dock.addView(b, LinearLayout.LayoutParams(dockSize).apply { if (i > 0) marginStart = ctx.px(4f) })
             }
         }
         fun showMode(m: LightMode) {
+            val changed = m != mode
             mode = m
             slider.visibility = if (m == LightMode.BRIGHTNESS) VISIBLE else GONE
             wheel?.visibility = if (m == LightMode.COLOR) VISIBLE else GONE
             temp?.visibility = if (m == LightMode.TEMP) VISIBLE else GONE
             modeButtons.forEach { (k, b) -> b.chosen = k == m }
+            if (changed) {
+                when (m) {
+                    LightMode.BRIGHTNESS -> slider
+                    LightMode.COLOR -> wheel
+                    LightMode.TEMP -> temp
+                }?.let(::fadeIn)
+            }
         }
         modeButtons.forEach { (k, b) -> b.setOnClickListener { showMode(k); updater?.invoke(ctx.store[id]) } }
         showMode(LightMode.BRIGHTNESS)
@@ -367,6 +483,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                             setStroke(ctx.px(1f).coerceAtLeast(1), theme.dividerColor)
                         }
                         isClickable = true
+                        ripple(this)
                         contentDescription = fav.name
                         setOnClickListener {
                             if (caps.color) setLightColor(id, fav.color, null)
@@ -388,14 +505,23 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             val tint = s?.lightTintColor() ?: fallback
             slider.setActiveColor(tint)
             val on = s?.state == "on"
-            val pct = if (on) s.brightnessPct else null
+            val pct = if (on) brightnessOf(s) else null
             val kelvin = (s?.attributes?.get("color_temp_kelvin") as? Number)?.toInt()
             val busy = slider.dragging || wheel?.dragging == true || temp?.dragging == true
             if (!busy) {
                 stateLabel.text = if (mode == LightMode.TEMP && on && kelvin != null) "$kelvin K" else lightStateText(s)
             }
             slider.active = on
-            slider.setPercent(if (on) pct ?: 100 else 0)
+            when {
+                !on -> slider.setPercent(0)
+                pct != null -> {
+                    lastPct = pct
+                    slider.setPercent(pct)
+                }
+                // Optimistic `on` before HA reports `brightness`: restore the last level, or hold still until the
+                // real value lands; never flash to 100%.
+                else -> lastPct?.let { slider.setPercent(it) }
+            }
             (s?.attributes?.get("rgb_color") as? List<*>)?.let { rgb ->
                 val c = rgb.take(3).map { (it as? Number)?.toInt() ?: 0 }
                 if (c.size == 3) wheel?.setColor(LightColor.pack(c[0], c[1], c[2]))
@@ -427,9 +553,16 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         ctx.callService("light", "turn_on", data, null)
     }
 
+    /** A light's real brightness as 1..100 %, or null while HA hasn't reported one (off, or an optimistic `on`). */
+    private fun brightnessOf(s: EntityState?): Int? {
+        val raw = (s?.attributes?.get("brightness") as? Number)?.toDouble() ?: return null
+        if (raw <= 0.0) return null
+        return s.brightnessPct?.coerceIn(1, 100)
+    }
+
     private fun lightStateText(s: EntityState?): String {
         val on = s?.state == "on"
-        val pct = if (on) s.brightnessPct else null
+        val pct = if (on) brightnessOf(s) else null
         return when {
             s == null -> "Unknown"
             s.isUnavailable -> s.formattedState()
@@ -476,9 +609,10 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         addPill(slider)
         val power = circleButton("mdi:power", 52f, 24f) { optimisticToggle(id, "fan", ctx.store[id]?.state != "on") }
         addCentered(power, topDp = dockGap, widthDp = 52f, heightDp = 52f)
+        var lastPct: Int? = initial.takeIf { it.state == "on" }?.let { (it.attributes["percentage"] as? Number)?.toInt() }?.takeIf { it > 0 }
         return { s ->
             val on = s?.state == "on"
-            val pct = (s?.attributes?.get("percentage") as? Number)?.toInt()
+            val pct = (s?.attributes?.get("percentage") as? Number)?.toInt()?.takeIf { it > 0 }
             if (!slider.dragging) {
                 stateLabel.text = when {
                     s == null -> "Unknown"
@@ -489,7 +623,15 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 }
             }
             slider.active = on
-            slider.setPercent(if (on) pct ?: 100 else 0)
+            when {
+                !on -> slider.setPercent(0)
+                pct != null -> {
+                    lastPct = pct
+                    slider.setPercent(pct)
+                }
+                // Optimistic `on` before HA reports `percentage`: no flash to 100%.
+                else -> lastPct?.let { slider.setPercent(it) }
+            }
             timeLabel.text = relativeTime(s)
         }
     }
@@ -583,16 +725,22 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val sliderBtn = FrameLayout(ctx.context).apply {
             addView(sliderIcon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
             isClickable = true
+            ripple(this)
             contentDescription = "Position"
         }
         val buttonsBtn = FrameLayout(ctx.context).apply {
             addView(buttonsIcon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
             isClickable = true
+            ripple(this)
             contentDescription = "Buttons"
         }
+        var sliderShown: Boolean? = null
         fun showSlider(on: Boolean) {
+            val changed = sliderShown != null && sliderShown != on
+            sliderShown = on
             slider.visibility = if (on) VISIBLE else GONE
             buttons.visibility = if (on) GONE else VISIBLE
+            if (changed) fadeIn(if (on) slider else buttons)
             listOf(Triple(sliderBtn, sliderIcon, on), Triple(buttonsBtn, buttonsIcon, !on)).forEach { (btn, icon, sel) ->
                 btn.background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
@@ -666,6 +814,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 setStroke(ctx.px(1f).coerceAtLeast(1), CardSurface.withAlpha(theme.secondaryTextColor, 0.5f))
             }
             isClickable = true
+            ripple(this)
             setOnClickListener { dial.nudge(sign) }
         }
         steppers.addView(stepBtn("mdi:minus", -1), LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)).apply { marginEnd = ctx.px(20f) })
@@ -738,6 +887,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 setColor(if (theme.dark) DOCK_DARK else DOCK_LIGHT)
             }
             isClickable = true
+            ripple(this, 16f * ctx.dp)
             contentDescription = caption
             addView(icon, LinearLayout.LayoutParams(ctx.px(22f), ctx.px(22f)).apply { marginEnd = ctx.px(12f) })
             addView(LinearLayout(ctx.context).apply {
@@ -851,6 +1001,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                             setColor(if (selected) CardSurface.withAlpha(theme.primaryColor, 0.12f) else Color.TRANSPARENT)
                         }
                         isClickable = true
+                        ripple(this, 12f * ctx.dp)
                         setOnClickListener {
                             ctx.store[id]?.let { ctx.store.putLocal(it.copy(state = opt)) }
                             ctx.callService(domain, "select_option", JSONObject().put("entity_id", id).put("option", opt), null)
@@ -951,6 +1102,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 setColor(theme.primaryColor)
             }
             isClickable = true
+            ripple(this)
             setOnClickListener { ctx.callService(domain, service, JSONObject().put("entity_id", id), null) }
         }
         addCentered(button, topDp = 24f, heightDp = 52f)
@@ -1098,7 +1250,11 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             setColor(Color.TRANSPARENT)
         }
         isClickable = true
+        ripple(this)
     }
+
+    /** HA's ripple on a sheet control, clipped to [radiusPx] (a pill or circle by default). */
+    private fun ripple(v: View, radiusPx: Float = 999f) = applyHaRipple(v, radiusPx, theme.dark)
 
     private fun circleButton(name: String, sizeDp: Float, iconDp: Float, onClick: () -> Unit): FrameLayout =
         circleButton(MdiIconView(ctx.context), name, sizeDp, iconDp, onClick)
@@ -1114,6 +1270,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             minimumWidth = ctx.px(sizeDp)
             minimumHeight = ctx.px(sizeDp)
             isClickable = true
+            ripple(this)
             setOnClickListener { onClick() }
         }
 
@@ -1125,6 +1282,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             setColor(BUTTON_SURFACE)
         }
         isClickable = true
+        ripple(this, 16f * ctx.dp)
         setOnClickListener { onClick() }
     }
 
@@ -1138,6 +1296,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 setColor(if (selected) theme.primaryColor else BUTTON_SURFACE)
             }
             isClickable = true
+            ripple(this)
             setOnClickListener { onClick() }
         }
 
@@ -1214,7 +1373,15 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         const val COMPACT_HEIGHT_DP = 580
         const val SCRIM = 0x66000000
         const val BUTTON_SURFACE = 0x14888888
-        const val ENTER_MS = 200L
+        const val ENTER_SHEET_MS = 240L
+        const val ENTER_WIDE_MS = 200L
+        const val EXIT_MS = 180L
+        const val CROSS_FADE_MS = 150L
+        const val ENTER_SCALE = 0.94f
+
+        /** The bottom sheet's start offset before its real height is known, and its least exit travel. */
+        const val SHEET_FALLBACK_DP = 220f
+        const val EXIT_MIN_DP = 180f
         const val CAMERA_POLL_MS = 1_500L
         const val TIME_REFRESH_MS = 30_000L
         const val HISTORY_TIMEOUT_MS = 8_000L
@@ -1329,6 +1496,10 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
         color = Color.WHITE
     }
     private var pct = 0f
+    private var targetPct = 0f
+    private var targetColor = activeColor
+    private var pctAnimator: ValueAnimator? = null
+    private var colorAnimator: ValueAnimator? = null
 
     var active = false
         set(v) { if (field != v) { field = v; invalidate() } }
@@ -1337,15 +1508,40 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
     var onChange: ((Int) -> Unit)? = null
     var onRelease: ((Int) -> Unit)? = null
 
-    /** Re-tints the fill live, e.g. when a light's RGB color or color temperature changes. */
+    /** Re-tints the fill, e.g. when a light's RGB color or color temperature changes; cross-fades over 180 ms. */
     fun setActiveColor(color: Int) {
-        if (color != activeColor) { activeColor = color; invalidate() }
+        if (color == targetColor) return
+        targetColor = color
+        colorAnimator?.cancel()
+        val from = activeColor
+        colorAnimator = HaMotion.run(this, MOTION_MS) { t ->
+            activeColor = HaMotion.lerpColor(from, color, t)
+            invalidate()
+        }
     }
 
+    /** Moves the fill to [value] %: animated over 180 ms on screen, snapped before attach. Ignored mid-drag. */
     fun setPercent(value: Int) {
         if (dragging) return
         val p = value.coerceIn(0, 100).toFloat()
-        if (p != pct) { pct = p; invalidate() }
+        if (p == targetPct) return
+        targetPct = p
+        pctAnimator?.cancel()
+        val from = pct
+        pctAnimator = HaMotion.run(this, MOTION_MS) { t ->
+            pct = HaMotion.lerp(from, p, t)
+            invalidate()
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        pctAnimator?.cancel()
+        pctAnimator = null
+        colorAnimator?.cancel()
+        colorAnimator = null
+        pct = targetPct
+        activeColor = targetColor
+        super.onDetachedFromWindow()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -1402,13 +1598,17 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
 
     private fun track(y: Float) {
         val h = height.toFloat().coerceAtLeast(1f)
+        pctAnimator?.cancel()
+        pctAnimator = null
         pct = ((1f - y / h) * 100f).coerceIn(0f, 100f)
+        targetPct = pct
         invalidate()
         onChange?.invoke(pct.roundToInt())
     }
 
     private companion object {
         const val NEUTRAL = 0xFF888888.toInt()
+        const val MOTION_MS = 180L
     }
 }
 
@@ -1455,8 +1655,8 @@ internal class VerticalTogglePillView(context: Context, private val onColor: Int
             return
         }
         animator = ValueAnimator.ofFloat(frac, target).apply {
-            duration = 180L
-            interpolator = DecelerateInterpolator()
+            duration = TOGGLE_MS
+            interpolator = HaMotion.standard()
             addUpdateListener {
                 frac = it.animatedValue as Float
                 invalidate()
@@ -1474,6 +1674,7 @@ internal class VerticalTogglePillView(context: Context, private val onColor: Int
     override fun onDetachedFromWindow() {
         animator?.cancel()
         animator = null
+        frac = if (on) 1f else 0f
         super.onDetachedFromWindow()
     }
 
@@ -1531,6 +1732,7 @@ internal class VerticalTogglePillView(context: Context, private val onColor: Int
     private companion object {
         const val OFF_THUMB = 0xFF9E9E9E.toInt()
         const val DRAG_DP = 24f
+        const val TOGGLE_MS = 200L
     }
 }
 
@@ -1799,15 +2001,35 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
     private val barRect = RectF()
     private var kelvin = (minK + maxK) / 2
 
+    /** Where the bar is drawn (0 = top), animated towards [kelvin]'s place. */
+    private var shown = fractionOf(kelvin, minK, maxK)
+    private var animator: ValueAnimator? = null
+
     var dragging = false
         private set
     var onChange: ((Int) -> Unit)? = null
     var onRelease: ((Int) -> Unit)? = null
 
+    /** Moves the bar to [k]: animated over 180 ms on screen, snapped before attach. Ignored mid-drag. */
     fun setKelvin(k: Int) {
         if (dragging) return
         val c = k.coerceIn(minOf(minK, maxK), maxOf(minK, maxK))
-        if (c != kelvin) { kelvin = c; invalidate() }
+        if (c == kelvin) return
+        kelvin = c
+        animator?.cancel()
+        val from = shown
+        val to = fractionOf(c, minK, maxK)
+        animator = HaMotion.run(this, MOTION_MS) { t ->
+            shown = HaMotion.lerp(from, to, t)
+            invalidate()
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        animator?.cancel()
+        animator = null
+        shown = fractionOf(kelvin, minK, maxK)
+        super.onDetachedFromWindow()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -1824,7 +2046,7 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
         canvas.clipPath(clip)
         canvas.drawRect(rect, fill)
         canvas.restore()
-        val y = (fractionOf(kelvin, minK, maxK) * h).coerceIn(14f * dp, h - 14f * dp)
+        val y = (shown * h).coerceIn(14f * dp, h - 14f * dp)
         val hw = 22f * dp
         val hh = 2.5f * dp
         barRect.set(w / 2f - hw, y - hh, w / 2f + hw, y + hh)
@@ -1859,12 +2081,16 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
     override fun performClick(): Boolean = super.performClick()
 
     private fun track(y: Float) {
+        animator?.cancel()
+        animator = null
         kelvin = kelvinAt(y / height.toFloat().coerceAtLeast(1f), minK, maxK)
+        shown = fractionOf(kelvin, minK, maxK)
         invalidate()
         onChange?.invoke(kelvin)
     }
 
     companion object {
+        private const val MOTION_MS = 180L
         const val DEFAULT_MIN_K = 2000
         const val DEFAULT_MAX_K = 6500
 
@@ -1897,15 +2123,34 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
     private val handle = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
     private var pct = 0
 
+    /** The position drawn, animated towards [pct]. */
+    private var shown = 0f
+    private var animator: ValueAnimator? = null
+
     var dragging = false
         private set
     var onChange: ((Int) -> Unit)? = null
     var onRelease: ((Int) -> Unit)? = null
 
+    /** Moves the fill to [value] % open: animated over 180 ms on screen, snapped before attach. Ignored mid-drag. */
     fun setPercent(value: Int) {
         if (dragging) return
         val p = value.coerceIn(0, 100)
-        if (p != pct) { pct = p; invalidate() }
+        if (p == pct) return
+        pct = p
+        animator?.cancel()
+        val from = shown
+        animator = HaMotion.run(this, MOTION_MS) { t ->
+            shown = HaMotion.lerp(from, p.toFloat(), t)
+            invalidate()
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        animator?.cancel()
+        animator = null
+        shown = pct.toFloat()
+        super.onDetachedFromWindow()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -1920,7 +2165,7 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
         canvas.save()
         canvas.clipPath(clip)
         canvas.drawRect(rect, track)
-        val bottom = fillBottom(pct, h)
+        val bottom = (1f - shown.coerceIn(0f, 100f) / 100f) * h
         if (bottom > 0f) {
             canvas.drawRect(0f, 0f, w, bottom, fill)
             val y = (bottom - 14f * dp).coerceAtLeast(10f * dp)
@@ -1958,12 +2203,16 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
     override fun performClick(): Boolean = super.performClick()
 
     private fun trackTo(y: Float) {
+        animator?.cancel()
+        animator = null
         pct = positionAt(y, height.toFloat())
+        shown = pct.toFloat()
         invalidate()
         onChange?.invoke(pct)
     }
 
     companion object {
+        private const val MOTION_MS = 180L
         const val PURPLE = 0xFF8E63C9.toInt()
 
         /** The cover header for a position: "Closed", "Open · 70%", "Open". */

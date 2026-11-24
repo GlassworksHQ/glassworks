@@ -11,16 +11,19 @@ todo items, the tokens (anyone signs in, there is nothing behind it) and the add
 It speaks what both clients need of HA's API: the websocket (auth, config, services, panels, states,
 themes, registries, translations, icons, `subscribe_entities` with live diffs, `call_service` that
 changes the in-memory home and tells every subscriber, history, statistics, `render_template`,
-todo lists, weather forecasts, cameras) and HTTP (auth, `/local`, camera stills and stream, the REST
-states). Commands it doesn't know are answered with `unknown_command` and printed once.
+todo lists, weather forecasts, cameras, humidifiers, logbook events) and HTTP (auth, `/local`, camera
+stills and stream, calendars, the REST states). Commands it doesn't know are answered with
+`unknown_command` and printed once.
 
   python3 tools/vitro/showcase_ha.py --port 8091
   open http://127.0.0.1:8091/vitro-parity/sections       # HA's Lovelace, signed in on its own
   # Vitro: the same address as the server, any access token.
 
-The dashboard `vitro-parity` has six views: sections, room-detail (a subview), themed, hacs (Tier 2
+The dashboard `vitro-parity` has seven views: sections, room-detail (a subview), themed, hacs (Tier 2
 cards: Mushroom, Bubble, mini-graph, clock-weather), panel-custom (a full-screen custom card from an
-inline `data:` module) and mixed-island (native cards next to a custom card served from /local).
+inline `data:` module), mixed-island (native cards next to a custom card served from /local) and
+advanced (a floorplan, the inline tile features, a humidifier, a calendar, a logbook and a HACS-style
+wrapper card that builds its inner cards with `loadCardHelpers`).
 
 Options: --hls serves the cameras' H.264 as HLS too (needs ffmpeg with libx264, tools/perf/camera.py);
 --local-dir DIR serves DIR at /local/ as well (put a HACS bundle there); --resource URL adds a
@@ -231,8 +234,115 @@ window.customCards = window.customCards || [];
 window.customCards.push({ type: "vitro-panel-card", name: "Vitro panel", description: "A full-screen card for the parity showcase" });
 """
 
+WRAPPER_CARD_JS = r"""// vitro-wrapper-card: a made-up HACS-style wrapper card for the parity showcase. It builds its inner cards
+// with window.loadCardHelpers(), words its labels through hass.localize and hass.formatEntityState, and
+// reads HA's location from hass.callApi("GET", "config"), all inside Shadow DOM.
+class VitroWrapperCard extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._config = null;
+    this._hass = null;
+    this._helpers = null;
+    this._cards = [];
+    this._location = null;
+    this._locationRequested = false;
+  }
+  setConfig(config) {
+    if (!config || !config.entity) throw new Error("entity is required");
+    this._config = Object.assign({ title: "HACS wrapper" }, config);
+    this._cards = [];
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        ha-card { padding: 16px; }
+        .title { font-size: 16px; font-weight: 500; color: var(--primary-text-color); margin-bottom: 4px; }
+        .row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px;
+          color: var(--secondary-text-color); border-bottom: 1px solid var(--divider-color, rgba(127, 127, 127, 0.25)); }
+        .row b { color: var(--primary-text-color); font-weight: 500; text-align: right; }
+        .wrapped { display: grid; gap: 8px; margin-top: 12px; }
+        .note { font-size: 12px; color: var(--secondary-text-color); }
+      </style>
+      <ha-card>
+        <div class="title"></div>
+        <div class="row"><span class="entity-label"></span><b class="entity-state">--</b></div>
+        <div class="row"><span>Location</span><b class="location">...</b></div>
+        <div class="wrapped"><span class="note">Loading card helpers...</span></div>
+      </ha-card>`;
+    this._update();
+    this._loadHelpers();
+  }
+  set hass(hass) {
+    this._hass = hass;
+    for (const card of this._cards) card.hass = hass;
+    this._fetchLocation();
+    this._update();
+  }
+  getCardSize() { return 6; }
+  static getStubConfig() { return { entity: "sensor.studio_power" }; }
+  async _loadHelpers() {
+    try {
+      this._helpers = typeof window.loadCardHelpers === "function" ? await window.loadCardHelpers() : null;
+    } catch (e) {
+      this._helpers = null;
+    }
+    this._mountCards();
+  }
+  _mountCards() {
+    const slot = this.shadowRoot.querySelector(".wrapped");
+    if (!slot || !this._config) return;
+    slot.textContent = "";
+    this._cards = [];
+    if (!this._helpers) {
+      const note = document.createElement("span");
+      note.className = "note";
+      note.textContent = "Card helpers are not available here.";
+      slot.appendChild(note);
+      return;
+    }
+    const entity = this._config.entity;
+    for (const config of [{ type: "tile", entity }, { type: "entity", entity, name: this._config.title }]) {
+      const card = this._helpers.createCardElement(config);
+      if (this._hass) card.hass = this._hass;
+      this._cards.push(card);
+      slot.appendChild(card);
+    }
+  }
+  async _fetchLocation() {
+    if (this._locationRequested || !this._hass || typeof this._hass.callApi !== "function") return;
+    this._locationRequested = true;
+    try {
+      const cfg = await this._hass.callApi("GET", "config");
+      this._location = `${cfg.location_name} (HA ${cfg.version})`;
+    } catch (e) {
+      this._location = "unavailable";
+    }
+    this._update();
+  }
+  _update() {
+    const root = this.shadowRoot;
+    if (!this._config || !root.querySelector(".title")) return;
+    root.querySelector(".title").textContent = this._config.title;
+    const hass = this._hass;
+    const st = hass && hass.states[this._config.entity];
+    const label = hass && typeof hass.localize === "function"
+      ? hass.localize("ui.panel.lovelace.editor.card.generic.entity") : "";
+    const name = st ? (st.attributes.friendly_name || st.entity_id) : this._config.entity;
+    root.querySelector(".entity-label").textContent = `${label || "Entity"}: ${name}`;
+    let shown = st ? st.state : "--";
+    if (st && typeof hass.formatEntityState === "function") shown = hass.formatEntityState(st);
+    root.querySelector(".entity-state").textContent = shown;
+    if (this._location) root.querySelector(".location").textContent = this._location;
+  }
+}
+if (!customElements.get("vitro-wrapper-card")) customElements.define("vitro-wrapper-card", VitroWrapperCard);
+window.customCards = window.customCards || [];
+window.customCards.push({ type: "vitro-wrapper-card", name: "Vitro wrapper", description: "A HACS-style wrapper card for the parity showcase" });
+"""
+
 PANEL_CARD_URL = "data:text/javascript;base64," + base64.b64encode(PANEL_CARD_JS.encode()).decode()
 LOCAL_FILES["vitro-demo/energy-ring-card.js"] = ("application/javascript", ENERGY_RING_JS.encode())
+LOCAL_FILES["vitro-demo/wrapper-card.js"] = ("application/javascript", WRAPPER_CARD_JS.encode())
 
 
 # ---- the home
@@ -284,6 +394,13 @@ ENTITIES = {
     "cover.studio_blind": ("open", {"friendly_name": "Studio blind", "device_class": "blind", "current_position": 70,
                                     "supported_features": 15}),
     "cover.garage_door": ("closed", {"friendly_name": "Garage door", "device_class": "garage", "supported_features": 3}),
+    "humidifier.studio_humidifier": ("on", {
+        "friendly_name": "Studio humidifier", "device_class": "humidifier", "humidity": 50, "current_humidity": 44,
+        "min_humidity": 30, "max_humidity": 80, "mode": "comfort", "available_modes": ["eco", "comfort", "boost"],
+        "action": "humidifying", "supported_features": 1}),
+    "calendar.studio_schedule": ("off", {
+        "friendly_name": "Studio schedule", "message": "Design review", "all_day": False, "start_time": "2026-11-13 10:00:00",
+        "end_time": "2026-11-13 11:00:00", "location": "Studio", "description": ""}),
     "lock.front_door": ("locked", {"friendly_name": "Front door lock", "supported_features": 0}),
     "select.studio_scene": ("Focus", {"friendly_name": "Studio scene", "options": ["Focus", "Relax", "Presentation"]}),
     "input_select.studio_mode": ("Work", {"friendly_name": "Studio mode", "options": ["Work", "Play", "Away"]}),
@@ -311,7 +428,8 @@ ENTITIES = {
 }
 AREAS = {"studio": ["light.desk_lamp", "light.ceiling_strip", "switch.coffee_maker", "switch.studio_fan_plug", "fan.studio_fan",
                     "cover.studio_blind", "sensor.studio_humidity", "sensor.studio_power", "sensor.studio_co2",
-                    "binary_sensor.studio_motion", "camera.studio_front", "media_player.studio_speaker"],
+                    "binary_sensor.studio_motion", "camera.studio_front", "media_player.studio_speaker",
+                    "humidifier.studio_humidifier", "calendar.studio_schedule"],
          "lounge": ["light.floor_lamp", "light.reading_nook", "climate.living_room", "binary_sensor.window_contact"]}
 TODOS = {"todo.panel_tasks": [
     ("1", "Calibrate studio lights", "needs_action"), ("2", "Water the desk plants", "needs_action"),
@@ -499,9 +617,43 @@ def _view_mixed_island():
         ]}
 
 
+def _view_advanced():
+    half = {"columns": 6}
+    return {
+        "title": "Advanced", "path": "advanced", "type": "sections", "max_columns": 3, "icon": "mdi:layers-triple", "sections": [
+            {"type": "grid", "cards": [
+                {"type": "heading", "heading": "Floorplan & Environment", "heading_style": "title", "icon": "mdi:floor-plan"},
+                {"type": "picture-elements", "image": "/local/vitro-demo/floorplan.png", "elements": [
+                    {"type": "state-icon", "entity": "light.desk_lamp", "tap_action": {"action": "toggle"},
+                     "style": {"left": "30%", "top": "40%"}},
+                    {"type": "state-icon", "entity": "binary_sensor.front_door", "style": {"left": "80%", "top": "25%"}},
+                    {"type": "state-label", "entity": "sensor.studio_power", "style": {"left": "55%", "top": "70%"}},
+                    {"type": "state-badge", "entity": "sensor.outdoor_temp", "style": {"left": "20%", "top": "75%"}}]},
+                {"type": "humidifier", "entity": "humidifier.studio_humidifier"}]},
+            {"type": "grid", "cards": [
+                {"type": "heading", "heading": "Inline Tile Features", "heading_style": "title", "icon": "mdi:tune-variant"},
+                _tile("climate.living_room", grid_options=half, features_position="bottom",
+                      features=[{"type": "climate-hvac-modes", "hvac_modes": ["off", "heat", "cool"]},
+                                {"type": "target-temperature"}]),
+                _tile("fan.studio_fan", grid_options=half, features_position="bottom", features=[{"type": "fan-speed"}]),
+                _tile("cover.studio_blind", grid_options=half, features_position="bottom", features=[{"type": "cover-position"}]),
+                _tile("light.ceiling_strip", grid_options=half, features_position="bottom", features=[{"type": "light-color-temp"}]),
+                _tile("media_player.studio_speaker", grid_options=half, features_position="bottom",
+                      features=[{"type": "media-player-volume-slider"}])]},
+            {"type": "grid", "cards": [
+                {"type": "heading", "heading": "Agenda, Activity & Wrapper Card", "heading_style": "title", "icon": "mdi:calendar-clock"},
+                {"type": "calendar", "entities": ["calendar.studio_schedule"]},
+                {"type": "logbook", "entities": ["light.desk_lamp", "switch.studio_fan_plug", "cover.studio_blind"], "hours_to_show": 24},
+                {"type": "custom:vitro-wrapper-card", "entity": "sensor.studio_power", "title": "HACS Wrapper Test"}]},
+        ]}
+
+
+VIEWS = ("sections", "room-detail", "themed", "hacs", "panel-custom", "mixed-island", "advanced")
+
+
 def lovelace_config():
     return {"title": DASHBOARD_TITLE, "views": [_view_sections(), _view_room_detail(), _view_themed(), _view_hacs(),
-                                                _view_panel_custom(), _view_mixed_island()]}
+                                                _view_panel_custom(), _view_mixed_island(), _view_advanced()]}
 
 
 # ---- themes: what frontend/get_themes sends (a theme's keys are CSS variables without their --)
@@ -558,9 +710,13 @@ STATE_WORDS = {
     "alarm_control_panel._": {"disarmed": "Disarmed", "armed_home": "Armed home", "armed_away": "Armed away",
                               "armed_night": "Armed night"},
     "sun._": {"above_horizon": "Above horizon", "below_horizon": "Below horizon"},
+    "humidifier._": {"on": "On", "off": "Off"}, "calendar._": {"on": "On", "off": "Off"},
 }
 ATTR_WORDS = {"climate._.state_attributes.hvac_action.state": {"heating": "Heating", "cooling": "Cooling", "idle": "Idle",
-                                                              "off": "Off"}}
+                                                              "off": "Off"},
+              "humidifier._.state_attributes.action.state": {"humidifying": "Humidifying", "drying": "Drying", "idle": "Idle",
+                                                             "off": "Off"},
+              "humidifier._.state_attributes.mode.state": {"eco": "Eco", "comfort": "Comfort", "boost": "Boost"}}
 
 
 def translations(category):
@@ -604,6 +760,8 @@ ICONS = {
     "button": {"_": {"default": "mdi:gesture-tap-button"}, "restart": {"default": "mdi:restart"}},
     "light": {"_": {"default": "mdi:lightbulb", "state": {"off": "mdi:lightbulb-off"}}},
     "select": {"_": {"default": "mdi:format-list-bulleted"}}, "sun": {"_": {"default": "mdi:white-balance-sunny"}},
+    "humidifier": {"_": {"default": "mdi:air-humidifier", "state": {"off": "mdi:air-humidifier-off"}}},
+    "calendar": {"_": {"default": "mdi:calendar"}},
 }
 
 
@@ -615,7 +773,8 @@ def icons(category):
 
 COMPONENTS = ["frontend", "lovelace", "history", "recorder", "sensor", "binary_sensor", "light", "switch", "fan", "cover", "lock",
               "climate", "weather", "media_player", "alarm_control_panel", "todo", "button", "script", "scene", "select",
-              "input_select", "input_boolean", "person", "sun", "camera", "homeassistant", "persistent_notification"]
+              "input_select", "input_boolean", "person", "sun", "camera", "homeassistant", "persistent_notification",
+              "humidifier", "calendar", "logbook"]
 
 
 def config(hls=False):
@@ -647,7 +806,8 @@ def dashboards_list():
 
 def resources(extra=()):
     out = [{"id": "vitro_energy_ring", "url": "/local/vitro-demo/energy-ring-card.js", "type": "module"},
-           {"id": "vitro_panel_card", "url": PANEL_CARD_URL, "type": "module"}]
+           {"id": "vitro_panel_card", "url": PANEL_CARD_URL, "type": "module"},
+           {"id": "vitro_wrapper_card", "url": "/local/vitro-demo/wrapper-card.js", "type": "module"}]
     for k, url in enumerate(extra):
         out.append({"id": f"extra_{k}", "url": url, "type": "css" if url.split("?")[0].endswith(".css") else "module"})
     return out
@@ -804,6 +964,33 @@ def forecast(now=None):
         out.append({"datetime": _iso(t), "condition": c, "temperature": [10, 11, 12, 9, 8][k], "templow": [5, 6, 4, 3, 2][k],
                     "precipitation": [4.2, 0.6, 0, 0.2, 0.4][k], "is_daytime": True})
     return {"type": "daily", "forecast": out}
+
+
+def calendar_events(now=None):
+    """GET /api/calendars/<entity>: four made-up events, each one in the future of `now` (the next quarter hour is the base)."""
+    now = time.time() if now is None else now
+    base = now - now % 900 + 900
+    plan = [(1, 1.0, "Design review", "Walk through the synthetic floorplan mockups."),
+            (5, 0.5, "Lighting calibration", "Check every lamp against the test pattern."),
+            (26, 1.5, "Studio planning", "Plan next week's made-up builds."),
+            (50, 1.0, "Prototype demo", "Show the fixture ensemble to the test audience.")]
+    return [{"start": {"dateTime": _iso(base + h * 3600)}, "end": {"dateTime": _iso(base + (h + length) * 3600)},
+             "summary": summary, "description": text} for h, length, summary, text in plan]
+
+
+# (minutes ago, entity, state, what happened): the last state of each entity matches the home's own start state
+LOGBOOK = [(330, "light.desk_lamp", "off", "turned off"), (280, "cover.studio_blind", "closed", "closed"),
+           (200, "switch.studio_fan_plug", "off", "turned off"), (120, "cover.studio_blind", "open", "opened"),
+           (75, "light.desk_lamp", "on", "turned on"), (30, "switch.studio_fan_plug", "on", "turned on")]
+
+
+def logbook_events(entity_ids=None, now=None):
+    """logbook/get_events: six made-up recent events, oldest first, anchored to `now`; `entity_ids` narrows them."""
+    now = time.time() if now is None else now
+    wanted = set(entity_ids) if entity_ids else None
+    return [{"when": round(now - minutes * 60, 3), "name": ENTITIES[eid][1]["friendly_name"], "state": state, "entity_id": eid,
+             "domain": domain_of(eid), "message": message}
+            for minutes, eid, state, message in LOGBOOK if wanted is None or eid in wanted]
 
 
 # ---- a small Jinja subset for render_template: {{ }}, {% if/elif/else %}, states(), state_attr(), is_state() and filters
@@ -1327,6 +1514,25 @@ def svc_media(hub, eid, s, svc, d):
     raise ServiceError("service_not_found")
 
 
+def _humidifier_action(state, current, target):
+    if state != "on":
+        return "off"
+    return "humidifying" if current < target else "idle"
+
+
+def svc_humidifier(hub, eid, s, svc, d):
+    a = s["attributes"]
+    if svc == "set_humidity":
+        target = max(a["min_humidity"], min(a["max_humidity"], int(d["humidity"])))
+        return s["state"], {"humidity": target, "action": _humidifier_action(s["state"], a["current_humidity"], target)}
+    if svc == "set_mode":
+        if d["mode"] not in a["available_modes"]:
+            raise ServiceError(f"mode {d['mode']} is not valid for {eid}")
+        return s["state"], {"mode": d["mode"]}
+    state = _onoff(svc, s)
+    return state, {"action": _humidifier_action(state, a["current_humidity"], a["humidity"])}
+
+
 def svc_alarm(hub, eid, s, svc, d):
     return {"alarm_arm_home": "armed_home", "alarm_arm_away": "armed_away", "alarm_arm_night": "armed_night",
             "alarm_disarm": "disarmed"}[svc], {}
@@ -1365,6 +1571,7 @@ SERVICES = {
     "media_player": {k: svc_media for k in ("media_play_pause", "media_play", "media_pause", "media_stop", "media_next_track",
                                             "media_previous_track", "volume_set", "volume_mute", "turn_on", "turn_off", "toggle")},
     "alarm_control_panel": {k: svc_alarm for k in ("alarm_arm_home", "alarm_arm_away", "alarm_arm_night", "alarm_disarm")},
+    "humidifier": {k: svc_humidifier for k in ("toggle", "turn_on", "turn_off", "set_humidity", "set_mode")},
     "button": {"press": svc_button}, "script": {"turn_on": svc_script}, "scene": {"turn_on": svc_scene},
     "todo": {k: None for k in ("add_item", "update_item", "remove_item", "remove_completed_items", "get_items")},
     "homeassistant": {k: svc_homeassistant for k in ("turn_on", "turn_off", "toggle", "update_entity")},
@@ -1770,6 +1977,17 @@ def _forecast(c, m):
     c.event(m["id"], forecast())
 
 
+def _logbook_get_events(c, m):
+    c.result(m["id"], logbook_events(m.get("entity_ids")))
+
+
+def _logbook_stream(c, m):
+    """logbook/event_stream (what the real frontend's logbook card subscribes to): the same events, once."""
+    c.result(m["id"])
+    now = time.time()
+    c.event(m["id"], {"events": logbook_events(m.get("entity_ids"), now), "start_time": now - 86400, "end_time": now})
+
+
 def _registry_get(c, m):
     ent = entity_registry().get(m.get("entity_id"))
     if not ent:
@@ -1827,6 +2045,7 @@ HANDLERS = {
     "subscribe_condition": _sub_condition, "test_condition": _test_condition, "render_template": _render_template, "todo/item/list": _todo_list, "todo/item/subscribe": _todo_subscribe,
     "weather/subscribe_forecast": _forecast, "camera/capabilities": _camera_capabilities, "camera/stream": _camera_stream,
     "camera/get_prefs": _const({"preload_stream": False, "orientation": 1}),
+    "logbook/get_events": _logbook_get_events, "logbook/event_stream": _logbook_stream,
 }
 
 
@@ -1866,6 +2085,82 @@ def camera_png(frame):
 
 def now_frame():
     return int(time.time() * 4)
+
+
+# ---- the floorplan: a made-up studio plan for the picture-elements card (stdlib only, the same bytes every time)
+
+PLAN_W, PLAN_H = 800, 480
+_GLYPHS = {
+    "S": (" ####", "#    ", "#    ", " ### ", "    #", "    #", "#### "),
+    "T": ("#####", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "  #  "),
+    "U": ("#   #", "#   #", "#   #", "#   #", "#   #", "#   #", " ### "),
+    "D": ("#### ", "#   #", "#   #", "#   #", "#   #", "#   #", "#### "),
+    "I": ("#####", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "#####"),
+    "O": (" ### ", "#   #", "#   #", "#   #", "#   #", "#   #", " ### "),
+    "L": ("#    ", "#    ", "#    ", "#    ", "#    ", "#    ", "#####"),
+    "N": ("#   #", "##  #", "# # #", "#  ##", "#   #", "#   #", "#   #"),
+    "G": (" ### ", "#   #", "#    ", "# ###", "#   #", "#   #", " ### "),
+    "E": ("#####", "#    ", "#    ", "#### ", "#    ", "#    ", "#####"),
+    "R": ("#### ", "#   #", "#   #", "#### ", "# #  ", "#  # ", "#   #"),
+    "Y": ("#   #", "#   #", " # # ", "  #  ", "  #  ", "  #  ", "  #  "),
+}
+
+
+def floorplan_png():
+    """An 800x480 slate-blue plan: outer walls, two partitions with door gaps, windows, furniture blocks, three room labels."""
+    outside, floor, grid = (233, 238, 246), (247, 249, 253), (234, 239, 247)
+    wall, door, window = (71, 85, 105), (147, 170, 214), (186, 210, 238)
+    fill, edge, ink = (190, 203, 223), (148, 163, 184), (100, 116, 139)
+    img = [bytearray(bytes(outside) * PLAN_W) for _ in range(PLAN_H)]
+
+    def rect(x0, y0, x1, y1, color):
+        run = bytes(color) * (x1 - x0)
+        for y in range(y0, y1):
+            img[y][x0 * 3:x1 * 3] = run
+
+    def block(x0, y0, x1, y1):
+        rect(x0, y0, x1, y1, edge)
+        rect(x0 + 2, y0 + 2, x1 - 2, y1 - 2, fill)
+
+    def text(x, y, word, scale=3):
+        for n, ch in enumerate(word):
+            for r, row in enumerate(_GLYPHS[ch]):
+                for c, bit in enumerate(row):
+                    if bit == "#":
+                        rect(x + (n * 6 + c) * scale, y + r * scale, x + (n * 6 + c + 1) * scale, y + (r + 1) * scale, ink)
+
+    rect(48, 48, 752, 432, floor)
+    for x in range(80, 752, 40):
+        rect(x, 48, x + 1, 432, grid)
+    for y in range(80, 432, 40):
+        rect(48, y, 752, y + 1, grid)
+    rect(40, 40, 760, 48, wall)         # outer walls, 8 px thick
+    rect(40, 432, 760, 440, wall)
+    rect(40, 40, 48, 440, wall)
+    rect(752, 40, 760, 440, wall)
+    rect(476, 48, 484, 300, wall)       # the studio's wall, with a doorway to the lounge
+    rect(476, 360, 484, 432, wall)
+    rect(484, 236, 580, 244, wall)      # the entry's wall, with a doorway
+    rect(640, 236, 752, 244, wall)
+    rect(600, 40, 680, 48, door)        # the front door
+    rect(40, 150, 48, 270, window)      # two windows
+    rect(120, 432, 300, 440, window)
+    block(180, 150, 360, 230)           # desk
+    block(240, 245, 290, 285)           # chair
+    block(380, 52, 470, 84)             # shelf
+    block(56, 56, 96, 96)               # plant
+    block(500, 52, 580, 84)             # entry bench
+    block(520, 380, 720, 424)           # sofa
+    block(570, 310, 670, 350)           # coffee table
+    text(64, 404, "STUDIO")
+    text(500, 252, "LOUNGE")
+    text(500, 200, "ENTRY")
+    rows = b"".join(b"\0" + bytes(r) for r in img)
+    return (b"\x89PNG\r\n\x1a\n" + _chunk(b"IHDR", struct.pack(">IIBBBBB", PLAN_W, PLAN_H, 8, 2, 0, 0, 0))
+            + _chunk(b"IDAT", zlib.compress(rows, 9)) + _chunk(b"IEND", b""))
+
+
+LOCAL_FILES["vitro-demo/floorplan.png"] = ("image/png", floorplan_png())
 
 
 # ---- HTTP
@@ -1933,6 +2228,14 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/states/"):
             st = self.hub.states.get(path[len("/api/states/"):])
             return self.send_json(self.hub.state_object(st)) if st else self.send_json({"message": "Entity not found."}, 404)
+        if path == "/api/calendars":
+            return self.send_json([{"entity_id": e, "name": s["attributes"]["friendly_name"]}
+                                   for e, s in self.hub.states.items() if domain_of(e) == "calendar"])
+        if path.startswith("/api/calendars/"):
+            eid = path[len("/api/calendars/"):]
+            if domain_of(eid) != "calendar" or eid not in self.hub.states:
+                return self.send_json({"message": "Entity not found."}, 404)
+            return self.send_json(calendar_events())
         if path.startswith("/api/camera_proxy_stream/"):
             return self.camera_stream(path[len("/api/camera_proxy_stream/"):])
         if path.startswith("/api/camera_proxy/"):
@@ -2096,7 +2399,7 @@ def main():
     srv = serve(a.port, a.hls, a.local_dir, a.resource, a.log)
     base = f"http://127.0.0.1:{srv.server_address[1]}"
     print(f"Vitro showcase Home Assistant {HA_VERSION}, frontend {hafrontend.VERSION}, on {base}", flush=True)
-    for view in ("sections", "room-detail", "themed", "hacs", "panel-custom", "mixed-island"):
+    for view in VIEWS:
         print(f"  {base}/{DASHBOARD}/{view}", flush=True)
     try:
         srv.serve_forever()
