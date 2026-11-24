@@ -101,10 +101,17 @@ select), `bubble-card`, `mini-graph-card`, `mini-media-player`, `clock-weather-c
    $ gh api -X GET search/code -f q='"type: custom:" "views:" path:lovelace extension:yaml'     # 2 pages
    ```
    The three queries returned 429 distinct repositories. I shuffled them with a fixed seed (`random.seed(798)`),
-   took the first 80, and downloaded up to four matching YAML files from each (80 repos, 2 MB). A repository counts as
-   one dashboard, with all its fetched files merged; I dropped those with fewer than five cards (fragments of
-   `!include` trees) and kept **57 dashboards, 3,449 cards**. Each file was parsed with PyYAML, ignoring `!include`
+   took the first 80, and downloaded up to four matching YAML files from each (80 repos, 94 files, 2 MB). A repository
+   counts as one dashboard, with all its fetched files merged; I dropped those with fewer than five cards (fragments of
+   `!include` trees) and kept **60 dashboards, 3,787 cards**. Each file was parsed with PyYAML, ignoring `!include`
    and other tags, and cards were found under `views[].cards`, `views[].sections[].cards` and nested `cards` / `card`.
+   `tools/vitro-census/sample.py` does the search, the draw and the download; `sample-manifest.json` next to it lists
+   the 80 repositories and pins each file to the commit GitHub returned, so the numbers below reproduce exactly.
+
+   A first pass used a separate, quicker card walker and got 57 dashboards and 3,449 cards. It missed every card in
+   three repositories whose files are storage-mode exports (the views sit under a top-level `config:` key), and a
+   few nested cards in five more. All numbers here
+   come from `census.py`'s walker, the one that ships.
 
    Caveats, so the numbers aren't over-read:
    - The queries ask for `type: custom:`, so every dashboard has at least one custom card. This over-states the
@@ -116,56 +123,58 @@ select), `bubble-card`, `mini-graph-card`, `mini-media-player`, `clock-weather-c
 
 ## Result
 
-**Community sample, 57 dashboards, 3,449 cards** (verified):
+**Community sample, 60 dashboards, 3,787 cards** (verified, `census.py --per-dir --min-cards 5`):
 
 | | |
 |---|---|
-| Cards drawn natively | 2,624 (76.1%) |
-| Cards that need an island | 825 (23.9%) |
-| Dashboards with no island card | 6 of 57 |
-| Dashboards with at most two island cards | 20 of 57 |
-| Distinct island card types | 109 (95 custom, 14 core) |
-| Island types seen in only one dashboard | 80 |
+| Cards drawn natively | 2,915 (77.0%) |
+| Cards that need an island | 872 (23.0%) |
+| Dashboards with no island card | 6 of 60 |
+| Dashboards with at most two island cards | 19 of 60 |
+| Distinct island card types | 113 (99 custom, 14 core) |
+| Island types seen in only one dashboard | 81 |
 
 Island card types by how many dashboards use them (the 14 seen in at least three, then the notable ones):
 
 | Dashboards | Cards | Type | Kind |
 |---|---|---|---|
-| 17 | 376 | `custom:button-card` | HACS, templated JS |
+| 18 | 377 | `custom:button-card` | HACS, templated JS |
+| 9 | 14 | `custom:weather-card` | HACS |
 | 8 | 12 | `iframe` | core |
-| 7 | 10 | `map` | core |
-| 7 | 9 | `custom:weather-card` | HACS |
-| 6 | 78 | `custom:apexcharts-card` | HACS, charts |
+| 8 | 11 | `map` | core |
+| 7 | 82 | `custom:apexcharts-card` | HACS, charts |
 | 6 | 45 | `entity-button` | core (deprecated alias of `button`) |
+| 6 | 17 | `custom:monster-card` | HACS, a filter card like `auto-entities` |
 | 4 | 10 | `custom:thermostat-card` | HACS |
 | 4 | 8 | `custom:calendar-card` | HACS |
 | 3 | 20 | `custom:advanced-camera-card` | HACS, video |
 | 3 | 18 | `custom:simple-thermostat` | HACS |
 | 3 | 4 | `custom:horizon-card`, `custom:bignumber-card` | HACS |
-| 3 | 3 | `energy-*` (usage graph, date selection, solar) | core |
-| 3 | 3 | `custom:tracker-card` | HACS |
+| 3 | 3 | `energy-usage-graph`, `custom:battery-state-card`, `custom:tracker-card` | core, HACS |
 | 2 | 7 | `custom:mushroom-empty-card` | HACS, a spacer |
+| 2 | 6 | `custom:swipe-card` | HACS, a layout wrapper |
 
-Concentration: `button-card` alone is 46% of island cards; with `apexcharts-card` and `entity-button` it is 60%; the top
-25 types are 84%. Adding native paths in order of how many dashboards use them:
+Concentration: `button-card` alone is 43% of island cards; with `apexcharts-card` and `entity-button` it is 58%; the top
+25 types are 83%. Adding native paths in order of how many dashboards use them:
 
 | Types added | Dashboards with no island | Island cards left |
 |---|---|---|
-| none | 6 of 57 | 825 |
-| top 1 (`button-card`) | 7 | 449 |
-| top 3 | 9 | 427 |
-| top 5 | 13 | 340 |
-| top 10 | 16 | 256 |
-| top 20 | 24 | 213 |
+| none | 6 of 60 | 872 |
+| top 1 (`button-card`) | 7 | 495 |
+| top 3 | 9 | 469 |
+| top 5 | 12 | 376 |
+| top 10 | 17 | 276 |
+| top 20 | 24 | 220 |
 
-A cross-check without merging files per repo (72 files of at least five cards: 3,782 cards, 870 island, 23.0%) gives the
-same top of the list (`button-card` 19 files, `weather-card`, `apexcharts-card`, `iframe`, `map`, `entity-button`).
+Counting each file as its own dashboard instead (`census.py --min-cards 5`, no `--per-dir`) gives 72 files, 3,782
+cards and 870 island cards (23.0%), with the same top of the list. It is five cards short of the per-repository total
+because a few repositories have a file under five cards that only counts once merged.
 
 **Combined with our own dashboards**, the cards that would still need an island after today's fast paths, ranked:
 
-1. `custom:button-card`. Most common by far (17 of 57 dashboards, 376 cards). It is a template engine (JS templates in `[[[ ]]]`, styles, state-based styling), so a native path would
+1. `custom:button-card`. Most common by far (18 of 60 dashboards, 377 cards). It is a template engine (JS templates in `[[[ ]]]`, styles, state-based styling), so a native path would
    draw the common subset and send anything with custom JS to an island.
-2. `custom:apexcharts-card`. Charts, 6 dashboards, 78 cards; heavy and varied in config.
+2. `custom:apexcharts-card`. Charts, 7 dashboards, 82 cards; heavy and varied in config.
 3. The core cards Vitro doesn't draw: `entity-button` (an alias of `button`, a one-line route), `iframe`, `map`, and the
    `energy-*` cards. The first is trivial. `iframe` and `map` are islands by nature (a web page, a tile map).
 4. `custom:weather-card`, `custom:thermostat-card` and `custom:simple-thermostat`, `custom:calendar-card`,
@@ -186,9 +195,11 @@ The list is **short at the head and long in the tail**, so do both halves of the
      few `state:` rules), with the JS-template forms (`[[[ ]]]`) falling back to an island on purpose (#795);
    - `custom:mushroom-empty-card`, a spacer, then `custom:weather-card` and `custom:swipe-card` (a layout wrapper),
      which are the next cheapest.
-   After `button-card` and `entity-button` alone, island cards in the sample fall from 825 to 449 (24% to about 13% of the sample's cards).
+   Full native coverage of `button-card` and `entity-button` would take island cards in the sample from 872 to 450
+   (23% to about 12% of the sample's cards). That's a lower bound: the `button-card` subset sends its JS-template
+   forms to an island on purpose, and how many cards use them is not counted yet (untested).
 2. **Spike the light JS island engine afterwards, not instead**, but only if you want to remove islands for the tail:
-   109 distinct types, 80 of them in a single dashboard, `button-card`'s JS templates and `apexcharts-card`'s config
+   113 distinct types, 81 of them in a single dashboard, `button-card`'s JS templates and `apexcharts-card`'s config
    language will not be covered by any small set of native views. Two concrete test cards for the spike: a plain Lit
    card (`mini-graph-card`'s data model without its renderer) and `button-card` with `[[[ ]]]` templates, which are
    JS that runs against `states`, `entity` and `hass`.
@@ -203,14 +214,14 @@ a stated goal (Vitro already draws `history-graph`, `statistics-graph` and `mini
 Read-only throughout: the HA websocket helper only calls `lovelace/*` reads, and GitHub is read through the public API.
 
 ```
-node ws.mjs get <url_path> > ours/<url_path>.json                     # one per dashboard
-python3 tools/vitro-census/census.py ours/*.json                      # native vs island, per card type
-python3 tools/vitro-census/census.py --min-cards 5 comm/*/*.yaml      # community sample (one file = one dashboard)
+node ws.mjs get <url_path> > ours/<url_path>.json                                 # one per dashboard
+python3 tools/vitro-census/census.py ours/*.json                                  # native vs island, per card type
+python3 tools/vitro-census/sample.py fetch tools/vitro-census/sample-manifest.json /tmp/census   # the pinned sample
+python3 tools/vitro-census/census.py --per-dir --min-cards 5 /tmp/census/comm/*/*.yaml          # the numbers above
 ```
 
-`census.py` reads the native set out of `ui/VitroView.kt`, so it follows the code. The per-repository merge and the
-random draw were a few lines of glue (shuffle with seed 798, first 80 of 429 repos, four files each); the file-level
-run above is the reproducible version. To rerun the sample, repeat the three `search/code` queries in step 3.
+`census.py` reads the native set out of `ui/VitroView.kt`, so it follows the code: rerun it after a new fast path to
+see the island share drop. `sample.py search` and `draw` make a fresh sample (code search results change over time).
 
 ## Open questions
 

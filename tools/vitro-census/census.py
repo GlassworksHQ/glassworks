@@ -7,6 +7,10 @@ Never talks to Home Assistant or GitHub.
 
   python3 tools/vitro-census/census.py dash1.json dash2.yaml ...        # per file, then totals
   python3 tools/vitro-census/census.py --min-cards 5 comm/*/*.yaml      # one file = one dashboard
+  python3 tools/vitro-census/census.py --per-dir --min-cards 5 comm/*/*.yaml   # one folder (repo) = one dashboard
+
+The community sample in docs/research/vitro-island-census.md is the --per-dir run over the files
+sample.py fetches.
 
 Native = a card type the `when (card.type)` in VitroView.kt routes to a native view; everything else
 goes to the web island. A dashboard's cards are the ones under views[].cards and
@@ -90,23 +94,28 @@ def load(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("files", nargs="+")
-    ap.add_argument("--min-cards", type=int, default=1, help="skip files with fewer cards (fragments)")
+    ap.add_argument("--min-cards", type=int, default=1, help="skip dashboards with fewer cards (fragments)")
+    ap.add_argument("--per-dir", action="store_true", help="merge the files in each folder into one dashboard")
     a = ap.parse_args()
     nat = native_types()
     occ, dash = collections.Counter(), collections.Counter()
-    n = 0
+    groups = collections.OrderedDict()
     for f in a.files:
-        try:
-            c = [t for d in load(f) for t in cards(d)]
-        except Exception as e:  # noqa: BLE001
-            print(f"skip {f}: {e}", file=sys.stderr)
-            continue
+        groups.setdefault(os.path.dirname(f) if a.per_dir else f, []).append(f)
+    n = 0
+    for f, files in groups.items():
+        c = []
+        for path in files:
+            try:
+                c += [t for d in load(path) for t in cards(d)]
+            except Exception as e:  # noqa: BLE001
+                print(f"skip {path}: {e}", file=sys.stderr)
         if len(c) < a.min_cards:
             continue
         n += 1
         occ.update(c)
         dash.update(set(c))
-        if len(a.files) <= 12:
+        if len(groups) <= 12:
             k = sum(t in nat for t in c)
             print(f"{os.path.basename(f)}: {len(c)} cards, {k} native, {len(c) - k} island")
     tot = sum(occ.values())
