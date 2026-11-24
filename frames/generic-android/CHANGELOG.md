@@ -11,6 +11,12 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Added
+- **Vitro, an experimental native dashboard renderer, in a new Labs section.** Turn on *Vitro renderer* under
+  *Settings → Labs*, on the panel or the Manage page, and after the app restarts your Home Assistant dashboard is drawn
+  with the device's own views instead of a browser. Cards it can't draw yet show in a small browser view. It's off by
+  default, and with it off the app works exactly as before.
+
 ### Fixed
 - **Kiln installs Glassworks on the Mirror again.** Since Kiln moved to Glass Panes image 3, building the Mirror's system stopped with "no room for … libxul.so". Kiln now clears out the image's own kiosk app and the apps a Mirror never uses before it adds Glassworks, so the app fits with room to spare.
 
