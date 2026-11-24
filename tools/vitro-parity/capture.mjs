@@ -210,6 +210,12 @@ const TEXTS_JS = (slot) => {
     for (let e = el; e && e.nodeType === 1; e = e.parentElement || (e.getRootNode && e.getRootNode().host)) {
       const s = getComputedStyle(e);
       if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity === 0) return false;
+      // Visually hidden, for screen readers only (HA's select keeps its "Option" label this way): a 1x1 or
+      // fully clipped box. Its text range still measures full size, so the element itself is what tells.
+      if (e.classList.contains('visually-hidden') || e.classList.contains('sr-only')) return false;
+      if (/^rect\(0(px)?,? 0(px)?,? 0(px)?,? 0(px)?\)$/.test(s.clip) || /^inset\((50|100)%\)$/.test(s.clipPath)) return false;
+      const r = e.getBoundingClientRect();
+      if (r.width <= 1 && r.height <= 1 && s.overflow !== 'visible') return false;
     }
     return true;
   };

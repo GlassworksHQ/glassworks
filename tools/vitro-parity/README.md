@@ -60,7 +60,7 @@ Write `corpus/<case>.json`, then run `tools/vitro-parity/run.sh --refresh --case
 | Pixels | 2% | Share of the crop that differs, at one sample per CSS px (both images box-filtered first, which irons out font antialiasing), with pixelmatch's YIQ colour distance at 0.1. A pixel that matches a neighbour within 1 CSS px counts as a shift, not a difference |
 | Bounds | 2 CSS px | The largest offset of any edge of the card's slot |
 | Font | 1 CSS px | The largest font size difference among the texts found |
-| Texts | 0 missing | HA texts not found in any of Vitro's TextViews. Text Vitro draws straight on a canvas (gauges, the thermostat dial) shows up here as missing |
+| Texts | 0 missing | HA texts not found in any of Vitro's TextViews. Text Vitro draws straight on a canvas (gauges, the thermostat dial) shows up here as missing. HA text that is visually hidden (a 1×1 or clipped screen-reader label, `.visually-hidden`, `.sr-only`) isn't counted |
 
 A refresh takes new references with live states, so the scores of cases that drift move a little with it. After a refresh with no Vitro change, run `run.sh --update-baseline` and commit the references and the baseline together (the reasons stay).
 

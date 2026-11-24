@@ -55,18 +55,6 @@
   },
   {
    "slot": 0,
-   "text": "Option",
-   "x": 31,
-   "y": 86.5,
-   "w": 37.69,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
    "text": "open",
    "x": 32,
    "y": 79,
