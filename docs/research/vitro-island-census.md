@@ -116,8 +116,9 @@ select), `bubble-card`, `mini-graph-card`, `mini-media-player`, `clock-weather-c
    come from `census.py`'s walker, the one that ships.
 
    Caveats, so the numbers aren't over-read:
-   - The queries ask for `type: custom:`, so every dashboard has at least one custom card. This over-states the
-     island share for dashboards in general, and is the right population for this question.
+   - The queries ask for `type: custom:`, so every dashboard has at least one custom card. That is a selection on
+     custom cards, not on island cards (some custom types route natively, some core types to an island), so how the
+     share compares with dashboards in general is untested. It is the population this question is about.
    - GitHub code search finds public YAML files, so the sample is dashboards people publish as code: mostly
      hand-written YAML, plus the three storage-mode exports above. Dashboards edited only in the UI and never
      published are not in it. Whether those use custom cards more or less often is untested, so this sample says
@@ -228,7 +229,7 @@ python3 tools/vitro-census/census.py --per-dir --min-cards 5 "$OUT"/comm/*/*.yam
 
 Because an `http://` `HA_URL` means `ws://`, which is unencrypted, anyone observing the network path can read the
 token: use it only on a trusted local network, or connect over `https://` (`wss://`) if Home Assistant serves HTTPS.
-The helper prints a warning when it isn't `https://`.
+The helper prints a warning when the WebSocket URL it builds isn't `wss://`.
 
 `census.py` reads the native set out of `ui/VitroView.kt`, so it follows the code: rerun it after a new fast path to
 see the island share drop. `sample.py search` and `draw` make a fresh sample (code search results change over time).
