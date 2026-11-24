@@ -141,6 +141,9 @@ class VitroEngine(
         private var clientGeneration = 0
         private var disposed = false
 
+        /** True while a native dashboard owns the page; false once the fallback took it over. */
+        private var nativeActive = false
+
         /** The Home Assistant origin the app is set to (the settings' dashboard), the only one its token is for. */
         private fun configuredOrigin(): String? = settings(activity.applicationContext).dashboard?.let(OAuth::origin)
 
@@ -285,6 +288,8 @@ class VitroEngine(
         }
 
         override fun load(url: String) {
+            // A navigation queued before the activity went away: a new client here would outlive the page.
+            if (disposed) return
             val redirected = host.redirect(url)
             if (redirected != null) {
                 if (redirected == "about:blank") return
@@ -306,6 +311,7 @@ class VitroEngine(
                 openInFallback(url)
                 return
             }
+            nativeActive = true
             val (dashPath, viewPath) = LovelaceParser.parseRoute(url)
             pendingViewPath = viewPath
             host.onPageStart(url)
@@ -480,6 +486,7 @@ class VitroEngine(
          * the page (it would render, report its location and signal ready behind the fallback).
          */
         private fun leaveNativeDashboard() {
+            nativeActive = false
             currentDashboardPath = NO_DASHBOARD
             client?.releaseDashboard()
         }
@@ -615,7 +622,9 @@ class VitroEngine(
                 post {
                     if (firstPaintReported) {
                         vitroView.setConnectionBanner("Connection lost. Reconnecting…")
-                    } else {
+                    } else if (nativeActive) {
+                        // Only the native dashboard's own load fails: the host is shared with the fallback page,
+                        // which may have loaded (or be loading) normally.
                         host.onPageStop(false)
                     }
                 }

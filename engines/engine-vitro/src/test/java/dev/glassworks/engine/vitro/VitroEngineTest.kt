@@ -431,6 +431,37 @@ class VitroEngineTest {
         assertEquals(0, host.firstPaints.get())
     }
 
+    @Test
+    fun aLostConnectionAfterTheFallbackTookOverDoesNotFailItsPage() {
+        // The dashboard's connection fails only after the page moved on to a fallback page: that page isn't failed.
+        val attempts = java.util.concurrent.atomic.AtomicInteger(0)
+        val engine = VitroEngine(
+            fallback = fallback,
+            settings = { settings },
+            enabled = { true },
+            tokenProvider = { _, done -> done(FakeHaServer.TOKEN) },
+            socketFactory = { attempts.incrementAndGet(); throw java.io.IOException("Connection refused") },
+        ).also { engines += it }
+        val page = openPage(engine)
+        page.load("$base/wall-test/living")
+        page.load("$base/config/blueprint/import") // before the main thread hears of the failure
+        awaitMain("the connection was tried") { attempts.get() >= 1 }
+        Thread.sleep(100)
+        idle()
+        assertFalse(host.pageStops.toString(), host.pageStops.contains(false))
+    }
+
+    @Test
+    fun aNavigationQueuedBeforeTheActivityWentAwayStartsNothing() {
+        val page = openPage(vitro())
+        page.javaClass.getDeclaredMethod("dispose").apply { isAccessible = true }.invoke(page)
+        page.load("$base/wall-test/living")
+        idle()
+        assertTrue("no connection for a disposed page", server.connectUrls.isEmpty())
+        val client = page.javaClass.getDeclaredField("client").apply { isAccessible = true }.get(page)
+        assertNull(client)
+    }
+
     // ---- Messages from the host and Page API ----
 
     @Test
