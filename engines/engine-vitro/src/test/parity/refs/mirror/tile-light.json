@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": true,
    "text": "Entryway Ceiling Light Entryway Ceiling Halo",
    "x": 56,
    "y": 17.61,
@@ -89,5 +90,72 @@
    "lu": 1795508469.1702254
   }
  },
- "templates": {}
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.entryway_ceiling_halo",
+    "pl": "zha",
+    "tk": "light",
+    "di": "device-1",
+    "en": "Entryway Ceiling Halo"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Entryway Ceiling Light"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "light": {
+      "light": {
+       "state_attributes": {
+        "effect": {
+         "state": {
+          "colorloop": "mdi:looks"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
 }

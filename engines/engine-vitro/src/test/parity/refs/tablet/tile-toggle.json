@@ -65,5 +65,41 @@
    "lc": 1795504897.1536012
   }
  },
- "templates": {}
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "input_boolean.guest_mode",
+    "pl": "input_boolean",
+    "en": "Guest mode"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "input_boolean"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "input_boolean": {
+     "_": {
+      "default": "mdi:check-circle-outline",
+      "state": {
+       "off": "mdi:close-circle-outline"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.input_boolean.entity_component._.state.off": "Off",
+    "component.input_boolean.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
 }

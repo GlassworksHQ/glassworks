@@ -60,7 +60,7 @@ test('findPrivate flags what a screenshot would show, never the values', async (
   assert.deepEqual(findPrivate('20.7° 48% v1.2.3 192.0.2.4', null), []);
   assert.deepEqual(findPrivate('Router 10.0.0.1', null), ['an IPv4 address']);
   assert.deepEqual(findPrivate('aa:bb:cc:dd:ee:ff', null), ['a MAC address']);
-  assert.deepEqual(findPrivate('/api/x?token=abc123', null), ['a token']);
+  assert.deepEqual(findPrivate('/api/x?token=secretvalue', null), ['a token']);
   const creds = { origin: 'http://ha.example.test:8123', token: 'secret-token' };
   assert.deepEqual(findPrivate('open ha.example.test:8123 now', creds), ["Home Assistant's address or token"]);
   const found = findPrivate('Router 10.0.0.1', null).join(' ');
@@ -149,4 +149,53 @@ test('run.sh rejects an explicitly empty --local path', async () => {
   const r = spawnSync('bash', [new URL('../run.sh', import.meta.url).pathname, '--refresh', '--local', ''], { encoding: 'utf8' });
   assert.equal(r.status, 2);
   assert.match(r.stderr, /--local needs a path/);
+});
+
+test('buildDisplay keeps only what Vitro reads, with synthetic device ids', async () => {
+  const { buildDisplay } = await import('../lib/display.mjs');
+  const realDevice = '53d0477a41d33ff0081a623f2a4e192d';
+  const registry = { entities: [
+    { ei: 'sensor.fridge', pl: 'localthings', tk: 'instance_temperature', dp: 1, di: realDevice, en: 'Fridge temperature', lb: ['x'], ai: 'kitchen', np: 'device' },
+    { ei: 'sensor.other', pl: 'esphome', dp: 2 },
+    { ei: 'light.lamp', pl: 'zha', di: realDevice },
+  ] };
+  const devices = [{ id: realDevice, name: 'AirDot 4c83f8', name_by_user: 'Fridge', serial_number: 'SN1', connections: [['mac', 'aa:bb:cc:dd:ee:ff']] }];
+  const icons = (category, n) => ({
+    entity_component: { sensor: { _: { default: 'mdi:eye' }, temperature: { default: 'mdi:thermometer' }, humidity: { default: 'mdi:water' } }, light: { _: { default: 'mdi:lightbulb' } } },
+    entity: { localthings: { sensor: { instance_temperature: { default: 'mdi:fridge' }, other_key: { default: 'mdi:x' } } } },
+  })[category][n];
+  const translations = (category, n) => ({
+    'component.sensor.entity_component._.state.on': 'On',
+    'component.sensor.entity_component.humidity.state.x': 'X',
+    'component.sensor.entity_component._.name': 'Sensor',
+    'component.localthings.entity.sensor.instance_temperature.state.cold': 'Cold',
+    'component.localthings.entity.sensor.other_key.state.y': 'Y',
+  });
+  const d = buildDisplay(new Set(['sensor.fridge', 'light.lamp']), registry, devices, icons, translations, { 'sensor.fridge': 'temperature' });
+  assert.deepEqual(d.entities, [
+    { ei: 'light.lamp', pl: 'zha', di: 'device-1' },
+    { ei: 'sensor.fridge', pl: 'localthings', tk: 'instance_temperature', dp: 1, di: 'device-1', en: 'Fridge temperature' },
+  ]);
+  // The name HA shows only: the default one ("AirDot 4c83f8", a MAC fragment) stays out.
+  assert.deepEqual(d.devices, [{ id: 'device-1', name: 'Fridge' }]);
+  assert.deepEqual(d.requested, { domains: ['light', 'sensor'], platforms: ['localthings'] });
+  assert.deepEqual(d.icons.entity_component.sensor, { _: { default: 'mdi:eye' }, temperature: { default: 'mdi:thermometer' } });
+  assert.deepEqual(d.icons.entity, { localthings: { sensor: { instance_temperature: { default: 'mdi:fridge' } } } });
+  assert.deepEqual(Object.keys(d.translations.entity_component), ['component.sensor.entity_component._.state.on']);
+  assert.deepEqual(Object.keys(d.translations.entity), ['component.localthings.entity.sensor.instance_temperature.state.cold']);
+  const text = JSON.stringify(d);
+  assert.ok(!text.includes(realDevice) && !text.includes('SN1') && !text.includes('aa:bb') && !text.includes('4c83f8'));
+});
+
+test('findPrivate flags a MAC fragment but not a colour or a model id', async () => {
+  const { findPrivate } = await import('../lib/scrub.mjs');
+  assert.deepEqual(findPrivate('AirDot 4c83f8', null), ['a MAC fragment']);
+  assert.deepEqual(findPrivate('esp-a1b2c3d4e5f6', null), ['a MAC fragment']);
+  // `_` sets a fragment off too: it's a word character, so a \w boundary missed it.
+  assert.deepEqual(findPrivate('AirDot_a1b2c3d4e5f6', null), ['a MAC fragment']);
+  assert.deepEqual(findPrivate('esp_4C83F8.local', null), ['a MAC fragment']);
+  const { hasMacFragment } = await import('../lib/scrub.mjs');
+  assert.ok(hasMacFragment('{"friendly_name": "airdot_4bb0c0 Temperature"}'));
+  assert.ok(!hasMacFragment('{"color": "#a1b2c3", "lc": 1795504930.063075}'));
+  for (const ok of ['#34d399', 'TS0501B', '_TZB210_gumjktrw', 'abcdef', '123456', 'Fog 8.3 °C']) assert.deepEqual(findPrivate(ok, null), [], ok);
 });

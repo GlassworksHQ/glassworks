@@ -55,10 +55,10 @@
   },
   {
    "slot": 0,
-   "text": "20.7°",
-   "x": 811.31,
+   "text": "20.4°",
+   "x": 810.05,
    "y": 51.19,
-   "w": 42.69,
+   "w": 43.95,
    "h": 20,
    "size": 17,
    "weight": 400,
@@ -67,10 +67,10 @@
   },
   {
    "slot": 0,
-   "text": "48%",
-   "x": 864.3,
+   "text": "47%",
+   "x": 865.08,
    "y": 51.78,
-   "w": 33.7,
+   "w": 32.92,
    "h": 19,
    "size": 15,
    "weight": 400,
@@ -103,10 +103,10 @@
   },
   {
    "slot": 0,
-   "text": "61 W",
-   "x": 863.59,
+   "text": "50 W",
+   "x": 860.41,
    "y": 87.97,
-   "w": 34.41,
+   "w": 37.59,
    "h": 19,
    "size": 15,
    "weight": 400,
@@ -127,39 +127,117 @@
    "lc": 1795504918.0331674
   },
   "sensor.kitchen_fridge_power": {
-   "s": "61.0",
+   "s": "50.0",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "W",
     "device_class": "power",
     "friendly_name": "Fridge Power"
    },
-   "lc": 1795511218.9105065
+   "lc": 1795522833.0296257
   },
   "sensor.living_room_airdot_living_room_humidity": {
-   "s": "48.3600006103516",
+   "s": "47.2400016784668",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "%",
     "device_class": "humidity",
     "friendly_name": "AirDot Living Room Humidity"
    },
-   "lc": 1795511684.9075682
+   "lc": 1795522954.9950962
   },
   "sensor.living_room_airdot_living_room_temperature": {
-   "s": "20.6849994659424",
+   "s": "20.3549995422363",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
     "friendly_name": "AirDot Living Room Temperature"
    },
-   "lc": 1795511704.9057643
+   "lc": 1795522954.970371
   }
  },
  "templates": {
   "###### Inside\n<table role=\"presentation\"><tr><td><ha-icon icon=\"mdi:sofa\"></ha-icon></td><td>Living Room</td><td>{{ '%.1f' | format(states('sensor.living_room_airdot_living_room_temperature') | float(0)) }}°</td><td>{{ states('sensor.living_room_airdot_living_room_humidity') | float(0) | round(0) | int }}%</td></tr><tr><td><ha-icon icon=\"mdi:fridge\"></ha-icon></td><td>Fridge</td><td>{{ '%.1f' | format(states('sensor.kitchen_fridge_fridge_temperature') | float(0)) }}°</td><td>{{ states('sensor.kitchen_fridge_power') | float(0) | round(0) | int }} W</td></tr></table>": {
-   "result": "###### Inside\n<table role=\"presentation\"><tr><td><ha-icon icon=\"mdi:sofa\"></ha-icon></td><td>Living Room</td><td>20.7°</td><td>48%</td></tr><tr><td><ha-icon icon=\"mdi:fridge\"></ha-icon></td><td>Fridge</td><td>1.1°</td><td>61 W</td></tr></table>"
+   "result": "###### Inside\n<table role=\"presentation\"><tr><td><ha-icon icon=\"mdi:sofa\"></ha-icon></td><td>Living Room</td><td>20.4°</td><td>47%</td></tr><tr><td><ha-icon icon=\"mdi:fridge\"></ha-icon></td><td>Fridge</td><td>1.1°</td><td>50 W</td></tr></table>"
+  }
+ },
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.kitchen_fridge_fridge_temperature",
+    "pl": "localthings",
+    "tk": "instance_temperature",
+    "dp": 1,
+    "di": "device-1",
+    "en": "Fridge temperature"
+   },
+   {
+    "ei": "sensor.kitchen_fridge_power",
+    "pl": "localthings",
+    "tk": "power_watts",
+    "dp": 0,
+    "di": "device-1",
+    "en": "Power"
+   },
+   {
+    "ei": "sensor.living_room_airdot_living_room_humidity",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "device-2",
+    "en": "Humidity"
+   },
+   {
+    "ei": "sensor.living_room_airdot_living_room_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "device-2",
+    "en": "Temperature"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Fridge"
+   },
+   {
+    "id": "device-2",
+    "name": "AirDot Living Room"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": [
+    "localthings"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "humidity": {
+      "default": "mdi:water-percent"
+     },
+     "power": {
+      "default": "mdi:flash"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
   }
  }
 }

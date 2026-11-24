@@ -19,6 +19,7 @@ import android.widget.TextView
 import com.sun.net.httpserver.HttpServer
 import dev.glassworks.engine.vitro.cards.ClockCardView
 import dev.glassworks.engine.vitro.data.EntityStore
+import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.ui.HaGridLayout
@@ -201,6 +202,37 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
     }
 
     fun render(case: ParityCase, ref: ParityReference?): VitroRender {
+        // HaDisplay is process-wide: hold the case's display data while it renders, and nothing after.
+        HaDisplay.reset()
+        ref?.display?.let(::applyDisplay)
+        try {
+            return renderWithDisplay(case, ref)
+        } finally {
+            HaDisplay.reset()
+        }
+    }
+
+    /**
+     * Feeds the reference's `display` block to HaDisplay the way HaDashboardClient feeds it HA's answers: the
+     * registry (`list_for_display`), the devices, then the icons and state labels of the requested domains and
+     * integrations.
+     */
+    private fun applyDisplay(d: JSONObject) {
+        HaDisplay.applyRegistry(JSONObject().put("entities", d.optJSONArray("entities") ?: org.json.JSONArray()))
+        d.optJSONArray("devices")?.let(HaDisplay::applyDevices)
+        val requested = d.optJSONObject("requested") ?: JSONObject()
+        fun names(key: String) = requested.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty()
+        val domains = names("domains")
+        val platforms = names("platforms")
+        val icons = d.optJSONObject("icons") ?: JSONObject()
+        val labels = d.optJSONObject("translations") ?: JSONObject()
+        HaDisplay.applyIcons(JSONObject().put("resources", icons.optJSONObject("entity_component") ?: JSONObject()), true, domains)
+        HaDisplay.applyIcons(JSONObject().put("resources", icons.optJSONObject("entity") ?: JSONObject()), false, platforms)
+        HaDisplay.applyTranslations(JSONObject().put("resources", labels.optJSONObject("entity_component") ?: JSONObject()), true, domains)
+        HaDisplay.applyTranslations(JSONObject().put("resources", labels.optJSONObject("entity") ?: JSONObject()), false, platforms)
+    }
+
+    private fun renderWithDisplay(case: ParityCase, ref: ParityReference?): VitroRender {
         val store = EntityStore()
         ref?.states?.let { if (it.length() > 0) store.applyCompressedEvent(JSONObject().put("a", it)) }
         val templates = ref?.templates.orEmpty()

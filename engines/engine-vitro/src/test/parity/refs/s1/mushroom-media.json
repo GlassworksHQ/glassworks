@@ -73,5 +73,61 @@
    "lc": 1795504932.6927228
   }
  },
- "templates": {}
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "media_player.living_room_living_room",
+    "pl": "sonos",
+    "di": "device-1"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Sonos Living Room"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "media_player"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "media_player": {
+     "_": {
+      "default": "mdi:cast",
+      "state": {
+       "off": "mdi:cast-off",
+       "paused": "mdi:cast-connected",
+       "playing": "mdi:cast-connected"
+      }
+     },
+     "speaker": {
+      "default": "mdi:speaker",
+      "state": {
+       "off": "mdi:speaker-off",
+       "paused": "mdi:speaker-pause",
+       "playing": "mdi:speaker-play"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.media_player.entity_component._.state.buffering": "Buffering",
+    "component.media_player.entity_component._.state.idle": "Idle",
+    "component.media_player.entity_component._.state.off": "Off",
+    "component.media_player.entity_component._.state.on": "On",
+    "component.media_player.entity_component._.state.paused": "Paused",
+    "component.media_player.entity_component._.state.playing": "Playing",
+    "component.media_player.entity_component._.state.standby": "Standby"
+   },
+   "entity": {}
+  }
+ }
 }
