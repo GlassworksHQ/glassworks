@@ -421,8 +421,13 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         setBorderInset(0)
     }
 
+    /** The border the card draws now, px (0 without one), whether or not its content sits inside it. */
+    protected var drawnBorderPx = 0
+        private set
+
     /** The border width the content sits inside (0 when the card draws no border). */
     private fun setBorderInset(width: Int) {
+        drawnBorderPx = width
         val px = if (contentInsideBorder) width else 0
         if (px == borderInsetPx) return
         borderInsetPx = px
