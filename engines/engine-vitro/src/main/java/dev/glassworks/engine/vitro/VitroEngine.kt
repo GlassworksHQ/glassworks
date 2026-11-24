@@ -558,6 +558,7 @@ class VitroEngine(
                     displayedDashboard = currentOrigin to urlPath
                     vitroView.setConnectionBanner(null)
                     vitroView.setDashboard(config, pendingViewPath)
+                    client?.dashboardShown()
                     signalReady("vitro")
                 }
             }

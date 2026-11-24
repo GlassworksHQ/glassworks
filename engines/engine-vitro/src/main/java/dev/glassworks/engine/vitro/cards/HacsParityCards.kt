@@ -1110,10 +1110,14 @@ object AutoEntitiesFilter {
                     "or", "and" -> (rule.opt(k) as? JSONArray)?.let { arr ->
                         (0 until arr.length()).all { i -> arr.optJSONObject(i)?.let(::supported) ?: false }
                     } ?: false
-                    "attributes" -> rule.opt(k) is JSONObject
-                    else -> true
+                    "attributes" -> (rule.opt(k) as? JSONObject)?.let { a -> a.keys().asSequence().all { isScalar(a.opt(it)) } } ?: false
+                    "options", "sort" -> true
+                    // domain, entity_id, state, name, group: one value to match (`state: null` or an object is no rule).
+                    else -> isScalar(rule.opt(k))
                 }
             }
+
+    private fun isScalar(v: Any?): Boolean = v is String || v is Number || v is Boolean
 
     /** An attribute as text, `a:b` reaching into a nested map. */
     private fun attributeString(s: EntityState, key: String): String? {

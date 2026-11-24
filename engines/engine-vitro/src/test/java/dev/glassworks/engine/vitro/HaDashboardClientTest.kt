@@ -800,10 +800,20 @@ class HaDashboardClientTest {
         // Reclaiming the dashboard shown before fetches it, since refetches were skipped meanwhile.
         c.claimDashboard(null)
         awaitCondition("refetched on claim") { server.commands("lovelace/config").size == 2 }
+        // The page puts it on screen (VitroEngine does this in onDashboardConfig).
+        awaitCondition("config delivered") { listener.configs.size == 2 }
+        c.dashboardShown()
         // A claim with nothing skipped stays instant (no request).
         c.claimDashboard(null)
-        Thread.sleep(100)
+        readerBarrier(c)
         assertEquals(2, server.commands("lovelace/config").size)
+    }
+
+    /** Returns once the reader has handled everything HA sent before: a request's answer comes after all of it. */
+    private fun readerBarrier(c: HaDashboardClient) {
+        val done = CompletableFuture<Boolean>()
+        c.callWs(JSONObject().put("type", "config/area_registry/list")) { ok, _, _ -> done.complete(ok) }
+        assertTrue(done.get(10, TimeUnit.SECONDS))
     }
 
     @Test
@@ -824,7 +834,7 @@ class HaDashboardClientTest {
         })
         c.releaseDashboard()
         server.pushEvent(server.eventSubscriptionId("lovelace_updated")!!, JSONObject().put("event_type", "lovelace_updated"))
-        Thread.sleep(100)
+        readerBarrier(c) // the update has been handled, while the dashboard is still released
         assertEquals(1, server.commands("lovelace/config").size) // skipped: the fallback shows
         swallow.set(true)
         c.claimDashboard(null) // asks, but the answer never comes

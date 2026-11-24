@@ -185,8 +185,16 @@ class HaDashboardClient(
         if (missedRefetch) fetchDashboard(urlPath)
     }
 
-    /** A refetch was skipped while the page showed the fallback; the next claim fetches instead of reusing. */
+    /**
+     * A refetch was skipped while the page showed the fallback; the next claim fetches instead of reusing. Cleared
+     * only by [dashboardShown], where the page puts a config on screen: an answer dropped on the way leaves it set.
+     */
     @Volatile private var missedRefetch = false
+
+    /** The page put the config it got on screen: nothing skipped is owed any more. */
+    fun dashboardShown() {
+        missedRefetch = false
+    }
 
     /** The page left the dashboards for the fallback; the next [fetchDashboard] or [claimDashboard] takes them back. */
     fun releaseDashboard() {
@@ -210,8 +218,6 @@ class HaDashboardClient(
             // The connection, not Home Assistant, failed: the reconnect asks again (onAuthenticated). Reporting it
             // would send a dashboard that exists to the fallback as "not found".
             if (isTransportError(res)) return@request
-            // An answer for the dashboard the page shows: the skipped refetch is made up now (a discarded one isn't).
-            missedRefetch = false
             if (res.optBoolean("success", false)) {
                 val cfgObj = res.optJSONObject("result") ?: JSONObject()
                 listener.onDashboardConfig(urlPath, LovelaceParser.parseDashboard(cfgObj))
