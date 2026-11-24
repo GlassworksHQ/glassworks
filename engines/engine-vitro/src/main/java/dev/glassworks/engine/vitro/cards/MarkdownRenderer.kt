@@ -490,10 +490,12 @@ class MdiIconSpan(val iconName: String, val color: Int, sizePx: Int) :
         val rect = d.bounds
         if (fm != null) {
             val pfm = paint.fontMetricsInt
-            fm.ascent = pfm.ascent
-            fm.descent = pfm.descent
-            fm.top = pfm.top
-            fm.bottom = pfm.bottom
+            val mid = (pfm.ascent + pfm.descent) / 2
+            val half = rect.height() / 2
+            fm.ascent = minOf(pfm.ascent, mid - half)
+            fm.descent = maxOf(pfm.descent, mid + half)
+            fm.top = minOf(pfm.top, fm.ascent)
+            fm.bottom = maxOf(pfm.bottom, fm.descent)
         }
         return rect.right
     }
@@ -570,10 +572,14 @@ class MarkdownInline(
     /** The product of every enclosing `opacity`, folded into nested colors. */
     private var alphaMul = 1f
 
+    /** Active pixel size for inline `<ha-icon>` spans; scales with enclosing `<span style="font-size:...">`. */
+    private var currentIconSizePx = iconSizePx
+
     fun render(text: String, baseColor: Int): SpannableStringBuilder {
         val sb = SpannableStringBuilder()
         transform = null
         alphaMul = 1f
+        currentIconSizePx = iconSizePx
         renderInto(sb, text, 0, text.length, baseColor)
         while (sb.isNotEmpty() && sb[sb.length - 1] == '\n') sb.delete(sb.length - 1, sb.length)
         return sb
@@ -695,9 +701,14 @@ class MarkdownInline(
                 val icon = attr(attrs, "icon")
                 val end = if (selfClosed) after else findClose(s, name, after, to)?.let { it.last + 1 } ?: after
                 if (!icon.isNullOrBlank()) {
+                    val css = MdCss.parse(attr(attrs, "style"))
+                    val iconColor = css["color"]?.let(::parseCssColor)?.let { scaleAlpha(it, alphaMul) } ?: color
+                    val explicitDp = MdCss.lengthDp(css["--mdc-icon-size"] ?: css["font-size"] ?: css["width"])
+                    val px = explicitDp?.takeIf { it > 0f }?.let { (it * density * fontScale).roundToInt().coerceAtLeast(1) }
+                        ?: currentIconSizePx
                     val start = sb.length
                     sb.append('￼')
-                    sb.setSpan(MdiIconSpan(icon, color, iconSizePx), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    sb.setSpan(MdiIconSpan(icon, iconColor, px), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
                 return end
             }
@@ -766,11 +777,16 @@ class MarkdownInline(
         if (opacity != null) effective = scaleAlpha(effective, opacity)
         val prevTransform = transform
         val prevAlpha = alphaMul
+        val prevIconSize = currentIconSizePx
         css["text-transform"]?.trim()?.lowercase(Locale.ROOT)?.let { transform = if (it == "none") null else it }
         if (opacity != null) alphaMul *= opacity
+        MdCss.lengthDp(css["font-size"])?.takeIf { it > 0f }?.let { dp ->
+            currentIconSizePx = (dp * density * fontScale * 1.15f).roundToInt().coerceAtLeast(1)
+        }
         renderInto(sb, s, from, to, effective)
         transform = prevTransform
         alphaMul = prevAlpha
+        currentIconSizePx = prevIconSize
         if (parsed != null || opacity != null) span(sb, ForegroundColorSpan(effective), start)
         typography(sb, start, css)
         if (block) {

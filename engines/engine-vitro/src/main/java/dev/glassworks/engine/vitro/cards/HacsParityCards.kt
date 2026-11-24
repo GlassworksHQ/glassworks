@@ -1212,6 +1212,10 @@ open class StackInCardView(
         }
         val stack = LinearLayout(ctx.context).apply {
             orientation = if (horizontal) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            if (keep.optBoolean("background", false) || keep.optBoolean("margin", false)) {
+                val pad = ctx.px(12f)
+                setPadding(pad, pad, pad, pad)
+            }
         }
         val gap = if (keep.optBoolean("margin", false)) ctx.px(ctx.theme.cardGapDp) else 0
         children = config.childCards.mapIndexed { idx, child ->
