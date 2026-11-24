@@ -54,6 +54,9 @@ import dev.glassworks.engine.vitro.cards.MediaControlCardView
 import dev.glassworks.engine.vitro.cards.ModernCircularGaugeCardView
 import dev.glassworks.engine.vitro.cards.MoreInfoSheet
 import dev.glassworks.engine.vitro.cards.MushroomChipsCardView
+import dev.glassworks.engine.vitro.cards.MushroomCoverCardView
+import dev.glassworks.engine.vitro.cards.MushroomFanCardView
+import dev.glassworks.engine.vitro.cards.MushroomLightCardView
 import dev.glassworks.engine.vitro.cards.PictureCardView
 import dev.glassworks.engine.vitro.cards.PictureElementsCardView
 import dev.glassworks.engine.vitro.cards.SensorGraphCardView
@@ -843,7 +846,7 @@ class VitroView(
                 grid.addView(wrapVisibility(card, View(context), ctx), HaGridLayout.LayoutParams(columns))
                 continue
             }
-            val size = HaGridSize.of(card)
+            val size = HaGridSize.of(card, card.entity?.let { store[it] })
             val cardView = wrapVisibility(card, buildCard(card, ctx, fillViewport = false, layout = "grid"), ctx)
             cacheCardAsLayer(cardView, ctx)
             val fixed = size.rows?.let { r -> px(r * (rowHeight + rowGap) - rowGap) }
@@ -1101,10 +1104,11 @@ class VitroView(
             "calendar" -> CalendarCardView(ctx, card)
             "logbook" -> LogbookCardView(ctx, card)
             // Tier 2: Popular HACS Fast-Paths
+            // Mushroom's light, fan and cover cards with their controls row; without one, the tile draws them.
+            "custom:mushroom-light-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, card.entity?.let { store[it] })) MushroomLightCardView(ctx, card) else TileCardView(ctx, card)
+            "custom:mushroom-fan-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, card.entity?.let { store[it] })) MushroomFanCardView(ctx, card) else TileCardView(ctx, card)
+            "custom:mushroom-cover-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, card.entity?.let { store[it] })) MushroomCoverCardView(ctx, card) else TileCardView(ctx, card)
             "custom:mushroom-entity-card",
-            "custom:mushroom-light-card",
-            "custom:mushroom-fan-card",
-            "custom:mushroom-cover-card",
             "custom:mushroom-person-card",
             "custom:mushroom-template-card" -> TileCardView(ctx, card)
             "custom:mushroom-title-card" -> HeadingCardView(ctx, card)

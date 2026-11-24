@@ -167,7 +167,8 @@ class HacsParityWaveTest {
             card("""{"type": "custom:mushroom-vacuum-card", "entity": "vacuum.robo", "commands": ["start_pause", "stop", "locate", "clean_spot", "return_home"]}"""),
         )
         idle()
-        assertTrue(card.texts().any { "85%" in it })
+        // Mushroom's vacuum card: HA's state label alone under the name (no battery, no `status` attribute).
+        assertTrue(card.texts().toString(), card.texts().any { it == "Docked" })
         card.click("Start")
         assertEquals("vacuum.start", calls.last().service)
         st.putLocal(entity("vacuum.robo", "cleaning", "battery_level" to 80))
