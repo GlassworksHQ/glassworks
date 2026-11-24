@@ -44,6 +44,30 @@ class MdSvg private constructor(
         val attrs: Map<String, String>,
         val matrix: Matrix?,
         val text: String? = null,
+    ) {
+        /** Its paint, resolved from [attrs] on the first draw and reused by every draw after it. */
+        var style: ShapeStyle? = null
+    }
+
+    /** A shape's attributes as paint settings: colors, stroke, dashes and text, all parsed once. */
+    private class ShapeStyle(
+        val fill: Int?,
+        val stroke: Int?,
+        val strokeWidth: Float,
+        val cap: Paint.Cap,
+        val join: Paint.Join,
+        /** The stroke's dashes (null when solid). */
+        val dash: DashPathEffect?,
+        /** A dash pattern that starts with a zero-length dash: only its cap at the path's start is drawn. */
+        val capDot: FloatArray?,
+        /** That zero-length dash with a butt cap: nothing is stroked. */
+        val strokeHidden: Boolean,
+        val strokeFirst: Boolean,
+        val textSize: Float,
+        val textWeight: Int,
+        val textAlign: Paint.Align,
+        val x: Float,
+        val y: Float,
     )
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -73,88 +97,129 @@ class MdSvg private constructor(
         canvas.restore()
     }
 
-    private fun drawShape(canvas: Canvas, shape: Shape, context: Context) {
+    private fun styleOf(shape: Shape): ShapeStyle {
+        shape.style?.let { return it }
         val a = shape.attrs
+        val opacity = (a["opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f)
+        val fill = color(a["fill"] ?: "black", opacity * (a["fill-opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f))
+        val stroke = color(a["stroke"] ?: "none", opacity * (a["stroke-opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f))
+        val strokeWidth = a["stroke-width"]?.let { num(it) } ?: 1f
+        val cap = when (a["stroke-linecap"]) {
+            "round" -> Paint.Cap.ROUND
+            "square" -> Paint.Cap.SQUARE
+            else -> Paint.Cap.BUTT
+        }
+        var dash: DashPathEffect? = null
+        var capDot: FloatArray? = null
+        var strokeHidden = false
+        val path = shape.path
+        val dashes = a["stroke-dasharray"]?.split(SEPARATORS)?.mapNotNull { it.toFloatOrNull() }?.filter { it >= 0f }
+        if (path != null && stroke != null && !dashes.isNullOrEmpty() && dashes.any { it > 0f }) {
+            val scale = a["pathLength"]?.toFloatOrNull()?.takeIf { it > 0f }?.let { PathMeasure(path, false).length / it } ?: 1f
+            val list = (if (dashes.size % 2 == 1) dashes + dashes else dashes).map { it * scale }
+            if (list[0] <= 0f) {
+                // A zero-length dash still draws its round or square cap.
+                if (cap != Paint.Cap.BUTT) capDot = FloatArray(2).also { PathMeasure(path, false).getPosTan(0f, it, null) }
+                else strokeHidden = true
+            } else {
+                dash = DashPathEffect(list.map { it.coerceAtLeast(0.001f) }.toFloatArray(), 0f)
+            }
+        }
+        val size = a["font-size"]?.let { MdCascade.length(it, 16f, 0f) ?: it.toFloatOrNull() } ?: 16f
+        val weight = when (val wt = a["font-weight"]?.lowercase(Locale.ROOT)) {
+            null, "normal" -> 400
+            "bold" -> 700
+            else -> wt.toIntOrNull() ?: 400
+        }
+        return ShapeStyle(
+            fill = fill,
+            stroke = stroke,
+            strokeWidth = strokeWidth,
+            cap = cap,
+            join = when (a["stroke-linejoin"]) {
+                "round" -> Paint.Join.ROUND
+                "bevel" -> Paint.Join.BEVEL
+                else -> Paint.Join.MITER
+            },
+            dash = dash,
+            capDot = capDot,
+            strokeHidden = strokeHidden,
+            strokeFirst = a["paint-order"]?.trim()?.startsWith("stroke") == true,
+            textSize = size,
+            textWeight = weight,
+            textAlign = when (a["text-anchor"]) {
+                "middle" -> Paint.Align.CENTER
+                "end" -> Paint.Align.RIGHT
+                else -> Paint.Align.LEFT
+            },
+            x = num(a["x"]),
+            y = num(a["y"]),
+        ).also { shape.style = it }
+    }
+
+    private fun drawShape(canvas: Canvas, shape: Shape, context: Context) {
+        val st = styleOf(shape)
         canvas.save()
         shape.matrix?.let { canvas.concat(it) }
-        val opacity = (a["opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f)
-        val fill = a["fill"] ?: "black"
-        val stroke = a["stroke"] ?: "none"
         if (shape.text != null) {
             paint.reset()
             paint.isAntiAlias = true
             paint.style = Paint.Style.FILL
-            paint.color = color(fill, opacity * (a["fill-opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f)) ?: 0
-            val size = a["font-size"]?.let { MdCascade.length(it, 16f, 0f) ?: it.toFloatOrNull() } ?: 16f
-            paint.textSize = size
-            val weight = when (val wt = a["font-weight"]?.lowercase(Locale.ROOT)) {
-                null, "normal" -> 400
-                "bold" -> 700
-                else -> wt.toIntOrNull() ?: 400
-            }
-            paint.typeface = MdFonts.typeface(context, weight, false, false, size)
-            paint.textAlign = when (a["text-anchor"]) {
-                "middle" -> Paint.Align.CENTER
-                "end" -> Paint.Align.RIGHT
-                else -> Paint.Align.LEFT
-            }
-            canvas.drawText(shape.text, num(a["x"]), num(a["y"]), paint)
+            paint.color = st.fill ?: 0
+            paint.textSize = st.textSize
+            paint.typeface = MdFonts.typeface(context, st.textWeight, false, false, st.textSize)
+            paint.textAlign = st.textAlign
+            canvas.drawText(shape.text, st.x, st.y, paint)
             canvas.restore()
             return
         }
-        val path = shape.path ?: run { canvas.restore(); return }
-        val drawFill = {
-            color(fill, opacity * (a["fill-opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f))?.let { c ->
-                paint.reset()
-                paint.isAntiAlias = true
-                paint.style = Paint.Style.FILL
-                paint.color = c
-                canvas.drawPath(path, paint)
-            }
-        }
-        val drawStroke = {
-            color(stroke, opacity * (a["stroke-opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f))?.let { c ->
-                paint.reset()
-                paint.isAntiAlias = true
-                paint.style = Paint.Style.STROKE
-                paint.color = c
-                paint.strokeWidth = a["stroke-width"]?.let { num(it) } ?: 1f
-                paint.strokeCap = when (a["stroke-linecap"]) {
-                    "round" -> Paint.Cap.ROUND
-                    "square" -> Paint.Cap.SQUARE
-                    else -> Paint.Cap.BUTT
-                }
-                paint.strokeJoin = when (a["stroke-linejoin"]) {
-                    "round" -> Paint.Join.ROUND
-                    "bevel" -> Paint.Join.BEVEL
-                    else -> Paint.Join.MITER
-                }
-                val dashes = a["stroke-dasharray"]?.split(Regex("""[\s,]+"""))?.mapNotNull { it.toFloatOrNull() }
-                    ?.filter { it >= 0f }
-                if (!dashes.isNullOrEmpty() && dashes.any { it > 0f }) {
-                    val scale = a["pathLength"]?.toFloatOrNull()?.takeIf { it > 0f }?.let { PathMeasure(path, false).length / it } ?: 1f
-                    val list = (if (dashes.size % 2 == 1) dashes + dashes else dashes).map { it * scale }
-                    if (list[0] <= 0f) {
-                        // A zero-length dash still draws its round or square cap.
-                        if (paint.strokeCap != Paint.Cap.BUTT) {
-                            val pm = PathMeasure(path, false)
-                            val pos = FloatArray(2)
-                            pm.getPosTan(0f, pos, null)
-                            paint.style = Paint.Style.FILL
-                            canvas.drawCircle(pos[0], pos[1], paint.strokeWidth / 2f, paint)
-                        }
-                    } else {
-                        paint.pathEffect = DashPathEffect(list.map { it.coerceAtLeast(0.001f) }.toFloatArray(), 0f)
-                        canvas.drawPath(path, paint)
-                    }
-                } else {
-                    canvas.drawPath(path, paint)
-                }
-            }
+        val path = shape.path
+        if (path == null) {
+            canvas.restore()
+            return
         }
         // `paint-order: stroke` paints the stroke under the fill.
-        if (a["paint-order"]?.trim()?.startsWith("stroke") == true) { drawStroke(); drawFill() } else { drawFill(); drawStroke() }
+        if (st.strokeFirst) {
+            drawStroke(canvas, path, st)
+            drawFill(canvas, path, st)
+        } else {
+            drawFill(canvas, path, st)
+            drawStroke(canvas, path, st)
+        }
         canvas.restore()
+    }
+
+    private fun drawFill(canvas: Canvas, path: Path, st: ShapeStyle) {
+        val c = st.fill ?: return
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.style = Paint.Style.FILL
+        paint.color = c
+        canvas.drawPath(path, paint)
+    }
+
+    private fun drawStroke(canvas: Canvas, path: Path, st: ShapeStyle) {
+        val c = st.stroke ?: return
+        if (st.strokeHidden) return
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.style = Paint.Style.STROKE
+        paint.color = c
+        paint.strokeWidth = st.strokeWidth
+        paint.strokeCap = st.cap
+        paint.strokeJoin = st.join
+        val dot = st.capDot
+        when {
+            dot != null -> {
+                paint.style = Paint.Style.FILL
+                canvas.drawCircle(dot[0], dot[1], st.strokeWidth / 2f, paint)
+            }
+            st.dash != null -> {
+                paint.pathEffect = st.dash
+                canvas.drawPath(path, paint)
+            }
+            else -> canvas.drawPath(path, paint)
+        }
     }
 
     private fun color(v: String, opacity: Float): Int? {
@@ -165,6 +230,7 @@ class MdSvg private constructor(
     }
 
     companion object {
+        private val SEPARATORS = Regex("""[\s,]+""")
         private val ELEMENT = Regex("""<(/?)([a-zA-Z][\w:-]*)((?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(/?)>""")
         private val ATTR = Regex("""([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')""")
 
@@ -251,7 +317,7 @@ class MdSvg private constructor(
                 when (name) {
                     "svg" -> {
                         if (viewBox == null) {
-                            own["viewBox"]?.split(Regex("""[\s,]+"""))?.mapNotNull { it.toFloatOrNull() }?.takeIf { it.size == 4 }?.let {
+                            own["viewBox"]?.split(SEPARATORS)?.mapNotNull { it.toFloatOrNull() }?.takeIf { it.size == 4 }?.let {
                                 viewBox = RectF(it[0], it[1], it[0] + it[2], it[1] + it[3])
                             }
                             own["preserveAspectRatio"]?.let { preserve = it.trim() }
@@ -301,7 +367,7 @@ class MdSvg private constructor(
                         lineTo(num(own["x2"]), num(own["y2"]))
                     }, attrs + ("fill" to "none"), matrix)
                     "polyline", "polygon" -> {
-                        val pts = own["points"]?.split(Regex("""[\s,]+"""))?.mapNotNull { it.toFloatOrNull() }.orEmpty()
+                        val pts = own["points"]?.split(SEPARATORS)?.mapNotNull { it.toFloatOrNull() }.orEmpty()
                         if (pts.size >= 4) {
                             val p = Path()
                             p.moveTo(pts[0], pts[1])
@@ -330,7 +396,7 @@ class MdSvg private constructor(
             val m = Matrix()
             var any = false
             for (t in TRANSFORM.findAll(v)) {
-                val a = t.groupValues[2].split(Regex("""[\s,]+""")).mapNotNull { it.toFloatOrNull() }
+                val a = t.groupValues[2].split(SEPARATORS).mapNotNull { it.toFloatOrNull() }
                 val step = Matrix()
                 when (t.groupValues[1]) {
                     "translate" -> step.setTranslate(a.getOrElse(0) { 0f }, a.getOrElse(1) { 0f })

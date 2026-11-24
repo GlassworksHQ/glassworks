@@ -4,6 +4,8 @@
 
 package dev.glassworks.engine.vitro.cards
 
+import dev.glassworks.engine.vitro.ui.KeyedText
+import dev.glassworks.engine.vitro.ui.NumberText
 import dev.glassworks.engine.vitro.ui.HaWeatherSvg
 import android.animation.ValueAnimator
 import android.content.Context
@@ -182,12 +184,22 @@ private class SparklineCanvasView(
         textSize = 9f * dp
         textAlign = Paint.Align.LEFT
     }
-    private val linePath = Path()
-    private val fillPath = Path()
     private var series: List<List<HistoryPoint>> = emptyList()
+
+    // Built once per data or size change, never in onDraw: one line path per series, the first one's fill and its
+    // gradient, and the min/max labels.
+    private val linePaths = ArrayList<Path>()
+    private val lineColors = ArrayList<Int>()
+    private val fillPath = Path()
+    private var hasFill = false
+    private var minText = ""
+    private var maxText = ""
+    private var builtW = -1
+    private var builtH = -1
 
     fun setSeries(data: List<List<HistoryPoint>>) {
         series = data
+        builtW = -1
         invalidate()
     }
 
@@ -195,8 +207,13 @@ private class SparklineCanvasView(
         if (kotlin.math.abs(v) >= 100.0 || v == Math.rint(v)) String.format(Locale.US, "%.0f", v)
         else String.format(Locale.US, "%.1f", v)
 
-    override fun onDraw(canvas: Canvas) {
-        if (series.isEmpty() || width <= 4 || height <= 4) return
+    private fun rebuild(w: Float, h: Float) {
+        builtW = width
+        builtH = height
+        linePaths.clear()
+        lineColors.clear()
+        fillPath.reset()
+        hasFill = false
         var minV = Double.POSITIVE_INFINITY
         var maxV = Double.NEGATIVE_INFINITY
         for (s in series) {
@@ -207,9 +224,7 @@ private class SparklineCanvasView(
         }
         val span = (maxV - minV).takeIf { it > 1e-6 } ?: 1.0
         val padY = 4f * dp
-        val usableH = (height - padY * 2f).coerceAtLeast(1f)
-        val w = width.toFloat()
-        val h = height.toFloat()
+        val usableH = (h - padY * 2f).coerceAtLeast(1f)
         // A time axis shared by every series, up to now as HA draws it; sample order only when a time is missing.
         var tMin = Double.POSITIVE_INFINITY
         var tMax = Double.NEGATIVE_INFINITY
@@ -222,12 +237,10 @@ private class SparklineCanvasView(
         tMax = maxOf(tMax, System.currentTimeMillis() / 1000.0)
         val tSpan = tMax - tMin
         if (tSpan <= 0.0) timed = false
-
         series.forEachIndexed { idx, pts ->
             if (pts.size < 2) return@forEachIndexed
             val color = colors[idx % colors.size]
-            linePath.reset()
-            fillPath.reset()
+            val linePath = Path()
             val n = pts.size
             var prevX = 0f
             var prevY = 0f
@@ -237,13 +250,12 @@ private class SparklineCanvasView(
                 val y = h - padY - norm * usableH
                 if (i == 0) {
                     linePath.moveTo(x, y)
-                    fillPath.moveTo(x, h)
-                    fillPath.lineTo(x, y)
+                    if (idx == 0) { fillPath.moveTo(x, h); fillPath.lineTo(x, y) }
                 } else {
                     // Smooth S-curve with horizontal tangents at each sample: no overshoot past min/max.
                     val midX = (prevX + x) / 2f
                     linePath.cubicTo(midX, prevY, midX, y, x, y)
-                    fillPath.cubicTo(midX, prevY, midX, y, x, y)
+                    if (idx == 0) fillPath.cubicTo(midX, prevY, midX, y, x, y)
                 }
                 prevX = x
                 prevY = y
@@ -256,21 +268,28 @@ private class SparklineCanvasView(
             if (idx == 0) {
                 fillPath.lineTo(w, h)
                 fillPath.close()
-                fillPaint.shader = LinearGradient(
-                    0f, 0f, 0f, h,
-                    CardSurface.withAlpha(color, 0.28f),
-                    Color.TRANSPARENT,
-                    Shader.TileMode.CLAMP,
-                )
-                canvas.drawPath(fillPath, fillPaint)
+                hasFill = true
+                fillPaint.shader = LinearGradient(0f, 0f, 0f, h, CardSurface.withAlpha(color, 0.28f), Color.TRANSPARENT, Shader.TileMode.CLAMP)
             }
-            linePaint.color = color
-            canvas.drawPath(linePath, linePaint)
+            linePaths += linePath
+            lineColors += color
         }
+        minText = formatValue(minV)
+        maxText = formatValue(maxV)
+    }
 
+    override fun onDraw(canvas: Canvas) {
+        if (series.isEmpty() || width <= 4 || height <= 4) return
+        val h = height.toFloat()
+        if (builtW != width || builtH != height) rebuild(width.toFloat(), h)
+        if (hasFill) canvas.drawPath(fillPath, fillPaint)
+        for (i in linePaths.indices) {
+            linePaint.color = lineColors[i]
+            canvas.drawPath(linePaths[i], linePaint)
+        }
         // Faint min/max labels in the left-hand corners.
-        canvas.drawText(formatValue(maxV), 2f * dp, labelPaint.textSize, labelPaint)
-        canvas.drawText(formatValue(minV), 2f * dp, h - 2f * dp, labelPaint)
+        canvas.drawText(maxText, 2f * dp, labelPaint.textSize, labelPaint)
+        canvas.drawText(minText, 2f * dp, h - 2f * dp, labelPaint)
     }
 
     companion object {
@@ -640,21 +659,34 @@ internal class ThermostatDialView(
     private val offPaint = textPaint(36f, Inter.REGULAR).apply { textAlign = Paint.Align.CENTER }
     private val offCurPaint = textPaint(16f, Inter.MEDIUM)
 
+    // What onDraw reuses instead of building: formatted texts (rebuilt only when their value changes), the font
+    // metrics, the thermometer glyph and one point on the ring.
+    private val offCurMemo = NumberText()
+    private val curMemo = NumberText()
+    private val labelMemo = KeyedText()
+    private var splitValue = Double.NaN
+    private var splitStep = Double.NaN
+    private var splitWhole = ""
+    private var splitDec = ""
+    private val fmBuf = Paint.FontMetrics()
+    private val thermometer: Path by lazy { MdiIcons.pathFor("mdi:thermometer") }
+    private val pt = FloatArray(2)
+
     /** The thermometer and the current temperature, centered on [centerY]. */
     private fun drawCurrent(canvas: Canvas, cur: Double, color: Int, paint: Paint, iconSize: Float, centerY: Float) {
-        val curText = HaDisplay.formatValue(cur, 1).let { if ('.' in it) it else String.format(Locale.US, "%.1f", cur) } + " " + unit
+        val curText = offCurMemo.of(cur) { v -> HaDisplay.formatValue(v, 1).let { if ('.' in it) it else String.format(Locale.US, "%.1f", v) } + " " + unit }
         paint.color = color
         val textW = paint.measureText(curText)
         val gap = 4f * dp
         val left = cx - (iconSize + gap + textW) / 2f
-        iconPath.set(MdiIcons.pathFor("mdi:thermometer"))
+        iconPath.set(thermometer)
         iconMatrix.setScale(iconSize / 24f, iconSize / 24f)
         iconMatrix.postTranslate(left, centerY - iconSize / 2f)
         iconPath.transform(iconMatrix)
         fill.color = color
         canvas.drawPath(iconPath, fill)
         paint.textAlign = Paint.Align.LEFT
-        val fm = paint.fontMetrics
+        val fm = fmBuf.also { paint.getFontMetrics(it) }
         canvas.drawText(curText, left + iconSize + gap, centerY - (fm.ascent + fm.descent) / 2f, paint)
     }
     private val iconMatrix = Matrix()
@@ -813,18 +845,23 @@ internal class ThermostatDialView(
                 arcPaint.color = solid
                 canvas.drawArc(oval, minOf(a, b), kotlin.math.abs(b - a), false, arcPaint)
                 fill.color = Color.WHITE
-                pointAt(a).let { (x, y) -> canvas.drawCircle(x, y, 2.5f * dp, fill) }
+                pointAt(a)
+                canvas.drawCircle(pt[0], pt[1], 2.5f * dp, fill)
             }
         } else if (isAutoIdle && cur != null) {
             fill.color = CardSurface.withAlpha(Color.WHITE, 0.7f)
-            pointAt(angleOf(cur)).let { (x, y) -> canvas.drawCircle(x, y, 3f * dp, fill) }
+            pointAt(angleOf(cur))
+            canvas.drawCircle(pt[0], pt[1], 3f * dp, fill)
         } else if (tgt == null && cur != null) {
             // With no target HA still marks the current temperature on the ring.
             fill.color = ctx.theme.secondaryTextColor
-            pointAt(angleOf(cur)).let { (x, y) -> canvas.drawCircle(x, y, 4f * dp, fill) }
+            pointAt(angleOf(cur))
+            canvas.drawCircle(pt[0], pt[1], 4f * dp, fill)
         }
         if (tgt != null) {
-            val (x, y) = pointAt(angleOf(tgt))
+            pointAt(angleOf(tgt))
+            val x = pt[0]
+            val y = pt[1]
             fill.color = accent?.first ?: ctx.theme.secondaryTextColor
             canvas.drawCircle(x, y, 6.5f * dp, fill)
             fill.color = Color.WHITE
@@ -836,12 +873,12 @@ internal class ThermostatDialView(
             // ha-state-control-climate-temperature with no target: the state big (36 px) in the middle, the current
             // temperature (16 px / 500, primary color) 49 px under it, no label above.
             offPaint.color = ctx.theme.primaryTextColor
-            val fm = offPaint.fontMetrics
+            val fm = fmBuf.also { offPaint.getFontMetrics(it) }
             canvas.drawText(stateLabel, cx, cy - (fm.ascent + fm.descent) / 2f - 1.6f * dp, offPaint)
             if (cur != null && showCurrentInDial) drawCurrent(canvas, cur, ctx.theme.primaryTextColor, offCurPaint, 16f * dp, cy + 48.8f * dp)
             return
         }
-        val labelText = (action ?: mode).replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
+        val labelText = labelMemo.of(action, mode) { (action ?: mode).replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) } }
         labelPaint.color = activeTint ?: ctx.theme.secondaryTextColor
         canvas.drawText(labelText, cx, cy - 34f * dp, labelPaint)
 
@@ -855,7 +892,15 @@ internal class ThermostatDialView(
             canvas.drawText("–", cx, baseline, bigPaint)
         } else {
             bigPaint.textAlign = Paint.Align.LEFT
-            val (whole, dec) = splitTemp(shownValue, step)
+            if (shownValue != splitValue || step != splitStep) {
+                val parts = splitTemp(shownValue, step)
+                splitValue = shownValue
+                splitStep = step
+                splitWhole = parts.first
+                splitDec = parts.second
+            }
+            val whole = splitWhole
+            val dec = splitDec
             val wholeW = bigPaint.measureText(whole)
             val sideW = maxOf(unitPaint.measureText(unit), if (dec.isEmpty()) 0f else decPaint.measureText(dec))
             val gap = 2f * dp
@@ -867,7 +912,7 @@ internal class ThermostatDialView(
         }
 
         if (cur != null && showCurrentInDial) {
-            val curText = String.format(Locale.US, "%.1f %s", cur, unit)
+            val curText = curMemo.of(cur) { v -> String.format(Locale.US, "%.1f %s", v, unit) }
             val curColor = if (action == "heating") HEAT_COLOR else if (action == "cooling") COOL_COLOR else ctx.theme.secondaryTextColor
             curPaint.color = curColor
             val iconSize = 14f * dp
@@ -875,7 +920,7 @@ internal class ThermostatDialView(
             val total = iconSize + 4f * dp + textW
             val left = cx - total / 2f
             val rowBase = cy + 46f * dp
-            iconPath.set(MdiIcons.pathFor("mdi:thermometer"))
+            iconPath.set(thermometer)
             iconMatrix.setScale(iconSize / 24f, iconSize / 24f)
             iconMatrix.postTranslate(left, rowBase - iconSize + 2f * dp)
             iconPath.transform(iconMatrix)
@@ -886,9 +931,11 @@ internal class ThermostatDialView(
         }
     }
 
-    private fun pointAt(angleDeg: Float): Pair<Float, Float> {
+    /** The point on the ring at [angleDeg], into [pt]. */
+    private fun pointAt(angleDeg: Float) {
         val rad = Math.toRadians(angleDeg.toDouble())
-        return (cx + radius * cos(rad)).toFloat() to (cy + radius * sin(rad)).toFloat()
+        pt[0] = (cx + radius * cos(rad)).toFloat()
+        pt[1] = (cy + radius * sin(rad)).toFloat()
     }
 
     private fun valueAt(x: Float, y: Float): Double {

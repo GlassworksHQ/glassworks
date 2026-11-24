@@ -1391,6 +1391,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         private val iconPath = Path()
         private val matrix = android.graphics.Matrix()
         private var shaderSize = 0
+        private var shaderHeight = 0
+        private var shaderKind: LightMode? = null
+        private val brightnessGlyph: Path by lazy { MdiIcons.pathFor("mdi:brightness-6") }
 
         var chosen = false
             set(v) { if (field != v) { field = v; invalidate() } }
@@ -1418,7 +1421,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                     theme.primaryTextColor
                 }
                 val size = 22f * dp
-                iconPath.set(MdiIcons.pathFor("mdi:brightness-6"))
+                iconPath.set(brightnessGlyph)
                 matrix.setScale(size / 24f, size / 24f)
                 matrix.postTranslate(cx - size / 2f, cy - size / 2f)
                 iconPath.transform(matrix)
@@ -1427,8 +1430,11 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 return
             }
             val inner = r - 6f * dp
-            if (shaderSize != width) {
+            // The shader follows the size (and the mode, which fixes its kind): built once per change, not per draw.
+            if (shaderSize != width || shaderHeight != height || shaderKind != kind) {
                 shaderSize = width
+                shaderHeight = height
+                shaderKind = kind
                 paint.shader = if (kind == LightMode.COLOR) {
                     android.graphics.SweepGradient(cx, cy, RgbColorWheelView.WHEEL_COLORS, null)
                 } else {
@@ -1860,14 +1866,19 @@ internal class MoreInfoHistoryChartView(context: Context, private val theme: Res
         invalidate()
     }
 
-    override fun onDraw(canvas: Canvas) {
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val pts = points
-        if (pts == null || pts.isEmpty()) {
-            canvas.drawText(if (pts == null) "Loading history…" else "No recent history", w / 2f, h / 2f, messagePaint)
-            return
-        }
+    // Built once per data, size or minute (the time axis ends at "now"), never per draw: the step path and the labels.
+    private val timeLabels = arrayOfNulls<String>(4)
+    private val valueLabels = arrayOfNulls<String>(3)
+    private var builtPoints: List<HistoryPoint>? = null
+    private var builtW = -1
+    private var builtH = -1
+    private var builtMinute = Long.MIN_VALUE
+
+    private fun rebuild(pts: List<HistoryPoint>, w: Float, h: Float, minute: Long) {
+        builtPoints = pts
+        builtW = width
+        builtH = height
+        builtMinute = minute
         var minV = pts.minOf { it.value }
         var maxV = pts.maxOf { it.value }
         if (maxV - minV < 1e-6) { minV -= 1.0; maxV += 1.0 }
@@ -1877,37 +1888,11 @@ internal class MoreInfoHistoryChartView(context: Context, private val theme: Res
         val right = w - 4f * dp
         val chartH = (bottom - top).coerceAtLeast(1f)
         val chartW = (right - left).coerceAtLeast(1f)
-
-        for (i in 0..4) {
-            val y = top + chartH * i / 4f
-            canvas.drawLine(left, y, right, y, gridPaint)
-        }
-        val nowSec = System.currentTimeMillis() / 1000.0
-        val startSec = nowSec - spanSec
-        labelPaint.textAlign = Paint.Align.CENTER
-        for (i in 0..3) {
-            val x = left + chartW * i / 3f
-            canvas.drawLine(x, top, x, bottom, gridPaint)
-            val t = startSec + spanSec * i / 3.0
-            labelPaint.textAlign = when (i) {
-                0 -> Paint.Align.LEFT
-                3 -> Paint.Align.RIGHT
-                else -> Paint.Align.CENTER
-            }
-            canvas.drawText(timeFormat.format(Date((t * 1000).toLong())), x, h - 4f * dp, labelPaint)
-        }
-
-        labelPaint.textAlign = Paint.Align.RIGHT
-        val labelX = left - 6f * dp
-        val half = labelPaint.textSize / 3f
-        canvas.drawText(format(maxV, maxV - minV), labelX, top + half, labelPaint)
-        canvas.drawText(format((maxV + minV) / 2, maxV - minV), labelX, top + chartH / 2f + half, labelPaint)
-        canvas.drawText(format(minV, maxV - minV), labelX, bottom + half, labelPaint)
-        if (unit.isNotEmpty()) {
-            labelPaint.textAlign = Paint.Align.LEFT
-            canvas.drawText(unit, 0f, labelPaint.textSize, labelPaint)
-        }
-
+        val startSec = minute * 60.0 - spanSec
+        for (i in 0..3) timeLabels[i] = timeFormat.format(Date(((startSec + spanSec * i / 3.0) * 1000).toLong()))
+        valueLabels[0] = format(maxV, maxV - minV)
+        valueLabels[1] = format((maxV + minV) / 2, maxV - minV)
+        valueLabels[2] = format(minV, maxV - minV)
         fun xOf(sec: Double) = left + (((sec - startSec) / spanSec).toFloat().coerceIn(0f, 1f)) * chartW
         fun yOf(v: Double) = bottom - ((v - minV) / (maxV - minV)).toFloat() * chartH
         path.reset()
@@ -1921,6 +1906,49 @@ internal class MoreInfoHistoryChartView(context: Context, private val theme: Res
             prevY = y
         }
         path.lineTo(right, prevY) // the last state holds until now
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val pts = points
+        if (pts == null || pts.isEmpty()) {
+            canvas.drawText(if (pts == null) "Loading history…" else "No recent history", w / 2f, h / 2f, messagePaint)
+            return
+        }
+        // The axis ends at the current minute, as the labels show minutes.
+        val minute = System.currentTimeMillis() / 60_000L
+        if (pts !== builtPoints || width != builtW || height != builtH || minute != builtMinute) rebuild(pts, w, h, minute)
+        val left = 40f * dp
+        val top = 18f * dp
+        val bottom = h - 20f * dp
+        val right = w - 4f * dp
+        val chartH = (bottom - top).coerceAtLeast(1f)
+        val chartW = (right - left).coerceAtLeast(1f)
+        for (i in 0..4) {
+            val y = top + chartH * i / 4f
+            canvas.drawLine(left, y, right, y, gridPaint)
+        }
+        for (i in 0..3) {
+            val x = left + chartW * i / 3f
+            canvas.drawLine(x, top, x, bottom, gridPaint)
+            labelPaint.textAlign = when (i) {
+                0 -> Paint.Align.LEFT
+                3 -> Paint.Align.RIGHT
+                else -> Paint.Align.CENTER
+            }
+            canvas.drawText(timeLabels[i].orEmpty(), x, h - 4f * dp, labelPaint)
+        }
+        labelPaint.textAlign = Paint.Align.RIGHT
+        val labelX = left - 6f * dp
+        val half = labelPaint.textSize / 3f
+        canvas.drawText(valueLabels[0].orEmpty(), labelX, top + half, labelPaint)
+        canvas.drawText(valueLabels[1].orEmpty(), labelX, top + chartH / 2f + half, labelPaint)
+        canvas.drawText(valueLabels[2].orEmpty(), labelX, bottom + half, labelPaint)
+        if (unit.isNotEmpty()) {
+            labelPaint.textAlign = Paint.Align.LEFT
+            canvas.drawText(unit, 0f, labelPaint.textSize, labelPaint)
+        }
         canvas.drawPath(path, linePaint)
     }
 

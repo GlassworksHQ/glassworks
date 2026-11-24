@@ -171,6 +171,8 @@ class MdPicture(val svg: MdSvg?) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val rect = RectF()
     private val matrix = Matrix()
+    private var bitmapShader: BitmapShader? = null
+    private var shaderBitmap: Bitmap? = null
 
     val ready: Boolean get() = svg != null || bitmap != null
 
@@ -185,7 +187,9 @@ class MdPicture(val svg: MdSvg?) {
         }
         val bmp = bitmap ?: return
         rect.set(x, y, x + w, y + h)
-        val shader = BitmapShader(bmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        // One shader per bitmap; each draw only moves it.
+        val shader = bitmapShader?.takeIf { shaderBitmap === bmp }
+            ?: BitmapShader(bmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).also { bitmapShader = it; shaderBitmap = bmp }
         matrix.reset()
         matrix.setScale(w / bmp.width, h / bmp.height)
         matrix.postTranslate(x, y)

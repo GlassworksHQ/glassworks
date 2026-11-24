@@ -2307,7 +2307,8 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         }
         val rawContent = config.raw.optString("content", "")
         if (isTemplate(rawContent)) {
-            track(ctx.subscribeTemplate(rawContent) { rendered -> ctx.main.post { content = rendered; rerender() } })
+            // HA re-sends a template on reconnects and resubscribes: only a changed text is laid out again.
+            track(ctx.subscribeTemplate(rawContent) { rendered -> ctx.main.post { if (rendered != content) { content = rendered; rerender() } } })
         } else {
             content = rawContent
             rerender()
@@ -3341,13 +3342,16 @@ internal class ChipStyle(
     val textColor: Int,
 ) {
     companion object {
+        private val CHIP_LENGTH = Regex("""^(-?[\d.]+)(px|em|rem)?$""")
+        private val CHIP_SPACES = Regex("""\s+""")
+
         fun resolve(ctx: VitroCardContext, own: Map<String, String>): ChipStyle {
             val theme = ctx.theme
             val vars = theme.vars + ctx.cardVars + own
             fun raw(name: String): String? = (vars["chip-$name"] ?: vars["mush-chip-$name"])
                 ?.let { ThemeResolver.resolveValue(it, vars, 0) }?.trim()?.takeIf { it.isNotEmpty() }
             fun len(v: String?, em: Float): Float? {
-                val m = Regex("""^(-?[\d.]+)(px|em|rem)?$""").find(v?.trim().orEmpty()) ?: return null
+                val m = CHIP_LENGTH.find(v?.trim().orEmpty()) ?: return null
                 val n = m.groupValues[1].toFloatOrNull() ?: return null
                 return when (m.groupValues[2]) { "em" -> n * em; "rem" -> n * 16f; else -> n }
             }
@@ -3358,7 +3362,7 @@ internal class ChipStyle(
             fun varColor(vararg names: String): Int? =
                 names.firstNotNullOfOrNull { n -> vars[n]?.let { color(ThemeResolver.resolveValue(it, vars, 0)) } }
             val h = len(raw("height"), 16f) ?: 36f
-            val pad = raw("padding")?.split(Regex("""\s+"""))?.let { p -> len(p.getOrNull(1) ?: p[0], h) } ?: (0.25f * h)
+            val pad = raw("padding")?.split(CHIP_SPACES)?.let { p -> len(p.getOrNull(1) ?: p[0], h) } ?: (0.25f * h)
             val weight = when (val w = raw("font-weight")?.lowercase(Locale.ROOT)) {
                 null, "bold" -> 700
                 "normal" -> 400
