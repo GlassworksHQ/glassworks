@@ -327,9 +327,10 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         } else {
             emptyList()
         }
+        // HA's tile: the info row takes the height the features leave (centered in it), the features sit at the bottom.
         val rootCol = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, 1f))
         }
         val entityId = config.entity
         var brightnessSlider: HaHorizontalSliderView? = null
@@ -351,8 +352,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         }
         if ("select-options" in featureTypes && entityId != null) {
             // HA 2026's select feature: a filled dropdown box showing the current option; tap for the list.
-            // ha-control-select-menu: a button's 13.33 px text, 20 px in, a 20 px arrow 10 px from the end.
-            val current = textView(ctx, 40f / 3f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
+            // ha-control-select-menu: the value (p.value) is 14 px, 20 px in, centered; a 20 px arrow 10 px from the end.
+            val current = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             }
@@ -367,6 +368,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 addView(MdiIconView(ctx.context).apply { setIcon("mdi:menu-down", ctx.theme.primaryTextColor) },
                     LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)).apply { marginStart = ctx.px(10f) })
                 setOnClickListener { v -> showSelectMenu(v, entityId) }
+                // HA's visually hidden "Option" label, for TalkBack.
+                contentDescription = "Option"
             }
             selectBox = current
             box.tag = FEATURE_TAG + "select-options"
@@ -420,8 +423,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             row.addView(slot, LinearLayout.LayoutParams(0, ctx.px(36f)))
             inlineFeatures = slot
         }
-        // HA's tile centers the info row and its features in the card's grid rows.
-        addView(rootCol, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
+        addView(rootCol, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         tileBody = rootCol
 
         // HA's `hui-tile-card`: the body opens more-info; the icon toggles what can be toggled.
@@ -452,6 +454,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 brightnessSlider?.let { sb ->
                     // HA's feature color: the light's own color, else --state-light-active-color.
                     sb.setAccentColor(s?.lightTintColor() ?: ctx.theme.activeColor("light"))
+                    sb.inactiveColor = if (s?.state == "unavailable") ctx.theme.disabledTextColor else ctx.theme.stateInactiveColor
                     val on = s?.isActive == true
                     val bri = (s?.attributes?.get("brightness") as? Number)?.toInt()?.takeIf { it in 1..255 }
                     when {
@@ -1206,6 +1209,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             domain == "lock" && s?.state == "locked" -> LOCKED_GREEN
             domain == "lock" && (s?.state == "unlocked" || s?.state == "open") -> UNLOCKED_RED
             // HA colors a tile only for its state-colored domains; the rest keep --state-icon-color.
+            // --state-unavailable-color: the theme's disabled text color.
+            s?.state == "unavailable" -> ctx.theme.disabledTextColor
             domain !in STATE_COLORED_DOMAINS -> ctx.theme.stateIconColor
             active -> s?.lightTintColor() ?: ctx.theme.activeColor(domain)
             else -> ctx.theme.stateInactiveColor
@@ -1391,6 +1396,10 @@ internal class HaHorizontalSliderView(
     private val handleRect = RectF()
     private var fraction = 0f
     private var active = false
+
+    /** The track's color while off: `--state-inactive-color`, or the unavailable color. */
+    var inactiveColor: Int = ctx.theme.stateInactiveColor
+        set(v) { if (field != v) { field = v; invalidate() } }
     private var dragging = false
 
     /** Where the fill is heading: the last value set or dragged to, even while it is still animating there. */
@@ -1494,7 +1503,8 @@ internal class HaHorizontalSliderView(
         clipPath.addRoundRect(bounds, r, r, Path.Direction.CW)
         canvas.save()
         canvas.clipPath(clipPath)
-        trackPaint.color = if (active) CardSurface.withAlpha(accentColor, 0.20f) else CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.08f)
+        // ha-control-slider: the track is the slider's color at 20%; off, that's the state's inactive color.
+        trackPaint.color = CardSurface.withAlpha(if (active) accentColor else inactiveColor, 0.20f)
         canvas.drawRect(bounds, trackPaint)
         val fillW = (w * fraction).coerceIn(0f, w)
         if (fillW > 0f) {
@@ -2215,6 +2225,26 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             (ms.padding[1] * ctx.dp).roundToInt(), (ms.padding[2] * ctx.dp).roundToInt(),
         )
         renderer.render(md, body, ms, markdownSheet)
+        relayoutFromRoot()
+    }
+
+    /**
+     * New content must reach a layout pass even when an ancestor still holds a layout request from an earlier pass
+     * (requestLayout stops at such an ancestor, and the card would keep its old, maybe empty, size until something
+     * else relaid that branch out: seen live on the tablet's horizontal stack-in-card). Marks the path up to the
+     * root for layout, then asks the root for a pass.
+     */
+    private fun relayoutFromRoot() {
+        if (!isAttachedToWindow) return
+        var v: View? = this
+        var top: View = this
+        while (v != null) {
+            v.forceLayout()
+            top = v
+            v = v.parent as? View
+        }
+        top.requestLayout()
+        requestLayout()
     }
 
     private companion object {
