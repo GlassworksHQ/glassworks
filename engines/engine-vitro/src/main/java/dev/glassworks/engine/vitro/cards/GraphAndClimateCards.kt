@@ -120,8 +120,9 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
             val showGraph = config.raw.optString("graph", "line") != "none"
             if (showGraph) {
                 ctx.fetchHistory(entityIds, hours) { map ->
-                    val series = entityIds.mapNotNull { map[it] }.filter { it.size >= 2 }
-                    ctx.main.post { chart.setSeries(series) }
+                    // One slot per entity, empty when it has too little history, so each keeps its legend color.
+                    val series = entityIds.map { id -> map[id]?.takeIf { it.size >= 2 } ?: emptyList() }
+                    ctx.main.post { chart.setSeries(if (series.all { it.isEmpty() }) emptyList() else series) }
                 }
             } else {
                 chart.visibility = GONE
@@ -206,6 +207,18 @@ private class SparklineCanvasView(
         val usableH = (height - padY * 2f).coerceAtLeast(1f)
         val w = width.toFloat()
         val h = height.toFloat()
+        // A time axis shared by every series, up to now as HA draws it; sample order only when a time is missing.
+        var tMin = Double.POSITIVE_INFINITY
+        var tMax = Double.NEGATIVE_INFINITY
+        var timed = true
+        for (s in series) for (p in s) {
+            if (p.epochSec <= 0.0) timed = false
+            if (p.epochSec < tMin) tMin = p.epochSec
+            if (p.epochSec > tMax) tMax = p.epochSec
+        }
+        tMax = maxOf(tMax, System.currentTimeMillis() / 1000.0)
+        val tSpan = tMax - tMin
+        if (tSpan <= 0.0) timed = false
 
         series.forEachIndexed { idx, pts ->
             if (pts.size < 2) return@forEachIndexed
@@ -216,7 +229,7 @@ private class SparklineCanvasView(
             var prevX = 0f
             var prevY = 0f
             for (i in 0 until n) {
-                val x = (i.toFloat() / (n - 1).toFloat()) * w
+                val x = if (timed) (((pts[i].epochSec - tMin) / tSpan).toFloat() * w) else (i.toFloat() / (n - 1).toFloat()) * w
                 val norm = ((pts[i].value - minV) / span).toFloat()
                 val y = h - padY - norm * usableH
                 if (i == 0) {
@@ -231,6 +244,11 @@ private class SparklineCanvasView(
                 }
                 prevX = x
                 prevY = y
+            }
+            if (timed && prevX < w) {
+                // The last state holds until now.
+                linePath.lineTo(w, prevY)
+                fillPath.lineTo(w, prevY)
             }
             if (idx == 0) {
                 fillPath.lineTo(w, h)
@@ -626,11 +644,15 @@ internal class ThermostatDialView(
 
     var onCommit: (Double) -> Unit = {}
 
+    /** The target Home Assistant last reported, kept during a drag so a cancelled one goes back to it. */
+    private var boundTarget: Double? = null
+
     fun bind(min: Double, max: Double, step: Double, current: Double?, target: Double?, mode: String, action: String?) {
         this.min = min
         this.max = if (max > min) max else min + 1.0
         this.step = step
         this.current = current
+        boundTarget = target
         if (!dragging) setTarget(target)
         this.mode = mode
         this.action = action
@@ -851,6 +873,11 @@ internal class ThermostatDialView(
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
+                if (dragging) {
+                    // Nothing was sent: drop the preview and show the target Home Assistant has.
+                    setTarget(boundTarget)
+                    invalidate()
+                }
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
                 return true
@@ -950,16 +977,16 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                         if (days.isEmpty()) return@post
                         forecastFromSocket = true
                         val u = (ctx.store[eid]?.attributes?.get("temperature_unit") as? String) ?: "°C"
-                        renderForecast(days, u)
+                        renderForecast(days, u, hourly = type == "hourly")
                     }
                 }
             }
         }
     }
 
-    private fun renderForecast(days: List<ForecastDay>, unit: String) {
+    /** [hourly] comes from the `forecast_type` asked for, as HA decides; only the legacy attribute has to guess. */
+    private fun renderForecast(days: List<ForecastDay>, unit: String, hourly: Boolean = days.size >= 2 && sameDay(days[0].datetime, days[1].datetime)) {
         forecastRow.removeAllViews()
-        val hourly = days.size >= 2 && sameDay(days[0].datetime, days[1].datetime)
         for (day in days.take(5)) {
             val cell = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.VERTICAL
