@@ -28,13 +28,6 @@
   "missingText": 3,
   "reason": "the wrapped entities card loses its title (\"Lights off\") and header toggle, and rows show the bare entity name (\"Window\") where HA prefixes the device (\"LED Strip Window\"); card ~50 px shorter (coverage #794, 2026-11-24)"
  },
- "mirror/layout-card": {
-  "pixel": 0.0908,
-  "bounds": 24,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the 2x2 grid of tiles is laid out, but its column gap and margins differ: Vitro's tiles start ~10 px higher and right of HA's and the card is ~24 px off (coverage #794, 2026-11-24)"
- },
  "mirror/markdown-cardmod": {
   "pixel": 0.0202,
   "bounds": 2.7,
@@ -91,13 +84,6 @@
   "missingText": 3,
   "reason": "the wrapped entities card loses its title (\"Lights off\") and header toggle, and rows show the bare entity name (\"Window\") where HA prefixes the device (\"LED Strip Window\"); card ~50 px shorter (coverage #794, 2026-11-24)"
  },
- "s1/layout-card": {
-  "pixel": 0.1011,
-  "bounds": 24,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the 2x2 grid of tiles is laid out, but its column gap and margins differ: Vitro's tiles start ~10 px higher and right of HA's and the card is ~24 px off (coverage #794, 2026-11-24)"
- },
  "s1/markdown-cardmod": {
   "pixel": 0.0148,
   "bounds": 2.7,
@@ -153,13 +139,6 @@
   "font": 0,
   "missingText": 3,
   "reason": "the wrapped entities card loses its title (\"Lights off\") and header toggle, and rows show the bare entity name (\"Window\") where HA prefixes the device (\"LED Strip Window\"); card ~50 px shorter (coverage #794, 2026-11-24)"
- },
- "tablet/layout-card": {
-  "pixel": 0.09,
-  "bounds": 24,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the 2x2 grid of tiles is laid out, but its column gap and margins differ: Vitro's tiles start ~10 px higher and right of HA's and the card is ~24 px off (coverage #794, 2026-11-24)"
  },
  "tablet/markdown-cardmod": {
   "pixel": 0.0097,
