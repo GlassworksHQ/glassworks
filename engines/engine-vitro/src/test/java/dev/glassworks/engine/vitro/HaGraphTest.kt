@@ -118,6 +118,10 @@ class HaGraphTest {
         assertNull(b.fixMin)
         assertEquals(1, b.fractionDigits)
         assertEquals("1,018.5", HaChartFormat.number(1018.5, 1, 1))
+        // Ties round away from zero, as Intl does.
+        assertEquals("3", HaChartFormat.number(2.5, 0, 0))
+        assertEquals("-3", HaChartFormat.number(-2.5, 0, 0))
+        assertEquals("100", HaChartFormat.number(100.0, 0, 0))
         // A percentage close to 100 is pinned there; a positive series close to 0 is pinned at 0.
         assertEquals(100.0, HaYBounds.of(50.0, 99.5, "%", false, null, null).fixMax!!, 0.0)
         assertEquals(0.0, HaYBounds.of(0.5, 40.0, "W", false, null, null).fixMin!!, 0.0)

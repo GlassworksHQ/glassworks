@@ -32,7 +32,7 @@ import { aliasPaths, assetDestination, canonicalPath, capturableImage, staleAsse
 import { applyEntityEvent, unmetExpectations } from './lib/states.mjs';
 import { imageOutcomes, noteSaved } from './lib/images.mjs';
 import { buildDisplay } from './lib/display.mjs';
-import { wsRecorder, snapshotCalls } from './lib/wsdata.mjs';
+import { wsRecorder, snapshotCalls, pendingOneShots } from './lib/wsdata.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -604,6 +604,17 @@ async function capture() {
           // they're taken makes the pair disagree, so the capture starts over (three tries).
           for (let attempt = 1; ; attempt++) {
             ({ info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000));
+            // A graph waits on one-shot answers (the statistics card asks for statistics after its metadata): a call
+            // still unanswered means the card isn't drawn yet. Wait for them (10 s at most), then settle again.
+            if (pendingOneShots(graphs.calls).length) {
+              const w0 = Date.now();
+              while (pendingOneShots(graphs.calls).length && Date.now() - w0 < 10000) await page.waitForTimeout(100);
+              const left = pendingOneShots(graphs.calls);
+              if (left.length) throw new Error(`graph call(s) never answered: ${left.join(', ')}`);
+              if (attempt >= 3) throw new Error('graph answers kept arriving during the capture (3 tries)');
+              log(`${frame.id}/${c.id}: a graph answer arrived after the page settled: again`);
+              continue;
+            }
             if (!info.slots.length && c.card) throw new Error('no card on the page');
             if (!info.slots.length) log(`${frame.id}/${c.id}: HA shows no card (all hidden?): comparing the whole page`);
             if (c.card) {

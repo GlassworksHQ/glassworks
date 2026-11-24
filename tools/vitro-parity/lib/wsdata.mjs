@@ -54,5 +54,12 @@ export function wsRecorder() {
   };
 }
 
+/** The commands answered by one result (everything recorded but `history/stream`, a subscription). */
+const ONE_SHOT = new Set(['history/history_during_period', 'recorder/statistics_during_period', 'recorder/get_statistics_metadata']);
+
+/** The one-shot calls in [calls] still waiting for their result or error, by type. */
+export const pendingOneShots = (calls) =>
+  calls.filter((c) => ONE_SHOT.has(c.request?.type) && !('result' in c) && !('error' in c)).map((c) => c.request.type);
+
 /** A deep copy of [calls] that later frames can't change: what the screenshot showed. */
 export const snapshotCalls = (calls) => JSON.parse(JSON.stringify(calls));

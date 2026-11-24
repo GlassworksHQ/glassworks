@@ -308,13 +308,16 @@ object ECharts {
 object HaChartFormat {
     private val US = DecimalFormatSymbols(Locale.US)
 
-    /** `formatNumber(value, locale, {minimumFractionDigits, maximumFractionDigits})`, grouped like `Intl`. */
+    /**
+     * `formatNumber(value, locale, {minimumFractionDigits, maximumFractionDigits})`, grouped like `Intl`, which rounds
+     * ties away from zero (`halfExpand`) on the number's shortest decimal form: 2.5 at no decimals is "3".
+     */
     fun number(v: Double, minFraction: Int, maxFraction: Int): String {
         val f = DecimalFormat("#,##0", US)
         f.minimumFractionDigits = minFraction
         f.maximumFractionDigits = maxFraction
-        f.roundingMode = RoundingMode.HALF_EVEN
-        return f.format(if (v == 0.0) 0.0 else v)
+        f.roundingMode = RoundingMode.HALF_UP
+        return f.format(if (v == 0.0 || !v.isFinite()) (if (v == 0.0) 0.0 else v) else BigDecimal(v.toString()))
     }
 
     fun time(t: Long): String = SimpleDateFormat("h:mm a", Locale.US).format(Date(t))

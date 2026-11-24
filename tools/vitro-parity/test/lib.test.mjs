@@ -306,3 +306,14 @@ test('unmetExpectations names the entities not in the state a case expects', asy
   assert.deepEqual(unmetExpectations({ 'light.a': 'on', 'light.b': 'on', 'light.c': 'off' }, states),
     ['light.b: expected on, got off', 'light.c: expected off, got no state']);
 });
+
+test('pendingOneShots lists the one-shot graph calls still unanswered, never a stream', async () => {
+  const { pendingOneShots } = await import('../lib/wsdata.mjs');
+  const calls = [
+    { request: { type: 'history/stream' }, events: [] },
+    { request: { type: 'recorder/get_statistics_metadata' }, events: [] },
+    { request: { type: 'recorder/statistics_during_period' }, result: {}, events: [] },
+    { request: { type: 'history/history_during_period' }, error: { code: 'x' }, events: [] },
+  ];
+  assert.deepEqual(pendingOneShots(calls), ['recorder/get_statistics_metadata']);
+});
