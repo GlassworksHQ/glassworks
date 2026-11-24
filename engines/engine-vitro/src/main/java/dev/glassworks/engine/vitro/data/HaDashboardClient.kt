@@ -6,7 +6,8 @@ package dev.glassworks.engine.vitro.data
 
 import dev.glassworks.auth.HaSocket
 import dev.glassworks.auth.HaThreadClient
-import dev.glassworks.auth.WsHaSocket
+import dev.glassworks.net.HappyEyeballs
+import dev.glassworks.sendspin.WsClient
 import dev.glassworks.engine.vitro.model.DashboardConfig
 import dev.glassworks.engine.vitro.model.DashboardSummary
 import dev.glassworks.engine.vitro.model.LovelaceParser
@@ -34,7 +35,7 @@ class HaDashboardClient(
     private val haBase: String,
     private val tokenProvider: (force: Boolean, done: (String?) -> Unit) -> Unit,
     private val store: EntityStore,
-    private val connect: (url: String) -> HaSocket = { url -> WsHaSocket.connect(url) },
+    private val connect: (url: String) -> HaSocket = ::connectLongLived,
     private val listener: Listener,
 ) {
     interface Listener {
@@ -368,6 +369,25 @@ class HaDashboardClient(
     }
 
     companion object {
+        /**
+         * Long-lived RFC 6455 socket for the dashboard WebSocket (`readTimeoutMs = 0` so an idle
+         * dashboard doesn't disconnect every 15 s like one-shot `WsHaSocket.connect`).
+         */
+        fun connectLongLived(url: String): HaSocket {
+            val connector = HappyEyeballs()
+            val ws = WsClient.connect(url, connectTimeoutMs = 8_000, readTimeoutMs = 0, openSocket = connector::connect)
+            return object : HaSocket {
+                override fun send(text: String) = ws.sendText(text)
+                override fun receive(): String? {
+                    while (true) {
+                        val m = ws.receive() ?: return null
+                        if (m.text) return m.data.toString(Charsets.UTF_8)
+                    }
+                }
+                override fun close() = ws.close()
+            }
+        }
+
         private fun formatIsoUtc(epochMs: Long): String {
             val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
             fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")

@@ -475,6 +475,7 @@ class ThemeResolverTest {
         assertEquals(argb(0xFF9C27B0), t.activeColor("cover"))
         assertEquals(argb(0xFF4CAF50), t.activeColor("person"))
         assertEquals(argb(0xFF4CAF50), t.activeColor("device_tracker"))
-        assertEquals(t.primaryColor, t.activeColor("sensor")) // no rule: the primary color
+        assertEquals(argb(0xFF2196F3), t.activeColor("sensor")) // HA blue
+        assertEquals(t.primaryColor, t.activeColor("weather")) // no rule: the primary color
     }
 }

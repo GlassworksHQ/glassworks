@@ -52,11 +52,29 @@ class VitroEngine(
     private val settings: (Context) -> EngineSettings,
     private val enabled: (Context) -> Boolean = { true },
     private val tokenProvider: (force: Boolean, done: (String?) -> Unit) -> Unit = { _, done -> done(null) },
-    private val socketFactory: (String) -> HaSocket = { url -> WsHaSocket.connect(url) },
+    private val socketFactory: (String) -> HaSocket = HaDashboardClient::connectLongLived,
     private val logTag: String = "Glassworks.Vitro",
 ) : Engine {
 
     @Volatile private var activeInProcess: Boolean? = null
+    @Volatile private var activePage: VitroPage? = null
+
+    /**
+     * The loopback server for Tier 3 islands, one per process and started on first use ([ensureStarted] picks the
+     * port once). It reads the active page's Home Assistant origin and token on every request. The legacy engine
+     * (a locked-down [fallback]) is held to one origin, so [fallbackDashboardOrigin] gives it this one up front.
+     */
+    val islandServer: VitroIslandServer = VitroIslandServer(
+        haBase = { activePage?.currentOrigin },
+        accessToken = { activePage?.cachedToken },
+        log = { msg -> Log.d(logTag, "island: $msg") },
+    )
+
+    /**
+     * The origin a locked-down [fallback] is told its dashboard is (`EngineSettings.dashboard`): the island server's
+     * loopback origin, started now. Pages the fallback shows come through it and are proxied to Home Assistant.
+     */
+    fun fallbackDashboardOrigin(): String = islandServer.ensureStarted()
     @Volatile private var startedSettings: EngineSettings? = null
     @Volatile var lastMetrics: VitroMetrics = VitroMetrics()
         private set
@@ -79,7 +97,7 @@ class VitroEngine(
         val cfg = settings(activity.applicationContext)
         startedSettings = cfg
         Log.i(logTag, "Starting $VERSION_NAME (native Lovelace renderer; fallback=${fallback.name.ifEmpty { "lazy" }})")
-        return VitroPage(activity, host, background)
+        return VitroPage(activity, host, background).also { activePage = it }
     }
 
     private inner class VitroPage(
@@ -93,11 +111,6 @@ class VitroEngine(
         private val vitroView = VitroView(activity, store, backgroundColor)
         private var fallbackPage: Page? = null
         private var client: HaDashboardClient? = null
-        private val islandServer = VitroIslandServer(
-            haBase = { currentOrigin },
-            accessToken = { cachedToken },
-            log = { msg -> Log.d(logTag, "island: $msg") },
-        )
         private val islandHost = object : PageHost {
             override fun onPageStart(url: String) {}
             override fun onPageStop(success: Boolean) {}
@@ -111,10 +124,10 @@ class VitroEngine(
             override fun onPortMessage(port: PagePort, message: JSONObject) {}
         }
         private var currentUrl: String? = null
-        private var currentOrigin: String? = null
+        @Volatile var currentOrigin: String? = null
         private var currentDashboardPath: String? = null
         private var pendingViewPath: String? = null
-        @Volatile private var cachedToken: String? = null
+        @Volatile var cachedToken: String? = null
         private val history = ArrayDeque<String>()
         private var firstPaintReported = false
 
@@ -258,7 +271,7 @@ class VitroEngine(
 
         override fun restart() {
             fallbackPage?.restart()
-            islandServer.stop()
+            // The island server stays up: its port is the locked-down fallback's one allowed origin for the process.
             client?.close()
             client = null
             currentOrigin = null
@@ -324,22 +337,35 @@ class VitroEngine(
         }
 
         private fun openInFallback(url: String) {
-            Log.i(logTag, "Routing non-dashboard URL to fallback engine: $url")
+            val target = loopbackUrl(url)
+            Log.i(logTag, "Routing non-dashboard URL to fallback engine: $target")
             val fp = fallbackPage ?: fallback.open(activity, host, backgroundColor).also { created ->
                 fallbackPage = created
                 container.addView(created.view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             }
             vitroView.visibility = View.GONE
             fp.view.visibility = View.VISIBLE
-            fp.load(url)
+            fp.load(target)
+        }
+
+        /**
+         * A locked-down fallback loads only one origin, the island server's. A Home Assistant URL (`/auth/authorize`)
+         * moves to it, so the server proxies it to [currentOrigin], and to nothing else.
+         */
+        private fun loopbackUrl(url: String): String {
+            val ha = currentOrigin ?: return url
+            if (!fallback.lockedDown || OAuth.origin(url) != ha) return url
+            val afterScheme = url.trim().substringAfter("://")
+            val rest = afterScheme.indexOfFirst { it == '/' || it == '?' || it == '#' }.let { if (it < 0) "" else afterScheme.substring(it) }
+            return islandServer.ensureStarted() + (if (rest.startsWith("/")) rest else "/$rest")
         }
 
         private fun signalReady(why: String) {
             if (!firstPaintReported) {
                 firstPaintReported = true
                 host.onFirstPaint()
-                host.onPageStop(true)
             }
+            host.onPageStop(true)
             host.onPortMessage(port, JSONObject().put("type", "ready").put("why", why))
         }
 

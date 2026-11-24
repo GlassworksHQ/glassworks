@@ -45,7 +45,7 @@ private fun label(ctx: VitroCardContext, sp: Float, color: Int, weight: Int = In
 class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
     private val titleView = label(ctx, 14f, ctx.theme.secondaryTextColor, Inter.MEDIUM)
     private val valueView = label(ctx, 24f, ctx.theme.primaryTextColor, Inter.LIGHT)
-    private val chart = SparklineCanvasView(ctx.context, ctx.theme.primaryColor, ctx.theme.accentColor)
+    private val chart = SparklineCanvasView(ctx.context, ctx.theme.primaryColor, ctx.theme.accentColor, ctx.theme.secondaryTextColor)
 
     init {
         val col = LinearLayout(ctx.context).apply {
@@ -99,15 +99,26 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
     }
 }
 
-private class SparklineCanvasView(context: Context, primaryColor: Int, secondaryColor: Int) : View(context) {
+private class SparklineCanvasView(
+    context: Context,
+    primaryColor: Int,
+    secondaryColor: Int,
+    private val labelColor: Int,
+) : View(context) {
+    private val dp = resources.displayMetrics.density
     private val colors = intArrayOf(primaryColor, secondaryColor, 0xFF4CAF50.toInt(), 0xFFE91E63.toInt())
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 2.2f * resources.displayMetrics.density
+        strokeWidth = 2.2f * dp
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = CardSurface.withAlpha(labelColor, 0.55f)
+        textSize = 9f * dp
+        textAlign = Paint.Align.LEFT
+    }
     private val linePath = Path()
     private val fillPath = Path()
     private var series: List<List<HistoryPoint>> = emptyList()
@@ -116,6 +127,10 @@ private class SparklineCanvasView(context: Context, primaryColor: Int, secondary
         series = data
         invalidate()
     }
+
+    private fun formatValue(v: Double): String =
+        if (kotlin.math.abs(v) >= 100.0 || v == Math.rint(v)) String.format(Locale.US, "%.0f", v)
+        else String.format(Locale.US, "%.1f", v)
 
     override fun onDraw(canvas: Canvas) {
         if (series.isEmpty() || width <= 4 || height <= 4) return
@@ -128,9 +143,10 @@ private class SparklineCanvasView(context: Context, primaryColor: Int, secondary
             }
         }
         val span = (maxV - minV).takeIf { it > 1e-6 } ?: 1.0
-        val padY = 4f * resources.displayMetrics.density
+        val padY = 4f * dp
         val usableH = (height - padY * 2f).coerceAtLeast(1f)
         val w = width.toFloat()
+        val h = height.toFloat()
 
         series.forEachIndexed { idx, pts ->
             if (pts.size < 2) return@forEachIndexed
@@ -138,24 +154,30 @@ private class SparklineCanvasView(context: Context, primaryColor: Int, secondary
             linePath.reset()
             fillPath.reset()
             val n = pts.size
+            var prevX = 0f
+            var prevY = 0f
             for (i in 0 until n) {
                 val x = (i.toFloat() / (n - 1).toFloat()) * w
                 val norm = ((pts[i].value - minV) / span).toFloat()
-                val y = height - padY - norm * usableH
+                val y = h - padY - norm * usableH
                 if (i == 0) {
                     linePath.moveTo(x, y)
-                    fillPath.moveTo(x, height.toFloat())
+                    fillPath.moveTo(x, h)
                     fillPath.lineTo(x, y)
                 } else {
-                    linePath.lineTo(x, y)
-                    fillPath.lineTo(x, y)
+                    // Smooth S-curve with horizontal tangents at each sample: no overshoot past min/max.
+                    val midX = (prevX + x) / 2f
+                    linePath.cubicTo(midX, prevY, midX, y, x, y)
+                    fillPath.cubicTo(midX, prevY, midX, y, x, y)
                 }
+                prevX = x
+                prevY = y
             }
             if (idx == 0) {
-                fillPath.lineTo(w, height.toFloat())
+                fillPath.lineTo(w, h)
                 fillPath.close()
                 fillPaint.shader = LinearGradient(
-                    0f, 0f, 0f, height.toFloat(),
+                    0f, 0f, 0f, h,
                     CardSurface.withAlpha(color, 0.28f),
                     Color.TRANSPARENT,
                     Shader.TileMode.CLAMP,
@@ -165,6 +187,10 @@ private class SparklineCanvasView(context: Context, primaryColor: Int, secondary
             linePaint.color = color
             canvas.drawPath(linePath, linePaint)
         }
+
+        // Faint min/max labels in the left-hand corners.
+        canvas.drawText(formatValue(maxV), 2f * dp, labelPaint.textSize, labelPaint)
+        canvas.drawText(formatValue(minV), 2f * dp, h - 2f * dp, labelPaint)
     }
 }
 
@@ -241,6 +267,7 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
     private val currentView = label(ctx, 13f, ctx.theme.secondaryTextColor)
     private var targetTemp = 21.0
     private var step = 0.5
+    private var glowAction: String? = null
 
     init {
         val col = LinearLayout(ctx.context).apply {
@@ -285,6 +312,7 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                 titleView.text = config.name ?: s?.friendlyName ?: eid
                 val action = (s?.attributes?.get("hvac_action") as? String) ?: s?.state ?: "off"
                 val color = if (action == "heating") ctx.theme.activeColor("climate") else ctx.theme.primaryColor
+                applyActionGlow(if (action == "heating" || action == "cooling") action else null)
                 modeBadge.text = action.replaceFirstChar { it.titlecase(Locale.ROOT) }
                 modeBadge.setTextColor(if (s?.isActive == true) color else ctx.theme.secondaryTextColor)
                 (s?.attributes?.get("target_temp_step") as? Number)?.toDouble()?.let { if (it > 0) step = it }
@@ -295,6 +323,40 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                 currentView.text = if (cur != null) "Currently $cur°" else ""
             }
         }
+    }
+
+    /** Soft tinted border and top glow while the HVAC is actively heating or cooling. */
+    private fun applyActionGlow(action: String?) {
+        if (action == glowAction) return
+        glowAction = action
+        if (action == null) {
+            applyTheme(ctx.theme)
+            return
+        }
+        val tint = if (action == "heating") ctx.theme.activeColor("climate") else COOLING_COLOR
+        val base = ctx.theme.cardBackgroundColor
+        background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(blend(base, tint, 0.20f), base),
+        ).apply {
+            cornerRadius = ctx.theme.cardBorderRadiusDp * ctx.dp
+            setStroke(ctx.px(2f).coerceAtLeast(2), withAlpha(tint, 0.65f))
+        }
+    }
+
+    private fun blend(base: Int, over: Int, fraction: Float): Int {
+        val f = fraction.coerceIn(0f, 1f)
+        fun mix(a: Int, b: Int) = (a + (b - a) * f).toInt().coerceIn(0, 255)
+        return Color.argb(
+            Color.alpha(base),
+            mix(Color.red(base), Color.red(over)),
+            mix(Color.green(base), Color.green(over)),
+            mix(Color.blue(base), Color.blue(over)),
+        )
+    }
+
+    private companion object {
+        const val COOLING_COLOR = 0xFF2196F3.toInt()
     }
 }
 

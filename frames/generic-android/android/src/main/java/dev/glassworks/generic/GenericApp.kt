@@ -80,22 +80,40 @@ class GenericApp : Application(), GlassworksApp {
                 EngineSettings(secureHosts(), zoom, remoteDebugging(build.debug) && !legacy(applicationId), dashboard = test ?: url.ifEmpty { null })
             }
 
+        /**
+         * What GeckoView starts with. As [engineSettings], except on the legacy build with Vitro on: its engine holds
+         * pages to one origin (#198), and Vitro's fallback pages (sign-in) come through the loopback island server, so
+         * that origin is the dashboard it is told. Vitro itself keeps the real Home Assistant settings.
+         */
+        internal fun geckoSettings(
+            context: Context, build: AppBuild, applicationId: String, vitro: () -> VitroEngine,
+        ): EngineSettings {
+            val settings = engineSettings(context, build, applicationId)
+            return if (legacy(applicationId) && KioskPrefs(context).vitroEnabled) {
+                settings.copy(dashboard = vitro().fallbackDashboardOrigin())
+            } else {
+                settings
+            }
+        }
+
         /** Vitro wrapping GeckoView (with the kiosk's helper extension): native Lovelace when opt-in enabled, else GeckoView. */
-        internal fun engine(build: AppBuild): Engine {
+        internal fun engine(build: AppBuild, applicationId: String = BuildConfig.APPLICATION_ID): Engine {
+            lateinit var vitro: VitroEngine
             val gecko = GeckoEngine(
-                settings = { context -> engineSettings(context, build) },
+                settings = { context -> geckoSettings(context, build, applicationId) { vitro } },
                 extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "glassworks"),
                 logTag = TAG,
                 generatedBy = PRODUCT,
             )
-            return VitroEngine(
+            vitro = VitroEngine(
                 fallback = gecko,
-                settings = { context -> engineSettings(context, build) },
+                settings = { context -> engineSettings(context, build, applicationId) },
                 enabled = { context -> KioskPrefs(context).vitroEnabled },
                 tokenProvider = { force, done ->
                     HaAuth.accessToken(force) { a -> done((a as? HaAuth.Access.Ok)?.accessToken) }
                 },
             )
+            return vitro
         }
     }
 }

@@ -50,7 +50,7 @@ class VitroTestActivity : Activity() {
     private lateinit var hud: LinearLayout
     private lateinit var hudText: TextView
     private lateinit var reload: Button
-    private var expanded = true
+    private var expanded = false
     private var url: String? = null
     private var status = "starting"
     private var loads = 0
@@ -201,9 +201,9 @@ class VitroTestActivity : Activity() {
         val pssMb = pssMb()
         val heapMb = (rt.totalMemory() - rt.freeMemory()) shr 20
         val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
-        val head = "${VitroEngine.VERSION_NAME.substringBefore(" (")}  $status"
+        val head = "${VitroEngine.VERSION_NAME.substringBefore(" (")} · $status"
         hudText.text = if (!expanded) {
-            "$head  ${pssMb}MB"
+            "$head · ${m.buildTimeMs}ms · ${pssMb}MB"
         } else {
             buildString {
                 appendLine(head)

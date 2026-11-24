@@ -10,7 +10,11 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
+import android.util.LruCache
 import android.os.Looper
+import android.view.MotionEvent
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.data.EntityState
@@ -25,6 +29,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
+import kotlin.math.max
 
 /** Shared context passed to every Vitro card renderer on the active view. */
 class VitroCardContext(
@@ -79,12 +84,23 @@ class VitroCardContext(
         }
     }
 
-    /** Loads an HA-hosted image asynchronously on a shared daemon pool and delivers on the main thread. */
+    /**
+     * Loads an HA-hosted image asynchronously on a shared daemon pool and delivers on the main thread.
+     * Images are downsampled to at most [MAX_IMAGE_DIM] px on the long edge and decoded as RGB_565, and kept
+     * in a shared 12 MB LRU cache. URLs carrying a `t=` query parameter (live camera polls) are never cached.
+     */
     fun loadImage(rawUrl: String, done: (Bitmap?) -> Unit) {
         val fullUrl = when {
             rawUrl.startsWith("http://") || rawUrl.startsWith("https://") -> rawUrl
             rawUrl.startsWith("/") -> haBase.trimEnd('/') + rawUrl
             else -> haBase.trimEnd('/') + "/" + rawUrl
+        }
+        val cacheable = !LIVE_PARAM.containsMatchIn(fullUrl)
+        if (cacheable) {
+            IMAGE_CACHE.get(fullUrl)?.takeIf { !it.isRecycled }?.let { hit ->
+                main.post { done(hit) }
+                return
+            }
         }
         IMAGE_POOL.execute {
             val bmp = runCatching {
@@ -94,17 +110,41 @@ class VitroCardContext(
                     accessToken()?.takeIf { it.isNotEmpty() }?.let { setRequestProperty("Authorization", "Bearer $it") }
                 }
                 try {
-                    if (conn.responseCode in 200..299) conn.inputStream.use(BitmapFactory::decodeStream) else null
+                    if (conn.responseCode in 200..299) decodeDownsampled(conn.inputStream.use { it.readBytes() }) else null
                 } finally {
                     conn.disconnect()
                 }
             }.getOrNull()
+            if (bmp != null && cacheable) IMAGE_CACHE.put(fullUrl, bmp)
             main.post { done(bmp) }
         }
     }
 
     companion object {
         private val IMAGE_POOL = Executors.newFixedThreadPool(3) { r -> Thread(r, "vitro-img").apply { isDaemon = true } }
+
+        /** Long-edge cap in px: plenty for a 1440x720 panel, 4x-8x less memory than full-size ARGB_8888. */
+        private const val MAX_IMAGE_DIM = 720
+        private const val IMAGE_CACHE_KB = 12 * 1024
+        private val LIVE_PARAM = Regex("[?&]t=")
+
+        private val IMAGE_CACHE = object : LruCache<String, Bitmap>(IMAGE_CACHE_KB) {
+            override fun sizeOf(key: String, value: Bitmap): Int = max(1, value.allocationByteCount / 1024)
+        }
+
+        private fun decodeDownsampled(bytes: ByteArray): Bitmap? {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            val longest = max(bounds.outWidth, bounds.outHeight)
+            if (longest <= 0) return null
+            var sample = 1
+            while (longest / sample > MAX_IMAGE_DIM) sample *= 2
+            val opts = BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+        }
     }
 }
 
@@ -131,6 +171,29 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         clipToOutline = true
     }
 
+    /**
+     * Subtle tactile press feedback: scales to 0.975 over 70 ms on touch-down and springs back to 1.0
+     * over 120 ms on release/cancel. The touch listener returns false, so clicks still fire normally.
+     */
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    fun enablePressFeedback() {
+        setOnTouchListener { v, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    v.animate().cancel()
+                    v.animate().scaleX(PRESS_SCALE).scaleY(PRESS_SCALE).setDuration(70L)
+                        .setInterpolator(DecelerateInterpolator()).start()
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    v.animate().cancel()
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(120L)
+                        .setInterpolator(OvershootInterpolator(2f)).start()
+                }
+            }
+            false
+        }
+    }
+
     protected fun observe(entityId: String, onState: (EntityState?) -> Unit) {
         onState(ctx.store[entityId])
         val unsub = ctx.store.subscribe(entityId) { s ->
@@ -145,11 +208,16 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        animate().cancel()
+        scaleX = 1f
+        scaleY = 1f
         subscriptions.forEach { runCatching { it() } }
         subscriptions.clear()
     }
 
     companion object {
+        private const val PRESS_SCALE = 0.975f
+
         /** Computes a soft tinted pill/circle color (e.g. 20% alpha of active domain color). */
         fun withAlpha(color: Int, alphaFraction: Float): Int {
             val a = (alphaFraction.coerceIn(0f, 1f) * 255f).toInt()

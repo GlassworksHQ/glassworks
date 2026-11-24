@@ -140,8 +140,10 @@ class VitroView(
     }
 
     fun setThemes(catalog: ThemeCatalog) {
+        if (catalog == themeCatalog) return
         themeCatalog = catalog
         viewCache.clear()
+        contentHost.removeAllViews()
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
     }
 
@@ -240,8 +242,10 @@ class VitroView(
         } else {
             val cardCtx = contextFactory?.invoke(theme) ?: return
             buildViewTree(viewCfg, cardCtx).also { built ->
+                viewCache.remove(index)?.let { contentHost.removeView(it) }
                 viewCache[index] = built
                 contentHost.addView(built, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                trimViewCache(keep = index)
             }
         }
 
@@ -272,6 +276,14 @@ class VitroView(
                 "islands=${metrics.webIslandCards}, entities=${metrics.subscribedEntities})",
         )
         onMetrics?.invoke(metrics)
+    }
+
+    /** Keeps at most [MAX_CACHED_VIEWS] built views alive, evicting the oldest one that is not [keep]. */
+    private fun trimViewCache(keep: Int) {
+        while (viewCache.size > MAX_CACHED_VIEWS) {
+            val oldest = viewCache.keys.firstOrNull { it != keep } ?: return
+            viewCache.remove(oldest)?.let { contentHost.removeView(it) }
+        }
     }
 
     private fun applyBackdrop(theme: ResolvedTheme) {
@@ -307,8 +319,8 @@ class VitroView(
             isVerticalScrollBarEnabled = false
         }
         val widthDp = (resources.displayMetrics.widthPixels / dp).toInt()
-        val gap = px(10f)
-        val outerPad = px(12f)
+        val gap = px(8f)
+        val outerPad = px(8f)
 
         val container: View = if (view.type == "sections" && view.sections.isNotEmpty()) {
             buildSectionsLayout(view, ctx, widthDp, outerPad, gap)
@@ -557,5 +569,6 @@ class VitroView(
 
     companion object {
         private const val TAG = "Glassworks.Vitro"
+        private const val MAX_CACHED_VIEWS = 3
     }
 }
