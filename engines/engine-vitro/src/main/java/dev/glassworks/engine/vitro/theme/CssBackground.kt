@@ -91,6 +91,7 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
     }
 
     companion object {
+        private val WHITESPACE = Regex("""\s+""")
         private val SQRT2 = sqrt(2f)
         private val FN = Regex("""^(repeating-)?(linear|radial)-gradient\((.*)\)$""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
         private val WS = Regex("""\s+""")
@@ -135,7 +136,7 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
         }
 
         private fun sideAngle(side: String): Float? {
-            val words = side.split(Regex("""\s+""")).toSet()
+            val words = side.split(WHITESPACE).toSet()
             val v = when { "top" in words -> -1; "bottom" in words -> 1; else -> 0 }
             val hz = when { "left" in words -> -1; "right" in words -> 1; else -> 0 }
             return when {
@@ -171,7 +172,7 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
                 val shapePart = head.substringBefore(" at ").let { if (head.startsWith("at ")) "" else it }.trim()
                 val posPart = if (head.startsWith("at ")) head.removePrefix("at ") else head.substringAfter(" at ", "")
                 val sizes = ArrayList<Pair<Float, Boolean>>()
-                for (tok in shapePart.split(Regex("""\s+""")).filter { it.isNotEmpty() }) {
+                for (tok in shapePart.split(WHITESPACE).filter { it.isNotEmpty() }) {
                     when (tok) {
                         "circle" -> circle = true
                         "ellipse" -> circle = false
@@ -193,7 +194,7 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
 
         /** `at` positions: one or two of `left|center|right|top|bottom|<length>`. */
         private fun position(s: String): Pair<Length, Length>? {
-            val toks = s.split(Regex("""\s+"""))
+            val toks = s.split(WHITESPACE)
             fun kw(t: String): Length? = when (t) {
                 "left", "top" -> Length(0f, true)
                 "center" -> Length(50f, true)

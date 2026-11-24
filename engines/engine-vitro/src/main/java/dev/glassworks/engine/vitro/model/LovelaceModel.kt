@@ -462,13 +462,27 @@ object CardRouter {
         return view.sections.any { s -> s.cards.any(::walk) } || view.cards.any(::walk)
     }
 
-    private val ENTITY_ID_PATTERN = Regex("""^[a-z][a-z0-9_]*\.[a-z0-9_]+$""")
+    /**
+     * `^[a-z][a-z0-9_]*\.[a-z0-9_]+$`, checked by hand: the deep scan below tests every string of a custom card's
+     * config (long templates included), and a pattern match per string cost a slow panel about 0.1 s per view.
+     */
+    internal fun isEntityId(v: String): Boolean {
+        if (v.isEmpty() || v[0] !in 'a'..'z') return false
+        val dot = v.indexOf('.')
+        if (dot < 1 || dot == v.length - 1) return false
+        for (i in v.indices) {
+            if (i == dot) continue
+            val c = v[i]
+            if (c !in 'a'..'z' && c !in '0'..'9' && c != '_') return false
+        }
+        return true
+    }
 
     private fun scanElements(arr: JSONArray?, out: MutableSet<String>) {
         if (arr == null) return
         for (i in 0 until arr.length()) {
             val el = arr.optJSONObject(i) ?: continue
-            el.optString("entity", "").takeIf { ENTITY_ID_PATTERN.matches(it) }?.let { out += it }
+            el.optString("entity", "").takeIf { isEntityId(it) }?.let { out += it }
             VisibilityCondition.parseList(el.optJSONArray("conditions")).forEach { it.referencedEntities(out) }
             scanElements(el.optJSONArray("elements"), out)
         }
@@ -479,7 +493,7 @@ object CardRouter {
         val out = LinkedHashSet<String>()
         fun scanJson(v: Any?) {
             when (v) {
-                is String -> if (ENTITY_ID_PATTERN.matches(v) && !v.startsWith("http") && !v.endsWith(".js") && !v.endsWith(".png") && !v.endsWith(".jpg") && !v.endsWith(".svg")) {
+                is String -> if (isEntityId(v) && !v.startsWith("http") && !v.endsWith(".js") && !v.endsWith(".png") && !v.endsWith(".jpg") && !v.endsWith(".svg")) {
                     out += v
                 }
                 is JSONArray -> for (i in 0 until v.length()) scanJson(v.opt(i))
@@ -502,13 +516,13 @@ object CardRouter {
             // subscribe_entities automatically captures every entity without knowing each card's schema.
             if (c.type.startsWith("custom:")) scanJson(c.raw)
             for (key in EXTRA_ENTITY_KEYS) {
-                c.raw.optString(key, "").takeIf { ENTITY_ID_PATTERN.matches(it) }?.let { out += it }
+                c.raw.optString(key, "").takeIf { isEntityId(it) }?.let { out += it }
             }
             // Heading cards carry entity `badges` (objects or bare ids) on their right side.
             c.raw.optJSONArray("badges")?.let { arr ->
                 for (i in 0 until arr.length()) {
                     val id = arr.optJSONObject(i)?.optString("entity", "") ?: arr.optString(i, "")
-                    if (ENTITY_ID_PATTERN.matches(id)) out += id
+                    if (isEntityId(id)) out += id
                 }
             }
             // picture-elements: every overlay's entity, including those nested in `conditional` elements.
