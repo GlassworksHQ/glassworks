@@ -504,6 +504,10 @@ class ThemeResolverTest {
         assertEquals(0f, resolveWith("""{"ha-card-box-shadow": "0 4px 8px rgba(0, 0, 0, 0)"}""").cardElevationDp, 0.001f)
         assertEquals(0f, ThemeResolver.parseBoxShadowElevationDp("0 4px 8px hsla(0, 0%, 0%, 0)"), 0.001f)
         assertEquals(8f, ThemeResolver.parseBoxShadowElevationDp("0 4px 8px rgba(0, 0, 0, 0.01)"), 0.001f)
+        // The first visible outer layer counts: a transparent or inset one before it is skipped.
+        assertEquals(8f, ThemeResolver.parseBoxShadowElevationDp("0 2px 6px transparent, 0 4px 8px #000"), 0.001f)
+        assertEquals(5f, ThemeResolver.parseBoxShadowElevationDp("inset 0 0 4px #000, 0 2px 6px #000"), 0.001f)
+        assertEquals(0f, ThemeResolver.parseBoxShadowElevationDp("0 2px 6px transparent, inset 0 4px 8px #000"), 0.001f)
     }
 
     @Test

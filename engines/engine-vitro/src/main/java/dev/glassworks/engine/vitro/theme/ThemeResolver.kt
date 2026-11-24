@@ -410,22 +410,27 @@ object ThemeResolver {
 
     /**
      * Maps a CSS `box-shadow` (`0px 2px 6px rgba(0,0,0,0.2)`) to an Android elevation of 1..12 dp: half the blur
-     * plus the vertical offset. `none`, blank, inset-only, fully transparent or unparsable values give 0.
+     * plus the vertical offset, from the first visible outer shadow. `none`, blank, unparsable values and shadows
+     * that are all inset or fully transparent give 0.
      */
     fun parseBoxShadowElevationDp(raw: String?): Float {
         val value = raw?.trim().orEmpty()
         if (value.isEmpty() || value.equals("none", ignoreCase = true)) return 0f
-        val first = splitTopLevelCommas(value).firstOrNull { it.isNotBlank() }?.trim() ?: return 0f
-        if (first.startsWith("inset", ignoreCase = true) || first.endsWith("inset", ignoreCase = true)) return 0f
-        // A transparent shadow (`transparent`, `rgba(0,0,0,0)`) draws nothing.
-        val color = splitTopLevelSpaces(first).firstOrNull { !SHADOW_LENGTH.matches(it) && !it.equals("inset", ignoreCase = true) }
-        if (color != null && (color.equals("transparent", ignoreCase = true) || parseColor(color)?.let { it ushr 24 } == 0)) return 0f
+        val first = splitTopLevelCommas(value).map { it.trim() }.firstOrNull { it.isNotEmpty() && isVisibleOuterShadow(it) } ?: return 0f
         val lengths = SHADOW_LENGTH.findAll(SHADOW_COLOR.replace(first, " ").trim())
             .mapNotNull { it.groupValues[1].toFloatOrNull() }.toList()
         if (lengths.size < 2) return 0f
         val offsetY = lengths[1]
         val blur = lengths.getOrElse(2) { 0f }.coerceAtLeast(0f)
         return (blur / 2f + abs(offsetY)).coerceIn(1f, 12f)
+    }
+
+    /** False for an inset shadow and for a transparent one (`transparent`, `rgba(0,0,0,0)`), which draw no elevation. */
+    private fun isVisibleOuterShadow(layer: String): Boolean {
+        val tokens = splitTopLevelSpaces(layer)
+        if (tokens.any { it.equals("inset", ignoreCase = true) }) return false
+        val color = tokens.firstOrNull { !SHADOW_LENGTH.matches(it) } ?: return true
+        return !color.equals("transparent", ignoreCase = true) && parseColor(color)?.let { it ushr 24 } != 0
     }
 
     /** Recursively substitutes `var(--name, fallback)` up to depth 8. */
@@ -562,11 +567,14 @@ object ThemeResolver {
         if (cleaned.isBlank()) return CardModStyle()
         val (decls, otherRules) = hostDeclarations(cleaned)
         val custom = Regex("""(?:^|[;\n{])\s*--([\w-]+)\s*:\s*([^;\n]+)""").findAll(decls)
-            .associate { it.groupValues[1] to resolveValue(it.groupValues[2].trim(), vars, 0) }
-        fun prop(name: String): String? =
-            Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;!\n]+)""", RegexOption.IGNORE_CASE).findAll(decls)
-                .lastOrNull()?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
-                ?.let { resolveValue(it, vars, 0) }
+            .associate { it.groupValues[1] to resolveValue(it.groupValues[2].replace(IMPORTANT, "").trim(), vars, 0) }
+        // As in the browser: the last `!important` declaration wins, else the last one. card-mod keeps the flag.
+        fun prop(name: String): String? {
+            val values = Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;\n]+)""", RegexOption.IGNORE_CASE).findAll(decls)
+                .map { it.groupValues[1] }.toList()
+            val winner = values.lastOrNull { IMPORTANT.containsMatchIn(it) } ?: values.lastOrNull()
+            return winner?.replace(IMPORTANT, "")?.trim()?.takeIf { it.isNotEmpty() }?.let { resolveValue(it, vars, 0) }
+        }
 
         val bgImage = prop("background-image")
         val bgShort = prop("background")
@@ -678,12 +686,16 @@ object ThemeResolver {
 
     /**
      * Splits a CSS sheet into `(selector, declarations)` rules the way the browser reads it: comments and Jinja
-     * dropped, `!important` ignored, bare top-level declarations dropped (they are not valid CSS, so card-mod's
+     * dropped, `!important` stripped from the value (see [cssRulesImportant] for the flag), bare top-level declarations dropped (they are not valid CSS, so card-mod's
      * `<style>` ignores them). A comma selector list stays one rule; declarations keep source order.
      */
-    fun cssRules(css: String): List<Pair<String, List<Pair<String, String>>>> {
+    fun cssRules(css: String): List<Pair<String, List<Pair<String, String>>>> =
+        cssRulesImportant(css).map { (sel, decls) -> sel to decls.map { (n, v, _) -> n to v } }
+
+    /** [cssRules] with each declaration's `!important` flag kept, for code that resolves the cascade. */
+    fun cssRulesImportant(css: String): List<Pair<String, List<Triple<String, String, Boolean>>>> {
         val cleaned = JINJA_PATTERN.replace(CSS_COMMENT.replace(css, " "), " ")
-        val out = ArrayList<Pair<String, List<Pair<String, String>>>>()
+        val out = ArrayList<Pair<String, List<Triple<String, String, Boolean>>>>()
         var depth = 0
         var segStart = 0
         var bodyStart = 0
@@ -703,8 +715,9 @@ object ThemeResolver {
                         val decls = cleaned.substring(bodyStart, i).split(';').mapNotNull { d ->
                             val c = d.indexOf(':').takeIf { it > 0 } ?: return@mapNotNull null
                             val name = d.substring(0, c).trim().lowercase(Locale.ROOT)
-                            val value = d.substring(c + 1).replace(IMPORTANT, "").trim()
-                            if (name.isEmpty() || value.isEmpty()) null else name to value
+                            val rawValue = d.substring(c + 1)
+                            val value = rawValue.replace(IMPORTANT, "").trim()
+                            if (name.isEmpty() || value.isEmpty()) null else Triple(name, value, IMPORTANT.containsMatchIn(rawValue))
                         }
                         if (selector.isNotEmpty() && !selector.startsWith("@")) out += selector to decls
                         segStart = i + 1
@@ -765,7 +778,8 @@ object ThemeResolver {
                 ';' -> if (depth == 0) segStart = i + 1
             }
         }
-        return host.toString().replace(Regex("""\s*!\s*important""", RegexOption.IGNORE_CASE), "") to other
+        // `!important` stays on each declaration: [parseCardMod] lets it win, as the browser does.
+        return host.toString() to other
     }
 
     /**
@@ -777,8 +791,11 @@ object ThemeResolver {
         val s = raw.trim().lowercase(Locale.ROOT).replace(Regex("""\s+"""), " ")
         s == "ha-card" || s == ":host" || s == "." || s == ":host ha-card" || s == ":host > ha-card" ||
             (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && ":hover" !in s && ":active" !in s &&
-                !hasCombinator(s))
+                !hasCombinator(s) && !PSEUDO_ELEMENT.containsMatchIn(s.replace(Regex("""\[[^\]]*\]"""), "[]")))
     }
+
+    /** `::before`, `::part()` and the legacy one-colon forms: they style a box inside the card, not the card. */
+    private val PSEUDO_ELEMENT = Regex("""::|:(before|after|first-line|first-letter)\b""")
 
     /** True when [s] has a combinator (whitespace, `>`, `+`, `~`) outside brackets, parentheses and quotes. */
     private fun hasCombinator(s: String): Boolean {

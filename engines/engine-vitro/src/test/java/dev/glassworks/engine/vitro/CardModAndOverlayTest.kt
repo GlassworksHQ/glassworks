@@ -207,6 +207,9 @@ class CardModAndOverlayTest {
         tile.makeSeamless(keepBackground = true)
         tile.applyStyleCss("ha-card { padding: 4px }")
         assertEquals(0f, tile.elevation, 0.001f)
+        // Even an explicit shadow: the card shares its parent's surface, background kept or not.
+        tile.applyStyleCss("ha-card { box-shadow: 0 2px 6px #000 }")
+        assertEquals(0f, tile.elevation, 0.001f)
     }
 
     @Test

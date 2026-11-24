@@ -275,6 +275,9 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     /** The shadow the card has without a card_mod `box-shadow`: the theme's, or none once it shares a surface. */
     private var baselineElevationDp = 0f
 
+    /** True once the card shares a parent's surface (stack-in-card): no shadow of its own, even from card_mod. */
+    private var shadowless = false
+
     init {
         applyTheme(ctx.theme)
     }
@@ -308,6 +311,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     /** Drops the card's background, border and shadow so it shares a parent card's surface (stack-in-card). */
     fun makeSeamless(keepBackground: Boolean = false, keepRadius: Boolean = false) {
         seamless = !keepBackground
+        shadowless = true
         baselineElevationDp = 0f
         elevation = 0f
         if (!keepBackground) {
@@ -382,7 +386,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         }
         mod.opacity?.let { alpha = it.coerceIn(0f, 1f) }
         // A templated style re-renders here: when it stops setting `box-shadow`, the theme's shadow comes back.
-        if (!seamless) elevation = (mod.elevationDp ?: baselineElevationDp) * ctx.dp
+        if (!shadowless) elevation = (mod.elevationDp ?: baselineElevationDp) * ctx.dp
         onCardModApplied(mod)
     }
 
