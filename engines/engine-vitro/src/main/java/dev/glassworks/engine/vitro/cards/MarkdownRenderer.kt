@@ -912,7 +912,11 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         return MdPicture(null)
     }
 
-    private fun load(src: String, picture: MdPicture, done: () -> Unit) {
+    /**
+     * Fetches [picture] once [owner] is on screen (a hidden card loads none, as on HA's page). An embedded raster
+     * fetches nothing: it is decoded off the main thread at once.
+     */
+    private fun load(src: String, picture: MdPicture, owner: View, done: () -> Unit) {
         if (isEmbeddedRaster(src)) {
             ctx.decodeEmbedded(src) { decoded ->
                 if (decoded != null) {
@@ -924,7 +928,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             }
             return
         }
-        ctx.loadImage(src) { bmp -> if (bmp != null) { picture.bitmap = bmp; done() } }
+        ctx.loadImage(src, owner) { bmp -> if (bmp != null) { picture.bitmap = bmp; done() } }
     }
 
     private fun isEmbeddedRaster(src: String): Boolean =
@@ -936,9 +940,10 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         val src = node.attrs["src"]?.takeIf { it.isNotBlank() } ?: return null
         val picture = picture(src) ?: return null
         val view = MdImageView(ctx.context, picture, s.width, s.height?.takeIf { !it.percent }?.value, s.borderRadius * dp, dp)
-        if (!picture.ready) load(src, picture) { view.requestLayout(); view.invalidate() }
+        if (!picture.ready) load(src, picture, view) { view.requestLayout(); view.invalidate() }
         if (s.opacity < 1f) view.alpha = s.opacity
-        if (s.hidden) view.visibility = View.INVISIBLE // its room, nothing drawn
+        // Its room, nothing drawn; still shown as far as loading goes, so the picture (and its size) arrives.
+        if (s.hidden) view.alpha = 0f
         return view
     }
 
@@ -979,7 +984,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             else -> View.TEXT_ALIGNMENT_VIEW_START
         }
         images.forEach { span ->
-            if (!span.picture.ready) load(span.src, span.picture) {
+            if (!span.picture.ready) load(span.src, span.picture, tv) {
                 if (span.natural && span.applyNaturalSize(dp, tv.width - tv.paddingLeft - tv.paddingRight)) {
                     // The line grows to the picture: lay the text out again with the same spans.
                     tv.text = tv.text

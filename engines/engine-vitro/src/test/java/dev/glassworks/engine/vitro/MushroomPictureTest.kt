@@ -37,6 +37,18 @@ class MushroomPictureTest {
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
 
     @Test
+    fun theIconTogglesByDefaultForATogglingDomainAsInMushroom() {
+        // Mushroom 5's template card: icon_tap_action defaults to toggle for these domains, so the icon is interactive
+        // and draws its tinted shape (the air purifier in a stack-in-card); a climate or a sensor gets none.
+        for (e in listOf("fan.air_purifier", "light.lamp", "switch.x", "input_boolean.x", "scene.x", "valve.x")) {
+            assertEquals(e, "toggle", TileCardView.mushroomIconDefault(e))
+        }
+        for (e in listOf("climate.ac", "sensor.co2", "media_player.tv", null)) {
+            assertEquals("$e", "none", TileCardView.mushroomIconDefault(e))
+        }
+    }
+
+    @Test
     fun aPictureIsCroppedToACircleWhateverDrawsIt() {
         val src = Bitmap.createBitmap(80, 40, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
         val out = Bitmap.createBitmap(36, 36, Bitmap.Config.ARGB_8888)

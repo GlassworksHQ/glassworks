@@ -212,6 +212,14 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     private var inlineFeatures: View? = null
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        mushroom?.row?.let { row ->
+            // Mushroom 5's `.container { margin: calc(-1 * var(--ha-card-border-width, 1px)) }`: the variable, not the
+            // border drawn. With the theme's border the content covers it; with `border: none` (card-mod) it runs past
+            // each edge by the variable, and the card is that much shorter than its 56 px content (the S1's alarm row).
+            val m = drawnBorderPx - (ctx.theme.cardBorderWidthDp * ctx.dp).toInt()
+            val lp = row.layoutParams as MarginLayoutParams
+            if (lp.topMargin != m || lp.leftMargin != m) lp.setMargins(m, m, m, m)
+        }
         inlineFeatures?.let { slot ->
             if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
                 // hui-card-features beside the content: calc(50% - var(--column-gap) / 2 - 12px), 12 px end padding.
@@ -1041,7 +1049,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val shapeBox = ctx.px(48f)
         val shapeSize = ctx.px(36f)
         val primaryText = ctx.theme.primaryTextColor
-        val iconAction = ActionConfig.parse(raw.optJSONObject("icon_tap_action"), "none")
+        // Mushroom 5's default icon action: toggle for an entity of a toggling domain, else none.
+        val iconAction = ActionConfig.parse(raw.optJSONObject("icon_tap_action"), mushroomIconDefault(config.entity))
         val interactiveIcon = iconAction.action != "none"
 
         val avatarBg = GradientDrawable().apply {
@@ -1201,7 +1210,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         bindTpl("picture", "") { v ->
             pictureUrl = v
             refreshAvatar()
-            if (v.isNotBlank()) ctx.loadImage(v) { bmp -> if (bmp != null && pictureUrl == v) picture.setImageDrawable(CircleCropDrawable(bmp)) }
+            if (v.isNotBlank()) ctx.loadImage(v, this) { bmp -> if (bmp != null && pictureUrl == v) picture.setImageDrawable(CircleCropDrawable(bmp)) }
         }
         bindTpl("badge_icon", "") { v -> badgeIconName = v; refreshBadge() }
         bindTpl("badge_color", "") { v -> badgeColorValue = MushroomColors.parse(v, ctx.theme); refreshBadge() }
@@ -1343,6 +1352,15 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     companion object {
         const val MUSHROOM_TEMPLATE = "custom:mushroom-template-card"
+
+        /** The domains whose entity's icon Mushroom's template card toggles by default (its `_e` and buttons). */
+        private val MUSHROOM_TOGGLE_DOMAINS = setOf(
+            "fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve", "button", "input_button", "scene",
+        )
+
+        /** Mushroom 5's template card: `icon_tap_action` defaults to `toggle` for [MUSHROOM_TOGGLE_DOMAINS], else none. */
+        internal fun mushroomIconDefault(entity: String?): String =
+            if (entity != null && entity.substringBefore('.') in MUSHROOM_TOGGLE_DOMAINS) "toggle" else "none"
         private val BARE_ICON_DOMAINS = setOf("sensor", "weather", "text", "select")
         /** HA's `STATE_COLORED_DOMAIN`: the domains whose tiles take a state color. */
         private val STATE_COLORED_DOMAINS = setOf(
@@ -2530,7 +2548,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
 
         val staticImage = config.raw.optString("image", "").ifEmpty { null }
         if (staticImage != null) {
-            ctx.loadImage(staticImage) { bmp -> if (bmp != null) showBitmap(bmp) }
+            ctx.loadImage(staticImage, this) { bmp -> if (bmp != null) showBitmap(bmp) }
         }
         // HA's picture-glance labels its bar with `title`; the other picture cards use `name`.
         val label = if (config.type == "picture-glance") config.title ?: config.name else config.name
@@ -2548,7 +2566,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 img.setImageDrawable(null)
                 return
             }
-            ctx.loadImage(pic) { bmp -> if (bmp != null && generation == pictureGeneration) showBitmap(bmp) }
+            ctx.loadImage(pic, this) { bmp -> if (bmp != null && generation == pictureGeneration) showBitmap(bmp) }
         }
         if (staticImage == null && pictureSource != null && pictureSource != eid) {
             observe(pictureSource) { s -> showPicture(s?.entityPicture) }
@@ -2693,7 +2711,14 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
 
     private val style = ChipStyle.resolve(ctx, ownVars(ctx, config))
     private val alignment = config.raw.optString("alignment")
-    private val spacingPx = ctx.px(style.spacing)
+    /**
+     * A chip length in device px, rounded: Chrome lays chips out in fractional px, and truncating each part (a 9 px
+     * padding is 13.5 px at 1.5x) made every chip about a pixel narrower than HA's, adding up along the row.
+     * Borders still truncate, as Chrome snaps them down.
+     */
+    private fun chipPx(v: Float): Int = Math.round(v * ctx.dp)
+
+    private val spacingPx = chipPx(style.spacing)
     private val spacers = HashSet<View>()
 
     init {
@@ -2835,10 +2860,10 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
                 if (border > 0) setStroke(border, st.borderColor)
             }
             // box-sizing: content-box: the border sits outside --chip-height.
-            val h = ctx.px(st.height)
+            val h = chipPx(st.height)
             minimumHeight = h + 2 * border
             minimumWidth = h + 2 * border
-            setPadding(ctx.px(st.paddingX) + border, border, ctx.px(st.paddingX) + border, border)
+            setPadding(chipPx(st.paddingX) + border, border, chipPx(st.paddingX) + border, border)
             isClickable = true
             applyHaRipple(this, radiusPx, ctx.theme.dark)
         }
@@ -2850,13 +2875,13 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
             includeFontPadding = false
             maxLines = 1
         }
-        val iconSize = ctx.px(st.iconSize)
+        val iconSize = chipPx(st.iconSize)
         // ::slotted(*:not(:last-child)) { margin-right: 0.15em }: the gap after the icon when a label follows.
         val iconLp = LinearLayout.LayoutParams(iconSize, iconSize)
         chip.addView(icon, iconLp)
         chip.addView(label, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
         fun syncGap() {
-            iconLp.marginEnd = if (label.visibility == VISIBLE && icon.visibility == VISIBLE) ctx.px(st.height * 0.15f) else 0
+            iconLp.marginEnd = if (label.visibility == VISIBLE && icon.visibility == VISIBLE) chipPx(st.height * 0.15f) else 0
             icon.layoutParams = iconLp
         }
         fun setLabel(text: String) {
@@ -3281,7 +3306,7 @@ class MediaControlCardView(ctx: VitroCardContext, config: CardConfig) : CardSurf
             scrim.visibility = GONE
             return
         }
-        ctx.loadImage(url) { bmp ->
+        ctx.loadImage(url, this) { bmp ->
             if (artUrl != url) return@loadImage
             if (bmp != null) {
                 artwork.setImageBitmap(bmp)
