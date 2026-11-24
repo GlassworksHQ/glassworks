@@ -540,7 +540,11 @@ class VitroView(
         }
     }
 
+    /** Bumped by every backdrop change, so an image that loads after a newer backdrop doesn't replace it. */
+    private var backdropGeneration = 0
+
     private fun applyBackdrop(theme: ResolvedTheme) {
+        val generation = ++backdropGeneration
         when (val bg = theme.background) {
             is ThemeBackground.Solid -> setBackgroundColor(bg.color)
             is ThemeBackground.LinearGradient -> background = CssBackgroundDrawable(
@@ -552,7 +556,7 @@ class VitroView(
             is ThemeBackground.ImageUrl -> {
                 setBackgroundColor(bg.fallbackColor)
                 contextFactory?.invoke(theme)?.loadImage(bg.url) { bmp ->
-                    if (bmp != null) background = BitmapDrawable(resources, bmp)
+                    if (bmp != null && generation == backdropGeneration) background = BitmapDrawable(resources, bmp)
                 }
             }
         }
@@ -562,7 +566,7 @@ class VitroView(
         // Panel view: single full-viewport card (e.g. custom:mirror-home-card, custom:tablet-home-card).
         if (view.type == "panel" && view.cards.isNotEmpty()) {
             val card = view.cards.first()
-            return buildCard(card, ctx, fillViewport = true)
+            return wrapVisibility(card, buildCard(card, ctx, fillViewport = true), ctx)
         }
 
         val scroll = ScrollView(context).apply {
@@ -821,13 +825,24 @@ class VitroView(
         } else {
             parentCtx
         }
-        val childBuilder: CardBuilder = { child -> wrapVisibility(child, buildCard(child, ctx, false), ctx) }
+        // A container may build children later (auto-entities on a state change): they see this card's variables then too.
+        var childScope: Map<String, String> = emptyMap()
+        val childBuilder: CardBuilder = { child ->
+            val saved = inheritedCardVars
+            inheritedCardVars = childScope
+            try {
+                wrapVisibility(child, buildCard(child, ctx, false), ctx)
+            } finally {
+                inheritedCardVars = saved
+            }
+        }
         val stackMod = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), ctx.theme.vars)
         // Custom properties set on a card (`ha-card { --vertical-stack-card-gap: 8px }`) inherit into the cards
         // inside it, as they do through the browser's shadow roots.
         val outerVars = inheritedCardVars
         val outerCtxVars = ctx.cardVars
         inheritedCardVars = if (stackMod.customProperties.isEmpty()) outerVars else outerVars + stackMod.customProperties
+        childScope = inheritedCardVars
         ctx.cardVars = inheritedCardVars
         try {
             return buildCardWithVars(card, ctx, fillViewport, childBuilder, stackMod)
@@ -1005,11 +1020,17 @@ class VitroView(
         update()
         val refs = LinkedHashSet<String>()
         conds.forEach { it.referencedEntities(refs) }
-        val unsubs = refs.map { eid -> store.subscribe(eid) { ctx.main.post(update) } }
+        fun subscribe() = refs.map { eid -> store.subscribe(eid) { ctx.main.post(update) } }
+        var unsubs = subscribe()
         // HA's user arrives after the first render, so user-gated cards re-check on the same tick as time-gated ones.
         val ticks = conds.any { it.dependsOnTime() || it.dependsOnUser() }
         view.addOnAttachStateChangeListener(object : OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: View) {
+                // Back after a detach: listen again, and catch up with what changed meanwhile.
+                if (unsubs.isEmpty() && refs.isNotEmpty()) {
+                    unsubs = subscribe()
+                    if (!ticks) update()
+                }
                 if (ticks) {
                     update() // The clock may have moved on while detached.
                     addPeriodicCheck(update)
@@ -1017,6 +1038,7 @@ class VitroView(
             }
             override fun onViewDetachedFromWindow(v: View) {
                 unsubs.forEach { it() }
+                unsubs = emptyList()
                 if (ticks) removePeriodicCheck(update)
                 // A cancelled fade never runs its end action: snap to the state it was heading for.
                 v.animate().cancel()
