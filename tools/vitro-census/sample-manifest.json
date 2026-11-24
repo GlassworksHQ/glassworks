@@ -1,0 +1,778 @@
+[
+ {
+  "repo": "pschmitt/homeassistant-google-antigravity-usage",
+  "files": [
+   {
+    "path": "dashboards/google_antigravity_usage.yaml",
+    "url": "https://github.com/pschmitt/homeassistant-google-antigravity-usage/blob/a548fc817ea8869e226ddf8d83841d3f352c334a/dashboards/google_antigravity_usage.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "alexsky74/ha_technopark",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/alexsky74/ha_technopark/blob/e7cbe763422054b75448588d0284e8dbc48acaec/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "culiplan/home-assistant-culiplan",
+  "files": [
+   {
+    "path": "lovelace/dashboards/phone-quick-view.yaml",
+    "url": "https://github.com/culiplan/home-assistant-culiplan/blob/9b1dba3020596b58b6b9c5245d6175200f14c823/lovelace/dashboards/phone-quick-view.yaml"
+   },
+   {
+    "path": "lovelace/dashboards/kitchen-tablet.yaml",
+    "url": "https://github.com/culiplan/home-assistant-culiplan/blob/9b1dba3020596b58b6b9c5245d6175200f14c823/lovelace/dashboards/kitchen-tablet.yaml"
+   },
+   {
+    "path": "lovelace/dashboards/voice-pe-companion.yaml",
+    "url": "https://github.com/culiplan/home-assistant-culiplan/blob/9b1dba3020596b58b6b9c5245d6175200f14c823/lovelace/dashboards/voice-pe-companion.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "arsaboo/homeassistant-config",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/arsaboo/homeassistant-config/blob/2a0376e3dca1a6d948f8f09b580f067d42ab8b0c/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "DanielBryars/HassConfig",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/DanielBryars/HassConfig/blob/7a8de84fbe061d3cfd1ce2b0d790013a6c5b7ea2/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "halkeye/homeassistant-config",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/halkeye/homeassistant-config/blob/9f7d88c40aca1e6e9f6648be334d9a202d8a409f/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "mcpowell87/homeassistant",
+  "files": [
+   {
+    "path": "lovelace/dashboards/overview-yaml.yaml",
+    "url": "https://github.com/mcpowell87/homeassistant/blob/8218b0ea5c9f6506b0fba09676417d89ad9c355f/lovelace/dashboards/overview-yaml.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Geertvdc/home-automation-geertvdc",
+  "files": [
+   {
+    "path": "config/home-assistant/ui-lovelace.yaml",
+    "url": "https://github.com/Geertvdc/home-automation-geertvdc/blob/d01138136e8b9535f1aabebaa383f3c8135e96e2/config/home-assistant/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "ruslanruslanruslan/home",
+  "files": [
+   {
+    "path": "iot/homeassistant/amur/config/ui-lovelace.yaml",
+    "url": "https://github.com/ruslanruslanruslan/home/blob/925a200eb266f27820650d7b7bedcadfb5f740fc/iot/homeassistant/amur/config/ui-lovelace.yaml"
+   },
+   {
+    "path": "iot/homeassistant/dacha/config/ui-lovelace.yaml",
+    "url": "https://github.com/ruslanruslanruslan/home/blob/925a200eb266f27820650d7b7bedcadfb5f740fc/iot/homeassistant/dacha/config/ui-lovelace.yaml"
+   },
+   {
+    "path": "iot/homeassistant/mati/config/ui-lovelace.yaml",
+    "url": "https://github.com/ruslanruslanruslan/home/blob/925a200eb266f27820650d7b7bedcadfb5f740fc/iot/homeassistant/mati/config/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Klench/home-assistant-config",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/Klench/home-assistant-config/blob/9754901ac77deda3c971c1cb8c64db3e290492dc/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "shaneprice/ha-boilerplate-card",
+  "files": [
+   {
+    "path": ".devcontainer/ui-lovelace.yaml",
+    "url": "https://github.com/shaneprice/ha-boilerplate-card/blob/cb5526e064589e0edec720ad9a019e14c0060ec2/.devcontainer/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Enzokot/config_ha",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/Enzokot/config_ha/blob/9108ef405522d489b9329f37fce99e5c09b1cdb6/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "PiotrMachowski/lovelace-xiaomi-vacuum-map-card",
+  "files": [
+   {
+    "path": ".devcontainer/ui-lovelace.yaml",
+    "url": "https://github.com/PiotrMachowski/lovelace-xiaomi-vacuum-map-card/blob/045c3ac946d4ef0a01201f306e9949643984a155/.devcontainer/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "JuzzWuzz/stack-in-card",
+  "files": [
+   {
+    "path": ".devcontainer/ui-lovelace.yaml",
+    "url": "https://github.com/JuzzWuzz/stack-in-card/blob/21d41f0b469bff820aab9847727eb7dce3a240c1/.devcontainer/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "alex-phillips/smart-home",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/alex-phillips/smart-home/blob/c5ef167cf66c519aa81dab3634e8c49030e2e837/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Kirbo/ha-lovelace-elapsed-time-card",
+  "files": [
+   {
+    "path": ".devcontainer/ui-lovelace.yaml",
+    "url": "https://github.com/Kirbo/ha-lovelace-elapsed-time-card/blob/84704a2d7f8c7bce331fa2a220a0741f802196f8/.devcontainer/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "blaineventurine/home-automation-docker",
+  "files": [
+   {
+    "path": "home-assistant/ui-lovelace.yaml",
+    "url": "https://github.com/blaineventurine/home-automation-docker/blob/896f32dfe34c3e778ecab347611d111d9e341f8f/home-assistant/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Chance-Konstruktion/ha-rejuvenation-bed",
+  "files": [
+   {
+    "path": "dashboards/schlafbericht.yaml",
+    "url": "https://github.com/Chance-Konstruktion/ha-rejuvenation-bed/blob/c56e7ac77565751ebb723935fa226e938724d6d8/dashboards/schlafbericht.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Chriotjuh1/ha-dashboard-2026",
+  "files": [
+   {
+    "path": "dashboards/claude_dashboard.yaml",
+    "url": "https://github.com/Chriotjuh1/ha-dashboard-2026/blob/2e2e55956bec15143680b9fef97a4ad51cff389f/dashboards/claude_dashboard.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "alex-phillips/firetv-card",
+  "files": [
+   {
+    "path": ".devcontainer/ui-lovelace.yaml",
+    "url": "https://github.com/alex-phillips/firetv-card/blob/6b161b822e50590d5438a19e37ef1307cb02813b/.devcontainer/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "BriianPowell/hass-config",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/BriianPowell/hass-config/blob/ae5cd3d729c3224ae669f0ed6a449f0d56067941/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "kamilzierke/proxmox-ha-mqtt-telemetry",
+  "files": [
+   {
+    "path": "dashboards/proxmox-hardware-dashboard.example.yaml",
+    "url": "https://github.com/kamilzierke/proxmox-ha-mqtt-telemetry/blob/fabdcd77deddd38b9a9aff56f55224f4769f5561/dashboards/proxmox-hardware-dashboard.example.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "makadaw/pi-home-automation",
+  "files": [
+   {
+    "path": "homeassistant/ui-lovelace.yaml",
+    "url": "https://github.com/makadaw/pi-home-automation/blob/539580f2635fff4ae2667123003f31cee8cccf0c/homeassistant/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "dwats/dwats-homeassistant",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml.save",
+    "url": "https://github.com/dwats/dwats-homeassistant/blob/1d2f34e9847312573367be49b77b66b33ae0c687/ui-lovelace.yaml.save"
+   },
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/dwats/dwats-homeassistant/blob/1d2f34e9847312573367be49b77b66b33ae0c687/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Juanko984/milesight-lorawan-ha",
+  "files": [
+   {
+    "path": "dashboards/coop.yaml",
+    "url": "https://github.com/Juanko984/milesight-lorawan-ha/blob/aa225970c64d59e9b7ea2fce1c91270f01fc74d9/dashboards/coop.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "DevelopementSoniverse/irrigation-computer",
+  "files": [
+   {
+    "path": "dashboards/irrigation_control.yaml",
+    "url": "https://github.com/DevelopementSoniverse/irrigation-computer/blob/2b1da2bf55a3fd39999e6befafe0da45eca35736/dashboards/irrigation_control.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "thecowan/ha-config",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/thecowan/ha-config/blob/f82fc9cb9ce8ccb1ec2034fee61781334ea740cc/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "thijsputman/home-assistant-config",
+  "files": [
+   {
+    "path": "lovelace/home.yaml",
+    "url": "https://github.com/thijsputman/home-assistant-config/blob/78e7419df33ea766073586141bdb02a5a08bad0b/lovelace/home.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "mwagner/HA_config",
+  "files": [
+   {
+    "path": "dashboards/main/parts/sections/rooms_roomcards/masterbedroom.yaml",
+    "url": "https://github.com/mwagner/HA_config/blob/1ded537b0083538ec43242b729d9145c1afeb348/dashboards/main/parts/sections/rooms_roomcards/masterbedroom.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Pater100/PaterHome-HASS",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/Pater100/PaterHome-HASS/blob/00494b9d6c02ea4677e557b16a46ee6713f39cd4/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "SamulionisJonas/hass",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/SamulionisJonas/hass/blob/ae85f9dcd25da5491a55deb2e29db91dd4167fa2/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "swingerman/dynamic-entity-panel-card",
+  "files": [
+   {
+    "path": ".devcontainer/ui-lovelace.yaml",
+    "url": "https://github.com/swingerman/dynamic-entity-panel-card/blob/751a6fae74f3f4904cabe376dd315044330dd5a6/.devcontainer/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "JonathanCasey/home-assistant-config",
+  "files": [
+   {
+    "path": "homeassistant/ui-lovelace.yaml",
+    "url": "https://github.com/JonathanCasey/home-assistant-config/blob/3afeb6a03316771d84f77eb31e8da95d077bc8c0/homeassistant/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Gamso/onlycat-home-assistant-card",
+  "files": [
+   {
+    "path": ".devcontainer/config/ui-lovelace.yaml",
+    "url": "https://github.com/Gamso/onlycat-home-assistant-card/blob/140459e538cb3cd73473c84e9a4c46ae7dbfb82e/.devcontainer/config/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "ezand/lovelace-posten-card",
+  "files": [
+   {
+    "path": ".devcontainer/ui-lovelace.yaml",
+    "url": "https://github.com/ezand/lovelace-posten-card/blob/741773a2ae8e6ea10ff6e507b0a67eff15d0bc99/.devcontainer/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "hazzap123/haiven",
+  "files": [
+   {
+    "path": "lovelace/haiven_default.yaml",
+    "url": "https://github.com/hazzap123/haiven/blob/9340634eff178c72e28f0373540f20e383231496/lovelace/haiven_default.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "JulianBarth/home_assistant_config",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/JulianBarth/home_assistant_config/blob/ac5c6bad8b2edd3861d0dd5d9436d791c000289c/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Maneridiet/home-assistant-blueprints",
+  "files": [
+   {
+    "path": "dashboards/maneridiets_homescreen.yaml",
+    "url": "https://github.com/Maneridiet/home-assistant-blueprints/blob/2919d81d0de5358ab1af4eab6b04a1f74f221448/dashboards/maneridiets_homescreen.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "cheynespc/Home-Assistant",
+  "files": [
+   {
+    "path": "lovelace/home_screen_desktop.yaml",
+    "url": "https://github.com/cheynespc/Home-Assistant/blob/d4722e678aa94f9a5e8987c1718206b5a1d271bb/lovelace/home_screen_desktop.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "jerkovicl/homeassistant-config",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/jerkovicl/homeassistant-config/blob/04b0999ca2c560f6617590f85196fd6dcda0b491/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Ahmed9190/webrtc_voice_sending_ha",
+  "files": [
+   {
+    "path": "config/ui-lovelace.yaml",
+    "url": "https://github.com/Ahmed9190/webrtc_voice_sending_ha/blob/59969481b9e4da907e333c23edeabc353507686f/config/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "noisufnoc/home-assistant-config",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml.old",
+    "url": "https://github.com/noisufnoc/home-assistant-config/blob/62a2b27818538f4ac754aa23ba8b3b1f7afbcd7c/ui-lovelace.yaml.old"
+   }
+  ]
+ },
+ {
+  "repo": "anujkumarnath/home-assistant",
+  "files": [
+   {
+    "path": "config/ui-lovelace.yaml",
+    "url": "https://github.com/anujkumarnath/home-assistant/blob/660abc88b9b9ab948def41121741f1c2ebfa99cc/config/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "morgeek/HA-Plugin-pour-Eau-du-Grand-Lyon",
+  "files": [
+   {
+    "path": "lovelace/energy_dashboard_preset.yaml",
+    "url": "https://github.com/morgeek/HA-Plugin-pour-Eau-du-Grand-Lyon/blob/316be2d23b77f890d9b0bfbad7a5daacac4a9e8b/lovelace/energy_dashboard_preset.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Norien/Home-Assistant-Config",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/Norien/Home-Assistant-Config/blob/f2affdaa0d0d5a056c8c79a62b0196fa343a7836/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "TRPostma/apexcharts-card-zonneplan",
+  "files": [
+   {
+    "path": "test/ui-lovelace.yaml",
+    "url": "https://github.com/TRPostma/apexcharts-card-zonneplan/blob/668d94d6c983b9caae39299dc69a2028f1372db9/test/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "robinbohnen/home-assistant",
+  "files": [
+   {
+    "path": "dashboards/home/dashboard.yaml",
+    "url": "https://github.com/robinbohnen/home-assistant/blob/a0f0fd97c97fb1d9655e0b361c5d1340b8760d5a/dashboards/home/dashboard.yaml"
+   },
+   {
+    "path": "dashboards/home/kamers.yaml",
+    "url": "https://github.com/robinbohnen/home-assistant/blob/a0f0fd97c97fb1d9655e0b361c5d1340b8760d5a/dashboards/home/kamers.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "kyleparisi/home-assistant-config",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/kyleparisi/home-assistant-config/blob/8f3cfedf46aa105d96708712a3ceb8b130adabc2/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "FaserF/homeassistant",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/FaserF/homeassistant/blob/b573d572da9746a388d5fb5f1cbd19af53f3fde4/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "gregose/opensprinkler-dashboard",
+  "files": [
+   {
+    "path": "dashboards/opensprinkler.yaml",
+    "url": "https://github.com/gregose/opensprinkler-dashboard/blob/947b9ae5bf1b8d4963737c9fbbd4f86e98dc36c7/dashboards/opensprinkler.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Se7enair/minimalist-dashboard",
+  "files": [
+   {
+    "path": "ui_lovelace_minimalist/dashboard/ui-lovelace.yaml",
+    "url": "https://github.com/Se7enair/minimalist-dashboard/blob/e952d8abbfc9eaba3c6c9603df4ef4481c2a2de2/ui_lovelace_minimalist/dashboard/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "arcanefoam/wiser-home-assistant",
+  "files": [
+   {
+    "path": "card/.devcontainer/ui-lovelace.yaml",
+    "url": "https://github.com/arcanefoam/wiser-home-assistant/blob/6b247b43e28f9601e1daa94cc9f7fcdf158abd54/card/.devcontainer/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Datenkrake/growassistant",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/Datenkrake/growassistant/blob/2fc1c9d6871c8b2b179fee965d2974824ed230b0/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "mhoyer/smart-home",
+  "files": [
+   {
+    "path": "homeassistant/ui-lovelace.yaml",
+    "url": "https://github.com/mhoyer/smart-home/blob/428413595ed5e28101186866c42c2f855aa162a8/homeassistant/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "JMack89427/home_assistant_stuff",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/JMack89427/home_assistant_stuff/blob/ccd8e9f0bba03607ad39f335b293189311440ebc/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "matt-sullivan/home-assistant-config",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/matt-sullivan/home-assistant-config/blob/cb032d0cf11458e71e9d079f1a499d28a03e8d88/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "konecnyna/ha-loading-button",
+  "files": [
+   {
+    "path": ".devcontainer/ui-lovelace.yaml",
+    "url": "https://github.com/konecnyna/ha-loading-button/blob/b00823f44074e71719e4e2356ed99be238d0ffd6/.devcontainer/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "SrSelse/homeassistant",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/SrSelse/homeassistant/blob/4fc01ff0a45262f465068cb305da2ba4f48cae68/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "jtbgroup/kodi-playlist-card",
+  "files": [
+   {
+    "path": ".devcontainer/ui-lovelace.yaml",
+    "url": "https://github.com/jtbgroup/kodi-playlist-card/blob/b526ac2d1f962b32ba38eb6314e296d08d3f81ed/.devcontainer/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Shah-Home/automation",
+  "files": [
+   {
+    "path": "dashboards/hemma/views/home.yaml",
+    "url": "https://github.com/Shah-Home/automation/blob/f68f9b08acc43692ee2d365ccd0dbbd9240fa808/dashboards/hemma/views/home.yaml"
+   },
+   {
+    "path": "dashboards/hemma/views/guest_bathroom.yaml",
+    "url": "https://github.com/Shah-Home/automation/blob/f68f9b08acc43692ee2d365ccd0dbbd9240fa808/dashboards/hemma/views/guest_bathroom.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "pkg40/greenboat-homeassistant",
+  "files": [
+   {
+    "path": "lovelace/lovelace.dashboard_searun.yaml",
+    "url": "https://github.com/pkg40/greenboat-homeassistant/blob/d72c0095203cc92448bdc1983a2ae4f9be8e6845/lovelace/lovelace.dashboard_searun.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "madmicio/trasparent-theme",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/madmicio/trasparent-theme/blob/0b31db83fe26db7a8484c9cc4e229b0757f22bb8/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Brons1981/PicoT-HEMS",
+  "files": [
+   {
+    "path": "lovelace/picot_technical_view.yaml",
+    "url": "https://github.com/Brons1981/PicoT-HEMS/blob/e62367c6dfba855262ed69736fa1196a9d033095/lovelace/picot_technical_view.yaml"
+   },
+   {
+    "path": "lovelace/picot_dashboard_v2.yaml",
+    "url": "https://github.com/Brons1981/PicoT-HEMS/blob/e62367c6dfba855262ed69736fa1196a9d033095/lovelace/picot_dashboard_v2.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "VirtualL/HomeAssistant-Config",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/VirtualL/HomeAssistant-Config/blob/e52be8f0a91f1412be87614b1dc77fce2795af7f/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "nip10/home-automation",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/nip10/home-automation/blob/058ca1db8b8061c1b9552c55ec5a3075679c3774/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "PiotrMachowski/Home-Assistant-Lovelace-Local-Conditional-card",
+  "files": [
+   {
+    "path": ".devcontainer/ui-lovelace.yaml",
+    "url": "https://github.com/PiotrMachowski/Home-Assistant-Lovelace-Local-Conditional-card/blob/1668965029313321aec5ea8431e8628ed48b8b90/.devcontainer/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "thomasdanielsson731/home-assistant-lab",
+  "files": [
+   {
+    "path": "config/home-assistant/ui-lovelace.yaml",
+    "url": "https://github.com/thomasdanielsson731/home-assistant-lab/blob/df5a9ce89501acaa417489258e0d05fbac188ed7/config/home-assistant/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "RssFra97/itchsblogHA",
+  "files": [
+   {
+    "path": "graphics/ui-lovelace.yaml",
+    "url": "https://github.com/RssFra97/itchsblogHA/blob/9ab71d0da2bacd393b5ec7839f086c5837bb901e/graphics/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Poeschl/P-Assistant-config",
+  "files": [
+   {
+    "path": "lovelace/lovelace.yaml",
+    "url": "https://github.com/Poeschl/P-Assistant-config/blob/cb5ac925f39da621b9a2ed1594ec6456f9f75c86/lovelace/lovelace.yaml"
+   },
+   {
+    "path": "lovelace/lovelace.lovelace_system.yaml",
+    "url": "https://github.com/Poeschl/P-Assistant-config/blob/cb5ac925f39da621b9a2ed1594ec6456f9f75c86/lovelace/lovelace.lovelace_system.yaml"
+   },
+   {
+    "path": "lovelace/lovelace.lovelace_stream.yaml",
+    "url": "https://github.com/Poeschl/P-Assistant-config/blob/cb5ac925f39da621b9a2ed1594ec6456f9f75c86/lovelace/lovelace.lovelace_stream.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "nmaupu/hass-config",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/nmaupu/hass-config/blob/c4dcb35ae6e2507ac7efdda86212531ba7a3f87b/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "sameeraman/HomeAssistant",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/sameeraman/HomeAssistant/blob/c2b3a367d690a5ec7804f98a21bc73df2fa5bcbf/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "V1d1o7/NY1-P-HOMEASSISTANT-01",
+  "files": [
+   {
+    "path": "lovelace/lovelace.control_center.yaml",
+    "url": "https://github.com/V1d1o7/NY1-P-HOMEASSISTANT-01/blob/3377da7945435f9ff5266fdba0e96bdbee669a0f/lovelace/lovelace.control_center.yaml"
+   },
+   {
+    "path": "lovelace/lovelace.switches_relays.yaml",
+    "url": "https://github.com/V1d1o7/NY1-P-HOMEASSISTANT-01/blob/3377da7945435f9ff5266fdba0e96bdbee669a0f/lovelace/lovelace.switches_relays.yaml"
+   },
+   {
+    "path": "lovelace/lovelace.tbr_dashboard.yaml",
+    "url": "https://github.com/V1d1o7/NY1-P-HOMEASSISTANT-01/blob/3377da7945435f9ff5266fdba0e96bdbee669a0f/lovelace/lovelace.tbr_dashboard.yaml"
+   },
+   {
+    "path": "lovelace/lovelace.dashboard_clark.yaml",
+    "url": "https://github.com/V1d1o7/NY1-P-HOMEASSISTANT-01/blob/3377da7945435f9ff5266fdba0e96bdbee669a0f/lovelace/lovelace.dashboard_clark.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "daredoes/lovelace-various-buttons-card",
+  "files": [
+   {
+    "path": ".devcontainer/ui-lovelace.yaml",
+    "url": "https://github.com/daredoes/lovelace-various-buttons-card/blob/17d68085c7b92e8a90f2276cd8c56db5cfd9360a/.devcontainer/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "Gulianrdgd/findmy-pet-card",
+  "files": [
+   {
+    "path": "dev/config/ui-lovelace.yaml",
+    "url": "https://github.com/Gulianrdgd/findmy-pet-card/blob/90dc43d46420115586905470c8be6086c20f1cee/dev/config/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "avassem85/HomeAssistantConfiguration",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/avassem85/HomeAssistantConfiguration/blob/aee66e5493ec97fab39e411f4a959a34a5cfa54e/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "diymoica/DmDose",
+  "files": [
+   {
+    "path": "dashboards/dashboard_dmd_mobile_en.yaml",
+    "url": "https://github.com/diymoica/DmDose/blob/ff950d75b3a38e9ae0f8e698ce8b2f6a921a366e/dashboards/dashboard_dmd_mobile_en.yaml"
+   },
+   {
+    "path": "dashboards/dashboard_dmd_mobile_fr.yaml",
+    "url": "https://github.com/diymoica/DmDose/blob/ff950d75b3a38e9ae0f8e698ce8b2f6a921a366e/dashboards/dashboard_dmd_mobile_fr.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "uherting/MyHA-Configuration",
+  "files": [
+   {
+    "path": "custom_components/linus_dashboard/lovelace/ui-lovelace.yaml",
+    "url": "https://github.com/uherting/MyHA-Configuration/blob/ee42681e322d2fceb323eb2a2880a86db6307e8d/custom_components/linus_dashboard/lovelace/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "johannesWen/KEBA-Heat-Pump-Modbus-Integration",
+  "files": [
+   {
+    "path": "dev/ui-lovelace.yaml",
+    "url": "https://github.com/johannesWen/KEBA-Heat-Pump-Modbus-Integration/blob/a72b4991df062d5133303030852114b82afba001/dev/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "LucaKaufmann/Home-AssistantConfig",
+  "files": [
+   {
+    "path": "ui-lovelace.yaml",
+    "url": "https://github.com/LucaKaufmann/Home-AssistantConfig/blob/3be0ab0a91a2ff188abf1e0a9d0dd4dea7d30d45/ui-lovelace.yaml"
+   }
+  ]
+ },
+ {
+  "repo": "custom-cards/stack-in-card",
+  "files": [
+   {
+    "path": ".devcontainer/ui-lovelace.yaml",
+    "url": "https://github.com/custom-cards/stack-in-card/blob/6d8401dd2c90f25565bfc5e913dff262ddd331ef/.devcontainer/ui-lovelace.yaml"
+   }
+  ]
+ }
+]
