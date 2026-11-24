@@ -11,7 +11,7 @@ description: >-
 
 # Rewrite a Home Assistant Dashboard to Be 100% Vitro-Native
 
-Glassworks' **Vitro** engine renders **31 built-in Lovelace cards (Tier 1)** and **12 popular HACS cards (Tier 2)** directly in native Android Views with zero browser overhead (~114 MB RAM vs ~636 MB with GeckoView). Any unrecognized `custom:*` card triggers a **Tier 3 GeckoView micro-island**, which spins up the full browser engine and wipes out the memory savings.
+Glassworks' **Vitro** engine renders **31 built-in Lovelace cards (Tier 1)** and **26 popular HACS cards (Tier 2)** directly in native Android Views with zero browser overhead (~114 MB RAM vs ~636 MB with GeckoView). Any unrecognized `custom:*` card triggers a **Tier 3 GeckoView micro-island**, which spins up the full browser engine and wipes out the memory savings.
 
 Use this workflow to rewrite an existing dashboard into a **100% Vitro-native** dashboard and theme that keeps the same visual layout, aesthetic, entities, and actions with **zero Tier 3 GeckoView triggers**.
 
@@ -44,7 +44,7 @@ If the dashboard uses a custom JS panel card (for example `/config/www/mirror-da
 Follow these rules strictly so GeckoView never loads:
 
 - **Use ONLY Tier 1 core cards and Tier 2 native HACS cards.** Every supported type is listed in [references/card-migration-map.md](./references/card-migration-map.md).
-- **Replace custom layouts with HA Sections (`type: sections`).** Use `max_columns`, `column_span`, `grid_options`, `grid`, `horizontal-stack`, `vertical-stack`, and `heading` instead of `custom:layout-card`, `custom:stack-in-card`, or full-screen custom panel JS.
+- **Replace custom layouts with HA Sections (`type: sections`).** Use `max_columns`, `column_span`, `grid_options`, `grid`, `horizontal-stack`, `vertical-stack`, and `heading` instead of full-screen custom panel JS. `custom:layout-card`, `custom:stack-in-card` and `custom:vertical-stack-in-card` render natively too, so an existing one can stay.
 - **Replace JS presence/mode switching with native `visibility:` conditions.** Both sections and individual cards support HA `visibility:` (`condition: state`, `numeric_state`, `and`, `or`, `not`, `screen`).
   - For a **two-way mirror presence hold** (where camera motion clears after 8 seconds): back the visibility condition with a Home Assistant `binary_sensor` / `input_boolean` or template helper with `delay_off: "00:01:00"` (HA stays the brain — no custom JS timer required).
   - Put the full room-empty layout in sections with `visibility: [{ condition: state, entity: binary_sensor.mirror_occupied, state: "off" }]`, and the slim occupied status strip in a section with `state: "on"`.

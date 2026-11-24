@@ -33,7 +33,7 @@ describe("the published compatibility manifest", () => {
 
   it("lists the HACS cards the Vitro engine draws natively, verbatim", () => {
     expect(published.nativeHacsTypes).toEqual(kotlinSet("NATIVE_HACS_TYPES"));
-    expect(published.nativeHacsTypes).toHaveLength(14);
+    expect(published.nativeHacsTypes).toHaveLength(26);
   });
 
   it("matches the audit script's lists", () => {
@@ -42,11 +42,12 @@ describe("the published compatibility manifest", () => {
     expect(new Set(published.supportedTileFeatures)).toEqual(new Set(pythonSet("SUPPORTED_TILE_FEATURES")));
     expect(new Set(published.containerTypes)).toEqual(new Set(pythonSet("CONTAINER_TYPES")));
     expect(published.supportedTileFeatures).toHaveLength(14);
-    expect(published.containerTypes).toHaveLength(4);
+    expect(published.containerTypes).toHaveLength(7);
   });
 
   it("walks the same containers the engine flattens", () => {
-    expect(kotlin).toContain('setOf("grid", "horizontal-stack", "vertical-stack", "conditional")');
+    expect(published.containerTypes).toEqual(kotlinSet("CONTAINER_TYPES"));
+    expect(kotlin).toContain("c.type in CONTAINER_TYPES");
   });
 });
 

@@ -7,7 +7,7 @@ Every card below renders 100% natively in Vitro with **zero GeckoView**.
 - **Controls & summaries:** `tile`, `entities`, `glance`, `button`, `entity`, `light`, `thermostat`, `humidifier`, `alarm-panel`, `media-control`, `todo-list`, `area`
 - **Information & media:** `heading`, `clock`, `sensor`, `gauge`, `weather-forecast`, `history-graph`, `statistics-graph`, `calendar`, `logbook`, `markdown` (rendered natively: headings, tables, lists, quotes, rules, `<font color>`, `<center>` and inline `<ha-icon>`, with HA server-side Jinja2 templates via `render_template`)
 - **Images & floorplans:** `picture`, `picture-entity`, `picture-glance`, `picture-elements` (`state-icon`, `state-label`, `state-badge`, `icon`, `service-button`)
-- **Layout & filtering:** `grid`, `horizontal-stack`, `vertical-stack`, `conditional`, `entity-filter`
+- **Layout & filtering:** `grid`, `horizontal-stack`, `vertical-stack`, `conditional`, `entity-filter` (plus the Tier 2 containers `custom:stack-in-card`, `custom:vertical-stack-in-card` and `custom:layout-card`, whose children are audited like any stack's)
 
 ### Supported Inline `tile` Features (14)
 
@@ -32,7 +32,7 @@ Every card below renders 100% natively in Vitro with **zero GeckoView**.
 - View `badges` (rendered as compact top status pills) and `subview: true` (back-arrow navigation)
 - `visibility:` on sections and cards (`state`, `numeric_state`, `and`, `or`, `not`, `screen`)
 
-## Tier 2: Native HACS Fast-Path Cards (14)
+## Tier 2: Native HACS Fast-Path Cards (26)
 
 - `custom:mushroom-entity-card`
 - `custom:mushroom-light-card`
@@ -43,11 +43,23 @@ Every card below renders 100% natively in Vitro with **zero GeckoView**.
 - `custom:mushroom-fan-card`
 - `custom:mushroom-cover-card`
 - `custom:mushroom-person-card`
-- `custom:bubble-card`
+- `custom:bubble-card` (`sub_button:` icon/state buttons with their own `entity`, `show_state`, `show_background`, `tap_action`, `hold_action`)
 - `custom:mini-graph-card`
 - `custom:clock-weather-card`
 - `custom:modern-circular-gauge` (`gauge_type` `standard` / `half` / `full`, `min`, `max`, `segments`, `smooth_segments`, `start_from_zero`, `secondary`)
 - `custom:bar-card` (`entity` or `entities`, `min`, `max`, `height`, `color`, `severity: [{from, to, color}]`, `positions: {icon, name, value}`)
+- `custom:mushroom-media-player-card` (`use_media_info`, `show_volume_level`, `media_controls`, `volume_controls`)
+- `custom:mushroom-lock-card` (lock / unlock / open)
+- `custom:mushroom-alarm-control-panel-card` (`states:` arm pills, disarm)
+- `custom:mushroom-vacuum-card` (`commands`: `on_off`, `start_pause`, `stop`, `locate`, `clean_spot`, `return_home`)
+- `custom:mushroom-humidifier-card` (`show_target_humidity_control`, icon toggle)
+- `custom:mushroom-number-card` (`display_mode: slider | buttons`)
+- `custom:mushroom-select-card` (dropdown of the entity's options)
+- `custom:mini-media-player` (`artwork: default | cover | full-cover | material | none`, `hide:`, `volume_stateless`, live progress)
+- `custom:auto-entities` (`filter.include` / `exclude` on `domain`, `entity_id`, `state`, `name`, `attributes`, `group`, `not`/`or`/`and`; globs, `/regex/`, `< > <= >= != ==`; `sort`; `card`, `card_param`, `show_empty`, `unique`)
+- `custom:stack-in-card` (`mode: vertical | horizontal`, `title`, `keep: {background, border_radius, margin}`)
+- `custom:vertical-stack-in-card` (`title`, `horizontal`)
+- `custom:layout-card` (`custom:grid-layout` with `grid-template-columns`, `grid-gap`, `mediaquery`, `view_layout.grid-column`; `custom:horizontal-layout` with `max_cols` / `width`; `custom:vertical-layout` with `column_break`)
 
 ## Tier 3 → Native Migration Map
 
@@ -55,10 +67,7 @@ Every card below renders 100% natively in Vitro with **zero GeckoView**.
 |---|---|---|
 | Full-screen custom JS panel (`custom:mirror-home-card`, `custom:tablet-home-card`) | `type: sections` + `clock`, `weather-forecast`, `tile`, `media-control`, `calendar`, `todo-list`, `markdown`, `custom:mushroom-chips-card` + YAML theme | Use `visibility:` conditions for presence-driven layout switching |
 | `custom:button-card` | `tile`, `button`, `custom:mushroom-entity-card`, `custom:mushroom-template-card`, or `custom:bubble-card` | Use `custom:mushroom-template-card` or `markdown` for Jinja2 labels/icons |
-| `custom:mini-media-player` | `media-control` or `tile` with `media-player-volume-slider` | Native `media-control` includes artwork backdrop, transport, volume, and live progress |
 | `custom:apexcharts-card` | `custom:mini-graph-card`, `history-graph`, or `statistics-graph` | All three render natively on Android Canvas |
-| `custom:auto-entities` | `entity-filter` or `entities` / `sections` with `visibility:` | `entity-filter` dynamically hides/shows rows matching `state_filter` |
-| `custom:layout-card`, `custom:stack-in-card`, `custom:vertical-stack-in-card` | `type: sections` (`max_columns`, `column_span`) + `grid` / `horizontal-stack` / `vertical-stack` | Native Sections handles responsive multi-column grids cleanly |
 | `custom:mod-card` / Shadow-DOM `card-mod` | HA YAML theme + container-level `card-mod` | Vitro natively applies `background`, `border-radius`, `border`, `opacity` on `ha-card` |
 | `custom:ha-floorplan` | `picture-elements` | Supports `state-icon`, `state-label`, `state-badge`, `icon`, and `service-button` overlays |
 

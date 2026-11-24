@@ -2501,6 +2501,10 @@ class BubbleCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
             }
             row.addView(circle, LinearLayout.LayoutParams(ctx.px(38f), ctx.px(38f)).apply { marginEnd = ctx.px(12f) })
             row.addView(textCol, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            bubbleSubButtons(ctx, config) { id, onState -> observe(id, onState) }?.let { subs ->
+                row.setPadding(ctx.px(10f), ctx.px(10f), ctx.px(10f), ctx.px(10f))
+                row.addView(subs, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(8f) })
+            }
             addView(row, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
             val eid = config.entity

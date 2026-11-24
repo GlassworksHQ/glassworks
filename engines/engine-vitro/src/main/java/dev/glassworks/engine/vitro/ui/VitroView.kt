@@ -23,6 +23,19 @@ import android.widget.ScrollView
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.AlarmPanelCardView
 import dev.glassworks.engine.vitro.cards.AreaCardView
+import dev.glassworks.engine.vitro.cards.AutoEntitiesCardView
+import dev.glassworks.engine.vitro.cards.CardBuilder
+import dev.glassworks.engine.vitro.cards.LayoutCardView
+import dev.glassworks.engine.vitro.cards.MiniMediaPlayerCardView
+import dev.glassworks.engine.vitro.cards.MushroomAlarmControlPanelCardView
+import dev.glassworks.engine.vitro.cards.MushroomHumidifierCardView
+import dev.glassworks.engine.vitro.cards.MushroomLockCardView
+import dev.glassworks.engine.vitro.cards.MushroomMediaPlayerCardView
+import dev.glassworks.engine.vitro.cards.MushroomNumberCardView
+import dev.glassworks.engine.vitro.cards.MushroomSelectCardView
+import dev.glassworks.engine.vitro.cards.MushroomVacuumCardView
+import dev.glassworks.engine.vitro.cards.StackInCardView
+import dev.glassworks.engine.vitro.cards.VerticalStackInCardView
 import dev.glassworks.engine.vitro.cards.BarCardView
 import dev.glassworks.engine.vitro.cards.BubbleCardView
 import dev.glassworks.engine.vitro.cards.ButtonCardView
@@ -201,6 +214,7 @@ class VitroView(
     }
 
     init {
+        MdiIcons.init(context)
         setBackgroundColor(backgroundColor)
         tabScroll.addView(tabBar, LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
         shell.addView(tabScroll, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -811,7 +825,8 @@ class VitroView(
         "light", "statistics-graph", "todo-list", "picture-elements", "calendar", "logbook" -> 6
         "humidifier" -> 7
         "alarm-panel" -> 8
-        "grid" -> card.childCards.size * 2
+        "grid", "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card" -> card.childCards.size * 2
+        "custom:mini-media-player", "custom:mushroom-media-player-card", "custom:auto-entities" -> 4
         else -> 2
     }
 
@@ -822,6 +837,7 @@ class VitroView(
         } else {
             parentCtx
         }
+        val childBuilder: CardBuilder = { child -> wrapVisibility(child, buildCard(child, ctx, false), ctx) }
         val built: View = when (card.type) {
             // Layout containers
             "vertical-stack" -> LinearLayout(context).apply {
@@ -898,6 +914,18 @@ class VitroView(
             "custom:clock-weather-card" -> WeatherCardView(ctx, card)
             "custom:modern-circular-gauge" -> ModernCircularGaugeCardView(ctx, card)
             "custom:bar-card" -> BarCardView(ctx, card)
+            "custom:mushroom-media-player-card" -> MushroomMediaPlayerCardView(ctx, card)
+            "custom:mushroom-lock-card" -> MushroomLockCardView(ctx, card)
+            "custom:mushroom-alarm-control-panel-card" -> MushroomAlarmControlPanelCardView(ctx, card)
+            "custom:mushroom-vacuum-card" -> MushroomVacuumCardView(ctx, card)
+            "custom:mushroom-humidifier-card" -> MushroomHumidifierCardView(ctx, card)
+            "custom:mushroom-number-card" -> MushroomNumberCardView(ctx, card)
+            "custom:mushroom-select-card" -> MushroomSelectCardView(ctx, card)
+            "custom:mini-media-player" -> MiniMediaPlayerCardView(ctx, card)
+            "custom:auto-entities" -> AutoEntitiesCardView(ctx, card, childBuilder)
+            "custom:stack-in-card" -> StackInCardView(ctx, card, childBuilder)
+            "custom:vertical-stack-in-card" -> VerticalStackInCardView(ctx, card, childBuilder)
+            "custom:layout-card" -> LayoutCardView(ctx, card, childBuilder)
             // Tier 3: Arbitrary unrecognized custom cards -> stripped Micro-Web Island
             else -> WebIslandCardView(ctx, card, fillViewport = fillViewport)
         }

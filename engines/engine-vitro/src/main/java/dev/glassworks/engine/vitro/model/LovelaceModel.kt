@@ -400,7 +400,31 @@ object CardRouter {
         "custom:clock-weather-card",
         "custom:modern-circular-gauge",
         "custom:bar-card",
+        "custom:mushroom-media-player-card",
+        "custom:mushroom-lock-card",
+        "custom:mushroom-alarm-control-panel-card",
+        "custom:mushroom-vacuum-card",
+        "custom:mushroom-humidifier-card",
+        "custom:mushroom-number-card",
+        "custom:mushroom-select-card",
+        "custom:mini-media-player",
+        "custom:auto-entities",
+        "custom:stack-in-card",
+        "custom:vertical-stack-in-card",
+        "custom:layout-card",
     )
+
+    /**
+     * Cards that only lay out the cards in their `cards:` list. [tierCounts] counts what is inside them, not the
+     * container, so a Tier 3 card inside a `stack-in-card` still shows up as an island.
+     */
+    val CONTAINER_TYPES = setOf(
+        "grid", "horizontal-stack", "vertical-stack", "conditional",
+        "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card",
+    )
+
+    /** Cards that pick their entities at runtime from the whole state machine (`auto-entities` filters). */
+    private val FOLLOWS_ALL_TYPES = setOf("custom:auto-entities")
 
     fun tier(card: CardConfig): CardTier = when {
         card.type in NATIVE_CORE_TYPES -> CardTier.NATIVE_CORE
@@ -416,7 +440,7 @@ object CardRouter {
             CardTier.WEB_ISLAND to 0,
         )
         fun walk(c: CardConfig) {
-            if (c.childCards.isNotEmpty() && c.type in setOf("grid", "horizontal-stack", "vertical-stack", "conditional")) {
+            if (c.childCards.isNotEmpty() && c.type in CONTAINER_TYPES) {
                 c.childCards.forEach(::walk)
             } else {
                 val t = tier(c)
@@ -426,6 +450,16 @@ object CardRouter {
         view.sections.forEach { s -> s.cards.forEach(::walk) }
         view.cards.forEach(::walk)
         return counts
+    }
+
+    /**
+     * True when a card in [view] chooses its entities at runtime (`custom:auto-entities`), so the view must follow
+     * every entity rather than only the ones [referencedEntities] names.
+     */
+    fun followsAllEntities(view: ViewConfig): Boolean {
+        fun walk(c: CardConfig): Boolean = c.type in FOLLOWS_ALL_TYPES || c.childCards.any(::walk) ||
+            (c.type.startsWith("custom:") && c.raw.optJSONObject("card")?.optString("type") in FOLLOWS_ALL_TYPES)
+        return view.sections.any { s -> s.cards.any(::walk) } || view.cards.any(::walk)
     }
 
     private val ENTITY_ID_PATTERN = Regex("""^[a-z][a-z0-9_]*\.[a-z0-9_]+$""")
@@ -557,7 +591,8 @@ object LovelaceParser {
     fun parseCard(raw: JSONObject): CardConfig {
         val type = raw.optString("type", "entities").ifEmpty { "entities" }
         val children = when (type) {
-            "grid", "horizontal-stack", "vertical-stack" -> parseCards(raw.optJSONArray("cards"))
+            "grid", "horizontal-stack", "vertical-stack",
+            "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card" -> parseCards(raw.optJSONArray("cards"))
             "conditional" -> listOfNotNull(raw.optJSONObject("card")?.let(::parseCard))
             else -> emptyList()
         }

@@ -1,0 +1,487 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+package dev.glassworks.engine.vitro
+
+import android.app.Activity
+import android.app.Application
+import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.TextView
+import dev.glassworks.engine.vitro.cards.AutoEntitiesCardView
+import dev.glassworks.engine.vitro.cards.AutoEntitiesFilter
+import dev.glassworks.engine.vitro.cards.BubbleCardView
+import dev.glassworks.engine.vitro.cards.LayoutCardView
+import dev.glassworks.engine.vitro.cards.MiniMediaPlayerCardView
+import dev.glassworks.engine.vitro.cards.MushroomAlarmControlPanelCardView
+import dev.glassworks.engine.vitro.cards.MushroomHumidifierCardView
+import dev.glassworks.engine.vitro.cards.MushroomLockCardView
+import dev.glassworks.engine.vitro.cards.MushroomMediaPlayerCardView
+import dev.glassworks.engine.vitro.cards.MushroomNumberCardView
+import dev.glassworks.engine.vitro.cards.MushroomSelectCardView
+import dev.glassworks.engine.vitro.cards.MushroomVacuumCardView
+import dev.glassworks.engine.vitro.cards.StackInCardView
+import dev.glassworks.engine.vitro.cards.VerticalStackInCardView
+import dev.glassworks.engine.vitro.data.EntityState
+import dev.glassworks.engine.vitro.data.EntityStore
+import dev.glassworks.engine.vitro.model.CardConfig
+import dev.glassworks.engine.vitro.model.CardRouter
+import dev.glassworks.engine.vitro.model.CardTier
+import dev.glassworks.engine.vitro.model.LovelaceParser
+import dev.glassworks.engine.vitro.theme.ThemeCatalog
+import dev.glassworks.engine.vitro.theme.ThemeResolver
+import dev.glassworks.engine.vitro.ui.CardSurface
+import dev.glassworks.engine.vitro.ui.MdiIcons
+import dev.glassworks.engine.vitro.ui.VitroCardContext
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLooper
+
+/** The 7,447-icon MDI catalog and the Tier 2 wave: Mushroom controls, mini-media-player, auto-entities, stacks, Bubble sub-buttons. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class)
+class HacsParityWaveTest {
+    private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
+
+    /** One HA service call a card made. */
+    data class Call(val service: String, val data: JSONObject) {
+        val entityId: String get() = data.optString("entity_id")
+    }
+
+    private val calls = ArrayList<Call>()
+    private val actions = ArrayList<String>()
+
+    private fun context(store: EntityStore) = VitroCardContext(
+        context = activity,
+        haBase = FakeHaServer.BASE,
+        store = store,
+        theme = ThemeResolver.resolve(ThemeCatalog(), true),
+        resources = emptyList(),
+        accessToken = { FakeHaServer.TOKEN },
+        callService = { domain, service, data, _ -> calls += Call("$domain.$service", data ?: JSONObject()) },
+        navigate = { actions += "navigate:$it" },
+        openMoreInfo = { actions += "more-info:$it" },
+        fetchHistory = { _, _, _ -> },
+        subscribeTemplate = { _, _ -> {} },
+    )
+
+    private fun card(json: String) = LovelaceParser.parseCard(JSONObject(json))
+
+    private fun entity(id: String, state: String, vararg attrs: Pair<String, Any?>) =
+        EntityState(id, state, mapOf("friendly_name" to id.substringAfter('.').replace('_', ' ')) + attrs)
+
+    private fun store(vararg states: EntityState) = EntityStore().apply { states.forEach(::putLocal) }
+
+    private fun idle() = ShadowLooper.idleMainLooper()
+
+    private fun View.all(): List<View> {
+        val out = ArrayList<View>()
+        out += this
+        if (this is ViewGroup) for (i in 0 until childCount) out += getChildAt(i).all()
+        return out
+    }
+
+    private fun View.click(description: String) {
+        val v = all().firstOrNull { it.contentDescription?.toString() == description && it.visibility == View.VISIBLE }
+        assertNotNull("no visible '$description' in ${all().mapNotNull { it.contentDescription }}", v)
+        assertTrue(v!!.performClick())
+    }
+
+    private fun View.texts(): List<String> = all().filterIsInstance<TextView>().filter { it.visibility == View.VISIBLE }.map { it.text.toString() }
+
+    // ---- MDI catalog ----
+
+    @Test
+    fun theBundledCatalogHoldsAllOfficialIcons() {
+        MdiIcons.init(activity)
+        assertEquals(7447, MdiIcons.catalogSize())
+        for (n in listOf("robot-vacuum-variant", "doorbell-video", "ev-station", "circle", "flash-alert", "wrench", "information-outline")) {
+            assertTrue("missing $n", MdiIcons.has(n))
+            assertTrue("mdi:$n", MdiIcons.has("mdi:$n"))
+        }
+        // Official path data, as Home Assistant draws it (not the hand-drawn built-in `circle`).
+        assertEquals("M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z", MdiIcons.pathDataFor("mdi:circle"))
+        assertTrue(MdiIcons.names().size >= 7447)
+        assertFalse(MdiIcons.has("mdi:definitely-not-an-icon"))
+        assertEquals(MdiIcons.pathDataFor("home"), MdiIcons.pathDataFor("mdi:definitely-not-an-icon"))
+        // Registered glyphs still win over the catalog.
+        MdiIcons.register("mdi:vitro-wave-test", "M0 0L24 24H0Z")
+        assertEquals("M0 0L24 24H0Z", MdiIcons.pathDataFor("vitro-wave-test"))
+        assertNotNull(MdiIcons.pathFor("mdi:ev-station"))
+    }
+
+    // ---- Mushroom ----
+
+    @Test
+    fun mushroomLockCallsLockAndUnlock() {
+        val st = store(entity("lock.front_door", "locked"))
+        val card = MushroomLockCardView(context(st), card("""{"type": "custom:mushroom-lock-card", "entity": "lock.front_door"}"""))
+        idle()
+        assertTrue("Locked" in card.texts())
+        card.click("Unlock")
+        assertEquals("lock.unlock", calls.last().service)
+        assertEquals("lock.front_door", calls.last().entityId)
+
+        st.putLocal(entity("lock.front_door", "unlocked"))
+        idle()
+        card.click("Lock")
+        assertEquals("lock.lock", calls.last().service)
+    }
+
+    @Test
+    fun mushroomAlarmArmsTheConfiguredStatesAndDisarms() {
+        val st = store(entity("alarm_control_panel.home", "disarmed"))
+        val card = MushroomAlarmControlPanelCardView(
+            context(st),
+            card("""{"type": "custom:mushroom-alarm-control-panel-card", "entity": "alarm_control_panel.home", "states": ["armed_home", "armed_away", "armed_night"]}"""),
+        )
+        idle()
+        card.click("Arm night")
+        assertEquals("alarm_control_panel.alarm_arm_night", calls.last().service)
+        card.click("Arm away")
+        assertEquals("alarm_control_panel.alarm_arm_away", calls.last().service)
+
+        st.putLocal(entity("alarm_control_panel.home", "armed_away"))
+        idle()
+        assertTrue("Armed away" in card.texts())
+        card.click("Disarm")
+        assertEquals("alarm_control_panel.alarm_disarm", calls.last().service)
+    }
+
+    @Test
+    fun mushroomVacuumRunsItsCommands() {
+        val st = store(entity("vacuum.robo", "docked", "battery_level" to 85))
+        val card = MushroomVacuumCardView(
+            context(st),
+            card("""{"type": "custom:mushroom-vacuum-card", "entity": "vacuum.robo", "commands": ["start_pause", "stop", "locate", "clean_spot", "return_home"]}"""),
+        )
+        idle()
+        assertTrue(card.texts().any { "85%" in it })
+        card.click("Start")
+        assertEquals("vacuum.start", calls.last().service)
+        st.putLocal(entity("vacuum.robo", "cleaning", "battery_level" to 80))
+        idle()
+        card.click("Pause")
+        assertEquals("vacuum.pause", calls.last().service)
+        card.click("Stop"); assertEquals("vacuum.stop", calls.last().service)
+        card.click("Locate"); assertEquals("vacuum.locate", calls.last().service)
+        card.click("Clean spot"); assertEquals("vacuum.clean_spot", calls.last().service)
+        card.click("Return home"); assertEquals("vacuum.return_to_base", calls.last().service)
+    }
+
+    @Test
+    fun mushroomHumidifierTogglesAndShowsTheTarget() {
+        val st = store(entity("humidifier.bedroom", "on", "humidity" to 45, "current_humidity" to 38, "min_humidity" to 30, "max_humidity" to 80))
+        val card = MushroomHumidifierCardView(
+            context(st),
+            card("""{"type": "custom:mushroom-humidifier-card", "entity": "humidifier.bedroom", "show_target_humidity_control": true}"""),
+        )
+        idle()
+        assertTrue(card.texts().any { "Target 45%" in it && "38%" in it })
+        card.click("Toggle")
+        assertEquals("humidifier.toggle", calls.last().service)
+        assertEquals("humidifier.bedroom", calls.last().entityId)
+    }
+
+    @Test
+    fun mushroomNumberStepsWithinTheEntityRange() {
+        val st = store(entity("input_number.volume", "10", "min" to 0, "max" to 11, "step" to 1))
+        val card = MushroomNumberCardView(
+            context(st),
+            card("""{"type": "custom:mushroom-number-card", "entity": "input_number.volume", "display_mode": "buttons"}"""),
+        )
+        idle()
+        assertTrue("10" in card.texts())
+        card.click("Increase")
+        assertEquals("input_number.set_value", calls.last().service)
+        assertEquals(11L, calls.last().data.getLong("value"))
+        st.putLocal(entity("input_number.volume", "11", "min" to 0, "max" to 11, "step" to 1))
+        idle()
+        card.click("Increase")
+        assertEquals(11L, calls.last().data.getLong("value")) // clamped at max
+        card.click("Decrease")
+        assertEquals(10L, calls.last().data.getLong("value"))
+
+        val num = store(entity("number.fan_speed", "2.5", "min" to 0, "max" to 5, "step" to 0.5))
+        val n = MushroomNumberCardView(context(num), card("""{"type": "custom:mushroom-number-card", "entity": "number.fan_speed", "display_mode": "buttons"}"""))
+        idle()
+        n.click("Decrease")
+        assertEquals("number.set_value", calls.last().service)
+        assertEquals(2.0, calls.last().data.getDouble("value"), 1e-9)
+    }
+
+    @Test
+    fun mushroomSelectPicksAnOption() {
+        val st = store(entity("input_select.mode", "Home", "options" to listOf("Home", "Away", "Night")))
+        val card = MushroomSelectCardView(context(st), card("""{"type": "custom:mushroom-select-card", "entity": "input_select.mode"}"""))
+        idle()
+        assertTrue("Home" in card.texts())
+        assertEquals(listOf("Home", "Away", "Night"), card.options())
+        card.choose("Night")
+        assertEquals("input_select.select_option", calls.last().service)
+        assertEquals("Night", calls.last().data.getString("option"))
+
+        val sel = store(entity("select.preset", "eco", "options" to listOf("eco", "boost")))
+        MushroomSelectCardView(context(sel), card("""{"type": "custom:mushroom-select-card", "entity": "select.preset"}""")).choose("boost")
+        assertEquals("select.select_option", calls.last().service)
+    }
+
+    @Test
+    fun mushroomMediaPlayerShowsMediaInfoAndControls() {
+        val st = store(
+            entity("media_player.kitchen", "playing", "media_title" to "So What", "media_artist" to "Miles Davis", "volume_level" to 0.42, "is_volume_muted" to false),
+        )
+        val card = MushroomMediaPlayerCardView(
+            context(st),
+            card(
+                """{"type": "custom:mushroom-media-player-card", "entity": "media_player.kitchen", "use_media_info": true,
+                   "show_volume_level": true, "media_controls": ["on_off", "previous", "play_pause_stop", "next"],
+                   "volume_controls": ["volume_mute", "volume_set", "volume_buttons"]}""",
+            ),
+        )
+        idle()
+        assertTrue("So What" in card.texts())
+        assertTrue(card.texts().any { it == "Miles Davis · 42%" })
+        card.click("Pause"); assertEquals("media_player.media_play_pause", calls.last().service)
+        card.click("Next track"); assertEquals("media_player.media_next_track", calls.last().service)
+        card.click("Previous track"); assertEquals("media_player.media_previous_track", calls.last().service)
+        card.click("Power"); assertEquals("media_player.turn_off", calls.last().service)
+        card.click("Mute")
+        assertEquals("media_player.volume_mute", calls.last().service)
+        assertTrue(calls.last().data.getBoolean("is_volume_muted"))
+        card.click("Volume up"); assertEquals("media_player.volume_up", calls.last().service)
+    }
+
+    // ---- mini-media-player ----
+
+    @Test
+    fun miniMediaPlayerShowsTheTrackAndControlsThePlayer() {
+        val st = store(
+            entity("media_player.lounge", "playing", "media_title" to "Blue in Green", "media_artist" to "Bill Evans",
+                "volume_level" to 0.3, "media_duration" to 300, "media_position" to 150),
+        )
+        val card = MiniMediaPlayerCardView(
+            context(st),
+            card("""{"type": "custom:mini-media-player", "entity": "media_player.lounge", "artwork": "cover", "name": "Lounge", "hide": {"stop": false}}"""),
+        )
+        idle()
+        assertTrue("Lounge" in card.texts())
+        assertTrue("Blue in Green — Bill Evans" in card.texts())
+        card.click("Pause"); assertEquals("media_player.media_play_pause", calls.last().service)
+        card.click("Next track"); assertEquals("media_player.media_next_track", calls.last().service)
+        card.click("Stop"); assertEquals("media_player.media_stop", calls.last().service)
+        card.click("Mute")
+        assertEquals("media_player.volume_mute", calls.last().service)
+        card.click("Power")
+        assertEquals("media_player.turn_off", calls.last().service)
+        assertEquals("media_player.lounge", calls.last().entityId)
+
+        st.putLocal(entity("media_player.lounge", "off"))
+        idle()
+        card.click("Power")
+        assertEquals("media_player.turn_on", calls.last().service)
+
+        val stateless = MiniMediaPlayerCardView(
+            context(store(entity("media_player.den", "paused", "volume_level" to 0.5))),
+            card("""{"type": "custom:mini-media-player", "entity": "media_player.den", "volume_stateless": true}"""),
+        )
+        idle()
+        stateless.click("Volume up"); assertEquals("media_player.volume_up", calls.last().service)
+        stateless.click("Play"); assertEquals("media_player.media_play_pause", calls.last().service)
+    }
+
+    // ---- auto-entities ----
+
+    private fun builder(store: EntityStore): (CardConfig) -> View = { c ->
+        // A stand-in for VitroView.buildCard: a surface listing the entities it was handed.
+        object : CardSurface(context(store)) {}.apply {
+            tag = c
+            addView(TextView(context).apply { text = c.entities().joinToString(",") { it.entity } })
+        }
+    }
+
+    @Test
+    fun autoEntitiesFiltersSortsAndFollowsTheStore() {
+        val st = store(
+            entity("light.kitchen", "on", "friendly_name" to "Kitchen"),
+            entity("light.bedroom", "off", "friendly_name" to "Bedroom"),
+            entity("light.attic", "on", "friendly_name" to "Attic"),
+            entity("light.hall_ignored", "on", "friendly_name" to "Hall"),
+            entity("switch.fan", "on", "friendly_name" to "Fan"),
+        )
+        val view = AutoEntitiesCardView(
+            context(st),
+            card(
+                """{"type": "custom:auto-entities", "card": {"type": "entities", "title": "Lights on"},
+                   "filter": {"include": [{"domain": "light", "state": "on"}], "exclude": [{"entity_id": "*_ignored"}]},
+                   "sort": {"method": "name"}, "show_empty": false}""",
+            ),
+            builder(st),
+        )
+        idle()
+        assertEquals(listOf("light.attic", "light.kitchen"), view.matchedEntities)
+        val inner = view.getChildAt(0).tag as CardConfig
+        assertEquals("entities", inner.type)
+        assertEquals("Lights on", inner.title)
+        assertEquals(listOf("light.attic", "light.kitchen"), inner.entities().map { it.entity })
+
+        st.putLocal(entity("light.bedroom", "on", "friendly_name" to "Bedroom"))
+        idle()
+        assertEquals(listOf("light.attic", "light.bedroom", "light.kitchen"), view.matchedEntities)
+
+        for (id in listOf("light.attic", "light.bedroom", "light.kitchen")) st.putLocal(entity(id, "off"))
+        idle()
+        assertEquals(emptyList<String>(), view.matchedEntities)
+        assertEquals(View.GONE, view.visibility)
+    }
+
+    @Test
+    fun autoEntitiesValueRulesAndCardsParam() {
+        val temps = listOf(
+            entity("sensor.a_temp", "19.5", "device_class" to "temperature"),
+            entity("sensor.b_temp", "24", "device_class" to "temperature"),
+            entity("sensor.c_temp", "21", "device_class" to "temperature"),
+            entity("sensor.power", "300", "device_class" to "power"),
+        )
+        val st = store(*temps.toTypedArray())
+        val raw = JSONObject(
+            """{"filter": {"include": [{"attributes": {"device_class": "temperature"}, "state": "> 20", "options": {"type": "tile"}}]},
+                "sort": {"method": "state", "numeric": true, "reverse": true}, "card": {"type": "grid", "columns": 2}, "card_param": "cards"}""",
+        )
+        val matches = AutoEntitiesFilter.evaluate(raw, st.all().values, st::get)
+        assertEquals(listOf("sensor.b_temp", "sensor.c_temp"), matches.map { it.entityId })
+        assertTrue(AutoEntitiesFilter.matchValue("/^sensor\\.[ab]_/", "sensor.a_temp"))
+        assertTrue(AutoEntitiesFilter.matchValue("!= off", "on"))
+        assertTrue(AutoEntitiesFilter.matchValue(true, "on"))
+        assertFalse(AutoEntitiesFilter.matchValue("<= 5", "unavailable"))
+        // A key Vitro can't evaluate (here `area`) never widens an include to everything.
+        assertTrue(AutoEntitiesFilter.evaluate(JSONObject("""{"filter": {"include": [{"area": "kitchen"}]}}"""), st.all().values, st::get).isEmpty())
+
+        var built: CardConfig? = null
+        AutoEntitiesCardView(context(st), CardConfig("custom:auto-entities", raw)) { c -> built = c; View(activity) }
+        val inner = checkNotNull(built)
+        assertEquals("grid", inner.type)
+        assertEquals(listOf("tile", "tile"), inner.childCards.map { it.type })
+        assertEquals(listOf("sensor.b_temp", "sensor.c_temp"), inner.childCards.map { it.entity })
+    }
+
+    // ---- stack-in-card / vertical-stack-in-card / layout-card ----
+
+    @Test
+    fun stackInCardDrawsItsChildrenOnOneSurface() {
+        val st = store()
+        val cfg = card(
+            """{"type": "custom:stack-in-card", "title": "Living room", "mode": "horizontal",
+               "cards": [{"type": "tile", "entity": "light.a"}, {"type": "tile", "entity": "light.b"}]}""",
+        )
+        assertEquals(2, cfg.childCards.size)
+        val stack = StackInCardView(context(st), cfg, builder(st))
+        assertTrue("Living room" in stack.texts())
+        assertEquals(2, stack.children.size)
+        for (child in stack.children) {
+            assertNull("child surface stripped", child.background)
+            assertTrue((child as CardSurface).seamless)
+        }
+        assertNotNull("the stack keeps its own surface", stack.background)
+        val row = stack.children[0].parent as LinearLayout
+        assertEquals(LinearLayout.HORIZONTAL, row.orientation)
+
+        val kept = VerticalStackInCardView(
+            context(st),
+            card("""{"type": "custom:vertical-stack-in-card", "keep": {"background": true}, "cards": [{"type": "tile"}, {"type": "tile"}]}"""),
+            builder(st),
+        )
+        assertNotNull(kept.children[0].background)
+        assertEquals(LinearLayout.VERTICAL, (kept.children[0].parent as LinearLayout).orientation)
+    }
+
+    @Test
+    fun layoutCardLaysOutAGridWithSpans() {
+        val st = store()
+        val cfg = card(
+            """{"type": "custom:layout-card", "layout_type": "custom:grid-layout",
+               "layout": {"grid-template-columns": "repeat(3, 1fr)", "grid-gap": "12px"},
+               "cards": [{"type": "tile", "view_layout": {"grid-column": "span 2"}}, {"type": "tile"}, {"type": "tile"}, {"type": "tile", "view_layout": {"grid-column": "1 / -1"}}]}""",
+        )
+        val grid = LayoutCardView(context(st), cfg, builder(st), widthDp = 1280)
+        assertEquals(3, grid.tracks.size) // [span 2, 1], [1 + filler], [full width]
+        assertEquals(2, grid.tracks[0].childCount)
+        assertEquals(2f, (grid.tracks[0].getChildAt(0).layoutParams as LinearLayout.LayoutParams).weight, 0f)
+        assertEquals(3f, (grid.tracks[2].getChildAt(0).layoutParams as LinearLayout.LayoutParams).weight, 0f)
+        assertEquals(
+            listOf(LayoutCardView.Track(0f, 200f), LayoutCardView.Track(1f, 0f)),
+            LayoutCardView.parseColumns("200px 1fr", 1280),
+        )
+        assertEquals(4, LayoutCardView.parseColumns("repeat(auto-fill, minmax(300px, 1fr))", 1280).size)
+
+        val horizontal = LayoutCardView(
+            context(st),
+            card("""{"type": "custom:layout-card", "layout_type": "custom:horizontal-layout", "layout": {"max_cols": 2}, "cards": [{"type": "tile"}, {"type": "tile"}, {"type": "tile"}]}"""),
+            builder(st),
+            widthDp = 1280,
+        )
+        assertEquals(listOf(2, 1), horizontal.tracks.map { it.childCount })
+    }
+
+    @Test
+    fun containersCountTheirChildrenAndAutoEntitiesFollowsEveryEntity() {
+        val view = LovelaceParser.parseView(
+            0,
+            JSONObject(
+                """{"cards": [{"type": "custom:stack-in-card", "cards": [{"type": "tile"}, {"type": "custom:button-card"}]},
+                   {"type": "custom:layout-card", "cards": [{"type": "custom:mushroom-lock-card", "entity": "lock.a"}]},
+                   {"type": "custom:auto-entities", "card": {"type": "entities"}, "filter": {"include": [{"domain": "light"}]}}]}""",
+            ),
+        )
+        val tiers = CardRouter.tierCounts(view)
+        assertEquals(1, tiers[CardTier.NATIVE_CORE])
+        assertEquals(2, tiers[CardTier.NATIVE_HACS])
+        assertEquals(1, tiers[CardTier.WEB_ISLAND])
+        assertTrue(CardRouter.followsAllEntities(view))
+        assertTrue("lock.a" in CardRouter.referencedEntities(view))
+        assertEquals(26, CardRouter.NATIVE_HACS_TYPES.size)
+    }
+
+    // ---- Bubble Card sub_button ----
+
+    @Test
+    fun bubbleCardDrawsSubButtonsAndRunsTheirActions() {
+        val st = store(
+            entity("light.living", "on"),
+            entity("sensor.living_temp", "21.5", "unit_of_measurement" to "°C"),
+            entity("switch.fan", "off"),
+        )
+        val bubble = BubbleCardView(
+            context(st),
+            card(
+                """{"type": "custom:bubble-card", "card_type": "button", "entity": "light.living", "name": "Living",
+                   "sub_button": [
+                     {"entity": "sensor.living_temp", "name": "Temperature", "icon": "mdi:thermometer", "show_state": true},
+                     {"entity": "switch.fan", "name": "Fan", "icon": "mdi:fan", "tap_action": {"action": "toggle"}},
+                     {"name": "Scenes", "icon": "mdi:palette", "tap_action": {"action": "navigate", "navigation_path": "#scenes"}}
+                   ]}""",
+            ),
+        )
+        idle()
+        assertTrue("21.5 °C" in bubble.texts())
+        bubble.click("Fan")
+        assertEquals("switch.toggle", calls.last().service)
+        assertEquals("switch.fan", calls.last().entityId)
+        bubble.click("Temperature")
+        assertEquals("more-info:sensor.living_temp", actions.last())
+        bubble.click("Scenes")
+        assertEquals("navigate:#scenes", actions.last())
+        assertEquals(1, calls.size) // the sub-buttons didn't also fire the card's own toggle
+    }
+}

@@ -58,6 +58,18 @@ NATIVE_HACS_TYPES = {
     "custom:clock-weather-card",
     "custom:modern-circular-gauge",
     "custom:bar-card",
+    "custom:mushroom-media-player-card",
+    "custom:mushroom-lock-card",
+    "custom:mushroom-alarm-control-panel-card",
+    "custom:mushroom-vacuum-card",
+    "custom:mushroom-humidifier-card",
+    "custom:mushroom-number-card",
+    "custom:mushroom-select-card",
+    "custom:mini-media-player",
+    "custom:auto-entities",
+    "custom:stack-in-card",
+    "custom:vertical-stack-in-card",
+    "custom:layout-card",
 }
 
 SUPPORTED_TILE_FEATURES = {
@@ -77,7 +89,15 @@ SUPPORTED_TILE_FEATURES = {
     "vacuum-commands",
 }
 
-CONTAINER_TYPES = {"grid", "horizontal-stack", "vertical-stack", "conditional"}
+CONTAINER_TYPES = {
+    "grid",
+    "horizontal-stack",
+    "vertical-stack",
+    "conditional",
+    "custom:stack-in-card",
+    "custom:vertical-stack-in-card",
+    "custom:layout-card",
+}
 
 
 def load_dashboard(path: str):

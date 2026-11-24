@@ -15,6 +15,8 @@ android {
     defaultConfig {
         minSdk = 23
     }
+    // Robolectric reads the bundled icon catalog (src/main/assets/vitro-mdi.tsv.gz) through context.assets.
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
 dependencies {

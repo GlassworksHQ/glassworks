@@ -33,6 +33,7 @@ import dev.glassworks.engine.vitro.model.LovelaceResource
 import dev.glassworks.engine.vitro.net.MjpegStreamPlayer
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
+import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.VitroMetrics
 import dev.glassworks.engine.vitro.ui.VitroView
@@ -97,6 +98,7 @@ class VitroEngine(
 
         val cfg = settings(activity.applicationContext)
         startedSettings = cfg
+        MdiIcons.init(activity.applicationContext)
         Log.i(logTag, "Starting $VERSION_NAME (native Lovelace renderer; fallback=${fallback.name.ifEmpty { "lazy" }})")
         return VitroPage(activity, host, background).also { activePage = it }
     }
@@ -144,7 +146,8 @@ class VitroEngine(
             container.addView(vitroView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             vitroView.onMetrics = { m -> lastMetrics = m }
             vitroView.onViewSelected = { v ->
-                val refs = CardRouter.referencedEntities(v)
+                // An empty filter subscribes to every entity, which auto-entities' runtime filters need.
+                val refs = if (CardRouter.followsAllEntities(v)) emptySet() else CardRouter.referencedEntities(v)
                 client?.subscribeViewEntities(refs)
                 val path = buildViewUrl(currentOrigin, currentDashboardPath, v.path ?: v.index.toString())
                 if (path != null && path != currentUrl) {

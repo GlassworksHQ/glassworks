@@ -353,7 +353,7 @@ class VisualParityWave2Test {
         for (t in listOf("custom:modern-circular-gauge", "custom:bar-card")) {
             assertEquals("$t is Tier 2", CardTier.NATIVE_HACS, CardRouter.tier(card("""{"type": "$t"}""")))
         }
-        assertEquals(14, CardRouter.NATIVE_HACS_TYPES.size)
+        assertEquals(26, CardRouter.NATIVE_HACS_TYPES.size)
     }
 
     // ---- Mirror polish: clock zone and alignment, icons, markdown images, chip card-mod, to-do limits ----
@@ -433,8 +433,8 @@ class VisualParityWave2Test {
         val box = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         MarkdownRenderer(context()).render(md, box)
         val layout = box.getChildAt(0) as android.widget.TableLayout
-        // Two rows and one hairline between them; no empty header row or top rule.
-        assertEquals(3, layout.childCount)
+        // Borderless key-value table: two rows, no empty header row or hairlines.
+        assertEquals(2, layout.childCount)
         val firstRow = layout.getChildAt(0) as android.widget.TableRow
         assertEquals("Temp", (firstRow.getChildAt(0) as TextView).text.toString())
 

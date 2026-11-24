@@ -228,6 +228,14 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
     with the `@radix-ui/*` packages they use (a subset of those listed under Kiln in section 4): MIT,
     "Copyright (c) 2022 WorkOS". https://github.com/radix-ui/primitives
   - The licence text: `LICENSES/MIT.txt`.
+- `assets/vitro-mdi.tsv.gz` (in APKs that carry the Vitro engine, `engines/engine-vitro`): **Material Design
+  Icons**, `@mdi/svg` 7.4.47, all 7,447 icons. Only the `d` path data of each SVG, unmodified, stored as a
+  gzipped `name<TAB>pathData` table that `tools/vitro/update_mdi_icons.py` regenerates from the npm tarball.
+  - Licence: Apache-2.0 (`LICENSES/Apache-2.0.txt`)
+  - Copyright: Pictogrammers (Austin Andrews and contributors)
+  - Upstream: https://pictogrammers.com/library/mdi/
+  - Source: https://github.com/Templarian/MaterialDesign-SVG (npm `@mdi/svg` 7.4.47)
+  - Used by Vitro to draw the same icons Home Assistant shows.
 - `dev.glassworks.platform.HttpsTrust` (in the code, as text): **ISRG Root X1**, Let's Encrypt's root CA
   certificate, unmodified, from https://letsencrypt.org/certs/isrgrootx1.pem (SHA-256
   `96bcec06264976f37460779acf28c5a7cfe8a3c0aae11a8ffcee05c0bddf08c6`, the same file as AOSP's

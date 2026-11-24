@@ -75,6 +75,8 @@ sealed class MdBlock {
         val trackColor: Int?,
         val gapDp: Float,
         val segments: List<BarSegment>,
+        val align: String = "start",
+        val animated: Boolean = false,
     ) : MdBlock()
 
     /**
@@ -91,8 +93,14 @@ sealed class MdBlock {
     ) : MdBlock()
 }
 
-/** One segment of a [MdBlock.StackedBar]: [pct] of the track's width, in [color] (null = the theme's primary). */
-data class BarSegment(val pct: Float, val color: Int?)
+/** One segment of a [MdBlock.StackedBar]: [pct] of the track's width (or fixed [widthDp]), in [color]. */
+data class BarSegment(
+    val pct: Float,
+    val color: Int?,
+    val widthDp: Float? = null,
+    val heightPct: Float? = null,
+    val radiusDp: Float = 0f,
+)
 
 /** The small slice of CSS HA dashboards write in markdown `style` attributes. */
 object MdCss {
@@ -163,25 +171,44 @@ private val BAR_OUTER = Regex(
 private val BAR_INNER = Regex(BAR_INNER_SRC, RegexOption.IGNORE_CASE)
 private val ANY_TAG = Regex("""<[^>]*>""")
 
-/** Reads one bar match, or null when it isn't a bar (no `width:%` segment, or several outside a flex row). */
+/** Reads one bar match, or null when it isn't a bar (supports `%` progress bars and fixed-px equalizer bars). */
 private fun stackedBarOf(m: MatchResult): MdBlock.StackedBar? {
     val outer = MdCss.parse(m.groupValues[1].ifEmpty { m.groupValues[2] })
+    val flex = outer["display"]?.trim()?.lowercase(Locale.ROOT) == "flex"
     val segments = BAR_INNER.findAll(m.groupValues[3]).mapNotNull { inner ->
         val css = MdCss.parse(inner.groupValues[1].ifEmpty { inner.groupValues[2] })
-        val (n, unit) = MdCss.length(css["width"] ?: css["flex-basis"]) ?: return@mapNotNull null
-        if (unit != "%") return@mapNotNull null
-        BarSegment(n.coerceIn(0f, 100f), MdCss.backgroundColor(css))
+        val rawW = css["width"] ?: css["flex-basis"]
+        val (n, unit) = MdCss.length(rawW) ?: return@mapNotNull null
+        val hPair = MdCss.length(css["height"])
+        val hPct = if (hPair != null && hPair.second == "%" && hPair.first < 99.9f) hPair.first.coerceIn(5f, 100f) else null
+        val segRadius = (MdCss.lengthDp(css["border-radius"]) ?: 0f).coerceIn(0f, 32f)
+        when {
+            unit == "%" -> BarSegment(n.coerceIn(0f, 100f), MdCss.backgroundColor(css), null, hPct, segRadius)
+            flex && (unit == "px" || unit == "dp") -> BarSegment(0f, MdCss.backgroundColor(css), n.coerceIn(1f, 64f), hPct, segRadius)
+            else -> null
+        }
     }.toList()
     if (segments.isEmpty()) return null
-    val flex = outer["display"]?.trim()?.lowercase(Locale.ROOT) == "flex"
     if (!flex && segments.size > 1) return null
     val height = (MdCss.lengthDp(outer["height"]) ?: 8f).coerceIn(1f, 64f)
+    val justify = outer["justify-content"]?.trim()?.lowercase(Locale.ROOT)
+    val ml = outer["margin-left"]?.trim()?.lowercase(Locale.ROOT)
+    val mr = outer["margin-right"]?.trim()?.lowercase(Locale.ROOT)
+    val align = when {
+        justify == "flex-end" || justify == "end" || justify == "right" || (ml == "auto" && mr != "auto") -> "end"
+        justify == "center" || (ml == "auto" && mr == "auto") -> "center"
+        else -> "start"
+    }
+    val anim = outer["animation"]?.trim()?.lowercase(Locale.ROOT)
+    val animated = !anim.isNullOrEmpty() && anim != "none"
     return MdBlock.StackedBar(
         heightDp = height,
         radiusDp = (MdCss.lengthDp(outer["border-radius"]) ?: 0f).coerceIn(0f, height / 2f),
         trackColor = MdCss.backgroundColor(outer),
         gapDp = (MdCss.lengthDp(outer["gap"] ?: outer["column-gap"]) ?: 0f).coerceIn(0f, 24f),
         segments = segments,
+        align = align,
+        animated = animated,
     )
 }
 
@@ -968,9 +995,23 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                     topMargin = ctx.px(8f); bottomMargin = ctx.px(8f)
                 })
                 is MdBlock.Paragraph -> into.addView(paragraph(block.text, centered), lp(bottom = 8f))
-                is MdBlock.StackedBar -> into.addView(stackedBar(block), LinearLayout.LayoutParams(
-                    MATCH_PARENT, ctx.px(block.heightDp).coerceAtLeast(1),
-                ).apply { topMargin = ctx.px(if (first) 0f else 4f); bottomMargin = ctx.px(8f) })
+                is MdBlock.StackedBar -> {
+                    val fixedBars = block.segments.all { it.widthDp != null }
+                    into.addView(stackedBar(block), LinearLayout.LayoutParams(
+                        if (fixedBars) WRAP_CONTENT else MATCH_PARENT,
+                        ctx.px(block.heightDp).coerceAtLeast(1),
+                    ).apply {
+                        topMargin = ctx.px(if (first) 0f else 4f)
+                        bottomMargin = ctx.px(8f)
+                        if (fixedBars) {
+                            gravity = when (if (centered && block.align == "start") "center" else block.align) {
+                                "center" -> Gravity.CENTER_HORIZONTAL
+                                "end" -> Gravity.END
+                                else -> Gravity.START
+                            }
+                        }
+                    })
+                }
                 is MdBlock.ListItem -> into.addView(listRow(block, centered), lp(bottom = 3f).apply {
                     leftMargin = ctx.px(LIST_INDENT_DP * block.depth)
                 })
@@ -1051,22 +1092,69 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         return tv
     }
 
-    /** A [MdBlock.StackedBar]: a rounded, clipped track holding one weighted [View] per segment. */
+    /** A [MdBlock.StackedBar]: either weighted progress segments or fixed-width (optionally animated) equalizer bars. */
     private fun stackedBar(bar: MdBlock.StackedBar): LinearLayout = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.HORIZONTAL
         tag = STACKED_BAR_TAG
-        weightSum = maxOf(100f, bar.segments.sumOf { it.pct.toDouble() }.toFloat())
-        background = GradientDrawable().apply {
-            cornerRadius = bar.radiusDp * ctx.dp
-            setColor(bar.trackColor ?: android.graphics.Color.TRANSPARENT)
+        val fixedBars = bar.segments.all { it.widthDp != null }
+        val totalH = ctx.px(bar.heightDp).coerceAtLeast(1)
+        if (fixedBars) {
+            gravity = Gravity.BOTTOM
+        } else {
+            weightSum = maxOf(100f, bar.segments.sumOf { it.pct.toDouble() }.toFloat())
+            background = GradientDrawable().apply {
+                cornerRadius = bar.radiusDp * ctx.dp
+                setColor(bar.trackColor ?: android.graphics.Color.TRANSPARENT)
+            }
+            clipToOutline = true
         }
-        clipToOutline = true
+        val animators = ArrayList<android.animation.ValueAnimator>()
         bar.segments.forEachIndexed { i, seg ->
-            addView(View(ctx.context).apply {
+            val segView = View(ctx.context).apply {
                 tag = STACKED_SEGMENT_TAG
-                setBackgroundColor(seg.color ?: theme.primaryColor)
-            }, LinearLayout.LayoutParams(0, MATCH_PARENT, seg.pct).apply {
+                val col = seg.color ?: theme.primaryColor
+                if (seg.radiusDp > 0f) {
+                    background = GradientDrawable().apply {
+                        cornerRadius = seg.radiusDp * ctx.dp
+                        setColor(col)
+                    }
+                } else {
+                    setBackgroundColor(col)
+                }
+            }
+            val segH = if (seg.heightPct != null && !bar.animated) {
+                (totalH * (seg.heightPct / 100f)).roundToInt().coerceAtLeast(1)
+            } else {
+                MATCH_PARENT
+            }
+            val lp = if (fixedBars) {
+                LinearLayout.LayoutParams(ctx.px(seg.widthDp!!).coerceAtLeast(1), segH)
+            } else {
+                LinearLayout.LayoutParams(0, MATCH_PARENT, seg.pct)
+            }.apply {
                 if (i > 0 && bar.gapDp > 0f) marginStart = ctx.px(bar.gapDp)
+            }
+            addView(segView, lp)
+            if (bar.animated) {
+                segView.pivotY = totalH.toFloat()
+                val minScale = 0.22f + (i % 2) * 0.08f
+                val maxScale = 0.95f - (i % 3) * 0.1f
+                animators += android.animation.ValueAnimator.ofFloat(minScale, maxScale).apply {
+                    duration = 420L + (i % 3) * 130L
+                    startDelay = (i * 120L) % 480L
+                    repeatMode = android.animation.ValueAnimator.REVERSE
+                    repeatCount = android.animation.ValueAnimator.INFINITE
+                    addUpdateListener { a ->
+                        segView.pivotY = segView.height.toFloat().coerceAtLeast(1f)
+                        segView.scaleY = a.animatedValue as Float
+                    }
+                }
+            }
+        }
+        if (animators.isNotEmpty()) {
+            addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) { animators.forEach { it.start() } }
+                override fun onViewDetachedFromWindow(v: View) { animators.forEach { it.cancel() } }
             })
         }
     }
@@ -1128,16 +1216,29 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
     }
 
     private fun table(t: MdBlock.Table): TableLayout = TableLayout(ctx.context).apply {
-        isStretchAllColumns = true
-        isShrinkAllColumns = true
-        fun cell(md: String, header: Boolean, align: String) = TextView(ctx.context).apply {
+        val hasHeader = t.header.any { it.isNotBlank() }
+        if (hasHeader) {
+            isStretchAllColumns = true
+            isShrinkAllColumns = true
+        } else {
+            // Borderless key/value tables stretch the label column so right-aligned value columns hug the right edge.
+            setColumnStretchable(0, true)
+            setColumnShrinkable(0, true)
+        }
+        fun cell(md: String, header: Boolean, align: String, colIdx: Int) = TextView(ctx.context).apply {
             val color = theme.primaryTextColor
-            textSize = BODY_SP
+            val scaled = ctx.scaledSp(BODY_SP)
+            textSize = scaled
             setTextColor(color)
-            typeface = Inter.typeface(ctx.context, if (header) SEMIBOLD else Inter.REGULAR, BODY_SP)
+            typeface = Inter.typeface(ctx.context, if (header) SEMIBOLD else Inter.REGULAR, scaled)
             includeFontPadding = false
             text = inline.render(md, color)
-            setPadding(ctx.px(8f), ctx.px(6f), ctx.px(8f), ctx.px(6f))
+            if (hasHeader) {
+                setPadding(ctx.px(8f), ctx.px(6f), ctx.px(8f), ctx.px(6f))
+            } else {
+                val startPad = if (colIdx == 0) 0 else ctx.px(12f)
+                setPadding(startPad, ctx.px(8f), 0, ctx.px(8f))
+            }
             gravity = when (align) {
                 "center" -> Gravity.CENTER_HORIZONTAL
                 "end" -> Gravity.END
@@ -1146,18 +1247,17 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         }
         fun hairline() = View(ctx.context).apply { setBackgroundColor(theme.dividerColor) }
         val hairlineLp = { TableLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)) }
-        // A header of blank cells (a borderless key/value table) draws no header row and no top rule.
-        if (t.header.any { it.isNotBlank() }) {
+        if (hasHeader) {
             addView(TableRow(ctx.context).apply {
-                t.header.forEachIndexed { i, h -> addView(cell(h, true, t.aligns[i])) }
+                t.header.forEachIndexed { i, h -> addView(cell(h, true, t.aligns[i], i)) }
             })
             addView(hairline(), hairlineLp())
         }
         t.rows.forEachIndexed { r, row ->
             addView(TableRow(ctx.context).apply {
-                row.forEachIndexed { i, c -> addView(cell(c, false, t.aligns.getOrElse(i) { "start" })) }
+                row.forEachIndexed { i, c -> addView(cell(c, false, t.aligns.getOrElse(i) { "start" }, i)) }
             })
-            if (r < t.rows.size - 1) addView(hairline(), hairlineLp())
+            if (hasHeader && r < t.rows.size - 1) addView(hairline(), hairlineLp())
         }
     }
 

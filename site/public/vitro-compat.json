@@ -47,9 +47,29 @@
     "custom:mini-graph-card",
     "custom:clock-weather-card",
     "custom:modern-circular-gauge",
-    "custom:bar-card"
+    "custom:bar-card",
+    "custom:mushroom-media-player-card",
+    "custom:mushroom-lock-card",
+    "custom:mushroom-alarm-control-panel-card",
+    "custom:mushroom-vacuum-card",
+    "custom:mushroom-humidifier-card",
+    "custom:mushroom-number-card",
+    "custom:mushroom-select-card",
+    "custom:mini-media-player",
+    "custom:auto-entities",
+    "custom:stack-in-card",
+    "custom:vertical-stack-in-card",
+    "custom:layout-card"
   ],
-  "containerTypes": ["grid", "horizontal-stack", "vertical-stack", "conditional"],
+  "containerTypes": [
+    "grid",
+    "horizontal-stack",
+    "vertical-stack",
+    "conditional",
+    "custom:stack-in-card",
+    "custom:vertical-stack-in-card",
+    "custom:layout-card"
+  ],
   "supportedTileFeatures": [
     "light-brightness",
     "light-color-temp",

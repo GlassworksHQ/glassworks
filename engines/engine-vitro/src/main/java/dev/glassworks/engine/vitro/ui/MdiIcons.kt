@@ -5,13 +5,18 @@
 package dev.glassworks.engine.vitro.ui
 
 import android.content.Context
+import android.content.res.AssetManager
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.view.View
 import dev.glassworks.engine.vitro.data.EntityState
+import java.io.BufferedInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.GZIPInputStream
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -25,10 +30,111 @@ import kotlin.math.tan
 /**
  * Crisp 24x24 Material Design Icon vector renderer with zero icon-font overhead.
  * Works on Android 6+ (API 23) and scales cleanly from 720p wall switches to 40" 1080p mirrors.
+ *
+ * Once [init] has run, every name resolves through the official `@mdi/svg` catalog bundled as
+ * [CATALOG_ASSET] (all 7,447 icons of 7.4.47, Apache-2.0), so glyphs match Home Assistant's own. A built APK
+ * carries it un-gzipped as `vitro-mdi.tsv`; either form loads. The catalog is
+ * read on first use and kept as one Latin-1 byte blob plus an offset index; a [Path] is parsed only when an icon is
+ * actually drawn. Without a [Context] (pure JVM tests) the small built-in set below is the whole catalog.
  */
 object MdiIcons {
+    /** The gzipped `name\tpathData` catalog that `tools/vitro/update_mdi_icons.py` writes. */
+    const val CATALOG_ASSET = "vitro-mdi.tsv.gz"
+
+    /**
+     * The same catalog as it lands in a built APK: the Android Gradle plugin's asset merge un-gzips `.gz` assets
+     * (and the APK's own zip compresses it again), so the packaged name has no `.gz`.
+     */
+    private const val CATALOG_ASSET_PACKAGED = "vitro-mdi.tsv"
+
     private val cache = ConcurrentHashMap<String, Path>()
     private val registered = ConcurrentHashMap<String, String>()
+
+    @Volatile private var assets: AssetManager? = null
+    @Volatile private var catalog: Catalog? = null
+    @Volatile private var catalogTried = false
+    private val catalogLock = Any()
+
+    /** Path data packed in one byte array; [index] maps a name to `offset shl 32 or length`. */
+    private class Catalog(val blob: ByteArray, val index: HashMap<String, Long>) {
+        fun get(key: String): String? {
+            val packed = index[key] ?: return null
+            return String(blob, (packed ushr 32).toInt(), (packed and 0xFFFFFFFFL).toInt(), Charsets.ISO_8859_1)
+        }
+    }
+
+    /**
+     * Points the icon set at [context]'s bundled catalog. Call once per process (the engine does, on open); later
+     * calls are no-ops. The catalog is warmed on a background thread so the first drawn icon doesn't wait for it.
+     */
+    fun init(context: Context) {
+        if (assets != null) return
+        val app = context.applicationContext ?: context
+        synchronized(catalogLock) {
+            if (assets != null) return
+            assets = app.assets
+            if (catalog == null) catalogTried = false
+        }
+        Thread({ catalog() }, "vitro-mdi").apply { isDaemon = true }.start()
+    }
+
+    /** Loads a catalog from [input] (TSV, gzipped or not) directly, e.g. for off-device tools. Replaces any loaded one. */
+    fun loadCatalog(input: InputStream) {
+        val loaded = parseCatalog(input)
+        synchronized(catalogLock) {
+            catalog = loaded
+            catalogTried = true
+        }
+        cache.clear()
+    }
+
+    /** How many icons the bundled catalog holds (0 until it is loaded or when there is none). */
+    fun catalogSize(): Int = catalog()?.index?.size ?: 0
+
+    /** The official catalog, loading it on first use; null when there's no [Context] or no asset. */
+    private fun catalog(): Catalog? {
+        catalog?.let { return it }
+        if (catalogTried) return null
+        synchronized(catalogLock) {
+            catalog?.let { return it }
+            if (catalogTried) return null
+            val am = assets ?: return null
+            catalogTried = true
+            val loaded = sequenceOf(CATALOG_ASSET_PACKAGED, CATALOG_ASSET).firstNotNullOfOrNull { name ->
+                runCatching { am.open(name).use(::parseCatalog) }.getOrNull()
+            }
+            catalog = loaded
+            if (loaded != null) cache.clear() // drop built-in glyphs parsed before the official ones arrived
+            return loaded
+        }
+    }
+
+    private fun parseCatalog(input: InputStream): Catalog {
+        val buffered = BufferedInputStream(input, 64 * 1024)
+        buffered.mark(2)
+        val gzipped = buffered.read() == 0x1f && buffered.read() == 0x8b
+        buffered.reset()
+        val source = if (gzipped) GZIPInputStream(buffered, 64 * 1024) else buffered
+        val bytes = ByteArrayOutputStream(3 shl 20).also { out -> source.use { it.copyTo(out, 64 * 1024) } }.toByteArray()
+        val index = HashMap<String, Long>(10_000)
+        var lineStart = 0
+        val n = bytes.size
+        while (lineStart < n) {
+            var end = lineStart
+            while (end < n && bytes[end] != '\n'.code.toByte()) end++
+            var tab = lineStart
+            while (tab < end && bytes[tab] != '\t'.code.toByte()) tab++
+            var dataEnd = end
+            if (dataEnd > tab && bytes[dataEnd - 1] == '\r'.code.toByte()) dataEnd--
+            if (tab in (lineStart + 1) until dataEnd) {
+                val name = String(bytes, lineStart, tab - lineStart, Charsets.ISO_8859_1)
+                val off = tab + 1
+                index[name] = (off.toLong() shl 32) or (dataEnd - off).toLong()
+            }
+            lineStart = end + 1
+        }
+        return Catalog(bytes, index)
+    }
 
     /** Picks the best built-in MDI icon name for [explicitIcon] or [entity]. */
     fun resolveIconName(explicitIcon: String?, entity: EntityState?): String {
@@ -106,19 +212,27 @@ object MdiIcons {
     }
 
     /** Returns the raw 24x24 SVG path data string for [name] (also served to Tier 3 `<ha-icon>` shims). */
-    fun pathDataFor(name: String): String = pathDataOrNull(name) ?: PATHS.getValue("home")
+    fun pathDataFor(name: String): String = pathDataOrNull(name) ?: pathDataOrNull("home") ?: PATHS.getValue("home")
 
-    /** The path data for [name], or null when neither the built-in set nor [register] knows it. */
+    /**
+     * The path data for [name], or null when no source knows it. [register]ed glyphs win, then the official
+     * catalog, then the built-in set.
+     */
     fun pathDataOrNull(name: String): String? {
         val key = keyOf(name)
-        return registered[key] ?: PATHS[key]
+        return registered[key] ?: catalog()?.get(key) ?: PATHS[key]
     }
 
     /** True when [name] (with or without `mdi:`/`hass:`) has a glyph, so callers can fall back before drawing `home`. */
     fun has(name: String): Boolean = pathDataOrNull(name) != null
 
-    /** Every icon name Vitro can draw: the built-in set plus anything [register]ed. */
-    fun names(): Set<String> = PATHS.keys + registered.keys
+    /** Every icon name Vitro can draw: the built-in set, the official catalog when loaded, and anything [register]ed. */
+    fun names(): Set<String> {
+        val out = LinkedHashSet<String>(PATHS.keys)
+        catalog()?.index?.keys?.let(out::addAll)
+        out += registered.keys
+        return out
+    }
 
     /**
      * Adds or replaces the glyph for [name] with 24x24 SVG [pathData] (M/L/H/V/C/S/Q/T/A/Z, absolute or
@@ -133,7 +247,16 @@ object MdiIcons {
 
     fun pathFor(name: String): Path {
         val key = keyOf(name)
-        return cache.computeIfAbsent(key) { parseSvgPath(pathDataFor(it)) }
+        cache[key]?.let { return it }
+        val reg = registered[key]
+        val official = if (reg == null) catalog()?.let { it.get(key) ?: it.get("home") } else null
+        // Official MDI glyphs use SVG's default non-zero fill; the hand-drawn built-ins rely on even-odd holes.
+        val path = when {
+            reg != null -> parseSvgPath(reg)
+            official != null -> parseSvgPath(official, Path.FillType.WINDING)
+            else -> parseSvgPath(PATHS[key] ?: PATHS.getValue("home"))
+        }
+        return cache.putIfAbsent(key, path) ?: path
     }
 
     private fun keyOf(name: String): String = name.trim().lowercase().removePrefix("mdi:").removePrefix("hass:")
@@ -147,10 +270,10 @@ object MdiIcons {
         fun close()
     }
 
-    /** Parses SVG path data into an even-odd Android [Path] for 24x24 MDI glyphs. */
-    fun parseSvgPath(d: String): Path {
-        // Even-odd so nested sub-paths (door panes, glyph cut-outs) render as holes regardless of winding.
-        val path = Path().apply { fillType = Path.FillType.EVEN_ODD }
+    /** Parses SVG path data into an Android [Path] for 24x24 MDI glyphs ([fillType] defaults to even-odd). */
+    fun parseSvgPath(d: String, fillType: Path.FillType = Path.FillType.EVEN_ODD): Path {
+        // Even-odd by default so nested sub-paths (door panes, glyph cut-outs) render as holes regardless of winding.
+        val path = Path().apply { this.fillType = fillType }
         parseSvgPathInto(
             d,
             object : PathSink {

@@ -279,6 +279,24 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         elevation = theme.cardElevationDp * ctx.dp
     }
 
+    /**
+     * True once a seamless container (`stack-in-card`) has taken this card's surface off: later `card_mod`
+     * renders still set padding and opacity but no longer bring the background or border back.
+     */
+    var seamless: Boolean = false
+        private set
+
+    /** Drops the card's background, border and shadow so it shares a parent card's surface (stack-in-card). */
+    fun makeSeamless(keepBackground: Boolean = false, keepRadius: Boolean = false) {
+        seamless = true
+        elevation = 0f
+        if (!keepBackground) {
+            background = null
+        } else if (!keepRadius) {
+            (background as? GradientDrawable)?.mutate()?.let { (it as GradientDrawable).cornerRadius = 0f }
+        }
+    }
+
     /** The card's own `card_mod` as last applied (re-rendered live for templated styles). Empty when none. */
     var activeCardMod: CardModStyle = CardModStyle()
         private set
@@ -314,7 +332,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         val gradient = mod.backgroundGradient
         val restyle = gradient != null || mod.backgroundColor != null || mod.borderColor != null ||
             mod.borderWidthDp != null || mod.borderRadiusDp != null
-        if (restyle) {
+        if (restyle && !seamless) {
             background = (if (gradient != null) GradientDrawable(orientationFor(gradient.angleDeg), gradient.colors) else GradientDrawable()).apply {
                 if (gradient == null) setColor(mod.backgroundColor ?: theme.cardBackgroundColor)
                 cornerRadius = radiusPx
