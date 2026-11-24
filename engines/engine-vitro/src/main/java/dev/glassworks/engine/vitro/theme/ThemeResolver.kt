@@ -795,9 +795,12 @@ object ThemeResolver {
     internal fun isHostSelector(selector: String): Boolean = selector.split(',').any { raw ->
         val s = raw.trim().lowercase(Locale.ROOT).replace(Regex("""\s+"""), " ")
         s == "ha-card" || s == ":host" || s == "." || s == ":host ha-card" || s == ":host > ha-card" ||
-            (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && ":hover" !in s && ":active" !in s &&
+            (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && !INTERACTION.containsMatchIn(s) &&
                 !hasCombinator(s) && !PSEUDO_ELEMENT.containsMatchIn(s.replace(Regex("""\[[^\]]*\]"""), "[]")))
     }
+
+    /** States a card is in only while touched or focused: a rule for one isn't the card at rest. */
+    private val INTERACTION = Regex(""":(hover|active|focus|focus-visible|focus-within)\b""")
 
     /** `::before`, `::part()` and the legacy one-colon forms: they style a box inside the card, not the card. */
     private val PSEUDO_ELEMENT = Regex("""::|:(before|after|first-line|first-letter)\b""")

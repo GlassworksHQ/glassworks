@@ -277,6 +277,27 @@ class CardModAndOverlayTest {
     // ---- VitroView: pinned overlay and visibility ----
 
     @Test
+    fun anIslandThatLoadsCardModGetsTheOpacityOnce() {
+        fun islandAlpha(resources: List<dev.glassworks.engine.vitro.model.LovelaceResource>): Float {
+            val vv = vitroView(
+                EntityStore(),
+                """{"views": [{"cards": [{"type": "custom:acme-card", "card_mod": {"style": "ha-card { opacity: 0.5 }"}}]}]}""",
+                resources,
+            )
+            fun find(v: View): dev.glassworks.engine.vitro.cards.WebIslandCardView? = when (v) {
+                is dev.glassworks.engine.vitro.cards.WebIslandCardView -> v
+                is ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { find(v.getChildAt(it)) }
+                else -> null
+            }
+            return assertNotNull(find(vv)).let { find(vv)!!.alpha }
+        }
+        // card-mod in the island applies the 0.5 there, so the native frame stays at 1 (not 0.25 overall).
+        assertEquals(1f, islandAlpha(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-card-mod/card-mod.js", "module"))), 0.001f)
+        // Without card-mod in the island, the native frame is the only layer that applies it.
+        assertEquals(0.5f, islandAlpha(emptyList()), 0.001f)
+    }
+
+    @Test
     fun theCenteringIdiomIsPlacedAtTheViewportCenter() {
         // `left: 50%; top: 50%; transform: translate(-50%, -50%)` centers the card in HA, and the overlay centers it too.
         val vv = VitroView(activity, EntityStore(), 0xFF000000.toInt())
@@ -291,7 +312,11 @@ class CardModAndOverlayTest {
         assertEquals((24 * dp).toInt(), side.marginEnd)
     }
 
-    private fun vitroView(store: EntityStore, dashboard: String): VitroView {
+    private fun vitroView(
+        store: EntityStore,
+        dashboard: String,
+        resources: List<dev.glassworks.engine.vitro.model.LovelaceResource> = emptyList(),
+    ): VitroView {
         val vv = VitroView(activity, store, 0xFF000000.toInt())
         vv.contextFactory = { theme ->
             VitroCardContext(
@@ -299,7 +324,7 @@ class CardModAndOverlayTest {
                 haBase = FakeHaServer.BASE,
                 store = store,
                 theme = theme,
-                resources = emptyList(),
+                resources = resources,
                 accessToken = { FakeHaServer.TOKEN },
                 callService = { _, _, _, _ -> },
                 navigate = {},

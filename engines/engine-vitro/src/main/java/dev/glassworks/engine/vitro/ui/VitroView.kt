@@ -153,6 +153,9 @@ class VitroView(
     private var moreInfo: MoreInfoSheet? = null
     private val viewCache = LinkedHashMap<Int, View>()
 
+    /** For each cached view, whether its islands could load card-mod when it was built ([CardRouter.cardModInIsland]). */
+    private val builtCardModInIsland = HashMap<Int, Boolean>()
+
     /** Views the user came from, newest last; [goBack] pops it. Capped at [MAX_BACK_STACK]. */
     private val viewBackStack = ArrayDeque<Int>()
 
@@ -268,6 +271,7 @@ class VitroView(
         if (catalog == themeCatalog) return
         themeCatalog = catalog
         viewCache.clear()
+        builtCardModInIsland.clear()
         contentHost.removeAllViews()
         clearOverlay()
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
@@ -281,6 +285,7 @@ class VitroView(
         userThemeName = nextTheme
         darkMode = nextDark
         viewCache.clear()
+        builtCardModInIsland.clear()
         contentHost.removeAllViews()
         clearOverlay()
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
@@ -290,6 +295,7 @@ class VitroView(
         dashboard = config
         viewBackStack.clear()
         viewCache.clear()
+        builtCardModInIsland.clear()
         contentHost.removeAllViews()
         clearOverlay()
         val idx = resolveViewIndex(config, initialViewPath)
@@ -427,6 +433,7 @@ class VitroView(
             viewCache.remove(index)?.let { contentHost.removeView(it) }
             overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
             viewCache[index] = built
+            builtCardModInIsland[index] = CardRouter.cardModInIsland(cardCtx.resources)
             contentHost.addView(built, LayoutParams(MATCH_PARENT, MATCH_PARENT))
             if (pinned.isNotEmpty()) {
                 val frame = FrameLayout(context).apply {
@@ -453,7 +460,8 @@ class VitroView(
         }
 
         val elapsed = SystemClock.elapsedRealtime() - t0
-        val cardModInIsland = CardRouter.cardModInIsland(resourcesList)
+        // The report follows the tree on screen: a cached tree keeps the card-mod state it was built with.
+        val cardModInIsland = builtCardModInIsland[index] ?: CardRouter.cardModInIsland(resourcesList)
         val compat = CompatChecker.check(viewCfg, cardModInIsland)
         val tiers = CardRouter.tierCounts(viewCfg, cardModInIsland)
         val entities = CardRouter.referencedEntities(viewCfg)
@@ -972,7 +980,9 @@ class VitroView(
             // Tier 3: Arbitrary unrecognized custom cards -> stripped Micro-Web Island
             else -> WebIslandCardView(ctx, card, fillViewport = fillViewport)
         }
-        (built as? CardSurface)?.applyCardMod(card)
+        // An island that loads card-mod styles its card itself: styling the native frame too would apply it twice
+        // (a 0.5 opacity would show as 0.25).
+        if (!(built is WebIslandCardView && CardRouter.cardModInIsland(ctx.resources))) (built as? CardSurface)?.applyCardMod(card)
         // `margin` on the card insets it inside its slot, as an outer margin does in the browser.
         val margin = stackMod.marginInsets ?: return built
         return FrameLayout(context).apply {
