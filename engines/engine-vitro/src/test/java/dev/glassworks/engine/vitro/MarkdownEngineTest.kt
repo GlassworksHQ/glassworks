@@ -342,6 +342,27 @@ class MarkdownEngineTest {
         assertEquals(0.5f, root.findAll("p")[0].style!!.opacity)
     }
 
+    @Test
+    fun relativePositionNudgesWithoutMovingTheLine() {
+        val icon = styled("##### <ha-icon icon=\"mdi:weather-fog\"></ha-icon> 9°", "ha-markdown-element h5 ha-icon { position: relative; top: -2px; }")
+            .find("ha-icon")!!.style!!
+        assertEquals(-2f, icon.relativeShiftY())
+        val static = styled("<p><ha-icon icon=\"mdi:home\"></ha-icon></p>", "ha-markdown-element ha-icon { top: 5px; }").find("ha-icon")!!.style!!
+        assertEquals(0f, static.relativeShiftY()) // `top` alone does nothing without position: relative
+    }
+
+    @Test
+    fun svgArcsDrawAsArcsNotLines() {
+        // A half circle from (0,50) to (100,50), sweeping through the top; flags written together as "01".
+        val arc = MdSvg.pathData("M0 50 A50 50 0 01100 50")
+        val bounds = android.graphics.RectF()
+        @Suppress("DEPRECATION") arc.computeBounds(bounds, true)
+        assertEquals(0f, bounds.top, 0.5f)
+        assertEquals(100f, bounds.right, 0.5f)
+        val length = android.graphics.PathMeasure(arc, false).length
+        assertEquals((Math.PI * 50).toFloat(), length, 1.5f)
+    }
+
     // ---- sections grid ----
 
     @Test

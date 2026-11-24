@@ -47,6 +47,23 @@ class HaDisplayTest {
     }
 
     @Test
+    fun tileNamesJoinTheDeviceAndTheEntity() {
+        HaDisplay.applyRegistry(JSONObject("""{"entities": [
+            {"ei": "light.sunset", "di": "d1", "en": "Sunset"},
+            {"ei": "light.ball", "di": "d2"},
+            {"ei": "light.strip", "di": "d3", "en": "LED Strip accent"},
+            {"ei": "light.loose"}]}"""))
+        HaDisplay.applyDevices(org.json.JSONArray("""[
+            {"id": "d1", "name": "ZG-305Z", "name_by_user": "Sunset Lamp"},
+            {"id": "d2", "name": "Ball Lamp", "name_by_user": null},
+            {"id": "d3", "name": "LED Strip"}]"""))
+        assertEquals("Sunset Lamp Sunset", HaDisplay.deviceEntityName("light.sunset"))
+        assertEquals("Ball Lamp", HaDisplay.deviceEntityName("light.ball"))
+        assertEquals("LED Strip accent", HaDisplay.deviceEntityName("light.strip"))
+        assertNull(HaDisplay.deviceEntityName("light.loose"))
+    }
+
+    @Test
     fun iconsComeFromTheIntegrationThenTheDomain() {
         assertNull(HaDisplay.icon(EntityState("binary_sensor.p", "on", mapOf("device_class" to "occupancy"))))
         HaDisplay.applyRegistry(JSONObject("""{"entities": [{"ei": "select.pipeline", "pl": "esphome", "tk": "pipeline"}]}"""))

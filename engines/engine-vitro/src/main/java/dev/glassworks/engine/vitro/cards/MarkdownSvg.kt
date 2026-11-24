@@ -13,7 +13,16 @@ import android.graphics.Path
 import android.graphics.PathMeasure
 import android.graphics.RectF
 import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.math.tan
 
 /**
  * A small SVG subset, for the `data:image/svg+xml,…` images dashboards build with Jinja and show through a
@@ -333,10 +342,10 @@ class MdSvg private constructor(
 
         private val PATH_TOKEN = Regex("""[MmLlHhVvQqTtCcSsZzAa]|[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?""")
 
-        /** SVG path data to an Android [Path]. Arcs (A) are drawn as straight lines to their end point. */
+        /** SVG path data to an Android [Path], elliptical arcs (A) included. */
         fun pathData(d: String): Path {
             val p = Path()
-            val tokens = PATH_TOKEN.findAll(d).map { it.value }.toList()
+            val tokens = PATH_TOKEN.findAll(d).map { it.value }.toMutableList()
             var i = 0
             var cmd = 'M'
             var x = 0f
@@ -389,8 +398,13 @@ class MdSvg private constructor(
                     }
                     'A' -> {
                         if (!hasNum()) break
-                        repeat(5) { n() }
-                        x = ox + n(); y = oy + n(); p.lineTo(x, y)
+                        val rx = n(); val ry = n(); val rot = n()
+                        // The flags are single digits that may run together ("a5 5 0 011 1").
+                        val large = flag(tokens, i).also { i = it.second }.first
+                        val sweep = flag(tokens, i).also { i = it.second }.first
+                        val ex = ox + n(); val ey = oy + n()
+                        arcTo(p, x, y, rx, ry, rot, large, sweep, ex, ey)
+                        x = ex; y = ey
                     }
                     // Z takes no operands: a number after it is an error, and the path ends there (it looped forever).
                     'Z' -> { p.close(); x = sx; y = sy; if (hasNum()) break; if (i < tokens.size) cmd = tokens[i++][0] else break }
@@ -400,6 +414,66 @@ class MdSvg private constructor(
                 lastC = c
             }
             return p
+        }
+
+        /** Reads one arc flag at [i]: a whole `0` / `1` token, or the first digit of a run like `011`. */
+        private fun flag(tokens: MutableList<String>, i: Int): Pair<Boolean, Int> {
+            val t = tokens[i]
+            if (t.length > 1 && (t[0] == '0' || t[0] == '1') && t.all { it.isDigit() }) {
+                tokens[i] = t.substring(1) // "011" is the flag 0, then "11"
+                return (t[0] == '1') to i
+            }
+            return (t.toFloat() != 0f) to i + 1
+        }
+
+        /**
+         * SVG's endpoint arc (implementation notes F.6): radii scaled up when too small, the center found from the
+         * flags, then the sweep drawn as cubic Béziers of at most 90 degrees each.
+         */
+        internal fun arcTo(p: Path, x0: Float, y0: Float, rxIn: Float, ryIn: Float, rotDeg: Float, large: Boolean, sweep: Boolean, x: Float, y: Float) {
+            if (x0 == x && y0 == y) return
+            var rx = abs(rxIn).toDouble()
+            var ry = abs(ryIn).toDouble()
+            if (rx == 0.0 || ry == 0.0) { p.lineTo(x, y); return }
+            val phi = Math.toRadians(rotDeg.toDouble())
+            val cosP = cos(phi); val sinP = sin(phi)
+            val dx = (x0 - x) / 2.0; val dy = (y0 - y) / 2.0
+            val x1 = cosP * dx + sinP * dy
+            val y1 = -sinP * dx + cosP * dy
+            val lambda = (x1 * x1) / (rx * rx) + (y1 * y1) / (ry * ry)
+            if (lambda > 1) { val sq = sqrt(lambda); rx *= sq; ry *= sq }
+            val num = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1
+            val den = rx * rx * y1 * y1 + ry * ry * x1 * x1
+            var coef = if (den == 0.0) 0.0 else sqrt(max(0.0, num / den))
+            if (large == sweep) coef = -coef
+            val cx1 = coef * rx * y1 / ry
+            val cy1 = -coef * ry * x1 / rx
+            val cx = cosP * cx1 - sinP * cy1 + (x0 + x) / 2.0
+            val cy = sinP * cx1 + cosP * cy1 + (y0 + y) / 2.0
+            fun angle(ux: Double, uy: Double, vx: Double, vy: Double): Double {
+                val a = atan2(ux * vy - uy * vx, ux * vx + uy * vy)
+                return a
+            }
+            val theta1 = angle(1.0, 0.0, (x1 - cx1) / rx, (y1 - cy1) / ry)
+            var dTheta = angle((x1 - cx1) / rx, (y1 - cy1) / ry, (-x1 - cx1) / rx, (-y1 - cy1) / ry)
+            if (!sweep && dTheta > 0) dTheta -= 2 * PI else if (sweep && dTheta < 0) dTheta += 2 * PI
+            val segments = ceil(abs(dTheta) / (PI / 2)).toInt().coerceAtLeast(1)
+            val delta = dTheta / segments
+            val t = 4.0 / 3.0 * tan(delta / 4)
+            var a1 = theta1
+            for (k in 0 until segments) {
+                val a2 = a1 + delta
+                val c1 = cos(a1); val s1 = sin(a1); val c2 = cos(a2); val s2 = sin(a2)
+                // Unit-circle control points, then scaled, rotated and moved to the center.
+                fun px(ux: Double, uy: Double) = (cx + rx * ux * cosP - ry * uy * sinP).toFloat()
+                fun py(ux: Double, uy: Double) = (cy + rx * ux * sinP + ry * uy * cosP).toFloat()
+                p.cubicTo(
+                    px(c1 - t * s1, s1 + t * c1), py(c1 - t * s1, s1 + t * c1),
+                    px(c2 + t * s2, s2 - t * c2), py(c2 + t * s2, s2 - t * c2),
+                    px(c2, s2), py(c2, s2),
+                )
+                a1 = a2
+            }
         }
     }
 }

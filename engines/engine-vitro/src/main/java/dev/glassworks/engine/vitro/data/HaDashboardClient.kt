@@ -407,8 +407,8 @@ class HaDashboardClient(
     }
 
     /** Domains and platforms whose display data (icons, state labels) has been asked for on this connection. */
-    // newSetFromMap, not ConcurrentHashMap.newKeySet: KeySetView is API 24, and the Mirror runs Android 6.
-    private val displayRequested: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    // A set over a ConcurrentHashMap through Collections: the map's own key-set view is API 24, the Mirror runs 23.
+    private val displayRequested: MutableSet<String> = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
     private val displayPending = java.util.concurrent.atomic.AtomicInteger(0)
 
     /** Some display data arrived since the last re-render; without it (all refused) there is nothing to redraw. */
@@ -529,6 +529,18 @@ class HaDashboardClient(
         request(JSONObject().put("type", "config/entity_registry/list_for_display")) { res ->
             if (res.optBoolean("success", false)) res.optJSONObject("result")?.let(HaDisplay::applyRegistry)
             loadDisplayFor(displayIds())
+        }
+        // Device names, for HA's default tile names ("<device> <entity>").
+        displayPending.incrementAndGet()
+        request(JSONObject().put("type", "config/device_registry/list")) { res ->
+            if (res.optBoolean("success", false)) {
+                res.optJSONArray("result")?.let {
+                    HaDisplay.applyDevices(it)
+                    displayChanged.set(true)
+                }
+            }
+            // As for the icons and translations: one re-render once all are in, and only when something arrived.
+            if (displayPending.decrementAndGet() == 0 && displayChanged.getAndSet(false)) store.renotifyAll()
         }
     }
 

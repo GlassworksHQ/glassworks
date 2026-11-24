@@ -611,16 +611,19 @@ data class TodoItem(val uid: String, val summary: String, val completed: Boolean
 
 /** Native HA `todo-list` card (`hui-todo-list-card`): live items, checkboxes, completed section and add row. */
 class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
-    private val titleView = extLabel(ctx, 16f, ctx.theme.primaryTextColor, Inter.MEDIUM)
+    private val titleView = extLabel(ctx, 24f, ctx.theme.primaryTextColor)
+    private val activeHeader = sectionHeader("Active", null)
     private val activeBox = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
-    private val completedHeader = extLabel(ctx, 13f, ctx.theme.secondaryTextColor, Inter.MEDIUM).apply {
-        setPadding(0, ctx.px(10f), 0, ctx.px(6f))
-        isClickable = true
+    private val completedDivider = View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) }
+    private val completedHeader = sectionHeader("Completed") { anchor ->
+        android.widget.PopupMenu(ctx.context, anchor).apply {
+            menu.add("Clear checked items").setOnMenuItemClickListener { clearCompleted(); true }
+            show()
+        }
     }
     private val completedBox = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
     private val input = EditText(ctx.context)
     private var items: List<TodoItem> = emptyList()
-    private var completedExpanded = true
     private var fetchGeneration = 0
     private val hideCompleted = config.raw.optBoolean("hide_completed", false)
     /** `hide_create: true` drops the add-item row (display-only dashboards). */
@@ -629,24 +632,21 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     private val maxItems = config.raw.optInt("max_items", 0).coerceAtLeast(0)
     private val addRow: LinearLayout
 
+    /**
+     * hui-todo-list-card as measured in HA: the add field on top (a 56 px filled input with its + button, 16 px
+     * in), then 48 px "Active" / "Completed" headers with their menus over 40 px rows with 20 px square
+     * checkboxes, a divider between the sections, and no title unless the card sets one.
+     */
     init {
-        val pad = ctx.px(16f)
-        val col = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
-        }
-        col.addView(titleView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = ctx.px(8f) })
-        col.addView(activeBox, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        col.addView(completedHeader, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        col.addView(completedBox, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        completedHeader.setOnClickListener {
-            completedExpanded = !completedExpanded
-            renderItems()
-        }
+        val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+        titleView.setPadding(ctx.px(16f), ctx.px(20f), ctx.px(16f), 0)
+        titleView.visibility = if (config.title != null) VISIBLE else GONE
+        titleView.text = config.title.orEmpty()
+        col.addView(titleView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
         addRow = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            setPadding(ctx.px(16f), ctx.px(16f), ctx.px(16f), ctx.px(8f))
             if (hideCreate) visibility = GONE
         }
         input.apply {
@@ -658,11 +658,8 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             isSingleLine = true
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             imeOptions = EditorInfo.IME_ACTION_DONE
-            setPadding(ctx.px(12f), ctx.px(8f), ctx.px(12f), ctx.px(8f))
-            background = GradientDrawable().apply {
-                cornerRadius = 10f * ctx.dp
-                setStroke(ctx.px(1f), ctx.theme.dividerColor)
-            }
+            setPadding(ctx.px(16f), 0, ctx.px(56f), 0)
+            background = null
             setOnEditorActionListener { _, actionId, _ ->
                 if (actionId == EditorInfo.IME_ACTION_DONE) {
                     addItem()
@@ -672,30 +669,78 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
                 }
             }
         }
-        val plus = MdiIconView(ctx.context).apply {
-            setIcon("mdi:plus", ctx.theme.primaryColor)
-            val p = ctx.px(6f)
-            setPadding(p, p, p, p)
+        val plus = FrameLayout(ctx.context).apply {
             isClickable = true
+            contentDescription = "Add item"
+            addView(MdiIconView(ctx.context).apply { setIcon("mdi:plus", 0xFFCCCCCC.toInt()) },
+                FrameLayout.LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
             setOnClickListener { addItem() }
+            applyHaRipple(this, 999f, ctx.theme.dark)
         }
-        addRow.addView(input, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-        addRow.addView(plus, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)).apply { marginStart = ctx.px(6f) })
-        col.addView(addRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(10f) })
-        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        val field = FrameLayout(ctx.context).apply {
+            // ha-input: a filled field with 4 px top corners and a 1 px indicator line along the bottom.
+            background = android.graphics.drawable.LayerDrawable(arrayOf(
+                GradientDrawable().apply {
+                    cornerRadii = floatArrayOf(4f * ctx.dp, 4f * ctx.dp, 4f * ctx.dp, 4f * ctx.dp, 0f, 0f, 0f, 0f)
+                    setColor(if (ctx.theme.dark) 0xFF363636.toInt() else 0xFFF5F5F5.toInt())
+                },
+                GradientDrawable().apply { setColor(if (ctx.theme.dark) 0xFFB1B1B1.toInt() else 0xFF6B6B6B.toInt()) },
+            )).apply { setLayerInsetTop(1, ctx.px(55f)) }
+            addView(input, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            addView(plus, FrameLayout.LayoutParams(ctx.px(32f), ctx.px(32f), Gravity.CENTER_VERTICAL or Gravity.END).apply {
+                marginEnd = ctx.px(16f)
+            })
+        }
+        addRow.addView(field, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(56f)))
+        col.addView(addRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
-        titleView.text = config.title ?: config.entity?.let { ctx.store[it]?.friendlyName } ?: "To-do"
+        val list = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, ctx.px(8f), 0, ctx.px(8f))
+        }
+        list.addView(activeHeader, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(48f)))
+        list.addView(activeBox, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        list.addView(completedDivider, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)).apply {
+            topMargin = ctx.px(10f); bottomMargin = ctx.px(10f)
+        })
+        list.addView(completedHeader, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(48f)))
+        list.addView(completedBox, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        col.addView(list, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         renderItems()
+    }
+
+    /** A 48 px section header: the 14 px / 500 title and, at the end, a 48 px menu button. */
+    private fun sectionHeader(title: String, onMenu: ((View) -> Unit)?): LinearLayout = LinearLayout(ctx.context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(ctx.px(16f), 0, ctx.px(16f), 0)
+        addView(extLabel(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply { text = title }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        addView(FrameLayout(ctx.context).apply {
+            contentDescription = "$title menu"
+            addView(MdiIconView(ctx.context).apply { setIcon("mdi:dots-vertical", ctx.theme.primaryTextColor) },
+                FrameLayout.LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
+            if (onMenu != null) {
+                isClickable = true
+                applyHaRipple(this, 999f, ctx.theme.dark)
+                setOnClickListener { onMenu(this) }
+            }
+        }, LinearLayout.LayoutParams(ctx.px(48f), ctx.px(48f)))
+    }
+
+    private fun clearCompleted() {
+        val eid = config.entity ?: return
+        items = items.filter { !it.completed }
+        fetchGeneration++
+        renderItems()
+        ctx.callService("todo", "remove_completed_items", JSONObject().put("entity_id", eid), null)
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         val eid = config.entity ?: return
         // `observe` delivers the current state at once, so this fetches on attach and again on every change.
-        observe(eid) { s ->
-            titleView.text = config.title ?: s?.friendlyName ?: "To-do"
-            fetch(eid)
-        }
+        observe(eid) { _ -> fetch(eid) }
     }
 
     private fun fetch(eid: String) {
@@ -756,44 +801,53 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         val active = items.filter { !it.completed }
         val done = items.filter { it.completed }
         val shown = if (maxItems > 0) active.take(maxItems) else active
-        shown.forEach { activeBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)) }
+        shown.forEach { activeBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f))) }
         val hidden = active.size - shown.size
         if (hidden > 0) {
             activeBox.addView(extLabel(ctx, 12f, ctx.theme.secondaryTextColor).apply {
                 text = "+ $hidden more"
-                setPadding(ctx.px(34f), ctx.px(2f), 0, ctx.px(4f))
+                setPadding(ctx.px(48f), ctx.px(2f), 0, ctx.px(4f))
             })
         }
+        activeHeader.visibility = if (active.isNotEmpty()) VISIBLE else GONE
         if (active.isEmpty()) {
-            activeBox.addView(extLabel(ctx, 13f, ctx.theme.secondaryTextColor).apply {
-                text = if (items.isEmpty()) "No items" else "All done"
-                setPadding(0, ctx.px(6f), 0, ctx.px(6f))
+            activeBox.addView(extLabel(ctx, 14f, ctx.theme.primaryTextColor).apply {
+                text = "No items"
+                setPadding(ctx.px(16f), ctx.px(12f), ctx.px(16f), ctx.px(12f))
             })
         }
         val showCompleted = done.isNotEmpty() && !hideCompleted
+        completedDivider.visibility = if (showCompleted) VISIBLE else GONE
         completedHeader.visibility = if (showCompleted) VISIBLE else GONE
-        completedHeader.text = "${if (completedExpanded) "▾" else "▸"}  Completed (${done.size})"
-        completedBox.visibility = if (showCompleted && completedExpanded) VISIBLE else GONE
-        if (showCompleted && completedExpanded) {
-            done.forEach { completedBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)) }
+        completedBox.visibility = if (showCompleted) VISIBLE else GONE
+        if (showCompleted) {
+            done.forEach { completedBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f))) }
         }
     }
 
+    /** ha-check-list-item: 20 px in, a 20 px square checkbox, 8 px, then the summary (struck through when done). */
     private fun itemRow(item: TodoItem): View {
         val row = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, ctx.px(6f), 0, ctx.px(6f))
+            setPadding(ctx.px(20f), 0, ctx.px(20f), 0)
             isClickable = true
             setOnClickListener { toggle(item) }
         }
-        val box = MdiIconView(ctx.context).apply {
-            if (item.completed) setIcon("mdi:checkbox-marked-circle", ctx.theme.primaryColor)
-            else setIcon("mdi:checkbox-blank-circle-outline", ctx.theme.secondaryTextColor)
+        val box = FrameLayout(ctx.context).apply {
+            background = GradientDrawable().apply {
+                cornerRadius = 4f * ctx.dp
+                setStroke(ctx.px(2f), if (item.completed) CHECKED else 0xFF7A7A7A.toInt())
+                setColor(if (item.completed) CHECKED else Color.TRANSPARENT)
+            }
+            if (item.completed) addView(MdiIconView(ctx.context).apply { setIcon("mdi:check-bold", Color.WHITE) },
+                FrameLayout.LayoutParams(ctx.px(14f), ctx.px(14f), Gravity.CENTER))
         }
-        row.addView(box, LinearLayout.LayoutParams(ctx.px(22f), ctx.px(22f)).apply { marginEnd = ctx.px(12f) })
-        val text = extLabel(ctx, 14f, if (item.completed) ctx.theme.secondaryTextColor else ctx.theme.primaryTextColor).apply {
+        row.addView(box, LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)).apply { marginEnd = ctx.px(8f) })
+        val text = extLabel(ctx, 14f, ctx.theme.primaryTextColor).apply {
             this.text = item.summary
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
             if (item.completed) paintFlags = paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
         }
         row.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
@@ -811,6 +865,8 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     companion object {
         /** The uid prefix of a row added here that Home Assistant hasn't listed yet. */
         private const val LOCAL_UID = "local-"
+        /** HA's checked checkbox: its brand fill (#009ac7, measured). */
+        private const val CHECKED = 0xFF009AC7.toInt()
 
         /** Reads `{ items: [{ uid, summary, status }] }` from `todo/item/list`. */
         fun parseItems(result: JSONObject?): List<TodoItem> {

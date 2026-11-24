@@ -136,7 +136,14 @@ class MdiIconDrawable(name: String, color: Int, sizePx: Int) : Drawable() {
  * An inline `<ha-icon>`: an MDI path [sizePx] square in [color]. HA's `ha-icon` is `vertical-align: middle`,
  * so its center sits half an x-height above the baseline.
  */
-class MdIconSpan(val iconName: String, val color: Int, val sizePx: Int, private val xHeightPx: Float) : ReplacementSpan() {
+class MdIconSpan(
+    val iconName: String,
+    val color: Int,
+    val sizePx: Int,
+    private val xHeightPx: Float,
+    /** `position: relative` nudge, in px: drawn there without moving the line (as the browser does). */
+    private val shiftPx: Float = 0f,
+) : ReplacementSpan() {
     private val drawable = MdiIconDrawable(iconName, color, sizePx)
 
     override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
@@ -152,7 +159,7 @@ class MdIconSpan(val iconName: String, val color: Int, val sizePx: Int, private 
 
     override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: Paint) {
         canvas.save()
-        canvas.translate(x, y - xHeightPx / 2f - sizePx / 2f)
+        canvas.translate(x, y - xHeightPx / 2f - sizePx / 2f + shiftPx)
         drawable.draw(canvas)
         canvas.restore()
     }
@@ -676,6 +683,8 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                 val box = MdBox(ctx.context, dp)
                 styleBox(box, s)
                 if (s.display == "list-item") listItem(box, node) else fill(box, node)
+                // position: relative moves the box where it's painted, not where it's laid out.
+                s.relativeShiftY().takeIf { it != 0f }?.let { box.translationY = it * dp }
                 var top = m[0]
                 var bottom = m[2]
                 // A first child's top margin escapes a box with no padding or border above it (and the same below).
@@ -886,7 +895,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                     val start = sb.length
                     sb.append('￼')
                     val color = MarkdownInline.scaleAlpha(s.color, alphaMul * s.opacity)
-                    sb.setSpan(MdIconSpan(icon, color, px, xh), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    sb.setSpan(MdIconSpan(icon, color, px, xh, s.relativeShiftY() * dp), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     runs += CssLineBoxSpan.Run(start, sb.length, xh / 2f + px / 2f, px / 2f - xh / 2f)
                     st.lastSpace = false
                 }

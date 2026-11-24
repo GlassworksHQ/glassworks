@@ -123,16 +123,28 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
         shape.clipToOutline = true
         val texts = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            addView(primary, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(20f)))
-            addView(secondary, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(16f)))
+            // 20 / 16 px lines at Mushroom's sizes, growing when card_mod sets a larger font.
+            primary.minHeight = ctx.px(20f)
+            secondary.minHeight = ctx.px(16f)
+            addView(primary, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            addView(secondary, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
-        val header = LinearLayout(ctx.context).apply {
+        // mushroom-state-item: the shape and the info. With `layout: horizontal` it and the actions are flex: 1
+        // halves of the row, so a long title truncates at the middle as in HA.
+        val stateItem = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             if (!config.raw.optBoolean("hide_icon", false)) {
                 addView(shape, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)).apply { marginEnd = ctx.px(10f) })
             }
             addView(texts, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            // The state item keeps its own 10 px end padding inside its half (HA: a 129 px info box in a 400 px card).
+            if (horizontal) setPadding(0, 0, ctx.px(10f), 0)
+        }
+        val header = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(stateItem, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             if (horizontal) addView(controls, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginStart = ctx.px(10f) })
         }
         if (hideName) primary.visibility = GONE
@@ -1277,7 +1289,9 @@ open class StackInCardView(
     private val stack: LinearLayout
 
     init {
-        val column = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+        // A child whose content overflows its slot (a big heading in a 1-row Markdown card) paints past it, as in
+        // the browser; only the card's own rounded outline clips.
+        val column = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
         config.title?.let { t ->
             column.addView(label(ctx, 16f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
                 text = t
@@ -1289,6 +1303,8 @@ open class StackInCardView(
         val outerPadding = if (keep.has("outer_padding")) keep.optBoolean("outer_padding") else keep.optBoolean("margin", false)
         stack = LinearLayout(ctx.context).apply {
             orientation = if (horizontal) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
             if (outerPadding) {
                 val pad = ctx.px(8f)
                 setPadding(pad, pad, pad, pad)

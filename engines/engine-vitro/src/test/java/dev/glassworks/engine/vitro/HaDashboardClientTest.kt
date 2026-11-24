@@ -590,7 +590,7 @@ class HaDashboardClientTest {
         val ids = server.received.drop(1).map { it.getInt("id") }
         assertEquals(ids.sorted(), ids)
         // Display data (registry, icons, translations) can interleave: it isn't what this test orders.
-        val display = setOf("config/entity_registry/list_for_display", "frontend/get_icons", "frontend/get_translations")
+        val display = setOf("config/entity_registry/list_for_display", "config/device_registry/list", "frontend/get_icons", "frontend/get_translations")
         val after = server.received.drop(1).filter { it.getInt("id") > 11 && it.getString("type") !in display }.map {
             if (it.getString("type") == "call_service") it.getString("service") else it.getString("type")
         }
