@@ -35,13 +35,6 @@
   "missingText": 0,
   "reason": "values now match HA (display precision from the registry); what's left is text rendering and chip edges about 1 px apart, just over 2% at the 1.5x panels' density"
  },
- "mirror/mushroom-template-picture": {
-  "pixel": 0.1372,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "Vitro draws the template card's picture square where Mushroom crops it to a circle; the text block also sits 2-3 px higher. Badge matches. #791"
- },
  "mirror/thermostat": {
   "pixel": 0.0015,
   "bounds": 0.7,
@@ -84,13 +77,6 @@
   "missingText": 0,
   "reason": "values now match HA (display precision from the registry); what's left is text rendering and chip edges about 1 px apart, just over 2% at the 1.5x panels' density"
  },
- "s1/mushroom-template-picture": {
-  "pixel": 0.1372,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "Vitro draws the template card's picture square where Mushroom crops it to a circle; the text block also sits 2-3 px higher. Badge matches. #791"
- },
  "s1/thermostat": {
   "pixel": 0.0015,
   "bounds": 0.7,
@@ -125,13 +111,6 @@
   "font": 0.1,
   "missingText": 0,
   "reason": "Vitro drops a Markdown <img> with no width or height; HA shows it at its natural size (192 px here), so Vitro's card is 212 px shorter. #791"
- },
- "tablet/mushroom-template-picture": {
-  "pixel": 0.1244,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "Vitro draws the template card's picture square where Mushroom crops it to a circle; the text block also sits 2-3 px higher. Badge matches. #791"
  },
  "tablet/thermostat": {
   "pixel": 0.0019,
