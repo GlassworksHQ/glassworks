@@ -1277,7 +1277,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 chart.setPoints(map[id].orEmpty(), ctx.store[id]?.unit.orEmpty())
             }
         }
-        // history/stream only answers when it has numeric points; don't leave "Loading" up forever.
+        // A failed history request answers nothing: don't leave "Loading" up forever.
         ctx.main.postDelayed(timeout, HISTORY_TIMEOUT_MS)
 
         return { s ->

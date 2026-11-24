@@ -89,14 +89,14 @@ object HaDisplay {
     }
 
     /**
-     * HA's tile name for an entity on a device: the device's name, then the entity's own name with the device's
-     * name taken off its front ("Sunset Lamp Sunset"), or the device's name alone for its main entity. Null when
-     * the entity has no device (or the registries haven't arrived): callers use the friendly name.
+     * HA's tile name for an entity on a device: the device's name, then the entity's own name (`en`, kept whole, as
+     * HA's frontend joins the parts: "Sunset Lamp Sunset"), or the device's name alone for its main entity. Null
+     * when the entity has no device (or the registries haven't arrived): callers use the friendly name.
      */
     fun deviceEntityName(entityId: String): String? {
         val entry = registry[entityId] ?: return null
         val device = entry.deviceId?.let { devices[it] } ?: return null
-        val own = entry.name?.let { n -> if (n.startsWith(device, ignoreCase = true)) n.substring(device.length).trim() else n }
+        val own = entry.name?.trim()
         return if (own.isNullOrEmpty()) device else "$device $own"
     }
 

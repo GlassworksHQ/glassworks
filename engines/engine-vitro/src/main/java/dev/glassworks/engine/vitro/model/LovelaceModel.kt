@@ -125,9 +125,15 @@ data class EntityRowConfig(
 sealed class VisibilityCondition {
     /**
      * HA's `state` condition. [states] and [statesNot] take one value or a list (`state: [playing, paused]`).
-     * The single-value constructor keeps older call sites working.
+     * The single-value constructor keeps older call sites working. With [attribute] the condition compares that
+     * attribute instead of the state. A value that names an entity also matches that entity's state, as in HA.
      */
-    data class State(val entity: String, val states: List<String>? = null, val statesNot: List<String>? = null) : VisibilityCondition() {
+    data class State(
+        val entity: String,
+        val states: List<String>? = null,
+        val statesNot: List<String>? = null,
+        val attribute: String? = null,
+    ) : VisibilityCondition() {
         constructor(entity: String, state: String?, stateNot: String?) :
             this(entity, state?.let { listOf(it) }, stateNot?.let { listOf(it) })
     }
@@ -141,6 +147,8 @@ sealed class VisibilityCondition {
         val below: Double?,
         val aboveEntity: String? = null,
         val belowEntity: String? = null,
+        /** Compare this attribute instead of the state. */
+        val attribute: String? = null,
     ) : VisibilityCondition()
     data class Screen(val mediaQuery: String) : VisibilityCondition()
     data class And(val conditions: List<VisibilityCondition>) : VisibilityCondition()
@@ -159,14 +167,24 @@ sealed class VisibilityCondition {
      */
     data class Unknown(val condition: String) : VisibilityCondition()
 
-    /** True only when the condition definitely holds: one Vitro can't evaluate never shows a card. */
+    /**
+     * True only when the condition definitely holds: one Vitro can't evaluate never shows a card. [nowSeconds] and
+     * [weekday] default to one sample of the clock, so a check across midnight never mixes two days.
+     */
     fun evaluate(
         lookup: (String) -> EntityState?,
         widthDp: Int = 1024,
         userId: String? = null,
-        nowSeconds: Int = currentLocalSeconds(),
-        weekday: Int = currentLocalWeekday(),
-    ): Boolean = evaluate3(lookup, widthDp, userId, nowSeconds, weekday) == true
+        nowSeconds: Int? = null,
+        weekday: Int? = null,
+    ): Boolean {
+        val now = if (nowSeconds == null || weekday == null) Calendar.getInstance() else null
+        return evaluate3(
+            lookup, widthDp, userId,
+            nowSeconds ?: secondsOf(now!!),
+            weekday ?: now!!.get(Calendar.DAY_OF_WEEK),
+        ) == true
+    }
 
     /**
      * Three-valued: null when Vitro can't tell ([Unknown], a media query it can't read). Null stays null through `not`,
@@ -176,12 +194,30 @@ sealed class VisibilityCondition {
     private fun evaluate3(lookup: (String) -> EntityState?, widthDp: Int, userId: String?, nowSeconds: Int, weekday: Int): Boolean? =
         when (this) {
             is State -> {
-                // Like HA's frontend, a missing entity reads as "unavailable": `state_not: off` still shows it.
-                val cur = lookup(entity)?.state ?: UNAVAILABLE
-                (states == null || cur in states) && (statesNot == null || cur !in statesNot)
+                // Like HA's frontend, a missing entity (or attribute) reads as "unknown": `state_not: off` still shows it.
+                val obj = lookup(entity)
+                val cur = when {
+                    obj == null -> UNKNOWN
+                    attribute != null -> obj.attributes[attribute]?.let(::jsString) ?: UNKNOWN
+                    else -> obj.state
+                }
+                // A value naming an entity matches that entity's state too (`state: input_select.mode`).
+                fun expand(values: List<String>) = values + values.mapNotNull { v ->
+                    if (ENTITY_ID.matches(v)) lookup(v)?.state else null
+                }
+                (states == null || cur in expand(states)) && (statesNot == null || cur !in expand(statesNot))
             }
             is NumericState -> {
-                val v = lookup(entity)?.state?.toDoubleOrNull()
+                val obj = lookup(entity)
+                val v = if (attribute != null) {
+                    when (val a = obj?.attributes?.get(attribute)) {
+                        is Number -> a.toDouble()
+                        null -> null
+                        else -> a.toString().trim().toDoubleOrNull()
+                    }
+                } else {
+                    obj?.state?.toDoubleOrNull()
+                }
                 if (v == null) {
                     false
                 } else {
@@ -238,7 +274,11 @@ sealed class VisibilityCondition {
 
     fun referencedEntities(out: MutableSet<String>) {
         when (this) {
-            is State -> out += entity
+            is State -> {
+                out += entity
+                // Entity-valued operands: a change to the named entity changes the result.
+                for (v in states.orEmpty() + statesNot.orEmpty()) if (ENTITY_ID.matches(v)) out += v
+            }
             is NumericState -> {
                 out += entity
                 aboveEntity?.let { out += it }
@@ -252,7 +292,17 @@ sealed class VisibilityCondition {
     }
 
     companion object {
-        private const val UNAVAILABLE = "unavailable"
+        private const val UNKNOWN = "unknown"
+
+        /** An attribute value as JavaScript's `String()` writes it (`150`, not `150.0`), as HA compares it. */
+        private fun jsString(v: Any): String = when (v) {
+            is Double -> if (v % 1.0 == 0.0 && kotlin.math.abs(v) < 1e15) v.toLong().toString() else v.toString()
+            is Float -> jsString(v.toDouble())
+            else -> v.toString()
+        }
+
+        private fun secondsOf(c: Calendar): Int =
+            c.get(Calendar.HOUR_OF_DAY) * 3_600 + c.get(Calendar.MINUTE) * 60 + c.get(Calendar.SECOND)
         /** One `(min-width: Npx)` / `(max-width: Npx)` feature: the only media features Vitro evaluates. */
         private val WIDTH_FEATURE = Regex("""^\(\s*(min|max)-width\s*:\s*(\d+(?:\.\d+)?)px\s*\)$""")
         private val MEDIA_AND = Regex("""\s+and\s+""")
@@ -263,9 +313,7 @@ sealed class VisibilityCondition {
             "thu" to Calendar.THURSDAY, "fri" to Calendar.FRIDAY, "sat" to Calendar.SATURDAY, "sun" to Calendar.SUNDAY,
         )
 
-        fun currentLocalSeconds(): Int = Calendar.getInstance().let {
-            it.get(Calendar.HOUR_OF_DAY) * 3_600 + it.get(Calendar.MINUTE) * 60 + it.get(Calendar.SECOND)
-        }
+        fun currentLocalSeconds(): Int = secondsOf(Calendar.getInstance())
 
         /**
          * Milliseconds from [nowMillis] (local time) until just after the next `after`/`before` bound of a `time`
@@ -360,6 +408,17 @@ sealed class VisibilityCondition {
             return out
         }
 
+        /**
+         * A group's `conditions`: a list, or one condition object (HA takes either). Absent is an empty group; any
+         * other value is unreadable (null), never an empty group that shows the card.
+         */
+        private fun parseGroup(o: JSONObject): List<VisibilityCondition>? = when (val c = o.opt("conditions")) {
+            null, JSONObject.NULL -> emptyList()
+            is JSONArray -> parseList(c)
+            is JSONObject -> listOf(parse(c))
+            else -> null
+        }
+
         /** Parses one condition. Anything Vitro can't evaluate becomes [Unknown], which hides the card. */
         fun parse(o: JSONObject): VisibilityCondition {
             val condName = o.optString("condition", "state")
@@ -369,13 +428,13 @@ sealed class VisibilityCondition {
                     val st = parseStringList(o, "state")
                     val not = parseStringList(o, "state_not")
                     if (st == null && not == null) return Unknown(condName)
-                    State(entity, st, not)
+                    State(entity, st, not, o.optString("attribute", "").trim().ifEmpty { null })
                 }
                 "numeric_state" -> {
                     val entity = conditionEntity(o).ifEmpty { return Unknown(condName) }
                     val (above, aboveEntity) = bound(o, "above")
                     val (below, belowEntity) = bound(o, "below")
-                    NumericState(entity, above, below, aboveEntity, belowEntity)
+                    NumericState(entity, above, below, aboveEntity, belowEntity, o.optString("attribute", "").trim().ifEmpty { null })
                 }
                 "screen" -> Screen(o.optString("media_query", ""))
                 "user" -> {
@@ -391,9 +450,9 @@ sealed class VisibilityCondition {
                     }
                     Time(after, before, weekdays)
                 }
-                "and" -> And(parseList(o.optJSONArray("conditions")))
-                "or" -> Or(parseList(o.optJSONArray("conditions")))
-                "not" -> Not(parseList(o.optJSONArray("conditions")))
+                "and" -> And(parseGroup(o) ?: return Unknown(condName))
+                "or" -> Or(parseGroup(o) ?: return Unknown(condName))
+                "not" -> Not(parseGroup(o) ?: return Unknown(condName))
                 else -> Unknown(condName)
             }
         }

@@ -51,15 +51,19 @@ class HaDisplayTest {
         HaDisplay.applyRegistry(JSONObject("""{"entities": [
             {"ei": "light.sunset", "di": "d1", "en": "Sunset"},
             {"ei": "light.ball", "di": "d2"},
-            {"ei": "light.strip", "di": "d3", "en": "LED Strip accent"},
+            {"ei": "light.strip", "di": "d3", "en": "Accent"},
+            {"ei": "switch.desk", "di": "d4", "en": "Desktop"},
             {"ei": "light.loose"}]}"""))
         HaDisplay.applyDevices(org.json.JSONArray("""[
             {"id": "d1", "name": "ZG-305Z", "name_by_user": "Sunset Lamp"},
             {"id": "d2", "name": "Ball Lamp", "name_by_user": null},
-            {"id": "d3", "name": "LED Strip"}]"""))
+            {"id": "d3", "name": "LED Strip"},
+            {"id": "d4", "name": "Desk"}]"""))
         assertEquals("Sunset Lamp Sunset", HaDisplay.deviceEntityName("light.sunset"))
         assertEquals("Ball Lamp", HaDisplay.deviceEntityName("light.ball"))
-        assertEquals("LED Strip accent", HaDisplay.deviceEntityName("light.strip"))
+        assertEquals("LED Strip Accent", HaDisplay.deviceEntityName("light.strip"))
+        // The entity's own name stays whole: no device-name prefix is cut off it.
+        assertEquals("Desk Desktop", HaDisplay.deviceEntityName("switch.desk"))
         assertNull(HaDisplay.deviceEntityName("light.loose"))
     }
 

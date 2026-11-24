@@ -53,6 +53,17 @@ class EntityStoreTest {
     }
 
     @Test
+    fun hassJsonCarriesTheTimestampsInHaFormat() {
+        val json = EntityState("sensor.t", "1", emptyMap(), lastChanged = 1700000000.25, lastUpdated = 1700000100.0).toHassJson()
+        assertEquals("2023-11-14T22:13:20.250000+00:00", json.getString("last_changed"))
+        assertEquals("2023-11-14T22:15:00.000000+00:00", json.getString("last_updated"))
+        // Unknown timestamps stay out instead of reading as 1970.
+        val bare = EntityState("sensor.t", "1", emptyMap()).toHassJson()
+        assertFalse(bare.has("last_changed"))
+        assertFalse(bare.has("last_updated"))
+    }
+
+    @Test
     fun lastUpdatedFallsBackToLastChangedLikeHaCompresses() {
         val store = EntityStore()
         store.applyCompressedEvent(event("""{"a": {"sensor.t": {"s": "1", "lc": 1700000000.0}}}"""))
