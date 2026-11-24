@@ -1948,7 +1948,9 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             }
             when {
                 isSwitchable -> row.addView(switchView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-                isCover -> COVER_BUTTONS.forEach { (iconName, service) ->
+                // ha-cover-controls: 48 px icon buttons (24 px icons), the group 8 px into the row's end padding, so a
+                // cover row is 48 px tall where a plain one is 40.
+                isCover -> COVER_BUTTONS.forEachIndexed { i, (iconName, service) ->
                     val btn = android.widget.FrameLayout(ctx.context).apply {
                         isClickable = true
                         contentDescription = service.substringBefore('_').replaceFirstChar { it.titlecase(Locale.ROOT) }
@@ -1958,12 +1960,14 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                         }
                         applyHaRipple(this, 999f, ctx.theme.dark)
                         addView(MdiIconView(ctx.context).apply { setIcon(iconName, ctx.theme.primaryTextColor) },
-                            android.widget.FrameLayout.LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
+                            android.widget.FrameLayout.LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
                         setOnClickListener {
                             ctx.callService("cover", service, JSONObject().put("entity_id", rowCfg.entity), null)
                         }
                     }
-                    row.addView(btn, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)))
+                    row.addView(btn, LinearLayout.LayoutParams(ctx.px(48f), ctx.px(48f)).apply {
+                        if (i == COVER_BUTTONS.lastIndex) marginEnd = -ctx.px(8f)
+                    })
                 }
                 else -> row.addView(valueView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
             }
@@ -1985,7 +1989,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 val active = s?.isActive == true
                 val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                 iconView.setIcon(MdiIcons.resolveIconName(rowCfg.icon, s), tint)
-                nameView.text = rowCfg.name ?: s?.friendlyName ?: rowCfg.entity
+                nameView.text = rowCfg.name ?: s?.displayName ?: rowCfg.entity
                 secondaryView?.text = if (rowCfg.secondaryInfo == "last-updated") {
                     s?.copy(lastChanged = s.lastUpdated.takeIf { it > 0.0 } ?: s.lastChanged)?.relativeLastChanged()
                 } else {
@@ -2078,7 +2082,7 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                     val active = s?.isActive == true
                     val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                     icon.setIcon(MdiIcons.resolveIconName(e.icon, s), tint)
-                    name.text = e.name ?: s?.friendlyName ?: e.entity
+                    name.text = e.name ?: s?.displayName ?: e.entity
                     state.text = s?.plainState() ?: "…"
                 }
                 row.addView(cell, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { bottomMargin = ctx.px(12f) })
@@ -2143,7 +2147,7 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
             observe(eid) { s ->
                 val active = s?.isActive == true
                 icon.setIcon(MdiIcons.resolveIconName(config.icon, s), if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor)
-                label.text = config.name ?: s?.friendlyName ?: eid
+                label.text = config.name ?: s?.displayName ?: eid
                 state.text = s?.plainState().orEmpty()
             }
         } else {
@@ -2478,8 +2482,11 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     private val aspect: Float = parseAspectRatio(config.raw.opt("aspect_ratio")?.toString())
     /** `state_filter`: a CSS filter per state. */
     private val stateFilters: JSONObject? = config.raw.optJSONObject("state_filter")
-    /** Without `aspect_ratio`, HA's picture-entity takes the image's own shape once it has loaded. */
-    private val naturalAspect = config.type == "picture-entity" && !config.raw.has("aspect_ratio")
+    /**
+     * Without `aspect_ratio`, hui-image is the image at full width and its own shape once it has loaded: picture,
+     * picture-entity and picture-glance alike.
+     */
+    private val naturalAspect = !config.raw.has("aspect_ratio")
     private var imageAspect: Float? = null
 
     /**
@@ -2523,15 +2530,19 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             }
             addView(bar, LayoutParams(MATCH_PARENT, ctx.px(48f), Gravity.BOTTOM))
         } else if (config.type != "picture" && (showName || showState || glanceEntities.isNotEmpty())) {
+            // hui-picture-glance-card's .box: rgba(0,0,0,.3), 4 px 8 px padding, 48 px tall; the title 16 px / 500 on
+            // a 32 px line 8 px in; the entities' 40 px icon buttons side by side at the end.
+            caption.textSize = ctx.scaledSp(16f)
+            caption.typeface = VitroFonts.typeface(ctx.context, Inter.MEDIUM, ctx.scaledSp(16f))
             val bar = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setBackgroundColor(0x88000000.toInt())
-                setPadding(ctx.px(12f), ctx.px(8f), ctx.px(8f), ctx.px(8f))
+                setBackgroundColor(0x4D000000)
+                setPadding(ctx.px(16f), ctx.px(4f), ctx.px(8f), ctx.px(4f))
+                minimumHeight = ctx.px(48f)
                 addView(caption, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             }
             if (glanceEntities.isNotEmpty()) {
-                bar.setPadding(ctx.px(12f), ctx.px(2f), ctx.px(4f), ctx.px(2f))
                 bar.addView(buildGlanceIcons(glanceEntities), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
             }
             addView(bar, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
@@ -2569,11 +2580,11 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             observe(eid) { s ->
                 applyStateFilter(s)
                 if (config.type == "picture-entity" && showName && showState) {
-                    caption.text = label ?: s?.friendlyName ?: eid
+                    caption.text = label ?: s?.displayName ?: eid
                     stateCaption.text = s?.formattedState().orEmpty()
                 } else {
                     val parts = buildList {
-                        if (showName) add(label ?: s?.friendlyName ?: eid)
+                        if (showName) add(label ?: s?.displayName ?: eid)
                         if (showState && s != null && glanceEntities.isEmpty()) add(s.formattedState())
                     }
                     caption.text = parts.joinToString(" · ")
@@ -2587,7 +2598,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     private fun buildGlanceIcons(entries: List<EntityRowConfig>): LinearLayout = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL or Gravity.END
-        entries.forEachIndexed { index, entry ->
+        entries.forEach { entry ->
             val icon = MdiIconView(ctx.context)
             val target = FrameLayout(ctx.context).apply {
                 isClickable = true
@@ -2597,9 +2608,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 setOnClickListener { ctx.performAction(glanceTapAction(entry), entry.entity) }
                 bindHoldAction(ctx, entry.holdAction ?: ActionConfig("more-info"), entry.entity)
             }
-            addView(target, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)).apply {
-                if (index > 0) marginStart = ctx.px(4f)
-            })
+            addView(target, LinearLayout.LayoutParams(ctx.px(40f), ctx.px(40f)))
             observe(entry.entity) { s ->
                 val name = s?.friendlyName ?: entry.entity
                 target.contentDescription = entry.name ?: name
