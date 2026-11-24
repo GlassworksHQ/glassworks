@@ -305,6 +305,9 @@ open class AppManage(
             is SettingsItem.Blueprints -> listOf("${dev.glassworks.pane.BLUEPRINTS}:") + runCatching { i.card(dev.glassworks.pane.BlueprintSurface.PANEL) }.getOrNull()
                 ?.let { c -> listOfNotNull(c.note?.let { "  $it" }) + c.rows.map { (bp, a) -> "  ${bp.name}: ${a::class.simpleName}" } }.orEmpty()
             is SettingsItem.Action -> listOf("${i.title}: ${v(i.detail)}")
+            // Never a network's name (#460): whether a change is under way, and whether the last one didn't work.
+            is SettingsItem.Wifi -> listOf("${i.title}: " + (if (runCatching { i.open() }.getOrDefault(true)) "no change under way" else "a change is under way") +
+                if (runCatching { i.problem() }.getOrDefault(false)) ", the last one didn't work" else "")
             // A native view's typed twin, as the Manage page shows it; never a secret (SettingsItem.Native).
             is SettingsItem.Native -> itemLines(dev.glassworks.pane.SettingsChange.twinOf(i))
             // Its twin too: what a link opens is the person's (the notifications' words), not the panel's state.

@@ -141,8 +141,14 @@ object ImprovController {
      * gets discovered, and a restart would cut the Improv connection before the result arrives.
      */
     val busy: Boolean
-        get() = installerJoining || session?.state == ImprovState.PROVISIONING ||
+        get() = installerJoining || settingsJoining || session?.state == ImprovState.PROVISIONING ||
             SystemClock.elapsedRealtime() < settleUntil
+    /** A Wi-Fi change from the settings (#660) is joining or going back: as [installerJoining], no restart then. */
+    private var settingsJoining = false
+
+    /** Counts settings joins and ways back: only the latest one's answer clears [settingsJoining]. */
+    private var settingsSeq = 0
+
     /** Installer requests in this process; an outcome only updates [installerWifi] if it's the latest. */
     private var installerSeq = 0
     private var notifying = false
@@ -298,6 +304,41 @@ object ImprovController {
         refreshOverlay()
         wifi.connect(ssid, psk, hidden) { outcome -> main.post { onInstallerOutcome(seq, ssid, via, outcome); done?.invoke(outcome) } }
         return true
+    }
+
+    // ---- Wi-Fi changes from the settings (#660), on the same provisioner as every other join
+
+    /** The provisioner, once the controller is up: the settings' Wi-Fi change reads and joins through it. */
+    val provisioner: WifiProvisioner? get() = if (initialized) wifi else null
+
+    /**
+     * Joins [ssid] for a Wi-Fi change from the settings ([dev.glassworks.net.WifiChange]), on the same provisioner as
+     * Bluetooth and the installer: a newer join from either supersedes this one, and this one supersedes theirs. The
+     * setup screen's Wi-Fi step doesn't show it. [psk] is never logged. False if the controller isn't up yet.
+     */
+    fun joinFromSettings(ssid: String, psk: String, done: (WifiProvisioner.Outcome) -> Unit): Boolean {
+        if (!initialized) return false
+        Log.i(TAG, "settings Wi-Fi change: joining the chosen network")
+        val seq = ++settingsSeq
+        settingsJoining = true
+        wifi.connect(ssid, psk) { o -> main.post { settingsDone(seq); done(o) } }
+        return true
+    }
+
+    /** [WifiProvisioner.goBack] for a Wi-Fi change from the settings; false if the controller isn't up yet. */
+    fun goBackFromSettings(to: WifiProvisioner.OnNetwork, leave: String, forget: Boolean, done: (WifiProvisioner.Outcome) -> Unit): Boolean {
+        if (!initialized) return false
+        val seq = ++settingsSeq
+        settingsJoining = true
+        wifi.goBack(to, leave, forget) { o -> main.post { settingsDone(seq); done(o) } }
+        return true
+    }
+
+    /** A settings join or way back answered: busy ends only with the latest one's answer, a superseded one's changes nothing. */
+    private fun settingsDone(seq: Int) {
+        if (seq != settingsSeq) return
+        settingsJoining = false
+        settleUntil = SystemClock.elapsedRealtime() + SETTLE_MS
     }
 
     /**

@@ -236,17 +236,34 @@ public final class dev/glassworks/improv/WifiProvisioner {
 	public final fun getHasLocationAccess ()Z
 	public final fun getLegacyApiAllowed ()Z
 	public final fun getOnProgress ()Lkotlin/jvm/functions/Function1;
+	public final fun goBack (Ldev/glassworks/improv/WifiProvisioner$OnNetwork;Ljava/lang/String;ZLkotlin/jvm/functions/Function1;)V
+	public final fun isSaved (Ljava/lang/String;)Ljava/lang/Boolean;
+	public final fun onNetwork ()Ldev/glassworks/improv/WifiProvisioner$OnNetwork;
 	public final fun requestScan ()Z
 	public final fun scan ()Ljava/util/List;
 	public final fun scanFresh (JLkotlin/jvm/functions/Function1;)V
 	public final fun setOnProgress (Lkotlin/jvm/functions/Function1;)V
 	public final fun status ()Ljava/lang/String;
+	public final fun switchBlock ()Ldev/glassworks/improv/WifiProvisioner$SwitchBlock;
 }
 
 public final class dev/glassworks/improv/WifiProvisioner$Companion {
 	public final fun getLogTag ()Ljava/lang/String;
 	public final fun saysWhatToDo (Ljava/lang/String;)Z
 	public final fun setLogTag (Ljava/lang/String;)V
+}
+
+public final class dev/glassworks/improv/WifiProvisioner$OnNetwork {
+	public fun <init> (Ljava/lang/String;I)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()I
+	public final fun copy (Ljava/lang/String;I)Ldev/glassworks/improv/WifiProvisioner$OnNetwork;
+	public static synthetic fun copy$default (Ldev/glassworks/improv/WifiProvisioner$OnNetwork;Ljava/lang/String;IILjava/lang/Object;)Ldev/glassworks/improv/WifiProvisioner$OnNetwork;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getName ()Ljava/lang/String;
+	public final fun getNetId ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public abstract class dev/glassworks/improv/WifiProvisioner$Outcome {
@@ -278,5 +295,13 @@ public final class dev/glassworks/improv/WifiProvisioner$Outcome$Failed : dev/gl
 	public final fun getRestored ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/improv/WifiProvisioner$SwitchBlock : java/lang/Enum {
+	public static final field NO_LOCATION Ldev/glassworks/improv/WifiProvisioner$SwitchBlock;
+	public static final field SUGGESTIONS_ONLY Ldev/glassworks/improv/WifiProvisioner$SwitchBlock;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/glassworks/improv/WifiProvisioner$SwitchBlock;
+	public static fun values ()[Ldev/glassworks/improv/WifiProvisioner$SwitchBlock;
 }
 

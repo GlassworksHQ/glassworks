@@ -37,6 +37,9 @@ import dev.glassworks.frame.systemSettings
 import dev.glassworks.discovery.HaDiscovery
 import dev.glassworks.device.PanelDevice
 import dev.glassworks.provisioning.ImprovController
+import dev.glassworks.provisioning.SettingsWifiRadio
+import dev.glassworks.provisioning.WifiChangeStore
+import dev.glassworks.net.WifiChange
 import dev.glassworks.provisioning.ImprovSelfAuth
 import dev.glassworks.provisioning.ImprovSerialServer
 import dev.glassworks.device.SecretHandoverServer
@@ -118,6 +121,7 @@ open class KioskService : Service() {
         SetupChannelServer.start(this, glassworks)
         secretHandover = SecretHandoverServer.create(this).also { it.start() }
         startSetupHotspot()
+        startWifiChange()
         Log.i("Glassworks", "KioskService started")
     }
 
@@ -165,7 +169,26 @@ open class KioskService : Service() {
         hs.start()
     }
 
+    /**
+     * Changing Wi-Fi after setup (#660), on Improv's provisioner (up by now). A change a run of the app left part way
+     * finishes first ([WifiChange.resume]): on the new network with Home Assistant in reach, or back on the old one.
+     */
+    private fun startWifiChange() {
+        val prefs = KioskPrefs(this)
+        val c = WifiChange(
+            radio = SettingsWifiRadio(this, main, haBase = { prefs.haBase }, armHotspot = { glassworks.setupHotspot?.configured() }),
+            store = WifiChangeStore(this),
+            clock = SystemClock::elapsedRealtime,
+            schedule = { delay, run -> val r = Runnable(run); main.postDelayed(r, delay); { main.removeCallbacks(r) } },
+            log = { Log.i(WIFI_TAG, it) },
+        )
+        glassworks.wifiChange = c
+        c.resume()
+    }
+
     override fun onDestroy() {
+        glassworks.wifiChange?.close()
+        glassworks.wifiChange = null
         hotspotNetworks?.let { cb -> runCatching { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) } }
         hotspotNetworks = null
         glassworks.setupHotspot?.close() // stops it, and puts back what it changed
@@ -265,6 +288,7 @@ open class KioskService : Service() {
 
     companion object {
         private const val HOTSPOT_TAG = "Glassworks.Hotspot"
+        private const val WIFI_TAG = "Glassworks.Wifi"
         private const val CHANNEL = "kiosk"
         private const val NOTIFICATION_ID = 1
         private const val REQ_KIOSK_SETTINGS = 10  // distinct PendingIntent request codes

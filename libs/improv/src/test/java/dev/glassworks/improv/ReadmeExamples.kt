@@ -52,6 +52,17 @@ private object ReadmeExamples {
         wifi.connect(ssid, password) { outcome -> /* any thread */ }
     }
 
+    fun switchAndBack(wifi: WifiProvisioner, newName: String, password: String, reachesMyServer: () -> Boolean) {
+        if (wifi.switchBlock() != null) return
+        val previous = wifi.onNetwork() ?: return
+        val forget = !(wifi.isSaved(newName) ?: return) // can't tell: don't risk forgetting the person's own
+        wifi.connect(newName, password) { joined ->
+            if (joined is WifiProvisioner.Outcome.Connected && !reachesMyServer()) {
+                wifi.goBack(previous, leave = newName, forget = forget) { back -> /* Connected once on `previous` again */ }
+            }
+        }
+    }
+
     fun serialOverAdb(main: Handler, wifi: WifiProvisioner) {
         val server = ImprovAdbServer("myapp_improv") { output ->
             object : ImprovSerialSession.Effects {

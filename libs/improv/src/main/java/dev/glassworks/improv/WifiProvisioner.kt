@@ -120,6 +120,118 @@ public class WifiProvisioner(
     public fun status(): String = "deviceOwner=$isDeviceOwner saw=$canDrawOverlays legacyApi=$legacyApiAllowed " +
         "fineLocation=$hasLocationPermission locationOn=$locationEnabled wifiOn=${wm.isWifiEnabled}"
 
+    /**
+     * A saved network the device is on, for [onNetwork] and [goBack].
+     *
+     * @property name The network's name (SSID), unquoted.
+     * @property netId Android's id for its saved configuration.
+     */
+    public data class OnNetwork(public val name: String, public val netId: Int) {
+        /** For a log: the id, never the network's name. */
+        override fun toString(): String = "OnNetwork(netId=$netId)"
+    }
+
+    /** Why this app can't move the device from one saved network to another and back ([switchBlock]). */
+    public enum class SwitchBlock {
+        /**
+         * Android lets this app only suggest networks (Android 10+ without the device owner or, on Android 10, the
+         * overlay permission), and a suggestion never moves the device off a saved network that works.
+         */
+        SUGGESTIONS_ONLY,
+
+        /** No location access: Android hides which network the device is on, so the way back can't be known. */
+        NO_LOCATION,
+    }
+
+    /**
+     * Why this app can't move the device to another network and back to the one it is on ([connect], then [goBack]), or
+     * null when it can: it may add and select networks itself ([legacyApiAllowed]) and sees which one it is on
+     * ([hasLocationAccess]). A device owner grants itself the location permission first.
+     */
+    public fun switchBlock(): SwitchBlock? {
+        if (!legacyApiAllowed) return SwitchBlock.SUGGESTIONS_ONLY
+        ensureLocationIfDeviceOwner()
+        return if (hasLocationAccess) null else SwitchBlock.NO_LOCATION
+    }
+
+    /**
+     * The saved network the device is on now, with an address, or null when it is on none, or this app can't tell which
+     * (no location access: Android redacts it).
+     */
+    @Suppress("DEPRECATION")
+    public fun onNetwork(): OnNetwork? {
+        ensureLocationIfDeviceOwner()
+        if (!hasLocationAccess || !wifiNetworkUp()) return null
+        val i = runCatching { wm.connectionInfo }.getOrNull() ?: return null
+        if (i.supplicantState != SupplicantState.COMPLETED || i.networkId == -1 || i.ipAddress == 0) return null
+        val name = WifiSecurityRules.unquote(i.ssid)?.takeIf { it.isNotEmpty() && it != UNKNOWN_SSID } ?: return null
+        return OnNetwork(name, i.networkId)
+    }
+
+    /**
+     * Whether a network called [name] is saved on the device now, or null when this app can't tell: no location access
+     * (see [switchBlock]), or Android refused the list. A caller that forgets what it saved must not read null as no.
+     */
+    @Suppress("DEPRECATION")
+    public fun isSaved(name: String): Boolean? {
+        ensureLocationIfDeviceOwner()
+        if (!hasLocationAccess) return null
+        val saved = runCatching { wm.configuredNetworks }.getOrNull() ?: return null
+        return saved.any { WifiSecurityRules.unquote(it.SSID) == name }
+    }
+
+    /**
+     * Takes the device from [leave] (a network a [connect] joined) back to the saved network [to]. When [forget], the
+     * saved [leave] goes first: that join saved it, it wasn't saved before. Then [to] is selected again, and [cb] gets
+     * [Outcome.Connected] once the device is on it with an address, or [Outcome.Failed] after [CONNECT_TIMEOUT_MS].
+     * Already on [to], only the forgetting happens. A [connect] in progress is cancelled first. Needs what [connect]'s
+     * own way back needs ([switchBlock] null). Neither name is logged. Main thread; [cb] once, on it.
+     */
+    @Suppress("DEPRECATION")
+    public fun goBack(to: OnNetwork, leave: String, forget: Boolean, cb: (Outcome) -> Unit) {
+        cancel()
+        if (forget && leave != to.name) {
+            val saved = runCatching { wm.configuredNetworks.orEmpty() }.getOrDefault(emptyList())
+            for (c in saved) if (c.networkId != to.netId && WifiSecurityRules.unquote(c.SSID) == leave) {
+                Log.i(TAG, "go back: forget the network the change saved (${c.networkId}) -> ${runCatching { wm.removeNetwork(c.networkId) }.getOrDefault(false)}")
+            }
+        }
+        if (onNetwork()?.netId == to.netId) {
+            Log.i(TAG, "go back: already on the previous network")
+            return cb(Outcome.Connected(to.name, WifiSecurityRules.ipv4(wm.connectionInfo?.ipAddress ?: 0), "already-connected"))
+        }
+        val selected = runCatching { wm.enableNetwork(to.netId, true) }.getOrDefault(false)
+        runCatching { wm.reconnect() }
+        Log.i(TAG, "go back: select the previous network (${to.netId}) -> $selected")
+        val r = Return(to, cb, SystemClock.elapsedRealtime() + CONNECT_TIMEOUT_MS)
+        returning = r
+        main.postDelayed(r, 500)
+    }
+
+    /** The [goBack] in progress, if any. */
+    private var returning: Return? = null
+
+    /** A [goBack] waiting for the device to be on [to] again. */
+    @Suppress("DEPRECATION")
+    private inner class Return(val to: OnNetwork, val cb: (Outcome) -> Unit, val deadline: Long) : Runnable {
+        override fun run() {
+            if (returning !== this) return
+            val ip = if (onNetwork()?.netId == to.netId) WifiSecurityRules.ipv4(wm.connectionInfo?.ipAddress ?: 0) else null
+            when {
+                ip != null -> { Log.i(TAG, "go back: on the previous network again"); finish(Outcome.Connected(to.name, ip, "back")) }
+                SystemClock.elapsedRealtime() > deadline -> { Log.w(TAG, "go back: the previous network didn't come back"); finish(Outcome.Failed("timed out", null)) }
+                else -> main.postDelayed(this, 500)
+            }
+        }
+
+        fun finish(o: Outcome) {
+            if (returning !== this) return
+            returning = null
+            main.removeCallbacks(this)
+            cb(o)
+        }
+    }
+
     /** A device owner can grant itself the location permission (needed for SSIDs and scans). */
     internal fun ensureLocationIfDeviceOwner() {
         if (hasLocationPermission || !isDeviceOwner) return
@@ -189,8 +301,9 @@ public class WifiProvisioner(
         }
     }
 
-    /** Cancels a [connect] in progress; its callback gets [Outcome.Failed] with `cancelled`. */
+    /** Cancels a [connect] or a [goBack] in progress; its callback gets [Outcome.Failed] with `cancelled`. */
     public fun cancel() {
+        returning?.finish(Outcome.Failed("cancelled", null))
         preparing?.let { finishPreparing(it, Outcome.Failed("cancelled", null)) }
         job?.finish(Outcome.Failed("cancelled", null))
     }
@@ -250,6 +363,7 @@ public class WifiProvisioner(
      * main thread.
      */
     public fun connect(ssid: String, password: String, hidden: Boolean? = null, cb: (Outcome) -> Unit) {
+        returning?.finish(Outcome.Failed("superseded", null))
         preparing?.let { finishPreparing(it, Outcome.Failed("superseded", null)) }
         job?.finish(Outcome.Failed("superseded", null))
         if (!wm.isWifiEnabled) {
@@ -483,6 +597,8 @@ public class WifiProvisioner(
         /** Logcat tag; set it before use to log under your app's own. */
         @Volatile public var logTag: String = "ImprovWifi"
         private val TAG get() = logTag
+        /** What WifiInfo says for a network it hides. */
+        private const val UNKNOWN_SSID = "<unknown ssid>"
         /** Same as ESPHome's improv_ble connect timeout. */
         internal const val CONNECT_TIMEOUT_MS: Long = 30_000L
         /** Suggestions wait for the user to approve a notification. */

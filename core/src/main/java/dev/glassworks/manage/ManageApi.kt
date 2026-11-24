@@ -66,7 +66,7 @@ class ManageApi(
         val key = f["key"].orEmpty()
         val item = section?.let { SettingsChange.find(it, key) }
             ?: return json(req, 404, JSONObject().put("problem", "This panel doesn't have that setting.").put("missing", true))
-        if (item is SettingsItem.SignIn || item is SettingsItem.Action) return json(req, 422, JSONObject().put("problem", "Change this on the panel's own Manage page."))
+        if (item is SettingsItem.SignIn || item is SettingsItem.Action || item is SettingsItem.Wifi) return json(req, 422, JSONObject().put("problem", "Change this on the panel's own Manage page."))
         // The panel's own connection (its Home Assistant address): never from another panel's page (#466 panel run).
         if (item is SettingsItem.Text && item.perPanel) return json(req, 422, JSONObject().put("problem", PER_PANEL))
         val raw = f["value"].orEmpty().trim()

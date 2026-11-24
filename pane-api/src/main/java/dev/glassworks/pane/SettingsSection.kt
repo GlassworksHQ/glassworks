@@ -326,6 +326,27 @@ sealed interface SettingsItem {
         val save: (Pair<String, String?>?, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
 
+    /**
+     * The panel's Wi-Fi network, and a way to change it (#660): the core's Network page has the one. The row shows
+     * [detail] (the network now, a change under way, how the last one ended), amber when [problem]; its button
+     * ([label]) opens a sheet with [hint], the networks [nearby] to pick from, a typed name, and a password. [open]:
+     * false while a change is under way, and the row then opens nothing. [needsCode] as an [Action]'s: a surface away
+     * from the panel asks for the code the panel shows first. The password is write-only, as a [SignIn]'s: never shown
+     * again, logged, or sent back into a page. `join` gets the name and the password after [SettingsChange.wifi]'s
+     * checks, and calls `done` with null once the change is under way, else why not.
+     */
+    class Wifi(
+        val title: String,
+        val detail: () -> String,
+        val hint: String,
+        val label: String,
+        val problem: () -> Boolean = { false },
+        val nearby: () -> List<String> = { emptyList() },
+        val open: () -> Boolean = { true },
+        val needsCode: Boolean = true,
+        val join: (network: String, password: String, done: (String?) -> Unit) -> Unit,
+    ) : SettingsItem
+
     /** Opens something else: another app's settings, the licences, or another section ([Link.section]). */
     class Link(
         val title: String, val detail: String,

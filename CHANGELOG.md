@@ -13,6 +13,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 **S1 Kiosk is now Glassworks, in its last release before 1.0: a browser Manage page for every panel, themes and an edge glow for Assist, notifications and Bluetooth proxy panes, and frame updates from Home Assistant.**
 
 ### Added
+- **Change the panel's Wi-Fi after setup.** A new *Network* page, on the panel and in Manage, moves the panel to
+  another network: pick one nearby or type its name, and enter the password (on Manage, also the code the panel
+  shows). The panel keeps its old network saved, and goes back to it on its own within 2 minutes if it can't join
+  the new one or reach Home Assistant there. The Wi-Fi row says what happened.
 - **Frame updates install from Home Assistant.** On a panel with the frame loader, Install on the Frame update card
   (or an automation's `update.install`) downloads the S1's signed frame bundle, checks it, and restarts the panel
   once to load it. The card shows the download's progress, and says why when it stops: a download that doesn't match,

@@ -118,6 +118,12 @@ interface Glassworks {
     var setupHotspot: dev.glassworks.setup.SetupHotspot?
 
     /**
+     * Changing the panel's Wi-Fi after setup (#660), set while KioskService runs: the Network page's row draws and starts
+     * it. Main thread.
+     */
+    var wifiChange: dev.glassworks.net.WifiChange?
+
+    /**
      * Setup over the network (#34), set while the panel's web server runs (HaAuth.startServer): "Close setup over the
      * network" ends its paired browsers through it. Any thread.
      */

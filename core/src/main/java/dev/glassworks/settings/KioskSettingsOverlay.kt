@@ -311,6 +311,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             is SettingsItem.TimeRange -> sheet.range(i) {}
             is SettingsItem.Choice -> sheet.choice(i) {}
             is SettingsItem.SignIn -> sheet.signIn(i) {}
+            is SettingsItem.Wifi -> { sheet.wifi(i) {}; typed?.let { sheet.field.setText(it) } }
             else -> {}
         }
     }
@@ -511,6 +512,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         is SettingsItem.Link -> i.title
         is SettingsItem.Choice -> i.title
         is SettingsItem.SignIn -> i.title
+        is SettingsItem.Wifi -> i.title
         // A changed action (Connect for Disconnect) draws the page again, with its own run (CodeRabbit on #331).
         is SettingsItem.Action -> i.title
         else -> null
@@ -596,6 +598,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         is SettingsItem.Choice -> if (i.swatch != null) themes(i) else follow(valueRow(i.title, choiceName(i), chevron = true, dim = false) { sheet.choice(i) { build() } }) { choiceName(i) }
         is SettingsItem.SignIn -> follow(valueRow(i.title, i.shown(i.isSet()), chevron = true, dim = false) { sheet.signIn(i) { build() } }) { i.shown(i.isSet()) }
         is SettingsItem.Action -> actionRow(i, prefix)
+        is SettingsItem.Wifi -> wifiRow(i)
         is SettingsItem.Group, is SettingsItem.States, is SettingsItem.Status, is SettingsItem.Tiles, is SettingsItem.Blueprints -> error("laid out by layOut")
         is SettingsItem.Native -> natives.getOrPut(i.key) { i.create(nativeHost) }.also { it.refresh() }.view
     }
@@ -947,6 +950,34 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         }) { val a = current(); if (button.text != a.label) button.text = a.label; a.detail() }
     }
 
+    /**
+     * The Wi-Fi row (#660): the network, or the change under way and how it ended (amber when it didn't work), and
+     * Change at the end, gone while a change is under way. Followed on [refresh], so the person at the panel sees
+     * a change sent from the Manage page as it goes.
+     */
+    private fun wifiRow(i: SettingsItem.Wifi): View {
+        val button = g.ghost(i.label).apply { setPadding(px(18f), px(8f), px(18f), px(8f)); setOnClickListener { if (i.open()) sheet.wifi(i) { build() } } }
+        val texts = texts(i.title, i.detail(), TX)
+        val line = texts.findViewWithTag<TextView>(VALUE)
+        fun bind() {
+            val d = i.detail()
+            if (line.text != d) line.text = d
+            line.visibility = if (d.isEmpty()) View.GONE else View.VISIBLE
+            line.setTextColor(if (i.problem()) AMBER else MU)
+            button.visibility = if (i.open()) View.VISIBLE else View.GONE
+        }
+        bind()
+        live += { bind() }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = px(OverviewPage.ROW_MIN)
+            setPadding(0, px(10f), 0, px(10f))
+            addView(texts, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(16f) })
+            addView(button)
+        }
+    }
+
     /** The name with the value on its right, the slider under them; saved when let go. */
     private fun sliderRow(i: SettingsItem.Slider): View {
         val shown = g.text(15f, MU).apply { text = i.shown(i.value()) }
@@ -1209,6 +1240,36 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
                 onClear = { commit(false, after) { done -> SettingsChange.clear(i, done) } }
             }
             field.requestFocus()
+        }
+
+        /**
+         * Another Wi-Fi network (#660): the ones nearby as chips (a tap fills the name), the name, and its password,
+         * always empty when the sheet opens. Join starts the change after [SettingsChange.wifi]'s checks; the row then
+         * says how it goes. No code here: the person is at the panel.
+         */
+        fun wifi(i: SettingsItem.Wifi, after: () -> Unit) {
+            val fields = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+            open(i.title, i.hint, fields, SettingsChange.WIFI_JOIN)
+            val near = runCatching { i.nearby() }.getOrDefault(emptyList())
+            if (near.isNotEmpty()) {
+                // One row that scrolls sideways: however many networks are near, the fields and Join stay in view.
+                val chips = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+                near.forEach { n ->
+                    chips.addView(g.chip(n).apply { setOnClickListener { field.setText(n); field.setSelection(n.length); password.requestFocus() } },
+                        LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(10f) })
+                }
+                val row = android.widget.HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; addView(chips) }
+                fields.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = px(14f) })
+            }
+            field.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            field.hint = SettingsChange.WIFI_NAME
+            field.setText("")
+            fields.addView(field, LinearLayout.LayoutParams(-1, -2))
+            passwordRow.addView(password, LinearLayout.LayoutParams(0, -2, 1f))
+            password.hint = SettingsChange.WIFI_PASSWORD
+            fields.addView(passwordRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(12f) })
+            onSave = { commit(false, after) { done -> SettingsChange.wifi(i, field.text?.toString().orEmpty(), password.text?.toString().orEmpty(), done) } }
+            if (near.isEmpty()) field.requestFocus()
         }
 
         /** The choices as chips; picking one applies it. */
