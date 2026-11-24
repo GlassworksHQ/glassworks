@@ -154,26 +154,12 @@
   "missingText": 1,
   "reason": "commands ignored: the start/return buttons row is missing (64 px shorter); state shows \"sleeping\" (an attribute) where HA shows \"Docked\", and a vacuum icon where HA's docked icon is zzz (coverage #794, 2026-11-24)"
  },
- "mirror/picture": {
-  "pixel": 0.7675,
-  "bounds": 362,
-  "font": 0,
-  "missingText": 0,
-  "reason": "wrong size: Vitro draws the image at half the column width, cropped to a short banner, where HA draws it full width at its natural square aspect; card ~362 px off (coverage #794, 2026-11-24)"
- },
  "mirror/picture-elements": {
   "pixel": 0.0092,
   "bounds": 0,
   "font": 2,
   "missingText": 0,
   "reason": "image and positions match; the state icon sits on a dark disc and the state label on a dark pill that HA doesn't draw, label 12 vs 14 px (coverage #794, 2026-11-24)"
- },
- "mirror/picture-glance": {
-  "pixel": 0.7771,
-  "bounds": 362,
-  "font": 3,
-  "missingText": 0,
-  "reason": "the same picture sizing as `picture` (half width, cropped banner vs full-width square), ~362 px off; the title bar and entity icons are there (coverage #794, 2026-11-24)"
  },
  "mirror/weather-current": {
   "pixel": 0.0797,
@@ -336,26 +322,12 @@
   "missingText": 1,
   "reason": "commands ignored: the start/return buttons row is missing (64 px shorter); state shows \"sleeping\" (an attribute) where HA shows \"Docked\", and a vacuum icon where HA's docked icon is zzz (coverage #794, 2026-11-24)"
  },
- "s1/picture": {
-  "pixel": 0.7675,
-  "bounds": 362,
-  "font": 0,
-  "missingText": 0,
-  "reason": "wrong size: Vitro draws the image at half the column width, cropped to a short banner, where HA draws it full width at its natural square aspect; card ~362 px off (coverage #794, 2026-11-24)"
- },
  "s1/picture-elements": {
   "pixel": 0.0092,
   "bounds": 0,
   "font": 2,
   "missingText": 0,
   "reason": "image and positions match; the state icon sits on a dark disc and the state label on a dark pill that HA doesn't draw, label 12 vs 14 px (coverage #794, 2026-11-24)"
- },
- "s1/picture-glance": {
-  "pixel": 0.7771,
-  "bounds": 362,
-  "font": 3,
-  "missingText": 0,
-  "reason": "the same picture sizing as `picture` (half width, cropped banner vs full-width square), ~362 px off; the title bar and entity icons are there (coverage #794, 2026-11-24)"
  },
  "s1/weather-current": {
   "pixel": 0.0797,
@@ -525,26 +497,12 @@
   "missingText": 1,
   "reason": "commands ignored: the start/return buttons row is missing (64 px shorter); state shows \"sleeping\" (an attribute) where HA shows \"Docked\", and a vacuum icon where HA's docked icon is zzz (coverage #794, 2026-11-24)"
  },
- "tablet/picture": {
-  "pixel": 0.7664,
-  "bounds": 362,
-  "font": 0,
-  "missingText": 0,
-  "reason": "wrong size: Vitro draws the image at half the column width, cropped to a short banner, where HA draws it full width at its natural square aspect; card ~362 px off (coverage #794, 2026-11-24)"
- },
  "tablet/picture-elements": {
   "pixel": 0.006,
   "bounds": 0,
   "font": 2,
   "missingText": 0,
   "reason": "image and positions match; the state icon sits on a dark disc and the state label on a dark pill that HA doesn't draw, label 12 vs 14 px (coverage #794, 2026-11-24)"
- },
- "tablet/picture-glance": {
-  "pixel": 0.7765,
-  "bounds": 362,
-  "font": 3,
-  "missingText": 0,
-  "reason": "the same picture sizing as `picture` (half width, cropped banner vs full-width square), ~362 px off; the title bar and entity icons are there (coverage #794, 2026-11-24)"
  },
  "tablet/weather-current": {
   "pixel": 0.0762,
