@@ -54,6 +54,7 @@ import dev.glassworks.engine.vitro.cards.MediaControlCardView
 import dev.glassworks.engine.vitro.cards.ModernCircularGaugeCardView
 import dev.glassworks.engine.vitro.cards.MoreInfoSheet
 import dev.glassworks.engine.vitro.cards.MushroomChipsCardView
+import dev.glassworks.engine.vitro.cards.MushroomClimateCardView
 import dev.glassworks.engine.vitro.cards.MushroomCoverCardView
 import dev.glassworks.engine.vitro.cards.MushroomFanCardView
 import dev.glassworks.engine.vitro.cards.MushroomLightCardView
@@ -1113,7 +1114,7 @@ class VitroView(
             "custom:mushroom-template-card" -> TileCardView(ctx, card)
             "custom:mushroom-title-card" -> HeadingCardView(ctx, card)
             "custom:mushroom-chips-card" -> MushroomChipsCardView(ctx, card)
-            "custom:mushroom-climate-card" -> ThermostatCardView(ctx, card)
+            "custom:mushroom-climate-card" -> MushroomClimateCardView(ctx, card)
             "custom:bubble-card" -> BubbleCardView(ctx, card)
             "custom:mini-graph-card" -> SensorGraphCardView(ctx, card)
             "custom:clock-weather-card" -> WeatherCardView(ctx, card)

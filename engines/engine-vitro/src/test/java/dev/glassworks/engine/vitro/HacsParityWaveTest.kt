@@ -182,6 +182,58 @@ class HacsParityWaveTest {
     }
 
     @Test
+    fun mushroomCoverButtonsAndItsStateLine() {
+        val st = store(entity("cover.blind", "open", "current_position" to 100))
+        val card = dev.glassworks.engine.vitro.cards.MushroomCoverCardView(context(st),
+            card("""{"type": "custom:mushroom-cover-card", "entity": "cover.blind", "show_buttons_control": true}"""))
+        idle()
+        assertTrue(card.texts().toString(), "Open \u2E31 100%" in card.texts())
+        card.click("Open"); assertEquals("cover.open_cover", calls.last().service)
+        card.click("Stop"); assertEquals("cover.stop_cover", calls.last().service)
+        card.click("Close"); assertEquals("cover.close_cover", calls.last().service)
+    }
+
+    @Test
+    fun mushroomFanShowsItsPercentageAndOscillates() {
+        val st = store(entity("fan.purifier", "on", "percentage" to 20, "oscillating" to false, "supported_features" to 3))
+        val card = dev.glassworks.engine.vitro.cards.MushroomFanCardView(context(st),
+            card("""{"type": "custom:mushroom-fan-card", "entity": "fan.purifier", "show_percentage_control": true, "show_oscillate_control": true}"""))
+        idle()
+        assertTrue(card.texts().toString(), "20%" in card.texts())
+        card.click("Oscillate")
+        assertEquals("fan.oscillate", calls.last().service)
+        assertEquals(true, calls.last().data.getBoolean("oscillating"))
+    }
+
+    @Test
+    fun mushroomClimateStepsTheTargetAndSwitchesToTheModes() {
+        val st = store(entity("climate.ac", "heat", "temperature" to 22.0, "current_temperature" to 19.5, "target_temp_step" to 0.5,
+            "temperature_unit" to "°C", "hvac_action" to "heating", "hvac_modes" to listOf("off", "heat", "cool", "auto")))
+        val card = dev.glassworks.engine.vitro.cards.MushroomClimateCardView(context(st),
+            card("""{"type": "custom:mushroom-climate-card", "entity": "climate.ac", "show_temperature_control": true, "hvac_modes": ["heat", "cool", "off"]}"""))
+        idle()
+        assertTrue(card.texts().toString(), "Heat \u2E31 19.5 °C" in card.texts() && "22.0" in card.texts())
+        card.click("Increase")
+        assertEquals("climate.set_temperature", calls.last().service)
+        assertEquals(22.5, calls.last().data.getDouble("temperature"), 0.0)
+        // The other control's button: the modes the entity has and the card lists, in HA's order (no auto).
+        card.click("HVAC modes")
+        card.click("cool")
+        assertEquals("climate.set_hvac_mode", calls.last().service)
+        assertEquals("cool", calls.last().data.getString("hvac_mode"))
+        assertTrue(card.all().none { it.contentDescription == "auto" })
+    }
+
+    @Test
+    fun aMushroomCardTakesARowForItsControlsOnlyWhenTheEntityHasThem() {
+        val cfg = card("""{"type": "custom:mushroom-light-card", "entity": "light.x", "show_brightness_control": true}""")
+        // An on/off light has no brightness to control: one row, as in Mushroom.
+        assertEquals(1, dev.glassworks.engine.vitro.ui.HaGridSize.of(cfg, entity("light.x", "on", "supported_color_modes" to listOf("onoff"))).rows)
+        assertEquals(2, dev.glassworks.engine.vitro.ui.HaGridSize.of(cfg, entity("light.x", "on", "supported_color_modes" to listOf("brightness"))).rows)
+        assertEquals(1, dev.glassworks.engine.vitro.ui.HaGridSize.of(card("""{"type": "custom:mushroom-light-card", "entity": "light.x"}""")).rows)
+    }
+
+    @Test
     fun mushroomHumidifierTogglesAndShowsTheTarget() {
         val st = store(entity("humidifier.bedroom", "on", "humidity" to 45, "current_humidity" to 38, "min_humidity" to 30, "max_humidity" to 80))
         val card = MushroomHumidifierCardView(

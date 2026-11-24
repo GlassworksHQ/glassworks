@@ -173,6 +173,14 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                     (raw.optBoolean("show_direction_control") && has(4))
             }
             "custom:mushroom-cover-card" -> listOf("show_buttons_control", "show_position_control", "show_tilt_position_control").any { raw.optBoolean(it) }
+            "custom:mushroom-climate-card" -> {
+                // A temperature control with a target to show; the hvac_modes the entity has and the card lists.
+                val target = state == null || state.attributes["temperature"] != null ||
+                    (state.attributes["target_temp_low"] != null && state.attributes["target_temp_high"] != null)
+                val listed = (0 until (raw.optJSONArray("hvac_modes")?.length() ?: 0)).map { raw.optJSONArray("hvac_modes")!!.optString(it) }
+                val modes = (state?.attributes?.get("hvac_modes") as? List<*>)?.map { it.toString() }
+                (raw.optBoolean("show_temperature_control") && target) || listed.any { modes == null || it in modes }
+            }
             "custom:mushroom-humidifier-card" -> raw.optBoolean("show_target_humidity_control")
             "custom:mushroom-vacuum-card" -> (raw.optJSONArray("commands")?.length() ?: 0) > 0
             "custom:mushroom-media-player-card" -> (raw.optJSONArray("media_controls")?.length() ?: 0) > 0 || (raw.optJSONArray("volume_controls")?.length() ?: 0) > 0

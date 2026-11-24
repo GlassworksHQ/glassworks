@@ -107,6 +107,9 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
     protected val secondary = label(ctx, 12f, ctx.theme.primaryTextColor).apply {
         gravity = Gravity.CENTER_VERTICAL; letterSpacing = 0.4f / 12f
     }
+    /** mushroom-badge-icon: a 16 px disc with a white 12 px icon on the shape's top right ([setBadge]). */
+    protected val badge = FrameLayout(ctx.context).apply { visibility = GONE }
+    private val badgeIcon = MdiIconView(ctx.context).also { badge.addView(it, FrameLayout.LayoutParams(ctx.px(12f), ctx.px(12f), Gravity.CENTER)) }
     /** `layout: horizontal`: the controls share the info's row. */
     protected val horizontal = config.raw.optString("layout") == "horizontal"
     /** `--control-height`: 42 px, or the icon's 36 px beside the info. */
@@ -140,9 +143,18 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
         // halves of the row, so a long title truncates at the middle as in HA.
         val stateItem = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
+            clipChildren = false
             gravity = Gravity.CENTER_VERTICAL
             if (!config.raw.optBoolean("hide_icon", false)) {
-                addView(shape, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)).apply { marginEnd = ctx.px(10f) })
+                // The shape, and Mushroom's badge on its top right (16 px, 3 px past the shape's edge).
+                addView(FrameLayout(ctx.context).apply {
+                    clipChildren = false
+                    clipToPadding = false
+                    addView(shape, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                    addView(badge, FrameLayout.LayoutParams(ctx.px(16f), ctx.px(16f), Gravity.TOP or Gravity.END).apply {
+                        topMargin = -ctx.px(3f); rightMargin = -ctx.px(3f)
+                    })
+                }, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)).apply { marginEnd = ctx.px(10f) })
             }
             addView(texts, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             // The state item keeps its own 10 px end padding inside its half (HA: a 129 px info box in a 400 px card).
@@ -251,6 +263,14 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
 
     protected fun setSecondary(text: String) {
         secondary.text = text
+    }
+
+    /** Shows Mushroom's badge on the shape: [icon] (white) on a [color] disc; null hides it. */
+    protected fun setBadge(icon: String?, color: Int) {
+        badge.visibility = if (icon == null) GONE else VISIBLE
+        if (icon == null) return
+        badgeIcon.setIcon(icon, Color.WHITE)
+        badge.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) }
     }
 
     /** Mushroom's `.shape.disabled` (an off light, a closed cover): the theme's disabled color, its disc at 20%. */
@@ -917,6 +937,149 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
     private companion object {
         /** `--rgb-state-cover`: Mushroom's blue. */
         val BLUE = 0xFF2196F3.toInt()
+    }
+}
+
+/**
+ * `custom:mushroom-climate-card`: Mushroom's climate card. The shape in the HVAC mode's color with the HVAC action's
+ * badge, the state and the current temperature (and humidity) under the name ("Heat ⸱ 19.5 °C"), and the target
+ * temperature control (− value +) or the `hvac_modes` buttons, with a button to switch between them.
+ */
+class MushroomClimateCardView(ctx: VitroCardContext, config: CardConfig) : MushroomShellCardView(ctx, config) {
+    private val configModes = stringList(config.raw, "hvac_modes")
+    private val row = controlRow()
+    private var activeControl: String? = null
+    private val tempValue = label(ctx, 14f, ctx.theme.primaryTextColor, 700).apply { gravity = Gravity.CENTER }
+    /** mushroom-input-number: − value + on one 42 px pill. */
+    private val tempControl = LinearLayout(ctx.context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        background = GradientDrawable().apply {
+            cornerRadius = ctx.px(12f).toFloat()
+            setColor(CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.05f))
+        }
+        fun stepper(icon: String, description: String, dir: Int) = FrameLayout(ctx.context).apply {
+            isClickable = true
+            contentDescription = description
+            addView(MdiIconView(ctx.context).apply { setIcon(icon, ctx.theme.primaryTextColor) },
+                FrameLayout.LayoutParams(controlIconPx, controlIconPx, Gravity.CENTER))
+            setOnClickListener { step(dir) }
+            applyHaRipple(this, ctx.px(12f).toFloat(), ctx.theme.dark)
+        }
+        addView(stepper("mdi:minus", "Decrease", -1), LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)))
+        addView(tempValue, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        addView(stepper("mdi:plus", "Increase", +1), LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)))
+    }
+    private val modeRow = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
+    private val modeButtons = LinkedHashMap<String, FrameLayout>()
+    private val switchButtons = LinkedHashMap<String, View>()
+
+    init {
+        row.addView(tempControl, LinearLayout.LayoutParams(0, ctx.px(42f), 1f))
+        row.addView(modeRow, LinearLayout.LayoutParams(0, ctx.px(42f), 1f))
+        CONTROL_ICONS.forEach { (c, icon) ->
+            val b = mushroomButton(icon, if (c == "temperature_control") "Temperature" else "HVAC modes") {
+                activeControl = c
+                eid?.let { render(ctx.store[it]) }
+            }
+            switchButtons[c] = b
+            row.addView(b, LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)).apply { marginStart = ctx.px(12f) })
+        }
+        start()
+    }
+
+    private fun step(dir: Int) {
+        val s = eid?.let { ctx.store[it] } ?: return
+        val cur = (s.attributes["temperature"] as? Number)?.toDouble() ?: return
+        val step = stepOf(s)
+        val min = (s.attributes["min_temp"] as? Number)?.toDouble() ?: Double.NEGATIVE_INFINITY
+        val max = (s.attributes["max_temp"] as? Number)?.toDouble() ?: Double.POSITIVE_INFINITY
+        val next = (Math.round((cur + dir * step) / step) * step).coerceIn(min, max)
+        call("climate", "set_temperature") { it.put("temperature", next) }
+    }
+
+    /** `target_temp_step`, else HA's default: 0.5 in °C, 1 in °F. */
+    private fun stepOf(s: EntityState): Double = (s.attributes["target_temp_step"] as? Number)?.toDouble()
+        ?: if ((s.attributes["temperature_unit"] as? String)?.contains("F") == true) 1.0 else 0.5
+
+    /** Mushroom's `_controls`: the temperature with a target to show, the modes the entity has and the card lists. */
+    private fun controlsFor(s: EntityState?): List<String> {
+        if (s == null) return emptyList()
+        val out = ArrayList<String>(2)
+        val target = s.attributes["temperature"] != null ||
+            (s.attributes["target_temp_low"] != null && s.attributes["target_temp_high"] != null)
+        if (target && config.raw.optBoolean("show_temperature_control")) out += "temperature_control"
+        if (modesOf(s).isNotEmpty()) out += "hvac_mode_control"
+        return out
+    }
+
+    private fun modesOf(s: EntityState): List<String> =
+        (s.attributes["hvac_modes"] as? List<*>)?.map { it.toString() }.orEmpty()
+            .filter { it in configModes }.sortedBy { MODE_ORDER.indexOf(it).let { i -> if (i < 0) 99 else i } }
+
+    override fun render(s: EntityState?) {
+        val state = s?.state.orEmpty()
+        val color = MODE_COLORS[state] ?: ctx.theme.disabledTextColor
+        val icon = MdiIcons.resolveIconName(null, s).takeIf { s != null } ?: "mdi:thermostat"
+        if (s != null && !s.isUnavailable) setShape(icon, color, true) else setShapeDisabled(icon)
+        val action = s?.attributes?.get("hvac_action") as? String
+        val badgeIcon = action?.takeIf { it != "off" && s?.isUnavailable == false }?.let { ACTION_ICONS[it] }
+        setBadge(badgeIcon, ACTION_COLORS[action] ?: ctx.theme.disabledTextColor)
+        val unit = (s?.attributes?.get("temperature_unit") as? String) ?: "°C"
+        // HA's label for the mode ("Heat"), not the action.
+        val line = StringBuilder(s?.let { dev.glassworks.engine.vitro.data.HaDisplay.stateLabel(it) ?: it.state.replace('_', ' ').replaceFirstChar { c -> c.titlecase(Locale.ROOT) } } ?: "…")
+        (s?.attributes?.get("current_temperature") as? Number)?.let { line.append(MUSH_SEPARATOR).append("${formatNumber(it.toDouble())} $unit") }
+        (s?.attributes?.get("current_humidity") as? Number)?.let { line.append(MUSH_SEPARATOR).append("${formatNumber(it.toDouble())} %") }
+        setSecondary(line.toString())
+
+        val available = controlsFor(s)
+        if (activeControl !in available) activeControl = available.firstOrNull()
+        tempControl.visibility = if (activeControl == "temperature_control") VISIBLE else GONE
+        modeRow.visibility = if (activeControl == "hvac_mode_control") VISIBLE else GONE
+        switchButtons.forEach { (c, b) -> b.visibility = if (available.size > 1 && c != activeControl && c in available) VISIBLE else GONE }
+        if (s != null) {
+            val target = (s.attributes["temperature"] as? Number)?.toDouble()
+            val decimals = if (stepOf(s) % 1.0 == 0.0) 0 else 1
+            tempValue.text = target?.let { String.format(Locale.US, "%.${decimals}f", it) } ?: "–"
+            val modes = modesOf(s)
+            if (modeButtons.keys.toList() != modes) {
+                modeRow.removeAllViews()
+                modeButtons.clear()
+                modes.forEach { m ->
+                    val b = mushroomButton(MODE_ICONS[m] ?: "mdi:thermostat", m) { call("climate", "set_hvac_mode") { it.put("hvac_mode", m) } }
+                    modeButtons[m] = b
+                    addCell(modeRow, b)
+                }
+            }
+            // The current mode: its icon in the mode's color, the button washed with it at 20% (off: grey).
+            modeButtons.forEach { (m, b) ->
+                val mc = if (m == "off") GREY else MODE_COLORS[m] ?: ctx.theme.disabledTextColor
+                val current = m == state
+                (b.getChildAt(0) as? MdiIconView)?.setIcon(MODE_ICONS[m] ?: "mdi:thermostat", if (current) mc else ctx.theme.primaryTextColor)
+                (b.background as? GradientDrawable)?.setColor(CardSurface.withAlpha(if (current) mc else ctx.theme.primaryTextColor, if (current) 0.2f else 0.05f))
+            }
+        }
+        controls.visibility = if (available.isEmpty()) GONE else VISIBLE
+        if (available.isNotEmpty()) collapseWhen(state == "off")
+    }
+
+    private companion object {
+        val MODE_ORDER = listOf("auto", "heat_cool", "heat", "cool", "dry", "fan_only", "off")
+        val MODE_COLORS = mapOf(
+            "auto" to 0xFF4CAF50.toInt(), "cool" to 0xFF2196F3.toInt(), "dry" to 0xFFFF9800.toInt(),
+            "fan_only" to 0xFF009688.toInt(), "heat" to 0xFFFF6F22.toInt(), "heat_cool" to 0xFF4CAF50.toInt(),
+        )
+        val ACTION_COLORS = mapOf("cooling" to 0xFF2196F3.toInt(), "drying" to 0xFFFF9800.toInt(), "heating" to 0xFFFF6F22.toInt())
+        val MODE_ICONS = mapOf(
+            "auto" to "mdi:thermostat-auto", "cool" to "mdi:snowflake", "dry" to "mdi:water-percent", "fan_only" to "mdi:fan",
+            "heat" to "mdi:fire", "heat_cool" to "mdi:sun-snowflake-variant", "off" to "mdi:power",
+        )
+        val ACTION_ICONS = mapOf("cooling" to "mdi:snowflake", "drying" to "mdi:water-percent", "heating" to "mdi:fire", "idle" to "mdi:clock-outline")
+        val CONTROL_ICONS = mapOf("temperature_control" to "mdi:thermometer", "hvac_mode_control" to "mdi:thermostat")
+        val GREY = 0xFF9E9E9E.toInt()
+
+        fun formatNumber(v: Double): String =
+            if (v % 1.0 == 0.0) v.toLong().toString() else String.format(Locale.US, "%.1f", v).trimEnd('0').trimEnd('.')
     }
 }
 
