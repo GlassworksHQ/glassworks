@@ -21,11 +21,25 @@ export function fixtureResources(c) {
   const list = c.resources ?? [];
   if (!Array.isArray(list)) throw new Error(`${c.id}: resources is a list`);
   return list.map((r) => {
-    if (r?.type !== 'css' || typeof r.url !== 'string' || !r.url.startsWith(FIXTURE_PREFIX)) {
+    // Checked as the page will request it too: `${FIXTURE_PREFIX}../x.css` normalizes to a path HA serves.
+    if (r?.type !== 'css' || typeof r.url !== 'string' || !r.url.startsWith(FIXTURE_PREFIX) || !staysInFixtures(r.url)) {
       throw new Error(`${c.id}: a resource is a type: css file under ${FIXTURE_PREFIX}, not ${JSON.stringify(r)}`);
     }
     return { type: 'css', url: r.url };
   });
+}
+
+/** Whether [url] (a path on HA's origin) still names a file under FIXTURE_PREFIX once a URL parser normalizes it. */
+function staysInFixtures(url) {
+  let parsed;
+  try {
+    parsed = new URL(url, 'http://homeassistant.local');
+  } catch {
+    return false;
+  }
+  if (parsed.origin !== 'http://homeassistant.local' || parsed.search || parsed.hash) return false;
+  const path = parsed.pathname;
+  return path === url && path.startsWith(FIXTURE_PREFIX) && path.length > FIXTURE_PREFIX.length && !/%2e|%2f|%5c/i.test(path);
 }
 
 /**

@@ -104,15 +104,110 @@ class WebFontsTest {
     private fun width(tf: Typeface) = Paint().apply { typeface = tf; textSize = 40f }.measureText("Entryway ceiling")
 
     @Test
-    fun aDashboardInBuiltInFontsNeverReadsItsStylesheets() {
+    fun builtInFamiliesFetchNoFontAndNoStylesheetsMeansNoRequest() {
         css("fonts.css", "@font-face { font-family: Pacifico; src: url(p.ttf) }")
+        font("p.ttf", "pacifico.ttf")
         configure("fonts.css")
         drain()
-        VitroFonts.typeface(activity, 400, 14f)
+        // Built-in families draw at once; the sheets are read once (one may declare them), the unused font never.
+        assertSame(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f))
         VitroFonts.typeface(activity, 500, 14f, fontFamily = "Roboto, sans-serif")
         VitroFonts.typeface(activity, 400, 14f, fontFamily = "monospace")
         drain()
-        assertTrue("no request for built-in families: $fetched", fetched.isEmpty())
+        assertEquals(listOf("$base/local/fonts.css"), fetched)
+        assertEquals("nothing a drawn family needs changed: no redraw", 0, notified)
+        // A dashboard without a `type: css` resource never asks for anything.
+        WebFonts.reset()
+        fetched.clear()
+        WebFonts.configure(base, listOf(LovelaceResource("/local/card.js", "module")), cache)
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "Pacifico, sans-serif")
+        drain()
+        assertTrue(fetched.isEmpty())
+    }
+
+    @Test
+    fun aSheetCanDeclareABuiltInName() {
+        // A page's @font-face wins over an installed font of the same name, Roboto included.
+        css("fonts.css", "@font-face { font-family: Roboto; src: url(p.ttf) }")
+        font("p.ttf", "pacifico.ttf")
+        configure("fonts.css")
+        drain()
+        // Roboto while the sheet is read, the declared face after.
+        assertSame(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f))
+        drain()
+        assertNotEquals(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f))
+        assertTrue(notified >= 1)
+    }
+
+    @Test
+    fun aSourceThatFailsMovesOnToTheNext() {
+        // The first source doesn't download; the second, with no format hint, is WOFF2 underneath; the third loads.
+        css("fonts.css", "@font-face { font-family: P; src: url(gone.woff), url(p-noext), url(p.ttf) format('truetype') }")
+        served["$base/local/p-noext"] = File(fonts, "bitter-vf.woff2").readBytes()
+        font("p.ttf", "pacifico.ttf")
+        configure("fonts.css")
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "P, sans-serif")
+        drain()
+        assertNotEquals(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f, fontFamily = "P, sans-serif"))
+        assertEquals(listOf("$base/local/gone.woff", "$base/local/p-noext", "$base/local/p.ttf"), fetched.drop(1))
+    }
+
+    @Test
+    fun anImportedSheetComesBeforeTheRulesThatImportIt() {
+        // root.css imports base.css, then overrides its face: the override wins, as in the browser.
+        css("root.css", "@import url(base.css); @font-face { font-family: F; src: url(override.ttf) }")
+        css("base.css", "@font-face { font-family: F; src: url(base.ttf) }")
+        font("override.ttf", "pacifico.ttf")
+        font("base.ttf", "comic-neue-400.ttf")
+        configure("root.css")
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "F")
+        drain()
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "F")
+        drain()
+        assertTrue("$base/local/override.ttf" in fetched)
+        assertTrue("$base/local/base.ttf" !in fetched)
+    }
+
+    @Test
+    fun aFailedJobLeavesTheLoaderWorking() {
+        css("fonts.css", "@font-face { font-family: Pacifico; src: url(p.ttf) }")
+        font("p.ttf", "pacifico.ttf")
+        val list = "Pacifico, sans-serif"
+        // Reading the sheets throws: nothing is left waiting, and the family is skipped for the next.
+        WebFonts.fetcher = WebFonts.Fetcher { _, _ -> throw IllegalStateException("network") }
+        configure("fonts.css")
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = list)
+        drain()
+        assertEquals(0, WebFonts.pending.get())
+        assertSame(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f, fontFamily = list))
+        // Loading the face throws: it's failed, not loading forever, and the redraw still comes.
+        WebFonts.reset()
+        WebFonts.fetcher = WebFonts.Fetcher { url, max ->
+            if (url.endsWith(".ttf")) throw IllegalStateException("network")
+            served[url]?.takeIf { it.size <= max }
+        }
+        configure("fonts.css")
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = list)
+        drain()
+        assertEquals(0, WebFonts.pending.get())
+        assertSame(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f, fontFamily = list))
+    }
+
+    @Test
+    fun theDiskCacheStaysUnderItsLimit() {
+        val dir = File(cache, "vitro-fonts").apply { mkdirs() }
+        // Old files fill the cache to its limit: a new font pushes the oldest out, not past the limit.
+        repeat(3) { i ->
+            File(dir, "old$i.font").apply { writeBytes(ByteArray((WebFonts.MAX_DISK_BYTES / 3).toInt())); setLastModified(1_000L * (i + 1)) }
+        }
+        css("fonts.css", "@font-face { font-family: Pacifico; src: url(p.ttf) }")
+        font("p.ttf", "pacifico.ttf")
+        configure("fonts.css")
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "Pacifico")
+        drain()
+        assertNotEquals(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f, fontFamily = "Pacifico"))
+        assertTrue(dir.listFiles()!!.sumOf { it.length() } <= WebFonts.MAX_DISK_BYTES)
+        assertTrue("the oldest went first", !File(dir, "old0.font").exists())
     }
 
     @Test

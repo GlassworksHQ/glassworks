@@ -1005,10 +1005,10 @@ class VitroView(
         val themedCtx = if (card.theme != null && card.theme != parentCtx.theme.name) {
             val overrideTheme = ThemeResolver.resolve(themeCatalog, darkMode, card.theme)
             contextFactory?.invoke(overrideTheme)?.let { themed ->
-                // The card's theme sets its own body font for the text inside it; else the font in force outside.
-                val family = VitroFonts.familyFor(overrideTheme).takeIf { it != VitroFonts.familyFor(parentCtx.theme) }
-                    ?: VitroFonts.familyOf(parentCtx.context).takeIf { it != VitroFonts.family }
-                if (family != null) themed.withFontFamily(family) else themed
+                // The card's theme sets the body font for the text inside it only if it sets one; a theme of colors
+                // only keeps the font in force outside the card.
+                val family = VitroFonts.declaredFamily(overrideTheme) ?: VitroFonts.familyOf(parentCtx.context)
+                if (family != VitroFonts.family) themed.withFontFamily(family) else themed
             } ?: parentCtx
         } else {
             parentCtx

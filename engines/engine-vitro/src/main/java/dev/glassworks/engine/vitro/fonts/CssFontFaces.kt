@@ -45,6 +45,9 @@ data class FontFace(
     /** The first source Vitro can draw, or null when the face has none (WOFF2 only, `local()` only). */
     val source: FontSource? get() = sources.firstOrNull { it.supported }
 
+    /** Every source Vitro can draw, in declaration order: tried one after another until one loads. */
+    val supportedUrls: List<String> get() = sources.filter { it.supported }.map { it.url }
+
     /** Whether the face covers Latin letters: of several faces split by `unicode-range` (Google Fonts), the one to use. */
     val coversLatin: Boolean get() = unicodeRanges.isEmpty() || unicodeRanges.any { 'A'.code in it }
 }

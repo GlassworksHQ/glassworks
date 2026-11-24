@@ -58,12 +58,6 @@ object VitroFonts {
         }
     }
 
-    /** Whether [name] is one of the names Vitro draws itself; a guess by name ("Roboto Mono") may still be a web font. */
-    private fun named(name: String): Boolean {
-        val n = name.lowercase(Locale.ROOT)
-        return n in INTER_FAMILIES || n in SYSTEM_FAMILIES || n in SERIF_FAMILIES || n in MONO_FAMILIES
-    }
-
     /** The built-in face a CSS `font-family` list draws in, web fonts aside: the first family Vitro has, else sans-serif. */
     fun faceFor(fontFamily: String?): Face {
         for (name in CssFontFaces.families(fontFamily?.takeIf { it.isNotBlank() } ?: HA_DEFAULT)) builtIn(name)?.let { return it }
@@ -71,10 +65,12 @@ object VitroFonts {
     }
 
     /** [theme]'s body font list. */
-    fun familyFor(theme: ResolvedTheme): String =
-        (theme.vars["ha-font-family-body"]?.takeIf { "var(" !in it && it.isNotBlank() }
-            ?: theme.vars["primary-font-family"]?.takeIf { "var(" !in it && it.isNotBlank() })
-            ?: HA_DEFAULT
+    fun familyFor(theme: ResolvedTheme): String = declaredFamily(theme) ?: HA_DEFAULT
+
+    /** The body font list [theme] sets itself, or null when it sets none (a theme of colors only). */
+    fun declaredFamily(theme: ResolvedTheme): String? =
+        theme.vars["ha-font-family-body"]?.takeIf { "var(" !in it && it.isNotBlank() }
+            ?: theme.vars["primary-font-family"]?.takeIf { "var(" !in it && it.isNotBlank() }
 
     /** The built-in face [theme]'s body text draws in, web fonts aside. */
     fun faceFor(theme: ResolvedTheme): Face = faceFor(familyFor(theme))
@@ -97,9 +93,10 @@ object VitroFonts {
         val list = fontFamily?.takeIf { it.isNotBlank() } ?: familyOf(context)
         for (name in CssFontFaces.families(list)) {
             val known = builtIn(name)
-            when (val web = WebFonts.lookup(name, weight, italic, mayFetch = !named(name))) {
+            when (val web = WebFonts.lookup(name, weight, italic)) {
                 is WebFonts.Lookup.Ready -> return web.typeface
-                WebFonts.Lookup.Loading -> continue
+                // A family Vitro has draws its own face while the sheets are read, in case one declares it too.
+                WebFonts.Lookup.Loading -> if (known != null) return builtIn(context, known, weight, sizeSp, italic)
                 WebFonts.Lookup.Absent -> if (known != null) return builtIn(context, known, weight, sizeSp, italic)
             }
         }

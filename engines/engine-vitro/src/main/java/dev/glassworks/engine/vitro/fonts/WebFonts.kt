@@ -31,8 +31,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * listener hears once the font has arrived, to draw again.
  *
  * Cheap on a small panel:
- * - **Nothing is fetched until a family Vitro doesn't have is drawn.** A dashboard in Roboto or Inter never reads its
- *   stylesheets.
+ * - **No font is fetched until it's drawn.** The stylesheets are read the first time text asks for a family (a sheet
+ *   may declare even "Roboto"), and a face only when a weight and style of it is drawn. A dashboard with no `type: css`
+ *   resource makes no request.
  * - Stylesheets and fonts load on one background thread, and both are kept on disk ([configure]'s cache folder), so a
  *   restart draws from disk: the sheets as they were last read, and every face read before, are loaded before the
  *   first view asks. The sheets are read again once per run, in the background, in case they changed.
@@ -133,17 +134,23 @@ object WebFonts {
         if (urls.isEmpty() || dir == null) return
         sheets = Sheets.PRELOADING
         val gen = generation
-        submit {
+        submit({
             trimDisk(dir)
             val text = readSheets(urls, dir, network = false)
             val parsed = text?.let { parseAll(it) }.orEmpty()
             // Every face read before has its file here: load them now, so the first view finds them ready.
             val ready = HashMap<String, Face>()
             for (face in parsed.values.flatten()) {
-                val src = face.source ?: continue
-                if (src.url in ready || ready.size >= MAX_FACES) continue
-                val file = fontFile(dir, src.url)
-                if (file.isFile) loadTypeface(file)?.let { ready[src.url] = Face.Ready(file, it) }
+                val key = faceKey(face) ?: continue
+                if (key in ready || ready.size >= MAX_FACES) continue
+                for (url in face.supportedUrls) {
+                    val file = fontFile(dir, url)
+                    val tf = if (file.isFile) loadTypeface(file) else null
+                    if (tf != null) {
+                        ready[key] = Face.Ready(file, tf)
+                        break
+                    }
+                }
             }
             ({
                 if (gen == generation && sheets == Sheets.PRELOADING) {
@@ -161,7 +168,13 @@ object WebFonts {
                     resume(asked - unknown.keys)
                 }
             })
-        }
+        }, onError = {
+            // The preload is only a head start: carry on as if the disk had nothing.
+            if (gen == generation && sheets == Sheets.PRELOADING) {
+                sheets = Sheets.NONE
+                if (waiting.isNotEmpty()) startSheets()
+            }
+        })
     }
 
     /** Forgets everything (a different server, or a test). */
@@ -178,15 +191,15 @@ object WebFonts {
     }
 
     /**
-     * [family] (any case, unquoted) at CSS [weight] and style, if a stylesheet declares it. [mayFetch] false (a
-     * family Vitro has built in, such as Roboto) answers from the sheets already read and never starts a read.
+     * [family] (any case, unquoted) at CSS [weight] and style, if a stylesheet declares it. The first ask of a family
+     * no sheet read so far declares starts reading the sheets (a sheet may declare even "Roboto" or "Inter", which then
+     * wins over the built-in one, as a page's `@font-face` wins over an installed font).
      */
-    fun lookup(family: String, weight: Int, italic: Boolean, mayFetch: Boolean = true): Lookup {
+    fun lookup(family: String, weight: Int, italic: Boolean): Lookup {
         if (cssUrls.isEmpty()) return Lookup.Absent
         val key = family.lowercase()
         val declared = faces[key]?.filter { it.source != null }.orEmpty()
         if (declared.isEmpty()) {
-            if (!mayFetch) return Lookup.Absent
             return when (sheets) {
                 Sheets.FRESH -> Lookup.Absent
                 Sheets.PRELOADING, Sheets.LOADING -> {
@@ -201,20 +214,31 @@ object WebFonts {
             }
         }
         // Drawn from sheets read off disk: read them again once this run, in case they changed.
-        if (sheets == Sheets.CACHED && mayFetch) startSheets()
-        val face = match(declared, weight, italic) ?: return Lookup.Absent
-        val src = face.source ?: return Lookup.Absent
-        return when (val state = loads[src.url]) {
+        if (sheets == Sheets.CACHED) startSheets()
+        val face = match(candidates(declared, Platform.hasTypefaceBuilder), weight, italic) ?: return Lookup.Absent
+        val id = faceKey(face) ?: return Lookup.Absent
+        return when (val state = loads[id]) {
             null -> {
                 if (loads.size >= MAX_FACES) return Lookup.Absent
-                startFace(src.url)
+                startFace(id, face.supportedUrls)
                 Lookup.Loading
             }
             Face.Loading -> Lookup.Loading
             Face.Failed -> Lookup.Absent
-            is Face.Ready -> Lookup.Ready(variant(state, src.url, face, weight, italic))
+            is Face.Ready -> Lookup.Ready(variant(state, id, face, weight, italic))
         }
     }
+
+    /**
+     * The faces to match from: all of them where a font can be drawn at a variation ([canVary]), else the static
+     * ones, so the nearest static weight is drawn rather than a variable font's default instance (all of them when
+     * the family is only variable).
+     */
+    fun candidates(faces: List<FontFace>, canVary: Boolean): List<FontFace> =
+        if (canVary) faces else faces.filter { !it.variable }.ifEmpty { faces }
+
+    /** A face's identity in [loads]: its drawable sources, in order (null when it has none). */
+    private fun faceKey(face: FontFace): String? = face.supportedUrls.takeIf { it.isNotEmpty() }?.joinToString("\n")
 
     /**
      * The face a browser picks for [weight] and [italic] (CSS Fonts 4, 5.2): the style first (an italic face for
@@ -237,14 +261,16 @@ object WebFonts {
     }
 
     private fun variant(ready: Face.Ready, url: String, face: FontFace, weight: Int, italic: Boolean): Typeface {
-        val effective = weight.coerceIn(face.weightMin, face.weightMax)
+        // A variable font that can't be varied draws its default instance, taken to be the regular one.
+        val varies = face.variable && Platform.hasTypefaceBuilder
+        val effective = if (face.variable && !varies) 400 else weight.coerceIn(face.weightMin, face.weightMax)
         // The browser's font-synthesis: bold when 600+ is asked of a lighter face, a slant when no italic face exists.
         val fakeBold = weight >= 600 && effective < 600
         val fakeItalic = italic && !face.italic
         val key = "$url|$effective|$fakeBold|$fakeItalic"
         variants[key]?.let { return it }
         var tf = ready.base
-        if (face.variable && Platform.hasTypefaceBuilder) {
+        if (varies) {
             tf = runCatching {
                 Typeface.Builder(ready.file).setFontVariationSettings("'wght' $effective").setWeight(effective)
                     .setItalic(face.italic).build()
@@ -262,8 +288,9 @@ object WebFonts {
         val gen = generation
         val urls = cssUrls
         val dir = cacheDir
-        submit {
-            val text = readSheets(urls, dir, network = true)
+        val live = liveFiles()
+        submit({
+            val text = readSheets(urls, dir, network = true, live = live)
             val parsed = text?.let { parseAll(it) }
             ({
                 if (gen == generation) {
@@ -275,7 +302,7 @@ object WebFonts {
                         faces = parsed.orEmpty()
                         if (changed) {
                             // Different sheets: faces may now point elsewhere. Drawn text picks them up on the redraw.
-                            loads.keys.retainAll(faces.values.flatten().mapNotNull { it.source?.url }.toSet())
+                            loads.keys.retainAll(faces.values.flatten().mapNotNull(::faceKey).toSet())
                             variants.clear()
                             notifyChanged()
                         }
@@ -283,7 +310,12 @@ object WebFonts {
                     resume(asked)
                 }
             })
-        }
+        }, onError = {
+            if (gen == generation && sheets == Sheets.LOADING) {
+                sheets = Sheets.FRESH
+                waiting.clear()
+            }
+        })
     }
 
     private fun takeWaiting(): Map<String, Set<Pair<Int, Boolean>>> = HashMap(waiting).also { waiting.clear() }
@@ -301,47 +333,79 @@ object WebFonts {
         if (ready) notifyChanged()
     }
 
-    private fun startFace(url: String) {
-        loads[url] = Face.Loading
+    private fun startFace(key: String, urls: List<String>) {
+        loads[key] = Face.Loading
         val gen = generation
         val dir = cacheDir
-        submit {
-            val ready = loadFace(url, dir)
-            ({
-                if (gen == generation) {
-                    loads[url] = ready ?: Face.Failed
-                    // One redraw for the fonts asked together: the last of them to arrive calls it.
-                    if (loads.values.none { it === Face.Loading }) notifyChanged()
-                }
-            })
+        val live = liveFiles()
+        fun settle(result: Face) {
+            // A sheet that changed meanwhile may have dropped this face: it stays dropped.
+            if (gen != generation || loads[key] !== Face.Loading) return
+            loads[key] = result
+            // One redraw for the fonts asked together: the last of them to arrive calls it.
+            if (loads.values.none { it === Face.Loading }) notifyChanged()
         }
+        submit({
+            val ready = loadFace(urls, dir, live)
+            ({ settle(ready ?: Face.Failed) })
+        }, onError = { settle(Face.Failed) })
     }
 
-    private fun loadFace(url: String, dir: File?): Face.Ready? {
-        val file = dir?.let { fontFile(it, url) } ?: File.createTempFile("vitro-font", ".font").apply { deleteOnExit() }
-        if (dir != null && file.isFile) {
-            file.setLastModified(System.currentTimeMillis())
+    /** The font files the faces drawn now use: never evicted from disk while they're in use. */
+    private fun liveFiles(): Set<File> = loads.values.mapNotNull { (it as? Face.Ready)?.file }.toSet()
+
+    /**
+     * The first of [urls] that loads, as the browser tries a face's sources in order: from disk, else fetched, made
+     * sfnt and kept. A source that fails to download or isn't a font Vitro can draw (WOFF2 behind a URL with no hint)
+     * moves on to the next.
+     */
+    private fun loadFace(urls: List<String>, dir: File?, live: Set<File>): Face.Ready? {
+        for (url in urls) {
+            val file = dir?.let { fontFile(it, url) } ?: File.createTempFile("vitro-font", ".font").apply { deleteOnExit() }
+            if (dir != null && file.isFile) {
+                file.setLastModified(System.currentTimeMillis())
+                loadTypeface(file)?.let { return Face.Ready(file, it) }
+            }
+            val bytes = fetch(url, MAX_FONT_BYTES) ?: continue
+            val sfnt = Sfnt.toSfnt(bytes, MAX_FONT_BYTES)
+            if (sfnt == null) {
+                Log.w(TAG, "Web font source isn't TrueType, OpenType or WOFF: trying the next")
+                continue
+            }
+            val saved = try {
+                if (dir != null) publish(dir, file, sfnt, live) else file.writeBytes(sfnt).let { true }
+            } catch (e: Exception) {
+                Log.w(TAG, "Web font not saved: ${e.javaClass.simpleName}")
+                false
+            }
+            if (!saved) continue
             loadTypeface(file)?.let { return Face.Ready(file, it) }
         }
-        val bytes = fetch(url, MAX_FONT_BYTES) ?: return null
-        val sfnt = Sfnt.toSfnt(bytes, MAX_FONT_BYTES)
-        if (sfnt == null) {
-            Log.w(TAG, "Web font isn't TrueType, OpenType or WOFF: drawn in its fallback")
-            return null
+        return null
+    }
+
+    /**
+     * Writes [bytes] to [file] in the cache folder only if the folder stays under [MAX_DISK_BYTES]: the files used
+     * longest ago go first, never one of [keep] (fonts drawn now). False when it can't fit: the font then draws in its
+     * fallback, like one past any other cap.
+     */
+    private fun publish(dir: File, file: File, bytes: ByteArray, keep: Set<File>): Boolean {
+        dir.mkdirs()
+        val others = dir.listFiles()?.filter { it.isFile && it != file && !it.name.endsWith(".part") }.orEmpty()
+        var total = others.sumOf { it.length() } + bytes.size
+        for (f in others.filter { it !in keep }.sortedBy { it.lastModified() }) {
+            if (total <= MAX_DISK_BYTES) break
+            total -= f.length()
+            f.delete()
         }
-        return try {
-            file.parentFile?.mkdirs()
-            val tmp = File(file.path + ".part")
-            tmp.writeBytes(sfnt)
-            if (!tmp.renameTo(file)) {
-                tmp.delete()
-                return null
-            }
-            loadTypeface(file)?.let { Face.Ready(file, it) }
-        } catch (e: Exception) {
-            Log.w(TAG, "Web font not saved: ${e.javaClass.simpleName}")
-            null
+        if (total > MAX_DISK_BYTES) return false
+        val tmp = File(file.path + ".part")
+        tmp.writeBytes(bytes)
+        if (!tmp.renameTo(file)) {
+            tmp.delete()
+            return false
         }
+        return true
     }
 
     private fun loadTypeface(file: File): Typeface? = try {
@@ -351,31 +415,32 @@ object WebFonts {
         null
     }
 
-    /** Every sheet of [urls] and the ones they import, joined, or null when none could be read. */
-    private fun readSheets(urls: List<String>, dir: File?, network: Boolean): String? {
+    /**
+     * Every sheet of [urls] and the ones they import, joined in the order the browser applies them (an imported sheet
+     * where its `@import` stands, before the rules of the sheet that imports it), or null when none could be read.
+     * A cached copy that can't be read is a cache miss.
+     */
+    private fun readSheets(urls: List<String>, dir: File?, network: Boolean, live: Set<File> = emptySet()): String? {
         val out = StringBuilder()
         val seen = HashSet<String>()
-        val queue = ArrayDeque(urls)
         var any = false
-        while (queue.isNotEmpty() && seen.size < MAX_SHEETS) {
-            val url = queue.removeFirst()
-            if (!seen.add(url)) continue
+        fun cachedText(file: File?): String? = file?.takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }
+        fun visit(url: String) {
+            if (seen.size >= MAX_SHEETS || !seen.add(url)) return
             val cached = dir?.let { File(it, hash(url) + ".css") }
             val text = if (network) {
                 fetch(url, MAX_CSS_BYTES)?.toString(Charsets.UTF_8)?.also { t ->
-                    runCatching {
-                        cached?.parentFile?.mkdirs()
-                        cached?.writeText(t)
-                    }
-                } ?: cached?.takeIf { it.isFile }?.readText()
+                    if (dir != null && cached != null) runCatching { publish(dir, cached, t.toByteArray(), live) }
+                } ?: cachedText(cached)
             } else {
-                cached?.takeIf { it.isFile }?.readText()
-            } ?: continue
+                cachedText(cached)
+            } ?: return
             any = true
+            CssFontFaces.parse(text, url).imports.forEach(::visit)
             // Each sheet's URLs resolve against that sheet: kept as a marker the parser splits on.
             out.append(SHEET_MARK).append(url).append('\n').append(text).append('\n')
-            CssFontFaces.parse(text, url).imports.forEach { queue.addLast(it) }
         }
+        urls.forEach(::visit)
         return if (any) out.toString() else null
     }
 
@@ -409,7 +474,11 @@ object WebFonts {
         })
     }
 
-    private fun submit(work: () -> (() -> Unit)) {
+    /**
+     * Runs [work] on [executor] and its result on the main thread. If [work] throws, [onError] runs there instead, so
+     * the loader never stays in a state that waits for an answer that won't come.
+     */
+    private fun submit(work: () -> (() -> Unit), onError: () -> Unit) {
         pending.incrementAndGet()
         try {
             executor.execute {
@@ -417,11 +486,11 @@ object WebFonts {
                     work()
                 } catch (t: Throwable) {
                     Log.w(TAG, "Web font work failed: ${t.javaClass.simpleName}")
-                    null
+                    onError
                 }
                 postToMain(Runnable {
                     try {
-                        done?.invoke()
+                        done()
                     } finally {
                         pending.decrementAndGet()
                     }
@@ -429,6 +498,7 @@ object WebFonts {
             }
         } catch (t: Throwable) {
             pending.decrementAndGet()
+            onError()
         }
     }
 

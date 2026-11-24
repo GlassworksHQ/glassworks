@@ -141,4 +141,17 @@ class CssFontFacesTest {
         val latin = FontFace("f", 400, 400, false, listOf(FontSource("https://x/latin.ttf", null)), listOf(0x0..0xFF))
         assertEquals(latin, WebFonts.match(listOf(greek, latin), 400, false))
     }
+
+    @Test
+    fun withoutVariationsTheNearestStaticWeight() {
+        val variable = FontFace("f", 100, 900, false, listOf(FontSource("https://x/vf.ttf", null)))
+        val regular = FontFace("f", 400, 400, false, listOf(FontSource("https://x/400.ttf", null)))
+        val bold = FontFace("f", 700, 700, false, listOf(FontSource("https://x/700.ttf", null)))
+        val all = listOf(variable, regular, bold)
+        assertEquals(variable, WebFonts.match(WebFonts.candidates(all, canVary = true), 600, false))
+        // Below Android 8: 600 is the static 700, not the variable font's default instance.
+        assertEquals(bold, WebFonts.match(WebFonts.candidates(all, canVary = false), 600, false))
+        // A family that's only variable keeps it.
+        assertEquals(listOf(variable), WebFonts.candidates(listOf(variable), canVary = false))
+    }
 }

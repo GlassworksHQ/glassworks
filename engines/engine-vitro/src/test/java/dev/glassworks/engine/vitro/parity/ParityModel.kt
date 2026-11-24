@@ -162,7 +162,9 @@ data class ParityCase(
                 resources = o.optJSONArray("resources")?.let { a ->
                     (0 until a.length()).map { a.getJSONObject(it) }.map { r ->
                         val url = r.getString("url")
-                        require(r.optString("type") == "css" && url.startsWith(FIXTURE_PREFIX)) {
+                        val rest = url.removePrefix(FIXTURE_PREFIX)
+                        val plain = rest.isNotEmpty() && '%' !in rest && '\\' !in rest && rest.split('/').none { it.isEmpty() || it == "." || it == ".." }
+                        require(r.optString("type") == "css" && url.startsWith(FIXTURE_PREFIX) && plain) {
                             "$id: a resource is a `type: css` file under $FIXTURE_PREFIX (corpus fixtures/), not $url"
                         }
                         LovelaceResource(url = url, type = "css")

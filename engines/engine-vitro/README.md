@@ -112,11 +112,12 @@ The list comes from the theme's `--ha-font-family-body` (or `--primary-font-fami
 
 A few details keep this light on a small panel:
 
-- **Nothing is downloaded until it's needed.** A dashboard drawn in Roboto or Inter never even reads its stylesheets, and a font is fetched only once some text uses it.
+- **Nothing is downloaded until it's needed.** A dashboard with no `type: css` resources makes no request at all. Otherwise Vitro reads the stylesheets the first time it draws text, as the browser loads them with the dashboard, but fetches a font only once some text uses it.
 - **Text never waits for a font.** While a font downloads, the text draws in the next family of the list, then draws again once the font arrives, as a browser does with `font-display: swap`. After a restart, fonts load from the panel's storage before the first view is drawn.
 - **There are limits.** Vitro reads up to 8 stylesheets of 512 KB and loads up to 12 font files of 4 MB each, and keeps 24 MB on the panel. A font past a limit draws in its fallback, like a font that failed to load.
 - **Formats:** TrueType, OpenType and WOFF. WOFF2 isn't decoded, so a face that offers only WOFF2 is skipped. Most stylesheets list a WOFF or TTF file next to it, and Google Fonts sends TrueType to Vitro.
-- **Weights** are matched the way CSS matches them. A variable font is drawn at the exact weight on Android 8 and later. On older versions it draws at its default weight, and a missing bold is synthesized, as a browser does.
+- **Weights** are matched the way CSS matches them, and a missing bold or italic is synthesized, as a browser does. A variable font is drawn at the exact weight on Android 8 and later. On older versions, Vitro uses the family's nearest static face if the stylesheet has one, and otherwise the variable font's default weight.
+- **Character ranges:** when a family is split into `unicode-range` subsets (as Google Fonts does for Latin, Greek or Cyrillic), Vitro uses the Latin subset. Characters outside it are drawn in Android's own fonts, not in the family's other subsets.
 
 ## Rendering like Home Assistant does
 

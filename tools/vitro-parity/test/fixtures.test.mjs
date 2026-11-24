@@ -11,6 +11,11 @@ test('a case lists type: css fixtures only', () => {
   assert.throws(() => fixtureResources({ id: 'a', resources: [{ type: 'module', url: `${FIXTURE_PREFIX}x.js` }] }));
   assert.throws(() => fixtureResources({ id: 'a', resources: [{ type: 'css', url: '/local/theme.css' }] }));
   assert.throws(() => fixtureResources({ id: 'a', resources: 'x' }));
+  // A path that normalizes out of the fixtures would reach HA itself.
+  assert.throws(() => fixtureResources({ id: 'a', resources: [{ type: 'css', url: `${FIXTURE_PREFIX}../theme.css` }] }));
+  assert.throws(() => fixtureResources({ id: 'a', resources: [{ type: 'css', url: `${FIXTURE_PREFIX}fonts/./x.css` }] }));
+  assert.throws(() => fixtureResources({ id: 'a', resources: [{ type: 'css', url: `${FIXTURE_PREFIX}%2e%2e/theme.css` }] }));
+  assert.throws(() => fixtureResources({ id: 'a', resources: [{ type: 'css', url: FIXTURE_PREFIX }] }));
 });
 
 test('a fixture request stays inside fixtures/ and serves fonts and sheets', () => {
