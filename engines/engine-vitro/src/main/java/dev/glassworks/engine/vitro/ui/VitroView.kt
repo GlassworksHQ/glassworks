@@ -927,7 +927,8 @@ class VitroView(
         // inside it, as they do through the browser's shadow roots; `var()` in them sees the inherited ones.
         val outerVars = inheritedCardVars
         val outerCtxVars = ctx.cardVars
-        val stackMod = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), ctx.theme.vars + outerVars)
+        // With nothing inherited, the theme's own map: the same scope, and the parse is shared with the card's surface.
+        val stackMod = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), if (outerVars.isEmpty()) ctx.theme.vars else ctx.theme.vars + outerVars)
         val scope = if (stackMod.customProperties.isEmpty()) outerVars else outerVars + stackMod.customProperties
         // Children built later (a refresh, a filter that changes) re-enter this card's scope.
         val childBuilder: CardBuilder = { child ->

@@ -712,9 +712,10 @@ object ThemeResolver {
         // to each other (`--inset: var(--spacing)`): resolved against that whole scope. Names in a cycle are invalid:
         // left out of the scope (the theme's value of that name included), so their `var()` takes its fallback.
         val cyclic = if (rawCustom.isEmpty()) emptySet() else cyclicNames(rawCustom)
-        val rawScope = if (rawCustom.isEmpty()) vars else (vars + rawCustom) - cyclic
+        // (Copies of the theme's map only when needed: `- cyclic` with nothing cyclic would copy it again.)
+        val rawScope = if (rawCustom.isEmpty()) vars else (vars + rawCustom).let { if (cyclic.isEmpty()) it else it - cyclic }
         val custom = rawCustom.mapValues { resolveValue(it.value, rawScope, 0) }
-        val scope = if (custom.isEmpty()) vars else (vars + custom) - cyclic
+        val scope = if (custom.isEmpty()) vars else (vars + custom).let { if (cyclic.isEmpty()) it else it - cyclic }
         // Most of the properties asked for below aren't there: skip the pattern when the name isn't in the text at all
         // (the pattern matches ASCII case-insensitively, so a lowercase miss is always a pattern miss).
         val lowerDecls = decls.lowercase(Locale.ROOT)

@@ -2672,9 +2672,11 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
      */
     private fun ownVars(ctx: VitroCardContext, config: CardConfig): Map<String, String> {
         val mod = config.raw.optJSONObject("card_mod")
-        val outer = ctx.theme.vars + ctx.cardVars
+        // The same scopes as `theme + card vars` and `+ its own`, reusing a map when there's nothing to add, so a
+        // parse already made (by the card's surface, or the first pass) is reused.
+        val outer = if (ctx.cardVars.isEmpty()) ctx.theme.vars else ctx.theme.vars + ctx.cardVars
         val first = ThemeResolver.parseCardMod(mod, outer).customProperties
-        return ThemeResolver.parseCardMod(mod, outer + first).customProperties
+        return if (first.isEmpty()) first else ThemeResolver.parseCardMod(mod, outer + first).customProperties
     }
 
     private fun addChip(c: JSONObject) {
