@@ -241,6 +241,26 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun aPageThePanelsHeightIsDrawnToItsBottom() {
+        // The activity's window is the panel less Robolectric's status and navigation bars; the kiosk has none.
+        org.robolectric.RuntimeEnvironment.setQualifiers(frame.qualifiers)
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val root = java.nio.file.Files.createTempDirectory("parity").toFile()
+        File(root, "dashboards").mkdirs()
+        val view = JSONObject().put("path", "home").put("type", "sections").put("sections", org.json.JSONArray().put(
+            JSONObject().put("type", "grid").put("cards", org.json.JSONArray().put(JSONObject().put("type", "tile").put("entity", "sensor.x"))),
+        ))
+        File(root, "dashboards/short.json").writeText(JSONObject().put("views", org.json.JSONArray().put(view)).toString())
+        val dash = ParityCase("short", "short", null, "short", "home", null, true, null, 1, Threshold(), emptyList())
+        val ref = ParityReference(File(root, "none.png"), JSONObject().put("now", 0L).put("docSize", JSONObject().put("height", frame.height)))
+        val render = ParityRenderer(activity, frame, root, null).render(dash, ref)
+        assertEquals(frame.pxHeight, render.bitmap.height)
+        assertEquals("Vitro laid out to the panel's bottom, not the window's", frame.pxHeight, render.root.height)
+        val black = android.graphics.Color.BLACK
+        assertTrue("the bottom row is the dashboard's, not the bitmap's black", render.bitmap.getPixel(frame.pxWidth / 2, frame.pxHeight - 2) != black)
+    }
+
+    @Test
     fun aPinnedCardStaysAtThePanelsEdgeWhenThePageIsTaller() {
         org.robolectric.RuntimeEnvironment.setQualifiers(frame.qualifiers)
         val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
@@ -257,6 +277,7 @@ class ParityHarnessSelfTest {
         val ref = ParityReference(File(root, "none.png"), JSONObject().put("now", 0L).put("docSize", JSONObject().put("height", 1500)))
         val render = ParityRenderer(activity, frame, root, null).render(dash, ref)
         assertEquals((1500 * frame.density).toInt(), render.bitmap.height)
+        assertEquals("Vitro drawn as tall as the bitmap", render.bitmap.height, render.root.height)
         val card = render.slots.last()
         assertEquals("anchored 16 px above the panel's bottom: $card", 480.0 - 16.0, card.bottom, 1.5)
     }

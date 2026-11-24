@@ -276,7 +276,7 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
             val w = frame.pxWidth
             var h = frame.pxHeight
             layout(view, w, h)
-            settle(view, ref)
+            settle(view, ref, w, h)
             // Like a full-page screenshot: as tall as the content.
             val scroll = ParityViews.all(view).filterIsInstance<ScrollView>().firstOrNull { it.isShown && it.childCount > 0 }
             // HA's page may run longer than its cards (its view's bottom padding): lay Vitro out as tall, so the
@@ -286,7 +286,7 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
             if (contentH > h) {
                 h = contentH
                 layout(view, w, h)
-                settle(view, ref)
+                settle(view, ref, w, h)
             }
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             // What shows through where Vitro paints nothing (a radial backdrop's transparent stops): the window
@@ -330,7 +330,12 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         layout(view, view.width, view.height)
     }
 
-    private fun settle(view: View, ref: ParityReference?) {
+    /**
+     * Runs the case until it has settled, then lays [view] out at [w] x [h] again: the window's own pass, which runs
+     * with the looper, sizes it to the activity's content area (the panel less Robolectric's system bars), and drawn
+     * at that height the page's bottom would stay black. The kiosk has no system bars.
+     */
+    private fun settle(view: View, ref: ParityReference?, w: Int, h: Int) {
         repeat(8) { step(view) }
         // Images load on a pool and reach their card through the main looper: run it until none is in flight, so a
         // late image can't leave a card drawn without its picture.
@@ -344,6 +349,6 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         // The clock shows the instant HA's page was frozen at (refs/*.json "now").
         ref?.let { r -> ParityViews.all(view).filterIsInstance<ClockCardView>().forEach { it.renderAt(Date(r.now)) } }
         shadowOf(Looper.getMainLooper()).idle()
-        layout(view, view.width, max(1, view.height))
+        layout(view, w, h)
     }
 }
