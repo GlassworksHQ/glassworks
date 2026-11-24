@@ -182,13 +182,6 @@
   "missingText": 0,
   "reason": "the same picture sizing as `picture` (half width, cropped banner vs full-width square), ~362 px off; the title bar and entity icons are there (coverage #794, 2026-11-24)"
  },
- "mirror/thermostat": {
-  "pixel": 0.0015,
-  "bounds": 0.7,
-  "font": 0,
-  "missingText": 2,
-  "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
- },
  "mirror/weather-current": {
   "pixel": 0.0797,
   "bounds": 36.7,
@@ -377,13 +370,6 @@
   "font": 3,
   "missingText": 0,
   "reason": "the same picture sizing as `picture` (half width, cropped banner vs full-width square), ~362 px off; the title bar and entity icons are there (coverage #794, 2026-11-24)"
- },
- "s1/thermostat": {
-  "pixel": 0.0015,
-  "bounds": 0.7,
-  "font": 0,
-  "missingText": 2,
-  "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
  },
  "s1/weather-current": {
   "pixel": 0.0797,
@@ -580,13 +566,6 @@
   "font": 3,
   "missingText": 0,
   "reason": "the same picture sizing as `picture` (half width, cropped banner vs full-width square), ~362 px off; the title bar and entity icons are there (coverage #794, 2026-11-24)"
- },
- "tablet/thermostat": {
-  "pixel": 0.0019,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 2,
-  "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
  },
  "tablet/weather-current": {
   "pixel": 0.0762,
