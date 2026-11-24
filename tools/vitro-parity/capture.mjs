@@ -417,16 +417,17 @@ async function capture() {
       }
     }
   };
-  const displayFor = async (ids) => {
+  const displayFor = async (ids, shown) => {
     const first = buildDisplay(ids, registry, devices, () => undefined, () => undefined);
     const { domains, platforms } = first.requested;
     await fetchDisplay('frontend/get_icons', 'entity_component', domains);
     await fetchDisplay('frontend/get_icons', 'entity', platforms);
     await fetchDisplay('frontend/get_translations', 'entity_component', domains);
     await fetchDisplay('frontend/get_translations', 'entity', platforms);
+    const deviceClasses = Object.fromEntries(Object.entries(shown).map(([id, st]) => [id, st.a?.device_class]).filter(([, dc]) => dc));
     return buildDisplay(ids, registry, devices,
       (category, n) => displayCache.get(`frontend/get_icons|${category}|${n}`),
-      (category, n) => displayCache.get(`frontend/get_translations|${category}|${n}`));
+      (category, n) => displayCache.get(`frontend/get_translations|${category}|${n}`), deviceClasses);
   };
   if (!cardModUrl) log('card-mod is not a Lovelace resource: card_mod styles will not apply in HA');
   const cases = loadCases();
@@ -514,7 +515,12 @@ async function capture() {
               if (pic.startsWith('/')) await fetchAsset(pic.split('?')[0], pic).catch((e) => log(`  picture: ${scrubText(String(e.message), creds)}`));
             }
           }
-          const display = await displayFor(ids);
+          const display = await displayFor(ids, shownStates);
+          // Device names can carry a MAC fragment (an ESPHome default like "AirDot 4c83f8"): check the block too.
+          if (committed) {
+            const inDisplay = findPrivate(JSON.stringify(display), creds);
+            if (inDisplay.length) throw new Error(`the display data holds ${inDisplay.join(', ')}: neither file is written`);
+          }
           const ref = {
             case: c.id, frame: frame.id, haVersion: haConfig.version, now, stable,
             viewport: { width: frame.width, height: frame.height, density: frame.density },

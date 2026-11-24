@@ -276,6 +276,9 @@ class ParityHarnessSelfTest {
             if (jwt.containsMatchIn(text)) problems += "$rel: a token"
             // HA's device and config-entry ids: 32 hex chars, unique to one HA (the fixtures use device-1, ...).
             if (Regex("""\b[0-9a-f]{32}\b""").containsMatchIn(text)) problems += "$rel: an HA registry id"
+            // The end of a MAC in a device name or hostname ("AirDot 4c83f8"); a CSS colour (#34d399) is fine.
+            Regex("""(?<![#\w])(?=[0-9a-fA-F]*\d)(?=[0-9a-fA-F]*[a-fA-F])(?:[0-9a-fA-F]{12}|[0-9a-fA-F]{6})(?!\w)""").find(text)
+                ?.let { problems += "$rel: a MAC fragment" }
             if (tokenParam.containsMatchIn(text)) problems += "$rel: a token parameter"
             privateKeys.find(text)?.let { problems += "$rel: a private attribute (${it.groupValues[1]})" }
             if (Regex("""https?://(?!127\.0\.0\.1|homeassistant\.local)[a-z0-9.-]+[:/]""").containsMatchIn(text)) problems += "$rel: an absolute URL to a host"
