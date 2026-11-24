@@ -28,20 +28,6 @@
   "missingText": 3,
   "reason": "the wrapped entities card loses its title (\"Lights off\") and header toggle, and rows show the bare entity name (\"Window\") where HA prefixes the device (\"LED Strip Window\"); card ~50 px shorter (coverage #794, 2026-11-24)"
  },
- "mirror/gauge": {
-  "pixel": 0.0671,
-  "bounds": 26.6,
-  "font": 0,
-  "missingText": 1,
-  "reason": "arc thinner and ~15% smaller, its track lighter grey than HA's near-black, the 74% value smaller and drawn on canvas (missing text), card ~27 px shorter (coverage #794, 2026-11-24)"
- },
- "mirror/gauge-needle": {
-  "pixel": 0.1034,
-  "bounds": 26.6,
-  "font": 0,
-  "missingText": 1,
-  "reason": "needle and severity bands ignored: Vitro draws one green value arc with no red/yellow segments and no needle; same smaller arc, value and ~27 px shorter card as the plain gauge (coverage #794, 2026-11-24)"
- },
  "mirror/layout-card": {
   "pixel": 0.0908,
   "bounds": 24,
@@ -112,20 +98,6 @@
   "missingText": 3,
   "reason": "the wrapped entities card loses its title (\"Lights off\") and header toggle, and rows show the bare entity name (\"Window\") where HA prefixes the device (\"LED Strip Window\"); card ~50 px shorter (coverage #794, 2026-11-24)"
  },
- "s1/gauge": {
-  "pixel": 0.0671,
-  "bounds": 26.6,
-  "font": 0,
-  "missingText": 1,
-  "reason": "arc thinner and ~15% smaller, its track lighter grey than HA's near-black, the 74% value smaller and drawn on canvas (missing text), card ~27 px shorter (coverage #794, 2026-11-24)"
- },
- "s1/gauge-needle": {
-  "pixel": 0.1034,
-  "bounds": 26.6,
-  "font": 0,
-  "missingText": 1,
-  "reason": "needle and severity bands ignored: Vitro draws one green value arc with no red/yellow segments and no needle; same smaller arc, value and ~27 px shorter card as the plain gauge (coverage #794, 2026-11-24)"
- },
  "s1/layout-card": {
   "pixel": 0.1011,
   "bounds": 24,
@@ -195,20 +167,6 @@
   "font": 0,
   "missingText": 3,
   "reason": "the wrapped entities card loses its title (\"Lights off\") and header toggle, and rows show the bare entity name (\"Window\") where HA prefixes the device (\"LED Strip Window\"); card ~50 px shorter (coverage #794, 2026-11-24)"
- },
- "tablet/gauge": {
-  "pixel": 0.0642,
-  "bounds": 25.4,
-  "font": 0,
-  "missingText": 1,
-  "reason": "arc thinner and ~15% smaller, its track lighter grey than HA's near-black, the 74% value smaller and drawn on canvas (missing text), card ~27 px shorter (coverage #794, 2026-11-24)"
- },
- "tablet/gauge-needle": {
-  "pixel": 0.1012,
-  "bounds": 25.4,
-  "font": 0,
-  "missingText": 1,
-  "reason": "needle and severity bands ignored: Vitro draws one green value arc with no red/yellow segments and no needle; same smaller arc, value and ~27 px shorter card as the plain gauge (coverage #794, 2026-11-24)"
  },
  "tablet/layout-card": {
   "pixel": 0.09,
