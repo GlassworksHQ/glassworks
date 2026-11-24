@@ -174,12 +174,14 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                 }
                 // hui-entity-card's (and so hui-sensor-card's) getGridOptions: 6 columns, 2 rows.
                 "entity", "sensor" -> HaGridSize(6, 2)
-                "light", "area", "picture-glance", "picture" -> HaGridSize(6, null)
+                "light", "area" -> HaGridSize(6, null)
                 // hui-button-card's getGridOptions: 6 columns, 2 rows.
                 "button" -> HaGridSize(6, 2)
-                // Measured in HA: a picture-entity card spans the section's full width at its image's height.
-                "picture-entity" -> HaGridSize(12, null)
+                // Measured in HA: the picture cards span the section's full width at their image's height.
+                "picture", "picture-entity", "picture-glance" -> HaGridSize(12, null)
                 "heading" -> HaGridSize(null, null)
+                // Measured in HA: with show_forecast: false the weather card is 2 rows (120 px), its conditions centered.
+                "weather-forecast" -> HaGridSize(12, if (raw.optBoolean("show_forecast", true)) null else 2)
                 "custom:mushroom-template-card" -> {
                     val hasContent = listOf("icon", "picture", "primary", "secondary").any { raw.optString(it).isNotBlank() }
                     val vertical = raw.optBoolean("vertical", false) || raw.optString("layout") == "vertical"

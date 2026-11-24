@@ -110,7 +110,11 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
         unsubscribe = ctx.subscribeWs(msg, { ev ->
             ctx.main.post {
                 if (stream !== s) return@post
-                error = null
+                if (error != null) {
+                    // Recovered: the error and its description go with it.
+                    error = null
+                    contentDescription = null
+                }
                 val combined = s.process(ev, ctx.now())
                 var states: List<HistoryState> = combined[id].orEmpty()
                 // No history: the current state alone (limitedHistoryFromStateObj).

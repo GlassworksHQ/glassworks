@@ -27,6 +27,13 @@ data class EntityState(
             ?: entityId.substringAfter('.', entityId).replace('_', ' ')
                 .replaceFirstChar { it.titlecase(Locale.ROOT) }
 
+    /**
+     * The name HA's cards show for this entity when their config sets none (2026's entity naming): its device and its
+     * own name ("LED Strip" + "Window"), or [friendlyName] for an entity on no device. Filters and sorts that match on
+     * `friendly_name` keep [friendlyName].
+     */
+    val displayName: String get() = HaDisplay.deviceEntityName(entityId) ?: friendlyName
+
     val unit: String? get() = (attributes["unit_of_measurement"] as? String)?.takeIf { it.isNotEmpty() }
     val deviceClass: String? get() = (attributes["device_class"] as? String)?.takeIf { it.isNotEmpty() }
     val icon: String? get() = (attributes["icon"] as? String)?.takeIf { it.isNotEmpty() }

@@ -684,7 +684,10 @@ class HaDashboardClient(
         msg.put("id", id)
         subscriptions[id] = { ev -> onEvent(id, ev) }
         pending[id] = { res ->
-            if (!res.optBoolean("success", false)) {
+            if (res.optBoolean("success", false)) {
+                // Acknowledged: a cancel from here on no longer races the result, so its marker can go.
+                cancelledSubs.remove(id)
+            } else {
                 subscriptions.remove(id)
                 // Only an explicit cancel keeps it quiet: a rejection or a lost connection (which clears the
                 // subscriptions before it answers this) is reported once.

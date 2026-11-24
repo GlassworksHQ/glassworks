@@ -17,6 +17,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import dev.glassworks.engine.vitro.data.EntityState
+import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.ui.CardSurface
@@ -108,7 +109,7 @@ object HaHistory {
             if (n > 1 && out[n - 1].state == p.state && out[n - 2].state == p.state) continue
             out += p
         }
-        return LineEntity(id, current?.friendlyName ?: id, out)
+        return LineEntity(id, chartName(id, current), out)
     }
 
     private fun timelineRow(id: String, states: List<HistoryState>, current: EntityState?): TimelineRow {
@@ -118,8 +119,12 @@ object HaHistory {
             val label = current?.copy(state = s.s)?.plainState() ?: s.s
             data += TimelineState(s.s, label, (s.lc.takeIf { !it.isNaN() && it != 0.0 } ?: s.lu) * 1000)
         }
-        return TimelineRow(id, current?.friendlyName ?: id, data)
+        return TimelineRow(id, chartName(id, current), data)
     }
+
+    /** The default name of a chart's entity: `formatEntityName` with HA's chart separator, "Device ▸ Entity". */
+    private fun chartName(id: String, current: EntityState?): String =
+        if (current == null) id else HaDisplay.deviceEntityName(id, " ▸ ") ?: current.friendlyName
 
     /** `convertStatisticsToHistory`: hourly means (or states) as the statistics part of line charts. */
     fun statisticsToHistory(store: (String) -> EntityState?, statistics: JSONObject, statisticIds: List<String>): HistoryResult {
@@ -1050,7 +1055,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
             if (rows.length() == 0) continue
             val stats = (0 until rows.length()).mapNotNull { rows.optJSONObject(it) }
             val color = HaGraphColors.byIndex(ctx.theme, colorIndex++)
-            val name = config.entities().firstOrNull { it.entity == id }?.name ?: ctx.store[id]?.friendlyName ?: id
+            val name = config.entities().firstOrNull { it.entity == id }?.name ?: ctx.store[id]?.displayName ?: id
             fun has(type: String) = stats.any { it.has(type) && !it.isNull(type) }
             val hasMean = "mean" in statTypes && has("mean")
             val hasMax = "max" in statTypes && has("max")

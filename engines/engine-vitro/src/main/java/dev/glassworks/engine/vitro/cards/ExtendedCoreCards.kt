@@ -174,7 +174,7 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
     }
 
     private fun render(s: EntityState?) {
-        nameView.text = config.name ?: s?.friendlyName ?: config.entity.orEmpty()
+        nameView.text = config.name ?: s?.displayName ?: config.entity.orEmpty()
         val color = if (colored(s)) stateColor(s) else null
         iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color ?: ctx.theme.stateIconColor)
         val (value, unit) = valueAndUnit(config.raw, s)
@@ -268,7 +268,7 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     private var lastPct: Int? = null
 
     private fun render(s: EntityState?) {
-        nameView.text = config.name ?: s?.friendlyName ?: config.entity.orEmpty()
+        nameView.text = config.name ?: s?.displayName ?: config.entity.orEmpty()
         val on = s?.state == "on"
         val reportedPct = s?.brightnessPct
         if (reportedPct != null && reportedPct > 0) lastPct = reportedPct

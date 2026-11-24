@@ -7,13 +7,6 @@
   "missingText": 0,
   "reason": "Vitro draws a 48 px compact header row (name + a sofa icon, not the area's own stove icon) where HA draws its default picture-less area card: a 120 px icon hero over a name row; card ~130 px shorter, name 16 vs 14 px (coverage #794, 2026-11-24)"
  },
- "mirror/auto-entities": {
-  "pixel": 0.0378,
-  "bounds": 24.8,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the entities card inside matches row for row, but Vitro's rows are 48 vs HA's 56 px apart and the cover buttons sit closer together, so the card is ~25 px shorter (coverage #794, 2026-11-24)"
- },
  "mirror/clock-date": {
   "pixel": 0.0233,
   "bounds": 0,
@@ -56,13 +49,6 @@
   "missingText": 1,
   "reason": "needle and severity bands ignored: Vitro draws one green value arc with no red/yellow segments and no needle; same smaller arc, value and ~27 px shorter card as the plain gauge (coverage #794, 2026-11-24)"
  },
- "mirror/horizontal-stack": {
-  "pixel": 0.0217,
-  "bounds": 0.4,
-  "font": 0,
-  "missingText": 2,
-  "reason": "the stack itself matches; the two button cards show the bare entity name (\"Window\", \"Sunset\") where HA prefixes the device (\"LED Strip Window\", \"Sunset Lamp Sunset\") (coverage #794, 2026-11-24)"
- },
  "mirror/layout-card": {
   "pixel": 0.0908,
   "bounds": 24,
@@ -71,11 +57,11 @@
   "reason": "the 2x2 grid of tiles is laid out, but its column gap and margins differ: Vitro's tiles start ~10 px higher and right of HA's and the card is ~24 px off (coverage #794, 2026-11-24)"
  },
  "mirror/light-off": {
-  "pixel": 0.0988,
+  "pixel": 0.1018,
   "bounds": 254,
-  "font": 0,
-  "missingText": 1,
-  "reason": "a different card: Vitro draws a half-width, ~160 px tall tile (small dial, icon in a disc, name + \"Off\"); HA's card is full width, ~260 px tall, a large dial around the entity icon, a more-info button, device-prefixed name and no state line (coverage #794, 2026-11-24)"
+  "font": 1.8,
+  "missingText": 0,
+  "reason": "a different card: Vitro draws a half-width, ~160 px tall tile (small dial, icon in a disc, name + \"Off\"); HA's card is full width, ~260 px tall, a large dial around the entity icon, a more-info button and no state line. The name now matches HA's (\"LED Strip Window\"), so the harness measures it: 1.8 px larger and ~120 px off, where the different layout puts it; the longer name adds 0.3% pixels (coverage #794, 2026-11-24)"
  },
  "mirror/light-on": {
   "pixel": 0.1056,
@@ -168,13 +154,6 @@
   "missingText": 1,
   "reason": "commands ignored: the start/return buttons row is missing (64 px shorter); state shows \"sleeping\" (an attribute) where HA shows \"Docked\", and a vacuum icon where HA's docked icon is zzz (coverage #794, 2026-11-24)"
  },
- "mirror/picture": {
-  "pixel": 0.7675,
-  "bounds": 362,
-  "font": 0,
-  "missingText": 0,
-  "reason": "wrong size: Vitro draws the image at half the column width, cropped to a short banner, where HA draws it full width at its natural square aspect; card ~362 px off (coverage #794, 2026-11-24)"
- },
  "mirror/picture-elements": {
   "pixel": 0.0092,
   "bounds": 0,
@@ -182,33 +161,12 @@
   "missingText": 0,
   "reason": "image and positions match; the state icon sits on a dark disc and the state label on a dark pill that HA doesn't draw, label 12 vs 14 px (coverage #794, 2026-11-24)"
  },
- "mirror/picture-glance": {
-  "pixel": 0.7771,
-  "bounds": 362,
-  "font": 3,
-  "missingText": 0,
-  "reason": "the same picture sizing as `picture` (half width, cropped banner vs full-width square), ~362 px off; the title bar and entity icons are there (coverage #794, 2026-11-24)"
- },
- "mirror/weather-current": {
-  "pixel": 0.0797,
-  "bounds": 36.7,
-  "font": 2,
-  "missingText": 0,
-  "reason": "icon ~30% smaller, condition and temperature 22 vs 24 px, 76% 12 vs 14 px with no humidity drop icon, card ~37 px shorter (HA pads more) (coverage #794, 2026-11-24)"
- },
  "s1/area": {
   "pixel": 0.0553,
   "bounds": 130.7,
   "font": 2,
   "missingText": 0,
   "reason": "Vitro draws a 48 px compact header row (name + a sofa icon, not the area's own stove icon) where HA draws its default picture-less area card: a 120 px icon hero over a name row; card ~130 px shorter, name 16 vs 14 px (coverage #794, 2026-11-24)"
- },
- "s1/auto-entities": {
-  "pixel": 0.0378,
-  "bounds": 24.8,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the entities card inside matches row for row, but Vitro's rows are 48 vs HA's 56 px apart and the cover buttons sit closer together, so the card is ~25 px shorter (coverage #794, 2026-11-24)"
  },
  "s1/clock-date": {
   "pixel": 0.0233,
@@ -252,13 +210,6 @@
   "missingText": 1,
   "reason": "needle and severity bands ignored: Vitro draws one green value arc with no red/yellow segments and no needle; same smaller arc, value and ~27 px shorter card as the plain gauge (coverage #794, 2026-11-24)"
  },
- "s1/horizontal-stack": {
-  "pixel": 0.0217,
-  "bounds": 0.4,
-  "font": 0,
-  "missingText": 2,
-  "reason": "the stack itself matches; the two button cards show the bare entity name (\"Window\", \"Sunset\") where HA prefixes the device (\"LED Strip Window\", \"Sunset Lamp Sunset\") (coverage #794, 2026-11-24)"
- },
  "s1/layout-card": {
   "pixel": 0.1011,
   "bounds": 24,
@@ -267,11 +218,11 @@
   "reason": "the 2x2 grid of tiles is laid out, but its column gap and margins differ: Vitro's tiles start ~10 px higher and right of HA's and the card is ~24 px off (coverage #794, 2026-11-24)"
  },
  "s1/light-off": {
-  "pixel": 0.0988,
+  "pixel": 0.1018,
   "bounds": 254,
-  "font": 0,
-  "missingText": 1,
-  "reason": "a different card: Vitro draws a half-width, ~160 px tall tile (small dial, icon in a disc, name + \"Off\"); HA's card is full width, ~260 px tall, a large dial around the entity icon, a more-info button, device-prefixed name and no state line (coverage #794, 2026-11-24)"
+  "font": 1.8,
+  "missingText": 0,
+  "reason": "a different card: Vitro draws a half-width, ~160 px tall tile (small dial, icon in a disc, name + \"Off\"); HA's card is full width, ~260 px tall, a large dial around the entity icon, a more-info button and no state line. The name now matches HA's (\"LED Strip Window\"), so the harness measures it: 1.8 px larger and ~120 px off, where the different layout puts it; the longer name adds 0.3% pixels (coverage #794, 2026-11-24)"
  },
  "s1/light-on": {
   "pixel": 0.1056,
@@ -364,13 +315,6 @@
   "missingText": 1,
   "reason": "commands ignored: the start/return buttons row is missing (64 px shorter); state shows \"sleeping\" (an attribute) where HA shows \"Docked\", and a vacuum icon where HA's docked icon is zzz (coverage #794, 2026-11-24)"
  },
- "s1/picture": {
-  "pixel": 0.7675,
-  "bounds": 362,
-  "font": 0,
-  "missingText": 0,
-  "reason": "wrong size: Vitro draws the image at half the column width, cropped to a short banner, where HA draws it full width at its natural square aspect; card ~362 px off (coverage #794, 2026-11-24)"
- },
  "s1/picture-elements": {
   "pixel": 0.0092,
   "bounds": 0,
@@ -378,33 +322,12 @@
   "missingText": 0,
   "reason": "image and positions match; the state icon sits on a dark disc and the state label on a dark pill that HA doesn't draw, label 12 vs 14 px (coverage #794, 2026-11-24)"
  },
- "s1/picture-glance": {
-  "pixel": 0.7771,
-  "bounds": 362,
-  "font": 3,
-  "missingText": 0,
-  "reason": "the same picture sizing as `picture` (half width, cropped banner vs full-width square), ~362 px off; the title bar and entity icons are there (coverage #794, 2026-11-24)"
- },
- "s1/weather-current": {
-  "pixel": 0.0797,
-  "bounds": 36.7,
-  "font": 2,
-  "missingText": 0,
-  "reason": "icon ~30% smaller, condition and temperature 22 vs 24 px, 76% 12 vs 14 px with no humidity drop icon, card ~37 px shorter (HA pads more) (coverage #794, 2026-11-24)"
- },
  "tablet/area": {
   "pixel": 0.0472,
   "bounds": 130,
   "font": 2,
   "missingText": 0,
   "reason": "Vitro draws a 48 px compact header row (name + a sofa icon, not the area's own stove icon) where HA draws its default picture-less area card: a 120 px icon hero over a name row; card ~130 px shorter, name 16 vs 14 px (coverage #794, 2026-11-24)"
- },
- "tablet/auto-entities": {
-  "pixel": 0.0395,
-  "bounds": 24.3,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the entities card inside matches row for row, but Vitro's rows are 48 vs HA's 56 px apart and the cover buttons sit closer together, so the card is ~25 px shorter (coverage #794, 2026-11-24)"
  },
  "tablet/clock-date": {
   "pixel": 0.0271,
@@ -448,13 +371,6 @@
   "missingText": 1,
   "reason": "needle and severity bands ignored: Vitro draws one green value arc with no red/yellow segments and no needle; same smaller arc, value and ~27 px shorter card as the plain gauge (coverage #794, 2026-11-24)"
  },
- "tablet/horizontal-stack": {
-  "pixel": 0.0157,
-  "bounds": 0.1,
-  "font": 0,
-  "missingText": 2,
-  "reason": "the stack itself matches; the two button cards show the bare entity name (\"Window\", \"Sunset\") where HA prefixes the device (\"LED Strip Window\", \"Sunset Lamp Sunset\") (coverage #794, 2026-11-24)"
- },
  "tablet/layout-card": {
   "pixel": 0.09,
   "bounds": 24,
@@ -463,11 +379,11 @@
   "reason": "the 2x2 grid of tiles is laid out, but its column gap and margins differ: Vitro's tiles start ~10 px higher and right of HA's and the card is ~24 px off (coverage #794, 2026-11-24)"
  },
  "tablet/light-off": {
-  "pixel": 0.0968,
+  "pixel": 0.0993,
   "bounds": 254,
-  "font": 0,
-  "missingText": 1,
-  "reason": "a different card: Vitro draws a half-width, ~160 px tall tile (small dial, icon in a disc, name + \"Off\"); HA's card is full width, ~260 px tall, a large dial around the entity icon, a more-info button, device-prefixed name and no state line (coverage #794, 2026-11-24)"
+  "font": 1.8,
+  "missingText": 0,
+  "reason": "a different card: Vitro draws a half-width, ~160 px tall tile (small dial, icon in a disc, name + \"Off\"); HA's card is full width, ~260 px tall, a large dial around the entity icon, a more-info button and no state line. The name now matches HA's (\"LED Strip Window\"), so the harness measures it: 1.8 px larger and ~120 px off, where the different layout puts it; the longer name adds 0.3% pixels (coverage #794, 2026-11-24)"
  },
  "tablet/light-on": {
   "pixel": 0.1043,
@@ -567,32 +483,11 @@
   "missingText": 1,
   "reason": "commands ignored: the start/return buttons row is missing (64 px shorter); state shows \"sleeping\" (an attribute) where HA shows \"Docked\", and a vacuum icon where HA's docked icon is zzz (coverage #794, 2026-11-24)"
  },
- "tablet/picture": {
-  "pixel": 0.7664,
-  "bounds": 362,
-  "font": 0,
-  "missingText": 0,
-  "reason": "wrong size: Vitro draws the image at half the column width, cropped to a short banner, where HA draws it full width at its natural square aspect; card ~362 px off (coverage #794, 2026-11-24)"
- },
  "tablet/picture-elements": {
   "pixel": 0.006,
   "bounds": 0,
   "font": 2,
   "missingText": 0,
   "reason": "image and positions match; the state icon sits on a dark disc and the state label on a dark pill that HA doesn't draw, label 12 vs 14 px (coverage #794, 2026-11-24)"
- },
- "tablet/picture-glance": {
-  "pixel": 0.7765,
-  "bounds": 362,
-  "font": 3,
-  "missingText": 0,
-  "reason": "the same picture sizing as `picture` (half width, cropped banner vs full-width square), ~362 px off; the title bar and entity icons are there (coverage #794, 2026-11-24)"
- },
- "tablet/weather-current": {
-  "pixel": 0.0762,
-  "bounds": 36,
-  "font": 2,
-  "missingText": 0,
-  "reason": "icon ~30% smaller, condition and temperature 22 vs 24 px, 76% 12 vs 14 px with no humidity drop icon, card ~37 px shorter (HA pads more) (coverage #794, 2026-11-24)"
  }
 }
