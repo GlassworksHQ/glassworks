@@ -150,3 +150,27 @@ test('run.sh rejects an explicitly empty --local path', async () => {
   assert.equal(r.status, 2);
   assert.match(r.stderr, /--local needs a path/);
 });
+
+test('buildDisplay keeps only what Vitro reads, with synthetic device ids', async () => {
+  const { buildDisplay } = await import('../lib/display.mjs');
+  const realDevice = '53d0477a41d33ff0081a623f2a4e192d';
+  const registry = { entities: [
+    { ei: 'sensor.fridge', pl: 'localthings', tk: 'instance_temperature', dp: 1, di: realDevice, en: 'Fridge temperature', lb: ['x'], ai: 'kitchen', np: 'device' },
+    { ei: 'sensor.other', pl: 'esphome', dp: 2 },
+    { ei: 'light.lamp', pl: 'zha', di: realDevice },
+  ] };
+  const devices = [{ id: realDevice, name: 'Fridge', name_by_user: null, serial_number: 'SN1', connections: [['mac', 'aa:bb:cc:dd:ee:ff']] }];
+  const icons = (category, n) => ({ entity_component: { sensor: { _: { default: 'mdi:eye' } }, light: { _: { default: 'mdi:lightbulb' } } }, entity: { localthings: { sensor: {} } } })[category][n];
+  const translations = (category, n) => ({ 'component.sensor.entity_component._.state.on': 'On', 'component.sensor.entity_component._.name': 'Sensor' });
+  const d = buildDisplay(new Set(['sensor.fridge', 'light.lamp']), registry, devices, icons, translations);
+  assert.deepEqual(d.entities, [
+    { ei: 'light.lamp', pl: 'zha', di: 'device-1' },
+    { ei: 'sensor.fridge', pl: 'localthings', tk: 'instance_temperature', dp: 1, di: 'device-1', en: 'Fridge temperature' },
+  ]);
+  assert.deepEqual(d.devices, [{ id: 'device-1', name: 'Fridge', name_by_user: null }]);
+  assert.deepEqual(d.requested, { domains: ['light', 'sensor'], platforms: ['localthings'] });
+  assert.deepEqual(Object.keys(d.icons.entity_component), ['light', 'sensor']);
+  assert.deepEqual(Object.keys(d.translations.entity_component), ['component.sensor.entity_component._.state.on']);
+  const text = JSON.stringify(d);
+  assert.ok(!text.includes(realDevice) && !text.includes('SN1') && !text.includes('aa:bb'));
+});

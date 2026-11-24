@@ -29,6 +29,7 @@ import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate 
 import { parseArgs, pick } from './lib/args.mjs';
 import { assetDestination, canonicalPath } from './lib/assets.mjs';
 import { applyEntityEvent } from './lib/states.mjs';
+import { buildDisplay } from './lib/display.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -401,6 +402,32 @@ async function capture() {
     ha.call({ type: 'get_config' }), ha.call({ type: 'frontend/get_themes' }), ha.call({ type: 'lovelace/resources' }),
   ]);
   const cardModUrl = resources.map((r) => r.url).find((u) => /card-mod\.js/.test(u)) || null;
+  // The display data Vitro reads live (HaDisplay): fetched once, cut down per case.
+  const [registry, devices] = await Promise.all([ha.call({ type: 'config/entity_registry/list_for_display' }), ha.call({ type: 'config/device_registry/list' })]);
+  const displayCache = new Map();
+  const fetchDisplay = async (type, category, names) => {
+    const want = names.filter((n) => !displayCache.has(`${type}|${category}|${n}`));
+    if (want.length) {
+      const res = await ha.call({ type, category, integration: want, ...(type === 'frontend/get_translations' ? { language: 'en' } : {}) });
+      for (const n of want) {
+        let mine;
+        if (type === 'frontend/get_icons') mine = res.resources?.[n];
+        else mine = Object.fromEntries(Object.entries(res.resources || {}).filter(([k]) => k.startsWith(`component.${n}.`)));
+        displayCache.set(`${type}|${category}|${n}`, mine);
+      }
+    }
+  };
+  const displayFor = async (ids) => {
+    const first = buildDisplay(ids, registry, devices, () => undefined, () => undefined);
+    const { domains, platforms } = first.requested;
+    await fetchDisplay('frontend/get_icons', 'entity_component', domains);
+    await fetchDisplay('frontend/get_icons', 'entity', platforms);
+    await fetchDisplay('frontend/get_translations', 'entity_component', domains);
+    await fetchDisplay('frontend/get_translations', 'entity', platforms);
+    return buildDisplay(ids, registry, devices,
+      (category, n) => displayCache.get(`frontend/get_icons|${category}|${n}`),
+      (category, n) => displayCache.get(`frontend/get_translations|${category}|${n}`));
+  };
   if (!cardModUrl) log('card-mod is not a Lovelace resource: card_mod styles will not apply in HA');
   const cases = loadCases();
   const wantedFile = args.templates || join(ROOT, 'engines', 'engine-vitro', 'build', 'vitro-parity', committed ? 'templates-wanted.json' : 'templates-wanted-local.json');
@@ -487,11 +514,12 @@ async function capture() {
               if (pic.startsWith('/')) await fetchAsset(pic.split('?')[0], pic).catch((e) => log(`  picture: ${scrubText(String(e.message), creds)}`));
             }
           }
+          const display = await displayFor(ids);
           const ref = {
             case: c.id, frame: frame.id, haVersion: haConfig.version, now, stable,
             viewport: { width: frame.width, height: frame.height, density: frame.density },
             clip, docSize: { width: info.docW, height: info.docH }, slots: slots.map(roundRect), texts,
-            states: caseStates, templates,
+            states: caseStates, templates, display,
           };
           if (!committed) {
             // Pictures that templates point at (a plant's image entity inside Markdown, say), unredacted from the raw text.

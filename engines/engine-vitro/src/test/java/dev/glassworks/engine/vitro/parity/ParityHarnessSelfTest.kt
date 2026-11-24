@@ -213,6 +213,27 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun theReferencesDisplayDataReachesTheCardsAndIsDroppedAfter() {
+        org.robolectric.RuntimeEnvironment.setQualifiers(frame.qualifiers)
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val root = java.nio.file.Files.createTempDirectory("parity").toFile()
+        val tile = ParityCase.parse("t", JSONObject().put("card", JSONObject().put("type", "tile").put("entity", "sensor.fridge")))
+        val state = JSONObject().put("sensor.fridge", JSONObject().put("s", "1.11111111")
+            .put("a", JSONObject().put("friendly_name", "Fridge").put("unit_of_measurement", "°C").put("device_class", "temperature")))
+        fun ref(display: JSONObject?) = ParityReference(File(root, "none.png"), JSONObject().put("now", 0L).put("states", state)
+            .apply { display?.let { put("display", it) } })
+        fun shown(r: ParityReference) = ParityRenderer(activity, frame, root, null).render(tile, r).texts(0).joinToString(" | ") { it.normalized }
+        val display = JSONObject()
+            .put("entities", org.json.JSONArray().put(JSONObject().put("ei", "sensor.fridge").put("pl", "demo").put("dp", 1)))
+            .put("requested", JSONObject().put("domains", org.json.JSONArray().put("sensor")).put("platforms", org.json.JSONArray()))
+        // Without the registry Vitro shows the raw state; with it, HA's display precision.
+        assertTrue(shown(ref(null)), "1.11111111" in shown(ref(null)))
+        assertTrue(shown(ref(display)), "1.1 °C" in shown(ref(display)) && "1.11" !in shown(ref(display)))
+        // HaDisplay is process-wide: nothing of the case is left for the next one.
+        assertTrue(dev.glassworks.engine.vitro.data.HaDisplay.registry.isEmpty())
+    }
+
+    @Test
     fun aPinnedCardStaysAtThePanelsEdgeWhenThePageIsTaller() {
         org.robolectric.RuntimeEnvironment.setQualifiers(frame.qualifiers)
         val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
@@ -253,6 +274,8 @@ class ParityHarnessSelfTest {
                 .forEach { problems += "$rel: an IPv4 address outside RFC 5737 (${it.value.take(4)}…)" }
             if (mac.containsMatchIn(text.replace("00:00:5e:00:53:00", ""))) problems += "$rel: a MAC address"
             if (jwt.containsMatchIn(text)) problems += "$rel: a token"
+            // HA's device and config-entry ids: 32 hex chars, unique to one HA (the fixtures use device-1, ...).
+            if (Regex("""\b[0-9a-f]{32}\b""").containsMatchIn(text)) problems += "$rel: an HA registry id"
             if (tokenParam.containsMatchIn(text)) problems += "$rel: a token parameter"
             privateKeys.find(text)?.let { problems += "$rel: a private attribute (${it.groupValues[1]})" }
             if (Regex("""https?://(?!127\.0\.0\.1|homeassistant\.local)[a-z0-9.-]+[:/]""").containsMatchIn(text)) problems += "$rel: an absolute URL to a host"
