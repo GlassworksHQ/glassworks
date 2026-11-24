@@ -565,7 +565,12 @@ class VitroEngineTest {
         assertTrue(html.contains("sendBridge({ type: 'callWs', id, msg: msg || {} })"))
         assertTrue(html.contains("const statesProxy = new Proxy(rawStates"))
         assertTrue(html.contains("sendBridge({ type: 'watch', entity_id: prop })"))
-        assertTrue(html.contains("callService(domain, service, data, target)"))
+        // hass.callService is HA's call_service over the same bridge, so its promise carries HA's answer.
+        assertTrue(html.contains("const msg = { type: 'call_service', domain, service, service_data: data || {} };"))
+        // A call that went out on a socket that closed is rejected, not left hanging.
+        assertTrue(html.contains("entry.reject(new Error('Connection lost'))"))
+        // An action with a confirmation is asked natively.
+        assertTrue(html.contains("sendBridge({ type: 'action', action, entity: entity || '' })"))
         assertTrue(html.contains("/__vitro/ws/"))
         assertTrue(html.contains("m.type === 'patch'"))
         assertTrue(html.contains("m.type === 'wsReply'"))
@@ -797,5 +802,13 @@ class VitroEngineTest {
         // A card that read another entity through hass.states starts following it.
         island.handleIslandMessage(JSONObject().put("type", "watch").put("entity_id", "light.kitchen")) {}
         assertTrue(island.patchFor(setOf("light.kitchen"))!!.getJSONObject("states").has("light.kitchen"))
+        // A watched entity that is removed goes out as null too.
+        island.handleIslandMessage(JSONObject().put("type", "watch").put("entity_id", "light.gone")) {}
+        assertTrue(island.patchFor(setOf("light.gone"))!!.getJSONObject("states").isNull("light.gone"))
+    }
+
+    @Test
+    fun anInlineModuleKeepsItsPlusSigns() {
+        assertEquals("a + b", WebIslandCardView.decodeInlineModule("data:text/javascript,a%20+%20b"))
     }
 }
