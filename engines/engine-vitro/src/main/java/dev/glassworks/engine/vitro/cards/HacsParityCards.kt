@@ -2114,3 +2114,147 @@ internal fun bubbleSubButtons(
     }
     return row.takeIf { it.childCount > 0 }
 }
+
+/**
+ * `custom:mushroom-title-card`, as Mushroom 5 draws it: no card surface, `--title-padding` (24 12 8) around a 24 px /
+ * 400 title on a 32 px line (-0.288 px letter spacing) and a 16 px / 400 subtitle in the secondary color on a 24 px
+ * line, 8 px apart (`--title-spacing`). Each can come from the theme's `--mush-title-*` / `--mush-subtitle-*`
+ * variables; `alignment` aligns the text; a tap action puts a chevron after its line. Both lines may be templates,
+ * and wrap (`white-space: pre-wrap`).
+ */
+class MushroomTitleCardView(private val ctx: VitroCardContext, private val config: CardConfig) : LinearLayout(ctx.context) {
+    private val unsubs = ArrayList<() -> Unit>()
+    private val binders = ArrayList<() -> (() -> Unit)>()
+
+    init {
+        orientation = VERTICAL
+        val vars = ctx.theme.vars
+        fun dp(name: String, default: Float) =
+            vars[name]?.let { dev.glassworks.engine.vitro.theme.ThemeResolver.parseDimensionDp(it, -1f) }?.takeIf { it >= 0f } ?: default
+        val pad = paddingDp(vars["mush-title-padding"]) ?: floatArrayOf(24f, 12f, 8f, 12f)
+        setPadding(ctx.px(pad[3]), ctx.px(pad[0]), ctx.px(pad[1]), ctx.px(pad[2]))
+        val spacing = dp("mush-title-spacing", 8f)
+        val gravityX = when (config.raw.optString("alignment", "")) {
+            "center" -> Gravity.CENTER_HORIZONTAL
+            "end" -> Gravity.END
+            else -> Gravity.START
+        }
+        val title = config.raw.optString("title", "")
+        val subtitle = config.raw.optString("subtitle", "")
+        val lines = listOf(
+            Line(title, "title_tap_action", dp("mush-title-font-size", 24f), weightOf(vars["mush-title-font-weight"]),
+                dp("mush-title-line-height", 32f), colorOf(vars["mush-title-color"]) ?: ctx.theme.primaryTextColor,
+                dp("mush-title-letter-spacing", -0.288f, allowNegative = true)),
+            Line(subtitle, "subtitle_tap_action", dp("mush-subtitle-font-size", 16f), weightOf(vars["mush-subtitle-font-weight"]),
+                dp("mush-subtitle-line-height", 24f), colorOf(vars["mush-subtitle-color"]) ?: ctx.theme.secondaryTextColor,
+                dp("mush-subtitle-letter-spacing", 0f, allowNegative = true)),
+        ).filter { it.text.isNotEmpty() }
+        for ((i, line) in lines.withIndex()) {
+            val view = lineView(line, gravityX)
+            addView(view, LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+                // `.header div:not(:last-of-type) { margin-bottom: var(--title-spacing) }`.
+                if (i < lines.size - 1) bottomMargin = ctx.px(spacing)
+            })
+        }
+    }
+
+    private fun dp(name: String, default: Float, allowNegative: Boolean): Float =
+        ctx.theme.vars[name]?.let { dev.glassworks.engine.vitro.theme.ThemeResolver.parseDimensionDp(it, Float.NaN) }
+            ?.takeIf { !it.isNaN() && (allowNegative || it >= 0f) } ?: default
+
+    private class Line(val text: String, val actionKey: String, val sizeDp: Float, val weight: Int, val lineDp: Float, val color: Int, val letterDp: Float)
+
+    private fun lineView(line: Line, gravityX: Int): View {
+        val tv = TextView(ctx.context).apply {
+            val scaled = ctx.scaledSp(line.sizeDp)
+            textSize = scaled
+            typeface = VitroFonts.typeface(ctx.context, line.weight, scaled)
+            includeFontPadding = false
+            setTextColor(line.color)
+            gravity = gravityX
+            letterSpacing = if (line.sizeDp > 0f) line.letterDp / line.sizeDp else 0f
+        }
+        val action = config.raw.optJSONObject(line.actionKey)?.let { ActionConfig.parse(it, "none") }
+        val actionable = action != null && action.action != "none"
+        fun show(value: String) {
+            // CSS line boxes: each line `line-height` tall, the leading split above and below the glyphs.
+            val fm = tv.paint.fontMetrics
+            val lh = line.lineDp * ctx.dp
+            val half = (lh - (fm.descent - fm.ascent)) / 2f
+            val strut = CssLineBoxSpan.Run(0, 0, -fm.ascent + half, fm.descent + half)
+            val text = android.text.SpannableStringBuilder(value)
+            if (actionable) {
+                // Mushroom's chevron (`ha-icon`, the font's size, 4 px after the text).
+                text.append(" ")
+                val icon = android.graphics.drawable.BitmapDrawable(resources, chevron(line))
+                icon.setBounds(0, 0, ctx.px(line.sizeDp), ctx.px(line.sizeDp))
+                val at = text.length
+                text.append(" ")
+                text.setSpan(android.text.style.ImageSpan(icon, android.text.style.DynamicDrawableSpan.ALIGN_BOTTOM), at, at + 1, 0)
+            }
+            text.setSpan(CssLineBoxSpan(emptyList(), strut), 0, text.length, android.text.Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            tv.text = text
+        }
+        if (isTemplate(line.text)) {
+            show("")
+            bind { ctx.subscribeTemplate(line.text) { rendered -> ctx.main.post { show(rendered) } } }
+        } else {
+            show(line.text)
+        }
+        if (actionable) {
+            tv.isClickable = true
+            tv.setOnClickListener { ctx.performAction(action!!, null) }
+        }
+        return tv
+    }
+
+    private fun chevron(line: Line): android.graphics.Bitmap {
+        val px = ctx.px(line.sizeDp).coerceAtLeast(1)
+        val bmp = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+        val v = MdiIconView(ctx.context).apply { setIcon("mdi:chevron-right", line.color) }
+        v.measure(MeasureSpec.makeMeasureSpec(px, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(px, MeasureSpec.EXACTLY))
+        v.layout(0, 0, px, px)
+        v.draw(android.graphics.Canvas(bmp))
+        return bmp
+    }
+
+    private fun bind(binder: () -> (() -> Unit)) {
+        binders += binder
+        unsubs += binder()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (unsubs.isEmpty()) binders.forEach { unsubs += it() }
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        unsubs.forEach { runCatching { it() } }
+        unsubs.clear()
+    }
+
+    private fun weightOf(raw: String?): Int = when (raw?.trim()?.lowercase(Locale.ROOT)) {
+        null, "", "normal" -> Inter.REGULAR
+        "bold" -> 700
+        else -> raw.trim().toIntOrNull()?.coerceIn(100, 900) ?: Inter.REGULAR
+    }
+
+    private fun colorOf(raw: String?): Int? =
+        raw?.takeIf { it.isNotBlank() }?.let { dev.glassworks.engine.vitro.theme.ThemeResolver.parseColor(it) }
+
+    companion object {
+        /** A CSS padding shorthand in px, as (top, right, bottom, left), or null when Vitro can't read it all. */
+        internal fun paddingDp(raw: String?): FloatArray? {
+            val parts = raw?.trim()?.split(Regex("\\s+"))?.filter { it.isNotEmpty() } ?: return null
+            val v = parts.map { dev.glassworks.engine.vitro.theme.ThemeResolver.parseDimensionDp(it, -1f).takeIf { d -> d >= 0f } ?: return null }
+            return when (v.size) {
+                1 -> floatArrayOf(v[0], v[0], v[0], v[0])
+                2 -> floatArrayOf(v[0], v[1], v[0], v[1])
+                3 -> floatArrayOf(v[0], v[1], v[2], v[1])
+                4 -> floatArrayOf(v[0], v[1], v[2], v[3])
+                else -> null
+            }
+        }
+    }
+}
