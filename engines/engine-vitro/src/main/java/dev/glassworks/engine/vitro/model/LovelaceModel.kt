@@ -423,6 +423,39 @@ object CardRouter {
 
     const val LAYOUT_BREAK = "custom:layout-break"
 
+    /**
+     * Every card [card]'s config produces, one level down, each with an index for report paths: a container's or a
+     * conditional's cards ([builtChildren]), auto-entities' `card:` (an `entities` card by default), and, with
+     * [perEntity], the cards auto-entities builds per entity under `card_param: cards`, one for each top-level
+     * `entities:` entry and include rule's `options` (a `tile` by default), as `AutoEntitiesCardView` builds them.
+     * Routing reads them all. The report leaves [perEntity] off, because which of those exist depends on live states.
+     */
+    fun producedCards(card: CardConfig, perEntity: Boolean = true): List<IndexedValue<CardConfig>> {
+        val out = builtChildren(card).toMutableList()
+        if (card.type != "custom:auto-entities") return out
+        val inner = card.raw.optJSONObject("card")?.let { JSONObject(it.toString()) } ?: JSONObject()
+        if (!inner.has("type")) inner.put("type", "entities")
+        out += IndexedValue(out.size, LovelaceParser.parseCard(inner))
+        if (!perEntity || card.raw.optString("card_param", "entities") != "cards") return out
+        val templates = ArrayList<JSONObject>()
+        card.raw.optJSONArray("entities")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                when (val e = arr.opt(i)) {
+                    is String -> templates += JSONObject()
+                    is JSONObject -> templates += JSONObject(e.toString()).apply { remove("entity") }
+                }
+            }
+        }
+        card.raw.optJSONObject("filter")?.optJSONArray("include")?.let { rules ->
+            for (i in 0 until rules.length()) templates += rules.optJSONObject(i)?.optJSONObject("options")?.let { JSONObject(it.toString()) } ?: JSONObject()
+        }
+        for (t in templates) {
+            if (!t.has("type")) t.put("type", "tile")
+            out += IndexedValue(out.size, LovelaceParser.parseCard(t))
+        }
+        return out
+    }
+
     /** One top-level card `VitroView` builds for a view, with its section (null outside sections) and index. */
     data class ViewRoot(val section: Int?, val index: Int, val card: CardConfig)
 

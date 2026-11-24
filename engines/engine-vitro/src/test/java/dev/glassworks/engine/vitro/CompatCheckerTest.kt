@@ -612,6 +612,19 @@ class CompatCheckerTest {
         assertEquals(CardRoute.NATIVE, autoWith("""[{"entity": "light.a", "type": "tile"}]""").route)
         assertEquals(CardRoute.NATIVE, autoWith("""["light.a"]""").route)
         assertEquals(CardRoute.ISLAND, autoWith("""[{"entity": "light.a", "type": "custom:mushroom-light-card"}]""").route)
+        // A built-in card inside its custom `card:` counts too, with the default `card_param: entities`.
+        val nested = verdict(
+            """{"type": "custom:auto-entities", "card": {"type": "custom:layout-card", "cards": [{"type": "tile", "entity": "light.a"}]},
+                "filter": {"include": [{"domain": "light"}]}, "card_mod": {"style": $media}}""",
+        )
+        assertEquals(CardRoute.NATIVE, nested.route)
+        assertTrue(nested.notes.toString(), nested.notes.any { "built-in cards inside it" in it })
+        // The report lists auto-entities' own card, not the per-entity ones (they depend on live states).
+        val view = LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "custom:auto-entities", "card": {"type": "custom:acme-card"}, "filter": {"include": [{"domain": "light"}]}}]}"""))
+        assertEquals(
+            listOf("View 1 › card 1 (custom:auto-entities)", "View 1 › card 1 (custom:auto-entities) › card 1 (custom:acme-card)"),
+            CompatChecker.check(view).entries.map { it.path },
+        )
         // Custom cards all the way down: the island runs them all.
         assertIsland(
             """{"type": "custom:auto-entities", "card": {"type": "custom:layout-card"}, "card_param": "cards",

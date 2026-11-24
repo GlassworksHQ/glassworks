@@ -208,6 +208,7 @@ class VitroView(
             viewCache.keys.filter { views.getOrNull(it)?.subview == true && it != currentViewIndex }.forEach { idx ->
                 viewCache.remove(idx)?.let { contentHost.removeView(it) }
                 overlayFrames.remove(idx)?.let { overlayLayer.removeView(it) }
+                builtScripts.remove(idx)
             }
             if (views.getOrNull(currentViewIndex)?.subview == true) renderView(currentViewIndex, forceRebuild = true)
         }
@@ -294,6 +295,7 @@ class VitroView(
      * rebuilt with the new server's resources before the new dashboard arrives.
      */
     fun resetForServer() {
+        closeMoreInfo()
         dashboard = null
         viewBackStack.clear()
         viewCache.clear()
@@ -531,6 +533,7 @@ class VitroView(
             val oldest = viewCache.keys.firstOrNull { it != keep } ?: return
             viewCache.remove(oldest)?.let { contentHost.removeView(it) }
             overlayFrames.remove(oldest)?.let { overlayLayer.removeView(it) }
+            builtScripts.remove(oldest)
         }
     }
 

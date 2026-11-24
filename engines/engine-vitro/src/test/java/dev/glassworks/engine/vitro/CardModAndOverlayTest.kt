@@ -371,10 +371,15 @@ class CardModAndOverlayTest {
     @Test
     fun aNewServerDropsTheOldDashboard() {
         // The new server's resources must not rebuild the old server's dashboard before its own arrives.
-        val vv = vitroView(EntityStore(), """{"views": [{"cards": [{"type": "tile", "entity": "light.a"}]}]}""")
+        val store = EntityStore()
+        store.putLocal(EntityState("light.a", "on", mapOf("friendly_name" to "A")))
+        val vv = vitroView(store, """{"views": [{"cards": [{"type": "tile", "entity": "light.a"}]}]}""")
         assertNotNull(vv.dashboard)
+        vv.openMoreInfo("light.a")
         vv.resetForServer()
         assertNull(vv.dashboard)
+        // Nothing of the old server stays on screen: no More-Info sheet either.
+        assertFalse(vv.closeMoreInfo())
         val metrics = vv.lastMetrics
         vv.resourcesList = listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/local/other.js", "module"))
         assertTrue("nothing rebuilt", metrics === vv.lastMetrics)

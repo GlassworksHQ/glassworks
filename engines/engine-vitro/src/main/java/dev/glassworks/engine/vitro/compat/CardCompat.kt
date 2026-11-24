@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro.compat
 import dev.glassworks.engine.vitro.cards.CssSelector
 import dev.glassworks.engine.vitro.cards.MdNode
 import dev.glassworks.engine.vitro.model.CardConfig
+import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import org.json.JSONArray
 import org.json.JSONObject
@@ -110,7 +111,7 @@ object CardCompat {
         if (reasons.isNotEmpty()) {
             val why = when {
                 type in VitroSupport.CORE_CARD_TYPES -> "the island can't draw built-in cards yet"
-                type in VitroSupport.HACS_CARD_TYPES && (card.childCards.any(::needsHaFrontend) || generatesBuiltInCards(card)) ->
+                type in VitroSupport.HACS_CARD_TYPES && needsHaFrontend(card) ->
                     "the island can't draw the built-in cards inside it yet"
                 else -> null
             }
@@ -129,53 +130,24 @@ object CardCompat {
         )
     }
 
-    /** The types of the cards inside [card]: its children, theirs, and what auto-entities builds from its config. */
+    /** The types of every card [card] produces, at any depth ([CardRouter.producedCards]). */
     private fun innerTypes(card: CardConfig): Set<String> {
         val out = LinkedHashSet<String>()
         fun walk(c: CardConfig) {
-            if (c.type == "custom:auto-entities") {
-                c.raw.optJSONObject("card")?.optString("type", "")?.ifEmpty { null }?.let { out += it }
-                objects(c.raw.optJSONArray("entities")).forEach { e -> e.optString("type", "").ifEmpty { null }?.let { out += it } }
-                objects(c.raw.optJSONObject("filter")?.optJSONArray("include")).forEach { r ->
-                    r.optJSONObject("options")?.optString("type", "")?.ifEmpty { null }?.let { out += it }
-                }
-            }
-            c.childCards.forEach { child -> out += child.type; walk(child) }
+            CardRouter.producedCards(c).forEach { (_, child) -> out += child.type; walk(child) }
         }
         walk(card)
         return out
     }
 
-    /** True when [card] or a card inside it is a built-in card, which the island can only draw as a summary. */
-    private fun needsHaFrontend(card: CardConfig): Boolean =
-        !card.type.startsWith("custom:") || card.childCards.any(::needsHaFrontend) || generatesBuiltInCards(card)
-
     /**
-     * True when `auto-entities` builds built-in cards at runtime: its `card:` (an `entities` card by default), or with
-     * `card_param: cards` one card per entity, from each top-level `entities:` entry and each rule's `options`
-     * (a `tile` by default), the way [dev.glassworks.engine.vitro.cards.AutoEntitiesCardView] builds them. Also
-     * `stack-in-card`, which (0.2.0) builds a built-in `vertical-stack` or `horizontal-stack` around its cards.
+     * True when [card] is a built-in card or produces one at any depth ([CardRouter.producedCards]): the island can
+     * only draw those as summaries. `stack-in-card` always does: version 0.2.0 wraps its cards in a built-in
+     * `vertical-stack` or `horizontal-stack`.
      */
-    private fun generatesBuiltInCards(card: CardConfig): Boolean {
-        if (card.type == "custom:stack-in-card") return true
-        if (card.type != "custom:auto-entities") return false
-        val inner = card.raw.optJSONObject("card")?.optString("type", "")?.ifEmpty { null } ?: "entities"
-        if (!inner.startsWith("custom:")) return true
-        if (card.raw.optString("card_param", "entities") != "cards") return false
-        val listed = card.raw.optJSONArray("entities")
-        val entryTypes = (0 until (listed?.length() ?: 0)).mapNotNull { i ->
-            when (val e = listed?.opt(i)) {
-                is String -> "tile"
-                is JSONObject -> e.optString("type", "").ifEmpty { "tile" }
-                else -> null
-            }
-        }
-        val ruleTypes = objects(card.raw.optJSONObject("filter")?.optJSONArray("include")).map { r ->
-            r.optJSONObject("options")?.optString("type", "")?.ifEmpty { null } ?: "tile"
-        }
-        val types = entryTypes + ruleTypes
-        return types.isEmpty() || types.any { !it.startsWith("custom:") }
-    }
+    private fun needsHaFrontend(card: CardConfig): Boolean =
+        !card.type.startsWith("custom:") || card.type == "custom:stack-in-card" ||
+            CardRouter.producedCards(card).any { needsHaFrontend(it.value) }
 
     /**
      * A CSS value as the checker may log it. The reasons go to logcat and the HUD, so an address (which can carry a

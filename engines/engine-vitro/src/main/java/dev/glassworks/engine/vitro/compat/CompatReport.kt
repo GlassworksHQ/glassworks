@@ -65,6 +65,6 @@ object CompatChecker {
         val verdict = card.compat.effective(scripts)
         out += CompatEntry(here, verdict)
         if (!verdict.isNative) return
-        CardRouter.builtChildren(card).forEach { (i, child) -> walk(child, "$here › card ${i + 1}", scripts, out) }
+        CardRouter.producedCards(card, perEntity = false).forEach { (i, child) -> walk(child, "$here › card ${i + 1}", scripts, out) }
     }
 }
