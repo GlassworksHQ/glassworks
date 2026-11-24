@@ -386,5 +386,28 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
       'system:restore-post-boot.sparse',
       'system:restore-services.sparse',
     ]);
+
+    // Verify --apply-adb can re-apply the saved patch-services.sparse cleanly from backup/
+    flashed.length = 0;
+    const applyRes = await runStockSurgicalAdb({
+      mode: 'apply-adb',
+      probeHost: '192.168.43.1',
+      probeHttpPort: 18765,
+      backupDir: '/tmp/out/backup',
+      waitSeconds: 30,
+      outDir: '/tmp/out-reapply',
+    }, {
+      ...deps,
+      readHostFile: async (absPath) => {
+        const rel = absPath.replace(/^\/tmp\/out\//, '');
+        const v = writes.get(rel);
+        if (!v) throw new Error(`missing ${rel}`);
+        return typeof v === 'string' ? new TextEncoder().encode(v) : v;
+      },
+    });
+    expect(applyRes.ok).toBe(true);
+    expect(flashed.map((f) => `${f.part}:${f.path.split('/').pop()}`)).toEqual([
+      'system:patch-services.sparse',
+    ]);
   });
 });

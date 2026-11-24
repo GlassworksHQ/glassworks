@@ -720,6 +720,7 @@ export interface BackupManifest {
     extents: FiemapExtent[];
     origFile: string;
     restoreSparse: string;
+    patchSparse?: string;
   };
   postBoot?: {
     path: string;
@@ -732,7 +733,7 @@ export interface BackupManifest {
 }
 
 export interface SurgicalAdbOptions {
-  mode: 'full' | 'preflight-only' | 'build-only' | 'undo';
+  mode: 'full' | 'preflight-only' | 'build-only' | 'undo' | 'apply-adb';
   probeHost: string;
   probeHttpPort: number;
   adbKey?: string;
@@ -957,6 +958,44 @@ export async function runStockSurgicalAdb(
     return { report, ok: true };
   }
 
+  // --- Apply-ADB mode (re-enable saved surgical services.jar hook from a previous backup dir) ---
+  if (o.mode === 'apply-adb') {
+    if (!o.backupDir) throw new Error('--apply-adb requires --backup-dir <dir>');
+    const manifestRaw = await d.readHostFile(`${o.backupDir}/manifest.json`);
+    const manifest = JSON.parse(td.decode(manifestRaw)) as BackupManifest;
+    const patchRel = manifest.servicesJar.patchSparse ?? '../patch-services.sparse';
+    const patchSparsePath = `${o.backupDir}/${patchRel}`;
+    // Verify patch sparse exists & is readable before touching fastboot
+    await d.readHostFile(patchSparsePath);
+    const fb = await d.waitForFastboot(o.waitSeconds * 1000);
+    if (!fb) {
+      report.stopReason = 'no Mirror detected in fastboot mode for --apply-adb';
+      await saveReport();
+      return { report, ok: false };
+    }
+    const product = await fb.getvar('product');
+    const sysBytes = parseHexOrDecSize(await fb.getvar('partition-size:system'));
+    if (product !== 'MSM8916' || sysBytes !== manifest.systemBytes) {
+      report.stopReason = `fastboot gate failed for --apply-adb (product=${product ?? 'unknown'}, system=${sysBytes ?? 'unknown'} vs manifest ${manifest.systemBytes})`;
+      await saveReport();
+      return { report, ok: false };
+    }
+    const proceed = await d.confirm(
+      `Re-apply surgical USB ADB services.jar hook (${manifest.servicesJar.fingerprint ?? 'saved host key'}) from ${o.backupDir}? (SELinux stays Enforcing; reversible anytime with --undo)`,
+    );
+    if (!proceed) {
+      report.stopReason = 'apply-adb cancelled by user';
+      await saveReport();
+      return { report, ok: false };
+    }
+    d.log('  flashing saved patch-services.sparse to system...');
+    await fb.flashPartition('system', patchSparsePath);
+    await fb.reboot();
+    report.notes.push('Re-applied surgical USB ADB services.jar hook to system and rebooted (SELinux stays Enforcing).');
+    await saveReport();
+    return { report, ok: true };
+  }
+
   // Validate ADB key up front when patching
   let cleanAdbKey: string | undefined;
   if (o.mode !== 'preflight-only') {
@@ -1100,6 +1139,7 @@ export async function runStockSurgicalAdb(
   report.servicesPadBytes = patchedJar.padBytes;
   manifest.servicesJar.patchedSha256 = patchedJar.patchedSha256;
   manifest.servicesJar.fingerprint = patchedJar.fingerprint;
+  manifest.servicesJar.patchSparse = 'patch-services.sparse';
   await d.writeFile('backup/manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
 
   let patchServicesSparse = buildSurgicalSparseImage(
@@ -1108,6 +1148,7 @@ export async function runStockSurgicalAdb(
     patchedJar.patched,
   );
   const patchServicesPath = await d.writeFile('patch-services.sparse', patchServicesSparse);
+  await d.writeFile('backup/patch-services.sparse', patchServicesSparse);
 
   let patchedPostBoot: Uint8Array | undefined;
   let patchPostBootPath: string | undefined;
@@ -1187,6 +1228,7 @@ export async function runStockSurgicalAdb(
     await d.writeFile('backup/restore-services.sparse', restoreServicesSparse);
     patchServicesSparse = buildSurgicalSparseImage(sysBytes, report.servicesFiemap.extents, patchedJar.patched);
     await d.writeFile('patch-services.sparse', patchServicesSparse);
+    await d.writeFile('backup/patch-services.sparse', patchServicesSparse);
     if (origPostBoot && report.postBootFiemap?.extents?.length) {
       await d.writeFile(
         'backup/restore-post-boot.sparse',
@@ -1361,6 +1403,10 @@ export async function runStockSurgicalAdb(
       d.log('  --restore-all: restoring original services.jar blocks...');
       await fb3.flashPartition('system', restoreServicesPath);
       report.restoredServices = true;
+    } else {
+      report.restoredServices = false;
+      d.log(`  keeping authorized USB ADB services.jar hook active (SELinux Enforcing). Revert anytime with: --undo --backup-dir ${o.outDir}/backup`);
+      report.notes.push('Kept surgical USB ADB services.jar hook active (SELinux Enforcing); temporary backup hook restored to stock.');
     }
     await fb3.reboot();
   } else {
