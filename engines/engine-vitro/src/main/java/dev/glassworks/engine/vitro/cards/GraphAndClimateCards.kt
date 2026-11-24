@@ -153,7 +153,9 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
         ctx.main.removeCallbacks(historyRefresh)
         if (historyIds.isEmpty()) return
         val ids = historyIds
-        val gen = ++historyGeneration
+        // Answers from this showing all count (a later read that fails doesn't discard an earlier one); hiding the
+        // card bumps the generation, which drops the ones still on their way.
+        val gen = historyGeneration
         // The next read is set now, not when this one answers: a failed request (which answers nothing) mustn't stop
         // the refresh while the card shows.
         if (isAttachedToWindow && isShown) ctx.main.postDelayed(historyRefresh, HISTORY_REFRESH_MS)
@@ -167,8 +169,12 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
         }
     }
 
+    /** Whether the card showed the last time its visibility was looked at: only a hidden → shown change reloads. */
+    private var historyShown = false
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        historyShown = isShown
         if (historyIds.isNotEmpty() && isShown) {
             ctx.main.removeCallbacks(historyRefresh)
             ctx.main.postDelayed(historyRefresh, HISTORY_REFRESH_MS)
@@ -183,7 +189,10 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
         if (!isAttachedToWindow || historyIds.isEmpty()) return
-        if (isShown) {
+        val shown = isShown
+        if (shown == historyShown) return // attaching (already loaded by the constructor), or no change
+        historyShown = shown
+        if (shown) {
             loadHistory()
         } else {
             ctx.main.removeCallbacks(historyRefresh)
