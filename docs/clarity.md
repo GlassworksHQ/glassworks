@@ -8,7 +8,7 @@ Each letter answers one practical question: **how busy a Home Assistant dashboar
 
 | Grade | What it means |
 |---|---|
-| **A+** | Handles heavy dashboards smoothly, with 60 fps scrolling and responsive camera playback within tight stall and dropped-frame limits |
+| **A+** | Handles heavy dashboards smoothly, with 60 fps scrolling (on devices with a touchscreen) and responsive camera playback within tight stall and dropped-frame limits |
 | **A** | Great wall panel even for large, dense dashboards |
 | **B** | Great wall panel for typical dashboards with a live camera stream |
 | **C** | Great wall panel for typical dashboards without a live camera |
@@ -30,6 +30,10 @@ On each dashboard, Clarity tests the interactions you notice every day on a wall
 - **More-info dialogs** — opening lights, thermostats, and sensor history graphs
 - **Live camera streams** — how quickly the first frame appears and how smoothly video plays
 
+Some devices, like the lululemon Mirror, have no touchscreen, so nobody can scroll them. Clarity doesn't grade those devices on scrolling. It skips the swipes and grades every other task as usual, and the report says "Scrolling: not applicable, this frame has no touch." A missing scroll result doesn't make their grade provisional, though anything else that's missing still does whenever it could change the letter.
+
+Some panels run short of memory on the bigger dashboards, and Android closes the browser page to free some. When that happens mid-test, Clarity counts that dashboard as failed for that run and carries on with the rest, so a panel that can't hold a dashboard isn't graded as if it could. The device card says which dashboard was lost, in how many runs, and why. This isn't a missing measurement, so it never makes the grade provisional.
+
 All thresholds come from published web and mobile UX standards (Core Web Vitals, RAIL, and Android vitals) rather than numbers tuned to any particular piece of hardware.
 
 ## Reading a device's Clarity card
@@ -39,7 +43,7 @@ Every supported device page on [glassworks.dev/frames](https://www.glassworks.de
 - **What holds it back:** A plain-English line naming the exact task that kept the device from earning the next letter up.
 - **Per-page breakdown:** How the panel performed on light, typical (with and without a camera), and heavy dashboards.
 - **Memory and headroom:** Idle CPU, app memory usage, and the RAM impact of optional panes like Assist voice or Sendspin music, so you know how much headroom you have left.
-- **Provisional or pending labels:** If a measurement had a missing metric or ran over a noisy link, Clarity marks the grade **provisional** and explains why. Devices that haven't been benchmarked yet show **Measurements pending**.
+- **Provisional or pending labels:** If a missing measurement could change the letter, or the test ran over a noisy link, Clarity marks the grade **provisional** and explains why. When something wasn't measured but couldn't change the letter either way, the grade stays final and the card still says what's missing and why it doesn't matter, for example when a large dashboard already falls short of an A on another task. Devices that haven't been benchmarked yet show **Measurements pending**.
 
 ## Run Clarity yourself
 

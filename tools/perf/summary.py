@@ -14,9 +14,10 @@ device-unique (no serial, no addresses).
   tools/perf/summary.py perf-s1/report.json perf-s1/summary.json [--report-url report.json]
                         [--allow-provisional]
 
-A summary with gaps (a run failed, a task not measured) or one that isn't comparable (not at the
-default zoom) is not written unless --allow-provisional is given; then `complete` is false and the
-facts say why.
+A summary with gaps (a run failed, a task not measured that could change the letter) or one that isn't
+comparable (not at the default zoom) is not written unless --allow-provisional is given; then `complete` is
+false and the facts say why. One missing only what can't change the letter is written: `complete` is false,
+and `unmeasured` says why it is missing.
 """
 import argparse
 import json
@@ -88,6 +89,12 @@ def page_summary(s):
                  "blocking": _n(s.get("blocking_ms")),
                  "camera": len(s.get("camera_runs") or [])},
     }
+    if s.get("lost_runs"):
+        # Runs in which the panel closed this page's browser page (report.py lost): every task failed in them, as
+        # `{"lost": true}` records and tap, open and blocking at the runner's view deadline; `lost_why` says why in
+        # words. Only when there was one, so every other summary stays as it was, byte for byte (test_summary).
+        out["lost_runs"] = s["lost_runs"]
+        out["lost_why"] = list(s.get("lost_why") or [])
     if "dialog_runs" in s:
         # Clarity v3 (#211), added within /3: HA's more-info dialogs, each run's record (graded per run:
         # the slowest to settle, how many failed, the open animations' frames). Absent for a report
@@ -100,7 +107,7 @@ def page_summary(s):
 def dialog_summary(s):
     keys = ("n", "failed", "settled_ms")
     return {"settled_ms": _med(s.get("dialog_settled_ms")),
-            "runs": [dict({"timed_out": True} if r.get("timed_out") else
+            "runs": [dict({"timed_out": True} if r.get("timed_out") else {"lost": True} if r.get("lost") else
                           dict({k: r.get(k) for k in keys}, frames=r.get("frames")))
                      for r in s["dialog_runs"]]}
 
@@ -109,11 +116,14 @@ def camera_summary(s):
     keys = ("first_frame_ms", "shown_pct", "max_gap_ms", "stall_total_ms")
     runs = s.get("camera_runs") or []
     tag = lambda r: dict({"timed_out": True} if r.get("timed_out") else {},  # noqa: E731
+                         **({"lost": True} if r.get("lost") else {}),
                          **({"stalls_reported": False} if r.get("stalls_reported") is False else {}),
                          # #265: what the receiver's counts left out of the window (the graders hold
                          # the fluid total bar against stalls + it); WebRTC runs only.
                          **({"uncovered_ms": r["uncovered_ms"]} if r.get("uncovered_ms") is not None else {}))
-    fb, paths = s.get("camera_fallback"), {r.get("path") or "hls" for r in runs}
+    # A lost run (its page closed before the camera window) has no transport: the path comes from the others, and
+    # is unknown (None) when every run was lost.
+    fb, paths = s.get("camera_fallback"), {r.get("path") or "hls" for r in runs if not r.get("lost")}
     return {"runs": [dict({k: r.get(k) for k in keys}, **tag(r)) for r in runs],
             "path": paths.pop() if len(paths) == 1 else None,
             "fallback": fb and {"path": fb["path"], "runs": [{k: r.get(k) for k in keys} for r in fb["runs"]]}}
@@ -170,6 +180,9 @@ def measurements(rep, report_url="report.json"):
     except ValueError:
         default_dpr = None
     vp = g.get("viewport") or {}
+    # Rubric 2: a frame without touch isn't graded on scrolling (grade_summary reads `touch`). Only said when false, so
+    # a frame with touch keeps its summary byte for byte (test_summary).
+    no_touch = {"touch": False} if (rep["frame"].get("device") or {}).get("touch") is False else {}
     return {
         "schema": SCHEMA,
         "test": G.NAME,
@@ -179,6 +192,7 @@ def measurements(rep, report_url="report.json"):
         "report_schema": rep["schema"],
         "measured_on": rep.get("measured_on"),
         "frame": {"id": rep["frame"]["id"], "name": rep["frame"]["name"]},
+        **no_touch,
         "app_version": (rep["frame"].get("app") or {}).get("version_name"),
         "viewport": {"css": list(seen[0][0]) if len(seen) == 1 and seen[0][0] else None,
                      "dpr": seen[0][1] if len(seen) == 1 else None, "default_dpr": default_dpr},
@@ -187,6 +201,9 @@ def measurements(rep, report_url="report.json"):
         "restart_ms": _graded(ref.get("start_ms")),
         # Measurement facts, not grade states: what is short, and why the numbers can't be compared.
         "gaps": list(g.get("provisional_reasons") or []),
+        # Why a measurement is missing that can't change the letter (grade.py missing_settled_by): a fact, not a gap.
+        # Only when there is one, so every other summary stays as it was.
+        **({"unmeasured": list(g["unmeasured"])} if g.get("unmeasured") else {}),
         # Not comparable: not at the default zoom, or nothing was measured to grade (--skip-reference).
         "not_comparable": (vp.get("reason") if vp.get("state") == "refused"
                            else g.get("refused") if g.get("grade") is None else None),
@@ -209,13 +226,15 @@ def transport_summary(t):
 
 
 def summarise(rep, report_url="report.json", allow_provisional=False):
-    """The summary, refused (Refused) when it has gaps, missing measurements or isn't comparable,
-    unless allow_provisional; `complete` says which."""
+    """The summary, refused (Refused) when its letter is provisional (gaps, or missing measurements that could change
+    it), there is none, or it isn't comparable, unless allow_provisional. `complete` says whether everything was
+    measured: a summary missing only what can't change the letter is exported, with complete false."""
     out = measurements(rep, report_url)
     g = G.grade_summary(out)
     missing = g.get("missing") or []
     complete = not out["gaps"] and not out["not_comparable"] and not missing and g["status"] == "graded"
-    if not complete and not allow_provisional:
+    final = not out["not_comparable"] and g["status"] == "graded" and not g["provisional"]
+    if not final and not allow_provisional:
         why = out["not_comparable"] or "; ".join(out["gaps"] + (["not measured: " + ", ".join(missing)] if missing else [])) \
             or g.get("why", "")
         raise Refused(f"the measurements are incomplete or not comparable ({why}); "

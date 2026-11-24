@@ -11,7 +11,7 @@ import { AdbAuthTimeout, AdbBusy, pemToPkcs8, type PanelShell } from '@glasswork
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
 import { askAdb, nothingPicked } from './adbAsk';
 import {
-  ProxyError, WrongImage, cap, imageFromLink, pickInList, plan, wifiStep,
+  ProxyError, WrongImage, adbKeyStep, cap, imageFromLink, pickInList, plan, sourceFile, systemKeyStep, wifiStep,
   type DeviceFrame, type FastbootLike, type FastbootReport, type FirstStart, type ImageFile, type ImageMaker, type ImageRecipe, type PlannedStep, type PrepareStep,
 } from '@glassworks/kiln-core';
 
@@ -110,7 +110,7 @@ export function sessionProgress(key: string): DeviceProgress {
 /** `image`: Glassworks' download and settings; `download`: a community image's. */
 /** `done`: a community image's end (Glassworks' is the standard flow's Done). */
 export type ImageScreen = 'choose' | 'image' | 'download' | 'keep' | 'fastboot' | 'confirm' | 'working' | 'adb' | 'done' | 'error';
-export type WorkStep = PrepareStep | 'wifi' | 'flash-system' | 'flash-userdata' | 'restart' | 'first-boot' | 'hand-back' | 'wifi-on';
+export type WorkStep = PrepareStep | 'system-key' | 'adb-key' | 'wifi' | 'flash-system' | 'flash-userdata' | 'restart' | 'first-boot' | 'hand-back' | 'wifi-on';
 /**
  * Home Assistant's ESPHome key across a reflash (issue 580): read from the running app before the flash, given back at the
  * first start. The key itself never goes in the state or the log, only its 4-hex fingerprint; the session holds it in
@@ -245,9 +245,9 @@ export class ImageSession {
     this.state = { screen: linked ? 'download' : 'choose', picked: first.id, open: !!linked, link: !!linked, files: waiting(first),
       wifi: { ssid: '', password: '' }, understood: false, log: [] };
     // a reload: an image written and restarted goes straight to its last step over adb, with no download and no fastboot
-    // (Glassworks' first start; a community image's Wi-Fi on, whose published key went with the restart's cleanup, so
-    // that step then says to switch Wi-Fi on in the image's own Settings). A write that didn't finish starts again from
-    // the image, saying an earlier try changed the device
+    // (Glassworks' first start; a community image's Wi-Fi on, with this browser's key, or with a published key that went
+    // with the restart's cleanup, so that step then says to switch Wi-Fi on in the image's own Settings). A write that
+    // didn't finish starts again from the image, saying an earlier try changed the device
     const mark = d.progress?.get();
     const wrote = mark && this.recipes.find((r) => r.id === mark.image);
     if (mark?.at === 'flashed' && wrote) this.state = { ...this.state, screen: 'adb', picked: wrote.id, open: wrote.community, files: waiting(wrote), changed: true };
@@ -615,7 +615,7 @@ export class ImageSession {
       // a community image's userdata goes on as published, at its own size: the partition must hold it (Glassworks builds one to fit)
       // (with the network saved, the copy Kiln makes is the same size, so the same holds)
       const floor = this.d.frame.imageFlow.communityUserdata;
-      const publishedUserdata = !!floor && r.steps.some((x) => x.do === 'flash' && x.partition === 'userdata' && (wifiStep(r, x.file)?.file ?? x.file) === floor.file);
+      const publishedUserdata = !!floor && r.steps.some((x) => x.do === 'flash' && x.partition === 'userdata' && sourceFile(r, x.file)?.name === floor.file);
       if (floor && r.community && publishedUserdata && fastboot.userdataBytes < floor.bytes) {
         fastboot.checks.push({ what: `Userdata partition for ${r.name}`, found: `${fastboot.userdataBytes} bytes`, ok: false, need: `at least ${floor.bytes} bytes, the size its userdata image expands to` });
         fastboot.ok = false;
@@ -656,15 +656,21 @@ export class ImageSession {
     this.made = Object.create(null);
     let building = false, reading = false;
     const network = s.wifi.ssid ? { ssid: s.wifi.ssid, password: s.wifi.password } : undefined;
+    // what a flash step writes: with no network, a wifi step's file is what it would have started from
+    const writtenName = (name: string) => (!network && wifiStep(r, name) ? wifiStep(r, name)!.file : name);
     try {
       // the device's LK can't read anything back: Kiln's backup step is the record of what it writes
       this.log(`Backup: none possible, ${this.d.frame.the}'s bootloader can't read anything back. What Kiln writes:`);
       for (const x of steps) {
         if (x.do !== 'flash') continue;
-        const ws = wifiStep(r, x.file);
-        const src = r.files.find((f) => f.name === (ws?.file ?? x.file));
+        const src = sourceFile(r, x.file);
         if (!src) continue; // built by Kiln (Glassworks' patch)
-        this.log('', ws && network ? `${src.name}: SHA-256 ${src.sha256} as published, with the Wi-Fi network saved in it` : `${src.name}: SHA-256 ${src.sha256}, as ${r.name}'s release publishes it`);
+        // what Kiln changes in it on the way: one file each
+        const name = writtenName(x.file);
+        const changes = [...(systemKeyStep(r, name) ? ['this browser\'s adb key in place of the one it lets in without asking'] : []),
+          ...(adbKeyStep(r, name) || adbKeyStep(r, wifiStep(r, name)?.file ?? '') ? ['this browser\'s adb key in place of the published one'] : []),
+          ...(network && wifiStep(r, name) ? ['the Wi-Fi network saved in it'] : [])];
+        this.log('', changes.length ? `${src.name}: SHA-256 ${src.sha256} as published, with ${changes.join(' and ')}` : `${src.name}: SHA-256 ${src.sha256}, as ${r.name}'s release publishes it`);
       }
       // every published file this install writes, opened and checked now, before the first write; those very Blobs go to
       // fastboot, so a file another tab changed can't leave one partition written and the other not. A userdata with the
@@ -673,10 +679,8 @@ export class ImageSession {
       reading = true;
       for (const x of steps) {
         if (x.do !== 'flash' || verified[x.file]) continue;
-        const ws = wifiStep(r, x.file);
-        if (ws && network) continue;
-        const want = r.files.find((f) => f.name === (ws?.file ?? x.file));
-        if (!want) continue; // built by Kiln (Glassworks' patch)
+        const want = r.files.find((f) => f.name === writtenName(x.file));
+        if (!want) continue; // made by Kiln: Glassworks' patch, or a copy the system-key, adb-key or wifi step hashes as it reads
         const blob = await this.d.images.file(want.name);
         this.log('', `${want.name}: checking it again before writing`);
         await this.d.images.check(blob, want, () => {});
@@ -701,27 +705,48 @@ export class ImageSession {
           built('');
           building = false;
           this.log('', `Kiln built: ${step.makes.join(', ')}`);
+        } else if (step.do === 'system-key') {
+          const adbKey = this.d.adbKey();
+          if (!adbKey) throw new Error('Kiln has no adb key for this browser yet. Reload the page and try again.');
+          reading = true;
+          this.log('Putting this browser\'s adb key in its system image');
+          work('system-key', 0);
+          this.made[step.makes] = await this.d.images.systemKey({ system: r.files.find((f) => f.name === step.file)!, makes: step.makes, adbKey }, (x) => work('system-key', x));
+          reading = false;
+          this.log('', `${step.file} letting in this browser's key without asking, in place of the one it hardcodes, and nothing else changed`);
+        } else if (step.do === 'adb-key') {
+          const adbKey = this.d.adbKey();
+          if (!adbKey) throw new Error('Kiln has no adb key for this browser yet. Reload the page and try again.');
+          reading = true;
+          this.log('Putting this browser\'s adb key in its userdata');
+          work('adb-key', 0);
+          this.made[step.makes] = await this.d.images.adbKey({ userdata: r.files.find((f) => f.name === step.file)!, makes: step.makes, adbKey }, (x) => work('adb-key', x));
+          reading = false;
+          this.log('', `${step.file} with this browser's key in /misc/adb/adb_keys in place of the published one, and nothing else changed`);
         } else if (step.do === 'wifi') {
           if (!network) continue; // not planned without one (writes()): userdata goes on as published
           const key = steps.find((x): x is Extract<PlannedStep, { do: 'wifi-on' }> => x.do === 'wifi-on');
           reading = true;
-          if (key) {
+          if (key?.key) {
             // the image's published key, checked now: the restart deletes the downloads, and it is needed after it
             this.imageConnect = this.d.adbWithKey?.(await readImageKey(this.d.images, r.files.find((f) => f.name === key.key)!));
           }
           this.log('Saving the Wi-Fi network you entered'); // never its name: logs end up in failure reports (CLAUDE.md rule 2)
           work('wifi', 0);
           const file = (n: string) => r.files.find((f) => f.name === n)!;
-          this.made[step.makes] = await this.d.images.wifi({ userdata: file(step.file), system: file(step.template), makes: step.makes, wifi: network }, (x) => work('wifi', x));
+          // on the copy the adb-key step made, when it starts from one
+          const made = adbKeyStep(r, step.file) ? step.file : undefined;
+          this.made[step.makes] = await this.d.images.wifi({ userdata: sourceFile(r, step.file)!, ...(made ? { made } : {}), system: file(step.template), makes: step.makes, wifi: network }, (x) => work('wifi', x));
           reading = false;
           this.set({ communityWifi: 'saved' });
           this.log('', `${step.file} with the network saved in /misc/wifi/wpa_supplicant.conf, and nothing else changed`);
         } else if (step.do === 'flash') {
           const id = `flash-${step.partition}` as WorkStep;
-          const blob = this.made[step.file] ?? verified[step.file];
+          const name = writtenName(step.file);
+          const blob = this.made[name] ?? verified[step.file];
           if (!blob) throw new Error(`Kiln has no checked ${step.file} to write. Nothing more was written.`);
-          const asIs = r.community && !this.made[step.file];
-          this.log(`Flashing ${step.partition}${asIs ? ` with ${wifiStep(r, step.file)?.file ?? step.file} as published` : r.community ? ` with ${step.file}, built by Kiln from a checked download` : s.noFill ? ' (zeros as RAW, no FILL chunks)' : ''}`);
+          const asIs = r.community && !this.made[name];
+          this.log(`Flashing ${step.partition}${asIs ? ` with ${name} as published` : r.community ? ` with ${name}, built by Kiln from a checked download` : s.noFill ? ' (zeros as RAW, no FILL chunks)' : ''}`);
           this.set({ flashFailed: true }); // until the restart: a failure from here is the bootloader's
           work(id, 0);
           // sending is the bar; after it the bootloader writes (and may erase) with nothing to report
@@ -775,7 +800,7 @@ export class ImageSession {
   /**
    * After the restart, inside the click: adb with this browser's key, then Kiln's first start (Glassworks). A device
    * still starting refuses the key: Kiln asks again every 5 s through the first start, and says so if it never lets in.
-   * For a community image's wifi-on: the image's own published key, then `svc wifi enable` and nothing else.
+   * For a community image's wifi-on: this browser's key (or the image's own published one), then `svc wifi enable` and nothing else.
    */
   async connectAdb(): Promise<void> {
     if (this.recipe.community) return this.connectWifiOn();
@@ -834,14 +859,42 @@ export class ImageSession {
   }
 
   private async connectWifiOn(): Promise<void> {
-    const req = this.imageConnect ? this.imageConnect() : Promise.reject(new Error(`Kiln has no key for this image here. Turn Wi-Fi on in ${this.d.frame.the}'s Settings once instead.`));
-    this.connects++;
-    this.set({ connecting: true, connectError: undefined });
+    if (this.state.connecting) return;
+    const step = this.recipe.steps.find((x): x is Extract<PlannedStep, { do: 'wifi-on' }> => x.do === 'wifi-on');
+    // the image's published key (step.key), or this browser's, which the adb-key step put in its userdata
+    const published = !!step?.key;
+    const run = ++this.connects;
     let p: PanelShell;
-    try { p = await req; } catch (e) { this.set({ connecting: false, connectError: (e as Error).message }); return; }
-    this.set({ connecting: false, screen: 'working', wifiOnFailed: false, error: undefined, work: { step: 'wifi-on', x: 0 } });
+    if (published) {
+      const req = this.imageConnect ? this.imageConnect() : Promise.reject(new Error(`Kiln has no key for this image here. Turn Wi-Fi on in ${this.d.frame.the}'s Settings once instead.`));
+      this.set({ connecting: true, connectError: undefined });
+      try { p = await req; } catch (e) { this.set({ connecting: false, connectError: (e as Error).message }); return; }
+    } else {
+      // the device refuses this browser's key until its framework is up: ask again every 5 s, as the first start does
+      const sleep = this.d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+      const { reopenAdb, adbPicked } = this.d;
+      const asking = askAdb({ request: (o) => this.d.requestAdb(o), ...(reopenAdb ? { reopen: (o) => reopenAdb.call(this.d, o) } : {}), ...(adbPicked ? { picked: () => adbPicked.call(this.d) } : {}) }, {
+        firstAuthMs: this.d.frame.timings.firstStartAuthMs, authMs: this.d.frame.timings.authMs, sleep, tries: this.d.adbTries, windowMs: this.d.adbWindowMs,
+        onPicked: () => { if (run === this.connects && this.state.connecting) this.set({ adbWaiting: true }); },
+        onWait: (why) => {
+          this.log('', `${cap(this.d.frame.the)} didn't let this browser in yet (${why}): it is still starting. Asking again in 5 s.`);
+          this.set({ adbWaiting: true });
+        },
+      });
+      this.set({ connecting: true, connectError: undefined });
+      const asked = await asking;
+      if (!asked.panel) {
+        const { last, picked, retried } = asked;
+        const why = (last as Error).message;
+        this.set({ connecting: false, adbWaiting: false, connectError: !picked && nothingPicked(last) ? `Nothing was picked. Click Connect and ${pickInList(this.d.frame)}.`
+          : retried && !(last instanceof AdbBusy) ? `${cap(this.d.frame.the)} didn't let this browser in (${why}). It knows only the key of the browser that installed it: use that browser, then Connect again.` : why });
+        return;
+      }
+      p = asked.panel;
+    }
+    this.set({ connecting: false, adbWaiting: false, screen: 'working', wifiOnFailed: false, error: undefined, work: { step: 'wifi-on', x: 0 } });
     try {
-      this.log('Switching Wi-Fi on, with the image\'s own published key: svc wifi enable');
+      this.log(published ? 'Switching Wi-Fi on, with the image\'s own published key: svc wifi enable' : 'Switching Wi-Fi on, with this browser\'s key: svc wifi enable');
       const on = await this.d.frame.imageFlow.wifiOn(p, this.d.sleep);
       this.imageConnect = undefined; // one connection only
       this.log('', on ? 'Android says Wi-Fi is on' : 'Android didn\'t confirm Wi-Fi is on');

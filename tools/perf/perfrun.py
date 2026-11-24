@@ -44,6 +44,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import clock as C  # noqa: E402
 import perflib as P  # noqa: E402
 
+FRAMES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "frames")
+
 
 class Device:
     def __init__(self, serial, package, activity=""):
@@ -292,6 +294,9 @@ def cmd_device(dev, a):
     zones = dev.sh("for z in /sys/class/thermal/thermal_zone*; do echo $(cat $z/type) $(cat $z/temp); done 2>/dev/null")
     write_json(os.path.join(a.out, "device.json"), {
         "frame": a.frame, "frame_name": a.name or a.frame,
+        # From the frame's data (design/installer.json `touch`): without touch nobody scrolls it, so the runner sends
+        # no swipes and the scroll isn't graded (rubric.json no_touch, rubric 2).
+        "touch": P.frame_touch(FRAMES, a.frame),
         "measured_on": time.strftime("%Y-%m-%d", time.gmtime()),   # UTC date of the run, from this computer
         "model": props["ro.product.model"], "manufacturer": props["ro.product.manufacturer"],
         "android": props["ro.build.version.release"], "api": int(props["ro.build.version.sdk"] or 0),
@@ -698,6 +703,68 @@ LOCKDOWN_EXIT = 4
 # runs no animation frames and slows its timers, so nothing timed then is the panel's (smoke10: the
 # kiosk's 20 s night idle timeout held light's view switch back 22 s and stopped heavy).
 SLEEP_RE = re.compile(r"PowerManagerService.*Going to sleep|Going to sleep due to")
+# The app's line when its browser page's process is gone (MainActivity.onContentGone, any frame and engine): GeckoView
+# calls the process "killed" when Android ended it (onKill) and "crashed" when it died by itself (onCrash). The app then
+# restarts the session and loads the kiosk's page again (the test dashboard's start view), which reaches the runner as
+# another page load. With this line before it, the open view is lost, not the run: the lululemon Mirror's
+# lowmemorykiller closed typical's page in all 3 graded runs (2026-11-23), and the run used to fail as a whole.
+CONTENT_GONE_TAG = "Glassworks"
+CONTENT_GONE_RE = re.compile(r"Content process (killed|crashed); restarting session")
+# Android's low-memory killer naming the process it ended: lmkd's line in logcat (Android 9 and later, tag
+# lowmemorykiller, the full name), or the kernel's in dmesg (Android 8 and earlier: "lowmemorykiller: Killing '<name>'
+# (<pid>)", the task name, which Android's zygote cuts to the last 15 characters of a longer process name, so a long
+# child name such as `<package>:sandboxed_tab_disable_art_image_24` keeps no colon: `le_art_image_24`). Only these
+# name the killer; without one the report says only that Android closed the page.
+LMK_TAG = "lowmemorykiller"
+LMK_RE = re.compile(r"\bKill(?:ing)? '([^']+)' \((\d+)\)")
+DMESG_TIME_RE = re.compile(r"\[\s*(\d+\.\d+)\]")
+# ActivityManager starting one of the kiosk's other processes (its browser page's among them): its pid and full name,
+# which the kernel's cut name and pid are matched against.
+CHILD_PROC_RE = r"Start proc (\d+):({pkg}:[^/\s]+)/"
+# The kernel's task names hold at most this many characters.
+TASK_COMM_LEN = 15
+# A low-memory kill counts for the page when it came this long before the app's line at most (or up to 5 s after:
+# the kernel's clock and logcat's needn't agree to the millisecond).
+LMK_WINDOW_S = 120
+
+
+def own_process(name, pid, package, procs):
+    """True when a process the low-memory killer named (`name`, `pid`) is one of the kiosk's own other processes (its
+    page's). `procs`: {pid: full name} of the ones ActivityManager started during the run (CHILD_PROC_RE). By its pid
+    or full name among those; by a part of one of those names when the kernel cut it (no colon left); else, for a
+    process started before the runner read logcat, `<package>:<name>` or the end of it that still keeps the colon."""
+    procs = procs or {}
+    if procs.get(str(pid)) or name in procs.values():
+        return True
+    # The kernel keeps the last TASK_COMM_LEN characters of a longer name. Some zygote versions copy one character
+    # fewer than they cut to, so a name one shorter may also miss the last character. Only those two forms: a short
+    # name that merely occurs inside a longer one ("sh") is someone else's process.
+    if any(len(full) > TASK_COMM_LEN and name in (full[-TASK_COMM_LEN:], full[-TASK_COMM_LEN:-1])
+           for full in procs.values()):
+        return True
+    base, sep, rest = name.partition(":")
+    return bool(sep and rest) and package.endswith(base)
+
+
+def low_memory_kill(dev, seen, gone_mono, procs=None):
+    """Whether the low-memory killer closed one of the kiosk's processes just before the app said its page was killed:
+    lmkd's line already in logcat (`seen`: [(mono, name, pid)]), or the kernel's in dmesg, read once now (read-only; a
+    build whose shell can't read it gives nothing). `procs`: own_process's. False when neither names it: then nothing
+    says why."""
+    if any(gone_mono - LMK_WINDOW_S <= m <= gone_mono + 5 and own_process(n, pid, dev.package, procs) for m, n, pid in seen):
+        return True
+    try:
+        out = dev.sh("dmesg", timeout=20)
+    except (subprocess.SubprocessError, OSError):
+        return False
+    for line in out.splitlines():
+        if LMK_TAG not in line:
+            continue
+        m, t = LMK_RE.search(line), DMESG_TIME_RE.search(line)
+        if m and t and gone_mono - LMK_WINDOW_S <= float(t.group(1)) <= gone_mono + 5 \
+                and own_process(m.group(1), m.group(2), dev.package, procs):
+            return True
+    return False
 # Once the restart page is done, the kiosk's test hold keeps the screen on through the views (#240).
 # Before it, the wake intents every 8 s and a live view's after 10 s without a touch did, and still
 # lost it: s1rtc5 run 1 (23:50) lost heavy's screen 16 to 20 s after its last tap, while the page
@@ -775,7 +842,9 @@ def cmd_coldstart(dev, a):
     by one view each run (tiers.json ORDER: run 1 light, typical-nocam, typical, heavy; run 2 from
     typical-nocam; run 3 from typical), so no view always comes first. Each opens only once the screen has been still
     for --between-quiet seconds (the view before stops its updates when it is done). After the first
-    open, any page load is an error: a view switch loads no page. Without a restart page (the kiosk
+    open, any page load is an error: a view switch loads no page. One exception: when the app said just
+    before that its browser page's process was killed or crashed (content_gone), the open view is lost
+    in this run, and the run carries on once the kiosk's page is back. Without a restart page (the kiosk
     came back to its own dashboard), it waits for that page as protocols 1 to 3 did.
 
     logcat follows the whole device, so its queue is rarely empty: no decision here waits for an
@@ -787,6 +856,11 @@ def cmd_coldstart(dev, a):
         # would skip building it.
         sys.exit(f"--warmup-tier {a.warmup_tier} is also graded; a view shown twice is cached the second time")
     turn = (a.run - 1) % len(base) if base else 0
+    # A frame without touch (its design/installer.json says so): nobody scrolls it, so its graded views get no swipes,
+    # and the scroll isn't graded (rubric.json no_touch). The taps still go: injected taps reach the page there.
+    touch = P.frame_touch(FRAMES, a.frame)
+    if ref and not touch:
+        print(f"{a.frame} has no touch: no swipes, and scrolling isn't graded", file=sys.stderr)
     tiers = base[turn:] + base[:turn]
     # The HLS fallback views (#202; detail, not graded) come after the graded ones, in a fixed order.
     fallback = [t for t in a.fallback.split(",") if t] if ref else []
@@ -884,7 +958,7 @@ def cmd_coldstart(dev, a):
            "fallback": {}}
     page_lines = P.PageLines()
     st = {"engine_at": None, "own_stop_at": 0.0, "current": None, "measure_mono": None, "sf_reads": None, "break_after": None,
-          "opened": 0, "next_at": None, "gestures": []}
+          "opened": 0, "next_at": None, "gestures": [], "lmk_seen": [], "own_procs": {}}
     # The threads start once `res` and `st` exist: they write to both at once (#250's verifier).
     poller = threading.Thread(target=poll, daemon=True)
     poller.start()
@@ -893,6 +967,7 @@ def cmd_coldstart(dev, a):
         threading.Thread(target=cpu_clock, daemon=True).start()
     size = screen_size(dev) if ref else None
     proc_re = re.compile(rf"Start proc \d+:{re.escape(dev.package)}/")
+    child_re = re.compile(CHILD_PROC_RE.format(pkg=re.escape(dev.package)))
 
     def entry_of(slot):
         if slot == "warmup":
@@ -958,7 +1033,7 @@ def cmd_coldstart(dev, a):
             tier, extra = slot, {"taps": a.taps, "swipes": 0, "dialogs": 0}
             res["fallback"][slot] = {"nonce": nonce, "swipes": []}
         else:
-            tier, extra = slot, {"taps": a.taps}
+            tier, extra = slot, dict({"taps": a.taps}, **({} if touch else {"swipes": 0}))
             res["tiers"][tier] = {"nonce": nonce, "swipes": []}
         # Protocol 4: the frontend is already loaded on the start view. The fake Home Assistant hands
         # this command to the harness, which opens the view with HA's own navigation (no page load).
@@ -1009,19 +1084,31 @@ def cmd_coldstart(dev, a):
         if ref and SLEEP_RE.search(msg) and res["proc_mono"] is not None:
             res.setdefault("screen_off", []).append({"mono": rec["mono"], "during": cur[0] if cur else
                                                      "recovery" if st.get("recovering") else "the restart"})
+        if ref and "Start proc" in msg:
+            m = child_re.search(msg)
+            if m:
+                st["own_procs"][m.group(1)] = m.group(2)
+        if ref and rec["tag"] == LMK_TAG:
+            m = LMK_RE.search(msg)
+            if m:
+                st["lmk_seen"].append((rec["mono"], m.group(1), m.group(2)))
+        if ref and rec["tag"] == CONTENT_GONE_TAG and st["opened"] and not st.get("recovering"):
+            m = CONTENT_GONE_RE.search(msg)
+            if m:
+                return content_gone(m.group(1), rec)
         if st.get("recovering"):
             # The kiosk coming back after a view timed out: only its restart page's lines count, and
             # they end the recovery; the run's own restart measurement stays the first one's.
             if proc_re.search(msg):
                 st["recovering"]["launched"] = True
+            if ref and rec["tag"] == CONTENT_GONE_TAG and CONTENT_GONE_RE.search(msg):
+                # The replacement page was lost too: its usable line no longer says the kiosk is back.
+                st["recovering"].pop("usable_at", None)
             pl = page_lines.feed(msg)
+            if pl and pl.get("nonce") == "" and pl.get("t") == "refdash":
+                st["recovering"].setdefault("usable_at", C.now())   # the done line may be lost: end_recovery
             if pl and pl.get("nonce") == "" and pl.get("t") in ("done", "error"):
-                rv = st.pop("recovering")
-                res["recoveries"][-1].update(back_s=round(C.now() - rv["at"], 1), launch=rv.get("launch") or "relaunched-by-system",
-                                             **({"error": pl.get("message")} if pl.get("t") == "error" else {}))
-                st["no_memory"] = True        # RAM right after a restart isn't the views' peak
-                st["next_at"] = C.now()
-                print(f"  the kiosk is back after {res['recoveries'][-1]['back_s']} s; carrying on", file=sys.stderr)
+                end_recovery(**({"error": pl.get("message")} if pl.get("t") == "error" else {}))
             return False
         pl = page_lines.feed(msg)
         res["bad_page_lines"] = page_lines.bad
@@ -1056,6 +1143,60 @@ def cmd_coldstart(dev, a):
             else:
                 res["error"] = "the kiosk loaded another page while a reference dashboard was measured"
                 return True
+        return False
+
+    def end_recovery(**extra):
+        """The kiosk's start view is back after a lost or timed-out view (its restart page's done or error line, or its
+        usable line RESTART_DONE_WAIT_S ago with no done line since): the next view opens once the screen is still."""
+        rv = st.pop("recovering")
+        res["recoveries"][-1].update(back_s=round(C.now() - rv["at"], 1), launch=rv.get("launch") or "relaunched-by-system",
+                                     **extra)
+        st["no_memory"] = True        # RAM right after a restart isn't the views' peak
+        st["next_at"] = C.now()
+        print(f"  the kiosk is back after {res['recoveries'][-1]['back_s']} s; carrying on", file=sys.stderr)
+
+    def content_gone(cause, rec):
+        """The app's browser page process is gone (CONTENT_GONE_RE) and the app is loading the kiosk's page again. The
+        open view is lost in this run: a graded one is measured as failing every task (report.py), a fallback copy
+        fails only itself, the warm-up says so; a view already done loses nothing. Then, as after a timed-out view, the
+        runner waits for the start view to be usable again and opens the rest. True when nothing is left to open."""
+        cur, now0 = st["current"], C.now()
+        slot = cur[0] if cur else None
+        entry = entry_of(slot) if slot else None
+        lost = entry is not None and not entry.get("done") and not entry.get("error")
+        at_end = st["opened"] == len(slots) and (lost or entry is None or entry.get("done") or entry.get("error"))
+        # The lost view ends before anything here can block (the dmesg read below takes up to 20 s, while the app is
+        # already loading its page again): its gestures stop (send checks the page), and its command goes, so the
+        # page the app loads doesn't run it when it asks the fake Home Assistant for one (CodeRabbit on #781).
+        st["current"], st["next_at"] = None, None
+        if lost:
+            st["live"] = st["view_open"] = False
+        # The run's last view too: the page coming back must find no command, whatever comes after.
+        try:
+            with urllib.request.urlopen(f"{a.url.rstrip('/')}/clarity/cancel", timeout=10) as r:
+                r.read()
+        except OSError:
+            pass
+        gone = {"cause": cause,
+                "low_memory": cause == "killed" and low_memory_kill(dev, st["lmk_seen"], rec["mono"], st["own_procs"])}
+        res.setdefault("content_gone", []).append(dict(gone, during=slot if lost else "between views", mono=rec["mono"]))
+        if lost:
+            entry["content_gone"] = dict(gone, after_s=round(now0 - st["opened_at"], 1),
+                                         after=st.get("last_line") or "usable")
+            entry["lost_lines"] = page_lines.close(cur[1])
+            if slot in fallback:
+                entry["error"] = P.content_gone_why(gone)
+            if st["sf_reads"]:
+                st["sf_reads"].stop()
+                st["sf_reads"] = None
+        print(f"  {slot if lost else 'between views'}: {P.content_gone_why(gone)}", file=sys.stderr)
+        if at_end:
+            st["gone_at_end"] = True
+            return True                       # the run's last view: nothing left to open
+        st["recovering"] = {"at": now0, "launched": True, "launch": "session-restart"}
+        st["held"] = False                    # the wake key again until the next view's hold
+        res.setdefault("recoveries", []).append({"after": slot, "content_gone": cause})
+        print("  waiting for the kiosk's page to come back", file=sys.stderr)
         return False
 
     def handle_restart(pl, rec):
@@ -1229,13 +1370,19 @@ def cmd_coldstart(dev, a):
                 continue
         if st.get("recovering"):
             rv = st["recovering"]
+            if rv.get("usable_at") and C.now() - rv["usable_at"] > RESTART_DONE_WAIT_S:
+                # Its usable line came, its done line didn't (lost in logcat), as for the run's own restart below:
+                # carry on from the usable line rather than fail the run at RECOVER_WAIT_S (CodeRabbit on #781).
+                end_recovery(done_missing=True)
+                continue
             if not rv.get("launched") and not rv.get("launch") and C.now() - rv["at"] > RECOVER_LAUNCH_S:
                 if drain():
                     break
                 if st.get("recovering") and not st["recovering"].get("launched"):
                     rv["launch"] = "am-start"
                     dev.sh(f"am start -W -n {dev.component}", timeout=120)
-            elif C.now() - rv["at"] > RECOVER_WAIT_S:
+            elif not rv.get("usable_at") and C.now() - rv["at"] > RECOVER_WAIT_S:
+                # RECOVER_WAIT_S is for the page to come back usable; once it has, the fallback above ends the wait.
                 res["error"] = (f"the kiosk didn't come back within {RECOVER_WAIT_S:.0f} s after "
                                 f"{res['recoveries'][-1]['after']} timed out")
                 break
@@ -1290,6 +1437,8 @@ def cmd_coldstart(dev, a):
             calm = quiet_for(a.between_quiet, 10.0) if a.between_quiet > 0 else True
             if drain():
                 break
+            if st["next_at"] is None:
+                continue                      # the page went (content_gone): wait for it to come back first
             res["between"].append("still" if calm else "moving")
             open_next()
             continue
@@ -1300,7 +1449,7 @@ def cmd_coldstart(dev, a):
         if rec and handle(rec):
             break
     if ref and a.memory and st["opened"] == len(slots) and not res["error"] and slots[-1] not in fallback \
-            and not (res.get("timed_out") or [None])[-1] == slots[-1]:
+            and not (res.get("timed_out") or [None])[-1] == slots[-1] and not st.get("gone_at_end"):
         res["memory"].append(dict(memory_sample(dev, [x for x in a.radio_procs.split(",") if x], summaries=False),
                                   after=slots[-1]))
     lc.terminate()
@@ -1314,7 +1463,8 @@ def cmd_coldstart(dev, a):
             and not entry_of(st["current"][0]).get("timed_out_s"):
         # The last view never said done (smoke10's heavy, with the screen off): not a lost line.
         res["error"] = f"{st['current'][0]} didn't finish within {a.timeout:.0f} s"
-    graded_done = ref and all(any((res["tiers"].get(t) or {}).get(k) for k in ("done", "error", "timed_out_s")) for t in tiers)
+    graded_done = ref and all(any((res["tiers"].get(t) or {}).get(k) for k in ("done", "error", "timed_out_s", "content_gone"))
+                              for t in tiers)
     if res["error"] and graded_done and fallback and (st["current"] is None or st["current"][0] in fallback):
         # A fallback view that failed fails only itself: the graded views were done. Only the
         # errors above, which come from the view the run stopped in; the screen check comes after.
@@ -1336,7 +1486,8 @@ def cmd_coldstart(dev, a):
             res["fallback"][x["during"]].setdefault("error", "the screen went off during this view")
     # A page that said done without its updates step (smoke7: the line was cut off in logcat) isn't a
     # failed run: its other measurements stand, and the report says what is missing.
-    res["missing_steps"] = [t for t, e in res["tiers"].items() if "step" not in e] if ref else []
+    # A view whose page was closed (content_gone) is lost whole, not missing a step.
+    res["missing_steps"] = [t for t, e in res["tiers"].items() if "step" not in e and "content_gone" not in e] if ref else []
     if res["missing_steps"]:
         print(f"  {', '.join(res['missing_steps'])}: no updates step; {page_lines.bad} page line(s) didn't parse or never arrived whole",
               file=sys.stderr)

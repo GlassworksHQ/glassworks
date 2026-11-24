@@ -30,6 +30,8 @@ SUMMARY_KEYS = {"schema", "test", "clarity", "protocol_version", "report_schema"
 PAGE_KEYS = {"inp_ms", "open_ms", "blocking_ms", "usable_ms", "scroll", "updates", "camera", "runs", "timed_out_runs",
              "dialog"}   # Clarity v3 (#211): the more-info dialogs, in a report that has them
 GRADE_KEYS = ("grade", "meaning", "levels", "bands", "capped_by_start", "missing", "provisional", "start")
+OPTIONAL_GRADE_KEYS = ("not_applicable",      # rubric 2: only on a frame without touch
+                       "missing_settled_by")  # only when something missing can't change the letter
 
 
 def fixture(variant):
@@ -37,7 +39,9 @@ def fixture(variant):
     b = T.Build()
     b.setUp()
     with open(os.path.join(b.dir, "device.json")) as f:
-        b.write("device.json", dict(json.load(f), measured_on="2026-11-20"))
+        # Rubric 2: a frame without touch (the Mirror) says so in device.json, from its frame data.
+        touch = {"touch": False} if variant == "no-touch" else {}
+        b.write("device.json", dict(json.load(f), measured_on="2026-11-20", **touch))
     for k in (1, 2, 3):
         run = T.refstart(k, [120, 180, 150][k - 1])
         if variant == "A":
@@ -55,10 +59,18 @@ def fixture(variant):
         elif variant == "premium":
             run = T.refstart(k, 100, heavy_missed=0)
             run["tiers"]["heavy"]["swipes"] = [T.swipe(50.0, i, T.late(60, 6)) for i in range(3)]   # good, not premium
+        elif variant in ("no-touch", "no-swipes"):   # rubric 2: no swipes ran (the runner sends none without touch)
+            run = T.refstart(k, 100, heavy_missed=0)
+            for t in run["tiers"].values():
+                t["swipes"] = []
         elif variant == "raf-only":
             run["tiers"]["heavy"]["swipes"] = [T.swipe(50.0, i, T.late(60, 20), sf=False) for i in range(3)]
         elif variant == "pre-v10":      # a report without typical-nocam: C's page is missing, provisional
             del run["tiers"]["typical-nocam"]
+        elif variant == "lost-one" and k == 2:    # the panel closed typical's browser page in run 2 (the Mirror)
+            run["tiers"]["typical"]["content_gone"] = {"cause": "killed", "low_memory": True, "after_s": 3.0, "after": "warmup"}
+        elif variant == "lost-all":     # ... and in every run
+            run["tiers"]["typical"]["content_gone"] = {"cause": "killed", "low_memory": True, "after_s": 3.0, "after": "warmup"}
         elif variant == "even":         # two runs: the worse middle band
             if k == 3:
                 continue
@@ -74,7 +86,8 @@ def fixture(variant):
     return rep
 
 
-VARIANTS = ["B", "A", "premium", "E", "capped", "zoom", "raf-only", "even", "missing-run", "pre-v10"]
+VARIANTS = ["B", "A", "premium", "E", "capped", "zoom", "raf-only", "even", "missing-run", "pre-v10", "no-touch", "no-swipes",
+            "lost-one", "lost-all"]
 
 
 def ts_grades(summaries):
@@ -202,12 +215,17 @@ class Export(unittest.TestCase):
         self.assertIsNone(re.search(r"([0-9a-f]{2}:){5}", text))             # no MACs
 
     def test_incomplete_or_not_comparable_is_refused_unless_asked(self):
-        for v in ("zoom", "raf-only", "missing-run", "E"):
+        for v in ("zoom", "raf-only", "missing-run"):
             with self.subTest(v):
                 with self.assertRaises(S.Refused):
                     S.summarise(self.reps[v])
                 s = S.summarise(self.reps[v], allow_provisional=True)
                 self.assertFalse(s["complete"])
+        # E's light open is missing, but light already fails on scrolling: the letter is final, so it is exported
+        # without the flag, still incomplete.
+        s = S.summarise(self.reps["E"])
+        self.assertFalse(s["complete"])
+        self.assertFalse(G.grade_summary(s)["provisional"])
         self.assertIn("expected 1.5", S.summarise(self.reps["zoom"], allow_provisional=True)["not_comparable"])
         self.assertIn("1 of 4 graded runs failed or are missing", S.summarise(self.reps["missing-run"], allow_provisional=True)["gaps"])
 
@@ -241,11 +259,12 @@ class Parity(unittest.TestCase):
         self.assertEqual(letters["capped"], "C")
         self.assertIsNone(letters["zoom"])
         self.assertTrue(self.reps["raf-only"]["grade"]["provisional"])
-        # Rubric v10 (#205): without typical-nocam, B still stands on typical with its camera, and the
-        # grade is provisional: the camera-free typical wasn't measured.
+        # Rubric v10 (#205): without typical-nocam, B still stands on typical with its camera. The camera-free typical
+        # wasn't measured, but only C needs it: the B can't change, so it isn't provisional (heavy decides A).
         g = self.reps["pre-v10"]["grade"]
-        self.assertEqual((g["grade"], g["provisional"]), ("B", True))
+        self.assertEqual((g["grade"], g["provisional"]), ("B", False))
         self.assertIn("typical-nocam.scroll", g["missing"])
+        self.assertEqual(g["missing_settled_by"]["limits"][0]["page"], "heavy")
 
     def test_python_from_the_summary_equals_the_report(self):
         for v in VARIANTS:
@@ -257,6 +276,8 @@ class Parity(unittest.TestCase):
                 self.assertEqual(py["status"], "graded")
                 for k in GRADE_KEYS:
                     self.assertEqual(py[k], rep_g[k], k)
+                for k in OPTIONAL_GRADE_KEYS:
+                    self.assertEqual(py.get(k), rep_g.get(k), k)
 
     def test_typescript_equals_python(self):
         for v in VARIANTS:
@@ -266,6 +287,65 @@ class Parity(unittest.TestCase):
                 for k in GRADE_KEYS + ("limits", "why"):
                     if k in py:
                         self.assertEqual(ts[k], py[k], k)
+                for k in OPTIONAL_GRADE_KEYS:
+                    self.assertEqual(ts.get(k), py.get(k), k)
+
+    def test_a_frame_without_touch_is_graded_without_scrolling_in_both(self):
+        """Rubric 2: the no-touch fixture ran no swipes. Its summary says touch: false, and both graders make its
+        scroll n/a: the letter comes from the other tasks (A+ here, as A's fixture), not provisional for the scroll.
+        The same runs on a frame with touch are short of scrolling on every page: provisional, as before."""
+        s, rep_g = self.sums["no-touch"], self.reps["no-touch"]["grade"]
+        self.assertIs(s["touch"], False)
+        self.assertTrue(s["complete"])
+        for g in (G.grade_summary(s), self.ts["no-touch"], rep_g):
+            self.assertEqual((g["grade"], g["provisional"], g["missing"]), ("A+", False, []))
+            self.assertEqual({b["scroll"] for b in g["bands"].values()}, {"n/a"})
+            self.assertEqual(g["not_applicable"], {"scroll": "this frame has no touch"})
+        touch, rep_t = self.sums["no-swipes"], self.reps["no-swipes"]["grade"]
+        self.assertNotIn("touch", touch)                 # a frame with touch: the summary as it was
+        for g in (G.grade_summary(touch), self.ts["no-swipes"], rep_t):
+            self.assertTrue(g["provisional"])
+            self.assertEqual([m for m in g["missing"] if m.endswith(".scroll")], [f"{t}.scroll" for t in G.TIERS])
+            self.assertNotIn("not_applicable", g)
+        self.assertFalse(touch["complete"])
+        self.assertNotEqual(rep_t["grade"], "A+")
+
+    def test_a_lost_page_fails_its_runs_in_both_and_never_makes_it_provisional(self):
+        """The Mirror (2026-11-23): the panel closed typical's browser page. Lost in one of three runs, the other two
+        decide typical's median and the letter stays B. Lost in all three, typical reaches no level and the letter
+        drops, final: the panel couldn't hold the page, which is a result, not a missing measurement."""
+        why = "the panel ran out of memory and its browser page was closed (low-memory killer)"
+        one, every = self.sums["lost-one"], self.sums["lost-all"]
+        self.assertEqual((one["pages"]["typical"]["lost_runs"], one["pages"]["typical"]["lost_why"]), (1, [why]))
+        self.assertEqual(every["pages"]["typical"]["lost_runs"], 3)
+        self.assertNotIn("lost_runs", one["pages"]["heavy"])
+        self.assertNotIn("lost_runs", self.sums["B"]["pages"]["typical"])      # other summaries as they were
+        self.assertEqual([r.get("lost") for r in one["pages"]["typical"]["camera"]["runs"]], [None, True, None])
+        self.assertEqual(one["pages"]["typical"]["dialog"]["runs"][1], {"lost": True})
+        # A lost run has no transport (CodeRabbit on #781): the path comes from the measured runs, unknown with none.
+        self.assertEqual(one["pages"]["typical"]["camera"]["path"], self.sums["B"]["pages"]["typical"]["camera"]["path"])
+        self.assertIsNone(every["pages"]["typical"]["camera"]["path"])
+        rtc = S.camera_summary({"camera_runs": [{"path": "web_rtc", "first_frame_ms": 900}, {"lost": True}]})
+        self.assertEqual((rtc["path"], rtc["runs"][1]), ("web_rtc", {"first_frame_ms": None, "shown_pct": None,
+                                                                     "max_gap_ms": None, "stall_total_ms": None, "lost": True}))
+        self.assertTrue(one["complete"] and every["complete"])
+        for g in (G.grade_summary(one), self.ts["lost-one"], self.reps["lost-one"]["grade"]):
+            self.assertEqual((g["grade"], g["provisional"], g["missing"]), ("B", False, []))
+        for g in (G.grade_summary(every), self.ts["lost-all"], self.reps["lost-all"]["grade"]):
+            self.assertEqual((g["grade"], g["provisional"], g["missing"], g["levels"]["typical"]), ("C", False, [], None))
+            self.assertEqual(set(g["bands"]["typical"].values()), {"slow", "poor"})
+        rep = self.reps["lost-all"]
+        self.assertIn(f"Held back by typical dashboards with a camera: the page was lost in 3 of 3 run(s) because {why}.",
+                      rep["grade"]["headline"])
+        self.assertIn(f"On typical with a camera, the page was lost in 3 of 3 runs: {why}.", rep["notes"]["text"])
+        self.assertNotIn("Memory isn't the limit", rep["notes"]["text"])
+        self.assertNotIn("typical with a camera takes", rep["notes"]["text"])  # no deadline quoted as a time
+        md = R.markdown(rep)
+        self.assertIn(f"typical in 3 of 3 run(s) (runs 1, 2 and 3): {why}", md)
+        self.assertIn("the page was lost in 3 of 3 run(s), slow", md)        # its camera cell
+        one_md = R.markdown(self.reps["lost-one"])
+        self.assertIn(f"typical in 1 of 3 run(s) (run 2): {why}", one_md)
+        self.assertNotIn("had a stream that showed no frame", one_md)
 
     def test_the_transport_goes_with_the_letter_in_both_and_never_changes_it(self):
         """Protocol 7 (#202, option B): the camera video's path is in the summary, and both graders pass

@@ -1,8 +1,8 @@
 /*
- * The site's look on the libraries' API reference: Dokka's own pages, unpacked from each javadoc jar
- * by scripts/api-docs.mjs, which links this file into every page after Dokka's styles. It sets Dokka's
- * variables to the site's tokens (src/app/globals.css) and styles the breadcrumb back to the docs.
- * Dokka already uses Inter and JetBrains Mono, the site's fonts.
+ * The site's look on the libraries' API reference: Dokka's pages, unpacked from each javadoc jar, and
+ * TypeDoc's, built from each npm tarball, by scripts/api-docs.mjs, which links this file into every page
+ * after their own styles. It sets their variables to the site's tokens (src/app/globals.css) and styles
+ * the breadcrumb back to the docs. Dokka already uses Inter and JetBrains Mono, the site's fonts.
  */
 :root {
   --background-color: #eceef2;
@@ -101,4 +101,46 @@
   .library-name--link {
     margin-left: 0;
   }
+}
+
+/* TypeDoc: the site's tokens, and a dark toolbar like Dokka's, with the same breadcrumb */
+:root {
+  --light-color-background: #eceef2;
+  --light-color-background-secondary: #e2e5eb;
+  --light-color-text: #0c0e13;
+  --light-color-text-aside: #4f525c;
+  --light-color-link: #0369a1;
+  --light-color-focus-outline: #0284c7;
+  --light-color-background-active: rgba(16, 20, 32, 0.08);
+  --dark-color-background: #0a0b0f;
+  --dark-color-background-secondary: #111319;
+  --dark-color-text: #f4f4f5;
+  --dark-color-text-aside: #a1a1aa;
+  --dark-color-link: #7dd3fc;
+  --dark-color-focus-outline: #bae6fd;
+  --dark-color-background-active: rgba(255, 255, 255, 0.08);
+}
+
+.tsd-page-toolbar {
+  background: #0a0b0f;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tsd-page-toolbar .title,
+.tsd-page-toolbar #tsd-toolbar-links a,
+#tsd-search-trigger,
+#tsd-toolbar-menu-trigger {
+  --color-icon-text: #f4f4f5;
+  --color-text: #f4f4f5;
+  color: #f4f4f5;
+}
+
+/* Dokka's header shows the version beside "API": so does TypeDoc's */
+.tsd-toolbar-contents > .title {
+  margin-right: 0;
+}
+
+.gw-version {
+  margin: 0 auto 0 6px;
+  color: #f4f4f5;
 }

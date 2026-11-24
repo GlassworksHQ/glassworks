@@ -108,8 +108,9 @@ addresses of bonded and nearby devices: grep for the lines you need, or redact b
 - **Wi-Fi and Sendspin with scanning on.** The panel plan in #121 measures throughput (`iperf3`)
   and Sendspin dropouts with the proxy off, at balanced and at low latency. Untested.
 - **2.4 GHz.** A panel on 2.4 GHz Wi-Fi shares the antenna path with Bluetooth. Not measured.
-- **Does Android pad the scan record? No, not between the two parts (read, 2026-11-20).** See
-  [Scan-record padding](#scan-record-padding-read-2026-11-20) below.
+- **Does Android pad the scan record? No, not between the two parts (read, 2026-11-20; verified on the
+  panel, 2026-11-23).** See [Scan-record padding](#scan-record-padding-read-2026-11-20) and
+  [A named sensor through the S1](#verified-a-named-sensor-through-the-s1-2026-11-23) below.
 - **GATT connections:** two links at once hold, with scanning alongside (**verified**, 2026-11-21). The
   third slot and whether the handles match an ESP32 proxy's are untested. See
   [GATT connections](#gatt-connections-246) below.
@@ -170,10 +171,47 @@ What this doesn't cover:
 - A device that puts a zero-length field *before* real data. Android cuts the rest of that part,
   so neither the panel nor the library sees it.
 
-To confirm on the panel (optional now): compare one scannable sensor's data, the one HA shows for it
-through the panel and through an ESP32 proxy. The scan response's structures should be in both.
-Not run on 2026-11-21: every ESP32 proxy on the test network scans passively, so none of them sees a scan
-response to compare with.
+On the panel: **verified** on 2026-11-23 with a sensor whose name is only in its scan response. HA got the
+name through the S1. See [A named sensor through the S1](#verified-a-named-sensor-through-the-s1-2026-11-23)
+below. (The comparison against an ESP32 proxy wasn't run on 2026-11-21: every ESP32 proxy on the test network
+scans passively, so none of them sees a scan response. The 2026-11-23 sensor doesn't need one.)
+
+## Verified: a named sensor through the S1 (2026-11-23)
+
+**Verified** on 2026-11-23, the root's run for #246 (plan v1, steps C and E). Setup:
+- S1 Plus on app 0.4.10 (`main` a70e5d59e), Home Assistant 2026.11; the pane on in *Listen only*, through HA's
+  *Bluetooth proxy* switch;
+- the sensor: an ESP32-S3-BOX on a short test firmware (ESPHome 2026.9.0, no `api:`) that broadcasts a
+  **BTHome v2** sensor as a scannable, non-connectable advertisement every 100–200 ms:
+  - **advertisement, 13 bytes:** flags, then service data `0xFCD2` (packet id and a temperature that steps
+    21.0 → 21.9 °C every 5 s);
+  - **scan response:** the complete local name, and nothing else;
+- the advertisement is under 31 bytes, so padding before the scan response would cut off the name: the case
+  [Scan-record padding](#scan-record-padding-read-2026-11-20) reads as safe;
+- addresses were compared in HA and the shell only; none is recorded here.
+
+| Step | Result |
+|---|---|
+| E: scan-record padding | **Pass.** HA's BTHome flow titled the device with the sensor's name. `bthome-ble` takes the title from `service_info.name` (read), and the name is only in the scan response. With the S1 as the source in HA's *Advertisement monitor*, the Name column showed it too. The scan response reaches HA through the S1 intact, as the AOSP 10 read (#708) says |
+| C: named sensor, the S1 as its source | **Pass.** With the box next to the S1, the *Advertisement monitor* named the S1 as the source. (In another room, a passive ESPHome proxy won on RSSI.) Over 10 min, 05:05–05:15 UTC, the temperature entity updated **120 times** for a 5 s send interval, every step of the cycle; longest gap about **9 s**. *Bluetooth proxy status* read `Listening` throughout |
+| Put back | The box back on its own firmware, OTA from the build that was on it (same file, same build time); HA shows the same entities and settings for it. The BTHome entry removed, no discovery flow left. The S1's *Bluetooth proxy* switch off, as found |
+
+How it was taken:
+- **The sensor's payload**: 3 bytes of flags, then 10 bytes of service data `0xFCD2` in the BTHome v2 format
+  (the device-info byte, a packet id object, a temperature object); the scan response holds one AD structure, the
+  complete local name. Any BTHome v2 sender with the name only in its scan response repeats the case. The test
+  firmware's YAML is kept with the root's run notes, not in the repo, because it's specific to one device.
+- **E**: HA's BTHome discovery flow for the sensor (its title), and the Bluetooth integration's *Advertisement monitor*
+  with the S1 as the source (the Name column).
+- **C**: the *Advertisement monitor*'s source column, then the state changes of the sensor's temperature entity in
+  HA for 05:05–05:15 UTC: their count (120) and the longest gap between two of them. *Bluetooth proxy status*:
+  `sensor.<panel>_bluetooth_proxy_status` over the same window.
+
+What it shows:
+- On the S1 (Android 10) a scannable advertisement's scan response reaches HA whole: the padding concern doesn't
+  apply here.
+- A passive BLE sensor follows the S1 as its proxy when the S1 is the closest, at the sensor's own rate. Another
+  ESPHome proxy was in range, so the S1 as the *only* proxy is still open (below).
 
 ## GATT connections (#246)
 
@@ -338,8 +376,9 @@ the restarts.
 - **The third link.** Android's stack allows 7 GATT links (believed, not checked). The RTL8821CS
   may hold fewer. The engine starts at 3, like ESPHome. Two at once hold (2026-11-21); a third needs a third
   device that holds its link.
-- **A passive sensor with the S1 as its only proxy.** Not run on 2026-11-21: the test network's HA has no
-  passive BLE sensor integration set up (the ones it found are ignored), so there was no named sensor to follow.
+- **A passive sensor with the S1 as its only proxy.** On 2026-11-23 the S1 was the source when it was the
+  closest, with another ESPHome proxy in range ([above](#verified-a-named-sensor-through-the-s1-2026-11-23)).
+  The S1 alone wasn't tried.
 - **Handles against an ESP32 proxy.** Connect the same device through both and compare the services
   HA caches. A mismatch breaks a cache HA built from the other proxy.
 - **`refresh()` on the panel.** Whether reflection reaches it with target SDK 35, and whether it

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assertImages, plan, validateImage } from '@glassworks/kiln-core';
 import { describe, expect, it } from 'vitest';
-import { GLASS_PANES, GLASS_PANES_IMAGE, GLASS_PANES_KEY, GLASS_PANES_USERDATA, GLASSWORKS_IMAGE, MIRROR_ACCESS, MIRROR_IMAGES } from '../src';
+import { GLASS_PANES, GLASS_PANES_IMAGE, GLASS_PANES_USERDATA, GLASSWORKS_IMAGE, MIRROR_ACCESS, MIRROR_IMAGES } from '../src';
 
 const ROOT = join(__dirname, '../../../..');
 const allowlist = JSON.parse(readFileSync(join(ROOT, 'kiln/workers/refract/allowlist.json'), 'utf8')) as Record<string, { owner: string; repo: string; tag?: string; name?: string; commit?: string; path?: string; size: number; sha256: string }>;
@@ -29,18 +29,22 @@ describe('the Mirror\'s images', () => {
       expect([a!.size, a!.sha256]).toEqual([f.size, f.sha256]);
     }
     expect(GLASS_PANES_IMAGE.files).toEqual([
-      { ...GLASS_PANES.system, refract: 'glass-panes/mirror-android-2/system.img' },
-      { ...GLASS_PANES_USERDATA, refract: 'glass-panes/mirror-android-2/userdata.sparse' },
-      GLASS_PANES_KEY,
+      { ...GLASS_PANES.system, refract: 'glass-panes/mirror-android-3/system.img' },
+      { ...GLASS_PANES_USERDATA, refract: 'glass-panes/mirror-android-3/userdata.sparse' },
     ]);
-    expect(GLASS_PANES_KEY.url).toMatch(/\/[0-9a-f]{40}\//); // a pinned commit, never a branch
+    // both options are on the same release
+    expect(GLASSWORKS_IMAGE.files.map((f) => f.refract)).toEqual(['glass-panes/mirror-android-3/system.img']);
   });
 
-  it('Glass Panes: both files downloaded and checked, fastboot and Kiln\'s checks, the warning, both written as published, restart', () => {
+  it('Glass Panes: both files downloaded and checked, fastboot and Kiln\'s checks, the warning, this browser\'s key in its system and its userdata, written, restart', () => {
     expect(plan(GLASS_PANES_IMAGE).map((s) => ('partition' in s ? `${s.do} ${s.partition} ${s.file}` : 'file' in s ? `${s.do} ${s.file}` : s.do))).toEqual([
-      'download system.img', 'download userdata.sparse', 'download adbkey', 'fastboot', 'checks', 'backup', 'confirm',
-      'wifi userdata.sparse', 'flash system system.img', 'flash userdata userdata+wifi', 'restart', 'wifi-on', 'way-back',
+      'download system.img', 'download userdata.sparse', 'fastboot', 'checks', 'backup', 'confirm',
+      'system-key system.img', 'adb-key userdata.sparse', 'wifi userdata+key', 'flash system system+key', 'flash userdata userdata+wifi', 'restart', 'wifi-on', 'way-back',
     ]);
+    // the image's hardcoded key never reaches the Mirror: what Kiln writes to system is its copy with this browser's
+    expect(GLASS_PANES_IMAGE.steps.filter((s) => s.do === 'flash' && s.partition === 'system')).toEqual([{ do: 'flash', partition: 'system', file: 'system+key' }]);
+    // Wi-Fi on with this browser's key, never the published project key's
+    expect(GLASS_PANES_IMAGE.steps.find((s) => s.do === 'wifi-on')).toEqual({ do: 'wifi-on' });
   });
 
   it('Glassworks: the steps the page has always run, now as data', () => {

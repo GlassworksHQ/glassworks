@@ -34,6 +34,8 @@ export interface Rubric {
     /** Rubric 3 (#211): HA's more-info dialog, the slowest of a view's dialogs to settle. */
     dialog_levels: { level: string; settled_max_ms: number; frames_band?: Band[] }[];
     below: string;
+    /** Rubric 2: a frame without a touchscreen isn't graded on these tasks; each is `value` on every page, which every level accepts. */
+    no_touch: { tasks: string[]; value: string; reason: string };
     levels: { level: string; accepts: Record<string, string[]> }[];
     letters: { letter: string; meaning: string; needs: Record<string, string> }[];
     fallback: { letter: string; meaning: string };
@@ -41,17 +43,17 @@ export interface Rubric {
   };
 }
 
-export interface FrameRun { timed_out?: boolean; p95_ms?: number | null; jank_pct?: number | null; frozen_pct?: number | null; fps?: number | null; n?: number | null }
+export interface FrameRun { timed_out?: boolean; lost?: boolean; p95_ms?: number | null; jank_pct?: number | null; frozen_pct?: number | null; fps?: number | null; n?: number | null }
 
 /** One run's live updates: change to screen, and the frames that had a change to draw. */
-export interface UpdateRun { timed_out?: boolean; latency_n?: number | null; latency_median_ms?: number | null; latency_p95_ms?: number | null; frames?: FrameRun | null }
+export interface UpdateRun { timed_out?: boolean; lost?: boolean; latency_n?: number | null; latency_median_ms?: number | null; latency_p95_ms?: number | null; frames?: FrameRun | null }
 
 /** One run's live camera streams (#174), the worst stream's numbers. */
-export interface CameraRun { timed_out?: boolean; stalls_reported?: boolean; uncovered_ms?: number | null; first_frame_ms?: number | null; shown_pct?: number | null; max_gap_ms?: number | null; stall_total_ms?: number | null }
+export interface CameraRun { timed_out?: boolean; lost?: boolean; stalls_reported?: boolean; uncovered_ms?: number | null; first_frame_ms?: number | null; shown_pct?: number | null; max_gap_ms?: number | null; stall_total_ms?: number | null }
 
 /** One run's more-info dialogs (rubric 3, #211): how many ran and failed, the slowest to settle
  * (null when one failed), and the open animations' frames. */
-export interface DialogRun { timed_out?: boolean; n?: number | null; failed?: number | null; settled_ms?: number | null; frames?: FrameRun | null }
+export interface DialogRun { timed_out?: boolean; lost?: boolean; n?: number | null; failed?: number | null; settled_ms?: number | null; frames?: FrameRun | null }
 
 export interface PageSummary {
   inp_ms?: number | null;
@@ -62,16 +64,22 @@ export interface PageSummary {
   camera?: { runs?: CameraRun[] } & Record<string, unknown>;
   dialog?: { runs?: DialogRun[] } & Record<string, unknown>;   // HA's more-info dialogs (#211)
   timed_out_runs?: number;     // runs in which the page didn't finish within the runner's deadline (#202)
+  lost_runs?: number;          // runs in which the panel closed the page's browser page (its page was killed or crashed)
+  lost_why?: string[];         // why, in words
 }
 
 export interface Summary {
   clarity?: number | null;
   measured_on?: string | null;
   protocol_version?: number | null;
+  /** false for a frame without a touchscreen (rubric 2): its scroll isn't graded. Absent: it has touch. */
+  touch?: boolean;
   webrtc_transport?: { transport?: string | null; chosen_by?: string | null; reason?: string | null; possibly_limited?: boolean } | null;
   pages?: Record<string, PageSummary>;
   restart_ms?: number | null;
   gaps?: string[];
+  /** Why a measurement is missing that can't change the letter (missing_settled_by): said, not a gap. */
+  unmeasured?: string[];
   not_comparable?: string | null;
 }
 
@@ -96,7 +104,14 @@ export interface Grade {
   transport?: string | null;
   /** Over adb: heavy's cameras may be limited by the test's link. Never changes the letter. */
   transport_caveat?: string | null;
+  /** On a frame without touch (rubric 2): the tasks not graded there, and why. */
+  not_applicable?: Record<string, string>;
+  /** Only when something is missing and it can't change the letter: what decides the letter instead (settledBy). */
+  missing_settled_by?: SettledBy;
 }
+
+/** Why missing measurements can't change a letter: the restart caps it, or what was measured keeps it from the next letter up. */
+export interface SettledBy { capped_by_start: boolean; limits: { page: string; needs: string; tasks: string[] }[] }
 
 export const TRANSPORT_CAVEAT = "heavy's cameras went through the test's adb link and may be limited by it, not by the panel";
 
@@ -127,10 +142,16 @@ export function medianBand(bands: (Band | null)[]): Band | null {
   return bs.length ? bs[Math.floor(bs.length / 2)] : null;
 }
 
+/** A run record that stands for a task the view never got to measure, measured as failing: the view didn't finish
+ * within the runner's deadline (timed_out), or its browser page was closed (lost). grade.py's failed_run is the same. */
+export function failedRun(run: { timed_out?: boolean; lost?: boolean } | null | undefined): boolean {
+  return !!run && !!(run.timed_out || run.lost);
+}
+
 /** One run's scroll level: the first of rubric.json's scroll_levels whose rule holds, or
  * `below` (measured, below fluid); null when it wasn't measured. */
 export function scrollLevel(st: FrameRun | null | undefined, rubric: Rubric): string | null {
-  if (st && st.timed_out) return rubric.grade.below;     // the view didn't finish: measured, failed
+  if (failedRun(st)) return rubric.grade.below;     // the view didn't finish, or its page was lost: measured, failed
   if (!st || !st.n) return null;
   for (const lv of rubric.grade.scroll_levels) {
     if (lv.frames_band) {
@@ -146,7 +167,7 @@ export function scrollLevel(st: FrameRun | null | undefined, rubric: Rubric): st
 /** One run's live-updates level from its change-to-screen p95 (and, for premium, the frames that had
  * a change to draw), or `below`; null when it wasn't measured. */
 export function updateLevel(run: UpdateRun | null | undefined, rubric: Rubric): string | null {
-  if (run && run.timed_out) return rubric.grade.below;
+  if (failedRun(run)) return rubric.grade.below;
   if (!run || !run.latency_n || run.latency_p95_ms === null || run.latency_p95_ms === undefined) return null;
   for (const lv of rubric.grade.update_levels) {
     if (run.latency_p95_ms > lv.latency_p95_max_ms) continue;
@@ -163,7 +184,7 @@ export function updateLevel(run: UpdateRun | null | undefined, rubric: Rubric): 
  * open animations' frames; `below` when a dialog never opened or settled, or the view didn't get to
  * them; null when they weren't measured. */
 export function dialogLevel(run: DialogRun | null | undefined, rubric: Rubric): string | null {
-  if (run && run.timed_out) return rubric.grade.below;
+  if (failedRun(run)) return rubric.grade.below;
   if (!run || !run.n) return null;
   if (run.failed || run.settled_ms === null || run.settled_ms === undefined) return rubric.grade.below;
   for (const lv of rubric.grade.dialog_levels) {
@@ -181,7 +202,7 @@ export function dialogLevel(run: DialogRun | null | undefined, rubric: Rubric): 
  * gaps over 500 ms added up; `below` when a stream showed no frame; null without a camera record. */
 export function cameraLevel(run: CameraRun | null | undefined, rubric: Rubric): string | null {
   if (!run) return null;
-  if (run.timed_out) return rubric.grade.below;
+  if (failedRun(run)) return rubric.grade.below;
   if (run.first_frame_ms === null || run.first_frame_ms === undefined || run.shown_pct === null || run.shown_pct === undefined) return rubric.grade.below;
   if (run.stalls_reported === false) {
     // Stalls n/a (no freeze counts, or counts that left part of the window out): not measured,
@@ -213,10 +234,11 @@ export function medianLevel(levels: (string | null)[], rubric: Rubric): string |
   return ls.length ? ls[Math.floor(ls.length / 2)] : null;
 }
 
-/** Each task's band on one page. The camera task is `none` on a page without streams. */
-export function tierBands(tier: TierInputs | undefined, rubric: Rubric, page?: string): Bands {
+/** Each task's band on one page. The camera task is `none` on a page without streams; on a frame without
+ * touch (touch false), each no_touch task is its `value`, whatever was measured. */
+export function tierBands(tier: TierInputs | undefined, rubric: Rubric, page?: string, touch = true): Bands {
   const t = tier || {};
-  return {
+  const out: Bands = {
     tap: band(t.inp_ms, rubric.metrics.inp_ms),
     scroll: t.scroll_level ?? null,
     updates: t.updates_level ?? null,
@@ -225,6 +247,8 @@ export function tierBands(tier: TierInputs | undefined, rubric: Rubric, page?: s
     blocking: band(t.blocking_ms, rubric.metrics.blocking_ms),
     dialog: t.dialog_level ?? null,
   };
+  if (touch === false) for (const task of rubric.grade.no_touch.tasks) out[task] = rubric.grade.no_touch.value;
+  return out;
 }
 
 export function pageLevel(bands: Bands, rubric: Rubric): Level {
@@ -246,19 +270,16 @@ function levelRank(level: Level, rubric: Rubric): number {
   return level === null ? 0 : order.length - order.indexOf(level);
 }
 
-/** The letter from each page's inputs (median tap and load, median-of-runs frames bands) and the restart. */
-export function gradeBands(tiers: Record<string, TierInputs>, startMs: number | null | undefined, rubric: Rubric): Grade {
+/** The best each task can be: the first of its levels (scroll, live updates, the camera, dialogs), else good. Every
+ * level accepts it, so a missing measurement set to it holds no page back: gradeBands grades with it for the best case. */
+export function bestValue(task: string, rubric: Rubric): string {
+  const levels = (rubric.grade as unknown as Record<string, unknown>)[rubric.grade.tasks[task]];
+  return Array.isArray(levels) ? (levels[0] as { level: string }).level : "good";
+}
+
+/** [letter, capped]: the first letter whose every page need holds, then the start cap (never raises it). */
+function letterOf(levels: Record<string, Level>, start: Band | null, rubric: Rubric): [string, boolean] {
   const R = rubric.grade;
-  const bands: Record<string, Bands> = {};
-  const levels: Record<string, Level> = {};
-  for (const t of R.pages) {
-    bands[t] = tierBands((tiers || {})[t], rubric, t);
-    levels[t] = pageLevel(bands[t], rubric);
-  }
-  const start = band(startMs, rubric.metrics.start_ms);
-  const missing: string[] = [];
-  for (const t of R.pages) for (const [task, b] of Object.entries(bands[t])) if (b === null) missing.push(`${t}.${task}`);
-  if (!start) missing.push("start");
   let letter = R.fallback.letter;
   for (const l of R.letters) {
     if (Object.entries(l.needs).every(([t, need]) => levelRank(levels[t] ?? null, rubric) >= levelRank(need, rubric))) {
@@ -269,12 +290,51 @@ export function gradeBands(tiers: Record<string, TierInputs>, startMs: number | 
   // Letters rank by their place in the table (A+ first), the fallback last; never by string order.
   const order = R.letters.map((l) => l.letter).concat([R.fallback.letter]);
   const capped = start === R.start_cap.band && order.indexOf(letter) < order.indexOf(R.start_cap.letter);
-  if (capped) letter = R.start_cap.letter;
+  return [capped ? R.start_cap.letter : letter, capped];
+}
+
+/** The letter from each page's inputs (median tap and load, median-of-runs frames bands) and the restart. A missing
+ * measurement fails whatever needs it, and a missing restart caps nothing. The grade is provisional only when what is
+ * missing could change the letter: when the best case (each missing band, and a missing restart, at the best it can
+ * be) and the worst (each missing band failing, and a missing restart slow enough to cap) give different letters; the
+ * start cap applies in both. When they agree, missing_settled_by says what decides the letter instead (grade.py). */
+export function gradeBands(tiers: Record<string, TierInputs>, startMs: number | null | undefined, rubric: Rubric, touch = true): Grade {
+  const R = rubric.grade;
+  const bands: Record<string, Bands> = {};
+  const levels: Record<string, Level> = {};
+  const bestLevels: Record<string, Level> = {};
+  for (const t of R.pages) {
+    bands[t] = tierBands((tiers || {})[t], rubric, t, touch);
+    levels[t] = pageLevel(bands[t], rubric);
+    bestLevels[t] = pageLevel(Object.fromEntries(Object.entries(bands[t]).map(([task, b]) => [task, b ?? bestValue(task, rubric)])), rubric);
+  }
+  const start = band(startMs, rubric.metrics.start_ms);
+  const missing: string[] = [];
+  for (const t of R.pages) for (const [task, b] of Object.entries(bands[t])) if (b === null) missing.push(`${t}.${task}`);
+  if (!start) missing.push("start");
+  const [letter, capped] = letterOf(levels, start, rubric);
+  // The worst case is the letter, but for a missing restart: the letter doesn't cap it, the worst case does.
+  const [lowest] = letterOf(levels, start ?? R.start_cap.band, rubric);
+  const [highest] = letterOf(bestLevels, start ?? "good", rubric);
   const meaning = (R.letters.find((l) => l.letter === letter) || R.fallback).meaning;
-  return {
+  const g: Grade = {
     status: "graded", grade: letter, meaning, rubric_version: rubric.version, capped_by_start: capped,
-    provisional: missing.length > 0, missing, bands, levels, start: { value: startMs ?? null, band: start },
+    provisional: highest !== lowest, missing, bands, levels, start: { value: startMs ?? null, band: start },
   };
+  if (missing.length > 0 && highest === lowest) g.missing_settled_by = settledBy(g, rubric);
+  if (touch === false) g.not_applicable = Object.fromEntries(R.no_touch.tasks.map((t) => [t, R.no_touch.reason]));
+  return g;
+}
+
+/** Why a grade's missing measurements can't change its letter: the restart caps it (measured, and slow), and
+ * nextLimits without the missing tasks, so what measured already keeps it from the next letter up. Both empty when
+ * the next letter up doesn't need the missing pages (or there is none). */
+export function settledBy(g: Grade, rubric: Rubric): SettledBy {
+  const missing = new Set(g.missing || []);
+  const limits = nextLimits(g, rubric)
+    .map((x) => ({ ...x, tasks: x.tasks.filter((k) => !missing.has(`${x.page}.${k}`)) }))
+    .filter((x) => x.tasks.length > 0);
+  return { capped_by_start: g.start?.band === rubric.grade.start_cap.band && g.grade === rubric.grade.start_cap.letter, limits };
 }
 
 /** What keeps a grade from the next letter up. Empty for the best letter. */
@@ -309,8 +369,8 @@ export function summaryInputs(summary: Summary, rubric: Rubric): [Record<string,
 
 /**
  * The letter for a summary, at render time. status:
- * - "graded": show the letter (and "provisional" when it is set: something wasn't measured, or the
- *   summary lists gaps);
+ * - "graded": show the letter (and "provisional" when it is set: something wasn't measured that could change
+ *   the letter, or the summary lists gaps; missing_settled_by says why what is missing can't);
  * - "re-measure": the summary was measured with a pre-release version of Clarity (no `clarity`), another
  *   version, the first v1 (before clarity_measured_since) or another protocol than these rules are for;
  *   show "re-measure", not a letter;
@@ -337,8 +397,10 @@ export function gradeSummary(summary: Summary, rubric: Rubric): Grade {
              why: `measured with protocol ${summary.protocol_version ?? "unknown"}, these rules are for protocol ${rubric.protocol_version}` };
   }
   const [tiers, start] = summaryInputs(summary, rubric);
-  const g = gradeBands(tiers, start, rubric);
-  g.provisional = (g.missing || []).length > 0 || (summary.gaps || []).length > 0;
+  // A summary says touch: false only for a frame without a touchscreen (summary.py); without it, touch.
+  const g = gradeBands(tiers, start, rubric, summary.touch !== false);
+  // Missing measurements only when they could change the letter (gradeBands); a gap always.
+  g.provisional = !!g.provisional || (summary.gaps || []).length > 0;
   g.limits = nextLimits(g, rubric);
   g.transport = summary.webrtc_transport?.transport ?? null;
   g.transport_caveat = summary.webrtc_transport?.possibly_limited ? TRANSPORT_CAVEAT : null;

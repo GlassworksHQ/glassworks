@@ -48,6 +48,28 @@ class CodeOverlayMockups {
         Mockup.save("manage-code-over-clock", Mockup.show(behind))
     }
 
+    /** On a phone held upright (360 dp): the code shrinks to stay on one line, the words keep off the edges. */
+    @Test
+    @Config(qualifiers = "w360dp-h640dp-port-xhdpi")
+    fun phone() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        val a = Mockup.activity()
+        Mockup.save("phone-manage-code-sign-in", Mockup.show(CodeOverlay.build(a, PanelCode.Shown("482913", "signin", "Sign in to manage this panel", 0), {})), 720, 1280)
+    }
+
+    /** The code stays on one line on a phone, and inside the screen. */
+    @Test
+    @Config(qualifiers = "w360dp-h640dp-port-xhdpi")
+    fun theCodeFitsAPhone() {
+        val a = Mockup.activity()
+        val v = Mockup.show(CodeOverlay.build(a, PanelCode.Shown("482913", "signin", "Sign in to manage this panel", 0), {}))
+        Mockup.layout(v, 720, 1280); Mockup.layout(v, 720, 1280)
+        val code = Mockup.label(v, "482  913")
+        assertTrue("one line", code.lineCount == 1)
+        val r = android.graphics.Rect().also { code.getGlobalVisibleRect(it) }
+        assertTrue("inside the screen: $r", r.left >= 0 && r.right <= 720 && r.width() == code.width)
+    }
+
     /** Without touch there's nothing to tap: no Close (#34). With touch, Close closes it. */
     @Test
     fun closeOnlyWhereTheScreenTakesATap() {

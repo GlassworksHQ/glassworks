@@ -5,7 +5,7 @@
 import type { PanelShell } from '@glassworks/adb';
 import { FakeKeySocket, fakeApk, filter, type FakeEl } from '@glassworks/app-adb/fakes';
 import { GLASSWORKS, PRIVILEGED, type MirrorApp } from '../src/app';
-import { GLASS_PANES_KEY_FINGERPRINT } from '../src/services';
+import { IMAGE_OWNER_FINGERPRINT } from '../src/services';
 
 /** A made-up adb public key line: 524 bytes, the size Android 6's adbd takes, so it has a fingerprint. Not a real key. */
 export function fakeAdbKey(seed = 1, name = 'kiln@test'): string {
@@ -44,8 +44,8 @@ export async function fakeDex(strings: string[]): Promise<Uint8Array> {
   return out;
 }
 
-/** Strings around the fingerprint as in the image (its neighbours there are "D" and "D: "), and on both sides of every slot a key can move it to. */
-export const SERVICES_STRINGS = ['0', '9 lives', 'Authorizing the Mirror owner\'s ADB key', 'D', GLASS_PANES_KEY_FINGERPRINT, 'D: ', 'DATA', 'Fingerprints do not match', 'G', 'Ljava/lang/String;', 'adb_keys'];
+/** Strings around the fingerprint as in image 3 (its neighbours there, read 2026-11-22), and on both sides of every slot a key can move it to. */
+export const SERVICES_STRINGS = ['0', '9 lives', 'A package name must be specified.', IMAGE_OWNER_FINGERPRINT, 'A2dpSuspended=false', 'Authorizing the Mirror owner\'s ADB key', 'D', 'D: ', 'DATA', 'Fingerprints do not match', 'G', 'Ljava/lang/String;', 'adb_keys'];
 
 /** A services.jar like the image's: META-INF/MANIFEST.MF and classes.dex, deflated (the image's way) or stored, with real CRCs. */
 export async function fakeServicesJar(o: { dex?: Uint8Array; stored?: boolean; extra?: [string, Uint8Array][] } = {}): Promise<Uint8Array> {
@@ -80,7 +80,7 @@ export async function fakeServicesJar(o: { dex?: Uint8Array; stored?: boolean; e
 export const MIRROR_KIOSK = 'com.nimrod.mirrorkiosk/.MainActivity';
 export const LAUNCHER3 = 'com.android.launcher3/.Launcher';
 /** The Glass Panes image's build fingerprint (image.ts GLASS_PANES). */
-const FINGERPRINT = 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11120023:userdebug/test-keys';
+const FINGERPRINT = 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11212248:userdebug/test-keys';
 
 /**
  * A stand-in for the legacy build of Glassworks for generic Android (#408), as its manifest is: the

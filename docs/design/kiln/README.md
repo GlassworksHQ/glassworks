@@ -16,6 +16,7 @@ in `kiln/`. It's the reference for building Kiln's UI, and for the per-frame rec
 |---|---|
 | [sketch.html](sketch.html) | The Kiln screens: panel, connect, your turn, install, Wi-Fi, Home Assistant, done, undo, error |
 | [community-images.md](community-images.md) | Community images (#579): the choice on a frame's page, the community install, its Done and the way back. Approved 2026-11-19 and built |
+| [lineageos.md](lineageos.md) | Kiln installs LineageOS, then Glassworks (#748): LineageOS's devices counted by install method, how Kiln knows the device, downloads and CORS, each step with its undo, the copy, the spike and the libraries. Design, post-v1 |
 | [recovery/player.js](recovery/player.js) | The recovery-mode player: draws any frame's device and animates its steps from data |
 | [recovery/aqara-s1-plus.json](recovery/aqara-s1-plus.json) | The S1 Plus's recovery data |
 | [recovery/index.html](recovery/index.html) | Preview: plays `?frame=<id>` from `<id>.json` in that folder |

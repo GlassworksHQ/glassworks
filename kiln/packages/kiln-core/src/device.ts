@@ -71,8 +71,15 @@ export interface ImageMaker {
   build(o: { apk: Uint8Array; bootAnimation?: Uint8Array; settings?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
     deviceMac?: string; wifi?: { ssid: string; password: string }; apiKeyHandover?: boolean },
     onProgress: (step: PrepareStep, x: number) => void): Promise<{ system: Blob; userdata: Blob }>;
-  /** A community image's `wifi` step: a copy of the stored userdata with the network saved in it. */
-  wifi(o: { userdata: ImageFile; system: ImageFile; makes: string; wifi: { ssid: string; password: string } }, onProgress: (x: number) => void): Promise<Blob>;
+  /**
+   * A community image's `wifi` step: a copy of the stored userdata with the network saved in it. `made`: start from
+   * what an earlier step made from that userdata (its `adb-key` step's copy) instead of the download itself.
+   */
+  wifi(o: { userdata: ImageFile; made?: string; system: ImageFile; makes: string; wifi: { ssid: string; password: string } }, onProgress: (x: number) => void): Promise<Blob>;
+  /** A community image's `adb-key` step: a copy of the stored userdata with `adbKey` (this browser's) as its only adb key. */
+  adbKey(o: { userdata: ImageFile; makes: string; adbKey: string }, onProgress: (x: number) => void): Promise<Blob>;
+  /** A community image's `system-key` step: a copy of the stored system image that lets in `adbKey` (this browser's) in place of the key it hardcodes. */
+  systemKey(o: { system: ImageFile; makes: string; adbKey: string }, onProgress: (x: number) => void): Promise<Blob>;
   /** Deletes what it kept. */
   discard(): Promise<void>;
 }

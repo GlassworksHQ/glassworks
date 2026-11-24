@@ -2,9 +2,13 @@
 
 Google Pixel Tablet, Android 17 (API 37), arm64-v8a, 8 cores, 7441 MB RAM, app 0.2.0-519bf2e, GeckoView 159.0.
 
-**Google Pixel Tablet: Clarity B, a good wall panel for typical dashboards, with a camera. Held back by large dashboards: a camera takes 2.1 s to show its first frame and shows 100% of its frames; its stalls weren't measured in 3 of 3 run(s); the main thread is blocked for 0.9 s after the view is drawn. Provisional: heavy: 3 camera run(s) whose receiver counts left up to 1.0 s of the window out (getStats answered late): stalls n/a, not measured; not everything was measured.**
+**Google Pixel Tablet: Clarity B, a good wall panel for typical dashboards, with a camera. Held back by large dashboards: a camera takes 2.1 s to show its first frame and shows 100% of its frames; its stalls weren't measured in 3 of 3 run(s); the main thread is blocked for 0.9 s after the view is drawn. Cameras on heavy weren't measured fully, but that can't change the letter: heavy already falls short on blocking.**
 
 Typical with a camera dashboards feel good: taps, live updates, opening a view, more-info dialogs and the cameras are quick, and scrolling is smooth. Bigger dashboards slow down: heavy blocks for 0.9 s after it is drawn. Memory isn't the limit (1279 of 3721 MB).
+
+Not measured, and it can't change the letter (not a reason for provisional):
+
+- heavy: 3 camera run(s) whose receiver counts left up to 1.0 s of the window out (getStats answered late): stalls n/a, not measured
 
 The grade comes only from the reference dashboards this test ships (light, typical without and with a camera, heavy), so it doesn't depend on your Home Assistant. Background load (panes, the radio, heat) still reaches it.
 

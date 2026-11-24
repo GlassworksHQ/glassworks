@@ -103,6 +103,11 @@ in HA. If a request goes against it, say so and point at the page instead of bui
   - *Before* comes from `main`, at the same state and size as *after*.
   - Upload them to the PR body (GitHub user attachments). Don't commit PR screenshots to the repo;
     only images that docs use go in `docs/img/` (as `.webp`).
+  - From the CLI, `gh` (2.101+) uploads them with `--attach '<file>#<alt text>'` on `gh pr create`,
+    `gh pr edit` and `gh pr comment` (repeat the flag, up to 50 files). A body reference such as
+    `![Before: setup screen](./before.png)` is rewritten to the uploaded asset; files the body
+    doesn't reference are appended. `gh pr edit --attach` without a body flag keeps the body and
+    appends. Example: `gh pr edit --attach './after.png#After: the Wi-Fi step'`.
 - **Changelog.** Add a line under **[Unreleased]** in `CHANGELOG.md` (the S1 app's) or
   `frames/generic-android/CHANGELOG.md` (the generic app and its legacy build; both, if both change) when someone running a panel
   or using the installer would notice the change: a feature, fixed behaviour, a new entity, a

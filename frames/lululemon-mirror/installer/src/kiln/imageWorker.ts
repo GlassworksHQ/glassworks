@@ -10,7 +10,9 @@ import { claimAndSweep, imageJobs, jobQueue, sessionDir, type BuildOptions, type
 
 type In = { id: number; op: 'fetch'; url: string } | { id: number; op: 'download'; url: string; file: ImageFile } | ({ id: number; op: 'build' } & BuildOptions)
   | { id: number; op: 'check'; file: Blob; want: ImageFile } | { id: number; op: 'discard' }
-  | { id: number; op: 'wifi'; userdata: ImageFile; system: ImageFile; makes: string; wifi: { ssid: string; password: string } };
+  | { id: number; op: 'wifi'; userdata: ImageFile; made?: string; system: ImageFile; makes: string; wifi: { ssid: string; password: string } }
+  | { id: number; op: 'adb-key'; userdata: ImageFile; makes: string; adbKey: string }
+  | { id: number; op: 'system-key'; system: ImageFile; makes: string; adbKey: string };
 
 const DIR = (self as unknown as { name?: string }).name || sessionDir(crypto.randomUUID());
 const root = () => navigator.storage.getDirectory();
@@ -54,6 +56,8 @@ async function run(m: In, signal: AbortSignal) {
     else if (m.op === 'build') await jobs.build(m, (step, x) => progress(x, step));
     else if (m.op === 'check') await jobs.check(m.file, m.want, progress);
     else if (m.op === 'wifi') await jobs.wifi(m, progress);
+    else if (m.op === 'adb-key') await jobs.adbKey(m, progress);
+    else if (m.op === 'system-key') await jobs.systemKey(m, progress);
     else await jobs.discard();
     post({ id: m.id, done: true });
   } catch (err) {

@@ -16,19 +16,20 @@ Each step is printed and waits for `y`. `--yes` answers every question.
 1. Checks, read-only: the APK must be the legacy build of Glassworks for generic Android
    (`dev.glassworks.generic_android.legacy`, or the probe with `--probe`) for Android 6, ask for
    `INSTALL_PACKAGES`, `REBOOT` and `WRITE_SECURE_SETTINGS`, and have a home screen Android can open
-   (an enabled activity or alias with MAIN, HOME and DEFAULT in one intent filter). The first
-   `--adb-key` must be an adb key and not the published Glass Panes project key. Then over adb the
+   (an enabled activity or alias with MAIN, HOME and DEFAULT in one intent filter). Every
+   `--adb-key` line must be an adb key, and none the published Glass Panes project key. Then over adb the
    board must be `msm8916`.
 2. The warning above.
 3. Load `system.img` (a local file, or `--refract`), and check its size and SHA-256.
 4. `adb reboot bootloader`.
 5. Fastboot checks, read-only: partition sizes and `max-download-size`.
-6. Build the images: the app as a priv-app (`/priv-app/Glassworks`, the probe in `/priv-app/S1Kiosk`), the boot animation, the
-   settings overlay and `ro.lockscreen.disable.default` (a first boot with nothing to tap),
-   `/framework/services.jar` letting in the first `--adb-key` (default `~/.android/adbkey.pub`) in
-   place of the Glass Panes project key, and a fresh userdata with the keys in `adb_keys` and, with
-   `--wifi-ssid`, the saved network. This image's adbd ignores `adb_keys`: the key gets in through
-   services.jar ([image-patch.md](../../frames/lululemon-mirror/research/image-patch.md#who-the-image-lets-in-over-adb)).
+6. Build the images: the app as a priv-app (`/priv-app/Glassworks`, the probe in `/priv-app/S1Kiosk`), with the
+   image's own kiosk app (`/priv-app/MirrorKiosk`) left out. It adds the boot animation, the settings overlay and
+   `ro.lockscreen.disable.default` (a first boot with nothing to tap), and `/framework/services.jar` letting in the first
+   `--adb-key` (default `~/.android/adbkey.pub`) in place of the key the image names, and a fresh userdata with the
+   keys in `adb_keys` and, with `--wifi-ssid`, the saved network. This image's adbd ignores `adb_keys`, but its
+   framework lets in a key listed there, as it does the one services.jar names
+   ([image-patch.md](../../frames/lululemon-mirror/research/image-patch.md#who-the-image-lets-in-over-adb)).
 7. Flash system. 8. Flash userdata. 9. Reboot.
 10. Wait for adb and `sys.boot_completed`. `unauthorized` for a while after each start is normal: the
     framework lets the key in once it runs. Still `unauthorized` after 6 minutes means adb's server
@@ -69,8 +70,9 @@ folder, which is removed at the end unless `--keep` or `--work` is given.
 
 ## A throwaway key
 
-The Mirror lets in only the first `--adb-key`, and adb's server answers with the key in its
-`HOME`'s `.android/adbkey`. To flash with a key other than this computer's (a throwaway one for a
+The Mirror lets in every `--adb-key` you give: `services.jar` names the first, and image 3's framework
+lets in each key the fresh userdata's `adb_keys` lists. So give only keys you mean to let in. adb's
+server answers with the key in its `HOME`'s `.android/adbkey`. To flash with a key other than this computer's (a throwaway one for a
 test), give the server that key for the Mirror only. This stops adb for every other device on this
 computer until the last command: check no one is using them first.
 

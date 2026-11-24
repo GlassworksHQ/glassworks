@@ -302,13 +302,47 @@ class RadioV4Test {
 
     // ------------------------------------------------------------------------------ controller
 
-    private fun controller(p: V4Props, mode: String, stack: StackStore = MemoryStackStore(), fetcher: ((File, (String) -> Unit) -> Unit)? = null): RadioController {
+    private fun controller(
+        p: V4Props, mode: String, stack: StackStore = MemoryStackStore(), bundle: RadioBundle? = null, fetcher: ((File, (String) -> Unit) -> Unit)? = null,
+    ): RadioController {
         var stored: String? = mode
         p.props[RadioHelper.PROP_MODE] = mode
         return RadioController(
             s1Agent(p), load = { stored }, store = { stored = it }, inline = true, log = {}, panelIp = { "198.51.100.7" },
-            filesDir = tmp.root, stackStore = stack, zigbeedFetcher = fetcher,
+            filesDir = tmp.root, stackStore = stack, zigbeedFetcher = fetcher, bundle = bundle,
         )
+    }
+
+    /** A bundle the loader rejected: the record says `bad`, in either image's format, and the property only why (#139). */
+    @Test
+    fun aRejectedBundleIsSaidWithWhy() {
+        val p = V4Props().apply {
+            props[RadioHelper.PROP_STATUS] = "ok thread: border router"; props[RadioHelper.PROP_SOURCE] = "boot"
+            props[RadioHelper.PROP_BUNDLE] = "bad: sisdk/NOTICE.txt does not match the manifest"
+        }
+        val (b, pub) = bundle(p, "bad 30200 30200\n")
+        fun inst() = controller(p, "thread", bundle = b).also { it.refresh() }.helperStatusText().substringAfter("radio bundle on the panel: ").substringBefore(';')
+        assertEquals("rejected (sisdk/NOTICE.txt does not match the manifest)", inst())
+        pub.writeText("bad - 5001 -\n") // the frame loader's record
+        assertEquals("rejected (sisdk/NOTICE.txt does not match the manifest)", inst())
+        p.props[RadioHelper.PROP_BUNDLE] = "none"
+        assertEquals("the record decides, the property only words it", "rejected", inst())
+        p.props[RadioHelper.PROP_BUNDLE] = "bad: forged"
+        pub.writeText("none - 5000 -\n")
+        assertEquals("none", inst())
+        pub.writeText("ok 1.0.0 5000 -\n")
+        assertEquals("ok 1.0.0", inst())
+        pub.writeText("ok 30200 30200\n") // the radio record, as before
+        assertEquals("ok 30200", inst())
+        pub.writeText("garbage\n") // no record to read: a `bad` property alone claims nothing
+        p.props[RadioHelper.PROP_BUNDLE] = "bad: forged"
+        assertEquals("?", inst())
+        p.props[RadioHelper.PROP_BUNDLE] = "rejected (forged)"
+        assertEquals("only the helper's own formats show", "?", inst())
+        p.props[RadioHelper.PROP_BUNDLE] = "ok 30100" // an older image's property still shows
+        assertEquals("ok 30100", inst())
+        p.props[RadioHelper.PROP_BUNDLE] = "none"
+        assertEquals("none", inst())
     }
 
     @Test

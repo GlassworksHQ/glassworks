@@ -209,6 +209,15 @@ Improv, and its guide has you open Settings through scrcpy to switch Wi-Fi on an
    user switches Wi-Fi on here, and that the saved network then joins. Android 6 joined a pre-saved
    network without `networkHistory.txt` on Glassworks' image (2026-11-16, below), which is the same
    Android. The panel plan checks both.
+6. **Since image 3 (2026-11-22): this browser's key, not the project key.** Image 3's framework lets
+   in a key listed in `/data/misc/adb/adb_keys`, and its userdata lists the project key there
+   ([image-patch.md](image-patch.md#image-3-a-new-constant-and-adb_keys), read). Its own installer
+   swaps that for the user's key. Kiln does the same (the `adb-key` step: one file, owner, mode and
+   label kept, verified offline on the real file 2026-11-22), puts the network on that copy, and runs
+   `svc wifi enable` with this browser's key. The published key isn't downloaded any more. It also
+   puts this browser's key in place of the one image 3's `services.jar` hardcodes (the `system-key`
+   step), so the unpublished `A1:EC:…` key doesn't get in either. **Untested on a Mirror**: that
+   image 3 lets in a listed key at first start.
 
 ### How the Glass Panes checks were run (2026-11-19, on the maintainer's Mac, read-only)
 

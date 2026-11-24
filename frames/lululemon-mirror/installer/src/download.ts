@@ -5,7 +5,7 @@
 /** Where Refract answers, and the image's id in its allowlist. The tests point it at a fake. */
 export const IMAGE_PROXY = {
   base: 'https://refract.glassworks.dev',
-  systemImg: 'glass-panes/mirror-android-2/system.img',
+  systemImg: 'glass-panes/mirror-android-3/system.img',
 } as const;
 
 /** Kiln's route couldn't serve a download (kiln-core's, so the engine knows it), and the resuming download. */

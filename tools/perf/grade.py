@@ -52,6 +52,11 @@ CAMERA_PAGES = RULES["camera_pages"]
 # of the tile's event, fluid within 2 s; premium adds the 60 fps bar on the open animation's frames.
 DIALOG_LEVELS = RULES["dialog_levels"]
 NO_CAMERA = "none"            # a page without streams: every level accepts it
+# A frame without a touchscreen (rubric 2, 2026-11-23): nobody scrolls it, so its scroll isn't graded. Each task in
+# no_touch.tasks takes no_touch.value on every page, which every level accepts: never a limit, never missing.
+NO_TOUCH = RULES["no_touch"]
+NOT_APPLICABLE = NO_TOUCH["value"]
+NO_TOUCH_REASON = NO_TOUCH["reason"]
 TASK_ORDER = [lv["level"] for lv in SCROLL_LEVELS] + [BELOW]
 SCROLL_ORDER = TASK_ORDER
 
@@ -106,11 +111,18 @@ def capacity(steps, accept):
     return best
 
 
+def failed_run(run):
+    """A run record that stands for a task the view never got to measure, measured as failing: the view didn't finish
+    within the runner's deadline (timed_out), or its browser page was closed (lost, the app said its page's process was
+    killed or crashed). Below fluid, never missing. grade.ts's failedRun is the same."""
+    return bool(run) and bool(run.get("timed_out") or run.get("lost"))
+
+
 def scroll_level(stats):
     """One run's scroll level: the first of rubric.json's scroll_levels whose rule holds, or "slow"
     (measured, below fluid); None when it wasn't measured."""
-    if stats and stats.get("timed_out"):
-        return BELOW                    # the view didn't finish within the runner's deadline: measured, failed
+    if failed_run(stats):
+        return BELOW                    # the view didn't finish, or its page was lost: measured, failed
     if not stats or not stats.get("n"):
         return None
     for lv in SCROLL_LEVELS:
@@ -125,7 +137,7 @@ def scroll_level(stats):
 def update_level(run):
     """One run's live-updates level from its change-to-screen p95 (and, for premium, the frames that
     had a change to draw), or "slow"; None when it wasn't measured."""
-    if run and run.get("timed_out"):
+    if failed_run(run):
         return BELOW
     if not run or not run.get("latency_n") or run.get("latency_p95_ms") is None:
         return None
@@ -142,7 +154,7 @@ def dialog_level(run):
     """One run's more-info level (rubric 3): from the slowest dialog's time to settled and, for
     premium, the open animations' frames; "slow" when a dialog never opened or never settled, or the
     view didn't get to them; None when they weren't measured."""
-    if run and run.get("timed_out"):
+    if failed_run(run):
         return BELOW
     if not run or not run.get("n"):
         return None
@@ -174,7 +186,7 @@ def camera_level_why(run):
     the same levels; the reasons are the report's."""
     if not run:
         return None, None
-    if run.get("timed_out"):
+    if failed_run(run):
         return BELOW, None
     if run.get("first_frame_ms") is None or run.get("shown_pct") is None:
         return BELOW, None
@@ -208,11 +220,12 @@ def median_level(levels):
     return ls[len(ls) // 2] if ls else None
 
 
-def tier_bands(tier, page=None):
+def tier_bands(tier, page=None, touch=True):
     """The band of each task on one page (None when it wasn't measured). Frames bands come from the
-    caller as the median of each run's band. The camera task is `none` on a page without streams."""
+    caller as the median of each run's band. The camera task is `none` on a page without streams; on a
+    frame without touch (touch False), each no_touch task is NOT_APPLICABLE, whatever was measured."""
     tier = tier or {}
-    return {
+    out = {
         "tap": band(tier.get("inp_ms"), METRICS["inp_ms"]),
         "scroll": tier.get("scroll_level"),
         "updates": tier.get("updates_level"),
@@ -223,6 +236,9 @@ def tier_bands(tier, page=None):
         # Rubric 3: HA's more-info dialogs, the median of each run's level.
         "dialog": tier.get("dialog_level"),
     }
+    if touch is False:
+        out.update({task: NOT_APPLICABLE for task in NO_TOUCH["tasks"]})
+    return out
 
 
 def page_level(bands):
@@ -238,33 +254,69 @@ def limits(bands, level):
     return [task for task, ok in LEVELS[level].items() if bands.get(task) not in ok]
 
 
-def grade(tiers, start_ms):
-    """tiers: {light|typical|heavy: {"inp_ms", "load_ms", "blocking_ms", "scroll_level", "updates_level", "camera_level",
-    "dialog_level"}};
-    start_ms: the restart, process start to the start view usable (protocol 4; engine ready before
-    it). Returns the letter, its plain meaning, each page's bands and level, and what is missing. A
-    missing measurement fails whatever needs it, and the grade is then provisional."""
-    bands = {t: tier_bands((tiers or {}).get(t), t) for t in TIERS}
-    levels = {t: page_level(bands[t]) for t in TIERS}
-    start = band(start_ms, METRICS["start_ms"])
-    missing = [f"{t}.{m}" for t in TIERS for m, b in bands[t].items() if b is None] + ([] if start else ["start"])
+# The best each task can be: the first of its levels (scroll, live updates, the camera, dialogs), else good. Every
+# level accepts it, so a missing measurement set to it holds no page back: grade() grades with it for the best case.
+BEST = {task: (RULES[src][0]["level"] if isinstance(RULES.get(src), list) else GOOD) for task, src in RULES["tasks"].items()}
+
+
+def letter_of(levels, start):
+    """(letter, capped): the first letter whose every page need holds, then the start cap (never raises it)."""
     letter = next((l for l, _, needs in LETTERS
                    if all(LEVEL_RANK[levels[t]] >= LEVEL_RANK[need] for t, need in needs.items())),
                   RULES["fallback"]["letter"])
     capped = start == RULES["start_cap"]["band"] and LETTER_ORDER.index(letter) < LETTER_ORDER.index(START_CAP)
-    if capped:
-        letter = START_CAP
-    return {
+    return (START_CAP if capped else letter), capped
+
+
+def grade(tiers, start_ms, touch=True):
+    """tiers: {light|typical|heavy: {"inp_ms", "load_ms", "blocking_ms", "scroll_level", "updates_level", "camera_level",
+    "dialog_level"}};
+    start_ms: the restart, process start to the start view usable (protocol 4; engine ready before
+    it). touch: False for a frame without a touchscreen (rubric 2): its no_touch tasks are not applicable.
+    Returns the letter, its plain meaning, each page's bands and level, and what is missing. A
+    missing measurement fails whatever needs it, and a missing restart caps nothing. The grade is provisional only
+    when what is missing could change the letter: when the best case (each missing band, and a missing restart, at the
+    best it can be) and the worst (each missing band failing, as in the letter, and a missing restart slow enough to
+    cap it) give different letters; the start cap applies in both. When they agree, missing_settled_by says what
+    decides the letter instead."""
+    bands = {t: tier_bands((tiers or {}).get(t), t, touch) for t in TIERS}
+    levels = {t: page_level(bands[t]) for t in TIERS}
+    start = band(start_ms, METRICS["start_ms"])
+    missing = [f"{t}.{m}" for t in TIERS for m, b in bands[t].items() if b is None] + ([] if start else ["start"])
+    letter, capped = letter_of(levels, start)
+    # The worst case is the letter, but for a missing restart: the letter doesn't cap it, the worst case does.
+    lowest, _ = letter_of(levels, start or RULES["start_cap"]["band"])
+    highest, _ = letter_of({t: page_level({m: BEST[m] if b is None else b for m, b in bands[t].items()}) for t in TIERS},
+                        start or GOOD)
+    out = {
         "rubric_version": RUBRIC_VERSION,
         "grade": letter,
         "meaning": MEANINGS[letter],
         "capped_by_start": capped,
-        "provisional": bool(missing),
+        "provisional": highest != lowest,
         "missing": missing,
         "bands": bands,
         "levels": levels,
         "start": {"value": start_ms, "band": start},
     }
+    if missing and highest == lowest:
+        out["missing_settled_by"] = settled_by(out)
+    if touch is False:
+        # Said, not only implied by the bands: report.md and the headline read it (only on such a frame, so a frame
+        # with touch keeps its record as it was).
+        out["not_applicable"] = {task: NO_TOUCH_REASON for task in NO_TOUCH["tasks"]}
+    return out
+
+
+def settled_by(g):
+    """Why a grade's missing measurements can't change its letter: {"capped_by_start": the restart caps the letter
+    (it was measured, and slow), "limits": next_limits without the missing tasks, so what measured already keeps the
+    grade from the next letter up}. Both empty when the next letter up doesn't need the missing pages (or there is
+    none)."""
+    missing = set(g["missing"])
+    lims = [dict(x, tasks=[k for k in x["tasks"] if f"{x['page']}.{k}" not in missing]) for x in next_limits(g)]
+    return {"capped_by_start": g["start"]["band"] == RULES["start_cap"]["band"] and g["grade"] == START_CAP,
+            "limits": [x for x in lims if x["tasks"]]}
 
 
 def median_band(bands):
@@ -327,8 +379,10 @@ def grade_summary(summary):
         return {"status": "re-measure", "grade": None, "meaning": None,
                 "why": f"measured with protocol {protocol_name(summary.get('protocol_version'))}, "
                        f"these rules are for protocol {PROTOCOL_VERSION}"}
-    g = grade(*summary_inputs(summary))
-    g["provisional"] = bool(g["missing"] or summary.get("gaps"))
+    # A summary says touch: false only for a frame without a touchscreen (summary.py); without it, touch.
+    g = grade(*summary_inputs(summary), touch=summary.get("touch") is not False)
+    # Missing measurements only when they could change the letter (grade); a gap always.
+    g["provisional"] = bool(g["provisional"] or summary.get("gaps"))
     g["status"] = "graded"
     g["limits"] = next_limits(g)
     # The camera video's path (protocol 7): letters from different transports aren't comparable, so

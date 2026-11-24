@@ -4,7 +4,11 @@
 // (undo, re-run) is still authorized.
 import { adbGeneratePublicKey, type AdbCredentialStore, type AdbPrivateKey } from '@yume-chan/adb';
 
-export const KEY_NAME = 's1-unleashed-web@browser';
+/**
+ * The name this browser's key gives itself (the `user@host` after the key), which a device shows next to it, e.g. on
+ * Manage → Security. Display only: devices match the key itself, so a key saved under an older name still gets in.
+ */
+export const KEY_NAME = 'kiln@glassworks';
 
 /** Where the PKCS#8 private key lives. IndexedDB in the browser, memory in the tests. */
 export interface KeyStorage {
@@ -12,20 +16,39 @@ export interface KeyStorage {
   save(pkcs8: Uint8Array): Promise<void>;
 }
 
-export class IndexedDbKeyStorage implements KeyStorage {
-  constructor(private readonly db = 's1-unleashed', private readonly store = 'adb-key') {}
+/** The IndexedDB database this browser's key lives in. */
+export const KEY_DB = 'glassworks-kiln';
+/**
+ * Where Kiln kept the key before it moved to KEY_DB (the project was S1 Unleashed). Read only, to bring a browser's
+ * key across once (MovedKeyStorage): a new key would lose every device that lets the old one in.
+ */
+export const OLD_KEY_DB = 's1-unleashed';
 
-  private open(): Promise<IDBDatabase> {
+export class IndexedDbKeyStorage implements KeyStorage {
+  /** `create: false`: a database that doesn't exist yet reads as empty and isn't made (for OLD_KEY_DB). */
+  constructor(private readonly db = KEY_DB, private readonly store = 'adb-key', private readonly o: { create?: boolean } = {}) {}
+
+  private open(): Promise<IDBDatabase | undefined> {
+    const create = this.o.create ?? true;
     return new Promise((resolve, reject) => {
       const r = indexedDB.open(this.db, 1);
-      r.onupgradeneeded = () => r.result.createObjectStore(this.store);
+      let missing = false;
+      r.onupgradeneeded = (e) => {
+        if (create || e.oldVersion > 0) { r.result.createObjectStore(this.store); return; }
+        missing = true;
+        r.transaction?.abort(); // no such database: leave none behind
+      };
       r.onsuccess = () => resolve(r.result);
-      r.onerror = () => reject(r.error ?? new Error('IndexedDB open failed'));
+      r.onerror = (e) => {
+        if (missing) { e.preventDefault(); resolve(undefined); return; }
+        reject(r.error ?? new Error('IndexedDB open failed'));
+      };
     });
   }
 
-  private async tx<T>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  private async tx<T>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest<T>): Promise<T | undefined> {
     const db = await this.open();
+    if (!db) return undefined;
     try {
       return await new Promise<T>((resolve, reject) => {
         const req = f(db.transaction(this.store, mode).objectStore(this.store));
@@ -45,6 +68,23 @@ export class IndexedDbKeyStorage implements KeyStorage {
   async save(pkcs8: Uint8Array): Promise<void> {
     await this.tx('readwrite', (s) => s.put(pkcs8, 'pkcs8'));
   }
+}
+
+/**
+ * The key from `now`, or, the first time, the one an older Kiln saved in `before`, copied into `now`. `before` keeps
+ * its copy, so a Kiln rolled back to before the move still finds the same key. A `before` that can't be read is an
+ * error, never "no key": a new key would lose every device that lets the old one in.
+ */
+export class MovedKeyStorage implements KeyStorage {
+  constructor(private readonly now: KeyStorage, private readonly before: KeyStorage) {}
+  async load(): Promise<Uint8Array | undefined> {
+    const v = await this.now.load();
+    if (v) return v;
+    const old = await this.before.load();
+    if (old) await this.now.save(old);
+    return old;
+  }
+  save(pkcs8: Uint8Array): Promise<void> { return this.now.save(pkcs8); }
 }
 
 export class MemoryKeyStorage implements KeyStorage {
@@ -74,7 +114,7 @@ export interface AdbKey {
 }
 
 /** Loads this browser's adb key, creating it the first time. */
-export async function loadOrCreateAdbKey(storage: KeyStorage = new IndexedDbKeyStorage()): Promise<AdbKey> {
+export async function loadOrCreateAdbKey(storage: KeyStorage = new MovedKeyStorage(new IndexedDbKeyStorage(), new IndexedDbKeyStorage(OLD_KEY_DB, 'adb-key', { create: false }))): Promise<AdbKey> {
   let pkcs8 = await storage.load();
   if (!pkcs8) {
     pkcs8 = await generatePkcs8();

@@ -31,6 +31,8 @@ class UsbDebuggingHeardTest {
 
     @Test fun `the image letting its owner in, and lines about neither`() {
         assertEquals(UsbDebugging.Heard.LetInByImage, UsbDebugging.heard("I/UsbDebuggingManager(  873): Authorizing the Mirror owner's ADB key"))
+        // image 3 (2026-11-22, read from its services.jar): a key listed in adb_keys, let in the same way
+        assertEquals(UsbDebugging.Heard.LetInByImage, UsbDebugging.heard("I/UsbDebuggingManager(  873): Authorizing an ADB key listed in adb_keys"))
         assertNull(UsbDebugging.heard("I/UsbDebuggingManager(  873): Entering thread"))
         assertNull(UsbDebugging.heard("--------- beginning of system"))
     }

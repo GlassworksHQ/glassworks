@@ -11,6 +11,20 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-24
+
+**The last release before 1.0. For Android 8 and newer it's the first release since 0.2.0, and brings everything in 0.3.0; the legacy build moves up from 0.3.0.**
+
+What 0.3.0 added (themes and the Assist edge glow, the notifications and Bluetooth proxy panes, setup with no touch on the lululemon Mirror) is in [its notes](https://github.com/GlassworksHQ/glassworks/blob/main/frames/generic-android/CHANGELOG.md#030---2026-11-23).
+
+### Fixed
+- **Setup and settings fit a phone's screen.** On a phone, setup used to cut off its headings and hide what each step asks, and settings squeezed each page into a sliver beside its list. Now setup shows its steps across the top when the phone is upright, keeps every heading, QR code and button on screen, and scrolls a long step. Settings opens on its list of pages and shows each page across the whole screen, with **‹ Settings** to go back. Tablets and wall panels look the same as before.
+- **Kiln installs Glassworks on the Mirror again.** Since Kiln moved to Glass Panes image 3, building the Mirror's system stopped with "no room for … libxul.so". Kiln now clears out the image's own kiosk app and the apps a Mirror never uses before it adds Glassworks, so the app fits with room to spare.
+
+## [0.3.0] - 2026-11-23
+
+**Themes and an edge glow for Assist, notifications and Bluetooth proxy panes, and setup with no touch on the lululemon Mirror.**
+
 ### Added
 - **Appearance themes, Assist edge glow, and timer board.** A new *Appearance* page (on the panel and in Manage) adds five light/dark themes, a Custom color picker, and a **Home Assistant** theme that mirrors your dashboard's colors and dark mode (plus a toggle to follow Home Assistant's dark mode with any theme). Themes apply to both Assist and timers. Assist now shows as an **edge glow** by default, keeping your dashboard visible (the orb is still a pick under *Assist* on the *Appearance* page): the whole border swells and brightens with your voice, light trails around the edges while Assist thinks, and it rests in the corners while the reply plays. Three or more active timers group into a single **timer board** card.
 - **Notifications and Bluetooth proxy panes (both builds).** Show rich Home Assistant notifications on screen (on by default; non-touch displays auto-dismiss untagged high/critical alerts after 2 minutes) and relay nearby BLE sensors to Home Assistant over an encrypted connection (off by default).
@@ -20,6 +34,7 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **Update channels (Stable / Beta).** Choose between Stable and Beta releases from the device page in Settings or Manage.
 - **The Samsung Galaxy Tab A 10.1 (2016) is a tested device.** The community ran Glassworks on an SM-T580 with LineageOS (64-bit), so it now has its own page on glassworks.dev, Kiln recognizes it by its model, and the app keeps it in landscape. Tested devices also say who tested them and on which Android, and a new *Device report* form on GitHub makes it easy to tell us how your own device did.
 - **Send a device report from Kiln, no GitHub account needed.** After installing with Kiln, *Tell us how it goes* opens a short form with what Kiln read about your device already filled in (model, Android version, ABI, how you installed it). Add what worked and what didn't, see exactly what will be posted publicly, and Kiln opens the report on GitHub for you. Nothing is sent until you press Send, and you can always open it on GitHub yourself instead. Comes with Kiln, not the app.
+- **Kiln installs Glass Panes' newest Mirror image, and lets only your browser in.** Both Mirror options in Kiln now use Glass Panes image 3. That image has one computer's USB key built in that isn't published, so Kiln puts your browser's key in its place, whether you install Glassworks or plain Glass Panes. Glassworks also leaves out the image's own kiosk app, so it doesn't run alongside. On the Mirror, Manage names the new image and shows a computer the image lets in as such. Comes with Kiln; the Manage part comes with the legacy build.
 
 ### Changed
 - **Calmer, clearer wording across Glassworks and Kiln.** Rewrote onboarding steps, settings descriptions, Manage dialogs, sign-in pages, and Kiln install/recovery screens in plainer, more explanatory American English—removing leftover "kiosk" and protocol jargon, explaining why steps are needed, and clarifying what stays safe while waiting or recovering.

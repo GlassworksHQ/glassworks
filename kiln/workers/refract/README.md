@@ -47,11 +47,18 @@ The ids today:
 | `glass-panes/mirror-android-2/userdata.sparse` | the same release | 154,944,572 bytes |
 | `glass-panes/project-key/adbkey` | [the Glass Panes repository](https://github.com/git-nimrod/glass-panes/tree/8ea31141cecc9d3e42ceb72ec08f92bd8ed38801/mirror-app/android/project-key) at commit `8ea31141`: the project adb key its images trust, published on purpose | 1,704 bytes |
 | `glass-panes/mirror-android-2/SHA256SUMS` | the same release | 159 bytes |
+| `glass-panes/mirror-android-3/system.img` | [git-nimrod/glass-panes `mirror-android-3`](https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-3) | 1,074,051,108 bytes |
+| `glass-panes/mirror-android-3/userdata.sparse` | the same release | 154,952,764 bytes |
+| `glass-panes/mirror-android-3/SHA256SUMS` | the same release | 159 bytes |
 
 So Kiln downloads the Mirror's image from
-`https://refract.glassworks.dev/glass-panes/mirror-android-2/system.img` (image 1's ids left the
-allowlist on 2026-11-16, when Kiln moved to image 2). Kiln's Glass Panes install (#579) downloads
-`userdata.sparse` too: Kiln writes both as published, the way back from Glassworks. Each id matches a
+`https://refract.glassworks.dev/glass-panes/mirror-android-3/system.img` (image 1's ids left the
+allowlist on 2026-11-16, when Kiln moved to image 2). Image 2's ids and the project key stay until the
+Kiln that still asks for them is replaced; then they go, as image 1's did. Kiln's Glass Panes install
+(#579) downloads `userdata.sparse` too, the way back from Glassworks. Kiln writes neither as published:
+the system image with this browser's adb key in place of the one its `services.jar` hardcodes, and the
+userdata with this browser's key in place of the project key (one file each). What Refract serves still
+matches the release's hashes; what reaches the Mirror differs from them in those two files. Each id matches a
 file in an image recipe (`frames/<id>/installer`), and the frame's tests check the size and SHA-256
 are the same in both ([docs/kiln-images.md](../../../docs/kiln-images.md)).
 
@@ -240,7 +247,14 @@ that workerd's date (2026-07-30), so the tests run the runtime production runs.
 
 ## Deploying
 
-The root thread deploys, never a PR. From the repo root:
+[`web-deploy.yml`](../../../.github/workflows/web-deploy.yml) deploys it from `main`, before Kiln, whenever
+something it's built from changed: its code, `allowlist.json` or `releases.json`. Its tests and notes don't count. The
+job runs `deploy.sh` with the repo secret `CLOUDFLARE_REFRACT_TOKEN` (the permissions below) and the variable
+`CLOUDFLARE_ACCOUNT_ID`, then reads the live listing until it has every id in the allowlist. Kiln's job waits for it,
+and Kiln doesn't deploy a commit with Refract files newer than Refract's last successful deploy. To deploy it again by hand from GitHub, run the workflow from the Actions tab
+with `refract`.
+
+From a computer, from the repo root:
 
 ```sh
 npm ci --prefix kiln/workers/refract
@@ -268,8 +282,7 @@ With an API token instead of `wrangler login`, put `CLOUDFLARE_API_TOKEN` and
 | Zone `glassworks.dev` | Workers Routes: Edit |
 | Zone `glassworks.dev` | DNS: Edit (the custom domain adds a DNS record) |
 
-These come from Cloudflare's permission list and its custom domain docs (read 2026-11-15). They
-have not been tried yet.
+These come from Cloudflare's permission list and its custom domain docs (read 2026-11-15).
 
 ## Cost
 

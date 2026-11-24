@@ -66,7 +66,27 @@ class CodeOverlay(private val context: Context, private val touch: Boolean, priv
                 val eyebrow = if (shown.purpose == dev.glassworks.setup.LanSetup.PURPOSE) "SET UP THIS PANEL" else "MANAGE THIS PANEL"
                 addView(text(eyebrow, 11f, Inter.MEDIUM, FAINT).apply { letterSpacing = 0.14f }, wrap())
                 addView(text(shown.label.removeSuffix("."), 26f, Inter.LIGHT, FG).apply { setPadding(0, (10 * dp).toInt(), 0, (24 * dp).toInt()) }, wrap())
-                addView(text(shown.code.chunked(3).joinToString("  "), 64f, Inter.LIGHT, FG).apply { letterSpacing = 0.12f }, wrap())
+                // On one line at 64 sp where it fits (a panel); smaller on a phone, whose 360 dp can't hold it.
+                addView(object : TextView(context) {
+                    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                        val room = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
+                        if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+                            // Sized on a copy of the paint: a size set only when it changes asks for no second layout.
+                            val p = android.text.TextPaint(paint).apply { textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, CODE_SP, resources.displayMetrics) }
+                            while (p.measureText(text.toString()) > room && p.textSize > 24 * dp) p.textSize *= 0.94f
+                            if (p.textSize != textSize) setTextSize(TypedValue.COMPLEX_UNIT_PX, p.textSize)
+                        }
+                        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+                    }
+                }.apply {
+                    text = shown.code.chunked(3).joinToString("  ")
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, CODE_SP)
+                    typeface = Inter.typeface(context, Inter.LIGHT, CODE_SP)
+                    setTextColor(FG)
+                    gravity = Gravity.CENTER
+                    letterSpacing = 0.12f
+                    maxLines = 1
+                }, wrap())
                 addView(text("Enter this code in your browser. It works once and expires in 5 minutes.", 15f, Inter.REGULAR, MUTED).apply {
                     setPadding(0, (22 * dp).toInt(), 0, (26 * dp).toInt())
                 }, wrap())
@@ -82,9 +102,13 @@ class CodeOverlay(private val context: Context, private val touch: Boolean, priv
             return FrameLayout(context).apply {
                 // Flat night, fully opaque: nothing behind (the night clock) may show through the digits.
                 setBackgroundColor(0xFF0A0B0F.toInt())
-                addView(col, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+                // A margin at the sides, so a phone's narrow screen keeps the words off its edges.
+                addView(col, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER).apply { leftMargin = (24 * dp).toInt(); rightMargin = (24 * dp).toInt() })
             }
         }
+
+        /** The code's size where it fits on one line. */
+        private const val CODE_SP = 64f
 
         private val FG = Color.parseColor("#F4F4F5")
         private val MUTED = Color.parseColor("#A1A1AA")

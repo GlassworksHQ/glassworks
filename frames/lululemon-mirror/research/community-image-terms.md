@@ -83,10 +83,10 @@ person" as the fallback.
 ## What this means for Kiln
 
 1. One button: Kiln `fetch`es
-   `https://refract.glassworks.dev/glass-panes/mirror-android-2/system.img` (image 2 since
-   2026-11-16; image 1's id now answers 404). Refract passes `Range`
+   `https://refract.glassworks.dev/glass-panes/mirror-android-3/system.img` (image 3 since
+   2026-11-22, image 2 from 2026-11-16 until then; image 1's id now answers 404). Refract passes `Range`
    through, so Kiln can resume a broken download. Refract refuses (502) when GitHub's size isn't the
-   pinned 850,905,808 bytes.
+   pinned 1,074,051,108 bytes.
 2. If Refract fails, Kiln falls back: a plain link to the release asset's URL (the browser downloads
    it, which needs no CORS), then the person picks the downloaded file (Chrome and Edge open the
    picker in Downloads).
@@ -99,7 +99,10 @@ person" as the fallback.
 
 - Does the release's `SHA256SUMS` stay put? It did for image 1. Kiln now pins image 2
   (`mirror-android-2`, 2026-11-16, `bdb6b844…e35c1`). Its release notes' "Licences and credit"
-  section reads the same as image 1's (read 2026-11-16), so the answer above holds for it.
+  section reads the same as image 1's (read 2026-11-16), so the answer above holds for it. Image 3
+  (`mirror-android-3`, 2026-11-22, `bd7f2e33…ec19`): its "Licenses and credit" section says the same
+  (the Android and kernel sources keep their own licenses, the vendor binaries belong to their owners,
+  the same community thanks; read 2026-11-22), so it holds for image 3 too.
   Refract checks only the size pinned in its `allowlist.json` (it streams, so it never hashes the
   file): a changed release of another size fails there with a 502. One of the same size streams
   through, and Kiln rejects it by its SHA-256.

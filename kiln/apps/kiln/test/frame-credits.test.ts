@@ -82,7 +82,7 @@ describe('frame credits', () => {
 
 describe('uncredited', () => {
   const glassPanes = read('lululemon-mirror').credits!.find((c) => c.id === 'glass-panes-image')!;
-  const release = 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/system.img';
+  const release = 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-3/system.img';
 
   it('flags another project\'s release that no used credit covers', () => {
     expect(uncredited(`const IMAGE = '${release}';`, [])).toEqual([release.slice(0, 'https://github.com/git-nimrod/glass-panes'.length)]);

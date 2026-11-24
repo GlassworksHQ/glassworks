@@ -40,21 +40,25 @@ export const GLASS_PANES_IMAGE: ImageRecipe = {
   licence: 'MIT; the image’s parts keep their own',
   summary: 'Android 6.0.1 for the Mirror as its release has it, with its own Mirror Kiosk app.',
   support: { name: 'Glass Panes on GitHub', href: 'https://github.com/git-nimrod/glass-panes/issues' },
-  release: { name: 'mirror-android-2', href: 'https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-2' },
+  release: { name: 'mirror-android-3', href: 'https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-3' },
   next: { name: 'its README', href: 'https://github.com/git-nimrod/glass-panes#readme' },
   files: [
-    { name: 'system.img', url: 'https://github.com/…/system.img', refract: 'glass-panes/mirror-android-2/system.img',
-      size: 850905808, sha256: 'bdb6b844…e35c1' },
-    { name: 'userdata.sparse', url: 'https://github.com/…/userdata.sparse', refract: 'glass-panes/mirror-android-2/userdata.sparse',
-      size: 154944572, sha256: '74b1f57a…cf908' },
+    { name: 'system.img', url: 'https://github.com/…/system.img', refract: 'glass-panes/mirror-android-3/system.img',
+      size: 1074051108, sha256: 'bd7f2e33…ec19' },
+    { name: 'userdata.sparse', url: 'https://github.com/…/userdata.sparse', refract: 'glass-panes/mirror-android-3/userdata.sparse',
+      size: 154952764, sha256: '81eb5648…c521d' },
   ],
   steps: [
     { do: 'download', file: 'system.img' },
     { do: 'download', file: 'userdata.sparse' },
     { do: 'fastboot' },
-    { do: 'flash', partition: 'system', file: 'system.img' },
-    { do: 'flash', partition: 'userdata', file: 'userdata.sparse' },
+    { do: 'system-key', file: 'system.img', makes: 'system+key' },
+    { do: 'adb-key', file: 'userdata.sparse', makes: 'userdata+key' },
+    { do: 'wifi', file: 'userdata+key', template: 'system.img', makes: 'userdata+wifi' },
+    { do: 'flash', partition: 'system', file: 'system+key' },
+    { do: 'flash', partition: 'userdata', file: 'userdata+wifi' },
     { do: 'restart' },
+    { do: 'wifi-on' },
   ],
 };
 ```
@@ -84,8 +88,10 @@ bootloader, `boot` or the modem).
 | `restart` | | Restarts the device into what was written |
 | `patch` | `file`, `makes` | Kiln's own change to a downloaded image. Glassworks only |
 | `first-start` | | Kiln's first start over adb with the browser's key. Glassworks only |
-| `wifi` | `file`, `template`, `makes` | Optional: when the person gives a network, saves it in a copy of a checked userdata image (`file`), named `makes`. It writes one file, `/misc/wifi/wpa_supplicant.conf`: the template from the checked system image (`template`'s `/etc/wifi/wpa_supplicant.conf`, read where it lies), then the network with its PSK, never the password. It re-hashes the userdata as it reads it. Without a network, `makes` is the userdata as published |
-| `wifi-on` | `key` | After the restart, when a network was saved: connects over adb with the image's own **published** adb key (`key`, a checked download, held in memory for that one connection) and runs `svc wifi enable`, nothing else, then waits for `dumpsys wifi` to say "Wi-Fi is enabled" (the driver up, not only the switch asked for). For an image that ships with Wi-Fi off, so the saved network joins without anyone opening its Settings |
+| `adb-key` | `file`, `makes` | Puts this browser's adb key in a copy of a checked userdata image (`file`), named `makes`, in place of the key your image publishes there. It writes one file, `/misc/adb/adb_keys`, keeping its owner, mode and label, and re-hashes the userdata as it reads it. For an image whose system lets in a key listed in `adb_keys`, so the device lets in only the computer that installed it. Not optional: a published key's private half is everyone's |
+| `system-key` | `file`, `makes` | Puts this browser's adb key in a copy of a checked system image (`file`), named `makes`, in place of a key your image's framework lets in without asking. It changes one file, the one the frame names (on the Mirror, `/framework/services.jar`, and in it only that key's fingerprint), keeping its owner, mode and label, and re-hashes the system image as it reads it. For an image with a key built in that nobody on the device can take back. It needs room in the browser's storage for the expanded image while it works (about 1.3 GB on the Mirror) |
+| `wifi` | `file`, `template`, `makes` | Optional: when the person gives a network, saves it in a copy of a checked userdata image (`file`), or of what `adb-key` made from one, named `makes`. It writes one file, `/misc/wifi/wpa_supplicant.conf`: the template from the checked system image (`template`'s `/etc/wifi/wpa_supplicant.conf`, read where it lies), then the network with its PSK, never the password. It re-hashes a downloaded userdata as it reads it. Without a network, `makes` is its `file` as it was |
+| `wifi-on` | `key` (optional) | After the restart, when a network was saved: connects over adb with this browser's key, which an `adb-key` step put in, or with the image's own **published** adb key (`key`, a checked download, held in memory for that one connection), and runs `svc wifi enable`, nothing else, then waits for `dumpsys wifi` to say "Wi-Fi is enabled" (the driver up, not only the switch asked for). For an image that ships with Wi-Fi off, so the saved network joins without anyone opening its Settings |
 
 A new kind of step is a change to Kiln's code, with its own review and tests, not part of adding an
 image.
@@ -114,10 +120,15 @@ CI:
 - Every `download` comes before the device is connected.
 - `flash` writes a checked file, after `fastboot`, to a partition the frame allows.
 - The recipe writes something and ends with `restart`.
-- A community image has no `patch` and no `first-start`: it goes on as its project publishes it.
-- `wifi` takes only checked downloads and names one new file; it's listed once.
-- `wifi-on` comes after `restart` and a `wifi` step, once, with a key that is a checked download.
-  It takes no command: what it runs is Kiln's code.
+- A community image has no `patch` and no `first-start`: it goes on as its project publishes it,
+  but for the library's own changes (`system-key`, `adb-key`, `wifi`).
+- `system-key` and `adb-key` each take a checked download and name one new file, between `fastboot`
+  and `restart`; each is listed once.
+- `patch` comes before any step that makes a file, and is listed once: Kiln's build replaces what was
+  made before it.
+- `wifi` takes a checked download, or what `adb-key` made, and names one new file; it's listed once.
+- `wifi-on` comes after `restart` and a `wifi` step, once, with a key that is a checked download, or
+  with none after an `adb-key` step. It takes no command: what it runs is Kiln's code.
 - The frame's own test checks each file against Refract's allowlist: the same source (a release
   file, or a repository file at a pinned commit), size and SHA-256.
 

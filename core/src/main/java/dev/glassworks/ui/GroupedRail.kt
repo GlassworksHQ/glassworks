@@ -40,13 +40,25 @@ class GroupedRail(context: Context) : LinearLayout(context) {
     var childDp = 34f
     var gapDp = 4f
 
+    /**
+     * The rows side by side, each as wide as its name: a strip across a phone held upright, in a horizontal scroll.
+     * An open group's rows follow it, as they do under it in a column. Takes effect at the next [bind].
+     */
+    var horizontal = false
+        set(v) { field = v; orientation = if (v) HORIZONTAL else VERTICAL }
+
     private val g = Glass(context)
 
     init { orientation = VERTICAL }
 
+    /** The selected row's view, or the open group's: what a strip scrolls into view. */
+    var current: View? = null
+        private set
+
     /** Draws [rows] with [selected] picked; [groups] names each group (id to title). */
     fun bind(rows: List<Row>, groups: Map<String, String>, selected: String?) {
         removeAllViews()
+        current = null
         this.rows = rows
         val open = rows.firstOrNull { it.id == selected }?.group
         var i = 0
@@ -76,8 +88,12 @@ class GroupedRail(context: Context) : LinearLayout(context) {
     }
 
     private fun add(v: View) {
+        if (v.isSelected) current = v
         val child = v.tag == CHILD
-        addView(v, LayoutParams(-1, g.px(if (child) childDp else rowDp)).apply { if (childCount > 0) topMargin = g.px(gapDp) })
+        val lp = LayoutParams(if (horizontal) -2 else -1, g.px(if (child) childDp else rowDp))
+        if (childCount > 0) { if (horizontal) lp.marginStart = g.px(gapDp) else lp.topMargin = g.px(gapDp) }
+        if (horizontal) lp.gravity = Gravity.CENTER_VERTICAL
+        addView(v, lp)
     }
 
     private fun row(title: String, mark: Mark, selected: Boolean, child: Boolean, enabled: Boolean, emphasis: Boolean = false, onClick: () -> Unit) =
@@ -85,15 +101,17 @@ class GroupedRail(context: Context) : LinearLayout(context) {
             tag = if (child) CHILD else null
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(g.px(if (child) 36f else 15f), 0, g.px(12f), 0)
+            setPadding(g.px(if (child && !horizontal) 36f else if (horizontal) 12f else 15f), 0, g.px(12f), 0)
             if (mark != Mark.NONE) addView(Dot(context, mark), LayoutParams(g.px(if (child) 7f else 9f), g.px(if (child) 7f else 9f)).apply { marginEnd = g.px(13f) })
             val color = when {
                 selected || emphasis || mark == Mark.CURRENT -> Glass.TX
                 mark == Mark.PENDING -> Glass.FA
                 else -> Glass.MU
             }
-            addView(g.text(if (child) 15f else 16.5f, color).apply { text = title; setSingleLine(); ellipsize = TextUtils.TruncateAt.END }, LayoutParams(0, -2, 1f))
+            addView(g.text(if (child) 15f else 16.5f, color).apply { text = title; setSingleLine(); ellipsize = TextUtils.TruncateAt.END },
+                if (horizontal) LayoutParams(-2, -2) else LayoutParams(0, -2, 1f))
             background = if (selected) g.surface(Tokens.R_PANE.toFloat()) else null
+            isSelected = selected
             contentDescription = title
             if (enabled) { isClickable = true; setOnClickListener { onClick() } }
         }

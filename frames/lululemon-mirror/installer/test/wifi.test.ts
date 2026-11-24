@@ -1,10 +1,13 @@
-// A community image's Wi-Fi from Kiln: the network saved in a copy of a checked userdata (one file,
-// from the system image's own template, read in place), and Wi-Fi switched on with one adb command.
+// A community image from Kiln: this browser's adb key in a copy of its checked system image (one file,
+// services.jar) and of its userdata (adb_keys), the network saved in a copy of a checked userdata (one
+// file, from the system image's own template, read in place), and Wi-Fi switched on with one adb command.
 // On small images made here: the real Glass Panes files can't go in the repo (hard rule 3).
 import { createHash } from 'node:crypto';
+import { zipEntry } from '@glassworks/app-adb';
 import { Disk, Ext4, MemoryStore, mkfs, readSparse, writeSparse } from '@glassworks/ext4';
 import { describe, expect, it } from 'vitest';
-import { WIFI_CONF, WrongImage, userdataWithWifi, wifiOn, wifiTemplate, wpaPsk } from '../src';
+import { ADB_KEYS, GLASS_PANES, IMAGE_OWNER_FINGERPRINT, SERVICES_JAR, WIFI_CONF, WrongImage, adbFingerprint, systemWithKey, userdataWithKey, userdataWithWifi, wifiOn, wifiTemplate, wpaPsk } from '../src';
+import { fakeAdbKey, fakeServicesJar } from './fakes';
 
 const BS = 4096;
 const TEMPLATE = 'update_config=1\neapol_version=1\nap_scan=1\nfast_reauth=1\npmf=1\np2p_no_group_iface=1\n';
@@ -103,6 +106,99 @@ describe('the network, saved in a copy of the checked userdata', () => {
     const sink: Uint8Array[] = [];
     await expect(userdataWithWifi(blob(src), pin(src), new MemoryStore(), TEMPLATE, { ssid: 'Home Net', password: 'short' }, (b) => { sink.push(b); }))
       .rejects.toThrow(/8 to 63/);
+    expect(sink).toEqual([]);
+  });
+});
+
+describe('this browser\'s adb key, in a copy of the checked userdata (image 3)', () => {
+  const KEY = fakeAdbKey(7, 'kiln@test');
+  const copyWithKey = async (src: Uint8Array) => {
+    const parts: Uint8Array[] = [];
+    await userdataWithKey(blob(src), pin(src), new MemoryStore(), KEY, (b) => { parts.push(b.slice()); });
+    return new Uint8Array(Buffer.concat(parts));
+  };
+
+  it('replaces adb_keys with this key alone, keeping its owner, mode and label, and changes nothing else', async () => {
+    const src = await userdataImg();
+    const before = await tree(await open(src));
+    const fs = await open(await copyWithKey(src));
+    const after = await tree(fs);
+    expect(Object.keys(after).sort()).toEqual(Object.keys(before).sort());
+    for (const [p, v] of Object.entries(before)) if (p !== ADB_KEYS) expect(after[p], p).toBe(v);
+    expect(after[ADB_KEYS]).toMatch(/^640 1000:2000 /);
+    expect(await fs.label(ADB_KEYS)).toBe('u:object_r:adb_keys_file:s0');
+    expect(new TextDecoder().decode(await fs.readFile(ADB_KEYS))).toBe(`${KEY}\n`);
+  });
+
+  it('then the network goes on that copy: both changes, nothing else', async () => {
+    const keyed = await copyWithKey(await userdataImg());
+    const parts: Uint8Array[] = [];
+    // a copy this page made: no pin to check it against (it was hashed as the adb-key step read the download)
+    await userdataWithWifi(blob(keyed), undefined, new MemoryStore(), TEMPLATE, { ssid: 'Home Net', password: 'not-a-real-password' }, (b) => { parts.push(b.slice()); });
+    const fs = await open(new Uint8Array(Buffer.concat(parts)));
+    expect(new TextDecoder().decode(await fs.readFile(ADB_KEYS))).toBe(`${KEY}\n`);
+    expect(await fs.exists(WIFI_CONF)).toBe(true);
+  });
+
+  it('refuses a stored file that doesn\'t match its pin, the published project key, and a userdata with no adb_keys, writing nothing', async () => {
+    const src = await userdataImg();
+    const sink: Uint8Array[] = [];
+    const to = (b: Uint8Array) => { sink.push(b); };
+    await expect(userdataWithKey(blob(src), { ...pin(src), sha256: '0'.repeat(64) }, new MemoryStore(), KEY, to)).rejects.toBeInstanceOf(WrongImage);
+    await expect(userdataWithKey(blob(src), pin(src), new MemoryStore(), 'not a key', to)).rejects.toThrow(/isn't an adb public key/);
+    const bare = await (async () => {
+      const d = new Disk(new MemoryStore(), BS, 16384, { zeroed: true });
+      const fs = await mkfs(d, { time: 1, journalBlocks: 0 });
+      await fs.flush();
+      return sparse(d);
+    })();
+    await expect(userdataWithKey(blob(bare), pin(bare), new MemoryStore(), KEY, to)).rejects.toThrow(/has no \/misc\/adb\/adb_keys.*Nothing was changed/);
+    expect(sink).toEqual([]);
+  });
+});
+
+describe('this browser\'s adb key, in a copy of the checked system image (image 3)', () => {
+  const KEY = fakeAdbKey(7, 'kiln@test');
+  /** A system image like Glass Panes': its build.prop and its services.jar, which names the key it lets in. */
+  async function glassPanesSystem(fingerprint: string = GLASS_PANES.fingerprint): Promise<Uint8Array> {
+    const d = new Disk(new MemoryStore(), BS, 8192, { zeroed: true });
+    const fs = await mkfs(d, { time: 1, journalBlocks: 0 });
+    await fs.mkdir('/framework', sys);
+    await fs.writeFile(SERVICES_JAR, await fakeServicesJar(), { ...sys, mode: 0o644 });
+    await fs.mkdir('/etc', sys);
+    await fs.mkdir('/etc/wifi', sys);
+    await fs.writeFile('/etc/wifi/wpa_supplicant.conf', new TextEncoder().encode(TEMPLATE), { ...sys, mode: 0o644 });
+    await fs.writeFile('/build.prop', new TextEncoder().encode(`ro.build.fingerprint=${fingerprint}\n`), { ...sys, mode: 0o644 });
+    await fs.flush();
+    return sparse(d);
+  }
+  const has = (b: Uint8Array, s: string) => Buffer.from(b).includes(Buffer.from(s));
+
+  it('replaces services.jar with one that names this key in place of the image\'s own, and changes nothing else', async () => {
+    const src = await glassPanesSystem();
+    const before = await tree(await open(src));
+    const parts: Uint8Array[] = [];
+    await systemWithKey(blob(src), pin(src, 'system.img'), new MemoryStore(), KEY, (b) => { parts.push(b.slice()); });
+    const fs = await open(new Uint8Array(Buffer.concat(parts)));
+    const after = await tree(fs);
+    expect(Object.keys(after).sort()).toEqual(Object.keys(before).sort());
+    for (const [p, v] of Object.entries(before)) if (p !== SERVICES_JAR) expect(after[p], p).toBe(v);
+    expect(after[SERVICES_JAR]).not.toBe(before[SERVICES_JAR]);
+    expect(after[SERVICES_JAR]).toMatch(/^644 0:0 /);
+    expect(await fs.label(SERVICES_JAR)).toBe('u:object_r:system_file:s0');
+    const dex = (await zipEntry(await fs.readFile(SERVICES_JAR), 'classes.dex'))!;
+    expect(has(dex, adbFingerprint(KEY))).toBe(true);
+    expect(has(dex, IMAGE_OWNER_FINGERPRINT)).toBe(false);
+  });
+
+  it('refuses a stored file that doesn\'t match its pin, another image and a bad key, writing nothing', async () => {
+    const src = await glassPanesSystem();
+    const sink: Uint8Array[] = [];
+    const to = (b: Uint8Array) => { sink.push(b); };
+    await expect(systemWithKey(blob(src), { ...pin(src, 'system.img'), sha256: '0'.repeat(64) }, new MemoryStore(), KEY, to)).rejects.toBeInstanceOf(WrongImage);
+    await expect(systemWithKey(blob(src), pin(src, 'system.img'), new MemoryStore(), 'not a key', to)).rejects.toThrow(/isn't an adb public key/);
+    const other = await glassPanesSystem('Android/other/other:6.0.1/X/1:user/release-keys');
+    await expect(systemWithKey(blob(other), pin(other, 'system.img'), new MemoryStore(), KEY, to)).rejects.toThrow(/build fingerprint differs.*Nothing was changed/);
     expect(sink).toEqual([]);
   });
 });

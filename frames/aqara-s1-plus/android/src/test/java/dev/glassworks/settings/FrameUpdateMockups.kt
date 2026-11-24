@@ -16,6 +16,7 @@ import dev.glassworks.s1.KioskApp
 import dev.glassworks.s1.frame.AqaraS1Plus
 import dev.glassworks.s1.manage.S1Manage
 import dev.glassworks.ui.Mockup
+import dev.glassworks.update.FrameBundleState
 import dev.glassworks.update.FrameOffer
 import dev.glassworks.update.FrameUpdateModel
 import dev.glassworks.update.GithubRelease
@@ -35,8 +36,9 @@ import org.robolectric.shadows.ShadowSystemProperties
 
 /**
  * The S1's Device page with its frame rows (#139), on the panel at 1440x720 and as the Manage page's HTML: a frame
- * update out, downloading, restarting to finish, and a refusal. The real settings model and Manage page over the S1
- * frame with the loader's stamp (frame 1.0.0) and an illustrative release (1.0.1). Skipped unless asked:
+ * update out, downloading, restarting to finish, a refusal, and a bundle the loader rejected at boot. The real settings
+ * model and Manage page over the S1 frame with the loader's stamp (frame 1.0.0) and an illustrative release (1.0.1).
+ * Skipped unless asked:
  *   ./gradlew :kiosk:testDebugUnitTest --tests '*FrameUpdateMockups*' -Ps1MockupDir=<dir>
  */
 @RunWith(RobolectricTestRunner::class)
@@ -109,5 +111,13 @@ class FrameUpdateMockups {
         shoot("frame-03-restarting", runtime)
         f.onFailed(a, "the panel refused it (bundle version 1000001 is below the floor 1000002 (no downgrades))")
         shoot("frame-04-refused", runtime)
+
+        // A new start whose loader rejected the bundle: the boot image's copies run, and 1.0.1 is still offered.
+        u.stop()
+        val r = UpdateManager(app, runtime, channel = { UpdateChannel.STABLE }, onChange = {}).also { updates = it }
+        runtime.updates = r
+        r.frame!!.onLoaderRecord(FrameBundleState.parse("bad - 1000000 -"), "sisdk/NOTICE.txt does not match the manifest")
+        r.frame!!.onChecked(FrameOffer.newest(listOf(release), "aqara-s1-plus"))
+        shoot("frame-05-rejected", runtime)
     }
 }

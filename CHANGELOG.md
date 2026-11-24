@@ -8,6 +8,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-24
+
+**S1 Kiosk is now Glassworks, in its last release before 1.0: a browser Manage page for every panel, themes and an edge glow for Assist, notifications and Bluetooth proxy panes, and frame updates from Home Assistant.**
+
 ### Added
 - **Frame updates install from Home Assistant.** On a panel with the frame loader, Install on the Frame update card
   (or an automation's `update.install`) downloads the S1's signed frame bundle, checks it, and restarts the panel
@@ -41,6 +45,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 - **Moved to `GlassworksHQ/glassworks` & streamlined Kiln.** Updates check [GlassworksHQ/glassworks](https://github.com/GlassworksHQ/glassworks) directly, and Kiln shows concise steps with live panel progress and upstream community credits.
 
 ### Fixed
+- **A rejected frame bundle is reported.** When the panel refuses its installed frame bundle at startup, the Frame
+  update card in Home Assistant, the Device page and the Manage page now say it was rejected and why, instead of
+  looking like a panel with no bundle. The *Radio helper* sensor says the same. Install still offers the release.
 - **Automatic recovery from Android 10 framework hangs on the S1.** Detects Android 10's multi-restart ActivityManager stall within 30 seconds and recovers automatically (comes with next Kiln install).
 - **More reliable S1 Zigbee/Thread radio & Thread routing.** Protects Zigbee router backups and Thread datasets against partial writes, caps runaway Thread join retries, and updates Thread border router routes when Wi-Fi reconnects (comes with the radio/frame bundle).
 - **Screen wake timeout & startup brightness.** Non-touch wakes (Home Assistant, voice, timers) now respect the full idle timeout instead of dimming after 20 seconds, and manual brightness applies immediately on boot.

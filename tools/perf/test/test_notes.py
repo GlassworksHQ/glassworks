@@ -390,6 +390,22 @@ class TypicalWithoutACamera(unittest.TestCase):
         # The camera page's limit isn't said twice; heavy's still is.
         self.assertEqual(n["limits"], "Bigger dashboards slow down: heavy shows 40% of its camera's frames.")
 
+    def test_a_camera_page_lost_in_most_runs_quotes_no_number_beside_it(self):
+        """CodeRabbit on #781: typical lost in 2 of 3 runs (its median is the lost runs' deadlines), typical-nocam the
+        best page: the good sentence says nothing of what the camera costs; the lost sentence says the page went."""
+        rep = self.rep()
+        t = rep["graded"]["reference"]["tiers"]["typical"]
+        why = "the panel ran out of memory and its browser page was closed (low-memory killer)"
+        t.update(positions=[1, 2, 3], lost_runs=2, lost_why=[why])
+        t["camera_runs"] = [{"lost": True}, {"lost": True}, {"first_frame_ms": 1500, "shown_pct": 40.0, "stall_total_ms": 200}]
+        self.assertIsNone(N._with_camera(rep))
+        n = N.notes(rep)
+        self.assertEqual(n["good"], "Typical dashboards feel good without a camera: taps, live updates and opening a view "
+                                    "are quick, and scrolling is fluid.")
+        self.assertIn(f"On typical with a camera, the page was lost in 2 of 3 runs: {why}.", n["text"])
+        t.update(lost_runs=1, lost_why=[why])           # lost in one run only: the measured runs decide, as before
+        self.assertEqual(N._with_camera(rep), ("camera", "shows 40% of its camera's frames"))
+
     def test_blocking_that_fluid_accepts_is_not_a_limit(self):
         """s1rtc10: light's 233 ms of blocking (needs improvement, which fluid accepts for blocking, as for
         the open) was quoted as blocking's limit, and typical's 2.9 s (poor, what holds it back) wasn't.

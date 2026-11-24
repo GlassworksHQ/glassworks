@@ -24,6 +24,7 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -206,7 +207,7 @@ class SetupOverlay(
     private val rail = object : LinearLayout(context) {
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-            if (portrait) return
+            if (portrait || compact) return
             val above = (0 until childCount).map(::getChildAt).filter { it !== railSpacer && it !== railFoot }
                 .sumOf { it.measuredHeight + (it.layoutParams as LayoutParams).let { lp -> lp.topMargin + lp.bottomMargin } }
             val fits = above + px(RAIL_ART_DP) <= MeasureSpec.getSize(heightMeasureSpec) - paddingTop - paddingBottom
@@ -225,9 +226,20 @@ class SetupOverlay(
             addView(StackView(context), LinearLayout.LayoutParams(px(24f), px(23f)).apply { marginEnd = px(14f) })
             addView(g.text(19f, TX, Inter.REGULAR).apply { text = "Glassworks" })
         })
-        addView(railRows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(33f) })
+        addView(railRows, railRowsLp)
         addView(railSpacer, LinearLayout.LayoutParams(-1, 0, 1f))
         addView(railFoot, LinearLayout.LayoutParams(-1, -2))
+    }
+
+    /** Where the rail's rows sit under the brand: 33 dp down on the S1, closer on a phone. */
+    private val railRowsLp get() = LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(if (compact) 14f else 33f) }
+
+    /** A phone held upright: the rows in a strip that scrolls sideways, under the brand ([arrange]). */
+    private val railStrip = HorizontalScrollView(context).apply {
+        isHorizontalScrollBarEnabled = false
+        isHorizontalFadingEdgeEnabled = true
+        setFadingEdgeLength(px(24f))
+        overScrollMode = View.OVER_SCROLL_NEVER
     }
 
     // ---- right: the current step's card
@@ -277,7 +289,44 @@ class SetupOverlay(
     /** The other ways are open: their link was tapped on this step. */
     private var waysOpen = false
 
-    private val buttons = LinearLayout(context).apply {
+    /**
+     * The card's buttons in a row: the quiet ones at the left, the primary at the right. When they don't all fit across
+     * the card (a phone), one under the other across its whole width instead: the foot's words, then the primary, then
+     * the rest. A row that fits is laid out as before, untouched.
+     */
+    private val buttons = object : LinearLayout(context) {
+        private var stacked = false
+        private val stackOrder get() = listOf(foot, primary, ghost, plain, plainLeft, quiet).filter { it.visibility != View.GONE }
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            stacked = false
+            if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+                val free = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+                val need = stackOrder.sumOf { v ->
+                    v.measure(free, free)
+                    v.measuredWidth + (v.layoutParams as LayoutParams).let { it.marginStart + it.marginEnd }
+                }
+                stacked = need > MeasureSpec.getSize(widthMeasureSpec)
+            }
+            if (!stacked) { super.onMeasure(widthMeasureSpec, heightMeasureSpec); return }
+            val w = MeasureSpec.getSize(widthMeasureSpec)
+            var h = 0
+            stackOrder.forEachIndexed { i, v ->
+                v.measure(exactly(w), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+                h += v.measuredHeight + if (i > 0) px(STACK_GAP_DP) else 0
+            }
+            setMeasuredDimension(w, h)
+        }
+
+        override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+            if (!stacked) { super.onLayout(changed, l, t, r, b); return }
+            var y = 0
+            stackOrder.forEach { v ->
+                v.layout(0, y, r - l, y + v.measuredHeight)
+                y += v.measuredHeight + px(STACK_GAP_DP)
+            }
+        }
+    }.apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         addView(ghost, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(22f) })
@@ -340,9 +389,9 @@ class SetupOverlay(
     /** Square, [QR_DP] at most: smaller only where the room under a portrait card's text is shorter. */
     private val qrTile = object : FrameLayout(context) {
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-            val side = MeasureSpec.makeMeasureSpec(
-                minOf(px(QR_DP), MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec)), MeasureSpec.EXACTLY,
-            )
+            // A side it may take any of (the card's scroll on a phone) doesn't limit it.
+            fun room(spec: Int) = if (MeasureSpec.getMode(spec) == MeasureSpec.UNSPECIFIED) Int.MAX_VALUE else MeasureSpec.getSize(spec)
+            val side = MeasureSpec.makeMeasureSpec(minOf(px(QR_DP), room(widthMeasureSpec), room(heightMeasureSpec)), MeasureSpec.EXACTLY)
             super.onMeasure(side, side)
         }
     }.apply {
@@ -395,6 +444,16 @@ class SetupOverlay(
         addView(textAndQr, LinearLayout.LayoutParams(-1, 0, 1f))
         addView(buttonRow, LinearLayout.LayoutParams(-1, -2))
     }
+    /**
+     * On a phone the card's text and the step's view scroll above its buttons, so a long step never loses its end
+     * ([arrange]). It fills the room it has, so a short step's buttons still sit at the card's foot.
+     */
+    private val cardScroll = ScrollView(context).apply {
+        isFillViewport = true
+        isVerticalFadingEdgeEnabled = true
+        setFadingEdgeLength(px(24f))
+        overScrollMode = View.OVER_SCROLL_NEVER
+    }
     private val wizard = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         setPadding(px(49f), px(44f), px(45f), px(40f))
@@ -408,9 +467,80 @@ class SetupOverlay(
     /** In [portrait], the QR code is on and sits under the card's text, filling the room left. */
     private var qrBelow = false
 
+    /**
+     * The screen is a phone's: its short side under [COMPACT_DP] (the S1's is 480 dp, the Mirror's 720 dp). From the
+     * screen's own size, so a keyboard that takes half of it doesn't change the layout under the person typing.
+     */
+    private var compact = false
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        stack(MeasureSpec.getSize(heightMeasureSpec) > MeasureSpec.getSize(widthMeasureSpec))
+        val c = resources.configuration
+        val small = minOf(c.screenWidthDp, c.screenHeightDp) in 1 until COMPACT_DP
+        val upright = MeasureSpec.getSize(heightMeasureSpec) > MeasureSpec.getSize(widthMeasureSpec)
+        if (small != compact) { compact = small; arrange(upright) }
+        stack(upright)
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    /**
+     * A phone's screen, [compact], or a panel's: the paddings, the rail's size, where the rail's rows sit, and whether
+     * the card's text scrolls. [stack] then places them for the screen's way up.
+     */
+    private fun arrange(upright: Boolean) {
+        val k = compact
+        if (k) wizard.setPadding(px(16f), px(if (upright) 18f else 14f), px(16f), px(16f)) else wizard.setPadding(px(49f), px(44f), px(45f), px(40f))
+        if (k) card.setPadding(px(22f), px(20f), px(20f), px(16f)) else card.setPadding(px(41f), px(36f), px(28f), px(30f))
+        card.background = g.surface(if (k) 26f else 34f)
+        cardTitle.maxLines = if (k) 3 else 2
+        cardTitle.textSize = titleSp(titleBig)
+        railRows.rowDp = if (k) 32f else 39f
+        railRows.childDp = if (k) 28f else 34f
+        railRows.gapDp = if (k) 2f else 4f
+        railBeside.width = px(if (k) 176f else 227f)
+        railBeside.marginEnd = px(if (k) 16f else 26f)
+        qrBeside.width = px(if (k) 180f else 238f)
+        // The card's text in its scroll on a phone, straight in the card on a panel.
+        val inScroll = textAndQr.parent === cardScroll
+        if (k != inScroll) {
+            (textAndQr.parent as? ViewGroup)?.removeView(textAndQr)
+            card.removeView(cardScroll)
+            if (k) {
+                cardScroll.addView(textAndQr, FrameLayout.LayoutParams(-1, -2))
+                card.addView(cardScroll, 0, LinearLayout.LayoutParams(-1, 0, 1f))
+            } else card.addView(textAndQr, 0, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
+        // The Panes list scrolls with the card on a phone, rather than inside it.
+        model?.let { setContent(slot.getChildAt(0)) }
+        railStrip(false)
+        stripped = null
+        portrait = !upright // stack() lays out again
+    }
+
+    /** The rail's rows are in [railStrip] (a phone held upright), or in the rail's column. */
+    private var stripped: Boolean? = null
+
+    private fun railStrip(on: Boolean) {
+        if (stripped == on) return
+        stripped = on
+        (railRows.parent as? ViewGroup)?.removeView(railRows)
+        rail.removeView(railStrip)
+        railRows.horizontal = on
+        if (on) {
+            railStrip.addView(railRows, FrameLayout.LayoutParams(-2, -2))
+            rail.addView(railStrip, 1, railRowsLp)
+        } else rail.addView(railRows, 1, railRowsLp)
+        model?.let(::bindRail)
+    }
+
+    /** The heading on the card is a core step's (Wi-Fi, Home Assistant, Panes), not a pane's own step's. */
+    private var titleBig = true
+
+    /** A step's heading: [big] for Wi-Fi, Home Assistant and Panes, a little smaller for a pane's own step. */
+    private fun titleSp(big: Boolean) = when {
+        compact && big -> 30f
+        compact -> 28f
+        big -> 45f
+        else -> 40f
     }
 
     /**
@@ -422,6 +552,8 @@ class SetupOverlay(
         if (on == portrait && below == qrBelow) return
         portrait = on
         qrBelow = below
+        // A phone held upright: the rows across the top, under the brand.
+        railStrip(on && compact)
         wizard.orientation = if (on) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
         textAndQr.orientation = wizard.orientation
         rail.layoutParams = if (on) LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = px(26f) } else railBeside
@@ -431,13 +563,15 @@ class SetupOverlay(
             below -> LinearLayout.LayoutParams(-1, -2)
             else -> LinearLayout.LayoutParams(-1, 0, 1f)
         }
-        // A gap between the text and the code, and between the code and the buttons (#422's portrait tablet).
-        qrGlow.layoutParams = if (on) LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = px(TIGHT_GAP_DP); bottomMargin = px(TIGHT_GAP_DP) } else qrBeside
+        // A gap between the text and the code, and between the code and the buttons (#422's portrait tablet). On a
+        // phone the card scrolls, so the code takes its own size rather than the room left.
+        qrGlow.layoutParams = if (on) LinearLayout.LayoutParams(-1, if (compact) -2 else 0, if (compact) 0f else 1f).apply { topMargin = px(TIGHT_GAP_DP); bottomMargin = px(TIGHT_GAP_DP) } else qrBeside
         // A plain View measured to wrap takes all the room it may: the spacers go, or the rail fills the screen and
         // the text the card.
         railSpacer.visibility = if (on) View.GONE else View.VISIBLE
         stretch.visibility = if (below) View.GONE else View.VISIBLE
-        railStack.visibility = if (on) View.GONE else View.VISIBLE
+        // On a phone the rail has no room for the art either way up.
+        railStack.visibility = if (on || compact) View.GONE else View.VISIBLE
     }
 
     // ---- Done: the lit stack on its own
@@ -635,6 +769,12 @@ class SetupOverlay(
             GROUPS,
             shown,
         )
+        // A phone's strip brings the step on screen into view.
+        if (stripped == true) railStrip.post {
+            val v = railRows.current ?: return@post
+            val x = v.left - (railStrip.width - v.width) / 2
+            railStrip.scrollTo(x.coerceAtLeast(0), 0)
+        }
         // The plates set one per step: none on the first, all three on the last.
         val current = flow.indexOf(m.step).coerceAtLeast(0)
         val set = if (flow.size < 2) 3 else 3 * current / (flow.size - 1)
@@ -656,7 +796,8 @@ class SetupOverlay(
     private fun drawCard(m: Model, stepChanged: Boolean) {
         qrGlow.visibility = View.GONE
         cardBody.visibility = View.VISIBLE
-        cardTitle.textSize = 45f
+        titleBig = true
+        cardTitle.textSize = titleSp(true)
         slotLp.topMargin = px(SECTION_GAP_DP)
         primary.visibility = View.GONE; ghost.visibility = View.GONE
         plain.visibility = View.GONE; plainLeft.visibility = View.GONE; foot.visibility = View.GONE
@@ -730,13 +871,19 @@ class SetupOverlay(
      * and scrolls there, a section gap above them, so Continue stays put however many panes there are.
      */
     private fun setContent(v: View?) {
-        fill(v != null && v === panes.view)
+        // On a phone the whole card scrolls ([cardScroll]): the list takes its own height in it.
+        val fills = v != null && v === panes.view && !compact
+        fill(fills)
+        if (v != null && v === panes.view) (v.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
+            val h = if (fills) -1 else -2
+            if (lp.height != h) { lp.height = h; v.layoutParams = lp }
+        }
         if (v == null) { if (slot.childCount > 0) slot.removeAllViews(); slot.visibility = View.GONE; return }
         slot.visibility = View.VISIBLE
         if (slot.childCount == 1 && slot.getChildAt(0) === v) return
         slot.removeAllViews()
         (v.parent as? ViewGroup)?.removeView(v)
-        slot.addView(v, LinearLayout.LayoutParams(-1, if (v === panes.view) -1 else -2))
+        slot.addView(v, LinearLayout.LayoutParams(-1, if (v === panes.view && !compact) -1 else -2))
     }
 
     private fun fill(on: Boolean) {
@@ -970,7 +1117,8 @@ class SetupOverlay(
 
     /** A pane's step: the screen sets the label, the step fills the rest ([paneCard]). */
     private fun bindPaneStep(step: SetupStep, stepChanged: Boolean) {
-        cardTitle.textSize = 40f
+        titleBig = false
+        cardTitle.textSize = titleSp(false)
         slotLp.topMargin = px(TIGHT_GAP_DP)
         screens.getValue(step.id).bind(paneCard, stepChanged)
     }
@@ -1217,21 +1365,7 @@ class SetupOverlay(
             // The bar in a gutter of its own, beside the cards rather than over them.
             scrollBarStyle = View.SCROLLBARS_OUTSIDE_OVERLAY
             setPadding(0, 0, px(10f), 0)
-            addView(LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                choices.chunked(2).forEachIndexed { r, pair ->
-                    addView(LinearLayout(context).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        isBaselineAligned = false
-                        pair.forEachIndexed { k, c ->
-                            addView(card(r * 2 + k, c), LinearLayout.LayoutParams(0, -1, 1f).apply { if (k > 0) marginStart = px(CARD_GAP_DP) })
-                        }
-                        // Match-parent like the cards: a row's height comes only from children that aren't,
-                        // so a 1 px spacer squashed a last row's lone card to 1 px.
-                        if (pair.size == 1) addView(View(context), LinearLayout.LayoutParams(0, -1, 1f).apply { marginStart = px(CARD_GAP_DP) })
-                    }, LinearLayout.LayoutParams(-1, -2).apply { if (r > 0) topMargin = px(CARD_GAP_DP) })
-                }
-            }, FrameLayout.LayoutParams(-1, -2))
+            addView(CardGrid().apply { choices.forEachIndexed { i, c -> addView(card(i, c)) } }, FrameLayout.LayoutParams(-1, -2))
         }
 
         /** Card [i] is on: as Continue applied it, else as the pane runs. A preview reads its own answer. */
@@ -1291,6 +1425,51 @@ class SetupOverlay(
         }
 
         private fun redraw() { sync(); model?.let { bindCard(it, stepChanged = false) } }
+    }
+
+    /**
+     * The pane cards two to a row, each row as tall as its tallest card; one to a row where two would each get less
+     * than [PANE_CARD_MIN_DP] (a phone held upright).
+     */
+    private inner class CardGrid : ViewGroup(context) {
+        private var columns = 2
+        private val rowHeights = ArrayList<Int>()
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val w = MeasureSpec.getSize(widthMeasureSpec)
+            val gap = px(CARD_GAP_DP)
+            columns = if (MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED || w >= 2 * px(PANE_CARD_MIN_DP) + gap) 2 else 1
+            val free = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+            rowHeights.clear()
+            for (row in (0 until childCount).chunked(columns)) {
+                // Measured to wrap at its column's width, then all at the row's height.
+                val tallest = row.maxOf { i -> getChildAt(i).let { it.measure(exactly(colWidth(w, i % columns)), free); it.measuredHeight } }
+                row.forEach { i -> getChildAt(i).measure(exactly(colWidth(w, i % columns)), exactly(tallest)) }
+                rowHeights += tallest
+            }
+            setMeasuredDimension(w, rowHeights.sum() + gap * (rowHeights.size - 1).coerceAtLeast(0))
+        }
+
+        /** Column [c]'s width: the room less the gap, shared out as a row of weighted views shares it. */
+        private fun colWidth(w: Int, c: Int): Int {
+            if (columns == 1) return w
+            val room = w - px(CARD_GAP_DP)
+            return if (c == 0) room / 2 else room - room / 2
+        }
+
+        override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+            val w = r - l
+            var y = 0
+            for ((n, row) in (0 until childCount).chunked(columns).withIndex()) {
+                var x = 0
+                row.forEach { i ->
+                    val v = getChildAt(i)
+                    v.layout(x, y, x + v.measuredWidth, y + v.measuredHeight)
+                    x += v.measuredWidth + px(CARD_GAP_DP)
+                }
+                y += rowHeights[n] + px(CARD_GAP_DP)
+            }
+        }
     }
 
     /** The step being drawn set its own view ([SetupCard.content]) during this draw. */
@@ -1378,9 +1557,17 @@ class SetupOverlay(
         /** The gap under the heading when the step's view needs the room (the Panes list). */
         const val TIGHT_GAP_DP = 18f
         const val CARD_GAP_DP = 11f
+        /** The narrowest a pane card gets two to a row, in dp: narrower, one to a row. */
+        const val PANE_CARD_MIN_DP = 160f
 
         /** The QR code's white tile, its quiet zone included. */
         const val QR_DP = 226f
+
+        /** A screen whose short side is under this, in dp, is a phone's ([compact]): the S1's is 480 dp. */
+        const val COMPACT_DP = 460
+
+        /** The gap between buttons stacked on a phone. */
+        const val STACK_GAP_DP = 6f
 
         /** The rail's stack art with the gap under it. */
         const val RAIL_ART_DP = 88f

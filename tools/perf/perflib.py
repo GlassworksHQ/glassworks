@@ -562,3 +562,37 @@ def frame_budgets_path(frames_dir, frame_id):
         return None
     path = os.path.join(frames_dir, base, "budgets.json") if base else None
     return path if path and os.path.exists(path) else None
+
+
+def frame_touch(frames_dir, frame_id):
+    """Whether the frame has a touchscreen, as its frame data says: `touch` in frames/<id>/design/installer.json, else
+    in its base frame's (design/frame.json `base`), as Kiln reads it. False only when it says false (the Mirror); a frame
+    the repo doesn't know, or that doesn't say, has touch. Without touch the runner sends no swipes and the scroll isn't
+    graded (rubric.json no_touch)."""
+    def read(*parts):
+        try:
+            with open(os.path.join(frames_dir, *parts)) as f:
+                return json.load(f)
+        except (FileNotFoundError, NotADirectoryError):
+            return None
+    if not frame_id or os.sep in frame_id or frame_id.startswith("."):
+        return True
+    own = read(frame_id, "design", "installer.json")
+    if own is not None and "touch" in own:
+        return own["touch"] is not False
+    base = (read(frame_id, "design", "frame.json") or {}).get("base")
+    inherited = read(base, "design", "installer.json") if base else None
+    return (inherited or {}).get("touch") is not False
+
+
+# ---- a view whose browser page was closed (perfrun.py content_gone)
+
+def content_gone_why(gone):
+    """Why a view's browser page went, in words, from perfrun's record ({"cause": killed or crashed, "low_memory"}):
+    the low-memory killer is named only when its own line said so; otherwise Android closed the page, or it crashed."""
+    gone = gone or {}
+    if gone.get("cause") == "crashed":
+        return "the panel's browser page crashed"
+    if gone.get("low_memory"):
+        return "the panel ran out of memory and its browser page was closed (low-memory killer)"
+    return "Android closed the panel's browser page"
