@@ -1041,7 +1041,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val shapeBox = ctx.px(48f)
         val shapeSize = ctx.px(36f)
         val primaryText = ctx.theme.primaryTextColor
-        val iconAction = ActionConfig.parse(raw.optJSONObject("icon_tap_action"), "none")
+        // Mushroom 5's default icon action: toggle for an entity of a toggling domain, else none.
+        val iconAction = ActionConfig.parse(raw.optJSONObject("icon_tap_action"), mushroomIconDefault(config.entity))
         val interactiveIcon = iconAction.action != "none"
 
         val avatarBg = GradientDrawable().apply {
@@ -1201,7 +1202,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         bindTpl("picture", "") { v ->
             pictureUrl = v
             refreshAvatar()
-            if (v.isNotBlank()) ctx.loadImage(v) { bmp -> if (bmp != null && pictureUrl == v) picture.setImageDrawable(CircleCropDrawable(bmp)) }
+            if (v.isNotBlank()) ctx.loadImage(v, this) { bmp -> if (bmp != null && pictureUrl == v) picture.setImageDrawable(CircleCropDrawable(bmp)) }
         }
         bindTpl("badge_icon", "") { v -> badgeIconName = v; refreshBadge() }
         bindTpl("badge_color", "") { v -> badgeColorValue = MushroomColors.parse(v, ctx.theme); refreshBadge() }
@@ -1343,6 +1344,15 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     companion object {
         const val MUSHROOM_TEMPLATE = "custom:mushroom-template-card"
+
+        /** The domains whose entity's icon Mushroom's template card toggles by default (its `_e` and buttons). */
+        private val MUSHROOM_TOGGLE_DOMAINS = setOf(
+            "fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve", "button", "input_button", "scene",
+        )
+
+        /** Mushroom 5's template card: `icon_tap_action` defaults to `toggle` for [MUSHROOM_TOGGLE_DOMAINS], else none. */
+        internal fun mushroomIconDefault(entity: String?): String =
+            if (entity != null && entity.substringBefore('.') in MUSHROOM_TOGGLE_DOMAINS) "toggle" else "none"
         private val BARE_ICON_DOMAINS = setOf("sensor", "weather", "text", "select")
         /** HA's `STATE_COLORED_DOMAIN`: the domains whose tiles take a state color. */
         private val STATE_COLORED_DOMAINS = setOf(
@@ -2521,7 +2531,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
 
         val staticImage = config.raw.optString("image", "").ifEmpty { null }
         if (staticImage != null) {
-            ctx.loadImage(staticImage) { bmp -> if (bmp != null) showBitmap(bmp) }
+            ctx.loadImage(staticImage, this) { bmp -> if (bmp != null) showBitmap(bmp) }
         }
         // HA's picture-glance labels its bar with `title`; the other picture cards use `name`.
         val label = if (config.type == "picture-glance") config.title ?: config.name else config.name
@@ -2539,7 +2549,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 img.setImageDrawable(null)
                 return
             }
-            ctx.loadImage(pic) { bmp -> if (bmp != null && generation == pictureGeneration) showBitmap(bmp) }
+            ctx.loadImage(pic, this) { bmp -> if (bmp != null && generation == pictureGeneration) showBitmap(bmp) }
         }
         if (staticImage == null && pictureSource != null && pictureSource != eid) {
             observe(pictureSource) { s -> showPicture(s?.entityPicture) }
@@ -3272,7 +3282,7 @@ class MediaControlCardView(ctx: VitroCardContext, config: CardConfig) : CardSurf
             scrim.visibility = GONE
             return
         }
-        ctx.loadImage(url) { bmp ->
+        ctx.loadImage(url, this) { bmp ->
             if (artUrl != url) return@loadImage
             if (bmp != null) {
                 artwork.setImageBitmap(bmp)
