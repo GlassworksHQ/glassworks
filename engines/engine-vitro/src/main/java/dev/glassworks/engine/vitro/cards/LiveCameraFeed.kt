@@ -11,13 +11,19 @@ import dev.glassworks.engine.vitro.ui.VitroCardContext
  * One camera's live picture for a card or the More-Info sheet: HA's MJPEG stream first, with a still snapshot shown
  * while it connects. If the stream fails or drops, snapshots of [picture] are polled every [POLL_MS] and the stream
  * is retried every [RETRY_MS]; the first streamed frame stops the polling again. Main thread only.
+ *
+ * With [stream] false (HA's `camera_view: auto`) there is no stream: a snapshot now and every [SNAPSHOT_MS], as
+ * HA's `hui-image` refreshes a camera picture.
  */
 internal class LiveCameraFeed(
     private val ctx: VitroCardContext,
     private val entityId: String,
     private val picture: () -> String?,
+    private val stream: Boolean = true,
     private val onBitmap: (Bitmap) -> Unit,
 ) {
+    private val pollMs = if (stream) POLL_MS else SNAPSHOT_MS
+
     private var running = false
     private var polling = false
     private var inFlight = false
@@ -32,7 +38,7 @@ internal class LiveCameraFeed(
         override fun run() {
             if (!polling) return
             snapshot()
-            ctx.main.postDelayed(this, POLL_MS)
+            ctx.main.postDelayed(this, pollMs)
         }
     }
 
@@ -45,7 +51,12 @@ internal class LiveCameraFeed(
         running = true
         streamFrames = 0
         snapshot()
-        openStream()
+        if (stream) {
+            openStream()
+        } else {
+            polling = true
+            ctx.main.postDelayed(pollTick, pollMs)
+        }
     }
 
     fun stop() {
@@ -82,7 +93,7 @@ internal class LiveCameraFeed(
                     stopStream = null
                     if (!polling) {
                         polling = true
-                        ctx.main.postDelayed(pollTick, POLL_MS)
+                        ctx.main.postDelayed(pollTick, pollMs)
                     }
                     ctx.main.removeCallbacks(retry)
                     ctx.main.postDelayed(retry, RETRY_MS)
@@ -109,6 +120,9 @@ internal class LiveCameraFeed(
 
     companion object {
         const val POLL_MS = 1_500L
+
+        /** HA's `hui-image` refresh of a camera snapshot (`camera_view: auto`). */
+        const val SNAPSHOT_MS = 10_000L
         const val RETRY_MS = 10_000L
     }
 }

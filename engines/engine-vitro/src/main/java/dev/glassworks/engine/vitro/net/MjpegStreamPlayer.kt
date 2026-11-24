@@ -26,8 +26,9 @@ internal const val MAX_FRAME_BYTES = 2 * 1024 * 1024
  * [maxWidthPx] wide, and handed to [onFrame] on the main thread. A frame that arrives while the previous one is
  * still waiting for the main thread is dropped, so a slow panel shows the newest picture instead of building lag.
  *
- * [onError] runs once on the main thread when the stream can't connect, answers non-200, isn't multipart, or
- * drops; callers fall back to snapshot polling then. It never runs after [stop].
+ * [onError] runs once on the main thread when the stream can't connect, answers non-200, isn't multipart, drops,
+ * or goes [NO_FRAME_MS] without a frame that decodes (a proxy that keeps sending broken parts keeps the socket busy,
+ * so no read times out); callers fall back to snapshot polling then. It never runs after [stop].
  */
 class MjpegStreamPlayer(
     private val url: String,
@@ -48,10 +49,28 @@ class MjpegStreamPlayer(
 
     val isRunning: Boolean get() = running
 
+    /** When the last frame decoded (or the stream started): the [watchdog] ends a stream that stays without one. */
+    @Volatile private var lastGoodFrame = 0L
+
+    private val watchdog = object : Runnable {
+        override fun run() {
+            if (!running) return
+            if (android.os.SystemClock.elapsedRealtime() - lastGoodFrame > NO_FRAME_MS) {
+                // Ends the worker's read; it reports the drop through the usual error path.
+                runCatching { conn?.disconnect() }
+                thread?.interrupt()
+            } else {
+                main.postDelayed(this, WATCHDOG_MS)
+            }
+        }
+    }
+
     fun start() {
         if (running) return
         running = true
         cancelled = false
+        lastGoodFrame = android.os.SystemClock.elapsedRealtime()
+        main.postDelayed(watchdog, WATCHDOG_MS)
         thread = Thread({ runLoop() }, "vitro-mjpeg-${entityLabel(url)}").apply {
             isDaemon = true
             start()
@@ -59,6 +78,7 @@ class MjpegStreamPlayer(
     }
 
     fun stop() {
+        main.removeCallbacks(watchdog)
         cancelled = true
         running = false
         runCatching { conn?.disconnect() }
@@ -89,9 +109,12 @@ class MjpegStreamPlayer(
                         if (bmp == null) {
                             frameInFlight.set(false)
                         } else {
+                            lastGoodFrame = android.os.SystemClock.elapsedRealtime()
                             main.post {
                                 frameInFlight.set(false)
-                                if (running) onFrame(bmp)
+                                // Only a stop() drops it: a frame queued just before the stream ended normally still
+                                // shows (before the fallback's error, which is posted after it).
+                                if (!cancelled) onFrame(bmp)
                             }
                         }
                     }
@@ -117,6 +140,13 @@ class MjpegStreamPlayer(
         private const val CONNECT_TIMEOUT_MS = 5_000
         private const val READ_TIMEOUT_MS = 15_000
 
+        /** How long a stream may go without a frame that decodes, first one included, before it counts as dropped. */
+        const val NO_FRAME_MS = 15_000L
+        private const val WATCHDOG_MS = 2_500L
+
+        /** Decoded pixels a frame may take (1280 x 720), whatever its width: a tall JPEG is sampled down too. */
+        const val MAX_DECODED_PIXELS = 1280L * 720L
+
         /**
          * HA's stream address for [entityId] on [haBase]. A `token` on the entity's `entity_picture` (the signed
          * camera access token) is carried over, so the stream also works without a bearer header. Null without a base.
@@ -140,13 +170,18 @@ class MjpegStreamPlayer(
         private fun entityLabel(url: String): String =
             url.substringAfter("/api/camera_proxy_stream/", "camera").substringBefore('?')
 
-        /** Decodes [bytes] as RGB_565, halving until it's at most [maxWidthPx] wide. */
+        /**
+         * Decodes [bytes] as RGB_565, halving until it's at most [maxWidthPx] wide and [MAX_DECODED_PIXELS] in all
+         * (the 2 MiB part cap bounds the bytes, not the pixels: a 65535 px tall JPEG fits in it).
+         */
         fun decode(bytes: ByteArray, maxWidthPx: Int): Bitmap? {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            val w = bounds.outWidth
+            val h = bounds.outHeight
+            if (w <= 0 || h <= 0) return null
             var sample = 1
-            while (bounds.outWidth / sample > maxWidthPx.coerceAtLeast(1)) sample *= 2
+            while (w / sample > maxWidthPx.coerceAtLeast(1) || (w / sample).toLong() * (h / sample) > MAX_DECODED_PIXELS) sample *= 2
             val opts = BitmapFactory.Options().apply {
                 inSampleSize = sample
                 inPreferredConfig = Bitmap.Config.RGB_565

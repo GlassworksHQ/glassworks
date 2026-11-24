@@ -44,7 +44,10 @@ data class CardModStyle(
     val hasComplexSelectors: Boolean = false,
     /** `background:` / `background-image:` holding a `linear-gradient(...)`. */
     val backgroundGradient: ThemeBackground.LinearGradient? = null,
-    /** `background:` / `background-image:` holding any gradient, every layer and stop position as CSS paints it. */
+    /**
+     * `background:` / `background-image:` holding any gradient, every layer and stop position as CSS paints it. They
+     * lie on the card's fill: [backgroundColor], or the theme's card color when the card sets none.
+     */
     val backgroundLayers: CssBackground? = null,
     /** `padding:` top value in dp (kept for callers checking uniform / zero padding); full sides live in [paddingInsets]. */
     val paddingDp: Float? = null,
@@ -371,9 +374,15 @@ object ThemeResolver {
             themeVarNames += if (dark) def.dark.keys else def.light.keys
         }
 
+        // Names in a reference cycle are invalid, as in CSS, and so is a name whose value needs an invalid or missing
+        // one with no fallback (`b: var(--a)` with `a` in a cycle): left out of the scope, so a `var()` of one takes
+        // its fallback (as the card parser does). They're left out of the result entirely, not exported empty:
+        // `--b: ;` would be a valid empty value, and an island's `var(--b, fallback)` would never take its fallback.
+        val invalid = invalidNames(raw)
+        val scope: Map<String, String> = if (invalid.isEmpty()) raw else raw - invalid
         val resolved = LinkedHashMap<String, String>(raw.size)
         for (k in raw.keys) {
-            resolved[k] = resolveValue(raw[k].orEmpty(), raw, 0)
+            if (k !in invalid) resolved[k] = resolveValue(raw[k].orEmpty(), scope, 0)
         }
 
         val bg = parseColor(resolved["primary-background-color"]) ?: if (dark) 0xFF111111.toInt() else 0xFFFAFAFA.toInt()
@@ -469,9 +478,35 @@ object ThemeResolver {
         // Bounded like the browser's: substitution that grows a value by more than the limit in one pass
         // (`--a: var(--a) var(--a)` doubles every pass) makes it invalid, an empty value, instead of filling the heap
         // on the main thread. The growth is what's capped, not the length: a long card-mod stylesheet stays whole.
-        val replaced = substituteVars(input) { key, fallback -> map[key] ?: fallback }
-        if (replaced.length - input.length > MAX_VAR_EXPANSION) return ""
+        val replaced = substituteVars(input, MAX_VAR_EXPANSION) { key, fallback, _ -> map[key] ?: fallback } ?: return ""
         return if (replaced == input) replaced.trim() else resolveValue(replaced, map, depth + 1)
+    }
+
+    /**
+     * The names of [raw] that are invalid at computed-value time: those in a cycle, and (to a fixed point) those whose
+     * value uses a missing or invalid name through a `var()` with no fallback (a fallback that does the same counts).
+     */
+    internal fun invalidNames(raw: Map<String, String>): Set<String> {
+        val invalid = HashSet(cyclicNames(raw))
+        while (true) {
+            val scope = raw.keys - invalid
+            // A whole stylesheet (`card-mod-card`) isn't one value: a missing reference in one of its declarations
+            // empties that reference (resolveValue) and leaves the other declarations as they are.
+            val more = raw.filter { (k, v) -> k !in invalid && !k.startsWith("card-mod-") && needsMissing(v, scope) }.keys
+            if (more.isEmpty()) return invalid
+            invalid += more
+        }
+    }
+
+    /** True when [value] substitutes a name outside [scope] through a `var()` (or fallback chain) with no fallback. */
+    private fun needsMissing(value: String, scope: Set<String>, depth: Int = 0): Boolean {
+        if ("var(" !in value || depth >= 8) return false
+        var missing = false
+        substituteVars(value, Int.MAX_VALUE) { key, fallback, hasFallback ->
+            if (key !in scope && (!hasFallback || needsMissing(fallback, scope, depth + 1))) missing = true
+            ""
+        }
+        return missing
     }
 
     /** How much a value may grow in one substitution pass. */
@@ -503,8 +538,10 @@ object ThemeResolver {
     /**
      * Replaces each outermost `var(--name, fallback)` in [s] with [value] of its name and fallback. The whole
      * expression is found by balanced parentheses, so a nested fallback (`var(--a, var(--b))`) isn't cut short.
+     * Null as soon as the value has grown by more than [maxGrowth] chars: checked at each append, so the limit
+     * bounds the memory used on the way, not only the result.
      */
-    private fun substituteVars(s: String, value: (key: String, fallback: String) -> String): String {
+    private fun substituteVars(s: String, maxGrowth: Int, value: (key: String, fallback: String, hasFallback: Boolean) -> String): String? {
         val out = StringBuilder(s.length)
         var i = 0
         while (i < s.length) {
@@ -543,9 +580,14 @@ object ThemeResolver {
                 i = j
                 continue
             }
-            out.append(value(name.removePrefix("--"), if (comma < 0) "" else inner.substring(comma + 1).trim()))
+            val v = value(name.removePrefix("--"), if (comma < 0) "" else inner.substring(comma + 1).trim(), comma >= 0)
+            // The output so far is bounded by the whole input plus the budget at every append (so a later part that
+            // shrinks it can still count), and the finished value by its net growth.
+            if (out.length.toLong() + v.length > s.length.toLong() + maxGrowth) return null
+            out.append(v)
             i = j
         }
+        if (out.length.toLong() - s.length > maxGrowth) return null
         return out.toString()
     }
 
@@ -618,6 +660,13 @@ object ThemeResolver {
         val css = CssBackground.parse(spec)
         css?.takeIf { it.layers.size > 1 || it.color != null || it.layers[0] is CssBackground.Radial }
             ?.let { return ThemeBackground.Layers(it, fallbackColor) }
+        // One linear layer: the parsed one, with its angle (`.25turn`, `to top right`) and stops (`10px`), which the
+        // plain pattern below can't read.
+        (css?.layers?.singleOrNull() as? CssBackground.Linear)?.let { l ->
+            // A corner keyword's angle depends on the box: painted from the layer itself.
+            if (l.corner != null) return ThemeBackground.Layers(css, fallbackColor)
+            return ThemeBackground.LinearGradient(l.angleDeg, l.stops.map { it.color }.toIntArray(), l.stops)
+        }
         LINEAR_GRADIENT_PATTERN.find(spec)?.let { m ->
             val parts = splitTopLevelCommas(m.groupValues[2])
             // CSS side keywords (`to right`, `to bottom left`) become their angle; a plain list defaults to 180deg.
@@ -727,16 +776,43 @@ object ThemeResolver {
             return winner?.replace(IMPORTANT, "")?.trim()?.takeIf { it.isNotEmpty() }?.let { resolveValue(it, scope, 0) }
         }
 
-        val bgImage = prop("background-image")
-        val bgShort = prop("background")
-        val gradient = listOfNotNull(bgImage, bgShort).firstOrNull { "linear-gradient" in it.lowercase(Locale.ROOT) }
+        /**
+         * The cascade's winner among [names] (a shorthand and its longhand): an `!important` declaration beats a
+         * normal one, then the later one wins. The winning name and its resolved value.
+         */
+        fun winner(vararg names: String): Pair<String, String>? {
+            var best: Triple<String, String, Pair<Boolean, Int>>? = null
+            for (name in names) {
+                if (name !in lowerDecls) continue
+                for (m in declProp(name).findAll(decls)) {
+                    val key = IMPORTANT.containsMatchIn(m.groupValues[1]) to m.range.first
+                    val b = best
+                    if (b == null || key.first && !b.third.first || key.first == b.third.first && key.second > b.third.second) {
+                        best = Triple(name, m.groupValues[1], key)
+                    }
+                }
+            }
+            val (name, raw) = best ?: return null
+            return raw.replace(IMPORTANT, "").trim().takeIf { it.isNotEmpty() }?.let { name to resolveValue(it, scope, 0) }
+        }
+
+        // `background` resets the image and the color; `background-image` and `background-color` set one each. Which
+        // one paints is the cascade's call between the shorthand and that longhand.
+        val image = winner("background-image", "background")
+        val gradientText = image?.second?.takeIf { "gradient(" in it.lowercase(Locale.ROOT) }
+        val gradient = gradientText?.takeIf { "linear-gradient" in it.lowercase(Locale.ROOT) }
             ?.let { parseBackground(it, 0) as? ThemeBackground.LinearGradient }
-        val layers = listOfNotNull(bgImage, bgShort).firstOrNull { "gradient(" in it.lowercase(Locale.ROOT) }
-            ?.let(CssBackground::parse)
+        val layers = gradientText?.let(CssBackground::parse)
         // `background: none` (the dashboard's usual "bare card") is a transparent fill.
         fun fill(v: String): Int? = if (v.trim().equals("none", ignoreCase = true)) 0 else parseColor(v)
-        val bg = prop("background-color")?.let(::fill)
-            ?: bgShort?.takeIf { (gradient == null && layers == null) || "gradient" !in it.lowercase(Locale.ROOT) }?.let(::fill)
+        val color = winner("background-color", "background")
+        val bg = when {
+            color == null -> null
+            color.first == "background-color" -> fill(color.second)
+            // A shorthand with a gradient: its own color, else transparent (the shorthand resets it).
+            "gradient" in color.second.lowercase(Locale.ROOT) -> CssBackground.parse(color.second)?.color ?: 0
+            else -> fill(color.second)
+        }
         val radius = prop("border-radius")?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }
         val opacity = prop("opacity")?.let { o ->
             if (o.endsWith("%")) o.dropLast(1).toFloatOrNull()?.div(100f) else o.toFloatOrNull()

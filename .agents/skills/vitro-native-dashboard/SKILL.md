@@ -15,6 +15,8 @@ Glassworks' **Vitro** engine renders **31 built-in Lovelace cards (Tier 1)** and
 
 Use this workflow to rewrite an existing dashboard into a **100% Vitro-native** dashboard and theme that keeps the same visual layout, aesthetic, entities, and actions with **zero Tier 3 GeckoView triggers**.
 
+Sometimes those goals conflict. A custom JS panel can do something no native card does (a drawn animation, its own interactions, a layout no grid reproduces). When no supported card can faithfully replace part of it, say so to the user: name what would be lost and let them choose between dropping that behavior and keeping that one card as a Tier 3 island. Don't remove the island silently and don't claim the rewrite is faithful.
+
 ## Workflow
 
 ### 1. Back up and audit the current dashboard

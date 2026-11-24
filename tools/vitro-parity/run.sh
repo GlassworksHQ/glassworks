@@ -50,11 +50,16 @@ gradle_props=()
 node_args=()
 [ -n "$frames" ] && gradle_props+=("-PvitroParityFrames=$frames") && node_args+=(--frames "$frames")
 [ -n "$cases" ] && gradle_props+=("-PvitroParityCases=$cases") && node_args+=(--cases "$cases")
-[ -n "$out" ] && gradle_props+=("-PvitroParityOut=$out")
+if [ -n "$out" ]; then
+  # Gradle runs the test in engines/engine-vitro: a relative --out is the caller's, made absolute here.
+  case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
+  gradle_props+=("-PvitroParityOut=$out")
+fi
 if [ -n "$local_dir" ]; then
   [ -d "$local_dir/corpus" ] || { echo "no corpus at $local_dir/corpus (see tools/vitro-parity/README.md)" >&2; exit 2; }
   gradle_props+=("-PvitroParityLocal=$local_dir")
-  # A local run reports on the local corpus only.
+  # A local run selects the local corpus's case ids. A committed case with the same id as a local one runs too: the
+  # harness applies the id filter to both corpora.
   [ -z "$cases" ] && gradle_props+=("-PvitroParityCases=$(cd "$local_dir/corpus" && ls ./*.json | sed 's#^\./##; s#\.json$##' | paste -sd, -)")
   node_args+=(--root "$local_dir")
 fi

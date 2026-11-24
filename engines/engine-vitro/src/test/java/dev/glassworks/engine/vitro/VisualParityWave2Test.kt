@@ -240,6 +240,27 @@ class VisualParityWave2Test {
     }
 
     @Test
+    fun theClockDateUsesTheSameZoneAsItsTime() {
+        val prev = java.util.TimeZone.getDefault()
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))
+        try {
+            // 20:00 UTC on a Monday is already Tuesday in Tokyo: the date must say so, from the very first render.
+            val instant = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
+                .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.parse("2026-11-23 20:00")!!
+            val tokyo = ClockCardView(
+                context(haConfig = JSONObject().put("time_zone", "Asia/Tokyo")),
+                card("""{"type": "clock", "time_format": "24", "date_format": ["weekday-long"]}"""),
+            )
+            tokyo.renderAt(instant)
+            val weekday = java.text.SimpleDateFormat("EEEE", java.util.Locale.getDefault())
+                .apply { timeZone = java.util.TimeZone.getTimeZone("Asia/Tokyo") }.format(instant)
+            assertTrue("${tokyo.renderedDate} is $weekday", tokyo.renderedDate.contains(weekday))
+        } finally {
+            java.util.TimeZone.setDefault(prev)
+        }
+    }
+
+    @Test
     fun mirrorDashboardIconsExistAndParse() {
         val names = listOf(
             "circle", "circle-small", "flash-alert", "wrench", "table-furniture", "hvac", "stove", "weather-fog",

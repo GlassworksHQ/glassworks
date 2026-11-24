@@ -739,7 +739,8 @@ class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
         if (v != null && pendingValue == v) pendingValue = null
         val text = when {
             v == null -> s?.state ?: "…"
-            stepSize % 1.0 == 0.0 -> v.roundToInt().toString()
+            // Whole numbers only when the step, the range's start and the value all are: `min: 0.5, step: 1` shows 1.5.
+            stepSize % 1.0 == 0.0 && min % 1.0 == 0.0 && v % 1.0 == 0.0 -> v.roundToInt().toString()
             else -> v.toString()
         }
         valueLabel.text = s?.unit?.let { "$text $it" } ?: text
@@ -1343,7 +1344,7 @@ class MiniMediaPlayerCardView(ctx: VitroCardContext, private val config: CardCon
         (attrs["volume_level"] as? Number)?.toFloat()?.let { slider?.setValue(it, active = !muted && it > 0f) }
         controlsRow.visibility = if (off) GONE else VISIBLE
         updateProgress(s)
-        setTicking(playing && isAttachedToWindow)
+        setTicking(playing && isAttachedToWindow && isShown)
     }
 
     private fun setArtwork(url: String?) {
@@ -1390,12 +1391,20 @@ class MiniMediaPlayerCardView(ctx: VitroCardContext, private val config: CardCon
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        setTicking(last?.state == "playing")
+        setTicking(last?.state == "playing" && isShown)
     }
 
     override fun onDetachedFromWindow() {
         setTicking(false)
         super.onDetachedFromWindow()
+    }
+
+    /** A cached view another one hides stays attached: the position stops ticking, and is caught up on return. */
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (!isAttachedToWindow) return
+        if (isShown) updateProgress(last)
+        setTicking(last?.state == "playing" && isShown)
     }
 }
 
@@ -1432,7 +1441,8 @@ object AutoEntitiesFilter {
     /** One matched entity and the `options` its include rule gives its row or card. */
     data class Match(val entityId: String, val options: JSONObject?)
 
-    private val RULE_KEYS = setOf("domain", "entity_id", "state", "name", "attributes", "group", "not", "or", "and", "options", "sort")
+    /** The rule keys Vitro evaluates; the compatibility check reports the others. */
+    internal val RULE_KEYS = setOf("domain", "entity_id", "state", "name", "attributes", "group", "not", "or", "and", "options", "sort")
 
     fun evaluate(raw: JSONObject, states: Collection<EntityState>, lookup: (String) -> EntityState?): List<Match> {
         val out = ArrayList<Match>()
@@ -1502,14 +1512,22 @@ object AutoEntitiesFilter {
                     "or", "and" -> (rule.opt(k) as? JSONArray)?.let { arr ->
                         (0 until arr.length()).all { i -> arr.optJSONObject(i)?.let(::supported) ?: false }
                     } ?: false
-                    "attributes" -> (rule.opt(k) as? JSONObject)?.let { a -> a.keys().asSequence().all { isScalar(a.opt(it)) } } ?: false
+                    "attributes" -> (rule.opt(k) as? JSONObject)?.let { a -> a.keys().asSequence().all { isPattern(a.opt(it)) } } ?: false
                     "options", "sort" -> true
                     // domain, entity_id, state, name, group: one value to match (`state: null` or an object is no rule).
-                    else -> isScalar(rule.opt(k))
+                    else -> isPattern(rule.opt(k))
                 }
             }
 
-    private fun isScalar(v: Any?): Boolean = v is String || v is Number || v is Boolean
+    /**
+     * A value a rule can match with: a scalar, and for a `/regex/` one that compiles. An invalid regex matches
+     * nothing, so it can't be told apart from a valid miss once evaluated: under `not` it would match everything.
+     */
+    private fun isPattern(v: Any?): Boolean {
+        if (v !is String) return v is Number || v is Boolean
+        if (v.length >= 2 && v.startsWith("/") && v.endsWith("/")) return runCatching { Regex(v.substring(1, v.length - 1)) }.isSuccess
+        return true
+    }
 
     /** An attribute as text, `a:b` reaching into a nested map. */
     private fun attributeString(s: EntityState, key: String): String? {
@@ -1527,8 +1545,9 @@ object AutoEntitiesFilter {
         if (value == null) return false
         val p = when (pattern) {
             null, JSONObject.NULL -> return false
-            true -> "on"
-            false -> "off"
+            // YAML reads `on` as true: a boolean pattern matches a state's on/off and an attribute's true/false.
+            true -> return value == "on" || value == "true"
+            false -> return value == "off" || value == "false"
             is Number -> {
                 val d = value.toDoubleOrNull()
                 return if (d != null) d == pattern.toDouble() else value == pattern.toString()
@@ -1726,9 +1745,10 @@ open class StackInCardView(
             }
         }
         // The inner stack's gap: `--vertical-stack-card-gap` (or the horizontal one), then `--stack-card-gap`, 8 px.
+        // Each name from the stack's own card_mod first, then the enclosing cards' (inherited), then the theme's.
         val vars = dev.glassworks.engine.vitro.theme.ThemeResolver.parseCardMod(config.raw.optJSONObject("card_mod"), ctx.theme.vars).customProperties
         val gapVar = listOf(if (horizontal) "horizontal-stack-card-gap" else "vertical-stack-card-gap", "stack-card-gap")
-            .firstNotNullOfOrNull { vars[it] ?: ctx.theme.vars[it] }
+            .firstNotNullOfOrNull { vars[it] ?: ctx.cardVars[it] ?: ctx.theme.vars[it] }
         val gap = ctx.px(dev.glassworks.engine.vitro.theme.ThemeResolver.parseDimensionDp(gapVar, 8f))
         children = config.childCards.mapIndexed { idx, child ->
             val v = build(child)
@@ -1779,6 +1799,17 @@ class LayoutCardView(
 ) : LinearLayout(ctx.context) {
     /** Each built row (grid) or column (horizontal / vertical layouts), for tests. */
     val tracks = ArrayList<LinearLayout>()
+
+    /**
+     * A grid whose tracks have percentages: its template, gap, each placed view (a card or a filler) with its first
+     * track and span, and the width (dp) the fixed sizes were last resolved at. The build only knows the display's
+     * width; [onMeasure] resolves the percentages again against the grid's own.
+     */
+    private var percentTemplate: String? = null
+    private var gridGap = 0f
+    private var gridCols = 0
+    private val placed = ArrayList<Triple<View, Int, Int>>()
+    private var resolvedAtDp = -1
 
     init {
         orientation = VERTICAL
@@ -1849,6 +1880,12 @@ class LayoutCardView(
         val template = layout.optString("grid-template-columns", "").ifEmpty { config.raw.optString("grid-template-columns", "") }
         val tracksSpec = parseColumns(template, widthDp).ifEmpty { listOf(Track(1f, 0f)) }
         val cols = tracksSpec.size
+        if ('%' in template) {
+            percentTemplate = template
+            gridGap = gap
+            gridCols = cols
+            resolvedAtDp = widthDp
+        }
         var row: LinearLayout? = null
         var used = 0
         fun closeRow() {
@@ -1856,9 +1893,11 @@ class LayoutCardView(
             if (used < cols) {
                 val rest = tracksSpec.subList(used, cols)
                 // The rest's own gutters too, so the weighted columns keep their widths on a short row.
-                r.addView(Space(ctx.context), LayoutParams(ctx.px(rest.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (rest.size - 1)), 1, rest.sumOf { it.fr.toDouble() }.toFloat()).apply {
+                val filler = Space(ctx.context)
+                r.addView(filler, LayoutParams(ctx.px(rest.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (rest.size - 1)), 1, rest.sumOf { it.fr.toDouble() }.toFloat()).apply {
                     marginStart = ctx.px(gap)
                 })
+                placed += Triple(filler, used, cols - used)
             }
             row = null
         }
@@ -1875,7 +1914,9 @@ class LayoutCardView(
             }
             if (start != null && start > used) {
                 val skipped = tracksSpec.subList(used, start)
-                row!!.addView(Space(ctx.context), LayoutParams(
+                val filler = Space(ctx.context)
+                placed += Triple(filler, used, start - used)
+                row!!.addView(filler, LayoutParams(
                     ctx.px(skipped.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (skipped.size - 1)), 1,
                     skipped.sumOf { it.fr.toDouble() }.toFloat(),
                 ).apply { if (used > 0) marginStart = ctx.px(gap) })
@@ -1884,10 +1925,33 @@ class LayoutCardView(
             val spanned = tracksSpec.subList(used, used + span)
             val fixed = spanned.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (span - 1)
             val weight = spanned.sumOf { it.fr.toDouble() }.toFloat()
-            row!!.addView(build(child), LayoutParams(ctx.px(fixed), WRAP_CONTENT, weight).apply { if (used > 0) marginStart = ctx.px(gap) })
+            val view = build(child)
+            placed += Triple(view, used, span)
+            row!!.addView(view, LayoutParams(ctx.px(fixed), WRAP_CONTENT, weight).apply { if (used > 0) marginStart = ctx.px(gap) })
             used += span
         }
         closeRow()
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val template = percentTemplate
+        if (template != null && MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            // Percentages are of this grid's width (a card in a half-width column), not the display's.
+            val w = ((MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight) / ctx.dp).toInt()
+            if (w > 0 && w != resolvedAtDp) {
+                val spec = parseColumns(template, w)
+                // Only the sizes change here; a track count that depends on the width (auto-fill) keeps its build.
+                if (spec.size == gridCols) {
+                    for ((v, first, span) in placed) {
+                        val tracks = spec.subList(first, first + span)
+                        (v.layoutParams as? LayoutParams)?.width =
+                            ctx.px(tracks.sumOf { it.fixedDp.toDouble() }.toFloat() + gridGap * (span - 1))
+                    }
+                    resolvedAtDp = w
+                }
+            }
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 
     /** The 0-based column of an explicit `grid-column` start line, or null for automatic placement. */
@@ -1918,7 +1982,7 @@ class LayoutCardView(
                 val repeat = Regex("""^repeat\(\s*([^,]+)\s*,\s*(.+)\)$""").find(tok)
                 if (repeat != null) {
                     val count = repeat.groupValues[1].trim()
-                    val inner = splitTop(repeat.groupValues[2].trim()).map { parseTrack(it) }
+                    val inner = splitTop(repeat.groupValues[2].trim()).map { parseTrack(it, widthDp) }
                     val n = count.toIntOrNull() ?: run {
                         // auto-fill / auto-fit: as many tracks as fit at their minimum width.
                         val minDp = inner.sumOf { t -> (t.minDp.takeIf { it > 0f } ?: t.fixedDp.takeIf { it > 0f } ?: 100f).toDouble() }
@@ -1926,24 +1990,31 @@ class LayoutCardView(
                     }
                     repeat(n.coerceIn(1, 24)) { out += inner }
                 } else {
-                    out += parseTrack(tok)
+                    out += parseTrack(tok, widthDp)
                 }
             }
             return out
         }
 
-        private fun parseTrack(tok: String): Track {
+        /** One track; a percentage is of the grid's width ([widthDp]), a fixed size like `px`, never a share. */
+        private fun parseTrack(tok: String, widthDp: Int): Track {
             Regex("""^minmax\(\s*([^,]+)\s*,\s*(.+)\)$""").find(tok)?.let { m ->
-                val lo = parseTrack(m.groupValues[1].trim())
-                val hi = parseTrack(m.groupValues[2].trim())
-                return if (hi.fr > 0f) Track(hi.fr, 0f, lo.fixedDp) else lo
+                val lo = parseTrack(m.groupValues[1].trim(), widthDp)
+                val hi = parseTrack(m.groupValues[2].trim(), widthDp)
+                // A flexible maximum shares the free space above the minimum; a fixed one (`50%`, `200px`) sizes
+                // the track up to it (never below the minimum).
+                return when {
+                    hi.fr > 0f -> Track(hi.fr, 0f, lo.fixedDp)
+                    hi.fixedDp > 0f -> Track(0f, maxOf(lo.fixedDp, hi.fixedDp))
+                    else -> lo
+                }
             }
             val fr = Regex("""^(\d+(?:\.\d+)?)fr$""").find(tok)?.groupValues?.get(1)?.toFloatOrNull()
             if (fr != null) return Track(fr, 0f)
             val px = Regex("""^(\d+(?:\.\d+)?)px$""").find(tok)?.groupValues?.get(1)?.toFloatOrNull()
             if (px != null) return Track(0f, px)
             val pct = Regex("""^(\d+(?:\.\d+)?)%$""").find(tok)?.groupValues?.get(1)?.toFloatOrNull()
-            if (pct != null) return Track(pct / 100f, 0f)
+            if (pct != null) return Track(0f, widthDp * pct / 100f)
             return Track(1f, 0f) // auto, min-content, …
         }
 

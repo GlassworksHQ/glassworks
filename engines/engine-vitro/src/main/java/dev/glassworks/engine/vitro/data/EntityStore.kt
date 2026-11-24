@@ -155,10 +155,14 @@ data class EntityState(
     fun toHassJson(): JSONObject {
         val attrs = JSONObject()
         for ((k, v) in attributes) attrs.put(k, EntityStore.toJsonValue(v))
-        return JSONObject()
+        val o = JSONObject()
             .put("entity_id", entityId)
             .put("state", state)
             .put("attributes", attrs)
+        // Timestamps as HA writes them; one Vitro never received stays absent rather than becoming 1970.
+        if (lastChanged > 0.0) o.put("last_changed", EntityStore.formatHaIso(lastChanged))
+        if (lastUpdated > 0.0) o.put("last_updated", EntityStore.formatHaIso(lastUpdated))
+        return o
     }
 }
 
@@ -423,6 +427,16 @@ class EntityStore {
                 out[k] = unwrap(obj.opt(k))
             }
             return out
+        }
+
+        /** Epoch seconds as HA's ISO form in UTC, with microseconds: `2026-11-24T10:00:00.123456+00:00`. */
+        fun formatHaIso(epochSec: Double): String {
+            val micros = Math.round(epochSec * 1_000_000.0)
+            val ms = micros / 1_000L // positive: a timestamp Vitro got (floorDiv is API 24)
+            val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+            fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            val frac = micros % 1_000_000L
+            return fmt.format(java.util.Date(ms)) + "." + frac.toString().padStart(6, '0') + "+00:00"
         }
 
         /** [v] from [unwrap] back as a JSON value: Android's `JSONObject.put` would write a List or Map as its toString(). */

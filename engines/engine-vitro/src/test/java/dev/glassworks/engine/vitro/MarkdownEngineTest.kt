@@ -234,6 +234,54 @@ class MarkdownEngineTest {
     }
 
     @Test
+    fun visibilityHiddenKeepsTheRoomAndPaintsNothing() {
+        val into = LinearLayout(activity)
+        MarkdownRenderer(context()).render(
+            "first\n\nsecond\n\n[go](/lovelace/wall)",
+            into,
+            MarkdownRenderer(context()).defaultRootStyle(),
+            MdSheet.parse("ha-markdown-element p:first-child { visibility: hidden; background: #ff0000 }"),
+        )
+        val texts = into.all().filterIsInstance<TextView>()
+        val hidden = texts.first { it.text.toString() == "first" }
+        val spans = (hidden.text as Spanned).getSpans(0, hidden.text.length, android.text.style.ForegroundColorSpan::class.java)
+        assertTrue(spans.isNotEmpty() && spans.all { android.graphics.Color.alpha(it.foregroundColor) == 0 })
+        assertEquals(View.VISIBLE, hidden.visibility) // still in the layout
+        val shown = texts.first { it.text.toString() == "second" }
+        assertTrue((shown.text as Spanned).getSpans(0, 6, android.text.style.ForegroundColorSpan::class.java).any { android.graphics.Color.alpha(it.foregroundColor) > 0 })
+    }
+
+    @Test
+    fun aDashboardLinkInMarkdownNavigates() {
+        val into = LinearLayout(activity)
+        val went = ArrayList<String>()
+        val base = context()
+        val ctx = VitroCardContext(
+            context = activity, haBase = base.haBase, store = base.store, theme = base.theme, resources = emptyList(),
+            accessToken = { null }, callService = { _, _, _, _ -> }, navigate = { went += it }, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+        )
+        MarkdownRenderer(ctx).render("[Wall](/lovelace/wall) and [docs](https://example.com)", into, MarkdownRenderer(ctx).defaultRootStyle(), MdSheet.parse(""))
+        val tv = into.all().filterIsInstance<TextView>().single()
+        val links = (tv.text as Spanned).getSpans(0, tv.text.length, dev.glassworks.engine.vitro.cards.MdLinkSpan::class.java)
+        // A hidden part of a link takes no tap; a part that is visible again does.
+        val hiddenInto = LinearLayout(activity)
+        MarkdownRenderer(ctx).render(
+            "<a href=\"/lovelace/x\">gone <b>back</b></a>", hiddenInto, MarkdownRenderer(ctx).defaultRootStyle(),
+            MdSheet.parse("ha-markdown-element a { visibility: hidden } ha-markdown-element b { visibility: visible }"),
+        )
+        val htv = hiddenInto.all().filterIsInstance<TextView>().single()
+        val hs = htv.text as Spanned
+        val linked = hs.getSpans(0, hs.length, dev.glassworks.engine.vitro.cards.MdLinkSpan::class.java)
+            .joinToString("") { hs.subSequence(hs.getSpanStart(it), hs.getSpanEnd(it)).toString() }
+        assertEquals("back", linked.trim())
+        // Only the dashboard path is a link; the external one stays text.
+        assertEquals(listOf("/lovelace/wall"), links.map { it.href })
+        links.single().onClick(tv)
+        assertEquals(listOf("/lovelace/wall"), went)
+    }
+
+    @Test
     fun fixedTableLayoutSplitsPercentagesAfterSpacing() {
         val into = LinearLayout(activity)
         MarkdownRenderer(context()).render(
@@ -358,6 +406,23 @@ class MarkdownEngineTest {
         val html = MarkedLite.toHtml("```\ncode\n    ```\nstill code\n```")
         assertTrue(html, html.contains("still code"))
         assertTrue(html, html.indexOf("still code") < html.indexOf("</code>"))
+    }
+
+    @Test
+    fun aFenceIndentedTwoSpacesTakesTwoSpacesOffItsLines() {
+        val html = MarkedLite.toHtml("  ```\n  two\n    four\n one\n  ```")
+        assertTrue(html, html.contains("<code>two\n  four\none\n</code>"))
+    }
+
+    @Test
+    fun aBorderStyleAloneDrawsAMediumBorderInTheTextColor() {
+        val root = styled("<p>a</p>", "ha-markdown-element p { border-style: solid; color: #ff0000 }")
+        val p = root.findAll("p")[0].style!!
+        assertEquals(3f, p.borderWidth[0], 0f)
+        assertEquals(p.color, p.borderColor[0])
+        // An explicit zero width stays zero.
+        val zero = styled("<p>a</p>", "ha-markdown-element p { border-style: solid; border-width: 0 }").findAll("p")[0].style!!
+        assertEquals(0f, zero.borderWidth[0], 0f)
     }
 
     @Test

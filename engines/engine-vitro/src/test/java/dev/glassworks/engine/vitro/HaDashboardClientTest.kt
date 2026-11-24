@@ -544,17 +544,32 @@ class HaDashboardClientTest {
         assertEquals(setOf("sensor.kitchen_temp"), points.keys) // a series with no numbers is left out
         assertEquals(listOf(HistoryPoint(1700000000.0, 20.5), HistoryPoint(1700000100.0, 21.0)), points.getValue("sensor.kitchen_temp"))
 
-        val msg = server.commands("history/stream").single()
+        // One-shot: the whole window in one answer, nothing subscribed (a stream's first event can be incomplete).
+        val msg = server.commands("history/history_during_period").single()
         assertEquals(listOf("sensor.kitchen_temp", "sensor.other"), msg.getJSONArray("entity_ids").let { a -> (0 until a.length()).map { a.getString(it) } })
         assertTrue(msg.getBoolean("minimal_response"))
+        assertTrue(msg.getBoolean("no_attributes"))
         assertFalse(msg.getBoolean("significant_changes_only"))
         val start = Instant.parse(msg.getString("start_time"))
         val expected = Instant.now().minusSeconds(6 * 3600L)
         assertTrue("start_time is 6 hours back: $start vs $expected", kotlin.math.abs(start.epochSecond - expected.epochSecond) < 120)
+        val end = Instant.parse(msg.getString("end_time"))
+        assertTrue("end_time is now: $end", kotlin.math.abs(end.epochSecond - Instant.now().epochSecond) < 180)
+        assertTrue(server.commands("history/stream").isEmpty())
+        assertTrue(server.commands("unsubscribe_events").isEmpty())
+    }
 
-        // One-shot: the client unsubscribes after the first series.
-        val subId = msg.getInt("id")
-        awaitCondition("history unsubscribe") { server.commands("unsubscribe_events").any { it.getInt("subscription") == subId } }
+    @Test
+    fun aFailedHistoryRequestCallsNothingBack() {
+        server.failHistory = true
+        val c = connected()
+        val called = java.util.concurrent.atomic.AtomicBoolean(false)
+        c.fetchHistory(listOf("sensor.kitchen_temp")) { called.set(true) }
+        awaitCondition("history request") { server.commands("history/history_during_period").isNotEmpty() }
+        val done = CompletableFuture<Boolean>()
+        c.callWs(JSONObject().put("type", "config/area_registry/list")) { ok, _, _ -> done.complete(ok) }
+        assertTrue(done.get(10, TimeUnit.SECONDS)) // the history answer came before this one
+        assertFalse(called.get())
     }
 
     @Test
@@ -575,24 +590,6 @@ class HaDashboardClientTest {
     }
 
     @Test
-    fun historyUnsubscribesEvenWhenTheServerAnswersAtOnce() {
-        // The event arrives as the request leaves the wire, before the caller can have recorded the subscription id.
-        server.history = JSONObject("""{"states": {"sensor.kitchen_temp": [{"s": "20.5", "lu": 1700000000.0}]}}""")
-        val c = connected(connect = { url ->
-            SpySocket(server.connect(url), after = { msg ->
-                if (msg.optString("type") == "history/stream") server.pushEvent(msg.getInt("id"), server.history)
-            })
-        })
-        val got = LinkedBlockingQueue<Map<String, List<HistoryPoint>>>()
-        c.fetchHistory(listOf("sensor.kitchen_temp")) { got.put(it) }
-        assertEquals(listOf(HistoryPoint(1700000000.0, 20.5)), got.poll(10, TimeUnit.SECONDS)!!.getValue("sensor.kitchen_temp"))
-        val subId = server.commands("history/stream").single().getInt("id")
-        awaitCondition("history unsubscribe") { server.commands("unsubscribe_events").any { it.getInt("subscription") == subId } }
-        Thread.sleep(150) // the server's own delayed copy of the series must not call back again
-        assertNull(got.poll())
-    }
-
-    @Test
     fun socketWritesLeaveTheCallingThreadAndKeepTheirOrder() {
         // On Android the caller is the main thread, where a socket write throws NetworkOnMainThreadException.
         val writers = CopyOnWriteArrayList<Pair<String, String>>() // message type to writing thread
@@ -606,7 +603,7 @@ class HaDashboardClientTest {
         c.callService("light", "turn_off")
         c.fetchHistory(listOf("sensor.kitchen_temp"), 1) {}
         c.callService("light", "toggle")
-        awaitCondition("queued writes") { server.commands("history/stream").isNotEmpty() && server.commands("call_service").size == 3 }
+        awaitCondition("queued writes") { server.commands("history/history_during_period").isNotEmpty() && server.commands("call_service").size == 3 }
 
         val sent = writers.drop(1) // everything after `auth`
         assertTrue("every post-auth write is on the writer thread: $sent", sent.all { it.second == "vitro-ha-send" })
@@ -622,7 +619,7 @@ class HaDashboardClientTest {
         val after = server.received.drop(1).filter { it.getInt("id") > 11 && it.getString("type") !in display }.map {
             if (it.getString("type") == "call_service") it.getString("service") else it.getString("type")
         }
-        assertEquals(listOf("turn_on", "turn_off", "history/stream", "toggle"), after.take(4))
+        assertEquals(listOf("turn_on", "turn_off", "history/history_during_period", "toggle"), after.take(4))
     }
 
     private fun failingCallServiceWrites(): HaDashboardClient = connected(connect = { url ->
@@ -659,7 +656,7 @@ class HaDashboardClientTest {
         val done = CompletableFuture<Boolean>()
         c.callWs(JSONObject().put("type", "config/area_registry/list")) { ok, _, _ -> done.complete(ok) }
         assertTrue(done.get(10, TimeUnit.SECONDS))
-        assertTrue(server.commands("history/stream").isEmpty())
+        assertTrue(server.commands("history/history_during_period").isEmpty())
         assertFalse(called.get())
     }
 
@@ -846,14 +843,19 @@ class HaDashboardClientTest {
 
     @Test
     fun aMissedRefetchSurvivesARequestWhoseAnswerIsDiscarded() {
-        // While `swallow` is set, HA never answers lovelace/config.
+        // While `swallow` is set, HA holds back its lovelace/config answer; the test delivers it late.
         val swallow = java.util.concurrent.atomic.AtomicBoolean(false)
+        val swallowedId = java.util.concurrent.atomic.AtomicInteger(-1)
+        var socket: FakeHaServer.Socket? = null
         val c = connected(connect = { url ->
-            val inner = server.connect(url)
+            val inner = server.connect(url) as FakeHaServer.Socket
+            socket = inner
             object : HaSocket by inner {
                 override fun send(text: String) {
-                    if (swallow.get() && JSONObject(text).optString("type") == "lovelace/config") {
-                        server.received += JSONObject(text)
+                    val m = JSONObject(text)
+                    if (swallow.get() && m.optString("type") == "lovelace/config") {
+                        server.received += m
+                        swallowedId.set(m.getInt("id"))
                         return
                     }
                     inner.send(text)
@@ -869,9 +871,75 @@ class HaDashboardClientTest {
         awaitCondition("asked on claim") { server.commands("lovelace/config").size == 2 }
         c.releaseDashboard()
         swallow.set(false)
+        // The answer arrives late, after the release: it is dropped, and it doesn't count as the refetch made up.
+        val configsBefore = listener.configs.size
+        socket!!.push(
+            JSONObject().put("id", swallowedId.get()).put("type", "result").put("success", true)
+                .put("result", JSONObject(FakeHaServer.DASHBOARD_JSON)),
+        )
+        readerBarrier(c)
+        assertEquals(configsBefore, listener.configs.size)
         // The refetch was never made up: the next claim asks again and gets the dashboard.
         c.claimDashboard(null)
         awaitCondition("asked again") { server.commands("lovelace/config").size == 3 }
+        awaitCondition("delivered on the new claim") { listener.configs.size == configsBefore + 1 }
+    }
+
+    @Test
+    fun anIdleConnectionOutlivesTheUpgradeDeadline() {
+        // The deadline bounds the upgrade only: no read timeout is left on the socket afterwards.
+        java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
+            val accepted = Thread {
+                runCatching {
+                    val s = server.accept()
+                    val r = s.getInputStream().bufferedReader(Charsets.ISO_8859_1)
+                    var key = ""
+                    while (true) {
+                        val line = r.readLine() ?: break
+                        if (line.isEmpty()) break
+                        if (line.startsWith("Sec-WebSocket-Key:", ignoreCase = true)) key = line.substringAfter(':').trim()
+                    }
+                    val accept = java.util.Base64.getEncoder().encodeToString(
+                        java.security.MessageDigest.getInstance("SHA-1").digest((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").toByteArray()),
+                    )
+                    s.getOutputStream().write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: $accept\r\n\r\n".toByteArray())
+                    Thread.sleep(900) // idle for three upgrade deadlines
+                    s.getOutputStream().write(byteArrayOf(0x81.toByte(), 2, 'h'.code.toByte(), 'i'.code.toByte()))
+                    Thread.sleep(500)
+                    s.close()
+                }
+            }.apply { isDaemon = true; start() }
+            val ws = HaDashboardClient.connectLongLived("ws://127.0.0.1:${server.localPort}/api/websocket", upgradeTimeoutMs = 300)
+            assertEquals("hi", ws.receive())
+            ws.close()
+            accepted.join(5_000)
+        }
+    }
+
+    @Test
+    fun aPingThroughCallWsSettlesOnPong() {
+        val c = connected()
+        val done = CompletableFuture<Boolean>()
+        c.callWs(JSONObject().put("type", "ping")) { ok, _, _ -> done.complete(ok) }
+        assertTrue(done.get(10, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun aStalledUpgradeFailsInsteadOfHanging() {
+        // A proxy that accepts TCP and then never answers the HTTP upgrade.
+        java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
+            val held = CopyOnWriteArrayList<java.net.Socket>()
+            val acceptor = Thread { runCatching { while (true) held += server.accept() } }.apply { isDaemon = true; start() }
+            val started = System.nanoTime()
+            try {
+                HaDashboardClient.connectLongLived("ws://127.0.0.1:${server.localPort}/api/websocket", upgradeTimeoutMs = 300)
+                org.junit.Assert.fail("the upgrade should time out")
+            } catch (_: IOException) {
+            }
+            assertTrue("gave up within the bound", System.nanoTime() - started < 5_000_000_000L)
+            held.forEach { runCatching { it.close() } }
+            acceptor.interrupt()
+        }
     }
 
     @Test

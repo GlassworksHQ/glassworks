@@ -5,6 +5,7 @@
 package dev.glassworks.engine.vitro
 
 import android.app.Application
+import dev.glassworks.engine.vitro.cards.AlarmModes
 import dev.glassworks.engine.vitro.cards.ColorTempSliderView
 import dev.glassworks.engine.vitro.cards.LightCaps
 import dev.glassworks.engine.vitro.cards.RgbColorWheelView
@@ -70,6 +71,25 @@ class MoreInfoControlsTest {
         assertEquals(0f, ColorTempSliderView.fractionOf(2000, 2000, 6500), 0.0001f)
         assertEquals(1f, ColorTempSliderView.fractionOf(9000, 2000, 6500), 0.0001f)
         assertEquals(0.5f, ColorTempSliderView.fractionOf(4000, 4000, 4000), 0.0001f)
+    }
+
+    @Test
+    fun colorTempPillReachesTheDevicesOwnLimits() {
+        // 50 K rounding would leave both ends inside the range.
+        assertEquals(1538, ColorTempSliderView.kelvinAt(0f, 1538, 6520))
+        assertEquals(6520, ColorTempSliderView.kelvinAt(1f, 1538, 6520))
+        assertEquals(4050, ColorTempSliderView.kelvinAt(0.5f, 1538, 6520))
+    }
+
+    @Test
+    fun alarmButtonsFollowTheSupportedModes() {
+        fun alarm(features: Int?) = EntityState(
+            "alarm_control_panel.home", "disarmed",
+            if (features == null) emptyMap() else mapOf("supported_features" to features),
+        )
+        assertEquals(listOf("alarm_arm_away", "alarm_arm_night", "alarm_disarm"), AlarmModes.actions(alarm(2 or 4)).map { it.second })
+        assertEquals(listOf("alarm_arm_home", "alarm_arm_away", "alarm_disarm"), AlarmModes.actions(alarm(null)).map { it.second })
+        assertEquals(listOf("alarm_disarm"), AlarmModes.actions(alarm(8)).map { it.second }) // trigger only: Disarm stays
     }
 
     @Test

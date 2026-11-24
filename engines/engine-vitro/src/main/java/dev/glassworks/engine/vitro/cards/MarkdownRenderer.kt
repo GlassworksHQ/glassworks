@@ -168,6 +168,10 @@ class MdIconSpan(
 /** The picture of one Markdown `<img>`: a vector [svg] (data URI) or a loaded [bitmap], drawn stretched to its box. */
 class MdPicture(val svg: MdSvg?) {
     var bitmap: Bitmap? = null
+
+    /** The image's own size in pixels when [bitmap] was decoded smaller (an embedded picture past the budget). */
+    var intrinsicWidth = 0
+    var intrinsicHeight = 0
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val rect = RectF()
     private val matrix = Matrix()
@@ -220,11 +224,36 @@ class MdImageSpan(
     var natural: Boolean = false
     var run: CssLineBoxSpan.Run? = null
 
+    /** `visibility: hidden`: its room, nothing drawn. */
+    var hidden: Boolean = false
+
+    /** A natural image with one CSS dimension set (`<img width="100">`): the other follows the picture's shape. */
+    var fixedWidthCss: Float? = null
+    var fixedHeightCss: Float? = null
+
     /** Takes the loaded picture's natural size; true when it changed (the text needs laying out again). */
     fun applyNaturalSize(dp: Float, maxWidthPx: Int): Boolean {
         val bmp = picture.bitmap ?: return false
-        var nw = (bmp.width * dp).roundToInt().coerceAtLeast(1)
-        var nh = (bmp.height * dp).roundToInt().coerceAtLeast(1)
+        val iw = picture.intrinsicWidth.takeIf { it > 0 } ?: bmp.width
+        val ih = picture.intrinsicHeight.takeIf { it > 0 } ?: bmp.height
+        val fw = fixedWidthCss
+        val fh = fixedHeightCss
+        var nw: Int
+        var nh: Int
+        when {
+            fw != null -> {
+                nw = (fw * dp).roundToInt().coerceAtLeast(1)
+                nh = (nw.toLong() * ih / iw.coerceAtLeast(1)).toInt().coerceAtLeast(1)
+            }
+            fh != null -> {
+                nh = (fh * dp).roundToInt().coerceAtLeast(1)
+                nw = (nh.toLong() * iw / ih.coerceAtLeast(1)).toInt().coerceAtLeast(1)
+            }
+            else -> {
+                nw = (iw * dp).roundToInt().coerceAtLeast(1)
+                nh = (ih * dp).roundToInt().coerceAtLeast(1)
+            }
+        }
         if (maxWidthPx in 1 until nw) {
             nh = (nh.toLong() * maxWidthPx / nw).toInt().coerceAtLeast(1)
             nw = maxWidthPx
@@ -245,6 +274,7 @@ class MdImageSpan(
     }
 
     override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: Paint) {
+        if (hidden) return
         val t = if (alignTop) top.toFloat() else (y - h).toFloat()
         picture.draw(canvas, context, x, t, w.toFloat(), h.toFloat(), radiusPx)
     }
@@ -273,7 +303,8 @@ class MdImageView(
         var w = cssWidth?.let { l -> if (l.percent && mode == MeasureSpec.UNSPECIFIED) null else (l.resolve(avail / dp) * dp).roundToInt() }
             ?: if (hPx != null && r != null) (hPx * r).roundToInt() else null
             ?: picture.svg?.intrinsicWidth?.let { (it * dp).roundToInt() }
-            ?: picture.bitmap?.let { (it.width * dp).roundToInt() }
+            // The image's own width (an embedded picture past the budget is drawn from a smaller bitmap).
+            ?: picture.bitmap?.let { ((picture.intrinsicWidth.takeIf { w -> w > 0 } ?: it.width) * dp).roundToInt() }
             ?: (300 * dp).roundToInt()
         if (mode != MeasureSpec.UNSPECIFIED) w = minOf(w, avail)
         val h = hPx ?: if (r != null && r > 0f) (w / r).roundToInt() else (150 * dp).roundToInt()
@@ -797,7 +828,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         box.cssWidth = s.width
         box.cssHeight = s.height
         box.cssMaxWidth = s.maxWidth
-        if (s.background != null || s.borderWidth.any { it > 0f }) {
+        if (!s.hidden && (s.background != null || s.borderWidth.any { it > 0f })) {
             box.background = MdBoxDrawable(s.background, s.borderRadius * dp, FloatArray(4) { s.borderWidth[it] * dp }, s.borderColor)
         }
         if (s.overflowHidden && s.borderRadius > 0f) {
@@ -870,26 +901,39 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         return MdTableView(ctx.context, s, rows, dp).apply { if (s.opacity < 1f) alpha = s.opacity }
     }
 
-    /** The picture for [src]: data-URI SVGs are parsed here, anything else is fetched by [load]. */
+    /**
+     * The picture for [src]: data-URI SVGs are parsed here; an embedded raster (`data:image/…;base64`) and anything
+     * else is loaded by [load], off the main thread.
+     */
     private fun picture(src: String): MdPicture? {
         if (src.startsWith("data:", ignoreCase = true)) {
             MdSvg.fromDataUri(src)?.let { return MdPicture(it) }
-            if (src.substringBefore(',').endsWith(";base64", ignoreCase = true)) {
-                val bmp = runCatching {
-                    val bytes = android.util.Base64.decode(src.substringAfter(','), android.util.Base64.DEFAULT)
-                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                }.getOrNull() ?: return null
-                return MdPicture(null).apply { bitmap = bmp }
-            }
-            return null
+            return if (isEmbeddedRaster(src)) MdPicture(null) else null
         }
         return MdPicture(null)
     }
 
-    /** Fetches [picture] once [owner] is on screen (a hidden card loads none, as on HA's page). */
+    /**
+     * Fetches [picture] once [owner] is on screen (a hidden card loads none, as on HA's page). An embedded raster
+     * fetches nothing: it is decoded off the main thread at once.
+     */
     private fun load(src: String, picture: MdPicture, owner: View, done: () -> Unit) {
+        if (isEmbeddedRaster(src)) {
+            ctx.decodeEmbedded(src) { decoded ->
+                if (decoded != null) {
+                    picture.intrinsicWidth = decoded.width
+                    picture.intrinsicHeight = decoded.height
+                    picture.bitmap = decoded.bitmap
+                    done()
+                }
+            }
+            return
+        }
         ctx.loadImage(src, owner) { bmp -> if (bmp != null) { picture.bitmap = bmp; done() } }
     }
+
+    private fun isEmbeddedRaster(src: String): Boolean =
+        src.startsWith("data:image/", ignoreCase = true) && src.substringBefore(',').endsWith(";base64", ignoreCase = true)
 
     /** An `<img>` made a block by its sheet (`display: block`). */
     private fun blockImage(node: MdNode): View? {
@@ -899,6 +943,8 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         val view = MdImageView(ctx.context, picture, s.width, s.height?.takeIf { !it.percent }?.value, s.borderRadius * dp, dp)
         if (!picture.ready) load(src, picture, view) { view.requestLayout(); view.invalidate() }
         if (s.opacity < 1f) view.alpha = s.opacity
+        // Its room, nothing drawn; still shown as far as loading goes, so the picture (and its size) arrives.
+        if (s.hidden) view.alpha = 0f
         return view
     }
 
@@ -949,10 +995,17 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             }
         }
         if (images.isNotEmpty()) tv.tag = IMAGE_TAG
+        // On every inline text view: an in-place update can give one its first link later (it only swaps the text).
+        tv.setOnTouchListener(MdLinkSpan.Touch())
         return tv
     }
 
-    private class InlineState { var lastSpace = true }
+    private class InlineState {
+        var lastSpace = true
+
+        /** Text ranges of `visibility: hidden` content: painted invisible, so a link there takes no taps either. */
+        val hidden = ArrayList<IntRange>()
+    }
 
     private fun inline(
         n: MdNode,
@@ -969,6 +1022,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             if (sb.length > start) {
                 styleRun(sb, start, s, alphaMul)
                 runs += lineBox(s, start, sb.length)
+                if (s.hidden) st.hidden += start until sb.length
             }
             return
         }
@@ -988,8 +1042,9 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                     val xh = parentStyle.fontSize * X_HEIGHT * dp
                     val start = sb.length
                     sb.append('￼')
-                    val color = MarkdownInline.scaleAlpha(s.color, alphaMul * s.opacity)
+                    val color = MarkdownInline.scaleAlpha(s.color, if (s.hidden) 0f else alphaMul * s.opacity)
                     sb.setSpan(MdIconSpan(icon, color, px, xh, s.relativeShiftY() * dp), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    if (s.hidden) st.hidden += start until sb.length
                     runs += CssLineBoxSpan.Run(start, sb.length, xh / 2f + px / 2f, px / 2f - xh / 2f)
                     st.lastSpace = false
                 }
@@ -1006,20 +1061,28 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                     else if (w == null) w = h!! * ratio
                     else if (h == null) h = w / ratio
                 }
-                // A bitmap with no CSS size takes its natural size once loaded (MdImageSpan.natural).
-                val natural = src != null && picture != null && svg == null && w == null && h == null
+                // A bitmap missing a CSS size takes its natural size once loaded (MdImageSpan.natural): both from the
+                // picture, or the one not given from the picture's shape.
+                val natural = src != null && picture != null && svg == null && (w == null || h == null)
                 if (src != null && picture != null && ((w != null && h != null) || natural)) {
                     val wpx = if (natural) 0 else (w!! * dp).roundToInt().coerceAtLeast(1)
                     val hpx = if (natural) 0 else (h!! * dp).roundToInt().coerceAtLeast(1)
                     val top = s.verticalAlign == "top"
                     val span = MdImageSpan(src, wpx, hpx, s.borderRadius * dp, top, picture, ctx.context)
+                    span.hidden = s.hidden
                     val start = sb.length
                     sb.append('\uFFFC')
                     sb.setSpan(span, start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     val run = if (top) CssLineBoxSpan.Run(start, sb.length, 0f, 0f, hpx.toFloat())
                     else CssLineBoxSpan.Run(start, sb.length, hpx.toFloat(), 0f)
                     runs += run
-                    if (natural) { span.natural = true; span.run = run }
+                    if (s.hidden) st.hidden += start until sb.length
+                    if (natural) {
+                        span.natural = true
+                        span.run = run
+                        span.fixedWidthCss = w
+                        span.fixedHeightCss = h
+                    }
                     images += span
                     st.lastSpace = false
                 } else {
@@ -1035,8 +1098,21 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                 val start = sb.length
                 val mul = alphaMul * s.opacity
                 for (c in n.children) inline(c, sb, runs, images, st, mul)
+                // A link to a dashboard path navigates there in place, as HA's markdown does. Other schemes (http,
+                // https, …) stay text: the panel has no browser to send them to.
+                val href = if (n.tag == "a") n.attrs["href"]?.trim() else null
+                if (href != null && href.startsWith("/") && !href.startsWith("//") && sb.length > start) {
+                    // Only the visible parts: hidden text keeps its room but takes no tap (a descendant that is
+                    // visible again does).
+                    var from = start
+                    for (h in st.hidden.filter { it.first >= start }.sortedBy { it.first }) {
+                        if (h.first > from) sb.setSpan(MdLinkSpan(href, ctx.navigate), from, h.first, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        from = maxOf(from, h.last + 1)
+                    }
+                    if (sb.length > from) sb.setSpan(MdLinkSpan(href, ctx.navigate), from, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
                 inlineMargin(sb, s.margin[1])
-                if (s.background != null && sb.length > start) {
+                if (s.background != null && !s.hidden && sb.length > start) {
                     sb.setSpan(BackgroundColorSpan(MarkdownInline.scaleAlpha(s.background!!, mul)), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
             }
@@ -1082,10 +1158,11 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         fun span(what: Any) = sb.setSpan(what, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         span(AbsoluteSizeSpan((s.fontSize * dp).roundToInt().coerceAtLeast(1), false))
         span(MdTypefaceSpan(typefaceFor(s)))
-        span(ForegroundColorSpan(MarkdownInline.scaleAlpha(s.color, alphaMul)))
+        // `visibility: hidden` paints nothing and keeps its room (a descendant may be visible again).
+        span(ForegroundColorSpan(MarkdownInline.scaleAlpha(s.color, if (s.hidden) 0f else alphaMul)))
         if (s.letterSpacing != 0f && s.fontSize > 0f) span(LetterSpacingSpan(s.letterSpacing / s.fontSize, null))
-        if (s.underline) span(UnderlineSpan())
-        if (s.strike) span(StrikethroughSpan())
+        if (s.underline && !s.hidden) span(UnderlineSpan())
+        if (s.strike && !s.hidden) span(StrikethroughSpan())
     }
 
     /** The CSS inline box of text in style [s]: its line height split evenly around the glyphs. */
@@ -1314,3 +1391,50 @@ internal object MdTreeCompare {
     }
 }
 
+/**
+ * A Markdown link to a dashboard path: a tap navigates there. Drawn as the cascade styled it (no link color or
+ * underline of Android's own). Taps elsewhere in the text are left to the card ([Touch] only takes those on a link).
+ */
+internal class MdLinkSpan(val href: String, private val navigate: (String) -> Unit) : android.text.style.ClickableSpan() {
+    override fun onClick(widget: View) = navigate(href)
+
+    override fun updateDrawState(ds: android.text.TextPaint) {}
+
+    /** Takes a gesture only when it starts on a link, and follows the link if it also ends there. One per view. */
+    class Touch : View.OnTouchListener {
+        private var down: MdLinkSpan? = null
+
+        override fun onTouch(v: View, ev: android.view.MotionEvent): Boolean {
+            val tv = v as? TextView ?: return false
+            val text = tv.text as? Spanned ?: return false
+            val layout = tv.layout ?: return false
+            fun spanAt(x: Float, y: Float): MdLinkSpan? {
+                val lx = x - tv.totalPaddingLeft + tv.scrollX
+                val ly = y - tv.totalPaddingTop + tv.scrollY
+                // Off the text (above, below, or beside a line's glyphs): no link, whatever offset is nearest.
+                if (ly < 0f || ly > layout.height) return null
+                val line = layout.getLineForVertical(ly.toInt())
+                if (lx < layout.getLineLeft(line) || lx > layout.getLineRight(line)) return null
+                val off = layout.getOffsetForHorizontal(line, lx)
+                return text.getSpans(off, off, MdLinkSpan::class.java).firstOrNull()
+            }
+            return when (ev.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    down = spanAt(ev.x, ev.y)
+                    down != null
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    val d = down
+                    down = null
+                    if (d != null && spanAt(ev.x, ev.y) === d) d.onClick(tv)
+                    d != null
+                }
+                android.view.MotionEvent.ACTION_CANCEL -> {
+                    down = null
+                    false
+                }
+                else -> down != null
+            }
+        }
+    }
+}

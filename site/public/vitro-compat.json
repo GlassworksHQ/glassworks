@@ -85,5 +85,25 @@
     "light-color-favorites",
     "numeric-input",
     "vacuum-commands"
-  ]
+  ],
+  "configDependentTypes": {
+    "custom:bubble-card": {
+      "option": "card_type",
+      "default": "button",
+      "native": [
+        "button",
+        "separator"
+      ]
+    },
+    "custom:layout-card": {
+      "option": "layout_type",
+      "default": "masonry-layout",
+      "native": [
+        "masonry-layout",
+        "horizontal-layout",
+        "vertical-layout",
+        "grid-layout"
+      ]
+    }
+  }
 }
