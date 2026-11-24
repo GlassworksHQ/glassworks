@@ -3,30 +3,39 @@ topic: access
 evidence: verified
 ---
 
-# Stock 1.24.0 Mirror probe: userdata-only code execution, vendor inventory, and `FS_IOC_FIEMAP`
+# Stock 1.24.0 Mirror probe: userdata-only code execution, reversible surgical ADB, and vendor inventory
 
-**Status (2026-11-22): verified on an untouched stock `1.24.0` Mirror.** Writing only `userdata`
-(leaving `system`, `boot`, `recovery`, `modem`, and `persist` untouched) runs our plain
-`untrusted_app` HTTP probe (`dev.glassworks.stockprobe`, `uid=10099`) automatically at
-`BOOT_COMPLETED` with zero ADB and zero touchscreen, reachable over stock's own `mirror-<serial>`
-setup SoftAP (`192.168.43.1:18765`). The probe extracted `/proc/config.gz`, ramdisk SELinux files,
-`init.svc.*`, `services.jar`, `pronto_wlan.ko`, `FS_IOC_FIEMAP` physical block extents, and the
-full 462-file Option C vendor audit including camera (**443/462** readable without root — 39 MB
-pulled cleanly; exact same 14 `*_exec` daemons denied as predicted in [option-c.md](option-c.md)).
-Two high-impact findings: stock `1.24.0` has **no active `dm-verity`** (single contiguous `FIEMAP`
-extents for `/system/etc/init.qcom.post_boot.sh` and `/system/build.prop`), and although it runs a
-different kernel git hash (`3.10.49-perf-g4869d64961b`) than the dev unit (`gf46dad5260f`), its
-`__versions` symbol CRCs (`module_layout=0xa5b7f7dd`, `printk=0x27e1a049`, `__kmalloc=0xd2b09ce5`)
-match `gf46dad5260f` — explaining why Linux 3.10's `same_magic()` accepts Glass Panes'
-`pronto_wlan.ko` when `CONFIG_MODVERSIONS=y`.
+**Status (2026-11-24): Phase 1 & Phase 2 surgical USB ADB verified on an untouched stock `1.24.0`
+Mirror.**
+- **Phase 1 (2026-11-22, verified):** Writing only `userdata` (leaving `system`, `boot`, `recovery`,
+  `modem`, and `persist` untouched) runs our plain `untrusted_app` HTTP probe
+  (`dev.glassworks.stockprobe`, `uid=10099`) automatically at `BOOT_COMPLETED` with zero ADB and
+  zero touchscreen, reachable over stock's own `mirror-<serial>` setup SoftAP (`192.168.43.1:18765`).
+  The probe extracted `/proc/config.gz`, ramdisk SELinux files, `init.svc.*`, `services.jar`,
+  `pronto_wlan.ko`, `FS_IOC_FIEMAP` physical block extents, and the full 462-file Option C vendor
+  audit including camera (**443/462** readable without root — 39 MB pulled cleanly; exact same 14
+  `*_exec` daemons denied as predicted in [option-c.md](option-c.md)). Stock `1.24.0` has **no
+  active `dm-verity`**, and although it runs a different kernel git hash
+  (`3.10.49-perf-g4869d64961b`) than the dev unit (`gf46dad5260f`), its `__versions` symbol CRCs
+  (`module_layout=0xa5b7f7dd`, `printk=0x27e1a049`, `__kmalloc=0xd2b09ce5`) match `gf46dad5260f`.
+- **Phase 2 (2026-11-24, verified):** Confirmed **`services.odex` is absent** on stock `1.24.0` and
+  `/system/framework/services.jar` (`2,411,806` B) occupies a single contiguous physical extent
+  (`block 40597 × 589`). Flashing an exact-byte-length surgical sparse patch (`patch-services.sparse`,
+  `DONT_CARE` everywhere outside those 589 blocks, with a byte-exact `restore-services.sparse` undo
+  saved first) opened **authorized USB ADB (`uid=2000(shell)`, SELinux `Enforcing`) on untouched
+  stock `1.24.0`** (`ro.build.version.mirror=1.24.0`, only **27** installed packages total).
+  An attempted Step 4 raw partition dump via `init.qcom.post_boot.sh` (`qti_init_shell`) hit a dead
+  end on stock `1.24.0` (`avc: denied { search }` on `/data/local/tmp`, and stock `1.24.0`'s
+  `/sepolicy` does not grant `qti_init_shell` `capability:sys_module`).
 
 Device: untouched stock lululemon Studio Mirror (`MSM8916`, `variant: SBC eMMC`, `secure: yes`,
 `Device unlocked: false`, `ro.build.version.mirror=1.24.0`, `ro.build.hwver.mirror=mirror-v1`).
-Host: Windows PC (community tester), connected over micro-USB for fastboot and Wi-Fi to stock's
+Host: Windows PC (community tester), connected over micro-USB for fastboot/ADB and Wi-Fi to stock's
 `mirror-<serial>` SoftAP for HTTP extraction.
 Tools: [`tools/mirror/stock-probe.ts`](../../../tools/mirror/stock-probe.ts),
-[`tools/mirror/stock-probe-app/`](../../../tools/mirror/stock-probe-app/), Android SDK `fastboot`
-and `adb`, `@glassworks/ext4`.
+[`tools/mirror/stock-probe-app/`](../../../tools/mirror/stock-probe-app/),
+[`tools/mirror/stock-surgical-adb.ts`](../../../tools/mirror/stock-surgical-adb.ts),
+Android SDK `fastboot` and `adb`, `@glassworks/ext4`, `@glassworks/bootpatch`.
 
 ## Question
 
@@ -43,9 +52,9 @@ untouched stock `1.2x+` Mirror:
 4. How closely do stock `1.24.0`'s vendor binaries and kernel match Glass Panes (`mirror-android-2`)
    and our Option C inventory ([option-c-vendor-files.tsv](option-c-vendor-files.tsv))?
 
-## How the `userdata`-only breakthrough works
+## How we got here
 
-Before this run, untouched stock `1.2x+` Mirrors looked completely sealed to read-only inspection:
+Before Phase 1, untouched stock `1.2x+` Mirrors looked completely sealed to read-only inspection:
 fastboot has no partition read-back and no `fastboot boot`, there is no touchscreen to approve an
 ADB prompt, stock `adbd` ignores `/data/misc/adb/adb_keys`, and flashing a replacement `system.img`
 permanently destroys stock firmware. Four small Android 6 facts chained together to break that wall
@@ -68,8 +77,45 @@ without writing a single byte outside `userdata`:
 4. **Physical eMMC block maps without root (`FS_IOC_FIEMAP`):** Even from an unprivileged
    `untrusted_app` (`uid=10099`), Linux's `FS_IOC_FIEMAP` ioctl on read-only `/system/` file
    descriptors is allowed by stock's SELinux policy. Combined with no active `dm-verity` and
-   fastboot's sparse `DONT_CARE` chunks, knowing a file's exact 4 KiB physical extents unlocks
-   byte-for-byte reversible surgical patching of individual `/system` files.
+   fastboot's sparse `DONT_CARE` chunks, knowing a file's exact 4 KiB physical extents unlocked
+   Phase 2: byte-for-byte reversible surgical patching of individual `/system` files.
+
+### Extending Phase 1 into Phase 2 (reversible surgical USB ADB)
+
+Once Phase 1 showed that `/system` has no active `dm-verity` and `services.jar` contains an
+un-odexed `classes.dex`, we asked whether we could open authorized USB ADB on untouched stock
+`1.24.0` by overwriting **only** `services.jar`'s physical blocks—keeping the rest of `/system`
+untouched, SELinux **Enforcing**, and rollback as simple as flashing back the original 589 blocks.
+Three constraints had to be solved before touching hardware:
+
+- **No `services.odex` shadow:** If stock pre-compiled `/system/framework/oat/arm64/services.odex`,
+  ART would ignore edits to `services.jar`. We built a hard stop-gate in `stock-surgical-adb.ts`
+  to check `/system/framework` and `/system/framework/oat` before writing anything; live preflight
+  confirmed `services.odex` is absent.
+- **Exact byte length (`2,411,806` B) across platforms:** An in-place sparse block write cannot grow
+  a file without editing ext4 inode metadata. Node 24's bundled Chromium `node:zlib` level-9 deflate
+  bloated `classes.dex` by +102 KB (`2,506,465` B, which would not fit). Switching to
+  `@glassworks/bootpatch`'s `zlib-rs` WASM level-9 deflate compressed the patched `classes.dex`
+  smaller than stock deterministically across macOS, Windows, and Linux, leaving `3,592` B of ZIP
+  EOCD comment padding headroom to hit the exact original `2,411,806` B length.
+- **Minimal DEX string-table churn:** Replacing the `"unable to start
+  customAdbPublicKeyConfirmationComponent "` log string with a shorter or differently-sorted string
+  shifted ~44,000 DEX string indices. Preserving the `"unable to start "` prefix and writing
+  `"unable to start " + <47-char MD5> + "        "` (extracted via `substring(16, 63)`) shifted
+  only ~5 string indices and passed both `dexdump -c` and real Android 6.0.1 ARM64 `dex2oat`
+  off-device before flashing.
+
+The first live Phase 2 run stopped cleanly at the Step 3 safety gate because the tool initially
+compared `fastboot getvar partition-size:system` against Glass Panes' ext4 image size
+(`1,288,413,184` B) instead of the Mirror's actual eMMC `system` partition (`0x4cccd000` =
+`1,288,491,008` B, 77,824 B larger). Updating the default to `0x4cccd000` (and auto-rebuilding the
+surgical sparse images to match the live `partition-size:system`) let Step 3 pass on the first flash.
+
+Finally, we tested whether Step 4 could stream a raw `system` + `boot` backup over the new USB ADB
+session by temporarily hooking `init.qcom.post_boot.sh` (20 blocks), based on [mirror-root.md](mirror-root.md) §5. That hit a clean dead end on stock `1.24.0`: live `dmesg` showed
+`qti_init_shell` is denied `search` on `/data/local/tmp` (`shell_data_file`), and inspecting stock
+`1.24.0`'s pulled `/sepolicy` showed that—unlike the older dev unit—`qti_init_shell` has no
+`capability:sys_module` rule at all.
 
 ## What we tried
 
@@ -136,6 +182,41 @@ outside the repository.
    `key-system/system/etc/init.qcom.post_boot.sh`, `pronto_wlan.ko` strings, and `services.jar`
    strings off-device. Nothing from the pull is committed.
 
+5. **Phase 2 surgical USB ADB on untouched stock `1.24.0`** (2026-11-24, verified)
+   With the Mirror booted into the Phase 1 `mirror-<serial>` SoftAP and connected over micro-USB:
+   ```
+   $ npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts
+   ```
+   - **Step 1 (read-only preflight over SoftAP):** confirmed `74` entries in `/system/framework`,
+     `services.odex detected: no`, `15` entries in `/system/app`, `10` entries in `/system/priv-app`,
+     single contiguous `FIEMAP` extents for `services.jar` (`block 40597 × 589`) and
+     `init.qcom.post_boot.sh` (`block 22517 × 20`), and wrote byte-exact `restore-services.sparse`
+     and `restore-post-boot.sparse` under `<out>/backup/`.
+   - **Step 2 (local build):** patched `UsbDebuggingManager.startConfirmation()` to authorize only
+     the tester's host ADB key (`EOCD pad: 3592 B`, exact `2,411,806` B) and built
+     `patch-services.sparse` + `userdata-adb.sparse`.
+   - **Step 3 (surgical flash & ADB verification):** first attempt tripped the partition-size gate
+     cleanly (`system=1288491008 expected 1288413184`, zero bytes written). After fixing the default
+     to `0x4cccd000` (`1,288,491,008` B), flashing `patch-services.sparse` + `userdata-adb.sparse`
+     and rebooting brought up **authorized USB ADB** (`uid=2000(shell)`, `getenforce=Enforcing`,
+     `ro.build.version.mirror=1.24.0`, `pm list packages` count: `27`).
+
+6. **Dead end: Step 4 raw backup via `init.qcom.post_boot.sh` (`qti_init_shell`)** (2026-11-24, verified)
+   Temporarily hooking `init.qcom.post_boot.sh` (20 blocks) to load an external local test module
+   from `/data/local/tmp/` left SELinux `Enforcing` and block nodes unreadable (`Permission denied`).
+   Live `adb shell dmesg` recorded:
+   ```
+   avc: denied { search } for pid=1510 comm="sh" name="tmp" dev="mmcblk0p29" ino=212994 scontext=u:r:qti_init_shell:s0 tcontext=u:object_r:shell_data_file:s0 tclass=dir permissive=0
+   ```
+   Parsing the pulled stock `1.24.0` `/sepolicy` (version 30, 923 types, 9,061 avtab rules) confirmed
+   that `qti_init_shell` has **no** `capability:sys_module` rule on stock `1.24.0`, ruling out
+   `init.qcom.post_boot.sh` for loading kernel modules on `1.24.0`.
+
+7. **Live ADB process & `/sepolicy` capability audit on stock `1.24.0`** (2026-11-24, verified / read)
+   Checked `/sepolicy` for `capability:sys_module` and `blk_file:read`, and ran read-only `ps -Z`,
+   `/proc/<pid>/status`, `/proc/<pid>/stat`, `ls -lZ`, and `/system/etc/dpm/dpm.conf` checks over
+   the new USB ADB session (details in Result §7 below).
+
 ## Result
 
 ### 1. Stock `1.24.0` identity, kernel, and boot configuration (verified)
@@ -187,11 +268,12 @@ CONFIG_SECURITY_SELINUX=y
 |---|---:|---:|---:|---:|---:|
 | `/system/etc/init.qcom.post_boot.sh` | 80,815 | 496 | `22517` | `20` | `92,229,632` |
 | `/system/build.prop` | 7,101 | 382 | `21093` | `2` | `86,396,928` |
+| `/system/framework/services.jar` | 2,411,806 | — | `40597` | `589` | `166,285,312` |
 
 Because `/system` is not dm-verity protected and `fastboot flash system` with Android sparse
-`DONT_CARE` chunks skips untouched blocks, **surgical in-place patching of
-`/system/etc/init.qcom.post_boot.sh` (blocks `22517..22536`) is feasible on untouched stock
-`1.24.0`**, with a byte-exact rollback using the original 20 blocks already read over HTTP.
+`DONT_CARE` chunks skips untouched blocks, **surgical in-place patching of individual `/system`
+files (such as `services.jar` at blocks `40597..41185`) works cleanly on untouched stock `1.24.0`**,
+with a byte-exact rollback using the original blocks read over HTTP beforehand.
 
 ### 3. `pronto_wlan.ko` kernel git hash vs matching ABI CRCs (verified)
 
@@ -283,7 +365,49 @@ slot from [community-root-and-network-adb.md](community-root-and-network-adb.md)
 stock `1.24.0`). `dt-panel.txt` returned empty (`0` bytes) because `untrusted_app` could not list
 `/proc/device-tree`.
 
+### 7. Phase 2 surgical USB ADB, stock app inventory, and `/sepolicy` audit (verified / read)
+
+- **Authorized USB ADB on stock `1.24.0` (2026-11-24, verified):**
+  ```
+  USB ADB authorized: YES
+  id: uid=2000(shell) gid=2000(shell) groups=2000(shell),1004(input),1007(log),1011(adb),1015(sdcard_rw),1028(sdcard_r),3001(net_bt_admin),3002(net_bt),3003(inet),3006(net_bw_stats) context=u:r:shell:s0
+  getenforce: Enforcing
+  ro.build.version.mirror: 1.24.0
+  pm list packages count: 27
+  ```
+- **No `services.odex` (2026-11-24, verified):** `/system/framework` has `74` entries and no
+  `services.odex` anywhere under `/system/framework` or `/system/framework/oat`.
+- **Lean stock `1.24.0` app inventory (2026-11-24, verified):**
+  - `/system/app` (`15` entries): `Bluetooth`, `CertInstaller`, `KeyChain`, `NetworkSetting`,
+    `Remover`, `co.mirror.cw`, `co.mirror.datacap`, `co.mirror.elevator`, `com.mirror.launcher`,
+    `com.mirror.mirrorupdater`, `com.mirror.services`, `com.mirror.watchdog`, `fastdormancy`,
+    `shutdownlistener`, `telresources`.
+  - `/system/priv-app` (`10` entries): `DefaultContainerService`, `DownloadProvider`,
+    `ExternalStorageProvider`, `FusedLocation`, `MediaProvider`, `PackageInstaller`, `Settings`,
+    `SettingsProvider`, `Shell`, `qcrilmsgtunnel`.
+- **Kernel command line & SELinux policy audit (2026-11-24, verified / read):**
+  - Live `dmesg` confirms stock `1.24.0`'s kernel command line includes
+    `androidboot.selinux=permissive` and `androidboot.authorized_kernel=true` (like the dev unit in
+    [mirror-root.md](mirror-root.md), the `user` build's `init` still enforces SELinux once
+    `/sepolicy` loads).
+  - Parsing the pulled stock `1.24.0` `/sepolicy` (version 30, 923 types, 9,061 avtab rules) found:
+    - Only 5 concrete domains hold `capability:sys_module`: `init`, `dpmd`, `qlogd`, `mmi`, and
+      `system_server`. `qti_init_shell` does **not** hold `capability:sys_module` and cannot search
+      `shell_data_file` (`/data/local/tmp`), ruling out `init.qcom.post_boot.sh` for raw partition
+      dumps on stock `1.24.0`.
+    - Only `install_recovery` holds `blk_file:read` on `boot_block_device` (`mmcblk0p19`), and
+      `rmt_storage` holds `blk_file:read` on `root_block_device` (`mmcblk0`), though `ps -Z` shows
+      `rmt_storage` runs unprivileged as `nobody`.
+  - Live `ps -Z` and `/proc/<pid>/status` on stock `1.24.0` observed `/system/bin/dpmd` running at
+    boot as `u:r:dpmd:s0` (`uid=0`, `CapEff: 0000001fffffffff`) with a forked `system` child, and
+    five `u:object_r:system_file:s0` DPM libraries present in both `/system/vendor/lib64/` and
+    `/system/vendor/lib/` (`libdpmctmgr.so`, `libdpmfdmgr.so`, `libdpmframework.so`, `libdpmnsrm.so`,
+    `libdpmtcm.so`). For daily Glassworks operation on stock `1.24.0`, root is **not** needed: the
+    `services.jar` USB ADB hook stays SELinux `Enforcing` and is MIT-licensed.
+
 ## How to reproduce
+
+### Phase 1 — Read-only `userdata`-only probe (`stock-probe.ts`)
 
 Using [`tools/mirror/stock-probe.ts`](../../../tools/mirror/stock-probe.ts):
 
@@ -307,26 +431,39 @@ Using [`tools/mirror/stock-probe.ts`](../../../tools/mirror/stock-probe.ts):
    removes the probe APK while leaving untouched stock `system` intact. Note that stock cloud
    onboarding was already wiped in Step 1.
 
+### Phase 2 — Reversible surgical USB ADB (`stock-surgical-adb.ts`)
+
+With the Phase 1 probe app reachable on `mirror-<serial>` (`192.168.43.1:18765`) and micro-USB
+connected:
+
+```sh
+# Read-only preflight + save byte-exact restore-*.sparse undo images
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --preflight-only
+
+# Steps 1-3: enable reversible authorized USB ADB (SELinux Enforcing, keeps ADB active)
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --keep-adb
+
+# Revert system back to 100% untouched stock anytime (add --erase-userdata for factory reset)
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --undo --backup-dir <out>/backup
+
+# Re-apply the saved USB ADB hook later from the backup folder without Wi-Fi AP
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --apply-adb --backup-dir <out>/backup
+```
+
 ## Open questions
 
-1. **Reading the 14 SELinux-denied daemons (and full `system` / `boot` backup):** `untrusted_app`
-   and `shell` cannot read the 14 `*_exec` daemons ([option-c.md](option-c.md)), and `qti_init_shell`
-   cannot read `*_exec` or block devices either ([mirror-root.md](mirror-root.md) §5, §7). Because
-   `FS_IOC_FIEMAP` now gives us exact physical blocks for `/system/etc/init.qcom.post_boot.sh` and
-   `CONFIG_MODULE_SIG` is off, the two next paths to test on stock are:
-   - **Surgical `services.jar` + `post_boot.sh` sparse patch** (blocks from `FIEMAP`, fully
-     reversible by flashing back the original blocks) to get authorized USB ADB + `qti_init_shell`
-     on untouched stock without replacing `system` (and test running Glassworks directly on stock).
-   - **Loading a kernel module built against `g4869d64961b`'s `vermagic`/CRCs** (or testing
-     `flash_recovery` → `/system/bin/install-recovery.sh` for `boot`) to read the 14 denied daemons
-     or take a full bit-for-bit `system` + `boot` backup before flashing Glassworks.
+1. **Full raw `system` / `boot` backup from untouched stock `1.24.0`:** `untrusted_app`, `shell`,
+   and `qti_init_shell` (`init.qcom.post_boot.sh`) are all blocked by stock `1.24.0`'s `/sepolicy`
+   from reading `mmcblk0p22` / `mmcblk0p19` or loading modules. Remaining open question: how to
+   capture a clean local raw `system` + `boot` backup for maintainer testing without shipping any
+   vendor binaries or GPL payloads in Glassworks.
 2. **Does Glass Panes `mirror-android-2` / `mirror-android-3` break Wi-Fi on `1.24.0` units?**
    Even though `__versions` CRCs match (`module_layout=0xa5b7f7dd`, `printk=0x27e1a049`,
    `__kmalloc=0xd2b09ce5`) and Linux 3.10's `same_magic()` ignores the `-perf-g...` prefix under
    `CONFIG_MODVERSIONS=y`, diff every `__versions` CRC between `1.24.0`'s `pronto_wlan.ko` and
    Glass Panes' `pronto_wlan.ko` (or test on a `1.24.0` unit) to be 100% certain.
-3. **Zero-Wi-Fi-swap transport & Stock-in-place Kiln checks (next on dev Mirror once stock `1.24.0`
-   `system.img` is backed up):**
+3. **Zero-Wi-Fi-swap transport & Stock-in-place Kiln checks (next on a stock `1.24.0` unit with live
+   USB ADB):**
    - **MTP over the existing micro-USB cable:** stock `1.24.0` sets `persist.sys.usb.config=mtp,adb`
      and `persist.fuse_sdcard=true`. Test whether Android 6's `MtpService` automatically exposes
      `/sdcard` over USB without a screen tap on fresh OOBE (no lock screen). If so, the probe app
@@ -336,8 +473,9 @@ Using [`tools/mirror/stock-probe.ts`](../../../tools/mirror/stock-probe.ts):
    - **Fallback if MTP stays locked until tapped:** test pre-saving the user's home Wi-Fi in Stage 1
      `userdata` + `enable_wifi` marker to see if stock joins home Wi-Fi cleanly instead of
      `mirror-<serial>` SoftAP.
-   - **Stock-in-place viability:** once authorized ADB works on stock `1.24.0`, check (a) whether
-     `/system/framework/oat/arm64/services.odex` is absent, (b) free RAM after `pm disable-user` on
-     lululemon's stock apps, (c) whether stock `1.24.0` turns the backlight completely dark on
-     sleep, (d) `/data/local/bootanimation.zip` SELinux access vs surgical `/system/media/bootanimation.zip`
-     size, and (e) silent-update options (in-place priv-app slot vs device-owner).
+   - **Stock-in-place viability:** `/system/framework/oat/arm64/services.odex` is now **verified
+     absent** (2026-11-24). Still to test over the live stock `1.24.0` USB ADB session: (a) free RAM
+     after `pm disable-user` on lululemon's stock apps (`com.mirror.*`, `co.mirror.*`), (b) whether
+     stock `1.24.0` turns the backlight completely dark on sleep, (c) `/data/local/bootanimation.zip`
+     SELinux access vs surgical `/system/media/bootanimation.zip` size, and (d) silent-update
+     options (in-place priv-app slot vs device-owner).

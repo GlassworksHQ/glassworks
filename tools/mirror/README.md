@@ -176,8 +176,9 @@ physical 4 KiB blocks (`DONT_CARE` everywhere else) to authorize your own `--adb
   back.
 
 ```sh
-npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --preflight-only   # Step 1 only (read-only over SoftAP)
-npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --build-only       # Steps 1-2 locally (no flash)
-npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts                    # Steps 1-3: reversible authorized USB ADB
-npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --undo --backup-dir <out>/backup --erase-userdata
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --preflight-only                  # Step 1 only (read-only over SoftAP)
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --build-only                      # Steps 1-2 locally (no flash)
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --keep-adb                        # Steps 1-3: reversible authorized USB ADB (Enforcing)
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --undo --backup-dir <out>/backup  # Restore untouched stock system (add --erase-userdata for factory reset)
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --apply-adb --backup-dir <out>/backup  # Re-apply saved USB ADB hook without Wi-Fi AP
 ```
