@@ -1,11 +1,32 @@
 {
  "_comment": "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: 2.0% pixels, 1.0 px bounds, 0.5 px font). Regenerate with -PvitroParityUpdateBaseline=true; keep or write each \"reason\". An update records regressions too: read the diff before committing it, and keep the entries of cases with an open regression. #794 empties this file.",
+ "mirror/clock-date": {
+  "pixel": 0.1676,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "Vitro doesn't draw date_format's date line (HA: \"Monday November 23\" under the time, which HA moves up to make room; at this size HA clips the date's first letter itself). #791"
+ },
  "mirror/markdown-cardmod": {
   "pixel": 0.0202,
   "bounds": 2.7,
   "font": 0.3,
   "missingText": 0,
   "reason": "harness limit: Robolectric's Skia draws Inter's default instance and ignores its wght/opsz axes, so the 56 px weight-300 h1 renders regular and its line box differs (Humidity 2 px higher, card ~2.5 px off). On the panels Inter's axes apply: the Vitro Glass clock's light digits draw like HA's on the tablet and the S1 (2026-11-24)"
+ },
+ "mirror/markdown-cardmod-has": {
+  "pixel": 0.0882,
+  "bounds": 10.9,
+  "font": 4,
+  "missingText": 0,
+  "reason": "of the card_mod sheet Vitro applies only :host ha-card (the border); not :host { --card-text-align } (text stays left), ha-card:has(...) (no tint), or :has() in the ha-markdown$ sheet (heading not green, the bold paragraph 14 px, not 18). #791"
+ },
+ "mirror/markdown-img-natural": {
+  "pixel": 0.1826,
+  "bounds": 212.2,
+  "font": 0.3,
+  "missingText": 0,
+  "reason": "Vitro drops a Markdown <img> with no width or height; HA shows it at its natural size (192 px here), so Vitro's card is 212 px shorter. #791"
  },
  "mirror/mushroom-chips": {
   "pixel": 0.0234,
@@ -14,12 +35,26 @@
   "missingText": 0,
   "reason": "values now match HA (display precision from the registry); what's left is text rendering and chip edges about 1 px apart, just over 2% at the 1.5x panels' density"
  },
+ "mirror/mushroom-template-picture": {
+  "pixel": 0.1372,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "Vitro draws the template card's picture square where Mushroom crops it to a circle; the text block also sits 2-3 px higher. Badge matches. #791"
+ },
  "mirror/thermostat": {
   "pixel": 0.0015,
   "bounds": 0.7,
   "font": 0,
   "missingText": 2,
   "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
+ },
+ "s1/clock-date": {
+  "pixel": 0.1676,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "Vitro doesn't draw date_format's date line (HA: \"Monday November 23\" under the time, which HA moves up to make room; at this size HA clips the date's first letter itself). #791"
  },
  "s1/markdown-cardmod": {
   "pixel": 0.0148,
@@ -28,12 +63,33 @@
   "missingText": 0,
   "reason": "harness limit: Robolectric's Skia draws Inter's default instance and ignores its wght/opsz axes, so the 56 px weight-300 h1 renders regular and its line box differs (Humidity 2 px higher, card ~2.5 px off). On the panels Inter's axes apply: the Vitro Glass clock's light digits draw like HA's on the tablet and the S1 (2026-11-24)"
  },
+ "s1/markdown-cardmod-has": {
+  "pixel": 0.0882,
+  "bounds": 10.9,
+  "font": 4,
+  "missingText": 0,
+  "reason": "of the card_mod sheet Vitro applies only :host ha-card (the border); not :host { --card-text-align } (text stays left), ha-card:has(...) (no tint), or :has() in the ha-markdown$ sheet (heading not green, the bold paragraph 14 px, not 18). #791"
+ },
+ "s1/markdown-img-natural": {
+  "pixel": 0.1825,
+  "bounds": 212.2,
+  "font": 0.3,
+  "missingText": 0,
+  "reason": "Vitro drops a Markdown <img> with no width or height; HA shows it at its natural size (192 px here), so Vitro's card is 212 px shorter. #791"
+ },
  "s1/mushroom-chips": {
   "pixel": 0.0234,
   "bounds": 0.7,
   "font": 0,
   "missingText": 0,
   "reason": "values now match HA (display precision from the registry); what's left is text rendering and chip edges about 1 px apart, just over 2% at the 1.5x panels' density"
+ },
+ "s1/mushroom-template-picture": {
+  "pixel": 0.1372,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "Vitro draws the template card's picture square where Mushroom crops it to a circle; the text block also sits 2-3 px higher. Badge matches. #791"
  },
  "s1/thermostat": {
   "pixel": 0.0015,
@@ -42,12 +98,40 @@
   "missingText": 2,
   "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
  },
+ "tablet/clock-date": {
+  "pixel": 0.1611,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "Vitro doesn't draw date_format's date line (HA: \"Monday November 23\" under the time, which HA moves up to make room; at this size HA clips the date's first letter itself). #791"
+ },
  "tablet/markdown-cardmod": {
   "pixel": 0.0097,
   "bounds": 2.5,
   "font": 0,
   "missingText": 0,
   "reason": "harness limit: Robolectric's Skia draws Inter's default instance and ignores its wght/opsz axes, so the 56 px weight-300 h1 renders regular and its line box differs (Humidity 2 px higher, card ~2.5 px off). On the panels Inter's axes apply: the Vitro Glass clock's light digits draw like HA's on the tablet and the S1 (2026-11-24)"
+ },
+ "tablet/markdown-cardmod-has": {
+  "pixel": 0.0811,
+  "bounds": 11.7,
+  "font": 4,
+  "missingText": 0,
+  "reason": "of the card_mod sheet Vitro applies only :host ha-card (the border); not :host { --card-text-align } (text stays left), ha-card:has(...) (no tint), or :has() in the ha-markdown$ sheet (heading not green, the bold paragraph 14 px, not 18). #791"
+ },
+ "tablet/markdown-img-natural": {
+  "pixel": 0.1803,
+  "bounds": 212.2,
+  "font": 0.1,
+  "missingText": 0,
+  "reason": "Vitro drops a Markdown <img> with no width or height; HA shows it at its natural size (192 px here), so Vitro's card is 212 px shorter. #791"
+ },
+ "tablet/mushroom-template-picture": {
+  "pixel": 0.1244,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "Vitro draws the template card's picture square where Mushroom crops it to a circle; the text block also sits 2-3 px higher. Badge matches. #791"
  },
  "tablet/thermostat": {
   "pixel": 0.0019,
