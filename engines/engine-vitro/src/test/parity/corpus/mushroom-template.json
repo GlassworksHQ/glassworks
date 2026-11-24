@@ -1,0 +1,11 @@
+{
+  "title": "Mushroom template card with templated text and icon color",
+  "card": {
+    "type": "custom:mushroom-template-card",
+    "entity": "sensor.living_room_airdot_living_room_co2",
+    "primary": "Air quality",
+    "secondary": "{{ states('sensor.living_room_airdot_living_room_co2') | int(0) }} ppm",
+    "icon": "mdi:molecule-co2",
+    "icon_color": "{{ 'green' if states('sensor.living_room_airdot_living_room_co2') | int(0) < 800 else 'orange' }}"
+  }
+}

@@ -1,0 +1,72 @@
+{
+ "case": "button",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1795457280000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "hui-button-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Cactus",
+   "x": 98.09,
+   "y": 86.19,
+   "w": 49.8,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Off",
+   "x": 114.28,
+   "y": 105.38,
+   "w": 17.42,
+   "h": 15,
+   "size": 12.6,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.living_room_cactus": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": null,
+    "friendly_name": "Cactus",
+    "supported_features": 0
+   },
+   "lc": 1795508121.7617655
+  }
+ },
+ "templates": {}
+}

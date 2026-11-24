@@ -1,0 +1,4 @@
+{
+  "title": "Tile: input_select with select-options",
+  "card": { "type": "tile", "entity": "input_select.kitchen_blind_position", "features": [{ "type": "select-options" }] }
+}

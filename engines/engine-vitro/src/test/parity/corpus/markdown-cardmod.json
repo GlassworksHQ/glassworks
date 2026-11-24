@@ -1,0 +1,15 @@
+{
+  "title": "Markdown with card-mod sheets (the real dashboards' greeting style)",
+  "theme": "Vitro Glass",
+  "card": {
+    "type": "markdown",
+    "text_only": true,
+    "content": "###### Inside\n# {{ '%.1f' | format(states('sensor.living_room_airdot_living_room_temperature') | float(0)) }}°\n#### Humidity {{ states('sensor.living_room_airdot_living_room_humidity') | float(0) | round(0) | int }}%",
+    "card_mod": {
+      "style": {
+        ".": "ha-card { padding: 18px; } ha-card ha-markdown { padding: 0; }",
+        "ha-markdown$": "ha-markdown-element { color: #f4f4f5; } ha-markdown-element h6 { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #63636b; margin: 0; } ha-markdown-element h1 { font-size: 56px; font-weight: 300; line-height: 1; margin: 6px 0 4px; letter-spacing: -0.02em; } ha-markdown-element h4 { font-size: 15px; font-weight: 400; color: #a1a1aa; margin: 0; }"
+      }
+    }
+  }
+}

@@ -121,7 +121,12 @@ Vitro sits behind the same `Engine` interface as the GeckoView engine, and hands
 ./gradlew :vitro-test:assembleDebug
 ./gradlew test :kiosk:assembleDebug :generic-android:assembleDebug
 python3 -m unittest tools/vitro/test_showcase_ha.py   # the parity showcase server
+tools/vitro-parity/run.sh                             # the parity harness: Vitro vs Home Assistant, card by card
 ```
+
+### The parity harness
+
+The harness renders a corpus of cards in Home Assistant's real frontend and in Vitro at each panel's size and density, compares them (pixels, card bounds, text sizes), and writes a side-by-side report to `build/reports/vitro-parity/index.html`. Its committed references let it run in CI with no device and no Home Assistant. A case that drifts further than `src/test/parity/baseline.json` allows fails the build. Run `tools/vitro-parity/run.sh --refresh` to capture new references when Home Assistant is reachable. Details are in [tools/vitro-parity](../../tools/vitro-parity/README.md).
 
 ## Try it: the parity showcase
 

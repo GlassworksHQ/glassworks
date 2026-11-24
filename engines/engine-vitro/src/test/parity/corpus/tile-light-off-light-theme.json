@@ -1,0 +1,5 @@
+{
+  "title": "Tile: a light that is off, light theme",
+  "dark": false,
+  "card": { "type": "tile", "entity": "light.sunset_lamp", "name": "Sunset", "features": [{ "type": "light-brightness" }] }
+}

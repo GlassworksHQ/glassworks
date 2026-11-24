@@ -1,0 +1,121 @@
+{
+ "case": "grid",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1795457280000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 122
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 105.81,
+   "type": "hui-grid-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Cactus",
+   "x": 55.77,
+   "y": 79.17,
+   "w": 49.8,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Window",
+   "x": 221.45,
+   "y": 79.17,
+   "w": 57.08,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Slats",
+   "x": 401.53,
+   "y": 79.17,
+   "w": 35.56,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.led_wood_slats": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "xy"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "hs_color": null,
+    "rgb_color": null,
+    "xy_color": null,
+    "off_with_transition": false,
+    "off_brightness": 254,
+    "friendly_name": "LED Wood Slats",
+    "supported_features": 40
+   },
+   "lc": 1795508121.6301472
+  },
+  "light.living_room_cactus": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": null,
+    "friendly_name": "Cactus",
+    "supported_features": 0
+   },
+   "lc": 1795508121.7617655
+  },
+  "light.window_accent": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "xy"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "hs_color": null,
+    "rgb_color": null,
+    "xy_color": null,
+    "off_with_transition": false,
+    "off_brightness": 254,
+    "icon": "mdi:window-open",
+    "friendly_name": "Window",
+    "supported_features": 40
+   },
+   "lc": 1795507611.0189574
+  }
+ },
+ "templates": {}
+}

@@ -1,0 +1,13 @@
+{
+  "title": "stack-in-card: two Mushroom template cards and a markdown",
+  "theme": "Vitro Glass",
+  "card": {
+    "type": "custom:stack-in-card",
+    "cards": [
+      { "type": "markdown", "content": "###### Climate", "text_only": true },
+      { "type": "custom:mushroom-template-card", "entity": "climate.ac", "primary": "AC", "secondary": "{{ states('climate.ac') | title }}", "icon": "mdi:air-conditioner" },
+      { "type": "custom:mushroom-template-card", "entity": "fan.air_purifier", "primary": "Air purifier", "secondary": "{{ states('fan.air_purifier') | title }}", "icon": "mdi:air-purifier" }
+    ],
+    "card_mod": { "style": "ha-card { height: 100%; box-sizing: border-box; }" }
+  }
+}
