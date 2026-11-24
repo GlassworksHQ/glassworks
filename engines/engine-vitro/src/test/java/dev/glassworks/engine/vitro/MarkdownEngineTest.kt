@@ -202,6 +202,16 @@ class MarkdownEngineTest {
         assertEquals(7f, pipe.padding[3], 1e-4f)
     }
 
+    @Test
+    fun revertRollsBackToTheBrowsersValue() {
+        // HA's `:is(ol, ul) { padding-inline-start: var(--markdown-list-indent, revert) }`: with no indent set, the
+        // list keeps the browser's 40px; the card's variable sets it.
+        assertEquals(40f, styled("- a\n- b").find("ul")!!.style!!.padding[3])
+        assertEquals(12f, styled("- a\n- b", "ha-markdown-element { --markdown-list-indent: 12px }").find("ul")!!.style!!.padding[3])
+        // Outside the browser's sheet, `revert` of a property the browser leaves alone is `unset`.
+        assertEquals(0f, styled("x", "ha-markdown-element p { padding-left: revert }").find("p")!!.style!!.padding[3])
+    }
+
     // ---- layout ----
 
     @Test
@@ -284,6 +294,20 @@ class MarkdownEngineTest {
         assertEquals("Hi", tv.text.toString())
         assertEquals(Gravity.END, tv.gravity and Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK)
         assertEquals(30f * activity.resources.displayMetrics.density, tv.textSize, 0.5f)
+    }
+
+    @Test
+    fun bulletsArePaintedSymbolsHangingBeforeTheText() {
+        // Chromium paints disc / circle / square as shapes sized from the font's ascent, hanging `2a/3 + 8` px
+        // before the item; ordered lists keep their number text.
+        val view = MarkdownCardView(context(), card("""{"type": "markdown", "content": "- a\n  - b\n\n1. c"}"""))
+        val symbols = view.body.all().filterIsInstance<dev.glassworks.engine.vitro.cards.MdListSymbol>()
+        assertEquals(2, symbols.size)
+        val dp = activity.resources.displayMetrics.density
+        val ascent = -android.graphics.Paint().apply { textSize = 14f; typeface = android.graphics.Typeface.DEFAULT }.fontMetrics.ascent
+        assertEquals((((Math.round(ascent) * 2 / 3) + 8) * dp).toInt().toFloat(), symbols[0].boxWidth.toFloat(), 1f)
+        assertTrue(view.body.all().filterIsInstance<TextView>().any { it.text.toString() == "1." })
+        assertTrue(view.body.all().filterIsInstance<TextView>().none { it.text.toString() == "•" })
     }
 
     @Test
