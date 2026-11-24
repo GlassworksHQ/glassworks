@@ -108,12 +108,33 @@ class CardModAndOverlayTest {
         assertEquals(2f, mod.borderWidthDp)
         assertEquals(28f, mod.borderRadiusDp)
         assertEquals(0f, mod.paddingDp)
+        assertEquals(dev.glassworks.engine.vitro.theme.EdgeInsetsDp(0f, 0f, 0f, 0f), mod.paddingInsets)
         assertEquals(164f, mod.fontSizeSp)
         assertEquals(300, mod.fontWeight)
         assertEquals(0.14f, mod.letterSpacingEm!!, 0.0001f)
         assertEquals(800L, mod.transitionOpacityMs)
         assertFalse(mod.positionFixed)
         assertFalse(mod.hasComplexSelectors)
+    }
+
+    @Test
+    fun parsesMultiValuePaddingAndGapAndViewPadding() {
+        val two = ThemeResolver.parseCardMod("ha-card { padding: 16px 10px; gap: 14px; }")
+        assertEquals(dev.glassworks.engine.vitro.theme.EdgeInsetsDp(10f, 16f, 10f, 16f), two.paddingInsets)
+        assertEquals(16f, two.paddingDp)
+        assertEquals(14f, two.gapDp)
+
+        val four = ThemeResolver.parseCardMod("ha-card { padding: 4px 8px 12px 16px; padding-left: 20px; }")
+        assertEquals(dev.glassworks.engine.vitro.theme.EdgeInsetsDp(20f, 4f, 8f, 12f), four.paddingInsets)
+
+        val theme = ThemeResolver.resolve(
+            ThemeCatalog(
+                defaultTheme = "mirror",
+                themes = mapOf("mirror" to ThemeCatalog.ThemeDefinition(base = mapOf("ha-view-sections-padding" to "28px", "masonry-view-card-margin" to "14px"))),
+            ),
+        )
+        assertEquals(28f, theme.viewPaddingDp)
+        assertEquals(14f, theme.cardGapDp)
     }
 
     @Test
@@ -176,6 +197,16 @@ class CardModAndOverlayTest {
         assertEquals(0.5f, tile.alpha)
         assertEquals(0xFFFF0000.toInt(), tile.activeCardMod.borderColor)
         assertEquals(3f, tile.activeCardMod.borderWidthDp)
+        assertTrue(tile.clipToOutline)
+
+        // Transparent borderless cards drop the rounded outline so corner clipping never chops text.
+        val bareCfg = card(
+            """{"type": "markdown", "content": "Monday", "card_mod": {"style": "ha-card { background: transparent; border: none; padding: 0; }"}}""",
+        )
+        val bare = dev.glassworks.engine.vitro.cards.MarkdownCardView(ctx, bareCfg)
+        bare.applyCardMod(bareCfg)
+        assertNull(bare.background)
+        assertFalse(bare.clipToOutline)
     }
 
     @Test

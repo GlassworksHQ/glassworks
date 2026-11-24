@@ -572,7 +572,7 @@ class VitroView(
         }
         val widthDp = (resources.displayMetrics.widthPixels / dp).toInt()
         val gap = px(ctx.theme.cardGapDp)
-        val outerPad = px(ctx.theme.cardGapDp)
+        val outerPad = px(ctx.theme.viewPaddingDp)
 
         val container: View = if (view.type == "sections" && view.sections.isNotEmpty()) {
             buildSectionsLayout(view, ctx, widthDp, outerPad, gap)
@@ -838,36 +838,48 @@ class VitroView(
             parentCtx
         }
         val childBuilder: CardBuilder = { child -> wrapVisibility(child, buildCard(child, ctx, false), ctx) }
+        val stackMod = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), ctx.theme.vars)
+        val stackGap = px(stackMod.gapDp ?: ctx.theme.cardGapDp)
+        fun LinearLayout.applyStackPadding() {
+            stackMod.paddingInsets?.let { p ->
+                setPadding(ctx.px(p.left), ctx.px(p.top), ctx.px(p.right), ctx.px(p.bottom))
+            }
+        }
         val built: View = when (card.type) {
             // Layout containers
             "vertical-stack" -> LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
+                applyStackPadding()
                 card.childCards.forEachIndexed { idx, child ->
                     addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-                        if (idx > 0) topMargin = px(8f)
+                        if (idx > 0) topMargin = stackGap
                     })
                 }
             }
             "horizontal-stack" -> LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
+                applyStackPadding()
+                val childH = if (card.childCards.size >= 2) MATCH_PARENT else WRAP_CONTENT
                 card.childCards.forEachIndexed { idx, child ->
-                    addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
-                        if (idx > 0) marginStart = px(8f)
+                    addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), LinearLayout.LayoutParams(0, childH, 1f).apply {
+                        if (idx > 0) marginStart = stackGap
                     })
                 }
             }
             "grid" -> LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
+                applyStackPadding()
                 val cols = card.gridColumns()
                 card.childCards.chunked(cols).forEachIndexed { rIdx, chunk ->
                     val r = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+                    val childH = if (chunk.size >= 2) MATCH_PARENT else WRAP_CONTENT
                     chunk.forEachIndexed { cIdx, child ->
-                        r.addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
-                            if (cIdx > 0) marginStart = px(8f)
+                        r.addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), LinearLayout.LayoutParams(0, childH, 1f).apply {
+                            if (cIdx > 0) marginStart = stackGap
                         })
                     }
                     addView(r, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-                        if (rIdx > 0) topMargin = px(8f)
+                        if (rIdx > 0) topMargin = stackGap
                     })
                 }
             }

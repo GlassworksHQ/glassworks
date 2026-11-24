@@ -504,7 +504,10 @@ class MdiIconSpan(val iconName: String, val color: Int, sizePx: Int) :
         canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: Paint,
     ) {
         val d = drawable
-        val transY = (top + bottom) / 2 - d.bounds.height() / 2
+        val h = d.bounds.height()
+        // Center on the cap-height / ascent band above baseline (`top..y`) rather than `top..bottom` so
+        // icons beside large numerals (e.g. weather `9°`) align with the digits instead of hanging below baseline.
+        val transY = ((top + y) / 2 - h / 2).coerceIn(top, (bottom - h).coerceAtLeast(top))
         canvas.save()
         canvas.translate(x, transY.toFloat())
         d.draw(canvas)

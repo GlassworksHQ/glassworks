@@ -267,15 +267,20 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     }
 
     fun applyTheme(theme: ResolvedTheme) {
-        val bg = GradientDrawable().apply {
-            cornerRadius = theme.cardBorderRadiusDp * ctx.dp
-            setColor(theme.cardBackgroundColor)
-            val strokePx = (theme.cardBorderWidthDp * ctx.dp).toInt()
-            if (strokePx > 0) setStroke(strokePx, theme.cardBorderColor)
+        val strokePx = (theme.cardBorderWidthDp * ctx.dp).toInt()
+        val hasSurface = Color.alpha(theme.cardBackgroundColor) > 0 || strokePx > 0
+        if (hasSurface) {
+            background = GradientDrawable().apply {
+                cornerRadius = theme.cardBorderRadiusDp * ctx.dp
+                setColor(theme.cardBackgroundColor)
+                if (strokePx > 0) setStroke(strokePx, theme.cardBorderColor)
+            }
+            clipToOutline = true
+        } else {
+            background = null
+            clipToOutline = false
         }
-        background = bg
         theme.cardMod.opacity?.let { alpha = it }
-        clipToOutline = true
         elevation = theme.cardElevationDp * ctx.dp
     }
 
@@ -292,6 +297,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         elevation = 0f
         if (!keepBackground) {
             background = null
+            clipToOutline = false
         } else if (!keepRadius) {
             (background as? GradientDrawable)?.mutate()?.let { (it as GradientDrawable).cornerRadius = 0f }
         }
@@ -333,20 +339,37 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         val restyle = gradient != null || mod.backgroundColor != null || mod.borderColor != null ||
             mod.borderWidthDp != null || mod.borderRadiusDp != null
         if (restyle && !seamless) {
-            background = (if (gradient != null) GradientDrawable(orientationFor(gradient.angleDeg), gradient.colors) else GradientDrawable()).apply {
-                if (gradient == null) setColor(mod.backgroundColor ?: theme.cardBackgroundColor)
-                cornerRadius = radiusPx
-                if (strokePx > 0) setStroke(strokePx, strokeColor)
+            val fillColor = mod.backgroundColor ?: theme.cardBackgroundColor
+            val invisibleSurface = gradient == null && Color.alpha(fillColor) == 0 && strokePx == 0
+            if (invisibleSurface) {
+                // Transparent, borderless card (`background: transparent; border: none;`): drop the rounded
+                // outline so Android's clipToOutline never clips text at the card's corners.
+                background = null
+                clipToOutline = false
+            } else {
+                background = (if (gradient != null) GradientDrawable(orientationFor(gradient.angleDeg), gradient.colors) else GradientDrawable()).apply {
+                    if (gradient == null) setColor(fillColor)
+                    cornerRadius = radiusPx
+                    if (strokePx > 0) setStroke(strokePx, strokeColor)
+                }
+                clipToOutline = true
             }
         }
-        mod.paddingDp?.let { p ->
-            val px = ctx.px(p)
-            setPadding(px, px, px, px)
-            // Cards keep their default padding on their single inner wrapper ViewGroup: clear it so
-            // `ha-card { padding: 0 }` truly removes padding and `padding: Npx` replaces rather than doubles it.
-            if (childCount == 1) (getChildAt(0) as? android.view.ViewGroup)?.setPadding(0, 0, 0, 0)
+        val pad = mod.paddingInsets ?: mod.paddingDp?.let { dev.glassworks.engine.vitro.theme.EdgeInsetsDp(it, it, it, it) }
+        if (pad != null) {
+            setPadding(ctx.px(pad.left), ctx.px(pad.top), ctx.px(pad.right), ctx.px(pad.bottom))
+            clearDefaultInnerPadding()
         }
         mod.opacity?.let { alpha = it.coerceIn(0f, 1f) }
+    }
+
+    /**
+     * Clears the card's default internal padding when `card_mod` supplies an explicit `padding:` so `padding: 0`
+     * truly removes padding and `padding: Npx` replaces rather than doubles it. Subclasses with deeper padded
+     * containers (such as [dev.glassworks.engine.vitro.cards.StackInCardView]) override this.
+     */
+    protected open fun clearDefaultInnerPadding() {
+        if (childCount == 1) (getChildAt(0) as? android.view.ViewGroup)?.setPadding(0, 0, 0, 0)
     }
 
     /**

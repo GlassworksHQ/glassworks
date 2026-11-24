@@ -1201,6 +1201,7 @@ open class StackInCardView(
 
     /** The built child cards, in order. */
     val children: List<View>
+    private val stack: LinearLayout
 
     init {
         val column = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
@@ -1210,19 +1211,24 @@ open class StackInCardView(
                 setPadding(ctx.px(16f), ctx.px(14f), ctx.px(16f), ctx.px(4f))
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
-        val stack = LinearLayout(ctx.context).apply {
+        stack = LinearLayout(ctx.context).apply {
             orientation = if (horizontal) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             if (keep.optBoolean("background", false) || keep.optBoolean("margin", false)) {
                 val pad = ctx.px(10f)
                 setPadding(pad, pad, pad, pad)
             }
         }
-        val gap = if (keep.optBoolean("margin", false)) ctx.px(ctx.theme.cardGapDp) else 0
+        val modGap = dev.glassworks.engine.vitro.theme.ThemeResolver.parseCardMod(config.raw.optJSONObject("card_mod"), ctx.theme.vars).gapDp
+        val gap = when {
+            modGap != null -> ctx.px(modGap)
+            keep.optBoolean("margin", false) -> ctx.px(ctx.theme.cardGapDp)
+            else -> 0
+        }
         children = config.childCards.mapIndexed { idx, child ->
             val v = build(child)
             strip(v)
             val lp = if (horizontal) {
-                LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { if (idx > 0) marginStart = gap }
+                LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { if (idx > 0) marginStart = gap }
             } else {
                 LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (idx > 0) topMargin = gap }
             }
@@ -1231,6 +1237,11 @@ open class StackInCardView(
         }
         column.addView(stack, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         addView(column, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+    }
+
+    override fun clearDefaultInnerPadding() {
+        super.clearDefaultInnerPadding()
+        stack.setPadding(0, 0, 0, 0)
     }
 
     /** Takes the surface off every card in [v]'s tree, so the children share this card's one surface. */

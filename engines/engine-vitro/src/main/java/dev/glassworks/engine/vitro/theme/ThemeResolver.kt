@@ -20,6 +20,14 @@ sealed class ThemeBackground {
     data class ImageUrl(val url: String, val fallbackColor: Int) : ThemeBackground()
 }
 
+/** CSS box insets (in dp), matching 1/2/3/4-value shorthand and per-side properties. */
+data class EdgeInsetsDp(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+)
+
 /** Parsed container-level `card-mod` styles that Vitro can apply natively without a browser. */
 data class CardModStyle(
     val backgroundColor: Int? = null,
@@ -32,8 +40,12 @@ data class CardModStyle(
     val hasComplexSelectors: Boolean = false,
     /** `background:` / `background-image:` holding a `linear-gradient(...)`. */
     val backgroundGradient: ThemeBackground.LinearGradient? = null,
-    /** `padding:` (first value; CSS px are treated as dp). */
+    /** `padding:` top value in dp (kept for callers checking uniform / zero padding); full sides live in [paddingInsets]. */
     val paddingDp: Float? = null,
+    /** Full CSS `padding` / `padding-{top,right,bottom,left}` box in dp. */
+    val paddingInsets: EdgeInsetsDp? = null,
+    /** CSS `gap` / `grid-gap` / `row-gap` in dp (for stack/grid containers). */
+    val gapDp: Float? = null,
     /** `font-size:` in sp (`px`/`sp` as-is, `rem`/`em` x16). Cards read it from [CardSurface.activeCardMod]. */
     val fontSizeSp: Float? = null,
     /** `font-weight:` as a CSS weight (100..900); keywords map to 300/400/500/600/700. */
@@ -87,6 +99,8 @@ data class ResolvedTheme(
     val cardElevationDp: Float = 0f,
     /** Gap between cards: `--masonry-view-card-margin` or `--ha-view-sections-column-gap`, clamped to 4..24 dp. */
     val cardGapDp: Float = 8f,
+    /** Outer padding of a view: `--ha-view-sections-padding` / `--masonry-view-padding` / `--vitro-view-padding`, else [cardGapDp]. */
+    val viewPaddingDp: Float = cardGapDp,
     /**
      * Variable names the theme itself set (as opposed to HA defaults Vitro fills in). Null treats every entry
      * of [vars] as set by the theme. It lets `--state-active-color` beat the built-in per-domain defaults.
@@ -324,6 +338,11 @@ object ThemeResolver {
         val bgSpec = viewBackground?.takeIf { it.isNotBlank() } ?: resolved["lovelace-background"]
         val background = parseBackground(bgSpec, bg)
 
+        val cardGap = (resolved["masonry-view-card-margin"] ?: resolved["ha-view-sections-column-gap"])
+            ?.let { parseDimensionDp(it, 8f) }?.coerceIn(4f, 24f) ?: 8f
+        val viewPad = (resolved["ha-view-sections-padding"] ?: resolved["masonry-view-padding"] ?: resolved["vitro-view-padding"])
+            ?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }?.coerceIn(0f, 48f) ?: cardGap
+
         return ResolvedTheme(
             name = pickedName,
             dark = dark,
@@ -345,8 +364,8 @@ object ThemeResolver {
             stateIconColor = parseColor(resolved["state-icon-color"]) ?: 0xFF44739E.toInt(),
             stateInactiveColor = parseColor(resolved["state-inactive-color"]) ?: 0xFF9E9E9E.toInt(),
             cardElevationDp = parseBoxShadowElevationDp(resolved["ha-card-box-shadow"]),
-            cardGapDp = (resolved["masonry-view-card-margin"] ?: resolved["ha-view-sections-column-gap"])
-                ?.let { parseDimensionDp(it, 8f) }?.coerceIn(4f, 24f) ?: 8f,
+            cardGapDp = cardGap,
+            viewPaddingDp = viewPad,
             themeVarNames = themeVarNames,
             fontScale = parseFontScale(resolved),
         )
@@ -543,7 +562,16 @@ object ThemeResolver {
         prop("border-width")?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }?.let { bw = it }
         prop("border-color")?.let(::parseColor)?.let { bc = it }
 
-        val padding = prop("padding")?.let { splitTopLevelSpaces(it).firstOrNull() }
+        val paddingInsets = parseEdgeInsets(
+            shorthand = prop("padding"),
+            top = prop("padding-top"),
+            right = prop("padding-right"),
+            bottom = prop("padding-bottom"),
+            left = prop("padding-left"),
+        )
+        val padding = paddingInsets?.top
+        val gap = (prop("gap") ?: prop("grid-gap") ?: prop("row-gap"))
+            ?.let { splitTopLevelSpaces(it).firstOrNull() }
             ?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }
         val fontSize = prop("font-size")?.let { parseDimensionDp(it, -1f) }?.takeIf { it > 0f }
         val fontWeight = prop("font-weight")?.let(::parseFontWeight)
@@ -573,6 +601,8 @@ object ThemeResolver {
             hasComplexSelectors = otherRules,
             backgroundGradient = gradient,
             paddingDp = padding,
+            paddingInsets = paddingInsets,
+            gapDp = gap,
             fontSizeSp = fontSize,
             fontWeight = fontWeight,
             letterSpacingEm = letterSpacing,
@@ -648,6 +678,36 @@ object ThemeResolver {
         val s = raw.trim().lowercase(Locale.ROOT)
         s == "ha-card" || s == ":host" || s == "." ||
             (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && ":hover" !in s && ":active" !in s)
+    }
+
+    private fun parseEdgeInsets(
+        shorthand: String?,
+        top: String?,
+        right: String?,
+        bottom: String?,
+        left: String?,
+    ): EdgeInsetsDp? {
+        val base = shorthand?.let { raw ->
+            val vals = splitTopLevelSpaces(raw).mapNotNull { parseDimensionDp(it, -1f).takeIf { v -> v >= 0f } }
+            when (vals.size) {
+                0 -> null
+                1 -> EdgeInsetsDp(vals[0], vals[0], vals[0], vals[0])
+                2 -> EdgeInsetsDp(vals[1], vals[0], vals[1], vals[0])
+                3 -> EdgeInsetsDp(vals[1], vals[0], vals[1], vals[2])
+                else -> EdgeInsetsDp(vals[3], vals[0], vals[1], vals[2])
+            }
+        }
+        val t = top?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }
+        val r = right?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }
+        val b = bottom?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }
+        val l = left?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }
+        if (base == null && t == null && r == null && b == null && l == null) return null
+        return EdgeInsetsDp(
+            left = l ?: base?.left ?: 0f,
+            top = t ?: base?.top ?: 0f,
+            right = r ?: base?.right ?: 0f,
+            bottom = b ?: base?.bottom ?: 0f,
+        )
     }
 
     private fun parseFontWeight(raw: String): Int? = when (raw.trim().lowercase(Locale.ROOT)) {
