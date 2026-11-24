@@ -91,6 +91,8 @@ private fun iconOr(name: String, fallback: String): String = if (MdiIcons.has(na
  * controls in their own `init`, then call [start].
  */
 abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config: CardConfig) : CardSurface(ctx) {
+    // HA's tile and Mushroom's cards lay their content out from the card's outer edge.
+    override val contentInsideBorder: Boolean get() = false
     protected val eid: String? = config.entity
     protected val shape = FrameLayout(ctx.context)
     protected val shapeIcon = MdiIconView(ctx.context)

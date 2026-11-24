@@ -171,6 +171,8 @@ internal object MushroomColors {
  * `custom:mushroom-person-card`, and `custom:mushroom-template-card`.
  */
 class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
+    // HA's tile and Mushroom's cards lay their content out from the card's outer edge.
+    override val contentInsideBorder: Boolean get() = false
     /** Live state binders for the inline features added by [addExtraFeatures]. */
     private val featureBinders = ArrayList<(EntityState?) -> Unit>()
     private val iconBadge = MdiIconView(ctx.context)
@@ -2254,9 +2256,8 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
     private fun dropSurfaceIfTextOnly() {
         // HA's `.text-only { background: none; border: none; box-shadow: none }` outranks card-mod's `ha-card`.
         if (textOnly) {
-            background = null
+            dropSurface()
             elevation = 0f
-            clipToOutline = false
         }
     }
 
@@ -2814,7 +2815,7 @@ class BubbleCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
     init {
         val cardType = config.raw.optString("card_type", "button")
         if (cardType == "separator") {
-            background = null
+            dropSurface()
             val row = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL

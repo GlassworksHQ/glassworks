@@ -406,6 +406,26 @@ class CoreParityTest {
     }
 
     @Test
+    fun contentSitsInsideTheCardBorder() {
+        // ha-card's `border: 1px solid` wraps its content: the card is its content, its padding and both borders.
+        val ctx = context(EntityStore())
+        val border = (ctx.theme.cardBorderWidthDp * ctx.dp).toInt()
+        assertTrue(border > 0)
+        val surface = object : dev.glassworks.engine.vitro.ui.CardSurface(ctx) {}
+        surface.addView(View(activity), android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 100))
+        surface.setPadding(10, 10, 10, 10)
+        fun height(): Int {
+            surface.measure(View.MeasureSpec.makeMeasureSpec(300, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            return surface.measuredHeight
+        }
+        assertEquals(100 + 20 + 2 * border, height())
+        assertEquals(10 + border, surface.paddingTop)
+        // A card with no border and no fill puts its content where the border was.
+        surface.applyStyleCss("ha-card { border-width: 0; background: transparent; }")
+        assertEquals(120, height())
+    }
+
+    @Test
     fun vacuumCommandsCallTheirServices() {
         val store = EntityStore()
         store.putLocal(EntityState("vacuum.robo", "docked", emptyMap()))

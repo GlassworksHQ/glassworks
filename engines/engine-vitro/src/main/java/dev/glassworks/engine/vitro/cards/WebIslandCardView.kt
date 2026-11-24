@@ -49,10 +49,7 @@ class WebIslandCardView(
     private var gestureAxis = AXIS_NONE
 
     init {
-        if (fillViewport) {
-            background = null
-            clipToOutline = false
-        }
+        if (fillViewport) dropSurface()
 
         val server = ctx.islandServer
         val opener = ctx.openIslandPage
