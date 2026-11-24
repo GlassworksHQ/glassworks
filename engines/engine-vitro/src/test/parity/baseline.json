@@ -7,13 +7,6 @@
   "missingText": 0,
   "reason": "Vitro draws a 48 px compact header row (name + a sofa icon, not the area's own stove icon) where HA draws its default picture-less area card: a 120 px icon hero over a name row; card ~130 px shorter, name 16 vs 14 px (coverage #794, 2026-11-24)"
  },
- "mirror/auto-entities": {
-  "pixel": 0.0378,
-  "bounds": 24.8,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the entities card inside matches row for row, but Vitro's rows are 48 vs HA's 56 px apart and the cover buttons sit closer together, so the card is ~25 px shorter (coverage #794, 2026-11-24)"
- },
  "mirror/clock-date": {
   "pixel": 0.0233,
   "bounds": 0,
@@ -168,13 +161,6 @@
   "missingText": 0,
   "reason": "Vitro draws a 48 px compact header row (name + a sofa icon, not the area's own stove icon) where HA draws its default picture-less area card: a 120 px icon hero over a name row; card ~130 px shorter, name 16 vs 14 px (coverage #794, 2026-11-24)"
  },
- "s1/auto-entities": {
-  "pixel": 0.0378,
-  "bounds": 24.8,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the entities card inside matches row for row, but Vitro's rows are 48 vs HA's 56 px apart and the cover buttons sit closer together, so the card is ~25 px shorter (coverage #794, 2026-11-24)"
- },
  "s1/clock-date": {
   "pixel": 0.0233,
   "bounds": 0,
@@ -328,13 +314,6 @@
   "font": 2,
   "missingText": 0,
   "reason": "Vitro draws a 48 px compact header row (name + a sofa icon, not the area's own stove icon) where HA draws its default picture-less area card: a 120 px icon hero over a name row; card ~130 px shorter, name 16 vs 14 px (coverage #794, 2026-11-24)"
- },
- "tablet/auto-entities": {
-  "pixel": 0.0395,
-  "bounds": 24.3,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the entities card inside matches row for row, but Vitro's rows are 48 vs HA's 56 px apart and the cover buttons sit closer together, so the card is ~25 px shorter (coverage #794, 2026-11-24)"
  },
  "tablet/clock-date": {
   "pixel": 0.0271,
