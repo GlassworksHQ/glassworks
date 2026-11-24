@@ -2215,6 +2215,26 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             (ms.padding[1] * ctx.dp).roundToInt(), (ms.padding[2] * ctx.dp).roundToInt(),
         )
         renderer.render(md, body, ms, markdownSheet)
+        relayoutFromRoot()
+    }
+
+    /**
+     * New content must reach a layout pass even when an ancestor still holds a layout request from an earlier pass
+     * (requestLayout stops at such an ancestor, and the card would keep its old, maybe empty, size until something
+     * else relaid that branch out: seen live on the tablet's horizontal stack-in-card). Marks the path up to the
+     * root for layout, then asks the root for a pass.
+     */
+    private fun relayoutFromRoot() {
+        if (!isAttachedToWindow) return
+        var v: View? = this
+        var top: View = this
+        while (v != null) {
+            v.forceLayout()
+            top = v
+            v = v.parent as? View
+        }
+        top.requestLayout()
+        requestLayout()
     }
 
     private companion object {
