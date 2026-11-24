@@ -5,6 +5,8 @@
 package dev.glassworks.engine.vitro.cards
 
 import android.util.Base64
+import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.widget.FrameLayout
 import android.widget.TextView
 import dev.glassworks.engine.Page
@@ -16,6 +18,7 @@ import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONObject
 import java.util.concurrent.CopyOnWriteArraySet
+import kotlin.math.abs
 
 /**
  * Tier 3 Custom Card Escape Hatch ("GeckoView Micro-Web Island").
@@ -37,6 +40,13 @@ class WebIslandCardView(
     private var slotId: String? = null
     private var islandPage: Page? = null
     @Volatile private var sendToIsland: ((JSONObject) -> Unit)? = null
+
+    // An inline island sits in Vitro's vertical scroller: a vertical drag belongs to the scroller, while taps and
+    // horizontal drags (sliders, carousels, charts) stay inside the island.
+    private val touchSlop = ViewConfiguration.get(ctx.context).scaledTouchSlop
+    private var downX = 0f
+    private var downY = 0f
+    private var gestureAxis = AXIS_NONE
 
     init {
         if (fillViewport) {
@@ -118,7 +128,36 @@ class WebIslandCardView(
         }
     }
 
-    private fun handleIslandMessage(msg: JSONObject, send: (JSONObject) -> Unit) {
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (!fillViewport) {
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = ev.x
+                    downY = ev.y
+                    gestureAxis = AXIS_NONE
+                }
+                MotionEvent.ACTION_MOVE -> if (gestureAxis == AXIS_NONE) {
+                    val dx = abs(ev.x - downX)
+                    val dy = abs(ev.y - downY)
+                    if (dx > touchSlop || dy > touchSlop) {
+                        gestureAxis = if (dx > dy) AXIS_HORIZONTAL else AXIS_VERTICAL
+                        // Horizontal: keep the scroller out. Vertical: let it take the gesture over.
+                        super.requestDisallowInterceptTouchEvent(gestureAxis == AXIS_HORIZONTAL)
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> gestureAxis = AXIS_NONE
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    /** The island's engine view may ask to keep every gesture; a vertical drag of an inline island is not its to keep. */
+    override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+        if (!fillViewport && disallowIntercept && gestureAxis == AXIS_VERTICAL) return
+        super.requestDisallowInterceptTouchEvent(disallowIntercept)
+    }
+
+    internal fun handleIslandMessage(msg: JSONObject, send: (JSONObject) -> Unit) {
         when (msg.optString("type")) {
             "watch" -> {
                 val id = msg.optString("entity_id", "")
@@ -160,6 +199,12 @@ class WebIslandCardView(
                 val id = msg.optString("entity_id", "")
                 if (id.isNotBlank()) ctx.main.post { ctx.openMoreInfo(id) }
             }
+            "navigate" -> {
+                // A card's `navigate` action / `history.pushState` + `location-changed` inside the island:
+                // the path is a dashboard path (`/lovelace/1`), handed to Vitro's own navigation.
+                val path = msg.optString("path", "").trim()
+                if (path.isNotEmpty() && !path.startsWith("/__vitro/")) ctx.main.post { ctx.navigate(path) }
+            }
         }
     }
 
@@ -172,6 +217,9 @@ class WebIslandCardView(
     }
 
     companion object {
+        private const val AXIS_NONE = 0
+        private const val AXIS_HORIZONTAL = 1
+        private const val AXIS_VERTICAL = 2
         private val VALID_BASE64 = Regex("""^[A-Za-z0-9+/=\s]+$""")
 
         /** Decodes a `data:` URI inline Lovelace JS resource into raw module source, or null for normal URLs. */
@@ -231,6 +279,10 @@ $cssVars
 html, body { margin: 0; padding: 0; background: transparent; color: var(--primary-text-color); font-family: Inter, system-ui, sans-serif; overflow: hidden; $heightRule }
 #mount { width: 100%; ${if (fillViewport) "height: 100vh;" else ""} }
 ha-card { display: block; background: var(--ha-card-background, var(--card-background-color)); border-radius: var(--ha-card-border-radius, 12px); color: var(--primary-text-color); }
+ha-card.vitro-fallback { padding: 12px 16px; }
+.vitro-title { font-size: 1.15em; font-weight: 500; padding-bottom: 8px; }
+.vitro-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
+.vitro-state { color: var(--secondary-text-color); }
 </style>
 <script>
 // Minimal HA custom-element shims for GeckoView Micro-Islands (zero HA SPA).
@@ -268,13 +320,65 @@ if (!customElements.get('ha-icon')) {
     }
   });
 }
-window.loadCardHelpers = async () => ({
-  createCardElement: (c) => {
-    const t = (c.type || '').startsWith('custom:') ? c.type.slice(7) : 'div';
-    const el = document.createElement(t);
-    if (el.setConfig) el.setConfig(c);
+// The latest hass object, for elements cards create through loadCardHelpers().
+window.__vitroHass = null;
+function vitroFallbackCard(c) {
+  // A built-in card nested in a custom one (stack-in-card, auto-entities, mod-card): a calm summary, not HA's frontend.
+  const card = document.createElement('ha-card');
+  card.className = 'vitro-fallback';
+  let cfg = c || {};
+  const ids = () => {
+    const list = [];
+    if (cfg.entity) list.push(cfg.entity);
+    for (const e of (cfg.entities || [])) {
+      const id = typeof e === 'string' ? e : (e && e.entity);
+      if (id) list.push(id);
+    }
+    return list;
+  };
+  const render = () => {
+    const hass = card._hass;
+    const list = ids();
+    // Text goes in through textContent only: names and states never become markup.
+    card.innerHTML = (cfg.title ? '<div class="vitro-title"></div>' : '') +
+      list.map(() => '<div class="vitro-row"><span></span><span class="vitro-state"></span></div>').join('');
+    if (cfg.title) card.querySelector('.vitro-title').textContent = cfg.title;
+    const rowEls = card.querySelectorAll('.vitro-row');
+    list.forEach((id, i) => {
+      const st = hass && hass.states ? hass.states[id] : undefined;
+      rowEls[i].children[0].textContent = (st && st.attributes && st.attributes.friendly_name) || id;
+      rowEls[i].children[1].textContent = st && hass ? hass.formatEntityState(st) : '';
+    });
+    if (!cfg.title && !rowEls.length) card.textContent = cfg.type || 'card';
+  };
+  card.setConfig = (next) => { cfg = next || {}; render(); };
+  Object.defineProperty(card, 'hass', { get() { return card._hass; }, set(h) { card._hass = h; render(); } });
+  card.getCardSize = () => 1 + ids().length;
+  render();
+  return card;
+}
+function vitroCreateCardElement(c) {
+  const cfg = c || {};
+  const type = String(cfg.type || '');
+  if (!type.startsWith('custom:')) {
+    const el = vitroFallbackCard(cfg);
+    if (window.__vitroHass) el.hass = window.__vitroHass;
     return el;
   }
+  const t = type.slice(7);
+  const el = document.createElement(t);
+  const configure = () => {
+    try { if (typeof el.setConfig === 'function') el.setConfig(cfg); } catch (e) { console.warn('setConfig', t, e); }
+    if (window.__vitroHass && !el.hass) el.hass = window.__vitroHass;
+  };
+  if (customElements.get(t)) configure();
+  else customElements.whenDefined(t).then(() => { if (customElements.upgrade) customElements.upgrade(el); configure(); });
+  return el;
+}
+window.loadCardHelpers = () => Promise.resolve({
+  createCardElement: vitroCreateCardElement,
+  createHuiElement: (c) => vitroCreateCardElement(c),
+  importMoreInfoControl: () => Promise.resolve(),
 });
 </script>
 $resourceScripts
@@ -305,27 +409,111 @@ const statesProxy = new Proxy(rawStates, {
   }
 });
 
+function vitroTitle(s) {
+  const t = String(s == null ? '' : s).replace(/_/g, ' ');
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+}
+
+function vitroLocalize(key, ...args) {
+  if (!key) return '';
+  const k = String(key);
+  const m = k.match(/^component\.[^.]+\.entity_component\._\.state\.(.+)$/);
+  let out = vitroTitle(m ? m[1] : k.split('.').pop());
+  // HA passes placeholders as ('name', value, …) pairs or one { name: value } object; {0} is positional.
+  const values = {};
+  if (args.length === 1 && args[0] && typeof args[0] === 'object') Object.assign(values, args[0]);
+  else for (let i = 0; i + 1 < args.length; i += 2) values[args[i]] = args[i + 1];
+  args.forEach((a, i) => { if (typeof a !== 'object') values[String(i)] = a; });
+  return out.replace(/\{([^}]+)\}/g, (all, name) => (name in values ? String(values[name]) : all));
+}
+
+function vitroFormatState(stateObj, state) {
+  const s = state !== undefined && state !== null ? state : (stateObj ? stateObj.state : '');
+  const str = String(s == null ? '' : s);
+  const unit = stateObj && stateObj.attributes ? stateObj.attributes.unit_of_measurement : undefined;
+  if (unit && str !== 'unavailable' && str !== 'unknown') return str + (unit === '%' ? '%' : ' ' + unit);
+  return vitroTitle(str);
+}
+
+function vitroFormatAttribute(stateObj, attr, value) {
+  const v = value !== undefined ? value : (stateObj && stateObj.attributes ? stateObj.attributes[attr] : undefined);
+  if (v === undefined || v === null) return '';
+  if (Array.isArray(v)) return v.map((x) => (typeof x === 'string' ? vitroTitle(x) : String(x))).join(', ');
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (typeof v === 'object') return JSON.stringify(v);
+  return vitroTitle(v);
+}
+
+function vitroCallWS(msg) {
+  return new Promise((resolve, reject) => {
+    const id = wsId++;
+    wsPending.set(id, { resolve, reject });
+    sendBridge({ type: 'callWs', id, msg: msg || {} });
+  });
+}
+
+// Same-origin: the island server proxies /api/... to Home Assistant with the panel's Bearer token.
+function vitroCallApiRaw(method, path, parameters, headers) {
+  const init = { method: String(method || 'GET').toUpperCase(), headers: Object.assign({}, headers || {}) };
+  if (parameters !== undefined && parameters !== null && init.method !== 'GET') {
+    init.headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(parameters);
+  }
+  return fetch('/api/' + String(path || '').replace(/^\/+/, ''), init);
+}
+
+async function vitroCallApi(method, path, parameters, headers) {
+  const r = await vitroCallApiRaw(method, path, parameters, headers);
+  let body = null;
+  if (r.status !== 204 && r.status !== 205) {
+    const ct = r.headers.get('content-type') || '';
+    const text = await r.text();
+    body = text;
+    if (ct.includes('application/json') && text) { try { body = JSON.parse(text); } catch (e) {} }
+  }
+  if (!r.ok) throw { error: (body && body.message) || ('Request failed: ' + r.status), status_code: r.status, body };
+  return body;
+}
+
+const hassBase = {
+  config: haConfig,
+  language: 'en',
+  selectedLanguage: null,
+  locale: { language: 'en', number_format: 'language', time_format: 'language' },
+  themes: { darkMode: ${ctx.theme.dark}, default_theme: ${JSONObject.quote(ctx.theme.name)}, themes: {} },
+  selectedTheme: null,
+  user: { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false },
+  areas: {},
+  devices: {},
+  entities: {},
+  floors: {},
+  services: {},
+  panels: {},
+  resources: {},
+  auth: { data: { access_token: accessToken, hassUrl: location.origin }, accessToken },
+  connected: true,
+  hassUrl: (path) => path ? new URL(path, location.origin).href : location.origin,
+  callService(domain, service, data, target) {
+    const payload = Object.assign({}, data || {}, target || {});
+    sendBridge({ type: 'callService', domain, service, data: payload });
+    return Promise.resolve();
+  },
+  callWS(msg) { return vitroCallWS(msg); },
+  callApi: vitroCallApi,
+  callApiRaw: vitroCallApiRaw,
+  fetchWithAuth(path, init) { return fetch(path, init || {}); },
+  localize: vitroLocalize,
+  formatEntityState: vitroFormatState,
+  formatEntityAttributeValue: vitroFormatAttribute,
+  formatEntityAttributeName(stateObj, attr) { return vitroTitle(attr); },
+  connection: { sendMessagePromise: (msg) => vitroCallWS(msg) },
+};
+
+// A new object on every patch: Lit cards compare hass by reference to decide whether to re-render.
 function makeHass() {
-  return {
-    states: statesProxy,
-    config: haConfig,
-    themes: { darkMode: ${ctx.theme.dark} },
-    language: 'en',
-    auth: { data: { access_token: accessToken } },
-    hassUrl: (path) => path ? new URL(path, location.origin).href : location.origin,
-    callService(domain, service, data) {
-      sendBridge({ type: 'callService', domain, service, data: data || {} });
-      return Promise.resolve();
-    },
-    callWS(msg) {
-      return new Promise((resolve, reject) => {
-        const id = wsId++;
-        wsPending.set(id, { resolve, reject });
-        sendBridge({ type: 'callWs', id, msg: msg || {} });
-      });
-    },
-    formatEntityState(s) { return s ? String(s.state) : ''; }
-  };
+  const h = Object.assign({}, hassBase, { states: statesProxy });
+  window.__vitroHass = h;
+  return h;
 }
 
 const tag = ${JSONObject.quote(tag)};
@@ -365,16 +553,80 @@ async function boot() {
   if (typeof cardEl.setConfig === 'function') cardEl.setConfig(cfg);
   cardEl.hass = makeHass();
   document.getElementById('mount').appendChild(cardEl);
-  cardEl.addEventListener('hass-more-info', (ev) => {
+  wireEvents();
+  wireResize();
+}
+
+function moreInfo(id) {
+  if (id) sendBridge({ type: 'moreInfo', entity_id: id });
+}
+
+function navigateTo(path) {
+  // Never the island's own address: only a dashboard path a card navigated to.
+  if (path && typeof path === 'string' && !path.startsWith('/__vitro/')) sendBridge({ type: 'navigate', path });
+}
+
+// HA's handleAction for a `hass-action` event: the card says which gesture, its config says what it does.
+function runAction(config, gesture) {
+  if (!config) return;
+  const action = config[(gesture || 'tap') + '_action'] || (gesture === 'tap' || !gesture ? { action: 'more-info' } : null);
+  if (!action) return;
+  const entity = action.entity || config.entity;
+  switch (action.action) {
+    case 'more-info': moreInfo(entity); break;
+    case 'navigate': navigateTo(action.navigation_path); break;
+    case 'toggle': if (entity) hassBase.callService('homeassistant', 'toggle', { entity_id: entity }); break;
+    case 'call-service':
+    case 'perform-action': {
+      const svc = String(action.perform_action || action.service || '');
+      const dot = svc.indexOf('.');
+      if (dot > 0) hassBase.callService(svc.slice(0, dot), svc.slice(dot + 1), action.data || action.service_data, action.target);
+      break;
+    }
+    case 'url': if (action.url_path) window.open(action.url_path, '_blank'); break;
+    default: break;
+  }
+}
+
+function wireEvents() {
+  // HA's fireEvent bubbles and is composed, so window hears what any card or nested card sends.
+  window.addEventListener('hass-more-info', (ev) => {
     const id = ev && ev.detail && ev.detail.entityId;
     if (id) sendBridge({ type: 'moreInfo', entity_id: id });
   });
+  window.addEventListener('hass-action', (ev) => {
+    const d = (ev && ev.detail) || {};
+    runAction(d.config, d.action);
+  });
+  // HA's navigate(): history.pushState, then `location-changed` on window.
+  window.addEventListener('location-changed', (ev) => {
+    const p = (ev && ev.detail && ev.detail.path) || (location.pathname + location.search);
+    navigateTo(p);
+  });
+  window.addEventListener('hass-navigate', (ev) => {
+    const p = ev && ev.detail && ev.detail.path;
+    navigateTo(p);
+  });
+}
+
+function wireResize() {
+  const mount = document.getElementById('mount');
+  let timer = null;
+  let lastH = -1;
   const reportSize = () => {
-    const h = Math.ceil(document.getElementById('mount').getBoundingClientRect().height || 120);
+    timer = null;
+    const h = Math.ceil(mount.getBoundingClientRect().height || 0);
+    // 0 px is a card that has not rendered yet: reporting it would collapse the island and flash.
+    if (h <= 0 || h === lastH) return;
+    lastH = h;
     sendBridge({ type: 'resize', height: h });
   };
-  if (window.ResizeObserver) new ResizeObserver(reportSize).observe(document.getElementById('mount'));
-  setTimeout(reportSize, 60);
+  const scheduleResize = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(reportSize, 50);
+  };
+  if (window.ResizeObserver) new ResizeObserver(scheduleResize).observe(mount);
+  scheduleResize();
 }
 boot();
 </script>

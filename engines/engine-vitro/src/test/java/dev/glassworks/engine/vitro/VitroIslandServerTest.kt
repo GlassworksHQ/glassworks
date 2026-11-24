@@ -36,7 +36,13 @@ class VitroIslandServerTest {
     private val loopback = InetAddress.getByName("127.0.0.1")
 
     /** What the fake Home Assistant saw: path with query, and the `Authorization` header (null when absent). */
-    private class Seen(val target: String, val method: String, val authorization: String?, val body: String)
+    private class Seen(
+        val target: String,
+        val method: String,
+        val authorization: String?,
+        val body: String,
+        val requestedWith: String? = null,
+    )
 
     private val haSeen = CopyOnWriteArrayList<Seen>()
     private lateinit var ha: HttpServer
@@ -84,7 +90,7 @@ class VitroIslandServerTest {
     }
 
     private fun fakeHa(req: HttpRequest): HttpResponse {
-        haSeen += Seen(req.target, req.method, req.headers["authorization"], String(req.body, Charsets.UTF_8))
+        haSeen += Seen(req.target, req.method, req.headers["authorization"], String(req.body, Charsets.UTF_8), req.headers["x-requested-with"])
         return when {
             req.path == "/local/custom-card.js" ->
                 HttpResponse(200, mapOf("Content-Type" to "application/javascript; charset=utf-8"), "customElements.define('x-card', class {});".toByteArray())
@@ -92,6 +98,8 @@ class VitroIslandServerTest {
                 HttpResponse(200, mapOf("Content-Type" to "image/jpeg"), byteArrayOf(1, 2, 3, 4))
             req.path == "/api/services/light/turn_on" && req.method == "POST" ->
                 HttpResponse(200, mapOf("Content-Type" to "application/json"), "[]".toByteArray())
+            req.path == "/api/shopping_list/item/fake-item-1" && req.method == "DELETE" ->
+                HttpResponse(204, emptyMap(), ByteArray(0))
             else -> HttpResponse.text(404, "nope")
         }
     }
@@ -100,10 +108,11 @@ class VitroIslandServerTest {
         val text get() = String(body, Charsets.UTF_8)
     }
 
-    private fun get(url: String, method: String = "GET", body: String? = null): Reply {
+    private fun get(url: String, method: String = "GET", body: String? = null, headers: Map<String, String> = emptyMap()): Reply {
         val conn = URL(url).openConnection() as HttpURLConnection
         try {
             conn.requestMethod = method
+            headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
             conn.connectTimeout = 5_000
             conn.readTimeout = 10_000
             if (body != null) {
@@ -204,6 +213,34 @@ class VitroIslandServerTest {
         val seen = haSeen.single()
         assertEquals("POST", seen.method)
         assertEquals("""{"entity_id":"light.lounge_lamp"}""", seen.body)
+        assertEquals("Bearer fake-token-0001", seen.authorization)
+    }
+
+    @Test
+    fun aDeleteGoesThroughWithTheTokenAndA204ComesBackEmpty() {
+        val reply = get(island.ensureStarted() + "/api/shopping_list/item/fake-item-1", "DELETE")
+        assertEquals(204, reply.code)
+        assertEquals(0, reply.body.size)
+        val seen = haSeen.single()
+        assertEquals("DELETE", seen.method)
+        assertEquals("/api/shopping_list/item/fake-item-1", seen.target)
+        assertEquals("Bearer fake-token-0001", seen.authorization)
+    }
+
+    @Test
+    fun aDeleteForwardsItsBodyAndXRequestedWith() {
+        val reply = get(
+            island.ensureStarted() + "/api/shopping_list/item/fake-item-1",
+            "DELETE",
+            """{"reason":"done"}""",
+            mapOf("X-Requested-With" to "XMLHttpRequest"),
+        )
+        assertEquals(204, reply.code)
+        assertEquals(0, reply.body.size)
+        val seen = haSeen.single()
+        assertEquals("DELETE", seen.method)
+        assertEquals("""{"reason":"done"}""", seen.body)
+        assertEquals("XMLHttpRequest", seen.requestedWith)
         assertEquals("Bearer fake-token-0001", seen.authorization)
     }
 

@@ -504,6 +504,7 @@ class VitroEngineTest {
         dark: Boolean = true,
         resources: List<LovelaceResource> = emptyList(),
         token: String? = FakeHaServer.TOKEN,
+        navigate: (String) -> Unit = {},
     ) = VitroCardContext(
         context = activity,
         haBase = base,
@@ -513,7 +514,7 @@ class VitroEngineTest {
         accessToken = { token },
         haConfig = { JSONObject().put("location_name", "Test Home") },
         callService = { _, _, _, _ -> },
-        navigate = {},
+        navigate = navigate,
         openMoreInfo = {},
         fetchHistory = { _, _, _ -> },
         subscribeTemplate = { _, _ -> {} },
@@ -563,7 +564,7 @@ class VitroEngineTest {
         assertTrue(html.contains("sendBridge({ type: 'callWs', id, msg: msg || {} })"))
         assertTrue(html.contains("const statesProxy = new Proxy(rawStates"))
         assertTrue(html.contains("sendBridge({ type: 'watch', entity_id: prop })"))
-        assertTrue(html.contains("callService(domain, service, data)"))
+        assertTrue(html.contains("callService(domain, service, data, target)"))
         assertTrue(html.contains("/__vitro/ws/"))
         assertTrue(html.contains("m.type === 'patch'"))
         assertTrue(html.contains("m.type === 'wsReply'"))
@@ -575,7 +576,7 @@ class VitroEngineTest {
         assertTrue(html.contains("\"rooms\""))
         assertTrue(html.contains("const haConfig = {\"location_name\":\"Test Home\"};"))
         assertTrue(html.contains("const accessToken = \"test-token\";"))
-        assertTrue(html.contains("themes: { darkMode: true }"))
+        assertTrue(html.contains("themes: { darkMode: true, default_theme: "))
         // The HA shims, instead of HA's frontend.
         assertTrue(html.contains("customElements.define('ha-card'"))
         assertTrue(html.contains("customElements.define('ha-icon'"))
@@ -586,7 +587,7 @@ class VitroEngineTest {
     fun islandHtmlFollowsTheLightTheme() {
         val html = WebIslandCardView.buildIslandHtml(cardContext(dark = false), islandCard())
         assertTrue(html.contains("--primary-background-color: #fafafa;"))
-        assertTrue(html.contains("themes: { darkMode: false }"))
+        assertTrue(html.contains("themes: { darkMode: false, default_theme: "))
     }
 
     @Test
@@ -655,5 +656,51 @@ class VitroEngineTest {
         assertTrue(
             child is WebView || (child is TextView && child.text.toString().contains("custom:acme-floorplan-card")),
         )
+    }
+
+    @Test
+    fun islandHtmlCarriesTheCustomCardRuntime() {
+        val html = WebIslandCardView.buildIslandHtml(cardContext(), islandCard())
+        // loadCardHelpers for stack-in-card, auto-entities, mod-card and friends.
+        assertTrue(html.contains("window.loadCardHelpers = () => Promise.resolve({"))
+        assertTrue(html.contains("createCardElement: vitroCreateCardElement"))
+        assertTrue(html.contains("createHuiElement: (c) => vitroCreateCardElement(c)"))
+        assertTrue(html.contains("importMoreInfoControl: () => Promise.resolve()"))
+        assertTrue(html.contains("customElements.whenDefined(t)"))
+        // The hass surface real cards read.
+        assertTrue(html.contains("callApi: vitroCallApi"))
+        assertTrue(html.contains("fetch('/api/' + String(path || '').replace(/^\\/+/, ''), init)"))
+        assertTrue(html.contains("fetchWithAuth(path, init) { return fetch(path, init || {}); }"))
+        assertTrue(html.contains("localize: vitroLocalize"))
+        assertTrue(html.contains("formatEntityState: vitroFormatState"))
+        assertTrue(html.contains("formatEntityAttributeValue: vitroFormatAttribute"))
+        assertTrue(html.contains("locale: { language: 'en', number_format: 'language', time_format: 'language' }"))
+        assertTrue(html.contains("themes: {} }"))
+        assertTrue(html.contains("user: { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false }"))
+        assertTrue(html.contains("areas: {},"))
+        assertTrue(html.contains("devices: {},"))
+        assertTrue(html.contains("entities: {},"))
+        assertTrue(html.contains("auth: { data: { access_token: accessToken, hassUrl: location.origin }"))
+        // Navigation and actions go back over the bridge.
+        assertTrue(html.contains("window.addEventListener('location-changed'"))
+        assertTrue(html.contains("window.addEventListener('hass-navigate'"))
+        assertTrue(html.contains("window.addEventListener('hass-action'"))
+        assertTrue(html.contains("sendBridge({ type: 'navigate', path })"))
+        // Resizes are debounced, and a 0 px first measurement is never sent.
+        assertTrue(html.contains("timer = setTimeout(reportSize, 50);"))
+        assertTrue(html.contains("if (h <= 0 || h === lastH) return;"))
+    }
+
+    @Test
+    fun anIslandNavigateMessageGoesToVitrosNavigation() {
+        val paths = mutableListOf<String>()
+        val island = WebIslandCardView(cardContext(navigate = { paths += it }), islandCard())
+        val noReply: (JSONObject) -> Unit = { throw AssertionError("navigate needs no reply") }
+        island.handleIslandMessage(JSONObject().put("type", "navigate").put("path", "/lovelace/energy"), noReply)
+        // Never the island's own page, and never an empty path.
+        island.handleIslandMessage(JSONObject().put("type", "navigate").put("path", "/__vitro/island/s1"), noReply)
+        island.handleIslandMessage(JSONObject().put("type", "navigate").put("path", ""), noReply)
+        idle()
+        assertEquals(listOf("/lovelace/energy"), paths)
     }
 }

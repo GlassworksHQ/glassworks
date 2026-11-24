@@ -267,7 +267,9 @@ class VitroEngine(
                 val prev = history.removeLast()
                 currentUrl = null // don't push onto history again
                 load(prev)
+                return
             }
+            vitroView.goBack()
         }
 
         override fun restart() {
@@ -383,6 +385,7 @@ class VitroEngine(
         private val wsListener = object : HaDashboardClient.Listener {
             override fun onConnected(haVersion: String) {
                 Log.i(logTag, "Connected to Home Assistant $haVersion over native WebSocket")
+                main.post { vitroView.setConnectionBanner(null) }
             }
 
             override fun onAuthRequired() {
@@ -411,8 +414,13 @@ class VitroEngine(
                 main.post { vitroView.setThemes(catalog) }
             }
 
+            override fun onUserTheme(themeName: String?, dark: Boolean?) {
+                main.post { vitroView.setUserTheme(themeName, dark) }
+            }
+
             override fun onDashboardConfig(urlPath: String?, config: DashboardConfig) {
                 main.post {
+                    vitroView.setConnectionBanner(null)
                     vitroView.setDashboard(config, pendingViewPath)
                     signalReady("vitro")
                 }
@@ -421,7 +429,11 @@ class VitroEngine(
             override fun onDisconnected(reason: String) {
                 Log.w(logTag, "HA WebSocket disconnected: $reason")
                 main.post {
-                    if (!firstPaintReported) host.onPageStop(false)
+                    if (firstPaintReported) {
+                        vitroView.setConnectionBanner("Connection lost. Reconnecting…")
+                    } else {
+                        host.onPageStop(false)
+                    }
                 }
             }
         }

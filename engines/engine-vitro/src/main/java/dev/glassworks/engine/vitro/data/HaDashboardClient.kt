@@ -76,6 +76,12 @@ class HaDashboardClient(
         fun onResources(resources: List<LovelaceResource>) {}
         fun onThemes(catalog: ThemeCatalog) {}
         fun onDashboardConfig(urlPath: String?, config: DashboardConfig) {}
+
+        /**
+         * The theme this user picked in HA's profile (`core` user data `selectedTheme`), or `null` to follow the
+         * server default. [dark] is the explicit light/dark choice, `null` for auto.
+         */
+        fun onUserTheme(themeName: String?, dark: Boolean?) {}
         fun onDisconnected(reason: String) {}
     }
 
@@ -101,6 +107,10 @@ class HaDashboardClient(
     @Volatile private var readerThread: Thread? = null
     @Volatile private var requestedDashboardPath: String? = null
     @Volatile var haConfig: JSONObject = JSONObject()
+        private set
+
+    /** The signed-in HA user from `auth/current_user` (`id`, `name`, `is_admin`, ...); empty until it arrives. */
+    @Volatile var currentUser: JSONObject = JSONObject()
         private set
 
     /** Sends an arbitrary HA WebSocket command (used by Tier 3 custom card `hass.callWS` bridge). */
@@ -372,6 +382,34 @@ class HaDashboardClient(
         }
         // 5. Initial entity subscription (refined to view's entities once config arrives)
         resubscribeEntities()
+        // 6. The signed-in user and the theme they picked in their HA profile (kept after the steps above)
+        request(JSONObject().put("type", "auth/current_user")) { res ->
+            if (res.optBoolean("success", false)) {
+                res.optJSONObject("result")?.let { currentUser = it }
+            }
+        }
+        request(JSONObject().put("type", "frontend/get_user_data").put("key", "core")) { res ->
+            if (res.optBoolean("success", false)) {
+                dispatchUserTheme(res.optJSONObject("result")?.optJSONObject("value"))
+            }
+        }
+        subscribe(JSONObject().put("type", "frontend/subscribe_user_data").put("key", "core")) { ev ->
+            dispatchUserTheme(ev.optJSONObject("value"))
+        }
+    }
+
+    /** Reads `selectedTheme` (a theme name, or `{theme, dark}`) out of the `core` user data and tells the listener. */
+    private fun dispatchUserTheme(value: JSONObject?) {
+        var name: String? = null
+        var dark: Boolean? = null
+        when (val sel = value?.opt("selectedTheme")) {
+            is String -> name = sel
+            is JSONObject -> {
+                name = sel.optString("theme", "")
+                if (sel.has("dark") && !sel.isNull("dark")) dark = sel.optBoolean("dark")
+            }
+        }
+        listener.onUserTheme(name?.trim()?.takeIf { it.isNotEmpty() }, dark)
     }
 
     private fun resubscribeEntities() {

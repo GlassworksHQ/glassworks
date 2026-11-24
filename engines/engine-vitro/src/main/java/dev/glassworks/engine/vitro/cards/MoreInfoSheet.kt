@@ -56,6 +56,19 @@ import kotlin.math.roundToInt
 class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: () -> Unit) : FrameLayout(ctx.context) {
     private val theme: ResolvedTheme = ctx.theme
     private val wide = ctx.context.resources.configuration.screenWidthDp >= WIDE_DP
+
+    /**
+     * Compact landscape wall panels (the S1 Plus at 1440×720 is 480 dp tall): the pills, wheel and dial shrink
+     * and the gaps tighten so the header, the control and its dock fit without scrolling.
+     */
+    private val compact = ctx.context.resources.displayMetrics.heightPixels / ctx.dp < COMPACT_HEIGHT_DP
+    private val pillW = if (compact) 116f else 132f
+    private val pillH = if (compact) 196f else 276f
+    private val wheelDp = if (compact) 196f else 248f
+    private val dialDp = if (compact) 204f else 260f
+    private val controlGap = if (compact) 10f else 24f
+    private val dockGap = if (compact) 10f else 20f
+    private val dialGap = if (compact) 6f else 12f
     private val panel = MaxHeightLinearLayout(ctx.context, if (wide) 0.9f else 0.85f)
     private val titleView = text(20f, theme.primaryTextColor, Inter.MEDIUM).apply {
         maxLines = 1
@@ -65,7 +78,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     private val historyButton = iconButton(historyIcon, "mdi:chart-box-outline")
     private val body = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(ctx.px(24f), ctx.px(8f), ctx.px(24f), ctx.px(24f))
+        setPadding(ctx.px(24f), ctx.px(if (compact) 4f else 8f), ctx.px(24f), ctx.px(if (compact) 12f else 24f))
     }
 
     private var entityId: String? = null
@@ -238,7 +251,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
             addPill(toggle)
             val power = circleButton("mdi:power", 52f, 24f) { optimisticToggle(id, "light", ctx.store[id]?.state != "on") }
-            addCentered(power, topDp = 20f, widthDp = 52f, heightDp = 52f)
+            addCentered(power, topDp = dockGap, widthDp = 52f, heightDp = 52f)
             return { s ->
                 stateLabel.text = lightStateText(s)
                 toggle.setOn(s?.state == "on")
@@ -262,11 +275,11 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 else ctx.callService("light", "turn_on", data.put("brightness", (pct * 255 / 100).coerceIn(1, 255)), null)
             }
         }
-        center.addView(slider, LayoutParams(ctx.px(132f), ctx.px(276f), Gravity.CENTER))
+        center.addView(slider, LayoutParams(ctx.px(pillW), ctx.px(pillH), Gravity.CENTER))
         val wheel = if (caps.color) {
             RgbColorWheelView(ctx.context).apply {
                 onRelease = { c -> setLightColor(id, c, null) }
-                center.addView(this, LayoutParams(ctx.px(248f), ctx.px(248f), Gravity.CENTER))
+                center.addView(this, LayoutParams(ctx.px(wheelDp), ctx.px(wheelDp), Gravity.CENTER))
             }
         } else {
             null
@@ -277,12 +290,12 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             ColorTempSliderView(ctx.context, minK, maxK).apply {
                 onChange = { k -> stateLabel.text = "$k K" }
                 onRelease = { k -> setLightColor(id, LightColor.kelvinToArgb(k), k) }
-                center.addView(this, LayoutParams(ctx.px(132f), ctx.px(276f), Gravity.CENTER))
+                center.addView(this, LayoutParams(ctx.px(pillW), ctx.px(pillH), Gravity.CENTER))
             }
         } else {
             null
         }
-        body.addView(center, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(276f)).apply { topMargin = ctx.px(24f) })
+        body.addView(center, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(pillH)).apply { topMargin = ctx.px(controlGap) })
 
         // HA 2026's dock: power, a divider, then one button per control.
         var mode = LightMode.BRIGHTNESS
@@ -335,7 +348,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         }
         modeButtons.forEach { (k, b) -> b.setOnClickListener { showMode(k); updater?.invoke(ctx.store[id]) } }
         showMode(LightMode.BRIGHTNESS)
-        addCentered(dock, topDp = 20f)
+        addCentered(dock, topDp = dockGap)
 
         // Favorite colors: warm whites always, the colored row when the light takes RGB.
         if (caps.color || caps.colorTemp) {
@@ -462,7 +475,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         }
         addPill(slider)
         val power = circleButton("mdi:power", 52f, 24f) { optimisticToggle(id, "fan", ctx.store[id]?.state != "on") }
-        addCentered(power, topDp = 20f, widthDp = 52f, heightDp = 52f)
+        addCentered(power, topDp = dockGap, widthDp = 52f, heightDp = 52f)
         return { s ->
             val on = s?.state == "on"
             val pct = (s?.attributes?.get("percentage") as? Number)?.toInt()
@@ -550,9 +563,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             onChange = { pct -> stateLabel.text = VerticalCoverSliderView.stateText(pct) }
             onRelease = { pct -> setPosition(pct) }
         }
-        center.addView(slider, LayoutParams(ctx.px(132f), ctx.px(276f), Gravity.CENTER))
+        center.addView(slider, LayoutParams(ctx.px(pillW), ctx.px(pillH), Gravity.CENTER))
         center.addView(buttons, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER))
-        body.addView(center, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(276f)).apply { topMargin = ctx.px(24f) })
+        body.addView(center, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(pillH)).apply { topMargin = ctx.px(controlGap) })
 
         // The mode switcher: the position slider, or the big buttons.
         val switcher = LinearLayout(ctx.context).apply {
@@ -594,7 +607,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         switcher.addView(sliderBtn, LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)))
         switcher.addView(buttonsBtn, LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)).apply { marginStart = ctx.px(4f) })
         showSlider(true)
-        addCentered(switcher, topDp = 20f)
+        addCentered(switcher, topDp = dockGap)
 
         val presets = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
         COVER_PRESETS.forEachIndexed { i, p ->
@@ -638,7 +651,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
         }
         val dialFrame = FrameLayout(ctx.context)
-        dialFrame.addView(dial, LayoutParams(MATCH_PARENT, ctx.px(260f)))
+        dialFrame.addView(dial, LayoutParams(MATCH_PARENT, ctx.px(dialDp)))
         val steppers = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -658,7 +671,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         steppers.addView(stepBtn("mdi:minus", -1), LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)).apply { marginEnd = ctx.px(20f) })
         steppers.addView(stepBtn("mdi:plus", 1), LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)))
         dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
-        body.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(260f)).apply { topMargin = ctx.px(12f) })
+        body.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(dialDp)).apply { topMargin = ctx.px(dialGap) })
 
         val controls = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -668,7 +681,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val presetBtn = infoPill("Preset")
         controls.addView(modeBtn.root, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(56f)))
         controls.addView(presetBtn.root, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(56f)).apply { marginStart = ctx.px(12f) })
-        addCentered(controls, topDp = 20f)
+        addCentered(controls, topDp = dockGap)
 
         modeBtn.root.setOnClickListener { v ->
             val modes = listAttr(ctx.store[id], "hvac_modes")
@@ -1075,7 +1088,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         body.addView(v, lp)
     }
 
-    private fun addPill(v: View) = addCentered(v, topDp = 24f, widthDp = 132f, heightDp = 276f)
+    private fun addPill(v: View) = addCentered(v, topDp = controlGap, widthDp = pillW, heightDp = pillH)
 
     private fun iconButton(icon: MdiIconView, name: String): FrameLayout = FrameLayout(ctx.context).apply {
         icon.setIcon(name, theme.primaryTextColor)
@@ -1196,6 +1209,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
     private companion object {
         const val WIDE_DP = 600
+
+        /** Below this viewport height (dp) the sheet uses its compact landscape sizes. */
+        const val COMPACT_HEIGHT_DP = 580
         const val SCRIM = 0x66000000
         const val BUTTON_SURFACE = 0x14888888
         const val ENTER_MS = 200L

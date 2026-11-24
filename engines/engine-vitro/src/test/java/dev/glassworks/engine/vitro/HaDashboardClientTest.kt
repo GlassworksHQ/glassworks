@@ -45,6 +45,7 @@ class HaDashboardClientTest {
         val themes = CopyOnWriteArrayList<ThemeCatalog>()
         val configs = CopyOnWriteArrayList<Pair<String?, DashboardConfig>>()
         val disconnected = CopyOnWriteArrayList<String>()
+        val userThemes = CopyOnWriteArrayList<Pair<String?, Boolean?>>()
 
         override fun onConnected(haVersion: String) { connected += haVersion }
         override fun onAuthRequired() { authRequired.incrementAndGet() }
@@ -53,6 +54,7 @@ class HaDashboardClientTest {
         override fun onThemes(catalog: ThemeCatalog) { themes += catalog }
         override fun onDashboardConfig(urlPath: String?, config: DashboardConfig) { configs += urlPath to config }
         override fun onDisconnected(reason: String) { disconnected += reason }
+        override fun onUserTheme(themeName: String?, dark: Boolean?) { userThemes += themeName to dark }
     }
 
     private val server = FakeHaServer()
@@ -194,6 +196,87 @@ class HaDashboardClientTest {
                 LovelaceResource("/local/legacy.js", "module"),
             ),
             listener.resources.single(), // the entry without a url is skipped
+        )
+    }
+
+    // ---- Signed-in user and their selected theme ----
+
+    /**
+     * A socket that answers the user-data commands [FakeHaServer] does not know: `auth/current_user`, then
+     * `frontend/get_user_data` with [userData] (the `core` value, or null for none) and `frontend/subscribe_user_data`.
+     */
+    private fun userDataConnect(currentUser: JSONObject, userData: JSONObject?): (String) -> HaSocket = { url ->
+        val inner = server.connect(url)
+        val socket = server.sockets.last()
+        fun reply(id: Int, result: Any) {
+            socket.push(JSONObject().put("id", id).put("type", "result").put("success", true).put("result", result))
+        }
+        // The answer is queued before the fake server's own "unknown_command" failure, which then finds no waiter.
+        SpySocket(inner, before = { msg ->
+            val id = msg.optInt("id", -1)
+            when (msg.optString("type")) {
+                "auth/current_user" -> reply(id, currentUser)
+                "frontend/get_user_data" -> reply(id, JSONObject().put("value", userData ?: JSONObject.NULL))
+                "frontend/subscribe_user_data" -> reply(id, JSONObject.NULL)
+            }
+        })
+    }
+
+    @Test
+    fun currentUserIsStoredFromAuthCurrentUser() {
+        val user = JSONObject("""{"id": "u1", "name": "Wall Panel", "is_admin": false, "is_owner": false}""")
+        val c = connected(connect = userDataConnect(user, null))
+        awaitCondition("currentUser") { c.currentUser.optString("id") == "u1" }
+        assertEquals("Wall Panel", c.currentUser.getString("name"))
+        assertFalse(c.currentUser.getBoolean("is_admin"))
+        assertEquals(JSONObject().toString(), newClient().currentUser.toString()) // empty until it arrives
+        assertEquals(1, server.commands("auth/current_user").size)
+    }
+
+    @Test
+    fun selectedThemeAsAStringReachesTheListener() {
+        connected(connect = userDataConnect(JSONObject(), JSONObject("""{"selectedTheme": "glass_dusk"}""")))
+        awaitCondition("user theme") { listener.userThemes.isNotEmpty() }
+        assertEquals(listOf<Pair<String?, Boolean?>>("glass_dusk" to null), listener.userThemes.toList())
+        assertEquals("core", server.commands("frontend/get_user_data").single().getString("key"))
+    }
+
+    @Test
+    fun selectedThemeAsAnObjectCarriesTheDarkChoice() {
+        connected(connect = userDataConnect(JSONObject(), JSONObject("""{"selectedTheme": {"theme": "glass_dusk", "dark": true, "primaryColor": "#ff0000"}}""")))
+        awaitCondition("user theme") { listener.userThemes.isNotEmpty() }
+        assertEquals(listOf<Pair<String?, Boolean?>>("glass_dusk" to true), listener.userThemes.toList())
+    }
+
+    @Test
+    fun noSelectedThemeMeansFollowTheServerDefault() {
+        connected(connect = userDataConnect(JSONObject(), null))
+        awaitCondition("user theme") { listener.userThemes.isNotEmpty() }
+        assertEquals(listOf<Pair<String?, Boolean?>>(null to null), listener.userThemes.toList())
+    }
+
+    @Test
+    fun userDataSubscriptionReportsLaterThemeChanges() {
+        connected(connect = userDataConnect(JSONObject(), null))
+        awaitCondition("initial") { listener.userThemes.isNotEmpty() }
+        val sub = server.commands("frontend/subscribe_user_data").single()
+        assertEquals("core", sub.getString("key"))
+        server.pushEvent(sub.getInt("id"), JSONObject("""{"value": {"selectedTheme": {"theme": "night", "dark": false}}}"""))
+        awaitCondition("change") { listener.userThemes.size == 2 }
+        assertEquals("night" to false, listener.userThemes[1])
+        server.pushEvent(sub.getInt("id"), JSONObject("""{"value": {}}"""))
+        awaitCondition("cleared") { listener.userThemes.size == 3 }
+        assertEquals(null to null, listener.userThemes[2])
+    }
+
+    @Test
+    fun theUserRequestsComeAfterTheFirstEightStartupRequests() {
+        connected(connect = userDataConnect(JSONObject(), null))
+        awaitCondition("user data asked") { server.commands("frontend/subscribe_user_data").isNotEmpty() }
+        val types = server.received.toList().drop(1).map { it.getString("type") }
+        assertEquals(
+            listOf("auth/current_user", "frontend/get_user_data", "frontend/subscribe_user_data"),
+            types.drop(8).take(3),
         )
     }
 
@@ -471,7 +554,7 @@ class HaDashboardClientTest {
         val c = connected(connect = { url ->
             SpySocket(server.connect(url), before = { msg -> writers += msg.optString("type") to Thread.currentThread().name })
         })
-        awaitCondition("startup writes") { writers.size >= 9 } // auth + 8 startup requests
+        awaitCondition("startup writes") { writers.size >= 12 } // auth + 8 startup requests + 3 user-data requests
         val caller = Thread.currentThread()
 
         c.callService("light", "turn_on")
@@ -489,7 +572,7 @@ class HaDashboardClientTest {
         // FIFO: ids go out in the order the calls were made, across the reader's and the caller's requests.
         val ids = server.received.drop(1).map { it.getInt("id") }
         assertEquals(ids.sorted(), ids)
-        val after = server.received.drop(1).filter { it.getInt("id") > 8 }.map {
+        val after = server.received.drop(1).filter { it.getInt("id") > 11 }.map {
             if (it.getString("type") == "call_service") it.getString("service") else it.getString("type")
         }
         assertEquals(listOf("turn_on", "turn_off", "history/stream", "toggle"), after.take(4))

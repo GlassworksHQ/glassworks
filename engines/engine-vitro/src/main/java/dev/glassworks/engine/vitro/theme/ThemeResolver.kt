@@ -12,7 +12,11 @@ import kotlin.math.roundToInt
 /** Background description parsed from HA's `lovelace-background` / `primary-background-color`. */
 sealed class ThemeBackground {
     data class Solid(val color: Int) : ThemeBackground()
+    /** CSS `linear-gradient(...)`: the angle plus every parsed color stop, in order. */
     data class LinearGradient(val angleDeg: Float, val colors: IntArray) : ThemeBackground()
+
+    /** CSS `radial-gradient(...)`: every parsed color stop, center to edge. Shape and position keywords are ignored. */
+    data class RadialGradient(val colors: IntArray) : ThemeBackground()
     data class ImageUrl(val url: String, val fallbackColor: Int) : ThemeBackground()
 }
 
@@ -51,11 +55,31 @@ data class ResolvedTheme(
     val stateIconColor: Int = 0xFF44739E.toInt(),
     /** HA's `--state-inactive-color`: the grey of an inactive toggleable tile. */
     val stateInactiveColor: Int = 0xFF9E9E9E.toInt(),
+    /** Native elevation derived from HA's `--ha-card-box-shadow` (0 when the theme has none or says `none`). */
+    val cardElevationDp: Float = 0f,
+    /** Gap between cards: `--masonry-view-card-margin` or `--ha-view-sections-column-gap`, clamped to 4..24 dp. */
+    val cardGapDp: Float = 8f,
+    /**
+     * Variable names the theme itself set (as opposed to HA defaults Vitro fills in). Null treats every entry
+     * of [vars] as set by the theme. It lets `--state-active-color` beat the built-in per-domain defaults.
+     */
+    val themeVarNames: Set<String>? = null,
 ) {
-    /** Domain active color matching HA's `--state-<domain>-active-color` convention. */
+    private fun themeVar(key: String): String? =
+        vars[key]?.takeIf { themeVarNames == null || key in themeVarNames }
+
+    /**
+     * Domain active color following HA's convention: `--state-<domain>-active-color`, then
+     * `--state-<domain>-on-color`, then the theme-wide `--state-active-color`, then HA's own default.
+     */
     fun activeColor(domain: String): Int {
-        val domainKey = "state-${domain.lowercase(Locale.ROOT)}-active-color"
-        ThemeResolver.parseColor(vars[domainKey])?.let { return it }
+        val d = domain.lowercase(Locale.ROOT)
+        ThemeResolver.parseColor(themeVar("state-$d-active-color"))?.let { return it }
+        ThemeResolver.parseColor(themeVar("state-$d-on-color"))?.let { return it }
+        if (d != "sensor" && d != "person" && d != "device_tracker") {
+            ThemeResolver.parseColor(themeVar("state-active-color"))?.let { return it }
+        }
+        ThemeResolver.parseColor(vars["state-$d-active-color"])?.let { return it }
         return when (domain) {
             "light" -> ThemeResolver.parseColor(vars["state-light-active-color"]) ?: 0xFFFFC107.toInt()
             "switch", "input_boolean" -> ThemeResolver.parseColor(vars["state-switch-active-color"]) ?: 0xFFFFC107.toInt()
@@ -151,7 +175,10 @@ object ThemeResolver {
     private val HSLA_PATTERN = Regex("""hsla?\(\s*([\d.]+)(?:deg)?\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%(?:\s*[,/]\s*([\d.]+%?))?\s*\)""", RegexOption.IGNORE_CASE)
     private val URL_PATTERN = Regex("""url\(\s*['"]?([^'")]+)['"]?\s*\)""", RegexOption.IGNORE_CASE)
     private val LINEAR_GRADIENT_PATTERN = Regex("""linear-gradient\(\s*(?:([\d.]+)deg\s*,)?\s*(.+)\)""", RegexOption.IGNORE_CASE)
+    private val RADIAL_GRADIENT_PATTERN = Regex("""radial-gradient\(\s*(.+)\)""", RegexOption.IGNORE_CASE)
     private val DIM_PX = Regex("""([\d.]+)\s*(px|rem|em)?""", RegexOption.IGNORE_CASE)
+    private val SHADOW_COLOR = Regex("""(?:rgba?|hsla?)\([^)]*\)""", RegexOption.IGNORE_CASE)
+    private val SHADOW_LENGTH = Regex("""(?<![\w#.])(-?[\d.]+)(?:px)?(?=\s|$)""", RegexOption.IGNORE_CASE)
 
     private val DARK_DEFAULTS = mapOf(
         "primary-color" to "#03a9f4",
@@ -231,6 +258,12 @@ object ThemeResolver {
             raw.putAll(if (dark) def.dark else def.light)
         }
 
+        val themeVarNames = LinkedHashSet<String>()
+        catalog.themes[pickedName]?.let { def ->
+            themeVarNames += def.base.keys
+            themeVarNames += if (dark) def.dark.keys else def.light.keys
+        }
+
         val resolved = LinkedHashMap<String, String>(raw.size)
         for (k in raw.keys) {
             resolved[k] = resolveValue(raw[k].orEmpty(), raw, 0)
@@ -272,7 +305,28 @@ object ThemeResolver {
             cardMod = cardMod,
             stateIconColor = parseColor(resolved["state-icon-color"]) ?: 0xFF44739E.toInt(),
             stateInactiveColor = parseColor(resolved["state-inactive-color"]) ?: 0xFF9E9E9E.toInt(),
+            cardElevationDp = parseBoxShadowElevationDp(resolved["ha-card-box-shadow"]),
+            cardGapDp = (resolved["masonry-view-card-margin"] ?: resolved["ha-view-sections-column-gap"])
+                ?.let { parseDimensionDp(it, 8f) }?.coerceIn(4f, 24f) ?: 8f,
+            themeVarNames = themeVarNames,
         )
+    }
+
+    /**
+     * Maps a CSS `box-shadow` (`0px 2px 6px rgba(0,0,0,0.2)`) to an Android elevation of 1..12 dp: half the blur
+     * plus the vertical offset. `none`, blank, inset-only or unparsable values give 0.
+     */
+    fun parseBoxShadowElevationDp(raw: String?): Float {
+        val value = raw?.trim().orEmpty()
+        if (value.isEmpty() || value.equals("none", ignoreCase = true)) return 0f
+        val first = splitTopLevelCommas(value).firstOrNull { it.isNotBlank() }?.trim() ?: return 0f
+        if (first.startsWith("inset", ignoreCase = true) || first.endsWith("inset", ignoreCase = true)) return 0f
+        val lengths = SHADOW_LENGTH.findAll(SHADOW_COLOR.replace(first, " ").trim())
+            .mapNotNull { it.groupValues[1].toFloatOrNull() }.toList()
+        if (lengths.size < 2) return 0f
+        val offsetY = lengths[1]
+        val blur = lengths.getOrElse(2) { 0f }.coerceAtLeast(0f)
+        return (blur / 2f + abs(offsetY)).coerceIn(1f, 12f)
     }
 
     /** Recursively substitutes `var(--name, fallback)` up to depth 8. */
@@ -355,6 +409,12 @@ object ThemeResolver {
                 parseColor(cleaned)
             }
             if (stops.size >= 2) return ThemeBackground.LinearGradient(angle, stops.toIntArray())
+        }
+        RADIAL_GRADIENT_PATTERN.find(spec)?.let { m ->
+            val stops = splitTopLevelCommas(m.groupValues[1]).mapNotNull { stop ->
+                parseColor(stop.trim().replace(Regex("""\s+[\d.]+(?:%|px)$"""), ""))
+            }
+            if (stops.size >= 2) return ThemeBackground.RadialGradient(stops.toIntArray())
         }
         parseColor(spec)?.let { return ThemeBackground.Solid(it) }
         return ThemeBackground.Solid(fallbackColor)

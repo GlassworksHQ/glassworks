@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro.ui
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
@@ -61,6 +62,7 @@ import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.ui.Inter
 import org.json.JSONObject
+import kotlin.math.hypot
 
 /** Snapshot of Vitro's rendering telemetry for the currently active view. */
 data class VitroMetrics(
@@ -114,11 +116,43 @@ class VitroView(
     private var moreInfo: MoreInfoSheet? = null
     private val viewCache = LinkedHashMap<Int, View>()
 
+    /** Views the user came from, newest last; [goBack] pops it. Capped at [MAX_BACK_STACK]. */
+    private val viewBackStack = ArrayDeque<Int>()
+
+    private val bannerText = TextView(context).apply {
+        text = "Connection lost. Reconnecting…"
+        textSize = 13f
+        setTextColor(0xFFFFFFFF.toInt())
+        typeface = Inter.typeface(context, Inter.MEDIUM, 13f)
+        includeFontPadding = false
+    }
+    private val connectionBanner = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(px(16f), px(10f), px(18f), px(10f))
+        background = GradientDrawable().apply {
+            cornerRadius = 999f * dp
+            setColor(0xEB2B2B2B.toInt())
+        }
+        elevation = 6f * dp
+        visibility = GONE
+        val dot = View(context).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0xFFFFB300.toInt())
+            }
+        }
+        addView(dot, LinearLayout.LayoutParams(px(8f), px(8f)).apply { marginEnd = px(10f) })
+        addView(bannerText, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+    }
+
     var dashboard: DashboardConfig? = null
         private set
     var currentViewIndex: Int = 0
         private set
     var themeCatalog: ThemeCatalog = ThemeCatalog()
+        private set
+    var userThemeName: String? = null
         private set
     /** Follows Android's night mode, like Home Assistant's own auto light/dark; callers can still override it. */
     var darkMode: Boolean =
@@ -144,6 +178,33 @@ class VitroView(
         shell.addView(contentHost, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
         addView(shell, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         addView(statusLabel, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        addView(
+            connectionBanner,
+            LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = px(16f) },
+        )
+    }
+
+    /** Shows a small floating pill (e.g. "Connection lost. Reconnecting…") while [message] is non-blank; hides it otherwise. */
+    fun setConnectionBanner(message: String?) {
+        if (message.isNullOrBlank()) {
+            connectionBanner.visibility = GONE
+            return
+        }
+        bannerText.text = message
+        connectionBanner.visibility = VISIBLE
+        connectionBanner.bringToFront()
+    }
+
+    /**
+     * Back navigation for the host's back key: closes the More-Info sheet first, then returns to the view the user
+     * came from. False when there is nothing to go back to.
+     */
+    fun goBack(): Boolean {
+        if (closeMoreInfo()) return true
+        if (viewBackStack.isEmpty()) return false
+        val prev = viewBackStack.removeLast()
+        renderView(prev, forceRebuild = false, pushHistory = false)
+        return true
     }
 
     fun showStatus(message: String) {
@@ -163,8 +224,21 @@ class VitroView(
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
     }
 
+    /** Applies the user's selected Home Assistant theme (`frontend/get_user_data` `core.selectedTheme`). */
+    fun setUserTheme(themeName: String?, dark: Boolean?) {
+        val nextTheme = themeName?.takeIf { it.isNotBlank() && it != "Backend-selected" }
+        val nextDark = dark ?: darkMode
+        if (nextTheme == userThemeName && nextDark == darkMode) return
+        userThemeName = nextTheme
+        darkMode = nextDark
+        viewCache.clear()
+        contentHost.removeAllViews()
+        dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
+    }
+
     fun setDashboard(config: DashboardConfig, initialViewPath: String?) {
         dashboard = config
+        viewBackStack.clear()
         viewCache.clear()
         contentHost.removeAllViews()
         val idx = resolveViewIndex(config, initialViewPath)
@@ -190,7 +264,7 @@ class VitroView(
     fun openMoreInfo(entityId: String) {
         closeMoreInfo()
         val cfg = dashboard?.views?.getOrNull(currentViewIndex)
-        val theme = ThemeResolver.resolve(themeCatalog, darkMode, cfg?.theme, cfg?.background)
+        val theme = ThemeResolver.resolve(themeCatalog, darkMode, cfg?.theme ?: userThemeName, cfg?.background)
         val cardCtx = contextFactory?.invoke(theme) ?: return
         val sheet = MoreInfoSheet(cardCtx) {
             moreInfo?.let { removeView(it) }
@@ -266,14 +340,19 @@ class VitroView(
         }
     }
 
-    private fun renderView(index: Int, forceRebuild: Boolean) {
+    private fun renderView(index: Int, forceRebuild: Boolean, pushHistory: Boolean = true) {
         val cfg = dashboard ?: return
         val viewCfg = cfg.views.getOrNull(index) ?: return
         val t0 = SystemClock.elapsedRealtime()
+        val prev = currentViewIndex
+        if (pushHistory && !forceRebuild && prev != index && cfg.views.getOrNull(prev) != null) {
+            viewBackStack.addLast(prev)
+            while (viewBackStack.size > MAX_BACK_STACK) viewBackStack.removeFirst()
+        }
         currentViewIndex = index
         hideStatus()
 
-        val theme = ThemeResolver.resolve(themeCatalog, darkMode, viewCfg.theme, viewCfg.background)
+        val theme = ThemeResolver.resolve(themeCatalog, darkMode, viewCfg.theme ?: userThemeName, viewCfg.background)
         applyBackdrop(theme)
         highlightTab(index, theme)
         onThemeResolved?.invoke(theme)
@@ -341,6 +420,7 @@ class VitroView(
                 }
                 background = GradientDrawable(orientation, bg.colors)
             }
+            is ThemeBackground.RadialGradient -> background = RadialBackdrop(bg.colors)
             is ThemeBackground.ImageUrl -> {
                 setBackgroundColor(bg.fallbackColor)
                 contextFactory?.invoke(theme)?.loadImage(bg.url) { bmp ->
@@ -362,8 +442,8 @@ class VitroView(
             isVerticalScrollBarEnabled = false
         }
         val widthDp = (resources.displayMetrics.widthPixels / dp).toInt()
-        val gap = px(8f)
-        val outerPad = px(8f)
+        val gap = px(ctx.theme.cardGapDp)
+        val outerPad = px(ctx.theme.cardGapDp)
 
         val container: View = if (view.type == "sections" && view.sections.isNotEmpty()) {
             buildSectionsLayout(view, ctx, widthDp, outerPad, gap)
@@ -390,7 +470,9 @@ class VitroView(
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(outerPad, outerPad, outerPad, px(4f))
                     isClickable = true
-                    setOnClickListener { ctx.navigate(view.backPath ?: "/") }
+                    setOnClickListener {
+                        if (view.backPath == null && viewBackStack.isNotEmpty()) goBack() else ctx.navigate(view.backPath ?: "/")
+                    }
                 }
                 backRow.addView(TextView(context).apply {
                     text = "←  ${view.title}"
@@ -775,5 +857,19 @@ class VitroView(
         const val UNLOCKED_RED = 0xFFF44336.toInt()
         const val SENSOR_BLUE = 0xFF03A9F4.toInt()
         private const val MAX_CACHED_VIEWS = 3
+        private const val MAX_BACK_STACK = 16
+    }
+}
+
+/** Radial backdrop whose radius follows its bounds, reaching the farthest corner like CSS `radial-gradient`. */
+private class RadialBackdrop(colors: IntArray) : GradientDrawable(Orientation.TOP_BOTTOM, colors) {
+    init {
+        gradientType = RADIAL_GRADIENT
+        setGradientCenter(0.5f, 0.5f)
+    }
+
+    override fun onBoundsChange(r: Rect) {
+        gradientRadius = (hypot(r.width().toFloat(), r.height().toFloat()) / 2f).coerceAtLeast(1f)
+        super.onBoundsChange(r)
     }
 }

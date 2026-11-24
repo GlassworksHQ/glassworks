@@ -481,4 +481,76 @@ class ThemeResolverTest {
         assertEquals(argb(0xFF2196F3), t.activeColor("sensor")) // HA blue
         assertEquals(t.primaryColor, t.activeColor("weather")) // no rule: the primary color
     }
+
+    // ---- Deeper HA theme support ----
+
+    @Test
+    fun cardBoxShadowBecomesAnElevation() {
+        assertEquals(0f, ThemeResolver.resolve(ThemeCatalog()).cardElevationDp, 0.001f) // no shadow in the defaults
+        assertEquals(0f, resolveWith("""{"ha-card-box-shadow": "none"}""").cardElevationDp, 0.001f)
+        assertEquals(0f, resolveWith("""{"ha-card-box-shadow": ""}""").cardElevationDp, 0.001f)
+        // blur / 2 + y offset
+        assertEquals(5f, resolveWith("""{"ha-card-box-shadow": "0px 2px 6px rgba(0,0,0,0.2)"}""").cardElevationDp, 0.001f)
+        assertEquals(6f, resolveWith("""{"ha-card-box-shadow": "0 2px 8px rgba(0, 0, 0, 0.3)"}""").cardElevationDp, 0.001f)
+        assertEquals(6f, resolveWith("""{"ha-card-box-shadow": "0 2px 8px #00000033"}""").cardElevationDp, 0.001f)
+        // clamped to 1..12, and only the first of several shadows counts
+        assertEquals(12f, resolveWith("""{"ha-card-box-shadow": "0 20px 60px rgba(0,0,0,0.5)"}""").cardElevationDp, 0.001f)
+        assertEquals(1f, resolveWith("""{"ha-card-box-shadow": "0 0 0 1px rgba(0,0,0,0.1)"}""").cardElevationDp, 0.001f)
+        assertEquals(5f, resolveWith("""{"ha-card-box-shadow": "0 2px 6px rgba(0,0,0,0.2), 0 20px 60px #000"}""").cardElevationDp, 0.001f)
+        assertEquals(0f, resolveWith("""{"ha-card-box-shadow": "inset 0 2px 6px #000"}""").cardElevationDp, 0.001f)
+    }
+
+    @Test
+    fun linearGradientKeepsEveryStop() {
+        val g = ThemeResolver.parseBackground(
+            "linear-gradient(45deg, #ff0000 0%, rgba(0, 255, 0, 0.5) 50%, #0000ff 100%)", 0,
+        ) as ThemeBackground.LinearGradient
+        assertEquals(45f, g.angleDeg, 0.001f)
+        assertArrayEquals(intArrayOf(argb(0xFFFF0000), argb(0x8000FF00), argb(0xFF0000FF)), g.colors)
+    }
+
+    @Test
+    fun radialGradientIsParsedWithItsStops() {
+        val g = ThemeResolver.parseBackground("radial-gradient(circle at top left, #112233 0%, #445566 60%, rgba(0, 0, 0, 0.8) 100%)", 0)
+            as ThemeBackground.RadialGradient
+        assertArrayEquals(intArrayOf(argb(0xFF112233), argb(0xFF445566), argb(0xCC000000)), g.colors)
+
+        val plain = ThemeResolver.parseBackground("radial-gradient(#000000, #ffffff)", 0) as ThemeBackground.RadialGradient
+        assertEquals(2, plain.colors.size)
+
+        assertEquals(ThemeBackground.Solid(0x44), ThemeResolver.parseBackground("radial-gradient(#ff0000)", 0x44))
+        val themed = resolveWith("""{"lovelace-background": "radial-gradient(circle, #101020, #000000)"}""")
+        assertTrue(themed.background is ThemeBackground.RadialGradient)
+    }
+
+    @Test
+    fun stateActiveColorOverridesApplyToEveryDomain() {
+        val t = resolveWith("""{"state-light-active-color": "#ff00ff", "state-active-color": "#00ff00"}""")
+        assertEquals(argb(0xFFFF00FF), t.activeColor("light")) // the domain key wins
+        assertEquals(argb(0xFF00FF00), t.activeColor("switch")) // the theme-wide key beats the built-in default
+        assertEquals(argb(0xFF00FF00), t.activeColor("fan"))
+        assertEquals(argb(0xFF00FF00), t.activeColor("cover"))
+        assertEquals(argb(0xFF00FF00), t.activeColor("climate"))
+        assertEquals(argb(0xFF00FF00), t.activeColor("binary_sensor"))
+        assertEquals(argb(0xFF2196F3), t.activeColor("sensor")) // sensors and people keep their own colors
+        assertEquals(argb(0xFF4CAF50), t.activeColor("person"))
+    }
+
+    @Test
+    fun stateOnColorIsAnAlternativeToTheActiveColor() {
+        val t = resolveWith("""{"state-switch-on-color": "#123456", "state-fan-active-color": "#abcdef", "state-fan-on-color": "#654321"}""")
+        assertEquals(argb(0xFF123456), t.activeColor("switch"))
+        assertEquals(argb(0xFFABCDEF), t.activeColor("fan")) // active-color is checked first
+        assertEquals(argb(0xFFFFC107), t.activeColor("light")) // untouched domains keep HA's default
+    }
+
+    @Test
+    fun cardGapFollowsTheViewMarginVariablesAndIsClamped() {
+        assertEquals(8f, ThemeResolver.resolve(ThemeCatalog()).cardGapDp, 0.001f)
+        assertEquals(12f, resolveWith("""{"masonry-view-card-margin": "12px"}""").cardGapDp, 0.001f)
+        assertEquals(16f, resolveWith("""{"ha-view-sections-column-gap": "1rem"}""").cardGapDp, 0.001f)
+        assertEquals(12f, resolveWith("""{"masonry-view-card-margin": "12px", "ha-view-sections-column-gap": "20px"}""").cardGapDp, 0.001f)
+        assertEquals(4f, resolveWith("""{"masonry-view-card-margin": "0px"}""").cardGapDp, 0.001f)
+        assertEquals(24f, resolveWith("""{"masonry-view-card-margin": "60px"}""").cardGapDp, 0.001f)
+    }
 }

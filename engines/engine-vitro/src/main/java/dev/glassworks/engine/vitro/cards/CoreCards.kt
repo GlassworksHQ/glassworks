@@ -17,6 +17,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
@@ -35,6 +36,8 @@ import dev.glassworks.ui.Inter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /** Inter's semibold weight (the variable font takes any weight; core's [Inter] names only up to medium). */
 private const val INTER_SEMIBOLD = 600
@@ -57,6 +60,8 @@ private fun textView(ctx: VitroCardContext, sp: Float, color: Int, weight: Int =
  * `custom:mushroom-person-card`, and `custom:mushroom-template-card`.
  */
 class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
+    /** Live state binders for the inline features added by [addExtraFeatures]. */
+    private val featureBinders = ArrayList<(EntityState?) -> Unit>()
     private val iconBadge = MdiIconView(ctx.context)
     private val iconWrap = LinearLayout(ctx.context)
     private val titleView = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM)
@@ -169,6 +174,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 }
             rootCol.addView(coverRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
+        if (entityId != null) {
+            addExtraFeatures(rootCol, featuresArr, featureTypes, entityId, pad)
+        }
         addView(rootCol, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
         // HA's `hui-tile-card`: the body opens more-info; the icon toggles what can be toggled.
@@ -196,6 +204,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                     sb.setValue(bri / 255f, active = s?.isActive == true)
                 }
                 selectBox?.text = s?.state ?: "…"
+                featureBinders.forEach { it(s) }
             }
         } else {
             titleView.text = config.name ?: config.title ?: "Tile"
@@ -203,6 +212,181 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             updateBadge(null, active = false)
         }
     }
+
+    /**
+     * HA 2026's other inline tile features: `climate-hvac-modes`, `target-temperature`, `fan-speed`,
+     * `cover-position`, `light-color-temp` and `media-player-volume-slider`, in the order the card lists them.
+     */
+    private fun addExtraFeatures(
+        rootCol: LinearLayout,
+        featuresArr: JSONArray?,
+        featureTypes: List<String>,
+        entityId: String,
+        pad: Int,
+    ) {
+        fun lp() = LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f)).apply {
+            leftMargin = pad; rightMargin = pad; bottomMargin = ctx.px(10f)
+        }
+        fun data() = JSONObject().put("entity_id", entityId)
+        fun featureConfig(type: String): JSONObject? = featuresArr?.let { arr ->
+            (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }.firstOrNull { it.optString("type") == type }
+        }
+        fun num(s: EntityState?, key: String): Double? = (s?.attributes?.get(key) as? Number)?.toDouble()
+
+        for (type in featureTypes.distinct()) {
+            when (type) {
+                "climate-hvac-modes" -> {
+                    val configured = featureConfig(type)?.optJSONArray("hvac_modes")
+                        ?.let { arr -> (0 until arr.length()).map { arr.optString(it) }.filter(String::isNotEmpty) }
+                    val bar = LinearLayout(ctx.context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        setPadding(ctx.px(3f), ctx.px(3f), ctx.px(3f), ctx.px(3f))
+                        background = GradientDrawable().apply {
+                            cornerRadius = 10f * ctx.dp
+                            setColor(if (ctx.theme.dark) SEGMENT_DARK else SEGMENT_LIGHT)
+                        }
+                    }
+                    var shownModes: List<String> = emptyList()
+                    val buttons = ArrayList<Pair<String, Pair<LinearLayout, MdiIconView>>>()
+                    rootCol.addView(bar, lp())
+                    featureBinders += { s ->
+                        val modes = configured?.takeIf { it.isNotEmpty() }
+                            ?: (s?.attributes?.get("hvac_modes") as? List<*>)?.mapNotNull { it?.toString() }?.takeIf { it.isNotEmpty() }
+                            ?: DEFAULT_HVAC_MODES
+                        if (modes != shownModes) {
+                            shownModes = modes
+                            bar.removeAllViews()
+                            buttons.clear()
+                            modes.forEach { mode ->
+                                val icon = MdiIconView(ctx.context)
+                                val btn = LinearLayout(ctx.context).apply {
+                                    gravity = Gravity.CENTER
+                                    isClickable = true
+                                    contentDescription = mode.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
+                                    addView(icon, LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)))
+                                    setOnClickListener {
+                                        ctx.callService("climate", "set_hvac_mode", data().put("hvac_mode", mode), null)
+                                    }
+                                }
+                                bar.addView(btn, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+                                buttons += mode to (btn to icon)
+                            }
+                        }
+                        buttons.forEach { (mode, views) ->
+                            val (btn, icon) = views
+                            val selected = s?.state == mode
+                            icon.setIcon(ThermostatCardView.modeIcon(mode), if (selected) Color.WHITE else ctx.theme.primaryTextColor)
+                            btn.background = if (selected) GradientDrawable().apply {
+                                cornerRadius = 8f * ctx.dp
+                                setColor(hvacModeColor(mode))
+                            } else null
+                        }
+                    }
+                }
+                "target-temperature" -> {
+                    val unit = ThermostatCardView.temperatureUnit(ctx)
+                    val value = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+                        gravity = Gravity.CENTER
+                        fontFeatureSettings = "tnum"
+                    }
+                    var pending: Double? = null
+                    fun step(sign: Int) {
+                        val st = ctx.store[entityId]
+                        val stepSize = num(st, "target_temp_step")?.takeIf { it > 0 } ?: 0.5
+                        val cur = pending ?: num(st, "temperature") ?: return
+                        val next = (Math.round((cur + sign * stepSize) / stepSize) * stepSize)
+                            .coerceIn(num(st, "min_temp") ?: 7.0, num(st, "max_temp") ?: 35.0)
+                        pending = next
+                        value.text = formatTemp(next, unit)
+                        ctx.callService("climate", "set_temperature", data().put("temperature", next), null)
+                    }
+                    fun stepButton(iconName: String, sign: Int, label: String) = LinearLayout(ctx.context).apply {
+                        gravity = Gravity.CENTER
+                        isClickable = true
+                        contentDescription = label
+                        addView(MdiIconView(ctx.context).apply { setIcon(iconName, ctx.theme.primaryTextColor) },
+                            LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)))
+                        setOnClickListener { step(sign) }
+                    }
+                    val stepper = LinearLayout(ctx.context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        background = GradientDrawable().apply {
+                            cornerRadius = 10f * ctx.dp
+                            setColor(if (ctx.theme.dark) SEGMENT_DARK else SEGMENT_LIGHT)
+                        }
+                        addView(stepButton("mdi:minus", -1, "Lower target temperature"), LinearLayout.LayoutParams(ctx.px(48f), MATCH_PARENT))
+                        addView(value, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                        addView(stepButton("mdi:plus", 1, "Raise target temperature"), LinearLayout.LayoutParams(ctx.px(48f), MATCH_PARENT))
+                    }
+                    rootCol.addView(stepper, lp())
+                    featureBinders += { s ->
+                        pending = null
+                        value.text = num(s, "temperature")?.let { formatTemp(it, unit) } ?: "–"
+                    }
+                }
+                "fan-speed" -> {
+                    val slider = HaHorizontalSliderView(ctx, ctx.theme.activeColor("fan")) { frac ->
+                        val pct = (frac * 100f).roundToInt().coerceIn(0, 100)
+                        if (pct <= 0) ctx.callService("fan", "turn_off", data(), null)
+                        else ctx.callService("fan", "set_percentage", data().put("percentage", pct), null)
+                    }
+                    rootCol.addView(slider, lp())
+                    featureBinders += { s ->
+                        val on = s?.state == "on"
+                        val pct = num(s, "percentage") ?: if (on) 100.0 else 0.0
+                        slider.setValue(if (on) pct.toFloat() / 100f else 0f, active = on)
+                    }
+                }
+                "cover-position" -> {
+                    val slider = HaHorizontalSliderView(ctx, ctx.theme.activeColor("cover")) { frac ->
+                        val pos = (frac * 100f).roundToInt().coerceIn(0, 100)
+                        ctx.callService("cover", "set_cover_position", data().put("position", pos), null)
+                    }
+                    rootCol.addView(slider, lp())
+                    featureBinders += { s ->
+                        val pos = num(s, "current_position") ?: if (s?.state == "open") 100.0 else 0.0
+                        slider.setValue(pos.toFloat() / 100f, active = pos > 0)
+                    }
+                }
+                "light-color-temp" -> {
+                    val bar = HaColorTempBarView(ctx) { kelvin ->
+                        ctx.callService("light", "turn_on", data().put("color_temp_kelvin", kelvin), null)
+                    }
+                    rootCol.addView(bar, lp())
+                    featureBinders += { s ->
+                        val minK = num(s, "min_color_temp_kelvin")?.toInt() ?: HaColorTempBarView.DEFAULT_MIN_K
+                        val maxK = num(s, "max_color_temp_kelvin")?.toInt() ?: HaColorTempBarView.DEFAULT_MAX_K
+                        bar.bind(minK, maxK, num(s, "color_temp_kelvin")?.toInt(), s?.state == "on")
+                    }
+                }
+                "media-player-volume-slider" -> {
+                    val slider = HaHorizontalSliderView(ctx, ctx.theme.primaryColor) { frac ->
+                        val vol = (frac * 100f).roundToInt() / 100.0
+                        ctx.callService("media_player", "volume_set", data().put("volume_level", vol), null)
+                    }
+                    rootCol.addView(slider, lp())
+                    featureBinders += { s ->
+                        val vol = num(s, "volume_level")
+                        val live = s != null && s.state != "off" && !s.isUnavailable && vol != null
+                        slider.setValue(vol?.toFloat() ?: 0f, active = live)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun hvacModeColor(mode: String): Int = when (mode) {
+        "heat" -> HVAC_HEAT
+        "cool" -> HVAC_COOL
+        "off" -> HVAC_OFF
+        "dry" -> HVAC_DRY
+        "fan_only" -> ctx.theme.activeColor("fan")
+        else -> ctx.theme.primaryColor
+    }
+
+    private fun formatTemp(t: Double, unit: String): String =
+        if (t % 1.0 == 0.0) String.format(Locale.US, "%.0f %s", t, unit) else String.format(Locale.US, "%.1f %s", t, unit)
 
     private fun bindMushroomTemplate() {
         val primaryTpl = config.raw.optString("primary", config.name.orEmpty())
@@ -294,6 +478,13 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         private const val BRIGHTNESS_DARK = 0xFFFFAA55.toInt()
         private const val FEATURE_FILL_LIGHT = 0x0F000000
         private const val FEATURE_FILL_DARK = 0x16FFFFFF
+        private const val SEGMENT_LIGHT = 0xFFF0F0F0.toInt()
+        private const val SEGMENT_DARK = 0xFF2A2A2A.toInt()
+        private const val HVAC_HEAT = 0xFFFF6F22.toInt()
+        private const val HVAC_COOL = 0xFF2196F3.toInt()
+        private const val HVAC_OFF = 0xFF757575.toInt()
+        private const val HVAC_DRY = 0xFFEFBD07.toInt()
+        private val DEFAULT_HVAC_MODES = listOf("off", "heat", "cool")
 
         /** The 10 dp rounded fill under HA 2026's tile features (dropdowns, cover buttons). */
         fun featureFill(ctx: VitroCardContext) = GradientDrawable().apply {
@@ -402,6 +593,109 @@ internal class HaHorizontalSliderView(
             canvas.drawRoundRect(handleRect, barW / 2f, barW / 2f, handlePaint)
         }
         canvas.restore()
+    }
+}
+
+/**
+ * HA 2026's inline `light-color-temp` tile feature: a 10 dp rounded warm-to-cool Kelvin gradient
+ * (#FF9329 → #FFFDF7 → #A6C8FF) with a white vertical handle; releasing calls back with the picked Kelvin.
+ */
+internal class HaColorTempBarView(
+    private val ctx: VitroCardContext,
+    private val onCommit: (Int) -> Unit,
+) : View(ctx.context) {
+    private val gradientPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val handlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.WHITE
+    }
+    private val handleShadow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0x33000000
+    }
+    private val bounds = RectF()
+    private val handleRect = RectF()
+    private var shaderWidth = -1f
+    private var minK = DEFAULT_MIN_K
+    private var maxK = DEFAULT_MAX_K
+    private var fraction = 0.5f
+    private var hasValue = false
+    private var dragging = false
+
+    fun bind(minKelvin: Int, maxKelvin: Int, kelvin: Int?, on: Boolean) {
+        if (dragging) return
+        minK = minKelvin
+        maxK = maxKelvin.coerceAtLeast(minKelvin + 1)
+        hasValue = on && kelvin != null
+        if (kelvin != null) fraction = ((kelvin - minK).toFloat() / (maxK - minK)).coerceIn(0f, 1f)
+        alpha = if (on) 1f else 0.5f
+        invalidate()
+    }
+
+    private fun kelvinAt(frac: Float): Int = (minK + frac * (maxK - minK)).roundToInt().coerceIn(minK, maxK)
+
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        val w = width.toFloat().coerceAtLeast(1f)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) parent?.requestDisallowInterceptTouchEvent(true)
+                dragging = true
+                hasValue = true
+                fraction = (event.x / w).coerceIn(0f, 1f)
+                invalidate()
+                return true
+            }
+            MotionEvent.ACTION_UP -> {
+                fraction = (event.x / w).coerceIn(0f, 1f)
+                dragging = false
+                parent?.requestDisallowInterceptTouchEvent(false)
+                invalidate()
+                onCommit(kelvinAt(fraction))
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                dragging = false
+                parent?.requestDisallowInterceptTouchEvent(false)
+                invalidate()
+                return true
+            }
+        }
+        return super.onTouchEvent(event)
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        if (w != shaderWidth) {
+            shaderWidth = w
+            gradientPaint.shader = android.graphics.LinearGradient(
+                0f, 0f, w, 0f,
+                intArrayOf(WARM, MID, COOL), floatArrayOf(0f, 0.5f, 1f),
+                android.graphics.Shader.TileMode.CLAMP,
+            )
+        }
+        val r = 10f * ctx.dp
+        bounds.set(0f, 0f, w, h)
+        canvas.drawRoundRect(bounds, r, r, gradientPaint)
+        if (!hasValue) return
+        val barW = 4f * ctx.dp
+        val barH = (h * 0.56f).coerceAtLeast(12f * ctx.dp)
+        val inset = 8f * ctx.dp
+        val cx = (inset + fraction * (w - 2f * inset)).coerceIn(inset, w - inset)
+        handleRect.set(cx - barW / 2f - 1f * ctx.dp, (h - barH) / 2f - 1f * ctx.dp, cx + barW / 2f + 1f * ctx.dp, (h + barH) / 2f + 1f * ctx.dp)
+        canvas.drawRoundRect(handleRect, barW, barW, handleShadow)
+        handleRect.set(cx - barW / 2f, (h - barH) / 2f, cx + barW / 2f, (h + barH) / 2f)
+        canvas.drawRoundRect(handleRect, barW / 2f, barW / 2f, handlePaint)
+    }
+
+    companion object {
+        const val DEFAULT_MIN_K = 2000
+        const val DEFAULT_MAX_K = 6500
+        private const val WARM = 0xFFFF9329.toInt()
+        private const val MID = 0xFFFFFDF7.toInt()
+        private const val COOL = 0xFFA6C8FF.toInt()
     }
 }
 
@@ -878,6 +1172,9 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
     private val secondsView: TextView
     private val ampmView: TextView
     private val dateView: TextView
+    private val baseTimeSp = if (large) 52f else 42f
+    private val baseSideSp = if (large) 20f else 16f
+    private var appliedScale = 1f
     private var running = false
 
     private val tick = object : Runnable {
@@ -900,8 +1197,8 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
             gravity = Gravity.CENTER
         }
         // Sized to fit a half-width sections card; `clock_size: large` grows it.
-        val timeSp = if (large) 52f else 42f
-        val sideSp = if (large) 20f else 16f
+        val timeSp = baseTimeSp
+        val sideSp = baseSideSp
         timeView = textView(ctx, timeSp, ctx.theme.primaryTextColor, INTER_SEMIBOLD).apply {
             letterSpacing = -0.03f
             fontFeatureSettings = "tnum"
@@ -928,6 +1225,41 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
         render(Date())
     }
 
+    /**
+     * Narrow cards (a half-width tile in the S1 Plus's 3-column 1440×720 landscape grid is under 195 dp) shrink the
+     * time and the side column together so the widest time, like "18:50 43" or "12:58 PM", never clips.
+     */
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (w <= 0) return
+        val scale = fitScale(w)
+        if (abs(scale - appliedScale) < 0.01f) return
+        appliedScale = scale
+        // Resizing text from inside a layout pass; apply it on the next frame.
+        post {
+            timeView.textSize = baseTimeSp * scale
+            secondsView.textSize = baseSideSp * scale
+            ampmView.textSize = baseSideSp * scale
+        }
+    }
+
+    private fun spToPx(sp: Float): Float =
+        android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, sp, ctx.context.resources.displayMetrics)
+
+    private fun fitScale(widthPx: Int): Float {
+        val available = widthPx - ctx.px(32f) - ctx.px(4f)
+        val probe = Paint(timeView.paint).apply { textSize = spToPx(baseTimeSp) }
+        var needed = probe.measureText(if (format24) "88:88" else "12:88")
+        if (showSeconds || !format24) {
+            probe.textSize = spToPx(baseSideSp)
+            probe.typeface = secondsView.typeface
+            val side = maxOf(if (showSeconds) probe.measureText("88") else 0f, if (!format24) probe.measureText("PM") else 0f)
+            needed += ctx.px(8f) + side
+        }
+        if (needed <= 0f || available >= needed) return 1f
+        return (available / needed).coerceIn(MIN_CLOCK_SCALE, 1f)
+    }
+
     private fun render(now: Date) {
         timeView.text = timeFormatter.format(now)
         if (showSeconds) secondsView.text = secondsFormatter.format(now)
@@ -945,6 +1277,11 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
         running = false
         ctx.main.removeCallbacks(tick)
         super.onDetachedFromWindow()
+    }
+
+    private companion object {
+        /** 42 sp shrinks to no less than 30 sp (16 sp side text to ~11.5 sp). */
+        const val MIN_CLOCK_SCALE = 30f / 42f
     }
 }
 
@@ -1254,49 +1591,283 @@ class BubbleCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
     }
 }
 
-/** Native HA `media-control` card. */
+/**
+ * Native HA 2026 `media-control` card (`hui-media-control-card`): the album art fills the card under a dark
+ * vertical scrim, with a header (player icon, name, power), the track and artist beside previous / play-pause /
+ * next, a volume row with mute, and a 3 dp playback progress line along the bottom edge. Without artwork a
+ * playing player gets a primary-tinted surface instead.
+ */
 class MediaControlCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
+    private val artwork = ImageView(ctx.context).apply {
+        scaleType = ImageView.ScaleType.CENTER_CROP
+        visibility = GONE
+    }
+    private val scrim = View(ctx.context).apply {
+        background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(SCRIM_TOP, SCRIM_BOTTOM))
+        visibility = GONE
+    }
+    private val tint = View(ctx.context).apply { visibility = GONE }
+    private val headerIcon = MdiIconView(ctx.context)
+    private val nameView = textView(ctx, 12f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+        maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+    }
+    private val powerIcon = MdiIconView(ctx.context)
+    private val powerBtn = iconButton(powerIcon, 22f)
+    private val title = textView(ctx, 17f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+        maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+    }
+    private val artist = textView(ctx, 13f, ctx.theme.primaryTextColor).apply {
+        maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+    }
+    private val prevIcon = MdiIconView(ctx.context)
+    private val prevBtn = iconButton(prevIcon, 24f)
+    private val playIcon = MdiIconView(ctx.context)
+    private val playBtn = iconButton(playIcon, 24f)
+    private val nextIcon = MdiIconView(ctx.context)
+    private val nextBtn = iconButton(nextIcon, 24f)
+    private val transport = LinearLayout(ctx.context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    private val muteIcon = MdiIconView(ctx.context)
+    private val muteBtn = iconButton(muteIcon, 20f)
+    private val volumeRow = LinearLayout(ctx.context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        visibility = GONE
+    }
+    private val progress = MediaProgressView(ctx)
+    private val eid = config.entity
+    private var volumeSlider: HaHorizontalSliderView? = null
+    private var artUrl: String? = null
+    private var last: EntityState? = null
+    private var ticking = false
+
+    private val progressTick = object : Runnable {
+        override fun run() {
+            if (!ticking) return
+            updateProgress(last)
+            ctx.main.postDelayed(this, 1_000L)
+        }
+    }
+
     init {
-        val row = LinearLayout(ctx.context).apply {
+        minimumHeight = ctx.px(112f)
+        addView(artwork, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        addView(tint, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        addView(scrim, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+
+        val content = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ctx.px(16f), ctx.px(10f), ctx.px(10f), ctx.px(12f))
+        }
+        val header = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(ctx.px(14f), ctx.px(14f), ctx.px(14f), ctx.px(14f))
+            addView(headerIcon, LinearLayout.LayoutParams(ctx.px(18f), ctx.px(18f)).apply { marginEnd = ctx.px(8f) })
+            addView(nameView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(powerBtn, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)))
         }
-        val icon = MdiIconView(ctx.context)
-        val title = textView(ctx, 15f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
-            maxLines = 1; ellipsize = TextUtils.TruncateAt.END
-        }
-        val artist = textView(ctx, 12f, ctx.theme.secondaryTextColor).apply {
-            maxLines = 1; ellipsize = TextUtils.TruncateAt.END
-        }
-        val playBtn = MdiIconView(ctx.context).apply {
-            isClickable = true
-            setPadding(ctx.px(8f), ctx.px(8f), ctx.px(8f), ctx.px(8f))
-        }
-        val col = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(title); addView(artist)
-        }
-        row.addView(icon, LinearLayout.LayoutParams(ctx.px(28f), ctx.px(28f)).apply { marginEnd = ctx.px(12f) })
-        row.addView(col, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-        row.addView(playBtn, LinearLayout.LayoutParams(ctx.px(38f), ctx.px(38f)))
-        addView(row, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        content.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
-        val eid = config.entity
+        val info = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(title)
+            addView(artist, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(3f) })
+        }
+        transport.addView(prevBtn, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)))
+        transport.addView(playBtn, LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)).apply {
+            marginStart = ctx.px(4f); marginEnd = ctx.px(4f)
+        })
+        transport.addView(nextBtn, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)))
+        val middle = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(info, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ctx.px(8f) })
+            addView(transport, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+        }
+        content.addView(middle, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(10f) })
+
+        volumeRow.addView(muteBtn, LinearLayout.LayoutParams(ctx.px(32f), ctx.px(32f)).apply { marginEnd = ctx.px(6f) })
+        content.addView(volumeRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(8f) })
+        addView(content, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        addView(progress, LayoutParams(MATCH_PARENT, ctx.px(3f), Gravity.BOTTOM))
+
         if (eid != null) {
+            val slider = HaHorizontalSliderView(ctx, ctx.theme.primaryColor) { frac ->
+                val vol = (frac * 100f).roundToInt() / 100.0
+                ctx.callService("media_player", "volume_set", JSONObject().put("entity_id", eid).put("volume_level", vol), null)
+            }
+            volumeSlider = slider
+            volumeRow.addView(slider, LinearLayout.LayoutParams(0, ctx.px(28f), 1f).apply { marginEnd = ctx.px(6f) })
+
             isClickable = true
             setOnClickListener { ctx.performAction(ActionConfig.parse(config.raw.optJSONObject("tap_action")), eid) }
             bindHoldAction(holdActionFor(config.raw, eid), eid)
-            playBtn.setOnClickListener {
-                ctx.callService("media_player", "media_play_pause", org.json.JSONObject().put("entity_id", eid), null)
+            fun call(service: String, extra: (JSONObject) -> Unit = {}) {
+                ctx.callService("media_player", service, JSONObject().put("entity_id", eid).also(extra), null)
             }
-            observe(eid) { s ->
-                val playing = s?.state == "playing"
-                icon.setIcon("mdi:speaker", if (playing) ctx.theme.primaryColor else ctx.theme.secondaryTextColor)
-                title.text = (s?.attributes?.get("media_title") as? String)?.takeIf { it.isNotBlank() } ?: s?.friendlyName ?: eid
-                artist.text = (s?.attributes?.get("media_artist") as? String)?.takeIf { it.isNotBlank() } ?: s?.formattedState().orEmpty()
-                playBtn.setIcon(if (playing) "mdi:pause" else "mdi:play", ctx.theme.primaryTextColor)
+            powerBtn.contentDescription = "Power"
+            powerBtn.setOnClickListener { call("toggle") }
+            prevBtn.contentDescription = "Previous track"
+            prevBtn.setOnClickListener { call("media_previous_track") }
+            playBtn.setOnClickListener { call("media_play_pause") }
+            nextBtn.contentDescription = "Next track"
+            nextBtn.setOnClickListener { call("media_next_track") }
+            muteBtn.setOnClickListener {
+                val muted = ctx.store[eid]?.attributes?.get("is_volume_muted") == true
+                call("volume_mute") { it.put("is_volume_muted", !muted) }
             }
+            observe(eid) { s -> render(s) }
+        } else {
+            nameView.text = config.name ?: "Media"
+            render(null)
         }
+    }
+
+    private fun iconButton(icon: MdiIconView, iconDp: Float): FrameLayout = FrameLayout(ctx.context).apply {
+        isClickable = true
+        addView(icon, LayoutParams(ctx.px(iconDp), ctx.px(iconDp), Gravity.CENTER))
+    }
+
+    private fun render(s: EntityState?) {
+        last = s
+        val attrs = s?.attributes.orEmpty()
+        val off = s == null || s.state == "off" || s.isUnavailable
+        val playing = s?.state == "playing"
+        val picture = if (off) null else s?.entityPicture
+        setArtwork(picture)
+        val onArt = picture != null && artwork.drawable != null
+
+        tint.visibility = if (!onArt && !off && playing) VISIBLE else GONE
+        tint.setBackgroundColor(CardSurface.withAlpha(ctx.theme.primaryColor, if (ctx.theme.dark) 0.22f else 0.14f))
+
+        val fg = if (onArt) Color.WHITE else ctx.theme.primaryTextColor
+        val fgSoft = CardSurface.withAlpha(fg, 0.75f)
+        headerIcon.setIcon(MdiIcons.resolveIconName(null, s).takeIf { s != null } ?: "mdi:speaker", fgSoft)
+        nameView.setTextColor(fgSoft)
+        nameView.text = s?.friendlyName ?: nameView.text
+        powerIcon.setIcon("mdi:power", if (off) fgSoft else fg)
+
+        val mediaTitle = (attrs["media_title"] as? String)?.takeIf { it.isNotBlank() }
+        val sub = listOf("media_artist", "media_album_name", "app_name")
+            .firstNotNullOfOrNull { (attrs[it] as? String)?.takeIf(String::isNotBlank) }
+        title.setTextColor(fg)
+        artist.setTextColor(fgSoft)
+        title.text = mediaTitle ?: s?.formattedState() ?: "…"
+        artist.text = if (mediaTitle != null) sub.orEmpty() else ""
+        artist.visibility = if (artist.text.isNullOrEmpty()) GONE else VISIBLE
+
+        transport.visibility = if (off) GONE else VISIBLE
+        prevIcon.setIcon("mdi:skip-previous", fg)
+        nextIcon.setIcon("mdi:skip-next", fg)
+        playIcon.setIcon(if (playing) "mdi:pause" else "mdi:play", Color.WHITE)
+        playBtn.contentDescription = if (playing) "Pause" else "Play"
+        playBtn.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(ctx.theme.primaryColor)
+        }
+
+        val vol = (attrs["volume_level"] as? Number)?.toFloat()
+        volumeRow.visibility = if (vol != null && !off) VISIBLE else GONE
+        if (vol != null) {
+            val muted = attrs["is_volume_muted"] == true
+            muteIcon.setIcon(if (muted) "mdi:volume-off" else "mdi:volume-high", fg)
+            muteBtn.contentDescription = if (muted) "Unmute" else "Mute"
+            volumeSlider?.setValue(vol, active = !muted && vol > 0f)
+        }
+
+        updateProgress(s)
+        setTicking(playing && isAttachedToWindow)
+    }
+
+    private fun setArtwork(url: String?) {
+        if (url == artUrl) return
+        artUrl = url
+        if (url == null) {
+            artwork.setImageDrawable(null)
+            artwork.visibility = GONE
+            scrim.visibility = GONE
+            return
+        }
+        ctx.loadImage(url) { bmp ->
+            if (artUrl != url) return@loadImage
+            if (bmp != null) {
+                artwork.setImageBitmap(bmp)
+                artwork.visibility = VISIBLE
+                scrim.visibility = VISIBLE
+            } else {
+                artwork.setImageDrawable(null)
+                artwork.visibility = GONE
+                scrim.visibility = GONE
+            }
+            render(last)
+        }
+    }
+
+    private fun updateProgress(s: EntityState?) {
+        val attrs = s?.attributes.orEmpty()
+        val duration = (attrs["media_duration"] as? Number)?.toDouble() ?: 0.0
+        val position = (attrs["media_position"] as? Number)?.toDouble()
+        if (s == null || duration <= 0.0 || position == null || s.state == "off" || s.isUnavailable) {
+            progress.visibility = GONE
+            return
+        }
+        var pos = position
+        if (s.state == "playing") {
+            val updatedAt = (attrs["media_position_updated_at"] as? String)?.let { raw ->
+                runCatching { java.time.OffsetDateTime.parse(raw).toInstant().toEpochMilli() }.getOrNull()
+            }
+            if (updatedAt != null) pos += (System.currentTimeMillis() - updatedAt).coerceAtLeast(0L) / 1000.0
+        }
+        progress.visibility = VISIBLE
+        progress.setFraction((pos / duration).toFloat().coerceIn(0f, 1f), artwork.visibility == VISIBLE)
+    }
+
+    private fun setTicking(on: Boolean) {
+        if (on == ticking) return
+        ticking = on
+        ctx.main.removeCallbacks(progressTick)
+        if (on) ctx.main.postDelayed(progressTick, 1_000L)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        setTicking(last?.state == "playing")
+    }
+
+    override fun onDetachedFromWindow() {
+        setTicking(false)
+        super.onDetachedFromWindow()
+    }
+
+    private companion object {
+        const val SCRIM_TOP = 0x66000000
+        const val SCRIM_BOTTOM = 0xCC000000.toInt()
+    }
+}
+
+/** The 3 dp playback progress line along the bottom of the media card, filled in the theme's primary color. */
+internal class MediaProgressView(private val ctx: VitroCardContext) : View(ctx.context) {
+    private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private var fraction = 0f
+    private var onArt = false
+
+    fun setFraction(value: Float, overArtwork: Boolean) {
+        if (value == fraction && overArtwork == onArt) return
+        fraction = value
+        onArt = overArtwork
+        invalidate()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        track.color = CardSurface.withAlpha(if (onArt) Color.WHITE else ctx.theme.primaryTextColor, 0.18f)
+        fill.color = ctx.theme.primaryColor
+        canvas.drawRect(0f, 0f, w, h, track)
+        canvas.drawRect(0f, 0f, w * fraction, h, fill)
     }
 }

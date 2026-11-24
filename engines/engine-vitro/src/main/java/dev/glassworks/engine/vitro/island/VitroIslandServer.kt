@@ -145,7 +145,11 @@ class VitroIslandServer(
         }
     }
 
-    /** Strictly proxies HA static assets and API paths (`/local/...`, `/hacsfiles/...`, `/api/...`) to [haBase]. */
+    /**
+     * Strictly proxies HA static assets and API paths (`/local/...`, `/hacsfiles/...`, `/api/...`) to [haBase]:
+     * `GET`, `POST`, `PUT`, `PATCH` and `DELETE` (what `hass.callApi` / `hass.fetchWithAuth` send), with the
+     * panel's Bearer token injected. A `204 No Content` comes back with an empty body.
+     */
     private fun proxyToHa(req: HttpRequest): HttpResponse {
         val base = haBase()?.trimEnd('/') ?: return HttpResponse.text(503, "Home Assistant not configured")
         if (!req.path.startsWith("/")) return HttpResponse.text(400, "Invalid path")
@@ -159,19 +163,21 @@ class VitroIslandServer(
                 accessToken()?.takeIf { it.isNotEmpty() }?.let { setRequestProperty("Authorization", "Bearer $it") }
                 req.headers["content-type"]?.let { setRequestProperty("Content-Type", it) }
                 req.headers["accept"]?.let { setRequestProperty("Accept", it) }
-                if (req.body.isNotEmpty() && req.method in setOf("POST", "PUT", "PATCH")) {
+                req.headers["x-requested-with"]?.let { setRequestProperty("X-Requested-With", it) }
+                if (req.body.isNotEmpty() && req.method in BODY_METHODS) {
                     doOutput = true
                     outputStream.use { it.write(req.body) }
                 }
             }
             try {
                 val code = conn.responseCode
+                val headers = LinkedHashMap<String, String>()
+                headers["Cache-Control"] = conn.getHeaderField("Cache-Control") ?: "no-cache"
+                // `hass.callApi('DELETE', …)` and friends: 204/205 carry no body, and asking for one can throw.
+                if (code == 204 || code == 205) return@runCatching HttpResponse(code, headers, ByteArray(0))
                 val stream = if (code in 200..399) conn.inputStream else conn.errorStream
                 val bytes = stream?.use { it.readBytes() } ?: ByteArray(0)
-                val contentType = conn.contentType ?: guessMime(req.path)
-                val headers = LinkedHashMap<String, String>()
-                headers["Content-Type"] = contentType
-                headers["Cache-Control"] = conn.getHeaderField("Cache-Control") ?: "no-cache"
+                headers["Content-Type"] = conn.contentType ?: guessMime(req.path)
                 HttpResponse(code, headers, bytes)
             } finally {
                 conn.disconnect()
@@ -182,6 +188,9 @@ class VitroIslandServer(
     }
 
     companion object {
+        /** Methods whose request body is forwarded (`hass.callApi('DELETE', …)` may carry one too). */
+        private val BODY_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
+
         private fun guessMime(path: String): String = when {
             path.endsWith(".js", ignoreCase = true) || path.endsWith(".mjs", ignoreCase = true) -> "application/javascript; charset=utf-8"
             path.endsWith(".css", ignoreCase = true) -> "text/css; charset=utf-8"

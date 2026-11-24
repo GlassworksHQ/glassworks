@@ -212,6 +212,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         background = bg
         theme.cardMod.opacity?.let { alpha = it }
         clipToOutline = true
+        elevation = theme.cardElevationDp * ctx.dp
     }
 
     /**
