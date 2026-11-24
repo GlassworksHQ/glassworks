@@ -31,42 +31,44 @@ export function canonicalPath(pathAndQuery) {
   return new URL(pathAndQuery, 'http://homeassistant.local').pathname;
 }
 
-/** A root-relative path on HA itself (`/local/…`, `/static/…`), without its query; not `//host/…`. */
-function localPath(v) {
-  if (typeof v !== 'string' || !v.startsWith('/') || v.startsWith('//')) return null;
-  return v.split(/[?#]/)[0];
-}
-
-/** The `src` of every `<img>` in Markdown/HTML text, outside code spans and fenced code blocks. */
-function imgSources(text) {
-  const prose = text
-    .replace(/^ {0,3}((`){3,}|(~){3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1(?:\2|\3)*[ \t]*$|(?![\s\S]))/gm, '') // fenced blocks; a closing fence may be longer
-    .replace(/(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g, ''); // code spans
-  const out = [];
-  for (const tag of prose.matchAll(/<img\b((?:[^>"']|"[^"]*"|'[^']*')*)>?/gi)) {
-    // Attributes as HTML parses them: name, then an optional double-quoted, single-quoted or bare value.
-    for (const a of tag[1].matchAll(/([^\s"'>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {
-      if (a[1].toLowerCase() === 'src') { out.push(a[2] ?? a[3] ?? a[4] ?? ''); break; }
-    }
+/**
+ * The asset path to save for one response HA's page got, or null. Only a successful image on HA's own origin under
+ * `/local/` or `/static/` counts: what HA drew is what Vitro's fixture server must serve, with no guessing from card
+ * configs or Markdown. `/api/` (proxies, camera stills) and anything else on the origin are left out.
+ */
+export function capturableImage(url, origin, status, contentType) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
   }
-  return out;
+  if (u.origin !== origin) return null;
+  if (!(status >= 200 && status < 300)) return null;
+  if (!/^image\//i.test(String(contentType || '').trim())) return null;
+  const p = u.pathname;
+  if (p.startsWith('//')) return null;
+  if (!p.startsWith('/local/') && !p.startsWith('/static/')) return null;
+  return p;
 }
 
 /**
- * HA's own static images a card shows, saved so Vitro's fixture server can serve them: `image:` and `picture:`
- * values (picture-entity, Mushroom's picture) and `<img src>` in Markdown content, outside code.
+ * Every path one image body stands for: the URL that answered and each URL that redirected to it ([urls]: the
+ * response's URL, then its request's redirectedFrom() chain), as capturableImage accepts them with the final
+ * response's [status] and [contentType]. An <img> keeps the URL it asked for, so a redirected image is saved under
+ * that path too.
  */
-export function imagePaths(card) {
+export function aliasPaths(urls, origin, status, contentType) {
   const out = new Set();
-  const add = (v) => { const p = localPath(v); if (p) out.add(p); };
-  const walk = (o) => {
-    if (Array.isArray(o)) o.forEach(walk);
-    else if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) {
-      if (/(image|picture)$/.test(k) && typeof v === 'string') add(v);
-      else walk(v);
-    }
-    else if (typeof o === 'string' && /<img\b/i.test(o)) imgSources(o).forEach(add);
-  };
-  walk(card);
-  return [...out];
+  for (const url of urls) {
+    const p = capturableImage(url, origin, status, contentType);
+    if (p) out.add(p);
+  }
+  return [...out].sort();
+}
+
+/** The asset paths in [existing] that [kept] doesn't hold: files a full refresh found nothing drawing or fetching. */
+export function staleAssets(existing, kept) {
+  const keep = new Set(kept);
+  return [...existing].filter((p) => !keep.has(p)).sort();
 }

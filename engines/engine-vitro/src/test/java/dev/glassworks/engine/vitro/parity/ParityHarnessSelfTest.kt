@@ -262,6 +262,34 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun theFixtureServerWithholdsAnImageHaCouldntLoad() {
+        val dir = java.nio.file.Files.createTempDirectory("assets").toFile()
+        File(dir, "static").mkdirs()
+        File(dir, "static/stale.png").writeBytes(byteArrayOf(1, 2, 3))
+        File(dir, "static/ok.png").writeBytes(byteArrayOf(4, 5))
+        fun get(http: FixtureHttp, path: String) = (java.net.URL(http.base + path).openConnection() as java.net.HttpURLConnection).run {
+            try { responseCode } finally { disconnect() }
+        }
+        FixtureHttp(dir, setOf("/static/stale.png")).use { http ->
+            // A file left from an earlier capture is never handed to Vitro once HA can't load that path.
+            assertEquals(404, get(http, "/static/stale.png"))
+            assertEquals(200, get(http, "/static/ok.png"))
+            assertEquals(listOf("/static/stale.png"), http.missing.toList())
+        }
+    }
+
+    @Test
+    fun anImageTheCaptureDidntSaveIsAnInputGapUnlessHaMissedItToo() {
+        val ref = ParityReference(File("none.png"), JSONObject().put("imagesHaMissing", org.json.JSONArray().put("/None")))
+        val (gaps, haToo) = ParityInputs.missingImages(listOf("/static/x.png", "/None", "/static/x.png"), ref)
+        assertEquals(listOf("/static/x.png"), gaps)
+        assertEquals(listOf("/None"), haToo)
+        assertEquals(emptyList<String>() to emptyList<String>(), ParityInputs.missingImages(emptyList(), ref))
+        // A reference without the field (nothing HA missed): every missing image is a gap.
+        assertEquals(listOf("/None"), ParityInputs.missingImages(listOf("/None"), ParityReference(File("none.png"), JSONObject())).first)
+    }
+
+    @Test
     fun aMacFragmentIsCaughtWhateverSetsItOff() {
         for (bad in listOf("AirDot 4c83f8", "airdot-4c83f8", "AirDot_a1b2c3d4e5f6", "esp_4C83F8.local", "(a1b2c3)")) {
             assertTrue(bad, MAC_FRAGMENT.containsMatchIn(bad))
