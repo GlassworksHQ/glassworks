@@ -1723,6 +1723,20 @@ internal class VerticalTogglePillView(context: Context, private val onColor: Int
 
     var onToggle: ((Boolean) -> Unit)? = null
 
+    init {
+        // A switch for TalkBack and a keyboard: a click flips it, as a tap does.
+        isClickable = true
+        isFocusable = true
+        if (contentDescription == null) contentDescription = "Toggle"
+    }
+
+    override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        info.className = android.widget.Switch::class.java.name
+        info.isCheckable = true
+        info.isChecked = on
+    }
+
     fun setOn(value: Boolean) {
         if (value == on && animator == null) {
             val target = if (value) 1f else 0f
@@ -1802,19 +1816,30 @@ internal class VerticalTogglePillView(context: Context, private val onColor: Int
             MotionEvent.ACTION_UP -> {
                 parent?.requestDisallowInterceptTouchEvent(false)
                 val dy = event.y - downY
-                val next = if (abs(dy) > DRAG_DP * dp) dy < 0f else !on
-                if (next != on) {
-                    setOn(next)
-                    onToggle?.invoke(next)
+                if (abs(dy) > DRAG_DP * dp) {
+                    // A drag sets the direction it went: up on, down off (no second flip through performClick).
+                    val next = dy < 0f
+                    if (next != on) {
+                        setOn(next)
+                        onToggle?.invoke(next)
+                    }
+                    super.performClick()
+                } else {
+                    performClick()
                 }
-                performClick()
             }
             MotionEvent.ACTION_CANCEL -> parent?.requestDisallowInterceptTouchEvent(false)
         }
         return true
     }
 
-    override fun performClick(): Boolean = super.performClick()
+    override fun performClick(): Boolean {
+        super.performClick()
+        val next = !on
+        setOn(next)
+        onToggle?.invoke(next)
+        return true
+    }
 
     private companion object {
         const val OFF_THUMB = 0xFF9E9E9E.toInt()

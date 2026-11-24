@@ -1433,6 +1433,42 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 }
 
 /**
+ * What a canvas slider tells TalkBack and does for a keyboard (API 23 and up): a seek bar with its range and value,
+ * scroll forward and back, the arrow keys and page keys. Each step commits as a drag's release does.
+ */
+internal object SliderAccess {
+    fun install(view: View) {
+        view.isFocusable = true
+        view.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+    }
+
+    fun describe(info: android.view.accessibility.AccessibilityNodeInfo, min: Float, max: Float, current: Float, percent: Boolean = true) {
+        info.className = android.widget.SeekBar::class.java.name
+        val type = if (percent) android.view.accessibility.AccessibilityNodeInfo.RangeInfo.RANGE_TYPE_PERCENT
+        else android.view.accessibility.AccessibilityNodeInfo.RangeInfo.RANGE_TYPE_INT
+        info.rangeInfo = android.view.accessibility.AccessibilityNodeInfo.RangeInfo.obtain(type, min, max, current)
+        if (current < max) info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD)
+        if (current > min) info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD)
+    }
+
+    /** +1 / -1 for TalkBack's scroll forward / back, else null. */
+    fun stepOf(action: Int): Int? = when (action) {
+        android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD -> 1
+        android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> -1
+        else -> null
+    }
+
+    /** Steps for a key: an arrow one, a page key ten, else null. */
+    fun keyStep(keyCode: Int): Int? = when (keyCode) {
+        android.view.KeyEvent.KEYCODE_DPAD_RIGHT, android.view.KeyEvent.KEYCODE_DPAD_UP -> 1
+        android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_DOWN -> -1
+        android.view.KeyEvent.KEYCODE_PAGE_UP -> 10
+        android.view.KeyEvent.KEYCODE_PAGE_DOWN -> -10
+        else -> null
+    }
+}
+
+/**
  * Rounded horizontal slider matching HA 2026's inline `hui-light-brightness-card-feature`:
  * a 42 dp rounded track tinted at 20%, solid filled progress from the left, and a crisp white vertical
  * drag bar inset from the right edge of the fill.
@@ -1549,6 +1585,32 @@ internal class HaHorizontalSliderView(
         fraction = targetFraction
         accentColor = targetColor
         super.onDetachedFromWindow()
+    }
+
+    init {
+        SliderAccess.install(this)
+    }
+
+    // TalkBack and a keyboard: the value as a percentage, stepped and committed as a release of a drag is.
+    override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        SliderAccess.describe(info, 0f, 100f, targetFraction * 100f)
+    }
+
+    override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean =
+        SliderAccess.stepOf(action)?.let { stepBy(it * 0.10f); true } ?: super.performAccessibilityAction(action, arguments)
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        SliderAccess.keyStep(keyCode)?.let { stepBy(it * 0.01f); true } ?: super.onKeyDown(keyCode, event)
+
+    private fun stepBy(delta: Float) {
+        fractionAnimator?.cancel()
+        fractionAnimator = null
+        fraction = (targetFraction + delta).coerceIn(0f, 1f)
+        targetFraction = fraction
+        active = fraction > 0f
+        invalidate()
+        onCommit(fraction)
     }
 
     @android.annotation.SuppressLint("ClickableViewAccessibility")
@@ -1695,6 +1757,29 @@ internal class HaColorTempBarView(
     }
 
     private fun kelvinAt(frac: Float): Int = (minK + frac * (maxK - minK)).roundToInt().coerceIn(minK, maxK)
+
+    init {
+        SliderAccess.install(this)
+    }
+
+    // TalkBack and a keyboard: the color temperature in Kelvin, stepped and committed as a release of a drag is.
+    override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        SliderAccess.describe(info, minK.toFloat(), maxK.toFloat(), kelvinAt(fraction).toFloat(), percent = false)
+    }
+
+    override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean =
+        SliderAccess.stepOf(action)?.let { stepBy(it * 0.10f); true } ?: super.performAccessibilityAction(action, arguments)
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        SliderAccess.keyStep(keyCode)?.let { stepBy(it * 0.01f); true } ?: super.onKeyDown(keyCode, event)
+
+    private fun stepBy(delta: Float) {
+        hasValue = true
+        fraction = (fraction + delta).coerceIn(0f, 1f)
+        invalidate()
+        onCommit(kelvinAt(fraction))
+    }
 
     @android.annotation.SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {

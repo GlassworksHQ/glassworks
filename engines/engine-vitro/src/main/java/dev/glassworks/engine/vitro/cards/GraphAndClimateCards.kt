@@ -1278,6 +1278,8 @@ internal class ThermostatDialView(
                 if (dragging) {
                     // Nothing was sent: drop the preview and show the target Home Assistant has.
                     setTarget(boundTarget)
+                    // TalkBack reads the restored target, not the preview.
+                    describe()
                     invalidate()
                 }
                 dragging = false
