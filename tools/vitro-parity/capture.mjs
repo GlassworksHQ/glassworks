@@ -164,6 +164,8 @@ async function prepare() {
     const cfg = await ha.call({ type: 'lovelace/config', url_path: c.dashboard, force: true });
     mkdirSync(join(corpusRoot, 'dashboards'), { recursive: true });
     writeFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), JSON.stringify(cfg, null, 1) + '\n');
+    // The images the dashboard shows directly (`image: /local/...`), for Vitro's fixture server.
+    for (const p of imagePaths(cfg)) await fetchAsset(p).catch((e) => log(`  image ${p}: ${scrubText(String(e.message), creds)}`));
     log(`dashboard ${c.dashboard}`);
   }
   ha.close();
