@@ -367,6 +367,29 @@ class HacsParityWaveTest {
         assertFalse(AutoEntitiesFilter.matchValue("<= 5", "unavailable"))
         // A key Vitro can't evaluate (here `area`) never widens an include to everything.
         assertTrue(AutoEntitiesFilter.evaluate(JSONObject("""{"filter": {"include": [{"area": "kitchen"}]}}"""), st.all().values, st::get).isEmpty())
+        // ...not even under `not`: "sensors not in the kitchen" can't be told apart, so it matches nothing.
+        assertTrue(
+            AutoEntitiesFilter.evaluate(
+                JSONObject("""{"filter": {"include": [{"domain": "sensor", "not": {"area": "kitchen"}}]}}"""), st.all().values, st::get,
+            ).isEmpty(),
+        )
+        // A malformed or empty rule under `not` matches nothing, rather than everything.
+        for (bad in listOf(
+            """{"domain": "sensor", "not": {"attributes": "invalid"}}""", """{"domain": "sensor", "not": {}}""",
+            """{"domain": "sensor", "not": {"state": null}}""", """{"domain": "sensor", "not": {"state": {"x": 1}}}""",
+        )) {
+            assertTrue(bad, AutoEntitiesFilter.evaluate(JSONObject("""{"filter": {"include": [$bad]}}"""), st.all().values, st::get).isEmpty())
+        }
+        // A valid negated condition still works.
+        assertTrue(AutoEntitiesFilter.evaluate(JSONObject("""{"filter": {"include": [{"domain": "sensor", "not": {"state": "nope"}}]}}"""), st.all().values, st::get).isNotEmpty())
+        // A rule's own sort and count pick from its matches before the global list is built.
+        val top = AutoEntitiesFilter.evaluate(
+            JSONObject(
+                """{"filter": {"include": [{"attributes": {"device_class": "temperature"}, "sort": {"method": "state", "numeric": true, "reverse": true, "count": 1}}]}}""",
+            ),
+            st.all().values, st::get,
+        )
+        assertEquals(1, top.size)
 
         var built: CardConfig? = null
         AutoEntitiesCardView(context(st), CardConfig("custom:auto-entities", raw)) { c -> built = c; View(activity) }

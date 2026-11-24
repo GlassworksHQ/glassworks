@@ -55,6 +55,14 @@ object MdiIcons {
     @Volatile private var catalogTried = false
     private val catalogLock = Any()
 
+    /**
+     * True while the warm-up thread parses the catalog. Icon lookups don't wait for it (a startup stall on a slow
+     * panel's UI thread is worse than a moment of fallback glyphs): they draw the built-in glyph, and the views
+     * that did are redrawn once the catalog is in ([redrawWhenReady]).
+     */
+    @Volatile private var loading = false
+    private val waitingViews: MutableSet<MdiIconView> = java.util.Collections.newSetFromMap(java.util.WeakHashMap())
+
     /** Path data packed in one byte array; [index] maps a name to `offset shl 32 or length`. */
     private class Catalog(val blob: ByteArray, val index: HashMap<String, Long>) {
         fun get(key: String): String? {
@@ -73,9 +81,12 @@ object MdiIcons {
         synchronized(catalogLock) {
             if (assets != null) return
             assets = app.assets
-            if (catalog == null) catalogTried = false
+            if (catalog == null) {
+                catalogTried = false
+                loading = true
+            }
         }
-        Thread({ catalog() }, "vitro-mdi").apply { isDaemon = true }.start()
+        Thread({ catalog(warmUp = true) }, "vitro-mdi").apply { isDaemon = true }.start()
     }
 
     /** Loads a catalog from [input] (TSV, gzipped or not) directly, e.g. for off-device tools. Replaces any loaded one. */
@@ -89,26 +100,45 @@ object MdiIcons {
     }
 
     /** How many icons the bundled catalog holds (0 until it is loaded or when there is none). */
-    fun catalogSize(): Int = catalog()?.index?.size ?: 0
+    fun catalogSize(): Int = catalog(warmUp = true)?.index?.size ?: 0
 
-    /** The official catalog, loading it on first use; null when there's no [Context] or no asset. */
-    private fun catalog(): Catalog? {
+    /**
+     * The official catalog, loading it on first use; null when there's no [Context] or no asset. While the warm-up
+     * thread is still loading it, an icon lookup ([warmUp] false) gets null at once instead of waiting.
+     */
+    private fun catalog(warmUp: Boolean = false): Catalog? {
         catalog?.let { return it }
-        // While the loader thread holds the lock, wait for it: an icon asked for mid-load would otherwise fall
-        // back to `home` and keep that glyph (the view holds the Path it got).
-        if (catalogTried) return synchronized(catalogLock) { catalog }
+        if (catalogTried) return null
+        if (loading && !warmUp) return null
+        val loaded: Catalog?
         synchronized(catalogLock) {
             catalog?.let { return it }
             if (catalogTried) return null
             val am = assets ?: return null
-            catalogTried = true
-            val loaded = sequenceOf(CATALOG_ASSET_PACKAGED, CATALOG_ASSET).firstNotNullOfOrNull { name ->
+            loaded = sequenceOf(CATALOG_ASSET_PACKAGED, CATALOG_ASSET).firstNotNullOfOrNull { name ->
                 runCatching { am.open(name).use(::parseCatalog) }.getOrNull()
             }
             catalog = loaded
+            catalogTried = true
             if (loaded != null) cache.clear() // drop built-in glyphs parsed before the official ones arrived
-            return loaded
+            loading = false
         }
+        redrawWaitingViews()
+        return loaded
+    }
+
+    /** [view] drew a built-in glyph while the catalog was loading: it gets its icon again once the catalog is in. */
+    internal fun redrawWhenReady(view: MdiIconView) {
+        synchronized(waitingViews) { waitingViews += view }
+        if (!loading) redrawWaitingViews() // finished in between
+    }
+
+    internal val isLoading: Boolean get() = loading
+
+    private fun redrawWaitingViews() {
+        val views = synchronized(waitingViews) { waitingViews.toList().also { waitingViews.clear() } }
+        if (views.isEmpty()) return
+        android.os.Handler(android.os.Looper.getMainLooper()).post { views.forEach { it.reloadIcon() } }
     }
 
     private fun parseCatalog(input: InputStream): Catalog {
@@ -295,7 +325,7 @@ object MdiIcons {
     /** Every icon name Vitro can draw: the built-in set, the official catalog when loaded, and anything [register]ed. */
     fun names(): Set<String> {
         val out = LinkedHashSet<String>(PATHS.keys)
-        catalog()?.index?.keys?.let(out::addAll)
+        catalog(warmUp = true)?.index?.keys?.let(out::addAll)
         out += registered.keys
         return out
     }
@@ -315,6 +345,7 @@ object MdiIcons {
         val key = keyOf(name)
         cache[key]?.let { return it }
         val reg = registered[key]
+        val pendingCatalog = loading
         val official = if (reg == null) catalog()?.let { it.get(key) ?: it.get("home") } else null
         // Official MDI glyphs use SVG's default non-zero fill; the hand-drawn built-ins rely on even-odd holes.
         val path = when {
@@ -322,6 +353,8 @@ object MdiIcons {
             official != null -> parseSvgPath(official, Path.FillType.WINDING)
             else -> parseSvgPath(PATHS[key] ?: PATHS.getValue("home"))
         }
+        // A stand-in drawn while the catalog loads isn't cached: the official glyph replaces it.
+        if (pendingCatalog && reg == null && official == null) return path
         return cache.putIfAbsent(key, path) ?: path
     }
 
@@ -795,6 +828,7 @@ class MdiIconView(context: Context) : View(context) {
     private val drawPath = Path()
     private val matrix = Matrix()
     private var iconPath: Path = MdiIcons.pathFor("home")
+    private var iconName = "home"
 
     var tintColor: Int = 0xFFFFFFFF.toInt()
         set(v) { if (field != v) { field = v; paint.color = v; invalidate() } }
@@ -805,9 +839,20 @@ class MdiIconView(context: Context) : View(context) {
 
     fun setIcon(name: String, color: Int = tintColor) {
         picture = null
+        iconName = name
+        // Read before the lookup: a catalog that finishes during it still redraws this view (redrawWhenReady
+        // re-checks), and one already loaded costs no registration.
+        val mayBeStandIn = MdiIcons.isLoading
         iconPath = MdiIcons.pathFor(name)
+        if (mayBeStandIn) MdiIcons.redrawWhenReady(this)
         tintColor = color
         paint.color = color
+        invalidate()
+    }
+
+    /** The catalog arrived after this view drew a stand-in: look the icon up again. Main thread. */
+    internal fun reloadIcon() {
+        iconPath = MdiIcons.pathFor(iconName)
         invalidate()
     }
 

@@ -166,6 +166,7 @@ $A --es open http://192.168.1.100:8123/profile/general      # navigate once (not
 $A --ef zoom 1.25          # CSS px ratio; 0 = auto (device density 1.5). Restarts the app.
 $A --es secure_hosts a.lan,b.lan   # extra secure-context hosts. Restarts the app.
 $A --ez remote_debug true  # Gecko remote debugging. Restarts the app.
+$A --ez vitro true         # experimental native dashboard renderer (Vitro); false turns it off. Restarts the app.
 $A --ez reload true
 $A --ez settings true      # open the settings dialog
 $A --ez hide_header false  # show HA header/sidebar

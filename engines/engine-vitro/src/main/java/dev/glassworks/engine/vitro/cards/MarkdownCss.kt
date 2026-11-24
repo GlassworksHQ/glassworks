@@ -185,12 +185,14 @@ class CssSelector private constructor(
             if (s == "even") return 2 to 0
             s.toIntOrNull()?.let { return 0 to it }
             val m = NTH.matchEntire(s) ?: return null
+            // Out-of-range numbers make the selector unsupported instead of aborting the sheet.
             val a = when (m.groupValues[1]) {
                 "", "+" -> 1
                 "-" -> -1
-                else -> m.groupValues[1].toInt()
+                else -> m.groupValues[1].toIntOrNull() ?: return null
             }
-            val b = m.groupValues[3].toIntOrNull()?.let { if (m.groupValues[2] == "-") -it else it } ?: 0
+            val bRaw = m.groupValues[3]
+            val b = if (bRaw.isEmpty()) 0 else (bRaw.toIntOrNull() ?: return null).let { if (m.groupValues[2] == "-") -it else it }
             return a to b
         }
 
@@ -206,7 +208,8 @@ class CssSelector private constructor(
             var pendingComb: Char? = null
             while (i < sel.length) {
                 val c = sel[i]
-                if (c.isWhitespace()) {
+                // CSS whitespace only: a non-breaking space is no combinator.
+                if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\u000C') {
                     if (parts.isNotEmpty() && pendingComb == null) pendingComb = ' '
                     i++
                     continue
@@ -515,8 +518,8 @@ object MdCascade {
         val browser = HashMap<String, String>()
         for (d in decls) {
             if (d.name.startsWith("--")) continue
-            val v = resolveVars(d.value, custom, ctx.themeVars)
-            if (v == null) { specified[d.name] = "unset"; continue }
+            // A failed substitution makes the declaration `unset`, for each longhand of a shorthand too.
+            val v = resolveVars(d.value, custom, ctx.themeVars) ?: "unset"
             expand(d.name, v).forEach { (n, value) ->
                 if (d.origin == 0) browser[n] = value
                 specified[n] = if (d.origin > 0 && value.trim().equals("revert", ignoreCase = true)) browser[n] ?: "unset" else value
@@ -574,6 +577,7 @@ object MdCascade {
         }
         // A unitless line height inherits as a factor and follows this element's font size.
         if (s.lineHeightFactor >= 0f) s.lineHeight = s.lineHeightFactor * s.fontSize
+        val currentColorBorders = BooleanArray(4)
         for ((name, raw) in sp) {
             val v = raw.trim()
             val lower = v.lowercase(Locale.ROOT)
@@ -658,7 +662,10 @@ object MdCascade {
                 }
                 "border-top-color", "border-right-color", "border-bottom-color", "border-left-color" -> {
                     val idx = SIDES.indexOf(name.substringAfter('-').substringBefore('-'))
-                    s.borderColor[idx] = MarkdownInline.parseCssColor(v) ?: s.borderColor[idx]
+                    // `currentColor`, and what an invalid value (HA's `hr` without --divider-color) resets to: the
+                    // text color, applied after the loop once `color` is known.
+                    if (initialKw || lower == "currentcolor") currentColorBorders[idx] = true
+                    else s.borderColor[idx] = MarkdownInline.parseCssColor(v) ?: s.borderColor[idx]
                 }
                 "width" -> s.width = if (lower == "auto" || initialKw) null else cssLen(lower, s.fontSize)
                 "height" -> s.height = if (lower == "auto" || initialKw) null else cssLen(lower, s.fontSize)
@@ -687,6 +694,7 @@ object MdCascade {
                 "justify-content" -> s.justifyContent = if (initialKw) null else lower
             }
         }
+        for (i in 0 until 4) if (currentColorBorders[i]) s.borderColor[i] = s.color
         // `border-*-style: none` (the initial value) means no border, whatever the width says.
         for (k in 0 until 4) {
             val style = sp["border-${SIDES[k]}-style"]?.trim()?.lowercase(Locale.ROOT)

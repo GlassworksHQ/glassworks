@@ -340,6 +340,45 @@ class MarkdownEngineTest {
     }
 
     @Test
+    fun svgPathsEndAtAnOperandAfterClosepathAndKeepSupplementaryCharacters() {
+        // `Z 5` used to loop forever on the UI thread.
+        val svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M0 0 L5 5 Z 5 L 9 9'/></svg>"
+        assertNotNull(MdSvg.parse(svg))
+        assertEquals("a\uD83D\uDE00 b", MdSvg.percentDecode("a\uD83D\uDE00%20b"))
+    }
+
+    @Test
+    fun markdownKeepsParenthesesInImageDestinationsAndIndentedFencesInCode() {
+        assertTrue(MarkedLite.toHtml("![Plan](/local/plan(v2).png)").contains("src=\"/local/plan(v2).png\""))
+        // A quoted title's parentheses don't count either.
+        assertTrue(MarkedLite.toHtml("![Plan](/local/plan.png \"Floor (draft\")").contains("src=\"/local/plan.png\""))
+        assertTrue(MarkedLite.toHtml("![Plan](/local/plan.png \"Floor \\\" (draft\")").contains("src=\"/local/plan.png\""))
+        // A `<…>` destination takes its parentheses as they are, balanced or not.
+        assertTrue(MarkedLite.toHtml("![Plan](</local/plan(v2.png>)").contains("src=\"/local/plan(v2.png\""))
+        val html = MarkedLite.toHtml("```\ncode\n    ```\nstill code\n```")
+        assertTrue(html, html.contains("still code"))
+        assertTrue(html, html.indexOf("still code") < html.indexOf("</code>"))
+    }
+
+    @Test
+    fun anInvalidBorderColorResetsToTheTextColor() {
+        // HA's `hr { border-color: var(--divider-color) }` with no such variable: the browser draws currentColor.
+        val root = styled("<p>a</p>\n\n<hr>", "ha-markdown-element hr { border-color: var(--no-such-color); color: #ff0000 }")
+        val hr = root.findAll("hr")[0].style!!
+        assertEquals(hr.color, hr.borderColor[0])
+        assertEquals(hr.color, hr.borderColor[2])
+    }
+
+    @Test
+    fun outOfRangeNthNumbersDropTheSelectorNotTheSheet() {
+        val root = styled(
+            "<p>a</p>",
+            "ha-markdown-element p:nth-child(2147483648n+1) { opacity: 0.1 } ha-markdown-element p { opacity: 0.5 }",
+        )
+        assertEquals(0.5f, root.findAll("p")[0].style!!.opacity)
+    }
+
+    @Test
     fun horizontalStackInCardLaysOutMarkdownThatArrivesAfterTheFirstPass() {
         // The tablet's Home card: a horizontal stack-in-card with a text-only Markdown (templated) and a chips card.
         val templates = ArrayList<(String) -> Unit>()

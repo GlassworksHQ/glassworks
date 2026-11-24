@@ -195,9 +195,12 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
             "local" -> ""
             else -> configured
         }
-        if (tzId == appliedZone) return
-        appliedZone = tzId
-        val zone = if (tzId.isEmpty()) TimeZone.getDefault() else TimeZone.getTimeZone(tzId)
+        // `local` follows the panel's zone, which may change while the card stays up: key it by that zone's id.
+        val local = if (tzId.isEmpty()) TimeZone.getDefault() else null
+        val key = local?.let { "local:" + it.id } ?: tzId
+        if (key == appliedZone) return
+        appliedZone = key
+        val zone = local ?: TimeZone.getTimeZone(tzId)
         listOf(hourFormat, minuteFormat, secondFormat, ampmFormat).forEach { it.timeZone = zone }
     }
 

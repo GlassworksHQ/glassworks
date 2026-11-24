@@ -399,6 +399,16 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
         orientation = LinearLayout.VERTICAL
         setPadding(ctx.px(12f), ctx.px(12f), ctx.px(12f), ctx.px(12f))
     }
+
+    /** HA's masked text field, for an alarm whose `code_format` is `text` (the keypad is for `number` codes). */
+    private val textCode = EditText(ctx.context).apply {
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        setSingleLine(true)
+        hint = "Code"
+        setTextColor(ctx.theme.primaryTextColor)
+        setHintTextColor(ctx.theme.secondaryTextColor)
+        visibility = GONE
+    }
     private val code = StringBuilder()
     private val armStates: List<String> = readStates(config.raw.optJSONArray("states"))
 
@@ -419,6 +429,7 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
         col.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         col.addView(actionsRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         col.addView(codeField, LinearLayout.LayoutParams(ctx.px(150f), ctx.px(56f)).apply { topMargin = ctx.px(8f) })
+        col.addView(textCode, LinearLayout.LayoutParams(ctx.px(200f), WRAP_CONTENT).apply { topMargin = ctx.px(8f) })
         buildKeypad()
         col.addView(keypad, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(8f) })
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -487,9 +498,12 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
         chipLabel.text = s?.let { HaDisplay.stateLabel(it) }?.takeIf { it != state } ?: stateLabel(state)
         chipIcon.setIcon(stateIcon(state), 0xFFFFFFFF.toInt())
         chip.background = pillBackground(stateColor(state), 16f * ctx.dp)
-        val needsCode = s?.attributes?.get("code_format") != null
-        keypad.visibility = if (needsCode) VISIBLE else GONE
-        codeField.visibility = if (needsCode) VISIBLE else GONE
+        val codeFormat = s?.attributes?.get("code_format")?.toString()
+        val needsCode = codeFormat != null
+        val textFormat = codeFormat == "text"
+        keypad.visibility = if (needsCode && !textFormat) VISIBLE else GONE
+        codeField.visibility = if (needsCode && !textFormat) VISIBLE else GONE
+        textCode.visibility = if (textFormat) VISIBLE else GONE
         renderCode()
 
         actionsRow.removeAllViews()
@@ -504,8 +518,10 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
                 gravity = Gravity.CENTER
                 setPadding(ctx.px(12f), 0, ctx.px(12f), 0)
                 background = pillBackground(bg)
-                isClickable = s != null && !s.isUnavailable
                 setOnClickListener { run(action) }
+                // After the listener, which makes the view clickable again: an unavailable alarm takes no action.
+                isClickable = s != null && !s.isUnavailable
+                isEnabled = isClickable
             }
             actionsRow.addView(b, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(32f)).apply {
                 setMargins(ctx.px(4f), ctx.px(4f), ctx.px(4f), ctx.px(4f))
@@ -516,9 +532,11 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
     private fun run(action: String) {
         val eid = config.entity ?: return
         val data = JSONObject().put("entity_id", eid)
-        if (code.isNotEmpty()) data.put("code", code.toString())
+        val entered = if (textCode.visibility == VISIBLE) textCode.text?.toString().orEmpty() else code.toString()
+        if (entered.isNotEmpty()) data.put("code", entered)
         ctx.callService("alarm_control_panel", serviceFor(action), data, null)
         code.setLength(0)
+        textCode.setText("")
         renderCode()
     }
 
@@ -591,7 +609,8 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
 // ---------------------------------------------------------------------------------------------
 
 /** One item of a `todo.*` list, as `todo/item/list` returns it. */
-data class TodoItem(val uid: String, val summary: String, val completed: Boolean)
+/** [pending]: added here and not yet listed by Home Assistant (its [uid] is made up; a real one can look alike). */
+data class TodoItem(val uid: String, val summary: String, val completed: Boolean, val pending: Boolean = false)
 
 /** Native HA `todo-list` card (`hui-todo-list-card`): live items, checkboxes, completed section and add row. */
 class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
@@ -728,10 +747,16 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         observe(eid) { _ -> fetch(eid) }
     }
 
-    private fun fetch(eid: String) {
+    private fun fetch(eid: String, retry: Boolean = true) {
         val gen = ++fetchGeneration
         ctx.callWs(JSONObject().put("type", "todo/item/list").put("entity_id", eid)) { ok, result, _ ->
-            if (!ok) return@callWs
+            if (!ok) {
+                // A row added here waits for this list to get its uid: ask once more rather than leave it untoggleable.
+                if (retry) ctx.main.postDelayed({
+                    if (gen == fetchGeneration && isAttachedToWindow && items.any { it.pending }) fetch(eid, retry = false)
+                }, RETRY_MS)
+                return@callWs
+            }
             val parsed = parseItems(result as? JSONObject)
             ctx.main.post {
                 if (gen != fetchGeneration) return@post
@@ -743,16 +768,31 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
 
     private fun toggle(item: TodoItem) {
         val eid = config.entity ?: return
+        // A row just added has no Home Assistant uid yet: nothing to update until the list comes back with it.
+        if (item.pending) return
         val now = !item.completed
-        items = items.map { if (it.uid == item.uid) it.copy(completed = now) else it }
+        val flipped = item.copy(completed = now)
+        items = items.map { if (it.uid == item.uid) flipped else it }
         fetchGeneration++ // a fetch already in flight must not undo the optimistic flip
         renderItems()
-        ctx.callService(
-            "todo",
+        callTodo(
             "update_item",
             JSONObject().put("entity_id", eid).put("item", item.uid).put("status", if (now) "completed" else "needs_action"),
-            null,
-        )
+        ) {
+            // Rejected: undo this flip at once (unless the row changed since), then read the list to reconcile.
+            if (items.any { it === flipped }) {
+                items = items.map { if (it === flipped) item else it }
+                renderItems()
+            }
+            fetch(eid)
+        }
+    }
+
+    /** `todo.<service>` with HA's answer: a rejected write runs [onFailed] on the main thread. */
+    private fun callTodo(service: String, data: JSONObject, onFailed: () -> Unit) {
+        val msg = JSONObject().put("type", "call_service").put("domain", "todo").put("service", service)
+            .put("service_data", data)
+        ctx.callWs(msg) { ok, _, _ -> if (!ok) ctx.main.post(onFailed) }
     }
 
     private fun addItem() {
@@ -760,10 +800,17 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         val text = input.text?.toString()?.trim().orEmpty()
         if (text.isEmpty()) return
         input.setText("")
-        items = items + TodoItem(uid = "local-${System.nanoTime()}", summary = text, completed = false)
+        val local = TodoItem(uid = "$LOCAL_UID${System.nanoTime()}", summary = text, completed = false, pending = true)
+        items = items + local
         fetchGeneration++
         renderItems()
-        ctx.callService("todo", "add_item", JSONObject().put("entity_id", eid).put("item", text), null)
+        callTodo("add_item", JSONObject().put("entity_id", eid).put("item", text)) {
+            // Rejected: take the row back out, and give the text back for another try.
+            items = items.filter { it.uid != local.uid }
+            renderItems()
+            if (input.text.isNullOrEmpty()) input.setText(text)
+            fetch(eid)
+        }
     }
 
     private fun renderItems() {
@@ -834,6 +881,11 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     }
 
     companion object {
+        /** The uid prefix of a row added here that Home Assistant hasn't listed yet. */
+        private const val LOCAL_UID = "local-"
+
+        /** The wait before a failed list read is tried again (once). */
+        private const val RETRY_MS = 2_000L
         /** HA's checked checkbox: its brand fill (#009ac7, measured). */
         private const val CHECKED = 0xFF009AC7.toInt()
 
@@ -889,12 +941,17 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
 
     override fun onDetachedFromWindow() {
         ctx.main.removeCallbacks(refresh)
+        generation++
         super.onDetachedFromWindow()
     }
+
+    /** Bumped per request and on detach: an answer from an earlier attachment doesn't overwrite a newer one. */
+    private var generation = 0
 
     private fun fetch() {
         ctx.main.removeCallbacks(refresh)
         if (ids.isEmpty()) return
+        val gen = ++generation
         val start = Date(System.currentTimeMillis() - days * 86_400_000L)
         val msg = JSONObject()
             .put("type", "recorder/statistics_during_period")
@@ -905,6 +962,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         ctx.callWs(msg) { ok, result, _ ->
             val res = if (ok) result as? JSONObject else null
             ctx.main.post {
+                if (gen != generation) return@post
                 if (res != null) render(res)
                 if (isAttachedToWindow) ctx.main.postDelayed(refresh, REFRESH_MS)
             }
@@ -1862,7 +1920,9 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }
         val start = StatisticsGraphCardView.isoUtc(startCal.time)
-        val end = StatisticsGraphCardView.isoUtc(Date(startCal.timeInMillis + DAYS * 86_400_000L))
+        // Seven calendar days, not 7 x 24 h: a DST change in between must not cut off the last hour.
+        val endCal = (startCal.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, DAYS) }
+        val end = StatisticsGraphCardView.isoUtc(endCal.time)
         val results = arrayOfNulls<List<CalendarEvent>>(ids.size)
         var pending = ids.size
         ids.forEachIndexed { i, eid ->

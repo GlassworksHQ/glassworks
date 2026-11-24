@@ -606,7 +606,11 @@ class VitroView(
         }
     }
 
+    /** Bumped by every backdrop change, so an image that loads after a newer backdrop doesn't replace it. */
+    private var backdropGeneration = 0
+
     private fun applyBackdrop(theme: ResolvedTheme) {
+        val generation = ++backdropGeneration
         // A picture replaces the root's color, as it did when it was the root's own background.
         fun picture(d: android.graphics.drawable.Drawable) {
             background = null
@@ -627,7 +631,7 @@ class VitroView(
             is ThemeBackground.ImageUrl -> {
                 color(bg.fallbackColor)
                 contextFactory?.invoke(theme)?.loadImage(bg.url) { bmp ->
-                    if (bmp != null) picture(BitmapDrawable(resources, bmp))
+                    if (bmp != null && generation == backdropGeneration) picture(BitmapDrawable(resources, bmp))
                 }
             }
         }
@@ -637,7 +641,11 @@ class VitroView(
         // Panel view: single full-viewport card (e.g. custom:mirror-home-card, custom:tablet-home-card).
         if (view.type == "panel" && view.cards.isNotEmpty()) {
             val card = view.cards.first()
-            return buildCard(card, ctx, fillViewport = true)
+            // In a full-viewport frame: the cached-view switch shows and hides the frame, the card's conditions the
+            // card inside it, so returning to the view can't undo a hidden card.
+            return FrameLayout(context).apply {
+                addView(wrapVisibility(card, buildCard(card, ctx, fillViewport = true), ctx), FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            }
         }
 
         val scroll = ScrollView(context).apply {
@@ -1120,18 +1128,25 @@ class VitroView(
         update()
         val refs = LinkedHashSet<String>()
         conds.forEach { it.referencedEntities(refs) }
-        val unsubs = refs.map { eid -> store.subscribe(eid) { ctx.main.post(update) } }
+        fun subscribe() = refs.map { eid -> store.subscribe(eid) { ctx.main.post(update) } }
+        var unsubs = subscribe()
         // HA's user arrives after the first render, so user-gated cards re-check on the same tick as time-gated ones.
         val ticks = conds.any { it.dependsOnTime() || it.dependsOnUser() }
         view.addOnAttachStateChangeListener(object : OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: View) {
+                // Back after a detach: listen again, and catch up with what changed meanwhile.
+                if (unsubs.isEmpty() && refs.isNotEmpty()) {
+                    unsubs = subscribe()
+                    if (!ticks) update()
+                }
                 if (ticks) {
                     update() // The clock may have moved on while detached.
-                    addPeriodicCheck(update)
+                    addPeriodicCheck(update, secondBoundaries(conds))
                 }
             }
             override fun onViewDetachedFromWindow(v: View) {
                 unsubs.forEach { it() }
+                unsubs = emptyList()
                 if (ticks) removePeriodicCheck(update)
                 // A cancelled fade never runs its end action: snap to the state it was heading for.
                 v.animate().cancel()
@@ -1179,22 +1194,59 @@ class VitroView(
 
     // ---- Periodic visibility re-checks (`time` and `user` conditions) ----
 
-    private fun addPeriodicCheck(check: () -> Unit) {
+    /** Seconds of the day that `time` conditions start or end at off the minute (`08:00:30`), per check. */
+    private val checkBoundaries = HashMap<() -> Unit, List<Int>>()
+
+    private fun addPeriodicCheck(check: () -> Unit, boundaries: List<Int> = emptyList()) {
         periodicChecks += check
+        if (boundaries.isNotEmpty()) checkBoundaries[check] = boundaries
         if (isAttachedToWindow) scheduleTick()
     }
 
     private fun removePeriodicCheck(check: () -> Unit) {
         periodicChecks -= check
+        checkBoundaries -= check
         if (periodicChecks.isEmpty()) removeCallbacks(periodicTick)
     }
 
-    /** Next tick just after the coming minute boundary, so `after: "07:00"` flips at 07:00, not up to 60 s late. */
+    /** The `time` bounds in [conds] (nested ones too) that don't fall on a minute: the minute tick would miss them. */
+    private fun secondBoundaries(conds: List<VisibilityCondition>): List<Int> {
+        val out = ArrayList<Int>()
+        fun walk(c: VisibilityCondition) {
+            when (c) {
+                is VisibilityCondition.Time -> listOfNotNull(c.after, c.before).filterTo(out) { it % 60 != 0 }
+                is VisibilityCondition.And -> c.conditions.forEach(::walk)
+                is VisibilityCondition.Or -> c.conditions.forEach(::walk)
+                is VisibilityCondition.Not -> c.conditions.forEach(::walk)
+                else -> Unit
+            }
+        }
+        conds.forEach(::walk)
+        return out
+    }
+
+    /**
+     * Next tick just after the coming minute boundary, so `after: "07:00"` flips at 07:00, not up to 60 s late; or
+     * sooner, just after a bound with seconds (`08:00:30`) when one comes first.
+     */
     private fun scheduleTick() {
         removeCallbacks(periodicTick)
         if (periodicChecks.isEmpty()) return
         val now = System.currentTimeMillis()
-        postDelayed(periodicTick, PERIODIC_CHECK_MS - now % PERIODIC_CHECK_MS + 250L)
+        var delay = PERIODIC_CHECK_MS - now % PERIODIC_CHECK_MS + 250L
+        if (checkBoundaries.isNotEmpty()) {
+            val cal = java.util.Calendar.getInstance().apply { timeInMillis = now }
+            // All from one clock sample: a second read could cross the boundary and push it to tomorrow.
+            val nowSec = cal.get(java.util.Calendar.HOUR_OF_DAY) * 3_600 + cal.get(java.util.Calendar.MINUTE) * 60 +
+                cal.get(java.util.Calendar.SECOND)
+            val msInSecond = cal.get(java.util.Calendar.MILLISECOND)
+            for (b in checkBoundaries.values.flatten()) {
+                val ahead = ((b - nowSec) % 86_400 + 86_400) % 86_400
+                val ms = (if (ahead == 0) 86_400 else ahead) * 1_000L - msInSecond + 250L
+                if (ms in 1 until delay) delay = ms
+            }
+        }
+        postDelayed(periodicTick, delay)
     }
 
     override fun onAttachedToWindow() {

@@ -86,7 +86,10 @@ class MdSvg private constructor(
             canvas.scale(sx, sy)
         } else {
             val s = if (preserve.contains("slice")) maxOf(sx, sy) else min(sx, sy)
-            canvas.translate((w - viewBox.width() * s) / 2f, (h - viewBox.height() * s) / 2f)
+            // The alignment `preserveAspectRatio` asks for (xMin/xMid/xMax, YMin/YMid/YMax); mid by default.
+            val fx = when { "xMin" in preserve -> 0f; "xMax" in preserve -> 1f; else -> 0.5f }
+            val fy = when { "YMin" in preserve -> 0f; "YMax" in preserve -> 1f; else -> 0.5f }
+            canvas.translate((w - viewBox.width() * s) * fx, (h - viewBox.height() * s) * fy)
             canvas.scale(s, s)
         }
         canvas.translate(-viewBox.left, -viewBox.top)
@@ -253,9 +256,11 @@ class MdSvg private constructor(
                     val h = s.substring(i + 1, i + 3).toIntOrNull(16)
                     if (h != null) { bytes.write(h); i += 3; continue }
                 }
-                val enc = c.toString().toByteArray(Charsets.UTF_8)
+                // By code point: a surrogate pair (an emoji) encodes as one character, not two halves.
+                val cp = s.codePointAt(i)
+                val enc = String(Character.toChars(cp)).toByteArray(Charsets.UTF_8)
                 bytes.write(enc, 0, enc.size)
-                i++
+                i += Character.charCount(cp)
             }
             return String(bytes.toByteArray(), Charsets.UTF_8)
         }
@@ -473,7 +478,8 @@ class MdSvg private constructor(
                         arcTo(p, x, y, rx, ry, rot, large, sweep, ex, ey)
                         x = ex; y = ey
                     }
-                    'Z' -> { p.close(); x = sx; y = sy; if (!hasNum()) { if (i < tokens.size) cmd = tokens[i++][0] else break } }
+                    // Z takes no operands: a number after it is an error, and the path ends there (it looped forever).
+                    'Z' -> { p.close(); x = sx; y = sy; if (hasNum()) break; if (i < tokens.size) cmd = tokens[i++][0] else break }
                     else -> break
                 }
                 lastQ = q

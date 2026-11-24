@@ -21,7 +21,11 @@ internal class LiveCameraFeed(
     private var running = false
     private var polling = false
     private var inFlight = false
-    private var gotStreamFrame = false
+    /** Frames the stream delivered this run: a still requested before the latest one never covers it. */
+    private var streamFrames = 0
+
+    /** Bumped by [stop]: a snapshot of an earlier run neither clears [inFlight] nor shows up. */
+    private var generation = 0
     private var stopStream: (() -> Unit)? = null
 
     private val pollTick = object : Runnable {
@@ -39,7 +43,7 @@ internal class LiveCameraFeed(
     fun start() {
         if (running) return
         running = true
-        gotStreamFrame = false
+        streamFrames = 0
         snapshot()
         openStream()
     }
@@ -48,6 +52,7 @@ internal class LiveCameraFeed(
         running = false
         polling = false
         inFlight = false
+        generation++
         ctx.main.removeCallbacks(pollTick)
         ctx.main.removeCallbacks(retry)
         stopStream?.let { runCatching { it() } }
@@ -63,7 +68,7 @@ internal class LiveCameraFeed(
             picture(),
             onFrame = { bmp ->
                 if (running) {
-                    gotStreamFrame = true
+                    streamFrames++
                     if (polling) {
                         polling = false
                         ctx.main.removeCallbacks(pollTick)
@@ -91,11 +96,14 @@ internal class LiveCameraFeed(
         val pic = picture() ?: return
         if (inFlight) return
         inFlight = true
+        val run = generation
+        val framesBefore = streamFrames
         val sep = if ('?' in pic) '&' else '?'
         ctx.loadImage("$pic${sep}t=${System.currentTimeMillis()}") { bmp ->
+            if (run != generation) return@loadImage
             inFlight = false
-            // A streamed frame is newer than any snapshot, so a late still never covers it.
-            if (running && bmp != null && (polling || !gotStreamFrame)) onBitmap(bmp)
+            // A streamed frame that arrived after this still was asked for is newer: the still never covers it.
+            if (running && bmp != null && streamFrames == framesBefore) onBitmap(bmp)
         }
     }
 

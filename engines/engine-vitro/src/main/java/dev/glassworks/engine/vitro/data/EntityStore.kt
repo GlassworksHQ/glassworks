@@ -146,7 +146,7 @@ data class EntityState(
     /** JSON object matching HA's `hass.states[entity_id]` shape for Tier 3 Micro-Web Islands. */
     fun toHassJson(): JSONObject {
         val attrs = JSONObject()
-        for ((k, v) in attributes) attrs.put(k, v ?: JSONObject.NULL)
+        for ((k, v) in attributes) attrs.put(k, EntityStore.toJsonValue(v))
         return JSONObject()
             .put("entity_id", entityId)
             .put("state", state)
@@ -179,7 +179,8 @@ class EntityStore {
 
     /** Subscribes to changes for one [entityId]. Returns an unsubscribe handle. */
     fun subscribe(entityId: String, listener: (EntityState?) -> Unit): () -> Unit {
-        val list = listeners.computeIfAbsent(entityId) { CopyOnWriteArrayList() }
+        // getOrPut on a ConcurrentMap is get + putIfAbsent: computeIfAbsent needs API 24, and this module is minSdk 23.
+        val list = listeners.getOrPut(entityId) { CopyOnWriteArrayList() }
         list += listener
         return { list -= listener }
     }
@@ -224,8 +225,12 @@ class EntityStore {
         return { anyListeners -= listener }
     }
 
-    /** Applies HA's `subscribe_entities` event payload (`a` initial map, `c` compressed diffs, `r` removals). */
-    fun applyCompressedEvent(ev: JSONObject): Set<String> {
+    /**
+     * Applies HA's `subscribe_entities` event payload (`a` initial map, `c` compressed diffs, `r` removals).
+     * [snapshotScope] non-null marks the subscription's first event, a snapshot of those entity ids (empty: every
+     * entity): one of them missing from its `a` map no longer exists and is removed.
+     */
+    fun applyCompressedEvent(ev: JSONObject, snapshotScope: Set<String>? = null): Set<String> {
         val changed = LinkedHashSet<String>()
 
         ev.optJSONObject("a")?.let { added ->
@@ -233,15 +238,23 @@ class EntityStore {
             while (keys.hasNext()) {
                 val id = keys.next()
                 val obj = added.optJSONObject(id) ?: continue
+                val lc = obj.optDouble("lc", 0.0)
                 val entity = EntityState(
                     entityId = id,
                     state = obj.optString("s", ""),
                     attributes = toMap(obj.optJSONObject("a")),
-                    lastChanged = obj.optDouble("lc", 0.0),
-                    lastUpdated = obj.optDouble("lu", 0.0),
+                    lastChanged = lc,
+                    // HA leaves `lu` out when it equals `lc`.
+                    lastUpdated = obj.optDouble("lu", lc),
                 )
                 states[id] = entity
                 changed += id
+            }
+            if (snapshotScope != null) {
+                val scope = if (snapshotScope.isEmpty()) states.keys.toList() else snapshotScope
+                for (id in scope) {
+                    if (!added.has(id) && states.remove(id) != null) changed += id
+                }
             }
         }
 
@@ -259,7 +272,8 @@ class EntityStore {
                 diff.optJSONObject("+")?.let { plus ->
                     if (plus.has("s")) state = plus.optString("s", state)
                     if (plus.has("lc")) lc = plus.optDouble("lc", lc)
-                    if (plus.has("lu")) lu = plus.optDouble("lu", lu)
+                    // A diff carries `lc` alone when the state changed (then last_updated is the same moment).
+                    if (plus.has("lu")) lu = plus.optDouble("lu", lu) else if (plus.has("lc")) lu = lc
                     plus.optJSONObject("a")?.let { a ->
                         val ak = a.keys()
                         while (ak.hasNext()) {
@@ -307,6 +321,15 @@ class EntityStore {
         }
         if (changed.isNotEmpty()) dispatch(changed)
         return changed
+    }
+
+    /** Forgets every entity (the page moved to another Home Assistant) and tells their listeners they are gone. */
+    fun clear() {
+        // The old server's snapshot says nothing about which entities the next one lacks.
+        snapshotFilter = null
+        val gone = LinkedHashSet(states.keys)
+        states.clear()
+        if (gone.isNotEmpty()) dispatch(gone)
     }
 
     /** Local optimistic update (e.g. instant toggle visual feedback before HA replies). */
@@ -377,6 +400,14 @@ class EntityStore {
                 out[k] = unwrap(obj.opt(k))
             }
             return out
+        }
+
+        /** [v] from [unwrap] back as a JSON value: Android's `JSONObject.put` would write a List or Map as its toString(). */
+        internal fun toJsonValue(v: Any?): Any = when (v) {
+            null -> JSONObject.NULL
+            is Map<*, *> -> JSONObject().also { o -> for ((k, x) in v) o.put(k.toString(), toJsonValue(x)) }
+            is List<*> -> JSONArray().also { a -> for (x in v) a.put(toJsonValue(x)) }
+            else -> v
         }
 
         private fun unwrap(v: Any?): Any? = when (v) {

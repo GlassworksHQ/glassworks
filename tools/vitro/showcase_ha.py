@@ -33,6 +33,7 @@ import argparse
 import ast
 import base64
 import colorsys
+import copy
 import datetime
 import functools
 import hashlib
@@ -577,7 +578,8 @@ def _view_hacs():
                 {"type": "custom:mushroom-template-card",
                  "primary": "{{ states('sensor.studio_co2') }} ppm",
                  "secondary": "{% if states('sensor.studio_co2') | int > 800 %}Open a window{% else %}Air is fine{% endif %}",
-                 "icon": "mdi:molecule-co2", "icon_color": "{{ 'red' if states('sensor.studio_co2') | int > 800 else 'green' }}"},
+                 "icon": "mdi:molecule-co2",
+                 "icon_color": "{% if states('sensor.studio_co2') | int > 800 %}red{% else %}green{% endif %}"},
                 {"type": "custom:bubble-card", "card_type": "separator", "name": "Lights", "icon": "mdi:lightbulb-group"},
                 {"type": "custom:bubble-card", "card_type": "button", "entity": "light.ceiling_strip", "button_type": "switch",
                  "show_state": True, "show_attribute": True, "attribute": "brightness"}]},
@@ -862,8 +864,8 @@ def window(start, end, now=None):
             return float(x)
         return datetime.datetime.fromisoformat(x.replace("Z", "+00:00")).timestamp()
     now = time.time() if now is None else now
-    t1 = parse(end) if end else now
-    t0 = parse(start) if start else t1 - 86400
+    t1 = parse(end) if end not in (None, "") else now           # 0 is the epoch, not "no bound"
+    t0 = parse(start) if start not in (None, "") else t1 - 86400
     return t0, max(t1, t0)
 
 
@@ -1069,11 +1071,16 @@ FILTERS = {
 }
 
 
+MAX_TEMPLATE_OUTPUT = 64 * 1024
+_DATE_FIELDS = {"year", "month", "day", "hour", "minute", "second", "microsecond", "tzinfo"}
+
+
 class _Eval:
     """Recursive-descent evaluator for one expression (values come out directly, no tree)."""
 
     def __init__(self, text, hub):
         self.hub, self.toks, self.i = hub, [], 0
+        self.dry = 0        # > 0 while parsing an operand `and`/`or` doesn't need: consumed, not evaluated
         pos = 0
         text = text.rstrip()
         while pos < len(text):
@@ -1085,7 +1092,8 @@ class _Eval:
             pos = m.end()
         self.env = {"states": _States(hub), "true": True, "false": False, "none": None, "True": True, "False": False, "None": None}
         self.funcs = {
-            "state_attr": lambda e, a: (hub.states.get(e) or {"attributes": {}})["attributes"].get(a),
+            # A detached copy: a template must not be able to change the home through a list or dict it reads.
+            "state_attr": lambda e, a: copy.deepcopy((hub.states.get(e) or {"attributes": {}})["attributes"].get(a)),
             "is_state": lambda e, s: (hub.states.get(e) or {}).get("state") in (s if isinstance(s, (list, tuple)) else [s]),
             "is_state_attr": lambda e, a, v: (hub.states.get(e) or {"attributes": {}})["attributes"].get(a) == v,
             "has_value": lambda e: (hub.states.get(e) or {}).get("state") not in (None, "unknown", "unavailable"),
@@ -1107,26 +1115,40 @@ class _Eval:
             raise TemplateError("unexpected " + self.toks[self.i][1])
         return v
 
+    def _skip(self, part):
+        self.dry += 1
+        try:
+            part()
+        finally:
+            self.dry -= 1
+
     def or_(self):
         v = self.and_()
         while self.peek("or"):
             self.take()
-            r = self.and_()
-            v = v or r
+            if v and not self.dry:
+                self._skip(self.and_)       # Jinja short-circuits: the right side isn't evaluated
+            else:
+                r = self.and_()
+                v = v or r
         return v
 
     def and_(self):
         v = self.not_()
         while self.peek("and"):
             self.take()
-            r = self.not_()
-            v = v and r
+            if not v and not self.dry:
+                self._skip(self.not_)
+            else:
+                r = self.not_()
+                v = v and r
         return v
 
     def not_(self):
         if self.peek("not"):
             self.take()
-            return not self.not_()
+            v = self.not_()
+            return None if self.dry else not v
         return self.cmp()
 
     def cmp(self):
@@ -1134,6 +1156,8 @@ class _Eval:
         if self.peek("==", "!=", "<", ">", "<=", ">=", "in"):
             op = self.take()[1]
             r = self.add()
+            if self.dry:
+                return None
             try:
                 return {"==": lambda: v == r, "!=": lambda: v != r, "<": lambda: v < r, ">": lambda: v > r,
                         "<=": lambda: v <= r, ">=": lambda: v >= r, "in": lambda: v in r}[op]()
@@ -1146,7 +1170,8 @@ class _Eval:
         while self.peek("+", "-", "~"):
             op = self.take()[1]
             r = self.mul()
-            v = str(v) + str(r) if op == "~" else v + r if op == "+" else v - r
+            if not self.dry:
+                v = str(v) + str(r) if op == "~" else v + r if op == "+" else v - r
         return v
 
     def mul(self):
@@ -1154,6 +1179,16 @@ class _Eval:
         while self.peek("*", "/", "%"):
             op = self.take()[1]
             r = self.filt()
+            if self.dry:
+                continue
+            if op == "*" and (isinstance(v, (str, list)) or isinstance(r, (str, list))):
+                # Repetition: bounded before it allocates (a tiny template could ask for gigabytes).
+                seq, n = (v, r) if isinstance(v, (str, list)) else (r, v)
+                if not isinstance(n, int) or len(seq) * max(n, 0) > MAX_TEMPLATE_OUTPUT:
+                    raise TemplateError("result too large")
+            if op == "%" and isinstance(v, str):
+                # printf-style formatting: a width like '%1000000000s' allocates before any check could see it.
+                raise TemplateError("string % formatting is not supported")
             v = v * r if op == "*" else v / r if op == "/" else v % r
         return v
 
@@ -1165,13 +1200,15 @@ class _Eval:
             args = self.args() if self.peek("(") else []
             if name not in FILTERS:
                 raise TemplateError(f"no filter {name}")
-            v = FILTERS[name](v, *args)
+            if not self.dry:
+                v = FILTERS[name](v, *args)
         return v
 
     def unary(self):
         if self.peek("-"):
             self.take()
-            return -self.unary()
+            v = self.unary()
+            return None if self.dry else -v
         return self.postfix()
 
     def args(self):
@@ -1192,16 +1229,32 @@ class _Eval:
                 name = self.take()[1]
                 if name.startswith("_"):
                     raise TemplateError("private name")
-                v = v.get(name) if isinstance(v, dict) else getattr(v, name, None)
+                if self.dry:
+                    continue
+                # Attributes of the template's own objects and of dates only: never a Python method.
+                if isinstance(v, dict):
+                    v = v.get(name)
+                elif isinstance(v, (_States, _Domain, _StateObj)) or (isinstance(v, datetime.datetime) and name in _DATE_FIELDS):
+                    v = getattr(v, name, None)
+                else:
+                    v = None
             elif self.peek("["):
                 self.take()
                 k = self.or_()
                 self.take()
+                if self.dry:
+                    continue
                 v = v.get(k) if isinstance(v, dict) else None if v is None else v[k]
-            elif self.peek("(") and callable(v):
-                v = v(*self.args())
+            elif self.peek("(") and (self.dry or self._callable(v)):
+                args = self.args()
+                if not self.dry:
+                    v = v(*args)
             else:
                 return v
+
+    def _callable(self, v):
+        """Only the template helpers (and `states(...)`) can be called."""
+        return isinstance(v, _States) or any(v is f for f in self.funcs.values())
 
     def atom(self):
         if self.i >= len(self.toks):
@@ -1387,7 +1440,8 @@ def svc_light(hub, eid, s, svc, d):
     if svc == "toggle":
         svc = "turn_off" if on else "turn_on"
     if svc == "turn_off":
-        hub.memory[eid] = {k: a.get(k) for k in ("brightness", "color_mode", "color_temp_kelvin", "rgb_color", "hs_color", "xy_color")}
+        if on:      # only on the way off: a second turn_off must not overwrite what the lamp was
+            hub.memory[eid] = {k: a.get(k) for k in ("brightness", "color_mode", "color_temp_kelvin", "rgb_color", "hs_color", "xy_color")}
         return "off", {"brightness": None, "color_mode": None, "color_temp_kelvin": None, "rgb_color": None, "hs_color": None, "xy_color": None}
     if svc != "turn_on":
         raise ServiceError("service_not_found")
@@ -1611,6 +1665,7 @@ class Hub:
 
     def __init__(self, hls=False, extra_resources=(), log=None):
         self.lock = threading.RLock()
+        self.publish_lock = threading.Lock()   # held from commit to the end of its announce (lock order: lock, then this)
         self._ctx = 0
         self.states = {}
         for e, (state, attrs) in ENTITIES.items():
@@ -1689,6 +1744,12 @@ class Hub:
         with self.lock:
             self._pending, todo_touched, response = [], set(), None
             now = time.time()
+            # Every target first: a bad one later in the list must not leave earlier ones changed but unannounced.
+            for eid in entity_ids:
+                if eid not in self.states:
+                    raise ServiceError(f"entity {eid} not found")
+                if domain not in ("todo", "homeassistant") and domain_of(eid) != domain:
+                    raise ServiceError(f"{eid} is not a {domain} entity")
             for eid in entity_ids:
                 if eid not in self.states:
                     raise ServiceError(f"entity {eid} not found")
@@ -1712,7 +1773,14 @@ class Hub:
                 if ch:
                     self._pending.append(ch)
             changes, self._pending = self._pending, []
-        self.announce(changes, todo_touched)
+            conns = list(self.conns)
+            # Taken before the hub lock goes: batches go out in the order they were committed.
+            self.publish_lock.acquire()
+        try:
+            for c in conns:
+                c.changed(changes, todo_touched)
+        finally:
+            self.publish_lock.release()
         return response
 
     def set_state(self, entity_id, state, attrs=None):
@@ -1825,7 +1893,9 @@ class Conn:
     def push_template(self, mid, sub, first=False):
         try:
             text, seen = render_template(self.hub, sub[0])
-        except TemplateError as e:
+        except Exception as e:     # any failure is this subscription's alone, never the service caller's
+            if not isinstance(e, TemplateError):
+                e = TemplateError(repr(e))
             if first:
                 self.event(mid, {"error": str(e), "level": "ERROR"})
             return
@@ -1836,7 +1906,9 @@ class Conn:
     def push_condition(self, mid, sub, first=False):
         try:
             ok = eval_condition(self.hub, sub[0])
-        except TemplateError as e:
+        except Exception as e:     # any failure is this subscription's alone
+            if not isinstance(e, TemplateError):
+                e = TemplateError(repr(e))
             if first:
                 self.event(mid, {"error": {"code": "invalid_format", "message": str(e)}})
             return
@@ -1872,7 +1944,8 @@ class Conn:
 
     def handle(self, m):
         mid, t = m.get("id"), m.get("type")
-        self.hub.record({"t": time.time(), "type": t, "msg": m})
+        # The command and its id only: paths and service data can carry tokens (auth/sign_path).
+        self.hub.record({"t": time.time(), "type": t, "id": mid})
         h = HANDLERS.get(t)
         if h is None:
             if t not in self.hub.unknown:
@@ -1898,8 +1971,9 @@ def _sub_entities(c, m):
     c.result(m["id"])
     with c.hub.lock:
         snap = {e: Hub.compressed(s) for e, s in c.hub.states.items() if wanted is None or e in wanted}
+        # Sent before the hub lock goes: no delta for this subscription can overtake its snapshot.
+        c.event(m["id"], {"a": snap})
         c.entity_subs[m["id"]] = wanted
-    c.event(m["id"], {"a": snap})
 
 
 def _sub_events(c, m):
@@ -1917,12 +1991,14 @@ def _unsub(c, m):
 
 def _targets(hub, m):
     ids = []
+    domain = m.get("domain")
     for src in (m.get("target") or {}, m.get("service_data") or {}):
         v = src.get("entity_id")
         ids += [v] if isinstance(v, str) else list(v or [])
         area = src.get("area_id")
         for a in [area] if isinstance(area, str) else list(area or []):
-            ids += hub.areas.get(a, [])
+            # An area expands to its entities of the service's domain (all of them for `homeassistant`).
+            ids += [e for e in hub.areas.get(a, []) if domain in ("homeassistant", None) or domain_of(e) == domain]
     return [e for k, e in enumerate(ids) if e not in ids[:k]]
 
 
@@ -2228,7 +2304,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.websocket()
         if path == "/auth/authorize":
             # HA's sign-in, without its login page: straight back to the frontend with a code
-            back = q["redirect_uri"][0]
+            back = q.get("redirect_uri", [""])[0]
+            if not back or any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in back):
+                return self.send_bytes(400, b"bad redirect_uri", "text/plain")
             loc = f"{back}{'&' if '?' in back else '?'}code=vitro&state={urllib.parse.quote(q.get('state', [''])[0])}&storeToken=true"
             self.send_response(302)
             self.send_header("Location", loc)
@@ -2343,6 +2421,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Connection", "close")
         self.end_headers()
         self.close_connection = True
+        if self.command == "HEAD":
+            return
         try:
             for _ in range(2400):         # ten minutes at most
                 png = camera_png(now_frame())

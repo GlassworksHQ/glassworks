@@ -177,8 +177,10 @@ data class ResolvedTheme(
         append(":root {\n")
         for ((k, v) in vars) {
             if (k.startsWith("card-mod-")) continue
-            val safeVal = v.replace("\n", " ").replace(";", "")
-            append("  --").append(k).append(": ").append(safeVal).append(";\n")
+            // This block goes inside an island's <style>: no angle brackets, so a theme value can't close it.
+            val safeKey = k.filter { it != '<' && it != '>' && it != '\n' && it != ';' && it != '{' && it != '}' }
+            val safeVal = v.replace("\n", " ").replace(";", "").filter { it != '<' && it != '>' }
+            append("  --").append(safeKey).append(": ").append(safeVal).append(";\n")
         }
         append("}\n")
     }
@@ -249,7 +251,6 @@ data class ThemeCatalog(
  * CSS gradients, background URLs, and basic `card-mod-card` container rules) into [ResolvedTheme].
  */
 object ThemeResolver {
-    private val VAR_PATTERN = Regex("""var\(\s*--([a-zA-Z0-9_-]+)\s*(?:,\s*([^)]+))?\)""")
     private val RGBA_PATTERN = Regex("""rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)""", RegexOption.IGNORE_CASE)
     private val HSLA_PATTERN = Regex("""hsla?\(\s*([\d.]+)(?:deg)?\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%(?:\s*[,/]\s*([\d.]+%?))?\s*\)""", RegexOption.IGNORE_CASE)
     private val URL_PATTERN = Regex("""url\(\s*['"]?([^'")]+)['"]?\s*\)""", RegexOption.IGNORE_CASE)
@@ -465,12 +466,87 @@ object ThemeResolver {
     /** Recursively substitutes `var(--name, fallback)` up to depth 8. */
     fun resolveValue(input: String, map: Map<String, String>, depth: Int): String {
         if (depth >= 8 || "var(" !in input) return input.trim()
-        val replaced = VAR_PATTERN.replace(input) { m ->
-            val key = m.groupValues[1]
-            val fallback = m.groupValues.getOrNull(2)?.trim().orEmpty()
-            map[key] ?: fallback
-        }
+        // Bounded like the browser's: substitution that grows a value by more than the limit in one pass
+        // (`--a: var(--a) var(--a)` doubles every pass) makes it invalid, an empty value, instead of filling the heap
+        // on the main thread. The growth is what's capped, not the length: a long card-mod stylesheet stays whole.
+        val replaced = substituteVars(input) { key, fallback -> map[key] ?: fallback }
+        if (replaced.length - input.length > MAX_VAR_EXPANSION) return ""
         return if (replaced == input) replaced.trim() else resolveValue(replaced, map, depth + 1)
+    }
+
+    /** How much a value may grow in one substitution pass. */
+    private const val MAX_VAR_EXPANSION = 16 * 1024
+
+    private val VAR_NAME = Regex("""var\(\s*--([\w-]+)""")
+
+    /**
+     * The names in [raw] (name -> value, no `--`) that take part in a reference cycle (`--a: var(--a)`,
+     * `--a: var(--b); --b: var(--a)`). As in CSS they are invalid at computed-value time: a `var()` of one
+     * takes its fallback, as for a name that isn't there.
+     */
+    internal fun cyclicNames(raw: Map<String, String>): Set<String> {
+        val refs = raw.mapValues { (_, v) -> VAR_NAME.findAll(v).map { it.groupValues[1] }.filter { it in raw }.toSet() }
+        val cyclic = HashSet<String>()
+        for (start in raw.keys) {
+            // Does a path from start's references lead back to start?
+            val seen = HashSet<String>()
+            val stack = ArrayDeque(refs[start].orEmpty())
+            while (stack.isNotEmpty()) {
+                val n = stack.removeLast()
+                if (n == start) { cyclic += start; break }
+                if (seen.add(n)) stack.addAll(refs[n].orEmpty())
+            }
+        }
+        return cyclic
+    }
+
+    /**
+     * Replaces each outermost `var(--name, fallback)` in [s] with [value] of its name and fallback. The whole
+     * expression is found by balanced parentheses, so a nested fallback (`var(--a, var(--b))`) isn't cut short.
+     */
+    private fun substituteVars(s: String, value: (key: String, fallback: String) -> String): String {
+        val out = StringBuilder(s.length)
+        var i = 0
+        while (i < s.length) {
+            val at = s.indexOf("var(", i)
+            if (at < 0) {
+                out.append(s, i, s.length)
+                break
+            }
+            out.append(s, i, at)
+            var j = at + 4
+            var depth = 1
+            while (j < s.length && depth > 0) {
+                when (s[j]) {
+                    '(' -> depth++
+                    ')' -> depth--
+                }
+                j++
+            }
+            if (depth != 0) {
+                out.append(s, at, s.length) // unbalanced: left as it is
+                break
+            }
+            val inner = s.substring(at + 4, j - 1)
+            var comma = -1
+            var d = 0
+            for (k in inner.indices) {
+                when (inner[k]) {
+                    '(' -> d++
+                    ')' -> d--
+                    ',' -> if (d == 0) { comma = k; break }
+                }
+            }
+            val name = (if (comma < 0) inner else inner.substring(0, comma)).trim()
+            if (!name.startsWith("--")) {
+                out.append(s, at, j) // not a custom property reference: left as it is
+                i = j
+                continue
+            }
+            out.append(value(name.removePrefix("--"), if (comma < 0) "" else inner.substring(comma + 1).trim()))
+            i = j
+        }
+        return out.toString()
     }
 
     /** Parses CSS colors (`#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()`, `hsl()`, `hsla()`, named) to Android ARGB. */
@@ -522,7 +598,11 @@ object ThemeResolver {
     }
 
     fun parseDimensionDp(raw: String?, defaultDp: Float): Float {
-        val m = DIM_PX.find(raw.orEmpty()) ?: return defaultDp
+        val text = raw.orEmpty()
+        val m = DIM_PX.find(text) ?: return defaultDp
+        // A negative length or a percentage isn't a positive dp: leave it unapplied rather than guess.
+        if (m.range.first > 0 && text[m.range.first - 1] == '-') return defaultDp
+        if (m.range.last + 1 < text.length && text[m.range.last + 1] == '%') return defaultDp
         val value = m.groupValues[1].toFloatOrNull() ?: return defaultDp
         return when (m.groupValues[2].lowercase(Locale.ROOT)) {
             "rem", "em" -> value * 16f
@@ -622,12 +702,19 @@ object ThemeResolver {
         if (cleaned.isBlank()) return CardModStyle()
         val (decls, otherRules) = hostDeclarations(cleaned)
         // Custom properties cascade like any other: per name, the last `!important` declaration wins, else the last.
-        val custom = CUSTOM_PROPERTY.findAll(decls)
+        val rawCustom = CUSTOM_PROPERTY.findAll(decls)
             .groupBy({ it.groupValues[1] }, { it.groupValues[2] })
             .mapValues { (_, values) ->
                 val winner = values.lastOrNull { IMPORTANT.containsMatchIn(it) } ?: values.last()
-                resolveValue(winner.replace(IMPORTANT, "").trim(), vars, 0)
+                winner.replace(IMPORTANT, "").trim()
             }
+        // The card's own custom properties come before the theme's, as they would on its ha-card, and they may refer
+        // to each other (`--inset: var(--spacing)`): resolved against that whole scope. Names in a cycle are invalid:
+        // left out of the scope (the theme's value of that name included), so their `var()` takes its fallback.
+        val cyclic = if (rawCustom.isEmpty()) emptySet() else cyclicNames(rawCustom)
+        val rawScope = if (rawCustom.isEmpty()) vars else (vars + rawCustom) - cyclic
+        val custom = rawCustom.mapValues { resolveValue(it.value, rawScope, 0) }
+        val scope = if (custom.isEmpty()) vars else (vars + custom) - cyclic
         // Most of the properties asked for below aren't there: skip the pattern when the name isn't in the text at all
         // (the pattern matches ASCII case-insensitively, so a lowercase miss is always a pattern miss).
         val lowerDecls = decls.lowercase(Locale.ROOT)
@@ -636,7 +723,7 @@ object ThemeResolver {
             if (name !in lowerDecls) return null
             val values = declProp(name).findAll(decls).map { it.groupValues[1] }.toList()
             val winner = values.lastOrNull { IMPORTANT.containsMatchIn(it) } ?: values.lastOrNull()
-            return winner?.replace(IMPORTANT, "")?.trim()?.takeIf { it.isNotEmpty() }?.let { resolveValue(it, vars, 0) }
+            return winner?.replace(IMPORTANT, "")?.trim()?.takeIf { it.isNotEmpty() }?.let { resolveValue(it, scope, 0) }
         }
 
         val bgImage = prop("background-image")
@@ -897,7 +984,12 @@ object ThemeResolver {
         left: String?,
     ): EdgeInsetsDp? {
         val base = shorthand?.let { raw ->
-            val vals = splitTopLevelSpaces(raw).mapNotNull { parseDimensionDp(it, -1f).takeIf { v -> v >= 0f } }
+            // Positions name the sides, so one value Vitro can't take (a percentage, a negative length) rejects the
+            // whole shorthand instead of shifting the others; `auto` keeps its place as 0.
+            val vals = splitTopLevelSpaces(raw).map { tok ->
+                if (tok.trim().equals("auto", ignoreCase = true)) 0f
+                else parseDimensionDp(tok, -1f).takeIf { v -> v >= 0f } ?: return@let null
+            }
             when (vals.size) {
                 0 -> null
                 1 -> EdgeInsetsDp(vals[0], vals[0], vals[0], vals[0])

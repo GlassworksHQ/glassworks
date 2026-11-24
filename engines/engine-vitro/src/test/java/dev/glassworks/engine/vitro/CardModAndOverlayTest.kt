@@ -573,4 +573,18 @@ class CardModAndOverlayTest {
         }
         return false
     }
+
+    @Test
+    fun aTemplateThatDropsItsPaddingAndSurfaceRulesGivesTheCardItsOwnBack() {
+        val surface = object : dev.glassworks.engine.vitro.ui.CardSurface(context(EntityStore())) {}
+        surface.setPadding(10, 10, 10, 10)
+        val before = listOf(surface.paddingLeft, surface.paddingTop, surface.paddingRight, surface.paddingBottom)
+        // Padding and a borderless, transparent surface, then the template drops both rules: several times over.
+        repeat(3) {
+            surface.applyStyleCss("ha-card { padding: 30px; background: transparent; border: none; }")
+            surface.applyStyleCss("")
+        }
+        // Back exactly where it started: no border inset added twice, and the theme border's inset restored.
+        assertEquals(before, listOf(surface.paddingLeft, surface.paddingTop, surface.paddingRight, surface.paddingBottom))
+    }
 }

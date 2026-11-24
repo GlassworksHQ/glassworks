@@ -92,6 +92,11 @@ class VitroIslandServerTest {
         return when {
             req.path == "/local/custom-card.js" ->
                 HttpResponse(200, mapOf("Content-Type" to "application/javascript; charset=utf-8"), "customElements.define('x-card', class {});".toByteArray())
+            // The page moves to another Home Assistant while this request is on its way, then HA redirects.
+            req.path == "/local/hop" -> {
+                token = "other-origin-token"
+                HttpResponse(302, mapOf("Location" to "/local/custom-card.js"), ByteArray(0))
+            }
             req.path == "/api/camera_proxy/cam" ->
                 HttpResponse(200, mapOf("Content-Type" to "image/jpeg"), byteArrayOf(1, 2, 3, 4))
             req.path == "/api/services/light/turn_on" && req.method == "POST" ->
@@ -190,6 +195,15 @@ class VitroIslandServerTest {
         val seen = haSeen.single()
         assertEquals("/local/custom-card.js", seen.target)
         assertEquals("Bearer fake-token-0001", seen.authorization)
+    }
+
+    @Test
+    fun aRedirectHopKeepsTheTokenReadWithItsOrigin() {
+        val reply = get(island.ensureStarted() + "/local/hop")
+        assertEquals(200, reply.code)
+        assertEquals(listOf("/local/hop", "/local/custom-card.js"), haSeen.map { it.target })
+        // Both hops carry the token read with the origin, never the one published for the next origin meanwhile.
+        assertEquals(listOf("Bearer fake-token-0001", "Bearer fake-token-0001"), haSeen.map { it.authorization })
     }
 
     @Test
@@ -305,8 +319,9 @@ class VitroIslandServerTest {
         try {
             WsClient.connect(wsUrl("s999"), readTimeoutMs = 5_000).also { it.abort() }
             throw AssertionError("the upgrade should have been refused")
-        } catch (_: IOException) {
-            // 404 instead of 101.
+        } catch (e: IOException) {
+            // 404 instead of 101; a refused or timed-out connection is a different failure.
+            assertTrue("expected a 404, got: ${e.message}", e.message.orEmpty().contains("404"))
         }
     }
 

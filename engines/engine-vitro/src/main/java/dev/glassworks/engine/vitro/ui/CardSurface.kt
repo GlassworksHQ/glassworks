@@ -19,6 +19,7 @@ import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
+import dev.glassworks.auth.OAuth
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -178,12 +179,14 @@ class VitroCardContext(
                 return
             }
         }
+        // The cache generation this load started under: a clear while it was in flight keeps its image out.
+        val generation = cacheGeneration
         IMAGE_POOL.execute {
             val bmp = runCatching {
                 val conn = (URL(fullUrl).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 5_000
                     readTimeout = 8_000
-                    accessToken()?.takeIf { it.isNotEmpty() }?.let { setRequestProperty("Authorization", "Bearer $it") }
+                    haToken(fullUrl)?.let { setRequestProperty("Authorization", "Bearer $it") }
                 }
                 try {
                     if (conn.responseCode in 200..299) decodeDownsampled(conn.inputStream.use { it.readBytes() }) else null
@@ -191,7 +194,9 @@ class VitroCardContext(
                     conn.disconnect()
                 }
             }.getOrNull()
-            if (bmp != null && cacheable) IMAGE_CACHE.put(fullUrl, bmp)
+            if (bmp != null && cacheable) {
+                synchronized(IMAGE_CACHE) { if (generation == cacheGeneration) IMAGE_CACHE.put(fullUrl, bmp) }
+            }
             deliver(bmp)
         }
     }
@@ -209,7 +214,7 @@ class VitroCardContext(
                     connectTimeout = 5_000
                     readTimeout = 8_000
                     setRequestProperty("Accept", "application/json")
-                    accessToken()?.takeIf { it.isNotEmpty() }?.let { setRequestProperty("Authorization", "Bearer $it") }
+                    haToken(fullUrl)?.let { setRequestProperty("Authorization", "Bearer $it") }
                 }
                 try {
                     if (conn.responseCode in 200..299) {
@@ -223,6 +228,12 @@ class VitroCardContext(
             }.getOrNull()
             main.post { done(parsed) }
         }
+    }
+
+    /** The panel's token for [url] on Home Assistant's own origin; an image on any other host gets no credentials. */
+    private fun haToken(url: String): String? {
+        if (!sameOrigin(url, haBase)) return null
+        return accessToken()?.takeIf { it.isNotEmpty() }
     }
 
     private fun absoluteUrl(raw: String): String = when {
@@ -255,6 +266,33 @@ class VitroCardContext(
 
         private val IMAGE_CACHE = object : LruCache<String, Bitmap>(IMAGE_CACHE_KB) {
             override fun sizeOf(key: String, value: Bitmap): Int = max(1, value.allocationByteCount / 1024)
+        }
+
+        /** Drops every cached image: they were fetched with a sign-in (or a Home Assistant) that no longer holds. */
+        fun clearImageCache() = synchronized(IMAGE_CACHE) {
+            // A load already on its way under the old sign-in doesn't put its image back afterwards.
+            cacheGeneration++
+            IMAGE_CACHE.evictAll()
+        }
+
+        @Volatile private var cacheGeneration = 0
+
+        /**
+         * True when [a] and [b] are the same origin: scheme, host and effective port (RFC 6454), so
+         * `https://homeassistant.local` and `https://homeassistant.local:443` match and other ports don't.
+         */
+        fun sameOrigin(a: String?, b: String?): Boolean {
+            val x = canonicalOrigin(a) ?: return false
+            return x == canonicalOrigin(b)
+        }
+
+        private fun canonicalOrigin(url: String?): String? {
+            val origin = url?.let(OAuth::origin) ?: return null
+            return when {
+                origin.startsWith("https://") && origin.endsWith(":443") -> origin.removeSuffix(":443")
+                origin.startsWith("http://") && origin.endsWith(":80") -> origin.removeSuffix(":80")
+                else -> origin
+            }
         }
 
         private fun decodeDownsampled(bytes: ByteArray): Bitmap? {
@@ -291,6 +329,9 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     // Read before the constructor finishes (View may set padding), hence nullable.
     private var cssPadding: IntArray? = null
     private var borderInsetPx = 0
+
+    /** The border inset before card_mod first restyled the surface. */
+    private var baseBorderInset = 0
 
     init {
         applyTheme(ctx.theme)
@@ -396,10 +437,18 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     var activeCardCss: String? = null
         private set
 
+    /** The surface as it was before `card_mod` first restyled it, to go back to when a template drops the rule. */
+    private var baseBackground: android.graphics.drawable.Drawable? = null
+    private var baseClip = false
+    private var basePadding: IntArray? = null
+    private var baseChildPadding: IntArray? = null
+    private var restyled = false
+
     /** Parses one rendered `card_mod` CSS string and restyles the surface from it. */
     fun applyStyleCss(css: String) {
         val theme = ctx.theme
         val mod = ThemeResolver.parseCardMod(css, theme.vars)
+        val previous = activeCardMod
         activeCardMod = mod
         activeCardCss = css
         val radiusPx = (mod.borderRadiusDp ?: theme.cardBorderRadiusDp) * ctx.dp
@@ -409,6 +458,19 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         val layers = mod.backgroundLayers
         val restyle = gradient != null || layers != null || mod.backgroundColor != null || mod.borderColor != null ||
             mod.borderWidthDp != null || mod.borderRadiusDp != null
+        if (restyle && !seamless && !restyled) {
+            baseBackground = background
+            baseClip = clipToOutline
+            baseBorderInset = borderInsetPx
+            restyled = true
+        } else if (!restyle && restyled) {
+            // A template that no longer styles the surface: back to the card's own, border inset included (the
+            // content sits inside the theme border again).
+            background = baseBackground
+            clipToOutline = baseClip
+            setBorderInset(baseBorderInset)
+            restyled = false
+        }
         if (restyle && !seamless) {
             val fillColor = mod.backgroundColor ?: theme.cardBackgroundColor
             val invisibleSurface = gradient == null && layers == null && Color.alpha(fillColor) == 0 && strokePx == 0
@@ -441,10 +503,28 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         }
         val pad = mod.paddingInsets ?: mod.paddingDp?.let { dev.glassworks.engine.vitro.theme.EdgeInsetsDp(it, it, it, it) }
         if (pad != null) {
+            if (basePadding == null) {
+                // The CSS padding, not the view's (which adds the border inset; setPadding would add it again).
+                basePadding = cssPadding?.copyOf() ?: intArrayOf(0, 0, 0, 0)
+                // The padding clearDefaultInnerPadding takes from a sole child, to give back with the outer one.
+                baseChildPadding = (getChildAt(0) as? android.view.ViewGroup)?.takeIf { childCount == 1 }
+                    ?.let { intArrayOf(it.paddingLeft, it.paddingTop, it.paddingRight, it.paddingBottom) }
+            }
             setPadding(ctx.px(pad.left), ctx.px(pad.top), ctx.px(pad.right), ctx.px(pad.bottom))
             clearDefaultInnerPadding()
+        } else {
+            basePadding?.let { setPadding(it[0], it[1], it[2], it[3]) }
+            baseChildPadding?.let { p ->
+                (getChildAt(0) as? android.view.ViewGroup)?.takeIf { childCount == 1 }?.setPadding(p[0], p[1], p[2], p[3])
+            }
+            basePadding = null
+            baseChildPadding = null
         }
-        mod.opacity?.let { alpha = it.coerceIn(0f, 1f) }
+        when {
+            mod.opacity != null -> alpha = mod.opacity.coerceIn(0f, 1f)
+            // The template dropped its `opacity`: back to the theme's card opacity, or opaque.
+            previous.opacity != null -> alpha = ctx.theme.cardMod.opacity?.coerceIn(0f, 1f) ?: 1f
+        }
         // A templated style re-renders here: when it stops setting `box-shadow`, the theme's shadow comes back.
         if (!shadowless) elevation = (mod.elevationDp ?: baselineElevationDp) * ctx.dp
         onCardModApplied(mod)

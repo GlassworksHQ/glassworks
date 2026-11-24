@@ -38,6 +38,71 @@ class EntityStoreTest {
     // ---- Compressed events ----
 
     @Test
+    fun hassJsonKeepsArraysAndObjectsStructured() {
+        val lamp = storeWithLamp()["light.lounge_lamp"]!!.toHassJson()
+        val attrs = lamp.getJSONObject("attributes")
+        // Android's JSONObject.put writes a Kotlin List as its toString(): the island must get a real array.
+        assertTrue(attrs.get("rgb_color") is JSONArray)
+        assertEquals(255, attrs.getJSONArray("rgb_color").getInt(0))
+        assertEquals("colorloop", JSONObject(lamp.toString()).getJSONObject("attributes").getJSONArray("effect_list").getString(1))
+        val nested = EntityState("sensor.x", "1", mapOf("info" to mapOf("a" to listOf(1, null)), "none" to null)).toHassJson()
+            .getJSONObject("attributes")
+        assertTrue(nested.get("info") is JSONObject)
+        assertTrue(nested.getJSONObject("info").getJSONArray("a").isNull(1))
+        assertTrue(nested.isNull("none"))
+    }
+
+    @Test
+    fun lastUpdatedFallsBackToLastChangedLikeHaCompresses() {
+        val store = EntityStore()
+        store.applyCompressedEvent(event("""{"a": {"sensor.t": {"s": "1", "lc": 1700000000.0}}}"""))
+        assertEquals(1700000000.0, store["sensor.t"]!!.lastUpdated, 0.0) // `lu` left out: it equals `lc`
+        store.applyCompressedEvent(event("""{"c": {"sensor.t": {"+": {"s": "2", "lc": 1700000100.0}}}}"""))
+        assertEquals(1700000100.0, store["sensor.t"]!!.lastUpdated, 0.0) // a state change carries `lc` alone
+        store.applyCompressedEvent(event("""{"c": {"sensor.t": {"+": {"a": {"x": 1}}}}}"""))
+        assertEquals(1700000100.0, store["sensor.t"]!!.lastUpdated, 0.0) // neither: kept
+    }
+
+    @Test
+    fun aSnapshotRemovesEntitiesOfItsScopeThatAreGone() {
+        val store = EntityStore()
+        store.applyCompressedEvent(event("""{"a": {"sensor.a": {"s": "1"}, "sensor.b": {"s": "2"}, "sensor.c": {"s": "3"}}}"""))
+        val gone = ArrayList<String>()
+        store.subscribe("sensor.b") { if (it == null) gone += "sensor.b" }
+        // A new subscription for a and b: b was deleted while the panel was offline. c is outside the scope and stays.
+        store.applyCompressedEvent(event("""{"a": {"sensor.a": {"s": "1"}}}"""), snapshotScope = setOf("sensor.a", "sensor.b"))
+        assertNull(store["sensor.b"])
+        assertNotNull(store["sensor.c"])
+        assertEquals(listOf("sensor.b"), gone)
+        // An empty scope is every entity.
+        store.applyCompressedEvent(event("""{"a": {"sensor.a": {"s": "1"}}}"""), snapshotScope = emptySet())
+        assertNull(store["sensor.c"])
+        // A diff is never a snapshot.
+        store.applyCompressedEvent(event("""{"a": {}}"""))
+        assertNotNull(store["sensor.a"])
+    }
+
+    @Test
+    fun clearForgetsTheOldServersSnapshotToo() {
+        val store = storeWithLamp()
+        store.markSnapshot(emptySet())
+        assertTrue(store.isMissing("sensor.only_on_the_next_server"))
+        store.clear()
+        // Until the next server's first snapshot, nothing counts as missing.
+        assertFalse(store.isMissing("sensor.only_on_the_next_server"))
+    }
+
+    @Test
+    fun clearForgetsEveryEntityAndTellsItsListeners() {
+        val store = storeWithLamp()
+        var seen: EntityState? = store["light.lounge_lamp"]
+        store.subscribe("light.lounge_lamp") { seen = it }
+        store.clear()
+        assertEquals(0, store.size())
+        assertNull(seen)
+    }
+
+    @Test
     fun addedEntitiesCarryStateAttributesAndTimestamps() {
         val store = storeWithLamp()
         val lamp = store["light.lounge_lamp"]!!

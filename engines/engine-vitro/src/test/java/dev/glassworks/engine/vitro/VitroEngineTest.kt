@@ -12,7 +12,6 @@ import android.graphics.Color
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.WebView
 import android.widget.TextView
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
@@ -71,8 +70,12 @@ class VitroEngineTest {
         activity = Robolectric.buildActivity(Activity::class.java).setup().get()
     }
 
+    /** Every engine a test made: their island servers (real loopback listeners) stop in [tearDown]. */
+    private val engines = ArrayList<VitroEngine>()
+
     @After
     fun tearDown() {
+        engines.forEach { runCatching { it.islandServer.stop() } }
         // Stop the page's reader thread, then hang up on it, so nothing keeps reconnecting after the test.
         opened.forEach { page ->
             runCatching {
@@ -98,7 +101,7 @@ class VitroEngineTest {
         enabled = enabled,
         tokenProvider = { _, done -> done(FakeHaServer.TOKEN) },
         socketFactory = server::connect,
-    )
+    ).also { engines += it }
 
     private fun openPage(engine: VitroEngine): Page =
         engine.open(activity, host, Color.BLACK).also { opened += it; idle() }
@@ -565,7 +568,12 @@ class VitroEngineTest {
         assertTrue(html.contains("sendBridge({ type: 'callWs', id, msg: msg || {} })"))
         assertTrue(html.contains("const statesProxy = new Proxy(rawStates"))
         assertTrue(html.contains("sendBridge({ type: 'watch', entity_id: prop })"))
-        assertTrue(html.contains("callService(domain, service, data, target)"))
+        // hass.callService is HA's call_service over the same bridge, so its promise carries HA's answer.
+        assertTrue(html.contains("const msg = { type: 'call_service', domain, service, service_data: data || {} };"))
+        // A call that went out on a socket that closed is rejected, not left hanging.
+        assertTrue(html.contains("entry.reject(new Error('Connection lost'))"))
+        // An action with a confirmation is asked natively.
+        assertTrue(html.contains("sendBridge({ type: 'action', action, entity: entity || '' })"))
         assertTrue(html.contains("/__vitro/ws/"))
         assertTrue(html.contains("m.type === 'patch'"))
         assertTrue(html.contains("m.type === 'wsReply'"))
@@ -653,10 +661,8 @@ class VitroEngineTest {
         val island = WebIslandCardView(cardContext(), islandCard(), fillViewport = true)
         assertEquals(1, island.childCount)
         val child = island.getChildAt(0)
-        // A WebView where the system has one; a note naming the card where it does not.
-        assertTrue(
-            child is WebView || (child is TextView && child.text.toString().contains("custom:acme-floorplan-card")),
-        )
+        // No island server or page opener in this fixture: the note naming the card.
+        assertTrue(child is TextView && child.text.toString().contains("custom:acme-floorplan-card"))
     }
 
     @Test
@@ -797,5 +803,62 @@ class VitroEngineTest {
         // A card that read another entity through hass.states starts following it.
         island.handleIslandMessage(JSONObject().put("type", "watch").put("entity_id", "light.kitchen")) {}
         assertTrue(island.patchFor(setOf("light.kitchen"))!!.getJSONObject("states").has("light.kitchen"))
+        // A watched entity that is removed goes out as null too.
+        island.handleIslandMessage(JSONObject().put("type", "watch").put("entity_id", "light.gone")) {}
+        assertTrue(island.patchFor(setOf("light.gone"))!!.getJSONObject("states").isNull("light.gone"))
+    }
+
+    @Test
+    fun anInlineModuleKeepsItsPlusSigns() {
+        assertEquals("a + b", WebIslandCardView.decodeInlineModule("data:text/javascript,a%20+%20b"))
+    }
+
+    @Test
+    fun originsCompareByTheirEffectivePort() {
+        val same = dev.glassworks.engine.vitro.ui.VitroCardContext.Companion::sameOrigin
+        assertTrue(same("https://homeassistant.local/api/image/x", "https://homeassistant.local:443"))
+        assertTrue(same("http://homeassistant.local:80/local/a.png", "http://homeassistant.local"))
+        assertTrue(same("http://192.0.2.10:8123/a", "http://192.0.2.10:8123"))
+        assertFalse(same("https://homeassistant.local:8443/a", "https://homeassistant.local"))
+        assertFalse(same("http://homeassistant.local/a", "https://homeassistant.local"))
+        assertFalse(same("https://images.example/a.png", "https://homeassistant.local"))
+    }
+
+    @Test
+    fun aTokenThatArrivesAfterThePanelMovedIsNotDeliveredOrKept() {
+        // The panel is set to this HA when the token is asked for, and to another one by the time it arrives.
+        var current = settings
+        val engine = VitroEngine(
+            fallback = fallback,
+            settings = { current },
+            enabled = { true },
+            tokenProvider = { _, done ->
+                current = settings.copy(dashboard = "http://192.0.2.99:8123/lovelace/0")
+                done(FakeHaServer.TOKEN)
+            },
+            socketFactory = server::connect,
+        ).also { engines += it }
+        val page = openPage(engine)
+        page.load("$base/wall-test/living")
+        awaitMain("auth sent") { server.commands("auth").isNotEmpty() }
+        // The client got no token: the auth carries none, and nothing serves it to images or the island proxy.
+        assertEquals("", server.commands("auth").first().optString("access_token"))
+        assertEquals(null, engine.islandServer.let { _ ->
+            val f = page.javaClass.getDeclaredMethod("tokenFor", String::class.java)
+            f.invoke(page, base) as String?
+        })
+    }
+
+    @Test
+    fun theImageAndStreamTokenIsOnlyTheOneIssuedForTheirOrigin() {
+        val engine = vitro()
+        val page = openPage(engine)
+        page.load("$base/wall-test/living")
+        awaitMain("connected") { server.commands("subscribe_entities").isNotEmpty() }
+        val tokenFor = page.javaClass.getDeclaredMethod("tokenFor", String::class.java)
+        assertEquals(FakeHaServer.TOKEN, tokenFor.invoke(page, base))
+        assertEquals(FakeHaServer.TOKEN, tokenFor.invoke(page, "$base/"))
+        // A request still queued for another Home Assistant gets nothing.
+        assertEquals(null, tokenFor.invoke(page, "http://192.0.2.99:8123"))
     }
 }
