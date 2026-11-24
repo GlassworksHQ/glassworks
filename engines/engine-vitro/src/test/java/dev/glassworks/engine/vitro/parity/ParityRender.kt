@@ -168,13 +168,17 @@ object ParityViews {
 }
 
 /** Serves a corpus's assets/ folder on 127.0.0.1, as Home Assistant serves /static: what Vitro's image loader fetches. */
-class FixtureHttp(private val assets: File) : Closeable {
+class FixtureHttp(
+    private val assets: File,
+    /** Paths HA's page couldn't load (the reference's imagesHaMissing): never served, even if a file is there. */
+    private val haMissing: Set<String> = emptySet(),
+) : Closeable {
     val missing = CopyOnWriteArrayList<String>()
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { ex ->
             val path = ex.requestURI.path
             val f = File(assets, path.removePrefix("/")).canonicalFile
-            if (f.isFile && f.path.startsWith(assets.canonicalPath)) {
+            if (path !in haMissing && f.isFile && f.path.startsWith(assets.canonicalPath)) {
                 val bytes = f.readBytes()
                 ex.sendResponseHeaders(200, bytes.size.toLong())
                 ex.responseBody.use { it.write(bytes) }
@@ -239,7 +243,7 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         val asked = CopyOnWriteArrayList<String>()
         val missing = CopyOnWriteArrayList<String>()
         val haConfig = shared?.haConfig ?: JSONObject()
-        FixtureHttp(File(root, "assets")).use { http ->
+        FixtureHttp(File(root, "assets"), ref?.imagesHaMissing.orEmpty()).use { http ->
             val view = VitroView(activity, store, Color.BLACK)
             view.contextFactory = { theme ->
                 VitroCardContext(

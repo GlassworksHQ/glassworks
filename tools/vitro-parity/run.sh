@@ -65,7 +65,7 @@ harness() {
 
 if [ "$refresh" = 1 ]; then
   [ -d "$HERE/node_modules/playwright-core" ] || (cd "$HERE" && npm ci --no-audit --no-fund)
-  echo "== 1/4 save the vitro-harness dashboard and fetch what the cases show"
+  echo "== 1/4 save the vitro-harness dashboard (and a local corpus's dashboard configs)"
   node "$HERE/capture.mjs" prepare ${node_args[@]+"${node_args[@]}"}
   echo "== 2/4 Vitro: which templates do the cases ask Home Assistant for"
   harness -PvitroParityCollect=true -q

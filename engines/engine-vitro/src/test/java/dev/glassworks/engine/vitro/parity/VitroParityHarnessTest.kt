@@ -116,10 +116,17 @@ class VitroParityHarnessTest {
             wanted.getOrPut(case.id) { LinkedHashSet() }.addAll(render.templatesAsked)
             val notes = ArrayList<String>()
             if (render.templatesMissing.isNotEmpty() && ref != null) notes += "${render.templatesMissing.size} template(s) Vitro asked for have no rendered result in the reference (recapture)"
-            if (render.assetsMissing.isNotEmpty()) notes += "images not in assets/: ${render.assetsMissing.distinct().joinToString()}"
             if (ref != null && !ref.stable) notes += "HA's render was still moving when captured"
             if (ParityFiles.collect) return ParityResult(label, frame, case, ParityStatus.COLLECTED, null, emptyList(), notes, null)
             if (ref == null) return ParityResult(label, frame, case, ParityStatus.NO_REFERENCE, null, listOf("no refs/${frame.id}/${case.id}.png: run tools/vitro-parity/run.sh"), notes, null)
+            // An image Vitro asks for that the capture didn't save is a gap in the inputs, not drift: comparing would
+            // charge Vitro with a picture it was never given. One HA couldn't load either is no gap.
+            val (gaps, alsoMissingInHa) = ParityInputs.missingImages(render.assetsMissing, ref)
+            if (alsoMissingInHa.isNotEmpty()) notes += "images HA couldn't load either: ${alsoMissingInHa.joinToString()}"
+            if (gaps.isNotEmpty()) {
+                return ParityResult(label, frame, case, ParityStatus.ERROR, null,
+                    listOf("capture input missing: Vitro asked for ${gaps.joinToString()}, which the capture didn't save (rerun tools/vitro-parity/run.sh --refresh)"), notes, null)
+            }
             val (m, side) = ParityCompare.measure(case, frame, ref, render)
             if (m.slotsHa != m.slotsVitro) notes += "HA shows ${m.slotsHa} card slot(s), Vitro ${m.slotsVitro}"
             val img = "img/$label/${frame.id}/${case.id}.png"
