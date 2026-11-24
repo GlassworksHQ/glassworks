@@ -91,68 +91,12 @@
   "missingText": 0,
   "reason": "a different design: HA's idle card is a filled accent-blue block with placeholder art, a large play button and browse/source icons; Vitro draws a dark card with prev/play/next, \"Idle\" and a volume slider, ~37 px taller (coverage #794, 2026-11-24)"
  },
- "mirror/mushroom-alarm": {
-  "pixel": 0.0507,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the arm buttons row (home, away) is missing, so the card is 64 px shorter; the disarmed icon is a green outline shield where HA's is a filled blue shield-off on a blue disc (coverage #794, 2026-11-24)"
- },
- "mirror/mushroom-climate": {
-  "pixel": 0.0718,
-  "bounds": 64,
-  "font": 2,
-  "missingText": 2,
-  "reason": "not drawn as a Mushroom card: Vitro shows only a centered \"AC\" and a menu button; no icon, no \"Heat - 19.5 °C\" state, no -/22.0/+ temperature row or mode button; 64 px shorter (coverage #794, 2026-11-24)"
- },
- "mirror/mushroom-cover": {
-  "pixel": 0.0539,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 1,
-  "reason": "show_buttons_control ignored: the up/stop/down row is missing (64 px shorter); icon purple without a disc where HA's is blue on a blue disc (coverage #794, 2026-11-24)"
- },
- "mirror/mushroom-fan": {
-  "pixel": 0.297,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 0,
-  "reason": "show_percentage_control ignored: the green 20% slider is missing (64 px shorter); the on icon is teal without a disc where HA's is green on a green disc (coverage #794, 2026-11-24)"
- },
- "mirror/mushroom-light-off": {
-  "pixel": 0.2984,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 0,
-  "reason": "show_brightness_control ignored: the brightness slider row is missing, 64 px shorter (coverage #794, 2026-11-24)"
- },
- "mirror/mushroom-number": {
-  "pixel": 0.2999,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the slider row is missing, 64 px shorter; header (icon, name, 22.0 °C) matches (coverage #794, 2026-11-24)"
- },
- "mirror/mushroom-select": {
-  "pixel": 0.0499,
-  "bounds": 64,
-  "font": 2,
-  "missingText": 1,
-  "reason": "the option dropdown row and the secondary state line (\"open\") are missing, so the name centers alone in a 64 px shorter card (coverage #794, 2026-11-24)"
- },
  "mirror/mushroom-title": {
   "pixel": 0.038,
   "bounds": 53.3,
   "font": 8,
   "missingText": 0,
   "reason": "title 16 vs 24 px and subtitle 13 vs 16 px, with less top padding: the text sits ~25 px higher than HA's (coverage #794, 2026-11-24)"
- },
- "mirror/mushroom-vacuum": {
-  "pixel": 0.038,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 1,
-  "reason": "commands ignored: the start/return buttons row is missing (64 px shorter); state shows \"sleeping\" (an attribute) where HA shows \"Docked\", and a vacuum icon where HA's docked icon is zzz (coverage #794, 2026-11-24)"
  },
  "mirror/picture-elements": {
   "pixel": 0.0092,
@@ -252,68 +196,12 @@
   "missingText": 0,
   "reason": "a different design: HA's idle card is a filled accent-blue block with placeholder art, a large play button and browse/source icons; Vitro draws a dark card with prev/play/next, \"Idle\" and a volume slider, ~37 px taller (coverage #794, 2026-11-24)"
  },
- "s1/mushroom-alarm": {
-  "pixel": 0.0507,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the arm buttons row (home, away) is missing, so the card is 64 px shorter; the disarmed icon is a green outline shield where HA's is a filled blue shield-off on a blue disc (coverage #794, 2026-11-24)"
- },
- "s1/mushroom-climate": {
-  "pixel": 0.0718,
-  "bounds": 64,
-  "font": 2,
-  "missingText": 2,
-  "reason": "not drawn as a Mushroom card: Vitro shows only a centered \"AC\" and a menu button; no icon, no \"Heat - 19.5 °C\" state, no -/22.0/+ temperature row or mode button; 64 px shorter (coverage #794, 2026-11-24)"
- },
- "s1/mushroom-cover": {
-  "pixel": 0.0539,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 1,
-  "reason": "show_buttons_control ignored: the up/stop/down row is missing (64 px shorter); icon purple without a disc where HA's is blue on a blue disc (coverage #794, 2026-11-24)"
- },
- "s1/mushroom-fan": {
-  "pixel": 0.297,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 0,
-  "reason": "show_percentage_control ignored: the green 20% slider is missing (64 px shorter); the on icon is teal without a disc where HA's is green on a green disc (coverage #794, 2026-11-24)"
- },
- "s1/mushroom-light-off": {
-  "pixel": 0.2984,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 0,
-  "reason": "show_brightness_control ignored: the brightness slider row is missing, 64 px shorter (coverage #794, 2026-11-24)"
- },
- "s1/mushroom-number": {
-  "pixel": 0.2999,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the slider row is missing, 64 px shorter; header (icon, name, 22.0 °C) matches (coverage #794, 2026-11-24)"
- },
- "s1/mushroom-select": {
-  "pixel": 0.0499,
-  "bounds": 64,
-  "font": 2,
-  "missingText": 1,
-  "reason": "the option dropdown row and the secondary state line (\"open\") are missing, so the name centers alone in a 64 px shorter card (coverage #794, 2026-11-24)"
- },
  "s1/mushroom-title": {
   "pixel": 0.038,
   "bounds": 53.3,
   "font": 8,
   "missingText": 0,
   "reason": "title 16 vs 24 px and subtitle 13 vs 16 px, with less top padding: the text sits ~25 px higher than HA's (coverage #794, 2026-11-24)"
- },
- "s1/mushroom-vacuum": {
-  "pixel": 0.038,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 1,
-  "reason": "commands ignored: the start/return buttons row is missing (64 px shorter); state shows \"sleeping\" (an attribute) where HA shows \"Docked\", and a vacuum icon where HA's docked icon is zzz (coverage #794, 2026-11-24)"
  },
  "s1/picture-elements": {
   "pixel": 0.0092,
@@ -413,27 +301,6 @@
   "missingText": 0,
   "reason": "a different design: HA's idle card is a filled accent-blue block with placeholder art, a large play button and browse/source icons; Vitro draws a dark card with prev/play/next, \"Idle\" and a volume slider, ~37 px taller (coverage #794, 2026-11-24)"
  },
- "tablet/mushroom-alarm": {
-  "pixel": 0.0481,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the arm buttons row (home, away) is missing, so the card is 64 px shorter; the disarmed icon is a green outline shield where HA's is a filled blue shield-off on a blue disc (coverage #794, 2026-11-24)"
- },
- "tablet/mushroom-climate": {
-  "pixel": 0.069,
-  "bounds": 64,
-  "font": 2,
-  "missingText": 2,
-  "reason": "not drawn as a Mushroom card: Vitro shows only a centered \"AC\" and a menu button; no icon, no \"Heat - 19.5 °C\" state, no -/22.0/+ temperature row or mode button; 64 px shorter (coverage #794, 2026-11-24)"
- },
- "tablet/mushroom-cover": {
-  "pixel": 0.0493,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 1,
-  "reason": "show_buttons_control ignored: the up/stop/down row is missing (64 px shorter); icon purple without a disc where HA's is blue on a blue disc (coverage #794, 2026-11-24)"
- },
  "tablet/mushroom-entity": {
   "pixel": 0.0225,
   "bounds": 0,
@@ -441,47 +308,12 @@
   "missingText": 0,
   "reason": "matches on the 1.5x frames; on the tablet the icon disc and text antialiasing land just over 2% (coverage #794, 2026-11-24)"
  },
- "tablet/mushroom-fan": {
-  "pixel": 0.2957,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 0,
-  "reason": "show_percentage_control ignored: the green 20% slider is missing (64 px shorter); the on icon is teal without a disc where HA's is green on a green disc (coverage #794, 2026-11-24)"
- },
- "tablet/mushroom-light-off": {
-  "pixel": 0.2961,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 0,
-  "reason": "show_brightness_control ignored: the brightness slider row is missing, 64 px shorter (coverage #794, 2026-11-24)"
- },
- "tablet/mushroom-number": {
-  "pixel": 0.2972,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the slider row is missing, 64 px shorter; header (icon, name, 22.0 °C) matches (coverage #794, 2026-11-24)"
- },
- "tablet/mushroom-select": {
-  "pixel": 0.0447,
-  "bounds": 64,
-  "font": 2,
-  "missingText": 1,
-  "reason": "the option dropdown row and the secondary state line (\"open\") are missing, so the name centers alone in a 64 px shorter card (coverage #794, 2026-11-24)"
- },
  "tablet/mushroom-title": {
   "pixel": 0.0344,
   "bounds": 53.5,
   "font": 8,
   "missingText": 0,
   "reason": "title 16 vs 24 px and subtitle 13 vs 16 px, with less top padding: the text sits ~25 px higher than HA's (coverage #794, 2026-11-24)"
- },
- "tablet/mushroom-vacuum": {
-  "pixel": 0.0354,
-  "bounds": 64,
-  "font": 0,
-  "missingText": 1,
-  "reason": "commands ignored: the start/return buttons row is missing (64 px shorter); state shows \"sleeping\" (an attribute) where HA shows \"Docked\", and a vacuum icon where HA's docked icon is zzz (coverage #794, 2026-11-24)"
  },
  "tablet/picture-elements": {
   "pixel": 0.006,

@@ -655,7 +655,10 @@ object HaTimelineChart {
     fun isStateColored(s: EntityState): Boolean =
         s.domain in STATE_COLORED || (s.domain == "sensor" && s.deviceClass == "battery")
 
-    /** `computeTimelineColor`'s generic colors: one graph color per state value, in the order they're first seen. */
+    /**
+     * `computeTimelineColor`'s generic colors: one graph-palette index per state value, in the order they're first
+     * seen, resolved against the current theme on every call (a theme change recolors them).
+     */
     private val genericColors = HashMap<String, Int>()
 
     /**
@@ -676,7 +679,8 @@ object HaTimelineChart {
             val i = options.indexOf(state)
             if (i >= 0) return HaGraphColors.byIndex(ctx.theme, i)
         }
-        return synchronized(genericColors) { genericColors.getOrPut(state) { HaGraphColors.byIndex(ctx.theme, genericColors.size) } }
+        val index = synchronized(genericColors) { genericColors.getOrPut(state) { genericColors.size } }
+        return HaGraphColors.byIndex(ctx.theme, index)
     }
 }
 

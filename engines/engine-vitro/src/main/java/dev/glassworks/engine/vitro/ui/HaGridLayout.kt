@@ -120,9 +120,10 @@ class HaGridLayout(
  */
 data class HaGridSize(val columns: Int?, val rows: Int?) {
     companion object {
-        fun of(card: CardConfig): HaGridSize {
+        /** [state] is the card's entity's (when it has one): some cards' rows depend on what it supports. */
+        fun of(card: CardConfig, state: dev.glassworks.engine.vitro.data.EntityState? = null): HaGridSize {
             val raw = card.raw
-            val default = defaults(card)
+            val default = defaults(card, state)
             var cols: Any? = default.columns ?: "full"
             var rows: Any? = default.rows ?: "auto"
             var minCols: Int? = null
@@ -164,8 +165,44 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
             else -> HaGridSize(null, null)
         }
 
+        /**
+         * Whether a Mushroom card draws its row of controls (Mushroom's `hasControls`): an option that is on and that
+         * [state]'s entity supports (a brightness control for a light that dims; with no state yet, any option on).
+         */
+        internal fun mushroomHasControls(type: String, raw: org.json.JSONObject, state: dev.glassworks.engine.vitro.data.EntityState? = null): Boolean = when (type) {
+            "custom:mushroom-light-card" -> {
+                val modes = (state?.attributes?.get("supported_color_modes") as? List<*>)?.map { it.toString() }
+                (raw.optBoolean("show_brightness_control") && (modes == null || modes.any { it != "onoff" })) ||
+                    (raw.optBoolean("show_color_temp_control") && (modes == null || "color_temp" in modes)) ||
+                    (raw.optBoolean("show_color_control") && (modes == null || modes.any { it in setOf("hs", "rgb", "rgbw", "rgbww", "xy") }))
+            }
+            "custom:mushroom-fan-card" -> {
+                // FanEntityFeature: SET_SPEED 1, OSCILLATE 2, DIRECTION 4.
+                val f = (state?.attributes?.get("supported_features") as? Number)?.toInt()
+                fun has(bit: Int) = f == null || f and bit != 0
+                (raw.optBoolean("show_percentage_control") && has(1)) || (raw.optBoolean("show_oscillate_control") && has(2)) ||
+                    (raw.optBoolean("show_direction_control") && has(4))
+            }
+            "custom:mushroom-cover-card" -> listOf("show_buttons_control", "show_position_control", "show_tilt_position_control").any { raw.optBoolean(it) }
+            "custom:mushroom-climate-card" -> {
+                // A temperature control with a target to show; the hvac_modes the entity has and the card lists.
+                val target = state == null || state.attributes["temperature"] != null ||
+                    (state.attributes["target_temp_low"] != null && state.attributes["target_temp_high"] != null)
+                val listed = (0 until (raw.optJSONArray("hvac_modes")?.length() ?: 0)).map { raw.optJSONArray("hvac_modes")!!.optString(it) }
+                val modes = (state?.attributes?.get("hvac_modes") as? List<*>)?.map { it.toString() }
+                (raw.optBoolean("show_temperature_control") && target) || listed.any { modes == null || it in modes }
+            }
+            "custom:mushroom-humidifier-card" -> raw.optBoolean("show_target_humidity_control")
+            "custom:mushroom-vacuum-card" -> (raw.optJSONArray("commands")?.length() ?: 0) > 0
+            "custom:mushroom-media-player-card" -> (raw.optJSONArray("media_controls")?.length() ?: 0) > 0 || (raw.optJSONArray("volume_controls")?.length() ?: 0) > 0
+            "custom:mushroom-number-card", "custom:mushroom-select-card", "custom:mushroom-lock-card" -> true
+            // Without `states`, Mushroom's alarm card shows arm home and arm away.
+            "custom:mushroom-alarm-control-panel-card" -> raw.optJSONArray("states")?.length() != 0
+            else -> false
+        }
+
         /** What each card type reports from `getGridOptions()` (HA 2026.11, Mushroom 5). */
-        fun defaults(card: CardConfig): HaGridSize {
+        fun defaults(card: CardConfig, state: dev.glassworks.engine.vitro.data.EntityState? = null): HaGridSize {
             val raw = card.raw
             return when (card.type) {
                 "clock" -> {
@@ -203,10 +240,17 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                 "custom:mushroom-cover-card", "custom:mushroom-person-card", "custom:mushroom-lock-card",
                 "custom:mushroom-media-player-card", "custom:mushroom-climate-card", "custom:mushroom-vacuum-card",
                 "custom:mushroom-humidifier-card", "custom:mushroom-number-card", "custom:mushroom-select-card",
-                "custom:mushroom-alarm-control-panel-card" -> when (raw.optString("layout")) {
-                    "vertical" -> HaGridSize(6, 2)
-                    "horizontal" -> HaGridSize(12, 1)
-                    else -> HaGridSize(6, 1)
+                "custom:mushroom-alarm-control-panel-card" -> {
+                    // Mushroom's getGridOptions: a row for the icon or info, one more for the controls (vertical: one
+                    // each for the icon, the info and the controls); horizontal is one full-width row. Collapsible
+                    // controls show only while the entity is active: the card's own height decides then.
+                    val controls = mushroomHasControls(card.type, raw, state)
+                    val collapsible = controls && raw.optBoolean("collapsible_controls", false)
+                    when (raw.optString("layout")) {
+                        "horizontal" -> HaGridSize(12, 1)
+                        "vertical" -> HaGridSize(6, if (collapsible) null else 2 + if (controls) 1 else 0)
+                        else -> HaGridSize(6, if (collapsible) null else 1 + if (controls) 1 else 0)
+                    }
                 }
                 else -> HaGridSize(12, null)
             }

@@ -1461,6 +1461,22 @@ internal class HaHorizontalSliderView(
     private var fraction = 0f
     private var active = false
 
+    /**
+     * Mushroom's `mushroom-slider`: a 12 px radius, the fill from the left with no indicator (Mushroom shows one only
+     * with `showIndicator`, its color-temperature control).
+     */
+    var mushroom: Boolean = false
+        set(v) { if (field != v) { field = v; invalidate() } }
+
+    /**
+     * A Mushroom gradient track (the color-temperature and color controls): drawn across the whole slider, with a
+     * white indicator at the value instead of a fill. Null: the plain fill.
+     */
+    var trackGradient: IntArray? = null
+        set(v) { field = v; gradientShader = null; invalidate() }
+    private var gradientShader: android.graphics.Shader? = null
+    private var gradientWidth = 0f
+
     /** `show-handle`: the bar keeps room for the handle at 0 (HA's brightness feature while the light is on). */
     var showHandle: Boolean = false
         set(v) { if (field != v) { field = v; invalidate() } }
@@ -1573,7 +1589,7 @@ internal class HaHorizontalSliderView(
         val w = width.toFloat()
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
-        val r = (if (haGeometry) 12f else 10f) * ctx.dp
+        val r = (if (haGeometry || mushroom) 12f else 10f) * ctx.dp
         bounds.set(0f, 0f, w, h)
         clipPath.reset()
         clipPath.addRoundRect(bounds, r, r, Path.Direction.CW)
@@ -1598,7 +1614,27 @@ internal class HaHorizontalSliderView(
             return
         }
         val fillW = (w * fraction).coerceIn(0f, w)
-        if (fillW > 0f) {
+        val gradient = trackGradient
+        if (mushroom && gradient != null) {
+            if (gradientShader == null || gradientWidth != w) {
+                gradientShader = android.graphics.LinearGradient(0f, 0f, w, 0f, gradient, null, android.graphics.Shader.TileMode.CLAMP)
+                gradientWidth = w
+            }
+            fillPaint.shader = gradientShader
+            canvas.drawRect(bounds, fillPaint)
+            fillPaint.shader = null
+            if (active) {
+                // .slider-track-indicator: a 4 px white bar at the value, half the height.
+                val iw = 4f * ctx.dp
+                val x = (w * fraction).coerceIn(iw, w - iw)
+                handleRect.set(x - iw / 2f, h / 4f, x + iw / 2f, h * 3f / 4f)
+                canvas.drawRoundRect(handleRect, iw / 2f, iw / 2f, handlePaint)
+            }
+        } else if (mushroom) {
+            // .slider-track-active: the color itself (the inactive one while off) over the 20% track.
+            fillPaint.color = if (active) accentColor else inactiveColor
+            if (fillW > 0f) canvas.drawRect(0f, 0f, fillW, h, fillPaint)
+        } else if (fillW > 0f) {
             fillPaint.color = accentColor
             canvas.drawRect(0f, 0f, fillW, h, fillPaint)
             val barW = 3.5f * ctx.dp
