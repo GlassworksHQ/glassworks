@@ -405,9 +405,22 @@ object CardRouter {
                 counts[t] = (counts[t] ?: 0) + 1
             }
         }
-        view.sections.forEach { s -> s.cards.forEach(::walk) }
-        view.cards.forEach(::walk)
+        viewRoots(view).forEach { walk(it.card) }
         return counts
+    }
+
+    /** One top-level card `VitroView` builds for a view, with its section (null outside sections) and index. */
+    data class ViewRoot(val section: Int?, val index: Int, val card: CardConfig)
+
+    /**
+     * The top-level cards `VitroView` builds for [view], the same choice its `buildViewTree` makes: a panel view's
+     * first card, a sections view's section cards, or else the view's own cards (masonry).
+     */
+    fun viewRoots(view: ViewConfig): List<ViewRoot> = when {
+        view.type == "panel" && view.cards.isNotEmpty() -> listOf(ViewRoot(null, 0, view.cards.first()))
+        view.type == "sections" && view.sections.isNotEmpty() ->
+            view.sections.flatMapIndexed { s, section -> section.cards.mapIndexed { i, c -> ViewRoot(s, i, c) } }
+        else -> view.cards.mapIndexed { i, c -> ViewRoot(null, i, c) }
     }
 
     /**

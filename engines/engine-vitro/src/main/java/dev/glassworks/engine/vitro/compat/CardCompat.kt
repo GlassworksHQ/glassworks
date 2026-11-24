@@ -24,7 +24,8 @@ enum class CardRoute {
 /**
  * Vitro's decision for one card: its [route], every reason it falls back (empty when native), and notes about
  * known gaps that don't force a fallback. The card's own config decides it, not its children: a stack's children
- * get their own verdicts.
+ * get their own verdicts. The one exception: a custom container with a built-in card inside stays native, because
+ * the island would draw that child as a summary.
  */
 data class CardVerdict(
     val type: String,
@@ -58,10 +59,19 @@ object CardCompat {
         // The island runs a custom card's own JavaScript, so it draws that card as HA does. It has no HA frontend for
         // built-in cards, so a built-in card there would be a plain summary: further from HA than Vitro's native
         // card. Until the island can run HA's card code, a built-in card Vitro draws stays native and the checker
-        // says what it would have fallen back for.
-        if (reasons.isNotEmpty() && type in VitroSupport.CORE_CARD_TYPES) {
-            reasons.forEach { notes += "would fall back for $it, but the island can't draw built-in cards yet" }
-            return CardVerdict(type = type, route = CardRoute.NATIVE, notes = notes.toList())
+        // says what it would have fallen back for. So does a custom container Vitro draws (stack-in-card,
+        // layout-card) with a built-in card anywhere inside it: in the island, that child would be a summary too.
+        if (reasons.isNotEmpty()) {
+            val why = when {
+                type in VitroSupport.CORE_CARD_TYPES -> "the island can't draw built-in cards yet"
+                type in VitroSupport.HACS_CARD_TYPES && card.childCards.any(::needsHaFrontend) ->
+                    "the island can't draw the built-in cards inside it yet"
+                else -> null
+            }
+            if (why != null) {
+                reasons.forEach { notes += "would fall back for $it, but $why" }
+                return CardVerdict(type = type, route = CardRoute.NATIVE, notes = notes.toList())
+            }
         }
         return CardVerdict(
             type = type,
@@ -70,6 +80,10 @@ object CardCompat {
             notes = notes.toList(),
         )
     }
+
+    /** True when [card] or a card inside it is a built-in card, which the island can only draw as a summary. */
+    private fun needsHaFrontend(card: CardConfig): Boolean =
+        !card.type.startsWith("custom:") || card.childCards.any(::needsHaFrontend)
 
     // -------------------------------------------------------------------------------------------------------------
     // Options
@@ -203,14 +217,21 @@ object CardCompat {
         topLevelAtRules(css).forEach { at ->
             if (at !in HARMLESS_AT_RULES) reasons += "card_mod `@$at` rules aren't evaluated natively"
         }
-        for ((selector, decls) in ThemeResolver.cssRules(css)) {
+        val rules = ThemeResolver.cssRules(css).map { (selector, decls) ->
             val parts = CssSelector.splitTopLevel(selector, ',').map { it.trim() }.filter { it.isNotEmpty() }
-            val verdicts = parts.map { classifySelector(it, sheet) }
+            Triple(selector, decls, parts.map { classifySelector(it, sheet) })
+        }
+        // Vitro merges every rule on the card itself into one style, so the last `position` there pins the card for
+        // all of them (`ha-card { position: fixed }` then `:host { width: … }`).
+        val hostPosition = rules.filter { (_, _, v) -> v.any { it is Sel.Honored && it.host } }
+            .flatMap { (_, decls, _) -> decls }.lastOrNull { it.first == "position" }?.second?.trim()?.lowercase(Locale.ROOT)
+        for ((_, decls, verdicts) in rules) {
             verdicts.filterIsInstance<Sel.Unsupported>().forEach { reasons += "card_mod `$key` selector `${it.selector}`: ${it.why}" }
             verdicts.filterIsInstance<Sel.Unchecked>().forEach { notes += gap("templated selector", "card_mod `$key` `${it.selector}`") }
             val honored = verdicts.filterIsInstance<Sel.Honored>()
             if (honored.isEmpty()) continue
-            checkDeclarations(type, key, decls, sheet, honored.any { it.host }, propertyReasons, notes)
+            val host = honored.any { it.host }
+            checkDeclarations(type, key, decls, sheet, host, if (host) hostPosition else null, propertyReasons, notes)
         }
     }
 
@@ -251,13 +272,16 @@ object CardCompat {
             return Sel.Honored(host = true)
         }
         var benign = false
-        for (m in PSEUDO.findAll(stripAttributeValues(norm))) {
+        val stripped = stripAttributeValues(norm)
+        val negated = negatedRanges(stripped)
+        for (m in PSEUDO.findAll(stripped)) {
             val name = m.groupValues[2]
             val element = m.groupValues[1] == "::" || name in LEGACY_PSEUDO_ELEMENTS
             when {
                 element && name in VitroSupport.BENIGN_PSEUDO_ELEMENTS -> benign = true
                 element -> return Sel.Unsupported(sel, "pseudo-element `::$name` isn't drawn natively")
-                name in VitroSupport.BENIGN_PSEUDO_CLASSES -> benign = true
+                // `:not(:hover)` matches at rest, so it doesn't make the rule inactive; the rest of the selector decides.
+                name in VitroSupport.BENIGN_PSEUDO_CLASSES -> if (negated.none { m.range.first in it }) benign = true
                 name in VitroSupport.PSEUDO_CLASSES -> Unit
                 name == "host" -> return Sel.Unsupported(sel, "`:host` with a selector isn't modeled")
                 else -> return Sel.Unsupported(sel, "`:$name` isn't evaluated natively")
@@ -280,6 +304,26 @@ object CardCompat {
     }
 
     private fun stripAttributeValues(sel: String): String = sel.replace(Regex("""\[[^\]]*\]"""), "[]")
+
+    /** The index ranges inside each `:not( … )` of [sel], nested ones included. */
+    private fun negatedRanges(sel: String): List<IntRange> {
+        val out = ArrayList<IntRange>()
+        var from = sel.indexOf(":not(")
+        while (from >= 0) {
+            val open = from + ":not".length
+            var depth = 0
+            var end = sel.length - 1
+            for (k in open until sel.length) {
+                when (sel[k]) {
+                    '(' -> depth++
+                    ')' -> if (--depth == 0) { end = k; break }
+                }
+            }
+            out += open..end
+            from = sel.indexOf(":not(", from + 1)
+        }
+        return out
+    }
 
     /**
      * The DOM Vitro rebuilds for a sheet, with every variant's classes at once (a `.size-large` rule is modeled even
@@ -328,6 +372,7 @@ object CardCompat {
         decls: List<Pair<String, String>>,
         sheet: Sheet,
         host: Boolean,
+        hostPosition: String?,
         reasons: MutableSet<String>,
         notes: MutableSet<String>,
     ) {
@@ -335,7 +380,8 @@ object CardCompat {
         val surface = sheet == Sheet.CARD || (host && (sheet == Sheet.MARKDOWN_CARD || sheet == Sheet.CLOCK_CARD))
         val cascade = cascadeSheet
         val byName = decls.associate { it.first to it.second.trim().lowercase(Locale.ROOT) }
-        val position = byName["position"]
+        // On the card itself, the position all its rules settle on; inside it, this rule's own.
+        val position = if (host) hostPosition else byName["position"]
         val pinned = position == "fixed" || position == "absolute"
         for ((name, rawValue) in decls) {
             val shown = "`$name: ${rawValue.trim()}`"
@@ -383,7 +429,7 @@ object CardCompat {
         "height" -> if (value in setOf("auto", "100%", "initial", "unset", "inherit", "fit-content")) null else "isn't drawn natively (only `auto` and `100%`)"
         "transform" -> when {
             value == "none" -> null
-            pinned && SPACE.split(value).all { TRANSLATE_CENTER.matches(it) } -> null
+            pinned && CssSelector.splitTopLevel(value, ' ').filter { it.isNotBlank() }.all { TRANSLATE_CENTER.matches(it) } -> null
             else -> "isn't drawn natively (only centering a pinned card)"
         }
         "box-shadow" -> when {
@@ -428,7 +474,7 @@ object CardCompat {
         "url(" in value -> "isn't drawn natively (background images)"
         "radial-gradient" in value || "conic-gradient" in value || "repeating-" in value -> "isn't drawn natively (only linear gradients)"
         !allowGradient && "gradient" in value -> "isn't drawn natively (no gradients inside Markdown)"
-        CssSelector.splitTopLevel(value, ',').size > 1 && "gradient" !in value -> "isn't drawn natively (layered backgrounds)"
+        CssSelector.splitTopLevel(value, ',').size > 1 -> "isn't drawn natively (layered backgrounds)"
         else -> null
     }
 

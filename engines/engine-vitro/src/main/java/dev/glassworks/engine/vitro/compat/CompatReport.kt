@@ -5,6 +5,7 @@
 package dev.glassworks.engine.vitro.compat
 
 import dev.glassworks.engine.vitro.model.CardConfig
+import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.DashboardConfig
 import dev.glassworks.engine.vitro.model.ViewConfig
 
@@ -48,10 +49,10 @@ object CompatChecker {
     fun check(view: ViewConfig): CompatReport {
         val out = ArrayList<CompatEntry>()
         val viewName = view.path ?: view.title
-        view.sections.forEachIndexed { s, section ->
-            section.cards.forEachIndexed { i, c -> walk(c, "$viewName › section ${s + 1} › card ${i + 1}", out) }
+        for (root in CardRouter.viewRoots(view)) {
+            val where = root.section?.let { "$viewName › section ${it + 1} › card ${root.index + 1}" } ?: "$viewName › card ${root.index + 1}"
+            walk(root.card, where, out)
         }
-        view.cards.forEachIndexed { i, c -> walk(c, "$viewName › card ${i + 1}", out) }
         return CompatReport(out)
     }
 

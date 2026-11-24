@@ -12,6 +12,7 @@ import dev.glassworks.engine.vitro.compat.VitroSupport
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.CardTier
 import dev.glassworks.engine.vitro.model.LovelaceParser
+import dev.glassworks.engine.vitro.theme.ThemeResolver
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -317,7 +318,7 @@ class CompatCheckerTest {
                 """{"cards": [
                   {"type": "vertical-stack", "cards": [{"type": "tile", "entity": "light.a"}, {"type": "custom:acme-card"}]},
                   {"type": "custom:stack-in-card", "card_mod": {"style": "@media (min-width: 1px) { :host { margin: 0 } }"},
-                   "cards": [{"type": "tile", "entity": "light.b"}, {"type": "tile", "entity": "light.c"}]}
+                   "cards": [{"type": "custom:mushroom-entity-card", "entity": "light.b"}, {"type": "custom:mushroom-entity-card", "entity": "light.c"}]}
                 ]}""",
             ),
         )
@@ -331,6 +332,114 @@ class CompatCheckerTest {
         val text = report.format()
         assertTrue(text, text.startsWith("4 cards: 2 native, 2 island"))
         assertTrue(text, "ISLAND View 1 › card 2 (custom:stack-in-card)\n  - card_mod `@media` rules aren't evaluated natively" in text)
+    }
+
+    @Test
+    fun aCustomContainerWithBuiltInCardsInsideStaysNative() {
+        // In the island, stack-in-card would draw its tiles as summaries: further from HA than Vitro's native stack.
+        val media = "@media (min-width: 1px) { :host { margin: 0 } }"
+        val v = verdict(
+            """{"type": "custom:stack-in-card", "card_mod": {"style": ${style(media)}},
+                "cards": [{"type": "custom:mushroom-entity-card", "entity": "light.a"}, {"type": "tile", "entity": "light.b"}]}""",
+        )
+        assertEquals(CardRoute.NATIVE, v.route)
+        assertTrue(v.notes.toString(), v.notes.any { "`@media`" in it && "built-in cards inside it" in it })
+        // A built-in card deeper down counts too.
+        assertEquals(
+            CardRoute.NATIVE,
+            verdict(
+                """{"type": "custom:layout-card", "layout_type": "custom:foo-layout",
+                    "cards": [{"type": "custom:vertical-stack-in-card", "cards": [{"type": "entities", "entities": ["light.a"]}]}]}""",
+            ).route,
+        )
+        // Only custom cards inside: the island runs all of their code, so the container goes there.
+        assertIsland(
+            """{"type": "custom:layout-card", "layout_type": "custom:foo-layout",
+                "cards": [{"type": "custom:mushroom-entity-card", "entity": "light.a"}, {"type": "custom:acme-card"}]}""",
+            "layout_type: foo-layout",
+        )
+    }
+
+    @Test
+    fun aSelectorThatGoesOnFromTheCardReachesInside() {
+        assertTrue(ThemeResolver.isHostSelector("ha-card.active"))
+        assertTrue(ThemeResolver.isHostSelector("ha-card[data-state=\"on off\"]"))
+        assertFalse(ThemeResolver.isHostSelector("ha-card.active .primary"))
+        assertFalse(ThemeResolver.isHostSelector("ha-card.active>div"))
+        assertFalse(ThemeResolver.isHostSelector("ha-card#x + ha-card"))
+        assertIsland(
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card.big .primary { font-size: 20px }")}}}""",
+            "reaches inside the card",
+        )
+    }
+
+    @Test
+    fun anInteractionStateInsideNotMatchesAtRest() {
+        // `:not(:hover)` is true at rest, so its rule applies; a plain `:hover` rule never does on a touch panel.
+        assertIsland(
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card:not(:hover) .shape { opacity: 0.5 }")}}}""",
+            "reaches inside the card",
+        )
+        assertNative("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card:hover .shape { opacity: 0.5 }")}}}""")
+    }
+
+    @Test
+    fun aCardPinnedInOneRuleIsPinnedInTheOthers() {
+        // Vitro merges the card's own rules, so `position: fixed` in one pins the width and transform in another.
+        assertNative(
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(
+                "ha-card { position: fixed; top: 50%; left: 50% } :host { width: 300px; transform: translate(-50%, -50%) }",
+            )}}}""",
+        )
+        assertNative(
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(
+                "ha-card { position: fixed; top: 50%; left: 50%; transform: translateX(-50%) translateY( -50% ) }",
+            )}}}""",
+        )
+        // The last position wins: a later `position: static` unpins it.
+        assertIsland(
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(
+                "ha-card { position: fixed; width: 300px } :host { position: static }",
+            )}}}""",
+            "only applies to pinned",
+        )
+        assertIsland(
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(
+                "ha-card { position: fixed; transform: translate(-50%, -50%) scale(0.9) }",
+            )}}}""",
+            "only centering a pinned card",
+        )
+    }
+
+    @Test
+    fun layeredBackgroundsFallBackEvenAsGradients() {
+        fun mushroomWith(css: String) = """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(css)}}}"""
+        assertIsland(
+            mushroomWith("ha-card { background: linear-gradient(90deg, rgba(0,0,0,0.2), transparent), linear-gradient(#123, #456) }"),
+            "layered backgrounds",
+        )
+        // Commas inside one gradient are its stops.
+        assertNative(mushroomWith("ha-card { background: linear-gradient(90deg, rgba(0,0,0,0.2) 0%, #456 100%) }"))
+    }
+
+    @Test
+    fun theCheckerSeesOnlyTheCardsTheViewBuilds() {
+        // A sections view builds its sections and ignores `cards:`; a panel view builds its first card.
+        val sections = LovelaceParser.parseView(
+            0,
+            JSONObject(
+                """{"type": "sections", "sections": [{"cards": [{"type": "tile", "entity": "light.a"}]}],
+                    "cards": [{"type": "custom:acme-card"}]}""",
+            ),
+        )
+        assertEquals(listOf("View 1 › section 1 › card 1 (tile)"), CompatChecker.check(sections).entries.map { it.path })
+        assertEquals(0, CardRouter.tierCounts(sections)[CardTier.WEB_ISLAND])
+        val panel = LovelaceParser.parseView(
+            0,
+            JSONObject("""{"type": "panel", "cards": [{"type": "tile", "entity": "light.a"}, {"type": "custom:acme-card"}]}"""),
+        )
+        assertEquals(listOf("View 1 › card 1 (tile)"), CompatChecker.check(panel).entries.map { it.path })
+        assertEquals(0, CardRouter.tierCounts(panel)[CardTier.WEB_ISLAND])
     }
 
     @Test
@@ -370,10 +479,13 @@ class CompatCheckerTest {
 class CompatCheckerLocalDashboardsTest {
     @Test
     fun realDashboardsRenderFullyNative() {
-        val dir = System.getenv("VITRO_PARITY_DIR")?.let(::File)
-        assumeTrue("VITRO_PARITY_DIR not set", dir != null && dir.isDirectory)
-        val files = dir!!.listFiles { f -> f.name.endsWith("-new.json") }.orEmpty().sortedBy { it.name }
-        assumeTrue(files.isNotEmpty())
+        val env = System.getenv("VITRO_PARITY_DIR")
+        assumeTrue("VITRO_PARITY_DIR not set", !env.isNullOrBlank())
+        // Set means asked for: a wrong path or an empty folder fails instead of passing by skipping.
+        val dir = File(env!!)
+        assertTrue("VITRO_PARITY_DIR $dir isn't a readable folder", dir.isDirectory && dir.canRead())
+        val files = dir.listFiles { f -> f.name.endsWith("-new.json") }.orEmpty().sortedBy { it.name }
+        assertTrue("no *-new.json files in $dir", files.isNotEmpty())
         val withIslands = ArrayList<String>()
         for (f in files) {
             val report = CompatChecker.check(LovelaceParser.parseDashboard(JSONObject(f.readText())))
