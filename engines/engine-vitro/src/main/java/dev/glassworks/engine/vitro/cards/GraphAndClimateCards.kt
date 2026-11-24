@@ -263,7 +263,7 @@ private class SparklineCanvasView(
             if (timed && prevX < w) {
                 // The last state holds until now.
                 linePath.lineTo(w, prevY)
-                fillPath.lineTo(w, prevY)
+                if (idx == 0) fillPath.lineTo(w, prevY) // the fill is series zero's alone
             }
             if (idx == 0) {
                 fillPath.lineTo(w, h)

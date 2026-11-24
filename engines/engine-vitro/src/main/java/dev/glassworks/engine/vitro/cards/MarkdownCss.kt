@@ -577,6 +577,7 @@ object MdCascade {
         }
         // A unitless line height inherits as a factor and follows this element's font size.
         if (s.lineHeightFactor >= 0f) s.lineHeight = s.lineHeightFactor * s.fontSize
+        val currentColorBorders = BooleanArray(4)
         for ((name, raw) in sp) {
             val v = raw.trim()
             val lower = v.lowercase(Locale.ROOT)
@@ -661,7 +662,10 @@ object MdCascade {
                 }
                 "border-top-color", "border-right-color", "border-bottom-color", "border-left-color" -> {
                     val idx = SIDES.indexOf(name.substringAfter('-').substringBefore('-'))
-                    s.borderColor[idx] = MarkdownInline.parseCssColor(v) ?: s.borderColor[idx]
+                    // `currentColor`, and what an invalid value (HA's `hr` without --divider-color) resets to: the
+                    // text color, applied after the loop once `color` is known.
+                    if (initialKw || lower == "currentcolor") currentColorBorders[idx] = true
+                    else s.borderColor[idx] = MarkdownInline.parseCssColor(v) ?: s.borderColor[idx]
                 }
                 "width" -> s.width = if (lower == "auto" || initialKw) null else cssLen(lower, s.fontSize)
                 "height" -> s.height = if (lower == "auto" || initialKw) null else cssLen(lower, s.fontSize)
@@ -690,6 +694,7 @@ object MdCascade {
                 "justify-content" -> s.justifyContent = if (initialKw) null else lower
             }
         }
+        for (i in 0 until 4) if (currentColorBorders[i]) s.borderColor[i] = s.color
         // `border-*-style: none` (the initial value) means no border, whatever the width says.
         for (k in 0 until 4) {
             val style = sp["border-${SIDES[k]}-style"]?.trim()?.lowercase(Locale.ROOT)

@@ -361,6 +361,15 @@ class MarkdownEngineTest {
     }
 
     @Test
+    fun anInvalidBorderColorResetsToTheTextColor() {
+        // HA's `hr { border-color: var(--divider-color) }` with no such variable: the browser draws currentColor.
+        val root = styled("<p>a</p>\n\n<hr>", "ha-markdown-element hr { border-color: var(--no-such-color); color: #ff0000 }")
+        val hr = root.findAll("hr")[0].style!!
+        assertEquals(hr.color, hr.borderColor[0])
+        assertEquals(hr.color, hr.borderColor[2])
+    }
+
+    @Test
     fun outOfRangeNthNumbersDropTheSelectorNotTheSheet() {
         val root = styled(
             "<p>a</p>",

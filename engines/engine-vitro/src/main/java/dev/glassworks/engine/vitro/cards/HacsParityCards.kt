@@ -683,6 +683,9 @@ class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
         setSecondary(s?.formattedState() ?: "…")
         val (min, max, stepSize) = bounds(s)
         val v = s?.state?.toDoubleOrNull()
+        // HA reported the value the last press asked for: nothing is pending any more (an earlier press's value
+        // isn't it, so an ack of that one keeps the target).
+        if (v != null && pendingValue == v) pendingValue = null
         val text = when {
             v == null -> s?.state ?: "…"
             stepSize % 1.0 == 0.0 -> v.roundToInt().toString()
