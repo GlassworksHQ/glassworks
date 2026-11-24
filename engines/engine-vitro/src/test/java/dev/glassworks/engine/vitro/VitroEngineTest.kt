@@ -476,6 +476,36 @@ class VitroEngineTest {
     }
 
     @Test
+    fun backFollowsTabTapsAndLoadsInTheOrderTheyHappened() {
+        val page = readyPage()
+        val vv = vitroView(page)
+        // A tab tap after the load: back returns to the tab's previous view first, not the older load.
+        val wallTab = (0 until vv.childCount).asSequence().flatMap { vv.getChildAt(it).let { c -> if (c is android.view.ViewGroup) c.allViews() else sequenceOf(c) } }
+            .first { it.tag == 1 && it.isClickable }
+        wallTab.performClick()
+        idle()
+        assertEquals(1, vv.currentViewIndex)
+        page.goBack()
+        idle()
+        assertEquals(0, vv.currentViewIndex)
+        // A reload keeps the tab now shown, not the one the route was loaded with.
+        wallTab.performClick()
+        idle()
+        val readies = host.messages("ready").size
+        page.reload()
+        awaitMain("the reloaded config is on screen") { host.messages("ready").size > readies }
+        assertEquals(1, vv.currentViewIndex)
+    }
+
+    private fun android.view.ViewGroup.allViews(): Sequence<View> = sequence {
+        for (i in 0 until childCount) {
+            val c = getChildAt(i)
+            yield(c)
+            if (c is android.view.ViewGroup) yieldAll(c.allViews())
+        }
+    }
+
+    @Test
     fun captureWithoutALayoutGivesNull() {
         val page = readyPage()
         var called = false

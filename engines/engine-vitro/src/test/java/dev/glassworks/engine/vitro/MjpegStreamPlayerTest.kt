@@ -225,7 +225,7 @@ class MjpegStreamPlayerTest {
                 pushFrame = onFrame
                 ({ stopped++ })
             }),
-            LovelaceParser.parseCard(JSONObject("""{"type": "picture-entity", "entity": "camera.porch"}""")),
+            LovelaceParser.parseCard(JSONObject("""{"type": "picture-entity", "entity": "camera.porch", "camera_view": "live"}""")),
         )
         attach(card)
         assertEquals("camera.porch /api/camera_proxy/camera.porch?token=t1", asked)
@@ -239,5 +239,20 @@ class MjpegStreamPlayerTest {
         activity.setContentView(View(activity))
         ShadowLooper.idleMainLooper()
         assertEquals(1, stopped)
+    }
+
+    @Test
+    fun aCameraWithoutLiveViewShowsSnapshotsAndOpensNoStream() {
+        // HA's `camera_view: auto` (the default): hui-image refreshes a still every 10 s, no MJPEG.
+        val store = EntityStore()
+        store.putLocal(EntityState("camera.porch", "idle", mapOf("entity_picture" to "/api/camera_proxy/camera.porch?token=t1")))
+        var streams = 0
+        val card = PictureCardView(
+            context(store, cameraStream = { _, _, _, _ -> streams++; {} }),
+            LovelaceParser.parseCard(JSONObject("""{"type": "picture-entity", "entity": "camera.porch"}""")),
+        )
+        attach(card)
+        ShadowLooper.idleMainLooper()
+        assertEquals(0, streams)
     }
 }

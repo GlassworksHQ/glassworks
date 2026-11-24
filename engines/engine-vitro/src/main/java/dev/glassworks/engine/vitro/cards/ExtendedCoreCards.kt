@@ -195,13 +195,11 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     private fun setBrightness(eid: String, pct: Int) {
         val cur = ctx.store[eid]
         if (pct <= 0) {
-            cur?.let { ctx.store.putLocal(it.copy(state = "off")) }
-            ctx.callService("light", "turn_off", JSONObject().put("entity_id", eid), null)
+            ctx.callOptimistic(cur?.copy(state = "off"), "light", "turn_off", JSONObject().put("entity_id", eid))
             return
         }
         val bri = (pct * 255 / 100).coerceIn(1, 255)
-        cur?.let { ctx.store.putLocal(it.copy(state = "on", attributes = it.attributes + ("brightness" to bri))) }
-        ctx.callService("light", "turn_on", JSONObject().put("entity_id", eid).put("brightness", bri), null)
+        ctx.callOptimistic(cur?.let { it.copy(state = "on", attributes = it.attributes + ("brightness" to bri)) }, "light", "turn_on", JSONObject().put("entity_id", eid).put("brightness", bri))
     }
 
     private var lastPct: Int? = null
@@ -737,7 +735,8 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         items = items.filter { !it.completed }
         fetchGeneration++
         renderItems()
-        ctx.callService("todo", "remove_completed_items", JSONObject().put("entity_id", eid), null)
+        // Rejected: the completed items are still on the server; read the list back so they (and the menu) return.
+        callTodo("remove_completed_items", JSONObject().put("entity_id", eid)) { fetch(eid) }
     }
 
     override fun onAttachedToWindow() {
@@ -945,6 +944,21 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         super.onDetachedFromWindow()
     }
 
+    /**
+     * A cached view another one hides stays attached: it stops polling Home Assistant (an answer still on its way is
+     * dropped), and asks once again when it shows.
+     */
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (!isAttachedToWindow) return
+        if (isShown) {
+            fetch()
+        } else {
+            ctx.main.removeCallbacks(refresh)
+            generation++
+        }
+    }
+
     /** Bumped per request and on detach: an answer from an earlier attachment doesn't overwrite a newer one. */
     private var generation = 0
 
@@ -964,7 +978,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
             ctx.main.post {
                 if (gen != generation) return@post
                 if (res != null) render(res)
-                if (isAttachedToWindow) ctx.main.postDelayed(refresh, REFRESH_MS)
+                if (isAttachedToWindow && isShown) ctx.main.postDelayed(refresh, REFRESH_MS)
             }
         }
     }
@@ -1282,7 +1296,9 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
     private val floorplan = FloorplanLayout(ctx.context)
     private val imageView = ImageView(ctx.context).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
     private val fixedRatio: Float? = parseAspectRatio(config.raw.optString("aspect_ratio", ""))
-    private var loadedUrl: String? = null
+    /** The picture on screen, and the one being loaded (cleared when that load fails, so a later update retries it). */
+    private var shownUrl: String? = null
+    private var loadingUrl: String? = null
 
     init {
         floorplan.ratio = fixedRatio ?: DEFAULT_RATIO
@@ -1299,10 +1315,14 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
     }
 
     private fun load(url: String) {
-        if (url == loadedUrl) return
-        loadedUrl = url
+        if (url == shownUrl || url == loadingUrl) return
+        loadingUrl = url
         ctx.loadImage(url) { bmp ->
-            if (bmp == null || url != loadedUrl) return@loadImage
+            // Only the newest request lands: an older one's answer never replaces it.
+            if (url != loadingUrl) return@loadImage
+            loadingUrl = null
+            if (bmp == null) return@loadImage
+            shownUrl = url
             imageView.setImageBitmap(bmp)
             if (fixedRatio == null && bmp.width > 0) {
                 // No aspect_ratio: follow the picture's own shape, so FIT_XY is exact and nothing is cropped.
@@ -1884,6 +1904,8 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     private val titleView = extLabel(ctx, 16f, ctx.theme.primaryTextColor, Inter.MEDIUM)
     private val list = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
     private val ids: List<String> = calendarIds(config)
+    /** Each calendar's last successful answer, kept through a failed refresh. */
+    private val lastEvents = HashMap<String, List<CalendarEvent>>()
     private val refresh = Runnable { fetch() }
     private var generation = 0
 
@@ -1912,6 +1934,21 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         super.onDetachedFromWindow()
     }
 
+    /**
+     * A cached view another one hides stays attached: it stops polling Home Assistant (an answer still on its way is
+     * dropped), and asks once again when it shows.
+     */
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (!isAttachedToWindow) return
+        if (isShown) {
+            fetch()
+        } else {
+            ctx.main.removeCallbacks(refresh)
+            generation++
+        }
+    }
+
     private fun fetch() {
         ctx.main.removeCallbacks(refresh)
         if (ids.isEmpty()) return
@@ -1929,10 +1966,12 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             val path = "/api/calendars/$eid?start=${URLEncoder.encode(start, "UTF-8")}&end=${URLEncoder.encode(end, "UTF-8")}"
             ctx.fetchJson(path) { json ->
                 if (gen != generation) return@fetchJson
-                results[i] = parseEvents(json as? JSONArray, eid)
+                // A failed or timed-out read keeps this calendar's last answer: only HA saying "no events" empties it.
+                val arr = json as? JSONArray
+                results[i] = if (arr != null) parseEvents(arr, eid).also { lastEvents[eid] = it } else lastEvents[eid].orEmpty()
                 if (--pending == 0) {
                     render(upcoming(results.filterNotNull().flatten(), System.currentTimeMillis()))
-                    if (isAttachedToWindow) ctx.main.postDelayed(refresh, REFRESH_MS)
+                    if (isAttachedToWindow && isShown) ctx.main.postDelayed(refresh, REFRESH_MS)
                 }
             }
         }
@@ -2098,6 +2137,21 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
         super.onDetachedFromWindow()
     }
 
+    /**
+     * A cached view another one hides stays attached: it stops polling Home Assistant (an answer still on its way is
+     * dropped), and asks once again when it shows.
+     */
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (!isAttachedToWindow) return
+        if (isShown) {
+            fetch()
+        } else {
+            ctx.main.removeCallbacks(refresh)
+            generation++
+        }
+    }
+
     private fun fetch() {
         ctx.main.removeCallbacks(refresh)
         if (ids.isEmpty()) return
@@ -2113,7 +2167,7 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
             ctx.main.post {
                 if (gen != generation) return@post
                 if (rows != null) render(rows)
-                if (isAttachedToWindow) ctx.main.postDelayed(refresh, REFRESH_MS)
+                if (isAttachedToWindow && isShown) ctx.main.postDelayed(refresh, REFRESH_MS)
             }
         }
     }

@@ -81,6 +81,7 @@ class MarkdownInPlaceTest {
     fun aChangedMinuteUpdatesTextInPlaceAndDrawsLikeARebuild() {
         val (updated, pushA) = card()
         pushA("###### Good night, Edu\n# 4:57 AM\nTuesday, November 24")
+        draw(updated) // laid out first, so the update below changes text views that already have a layout
         val before = updated.texts()
         pushA("###### Good night, Edu\n# 4:58 AM\nTuesday, November 24")
         val after = updated.texts()

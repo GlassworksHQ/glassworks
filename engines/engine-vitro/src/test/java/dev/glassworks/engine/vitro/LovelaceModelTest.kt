@@ -1260,6 +1260,16 @@ class LovelaceModelTest {
         assertEquals(12f, ends.last().first, 0.01f)
         assertEquals(22f, ends.last().second, 0.01f)
 
+        // An exponent stays in its number (`1e1` is 10); a minus after a number still starts the next one.
+        ends.clear()
+        MdiIcons.parseSvgPathInto("M0 0L1e1 4", endSink)
+        assertEquals(10f, ends.last().first, 0.001f)
+        assertEquals(4f, ends.last().second, 0.001f)
+        ends.clear()
+        MdiIcons.parseSvgPathInto("M0 0L10-4l2.5E-1 1", endSink)
+        assertEquals(10.25f, ends.last().first, 0.001f)
+        assertEquals(-3f, ends.last().second, 0.001f)
+
         // S and T reflect the previous control point; lower-case forms are relative.
         val smooth = BoundsSink()
         MdiIcons.parseSvgPathInto("M2 12C2 6 8 2 12 2S22 6 22 12s-4 10-10 10Q6 22 4 18T2 12Z", smooth)

@@ -72,6 +72,14 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
     private val valueView = label(ctx, 24f, ctx.theme.primaryTextColor, Inter.LIGHT)
     private val chart = SparklineCanvasView(ctx.context, ctx.theme.primaryColor, ctx.theme.accentColor, ctx.theme.secondaryTextColor)
 
+    // Declared before `init`, which sets them: an initializer after it would reset them.
+    private var historyIds: List<String> = emptyList()
+    private var historyHours = 24
+
+    /** Bumped per history request and when the card stops showing: only the newest answer is drawn. */
+    private var historyGeneration = 0
+    private val historyRefresh = Runnable { loadHistory() }
+
     init {
         val col = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
@@ -124,17 +132,59 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
         if (entityIds.isNotEmpty()) {
             val showGraph = config.raw.optString("graph", "line") != "none"
             if (showGraph) {
-                ctx.fetchHistory(entityIds, hours) { map ->
-                    // One slot per entity, empty when it has too little history, so each keeps its legend color.
-                    val series = entityIds.map { id -> map[id]?.takeIf { it.size >= 2 } ?: emptyList() }
-                    ctx.main.post { chart.setSeries(if (series.all { it.isEmpty() }) emptyList() else series) }
-                }
+                historyIds = entityIds
+                historyHours = hours
+                loadHistory()
             } else {
                 chart.visibility = GONE
             }
             isClickable = true
             setOnClickListener { ctx.performAction(ActionConfig.parse(config.raw.optJSONObject("tap_action")), primaryId) }
             bindHoldAction(holdFor(config.raw, primaryId), primaryId)
+        }
+    }
+
+    /**
+     * Reads the graph's history and draws it; while the card shows, again every [HISTORY_REFRESH_MS] (HA's graphs
+     * follow the history live), and once more when a hidden cached view shows again.
+     */
+    private fun loadHistory() {
+        ctx.main.removeCallbacks(historyRefresh)
+        if (historyIds.isEmpty()) return
+        val ids = historyIds
+        val gen = ++historyGeneration
+        ctx.fetchHistory(ids, historyHours) { map ->
+            // One slot per entity, empty when it has too little history, so each keeps its legend color.
+            val series = ids.map { id -> map[id]?.takeIf { it.size >= 2 } ?: emptyList() }
+            ctx.main.post {
+                if (gen != historyGeneration) return@post
+                chart.setSeries(if (series.all { it.isEmpty() }) emptyList() else series)
+                if (isAttachedToWindow && isShown) ctx.main.postDelayed(historyRefresh, HISTORY_REFRESH_MS)
+            }
+        }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (historyIds.isNotEmpty() && isShown) {
+            ctx.main.removeCallbacks(historyRefresh)
+            ctx.main.postDelayed(historyRefresh, HISTORY_REFRESH_MS)
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        ctx.main.removeCallbacks(historyRefresh)
+        super.onDetachedFromWindow()
+    }
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (!isAttachedToWindow || historyIds.isEmpty()) return
+        if (isShown) {
+            loadHistory()
+        } else {
+            ctx.main.removeCallbacks(historyRefresh)
+            historyGeneration++
         }
     }
 
@@ -161,6 +211,11 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
             observe(id) { s -> name.text = s?.friendlyName ?: id }
             legend.addView(item)
         }
+    }
+
+    private companion object {
+        /** How often a shown graph reads its history again. */
+        const val HISTORY_REFRESH_MS = 5 * 60_000L
     }
 }
 
@@ -535,7 +590,9 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
         if (eid != null) {
             bindHoldAction(holdFor(config.raw, eid), eid)
             dial.onCommit = { target ->
-                ctx.callService("climate", "set_temperature", JSONObject().put("entity_id", eid).put("temperature", target), null)
+                // A water heater sets its tank through its own domain's service.
+                val domain = if (eid.startsWith("water_heater.")) "water_heater" else "climate"
+                ctx.callService(domain, "set_temperature", JSONObject().put("entity_id", eid).put("temperature", target), null)
             }
             observe(eid) { s ->
                 titleView.text = config.name ?: s?.friendlyName ?: eid

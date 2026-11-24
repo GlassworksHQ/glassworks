@@ -103,7 +103,7 @@ class CardModAndOverlayTest {
         gradient!!
         assertEquals(135f, gradient.angleDeg)
         assertArrayEquals(intArrayOf(0xFF1E3A5F.toInt(), 0x66000000), gradient.colors)
-        assertNull(mod.backgroundColor)
+        assertEquals("the shorthand resets the color: transparent under the gradient", 0, mod.backgroundColor)
         assertEquals(0xFFFFB300.toInt(), mod.borderColor)
         assertEquals(2f, mod.borderWidthDp)
         assertEquals(28f, mod.borderRadiusDp)
@@ -376,7 +376,12 @@ class CardModAndOverlayTest {
         val vv = vitroView(store, """{"views": [{"cards": [{"type": "tile", "entity": "light.a"}]}]}""")
         assertNotNull(vv.dashboard)
         vv.openMoreInfo("light.a")
+        // The sheet is really open, so the check after the reset proves the reset removed it.
+        fun sheets(v: android.view.View): Int = (if (v is dev.glassworks.engine.vitro.cards.MoreInfoSheet) 1 else 0) +
+            ((v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).sumOf { sheets(g.getChildAt(it)) } } ?: 0)
+        assertEquals(1, sheets(vv))
         vv.resetForServer()
+        assertEquals(0, sheets(vv))
         assertNull(vv.dashboard)
         // Nothing of the old server stays on screen: no More-Info sheet either.
         assertFalse(vv.closeMoreInfo())

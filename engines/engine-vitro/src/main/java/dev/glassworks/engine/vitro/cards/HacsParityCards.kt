@@ -689,7 +689,8 @@ class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
         if (v != null && pendingValue == v) pendingValue = null
         val text = when {
             v == null -> s?.state ?: "…"
-            stepSize % 1.0 == 0.0 -> v.roundToInt().toString()
+            // Whole numbers only when the step, the range's start and the value all are: `min: 0.5, step: 1` shows 1.5.
+            stepSize % 1.0 == 0.0 && min % 1.0 == 0.0 && v % 1.0 == 0.0 -> v.roundToInt().toString()
             else -> v.toString()
         }
         valueLabel.text = s?.unit?.let { "$text $it" } ?: text
@@ -951,7 +952,7 @@ class MiniMediaPlayerCardView(ctx: VitroCardContext, private val config: CardCon
         (attrs["volume_level"] as? Number)?.toFloat()?.let { slider?.setValue(it, active = !muted && it > 0f) }
         controlsRow.visibility = if (off) GONE else VISIBLE
         updateProgress(s)
-        setTicking(playing && isAttachedToWindow)
+        setTicking(playing && isAttachedToWindow && isShown)
     }
 
     private fun setArtwork(url: String?) {
@@ -998,12 +999,20 @@ class MiniMediaPlayerCardView(ctx: VitroCardContext, private val config: CardCon
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        setTicking(last?.state == "playing")
+        setTicking(last?.state == "playing" && isShown)
     }
 
     override fun onDetachedFromWindow() {
         setTicking(false)
         super.onDetachedFromWindow()
+    }
+
+    /** A cached view another one hides stays attached: the position stops ticking, and is caught up on return. */
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (!isAttachedToWindow) return
+        if (isShown) updateProgress(last)
+        setTicking(last?.state == "playing" && isShown)
     }
 }
 
@@ -1110,14 +1119,22 @@ object AutoEntitiesFilter {
                     "or", "and" -> (rule.opt(k) as? JSONArray)?.let { arr ->
                         (0 until arr.length()).all { i -> arr.optJSONObject(i)?.let(::supported) ?: false }
                     } ?: false
-                    "attributes" -> (rule.opt(k) as? JSONObject)?.let { a -> a.keys().asSequence().all { isScalar(a.opt(it)) } } ?: false
+                    "attributes" -> (rule.opt(k) as? JSONObject)?.let { a -> a.keys().asSequence().all { isPattern(a.opt(it)) } } ?: false
                     "options", "sort" -> true
                     // domain, entity_id, state, name, group: one value to match (`state: null` or an object is no rule).
-                    else -> isScalar(rule.opt(k))
+                    else -> isPattern(rule.opt(k))
                 }
             }
 
-    private fun isScalar(v: Any?): Boolean = v is String || v is Number || v is Boolean
+    /**
+     * A value a rule can match with: a scalar, and for a `/regex/` one that compiles. An invalid regex matches
+     * nothing, so it can't be told apart from a valid miss once evaluated: under `not` it would match everything.
+     */
+    private fun isPattern(v: Any?): Boolean {
+        if (v !is String) return v is Number || v is Boolean
+        if (v.length >= 2 && v.startsWith("/") && v.endsWith("/")) return runCatching { Regex(v.substring(1, v.length - 1)) }.isSuccess
+        return true
+    }
 
     /** An attribute as text, `a:b` reaching into a nested map. */
     private fun attributeString(s: EntityState, key: String): String? {
@@ -1334,9 +1351,10 @@ open class StackInCardView(
             }
         }
         // The inner stack's gap: `--vertical-stack-card-gap` (or the horizontal one), then `--stack-card-gap`, 8 px.
+        // Each name from the stack's own card_mod first, then the enclosing cards' (inherited), then the theme's.
         val vars = dev.glassworks.engine.vitro.theme.ThemeResolver.parseCardMod(config.raw.optJSONObject("card_mod"), ctx.theme.vars).customProperties
         val gapVar = listOf(if (horizontal) "horizontal-stack-card-gap" else "vertical-stack-card-gap", "stack-card-gap")
-            .firstNotNullOfOrNull { vars[it] ?: ctx.theme.vars[it] }
+            .firstNotNullOfOrNull { vars[it] ?: ctx.cardVars[it] ?: ctx.theme.vars[it] }
         val gap = ctx.px(dev.glassworks.engine.vitro.theme.ThemeResolver.parseDimensionDp(gapVar, 8f))
         children = config.childCards.mapIndexed { idx, child ->
             val v = build(child)
@@ -1526,7 +1544,7 @@ class LayoutCardView(
                 val repeat = Regex("""^repeat\(\s*([^,]+)\s*,\s*(.+)\)$""").find(tok)
                 if (repeat != null) {
                     val count = repeat.groupValues[1].trim()
-                    val inner = splitTop(repeat.groupValues[2].trim()).map { parseTrack(it) }
+                    val inner = splitTop(repeat.groupValues[2].trim()).map { parseTrack(it, widthDp) }
                     val n = count.toIntOrNull() ?: run {
                         // auto-fill / auto-fit: as many tracks as fit at their minimum width.
                         val minDp = inner.sumOf { t -> (t.minDp.takeIf { it > 0f } ?: t.fixedDp.takeIf { it > 0f } ?: 100f).toDouble() }
@@ -1534,16 +1552,17 @@ class LayoutCardView(
                     }
                     repeat(n.coerceIn(1, 24)) { out += inner }
                 } else {
-                    out += parseTrack(tok)
+                    out += parseTrack(tok, widthDp)
                 }
             }
             return out
         }
 
-        private fun parseTrack(tok: String): Track {
+        /** One track; a percentage is of the grid's width ([widthDp]), a fixed size like `px`, never a share. */
+        private fun parseTrack(tok: String, widthDp: Int): Track {
             Regex("""^minmax\(\s*([^,]+)\s*,\s*(.+)\)$""").find(tok)?.let { m ->
-                val lo = parseTrack(m.groupValues[1].trim())
-                val hi = parseTrack(m.groupValues[2].trim())
+                val lo = parseTrack(m.groupValues[1].trim(), widthDp)
+                val hi = parseTrack(m.groupValues[2].trim(), widthDp)
                 return if (hi.fr > 0f) Track(hi.fr, 0f, lo.fixedDp) else lo
             }
             val fr = Regex("""^(\d+(?:\.\d+)?)fr$""").find(tok)?.groupValues?.get(1)?.toFloatOrNull()
@@ -1551,7 +1570,7 @@ class LayoutCardView(
             val px = Regex("""^(\d+(?:\.\d+)?)px$""").find(tok)?.groupValues?.get(1)?.toFloatOrNull()
             if (px != null) return Track(0f, px)
             val pct = Regex("""^(\d+(?:\.\d+)?)%$""").find(tok)?.groupValues?.get(1)?.toFloatOrNull()
-            if (pct != null) return Track(pct / 100f, 0f)
+            if (pct != null) return Track(0f, widthDp * pct / 100f)
             return Track(1f, 0f) // auto, min-content, …
         }
 

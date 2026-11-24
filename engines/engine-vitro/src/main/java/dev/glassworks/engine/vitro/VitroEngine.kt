@@ -185,6 +185,12 @@ class VitroEngine(
         fun tokenFor(origin: String?): String? =
             cachedSession?.takeIf { VitroCardContext.sameOrigin(it.first, origin) }?.second
         private val history = ArrayDeque<String>()
+
+        /** Records [url] for back; a wall panel runs for months, so only the last [MAX_HISTORY] are kept. */
+        private fun remember(url: String) {
+            history.addLast(url)
+            while (history.size > MAX_HISTORY) history.removeFirst()
+        }
         private var firstPaintReported = false
 
         private val port = object : PagePort {
@@ -209,11 +215,17 @@ class VitroEngine(
                 // not even for the default dashboard, whose path is null too.
                 val owns = displayedDashboard != null && displayedDashboard == (currentOrigin to currentDashboardPath)
                 val path = if (owns) buildViewUrl(currentOrigin, currentDashboardPath, v.path ?: v.index.toString()) else null
+                if (owns) {
+                    // A reload or a config refresh comes back to this view, not the one the route was loaded with.
+                    pendingViewPath = v.path ?: v.index.toString()
+                }
                 if (path != null && path != currentUrl) {
                     currentUrl = path
                     host.onLocationChange(path)
                 }
             }
+            // One chronological history for back: a tab tap goes in it like a load does.
+            vitroView.onTabNavigation = { currentUrl?.let(::remember) }
             vitroView.onThemeResolved = { theme -> reportThemeToHost(theme) }
             vitroView.contextFactory = { theme ->
                 val haBase = currentOrigin.orEmpty()
@@ -228,6 +240,10 @@ class VitroEngine(
                     haUser = { client?.currentUser ?: JSONObject() },
                     callService = { domain, service, data, target ->
                         client?.callService(domain, service, data, target)
+                    },
+                    callServiceThen = { domain, service, data, target, done ->
+                        val c = client
+                        if (c != null) c.callService(domain, service, data, target, done) else done(false)
                     },
                     callWs = { msg, done ->
                         val c = client
@@ -269,7 +285,7 @@ class VitroEngine(
                 load(redirected)
                 return
             }
-            currentUrl?.let { if (it != url) history.addLast(it) }
+            currentUrl?.let { if (it != url) remember(it) }
             currentUrl = url
 
             if (!LovelaceParser.isDashboardUrl(url)) {
@@ -343,6 +359,8 @@ class VitroEngine(
                                 return@tokenProvider
                             }
                             if (tok != null && generation == clientGeneration) {
+                                // Another sign-in than the cached images were fetched with: they go before it is used.
+                                VitroCardContext.noteToken(tok)
                                 cachedToken = tok
                                 cachedSession = origin to tok
                             }
@@ -374,13 +392,13 @@ class VitroEngine(
                 activeFallback.goBack()
                 return
             }
+            // Every view change (load or tab) is in [history], so it alone says where back goes. The view's own back
+            // stack mirrors it, and replaying that after the history would revisit views already gone back through.
             if (history.isNotEmpty()) {
                 val prev = history.removeLast()
                 currentUrl = null // don't push onto history again
                 load(prev)
-                return
             }
-            vitroView.goBack()
         }
 
         override fun restart() {
@@ -597,6 +615,9 @@ class VitroEngine(
 
         /** The dashboard path while the fallback shows a non-dashboard page: no real path equals it. */
         private const val NO_DASHBOARD = "\u0000fallback"
+
+        /** Back steps a page keeps. */
+        private const val MAX_HISTORY = 50
 
         internal fun buildViewUrl(origin: String?, dashPath: String?, viewPath: String): String? {
             if (origin.isNullOrBlank()) return null
