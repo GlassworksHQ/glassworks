@@ -70,8 +70,8 @@ Some rows need explaining.
   them, and `web` runs for anything else.
 - **refract** runs only for `kiln/workers`. Refract's `releases.json` is written from the frames'
   `installer.json` `releases`, so a change there runs `web`, whose `refract-releases.test.ts` fails until
-  `releases.json` is written again; that change then runs `refract` too. No CI job deploys Refract: the root
-  thread runs `kiln/workers/refract/deploy.sh` after the merge ([its README](../kiln/workers/refract/README.md#deploying)).
+  `releases.json` is written again; that change then runs `refract` too. Once merged, `web-deploy.yml` deploys
+  Refract before Kiln ([its README](../kiln/workers/refract/README.md#deploying)).
 - **size-generic** builds from no S1 module, so an S1-only change skips it.
 
 ## Emulator tests

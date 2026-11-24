@@ -6,27 +6,34 @@ diff, writing nothing but their output and the run summary. `start` creates one 
 adds a status to it.
 
 Usage:
-  tools/ci/web_deploy.py pick --event <event> [--project both|site|kiln|installer] [--summary <file>]
-      site=, kiln=, installer= true|false, for $GITHUB_OUTPUT (the changes job)
-  tools/ci/web_deploy.py check <project> --event <event> --started-for <sha> [--summary <file>]
-      deploy=true|false, commit=<sha> and base=<sha>, in a deploy job once it holds the project's queue
+  tools/ci/web_deploy.py pick --event <event> [--project both|site|kiln|installer|refract] [--summary <file>]
+      site=, kiln=, installer=, refract= true|false, for $GITHUB_OUTPUT (the changes job)
+  tools/ci/web_deploy.py check <project> --event <event> --started-for <sha> [--asked <project>] [--summary <file>]
+      deploy=true|false, commit=<sha> and base=<sha>, in a deploy job once it holds the project's queue (--asked:
+      what a run by hand asked for)
   tools/ci/web_deploy.py start <project> --commit <sha>
       just before the upload: a GitHub deployment of that commit (task TASK), in progress; prints id=<id>
   tools/ci/web_deploy.py finish <project> --id <id> --state success|failure
       after the upload: its outcome
 
 The base. A project's base is the commit of its newest record that reached success: the commit the deploy job
-checked out, marked only once Vercel took the upload. Not the push's `before`: a deploy that was cancelled by a
-newer run or failed (Vercel's daily cap) left its change undeployed, and a later push that doesn't touch the
-project would never deploy it. Not the deployment GitHub makes for each job in an environment either: that one has
+checked out, marked only once Vercel (or Cloudflare, for Refract) took the upload. Not the push's `before`: a
+deploy that was cancelled by a newer run or failed (Vercel's daily cap) left its change undeployed, and a later push
+that doesn't touch the project would never deploy it. Not the deployment GitHub makes for each job in an environment either: that one has
 the commit the run was started for, older than main at checkout, and succeeds when `check` skips the deploy too.
 
 Unsettled. A record newer than the base that never reached success (the upload failed, the job was cancelled or
 timed out, or GitHub didn't take the success status) may or may not be live. Then production can't be read from
 the base, so the project deploys whatever the diff says.
 
+Refract first. Kiln downloads every APK and image through Refract, so Kiln never deploys a commit whose Refract
+inputs changed since Refract's last successful deploy: `check kiln` says deploy=false then (Kiln's record stays
+where it was, so the run after Refract's deploy takes it). That covers a Refract deploy that failed, and a push that
+landed on main between Refract's checkout and Kiln's. A run by hand that asks for Kiln plans Refract as a push would.
+
 Events:
-  - workflow_dispatch: the project(s) asked for, with no diff (a deploy by hand always deploys);
+  - workflow_dispatch: the project(s) asked for, with no diff (a deploy by hand always deploys), and Refract by its
+    diff when Kiln is asked for;
   - push: what changed since the base. With no record in the last DEPTH deployments, or when GitHub's API or
     git fails, it deploys, failing closed as changes.py does;
   - schedule: the same, so a deploy that failed is tried again without a push, and nothing deploys when nothing
@@ -45,13 +52,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import changes  # noqa: E402
 
 # The GitHub environment each deploy job runs in (its `environment` in web-deploy.yml), where `record` writes.
-ENVIRONMENTS = {'site': 'glassworks.dev', 'kiln': 'kiln.glassworks.dev', 'installer': 's1.edm.sh'}
-URLS = {'site': 'https://www.glassworks.dev', 'kiln': 'https://kiln.glassworks.dev', 'installer': 'https://s1.edm.sh'}
-NAMES = {'site': 'glassworks.dev', 'kiln': 'Kiln', 'installer': 's1.edm.sh'}
+ENVIRONMENTS = {'site': 'glassworks.dev', 'kiln': 'kiln.glassworks.dev', 'installer': 's1.edm.sh',
+                'refract': 'refract.glassworks.dev'}
+URLS = {'site': 'https://www.glassworks.dev', 'kiln': 'https://kiln.glassworks.dev', 'installer': 'https://s1.edm.sh',
+        'refract': 'https://refract.glassworks.dev'}
+NAMES = {'site': 'glassworks.dev', 'kiln': 'Kiln', 'installer': 's1.edm.sh', 'refract': 'Refract'}
 
 # Kiln's app: its npm workspaces (kiln/, the frames' recipes, packages/), what every workspace builds with, and
 # the repo files kiln/scripts/stage-assets.mjs stages. Tests, mockups, Markdown and the Refract worker
-# (kiln/workers, its own deploy) don't go into it. The workflow and this picker redeploy it, to try a change to them.
+# (kiln/workers, its own job below) don't go into it. The workflow and this picker redeploy it, to try a change to them.
 KILN = (
     'kiln', 'frames/*/installer', 'frames/*/design', 'packages', 'branding',
     'frames/lululemon-mirror/overlay', 'frames/aqara-s1-plus/tools/root', 'frames/aqara-s1-plus/tools/radio',
@@ -65,6 +74,15 @@ KILN = (
 # s1.edm.sh's redirect.
 INSTALLER = ('kiln/s1-redirect',)
 
+# Refract, the Cloudflare Worker Kiln downloads every APK and image through: its code, its allowlist and the
+# release lines generated from the frames (releases.json), and what it's deployed with. Kiln's job waits for this
+# one, so a Kiln that names a new download never goes live before Refract serves it.
+REFRACT = (
+    'kiln/workers/refract', '.github/workflows/web-deploy.yml', 'tools/ci/web_deploy.py',
+    '!**/*.md', '!kiln/workers/refract/test',
+)
+PATTERNS = {'kiln': KILN, 'installer': INSTALLER, 'refract': REFRACT}
+
 # How many of a project's newest deployments to look through for a record (each deploy makes two: the job's and
 # the record).
 DEPTH = 50
@@ -72,7 +90,8 @@ DEPTH = 50
 # The task of a `record` deployment; the ones GitHub makes for a job have the task `deploy`.
 TASK = 'web-deploy'
 
-DISPATCH = {'both': ('site', 'kiln'), 'site': ('site',), 'kiln': ('kiln',), 'installer': ('installer',)}
+DISPATCH = {'both': ('site', 'kiln'), 'site': ('site',), 'kiln': ('kiln',), 'installer': ('installer',),
+            'refract': ('refract',)}
 
 
 def short(sha):
@@ -88,8 +107,7 @@ def wants(project, changed, deleted=()):
     if project == 'site':
         runs, why = changes.select(list(changed), list(deleted))['site']
         return why if runs else None
-    patterns = KILN if project == 'kiln' else INSTALLER
-    return next((f for f in changed if changes.matches(f, patterns)), None)
+    return next((f for f in changed if changes.matches(f, PATTERNS[project])), None)
 
 
 class Last(tuple):
@@ -213,7 +231,12 @@ def plan(projects, event, project='both', head='HEAD', fetch=None):
     """{project: (deploy, base, why)}. `fetch`: bases() unless given."""
     if event == 'workflow_dispatch':
         chosen = DISPATCH.get(project or 'both', DISPATCH['both'])
-        return {p: (p in chosen, None, 'asked for by hand' if p in chosen else 'not asked for') for p in projects}
+        out = {p: (p in chosen, None, 'asked for by hand' if p in chosen else 'not asked for') for p in projects}
+        if 'kiln' in chosen and 'refract' in projects and 'refract' not in chosen:
+            # Kiln goes out through Refract: Refract first, when what it serves changed.
+            deploy, base, why = plan(['refract'], 'push', head=head, fetch=fetch)['refract']
+            out['refract'] = (deploy, base, f'Kiln was asked for by hand, and {why}')
+        return out
     unread = None
     try:
         found = (fetch or bases)(projects)
@@ -229,6 +252,14 @@ def plan(projects, event, project='both', head='HEAD', fetch=None):
     return out
 
 
+def refract_behind(head='HEAD', fetch=None):
+    """Why Refract may not serve what Kiln at `head` downloads, or None: a Refract input changed since its last
+    successful deploy, a newer Refract deploy never reached success, Refract has no recorded deploy, or GitHub
+    couldn't say. Kiln waits then."""
+    deploy, _, why = plan(['refract'], 'push', head=head, fetch=fetch)['refract']
+    return why if deploy else None
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -237,6 +268,7 @@ def main(argv):
     check = sub.add_parser('check')
     check.add_argument('project', choices=list(ENVIRONMENTS))
     check.add_argument('--started-for', required=True, help='the commit the run was started for (github.sha)')
+    check.add_argument('--asked', help='what a run by hand asked for (inputs.project); the project itself if not given')
     st = sub.add_parser('start')
     st.add_argument('project', choices=list(ENVIRONMENTS))
     st.add_argument('--commit', required=True, help='the commit the job checked out and is about to upload')
@@ -283,7 +315,12 @@ def main(argv):
         print(f'::error::main at {short(commit)} does not have {short(a.started_for)}, the commit this run was '
               f'started for: {NAMES[a.project]} was not deployed', file=sys.stderr)
         return 1
-    deploy, base, why = plan([a.project], a.event, a.project, head=commit)[a.project]
+    deploy, base, why = plan([a.project], a.event, a.asked or a.project, head=commit)[a.project]
+    if deploy and a.project == 'kiln':
+        behind = refract_behind(commit)
+        if behind:
+            deploy, why = False, f'Refract may not serve its downloads yet ({behind}), so Kiln waits for Refract\'s deploy'
+            print(f'::warning::Kiln not deployed: {why}', file=sys.stderr)
     print(f'deploy={"true" if deploy else "false"}')
     print(f'commit={commit}')
     print(f'base={base or ""}')
