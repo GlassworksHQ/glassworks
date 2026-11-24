@@ -130,8 +130,7 @@ object WebFonts {
      * fonts on disk. A different list forgets every font of the previous one.
      */
     fun configure(haBase: String, resources: List<LovelaceResource>, cacheDir: File?) {
-        val base = haBase.trimEnd('/') + "/"
-        val urls = resources.filter { it.type == "css" }.mapNotNull { CssFontFaces.resolve(base, it.url) }.distinct()
+        val urls = sheetUrls(haBase, resources)
         val dir = cacheDir?.let { File(it, "vitro-fonts") }
         if (urls == cssUrls && dir == this.cacheDir) return
         reset()
@@ -182,6 +181,18 @@ object WebFonts {
                 if (waiting.isNotEmpty()) startSheets()
             }
         })
+    }
+
+    /**
+     * Whether the loader is set up for [haBase]'s [resources] now: a view whose dashboard it isn't (another view, a
+     * different server) mustn't redraw for its fonts, or the redraw would set it up for itself and away from the view
+     * on screen.
+     */
+    fun isConfiguredFor(haBase: String, resources: List<LovelaceResource>): Boolean = sheetUrls(haBase, resources) == cssUrls
+
+    private fun sheetUrls(haBase: String, resources: List<LovelaceResource>): List<String> {
+        val base = haBase.trimEnd('/') + "/"
+        return resources.filter { it.type == "css" }.mapNotNull { CssFontFaces.resolve(base, it.url) }.distinct()
     }
 
     /** Forgets everything (a different server, or a test). */
@@ -449,16 +460,21 @@ object WebFonts {
      */
     private fun readSheets(urls: List<String>, dir: File?, network: Boolean, gen: Int): String? {
         val out = StringBuilder()
-        val seen = HashSet<String>()
+        // Each sheet is read once ([MAX_SHEETS] of them), but every place it's imported counts, in order: the cascade
+        // sees `common.css` again after `a.css`'s overrides when `b.css` imports it too. Only a cycle is cut.
+        val read = HashMap<String, Pair<String, String>?>()
+        val open = HashSet<String>()
+        var occurrences = 0
         var any = false
         // A cached sheet keeps the URL it came from in the end (its first line): its URLs resolve against that.
         fun cached(file: File?): Pair<String, String>? = file?.takeIf { it.isFile }?.let { f ->
             runCatching { f.readText() }.getOrNull()?.let { it.substringBefore('\n') to it.substringAfter('\n', "") }
         }
-        fun visit(url: String) {
-            if (gen != liveGeneration || seen.size >= MAX_SHEETS || !seen.add(url)) return
+        fun load(url: String): Pair<String, String>? {
+            if (url in read) return read[url]
+            if (read.size >= MAX_SHEETS) return null
             val file = dir?.let { File(it, hash(url) + ".css") }
-            val (base, text) = (if (network) {
+            val sheet = if (network) {
                 fetch(url, MAX_CSS_BYTES)?.let { f ->
                     val t = f.bytes.toString(Charsets.UTF_8)
                     if (dir != null && file != null) runCatching { publish(dir, file, (f.url + "\n" + t).toByteArray()) }
@@ -466,10 +482,19 @@ object WebFonts {
                 } ?: cached(file)
             } else {
                 cached(file)
-            }) ?: return
+            }
+            read[url] = sheet
+            return sheet
+        }
+        fun visit(url: String) {
+            if (gen != liveGeneration || url in open || occurrences >= MAX_SHEET_OCCURRENCES) return
+            val (base, text) = load(url) ?: return
+            occurrences++
             any = true
+            open += url
             // After a redirect, the sheet's URLs resolve against where it came from, as in the browser.
             CssFontFaces.parse(text, base).imports.forEach(::visit)
+            open -= url
             // Each sheet's URLs resolve against that sheet: kept as a marker the parser splits on.
             out.append(SHEET_MARK).append(base).append('\n').append(text).append('\n')
         }
@@ -507,7 +532,7 @@ object WebFonts {
     /** The loader's state, for a test that waited too long: sheets, each face, what's waiting, and the last steps. */
     fun describe(): String =
         "sheets=$sheets faces=${faces.keys} loads=${loads.values.map { it.javaClass.simpleName }} waiting=${waiting.keys} " +
-            "pending=${pending.get()} notifyQueued=$notifyQueued trace=" + synchronized(trace) { trace.joinToString(" | ") }
+            "pending=${pending.get()} notifyQueued=$notifyQueued executor=${executor.javaClass.name} trace=" + synchronized(trace) { trace.joinToString(" | ") }
 
     private fun notifyChanged() {
         note("notify (queued already: $notifyQueued)")
@@ -532,6 +557,7 @@ object WebFonts {
     private fun submit(work: () -> (() -> Unit), onError: () -> Unit) {
         pending.incrementAndGet()
         val queuedAt = System.nanoTime()
+        note("job queued on ${executor.javaClass.name}")
         try {
             executor.execute {
                 val startedAt = System.nanoTime()
@@ -625,6 +651,9 @@ object WebFonts {
     }
 
     private const val SHEET_MARK = "\u0000sheet:"
+
+    /** How many times sheets may appear in the cascade in all, imports repeated included. */
+    private const val MAX_SHEET_OCCURRENCES = 32
 
     /** The longest a stylesheet or font request may take in all. */
     private const val REQUEST_DEADLINE_MS = 30_000L

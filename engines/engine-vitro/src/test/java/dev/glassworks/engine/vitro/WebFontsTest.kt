@@ -244,6 +244,34 @@ class WebFontsTest {
     }
 
     @Test
+    fun aSheetImportedTwiceCountsAtBothPlaces() {
+        // a.css imports common.css and overrides F; b.css imports common.css again: common's F wins, as in the cascade.
+        css("common.css", "@font-face { font-family: F; src: url(common.ttf) }")
+        css("a.css", "@import url(common.css); @font-face { font-family: F; src: url(a.ttf) }")
+        css("b.css", "@import url(common.css);")
+        font("common.ttf", "pacifico.ttf")
+        font("a.ttf", "comic-neue-400.ttf")
+        configure("a.css", "b.css")
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "F")
+        drain()
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "F")
+        drain()
+        assertTrue("$base/local/common.ttf" in fetched)
+        assertTrue("$base/local/a.ttf" !in fetched)
+        // Read once, used twice.
+        assertEquals(1, fetched.count { it.endsWith("/common.css") })
+    }
+
+    @Test
+    fun cursiveAndFantasyAreThePlatformsGenerics() {
+        configure()
+        assertSame(VitroFonts.typeface(activity, 400, 14f, fontFamily = "cursive"), VitroFonts.typeface(activity, 400, 14f, fontFamily = "\"Nope\", cursive"))
+        assertNotEquals(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f, fontFamily = "cursive"))
+        // Android has no fantasy family: its sans-serif, and the list ends there (no serif after it).
+        assertSame(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f, fontFamily = "fantasy, serif"))
+    }
+
+    @Test
     fun theDiskCacheStaysUnderItsLimit() {
         val dir = File(cache, "vitro-fonts").apply { mkdirs() }
         // Old files fill the cache to its limit: a new font pushes the oldest out, not past the limit.
@@ -389,6 +417,34 @@ class WebFontsTest {
         drain()
         WebFonts.configure("http://192.0.2.20:8123", emptyList(), cache)
         assertSame(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f, fontFamily = "Pacifico, sans-serif"))
+    }
+
+    @Test
+    fun aCardsFontContextKeepsEverythingElse() {
+        // withFontFamily copies the context: every field but the Android context must be the very same object, so a
+        // parameter added to VitroCardContext later (with a default) can't be dropped silently for cards with a font.
+        val ctx = dev.glassworks.engine.vitro.ui.VitroCardContext(
+            context = activity,
+            haBase = base,
+            store = dev.glassworks.engine.vitro.data.EntityStore(),
+            theme = dev.glassworks.engine.vitro.theme.ThemeResolver.resolve(dev.glassworks.engine.vitro.theme.ThemeCatalog(), true),
+            resources = emptyList(),
+            accessToken = { null },
+            callService = { _, _, _, _ -> },
+            callServiceThen = { _, _, _, _, done -> done(true) },
+            navigate = {},
+            openMoreInfo = {},
+            fetchHistory = { _, _, _ -> },
+            subscribeTemplate = { _, _ -> {} },
+        ).apply { cardVars = mapOf("x" to "1"); cardLayout = "grid" }
+        val copy = ctx.withFontFamily("Pacifico")
+        assertEquals("Pacifico", (copy.context as VitroFontContext).fontFamily)
+        val own = setOf("context", "main", "dp")
+        for (f in ctx.javaClass.declaredFields) {
+            if (java.lang.reflect.Modifier.isStatic(f.modifiers) || f.name in own) continue
+            f.isAccessible = true
+            assertSame("VitroCardContext.${f.name} is copied", f.get(ctx), f.get(copy))
+        }
     }
 
     @Test

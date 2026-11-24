@@ -30,7 +30,7 @@ import java.util.Locale
  * font at a time. Main thread.
  */
 object VitroFonts {
-    enum class Face { INTER, SYSTEM, SERIF, MONOSPACE }
+    enum class Face { INTER, SYSTEM, SERIF, MONOSPACE, CURSIVE }
 
     /** HA's default `--ha-font-family-body`. */
     const val HA_DEFAULT = "Roboto, Noto, sans-serif"
@@ -57,6 +57,9 @@ object VitroFonts {
             else -> null
         }
     }
+
+    private fun genericFace(name: String): Face =
+        if (name.equals("cursive", ignoreCase = true)) Face.CURSIVE else Face.SYSTEM
 
     /** Whether [name], unquoted, is a CSS generic keyword. */
     private fun isGenericName(name: String) = CssFontFaces.familyList(name).firstOrNull()?.generic == true
@@ -98,9 +101,9 @@ object VitroFonts {
             val known = builtIn(name)
             // A bare generic keyword (serif) is the platform's face, never a web font of that name; a quoted one
             // ("serif") is a family like any other, and a stylesheet may declare it.
-            if (generic) {
-                if (known != null) return builtIn(context, known, weight, sizeSp, italic) else continue
-            }
+            // A browser always has a font for a generic, so the list ends there: cursive is Android's own cursive
+            // family, and the generics Android has nothing for (fantasy, emoji, math, ...) its sans-serif.
+            if (generic) return builtIn(context, known ?: genericFace(name), weight, sizeSp, italic)
             // A quoted generic name ("serif") is a family name only: Vitro's own face doesn't stand in for it.
             val own = known?.takeUnless { isGenericName(name) }
             when (val web = WebFonts.lookup(name, weight, italic)) {
@@ -122,7 +125,7 @@ object VitroFonts {
             return when (face) {
                 Face.INTER -> if (inter) Inter.typeface(context, w, sizeSp) else system(w)
                 Face.SYSTEM -> system(w)
-                Face.SERIF, Face.MONOSPACE -> generic(face, w, false)
+                Face.SERIF, Face.MONOSPACE, Face.CURSIVE -> generic(face, w, false)
             }
         }
         return when (face) {
@@ -133,7 +136,7 @@ object VitroFonts {
                 systemItalic(w)
             }
             Face.SYSTEM -> systemItalic(w)
-            Face.SERIF, Face.MONOSPACE -> generic(face, w, true)
+            Face.SERIF, Face.MONOSPACE, Face.CURSIVE -> generic(face, w, true)
         }
     }
 
@@ -149,7 +152,12 @@ object VitroFonts {
                 italic -> Typeface.ITALIC
                 else -> Typeface.NORMAL
             }
-            Typeface.create(if (face == Face.SERIF) Typeface.SERIF else Typeface.MONOSPACE, style)
+            when (face) {
+                Face.SERIF -> Typeface.create(Typeface.SERIF, style)
+                // Android's fonts.xml has a "cursive" family on every version Glassworks runs on.
+                Face.CURSIVE -> Typeface.create("cursive", style)
+                else -> Typeface.create(Typeface.MONOSPACE, style)
+            }
         }
     }
 

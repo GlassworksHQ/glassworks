@@ -284,12 +284,23 @@ class VitroView(
     /** A font arrived while this view wasn't on screen: it draws again when it's attached. */
     private var fontsStale = false
 
+    /** The server and resources this view last set the font loader up for. */
+    private var fontsFor: Pair<String, List<LovelaceResource>>? = null
+
     private fun redrawForFonts() {
-        // Only the view on screen redraws (and so asks for fonts); another one catches up when it's attached.
-        if (!isAttachedToWindow) {
+        // Only the view on screen redraws (and so asks for fonts), and only for its own dashboard's fonts: a redraw
+        // sets the loader up for this view, which would take it away from the view that asked. Another view catches
+        // up when it's attached again.
+        val mine = fontsFor ?: return
+        if (!isAttachedToWindow || !WebFonts.isConfiguredFor(mine.first, mine.second)) {
             fontsStale = true
             return
         }
+        rebuildForFonts()
+    }
+
+    /** Builds the current view again, which also sets the font loader up for this view's dashboard. */
+    private fun rebuildForFonts() {
         fontsStale = false
         val cfg = dashboard ?: return
         if (cfg.views.getOrNull(currentViewIndex) == null) return
@@ -534,6 +545,7 @@ class VitroView(
             val cardCtx = contextFactory?.invoke(theme) ?: return
             // The fonts the dashboard's stylesheets declare: read only once a card draws a family Vitro doesn't have.
             WebFonts.configure(cardCtx.haBase, cardCtx.resources, context.cacheDir)
+            fontsFor = cardCtx.haBase to cardCtx.resources
             val pinned = ArrayList<Pair<View, FrameLayout.LayoutParams>>()
             pendingPinned = pinned
             val built = try {
@@ -1405,7 +1417,8 @@ class VitroView(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         scheduleTick()
-        if (fontsStale) redrawForFonts()
+        // Back on screen after fonts changed elsewhere: build again, taking the font loader back for this dashboard.
+        if (fontsStale) rebuildForFonts()
     }
 
     override fun onDetachedFromWindow() {
