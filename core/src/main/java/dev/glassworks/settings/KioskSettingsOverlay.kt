@@ -1093,11 +1093,19 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             addView(why, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(8f) })
             addView(buttons, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(14f) })
         }
-        val view = FrameLayout(context).apply {
+        val view = object : FrameLayout(context) {
+            // 560 dp, or the room less a margin on a narrow screen: from the width it has now, so a phone turned upright
+            // while a sheet is open keeps the card inside it.
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val lp = card.layoutParams as LayoutParams
+                val w = minOf(px(560f), MeasureSpec.getSize(widthMeasureSpec) - px(32f))
+                if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED && lp.width != w) lp.width = w
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            }
+        }.apply {
             setBackgroundColor(Color.argb(170, 10, 11, 15))
             isClickable = true
             setOnClickListener { close() }
-            // 560 dp, or the screen less a margin on a narrow portrait screen.
             addView(card, LayoutParams(minOf(px(560f), context.resources.displayMetrics.widthPixels - px(32f)), -2, Gravity.CENTER_HORIZONTAL or Gravity.TOP).apply { topMargin = px(40f) })
             visibility = View.GONE
         }

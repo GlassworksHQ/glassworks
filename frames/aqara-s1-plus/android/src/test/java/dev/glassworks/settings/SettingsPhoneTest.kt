@@ -97,6 +97,21 @@ class SettingsPhoneTest {
         assertFalse("no page bar", shown(o, "‹  Settings"))
     }
 
+    /** A sheet opened on its side (a 560 dp card) keeps its card inside the screen once the phone is turned upright. */
+    @Test
+    @Config(qualifiers = "w640dp-h360dp-land-xhdpi")
+    fun aSheetFollowsTheWidthItHas() {
+        val o = open()
+        o.previewSection("screen")
+        Mockup.idle(); lay(o)
+        row(o, "Turn off when idle").performClick()
+        Mockup.idle()
+        val card = generateSequence(Mockup.label(o, "Cancel") as View) { it.parent as? View }.first { (it.parent as? View)?.isClickable == true && it.isClickable }
+        Mockup.layout(o, 720, 1280)
+        val r = android.graphics.Rect().also { card.getDrawingRect(it); (o as ViewGroup).offsetDescendantRectToMyCoords(card, it) }
+        assertTrue("upright, the card is ${card.width} px at ${r.left}..${r.right} of 720", r.left >= 0 && r.right <= 720)
+    }
+
     /** The S1's 960 dp: the sidebar and the page side by side, no bar. */
     @Test
     @Config(qualifiers = "w960dp-h480dp-land-hdpi")
