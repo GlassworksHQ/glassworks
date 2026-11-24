@@ -504,8 +504,7 @@ class MdiIconSpan(val iconName: String, val color: Int, sizePx: Int) :
         canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: Paint,
     ) {
         val d = drawable
-        val fm = paint.fontMetricsInt
-        val transY = y + (fm.descent + fm.ascent) / 2 - d.bounds.bottom / 2
+        val transY = (top + bottom) / 2 - d.bounds.height() / 2
         canvas.save()
         canvas.translate(x, transY.toFloat())
         d.draw(canvas)

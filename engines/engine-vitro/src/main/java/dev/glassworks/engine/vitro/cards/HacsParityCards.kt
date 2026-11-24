@@ -1213,7 +1213,7 @@ open class StackInCardView(
         val stack = LinearLayout(ctx.context).apply {
             orientation = if (horizontal) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             if (keep.optBoolean("background", false) || keep.optBoolean("margin", false)) {
-                val pad = ctx.px(12f)
+                val pad = ctx.px(10f)
                 setPadding(pad, pad, pad, pad)
             }
         }
