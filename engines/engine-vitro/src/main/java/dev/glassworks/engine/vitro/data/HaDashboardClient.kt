@@ -619,13 +619,13 @@ class HaDashboardClient(
             msg.put("entity_ids", JSONArray(filter.toList()))
         }
         // This subscription owns the store's entity writes from now on; a retired one's events (one the reader
-        // already picked up when it was replaced) are dropped, even before subscribe() returns. Switched under the
-        // write lock, so an old event mid-commit finishes before the snapshot state is reset.
+        // already picked up when it was replaced) are dropped, even before subscribe() returns. Switched without the
+        // write lock: this runs on the UI thread when the view changes, and the reader can hold that lock for the
+        // whole first snapshot (hundreds of ms on a panel). An old event mid-commit finishes its write, and its
+        // snapshot mark, keyed to its owner, no longer lands.
         val owner = Any()
-        synchronized(storeWriteLock) {
-            store.resetSnapshot()
-            entityOwner = owner
-        }
+        entityOwner = owner
+        store.resetSnapshot(owner)
         // The first event is the subscription's snapshot: an entity of [filter] missing from it is gone (deleted while
         // the panel was offline) and leaves the store. Later events are diffs.
         val first = AtomicBoolean(true)
@@ -635,7 +635,7 @@ class HaDashboardClient(
             val isFirst = first.getAndSet(false)
             store.applyCompressedEvent(ev, snapshotScope = if (isFirst) filter else null)
             if (isFirst) {
-                store.markSnapshot(filter.toSet())
+                store.markSnapshot(filter.toSet(), owner)
                 loadDisplayFor(displayIds())
             }
         } }.takeIf { it > 0 }

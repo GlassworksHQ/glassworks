@@ -394,6 +394,34 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun changingTheViewNeverWaitsForTheSnapshotBeingApplied() {
+        // The reader applies the first snapshot under the store's write lock; here a store listener holds it there.
+        val inSnapshot = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        store.subscribe("light.lounge_lamp") { s ->
+            if (s != null && inSnapshot.count > 0) {
+                inSnapshot.countDown()
+                release.await(10, TimeUnit.SECONDS)
+            }
+        }
+        val c = newClient()
+        c.start(null)
+        assertTrue("snapshot reached the store", inSnapshot.await(10, TimeUnit.SECONDS))
+        try {
+            // The UI thread switching views meanwhile returns at once instead of waiting for the lock.
+            val switched = CompletableFuture.runAsync { c.subscribeViewEntities(setOf("sensor.kitchen_temp")) }
+            switched.get(2, TimeUnit.SECONDS)
+        } finally {
+            release.countDown()
+        }
+        // The retired snapshot's mark doesn't land: the new subscription's own does, once its first event arrives.
+        awaitCondition("resubscribed") { server.commands("subscribe_entities").size == 2 }
+        awaitCondition("new snapshot") { store["sensor.kitchen_temp"] != null && store.isMissing("sensor.not_in_ha").not() }
+        c.subscribeViewEntities(setOf("sensor.kitchen_temp", "sensor.not_in_ha"))
+        awaitCondition("missing entity reported by the third subscription") { store.isMissing("sensor.not_in_ha") }
+    }
+
+    @Test
     fun compressedDiffEventsUpdateTheStoreAndWakeItsSubscribers() {
         connected()
         awaitCondition("entities") { store.size() == 4 }

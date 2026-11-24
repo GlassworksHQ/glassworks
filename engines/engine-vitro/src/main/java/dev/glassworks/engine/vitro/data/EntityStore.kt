@@ -10,6 +10,7 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /** Snapshot of one Home Assistant entity. Immutable for lock-free UI reads. */
 data class EntityState(
@@ -189,26 +190,37 @@ class EntityStore {
      * The entity ids the current `subscribe_entities` asked for (empty means every entity), once its first event
      * has arrived; null before that. An id it covers that has no state then doesn't exist in HA.
      */
-    @Volatile
-    private var snapshotFilter: Set<String>? = null
+    private val snapshot = AtomicReference(Snapshot(null, null))
+
+    /** The subscription expected to answer next ([owner], any token) and, once it has, its [filter]. */
+    private class Snapshot(val owner: Any?, val filter: Set<String>?)
 
     /** True when HA has answered for [entityId] and has no such entity: HA's cards show "Entity not found". */
     fun isMissing(entityId: String): Boolean {
-        val f = snapshotFilter ?: return false
+        val f = snapshot.get().filter ?: return false
         return (f.isEmpty() || entityId in f) && states[entityId] == null
     }
 
-    /** A new subscription is on its way: nothing counts as missing until its first event. */
-    fun resetSnapshot() {
-        snapshotFilter = null
+    /**
+     * A new subscription, [owner], is on its way: nothing counts as missing until its first event. Lock-free, so the
+     * UI thread switching views never waits for a snapshot being applied: that one's [markSnapshot] then no longer
+     * lands.
+     */
+    fun resetSnapshot(owner: Any? = null) {
+        snapshot.set(Snapshot(owner, null))
     }
 
-    /** The first event of the subscription for [filter] has been applied: tells the missing ids' listeners. */
-    fun markSnapshot(filter: Set<String>) {
-        snapshotFilter = filter
+    /**
+     * The first event of [owner]'s subscription for [filter] has been applied: tells the missing ids' listeners.
+     * False, and nothing changes, when another subscription has been asked for since ([resetSnapshot]).
+     */
+    fun markSnapshot(filter: Set<String>, owner: Any? = null): Boolean {
+        val current = snapshot.get()
+        if (current.owner !== owner || !snapshot.compareAndSet(current, Snapshot(owner, filter))) return false
         for ((id, list) in listeners) {
             if (states[id] == null && (filter.isEmpty() || id in filter)) list.forEach { it(null) }
         }
+        return true
     }
 
     /** Calls every listener again with its entity's current state (HA's display data arrived: re-render). */
@@ -325,8 +337,12 @@ class EntityStore {
 
     /** Forgets every entity (the page moved to another Home Assistant) and tells their listeners they are gone. */
     fun clear() {
-        // The old server's snapshot says nothing about which entities the next one lacks.
-        snapshotFilter = null
+        // The old server's snapshot says nothing about which entities the next one lacks (the subscription on its
+        // way, if any, still marks its own).
+        while (true) {
+            val current = snapshot.get()
+            if (snapshot.compareAndSet(current, Snapshot(current.owner, null))) break
+        }
         val gone = LinkedHashSet(states.keys)
         states.clear()
         if (gone.isNotEmpty()) dispatch(gone)

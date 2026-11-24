@@ -83,6 +83,23 @@ class EntityStoreTest {
     }
 
     @Test
+    fun aRetiredSubscriptionsSnapshotMarkNeverLands() {
+        val store = storeWithLamp()
+        val old = Any()
+        val next = Any()
+        store.resetSnapshot(old)
+        store.resetSnapshot(next) // the view changed while the old snapshot was still being applied
+        assertFalse(store.markSnapshot(setOf("sensor.gone"), old))
+        assertFalse(store.isMissing("sensor.gone"))
+        assertTrue(store.markSnapshot(setOf("sensor.gone"), next))
+        assertTrue(store.isMissing("sensor.gone"))
+        // clear() forgets the filter but not who answers next.
+        store.resetSnapshot(old)
+        store.clear()
+        assertTrue(store.markSnapshot(emptySet(), old))
+    }
+
+    @Test
     fun clearForgetsTheOldServersSnapshotToo() {
         val store = storeWithLamp()
         store.markSnapshot(emptySet())
