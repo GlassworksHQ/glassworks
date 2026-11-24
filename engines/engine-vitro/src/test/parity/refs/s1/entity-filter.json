@@ -1,0 +1,253 @@
+{
+ "case": "entity-filter",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1795543680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 235
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 218.8,
+   "type": "hui-entity-filter-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Lights off",
+   "x": 17,
+   "y": 21,
+   "w": 99.06,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "LED Strip Window",
+   "x": 73,
+   "y": 77.59,
+   "w": 110.42,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Sunset Lamp Sunset",
+   "x": 73,
+   "y": 125.59,
+   "w": 128.13,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Entryway Ceiling Light",
+   "x": 73,
+   "y": 173.59,
+   "w": 136.7,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.entryway_ceiling_light": {
+   "s": "off",
+   "a": {
+    "min_color_temp_kelvin": 2702,
+    "max_color_temp_kelvin": 6535,
+    "supported_color_modes": [
+     "color_temp"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "color_temp_kelvin": null,
+    "hs_color": null,
+    "rgb_color": null,
+    "xy_color": null,
+    "off_with_transition": true,
+    "off_brightness": 153,
+    "friendly_name": "Entryway Ceiling Light",
+    "supported_features": 40
+   },
+   "lc": 1795543475.3965635
+  },
+  "light.sunset_lamp": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": null,
+    "off_with_transition": false,
+    "off_brightness": null,
+    "icon": "mdi:weather-sunset",
+    "friendly_name": "Sunset",
+    "supported_features": 8
+   },
+   "lc": 1795532578.3925707
+  },
+  "light.u7_pro_xg_wall_led": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": "onoff",
+    "friendly_name": "Bedroom AP LED",
+    "supported_features": 0
+   },
+   "lc": 1795532357.020664
+  },
+  "light.window_accent": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "xy"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "hs_color": null,
+    "rgb_color": null,
+    "xy_color": null,
+    "off_with_transition": false,
+    "off_brightness": 254,
+    "icon": "mdi:window-open",
+    "friendly_name": "Window",
+    "supported_features": 40
+   },
+   "lc": 1795507611.0189574
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.entryway_ceiling_light",
+    "pl": "zha",
+    "tk": "light",
+    "di": "device-1"
+   },
+   {
+    "ei": "light.sunset_lamp",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:weather-sunset",
+    "di": "device-2",
+    "en": "Sunset"
+   },
+   {
+    "ei": "light.u7_pro_xg_wall_led",
+    "pl": "unifi",
+    "tk": "led_control",
+    "di": "device-3",
+    "en": "LED"
+   },
+   {
+    "ei": "light.window_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:window-open",
+    "di": "device-4",
+    "en": "Window"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Entryway Ceiling Light"
+   },
+   {
+    "id": "device-2",
+    "name": "Sunset Lamp"
+   },
+   {
+    "id": "device-3",
+    "name": "Bedroom AP"
+   },
+   {
+    "id": "device-4",
+    "name": "LED Strip"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light"
+   ],
+   "platforms": [
+    "unifi",
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "light": {
+      "light": {
+       "state_attributes": {
+        "effect": {
+         "state": {
+          "colorloop": "mdi:looks"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

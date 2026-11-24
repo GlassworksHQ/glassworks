@@ -41,7 +41,7 @@ HA access comes from `~/.t3/glassworks-m1/vitro-parity/ha.json` (`{"origin": …
 | Path | What |
 |---|---|
 | `engines/engine-vitro/src/test/parity/frames.json` | The panels: S1 960×480 CSS at 1.5, Pixel Tablet 1280×800 at 2, Mirror 720×1280 at 1.5 |
-| `…/corpus/<case>.json` | One card per file: `card`, and optionally `title`, `frames`, `dark` (default true), `theme` (a view theme), `span` (section columns), `threshold`, and `masks` (CSS px regions relative to the card, each with a `why`) |
+| `…/corpus/<case>.json` | One card per file: `card`, and optionally `title`, `frames`, `dark` (default true), `theme` (a view theme), `span` (section columns), `threshold`, `masks` (CSS px regions relative to the card, each with a `why`), and `expect` (`{entity_id: state}`: a refresh writes no reference for the case while an entity is in another state, so a case about a light that is on never quietly becomes one about a light that is off) |
 | `…/refs/<frame>/<case>.png` and `.json` | Home Assistant's render and what came with it |
 | `…/refs/shared.json` | HA's version, the config fields Vitro reads, and the themes |
 | `…/assets/` | Images the fixture server hands Vitro, standing in for HA's `/static` |

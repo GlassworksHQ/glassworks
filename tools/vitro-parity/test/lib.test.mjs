@@ -297,3 +297,12 @@ test('scrubGraphCalls drops private attributes from recorded history, nothing el
   assert.deepEqual(out[0].events[0].states['climate.x'][0].a, { temperature: 21 });
   assert.deepEqual(out[1], calls[1]);
 });
+
+test('unmetExpectations names the entities not in the state a case expects', async () => {
+  const { unmetExpectations } = await import('../lib/states.mjs');
+  const states = { 'light.a': { s: 'on', a: {} }, 'light.b': { s: 'off', a: {} } };
+  assert.deepEqual(unmetExpectations(undefined, states), []);
+  assert.deepEqual(unmetExpectations({ 'light.a': 'on' }, states), []);
+  assert.deepEqual(unmetExpectations({ 'light.a': 'on', 'light.b': 'on', 'light.c': 'off' }, states),
+    ['light.b: expected on, got off', 'light.c: expected off, got no state']);
+});
