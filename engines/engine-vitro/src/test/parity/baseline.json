@@ -57,11 +57,11 @@
   "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph). Left: Vitro sizes Markdown runs in whole device px (AbsoluteSizeSpan), so the 16.38 px h3 draws at 16.5-16.67 (fractional sizes tried 2026-11-24: font deltas 0 but no pixel gain, markdown-table worse); the 18 px line sits 0.85-1.35 px lower and the card 0.3-0.5 px taller; Android's Roboto against the frontend's web Roboto. The report's +4.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it"
  },
  "mirror/media-control": {
-  "pixel": 0.8695,
-  "bounds": 37,
-  "font": 2,
+  "pixel": 0.0226,
+  "bounds": 1,
+  "font": 0,
   "missingText": 0,
-  "reason": "a different design: HA's idle card is a filled accent-blue block with placeholder art, a large play button and browse/source icons; Vitro draws a dark card with prev/play/next, \"Idle\" and a volume slider, ~37 px taller (coverage #794, 2026-11-24)"
+  "reason": "at 1.5x HA's border is 1.5 px and Vitro's 1 px (every card's), so the blue inside is 2 device px wider (748 vs 746) and each white icon and the name sit half a pixel off; the diff is their edges and the border line, 2.3% on this small high-contrast card. The layout, colors and sizes match (the tablet case matches; 2026-11-24)"
  },
  "mirror/mushroom-title": {
   "pixel": 0.038,
@@ -134,11 +134,11 @@
   "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph). Left: Vitro sizes Markdown runs in whole device px (AbsoluteSizeSpan), so the 16.38 px h3 draws at 16.5-16.67 (fractional sizes tried 2026-11-24: font deltas 0 but no pixel gain, markdown-table worse); the 18 px line sits 0.85-1.35 px lower and the card 0.3-0.5 px taller; Android's Roboto against the frontend's web Roboto. The report's +4.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it"
  },
  "s1/media-control": {
-  "pixel": 0.8695,
-  "bounds": 37,
-  "font": 2,
+  "pixel": 0.0226,
+  "bounds": 1,
+  "font": 0,
   "missingText": 0,
-  "reason": "a different design: HA's idle card is a filled accent-blue block with placeholder art, a large play button and browse/source icons; Vitro draws a dark card with prev/play/next, \"Idle\" and a volume slider, ~37 px taller (coverage #794, 2026-11-24)"
+  "reason": "at 1.5x HA's border is 1.5 px and Vitro's 1 px (every card's), so the blue inside is 2 device px wider (748 vs 746) and each white icon and the name sit half a pixel off; the diff is their edges and the border line, 2.3% on this small high-contrast card. The layout, colors and sizes match (the tablet case matches; 2026-11-24)"
  },
  "s1/mushroom-title": {
   "pixel": 0.038,
@@ -209,13 +209,6 @@
   "font": 0.1,
   "missingText": 0,
   "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph). Left: Vitro sizes Markdown runs in whole device px (AbsoluteSizeSpan), so the 16.38 px h3 draws at 16.5-16.67 (fractional sizes tried 2026-11-24: font deltas 0 but no pixel gain, markdown-table worse); the 18 px line sits 0.85-1.35 px lower and the card 0.3-0.5 px taller; Android's Roboto against the frontend's web Roboto. The report's +4.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it"
- },
- "tablet/media-control": {
-  "pixel": 0.8605,
-  "bounds": 37.7,
-  "font": 2,
-  "missingText": 0,
-  "reason": "a different design: HA's idle card is a filled accent-blue block with placeholder art, a large play button and browse/source icons; Vitro draws a dark card with prev/play/next, \"Idle\" and a volume slider, ~37 px taller (coverage #794, 2026-11-24)"
  },
  "tablet/mushroom-entity": {
   "pixel": 0.0225,
