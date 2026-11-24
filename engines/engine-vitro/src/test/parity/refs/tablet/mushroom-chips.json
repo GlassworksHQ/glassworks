@@ -31,7 +31,7 @@
  "texts": [
   {
    "slot": 0,
-   "text": "20.7 °C",
+   "text": "20.4 °C",
    "x": 33.39,
    "y": 11.59,
    "w": 35.69,
@@ -43,7 +43,7 @@
   },
   {
    "slot": 0,
-   "text": "48%",
+   "text": "47%",
    "x": 120.47,
    "y": 11.59,
    "w": 20.38,
@@ -55,7 +55,7 @@
   },
   {
    "slot": 0,
-   "text": "Fog ⸱ 8.7 °C",
+   "text": "Fog ⸱ 9.1 °C",
    "x": 192.23,
    "y": 11.59,
    "w": 56.17,
@@ -68,38 +68,38 @@
  ],
  "states": {
   "sensor.living_room_airdot_living_room_humidity": {
-   "s": "48.3499984741211",
+   "s": "47.2400016784668",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "%",
     "device_class": "humidity",
     "friendly_name": "AirDot Living Room Humidity"
    },
-   "lc": 1795511714.9144104
+   "lc": 1795522954.9950962
   },
   "sensor.living_room_airdot_living_room_temperature": {
-   "s": "20.6849994659424",
+   "s": "20.3549995422363",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
     "friendly_name": "AirDot Living Room Temperature"
    },
-   "lc": 1795511724.9347365
+   "lc": 1795522954.970371
   },
   "weather.forecast_home": {
    "s": "fog",
    "a": {
-    "temperature": 8.7,
-    "dew_point": 7.7,
+    "temperature": 9.1,
+    "dew_point": 7.8,
     "temperature_unit": "°C",
-    "humidity": 94,
-    "cloud_coverage": 77.3,
+    "humidity": 92,
+    "cloud_coverage": 99.2,
     "uv_index": 0,
-    "pressure": 1022.6,
+    "pressure": 1021.3,
     "pressure_unit": "hPa",
-    "wind_bearing": 85.4,
-    "wind_speed": 9.7,
+    "wind_bearing": 110.4,
+    "wind_speed": 16.6,
     "wind_speed_unit": "km/h",
     "visibility_unit": "km",
     "precipitation_unit": "mm",
@@ -108,12 +108,111 @@
     "supported_features": 3
    },
    "lc": 1795504913.209642,
-   "lu": 1795511633.4778297
+   "lu": 1795521713.4924083
   }
  },
  "templates": {
   "{{ states('sensor.living_room_airdot_living_room_humidity') | float(0) | round(0) | int }}%": {
-   "result": "48%"
+   "result": "47%"
+  }
+ },
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.living_room_airdot_living_room_humidity",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "device-1",
+    "en": "Humidity"
+   },
+   {
+    "ei": "sensor.living_room_airdot_living_room_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "device-1",
+    "en": "Temperature"
+   },
+   {
+    "ei": "weather.forecast_home",
+    "pl": "met",
+    "di": "device-2"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "AirDot Living Room"
+   },
+   {
+    "id": "device-2",
+    "name": "Home"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor",
+    "weather"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "humidity": {
+      "default": "mdi:water-percent"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    },
+    "weather": {
+     "_": {
+      "default": "mdi:weather-partly-cloudy",
+      "state": {
+       "clear-night": "mdi:weather-night",
+       "cloudy": "mdi:weather-cloudy",
+       "exceptional": "mdi:alert-circle-outline",
+       "fog": "mdi:weather-fog",
+       "hail": "mdi:weather-hail",
+       "lightning": "mdi:weather-lightning",
+       "lightning-rainy": "mdi:weather-lightning-rainy",
+       "pouring": "mdi:weather-pouring",
+       "rainy": "mdi:weather-rainy",
+       "snowy": "mdi:weather-snowy",
+       "snowy-rainy": "mdi:weather-snowy-rainy",
+       "sunny": "mdi:weather-sunny",
+       "windy": "mdi:weather-windy",
+       "windy-variant": "mdi:weather-windy-variant"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On",
+    "component.weather.entity_component._.state.clear-night": "Clear, night",
+    "component.weather.entity_component._.state.cloudy": "Cloudy",
+    "component.weather.entity_component._.state.exceptional": "Exceptional",
+    "component.weather.entity_component._.state.fog": "Fog",
+    "component.weather.entity_component._.state.hail": "Hail",
+    "component.weather.entity_component._.state.lightning": "Lightning",
+    "component.weather.entity_component._.state.lightning-rainy": "Lightning, rainy",
+    "component.weather.entity_component._.state.partlycloudy": "Partly cloudy",
+    "component.weather.entity_component._.state.pouring": "Pouring",
+    "component.weather.entity_component._.state.rainy": "Rainy",
+    "component.weather.entity_component._.state.snowy": "Snowy",
+    "component.weather.entity_component._.state.snowy-rainy": "Snowy, rainy",
+    "component.weather.entity_component._.state.sunny": "Sunny",
+    "component.weather.entity_component._.state.windy": "Windy",
+    "component.weather.entity_component._.state.windy-variant": "Windy, cloudy"
+   },
+   "entity": {}
   }
  }
 }

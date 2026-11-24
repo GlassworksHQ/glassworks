@@ -337,10 +337,20 @@ class MdSheet(val rules: List<MdRule>) {
 
         fun parse(css: String?): MdSheet {
             if (css.isNullOrBlank()) return EMPTY
-            return MdSheet(ThemeResolver.cssRules(css).mapNotNull { (sel, decls) ->
+            synchronized(cache) { cache[css] }?.let { return it }
+            val sheet = MdSheet(ThemeResolver.cssRules(css).mapNotNull { (sel, decls) ->
                 val selectors = CssSelector.parseList(sel)
                 if (selectors.isEmpty() || decls.isEmpty()) null else MdRule(selectors, decls)
             })
+            synchronized(cache) { cache[css] = sheet }
+            return sheet
+        }
+
+        // A sheet is immutable, and dashboards repeat the same card_mod sheet on many cards: parse each text once,
+        // keeping the most recently used [CACHE_SIZE].
+        private const val CACHE_SIZE = 128
+        private val cache = object : LinkedHashMap<String, MdSheet>(32, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, MdSheet>?) = size > CACHE_SIZE
         }
     }
 }

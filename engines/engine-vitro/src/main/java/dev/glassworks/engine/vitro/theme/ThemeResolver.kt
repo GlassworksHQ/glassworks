@@ -258,6 +258,27 @@ object ThemeResolver {
     private const val HA_DEFAULT_FONT_SIZE_PX = 14f
     private const val MIN_FONT_SCALE = 0.7f
     private const val MAX_FONT_SCALE = 2.2f
+    // Compiled once: card_mod is parsed for every card a view builds, and compiling a pattern per property lookup
+    // cost a slow panel more than a second per view.
+    private val BLUR = Regex("""blur\(\s*([\d.]+)px\s*\)""", RegexOption.IGNORE_CASE)
+    private val PX_NUMBER = Regex("""([\d.]+)px""")
+    private val WHITESPACE = Regex("""\s+""")
+    private val CUSTOM_PROPERTY = Regex("""(?:^|[;\n{])\s*--([\w-]+)\s*:\s*([^;\n]+)""")
+    private val LETTER_SPACING = Regex("""(-?[\d.]+)\s*(em|px|rem)?""", RegexOption.IGNORE_CASE)
+    private val TRANSLATE = Regex("""translate\(([^,)]+)(?:,([^)]+))?\)""")
+    private val STOP_PERCENT = Regex("""\s+[\d.]+%$""")
+    private val STOP_POSITION = Regex("""\s+[\d.]+(?:%|px)$""")
+    // One pattern per property name; the names are the literals below, so these stay small.
+    private val declProps = java.util.concurrent.ConcurrentHashMap<String, Regex>()
+    private val themeVarProps = java.util.concurrent.ConcurrentHashMap<String, Regex>()
+    private fun declProp(name: String): Regex = declProps.getOrPut(name) {
+        // The value keeps a trailing `!important`: [parseCardMod] lets it win, as the browser does.
+        Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;\n]+)""", RegexOption.IGNORE_CASE)
+    }
+    private fun themeVarProp(name: String): Regex = themeVarProps.getOrPut(name) {
+        Regex("""(?:^|[;\n{])\s*$name\s*:\s*([^;!\n}]+)""", RegexOption.IGNORE_CASE)
+    }
+
     private val JINJA_PATTERN = Regex("""\{%.*?%\}|\{\{.*?\}\}|\{#.*?#\}""", RegexOption.DOT_MATCHES_ALL)
     private val CSS_COMMENT = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
     private val TIME_PATTERN = Regex("""([\d.]+)(ms|s)""")
@@ -525,7 +546,7 @@ object ThemeResolver {
             val angle = m.groupValues[1].toFloatOrNull() ?: sideAngle ?: 180f
             val stopParts = if (sideAngle != null) parts.drop(1) else parts
             val stops = stopParts.mapNotNull { stop ->
-                val cleaned = stop.trim().replace(Regex("""\s+[\d.]+%$"""), "")
+                val cleaned = stop.trim().replace(STOP_PERCENT, "")
                 parseColor(cleaned)
             }
             // Keep the parsed stops (with their positions) for painting; `colors` stays the plain list.
@@ -533,7 +554,7 @@ object ThemeResolver {
         }
         RADIAL_GRADIENT_PATTERN.find(spec)?.let { m ->
             val stops = splitTopLevelCommas(m.groupValues[1]).mapNotNull { stop ->
-                parseColor(stop.trim().replace(Regex("""\s+[\d.]+(?:%|px)$"""), ""))
+                parseColor(stop.trim().replace(STOP_POSITION, ""))
             }
             if (stops.size >= 2) return ThemeBackground.RadialGradient(stops.toIntArray())
         }
@@ -546,20 +567,21 @@ object ThemeResolver {
         val css = vars["card-mod-card"].orEmpty() + "\n" + vars["card-mod-card-yaml"].orEmpty()
         if (css.isBlank()) return CardModStyle()
         val complex = "$" in css || "::part" in css || "@keyframes" in css || "{{" in css || "ha-state-icon" in css
-        fun prop(name: String): String? =
-            Regex("""(?:^|[;\n{])\s*$name\s*:\s*([^;!\n}]+)""", RegexOption.IGNORE_CASE).find(css)?.groupValues?.get(1)?.trim()
+        val lowerCss = css.lowercase(Locale.ROOT)
+        fun prop(name: String): String? = if (name !in lowerCss) null else
+            themeVarProp(name).find(css)?.groupValues?.get(1)?.trim()
 
         val bg = prop("background-color")?.let(::parseColor) ?: prop("background")?.let(::parseColor)
         val radius = prop("border-radius")?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }
         val opacity = prop("opacity")?.toFloatOrNull()?.coerceIn(0f, 1f)
         val blur = prop("backdrop-filter")?.let { bf ->
-            Regex("""blur\(\s*([\d.]+)px\s*\)""", RegexOption.IGNORE_CASE).find(bf)?.groupValues?.get(1)?.toFloatOrNull()
+            BLUR.find(bf)?.groupValues?.get(1)?.toFloatOrNull()
         }
         var bw: Float? = null
         var bc: Int? = null
         prop("border")?.let { border ->
-            Regex("""([\d.]+)px""").find(border)?.groupValues?.get(1)?.toFloatOrNull()?.let { bw = it }
-            border.split(Regex("""\s+""")).lastOrNull()?.let(::parseColor)?.let { bc = it }
+            PX_NUMBER.find(border)?.groupValues?.get(1)?.toFloatOrNull()?.let { bw = it }
+            border.split(WHITESPACE).lastOrNull()?.let(::parseColor)?.let { bc = it }
         }
         prop("border-width")?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }?.let { bw = it }
         prop("border-color")?.let(::parseColor)?.let { bc = it }
@@ -573,20 +595,46 @@ object ThemeResolver {
      * [CardModStyle.hasComplexSelectors]. `var(--x)` resolves against [vars] (theme variables, no `--` prefix).
      */
     fun parseCardMod(css: String, vars: Map<String, String> = emptyMap()): CardModStyle {
+        val key = CardModKey(css, vars)
+        synchronized(cardModCache) { cardModCache[key] }?.let { return it }
+        val parsed = parseCardModUncached(css, vars)
+        synchronized(cardModCache) { cardModCache[key] = parsed }
+        return parsed
+    }
+
+    /**
+     * A view parses the same `card_mod` text several times per card (layout, pinning, visibility, the surface, its
+     * variables) and often across cards, against the same theme. [CardModStyle] is an immutable value, so the result is
+     * kept per text and theme variable map (by identity: a theme resolves to one map), at most [CARD_MOD_CACHE] of them.
+     */
+    private class CardModKey(val css: String, val vars: Map<String, String>) {
+        override fun equals(other: Any?) = other is CardModKey && other.vars === vars && other.css == css
+        override fun hashCode() = css.hashCode() * 31 + System.identityHashCode(vars)
+    }
+
+    private const val CARD_MOD_CACHE = 256
+    private val cardModCache = object : LinkedHashMap<CardModKey, CardModStyle>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<CardModKey, CardModStyle>?) = size > CARD_MOD_CACHE
+    }
+
+    private fun parseCardModUncached(css: String, vars: Map<String, String>): CardModStyle {
         val cleaned = JINJA_PATTERN.replace(CSS_COMMENT.replace(css, " "), " ")
         if (cleaned.isBlank()) return CardModStyle()
         val (decls, otherRules) = hostDeclarations(cleaned)
         // Custom properties cascade like any other: per name, the last `!important` declaration wins, else the last.
-        val custom = Regex("""(?:^|[;\n{])\s*--([\w-]+)\s*:\s*([^;\n]+)""").findAll(decls)
+        val custom = CUSTOM_PROPERTY.findAll(decls)
             .groupBy({ it.groupValues[1] }, { it.groupValues[2] })
             .mapValues { (_, values) ->
                 val winner = values.lastOrNull { IMPORTANT.containsMatchIn(it) } ?: values.last()
                 resolveValue(winner.replace(IMPORTANT, "").trim(), vars, 0)
             }
+        // Most of the properties asked for below aren't there: skip the pattern when the name isn't in the text at all
+        // (the pattern matches ASCII case-insensitively, so a lowercase miss is always a pattern miss).
+        val lowerDecls = decls.lowercase(Locale.ROOT)
         // As in the browser: the last `!important` declaration wins, else the last one. card-mod keeps the flag.
         fun prop(name: String): String? {
-            val values = Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;\n]+)""", RegexOption.IGNORE_CASE).findAll(decls)
-                .map { it.groupValues[1] }.toList()
+            if (name !in lowerDecls) return null
+            val values = declProp(name).findAll(decls).map { it.groupValues[1] }.toList()
             val winner = values.lastOrNull { IMPORTANT.containsMatchIn(it) } ?: values.lastOrNull()
             return winner?.replace(IMPORTANT, "")?.trim()?.takeIf { it.isNotEmpty() }?.let { resolveValue(it, vars, 0) }
         }
@@ -606,7 +654,7 @@ object ThemeResolver {
             if (o.endsWith("%")) o.dropLast(1).toFloatOrNull()?.div(100f) else o.toFloatOrNull()
         }?.coerceIn(0f, 1f)
         val blur = prop("backdrop-filter")?.let { bf ->
-            Regex("""blur\(\s*([\d.]+)px\s*\)""", RegexOption.IGNORE_CASE).find(bf)?.groupValues?.get(1)?.toFloatOrNull()
+            BLUR.find(bf)?.groupValues?.get(1)?.toFloatOrNull()
         }
         var bw: Float? = null
         var bc: Int? = null
@@ -614,7 +662,7 @@ object ThemeResolver {
         if (border != null && (border.equals("none", ignoreCase = true) || border == "0")) {
             bw = 0f
         } else if (border != null) {
-            Regex("""([\d.]+)px""").find(border)?.groupValues?.get(1)?.toFloatOrNull()?.let { bw = it }
+            PX_NUMBER.find(border)?.groupValues?.get(1)?.toFloatOrNull()?.let { bw = it }
             splitTopLevelSpaces(border).lastOrNull()?.let(::parseColor)?.let { bc = it }
         }
         prop("border-width")?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }?.let { bw = it }
@@ -634,7 +682,7 @@ object ThemeResolver {
         val fontSize = prop("font-size")?.let { parseDimensionDp(it, -1f) }?.takeIf { it > 0f }
         val fontWeight = prop("font-weight")?.let(::parseFontWeight)
         val letterSpacing = prop("letter-spacing")?.let { ls ->
-            val m = Regex("""(-?[\d.]+)\s*(em|px|rem)?""", RegexOption.IGNORE_CASE).find(ls) ?: return@let null
+            val m = LETTER_SPACING.find(ls) ?: return@let null
             val v = m.groupValues[1].toFloatOrNull() ?: return@let null
             when (m.groupValues[2].lowercase(Locale.ROOT)) {
                 "em" -> v
@@ -646,7 +694,7 @@ object ThemeResolver {
         val position = prop("position")?.lowercase(Locale.ROOT)
         val transform = prop("transform")?.lowercase(Locale.ROOT).orEmpty().replace(" ", "")
         // Every translate in the list counts, as the checker reads it (`translate(0, 0) translate(0, -50%)` centers Y).
-        val translates = Regex("""translate\(([^,)]+)(?:,([^)]+))?\)""").findAll(transform).toList()
+        val translates = TRANSLATE.findAll(transform).toList()
         val centerY = "translatey(-50%)" in transform || translates.any { it.groupValues[2] == "-50%" }
         val centerX = "translatex(-50%)" in transform || translates.any { it.groupValues[1] == "-50%" }
 
@@ -808,13 +856,16 @@ object ThemeResolver {
      * not the card.
      */
     internal fun isHostSelector(selector: String): Boolean = CssSelector.splitTopLevel(selector, ',').any { raw ->
-        val s = raw.trim().lowercase(Locale.ROOT).replace(Regex("""\s+"""), " ")
+        val s = raw.trim().lowercase(Locale.ROOT).replace(WHITESPACE, " ")
         s == "ha-card" || s == ":host" || s == "." || s == ":host ha-card" || s == ":host > ha-card" ||
             (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && !INTERACTION.containsMatchIn(s) &&
-                !hasCombinator(s) && !PSEUDO_ELEMENT.containsMatchIn(s.replace(Regex("""\[[^\]]*\]"""), "[]")))
+                !hasCombinator(s) && !PSEUDO_ELEMENT.containsMatchIn(s.replace(ATTRIBUTE, "[]")))
     }
 
-    private fun inset(value: String): String? = value.takeUnless { it.trim().lowercase(Locale.ROOT) in setOf("auto", "unset", "initial") }
+    private val NO_INSET = setOf("auto", "unset", "initial")
+    private val ATTRIBUTE = Regex("""\[[^\]]*\]""")
+
+    private fun inset(value: String): String? = value.takeUnless { it.trim().lowercase(Locale.ROOT) in NO_INSET }
 
     /** States a card is in only while touched or focused: a rule for one isn't the card at rest. */
     private val INTERACTION = Regex(""":(hover|active|focus|focus-visible|focus-within)\b""")
@@ -894,7 +945,7 @@ object ThemeResolver {
     }
 
     private fun sideToAngle(side: String): Float? {
-        val words = side.removePrefix("to ").trim().split(Regex("""\s+""")).toSet()
+        val words = side.removePrefix("to ").trim().split(WHITESPACE).toSet()
         val top = "top" in words
         val bottom = "bottom" in words
         val left = "left" in words

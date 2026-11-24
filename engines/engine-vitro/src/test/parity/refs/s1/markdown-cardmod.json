@@ -43,10 +43,10 @@
   },
   {
    "slot": 0,
-   "text": "20.7°",
+   "text": "20.4°",
    "x": 22,
    "y": 35,
-   "w": 131.27,
+   "w": 132.83,
    "h": 68,
    "size": 56,
    "weight": 300,
@@ -55,10 +55,10 @@
   },
   {
    "slot": 0,
-   "text": "Humidity 48%",
+   "text": "Humidity 47%",
    "x": 22,
    "y": 101,
-   "w": 101.16,
+   "w": 100.38,
    "h": 19,
    "size": 15,
    "weight": 400,
@@ -68,29 +68,82 @@
  ],
  "states": {
   "sensor.living_room_airdot_living_room_humidity": {
-   "s": "48.3600006103516",
+   "s": "47.2400016784668",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "%",
     "device_class": "humidity",
     "friendly_name": "AirDot Living Room Humidity"
    },
-   "lc": 1795511684.9075682
+   "lc": 1795522954.9950962
   },
   "sensor.living_room_airdot_living_room_temperature": {
-   "s": "20.6849994659424",
+   "s": "20.3549995422363",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
     "friendly_name": "AirDot Living Room Temperature"
    },
-   "lc": 1795511704.9057643
+   "lc": 1795522954.970371
   }
  },
  "templates": {
   "###### Inside\n# {{ '%.1f' | format(states('sensor.living_room_airdot_living_room_temperature') | float(0)) }}°\n#### Humidity {{ states('sensor.living_room_airdot_living_room_humidity') | float(0) | round(0) | int }}%": {
-   "result": "###### Inside\n# 20.7°\n#### Humidity 48%"
+   "result": "###### Inside\n# 20.4°\n#### Humidity 47%"
+  }
+ },
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.living_room_airdot_living_room_humidity",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "device-1",
+    "en": "Humidity"
+   },
+   {
+    "ei": "sensor.living_room_airdot_living_room_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "device-1",
+    "en": "Temperature"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "AirDot Living Room"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "humidity": {
+      "default": "mdi:water-percent"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
   }
  }
 }

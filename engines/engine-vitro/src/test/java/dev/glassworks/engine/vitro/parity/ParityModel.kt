@@ -159,6 +159,9 @@ class ParityReference(val png: File, val json: JSONObject) {
     val clip: CssRect get() = CssRect.of(json.getJSONObject("clip"))
     val stable: Boolean get() = json.optBoolean("stable", true)
     val states: JSONObject get() = json.optJSONObject("states") ?: JSONObject()
+
+    /** What HaDisplay held for the case's entities (registry entries, device names, icons, state labels), or null. */
+    val display: JSONObject? get() = json.optJSONObject("display")
     val slots: List<CssRect> get() = json.getJSONArray("slots").let { a -> (0 until a.length()).map { CssRect.of(a.getJSONObject(it)) } }
     val slotTypes: List<String> get() = json.getJSONArray("slots").let { a -> (0 until a.length()).map { a.getJSONObject(it).optString("type") } }
 

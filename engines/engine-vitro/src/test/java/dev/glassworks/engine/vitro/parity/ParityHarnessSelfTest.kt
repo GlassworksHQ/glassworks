@@ -20,6 +20,13 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /** The harness's own checks: the diff measures what it claims, and the committed fixtures hold nothing private. */
+/**
+ * The end of a MAC as device names and hostnames carry it ("AirDot 4c83f8", "AirDot_a1b2c3d4e5f6"): a 6- or
+ * 12-hex-digit run mixing digits and letters, set off by anything but a letter or digit (so `_` and `-` too), and
+ * not a CSS colour. tools/vitro-parity/lib/scrub.mjs's MAC_FRAGMENT is the same pattern.
+ */
+internal val MAC_FRAGMENT = Regex("""(?<![#0-9A-Za-z])(?=[0-9a-fA-F]*\d)(?=[0-9a-fA-F]*[a-fA-F])(?:[0-9a-fA-F]{12}|[0-9a-fA-F]{6})(?![0-9A-Za-z])""")
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -213,6 +220,27 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun theReferencesDisplayDataReachesTheCardsAndIsDroppedAfter() {
+        org.robolectric.RuntimeEnvironment.setQualifiers(frame.qualifiers)
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val root = java.nio.file.Files.createTempDirectory("parity").toFile()
+        val tile = ParityCase.parse("t", JSONObject().put("card", JSONObject().put("type", "tile").put("entity", "sensor.fridge")))
+        val state = JSONObject().put("sensor.fridge", JSONObject().put("s", "1.11111111")
+            .put("a", JSONObject().put("friendly_name", "Fridge").put("unit_of_measurement", "°C").put("device_class", "temperature")))
+        fun ref(display: JSONObject?) = ParityReference(File(root, "none.png"), JSONObject().put("now", 0L).put("states", state)
+            .apply { display?.let { put("display", it) } })
+        fun shown(r: ParityReference) = ParityRenderer(activity, frame, root, null).render(tile, r).texts(0).joinToString(" | ") { it.normalized }
+        val display = JSONObject()
+            .put("entities", org.json.JSONArray().put(JSONObject().put("ei", "sensor.fridge").put("pl", "demo").put("dp", 1)))
+            .put("requested", JSONObject().put("domains", org.json.JSONArray().put("sensor")).put("platforms", org.json.JSONArray()))
+        // Without the registry Vitro shows the raw state; with it, HA's display precision.
+        assertTrue(shown(ref(null)), "1.11111111" in shown(ref(null)))
+        assertTrue(shown(ref(display)), "1.1 °C" in shown(ref(display)) && "1.11" !in shown(ref(display)))
+        // HaDisplay is process-wide: nothing of the case is left for the next one.
+        assertTrue(dev.glassworks.engine.vitro.data.HaDisplay.registry.isEmpty())
+    }
+
+    @Test
     fun aPinnedCardStaysAtThePanelsEdgeWhenThePageIsTaller() {
         org.robolectric.RuntimeEnvironment.setQualifiers(frame.qualifiers)
         val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
@@ -231,6 +259,16 @@ class ParityHarnessSelfTest {
         assertEquals((1500 * frame.density).toInt(), render.bitmap.height)
         val card = render.slots.last()
         assertEquals("anchored 16 px above the panel's bottom: $card", 480.0 - 16.0, card.bottom, 1.5)
+    }
+
+    @Test
+    fun aMacFragmentIsCaughtWhateverSetsItOff() {
+        for (bad in listOf("AirDot 4c83f8", "airdot-4c83f8", "AirDot_a1b2c3d4e5f6", "esp_4C83F8.local", "(a1b2c3)")) {
+            assertTrue(bad, MAC_FRAGMENT.containsMatchIn(bad))
+        }
+        for (ok in listOf("#34d399", "color: #a1b2c3", "TS0501B", "_TZB210_gumjktrw", "abcdef", "123456", "1795504930.063075", "Fog 9.1 °C")) {
+            assertTrue(ok, !MAC_FRAGMENT.containsMatchIn(ok))
+        }
     }
 
     /** CLAUDE.md hard rule 2: no tokens, addresses, MACs or serials in fixtures, references or reports. */
@@ -253,6 +291,10 @@ class ParityHarnessSelfTest {
                 .forEach { problems += "$rel: an IPv4 address outside RFC 5737 (${it.value.take(4)}…)" }
             if (mac.containsMatchIn(text.replace("00:00:5e:00:53:00", ""))) problems += "$rel: a MAC address"
             if (jwt.containsMatchIn(text)) problems += "$rel: a token"
+            // HA's device and config-entry ids: 32 hex chars, unique to one HA (the fixtures use device-1, ...).
+            if (Regex("""\b[0-9a-f]{32}\b""").containsMatchIn(text)) problems += "$rel: an HA registry id"
+            // The end of a MAC in a device name or hostname; a CSS colour (#34d399) is fine.
+            if (MAC_FRAGMENT.containsMatchIn(text)) problems += "$rel: a MAC fragment"
             if (tokenParam.containsMatchIn(text)) problems += "$rel: a token parameter"
             privateKeys.find(text)?.let { problems += "$rel: a private attribute (${it.groupValues[1]})" }
             if (Regex("""https?://(?!127\.0\.0\.1|homeassistant\.local)[a-z0-9.-]+[:/]""").containsMatchIn(text)) problems += "$rel: an absolute URL to a host"
