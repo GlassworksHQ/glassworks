@@ -56,13 +56,6 @@
   "missingText": 0,
   "reason": "at 1.5x HA's border is 1.5 px and Vitro's 1 px (every card's), so the blue inside is 2 device px wider (748 vs 746) and each white icon and the name sit half a pixel off; the diff is their edges and the border line, 2.3% on this small high-contrast card. The layout, colors and sizes match (the tablet case matches; 2026-11-24)"
  },
- "mirror/mushroom-title": {
-  "pixel": 0.038,
-  "bounds": 53.3,
-  "font": 8,
-  "missingText": 0,
-  "reason": "title 16 vs 24 px and subtitle 13 vs 16 px, with less top padding: the text sits ~25 px higher than HA's (coverage #794, 2026-11-24)"
- },
  "mirror/picture-elements": {
   "pixel": 0.0092,
   "bounds": 0,
@@ -126,13 +119,6 @@
   "missingText": 0,
   "reason": "at 1.5x HA's border is 1.5 px and Vitro's 1 px (every card's), so the blue inside is 2 device px wider (748 vs 746) and each white icon and the name sit half a pixel off; the diff is their edges and the border line, 2.3% on this small high-contrast card. The layout, colors and sizes match (the tablet case matches; 2026-11-24)"
  },
- "s1/mushroom-title": {
-  "pixel": 0.038,
-  "bounds": 53.3,
-  "font": 8,
-  "missingText": 0,
-  "reason": "title 16 vs 24 px and subtitle 13 vs 16 px, with less top padding: the text sits ~25 px higher than HA's (coverage #794, 2026-11-24)"
- },
  "s1/picture-elements": {
   "pixel": 0.0092,
   "bounds": 0,
@@ -195,13 +181,6 @@
   "font": 0,
   "missingText": 0,
   "reason": "matches on the 1.5x frames; on the tablet the icon disc and text antialiasing land just over 2% (coverage #794, 2026-11-24)"
- },
- "tablet/mushroom-title": {
-  "pixel": 0.0344,
-  "bounds": 53.5,
-  "font": 8,
-  "missingText": 0,
-  "reason": "title 16 vs 24 px and subtitle 13 vs 16 px, with less top padding: the text sits ~25 px higher than HA's (coverage #794, 2026-11-24)"
  },
  "tablet/picture-elements": {
   "pixel": 0.006,
