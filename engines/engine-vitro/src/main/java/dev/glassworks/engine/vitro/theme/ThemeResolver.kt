@@ -62,7 +62,7 @@ data class ResolvedTheme(
             "climate" -> ThemeResolver.parseColor(vars["state-climate-heat-color"]) ?: 0xFFFF8100.toInt()
             "binary_sensor" -> ThemeResolver.parseColor(vars["state-binary_sensor-active-color"]) ?: 0xFFFFC107.toInt()
             "sensor" -> ThemeResolver.parseColor(vars["state-sensor-active-color"]) ?: 0xFF2196F3.toInt()
-            "fan" -> ThemeResolver.parseColor(vars["state-fan-active-color"]) ?: 0xFF009688.toInt()
+            "fan" -> ThemeResolver.parseColor(vars["state-fan-active-color"]) ?: 0xFF00BCD4.toInt()
             "cover" -> ThemeResolver.parseColor(vars["state-cover-active-color"]) ?: 0xFF9C27B0.toInt()
             "person", "device_tracker" -> ThemeResolver.parseColor(vars["state-person-home-color"]) ?: 0xFF4CAF50.toInt()
             else -> primaryColor
@@ -177,7 +177,7 @@ object ThemeResolver {
         "state-climate-cool-color" to "#2b9af9",
         "state-binary_sensor-active-color" to "#ffc107",
         "state-sensor-active-color" to "#2196f3",
-        "state-fan-active-color" to "#009688",
+        "state-fan-active-color" to "#00BCD4",
         "state-cover-active-color" to "#9c27b0",
         "state-person-home-color" to "#4caf50",
         "state-icon-color" to "#44739e",
@@ -208,7 +208,7 @@ object ThemeResolver {
         "state-climate-cool-color" to "#2b9af9",
         "state-binary_sensor-active-color" to "#ffc107",
         "state-sensor-active-color" to "#2196f3",
-        "state-fan-active-color" to "#009688",
+        "state-fan-active-color" to "#00BCD4",
         "state-cover-active-color" to "#9c27b0",
         "state-person-home-color" to "#4caf50",
         "state-icon-color" to "#44739e",

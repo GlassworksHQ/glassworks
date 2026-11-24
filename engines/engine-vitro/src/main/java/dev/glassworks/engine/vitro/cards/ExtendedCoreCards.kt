@@ -790,7 +790,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         )
 
         fun statisticIds(config: CardConfig): List<String> {
-            val fromList = config.entities().map { it.entity }
+            val fromList = config.entities().filter { it.isEntity }.map { it.entity }
             return (fromList.ifEmpty { listOfNotNull(config.entity) }).distinct()
         }
 

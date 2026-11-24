@@ -6,6 +6,7 @@ package dev.glassworks.engine.vitro
 
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
+import dev.glassworks.engine.vitro.data.LightColor
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -539,5 +540,34 @@ class EntityStoreTest {
         assertEquals("Lounge Lamp", attrs.getString("friendly_name"))
         assertEquals(128, attrs.getInt("brightness"))
         assertTrue(attrs.isNull("gone"))
+    }
+
+    @Test
+    fun lightTintFollowsRgbThenColorTemperature() {
+        assertEquals(0xFF0A141E.toInt(), entity("light.a", "on", "rgb_color" to listOf(10, 20, 30)).lightTintColor())
+        assertEquals(0xFF0A141E.toInt(), entity("light.a", "on", "rgb_color" to listOf(10.0, 20.4, 30.9)).lightTintColor())
+        // rgb wins over color temperature when both are reported.
+        assertEquals(0xFF0A141E.toInt(), entity("light.a", "on", "rgb_color" to listOf(10, 20, 30), "color_temp_kelvin" to 2000).lightTintColor())
+        assertEquals(0xFFFF9E44.toInt(), entity("light.a", "on", "color_temp_kelvin" to 2000).lightTintColor())
+        assertEquals(0xFFFFD5A1.toInt(), entity("light.a", "on", "color_temp_kelvin" to 3000).lightTintColor())
+        assertEquals(0xFFFFF4E4.toInt(), entity("light.a", "on", "color_temp_kelvin" to 4500).lightTintColor())
+        assertEquals(0xFFCFE2FF.toInt(), entity("light.a", "on", "color_temp_kelvin" to 6500).lightTintColor())
+        assertEquals(0xFFFFD5A1.toInt(), entity("light.a", "on", "color_temp" to 333.3333).lightTintColor()) // mireds
+        // Off lights, plain lights and other domains get no tint.
+        assertNull(entity("light.a", "off", "rgb_color" to listOf(10, 20, 30)).lightTintColor())
+        assertNull(entity("light.a", "on", "brightness" to 255).lightTintColor())
+        assertNull(entity("light.a", "on", "rgb_color" to listOf(10, 20)).lightTintColor())
+        assertNull(entity("switch.a", "on", "rgb_color" to listOf(10, 20, 30)).lightTintColor())
+    }
+
+    @Test
+    fun kelvinScaleClampsAndInterpolates() {
+        assertEquals(LightColor.kelvinToArgb(2000), LightColor.kelvinToArgb(1500))
+        assertEquals(LightColor.kelvinToArgb(6500), LightColor.kelvinToArgb(9000))
+        val mid = LightColor.kelvinToArgb(2500) // halfway between #FF9E44 and #FFD5A1
+        assertEquals(0xFF, LightColor.red(mid))
+        assertEquals((0x9E + 0xD5 + 1) / 2, LightColor.green(mid))
+        assertEquals((0x44 + 0xA1 + 1) / 2, LightColor.blue(mid))
+        assertEquals(0xFF000000.toInt(), mid and 0xFF000000.toInt())
     }
 }

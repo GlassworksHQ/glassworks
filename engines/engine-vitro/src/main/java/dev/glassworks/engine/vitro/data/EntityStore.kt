@@ -50,6 +50,23 @@ data class EntityState(
     val brightnessPct: Int?
         get() = (attributes["brightness"] as? Number)?.toDouble()?.let { kotlin.math.round((it / 255.0) * 100.0).toInt().coerceIn(0, 100) }
 
+    /**
+     * The color a lit light shines, as HA 2026 tints its icon and sliders: `rgb_color` when set, else its color
+     * temperature (`color_temp_kelvin`, or `color_temp` in mireds) on a warm-amber → cool-white scale. Null for
+     * anything that isn't an `on` light or a light that reports no color.
+     */
+    fun lightTintColor(): Int? {
+        if (domain != "light" || !isActive) return null
+        val rgb = attributes["rgb_color"] as? List<*>
+        if (rgb != null && rgb.size >= 3) {
+            val c = rgb.take(3).map { (it as? Number)?.toInt() }
+            if (c.all { it != null }) return LightColor.pack(c[0]!!, c[1]!!, c[2]!!)
+        }
+        val kelvin = (attributes["color_temp_kelvin"] as? Number)?.toDouble()
+            ?: (attributes["color_temp"] as? Number)?.toDouble()?.takeIf { it > 0 }?.let { 1_000_000.0 / it }
+        return kelvin?.let { LightColor.kelvinToArgb(it.toInt()) }
+    }
+
     fun formattedState(): String {
         if (isUnavailable) return state.replaceFirstChar { it.titlecase(Locale.ROOT) }
         val u = unit
@@ -307,5 +324,76 @@ class EntityStore {
             is JSONObject -> toMap(v)
             else -> v
         }
+    }
+}
+
+/** Light color math shared by cards and More-Info. Pure integer ARGB, so it runs in plain JVM tests. */
+object LightColor {
+    /** Kelvin stops on HA's scale: warm amber, soft warm, crisp white, cool white. */
+    private val STOPS = listOf(
+        2000 to 0xFF9E44,
+        3000 to 0xFFD5A1,
+        4500 to 0xFFF4E4,
+        6500 to 0xCFE2FF,
+    )
+
+    /** Opaque ARGB from 0..255 channels (clamped). */
+    fun pack(r: Int, g: Int, b: Int): Int =
+        (0xFF shl 24) or (r.coerceIn(0, 255) shl 16) or (g.coerceIn(0, 255) shl 8) or b.coerceIn(0, 255)
+
+    fun red(c: Int): Int = (c shr 16) and 0xFF
+    fun green(c: Int): Int = (c shr 8) and 0xFF
+    fun blue(c: Int): Int = c and 0xFF
+
+    /** A color temperature as the opaque ARGB a light shows, interpolated between [STOPS] and clamped to 2000–6500 K. */
+    fun kelvinToArgb(kelvin: Int): Int {
+        val k = kelvin.coerceIn(STOPS.first().first, STOPS.last().first)
+        for (i in 0 until STOPS.size - 1) {
+            val (k0, c0) = STOPS[i]
+            val (k1, c1) = STOPS[i + 1]
+            if (k <= k1) {
+                val t = (k - k0).toFloat() / (k1 - k0)
+                fun mix(a: Int, b: Int) = Math.round(a + (b - a) * t)
+                return pack(mix(red(c0), red(c1)), mix(green(c0), green(c1)), mix(blue(c0), blue(c1)))
+            }
+        }
+        return 0xFF000000.toInt() or STOPS.last().second
+    }
+
+    /** Hue (0..360), saturation and value (0..1) to opaque ARGB. */
+    fun hsvToArgb(hue: Float, sat: Float, value: Float): Int {
+        val h = ((hue % 360f) + 360f) % 360f / 60f
+        val s = sat.coerceIn(0f, 1f)
+        val v = value.coerceIn(0f, 1f)
+        val c = v * s
+        val x = c * (1f - kotlin.math.abs(h % 2f - 1f))
+        val m = v - c
+        val (r, g, b) = when (h.toInt()) {
+            0 -> Triple(c, x, 0f)
+            1 -> Triple(x, c, 0f)
+            2 -> Triple(0f, c, x)
+            3 -> Triple(0f, x, c)
+            4 -> Triple(x, 0f, c)
+            else -> Triple(c, 0f, x)
+        }
+        return pack(Math.round((r + m) * 255f), Math.round((g + m) * 255f), Math.round((b + m) * 255f))
+    }
+
+    /** Opaque ARGB to hue (0..360) and saturation (0..1); value is ignored, as HA's wheel shows full value. */
+    fun argbToHueSat(color: Int): Pair<Float, Float> {
+        val r = red(color) / 255f
+        val g = green(color) / 255f
+        val b = blue(color) / 255f
+        val max = maxOf(r, g, b)
+        val min = minOf(r, g, b)
+        val d = max - min
+        val hue = when {
+            d == 0f -> 0f
+            max == r -> 60f * (((g - b) / d) % 6f)
+            max == g -> 60f * ((b - r) / d + 2f)
+            else -> 60f * ((r - g) / d + 4f)
+        }.let { if (it < 0f) it + 360f else it }
+        val sat = if (max == 0f) 0f else d / max
+        return hue to sat
     }
 }

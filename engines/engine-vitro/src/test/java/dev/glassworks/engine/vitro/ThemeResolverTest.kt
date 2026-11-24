@@ -474,7 +474,7 @@ class ThemeResolverTest {
         assertEquals(argb(0xFFFFC107), t.activeColor("switch"))
         assertEquals(argb(0xFFFFC107), t.activeColor("input_boolean"))
         assertEquals(argb(0xFFFFC107), t.activeColor("binary_sensor"))
-        assertEquals(argb(0xFF009688), t.activeColor("fan"))
+        assertEquals(argb(0xFF00BCD4), t.activeColor("fan")) // HA 2026 cyan
         assertEquals(argb(0xFF9C27B0), t.activeColor("cover"))
         assertEquals(argb(0xFF4CAF50), t.activeColor("person"))
         assertEquals(argb(0xFF4CAF50), t.activeColor("device_tracker"))

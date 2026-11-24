@@ -109,7 +109,11 @@ data class EntityRowConfig(
     val secondaryInfo: String? = null,
     val tapAction: ActionConfig? = null,
     val holdAction: ActionConfig? = null,
-)
+    /** `entity` for an entity row; `divider` and `section` for HA's special rows, which carry no entity. */
+    val rowType: String = "entity",
+) {
+    val isEntity: Boolean get() = rowType == "entity"
+}
 
 sealed class VisibilityCondition {
     data class State(val entity: String, val state: String?, val stateNot: String?) : VisibilityCondition()
@@ -211,6 +215,13 @@ data class CardConfig(
             when (val item = arr.opt(i)) {
                 is String -> if (item.isNotBlank()) out += EntityRowConfig(item)
                 is JSONObject -> {
+                    when (item.optString("type", "")) {
+                        "divider" -> { out += EntityRowConfig(entity = "", rowType = "divider"); continue }
+                        "section" -> {
+                            out += EntityRowConfig(entity = "", name = item.optString("label", "").ifEmpty { null }, rowType = "section")
+                            continue
+                        }
+                    }
                     val id = item.optString("entity", "").ifEmpty { continue }
                     out += EntityRowConfig(
                         entity = id,
@@ -331,7 +342,7 @@ object CardRouter {
         }
         fun walkCard(c: CardConfig) {
             c.entity?.let { out += it }
-            c.entities().forEach { out += it.entity }
+            c.entities().forEach { if (it.entity.isNotEmpty()) out += it.entity }
             c.visibility.forEach { it.referencedEntities(out) }
             VisibilityCondition.parseList(c.raw.optJSONArray("conditions")).forEach { it.referencedEntities(out) }
             // Deep-scan custom cards (e.g. room arrays, sleep/outside/camera objects) so view-scoped

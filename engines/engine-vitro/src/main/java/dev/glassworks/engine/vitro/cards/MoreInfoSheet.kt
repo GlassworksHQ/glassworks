@@ -26,11 +26,13 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HistoryPoint
+import dev.glassworks.engine.vitro.data.LightColor
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.MdiIconView
@@ -210,6 +212,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             "select", "input_select" -> buildSelect(id, domain)
             "lock" -> buildLock(id)
             "media_player" -> buildMedia(id)
+            "alarm_control_panel" -> buildAlarm(id, s)
             "button", "input_button", "script", "scene" -> buildAction(id, domain)
             else -> buildSensor(id)
         }
@@ -227,82 +230,199 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val timeLabel = timeLabel()
         addCentered(stateLabel)
         addCentered(timeLabel, topDp = 4f)
-        val color = theme.activeColor("light")
-        val modes = supportedModes(initial)
-        val dimmable = initial?.attributes?.get("brightness") != null || modes.any { it in DIMMABLE_MODES }
-        var slider: VerticalSliderPillView? = null
-        var toggle: VerticalTogglePillView? = null
-        if (dimmable) {
-            slider = VerticalSliderPillView(ctx.context, color).apply {
-                onChange = { pct -> stateLabel.text = if (pct <= 0) "Off" else "$pct%" }
-                onRelease = { pct ->
-                    val data = JSONObject().put("entity_id", id)
-                    if (pct <= 0) ctx.callService("light", "turn_off", data, null)
-                    else ctx.callService("light", "turn_on", data.put("brightness", (pct * 255 / 100).coerceIn(1, 255)), null)
-                }
-            }
-            addPill(slider)
-        } else {
-            toggle = VerticalTogglePillView(ctx.context, color, theme.dark).apply {
+        val caps = LightCaps.of(initial)
+        val fallback = theme.activeColor("light")
+        if (!caps.brightness) {
+            val toggle = VerticalTogglePillView(ctx.context, fallback, theme.dark).apply {
                 onToggle = { on -> optimisticToggle(id, "light", on) }
             }
             addPill(toggle)
+            val power = circleButton("mdi:power", 52f, 24f) { optimisticToggle(id, "light", ctx.store[id]?.state != "on") }
+            addCentered(power, topDp = 20f, widthDp = 52f, heightDp = 52f)
+            return { s ->
+                stateLabel.text = lightStateText(s)
+                toggle.setOn(s?.state == "on")
+                timeLabel.text = relativeTime(s)
+            }
         }
-        val power = circleButton("mdi:power", 52f, 24f) { optimisticToggle(id, "light", ctx.store[id]?.state != "on") }
-        addCentered(power, topDp = 20f, widthDp = 52f, heightDp = 52f)
 
-        val presets = buildList {
-            if ("color_temp" in modes) {
-                add(PRESET_WARM); add(PRESET_SOFT); add(PRESET_COOL)
-            }
-            if (modes.any { it in RGB_MODES }) {
-                add(PRESET_AMBER); add(PRESET_CORAL); add(PRESET_SKY)
+        // The three center controls share one frame; the dock below switches between them.
+        val center = FrameLayout(ctx.context)
+        val slider = VerticalSliderPillView(ctx.context, initial?.lightTintColor() ?: fallback).apply {
+            onChange = { pct -> stateLabel.text = if (pct <= 0) "Off" else "$pct%" }
+            onRelease = { pct ->
+                val data = JSONObject().put("entity_id", id)
+                ctx.store[id]?.let { cur ->
+                    ctx.store.putLocal(
+                        if (pct <= 0) cur.copy(state = "off")
+                        else cur.copy(state = "on", attributes = cur.attributes + ("brightness" to (pct * 255 / 100).coerceIn(1, 255))),
+                    )
+                }
+                if (pct <= 0) ctx.callService("light", "turn_off", data, null)
+                else ctx.callService("light", "turn_on", data.put("brightness", (pct * 255 / 100).coerceIn(1, 255)), null)
             }
         }
-        if (presets.isNotEmpty()) {
-            val row = LinearLayout(ctx.context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
+        center.addView(slider, LayoutParams(ctx.px(132f), ctx.px(276f), Gravity.CENTER))
+        val wheel = if (caps.color) {
+            RgbColorWheelView(ctx.context).apply {
+                onRelease = { c -> setLightColor(id, c, null) }
+                center.addView(this, LayoutParams(ctx.px(248f), ctx.px(248f), Gravity.CENTER))
             }
-            for (p in presets) {
-                val dot = View(ctx.context).apply {
-                    background = GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(p.swatch)
-                        setStroke(ctx.px(1f).coerceAtLeast(1), theme.dividerColor)
-                    }
-                    isClickable = true
-                    contentDescription = p.name
-                    setOnClickListener {
-                        val data = JSONObject().put("entity_id", id)
-                        if (p.kelvin != null) data.put("color_temp_kelvin", p.kelvin)
-                        else data.put("rgb_color", JSONArray().put(Color.red(p.swatch)).put(Color.green(p.swatch)).put(Color.blue(p.swatch)))
-                        ctx.callService("light", "turn_on", data, null)
-                    }
-                }
-                row.addView(dot, LinearLayout.LayoutParams(ctx.px(32f), ctx.px(32f)).apply {
+        } else {
+            null
+        }
+        val minK = (initial?.attributes?.get("min_color_temp_kelvin") as? Number)?.toInt() ?: ColorTempSliderView.DEFAULT_MIN_K
+        val maxK = (initial?.attributes?.get("max_color_temp_kelvin") as? Number)?.toInt() ?: ColorTempSliderView.DEFAULT_MAX_K
+        val temp = if (caps.colorTemp) {
+            ColorTempSliderView(ctx.context, minK, maxK).apply {
+                onChange = { k -> stateLabel.text = "$k K" }
+                onRelease = { k -> setLightColor(id, LightColor.kelvinToArgb(k), k) }
+                center.addView(this, LayoutParams(ctx.px(132f), ctx.px(276f), Gravity.CENTER))
+            }
+        } else {
+            null
+        }
+        body.addView(center, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(276f)).apply { topMargin = ctx.px(24f) })
+
+        // HA 2026's dock: power, a divider, then one button per control.
+        var mode = LightMode.BRIGHTNESS
+        val dock = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val p = ctx.px(6f)
+            setPadding(p, p, p, p)
+            background = GradientDrawable().apply {
+                cornerRadius = 999f * ctx.dp
+                setColor(if (theme.dark) DOCK_DARK else DOCK_LIGHT)
+            }
+        }
+        val dockSize = LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f))
+        val powerIcon = MdiIconView(ctx.context)
+        dock.addView(FrameLayout(ctx.context).apply {
+            powerIcon.setIcon("mdi:power", theme.primaryTextColor)
+            addView(powerIcon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
+            isClickable = true
+            contentDescription = "Toggle"
+            setOnClickListener {
+                val cur = ctx.store[id]
+                if (cur != null && cur.state in setOf("on", "off")) ctx.store.putLocal(cur.copy(state = if (cur.state == "on") "off" else "on"))
+                ctx.callService("light", "toggle", JSONObject().put("entity_id", id), null)
+            }
+        }, LinearLayout.LayoutParams(dockSize))
+        val modeButtons = ArrayList<Pair<LightMode, LightModeButton>>()
+        if (caps.color || caps.colorTemp) {
+            dock.addView(View(ctx.context).apply { setBackgroundColor(theme.dividerColor) },
+                LinearLayout.LayoutParams(ctx.px(1f).coerceAtLeast(1), ctx.px(24f)).apply {
                     marginStart = ctx.px(6f); marginEnd = ctx.px(6f)
                 })
+            val kinds = buildList {
+                add(LightMode.BRIGHTNESS)
+                if (caps.color) add(LightMode.COLOR)
+                if (caps.colorTemp) add(LightMode.TEMP)
             }
-            addCentered(row, topDp = 20f)
+            kinds.forEachIndexed { i, k ->
+                val b = LightModeButton(ctx.context, k, theme)
+                modeButtons += k to b
+                dock.addView(b, LinearLayout.LayoutParams(dockSize).apply { if (i > 0) marginStart = ctx.px(4f) })
+            }
+        }
+        fun showMode(m: LightMode) {
+            mode = m
+            slider.visibility = if (m == LightMode.BRIGHTNESS) VISIBLE else GONE
+            wheel?.visibility = if (m == LightMode.COLOR) VISIBLE else GONE
+            temp?.visibility = if (m == LightMode.TEMP) VISIBLE else GONE
+            modeButtons.forEach { (k, b) -> b.chosen = k == m }
+        }
+        modeButtons.forEach { (k, b) -> b.setOnClickListener { showMode(k); updater?.invoke(ctx.store[id]) } }
+        showMode(LightMode.BRIGHTNESS)
+        addCentered(dock, topDp = 20f)
+
+        // Favorite colors: warm whites always, the colored row when the light takes RGB.
+        if (caps.color || caps.colorTemp) {
+            val grid = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+            val rows = if (caps.color) listOf(FAVORITES_WARM, FAVORITES_COLOR) else listOf(FAVORITES_WARM)
+            rows.forEachIndexed { r, favorites ->
+                val row = LinearLayout(ctx.context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER
+                }
+                favorites.forEachIndexed { i, fav ->
+                    val dot = View(ctx.context).apply {
+                        background = GradientDrawable().apply {
+                            shape = GradientDrawable.OVAL
+                            setColor(fav.color)
+                            setStroke(ctx.px(1f).coerceAtLeast(1), theme.dividerColor)
+                        }
+                        isClickable = true
+                        contentDescription = fav.name
+                        setOnClickListener {
+                            if (caps.color) setLightColor(id, fav.color, null)
+                            else setLightColor(id, LightColor.kelvinToArgb(fav.kelvin ?: 2700), fav.kelvin ?: 2700)
+                        }
+                    }
+                    row.addView(dot, LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)).apply {
+                        if (i > 0) marginStart = ctx.px(16f)
+                    })
+                }
+                grid.addView(row, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
+                    if (r > 0) topMargin = ctx.px(14f)
+                })
+            }
+            addCentered(grid, topDp = 24f)
         }
 
         return { s ->
+            val tint = s?.lightTintColor() ?: fallback
+            slider.setActiveColor(tint)
             val on = s?.state == "on"
             val pct = if (on) s.brightnessPct else null
-            if (slider?.dragging != true) {
-                stateLabel.text = when {
-                    s == null -> "Unknown"
-                    s.isUnavailable -> s.formattedState()
-                    on && pct != null -> "$pct%"
-                    on -> "On"
-                    else -> "Off"
-                }
+            val kelvin = (s?.attributes?.get("color_temp_kelvin") as? Number)?.toInt()
+            val busy = slider.dragging || wheel?.dragging == true || temp?.dragging == true
+            if (!busy) {
+                stateLabel.text = if (mode == LightMode.TEMP && on && kelvin != null) "$kelvin K" else lightStateText(s)
             }
-            slider?.active = on
-            slider?.setPercent(if (on) pct ?: 100 else 0)
-            toggle?.setOn(on)
+            slider.active = on
+            slider.setPercent(if (on) pct ?: 100 else 0)
+            (s?.attributes?.get("rgb_color") as? List<*>)?.let { rgb ->
+                val c = rgb.take(3).map { (it as? Number)?.toInt() ?: 0 }
+                if (c.size == 3) wheel?.setColor(LightColor.pack(c[0], c[1], c[2]))
+            }
+            kelvin?.let { temp?.setKelvin(it) }
             timeLabel.text = relativeTime(s)
+        }
+    }
+
+    /** Sets a light's color (and color temperature, when [kelvin] is given) optimistically, then calls HA. */
+    private fun setLightColor(id: String, color: Int, kelvin: Int?) {
+        val rgb = listOf(LightColor.red(color), LightColor.green(color), LightColor.blue(color))
+        ctx.store[id]?.let { cur ->
+            val attrs = cur.attributes.toMutableMap()
+            attrs["rgb_color"] = rgb
+            if (kelvin != null) {
+                attrs["color_temp_kelvin"] = kelvin
+                attrs["color_mode"] = "color_temp"
+            } else {
+                attrs.remove("color_temp_kelvin")
+                attrs.remove("color_temp")
+                attrs["color_mode"] = "rgb"
+            }
+            ctx.store.putLocal(cur.copy(state = "on", attributes = attrs))
+        }
+        val data = JSONObject().put("entity_id", id)
+        if (kelvin != null) data.put("color_temp_kelvin", kelvin)
+        else data.put("rgb_color", JSONArray().put(rgb[0]).put(rgb[1]).put(rgb[2]))
+        ctx.callService("light", "turn_on", data, null)
+    }
+
+    private fun lightStateText(s: EntityState?): String {
+        val on = s?.state == "on"
+        val pct = if (on) s.brightnessPct else null
+        return when {
+            s == null -> "Unknown"
+            s.isUnavailable -> s.formattedState()
+            on && pct != null -> "$pct%"
+            on -> "On"
+            else -> "Off"
         }
     }
 
@@ -386,91 +506,314 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         addCentered(stateLabel)
         addCentered(timeLabel, topDp = 4f)
         val hasPosition = initial?.attributes?.get("current_position") != null
-        val slider = if (hasPosition) {
-            VerticalSliderPillView(ctx.context, theme.activeColor("cover")).apply {
-                onChange = { pct -> stateLabel.text = "$pct%" }
-                onRelease = { pct ->
-                    ctx.callService("cover", "set_cover_position", JSONObject().put("entity_id", id).put("position", pct), null)
-                }
-            }.also { addPill(it) }
-        } else {
-            null
+
+        fun setPosition(pos: Int) {
+            ctx.store[id]?.let { cur ->
+                ctx.store.putLocal(cur.copy(
+                    state = if (pos > 0) "open" else "closed",
+                    attributes = cur.attributes + ("current_position" to pos),
+                ))
+            }
+            ctx.callService("cover", "set_cover_position", JSONObject().put("entity_id", id).put("position", pos), null)
         }
+
         val buttons = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
-        listOf("mdi:arrow-up" to "open_cover", "mdi:stop" to "stop_cover", "mdi:arrow-down" to "close_cover")
-            .forEachIndexed { i, (icon, service) ->
-                val b = roundedButton(icon) { ctx.callService("cover", service, JSONObject().put("entity_id", id), null) }
-                buttons.addView(b, LinearLayout.LayoutParams(ctx.px(72f), ctx.px(56f)).apply {
+        COVER_ACTIONS.forEachIndexed { i, (icon, service) ->
+            val b = roundedButton(icon) { ctx.callService("cover", service, JSONObject().put("entity_id", id), null) }
+            b.contentDescription = service.substringBefore('_').replaceFirstChar { it.titlecase(Locale.ROOT) }
+            buttons.addView(b, LinearLayout.LayoutParams(ctx.px(if (hasPosition) 132f else 96f), ctx.px(if (hasPosition) 80f else 64f)).apply {
+                if (i > 0) topMargin = ctx.px(12f)
+            })
+        }
+
+        if (!hasPosition) {
+            // No position: HA shows the open / stop / close buttons alone, side by side.
+            buttons.orientation = LinearLayout.HORIZONTAL
+            for (i in 0 until buttons.childCount) {
+                (buttons.getChildAt(i).layoutParams as LinearLayout.LayoutParams).apply {
+                    topMargin = 0
                     if (i > 0) marginStart = ctx.px(12f)
-                })
+                }
             }
-        addCentered(buttons, topDp = 20f)
+            addCentered(buttons, topDp = 24f)
+            return { s ->
+                stateLabel.text = s?.formattedState() ?: "Unknown"
+                timeLabel.text = relativeTime(s)
+            }
+        }
+
+        val center = FrameLayout(ctx.context)
+        val slider = VerticalCoverSliderView(ctx.context).apply {
+            onChange = { pct -> stateLabel.text = VerticalCoverSliderView.stateText(pct) }
+            onRelease = { pct -> setPosition(pct) }
+        }
+        center.addView(slider, LayoutParams(ctx.px(132f), ctx.px(276f), Gravity.CENTER))
+        center.addView(buttons, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER))
+        body.addView(center, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(276f)).apply { topMargin = ctx.px(24f) })
+
+        // The mode switcher: the position slider, or the big buttons.
+        val switcher = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val p = ctx.px(6f)
+            setPadding(p, p, p, p)
+            background = GradientDrawable().apply {
+                cornerRadius = 999f * ctx.dp
+                setColor(if (theme.dark) DOCK_DARK else DOCK_LIGHT)
+            }
+        }
+        val sliderIcon = MdiIconView(ctx.context)
+        val buttonsIcon = MdiIconView(ctx.context)
+        val sliderBtn = FrameLayout(ctx.context).apply {
+            addView(sliderIcon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
+            isClickable = true
+            contentDescription = "Position"
+        }
+        val buttonsBtn = FrameLayout(ctx.context).apply {
+            addView(buttonsIcon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
+            isClickable = true
+            contentDescription = "Buttons"
+        }
+        fun showSlider(on: Boolean) {
+            slider.visibility = if (on) VISIBLE else GONE
+            buttons.visibility = if (on) GONE else VISIBLE
+            listOf(Triple(sliderBtn, sliderIcon, on), Triple(buttonsBtn, buttonsIcon, !on)).forEach { (btn, icon, sel) ->
+                btn.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(if (sel) selectedFill() else Color.TRANSPARENT)
+                }
+                icon.setIcon(if (btn === sliderBtn) "mdi:tune-vertical" else "mdi:swap-vertical",
+                    if (sel) selectedIcon() else theme.primaryTextColor)
+            }
+        }
+        sliderBtn.setOnClickListener { showSlider(true) }
+        buttonsBtn.setOnClickListener { showSlider(false) }
+        switcher.addView(sliderBtn, LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)))
+        switcher.addView(buttonsBtn, LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)).apply { marginStart = ctx.px(4f) })
+        showSlider(true)
+        addCentered(switcher, topDp = 20f)
+
+        val presets = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
+        COVER_PRESETS.forEachIndexed { i, p ->
+            presets.addView(pillLabel("$p%", false) { setPosition(p) },
+                LinearLayout.LayoutParams(0, ctx.px(44f), 1f).apply { if (i > 0) marginStart = ctx.px(8f) })
+        }
+        body.addView(presets, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(20f) })
+
         return { s ->
             val pos = (s?.attributes?.get("current_position") as? Number)?.toInt()
-            if (slider?.dragging != true) {
+            if (!slider.dragging) {
                 stateLabel.text = when {
                     s == null -> "Unknown"
-                    s.state == "open" && pos != null && pos in 1..99 -> "$pos%"
+                    s.isUnavailable -> s.formattedState()
+                    pos != null && s.state in setOf("open", "closed") -> VerticalCoverSliderView.stateText(pos)
                     else -> s.formattedState()
                 }
             }
-            slider?.active = s?.isActive == true
-            slider?.setPercent(pos ?: 0)
+            slider.setPercent(pos ?: 0)
             timeLabel.text = relativeTime(s)
         }
     }
 
+    private fun selectedFill(): Int = if (theme.dark) Color.WHITE else SELECTED_DARK
+    private fun selectedIcon(): Int = if (theme.dark) SELECTED_DARK else Color.WHITE
+
     private fun buildClimate(id: String): (EntityState?) -> Unit {
-        val target = text(38f, theme.primaryTextColor, Inter.REGULAR).apply { gravity = Gravity.CENTER }
-        val current = text(14f, theme.secondaryTextColor, Inter.MEDIUM).apply { gravity = Gravity.CENTER }
-        val stepper = LinearLayout(ctx.context).apply {
+        val unit = ThermostatCardView.temperatureUnit(ctx)
+        val caption = text(13f, theme.secondaryTextColor).apply {
+            gravity = Gravity.CENTER
+            this.text = "Current temperature"
+        }
+        val current = text(22f, theme.primaryTextColor, Inter.MEDIUM).apply { gravity = Gravity.CENTER }
+        addCentered(caption, topDp = 4f)
+        addCentered(current, topDp = 4f)
+
+        val dial = ThermostatDialView(ctx, unit, showCurrentInDial = false).apply {
+            onCommit = { t ->
+                ctx.store[id]?.let { cur -> ctx.store.putLocal(cur.copy(attributes = cur.attributes + ("temperature" to t))) }
+                ctx.callService("climate", "set_temperature", JSONObject().put("entity_id", id).put("temperature", t), null)
+            }
+        }
+        val dialFrame = FrameLayout(ctx.context)
+        dialFrame.addView(dial, LayoutParams(MATCH_PARENT, ctx.px(260f)))
+        val steppers = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        fun stepBtn(icon: String, sign: Int) = FrameLayout(ctx.context).apply {
+            addView(MdiIconView(ctx.context).apply { setIcon(icon, theme.primaryTextColor) },
+                LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
+            contentDescription = if (sign > 0) "Raise target temperature" else "Lower target temperature"
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.TRANSPARENT)
+                setStroke(ctx.px(1f).coerceAtLeast(1), CardSurface.withAlpha(theme.secondaryTextColor, 0.5f))
+            }
+            isClickable = true
+            setOnClickListener { dial.nudge(sign) }
+        }
+        steppers.addView(stepBtn("mdi:minus", -1), LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)).apply { marginEnd = ctx.px(20f) })
+        steppers.addView(stepBtn("mdi:plus", 1), LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)))
+        dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
+        body.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(260f)).apply { topMargin = ctx.px(12f) })
+
+        val controls = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        val modeBtn = infoPill("Mode")
+        val presetBtn = infoPill("Preset")
+        controls.addView(modeBtn.root, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(56f)))
+        controls.addView(presetBtn.root, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(56f)).apply { marginStart = ctx.px(12f) })
+        addCentered(controls, topDp = 20f)
+
+        modeBtn.root.setOnClickListener { v ->
+            val modes = listAttr(ctx.store[id], "hvac_modes")
+            showMenu(v, modes.map { humanize(it) }) { i ->
+                val m = modes[i]
+                ctx.store[id]?.let { ctx.store.putLocal(it.copy(state = m)) }
+                ctx.callService("climate", "set_hvac_mode", JSONObject().put("entity_id", id).put("hvac_mode", m), null)
+            }
+        }
+        presetBtn.root.setOnClickListener { v ->
+            val presets = listAttr(ctx.store[id], "preset_modes")
+            showMenu(v, presets.map { humanize(it) }) { i ->
+                val p = presets[i]
+                ctx.store[id]?.let { ctx.store.putLocal(it.copy(attributes = it.attributes + ("preset_mode" to p))) }
+                ctx.callService("climate", "set_preset_mode", JSONObject().put("entity_id", id).put("preset_mode", p), null)
+            }
+        }
+
+        return { s ->
+            val attrs = s?.attributes.orEmpty()
+            val mode = s?.state ?: "off"
+            dial.bind(
+                min = (attrs["min_temp"] as? Number)?.toDouble() ?: 7.0,
+                max = (attrs["max_temp"] as? Number)?.toDouble() ?: 35.0,
+                step = (attrs["target_temp_step"] as? Number)?.toDouble()?.takeIf { it > 0 } ?: 0.5,
+                current = (attrs["current_temperature"] as? Number)?.toDouble(),
+                target = (attrs["temperature"] as? Number)?.toDouble(),
+                mode = mode,
+                action = attrs["hvac_action"] as? String,
+            )
+            current.text = (attrs["current_temperature"] as? Number)?.toDouble()
+                ?.let { String.format(Locale.US, "%.1f %s", it, unit) } ?: "–"
+            modeBtn.icon.setIcon(ThermostatCardView.modeIcon(mode), theme.primaryTextColor)
+            modeBtn.value.text = if (s == null) "Unknown" else humanize(mode).replace("Heat cool", "Heat/Cool")
+            val presets = listAttr(s, "preset_modes")
+            presetBtn.root.visibility = if (presets.isEmpty()) GONE else VISIBLE
+            presetBtn.icon.setIcon("mdi:tune", theme.primaryTextColor)
+            presetBtn.value.text = (attrs["preset_mode"] as? String)?.let { humanize(it) } ?: "None"
+        }
+    }
+
+    private class InfoPill(val root: LinearLayout, val icon: MdiIconView, val value: TextView)
+
+    /** HA 2026's rounded control button: an icon, then a small caption over the current value. */
+    private fun infoPill(caption: String): InfoPill {
+        val icon = MdiIconView(ctx.context)
+        val value = text(14f, theme.primaryTextColor, Inter.MEDIUM).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+        val root = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-        }
-        var targetTemp: Double? = null
-        var step = 0.5
-        fun adjust(delta: Double) {
-            val t = (targetTemp ?: return) + delta
-            targetTemp = t
-            target.text = String.format(Locale.US, "%.1f°", t)
-            ctx.callService("climate", "set_temperature", JSONObject().put("entity_id", id).put("temperature", t), null)
-        }
-        stepper.addView(circleButton("mdi:minus", 48f, 22f) { adjust(-step) }, LinearLayout.LayoutParams(ctx.px(48f), ctx.px(48f)))
-        stepper.addView(target, LinearLayout.LayoutParams(ctx.px(150f), WRAP_CONTENT))
-        stepper.addView(circleButton("mdi:plus", 48f, 22f) { adjust(step) }, LinearLayout.LayoutParams(ctx.px(48f), ctx.px(48f)))
-        addCentered(stepper, topDp = 8f)
-        addCentered(current, topDp = 6f)
-
-        val modesRow = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
-        val modesScroll = HorizontalScrollView(ctx.context).apply {
-            isHorizontalScrollBarEnabled = false
-            addView(modesRow, LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-        }
-        body.addView(modesScroll, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(24f) })
-        var shownModes: List<String> = emptyList()
-        var shownState: String? = null
-        return { s ->
-            (s?.attributes?.get("target_temp_step") as? Number)?.toDouble()?.let { if (it > 0) step = it }
-            targetTemp = (s?.attributes?.get("temperature") as? Number)?.toDouble()
-            target.text = targetTemp?.let { String.format(Locale.US, "%.1f°", it) } ?: "–"
-            val cur = (s?.attributes?.get("current_temperature") as? Number)?.toDouble()
-            current.text = cur?.let { String.format(Locale.US, "Currently %.1f°", it) } ?: relativeTime(s)
-            val modes = listAttr(s, "hvac_modes")
-            if (modes != shownModes || s?.state != shownState) {
-                shownModes = modes
-                shownState = s?.state
-                modesRow.removeAllViews()
-                for (m in modes) {
-                    val selected = s?.state == m
-                    val chip = pillLabel(humanize(m), selected) {
-                        ctx.callService("climate", "set_hvac_mode", JSONObject().put("entity_id", id).put("hvac_mode", m), null)
-                    }
-                    modesRow.addView(chip, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(40f)).apply { marginEnd = ctx.px(8f) })
-                }
+            setPadding(ctx.px(16f), 0, ctx.px(20f), 0)
+            background = GradientDrawable().apply {
+                cornerRadius = 16f * ctx.dp
+                setColor(if (theme.dark) DOCK_DARK else DOCK_LIGHT)
             }
+            isClickable = true
+            contentDescription = caption
+            addView(icon, LinearLayout.LayoutParams(ctx.px(22f), ctx.px(22f)).apply { marginEnd = ctx.px(12f) })
+            addView(LinearLayout(ctx.context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(text(11f, theme.secondaryTextColor).apply { this.text = caption })
+                addView(value, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(2f) })
+            })
+        }
+        return InfoPill(root, icon, value)
+    }
+
+    private fun showMenu(anchor: View, labels: List<String>, onPick: (Int) -> Unit) {
+        if (labels.isEmpty()) return
+        val menu = PopupMenu(ctx.context, anchor)
+        labels.forEachIndexed { i, l -> menu.menu.add(0, i, i, l) }
+        menu.setOnMenuItemClickListener { item ->
+            onPick(item.itemId)
+            true
+        }
+        menu.show()
+    }
+
+    /** HA's alarm panel: a status badge, the arm / disarm buttons and, when the panel takes a code, a keypad. */
+    private fun buildAlarm(id: String, initial: EntityState?): (EntityState?) -> Unit {
+        val badgeIcon = MdiIconView(ctx.context)
+        val badge = FrameLayout(ctx.context).apply {
+            addView(badgeIcon, LayoutParams(ctx.px(40f), ctx.px(40f), Gravity.CENTER))
+        }
+        addCentered(badge, topDp = 8f, widthDp = 88f, heightDp = 88f)
+        val stateLabel = text(24f, theme.primaryTextColor, Inter.REGULAR).apply { gravity = Gravity.CENTER }
+        val timeLabel = timeLabel()
+        addCentered(stateLabel, topDp = 12f)
+        addCentered(timeLabel, topDp = 4f)
+
+        val needsCode = initial?.attributes?.get("code_format") != null
+        val code = StringBuilder()
+        val codeView = text(24f, theme.primaryTextColor, Inter.MEDIUM).apply {
+            gravity = Gravity.CENTER
+            letterSpacing = 0.3f
+        }
+        fun call(service: String) {
+            val data = JSONObject().put("entity_id", id)
+            if (code.isNotEmpty()) data.put("code", code.toString())
+            ctx.callService("alarm_control_panel", service, data, null)
+            code.setLength(0)
+            codeView.text = ""
+        }
+
+        val actions = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        ALARM_ACTIONS.forEachIndexed { i, (label, service) ->
+            actions.addView(pillLabel(label, false) { call(service) },
+                LinearLayout.LayoutParams(0, ctx.px(48f), 1f).apply { if (i > 0) marginStart = ctx.px(8f) })
+        }
+        body.addView(actions, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(20f) })
+
+        if (needsCode) {
+            addCentered(codeView, topDp = 20f, heightDp = 32f)
+            val pad = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+            listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("Clear", "0", "⌫")).forEachIndexed { r, keys ->
+                val row = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
+                keys.forEachIndexed { i, key ->
+                    val b = pillLabel(key, false) {
+                        when (key) {
+                            "Clear" -> code.setLength(0)
+                            "⌫" -> if (code.isNotEmpty()) code.setLength(code.length - 1)
+                            else -> if (code.length < MAX_CODE) code.append(key)
+                        }
+                        codeView.text = "•".repeat(code.length)
+                    }
+                    row.addView(b, LinearLayout.LayoutParams(ctx.px(72f), ctx.px(52f)).apply { if (i > 0) marginStart = ctx.px(12f) })
+                }
+                pad.addView(row, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { if (r > 0) topMargin = ctx.px(10f) })
+            }
+            addCentered(pad, topDp = 12f)
+        }
+
+        return { s ->
+            val st = s?.state.orEmpty()
+            val color = alarmColor(st)
+            badge.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(CardSurface.withAlpha(color, 0.2f))
+            }
+            badgeIcon.setIcon(alarmIcon(st), color)
+            stateLabel.text = if (s == null) "Unknown" else humanize(st)
+            timeLabel.text = relativeTime(s)
         }
     }
 
@@ -785,7 +1128,71 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             setOnClickListener { onClick() }
         }
 
-    private class Preset(val name: String, val swatch: Int, val kelvin: Int? = null)
+    private class Favorite(val name: String, val color: Int, val kelvin: Int? = null)
+
+    private enum class LightMode { BRIGHTNESS, COLOR, TEMP }
+
+    /** A More-Info dock button: brightness (a filled circle when chosen), or a mini color wheel / temperature swatch. */
+    private class LightModeButton(context: Context, private val kind: LightMode, private val theme: ResolvedTheme) : View(context) {
+        private val dp = resources.displayMetrics.density
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2.5f * dp }
+        private val iconPath = Path()
+        private val matrix = android.graphics.Matrix()
+        private var shaderSize = 0
+
+        var chosen = false
+            set(v) { if (field != v) { field = v; invalidate() } }
+
+        init {
+            isClickable = true
+            contentDescription = when (kind) {
+                LightMode.BRIGHTNESS -> "Brightness"
+                LightMode.COLOR -> "Color"
+                LightMode.TEMP -> "Color temperature"
+            }
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val cx = width / 2f
+            val cy = height / 2f
+            val r = minOf(width, height) / 2f
+            if (kind == LightMode.BRIGHTNESS) {
+                paint.shader = null
+                val iconColor = if (chosen) {
+                    paint.color = if (theme.dark) Color.WHITE else SELECTED_DARK
+                    canvas.drawCircle(cx, cy, r, paint)
+                    if (theme.dark) SELECTED_DARK else Color.WHITE
+                } else {
+                    theme.primaryTextColor
+                }
+                val size = 22f * dp
+                iconPath.set(MdiIcons.pathFor("mdi:brightness-6"))
+                matrix.setScale(size / 24f, size / 24f)
+                matrix.postTranslate(cx - size / 2f, cy - size / 2f)
+                iconPath.transform(matrix)
+                paint.color = iconColor
+                canvas.drawPath(iconPath, paint)
+                return
+            }
+            val inner = r - 6f * dp
+            if (shaderSize != width) {
+                shaderSize = width
+                paint.shader = if (kind == LightMode.COLOR) {
+                    android.graphics.SweepGradient(cx, cy, RgbColorWheelView.WHEEL_COLORS, null)
+                } else {
+                    android.graphics.LinearGradient(0f, cy - inner, 0f, cy + inner, ColorTempSliderView.GRADIENT, null,
+                        android.graphics.Shader.TileMode.CLAMP)
+                }
+            }
+            paint.color = Color.WHITE
+            canvas.drawCircle(cx, cy, inner, paint)
+            if (chosen) {
+                ring.color = theme.primaryTextColor
+                canvas.drawCircle(cx, cy, r - ring.strokeWidth / 2f, ring)
+            }
+        }
+    }
 
     private companion object {
         const val WIDE_DP = 600
@@ -800,22 +1207,47 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val HISTORY_TOGGLE_DOMAINS = setOf(
             "light", "switch", "fan", "input_boolean", "climate", "cover", "lock", "automation", "humidifier", "siren",
         )
-        val DIMMABLE_MODES = setOf("brightness", "color_temp", "hs", "rgb", "xy", "rgbw", "rgbww")
-        val RGB_MODES = setOf("hs", "rgb", "xy", "rgbw", "rgbww")
 
-        val PRESET_WARM = Preset("Warm white", 0xFFFFB46B.toInt(), 2700)
-        val PRESET_SOFT = Preset("Soft white", 0xFFFFE4C4.toInt(), 4000)
-        val PRESET_COOL = Preset("Cool white", 0xFFE6F0FF.toInt(), 6500)
-        val PRESET_AMBER = Preset("Amber", 0xFFFFBF00.toInt())
-        val PRESET_CORAL = Preset("Coral", 0xFFFF7F50.toInt())
-        val PRESET_SKY = Preset("Sky blue", 0xFF87CEEB.toInt())
+        const val DOCK_LIGHT = 0xFFF2F2F2.toInt()
+        const val DOCK_DARK = 0xFF2A2A2A.toInt()
+        const val SELECTED_DARK = 0xFF212121.toInt()
+        const val MAX_CODE = 12
 
-        fun supportedModes(s: EntityState?): List<String> = listAttr(s, "supported_color_modes")
+        /** HA 2026's favorite colors: warm whites, then colors. */
+        val FAVORITES_WARM = listOf(
+            Favorite("Deep orange", LightColor.pack(255, 140, 0), 2000),
+            Favorite("Warm amber", LightColor.pack(255, 190, 133), 2700),
+            Favorite("Soft peach", LightColor.pack(252, 224, 197), 3500),
+            Favorite("Warm white", LightColor.pack(255, 250, 240), 4500),
+        )
+        val FAVORITES_COLOR = listOf(
+            Favorite("Sky blue", LightColor.pack(126, 176, 255)),
+            Favorite("Lavender", LightColor.pack(204, 142, 255)),
+            Favorite("Pink", LightColor.pack(255, 153, 230)),
+            Favorite("Coral", LightColor.pack(255, 110, 84)),
+        )
+        val COVER_ACTIONS = listOf("mdi:arrow-up" to "open_cover", "mdi:stop" to "stop_cover", "mdi:arrow-down" to "close_cover")
+        val COVER_PRESETS = listOf(0, 25, 75, 100)
+        val ALARM_ACTIONS = listOf("Arm home" to "alarm_arm_home", "Arm away" to "alarm_arm_away", "Disarm" to "alarm_disarm")
 
         fun listAttr(s: EntityState?, key: String): List<String> = when (val v = s?.attributes?.get(key)) {
             is List<*> -> v.mapNotNull { it?.toString() }
             is JSONArray -> (0 until v.length()).map { v.optString(it) }
             else -> emptyList()
+        }
+
+        fun alarmIcon(state: String): String = when (state) {
+            "disarmed" -> "mdi:shield-off"
+            "armed_home" -> "mdi:shield-home"
+            "triggered" -> "mdi:bell"
+            else -> if (state.startsWith("armed") || state == "arming" || state == "pending") "mdi:shield-lock" else "mdi:shield-home"
+        }
+
+        fun alarmColor(state: String): Int = when {
+            state == "triggered" -> 0xFFF44336.toInt()
+            state == "arming" || state == "pending" -> 0xFFFF9800.toInt()
+            state.startsWith("armed") -> 0xFF4CAF50.toInt()
+            else -> 0xFF9E9E9E.toInt()
         }
 
         fun humanize(raw: String): String = raw.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
@@ -868,7 +1300,7 @@ private class AspectImageView(context: Context) : ImageView(context) {
  * bottom fills with [activeColor] up to the level, with a white handle 16 dp under the top of the fill.
  * Dragging reports the level live through [onChange] and once on release through [onRelease].
  */
-internal class VerticalSliderPillView(context: Context, private val activeColor: Int) : View(context) {
+internal class VerticalSliderPillView(context: Context, private var activeColor: Int) : View(context) {
     private val dp = resources.displayMetrics.density
     private val radius = 36f * dp
     private val rect = RectF()
@@ -888,6 +1320,11 @@ internal class VerticalSliderPillView(context: Context, private val activeColor:
         private set
     var onChange: ((Int) -> Unit)? = null
     var onRelease: ((Int) -> Unit)? = null
+
+    /** Re-tints the fill live, e.g. when a light's RGB color or color temperature changes. */
+    fun setActiveColor(color: Int) {
+        if (color != activeColor) { activeColor = color; invalidate() }
+    }
 
     fun setPercent(value: Int) {
         if (dragging) return
@@ -1189,5 +1626,342 @@ internal class MoreInfoHistoryChartView(context: Context, private val theme: Res
 
     private companion object {
         const val HA_BLUE = 0xFF4269D0.toInt()
+    }
+}
+
+/** What a light's More-Info can offer, from `supported_color_modes` and the attributes it reports. */
+internal data class LightCaps(val brightness: Boolean, val color: Boolean, val colorTemp: Boolean) {
+    companion object {
+        private val COLOR_MODES = setOf("rgb", "hs", "xy", "rgbw", "rgbww")
+
+        fun of(s: EntityState?): LightCaps {
+            val modes = when (val v = s?.attributes?.get("supported_color_modes")) {
+                is List<*> -> v.mapNotNull { it?.toString() }
+                is JSONArray -> (0 until v.length()).map { v.optString(it) }
+                else -> emptyList()
+            }
+            val attrs = s?.attributes.orEmpty()
+            val color = modes.any { it in COLOR_MODES } || attrs.containsKey("rgb_color")
+            val colorTemp = "color_temp" in modes || attrs.containsKey("color_temp_kelvin") || attrs.containsKey("color_temp")
+            val brightness = color || colorTemp || "brightness" in modes || attrs.containsKey("brightness")
+            return LightCaps(brightness, color, colorTemp)
+        }
+    }
+}
+
+/**
+ * HA's hue/saturation wheel: hue around the circle (red at the right, counter-clockwise through yellow, green,
+ * cyan, blue and magenta), white at the center. A 24 dp thumb in the chosen color follows the finger; the color
+ * is reported on release through [onRelease].
+ */
+internal class RgbColorWheelView(context: Context) : View(context) {
+    private val dp = resources.displayMetrics.density
+    private val huePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val whitePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val thumbFill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val thumbRing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2.5f * dp
+        color = Color.WHITE
+    }
+    private val thumbShadow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1f * dp
+        color = 0x40000000
+    }
+    private var hue = 0f
+    private var sat = 0f
+
+    var dragging = false
+        private set
+    var onRelease: ((Int) -> Unit)? = null
+
+    val color: Int get() = LightColor.hsvToArgb(hue, sat, 1f)
+
+    fun setColor(argb: Int) {
+        if (dragging) return
+        val (h, s) = LightColor.argbToHueSat(argb)
+        if (h != hue || s != sat) { hue = h; sat = s; invalidate() }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        val cx = w / 2f
+        val cy = h / 2f
+        val r = radius().coerceAtLeast(1f)
+        huePaint.shader = android.graphics.SweepGradient(cx, cy, WHEEL_COLORS, null)
+        whitePaint.shader = android.graphics.RadialGradient(cx, cy, r, Color.WHITE, Color.TRANSPARENT, android.graphics.Shader.TileMode.CLAMP)
+    }
+
+    private fun radius(): Float = minOf(width, height) / 2f - 2f * dp
+
+    override fun onDraw(canvas: Canvas) {
+        val cx = width / 2f
+        val cy = height / 2f
+        val r = radius()
+        if (r <= 0f) return
+        canvas.drawCircle(cx, cy, r, huePaint)
+        canvas.drawCircle(cx, cy, r, whitePaint)
+        val (dx, dy) = offsetOf(hue, sat, r)
+        val tr = 12f * dp
+        thumbFill.color = color
+        canvas.drawCircle(cx + dx, cy + dy, tr, thumbFill)
+        canvas.drawCircle(cx + dx, cy + dy, tr + thumbShadow.strokeWidth / 2f, thumbShadow)
+        canvas.drawCircle(cx + dx, cy + dy, tr - thumbRing.strokeWidth / 2f, thumbRing)
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
+                dragging = true
+                track(event.x, event.y)
+            }
+            MotionEvent.ACTION_MOVE -> track(event.x, event.y)
+            MotionEvent.ACTION_UP -> {
+                track(event.x, event.y)
+                dragging = false
+                parent?.requestDisallowInterceptTouchEvent(false)
+                onRelease?.invoke(color)
+                performClick()
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                dragging = false
+                parent?.requestDisallowInterceptTouchEvent(false)
+            }
+        }
+        return true
+    }
+
+    override fun performClick(): Boolean = super.performClick()
+
+    private fun track(x: Float, y: Float) {
+        val (h, s) = hueSatAt(x - width / 2f, y - height / 2f, radius())
+        hue = h
+        sat = s
+        invalidate()
+    }
+
+    companion object {
+        /** Clockwise on screen from the right, so hue climbs counter-clockwise as on HA's wheel. */
+        val WHEEL_COLORS = intArrayOf(
+            Color.RED, Color.MAGENTA, Color.BLUE, Color.CYAN, Color.GREEN, Color.YELLOW, Color.RED,
+        )
+
+        /** The hue (0..360, counter-clockwise from the right) and saturation (0..1, clamped at the rim) at an offset from the center. */
+        fun hueSatAt(dx: Float, dy: Float, radius: Float): Pair<Float, Float> {
+            var deg = Math.toDegrees(kotlin.math.atan2(-dy.toDouble(), dx.toDouble())).toFloat()
+            if (deg < 0f) deg += 360f
+            val sat = (kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat() / radius.coerceAtLeast(1f)).coerceIn(0f, 1f)
+            return deg to sat
+        }
+
+        /** The offset from the center where [hue] and [sat] sit on a wheel of [radius]. */
+        fun offsetOf(hue: Float, sat: Float, radius: Float): Pair<Float, Float> {
+            val rad = Math.toRadians(hue.toDouble())
+            val d = sat.coerceIn(0f, 1f) * radius
+            return (d * kotlin.math.cos(rad)).toFloat() to (-d * kotlin.math.sin(rad)).toFloat()
+        }
+    }
+}
+
+/**
+ * HA's color temperature slider: a 36 dp rounded pill running from warm amber at the top (the light's minimum
+ * Kelvin) to cool sky blue at the bottom (its maximum), with a white 44×5 dp bar at the current temperature.
+ */
+internal class ColorTempSliderView(context: Context, private val minK: Int, private val maxK: Int) : View(context) {
+    private val dp = resources.displayMetrics.density
+    private val rect = RectF()
+    private val clip = Path()
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val bar = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+    private val barOutline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1f * dp
+        color = 0x33000000
+    }
+    private val barRect = RectF()
+    private var kelvin = (minK + maxK) / 2
+
+    var dragging = false
+        private set
+    var onChange: ((Int) -> Unit)? = null
+    var onRelease: ((Int) -> Unit)? = null
+
+    fun setKelvin(k: Int) {
+        if (dragging) return
+        val c = k.coerceIn(minOf(minK, maxK), maxOf(minK, maxK))
+        if (c != kelvin) { kelvin = c; invalidate() }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        rect.set(0f, 0f, w.toFloat(), h.toFloat())
+        clip.reset()
+        clip.addRoundRect(rect, 36f * dp, 36f * dp, Path.Direction.CW)
+        fill.shader = android.graphics.LinearGradient(0f, 0f, 0f, h.toFloat(), GRADIENT, null, android.graphics.Shader.TileMode.CLAMP)
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        canvas.save()
+        canvas.clipPath(clip)
+        canvas.drawRect(rect, fill)
+        canvas.restore()
+        val y = (fractionOf(kelvin, minK, maxK) * h).coerceIn(14f * dp, h - 14f * dp)
+        val hw = 22f * dp
+        val hh = 2.5f * dp
+        barRect.set(w / 2f - hw, y - hh, w / 2f + hw, y + hh)
+        canvas.drawRoundRect(barRect, hh, hh, bar)
+        canvas.drawRoundRect(barRect, hh, hh, barOutline)
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
+                dragging = true
+                track(event.y)
+            }
+            MotionEvent.ACTION_MOVE -> track(event.y)
+            MotionEvent.ACTION_UP -> {
+                track(event.y)
+                dragging = false
+                parent?.requestDisallowInterceptTouchEvent(false)
+                onRelease?.invoke(kelvin)
+                performClick()
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                dragging = false
+                parent?.requestDisallowInterceptTouchEvent(false)
+            }
+        }
+        return true
+    }
+
+    override fun performClick(): Boolean = super.performClick()
+
+    private fun track(y: Float) {
+        kelvin = kelvinAt(y / height.toFloat().coerceAtLeast(1f), minK, maxK)
+        invalidate()
+        onChange?.invoke(kelvin)
+    }
+
+    companion object {
+        const val DEFAULT_MIN_K = 2000
+        const val DEFAULT_MAX_K = 6500
+
+        /** Warm amber → warm white → neutral white → cool sky blue, top to bottom. */
+        val GRADIENT = intArrayOf(0xFFFF9329.toInt(), 0xFFFFD6AA.toInt(), 0xFFFFFDF7.toInt(), 0xFFA6C8FF.toInt())
+
+        /** Kelvin at [fraction] (0 = top, warm) of the pill, rounded to 50 K. */
+        fun kelvinAt(fraction: Float, minK: Int, maxK: Int): Int {
+            val k = minK + (maxK - minK) * fraction.coerceIn(0f, 1f)
+            return (Math.round(k / 50f) * 50).coerceIn(minOf(minK, maxK), maxOf(minK, maxK))
+        }
+
+        /** Where [kelvin] sits on the pill, 0 (top) to 1 (bottom). */
+        fun fractionOf(kelvin: Int, minK: Int, maxK: Int): Float =
+            if (maxK == minK) 0.5f else ((kelvin - minK).toFloat() / (maxK - minK)).coerceIn(0f, 1f)
+    }
+}
+
+/**
+ * HA 2026's cover position slider: a purple 36 dp pill that fills from the top down as the cover closes (70 %
+ * open fills the top 30 %), with a white 44×4 dp handle 14 dp above the bottom of the fill. Dragging up opens.
+ */
+internal class VerticalCoverSliderView(context: Context) : View(context) {
+    private val dp = resources.displayMetrics.density
+    private val rect = RectF()
+    private val clip = Path()
+    private val handleRect = RectF()
+    private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = CardSurface.withAlpha(PURPLE, 0.18f) }
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = PURPLE }
+    private val handle = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+    private var pct = 0
+
+    var dragging = false
+        private set
+    var onChange: ((Int) -> Unit)? = null
+    var onRelease: ((Int) -> Unit)? = null
+
+    fun setPercent(value: Int) {
+        if (dragging) return
+        val p = value.coerceIn(0, 100)
+        if (p != pct) { pct = p; invalidate() }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        rect.set(0f, 0f, w.toFloat(), h.toFloat())
+        clip.reset()
+        clip.addRoundRect(rect, 36f * dp, 36f * dp, Path.Direction.CW)
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        canvas.save()
+        canvas.clipPath(clip)
+        canvas.drawRect(rect, track)
+        val bottom = fillBottom(pct, h)
+        if (bottom > 0f) {
+            canvas.drawRect(0f, 0f, w, bottom, fill)
+            val y = (bottom - 14f * dp).coerceAtLeast(10f * dp)
+            val hw = 22f * dp
+            handleRect.set(w / 2f - hw, y - 2f * dp, w / 2f + hw, y + 2f * dp)
+            canvas.drawRoundRect(handleRect, 2f * dp, 2f * dp, handle)
+        }
+        canvas.restore()
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
+                dragging = true
+                trackTo(event.y)
+            }
+            MotionEvent.ACTION_MOVE -> trackTo(event.y)
+            MotionEvent.ACTION_UP -> {
+                trackTo(event.y)
+                dragging = false
+                parent?.requestDisallowInterceptTouchEvent(false)
+                onRelease?.invoke(pct)
+                performClick()
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                dragging = false
+                parent?.requestDisallowInterceptTouchEvent(false)
+            }
+        }
+        return true
+    }
+
+    override fun performClick(): Boolean = super.performClick()
+
+    private fun trackTo(y: Float) {
+        pct = positionAt(y, height.toFloat())
+        invalidate()
+        onChange?.invoke(pct)
+    }
+
+    companion object {
+        const val PURPLE = 0xFF8E63C9.toInt()
+
+        /** The cover header for a position: "Closed", "Open · 70%", "Open". */
+        fun stateText(pct: Int): String = when {
+            pct <= 0 -> "Closed"
+            pct >= 100 -> "Open"
+            else -> "Open · $pct%"
+        }
+
+        /** The bottom edge of the purple fill for a cover [pct] open on a pill [height] tall. */
+        fun fillBottom(pct: Int, height: Float): Float = (1f - pct.coerceIn(0, 100) / 100f) * height
+
+        /** The position a finger at [y] asks for: the top is fully open, the bottom closed. */
+        fun positionAt(y: Float, height: Float): Int =
+            Math.round((1f - y / height.coerceAtLeast(1f)) * 100f).coerceIn(0, 100)
     }
 }

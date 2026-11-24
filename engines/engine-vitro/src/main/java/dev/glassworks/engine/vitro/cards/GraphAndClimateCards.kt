@@ -97,7 +97,7 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
 
         val entityIds = buildList {
             config.entity?.let(::add)
-            config.entities().forEach { if (it.entity !in this) add(it.entity) }
+            config.entities().forEach { if (it.isEntity && it.entity !in this) add(it.entity) }
         }
         val primaryId = entityIds.firstOrNull()
         val hours = config.raw.optInt("hours_to_show", 24).coerceIn(1, 168)
@@ -545,9 +545,14 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
 /**
  * The thermostat's 270° dial: a 14 dp track from 135°, a soft fill up to the lower of current and target, a solid
  * bridge between them with a dot at the current temperature and a white thumb at the target. Dragging along the
- * ring moves the target in `target_temp_step` steps and commits it on release.
+ * ring moves the target in `target_temp_step` steps and commits it on release. With [showCurrentInDial] off (the
+ * More-Info sheet, which prints the current temperature above the dial) the thermometer row in the centre is left out.
  */
-private class ThermostatDialView(private val ctx: VitroCardContext, private val unit: String) : View(ctx.context) {
+internal class ThermostatDialView(
+    private val ctx: VitroCardContext,
+    private val unit: String,
+    private val showCurrentInDial: Boolean = true,
+) : View(ctx.context) {
     private val dp = ctx.dp
     private val strokeW = 14f * dp
     private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -611,10 +616,11 @@ private class ThermostatDialView(private val ctx: VitroCardContext, private val 
         return (Math.round(snapped.coerceIn(min, max) * 100.0) / 100.0)
     }
 
-    /** The heat or cool accent this thermostat is working toward, or null when it is off or in another mode. */
+    /** The heat, cool or auto/heat_cool accent this thermostat uses, or null when off. */
     private fun accent(): Pair<Int, Int>? = when {
         action == "heating" || mode == "heat" -> HEAT_COLOR to HEAT_SOFT
         action == "cooling" || mode == "cool" -> COOL_COLOR to COOL_SOFT
+        mode == "heat_cool" || mode == "auto" -> AUTO_COLOR to AUTO_SOFT
         else -> null
     }
 
@@ -650,12 +656,17 @@ private class ThermostatDialView(private val ctx: VitroCardContext, private val 
             canvas.drawCircle(cx, cy, radius, glowPaint)
         }
 
-        arcPaint.color = if (ctx.theme.dark) TRACK_DARK else TRACK_LIGHT
+        val isAutoIdle = (mode == "heat_cool" || mode == "auto") && activeTint == null
+        arcPaint.color = when {
+            isAutoIdle -> AUTO_SOFT
+            ctx.theme.dark -> TRACK_DARK
+            else -> TRACK_LIGHT
+        }
         canvas.drawArc(oval, 135f, 270f, false, arcPaint)
 
         val cur = current
         val tgt = target
-        if (accent != null && tgt != null) {
+        if (accent != null && tgt != null && !isAutoIdle) {
             val (solid, soft) = accent
             val low = if (cur != null) minOf(cur, tgt) else tgt
             val lowAngle = angleOf(low)
@@ -671,6 +682,9 @@ private class ThermostatDialView(private val ctx: VitroCardContext, private val 
                 fill.color = Color.WHITE
                 pointAt(a).let { (x, y) -> canvas.drawCircle(x, y, 2.5f * dp, fill) }
             }
+        } else if (isAutoIdle && cur != null) {
+            fill.color = CardSurface.withAlpha(Color.WHITE, 0.7f)
+            pointAt(angleOf(cur)).let { (x, y) -> canvas.drawCircle(x, y, 3f * dp, fill) }
         }
         if (tgt != null) {
             val (x, y) = pointAt(angleOf(tgt))
@@ -705,7 +719,7 @@ private class ThermostatDialView(private val ctx: VitroCardContext, private val 
             if (dec.isNotEmpty()) canvas.drawText(dec, sideX, baseline, decPaint)
         }
 
-        if (cur != null) {
+        if (cur != null && showCurrentInDial) {
             val curText = String.format(Locale.US, "%.1f %s", cur, unit)
             val curColor = if (action == "heating") HEAT_COLOR else if (action == "cooling") COOL_COLOR else ctx.theme.secondaryTextColor
             curPaint.color = curColor
@@ -779,6 +793,8 @@ private class ThermostatDialView(private val ctx: VitroCardContext, private val 
     companion object {
         private const val TRACK_LIGHT = 0xFFE8E8E8.toInt()
         private const val TRACK_DARK = 0xFF333333.toInt()
+        private const val AUTO_COLOR = 0xFFFFC107.toInt()
+        private const val AUTO_SOFT = 0xFFFFE082.toInt()
 
         /** `21.5` → `("21", ".5")`; whole steps drop the decimal. */
         fun splitTemp(v: Double, step: Double): Pair<String, String> {

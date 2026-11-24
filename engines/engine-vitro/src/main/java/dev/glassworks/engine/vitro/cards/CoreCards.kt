@@ -192,6 +192,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 renderState(s)
                 brightnessSlider?.let { sb ->
                     val bri = (s?.attributes?.get("brightness") as? Number)?.toInt() ?: if (s?.isActive == true) 255 else 0
+                    sb.setAccentColor(s?.lightTintColor() ?: if (ctx.theme.dark) BRIGHTNESS_DARK else BRIGHTNESS_LIGHT)
                     sb.setValue(bri / 255f, active = s?.isActive == true)
                 }
                 selectBox?.text = s?.state ?: "…"
@@ -261,7 +262,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val color = when {
             domain == "lock" && s?.state == "locked" -> LOCKED_GREEN
             domain == "lock" && (s?.state == "unlocked" || s?.state == "open") -> UNLOCKED_RED
-            active -> ctx.theme.activeColor(domain)
+            active -> s?.lightTintColor() ?: ctx.theme.activeColor(domain)
             else -> ctx.theme.stateInactiveColor
         }
         iconBadge.setIcon(iconName, color)
@@ -309,7 +310,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
  */
 internal class HaHorizontalSliderView(
     private val ctx: VitroCardContext,
-    private val accentColor: Int,
+    private var accentColor: Int,
     private val onCommit: (Float) -> Unit,
 ) : View(ctx.context) {
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
@@ -324,6 +325,13 @@ internal class HaHorizontalSliderView(
     private var fraction = 0f
     private var active = false
     private var dragging = false
+
+    /** Re-tints the fill, e.g. when a light's RGB color or color temperature changes. */
+    fun setAccentColor(color: Int) {
+        if (color == accentColor) return
+        accentColor = color
+        invalidate()
+    }
 
     fun setValue(value: Float, active: Boolean) {
         if (dragging) return
@@ -451,7 +459,11 @@ internal class HaSwitchView(private val ctx: VitroCardContext) : View(ctx.contex
     }
 }
 
-/** Native HA `entities` card with live rows and interactive switches. Matches `hui-entities-card`: no dividers. */
+/**
+ * Native HA `entities` card with live rows and interactive switches, matching `hui-entities-card`: no dividers
+ * between rows, but `divider` and `section` special rows, `secondary_info` under the name and inline
+ * open / stop / close buttons on cover rows.
+ */
 class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
     init {
         val col = LinearLayout(ctx.context).apply {
@@ -461,7 +473,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         val title = config.title
         val rows = config.entities()
         // HA's header toggle: shown when the card has a title and holds toggleable entities, on while any is on.
-        val toggleIds = rows.map { it.entity }.filter { it.substringBefore('.') in SWITCH_DOMAINS }.distinct()
+        val toggleIds = rows.filter { it.isEntity }.map { it.entity }.filter { it.substringBefore('.') in SWITCH_DOMAINS }.distinct()
         val masterSwitch: HaSwitchView? =
             if (title != null && config.raw.optBoolean("show_header_toggle", true) && toggleIds.isNotEmpty()) HaSwitchView(ctx) else null
         if (title != null) {
@@ -514,7 +526,37 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             rowViews.forEachIndexed { i, row -> row.visibility = if (rowVisible[i]) VISIBLE else GONE }
         }
 
-        rows.forEachIndexed { idx, rowCfg ->
+        var prevWasDivider = false
+        for (rowCfg in rows) {
+            if (rowCfg.rowType == "divider") {
+                col.addView(dividerLine(ctx), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)).apply {
+                    marginStart = ctx.px(16f); marginEnd = ctx.px(16f)
+                    topMargin = ctx.px(8f); bottomMargin = ctx.px(8f)
+                })
+                prevWasDivider = true
+                continue
+            }
+            if (rowCfg.rowType == "section") {
+                if (!prevWasDivider) {
+                    col.addView(dividerLine(ctx), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)).apply {
+                        marginStart = ctx.px(16f); marginEnd = ctx.px(16f)
+                        topMargin = ctx.px(8f)
+                    })
+                }
+                rowCfg.name?.let { label ->
+                    col.addView(textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+                        text = label
+                        maxLines = 1
+                        ellipsize = TextUtils.TruncateAt.END
+                        setPadding(ctx.px(16f), ctx.px(14f), ctx.px(16f), ctx.px(6f))
+                    }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                }
+                prevWasDivider = false
+                continue
+            }
+            if (!rowCfg.isEntity) continue
+            prevWasDivider = false
+            val idx = rowViews.size
             val row = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -535,13 +577,47 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             }
             val switchView = HaSwitchView(ctx)
             val isSwitchable = rowCfg.entity.substringBefore('.') in SWITCH_DOMAINS
+            val isCover = rowCfg.entity.startsWith("cover.")
+            val secondaryView = if (rowCfg.secondaryInfo == "last-changed" || rowCfg.secondaryInfo == "last-updated") {
+                textView(ctx, 12f, ctx.theme.secondaryTextColor).apply {
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                }
+            } else {
+                null
+            }
 
             row.addView(iconView, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply { marginEnd = ctx.px(16f) })
-            row.addView(nameView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ctx.px(8f) })
-            if (isSwitchable) {
-                row.addView(switchView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+            if (secondaryView != null) {
+                val labels = LinearLayout(ctx.context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(0, ctx.px(4f), 0, ctx.px(4f))
+                    addView(nameView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                    addView(secondaryView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(2f) })
+                }
+                row.addView(labels, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ctx.px(8f) })
             } else {
-                row.addView(valueView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+                row.addView(nameView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ctx.px(8f) })
+            }
+            when {
+                isSwitchable -> row.addView(switchView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+                isCover -> COVER_BUTTONS.forEach { (iconName, service) ->
+                    val btn = android.widget.FrameLayout(ctx.context).apply {
+                        isClickable = true
+                        contentDescription = service.substringBefore('_').replaceFirstChar { it.titlecase(Locale.ROOT) }
+                        background = GradientDrawable().apply {
+                            shape = GradientDrawable.OVAL
+                            setColor(Color.TRANSPARENT)
+                        }
+                        addView(MdiIconView(ctx.context).apply { setIcon(iconName, ctx.theme.primaryTextColor) },
+                            android.widget.FrameLayout.LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
+                        setOnClickListener {
+                            ctx.callService("cover", service, JSONObject().put("entity_id", rowCfg.entity), null)
+                        }
+                    }
+                    row.addView(btn, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)))
+                }
+                else -> row.addView(valueView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
             }
 
             // HA's entity rows: the row opens more-info; only the switch itself toggles.
@@ -559,14 +635,21 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                     refreshFilter()
                 }
                 val active = s?.isActive == true
-                val tint = if (active) ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
+                val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                 iconView.setIcon(MdiIcons.resolveIconName(rowCfg.icon, s), tint)
                 nameView.text = rowCfg.name ?: s?.friendlyName ?: rowCfg.entity
-                if (isSwitchable) {
-                    switchView.setOn(active)
-                    refreshMaster()
+                secondaryView?.text = if (rowCfg.secondaryInfo == "last-updated") {
+                    s?.copy(lastChanged = s.lastUpdated.takeIf { it > 0.0 } ?: s.lastChanged)?.relativeLastChanged()
                 } else {
-                    valueView.text = s?.formattedState() ?: "…"
+                    s?.relativeLastChanged()
+                }.orEmpty()
+                when {
+                    isSwitchable -> {
+                        switchView.setOn(active)
+                        refreshMaster()
+                    }
+                    isCover -> Unit
+                    else -> valueView.text = s?.formattedState() ?: "…"
                 }
             }
             col.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -577,10 +660,13 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
 
     private companion object {
         val SWITCH_DOMAINS = setOf("light", "switch", "input_boolean", "fan", "automation", "humidifier", "siren")
+        val COVER_BUTTONS = listOf("mdi:arrow-up" to "open_cover", "mdi:stop" to "stop_cover", "mdi:arrow-down" to "close_cover")
+
+        fun dividerLine(ctx: VitroCardContext): View = View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) }
     }
 }
 
-/** Native HA `glance` card (compact multi-column icons + states). */
+/** Native HA `glance` card, in `hui-glance-card`'s order: name on top, icon in the middle, state at the bottom. */
 class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
     init {
         val pad = ctx.px(14f)
@@ -596,7 +682,7 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
         }
         val showName = config.raw.optBoolean("show_name", true)
         val showState = config.raw.optBoolean("show_state", true)
-        val entities = config.entities()
+        val entities = config.entities().filter { it.isEntity }
         val cols = config.raw.optInt("columns", minOf(entities.size.coerceAtLeast(1), 5)).coerceIn(1, 6)
 
         entities.chunked(cols).forEach { chunk ->
@@ -612,22 +698,24 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                     isClickable = true
                 }
                 val icon = MdiIconView(ctx.context)
-                val name = textView(ctx, 11f, ctx.theme.secondaryTextColor).apply {
+                val name = textView(ctx, 13f, ctx.theme.primaryTextColor).apply {
                     maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER
                 }
-                val state = textView(ctx, 12f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
+                val state = textView(ctx, 13f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
                     maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER
                 }
-                cell.addView(icon, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)))
-                if (showName) cell.addView(name, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(4f) })
-                if (showState) cell.addView(state, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(2f) })
+                if (showName) cell.addView(name, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                cell.addView(icon, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply {
+                    topMargin = ctx.px(10f); bottomMargin = ctx.px(10f)
+                })
+                if (showState) cell.addView(state, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
                 cell.setOnClickListener {
                     ctx.performAction(e.tapAction ?: ActionConfig("more-info"), e.entity)
                 }
                 cell.bindHoldAction(ctx, e.holdAction ?: ActionConfig("more-info"), e.entity)
                 observe(e.entity) { s ->
                     val active = s?.isActive == true
-                    val tint = if (active) ctx.theme.activeColor(s.domain) else ctx.theme.secondaryTextColor
+                    val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                     icon.setIcon(MdiIcons.resolveIconName(e.icon, s), tint)
                     name.text = e.name ?: s?.friendlyName ?: e.entity
                     state.text = s?.formattedState() ?: "…"

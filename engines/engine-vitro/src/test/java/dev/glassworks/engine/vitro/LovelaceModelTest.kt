@@ -737,4 +737,25 @@ class LovelaceModelTest {
         assertFalse(VitroView.isHalfWidth(card("""{"type": "clock", "grid_options": {"columns": 12}}""")))
         assertFalse(VitroView.isHalfWidth(card("""{"type": "tile", "entity": "light.a"}""")))
     }
+
+    @Test
+    fun entitiesRowsKeepDividersAndSections() {
+        val c = card(
+            """{"type": "entities", "entities": [
+                 "light.desk",
+                 {"type": "divider"},
+                 {"type": "section", "label": "Blinds"},
+                 {"type": "section"},
+                 {"entity": "cover.office", "secondary_info": "last-changed"}
+               ]}""",
+        )
+        val rows = c.entities()
+        assertEquals(listOf("entity", "divider", "section", "section", "entity"), rows.map { it.rowType })
+        assertEquals("", rows[1].entity)
+        assertEquals("Blinds", rows[2].name)
+        assertNull(rows[3].name)
+        assertTrue(rows[0].isEntity && !rows[1].isEntity && !rows[2].isEntity)
+        assertEquals("last-changed", rows[4].secondaryInfo)
+        assertEquals(setOf("light.desk", "cover.office"), CardRouter.referencedEntities(view("""{"cards": [${c.raw}]}""")))
+    }
 }
