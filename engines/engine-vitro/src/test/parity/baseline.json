@@ -89,7 +89,7 @@
   "bounds": 0.5,
   "font": 0.3,
   "missingText": 0,
-  "reason": "the sheet now applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph); left: the bold run is ~4 px wider (Robolectric's Skia draws Inter's default instance, not its wght axis), the heading 16.4 vs 16.5-16.7 px, the bottom border within 0.5 px (2026-11-24)"
+  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph). Left: Vitro sizes Markdown runs in whole device px (AbsoluteSizeSpan), so the 16.38 px h3 draws at 16.5-16.67 (fractional sizes tried 2026-11-24: font deltas 0 but no pixel gain, markdown-table worse); the 18 px line sits 0.85-1.35 px lower and the card 0.3-0.5 px taller; Android's Roboto against the frontend's web Roboto. The report's +4.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it"
  },
  "mirror/media-control": {
   "pixel": 0.8695,
@@ -104,13 +104,6 @@
   "font": 0,
   "missingText": 0,
   "reason": "the arm buttons row (home, away) is missing, so the card is 64 px shorter; the disarmed icon is a green outline shield where HA's is a filled blue shield-off on a blue disc (coverage #794, 2026-11-24)"
- },
- "mirror/mushroom-chips": {
-  "pixel": 0.0234,
-  "bounds": 0.7,
-  "font": 0,
-  "missingText": 0,
-  "reason": "values now match HA (display precision from the registry); what's left is text rendering and chip edges about 1 px apart, just over 2% at the 1.5x panels' density"
  },
  "mirror/mushroom-climate": {
   "pixel": 0.0718,
@@ -153,13 +146,6 @@
   "font": 2,
   "missingText": 1,
   "reason": "the option dropdown row and the secondary state line (\"open\") are missing, so the name centers alone in a 64 px shorter card (coverage #794, 2026-11-24)"
- },
- "mirror/mushroom-template-cut-in-stack": {
-  "pixel": 0.0224,
-  "bounds": 1.3,
-  "font": 0,
-  "missingText": 0,
-  "reason": "both cut the primary with an ellipsis (the capture flags HA's since the flat-tree walk); Vitro cuts one glyph earlier (\"door \u2026\" vs \"door a\u2026\") and its row is ~1.3 px taller (2026-11-24)"
  },
  "mirror/mushroom-title": {
   "pixel": 0.038,
@@ -299,7 +285,7 @@
   "bounds": 0.5,
   "font": 0.3,
   "missingText": 0,
-  "reason": "the sheet now applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph); left: the bold run is ~4 px wider (Robolectric's Skia draws Inter's default instance, not its wght axis), the heading 16.4 vs 16.5-16.7 px, the bottom border within 0.5 px (2026-11-24)"
+  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph). Left: Vitro sizes Markdown runs in whole device px (AbsoluteSizeSpan), so the 16.38 px h3 draws at 16.5-16.67 (fractional sizes tried 2026-11-24: font deltas 0 but no pixel gain, markdown-table worse); the 18 px line sits 0.85-1.35 px lower and the card 0.3-0.5 px taller; Android's Roboto against the frontend's web Roboto. The report's +4.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it"
  },
  "s1/media-control": {
   "pixel": 0.8695,
@@ -314,13 +300,6 @@
   "font": 0,
   "missingText": 0,
   "reason": "the arm buttons row (home, away) is missing, so the card is 64 px shorter; the disarmed icon is a green outline shield where HA's is a filled blue shield-off on a blue disc (coverage #794, 2026-11-24)"
- },
- "s1/mushroom-chips": {
-  "pixel": 0.0234,
-  "bounds": 0.7,
-  "font": 0,
-  "missingText": 0,
-  "reason": "values now match HA (display precision from the registry); what's left is text rendering and chip edges about 1 px apart, just over 2% at the 1.5x panels' density"
  },
  "s1/mushroom-climate": {
   "pixel": 0.0718,
@@ -363,13 +342,6 @@
   "font": 2,
   "missingText": 1,
   "reason": "the option dropdown row and the secondary state line (\"open\") are missing, so the name centers alone in a 64 px shorter card (coverage #794, 2026-11-24)"
- },
- "s1/mushroom-template-cut-in-stack": {
-  "pixel": 0.0224,
-  "bounds": 1.3,
-  "font": 0,
-  "missingText": 0,
-  "reason": "both cut the primary with an ellipsis (the capture flags HA's since the flat-tree walk); Vitro cuts one glyph earlier (\"door \u2026\" vs \"door a\u2026\") and its row is ~1.3 px taller (2026-11-24)"
  },
  "s1/mushroom-title": {
   "pixel": 0.038,
@@ -509,7 +481,7 @@
   "bounds": 0.3,
   "font": 0.1,
   "missingText": 0,
-  "reason": "the sheet now applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph); left: the bold run is ~4 px wider (Robolectric's Skia draws Inter's default instance, not its wght axis), the heading 16.4 vs 16.5-16.7 px, the bottom border within 0.5 px (2026-11-24)"
+  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph). Left: Vitro sizes Markdown runs in whole device px (AbsoluteSizeSpan), so the 16.38 px h3 draws at 16.5-16.67 (fractional sizes tried 2026-11-24: font deltas 0 but no pixel gain, markdown-table worse); the 18 px line sits 0.85-1.35 px lower and the card 0.3-0.5 px taller; Android's Roboto against the frontend's web Roboto. The report's +4.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it"
  },
  "tablet/media-control": {
   "pixel": 0.8605,
@@ -573,13 +545,6 @@
   "font": 2,
   "missingText": 1,
   "reason": "the option dropdown row and the secondary state line (\"open\") are missing, so the name centers alone in a 64 px shorter card (coverage #794, 2026-11-24)"
- },
- "tablet/mushroom-template-cut-in-stack": {
-  "pixel": 0.0466,
-  "bounds": 2,
-  "font": 0,
-  "missingText": 0,
-  "reason": "both cut the primary with an ellipsis (the capture flags HA's since the flat-tree walk); Vitro cuts one glyph earlier (\"door \u2026\" vs \"door a\u2026\") and its row is ~2 px taller, which moves the bottom border (2026-11-24)"
  },
  "tablet/mushroom-title": {
   "pixel": 0.0344,

@@ -212,6 +212,14 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     private var inlineFeatures: View? = null
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        mushroom?.row?.let { row ->
+            // Mushroom 5's `.container { margin: calc(-1 * var(--ha-card-border-width, 1px)) }`: the variable, not the
+            // border drawn. With the theme's border the content covers it; with `border: none` (card-mod) it runs past
+            // each edge by the variable, and the card is that much shorter than its 56 px content (the S1's alarm row).
+            val m = drawnBorderPx - (ctx.theme.cardBorderWidthDp * ctx.dp).toInt()
+            val lp = row.layoutParams as MarginLayoutParams
+            if (lp.topMargin != m || lp.leftMargin != m) lp.setMargins(m, m, m, m)
+        }
         inlineFeatures?.let { slot ->
             if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
                 // hui-card-features beside the content: calc(50% - var(--column-gap) / 2 - 12px), 12 px end padding.
@@ -2694,7 +2702,14 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
 
     private val style = ChipStyle.resolve(ctx, ownVars(ctx, config))
     private val alignment = config.raw.optString("alignment")
-    private val spacingPx = ctx.px(style.spacing)
+    /**
+     * A chip length in device px, rounded: Chrome lays chips out in fractional px, and truncating each part (a 9 px
+     * padding is 13.5 px at 1.5x) made every chip about a pixel narrower than HA's, adding up along the row.
+     * Borders still truncate, as Chrome snaps them down.
+     */
+    private fun chipPx(v: Float): Int = Math.round(v * ctx.dp)
+
+    private val spacingPx = chipPx(style.spacing)
     private val spacers = HashSet<View>()
 
     init {
@@ -2836,10 +2851,10 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
                 if (border > 0) setStroke(border, st.borderColor)
             }
             // box-sizing: content-box: the border sits outside --chip-height.
-            val h = ctx.px(st.height)
+            val h = chipPx(st.height)
             minimumHeight = h + 2 * border
             minimumWidth = h + 2 * border
-            setPadding(ctx.px(st.paddingX) + border, border, ctx.px(st.paddingX) + border, border)
+            setPadding(chipPx(st.paddingX) + border, border, chipPx(st.paddingX) + border, border)
             isClickable = true
             applyHaRipple(this, radiusPx, ctx.theme.dark)
         }
@@ -2851,13 +2866,13 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
             includeFontPadding = false
             maxLines = 1
         }
-        val iconSize = ctx.px(st.iconSize)
+        val iconSize = chipPx(st.iconSize)
         // ::slotted(*:not(:last-child)) { margin-right: 0.15em }: the gap after the icon when a label follows.
         val iconLp = LinearLayout.LayoutParams(iconSize, iconSize)
         chip.addView(icon, iconLp)
         chip.addView(label, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
         fun syncGap() {
-            iconLp.marginEnd = if (label.visibility == VISIBLE && icon.visibility == VISIBLE) ctx.px(st.height * 0.15f) else 0
+            iconLp.marginEnd = if (label.visibility == VISIBLE && icon.visibility == VISIBLE) chipPx(st.height * 0.15f) else 0
             icon.layoutParams = iconLp
         }
         fun setLabel(text: String) {
