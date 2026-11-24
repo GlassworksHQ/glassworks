@@ -223,4 +223,6 @@ test('imagePaths reads <img src> as HTML does: quotes, bare values, code and pro
   assert.deepEqual(md('<img src="//cdn.example.test/a.png"> <img src="/local/a.png#frag">'), ['/local/a.png']);
   assert.deepEqual(md('Code `<img src="/local/span.png">` and\n```\n<img src="/local/fence.png">\n```\nthen <img src="/local/real.png">'), ['/local/real.png']);
   assert.deepEqual(imagePaths({ type: 'picture', image: '//cdn.example.test/x.png' }), []);
+  assert.deepEqual(md('~~~\nexample\n~~~~\n<img src="/local/after.png">'), ['/local/after.png']);
+  assert.deepEqual(md('<img alt="a > b" src="/local/gt.png">'), ['/local/gt.png']);
 });

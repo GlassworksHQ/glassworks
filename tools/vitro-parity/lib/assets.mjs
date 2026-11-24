@@ -40,10 +40,10 @@ function localPath(v) {
 /** The `src` of every `<img>` in Markdown/HTML text, outside code spans and fenced code blocks. */
 function imgSources(text) {
   const prose = text
-    .replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[ \t]*$|(?![\s\S]))/gm, '') // fenced blocks
+    .replace(/^ {0,3}((`){3,}|(~){3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1(?:\2|\3)*[ \t]*$|(?![\s\S]))/gm, '') // fenced blocks; a closing fence may be longer
     .replace(/(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g, ''); // code spans
   const out = [];
-  for (const tag of prose.matchAll(/<img\b([^>]*)>?/gi)) {
+  for (const tag of prose.matchAll(/<img\b((?:[^>"']|"[^"]*"|'[^']*')*)>?/gi)) {
     // Attributes as HTML parses them: name, then an optional double-quoted, single-quoted or bare value.
     for (const a of tag[1].matchAll(/([^\s"'>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {
       if (a[1].toLowerCase() === 'src') { out.push(a[2] ?? a[3] ?? a[4] ?? ''); break; }
