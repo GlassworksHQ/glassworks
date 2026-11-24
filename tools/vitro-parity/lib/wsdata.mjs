@@ -12,38 +12,44 @@ export const RECORDED_TYPES = new Set([
 ]);
 
 /**
- * One page socket's recorder. `sent(msg)` and `received(msg)` take each parsed frame (one command or message);
- * `calls` lists what the page asked for since the last `reset()`, in order: `{ request, result?, error?, events }`,
- * the request without its id. `reset()` starts a new case: answers to an earlier case's ids are dropped from then on.
+ * The page's recorder. `socket()` gives each WebSocket its own `sent(msg)` / `received(msg)` pair (message ids are
+ * per connection, so an answer on one socket never matches a request made on another); `calls` lists what the page
+ * asked for since the last `reset()`, from every socket, in order: `{ request, result?, error?, events }`, the request
+ * without its id. `reset()` starts a new case: answers to an earlier case's ids are dropped from then on.
  */
 export function wsRecorder() {
-  let byId = new Map();
+  const sockets = new Set();
   let calls = [];
   return {
     get calls() { return calls; },
     reset() {
-      byId = new Map();
+      for (const byId of sockets) byId.clear();
       calls = [];
     },
-    sent(msg) {
-      if (!msg || typeof msg !== 'object') return;
-      if (msg.type === 'unsubscribe_events') return;
-      if (!RECORDED_TYPES.has(msg.type) || typeof msg.id !== 'number') return;
-      const { id, ...request } = msg;
-      const call = { request, events: [] };
-      byId.set(id, call);
-      calls.push(call);
-    },
-    received(msg) {
-      if (!msg || typeof msg !== 'object') return;
-      const call = byId.get(msg.id);
-      if (!call) return;
-      if (msg.type === 'result') {
-        if (msg.success) call.result = msg.result ?? null;
-        else call.error = msg.error ?? { code: 'unknown' };
-      } else if (msg.type === 'event') {
-        call.events.push(msg.event ?? null);
-      }
+    socket() {
+      const byId = new Map();
+      sockets.add(byId);
+      return {
+        sent(msg) {
+          if (!msg || typeof msg !== 'object') return;
+          if (!RECORDED_TYPES.has(msg.type) || typeof msg.id !== 'number') return;
+          const { id, ...request } = msg;
+          const call = { request, events: [] };
+          byId.set(id, call);
+          calls.push(call);
+        },
+        received(msg) {
+          if (!msg || typeof msg !== 'object') return;
+          const call = byId.get(msg.id);
+          if (!call) return;
+          if (msg.type === 'result') {
+            if (msg.success) call.result = msg.result ?? null;
+            else call.error = msg.error ?? { code: 'unknown' };
+          } else if (msg.type === 'event') {
+            call.events.push(msg.event ?? null);
+          }
+        },
+      };
     },
   };
 }

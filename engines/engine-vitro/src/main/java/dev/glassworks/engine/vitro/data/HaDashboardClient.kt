@@ -314,10 +314,12 @@ class HaDashboardClient(
 
     /**
      * Subscribes [msg] (any subscription command, e.g. `history/stream`) and hands each of its events to [onEvent], on
-     * the socket's thread. Returns the unsubscribe handle.
+     * the socket's thread. [onError] runs once if Home Assistant rejects the command (with its `error`), or with null
+     * when it can't be sent; cancelling with the returned handle never calls it.
      */
-    fun subscribeWs(msg: JSONObject, onEvent: (JSONObject) -> Unit): () -> Unit {
-        val subId = subscribe(JSONObject(msg.toString()), onEvent)
+    fun subscribeWs(msg: JSONObject, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit): () -> Unit {
+        val subId = subscribeWithId(JSONObject(msg.toString()), onError) { _, ev -> onEvent(ev) }
+        if (subId <= 0) onError(null)
         return { if (subId > 0) unsubscribe(subId) }
     }
 
@@ -673,12 +675,19 @@ class HaDashboardClient(
         subscribeWithId(msg) { _, ev -> onEvent(ev) }
 
     /** [subscribe] whose callback also gets its own subscription id, valid even for an event that beats the return. */
-    private fun subscribeWithId(msg: JSONObject, onEvent: (id: Int, event: JSONObject) -> Unit): Int = synchronized(queueLock) {
+    private fun subscribeWithId(
+        msg: JSONObject,
+        onError: ((JSONObject?) -> Unit)? = null,
+        onEvent: (id: Int, event: JSONObject) -> Unit,
+    ): Int = synchronized(queueLock) {
         val id = nextId.getAndIncrement()
         msg.put("id", id)
         subscriptions[id] = { ev -> onEvent(id, ev) }
         pending[id] = { res ->
-            if (!res.optBoolean("success", false)) subscriptions.remove(id)
+            if (!res.optBoolean("success", false)) {
+                // A cancelled subscription is already gone: only a live one reports the rejection.
+                if (subscriptions.remove(id) != null) onError?.invoke(res.optJSONObject("error"))
+            }
         }
         if (!send(msg)) {
             subscriptions.remove(id)

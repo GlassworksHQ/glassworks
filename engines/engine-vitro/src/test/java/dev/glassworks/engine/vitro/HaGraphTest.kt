@@ -6,6 +6,9 @@ package dev.glassworks.engine.vitro
 
 import android.app.Application
 import dev.glassworks.engine.vitro.cards.ECharts
+import dev.glassworks.engine.vitro.cards.GraphFooterView
+import dev.glassworks.engine.vitro.cards.StatisticsGraphCardView
+import dev.glassworks.engine.vitro.cards.historyPath
 import dev.glassworks.engine.vitro.cards.HaChartFormat
 import dev.glassworks.engine.vitro.cards.HaGraph
 import dev.glassworks.engine.vitro.cards.HaHistory
@@ -163,5 +166,29 @@ class HaGraphTest {
         val out = HaTimelineChart.downSample(segs, 200.0)
         assertEquals(listOf("on"), out.map { it.state })
         assertEquals(400.0, out.single().end, 0.0)
+    }
+
+    @Test
+    fun footerPurgeKeepsTheStartState() {
+        val states = listOf(HistoryState("1", 100.0), HistoryState("2", 200.0), HistoryState("3", 400.0))
+        assertEquals(listOf("2" to 300.0, "3" to 400.0), GraphFooterView.purge(states, 300.0).map { it.s to it.lu })
+        // Nothing older than the window: the list stays as it is.
+        assertEquals(states, GraphFooterView.purge(states, 50.0))
+    }
+
+    @Test
+    fun headerLinksToTheHistoryPanelFromTheWindowsStart() {
+        assertEquals(
+            "/history?entity_id=sensor.a%2Csensor.b&back=1&start_date=2026-11-23T18%3A08%3A00.000Z",
+            historyPath(listOf("sensor.a", "sensor.b"), 1_795_457_280_000L),
+        )
+    }
+
+    @Test
+    fun recorderRowTimesAreEpochOrIso() {
+        assertEquals(1_700_000_000_000.0, StatisticsGraphCardView.rowTime(1_700_000_000_000L)!!, 0.0)
+        assertEquals(1_700_000_000_000.0, StatisticsGraphCardView.rowTime("2023-11-14T22:13:20+00:00")!!, 1.0)
+        assertNull(StatisticsGraphCardView.rowTime("soon"))
+        assertNull(StatisticsGraphCardView.rowTime(null))
     }
 }

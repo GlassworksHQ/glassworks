@@ -190,6 +190,12 @@ object HaHistory {
     private val LEADING_FLOAT = Regex("^[+-]?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?")
 }
 
+/** The history panel's address for [entityIds] from [startMs], as the cards' header links build it (`createSearchParam`). */
+internal fun historyPath(entityIds: List<String>, startMs: Long): String {
+    fun enc(v: String) = java.net.URLEncoder.encode(v, "UTF-8")
+    return "/history?entity_id=" + enc(entityIds.joinToString(",")) + "&back=1&start_date=" + enc(HaGraph.isoString(startMs))
+}
+
 // ---------------------------------------------------------------------------------------------
 // Shared views: the card header and the chart legend
 // ---------------------------------------------------------------------------------------------
@@ -465,13 +471,21 @@ object HaLineChart {
             val ys = DoubleArray(l.ys.size) { if (l.ys[it].isNaN()) Double.NaN else yOf(l.ys[it]) }
             val (px, py) = if (l.step) ECharts.stepEnd(xs, ys) else xs to ys
             val b = l.bandBottom
-            if (b != null) {
+            if (b != null && b.xs.size == l.xs.size) {
                 val bx = DoubleArray(b.xs.size) { xOf(b.xs[it]) }
                 val by = DoubleArray(b.ys.size) { if (b.ys[it].isNaN()) Double.NaN else yOf(b.ys[it]) }
+                // One closed area per run of points both edges have: a gap in the statistics stays unfilled.
                 val area = Path()
-                ECharts.polyline(px, py, l.smooth, area, 1f)
-                ECharts.polyline(bx, by, b.smooth, area, 1f, reverse = true, continuePath = true)
-                area.close()
+                var i = 0
+                while (i < px.size) {
+                    while (i < px.size && (py[i].isNaN() || by[i].isNaN())) i++
+                    val from = i
+                    while (i < px.size && !py[i].isNaN() && !by[i].isNaN()) i++
+                    if (i - from < 1) continue
+                    ECharts.polyline(px.copyOfRange(from, i), py.copyOfRange(from, i), l.smooth, area, 1f)
+                    ECharts.polyline(bx.copyOfRange(from, i), by.copyOfRange(from, i), b.smooth, area, 1f, reverse = true, continuePath = true)
+                    area.close()
+                }
                 s.fill(ChartScene.Fill(area, l.areaColor, grid))
             }
             val path = Path()
@@ -662,7 +676,14 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
 
     init {
         val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
-        config.title?.let { col.addView(cardHeader(ctx, it) { ctx.navigate("/history") }) }
+        config.title?.let {
+            col.addView(cardHeader(ctx, it) {
+                // The header's link: the history panel for these entities from the window's start (local hours).
+                val cal = Calendar.getInstance().apply { timeInMillis = ctx.now() }
+                cal.set(Calendar.HOUR_OF_DAY, (cal.get(Calendar.HOUR_OF_DAY) - hours).toInt())
+                ctx.navigate(historyPath(entityIds, cal.timeInMillis))
+            })
+        }
         val content = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ctx.px(16f), 0, ctx.px(16f), ctx.px(8f))
@@ -675,12 +696,23 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         addView(col, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
+    /** `_redrawGraph`: once a minute the window follows the clock, from the history already held. */
+    private val redraw: Runnable = object : Runnable {
+        override fun run() {
+            if (stateHistory != null) render()
+            ctx.main.postDelayed(this, 60_000L)
+        }
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         subscribe()
+        ctx.main.removeCallbacks(redraw)
+        ctx.main.postDelayed(redraw, 60_000L)
     }
 
     override fun onDetachedFromWindow() {
+        ctx.main.removeCallbacks(redraw)
         unsubscribe?.invoke()
         unsubscribe = null
         stream = null
@@ -695,14 +727,25 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         stream = s
         val now = ctx.now()
         val msg = HaGraph.historyStreamMessage(entityIds, hours, now) { ctx.store[it] != null }
-        unsubscribe = ctx.subscribeWs(msg) { ev ->
+        unsubscribe = ctx.subscribeWs(msg, { ev ->
             ctx.main.post {
                 if (stream !== s) return@post
                 val combined = s.process(ev, ctx.now())
                 stateHistory = HaHistory.compute({ ctx.store[it] }, combined, entityIds, temperatureUnit())
                 render()
             }
-        }
+        }, { error ->
+            ctx.main.post {
+                if (stream !== s) return@post
+                // HA shows the error instead of the charts (`ui.components.history_charts.error`).
+                stream = null
+                unsubscribe = null
+                charts.removeAllViews()
+                val why = error?.optString("message")?.takeIf { it.isNotEmpty() } ?: error?.optString("code").orEmpty()
+                info.text = if (why.isEmpty()) "Unable to load history" else "Unable to load history: $why"
+                info.visibility = VISIBLE
+            }
+        })
         if (hours >= 1) {
             // _fetchStatistics: from an hour before the window (setHours on the local clock) to now, hourly.
             val cal = Calendar.getInstance().apply { timeInMillis = now }
@@ -894,7 +937,11 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
 
     init {
         val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
-        config.title?.let { col.addView(cardHeader(ctx, it) { ctx.navigate("/history") }) }
+        config.title?.let {
+            col.addView(cardHeader(ctx, it) {
+                ctx.navigate(historyPath(ids, (ctx.now() - (24 * days + 1) * HaGraph.HOUR_MS).toLong()))
+            })
+        }
         val content = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ctx.px(16f), if (config.title != null) 0 else ctx.px(16f), ctx.px(16f), ctx.px(16f))
@@ -966,6 +1013,11 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         var minX = Long.MAX_VALUE
         var maxX = Long.MIN_VALUE
         val unit = cardUnit ?: ids.mapNotNull { displayUnit(it, metadata[it]) }.distinct().singleOrNull()
+        // The chart's end (statistics-chart-data): the latest bucket start of any statistic, never after now.
+        val limit = min(ctx.now().toDouble(), ids.mapNotNull { id ->
+            result.optJSONArray(id)?.takeIf { it.length() > 0 }?.let { a -> rowTime(a.optJSONObject(a.length() - 1)?.opt("start")) }
+        }.maxOrNull() ?: ctx.now().toDouble())
+        val statLegend = ArrayList<LegendItem>()
         for (id in ids) {
             val rows = result.optJSONArray(id) ?: continue
             if (rows.length() == 0) continue
@@ -988,12 +1040,22 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
             var prevStart: Double? = null
             var prevEnd: Double? = null
             var prevVals: Map<String, Double>? = null
+            // A cumulative `sum` starts at zero in the window (its first value is the baseline).
+            var firstSum: Double? = null
             for (st in stats) {
-                val start = st.optDouble("start")
+                val start = rowTime(st.opt("start")) ?: continue
                 if (prevStart == start) continue
+                val rowEnd = rowTime(st.opt("end")) ?: continue
                 prevStart = start
-                val end = st.optDouble("end")
-                val vals = types.associateWith { t -> if (st.has(t) && !st.isNull(t)) st.optDouble(t) else Double.NaN }
+                // pushData's limit: a bucket ends at its end or at the chart's end, whichever comes first.
+                if (start > limit) continue
+                val end = min(rowEnd, limit)
+                val vals = types.associateWith { t ->
+                    val v = if (st.has(t) && !st.isNull(t)) st.optDouble(t) else Double.NaN
+                    if (t != "sum") v
+                    else if (firstSum == null) { firstSum = v.takeIf { !it.isNaN() }; 0.0 }
+                    else (if (v.isNaN()) 0.0 else v) - firstSum!!
+                }
                 if (prevEnd != null && prevVals != null && prevEnd != start) {
                     for (t in types) { xs.getValue(t) += prevEnd; ys.getValue(t) += prevVals.getValue(t); xs.getValue(t) += prevEnd; ys.getValue(t) += Double.NaN }
                 }
@@ -1004,9 +1066,8 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
             if (prevEnd != null && prevVals != null) for (t in types) { xs.getValue(t) += prevEnd; ys.getValue(t) += prevVals.getValue(t) }
             // The current state at now when the statistics reach within 10 minutes of it.
             val now = ctx.now().toDouble()
-            val lastStart = stats.last().optDouble("start")
             val current = ctx.store[id]?.state?.toDoubleOrNull()?.takeIf { it.isFinite() }
-            if (now - min(lastStart, now) <= 600_000 && current != null) {
+            if (now - limit <= 600_000 && current != null) {
                 for (t in types) if (t != "sum" && t != "change") { xs.getValue(t) += now; ys.getValue(t) += current }
             }
             val built = HashMap<String, ChartLine>()
@@ -1020,12 +1081,19 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
                 built[t] = line
                 lines += line
                 legendItems += LegendItem("$id-$t", "$name (${t})", lineColor, null)
+                // With several statistics, one entry each: its mean, else its first series.
+                if (if (hasMean) t == "mean" else statLegend.none { it.id == id }) statLegend += LegendItem(id, name, lineColor, null)
                 line.xs.forEach { x -> if (!x.isNaN()) { minX = min(minX, x.toLong()); maxX = max(maxX, x.toLong()) } }
             }
         }
-        if (lines.isEmpty()) return
-        // One statistic: the base chart's legend lists every series; several: one entry per statistic (its mean).
-        legend.setItems(if (ids.size > 1) legendItems.filter { it.id.endsWith("-mean") }.map { LegendItem(it.id.removeSuffix("-mean"), it.name.substringBeforeLast(" ("), it.color, null) } else legendItems)
+        if (lines.isEmpty()) {
+            // A successful answer with nothing in the window: nothing left to show.
+            legend.setItems(emptyList())
+            chart.setScene { ChartScene() }
+            return
+        }
+        // One statistic: the base chart's legend lists every series; several: one entry per statistic.
+        legend.setItems(if (ids.size > 1) statLegend else legendItems)
         // ha-chart-base: differenceInMinutes(axis.max || new Date(), axis.min); the statistics chart sets no max.
         val minutes = floor((ctx.now() - minX) / 60000.0)
         val dayDiff = minutes / 60 / 24
@@ -1053,6 +1121,13 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         }
 
         private val DEFAULT_TYPES = listOf("change", "state", "sum", "min", "max", "mean")
+
+        /** A recorder row's time in ms: epoch ms, or an ISO string from an older core; null when it's neither. */
+        fun rowTime(v: Any?): Double? = when (v) {
+            is Number -> v.toDouble().takeIf { it.isFinite() }
+            is String -> dev.glassworks.engine.vitro.data.EntityStore.parseTimestamp(v).takeIf { it > 0 }?.times(1000.0)
+            else -> null
+        }
 
         /** An ISO time without milliseconds, as the logbook and calendar cards send it. */
         fun isoUtc(date: java.util.Date): String = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.ROOT)

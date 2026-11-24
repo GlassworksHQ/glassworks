@@ -70,19 +70,36 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
     }
 
     override fun onDetachedFromWindow() {
+        ctx.main.removeCallbacks(redraw)
         unsubscribe?.invoke()
         unsubscribe = null
         stream = null
         super.onDetachedFromWindow()
     }
 
+    /**
+     * `_redrawGraph`, every minute (every hour past 24 hours shown): states older than the window go, the last of them
+     * kept at the window's start, and the path follows the clock even when the entity stays quiet.
+     */
+    private val redraw: Runnable = object : Runnable {
+        override fun run() {
+            val states = history
+            if (states != null && states.isNotEmpty()) history = purge(states, (ctx.now() - hoursToShow * HaGraph.HOUR_MS) / 1000.0)
+            builtFor = -1
+            invalidate()
+            ctx.main.postDelayed(this, if (hoursToShow > 24) HaGraph.HOUR_MS.toLong() else 60_000L)
+        }
+    }
+
     private fun subscribe() {
         val id = entityId ?: return
         if (unsubscribe != null) return
+        ctx.main.removeCallbacks(redraw)
+        ctx.main.postDelayed(redraw, if (hoursToShow > 24) HaGraph.HOUR_MS.toLong() else 60_000L)
         val s = HaGraph.Stream(hoursToShow)
         stream = s
         val msg = HaGraph.historyStreamMessage(listOf(id), hoursToShow, ctx.now()) { ctx.store[it] != null }
-        unsubscribe = ctx.subscribeWs(msg) { ev ->
+        unsubscribe = ctx.subscribeWs(msg, { ev ->
             ctx.main.post {
                 if (stream !== s) return@post
                 val combined = s.process(ev, ctx.now())
@@ -93,7 +110,10 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
                 builtFor = -1
                 invalidate()
             }
-        }
+        }, { _ ->
+            // A rejected stream: HA's footer shows the error instead of a line; this one draws nothing.
+            ctx.main.post { if (stream === s) { stream = null; unsubscribe = null; history = null; builtFor = -1; invalidate() } }
+        })
     }
 
     private fun rebuild() {
@@ -126,6 +146,15 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
     }
 
     companion object {
+        /** States from [cutoff] (seconds) on, the last earlier one moved to [cutoff] so the line starts at the window. */
+        fun purge(states: List<HistoryState>, cutoff: Double): List<HistoryState> {
+            val kept = states.filter { it.lu >= cutoff }
+            if (kept.size == states.size) return states
+            if (kept.isNotEmpty() && kept[0].lu == cutoff) return kept
+            val last = states[states.size - kept.size - 1]
+            return listOf(HistoryState(last.s, cutoff, last.a)) + kept
+        }
+
         /** The footer config the sensor card builds (`hui-sensor-card`'s setConfig), or null for `graph: none`. */
         fun sensorFooter(raw: JSONObject): JSONObject? {
             if (raw.optString("graph") != "line") return null

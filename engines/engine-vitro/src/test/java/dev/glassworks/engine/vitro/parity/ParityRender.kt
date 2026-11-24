@@ -265,7 +265,7 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
                     openMoreInfo = {},
                     fetchHistory = { _, _, done -> done(emptyMap()) },
                     callWs = { msg, done -> ws.call(msg) { ok, result, error -> main.post { done(ok, result, error) } } },
-                    subscribeWs = { msg, onEvent -> ws.subscribe(msg, { main.post(it) }, onEvent) },
+                    subscribeWs = { msg, onEvent, _ -> ws.subscribe(msg, { main.post(it) }, onEvent) },
                     // HA's page drew at the pinned instant (refs/*.json "now"): the graphs' time windows end there too.
                     now = { ref?.now ?: System.currentTimeMillis() },
                     subscribeTemplate = { tpl, onRendered ->

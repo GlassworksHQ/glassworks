@@ -241,10 +241,13 @@ class ParityWs(recorded: JSONArray?) {
     private val calls: List<JSONObject> = recorded?.let { a -> (0 until a.length()).map { a.getJSONObject(it) } }.orEmpty()
     val unmatched = java.util.concurrent.CopyOnWriteArrayList<String>()
 
-    /** The recorded call whose request is [msg] (its `id` aside), or null. */
+    /**
+     * The recorded call whose request is [msg] (its `id` aside), or null. When the page made the same call more than
+     * once, the last one: its answer is the one HA held when the screenshot was taken.
+     */
     fun find(msg: JSONObject): JSONObject? {
         val want = canonical(msg)
-        return calls.firstOrNull { canonical(it.getJSONObject("request")) == want }
+        return calls.lastOrNull { canonical(it.getJSONObject("request")) == want }
     }
 
     /** A one-shot command: its recorded result, or its recorded error. */

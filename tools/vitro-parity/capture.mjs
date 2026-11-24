@@ -26,7 +26,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { connect, loadCredentials, redact } from './lib/ha.mjs';
-import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate, hasMacFragment } from './lib/scrub.mjs';
+import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate, hasMacFragment, scrubGraphCalls } from './lib/scrub.mjs';
 import { parseArgs, pick } from './lib/args.mjs';
 import { aliasPaths, assetDestination, canonicalPath, capturableImage, staleAssets } from './lib/assets.mjs';
 import { applyEntityEvent } from './lib/states.mjs';
@@ -334,14 +334,15 @@ function recordStates(page, graphs) {
     // Per socket: message ids start again on every connection, and a new connection's first event replaces.
     const entitySubs = new Set();
     const seen = new Set();
+    const graphSocket = graphs.socket();
     const each = (payload, fn) => {
       let m;
       try { m = JSON.parse(payload); } catch { return; }
       (Array.isArray(m) ? m : [m]).forEach(fn);
     };
-    ws.on('framesent', (f) => each(f.payload, (m) => { if (m.type === 'subscribe_entities') entitySubs.add(m.id); graphs.sent(m); }));
+    ws.on('framesent', (f) => each(f.payload, (m) => { if (m.type === 'subscribe_entities') entitySubs.add(m.id); graphSocket.sent(m); }));
     ws.on('framereceived', (f) => each(f.payload, (m) => {
-      graphs.received(m);
+      graphSocket.received(m);
       if (m.type !== 'event' || !entitySubs.has(m.id)) return;
       const first = !seen.has(m.id);
       seen.add(m.id);
@@ -671,7 +672,7 @@ async function capture() {
             ...(failedDrawn.length ? { imagesHaMissing: failedDrawn } : {}),
             // The history and statistics calls the card's graphs made and what came back, for Vitro's same calls.
             // Only written when there are some.
-            ...(drawnGraphs.length ? { ws: drawnGraphs } : {}),
+            ...(drawnGraphs.length ? { ws: scrubGraphCalls(drawnGraphs) } : {}),
           };
           if (!committed) {
             // Pictures that templates point at (a plant's image entity inside Markdown, say), unredacted from the raw text.

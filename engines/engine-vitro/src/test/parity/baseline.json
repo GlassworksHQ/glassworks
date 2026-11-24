@@ -35,13 +35,6 @@
   "missingText": 0,
   "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph). Left: Vitro sizes Markdown runs in whole device px (AbsoluteSizeSpan), so the 16.38 px h3 draws at 16.5-16.67 (fractional sizes tried 2026-11-24: font deltas 0 but no pixel gain, markdown-table worse); the 18 px line sits 0.85-1.35 px lower and the card 0.3-0.5 px taller; Android's Roboto against the frontend's web Roboto. The report's +4.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it"
  },
- "mirror/statistics-graph": {
-  "pixel": 0.0395,
-  "bounds": 0.2,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the chart's geometry follows HA (band, smoothing 0.4, daily ticks, axis line, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"28\"), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
- },
  "mirror/thermostat": {
   "pixel": 0.0015,
   "bounds": 0.7,
@@ -84,13 +77,6 @@
   "missingText": 0,
   "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph). Left: Vitro sizes Markdown runs in whole device px (AbsoluteSizeSpan), so the 16.38 px h3 draws at 16.5-16.67 (fractional sizes tried 2026-11-24: font deltas 0 but no pixel gain, markdown-table worse); the 18 px line sits 0.85-1.35 px lower and the card 0.3-0.5 px taller; Android's Roboto against the frontend's web Roboto. The report's +4.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it"
  },
- "s1/statistics-graph": {
-  "pixel": 0.0395,
-  "bounds": 0.2,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the chart's geometry follows HA (band, smoothing 0.4, daily ticks, axis line, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"28\"), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
- },
  "s1/thermostat": {
   "pixel": 0.0015,
   "bounds": 0.7,
@@ -132,13 +118,6 @@
   "font": 0.1,
   "missingText": 0,
   "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph). Left: Vitro sizes Markdown runs in whole device px (AbsoluteSizeSpan), so the 16.38 px h3 draws at 16.5-16.67 (fractional sizes tried 2026-11-24: font deltas 0 but no pixel gain, markdown-table worse); the 18 px line sits 0.85-1.35 px lower and the card 0.3-0.5 px taller; Android's Roboto against the frontend's web Roboto. The report's +4.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it"
- },
- "tablet/statistics-graph": {
-  "pixel": 0.0433,
-  "bounds": 0.7,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the chart's geometry follows HA (band, smoothing 0.4, daily ticks, axis line, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"28\"), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
  },
  "tablet/thermostat": {
   "pixel": 0.0019,

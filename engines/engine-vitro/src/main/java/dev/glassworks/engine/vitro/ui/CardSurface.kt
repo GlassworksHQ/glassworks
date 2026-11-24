@@ -69,9 +69,10 @@ class VitroCardContext(
     val cameraStream: ((entityId: String, entityPicture: String?, onFrame: (Bitmap) -> Unit, onFallback: () -> Unit) -> () -> Unit)? = null,
     /**
      * A WebSocket subscription (`history/stream`, say): every event of [msg]'s subscription reaches `onEvent`, on any
-     * thread, until the returned handle is called. The default (tests, no engine) never delivers anything.
+     * thread, until the returned handle is called; `onError` runs once, on any thread, if Home Assistant rejects it
+     * (its `error`) or it can't be sent (null). The default (tests, no engine) never delivers anything.
      */
-    val subscribeWs: (msg: JSONObject, onEvent: (JSONObject) -> Unit) -> () -> Unit = { _, _ -> {} },
+    val subscribeWs: (msg: JSONObject, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit) -> () -> Unit = { _, _, _ -> {} },
     /** The wall clock, ms since the epoch: what HA's frontend reads as `new Date()` for its time windows. */
     val now: () -> Long = System::currentTimeMillis,
 ) {

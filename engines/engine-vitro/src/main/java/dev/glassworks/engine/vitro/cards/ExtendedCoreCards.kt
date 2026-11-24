@@ -42,6 +42,7 @@ import dev.glassworks.engine.vitro.ui.bindHoldAction
 import dev.glassworks.ui.Inter
 import dev.glassworks.engine.vitro.ui.VitroFonts
 import org.json.JSONArray
+import dev.glassworks.engine.vitro.theme.ThemeResolver
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
@@ -155,16 +156,31 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
         return config.type != "sensor" && s.domain == "light"
     }
 
+    /**
+     * HA's `_computeColor`: an explicit `color` (a theme color name or any CSS color) while the entity is active, else
+     * none; `color: state` (or no color) the state's own color.
+     */
+    private fun stateColor(s: EntityState?): Int? {
+        if (s == null) return null
+        val cfg = config.raw.optString("color").trim()
+        if (cfg.isNotEmpty() && cfg != "state") {
+            if (!s.isActive) return null
+            return ThemeResolver.parseColor(ctx.theme.vars["$cfg-color"]) ?: MushroomColors.parse(cfg, ctx.theme)
+        }
+        return iconColorFor(ctx, s)
+    }
+
     private fun render(s: EntityState?) {
         nameView.text = config.name ?: s?.friendlyName ?: config.entity.orEmpty()
-        val color = if (colored(s)) iconColorFor(ctx, s) else ctx.theme.stateIconColor
-        iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color)
+        val color = if (colored(s)) stateColor(s) else null
+        iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color ?: ctx.theme.stateIconColor)
         val (value, unit) = valueAndUnit(config.raw, s)
         valueView.text = value
         unitView.text = unit
         unitView.visibility = if (unit.isEmpty()) GONE else VISIBLE
-        // The footer takes the state color only when the card sets `color` (HA's `--accent-color` override).
-        if (footer != null && config.raw.optString("color").isNotEmpty() && s?.isActive == true) footer.color = color
+        // The footer takes the card's color only when the card sets `color` and has one (HA's `--accent-color`
+        // override); otherwise, on every render, the theme's accent.
+        footer?.color = color?.takeIf { config.raw.optString("color").isNotEmpty() } ?: ctx.theme.accentColor
     }
 
     companion object {

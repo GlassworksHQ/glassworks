@@ -261,16 +261,20 @@ test('noteSaved reports one path saved with two different images in a run', asyn
   assert.equal(noteSaved(seen, '/static/y.png', 'bbb'), null);
 });
 
-test('wsRecorder keeps the graph calls of the current case with their answers, nothing else', async () => {
+test('wsRecorder keeps the graph calls of the current case with their answers, per socket', async () => {
   const { wsRecorder, snapshotCalls } = await import('../lib/wsdata.mjs');
   const r = wsRecorder();
-  r.sent({ id: 3, type: 'history/stream', entity_ids: ['sensor.a'], start_time: 'T' });
-  r.sent({ id: 4, type: 'subscribe_entities' });
-  r.sent({ id: 5, type: 'recorder/statistics_during_period', statistic_ids: ['sensor.a'] });
-  r.received({ id: 3, type: 'result', success: true, result: null });
-  r.received({ id: 3, type: 'event', event: { states: { 'sensor.a': [{ s: '1', lu: 1 }] } } });
-  r.received({ id: 4, type: 'event', event: { a: {} } });
-  r.received({ id: 5, type: 'result', success: false, error: { code: 'x' } });
+  const a = r.socket();
+  a.sent({ id: 3, type: 'history/stream', entity_ids: ['sensor.a'], start_time: 'T' });
+  a.sent({ id: 4, type: 'subscribe_entities' });
+  a.sent({ id: 5, type: 'recorder/statistics_during_period', statistic_ids: ['sensor.a'] });
+  a.received({ id: 3, type: 'result', success: true, result: null });
+  a.received({ id: 3, type: 'event', event: { states: { 'sensor.a': [{ s: '1', lu: 1 }] } } });
+  a.received({ id: 4, type: 'event', event: { a: {} } });
+  a.received({ id: 5, type: 'result', success: false, error: { code: 'x' } });
+  // Another socket reusing id 3 for something else never answers the first socket's request.
+  const b = r.socket();
+  b.received({ id: 3, type: 'result', success: true, result: { other: true } });
   assert.deepEqual(r.calls, [
     { request: { type: 'history/stream', entity_ids: ['sensor.a'], start_time: 'T' }, result: null, events: [{ states: { 'sensor.a': [{ s: '1', lu: 1 }] } }] },
     { request: { type: 'recorder/statistics_during_period', statistic_ids: ['sensor.a'] }, error: { code: 'x' }, events: [] },
@@ -278,7 +282,18 @@ test('wsRecorder keeps the graph calls of the current case with their answers, n
   const snap = snapshotCalls(r.calls);
   // A new case drops the old ids: a late event for an earlier card isn't this case's data.
   r.reset();
-  r.received({ id: 3, type: 'event', event: { states: {} } });
+  a.received({ id: 3, type: 'event', event: { states: {} } });
   assert.deepEqual(r.calls, []);
   assert.equal(snap[0].events.length, 1);
+});
+
+test('scrubGraphCalls drops private attributes from recorded history, nothing else', async () => {
+  const { scrubGraphCalls } = await import('../lib/scrub.mjs');
+  const calls = [
+    { request: { type: 'history/stream' }, events: [{ states: { 'climate.x': [{ s: 'heat', lu: 1, a: { temperature: 21, mac_address: 'aa', serial_number: 'b' } }] } }] },
+    { request: { type: 'recorder/get_statistics_metadata' }, result: [{ statistic_id: 'sensor.a' }], events: [] },
+  ];
+  const out = scrubGraphCalls(calls);
+  assert.deepEqual(out[0].events[0].states['climate.x'][0].a, { temperature: 21 });
+  assert.deepEqual(out[1], calls[1]);
 });

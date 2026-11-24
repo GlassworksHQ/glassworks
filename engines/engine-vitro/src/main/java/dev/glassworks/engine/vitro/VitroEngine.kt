@@ -237,7 +237,10 @@ class VitroEngine(
                     openMoreInfo = { entityId -> vitroView.openMoreInfo(entityId) },
                     fetchHistory = { ids, hours, done -> client?.fetchHistory(ids, hours, done) },
                     fetchForecast = { id, kind, done -> client?.fetchForecast(id, kind, done) },
-                    subscribeWs = { msg, onEvent -> client?.subscribeWs(msg, onEvent) ?: {} },
+                    subscribeWs = { msg, onEvent, onError ->
+                        val c = client
+                        if (c != null) c.subscribeWs(msg, onEvent, onError) else { onError(null); {} }
+                    },
                     subscribeTemplate = { tpl, onRendered ->
                         client?.subscribeTemplate(tpl, onRendered) ?: {}
                     },
