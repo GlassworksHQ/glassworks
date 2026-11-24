@@ -1,12 +1,5 @@
 {
  "_comment": "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: 2.0% pixels, 1.0 px bounds, 0.5 px font). Regenerate with -PvitroParityUpdateBaseline=true; keep or write each \"reason\". An update records regressions too: read the diff before committing it, and keep the entries of cases with an open regression. #794 empties this file.",
- "mirror/area": {
-  "pixel": 0.0553,
-  "bounds": 130.7,
-  "font": 2,
-  "missingText": 0,
-  "reason": "Vitro draws a 48 px compact header row (name + a sofa icon, not the area's own stove icon) where HA draws its default picture-less area card: a 120 px icon hero over a name row; card ~130 px shorter, name 16 vs 14 px (coverage #794, 2026-11-24)"
- },
  "mirror/clock-date": {
   "pixel": 0.0233,
   "bounds": 0,
@@ -84,13 +77,6 @@
   "missingText": 0,
   "reason": "image and positions match; the state icon sits on a dark disc and the state label on a dark pill that HA doesn't draw, label 12 vs 14 px (coverage #794, 2026-11-24)"
  },
- "s1/area": {
-  "pixel": 0.0553,
-  "bounds": 130.7,
-  "font": 2,
-  "missingText": 0,
-  "reason": "Vitro draws a 48 px compact header row (name + a sofa icon, not the area's own stove icon) where HA draws its default picture-less area card: a 120 px icon hero over a name row; card ~130 px shorter, name 16 vs 14 px (coverage #794, 2026-11-24)"
- },
  "s1/clock-date": {
   "pixel": 0.0233,
   "bounds": 0,
@@ -167,13 +153,6 @@
   "font": 2,
   "missingText": 0,
   "reason": "image and positions match; the state icon sits on a dark disc and the state label on a dark pill that HA doesn't draw, label 12 vs 14 px (coverage #794, 2026-11-24)"
- },
- "tablet/area": {
-  "pixel": 0.0472,
-  "bounds": 130,
-  "font": 2,
-  "missingText": 0,
-  "reason": "Vitro draws a 48 px compact header row (name + a sofa icon, not the area's own stove icon) where HA draws its default picture-less area card: a 120 px icon hero over a name row; card ~130 px shorter, name 16 vs 14 px (coverage #794, 2026-11-24)"
  },
  "tablet/clock-date": {
   "pixel": 0.0271,
