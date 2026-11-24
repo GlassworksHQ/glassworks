@@ -2702,7 +2702,14 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
 
     private val style = ChipStyle.resolve(ctx, ownVars(ctx, config))
     private val alignment = config.raw.optString("alignment")
-    private val spacingPx = ctx.px(style.spacing)
+    /**
+     * A chip length in device px, rounded: Chrome lays chips out in fractional px, and truncating each part (a 9 px
+     * padding is 13.5 px at 1.5x) made every chip about a pixel narrower than HA's, adding up along the row.
+     * Borders still truncate, as Chrome snaps them down.
+     */
+    private fun chipPx(v: Float): Int = Math.round(v * ctx.dp)
+
+    private val spacingPx = chipPx(style.spacing)
     private val spacers = HashSet<View>()
 
     init {
@@ -2844,10 +2851,10 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
                 if (border > 0) setStroke(border, st.borderColor)
             }
             // box-sizing: content-box: the border sits outside --chip-height.
-            val h = ctx.px(st.height)
+            val h = chipPx(st.height)
             minimumHeight = h + 2 * border
             minimumWidth = h + 2 * border
-            setPadding(ctx.px(st.paddingX) + border, border, ctx.px(st.paddingX) + border, border)
+            setPadding(chipPx(st.paddingX) + border, border, chipPx(st.paddingX) + border, border)
             isClickable = true
             applyHaRipple(this, radiusPx, ctx.theme.dark)
         }
@@ -2859,13 +2866,13 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
             includeFontPadding = false
             maxLines = 1
         }
-        val iconSize = ctx.px(st.iconSize)
+        val iconSize = chipPx(st.iconSize)
         // ::slotted(*:not(:last-child)) { margin-right: 0.15em }: the gap after the icon when a label follows.
         val iconLp = LinearLayout.LayoutParams(iconSize, iconSize)
         chip.addView(icon, iconLp)
         chip.addView(label, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
         fun syncGap() {
-            iconLp.marginEnd = if (label.visibility == VISIBLE && icon.visibility == VISIBLE) ctx.px(st.height * 0.15f) else 0
+            iconLp.marginEnd = if (label.visibility == VISIBLE && icon.visibility == VISIBLE) chipPx(st.height * 0.15f) else 0
             icon.layoutParams = iconLp
         }
         fun setLabel(text: String) {
