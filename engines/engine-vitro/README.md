@@ -12,7 +12,7 @@ Vitro moves the Home Assistant data plane out of the browser into Kotlin (`HaDas
 |---|---|---|
 | **Tier 1: Native core** | Layouts (`sections`, `masonry`, `panel`, `grid`, stacks, `visibility`) and 31 built-in Home Assistant cards, from `tile`, `entities`, `glance` and `button` to `thermostat`, `humidifier`, `calendar`, `logbook`, `picture-elements`, `history-graph` and `media-control` | Native Android views and Canvas drawing: no JavaScript and no browser process |
 | **Tier 2: Native HACS fast-paths** | 26 popular HACS cards: the whole Mushroom suite (entity, light, fan, cover, climate, person, template, title, chips, media player, lock, alarm, vacuum, humidifier, number and select), Bubble Card with its sub-buttons, mini-graph-card, mini-media-player, clock-weather-card, modern-circular-gauge, bar-card, auto-entities, and the seamless stack-in-card, vertical-stack-in-card and layout-card containers | Native Kotlin renderers, with Home Assistant `render_template` subscriptions for Jinja2 templates |
-| **Tier 3: Micro-Islands** | Any other `custom:*` card, including full-screen `type: panel` cards and wrapper cards that build their inner cards with `loadCardHelpers` | A small inline Lovelace shim (`hass.callWS`, `hass.callService`, `hass.callApi`, `hass.localize`, `hass.formatEntityState`, `hass.config`, `<ha-icon>`, and a `hass` proxy that tracks which entities a card reads) with the resolved theme variables, in GeckoView only |
+| **Tier 3: Micro-Islands** | Any other `custom:*` card, and any card that uses something Vitro can't draw faithfully (see [What Vitro draws natively](#what-vitro-draws-natively)), including full-screen `type: panel` cards and wrapper cards that build their inner cards with `loadCardHelpers` | A small inline Lovelace shim (`hass.callWS`, `hass.callService`, `hass.callApi`, `hass.localize`, `hass.formatEntityState`, `hass.config`, `<ha-icon>`, and a `hass` proxy that tracks which entities a card reads) with the resolved theme variables, in GeckoView only |
 
 Tier 3 never uses `android.webkit.WebView`. Each island is served from `VitroIslandServer`, a tiny HTTP server bound to IPv4 loopback (`127.0.0.1`), and loaded into GeckoView, so the Android system WebView, which is missing or too old on some of these panels, is not a dependency. A dashboard that stays in Tier 1 and Tier 2 never starts GeckoView at all.
 
@@ -59,6 +59,43 @@ Vitro follows Home Assistant's own rules, so a dashboard never looks right only 
 | Images | `<img width height>`, block images (`display: block`, `width: 100%`), and `data:image/svg+xml` images built with Jinja, drawn natively from a small SVG subset. |
 | Sections | HA's grid: the `--ha-view-sections-*` gaps and column widths, 12 columns per section with `--ha-section-grid-*` gaps, and each card's `grid_options` (or the size its type reports, such as a large clock's 6 x 2). Hidden cards and sections leave no gap. |
 | Cards | The clock reads `clock_size`, `time_format`, `time_zone`, `no_background` and the `--ha-clock-card-digital-font-size-*` variables. Mushroom chips honor `conditional` chips and ignore a chip's own `visibility` and `card_mod`, like Mushroom does. stack-in-card follows version 0.2.0. A card's `margin` insets it in its slot. |
+
+## What Vitro draws natively
+
+Home Assistant's own render is the spec. Vitro draws a card natively only when it can match HA, and sends anything else to a web island on purpose, so that card looks the way HA draws it and only that card pays for a web engine. Vitro never draws half a card. It makes the choice once for each card when it reads the dashboard, never while drawing.
+
+The supported set lives in one place in the code, [`compat/VitroSupport.kt`](src/main/java/dev/glassworks/engine/vitro/compat/VitroSupport.kt), and [`compat/CardCompat.kt`](src/main/java/dev/glassworks/engine/vitro/compat/CardCompat.kt) checks each card against it.
+
+| Part | Native | Falls back to an island |
+|---|---|---|
+| Card types | The built-in and HACS cards in the tier table above | Any other `custom:` card, and built-in cards Vitro doesn't have yet (such as `map` or `energy-*`) |
+| Card options | Tile features `light-brightness`, `select-options`, `cover-open-close`, `climate-hvac-modes`, `target-temperature`, `fan-speed`, `cover-position`, `light-color-temp`, `media-player-volume-slider`, `toggle`, `media-player-playback`, `light-color-favorites`, `numeric-input` and `vacuum-commands`. Entity rows, `divider` and `section` rows. `picture-elements` icons, labels, badges and service buttons. Mushroom chips: entity, template, weather, light, action, menu, back, spacer and conditional. Bubble Card buttons and separators. layout-card's masonry, horizontal, vertical and grid layouts | Any other tile feature, entity row type (`buttons`, `attribute`, custom rows, ...), `picture-elements` element, chip, Bubble Card type or layout. Entities headers and footers |
+| card-mod sheets | `"."` (or a plain string) on every card, `"ha-markdown$"` on Markdown cards and `"hui-clock-card-digital$"` on the clock | Any other path, such as `"mushroom-shape-icon$"`, and nested selector maps |
+| The card's own rule | `ha-card { }`, `:host { }`, `:host ha-card { }` with backgrounds (colors and linear gradients), solid borders, `border-radius`, `box-shadow`, `opacity`, `padding`, `margin`, `height: 100%`, the opacity `transition`, a pinned card (`position: fixed` with offsets, `width` and a centering `transform`), and `font-size` on tile and Mushroom cards. A stack's `:host { }` with `padding`, `margin` and its gap variables | Background images, radial gradients, dashed borders, inset shadows, other transforms, filters, animations, fixed heights, `color` on cards other than Markdown and the clock |
+| Selectors | Inside Markdown and the clock, the selectors listed under "Markdown sheets" in the table above, matched against the elements Vitro rebuilds | Selectors that reach inside a card Vitro doesn't rebuild (`ha-card .primary`), `::before` and `::after`, `:has()`, `:host()`, and `@media` or `@supports` rules |
+| Markdown | Everything HA's sanitizer keeps, except the tags in the next column | `<ha-alert>`, `<ha-qr-code>`, `<ha-svg-icon>`, `<details>`, `<audio>`, `<video>`, `<picture>`, checkboxes and image maps |
+
+Some things never send a card to an island:
+
+- **What Home Assistant drops itself.** Declarations outside a rule, `!important` and tags outside HA's sanitizer are dropped by HA too, so dropping them is what matching HA means.
+- **Things that don't change the look on a touch panel**, such as `cursor`, `transition`, `user-select`, `pointer-events`, `will-change`, `-webkit-tap-highlight-color`, `outline: none`, and `:hover`, `:focus` and `:active` rules. Each one is listed with its reason in `VitroSupport`.
+- **Known gaps** that Vitro still draws natively, because an island wouldn't do better or the native work is underway: `backdrop-filter` (an island can't blur the native view behind it either), `text-overflow` and `white-space: nowrap` (they only show when text doesn't fit), small `position: relative` nudges, inline tile features, the Mushroom chips card's own card-mod, and card variables a native card doesn't read. The checker lists these as notes.
+
+A built-in card that falls back runs in the same island as a custom card. The island doesn't include HA's own card code yet, so for now a built-in card there shows a simple summary of its entities.
+
+### The compatibility checker
+
+The checker reports every card Vitro builds in a view, whether it renders natively or in an island, and the exact reason for each island:
+
+- **Logcat:** each time Vitro builds a view, it logs one `Island <where>: <why>` line per fallback under the `Glassworks.Vitro` tag.
+- **The test app:** tap the HUD to expand it. It lists the islands in the current view.
+- **From code or a test:** `CompatChecker.check(dashboard).format()` gives the same report as text, starting with a line such as `116 cards: 116 native, 0 island (fully native)`.
+
+To check your own dashboards without a panel, save each Lovelace config (`lovelace/config` over the WebSocket API) as a `*-new.json` file in one folder and run:
+
+```sh
+VITRO_PARITY_DIR=/path/to/folder ./gradlew :engine-vitro:testDebugUnitTest --tests '*CompatCheckerLocal*' -i
+```
 
 ## Key optimizations
 
