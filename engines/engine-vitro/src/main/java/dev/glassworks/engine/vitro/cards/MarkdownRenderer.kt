@@ -988,6 +988,9 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
     fun render(md: String, into: LinearLayout) {
         into.removeAllViews()
         renderBlocks(parseMarkdownBlocks(md), into, centered = false)
+        if (into.childCount > 0) {
+            (into.getChildAt(into.childCount - 1).layoutParams as? android.view.ViewGroup.MarginLayoutParams)?.bottomMargin = 0
+        }
     }
 
     private fun renderBlocks(blocks: List<MdBlock>, into: LinearLayout, centered: Boolean) {

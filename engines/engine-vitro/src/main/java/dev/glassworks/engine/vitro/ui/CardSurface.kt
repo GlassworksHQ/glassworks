@@ -339,7 +339,13 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
                 if (strokePx > 0) setStroke(strokePx, strokeColor)
             }
         }
-        mod.paddingDp?.let { p -> ctx.px(p).let { setPadding(it, it, it, it) } }
+        mod.paddingDp?.let { p ->
+            val px = ctx.px(p)
+            setPadding(px, px, px, px)
+            // Cards keep their default padding on their single inner wrapper ViewGroup: clear it so
+            // `ha-card { padding: 0 }` truly removes padding and `padding: Npx` replaces rather than doubles it.
+            if (childCount == 1) (getChildAt(0) as? android.view.ViewGroup)?.setPadding(0, 0, 0, 0)
+        }
         mod.opacity?.let { alpha = it.coerceIn(0f, 1f) }
     }
 
