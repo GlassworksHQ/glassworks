@@ -83,7 +83,9 @@ RULES = {
     # Markdown (their tests and sources only name it) and the modules' Kotlin, Java, resources and tests.
     'web': Rule('web', unless_only=(
         '**/*.md', f'{MODULES}/**/{{*.kt,*.java}}', f'{MODULES}/**/src/{{test,androidTest}}/**', f'{MODULES}/**/src/*/res/**',
-        '!testing/kotlin/dev/glassworks/testing/RepoFiles.kt', '!core/src/main/res/font/**')),
+        '!testing/kotlin/dev/glassworks/testing/RepoFiles.kt', '!core/src/main/res/font/**',
+        # site/src/lib/vitroCompat.test.ts checks the site's card lists against this file.
+        '!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/model/LovelaceModel.kt')),
     'refract': Rule('refract', when=('kiln/workers',)),
     'perf': Rule('scripts: Clarity tests (ffmpeg, fast and slow sets)', when=PERF + ('docs/perf.md',)),  # test_notes
     'perf_webrtc': Rule('perf-webrtc', when=PERF),

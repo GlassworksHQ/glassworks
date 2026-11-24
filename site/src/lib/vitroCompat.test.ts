@@ -264,7 +264,11 @@ describe("parseYaml", () => {
     expect(parseYaml("base: &b\n  x: 1\n  y: 2\nuse:\n  <<: *b\n  y: 3\n")).toEqual({ base: { x: 1, y: 2 }, use: { x: 1, y: 3 } });
   });
 
-  it("reads only the first document and ignores a leading marker", () => {
+  it("refuses an alias inside a flow collection rather than reading it as text", () => {
+    expect(() => parseYaml("base: &b\n  type: custom:button-card\nviews:\n  - cards: [*b]\n")).toThrow(/alias \*b/);
+  });
+
+    it("reads only the first document and ignores a leading marker", () => {
     expect(parseYaml("---\na: 1\n---\nb: 2\n")).toEqual({ a: 1 });
   });
 
