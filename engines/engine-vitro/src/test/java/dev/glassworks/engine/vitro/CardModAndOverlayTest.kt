@@ -302,6 +302,26 @@ class CardModAndOverlayTest {
     }
 
     @Test
+    fun resourcesArrivingLaterRebuildTheViews() {
+        // Built before the resources arrive, a card-mod-only fallback stays native; once card-mod arrives, the view
+        // is rebuilt and the card goes to its island.
+        val vv = vitroView(
+            EntityStore(),
+            """{"views": [{"cards": [{"type": "custom:mushroom-template-card", "card_mod": {"style": {"mushroom-shape-icon$": ".shape { color: red }"}}}]}]}""",
+        )
+        assertEquals(0, vv.lastMetrics.webIslandCards)
+        val cardMod = listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-card-mod/card-mod.js?hacstag=1", "module"))
+        vv.resourcesList = cardMod
+        assertEquals(1, vv.lastMetrics.webIslandCards)
+        assertFalse(vv.lastMetrics.cacheHit)
+        assertEquals(1, vv.lastMetrics.islands.size)
+        // The same list again changes nothing.
+        val metrics = vv.lastMetrics
+        vv.resourcesList = cardMod.toList()
+        assertTrue(metrics === vv.lastMetrics)
+    }
+
+    @Test
     fun theCenteringIdiomIsPlacedAtTheViewportCenter() {
         // `left: 50%; top: 50%; transform: translate(-50%, -50%)` centers the card in HA, and the overlay centers it too.
         val vv = VitroView(activity, EntityStore(), 0xFF000000.toInt())
@@ -314,6 +334,9 @@ class CardModAndOverlayTest {
         val side = vv.pinnedLayoutParams(ThemeResolver.parseCardMod("ha-card { position: fixed; right: 24px; top: 50%; transform: translateY(-50%) }"))
         assertEquals(Gravity.END or Gravity.CENTER_VERTICAL, side.gravity)
         assertEquals((24 * dp).toInt(), side.marginEnd)
+        // The overlay reads every translate in the list, as the checker does.
+        val list = vv.pinnedLayoutParams(ThemeResolver.parseCardMod("ha-card { position: fixed; left: 0; top: 50%; transform: translate(0, 0) translate(0, -50%) }"))
+        assertEquals(Gravity.START or Gravity.CENTER_VERTICAL, list.gravity)
     }
 
     private fun vitroView(
@@ -322,13 +345,14 @@ class CardModAndOverlayTest {
         resources: List<dev.glassworks.engine.vitro.model.LovelaceResource> = emptyList(),
     ): VitroView {
         val vv = VitroView(activity, store, 0xFF000000.toInt())
+        vv.resourcesList = resources
         vv.contextFactory = { theme ->
             VitroCardContext(
                 context = activity,
                 haBase = FakeHaServer.BASE,
                 store = store,
                 theme = theme,
-                resources = resources,
+                resources = vv.resourcesList,
                 accessToken = { FakeHaServer.TOKEN },
                 callService = { _, _, _, _ -> },
                 navigate = {},

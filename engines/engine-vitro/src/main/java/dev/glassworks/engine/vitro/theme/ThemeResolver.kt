@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.theme
 
+import dev.glassworks.engine.vitro.cards.CssSelector
 import org.json.JSONObject
 import java.util.Locale
 import kotlin.math.abs
@@ -644,9 +645,10 @@ object ThemeResolver {
         val transitionMs = prop("transition")?.let(::parseOpacityTransitionMs)
         val position = prop("position")?.lowercase(Locale.ROOT)
         val transform = prop("transform")?.lowercase(Locale.ROOT).orEmpty().replace(" ", "")
-        val translate = Regex("""translate\(([^,)]+)(?:,([^)]+))?\)""").find(transform)
-        val centerY = "translatey(-50%)" in transform || translate?.groupValues?.get(2) == "-50%"
-        val centerX = "translatex(-50%)" in transform || translate?.groupValues?.get(1) == "-50%"
+        // Every translate in the list counts, as the checker reads it (`translate(0, 0) translate(0, -50%)` centers Y).
+        val translates = Regex("""translate\(([^,)]+)(?:,([^)]+))?\)""").findAll(transform).toList()
+        val centerY = "translatey(-50%)" in transform || translates.any { it.groupValues[2] == "-50%" }
+        val centerX = "translatex(-50%)" in transform || translates.any { it.groupValues[1] == "-50%" }
 
         return CardModStyle(
             backgroundColor = bg,
@@ -804,7 +806,7 @@ object ThemeResolver {
      * A compound that goes on to a descendant or sibling (`ha-card.x .primary`) styles something inside the card,
      * not the card.
      */
-    internal fun isHostSelector(selector: String): Boolean = selector.split(',').any { raw ->
+    internal fun isHostSelector(selector: String): Boolean = CssSelector.splitTopLevel(selector, ',').any { raw ->
         val s = raw.trim().lowercase(Locale.ROOT).replace(Regex("""\s+"""), " ")
         s == "ha-card" || s == ":host" || s == "." || s == ":host ha-card" || s == ":host > ha-card" ||
             (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && !INTERACTION.containsMatchIn(s) &&
