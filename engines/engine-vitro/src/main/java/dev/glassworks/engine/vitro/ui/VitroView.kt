@@ -544,7 +544,7 @@ class VitroView(
         when (val bg = theme.background) {
             is ThemeBackground.Solid -> setBackgroundColor(bg.color)
             is ThemeBackground.LinearGradient -> background = CssBackgroundDrawable(
-                CssBackground(listOf(CssBackground.Linear(bg.angleDeg, bg.colors.map { CssBackground.Stop(it, null, null) })), null),
+                CssBackground(listOf(CssBackground.Linear(bg.angleDeg, bg.stops ?: bg.colors.map { CssBackground.Stop(it, null, null) })), null),
                 dp,
             )
             is ThemeBackground.RadialGradient -> background = RadialBackdrop(bg.colors)
@@ -822,14 +822,27 @@ class VitroView(
         } else {
             parentCtx
         }
-        val childBuilder: CardBuilder = { child -> wrapVisibility(child, buildCard(child, ctx, false), ctx) }
-        val stackMod = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), ctx.theme.vars)
         // Custom properties set on a card (`ha-card { --vertical-stack-card-gap: 8px }`) inherit into the cards
-        // inside it, as they do through the browser's shadow roots.
+        // inside it, as they do through the browser's shadow roots; `var()` in them sees the inherited ones.
         val outerVars = inheritedCardVars
         val outerCtxVars = ctx.cardVars
-        inheritedCardVars = if (stackMod.customProperties.isEmpty()) outerVars else outerVars + stackMod.customProperties
-        ctx.cardVars = inheritedCardVars
+        val stackMod = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), ctx.theme.vars + outerVars)
+        val scope = if (stackMod.customProperties.isEmpty()) outerVars else outerVars + stackMod.customProperties
+        // Children built later (a refresh, a filter that changes) re-enter this card's scope.
+        val childBuilder: CardBuilder = { child ->
+            val savedVars = inheritedCardVars
+            val savedCtxVars = ctx.cardVars
+            inheritedCardVars = scope
+            ctx.cardVars = scope
+            try {
+                wrapVisibility(child, buildCard(child, ctx, false), ctx)
+            } finally {
+                inheritedCardVars = savedVars
+                ctx.cardVars = savedCtxVars
+            }
+        }
+        inheritedCardVars = scope
+        ctx.cardVars = scope
         try {
             return buildCardWithVars(card, ctx, fillViewport, childBuilder, stackMod)
         } finally {

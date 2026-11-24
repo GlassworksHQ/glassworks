@@ -80,6 +80,8 @@ data class EntityState(
         }
         if (u != null) return if (u == "%") "$state$u" else "$state $u"
         if (domain != "light" && domain != "cover" && domain != "climate") HaDisplay.stateLabel(this)?.let { return it }
+        // Options and text are the user's own strings: HA shows them as they are, never capitalized.
+        if (domain in VERBATIM_DOMAINS) return state
         return when (domain) {
             "light" -> {
                 val pct = brightnessPct
@@ -148,6 +150,7 @@ data class EntityState(
  * cards bound to that `entity_id`.
  */
 private val NUMBER_DOMAINS = setOf("number", "input_number", "counter")
+private val VERBATIM_DOMAINS = setOf("select", "input_select", "text", "input_text")
 
 class EntityStore {
     private val states = ConcurrentHashMap<String, EntityState>()

@@ -123,8 +123,11 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
         shape.clipToOutline = true
         val texts = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            addView(primary, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(20f)))
-            addView(secondary, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(16f)))
+            // 20 / 16 px lines at Mushroom's sizes, growing when card_mod sets a larger font.
+            primary.minHeight = ctx.px(20f)
+            secondary.minHeight = ctx.px(16f)
+            addView(primary, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            addView(secondary, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
         val header = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL

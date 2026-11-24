@@ -17,6 +17,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.roundToInt
 
 /** Theme catalog parsing, `var()` resolution, CSS color/background parsing and card-mod extraction. Pure JVM. */
 class ThemeResolverTest {
@@ -527,6 +528,26 @@ class ThemeResolverTest {
         assertEquals(ThemeBackground.Solid(0x44), ThemeResolver.parseBackground("radial-gradient(#ff0000)", 0x44))
         val themed = resolveWith("""{"lovelace-background": "radial-gradient(circle, #101020, #000000)"}""")
         assertTrue(themed.background is ThemeBackground.Layers)
+    }
+
+    @Test
+    fun gradientStopsFollowCssOrderAcrossLinesAndFunctionalColors() {
+        // An explicit position under an earlier one is raised first; the missing ones then spread between them.
+        val bg = ThemeResolver.parseBackground("linear-gradient(red 90%, green, white 50%, black, blue 100%), #000000", 0)
+            as ThemeBackground.Layers
+        val layer = bg.css.layers.single()
+        val geo = bg.css.geometry(layer, 100f, 100f, 1f)!!
+        assertEquals(listOf(0.9f, 0.9f, 0.9f, 0.95f, 1f), geo.positions.toList().map { (it * 100).roundToInt() / 100f })
+        // A theme can fold the value over lines.
+        val folded = ThemeResolver.parseBackground("radial-gradient(\n  circle at top left,\n  #112233,\n  #445566\n)", 0)
+        assertTrue(folded is ThemeBackground.Layers)
+        // A first stop written as rgba() with spaces is a color stop, not a shape.
+        val functional = CssBackground.parse("radial-gradient(rgba(0, 0, 0, 0.5) 10%, transparent)")!!.layers.single()
+        assertEquals(2, functional.stops.size)
+        assertEquals(0.1f, functional.stops[0].pos)
+        // A single linear gradient keeps its stop positions for painting.
+        val single = ThemeResolver.parseBackground("linear-gradient(90deg, red 20%, blue 80%)", 0) as ThemeBackground.LinearGradient
+        assertEquals(listOf(0.2f, 0.8f), single.stops!!.map { it.pos })
     }
 
     @Test

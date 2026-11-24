@@ -77,6 +77,11 @@ class CssBackgroundDrawable(
         if (save >= 0) canvas.restoreToCount(save)
     }
 
+    /** A rounded outline, so a card clipping to it keeps its corners. */
+    override fun getOutline(outline: android.graphics.Outline) {
+        outline.setRoundRect(bounds, cornerRadiusPx)
+    }
+
     override fun setAlpha(alpha: Int) { paint.alpha = alpha }
     override fun setColorFilter(colorFilter: ColorFilter?) { paint.colorFilter = colorFilter }
     @Deprecated("Deprecated in Java")

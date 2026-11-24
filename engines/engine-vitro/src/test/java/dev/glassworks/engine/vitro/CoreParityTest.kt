@@ -242,6 +242,22 @@ class CoreParityTest {
         assertEquals(chips.paddingLeft, first.left)
     }
 
+    @Test
+    fun chipVariablesResolveThroughTheCardAndItsParents() {
+        val ctx = context(EntityStore())
+        ctx.cardVars = mapOf("pill" to "#ff0000")
+        val chips = MushroomChipsCardView(
+            ctx,
+            card(
+                """{"type": "custom:mushroom-chips-card", "chips": [{"type": "template", "content": "A"}],
+                   "card_mod": {"style": "ha-card { --chip-background: var(--pill); --tint: #00ff00; --primary-text-color: var(--tint); }"}}""",
+            ),
+        )
+        val chip = chips.getChildAt(0) as LinearLayout
+        assertEquals(0xFFFF0000.toInt(), (chip.background as android.graphics.drawable.GradientDrawable).color!!.defaultColor)
+        assertEquals(0xFF00FF00.toInt(), chip.all().filterIsInstance<TextView>().single().currentTextColor)
+    }
+
     // ---- Tile features ----
 
     private fun tile(store: EntityStore, calls: MutableList<Call>, entity: String, feature: String) =

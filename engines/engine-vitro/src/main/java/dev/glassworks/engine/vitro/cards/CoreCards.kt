@@ -1164,6 +1164,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val color = when {
             domain == "lock" && s?.state == "locked" -> LOCKED_GREEN
             domain == "lock" && (s?.state == "unlocked" || s?.state == "open") -> UNLOCKED_RED
+            // HA colors a tile only for its state-colored domains; the rest keep --state-icon-color.
+            domain !in STATE_COLORED_DOMAINS -> ctx.theme.stateIconColor
             active -> s?.lightTintColor() ?: ctx.theme.activeColor(domain)
             else -> ctx.theme.stateInactiveColor
         }
@@ -1256,6 +1258,13 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             }
         }
         private val BARE_ICON_DOMAINS = setOf("sensor", "weather", "text", "select")
+        /** HA's `STATE_COLORED_DOMAIN`: the domains whose tiles take a state color. */
+        private val STATE_COLORED_DOMAINS = setOf(
+            "alarm_control_panel", "alert", "automation", "binary_sensor", "calendar", "camera", "climate", "cover",
+            "device_tracker", "fan", "group", "humidifier", "input_boolean", "lawn_mower", "light", "lock",
+            "media_player", "person", "plant", "remote", "schedule", "script", "siren", "sun", "switch", "timer",
+            "update", "vacuum", "valve", "water_heater", "weather",
+        )
         /** Domains whose tile icon presses by default (`toggle` on them presses / activates). */
         private val PRESS_DOMAINS = setOf("button", "input_button", "scene")
         const val LOCKED_GREEN = 0xFF4CAF50.toInt()
@@ -2352,7 +2361,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
  */
 class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfig) : ViewGroup(ctx.context) {
     private val subscriptions = ArrayList<() -> Unit>()
-    private val style = ChipStyle.resolve(ctx, ThemeResolver.parseCardMod(config.raw.optJSONObject("card_mod"), ctx.theme.vars).customProperties)
+    private val style = ChipStyle.resolve(ctx, ownVars(ctx, config))
     private val alignment = config.raw.optString("alignment")
     private val spacingPx = ctx.px(style.spacing)
     private val spacers = HashSet<View>()
@@ -2366,6 +2375,17 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         if (chips != null) {
             for (i in 0 until chips.length()) chips.optJSONObject(i)?.let(::addChip)
         }
+    }
+
+    /**
+     * The card's own custom properties, with `var()` resolved against the theme, the enclosing cards' variables
+     * and the card's other declarations (a second pass, so `--a: var(--b)` on the same card works).
+     */
+    private fun ownVars(ctx: VitroCardContext, config: CardConfig): Map<String, String> {
+        val mod = config.raw.optJSONObject("card_mod")
+        val outer = ctx.theme.vars + ctx.cardVars
+        val first = ThemeResolver.parseCardMod(mod, outer).customProperties
+        return ThemeResolver.parseCardMod(mod, outer + first).customProperties
     }
 
     private fun addChip(c: JSONObject) {
