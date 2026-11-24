@@ -488,6 +488,22 @@ class MarkdownEngineTest {
     }
 
     @Test
+    fun anImageWithNoSizeTakesItsNaturalSize() {
+        // One CSS px per image pixel, at most the line's width (`max-width: 100%`) with the height in proportion; its line
+        // box grows with it.
+        val picture = dev.glassworks.engine.vitro.cards.MdPicture(null).apply {
+            bitmap = android.graphics.Bitmap.createBitmap(192, 96, android.graphics.Bitmap.Config.ARGB_8888)
+        }
+        val run = dev.glassworks.engine.vitro.cards.CssLineBoxSpan.Run(0, 1, 0f, 0f)
+        val span = dev.glassworks.engine.vitro.cards.MdImageSpan("/x.png", 0, 0, 0f, false, picture, activity).apply { natural = true; this.run = run }
+        assertTrue(span.applyNaturalSize(2f, 0))
+        assertEquals(384, span.w); assertEquals(192, span.h); assertEquals(192f, run.above)
+        assertTrue(span.applyNaturalSize(2f, 200))
+        assertEquals(200, span.w); assertEquals(100, span.h); assertEquals(100f, run.above)
+        assertFalse("nothing to lay out again", span.applyNaturalSize(2f, 200))
+    }
+
+    @Test
     fun clockDateFormatFollowsHa() {
         val monday = java.util.GregorianCalendar(java.util.TimeZone.getTimeZone("UTC"), java.util.Locale.US).apply {
             clear(); set(2026, java.util.Calendar.NOVEMBER, 23, 10, 8)

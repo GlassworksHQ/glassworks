@@ -212,6 +212,30 @@ class MdImageSpan(
     val picture: MdPicture,
     private val context: Context,
 ) : ReplacementSpan() {
+    /**
+     * An `<img>` with no width or height: 0 x 0 until its picture loads, then its natural size (one CSS px per image
+     * pixel), at most [maxWidthPx] wide (`max-width: 100%`) with the height kept in proportion, as the browser lays
+     * it out. [run] is its line box, which grows with it.
+     */
+    var natural: Boolean = false
+    var run: CssLineBoxSpan.Run? = null
+
+    /** Takes the loaded picture's natural size; true when it changed (the text needs laying out again). */
+    fun applyNaturalSize(dp: Float, maxWidthPx: Int): Boolean {
+        val bmp = picture.bitmap ?: return false
+        var nw = (bmp.width * dp).roundToInt().coerceAtLeast(1)
+        var nh = (bmp.height * dp).roundToInt().coerceAtLeast(1)
+        if (maxWidthPx in 1 until nw) {
+            nh = (nh.toLong() * maxWidthPx / nw).toInt().coerceAtLeast(1)
+            nw = maxWidthPx
+        }
+        if (nw == w && nh == h) return false
+        w = nw
+        h = nh
+        run?.let { r -> if (alignTop) r.topAligned = nh.toFloat() else r.above = nh.toFloat() }
+        return true
+    }
+
     override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
         if (fm != null && !alignTop) {
             fm.ascent = minOf(fm.ascent, -h)
@@ -274,7 +298,8 @@ class MdSpacerSpan(private val widthPx: Int) : ReplacementSpan() {
  */
 class CssLineBoxSpan(private val runs: List<Run>, private val strut: Run) : LineHeightSpan {
     /** One inline box: chars [start, end), extending [above] px over the baseline and [below] px under it. */
-    class Run(val start: Int, val end: Int, val above: Float, val below: Float, val topAligned: Float = 0f)
+    /** One inline box on a line. [above] and [topAligned] change once for an image that learns its natural size. */
+    class Run(val start: Int, val end: Int, var above: Float, val below: Float, var topAligned: Float = 0f)
 
     override fun chooseHeight(text: CharSequence, start: Int, end: Int, spanstartv: Int, lineHeight: Int, fm: Paint.FontMetricsInt) {
         var above = strut.above
@@ -912,7 +937,16 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             "right", "end" -> View.TEXT_ALIGNMENT_VIEW_END
             else -> View.TEXT_ALIGNMENT_VIEW_START
         }
-        images.forEach { span -> if (!span.picture.ready) load(span.src, span.picture) { tv.invalidate() } }
+        images.forEach { span ->
+            if (!span.picture.ready) load(span.src, span.picture) {
+                if (span.natural && span.applyNaturalSize(dp, tv.width - tv.paddingLeft - tv.paddingRight)) {
+                    // The line grows to the picture: lay the text out again with the same spans.
+                    tv.text = tv.text
+                } else {
+                    tv.invalidate()
+                }
+            }
+        }
         if (images.isNotEmpty()) tv.tag = IMAGE_TAG
         return tv
     }
@@ -971,16 +1005,20 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                     else if (w == null) w = h!! * ratio
                     else if (h == null) h = w / ratio
                 }
-                if (src != null && picture != null && w != null && h != null) {
-                    val wpx = (w * dp).roundToInt().coerceAtLeast(1)
-                    val hpx = (h * dp).roundToInt().coerceAtLeast(1)
+                // A bitmap with no CSS size takes its natural size once loaded (MdImageSpan.natural).
+                val natural = src != null && picture != null && svg == null && w == null && h == null
+                if (src != null && picture != null && ((w != null && h != null) || natural)) {
+                    val wpx = if (natural) 0 else (w!! * dp).roundToInt().coerceAtLeast(1)
+                    val hpx = if (natural) 0 else (h!! * dp).roundToInt().coerceAtLeast(1)
                     val top = s.verticalAlign == "top"
                     val span = MdImageSpan(src, wpx, hpx, s.borderRadius * dp, top, picture, ctx.context)
                     val start = sb.length
                     sb.append('\uFFFC')
                     sb.setSpan(span, start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    runs += if (top) CssLineBoxSpan.Run(start, sb.length, 0f, 0f, hpx.toFloat())
+                    val run = if (top) CssLineBoxSpan.Run(start, sb.length, 0f, 0f, hpx.toFloat())
                     else CssLineBoxSpan.Run(start, sb.length, hpx.toFloat(), 0f)
+                    runs += run
+                    if (natural) { span.natural = true; span.run = run }
                     images += span
                     st.lastSpace = false
                 } else {
