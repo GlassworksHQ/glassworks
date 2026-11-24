@@ -1637,7 +1637,7 @@ internal class HaSwitchView(private val ctx: VitroCardContext) : View(ctx.contex
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = ctx.dp * 1.5f
+        strokeWidth = ctx.dp * 1f
     }
     private val thumb = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val rect = RectF()
@@ -1670,7 +1670,8 @@ internal class HaSwitchView(private val ctx: VitroCardContext) : View(ctx.contex
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        setMeasuredDimension(ctx.px(46f), ctx.px(26f))
+        // ha-switch: a 38 x 20 track with a 1 px border and a 14 px thumb 3 px in (measured).
+        setMeasuredDimension(ctx.px(38f), ctx.px(20f))
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -1678,22 +1679,24 @@ internal class HaSwitchView(private val ctx: VitroCardContext) : View(ctx.contex
         val h = height.toFloat()
         val theme = ctx.theme
         val p = progress
-        fill.color = HaMotion.lerpColor(
-            CardSurface.withAlpha(theme.secondaryTextColor, 0.08f), CardSurface.withAlpha(theme.primaryColor, 0.18f), p,
-        )
-        stroke.color = HaMotion.lerpColor(CardSurface.withAlpha(theme.secondaryTextColor, 0.40f), theme.primaryColor, p)
+        val offTrack = if (theme.dark) OFF_TRACK_DARK else CardSurface.withAlpha(theme.secondaryTextColor, 0.08f)
+        val offBorder = if (theme.dark) OFF_BORDER_DARK else CardSurface.withAlpha(theme.secondaryTextColor, 0.40f)
+        fill.color = HaMotion.lerpColor(offTrack, CardSurface.withAlpha(theme.primaryColor, 0.18f), p)
+        stroke.color = HaMotion.lerpColor(offBorder, theme.primaryColor, p)
         thumb.color = HaMotion.lerpColor(if (theme.dark) OFF_THUMB_DARK else OFF_THUMB_LIGHT, theme.primaryColor, p)
         val half = stroke.strokeWidth / 2f
         rect.set(half, half, w - half, h - half)
         val radius = rect.height() / 2f
         canvas.drawRoundRect(rect, radius, radius, fill)
         canvas.drawRoundRect(rect, radius, radius, stroke)
-        val thumbR = ctx.dp * 8.2f
+        val thumbR = ctx.dp * 7f
         val cx = HaMotion.lerp(h / 2f, w - h / 2f, p)
         canvas.drawCircle(cx, h / 2f, thumbR, thumb)
     }
 
     private companion object {
+        private const val OFF_TRACK_DARK = 0xFF202020.toInt()
+        private const val OFF_BORDER_DARK = 0xFF7A7A7A.toInt()
         const val OFF_THUMB_LIGHT = 0xFF757575.toInt()
         const val OFF_THUMB_DARK = 0xFF9E9E9E.toInt()
         const val SLIDE_MS = 180L
@@ -1707,9 +1710,11 @@ internal class HaSwitchView(private val ctx: VitroCardContext) : View(ctx.contex
  */
 class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
     init {
+        // hui-entities-card: a 20 / 16 / 24 header (24 px title) whose content is pulled up 8 px, then 40 px rows
+        // 8 px apart in a `0 16px 16px` box (16 px all round without a header).
         val col = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, 0, 0, ctx.px(8f))
+            setPadding(0, 0, 0, ctx.px(16f))
         }
         val title = config.title
         val rows = config.entities()
@@ -1721,9 +1726,10 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             val header = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(ctx.px(16f), ctx.px(16f), ctx.px(16f), ctx.px(8f))
+                setPadding(ctx.px(16f), ctx.px(20f), ctx.px(16f), ctx.px(16f))
+                minimumHeight = ctx.px(20f + 28.8f + 16f)
             }
-            header.addView(textView(ctx, 22f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
+            header.addView(textView(ctx, 24f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
                 text = title.orEmpty()
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
@@ -1744,7 +1750,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             }
             col.addView(header)
         } else {
-            col.setPadding(0, ctx.px(8f), 0, ctx.px(8f))
+            col.setPadding(0, ctx.px(16f), 0, ctx.px(16f))
         }
         fun refreshMaster() {
             masterSwitch?.setOn(toggleIds.any { ctx.store[it]?.isActive == true })
@@ -1768,6 +1774,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         }
 
         var prevWasDivider = false
+        var prevWasRow = false
         for (rowCfg in rows) {
             if (rowCfg.rowType == "divider") {
                 col.addView(dividerLine(ctx), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)).apply {
@@ -1775,6 +1782,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                     topMargin = ctx.px(8f); bottomMargin = ctx.px(8f)
                 })
                 prevWasDivider = true
+                prevWasRow = false
                 continue
             }
             if (rowCfg.rowType == "section") {
@@ -1793,15 +1801,18 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                     }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
                 }
                 prevWasDivider = false
+                prevWasRow = false
                 continue
             }
             if (!rowCfg.isEntity) continue
             prevWasDivider = false
+            val gapAbove = prevWasRow
+            prevWasRow = true
             val idx = rowViews.size
             val row = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                minimumHeight = ctx.px(44f)
+                minimumHeight = ctx.px(40f)
                 setPadding(ctx.px(16f), 0, ctx.px(16f), 0)
                 isClickable = true
                 applyHaRipple(this, 4f * ctx.dp, ctx.theme.dark)
@@ -1829,7 +1840,10 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 null
             }
 
-            row.addView(iconView, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply { marginEnd = ctx.px(16f) })
+            // state-badge: a 24 px icon in a 40 px box, then the name 16 px after it.
+            row.addView(iconView, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply {
+                marginStart = ctx.px(8f); marginEnd = ctx.px(24f)
+            })
             if (secondaryView != null) {
                 val labels = LinearLayout(ctx.context).apply {
                     orientation = LinearLayout.VERTICAL
@@ -1895,7 +1909,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                     else -> valueView.text = s?.formattedState() ?: "…"
                 }
             }
-            col.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            col.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (gapAbove) topMargin = ctx.px(8f) })
         }
         refreshFilter()
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
