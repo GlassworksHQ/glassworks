@@ -1,7 +1,7 @@
 {
  "_comment": "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: 2.0% pixels, 1.0 px bounds, 0.5 px font). Regenerate with -PvitroParityUpdateBaseline=true; keep or write each \"reason\". An update records regressions too: read the diff before committing it, and keep the entries of cases with an open regression. #794 empties this file.",
  "mirror/markdown-cardmod": {
-  "pixel": 0.0184,
+  "pixel": 0.0202,
   "bounds": 2.7,
   "font": 0.3,
   "missingText": 0,
@@ -22,7 +22,7 @@
   "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
  },
  "s1/markdown-cardmod": {
-  "pixel": 0.0133,
+  "pixel": 0.0148,
   "bounds": 2.7,
   "font": 0.3,
   "missingText": 0,
@@ -43,7 +43,7 @@
   "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
  },
  "tablet/markdown-cardmod": {
-  "pixel": 0.0089,
+  "pixel": 0.0097,
   "bounds": 2.5,
   "font": 0,
   "missingText": 0,

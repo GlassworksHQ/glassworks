@@ -832,6 +832,7 @@ class VitroView(
             }
             val size = HaGridSize.of(card)
             val cardView = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
+            cacheBigCardAsLayer(cardView, ctx)
             val fixed = size.rows?.let { r -> px(r * (rowHeight + rowGap) - rowGap) }
             grid.addView(cardView, HaGridLayout.LayoutParams(size.columns?.coerceAtMost(columns) ?: columns, fixed))
         }
@@ -888,6 +889,23 @@ class VitroView(
         "grid", "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card" -> card.childCards.size * 2
         "custom:mini-media-player", "custom:mushroom-media-player-card", "custom:auto-entities" -> 4
         else -> 2
+    }
+
+    /**
+     * A big card (at least [BIG_CARD_SHARE] of the dashboard's area) on its own hardware layer: a live value redraws only
+     * the card it changed into its layer, and every frame composites the layer instead of replaying the card's text
+     * and shapes. Big cards hold most of what a frame draws; layering every card cost the S1 about 18 MB of GPU
+     * memory, so small ones (tiles, chips) are drawn directly. Decided once the card has a size, again when it changes.
+     * Never for a card that casts a shadow ([cardLayerWanted]), which the layer's bounds would clip.
+     */
+    private fun cacheBigCardAsLayer(cardView: View, ctx: VitroCardContext) {
+        if (!cardLayerWanted(ctx.theme.cardElevationDp, cardView.elevation)) return
+        cardView.addOnLayoutChangeListener { v, l, t, r, b, ol, ot, or, ob ->
+            if (r - l == or - ol && b - t == ob - ot) return@addOnLayoutChangeListener
+            val big = isBigCard(r - l, b - t, width, height)
+            val want = if (big) LAYER_TYPE_HARDWARE else LAYER_TYPE_NONE
+            if (v.layerType != want) v.setLayerType(want, null)
+        }
     }
 
     private fun buildCard(card: CardConfig, parentCtx: VitroCardContext, fillViewport: Boolean): View {
@@ -1190,6 +1208,16 @@ class VitroView(
     }
 
     companion object {
+        /** Whether a card is drawn through a hardware layer: never when it casts a shadow, which the layer's bounds would clip. */
+        internal fun cardLayerWanted(themeElevationDp: Float, viewElevation: Float): Boolean =
+            themeElevationDp == 0f && viewElevation == 0f
+
+        /** The share of the dashboard's area from which a card gets its own layer. */
+        internal const val BIG_CARD_SHARE = 0.07f
+
+        internal fun isBigCard(w: Int, h: Int, rootW: Int, rootH: Int): Boolean =
+            rootW > 0 && rootH > 0 && w.toLong() * h >= BIG_CARD_SHARE * rootW.toLong() * rootH
+
         private const val TAG = "Glassworks.Vitro"
         private const val PERIODIC_CHECK_MS = 60_000L
         private const val DEFAULT_FADE_MS = 300L

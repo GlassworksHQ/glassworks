@@ -460,6 +460,40 @@ class CardModAndOverlayTest {
     }
 
     @Test
+    fun bigCardsAreCachedLayersUnlessTheyCastShadows() {
+        // A shadow (the theme's card elevation, or the card's own) would be clipped to the layer's bounds.
+        assertTrue(VitroView.cardLayerWanted(0f, 0f))
+        assertFalse(VitroView.cardLayerWanted(2f, 0f))
+        assertFalse(VitroView.cardLayerWanted(0f, 3f))
+        // Only cards covering at least 7% of the dashboard.
+        assertTrue(VitroView.isBigCard(440, 372, 1440, 720))
+        assertFalse(VitroView.isBigCard(214, 84, 1440, 720))
+        assertFalse(VitroView.isBigCard(440, 372, 0, 0))
+
+        val store = EntityStore()
+        store.putLocal(EntityState("light.lounge", "on", mapOf("friendly_name" to "Lounge")))
+        val dash = """{"views": [{"title": "Home", "type": "sections", "theme": "t", "sections": [{"type": "grid", "cards": [
+            {"type": "tile", "entity": "light.lounge"},
+            {"type": "markdown", "content": "# Big\n\nA\n\nB\n\nC\n\nD\n\nE\n\nF\n\nG"}]}]}]}"""
+        fun layers(theme: String): Map<String, Int> {
+            val vv = vitroView(store, """{"views": []}""")
+            vv.setThemes(ThemeCatalog.parse(JSONObject("""{"themes": {"t": $theme}}""")))
+            vv.setDashboard(LovelaceParser.parseDashboard(JSONObject(dash)), null)
+            vv.measure(View.MeasureSpec.makeMeasureSpec(1280, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY))
+            vv.layout(0, 0, 1280, 800)
+            fun inGrid(card: View) = generateSequence(card) { it.parent as? View }
+                .first { it.parent is dev.glassworks.engine.vitro.ui.HaGridLayout }.layerType
+            return mapOf(
+                "tile" to inGrid(vv.all().filterIsInstance<TileCardView>().single()),
+                "markdown" to inGrid(vv.all().filterIsInstance<dev.glassworks.engine.vitro.cards.MarkdownCardView>().single()),
+            )
+        }
+        assertEquals(mapOf("tile" to View.LAYER_TYPE_NONE, "markdown" to View.LAYER_TYPE_HARDWARE), layers("{}"))
+        assertEquals(mapOf("tile" to View.LAYER_TYPE_NONE, "markdown" to View.LAYER_TYPE_NONE),
+            layers("""{"ha-card-box-shadow": "0 2px 8px rgba(0,0,0,0.3)"}"""))
+    }
+
+    @Test
     fun fixedCardLandsInTheOverlayLayer() {
         val store = EntityStore()
         store.putLocal(EntityState("light.lounge", "on", mapOf("friendly_name" to "Lounge")))
