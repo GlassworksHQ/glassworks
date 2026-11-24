@@ -149,6 +149,9 @@ class VitroCardContext(
         val (targetDomain, service) = when (domain) {
             "lock" -> "lock" to if (cur?.state == "locked") "unlock" else "lock"
             "script" -> "script" to "turn_on"
+            // HA's toggle on things that can only fire: press the button, activate the scene.
+            "button", "input_button" -> domain to "press"
+            "scene" -> "scene" to "turn_on"
             in TOGGLE_DOMAINS -> domain to "toggle"
             else -> "homeassistant" to "toggle"
         }

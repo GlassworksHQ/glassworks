@@ -84,6 +84,14 @@ data class CardModStyle(
     val marginInsets: EdgeInsetsDp? = null,
 )
 
+/** HA's base theme (`color.globals`): the domains whose `--state-<domain>-active-color` it defines itself. */
+private val HA_BASE_ACTIVE: Map<String, Int> = mapOf(
+    "light" to 0xFFFFC107, "switch" to 0xFFFFC107, "input_boolean" to 0xFFFFC107, "binary_sensor" to 0xFFFFC107,
+    "fan" to 0xFF00BCD4, "cover" to 0xFF9C27B0, "media_player" to 0xFF03A9F4, "vacuum" to 0xFF009688,
+    "valve" to 0xFF2196F3, "siren" to 0xFFF44336, "update" to 0xFFFF9800, "lawn_mower" to 0xFF4CAF50,
+    "climate" to 0xFFFF8100,
+).mapValues { it.value.toInt() }
+
 /** Resolved, native-ready Home Assistant theme for one view or card. */
 data class ResolvedTheme(
     val name: String,
@@ -128,13 +136,15 @@ data class ResolvedTheme(
         vars[key]?.takeIf { themeVarNames == null || key in themeVarNames }
 
     /**
-     * Domain active color following HA's convention: `--state-<domain>-active-color`, then
-     * `--state-<domain>-on-color`, then the theme-wide `--state-active-color`, then HA's own default.
+     * Domain active color following HA's `stateColorCss`: `--state-<domain>-active-color` (or `-on-color`) from the
+     * theme, then HA's base-theme color for the domains it defines (lights and switches amber, media players light
+     * blue, ...), which a theme-wide `--state-active-color` can't reach, then `--state-active-color`, then defaults.
      */
     fun activeColor(domain: String): Int {
         val d = domain.lowercase(Locale.ROOT)
         ThemeResolver.parseColor(themeVar("state-$d-active-color"))?.let { return it }
         ThemeResolver.parseColor(themeVar("state-$d-on-color"))?.let { return it }
+        HA_BASE_ACTIVE[d]?.let { base -> return ThemeResolver.parseColor(vars["state-$d-active-color"]) ?: base }
         if (d != "sensor" && d != "person" && d != "device_tracker") {
             ThemeResolver.parseColor(themeVar("state-active-color"))?.let { return it }
         }

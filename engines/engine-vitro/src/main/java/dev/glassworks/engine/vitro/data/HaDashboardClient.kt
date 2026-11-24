@@ -323,7 +323,38 @@ class HaDashboardClient(
         }
     }
 
+    /** Domains and platforms whose display data (icons, state labels) has been asked for on this connection. */
+    private val displayRequested = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val displayPending = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /**
+     * Asks HA for the icon and state translations the [entityIds] need (their domains, and the integrations of the
+     * ones with a translation key), the way HA's frontend loads them, and re-renders once they've all arrived.
+     */
+    private fun loadDisplayFor(entityIds: Collection<String>) {
+        val (domains, platforms) = HaDisplay.missingFor(entityIds)
+        val newDomains = domains.filter { displayRequested.add("d:$it") }
+        val newPlatforms = platforms.filter { displayRequested.add("p:$it") }
+        fun ask(type: String, category: String, names: List<String>, apply: (JSONObject) -> Unit) {
+            if (names.isEmpty()) return
+            val msg = JSONObject().put("type", type).put("category", category).put("integration", JSONArray(names))
+            if (type == "frontend/get_translations") msg.put("language", "en")
+            displayPending.incrementAndGet()
+            request(msg) { res ->
+                if (res.optBoolean("success", false)) res.optJSONObject("result")?.let(apply)
+                if (displayPending.decrementAndGet() == 0) store.renotifyAll()
+            }
+        }
+        ask("frontend/get_icons", "entity_component", newDomains) { HaDisplay.applyIcons(it, true, newDomains) }
+        ask("frontend/get_translations", "entity_component", newDomains) { HaDisplay.applyTranslations(it, true, newDomains) }
+        ask("frontend/get_icons", "entity", newPlatforms) { HaDisplay.applyIcons(it, false, newPlatforms) }
+        ask("frontend/get_translations", "entity", newPlatforms) { HaDisplay.applyTranslations(it, false, newPlatforms) }
+    }
+
+    private fun displayIds(): Collection<String> = activeEntityFilter.ifEmpty { store.all().keys }
+
     private fun onAuthenticated() {
+        displayRequested.clear()
         // 0. HA config (unit_system, location_name, time_zone — needed by custom cards reading hass.config)
         request(JSONObject().put("type", "get_config")) { res ->
             if (res.optBoolean("success", false)) {
@@ -396,6 +427,12 @@ class HaDashboardClient(
         subscribe(JSONObject().put("type", "frontend/subscribe_user_data").put("key", "core")) { ev ->
             dispatchUserTheme(ev.optJSONObject("value"))
         }
+        // 7. Display data, after everything the first paint needs: the entity registry, then the icons and state
+        // translations for the view's entities.
+        request(JSONObject().put("type", "config/entity_registry/list_for_display")) { res ->
+            if (res.optBoolean("success", false)) res.optJSONObject("result")?.let(HaDisplay::applyRegistry)
+            loadDisplayFor(displayIds())
+        }
     }
 
     /** Reads `selectedTheme` (a theme name, or `{theme, dark}`) out of the `core` user data and tells the listener. */
@@ -419,8 +456,15 @@ class HaDashboardClient(
         if (filter.isNotEmpty()) {
             msg.put("entity_ids", JSONArray(filter.toList()))
         }
+        store.resetSnapshot()
+        var first = true
         entitySubId = subscribe(msg) { ev ->
             store.applyCompressedEvent(ev)
+            if (first) {
+                first = false
+                store.markSnapshot(filter.toSet())
+                loadDisplayFor(displayIds())
+            }
         }.takeIf { it > 0 }
     }
 
