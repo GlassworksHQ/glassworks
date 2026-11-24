@@ -89,7 +89,7 @@ object CompatChecker {
         islandsOnly: Boolean = false,
     ) {
         val here = "$path (${card.type})"
-        if (!(islandsOnly && CardCompat.staysNative(card))) {
+        if (!(islandsOnly && card.nativeOnly)) {
             val verdict = card.compat.effective(scripts)
             if (!islandsOnly || !verdict.isNative) out += CompatEntry(here, verdict)
             if (!verdict.isNative) return

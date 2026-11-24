@@ -513,7 +513,10 @@ data class CardConfig(
      * native is answered without the full check, which then runs only when a report asks for its notes.
      */
     fun inIsland(scripts: IslandScripts = IslandScripts.ANY): Boolean =
-        !CardCompat.staysNative(this) && compat.inIsland(scripts)
+        !nativeOnly && compat.inIsland(scripts)
+
+    /** [CardCompat.staysNative] for this card, decided once like [compat] (it walks the cards it produces). */
+    internal val nativeOnly: Boolean by lazy { CardCompat.staysNative(this) }
 
     fun entities(): List<EntityRowConfig> {
         val arr = raw.optJSONArray("entities") ?: return emptyList()

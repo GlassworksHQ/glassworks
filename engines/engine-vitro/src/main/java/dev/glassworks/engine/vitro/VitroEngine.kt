@@ -24,6 +24,7 @@ import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.PageHost
 import dev.glassworks.engine.PagePort
+import dev.glassworks.engine.vitro.compat.CompatWarmup
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
 import dev.glassworks.engine.vitro.island.VitroIslandServer
@@ -582,6 +583,8 @@ class VitroEngine(
             }
 
             override fun onDashboardConfig(urlPath: String?, config: DashboardConfig) {
+                // Route the cards off the UI thread while the config waits for it to build the view.
+                CompatWarmup.start(config, pendingViewPath)
                 post {
                     // An older request's answer for a dashboard the page has left must not replace the current one.
                     if (urlPath != currentDashboardPath) return@post
