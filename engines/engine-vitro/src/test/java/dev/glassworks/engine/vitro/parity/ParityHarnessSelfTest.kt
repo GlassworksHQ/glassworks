@@ -388,6 +388,8 @@ class ParityHarnessSelfTest {
         // The whole authority, not a prefix of it; schemes in any case.
         assertTrue(FixtureScan.externalHost("""{"u": "http://homeassistant.local_private.example.test/x"}"""))
         assertTrue(FixtureScan.externalHost("""{"u": "HTTPS://private.example.test/x"}"""))
+        // Credentials in the URL fail it even for an allowed host.
+        assertTrue(FixtureScan.externalHost("""{"u": "https://fixture-user:pw@homeassistant.local/x"}"""))
         assertFalse(FixtureScan.externalHost("""{"u": "HTTP://homeassistant.local:8123/x?y=1"}"""))
     }
 
@@ -420,7 +422,9 @@ internal object FixtureScan {
     fun externalHost(text: String): Boolean = URL_AUTHORITY.findAll(text).any { m ->
         // The host is what's left of the authority without its user info and port; a bracketed IPv6 one is never
         // allowed. Anything that doesn't read as one of the allowed names counts as external.
-        val hostPort = m.groupValues[1].substringAfterLast('@')
+        // User info is a credential in a fixture whatever the host: never allowed.
+        if ('@' in m.groupValues[1]) return@any true
+        val hostPort = m.groupValues[1]
         val host = if (hostPort.startsWith("[")) hostPort else hostPort.substringBefore(':')
         host.lowercase().trimEnd('.') !in ALLOWED_HOSTS
     }

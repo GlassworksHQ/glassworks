@@ -405,6 +405,10 @@ class ThemeResolverTest {
         assertEquals(argb(0xFF123456), chained.primaryColor)
         assertFalse(chained.toCssRootBlock(), "--b:" in chained.toCssRootBlock())
         assertTrue(chained.toCssRootBlock(), "--c: #222222" in chained.toCssRootBlock())
+        // A stylesheet with one missing reference keeps its other declarations.
+        val sheet = resolveWith("""{"card-mod-card": "ha-card { color: var(--missing); background: #123456; border-radius: 24px; }"}""")
+        assertEquals(argb(0xFF123456), sheet.cardBackgroundColor)
+        assertEquals(24f, sheet.cardBorderRadiusDp, 0.01f)
     }
 
     @Test

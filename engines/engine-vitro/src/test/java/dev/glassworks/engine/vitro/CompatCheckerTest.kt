@@ -95,6 +95,8 @@ class CompatCheckerTest {
         assertEquals("img[src^=…]", CardCompat.redactAttributeValues("img[src^=\"/image?part=]&token=demo-token\"]"))
         // An escaped quote inside the value doesn't end it either.
         assertEquals("img[src=…]", CardCompat.redactAttributeValues("img[src=\"/image?q=\\\"]&token=example\"]"))
+        // An escaped line break inside the value doesn't stop the match either.
+        assertEquals("img[src=…]", CardCompat.redactAttributeValues("img[src=\"/a\\\nb?token=example\"]"))
         val quoted = verdict("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("img[src^=\"/image?part=]&token=demo-token\"] { opacity: 0 }")}}}""")
         assertFalse((quoted.reasons + quoted.notes).joinToString(), "demo-token" in (quoted.reasons + quoted.notes).joinToString())
     }

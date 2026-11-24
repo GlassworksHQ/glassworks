@@ -133,8 +133,8 @@ const savedDigests = new Map();
 /** Asset paths this run saved or found unchanged; a full, clean refresh deletes every other file in assets/. */
 const keptAssets = new Set();
 /** Files a capture run writes, held until every capture succeeded ([stage]): [path, data]. */
-const staged = [];
-const stage = (path, data) => staged.push([path, data]);
+const staged = new Map();
+const stage = (path, data) => staged.set(path, Buffer.isBuffer(data) ? data : Buffer.from(data));
 
 /** Every file under assets/, as the HA path it stands for (`/static/icons/x.png`). */
 function existingAssets() {
@@ -410,7 +410,10 @@ async function saveDrawnImages(images, drawn) {
     const conflict = noteSaved(savedDigests, path, createHash('sha256').update(bytes).digest('hex'));
     if (conflict) throw new Error(conflict);
     keptAssets.add(path);
-    if (existsSync(out) && readFileSync(out).equals(bytes)) continue;
+    // Against what this run will write there (a picture fetched earlier in the run), else the file on disk: the
+    // image HA drew is the one kept.
+    const pending = staged.get(out);
+    if (pending ? pending.equals(bytes) : existsSync(out) && readFileSync(out).equals(bytes)) continue;
     stage(out, bytes);
     log(`asset ${path} (HA drew it)`);
   }

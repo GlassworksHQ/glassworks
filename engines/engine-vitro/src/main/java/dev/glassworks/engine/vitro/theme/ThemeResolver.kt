@@ -490,7 +490,9 @@ object ThemeResolver {
         val invalid = HashSet(cyclicNames(raw))
         while (true) {
             val scope = raw.keys - invalid
-            val more = raw.filter { (k, v) -> k !in invalid && needsMissing(v, scope) }.keys
+            // A whole stylesheet (`card-mod-card`) isn't one value: a missing reference in one of its declarations
+            // empties that reference (resolveValue) and leaves the other declarations as they are.
+            val more = raw.filter { (k, v) -> k !in invalid && !k.startsWith("card-mod-") && needsMissing(v, scope) }.keys
             if (more.isEmpty()) return invalid
             invalid += more
         }

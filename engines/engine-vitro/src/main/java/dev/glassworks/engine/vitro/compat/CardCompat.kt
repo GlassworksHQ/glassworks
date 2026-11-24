@@ -521,7 +521,8 @@ object CardCompat {
     private val SELECTOR_SPACES = Regex("""\s+""")
     // Quote- and escape-aware: a `]` inside a quoted value (`[src^="/x?a=]&token=…"]`), an escaped quote inside one
     // (`"/x?q=\"]&token=…"`) or an escaped `]` doesn't end the attribute selector.
-    private val ATTRIBUTE_VALUE = Regex("""\[(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\\.|[^\]"'\\])*\]""")
+    // An escape takes any next character, a line break included (`.` wouldn't).
+    private val ATTRIBUTE_VALUE = Regex("""\[(?:"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|\\[\s\S]|[^\]"'\\])*\]""")
 
     private val FUNCTIONAL = Regex(""":(not|is|where|matches|-webkit-any|has)\(""")
 
