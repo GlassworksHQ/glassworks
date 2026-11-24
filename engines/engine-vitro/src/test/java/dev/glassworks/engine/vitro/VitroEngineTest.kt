@@ -505,10 +505,11 @@ class VitroEngineTest {
         resources: List<LovelaceResource> = emptyList(),
         token: String? = FakeHaServer.TOKEN,
         navigate: (String) -> Unit = {},
+        store: EntityStore = EntityStore(),
     ) = VitroCardContext(
         context = activity,
         haBase = base,
-        store = EntityStore(),
+        store = store,
         theme = ThemeResolver.resolve(ThemeCatalog(), dark),
         resources = resources,
         accessToken = { token },
@@ -702,5 +703,99 @@ class VitroEngineTest {
         island.handleIslandMessage(JSONObject().put("type", "navigate").put("path", ""), noReply)
         idle()
         assertEquals(listOf("/lovelace/energy"), paths)
+    }
+
+    @Test
+    fun islandHtmlShimsTheHaElementsUpstreamCardsUse() {
+        val html = WebIslandCardView.buildIslandHtml(
+            cardContext(resources = listOf(LovelaceResource("/hacsfiles/button-card/button-card.js", "module"))),
+            islandCard(),
+        )
+        for (name in listOf(
+            "ha-state-icon", "iron-icon", "ha-icon-button", "paper-icon-button", "ha-slider", "paper-slider",
+            "ha-switch", "ha-relative-time", "ha-ripple", "ha-spinner", "ha-formfield", "ha-input", "mwc-menu",
+            "mwc-list-item",
+        )) {
+            assertTrue("defines $name", html.contains("vitroDefine('$name'"))
+        }
+        // Defined only when the card bundle didn't bring its own, and before any card bundle loads:
+        // mini-media-player extends customElements.get('paper-slider') at import time.
+        assertTrue(html.contains("if (!customElements.get(name)) customElements.define(name, cls);"))
+        assertTrue(html.indexOf("vitroDefine('paper-slider'") < html.indexOf("button-card.js"))
+        assertTrue(html.indexOf("vitroDefine('paper-icon-button'") < html.indexOf("button-card.js"))
+        // ha-state-icon: explicit icon, then the entity's, then the domain's.
+        assertTrue(html.contains("if (st && st.attributes && st.attributes.icon) return st.attributes.icon;"))
+        assertTrue(html.contains("light: 'mdi:lightbulb'"))
+        assertTrue(html.contains("return VITRO_DOMAIN_ICONS[domain] || 'mdi:home';"))
+        // Icon buttons draw an mdi path or an ha-icon in a plain round button.
+        assertTrue(html.contains("border:0;background:transparent;color:inherit;cursor:pointer;padding:6px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%"))
+        assertTrue(html.contains("svg.setAttribute('viewBox', '0 0 24 24');"))
+        // Sliders and switches wrap native inputs and bubble their events.
+        assertTrue(html.contains("i.type = 'range';"))
+        assertTrue(html.contains("i.type = 'checkbox';"))
+        assertTrue(html.contains("new Event(type, { bubbles: true, composed: true })"))
+        assertTrue(html.contains("new Event('change', { bubbles: true, composed: true })"))
+        assertTrue(html.contains("if (abs < 45) return 'just now';"))
+        // The original shims stay.
+        assertTrue(html.contains("customElements.define('ha-card'"))
+        assertTrue(html.contains("customElements.define('ha-icon'"))
+    }
+
+    @Test
+    fun theFallbackCardCarriesItsLayoutInlineForShadowRoots() {
+        val html = WebIslandCardView.buildIslandHtml(cardContext(), islandCard())
+        assertTrue(html.contains("card.style.cssText = 'padding:12px 16px;display:block';"))
+        assertTrue(html.contains("<div class=\"vitro-title\" style=\"font-size:1.15em;font-weight:500;padding-bottom:8px\">"))
+        assertTrue(html.contains("<div class=\"vitro-row\" style=\"display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0\">"))
+        assertTrue(html.contains("<span class=\"vitro-state\" style=\"color:var(--secondary-text-color)\">"))
+        // Names and states still only go in as text.
+        assertTrue(html.contains("rowEls[i].children[0].textContent = "))
+        assertTrue(html.contains("rowEls[i].children[1].textContent = "))
+    }
+
+    private fun storeWith(vararg ids: String) = EntityStore().apply {
+        val arr = org.json.JSONArray()
+        for (id in ids) arr.put(JSONObject().put("entity_id", id).put("state", "on").put("attributes", JSONObject()))
+        applyStatesArray(arr)
+    }
+
+    private fun islandWith(store: EntityStore, card: String) =
+        WebIslandCardView(cardContext(store = store), LovelaceParser.parseCard(JSONObject(card)))
+
+    @Test
+    fun aFilterIslandGetsEveryEntityAndFollowsThemAll() {
+        val store = storeWith("light.kitchen", "light.porch", "sensor.studio_power")
+        val island = islandWith(store, """{"type": "custom:auto-entities", "card": {"type": "entities"}, "filter": {"include": [{"domain": "light"}]}}""")
+        assertTrue(island.followsAllEntities)
+
+        val sent = mutableListOf<JSONObject>()
+        island.seedInitialStates { sent += it }
+        assertEquals(1, sent.size)
+        val seed = sent.single().getJSONObject("states")
+        assertEquals("patch", sent.single().getString("type"))
+        assertEquals(setOf("light.kitchen", "light.porch", "sensor.studio_power"), seed.keys().asSequence().toSet())
+        assertEquals("on", seed.getJSONObject("light.kitchen").getString("state"))
+
+        // A change to any entity reaches it, and a removed one goes out as null.
+        val patch = island.patchFor(setOf("light.porch", "light.gone"))!!.getJSONObject("states")
+        assertEquals("on", patch.getJSONObject("light.porch").getString("state"))
+        assertTrue(patch.isNull("light.gone"))
+    }
+
+    @Test
+    fun anIslandNamingItsEntitiesStillSeesTheWholeStoreButOnlyFollowsItsOwn() {
+        val store = storeWith("light.lounge_lamp", "light.kitchen")
+        val island = islandWith(store, """{"type": "custom:button-card", "entity": "light.lounge_lamp"}""")
+        assertFalse(island.followsAllEntities)
+
+        val sent = mutableListOf<JSONObject>()
+        island.seedInitialStates { sent += it }
+        assertEquals(setOf("light.lounge_lamp", "light.kitchen"), sent.single().getJSONObject("states").keys().asSequence().toSet())
+
+        assertNull(island.patchFor(setOf("light.kitchen")))
+        assertEquals(setOf("light.lounge_lamp"), island.patchFor(setOf("light.lounge_lamp", "light.kitchen"))!!.getJSONObject("states").keys().asSequence().toSet())
+        // A card that read another entity through hass.states starts following it.
+        island.handleIslandMessage(JSONObject().put("type", "watch").put("entity_id", "light.kitchen")) {}
+        assertTrue(island.patchFor(setOf("light.kitchen"))!!.getJSONObject("states").has("light.kitchen"))
     }
 }

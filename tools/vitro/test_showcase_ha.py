@@ -38,6 +38,10 @@ import showcase_ha as S  # noqa: E402
 from fakeha import ws_frame, ws_read  # noqa: E402
 
 
+def _iso_z(t):
+    return datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
 class WS:
     """A minimal websocket client (masked text frames out, fakeha's reader in)."""
 
@@ -756,6 +760,45 @@ class ShowcaseTest(unittest.TestCase):
         self.ws.until(lambda m: m.get("id") == mid and m["type"] == "result")
         ev = self.ws.until(lambda m: m.get("id") == mid and m["type"] == "event")["event"]
         self.assertEqual((ev["type"], len(ev["forecast"])), ("daily", 5))
+
+    def test_rest_history_period(self):
+        t1 = time.time()
+        a, b = _iso_z(t1 - 7200), _iso_z(t1)
+        status, headers, body = http(self.port, f"/api/history/period/{a}?filter_entity_id=sensor.studio_power&end_time={b}&minimal_response&no_attributes")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "application/json")
+        data = json.loads(body)
+        self.assertEqual(len(data), 1)
+        series = data[0]
+        self.assertGreater(len(series), 2)
+        for p in series:
+            self.assertEqual(p["entity_id"], "sensor.studio_power")
+            float(p["state"])
+            for k in ("last_changed", "last_updated"):
+                t = datetime.datetime.fromisoformat(p[k]).timestamp()
+                self.assertGreaterEqual(t, t1 - 7200 - 1)
+                self.assertLessEqual(t, t1 + 1)
+            self.assertIsInstance(p["attributes"], dict)
+        times = [datetime.datetime.fromisoformat(p["last_updated"]).timestamp() for p in series]
+        self.assertEqual(times, sorted(times))
+        # the same curve the websocket serves for that window
+        ws = self.ws.call("history/history_during_period", entity_ids=["sensor.studio_power"], start_time=a, end_time=b,
+                          no_attributes=True)["result"]["sensor.studio_power"]
+        self.assertEqual([p["state"] for p in series], [p["s"] for p in ws])
+
+    def test_rest_history_multiple_and_edges(self):
+        a = _iso_z(time.time() - 3600)
+        data = json.loads(http(self.port, f"/api/history/period/{a}?filter_entity_id=sensor.studio_power,sensor.studio_humidity,sensor.nope")[2])
+        self.assertEqual([s[0]["entity_id"] for s in data], ["sensor.studio_power", "sensor.studio_humidity"])
+        self.assertEqual(data[0][0]["attributes"]["unit_of_measurement"], "W")      # attributes ride on the first point
+        # no start (defaults to 24 h back), non-numeric entity, no filter
+        data = json.loads(http(self.port, "/api/history/period?filter_entity_id=light.desk_lamp")[2])
+        self.assertEqual(len(data), 1)
+        self.assertIn(data[0][0]["state"], ("on", "off"))
+        everything = json.loads(http(self.port, "/api/history/period")[2])
+        self.assertEqual(len(everything), len(self.hub.states))
+        self.assertEqual(json.loads(http(self.port, f"/api/history/period/{a}?filter_entity_id=sensor.nope")[2]), [])
+        self.assertEqual(http(self.port, "/api/history/period/not-a-date")[0], 400)
 
     def test_camera_commands(self):
         caps = self.ws.call("camera/capabilities", entity_id="camera.studio_front")["result"]

@@ -915,6 +915,25 @@ def history(hub, entity_ids, start, end, no_attributes=False, now=None):
     return out, t0, t1
 
 
+def rest_history(hub, start, end, entity_ids=None, no_attributes=False, now=None):
+    """GET /api/history/period[/<start>]: HA's REST shape, one list per entity of {entity_id, state, attributes, last_changed,
+    last_updated}, from the same synthetic curves as the websocket's history (so both agree for one window). Without
+    filter_entity_id every entity in the home is returned; an unknown id gives no list. `minimal_response` and
+    `significant_changes_only` change nothing here: every point carries the full set of keys."""
+    ids = entity_ids if entity_ids else list(hub.states)
+    pts, _, _ = history(hub, ids, start, end, no_attributes, now)
+    out = []
+    for e in ids:
+        if e not in pts:
+            continue
+        series = []
+        for p in pts[e]:
+            t = _iso(p["lu"])
+            series.append({"entity_id": e, "state": p["s"], "attributes": p.get("a", {}), "last_changed": t, "last_updated": t})
+        out.append(series)
+    return out
+
+
 STAT_STEP = {"5minute": 300, "hour": 3600, "day": 86400, "week": 7 * 86400, "month": 30 * 86400}
 
 
@@ -2228,6 +2247,18 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/states/"):
             st = self.hub.states.get(path[len("/api/states/"):])
             return self.send_json(self.hub.state_object(st)) if st else self.send_json({"message": "Entity not found."}, 404)
+        if path == "/api/history/period" or path.startswith("/api/history/period/"):
+            start = urllib.parse.unquote(path[len("/api/history/period/"):]) or None
+            # a "+00:00" offset in the query arrives as a space once decoded
+            end = (q.get("end_time") or [None])[0]
+            ids = [e for part in q.get("filter_entity_id", []) for e in part.split(",") if e]
+            try:
+                with self.hub.lock:
+                    body = rest_history(self.hub, start and start.replace(" ", "+"), end and end.replace(" ", "+"), ids,
+                                        "no_attributes" in urllib.parse.parse_qs(url.query, keep_blank_values=True))
+            except (ValueError, AttributeError):
+                return self.send_json({"message": "Invalid datetime"}, 400)
+            return self.send_json(body)
         if path == "/api/calendars":
             return self.send_json([{"entity_id": e, "name": s["attributes"]["friendly_name"]}
                                    for e, s in self.hub.states.items() if domain_of(e) == "calendar"])

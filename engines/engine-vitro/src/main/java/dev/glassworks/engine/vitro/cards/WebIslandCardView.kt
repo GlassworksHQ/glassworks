@@ -88,13 +88,7 @@ class WebIslandCardView(
 
                 track(ctx.store.subscribeAny { changed ->
                     val send = sendToIsland ?: return@subscribeAny
-                    val hits = changed.filter { it in watchedEntities }
-                    if (hits.isEmpty()) return@subscribeAny
-                    val patch = JSONObject()
-                    for (eid in hits) ctx.store[eid]?.let { patch.put(eid, it.toHassJson()) }
-                    if (patch.length() > 0) {
-                        send(JSONObject().put("type", "patch").put("states", patch))
-                    }
+                    patchFor(changed)?.let(send)
                 })
             } else {
                 server.unregisterSlot(id)
@@ -115,17 +109,46 @@ class WebIslandCardView(
         addView(note, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
     }
 
-    private fun seedInitialStates(send: (JSONObject) -> Unit) {
+    /**
+     * Whether the card picks its entities at runtime (`auto-entities` filters, `button-card` JS templates, a card
+     * that names none up front): such a card follows every entity in the store, not only the ones it read.
+     */
+    internal val followsAllEntities: Boolean by lazy {
+        config.raw.has("filter") || referencedEntities().isEmpty()
+    }
+
+    private fun referencedEntities(): Set<String> {
         val syntheticView = ViewConfig(0, "", null, null, "panel", null, null, 1, emptyList(), listOf(config), emptyList())
-        val refs = CardRouter.referencedEntities(syntheticView)
+        return CardRouter.referencedEntities(syntheticView)
+    }
+
+    /**
+     * The first `patch` an island gets when its socket connects: every entity in the store, as HA's own frontend
+     * hands every card the whole `hass.states`, so filter and template cards find what they look for.
+     */
+    internal fun seedInitialStates(send: (JSONObject) -> Unit) {
+        watchedEntities.addAll(referencedEntities())
         val seed = JSONObject()
-        for (id in refs) {
-            watchedEntities.add(id)
-            ctx.store[id]?.let { seed.put(id, it.toHassJson()) }
-        }
+        for ((id, state) in ctx.store.all()) seed.put(id, state.toHassJson())
         if (seed.length() > 0) {
             send(JSONObject().put("type", "patch").put("states", seed))
         }
+    }
+
+    /**
+     * The `patch` for a batch of [changed] entities, or null when none concern this island. A card that follows
+     * every entity gets them all (a removed one as `null`); any other card only the ones it watches.
+     */
+    internal fun patchFor(changed: Set<String>): JSONObject? {
+        val patch = JSONObject()
+        for (eid in changed) {
+            if (!followsAllEntities && eid !in watchedEntities) continue
+            val state = ctx.store[eid]
+            if (state != null) patch.put(eid, state.toHassJson())
+            else if (followsAllEntities) patch.put(eid, JSONObject.NULL)
+        }
+        if (patch.length() == 0) return null
+        return JSONObject().put("type", "patch").put("states", patch)
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
@@ -297,7 +320,7 @@ html, body { margin: 0; padding: 0; background: transparent; color: var(--primar
 ha-card { display: block; background: var(--ha-card-background, var(--card-background-color)); border-radius: var(--ha-card-border-radius, 12px); color: var(--primary-text-color); }
 ha-card.vitro-fallback { padding: 12px 16px; }
 .vitro-title { font-size: 1.15em; font-weight: 500; padding-bottom: 8px; }
-.vitro-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
+.vitro-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; }
 .vitro-state { color: var(--secondary-text-color); }
 </style>
 <script>
@@ -336,12 +359,255 @@ if (!customElements.get('ha-icon')) {
     }
   });
 }
+// More HA elements upstream HACS cards render or extend (button-card, mini-media-player, …). Each is defined only
+// when nothing else did, so a card bundle that ships its own wins.
+const vitroDefine = (name, cls) => { if (!customElements.get(name)) customElements.define(name, cls); };
+function vitroReflect(cls, props) {
+  // A property per attribute, both ways, as Lit and Polymer elements behave.
+  for (const p of props) {
+    Object.defineProperty(cls.prototype, p, {
+      configurable: true,
+      get() { return this.getAttribute(p); },
+      set(v) { if (v === null || v === undefined || v === false) this.removeAttribute(p); else this.setAttribute(p, v === true ? '' : String(v)); },
+    });
+  }
+}
+// A property set before the element upgraded sits on the instance and hides the class accessor: move it over.
+function vitroUpgrade(el, props) {
+  for (const p of props) {
+    if (Object.prototype.hasOwnProperty.call(el, p)) { const v = el[p]; delete el[p]; el[p] = v; }
+  }
+}
+const VITRO_DOMAIN_ICONS = {
+  light: 'mdi:lightbulb', switch: 'mdi:flash', input_boolean: 'mdi:flash', fan: 'mdi:fan', cover: 'mdi:blinds',
+  climate: 'mdi:thermostat', humidifier: 'mdi:air-humidifier', media_player: 'mdi:cast', lock: 'mdi:lock',
+  person: 'mdi:account', device_tracker: 'mdi:account', sensor: 'mdi:eye', binary_sensor: 'mdi:checkbox-blank-circle',
+  camera: 'mdi:video', weather: 'mdi:weather-partly-cloudy',
+};
+vitroDefine('iron-icon', class extends (customElements.get('ha-icon')) {});
+vitroDefine('ha-state-icon', class extends HTMLElement {
+  static get observedAttributes() { return ['icon']; }
+  connectedCallback() { vitroUpgrade(this, ['icon', 'stateObj', 'hass']); this._render(); }
+  attributeChangedCallback() { this._render(); }
+  set icon(v) { this._icon = v || ''; this._render(); }
+  get icon() { return this._icon || this.getAttribute('icon') || ''; }
+  set stateObj(v) { this._stateObj = v; this._render(); }
+  get stateObj() { return this._stateObj; }
+  set hass(v) { this._hass = v; }
+  get hass() { return this._hass; }
+  _resolve() {
+    if (this.icon) return this.icon;
+    const st = this._stateObj;
+    if (st && st.attributes && st.attributes.icon) return st.attributes.icon;
+    const domain = st && st.entity_id ? String(st.entity_id).split('.')[0] : '';
+    return VITRO_DOMAIN_ICONS[domain] || 'mdi:home';
+  }
+  _render() {
+    if (!this.isConnected) return;
+    this.style.display = 'inline-flex';
+    let inner = this.firstElementChild;
+    if (!inner || inner.localName !== 'ha-icon') {
+      this.textContent = '';
+      inner = document.createElement('ha-icon');
+      this.appendChild(inner);
+    }
+    const icon = this._resolve();
+    if (inner.getAttribute('icon') !== icon) inner.setAttribute('icon', icon);
+  }
+});
+class VitroIconButton extends HTMLElement {
+  static get observedAttributes() { return ['icon', 'path', 'disabled', 'label']; }
+  connectedCallback() { vitroUpgrade(this, ['icon', 'path', 'label', 'disabled']); this._render(); }
+  attributeChangedCallback() { this._render(); }
+  set path(v) { this._path = v || ''; this._render(); }
+  get path() { return this._path || this.getAttribute('path') || ''; }
+  _render() {
+    if (!this.isConnected) return;
+    this.style.display = 'inline-flex';
+    if (!this._button) {
+      const kept = Array.from(this.childNodes);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.style.cssText = 'border:0;background:transparent;color:inherit;cursor:pointer;padding:6px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;font:inherit';
+      kept.forEach((n) => b.appendChild(n));
+      this._slotted = kept;
+      this._button = b;
+      this.appendChild(b);
+    }
+    const b = this._button;
+    b.disabled = this.hasAttribute('disabled');
+    const label = this.getAttribute('label');
+    if (label) b.setAttribute('aria-label', label); else b.removeAttribute('aria-label');
+    const icon = this.icon;
+    const path = this.path;
+    if (icon) {
+      b.textContent = '';
+      const i = document.createElement('ha-icon');
+      i.setAttribute('icon', icon);
+      b.appendChild(i);
+    } else if (path) {
+      b.textContent = '';
+      const ns = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.style.cssText = 'width:var(--mdc-icon-size,24px);height:var(--mdc-icon-size,24px);fill:currentColor';
+      const p = document.createElementNS(ns, 'path');
+      p.setAttribute('d', path);
+      svg.appendChild(p);
+      b.appendChild(svg);
+    } else if (this._slotted && !b.childNodes.length) {
+      this._slotted.forEach((n) => b.appendChild(n));
+    }
+  }
+}
+vitroReflect(VitroIconButton, ['icon', 'label']);
+Object.defineProperty(VitroIconButton.prototype, 'disabled', {
+  configurable: true,
+  get() { return this.hasAttribute('disabled'); },
+  set(v) { if (v) this.setAttribute('disabled', ''); else this.removeAttribute('disabled'); },
+});
+vitroDefine('ha-icon-button', VitroIconButton);
+vitroDefine('paper-icon-button', class extends VitroIconButton {});
+class VitroSlider extends HTMLElement {
+  static get observedAttributes() { return ['min', 'max', 'step', 'value', 'disabled']; }
+  connectedCallback() { vitroUpgrade(this, ['min', 'max', 'step', 'value', 'disabled']); this._ensure(); this._sync(); }
+  attributeChangedCallback() { this._sync(); }
+  _ensure() {
+    if (this._input) return this._input;
+    this.style.display = 'block';
+    const i = document.createElement('input');
+    i.type = 'range';
+    i.style.cssText = 'width:100%;margin:0;accent-color:var(--slider-color, var(--primary-color))';
+    const relay = (type) => (ev) => {
+      ev.stopPropagation();
+      this._value = Number(i.value);
+      this.dispatchEvent(new Event(type, { bubbles: true, composed: true }));
+    };
+    i.addEventListener('input', relay('input'));
+    i.addEventListener('change', relay('change'));
+    this._input = i;
+    this.appendChild(i);
+    return i;
+  }
+  _sync() {
+    const i = this._ensure();
+    i.min = String(this.min);
+    i.max = String(this.max);
+    i.step = String(this.step);
+    i.value = String(this.value);
+    i.disabled = this.disabled;
+  }
+  _num(name, fallback) { const a = this.getAttribute(name); return a === null || a === '' || isNaN(Number(a)) ? fallback : Number(a); }
+  get min() { return this._min !== undefined ? this._min : this._num('min', 0); }
+  set min(v) { this._min = Number(v); this._sync(); }
+  get max() { return this._max !== undefined ? this._max : this._num('max', 100); }
+  set max(v) { this._max = Number(v); this._sync(); }
+  get step() { return this._step !== undefined ? this._step : this._num('step', 1); }
+  set step(v) { this._step = Number(v); this._sync(); }
+  get value() { return this._value !== undefined ? this._value : this._num('value', 0); }
+  set value(v) { this._value = Number(v); this._sync(); }
+  get disabled() { return this._disabled !== undefined ? this._disabled : this.hasAttribute('disabled'); }
+  set disabled(v) { this._disabled = !!v; this._sync(); }
+}
+vitroDefine('paper-slider', VitroSlider);
+vitroDefine('ha-slider', class extends VitroSlider {});
+vitroDefine('ha-switch', class extends HTMLElement {
+  static get observedAttributes() { return ['checked', 'disabled']; }
+  connectedCallback() { vitroUpgrade(this, ['checked', 'disabled']); this._ensure(); this._sync(); }
+  attributeChangedCallback() { this._sync(); }
+  _ensure() {
+    if (this._input) return this._input;
+    this.style.display = 'inline-flex';
+    const i = document.createElement('input');
+    i.type = 'checkbox';
+    i.style.cssText = 'margin:0;accent-color:var(--switch-checked-color, var(--primary-color))';
+    i.addEventListener('change', (ev) => {
+      ev.stopPropagation();
+      this._checked = i.checked;
+      this.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    });
+    this._input = i;
+    this.appendChild(i);
+    return i;
+  }
+  _sync() { const i = this._ensure(); i.checked = this.checked; i.disabled = this.disabled; }
+  get checked() { return this._checked !== undefined ? this._checked : this.hasAttribute('checked'); }
+  set checked(v) { this._checked = !!v; this._sync(); }
+  get disabled() { return this._disabled !== undefined ? this._disabled : this.hasAttribute('disabled'); }
+  set disabled(v) { this._disabled = !!v; this._sync(); }
+});
+function vitroRelativeTime(when, now) {
+  const t = when instanceof Date ? when.getTime() : (typeof when === 'number' ? when : Date.parse(String(when)));
+  if (!isFinite(t)) return '';
+  const delta = Math.round(((now === undefined ? Date.now() : now) - t) / 1000);
+  const ahead = delta < 0;
+  const abs = Math.abs(delta);
+  if (abs < 45) return 'just now';
+  const steps = [[60, 'second'], [3600, 'minute'], [86400, 'hour'], [604800, 'day'], [2592000, 'week'], [31536000, 'month']];
+  let n = abs;
+  let unit = 'year';
+  let div = 31536000;
+  for (let k = 1; k < steps.length; k++) {
+    if (abs < steps[k][0]) { unit = steps[k][1]; div = steps[k - 1][0]; break; }
+  }
+  if (unit === 'year' && abs < 31536000) { unit = 'month'; div = 2592000; }
+  n = Math.max(1, Math.round(abs / div));
+  const label = n + ' ' + unit + (n === 1 ? '' : 's');
+  return ahead ? 'in ' + label : label + ' ago';
+}
+window.vitroRelativeTime = vitroRelativeTime;
+vitroDefine('ha-relative-time', class extends HTMLElement {
+  static get observedAttributes() { return ['datetime']; }
+  connectedCallback() { vitroUpgrade(this, ['datetime', 'hass']); this._render(); this._timer = setInterval(() => this._render(), 60000); }
+  disconnectedCallback() { clearInterval(this._timer); }
+  attributeChangedCallback() { this._render(); }
+  set datetime(v) { this._datetime = v; this._render(); }
+  get datetime() { return this._datetime !== undefined ? this._datetime : this.getAttribute('datetime'); }
+  set hass(v) { this._hass = v; }
+  get hass() { return this._hass; }
+  _render() {
+    const v = this.datetime;
+    this.textContent = v === null || v === undefined || v === '' ? '' : vitroRelativeTime(v);
+  }
+});
+vitroDefine('ha-ripple', class extends HTMLElement {});
+vitroDefine('ha-spinner', class extends HTMLElement {});
+vitroDefine('ha-formfield', class extends HTMLElement {});
+vitroDefine('mwc-menu', class extends HTMLElement {});
+vitroDefine('mwc-list-item', class extends HTMLElement {});
+vitroDefine('ha-input', class extends HTMLElement {
+  static get observedAttributes() { return ['value', 'placeholder', 'type', 'disabled']; }
+  connectedCallback() { vitroUpgrade(this, ['value']); this._ensure(); this._sync(); }
+  attributeChangedCallback() { this._sync(); }
+  _ensure() {
+    if (this._input) return this._input;
+    this.style.display = 'inline-block';
+    const i = document.createElement('input');
+    i.style.cssText = 'width:100%;box-sizing:border-box;font:inherit;color:inherit';
+    i.addEventListener('input', () => { this._value = i.value; });
+    i.addEventListener('change', () => { this._value = i.value; });
+    this._input = i;
+    this.appendChild(i);
+    return i;
+  }
+  _sync() {
+    const i = this._ensure();
+    i.type = this.getAttribute('type') || 'text';
+    i.placeholder = this.getAttribute('placeholder') || '';
+    i.disabled = this.hasAttribute('disabled');
+    i.value = this.value;
+  }
+  get value() { return this._value !== undefined ? this._value : (this.getAttribute('value') || ''); }
+  set value(v) { this._value = v === null || v === undefined ? '' : String(v); this._sync(); }
+});
 // The latest hass object, for elements cards create through loadCardHelpers().
 window.__vitroHass = null;
 function vitroFallbackCard(c) {
   // A built-in card nested in a custom one (stack-in-card, auto-entities, mod-card): a calm summary, not HA's frontend.
   const card = document.createElement('ha-card');
   card.className = 'vitro-fallback';
+  // Inline styles: inside another card's shadow root the page's own rules don't reach this card.
+  card.style.cssText = 'padding:12px 16px;display:block';
   let cfg = c || {};
   const ids = () => {
     const list = [];
@@ -356,8 +622,8 @@ function vitroFallbackCard(c) {
     const hass = card._hass;
     const list = ids();
     // Text goes in through textContent only: names and states never become markup.
-    card.innerHTML = (cfg.title ? '<div class="vitro-title"></div>' : '') +
-      list.map(() => '<div class="vitro-row"><span></span><span class="vitro-state"></span></div>').join('');
+    card.innerHTML = (cfg.title ? '<div class="vitro-title" style="font-size:1.15em;font-weight:500;padding-bottom:8px"></div>' : '') +
+      list.map(() => '<div class="vitro-row" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0"><span></span><span class="vitro-state" style="color:var(--secondary-text-color)"></span></div>').join('');
     if (cfg.title) card.querySelector('.vitro-title').textContent = cfg.title;
     const rowEls = card.querySelectorAll('.vitro-row');
     list.forEach((id, i) => {
@@ -496,6 +762,7 @@ const hassBase = {
   config: haConfig,
   language: 'en',
   selectedLanguage: null,
+  translationMetadata: { fragments: [], translations: { en: { nativeName: 'English', isRTL: false } } },
   locale: { language: 'en', number_format: 'language', time_format: 'language' },
   themes: { darkMode: ${ctx.theme.dark}, default_theme: ${JSONObject.quote(ctx.theme.name)}, themes: {} },
   selectedTheme: null,
@@ -550,7 +817,10 @@ function connectBridge() {
       let m;
       try { m = JSON.parse(line); } catch (e) { continue; }
       if (m.type === 'patch' && m.states) {
-        Object.assign(rawStates, m.states);
+        for (const id of Object.keys(m.states)) {
+          if (m.states[id] === null) delete rawStates[id];
+          else rawStates[id] = m.states[id];
+        }
         if (cardEl) cardEl.hass = makeHass();
       } else if (m.type === 'wsReply') {
         const entry = wsPending.get(m.id);
