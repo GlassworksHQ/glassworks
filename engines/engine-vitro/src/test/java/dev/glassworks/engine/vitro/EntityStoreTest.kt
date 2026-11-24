@@ -83,6 +83,16 @@ class EntityStoreTest {
     }
 
     @Test
+    fun clearForgetsTheOldServersSnapshotToo() {
+        val store = storeWithLamp()
+        store.markSnapshot(emptySet())
+        assertTrue(store.isMissing("sensor.only_on_the_next_server"))
+        store.clear()
+        // Until the next server's first snapshot, nothing counts as missing.
+        assertFalse(store.isMissing("sensor.only_on_the_next_server"))
+    }
+
+    @Test
     fun clearForgetsEveryEntityAndTellsItsListeners() {
         val store = storeWithLamp()
         var seen: EntityState? = store["light.lounge_lamp"]

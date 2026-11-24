@@ -764,6 +764,31 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun theEntityRegistryAloneSucceedingStillReRendersOnce() {
+        // Subscribed before connecting: the snapshot wakes it once, the display re-render once more.
+        val woken = AtomicInteger(0)
+        store.subscribe("light.lounge_lamp") { woken.incrementAndGet() }
+        // HA answers the entity registry; the device registry, icons and translations are refused (the fake's default).
+        connected(connect = { url ->
+            val inner = server.connect(url) as FakeHaServer.Socket
+            object : HaSocket by inner {
+                override fun send(text: String) {
+                    val m = JSONObject(text)
+                    if (m.optString("type") == "config/entity_registry/list_for_display") {
+                        inner.push(JSONObject().put("id", m.getInt("id")).put("type", "result").put("success", true)
+                            .put("result", JSONObject().put("entities", JSONArray())))
+                    } else {
+                        inner.send(text)
+                    }
+                }
+            }
+        })
+        awaitCondition("snapshot and the one re-render") { woken.get() >= 2 }
+        Thread.sleep(200)
+        assertEquals(2, woken.get())
+    }
+
+    @Test
     fun aDashboardHaRejectsIsReported() {
         val c = connected()
         c.fetchDashboard("missing")

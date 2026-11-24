@@ -106,6 +106,9 @@ class HaDashboardClient(
     /** Held while an entity event is applied to [store] and by [close]: no write lands after close() returns. */
     private val storeWriteLock = Any()
 
+    /** The entity subscription allowed to write to the store (replaced on every resubscribe). */
+    @Volatile private var entityOwner: Any? = null
+
     /** Guards the whole replacement of the entity subscription (startup and view changes race otherwise). */
     private val entitySubLock = Any()
 
@@ -418,6 +421,24 @@ class HaDashboardClient(
      * Asks HA for the icon and state translations the [entityIds] need (their domains, and the integrations of the
      * ones with a translation key), the way HA's frontend loads them, and re-renders once they've all arrived.
      */
+    /**
+     * Writes display data ([HaDisplay] is shared by every client) only while this client is open, under the lock
+     * close() takes: a client retired mid-callback can't put its server's names into the next one's.
+     */
+    private fun applyDisplay(write: () -> Unit) = synchronized(storeWriteLock) {
+        if (closed.get()) return
+        write()
+        displayChanged.set(true)
+    }
+
+    /**
+     * One display request answered. Re-render once all of them are in, and only when some display data arrived: a
+     * notification for nothing would look like a state change to every listener.
+     */
+    private fun settleDisplay() {
+        if (displayPending.decrementAndGet() == 0 && displayChanged.getAndSet(false) && !closed.get()) store.renotifyAll()
+    }
+
     private fun loadDisplayFor(entityIds: Collection<String>) {
         val (domains, platforms) = HaDisplay.missingFor(entityIds)
         val newDomains = domains.filter { displayRequested.add("d:$it") }
@@ -428,15 +449,8 @@ class HaDashboardClient(
             if (type == "frontend/get_translations") msg.put("language", "en")
             displayPending.incrementAndGet()
             request(msg) { res ->
-                if (res.optBoolean("success", false)) {
-                    res.optJSONObject("result")?.let {
-                        apply(it)
-                        displayChanged.set(true)
-                    }
-                }
-                // Re-render once all of them are in, and only when something display-related changed: a second
-                // notification for nothing would look like a state change to every listener.
-                if (displayPending.decrementAndGet() == 0 && displayChanged.getAndSet(false)) store.renotifyAll()
+                if (res.optBoolean("success", false)) res.optJSONObject("result")?.let { r -> applyDisplay { apply(r) } }
+                settleDisplay()
             }
         }
         ask("frontend/get_icons", "entity_component", newDomains) { HaDisplay.applyIcons(it, true, newDomains) }
@@ -526,21 +540,18 @@ class HaDashboardClient(
         }
         // 7. Display data, after everything the first paint needs: the entity registry, then the icons and state
         // translations for the view's entities.
+        // The registry counts as one display request: when it is the only one that succeeds, cards still re-render.
+        displayPending.incrementAndGet()
         request(JSONObject().put("type", "config/entity_registry/list_for_display")) { res ->
-            if (res.optBoolean("success", false)) res.optJSONObject("result")?.let(HaDisplay::applyRegistry)
+            if (res.optBoolean("success", false)) res.optJSONObject("result")?.let { r -> applyDisplay { HaDisplay.applyRegistry(r) } }
             loadDisplayFor(displayIds())
+            settleDisplay()
         }
         // Device names, for HA's default tile names ("<device> <entity>").
         displayPending.incrementAndGet()
         request(JSONObject().put("type", "config/device_registry/list")) { res ->
-            if (res.optBoolean("success", false)) {
-                res.optJSONArray("result")?.let {
-                    HaDisplay.applyDevices(it)
-                    displayChanged.set(true)
-                }
-            }
-            // As for the icons and translations: one re-render once all are in, and only when something arrived.
-            if (displayPending.decrementAndGet() == 0 && displayChanged.getAndSet(false)) store.renotifyAll()
+            if (res.optBoolean("success", false)) res.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyDevices(r) } }
+            settleDisplay()
         }
     }
 
@@ -565,13 +576,20 @@ class HaDashboardClient(
         if (filter.isNotEmpty()) {
             msg.put("entity_ids", JSONArray(filter.toList()))
         }
-        store.resetSnapshot()
+        // This subscription owns the store's entity writes from now on; a retired one's events (one the reader
+        // already picked up when it was replaced) are dropped, even before subscribe() returns. Switched under the
+        // write lock, so an old event mid-commit finishes before the snapshot state is reset.
+        val owner = Any()
+        synchronized(storeWriteLock) {
+            store.resetSnapshot()
+            entityOwner = owner
+        }
         // The first event is the subscription's snapshot: an entity of [filter] missing from it is gone (deleted while
         // the panel was offline) and leaves the store. Later events are diffs.
         val first = AtomicBoolean(true)
         entitySubId = subscribe(msg) { ev -> synchronized(storeWriteLock) {
             // Checked under the lock close() takes: a closed client never writes to the (shared) store again.
-            if (closed.get()) return@subscribe
+            if (closed.get() || entityOwner !== owner) return@subscribe
             val isFirst = first.getAndSet(false)
             store.applyCompressedEvent(ev, snapshotScope = if (isFirst) filter else null)
             if (isFirst) {

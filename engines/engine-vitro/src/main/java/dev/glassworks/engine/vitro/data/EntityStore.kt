@@ -315,6 +315,8 @@ class EntityStore {
 
     /** Forgets every entity (the page moved to another Home Assistant) and tells their listeners they are gone. */
     fun clear() {
+        // The old server's snapshot says nothing about which entities the next one lacks.
+        snapshotFilter = null
         val gone = LinkedHashSet(states.keys)
         states.clear()
         if (gone.isNotEmpty()) dispatch(gone)

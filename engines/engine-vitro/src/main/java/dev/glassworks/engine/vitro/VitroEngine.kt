@@ -197,7 +197,10 @@ class VitroEngine(
                 // An empty filter subscribes to every entity, which auto-entities' runtime filters need.
                 val refs = if (CardRouter.followsAllEntities(v)) emptySet() else CardRouter.referencedEntities(v)
                 client?.subscribeViewEntities(refs)
-                val path = buildViewUrl(currentOrigin, currentDashboardPath, v.path ?: v.index.toString())
+                // Only the dashboard that owns the route reports a location: one still on screen while another loads
+                // (a theme rebuild) would pair its view with the other's path.
+                val owns = displayedDashboard?.second == currentDashboardPath
+                val path = if (owns) buildViewUrl(currentOrigin, currentDashboardPath, v.path ?: v.index.toString()) else null
                 if (path != null && path != currentUrl) {
                     currentUrl = path
                     host.onLocationChange(path)
@@ -262,12 +265,14 @@ class VitroEngine(
             currentUrl = url
 
             if (!LovelaceParser.isDashboardUrl(url)) {
+                leaveNativeDashboard()
                 openInFallback(url)
                 return
             }
 
             showVitroLayer()
             val origin = OAuth.origin(url) ?: run {
+                leaveNativeDashboard()
                 openInFallback(url)
                 return
             }
@@ -424,6 +429,15 @@ class VitroEngine(
             load(origin + normalized)
         }
 
+        /**
+         * The page left the native dashboards for the fallback: a dashboard answer still on its way no longer owns
+         * the page (it would render, report its location and signal ready behind the fallback).
+         */
+        private fun leaveNativeDashboard() {
+            currentDashboardPath = NO_DASHBOARD
+            client?.claimDashboard(NO_DASHBOARD)
+        }
+
         private fun showVitroLayer() {
             vitroView.visibility = View.VISIBLE
             fallbackPage?.view?.visibility = View.GONE
@@ -557,6 +571,9 @@ class VitroEngine(
 
     companion object {
         const val VERSION_NAME = "Vitro 0.0.1 (experimental)"
+
+        /** The dashboard path while the fallback shows a non-dashboard page: no real path equals it. */
+        private const val NO_DASHBOARD = "\u0000fallback"
 
         internal fun buildViewUrl(origin: String?, dashPath: String?, viewPath: String): String? {
             if (origin.isNullOrBlank()) return null
