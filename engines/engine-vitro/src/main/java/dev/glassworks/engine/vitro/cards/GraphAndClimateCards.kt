@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.cards
 
+import dev.glassworks.engine.vitro.ui.HaWeatherSvg
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
@@ -28,6 +29,7 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import dev.glassworks.engine.vitro.data.ForecastDay
+import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
@@ -37,6 +39,7 @@ import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.bindHoldAction
 import dev.glassworks.ui.Inter
+import dev.glassworks.engine.vitro.ui.VitroFonts
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -57,7 +60,7 @@ private fun label(ctx: VitroCardContext, sp: Float, color: Int, weight: Int = In
     TextView(ctx.context).apply {
         textSize = sp
         setTextColor(color)
-        typeface = Inter.typeface(ctx.context, weight, sp)
+        typeface = VitroFonts.typeface(ctx.context, weight, sp)
         includeFontPadding = false
     }
 
@@ -363,7 +366,7 @@ private class GaugeCanvasView(context: Context, private var activeColor: Int, pr
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = textColor
         textSize = spToPx(context, 34f)
-        typeface = Inter.typeface(context, Inter.REGULAR, 34f)
+        typeface = VitroFonts.typeface(context, Inter.REGULAR, 34f)
         textAlign = Paint.Align.CENTER
     }
     private val oval = RectF()
@@ -448,17 +451,25 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
     }
     private var modes: List<String> = emptyList()
     private val modeButtons = ArrayList<Pair<FrameLayout, MdiIconView>>()
+    private var steppers: View? = null
 
     init {
+        // hui-thermostat-card: a 48 px title row over the 262 px dial; the mode bar only when its feature is set
+        // (Mushroom's climate card: when `hvac_modes` is).
+        val showModes = if (config.type == "thermostat") {
+            config.raw.optJSONArray("features")?.let { a -> (0 until a.length()).any { a.optJSONObject(it)?.optString("type") == "climate-hvac-modes" } } == true
+        } else {
+            config.raw.has("hvac_modes")
+        }
         val col = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(ctx.px(12f), ctx.px(8f), ctx.px(12f), ctx.px(12f))
+            setPadding(ctx.px(12f), 0, ctx.px(12f), if (showModes) ctx.px(12f) else 0)
         }
         val eid = config.entity
 
         // Header: the name centred, a ⋮ button for more-info pinned to the right.
         val header = FrameLayout(ctx.context)
-        header.addView(titleView, LayoutParams(MATCH_PARENT, ctx.px(36f)).apply {
+        header.addView(titleView, LayoutParams(MATCH_PARENT, ctx.px(48f)).apply {
             leftMargin = ctx.px(40f); rightMargin = ctx.px(40f)
         })
         val dots = FrameLayout(ctx.context).apply {
@@ -469,12 +480,12 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                 LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
             setOnClickListener { eid?.let { ctx.performAction(ActionConfig("more-info"), it) } }
         }
-        header.addView(dots, LayoutParams(ctx.px(36f), ctx.px(36f), Gravity.END or Gravity.CENTER_VERTICAL))
-        col.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(36f)))
+        header.addView(dots, LayoutParams(ctx.px(48f), ctx.px(48f), Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = -ctx.px(11f) })
+        col.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(48f)))
 
         // Dial, with the outlined − and + in the opening at its bottom.
         val dialFrame = FrameLayout(ctx.context)
-        dialFrame.addView(dial, LayoutParams(MATCH_PARENT, ctx.px(240f)))
+        dialFrame.addView(dial, LayoutParams(MATCH_PARENT, ctx.px(262f)))
         val steppers = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -496,9 +507,10 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
         steppers.addView(stepBtn("−", -1), LinearLayout.LayoutParams(btn, btn).apply { marginEnd = ctx.px(16f) })
         steppers.addView(stepBtn("+", 1), LinearLayout.LayoutParams(btn, btn))
         dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
-        col.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(240f)))
+        col.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(262f)))
 
-        col.addView(modeBar, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(46f)).apply { topMargin = ctx.px(8f) })
+        if (showModes) col.addView(modeBar, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(46f)).apply { topMargin = ctx.px(8f) })
+        this.steppers = steppers
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
         if (eid != null) {
@@ -519,7 +531,10 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                     target = (attrs["temperature"] as? Number)?.toDouble(),
                     mode = mode,
                     action = action,
+                    stateLabel = s?.let { HaDisplay.stateLabel(it) } ?: mode.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) },
                 )
+                // HA shows the steppers only while there's a target to step.
+                this.steppers?.visibility = if (attrs["temperature"] is Number) VISIBLE else GONE
                 val list = (attrs["hvac_modes"] as? List<*>)?.mapNotNull { it?.toString() }?.takeIf { it.isNotEmpty() }
                     ?: listOf("off", "heat", "cool")
                 renderModes(list, mode, eid)
@@ -604,7 +619,8 @@ internal class ThermostatDialView(
     private val showCurrentInDial: Boolean = true,
 ) : View(ctx.context) {
     private val dp = ctx.dp
-    private val strokeW = 14f * dp
+    /** ha-control-circular-slider: a 24 / 320 ring at radius 145 / 320 of the dial's size. */
+    private var strokeW = 14f * dp
     private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = strokeW
@@ -614,13 +630,33 @@ internal class ThermostatDialView(
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private fun textPaint(size: Float, weight: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = spToPx(ctx.context, size)
-        typeface = Inter.typeface(ctx.context, weight, size)
+        typeface = VitroFonts.typeface(ctx.context, weight, size)
     }
     private val labelPaint = textPaint(14f, Inter.MEDIUM).apply { textAlign = Paint.Align.CENTER }
     private val bigPaint = textPaint(44f, Inter.REGULAR)
     private val unitPaint = textPaint(13f, Inter.REGULAR)
     private val decPaint = textPaint(20f, Inter.REGULAR)
     private val curPaint = textPaint(14f, Inter.MEDIUM)
+    private val offPaint = textPaint(36f, Inter.REGULAR).apply { textAlign = Paint.Align.CENTER }
+    private val offCurPaint = textPaint(16f, Inter.MEDIUM)
+
+    /** The thermometer and the current temperature, centered on [centerY]. */
+    private fun drawCurrent(canvas: Canvas, cur: Double, color: Int, paint: Paint, iconSize: Float, centerY: Float) {
+        val curText = HaDisplay.formatValue(cur, 1).let { if ('.' in it) it else String.format(Locale.US, "%.1f", cur) } + " " + unit
+        paint.color = color
+        val textW = paint.measureText(curText)
+        val gap = 4f * dp
+        val left = cx - (iconSize + gap + textW) / 2f
+        iconPath.set(MdiIcons.pathFor("mdi:thermometer"))
+        iconMatrix.setScale(iconSize / 24f, iconSize / 24f)
+        iconMatrix.postTranslate(left, centerY - iconSize / 2f)
+        iconPath.transform(iconMatrix)
+        fill.color = color
+        canvas.drawPath(iconPath, fill)
+        paint.textAlign = Paint.Align.LEFT
+        val fm = paint.fontMetrics
+        canvas.drawText(curText, left + iconSize + gap, centerY - (fm.ascent + fm.descent) / 2f, paint)
+    }
     private val iconMatrix = Matrix()
     private val iconPath = Path()
     private val oval = RectF()
@@ -647,7 +683,11 @@ internal class ThermostatDialView(
     /** The target Home Assistant last reported, kept during a drag so a cancelled one goes back to it. */
     private var boundTarget: Double? = null
 
-    fun bind(min: Double, max: Double, step: Double, current: Double?, target: Double?, mode: String, action: String?) {
+    /** The state as HA shows it big when there's no target ("Off"). */
+    private var stateLabel = ""
+
+    fun bind(min: Double, max: Double, step: Double, current: Double?, target: Double?, mode: String, action: String?, stateLabel: String = "") {
+        this.stateLabel = stateLabel
         this.min = min
         this.max = if (max > min) max else min + 1.0
         this.step = step
@@ -720,7 +760,10 @@ internal class ThermostatDialView(
         super.onSizeChanged(w, h, oldw, oldh)
         cx = w / 2f
         cy = h / 2f
-        radius = (minOf(w, h) / 2f - strokeW / 2f - 4f * dp).coerceAtLeast(10f)
+        val size = minOf(w, h).toFloat()
+        strokeW = size * 24f / 320f
+        arcPaint.strokeWidth = strokeW
+        radius = (size * 145f / 320f).coerceAtLeast(10f)
         glowKey = 0
     }
 
@@ -775,6 +818,10 @@ internal class ThermostatDialView(
         } else if (isAutoIdle && cur != null) {
             fill.color = CardSurface.withAlpha(Color.WHITE, 0.7f)
             pointAt(angleOf(cur)).let { (x, y) -> canvas.drawCircle(x, y, 3f * dp, fill) }
+        } else if (tgt == null && cur != null) {
+            // With no target HA still marks the current temperature on the ring.
+            fill.color = ctx.theme.secondaryTextColor
+            pointAt(angleOf(cur)).let { (x, y) -> canvas.drawCircle(x, y, 4f * dp, fill) }
         }
         if (tgt != null) {
             val (x, y) = pointAt(angleOf(tgt))
@@ -785,6 +832,15 @@ internal class ThermostatDialView(
         }
 
         // Centre: action label, split target temperature, current temperature.
+        if (target == null) {
+            // ha-state-control-climate-temperature with no target: the state big (36 px) in the middle, the current
+            // temperature (16 px / 500, primary color) 49 px under it, no label above.
+            offPaint.color = ctx.theme.primaryTextColor
+            val fm = offPaint.fontMetrics
+            canvas.drawText(stateLabel, cx, cy - (fm.ascent + fm.descent) / 2f - 1.6f * dp, offPaint)
+            if (cur != null && showCurrentInDial) drawCurrent(canvas, cur, ctx.theme.primaryTextColor, offCurPaint, 16f * dp, cy + 48.8f * dp)
+            return
+        }
         val labelText = (action ?: mode).replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
         labelPaint.color = activeTint ?: ctx.theme.secondaryTextColor
         canvas.drawText(labelText, cx, cy - 34f * dp, labelPaint)
@@ -916,7 +972,7 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val icon = WeatherIconView(ctx.context)
+        val icon = WeatherIconView(ctx.context).apply { themeVars = ctx.theme.vars; fallbackColor = ctx.theme.primaryTextColor }
         val condition = label(ctx, 22f, ctx.theme.primaryTextColor).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         val name = label(ctx, 13f, ctx.theme.secondaryTextColor).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         val temp = label(ctx, 22f, ctx.theme.primaryTextColor).apply { gravity = Gravity.END }
@@ -994,7 +1050,7 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             }
             cell.addView(label(ctx, 12f, ctx.theme.secondaryTextColor).apply { text = forecastLabel(day.datetime, hourly) },
                 LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-            cell.addView(WeatherIconView(ctx.context).apply { setCondition(day.condition.orEmpty()) },
+            cell.addView(WeatherIconView(ctx.context).apply { themeVars = ctx.theme.vars; fallbackColor = ctx.theme.primaryTextColor; setCondition(day.condition.orEmpty()) },
                 LinearLayout.LayoutParams(ctx.px(32f), ctx.px(32f)).apply { topMargin = ctx.px(6f); bottomMargin = ctx.px(6f) })
             cell.addView(label(ctx, 13f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
                 text = day.temperature?.let { formatDegrees(it) } ?: "–"
@@ -1039,15 +1095,25 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     }
 }
 
-/** HA-style multi-color weather glyph drawn on Canvas: sun, moon, layered clouds, rain, snow, bolt, fog, wind. */
+/**
+ * HA's weather picture for a condition ([HaWeatherSvg], from the frontend's `getWeatherStateSVG`), or for a condition
+ * HA has no picture for ("exceptional"), its MDI glyph in [fallbackColor], as HA's `getWeatherStateIcon` does.
+ */
 class WeatherIconView(context: Context) : View(context) {
     private var condition = ""
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val path = Path()
+    private var night = false
 
-    fun setCondition(value: String) {
-        if (value == condition) return
+    /** Theme variables (no `--`), for HA's `--weather-icon-*-color` overrides. */
+    var themeVars: Map<String, String> = emptyMap()
+    var fallbackColor: Int = 0xFFE1E1E1.toInt()
+    private val glyph = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val glyphPath = Path()
+    private val glyphMatrix = Matrix()
+
+    fun setCondition(value: String, nightTime: Boolean = false) {
+        if (value == condition && nightTime == night) return
         condition = value
+        night = nightTime
         invalidate()
     }
 
@@ -1056,136 +1122,17 @@ class WeatherIconView(context: Context) : View(context) {
         if (size <= 0f) return
         canvas.save()
         canvas.translate((width - size) / 2f, (height - size) / 2f)
-        canvas.scale(size / 24f, size / 24f)
-        when (condition) {
-            "sunny" -> sun(canvas, 12f, 12f, 5f, rays = true)
-            "clear-night" -> moon(canvas)
-            "partlycloudy" -> { sun(canvas, 9f, 9f, 4.2f, rays = true); cloud(canvas, 14f, 15.5f, 1f, CLOUD_LIGHT) }
-            "cloudy" -> { cloud(canvas, 15f, 10.5f, 0.8f, CLOUD_DARK); cloud(canvas, 11f, 14.5f, 1f, CLOUD_LIGHT) }
-            "rainy" -> { cloud(canvas, 12f, 10f, 1f, CLOUD_DARK); drops(canvas, 3) }
-            "pouring" -> { cloud(canvas, 12f, 10f, 1f, CLOUD_DARK); drops(canvas, 5) }
-            "snowy" -> { cloud(canvas, 12f, 10f, 1f, CLOUD_LIGHT); flakes(canvas) }
-            "snowy-rainy", "hail" -> { cloud(canvas, 12f, 10f, 1f, CLOUD_LIGHT); drops(canvas, 2); flakes(canvas, sparse = true) }
-            "lightning" -> { cloud(canvas, 12f, 10f, 1f, CLOUD_DARK); bolt(canvas) }
-            "lightning-rainy" -> { cloud(canvas, 12f, 10f, 1f, CLOUD_DARK); bolt(canvas); drops(canvas, 2) }
-            "fog" -> { cloud(canvas, 12f, 9.5f, 1f, CLOUD_LIGHT); fog(canvas) }
-            "windy", "windy-variant" -> wind(canvas)
-            else -> cloud(canvas, 12f, 12.5f, 1f, CLOUD_LIGHT)
+        val svg = HaWeatherSvg.forCondition(condition, night, themeVars)
+        if (svg != null) {
+            svg.draw(canvas, size, size, context)
+        } else if (condition.isNotEmpty()) {
+            glyphMatrix.setScale(size / 24f, size / 24f)
+            glyphPath.set(MdiIcons.pathFor(MdiIcons.weatherIcon(condition).removePrefix("mdi:")))
+            glyphPath.transform(glyphMatrix)
+            glyph.color = fallbackColor
+            canvas.drawPath(glyphPath, glyph)
         }
         canvas.restore()
-    }
-
-    private fun sun(c: Canvas, x: Float, y: Float, r: Float, rays: Boolean) {
-        paint.style = Paint.Style.FILL
-        paint.color = SUN
-        c.drawCircle(x, y, r, paint)
-        if (!rays) return
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 1.3f
-        paint.strokeCap = Paint.Cap.ROUND
-        for (i in 0 until 8) {
-            val a = Math.toRadians(i * 45.0)
-            val r1 = r + 1.6f
-            val r2 = r + 3.2f
-            c.drawLine(x + r1 * cos(a).toFloat(), y + r1 * sin(a).toFloat(), x + r2 * cos(a).toFloat(), y + r2 * sin(a).toFloat(), paint)
-        }
-        paint.style = Paint.Style.FILL
-    }
-
-    private fun moon(c: Canvas) {
-        path.reset()
-        path.addCircle(12f, 12f, 7f, Path.Direction.CW)
-        val bite = Path().apply { addCircle(15.5f, 9f, 6f, Path.Direction.CW) }
-        path.op(bite, Path.Op.DIFFERENCE)
-        paint.style = Paint.Style.FILL
-        paint.color = MOON
-        c.drawPath(path, paint)
-    }
-
-    /** A cloud about 16 units wide at [scale] 1, centred on ([x], [y]). */
-    private fun cloud(c: Canvas, x: Float, y: Float, scale: Float, color: Int) {
-        paint.style = Paint.Style.FILL
-        paint.color = color
-        c.save()
-        c.translate(x, y)
-        c.scale(scale, scale)
-        c.drawCircle(-3.5f, 0.5f, 3.5f, paint)
-        c.drawCircle(1f, -1.5f, 4.8f, paint)
-        c.drawCircle(5f, 1f, 3.2f, paint)
-        c.drawRoundRect(RectF(-7f, 0.5f, 8.2f, 4.2f), 1.8f, 1.8f, paint)
-        c.restore()
-    }
-
-    private fun drops(c: Canvas, n: Int) {
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 1.4f
-        paint.strokeCap = Paint.Cap.ROUND
-        paint.color = RAIN
-        val xs = when (n) {
-            1 -> listOf(12f)
-            2 -> listOf(9f, 15f)
-            3 -> listOf(8f, 12f, 16f)
-            else -> listOf(6.5f, 9.25f, 12f, 14.75f, 17.5f)
-        }
-        xs.forEachIndexed { i, x ->
-            val y = if (i % 2 == 0) 16.5f else 18f
-            c.drawLine(x, y, x - 1f, y + 3.2f, paint)
-        }
-        paint.style = Paint.Style.FILL
-    }
-
-    private fun flakes(c: Canvas, sparse: Boolean = false) {
-        paint.style = Paint.Style.FILL
-        paint.color = SNOW
-        val pts = if (sparse) listOf(12f to 18.5f, 17f to 19.5f) else listOf(8f to 17.5f, 12f to 19.5f, 16f to 17.5f, 10f to 21.5f, 14f to 21.5f)
-        for ((x, y) in pts) c.drawCircle(x, y, 1.1f, paint)
-    }
-
-    private fun bolt(c: Canvas) {
-        path.reset()
-        path.moveTo(13f, 13f)
-        path.lineTo(9.5f, 18.5f)
-        path.lineTo(12f, 18.5f)
-        path.lineTo(10.5f, 23f)
-        path.lineTo(15.5f, 16.5f)
-        path.lineTo(12.8f, 16.5f)
-        path.lineTo(14.5f, 13f)
-        path.close()
-        paint.style = Paint.Style.FILL
-        paint.color = SUN
-        c.drawPath(path, paint)
-    }
-
-    private fun fog(c: Canvas) {
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 1.4f
-        paint.strokeCap = Paint.Cap.ROUND
-        paint.color = CLOUD_DARK
-        c.drawLine(5f, 17f, 19f, 17f, paint)
-        c.drawLine(7f, 20f, 17f, 20f, paint)
-        paint.style = Paint.Style.FILL
-    }
-
-    private fun wind(c: Canvas) {
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 1.6f
-        paint.strokeCap = Paint.Cap.ROUND
-        paint.color = CLOUD_DARK
-        path.reset()
-        path.moveTo(3f, 9f); path.lineTo(15f, 9f); path.cubicTo(19f, 9f, 19f, 4f, 15.5f, 4.5f)
-        path.moveTo(3f, 13f); path.lineTo(19f, 13f); path.cubicTo(23f, 13f, 23f, 18f, 19.5f, 17.5f)
-        path.moveTo(5f, 17f); path.lineTo(12f, 17f)
-        c.drawPath(path, paint)
-        paint.style = Paint.Style.FILL
-    }
-
-    private companion object {
-        const val SUN = 0xFFFBC02D.toInt()
-        const val MOON = 0xFFFFE082.toInt()
-        const val CLOUD_LIGHT = 0xFFCFD8DC.toInt()
-        const val CLOUD_DARK = 0xFFB0BEC5.toInt()
-        const val RAIN = 0xFF42A5F5.toInt()
-        const val SNOW = 0xFF90CAF9.toInt()
     }
 }
 
@@ -1382,18 +1329,18 @@ internal class GaugeRingView(
     }
     private val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = textColor
-        typeface = Inter.typeface(context, Inter.MEDIUM, 32f)
+        typeface = VitroFonts.typeface(context, Inter.MEDIUM, 32f)
         textAlign = Paint.Align.LEFT
         fontFeatureSettings = "tnum"
     }
     private val unitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = secondaryColor
-        typeface = Inter.typeface(context, Inter.REGULAR, 14f)
+        typeface = VitroFonts.typeface(context, Inter.REGULAR, 14f)
         textAlign = Paint.Align.LEFT
     }
     private val secondaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = secondaryColor
-        typeface = Inter.typeface(context, Inter.REGULAR, 12f)
+        typeface = VitroFonts.typeface(context, Inter.REGULAR, 12f)
         textAlign = Paint.Align.CENTER
         fontFeatureSettings = "tnum"
     }

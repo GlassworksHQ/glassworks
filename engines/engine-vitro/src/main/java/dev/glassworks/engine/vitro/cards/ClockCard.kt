@@ -92,9 +92,8 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     // HA's `.no-background` (a class) outranks card-mod's `ha-card { background: … }`.
     private fun dropBackground() {
         if (noBackground) {
-            background = null
+            dropSurface()
             elevation = 0f
-            clipToOutline = false
         }
     }
 

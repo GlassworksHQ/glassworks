@@ -117,6 +117,15 @@ data class EntityState(
     }
 
     /**
+     * The state as HA's `formatEntityState` writes it everywhere but a tile: translated, without the tile's extras
+     * (a light's brightness, a cover's position, a fan's speed, a climate's temperatures).
+     */
+    fun plainState(): String {
+        if (domain !in TILE_EXTRA_DOMAINS || isUnavailable) return formattedState()
+        return HaDisplay.stateLabel(this) ?: state.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
+    }
+
+    /**
      * "Just now", "5 minutes ago", "2 days ago" … for how long ago [lastChanged] was, or null when it is unknown (<= 0).
      * [nowEpochSec] is a parameter so tests (and a ticking card) control the clock.
      */
@@ -153,6 +162,7 @@ data class EntityState(
  * cards bound to that `entity_id`.
  */
 private val NUMBER_DOMAINS = setOf("number", "input_number", "counter")
+private val TILE_EXTRA_DOMAINS = setOf("light", "cover", "fan", "climate")
 private val VERBATIM_DOMAINS = setOf("select", "input_select", "text", "input_text")
 
 class EntityStore {

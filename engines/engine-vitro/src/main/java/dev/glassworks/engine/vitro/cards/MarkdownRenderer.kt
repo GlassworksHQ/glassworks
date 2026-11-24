@@ -41,7 +41,7 @@ import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.platform.Platform
-import dev.glassworks.ui.Inter
+import dev.glassworks.engine.vitro.ui.VitroFonts
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -733,15 +733,16 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         val content = MdBox(ctx.context, dp)
         fill(content, node)
         val parent = node.parent
-        val marker = if (s.listStyleNone) null else when (parent?.tag) {
-            "ol" -> "${parent.children.filter { it.tag == "li" }.indexOf(node) + 1}."
-            else -> {
-                val depth = generateSequence(parent) { it.parent }.count { it.tag == "ul" || it.tag == "ol" }
-                when (depth) { 1 -> "•"; 2 -> "◦"; else -> "▪" }
-            }
-        }
+        val ordered = parent?.tag == "ol"
+        val marker = if (s.listStyleNone || !ordered) null else "${parent!!.children.filter { it.tag == "li" }.indexOf(node) + 1}."
         val frame = FrameLayout(ctx.context).apply { clipChildren = false; clipToPadding = false }
         frame.addView(content, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+        if (!s.listStyleNone && !ordered) {
+            // Disc, circle, square: Chromium paints a shape, not the bullet character ([MdListSymbol]).
+            val depth = generateSequence(parent) { it.parent }.count { it.tag == "ul" || it.tag == "ol" }
+            val symbol = MdListSymbol(ctx.context, content, depth.coerceIn(1, 3) - 1, s.color, typefaceFor(s), s.fontSize * dp, dp)
+            frame.addView(symbol, FrameLayout.LayoutParams(symbol.boxWidth, FrameLayout.LayoutParams.MATCH_PARENT).apply { leftMargin = -symbol.boxWidth })
+        }
         if (marker != null) {
             val tv = textView(s)
             val text = SpannableStringBuilder(marker)
@@ -1065,25 +1066,90 @@ class CssLineText(context: Context) : TextView(context) {
     }
 }
 
-/** Typefaces for CSS weights: Inter where the platform can vary it, else Roboto's light / regular / medium / bold. */
+/** Typefaces for CSS weights in the theme's face ([VitroFonts]): Inter where the platform can vary it, else Roboto's light / regular / medium / bold. */
 object MdFonts {
     private val cache = HashMap<Long, Typeface>()
 
     fun typeface(context: Context, weight: Int, italic: Boolean, mono: Boolean, sizePx: Float): Typeface {
         val w = weight.coerceIn(100, 900)
-        val key = (w.toLong() shl 8) or (if (italic) 1L else 0L) or (if (mono) 2L else 0L) or
-            ((if (Platform.hasFontBuilder) sizePx.roundToInt().coerceIn(14, 32) else 0).toLong() shl 20)
+        val inter = Platform.hasFontBuilder && VitroFonts.face == VitroFonts.Face.INTER
+        val key = (w.toLong() shl 8) or (if (italic) 1L else 0L) or (if (mono) 2L else 0L) or (if (inter) 4L else 0L) or
+            ((if (inter) sizePx.roundToInt().coerceIn(14, 32) else 0).toLong() shl 20)
         cache[key]?.let { return it }
         val base = when {
             mono -> Typeface.create(Typeface.MONOSPACE, if (w >= 600) Typeface.BOLD else Typeface.NORMAL)
-            Platform.hasFontBuilder -> Inter.typeface(context, w, sizePx)
-            w <= 350 -> Typeface.create("sans-serif-light", Typeface.NORMAL)
-            w < 450 -> Typeface.create("sans-serif", Typeface.NORMAL)
-            w < 550 -> Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            else -> Typeface.create("sans-serif", Typeface.BOLD)
+            inter -> VitroFonts.typeface(context, w, sizePx)
+            else -> VitroFonts.system(w)
         }
-        val tf = if (italic) Typeface.create(base, if (w >= 600 && !Platform.hasFontBuilder) Typeface.BOLD_ITALIC else Typeface.ITALIC) else base
+        val tf = if (italic) Typeface.create(base, if (w >= 600 && !inter) Typeface.BOLD_ITALIC else Typeface.ITALIC) else base
         cache[key] = tf
         return tf
     }
 }
+
+/**
+ * A `disc` / `circle` / `square` list marker as Chromium paints it (`ListMarker`'s symbol geometry): with the font's
+ * whole-pixel ascent `a` and `o = 2a/3` (integer division), a `(o + 1) / 2` px shape whose box starts `o + 8` px before
+ * the content, 1 px in, `3 (a - o) / 2` px below the top of the first line's ascent. A circle is a 1 px outline.
+ */
+class MdListSymbol(
+    context: Context,
+    private val content: View,
+    /** 0 disc, 1 circle, 2 square. */
+    private val kind: Int,
+    private val color: Int,
+    typeface: Typeface,
+    textSizePx: Float,
+    private val dp: Float,
+) : View(context) {
+    private val ascent: Int
+    private val offset: Int
+    /** The marker box's width in device px: it hangs this far before the content. */
+    val boxWidth: Int
+
+    init {
+        val p = Paint().apply { this.typeface = typeface; textSize = textSizePx / dp }
+        ascent = (-p.fontMetrics.ascent).roundToInt()
+        offset = ascent * 2 / 3
+        boxWidth = ((offset + 8) * dp).roundToInt()
+    }
+
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    init {
+        content.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> invalidate() }
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        // The content and this view share the list item's frame.
+        val baseline = (baselineIn(content) ?: return) + content.top - top
+        val size = (offset + 1) / 2 * dp
+        val left = 1f * dp
+        val top = baseline - ascent * dp + 3 * (ascent - offset) / 2 * dp
+        paint.color = color
+        when (kind) {
+            0 -> { paint.style = Paint.Style.FILL; canvas.drawOval(left, top, left + size, top + size, paint) }
+            1 -> {
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = dp
+                val h = dp / 2f
+                canvas.drawOval(left + h, top + h, left + size - h, top + size - h, paint)
+            }
+            else -> { paint.style = Paint.Style.FILL; canvas.drawRect(left, top, left + size, top + size, paint) }
+        }
+    }
+
+    /** The first text line's baseline in [v]'s own coordinates. */
+    private fun baselineIn(v: View): Float? {
+        if (v.visibility == GONE) return null
+        if (v is TextView) return if (v.text.isNotEmpty() && v.layout != null) v.baseline.toFloat() else null
+        if (v is android.view.ViewGroup) {
+            for (i in 0 until v.childCount) {
+                val c = v.getChildAt(i)
+                baselineIn(c)?.let { return it + c.top + c.translationY }
+            }
+        }
+        return null
+    }
+}
+

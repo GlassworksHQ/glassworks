@@ -318,8 +318,43 @@ class VitroCardContext(
 open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.context) {
     private val subscriptions = ArrayList<() -> Unit>()
 
+    // The padding cards and card_mod set (CSS padding), and the border drawn around it: like `ha-card`'s
+    // `border: 1px solid`, the content sits inside the border, so a card's height is its content plus both borders.
+    // Read before the constructor finishes (View may set padding), hence nullable.
+    private var cssPadding: IntArray? = null
+    private var borderInsetPx = 0
+
     init {
         applyTheme(ctx.theme)
+    }
+
+    /**
+     * Whether the content sits inside the border, as in most HA cards. The tile card and Mushroom's cards lay their
+     * content out from the card's outer edge (their containers fill the whole card, border included), so they say
+     * false. Read from the constructor: override it with a constant getter.
+     */
+    protected open val contentInsideBorder: Boolean get() = true
+
+    override fun setPadding(left: Int, top: Int, right: Int, bottom: Int) {
+        cssPadding = intArrayOf(left, top, right, bottom)
+        val b = borderInsetPx
+        super.setPadding(left + b, top + b, right + b, bottom + b)
+    }
+
+    /** No fill and no border (`background: none; border: none`): the content takes the border's place too. */
+    protected fun dropSurface() {
+        background = null
+        clipToOutline = false
+        setBorderInset(0)
+    }
+
+    /** The border width the content sits inside (0 when the card draws no border). */
+    private fun setBorderInset(width: Int) {
+        val px = if (contentInsideBorder) width else 0
+        if (px == borderInsetPx) return
+        borderInsetPx = px
+        val p = cssPadding ?: intArrayOf(0, 0, 0, 0)
+        setPadding(p[0], p[1], p[2], p[3])
     }
 
     fun applyTheme(theme: ResolvedTheme) {
@@ -332,9 +367,11 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
                 if (strokePx > 0) setStroke(strokePx, theme.cardBorderColor)
             }
             clipToOutline = true
+            setBorderInset(strokePx)
         } else {
             background = null
             clipToOutline = false
+            setBorderInset(0)
         }
         theme.cardMod.opacity?.let { alpha = it }
         elevation = theme.cardElevationDp * ctx.dp
@@ -354,6 +391,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         if (!keepBackground) {
             background = null
             clipToOutline = false
+            setBorderInset(0)
         } else if (!keepRadius) {
             (background as? GradientDrawable)?.mutate()?.let { (it as GradientDrawable).cornerRadius = 0f }
         }
@@ -426,6 +464,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
                 // outline so Android's clipToOutline never clips text at the card's corners.
                 background = null
                 clipToOutline = false
+                setBorderInset(0)
             } else if (layers != null) {
                 // Gradients paint like the browser (angle, stop positions, layers), under the card's border.
                 background = android.graphics.drawable.LayerDrawable(arrayOf(
@@ -445,6 +484,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
                 }
                 clipToOutline = true
             }
+            if (!invisibleSurface) setBorderInset(strokePx)
         }
         val pad = mod.paddingInsets ?: mod.paddingDp?.let { dev.glassworks.engine.vitro.theme.EdgeInsetsDp(it, it, it, it) }
         if (pad != null) {

@@ -503,17 +503,16 @@ object MdCascade {
         s.custom = custom
 
         // 2. Everything else as longhands; later declarations win.
+        // `revert` outside the browser's sheet rolls back to the browser's value (sorted first, so already known).
         val specified = LinkedHashMap<String, String>()
-        // The user-agent values, for an author `revert` (HA's `var(--markdown-list-indent, revert)`) to roll back to.
-        val uaSpecified = HashMap<String, String>()
+        val browser = HashMap<String, String>()
         for (d in decls) {
             if (d.name.startsWith("--")) continue
             // A failed substitution makes the declaration `unset`, for each longhand of a shorthand too.
             val v = resolveVars(d.value, custom, ctx.themeVars) ?: "unset"
-            val pairs = expand(d.name, v)
-            if (d.origin == 0) pairs.forEach { (n, value) -> uaSpecified[n] = value }
-            pairs.forEach { (n, value) ->
-                specified[n] = if (d.origin > 0 && value.trim().equals("revert", ignoreCase = true)) uaSpecified[n] ?: value else value
+            expand(d.name, v).forEach { (n, value) ->
+                if (d.origin == 0) browser[n] = value
+                specified[n] = if (d.origin > 0 && value.trim().equals("revert", ignoreCase = true)) browser[n] ?: "unset" else value
             }
         }
         applySpecified(s, parent, specified)

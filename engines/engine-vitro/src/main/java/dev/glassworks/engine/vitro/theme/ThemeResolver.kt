@@ -89,9 +89,9 @@ data class CardModStyle(
 /** HA's base theme (`color.globals`): the domains whose `--state-<domain>-active-color` it defines itself. */
 private val HA_BASE_ACTIVE: Map<String, Int> = mapOf(
     "light" to 0xFFFFC107, "switch" to 0xFFFFC107, "input_boolean" to 0xFFFFC107, "binary_sensor" to 0xFFFFC107,
-    "fan" to 0xFF00BCD4, "cover" to 0xFF9C27B0, "media_player" to 0xFF03A9F4, "vacuum" to 0xFF009688,
-    "valve" to 0xFF2196F3, "siren" to 0xFFF44336, "update" to 0xFFFF9800, "lawn_mower" to 0xFF4CAF50,
-    "climate" to 0xFFFF8100,
+    "fan" to 0xFF00BCD4, "cover" to 0xFF926BC7, "media_player" to 0xFF03A9F4, "vacuum" to 0xFF009688,
+    "valve" to 0xFF2196F3, "siren" to 0xFFF44336, "update" to 0xFFFF9800, "lawn_mower" to 0xFF009688,
+    "climate" to 0xFFFF6F22,
 ).mapValues { it.value.toInt() }
 
 /** Resolved, native-ready Home Assistant theme for one view or card. */
@@ -159,11 +159,11 @@ data class ResolvedTheme(
         return when (domain) {
             "light" -> ThemeResolver.parseColor(vars["state-light-active-color"]) ?: 0xFFFFC107.toInt()
             "switch", "input_boolean" -> ThemeResolver.parseColor(vars["state-switch-active-color"]) ?: 0xFFFFC107.toInt()
-            "climate" -> ThemeResolver.parseColor(vars["state-climate-heat-color"]) ?: 0xFFFF8100.toInt()
+            "climate" -> ThemeResolver.parseColor(vars["state-climate-heat-color"]) ?: 0xFFFF6F22.toInt()
             "binary_sensor" -> ThemeResolver.parseColor(vars["state-binary_sensor-active-color"]) ?: 0xFFFFC107.toInt()
             "sensor" -> ThemeResolver.parseColor(vars["state-sensor-active-color"]) ?: 0xFF2196F3.toInt()
             "fan" -> ThemeResolver.parseColor(vars["state-fan-active-color"]) ?: 0xFF00BCD4.toInt()
-            "cover" -> ThemeResolver.parseColor(vars["state-cover-active-color"]) ?: 0xFF9C27B0.toInt()
+            "cover" -> ThemeResolver.parseColor(vars["state-cover-active-color"]) ?: 0xFF926BC7.toInt()
             "person", "device_tracker" -> ThemeResolver.parseColor(vars["state-person-home-color"]) ?: 0xFF4CAF50.toInt()
             else -> primaryColor
         }
@@ -283,12 +283,12 @@ object ThemeResolver {
         "rgb-card-background-color" to "28, 28, 28",
         "state-light-active-color" to "#ffc107",
         "state-switch-active-color" to "#ffc107",
-        "state-climate-heat-color" to "#ff8100",
-        "state-climate-cool-color" to "#2b9af9",
+        "state-climate-heat-color" to "#ff6f22",
+        "state-climate-cool-color" to "#2196f3",
         "state-binary_sensor-active-color" to "#ffc107",
         "state-sensor-active-color" to "#2196f3",
         "state-fan-active-color" to "#00BCD4",
-        "state-cover-active-color" to "#9c27b0",
+        "state-cover-active-color" to "#926bc7",
         "state-person-home-color" to "#4caf50",
         "state-icon-color" to "#44739e",
         "state-inactive-color" to "#9e9e9e",
@@ -314,12 +314,12 @@ object ThemeResolver {
         "rgb-card-background-color" to "255, 255, 255",
         "state-light-active-color" to "#ffc107",
         "state-switch-active-color" to "#ffc107",
-        "state-climate-heat-color" to "#ff8100",
-        "state-climate-cool-color" to "#2b9af9",
+        "state-climate-heat-color" to "#ff6f22",
+        "state-climate-cool-color" to "#2196f3",
         "state-binary_sensor-active-color" to "#ffc107",
         "state-sensor-active-color" to "#2196f3",
         "state-fan-active-color" to "#00BCD4",
-        "state-cover-active-color" to "#9c27b0",
+        "state-cover-active-color" to "#926bc7",
         "state-person-home-color" to "#4caf50",
         "state-icon-color" to "#44739e",
         "state-inactive-color" to "#9e9e9e",
@@ -978,7 +978,7 @@ object ThemeResolver {
         "white" to 0xFFFFFFFF.toInt(),
         "red" to 0xFFF44336.toInt(),
         "pink" to 0xFFE91E63.toInt(),
-        "purple" to 0xFF9C27B0.toInt(),
+        "purple" to 0xFF926BC7.toInt(),
         "indigo" to 0xFF3F51B5.toInt(),
         "blue" to 0xFF2196F3.toInt(),
         "cyan" to 0xFF00BCD4.toInt(),

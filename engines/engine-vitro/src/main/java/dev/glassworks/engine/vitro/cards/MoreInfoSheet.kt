@@ -40,6 +40,7 @@ import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.ui.Inter
+import dev.glassworks.engine.vitro.ui.VitroFonts
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -1298,7 +1299,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     private fun text(sp: Float, color: Int, weight: Int = Inter.REGULAR): TextView = TextView(ctx.context).apply {
         textSize = sp
         setTextColor(color)
-        typeface = Inter.typeface(ctx.context, weight, sp)
+        typeface = VitroFonts.typeface(ctx.context, weight, sp)
         includeFontPadding = false
     }
 

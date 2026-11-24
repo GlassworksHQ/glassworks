@@ -39,6 +39,7 @@ import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.bindHoldAction
 import dev.glassworks.ui.Inter
+import dev.glassworks.engine.vitro.ui.VitroFonts
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -57,7 +58,7 @@ private fun extLabel(ctx: VitroCardContext, sp: Float, color: Int, weight: Int =
     TextView(ctx.context).apply {
         textSize = sp
         setTextColor(color)
-        typeface = Inter.typeface(ctx.context, weight, sp)
+        typeface = VitroFonts.typeface(ctx.context, weight, sp)
         includeFontPadding = false
     }
 
@@ -653,7 +654,7 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         input.apply {
             hint = "Add item"
             textSize = 14f
-            typeface = Inter.typeface(ctx.context, Inter.REGULAR, 14f)
+            typeface = VitroFonts.typeface(ctx.context, Inter.REGULAR, 14f)
             setTextColor(ctx.theme.primaryTextColor)
             setHintTextColor(ctx.theme.secondaryTextColor)
             isSingleLine = true
@@ -1689,7 +1690,7 @@ internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.co
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private fun textPaint(sp: Float, weight: Int, color: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = extSpPx(ctx, sp)
-        typeface = Inter.typeface(ctx.context, weight, sp)
+        typeface = VitroFonts.typeface(ctx.context, weight, sp)
         textAlign = Paint.Align.CENTER
         this.color = color
     }
