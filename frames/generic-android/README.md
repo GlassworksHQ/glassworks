@@ -87,6 +87,7 @@ On the Manage page's Overview screen, the legacy build displays a **Legacy** bad
 The app automatically adapts to the device without requiring custom per-device code:
 
 - **Orientation:** Follows Android's auto-rotate or user rotation lock (Kiln locks the Mirror to portrait at first boot), while recognized frames like the Pixel Tablet and the Galaxy Tab A 10.1 (2016) use the orientation defined in their `frame.json`.
+- **Phone screens:** On a phone, setup and settings rearrange to fit, whichever way it's held. Held upright, setup shows its steps across the top and stacks its buttons. Settings opens on its list of pages and goes back to it with **‹ Settings** or the Back button.
 - **Touchless setup:** When no touchscreen input device is detected, first-boot setup automatically switches to network setup from a phone or computer ([Set up over the network](../../docs/manage.md#set-up-over-the-network)).
 
 Neither build is distributed on Google Play because Glassworks manages its own updates from GitHub Releases and requests privileged permissions (`INSTALL_PACKAGES`, `REBOOT`, `WRITE_SECURE_SETTINGS`) needed for dedicated hardware like the Mirror.

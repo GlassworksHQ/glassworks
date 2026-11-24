@@ -203,7 +203,7 @@
         "build": "s1-kiosk",
         "abis": "every-frame",
         "assets": { "armeabi-v7a": "s1-kiosk-{version}.apk", "*": "s1-kiosk-{abi}-{version}.apk" },
-        "latest": true
+        "latest": false
       }
     },
     "app": ["aqara-s1-plus"],

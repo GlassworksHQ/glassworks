@@ -236,4 +236,65 @@ class SetupMockups {
         Mockup.idle()
         Mockup.save("portrait-05-no-touch-no-network", n, 1080, 1920)
     }
+
+    /** Every touch step at a phone's size (360x640 dp, xhdpi): the generic app on a phone, either way up. */
+    private fun phone(prefix: String, w: Int, h: Int) {
+        val idle = ImprovFacts()
+        for ((name, m) in listOf(
+            "01-wifi-allow" to model(SetupFlow.WIFI, wifi = offline,
+                improv = ImprovFacts(running = true, advertising = true, clients = 1, state = ImprovState.AUTHORIZATION_REQUIRED)),
+            "02-wifi-connected" to model(SetupFlow.WIFI, done = setOf(SetupFlow.WIFI), preview = true),
+            "03-ha-add" to model(SetupFlow.HA),
+            "04-ha-looking" to model(SetupFlow.HA, haUrl = null),
+            "05-signin" to model(SetupFlow.SIGNIN),
+            "06-panes" to model(SetupFlow.PANES),
+            "07-hotspot-offer" to model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.offer),
+            "08-hotspot-on" to model(SetupFlow.WIFI, wifi = offline, hotspot = Spot.on),
+            "09-hotspot-failed" to model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.failed),
+            "10-preview" to model(SetupFlow.WIFI, preview = true),
+        )) {
+            val a = Mockup.activity()
+            val f = dev.glassworks.s1.frame.TestFrames.phone(a)
+            val s = SetupOverlay(a, f, panes(a, f, null))
+            a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
+            s.render(m)
+            Mockup.idle()
+            Mockup.save("$prefix-$name", s, w, h)
+        }
+        val a = Mockup.activity()
+        val s = SetupOverlay(a, dev.glassworks.s1.frame.TestFrames.phone(a), emptyList())
+        a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
+        s.render(model(SetupFlow.PANES))
+        s.finish(holdMs = 60_000) {}
+        Mockup.idle()
+        Mockup.save("$prefix-11-done", s, w, h)
+        for ((name, state) in listOf(
+            "12-connecting" to LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, "homeassistant.local"),
+            "13-unreachable" to LoadingOverlay.State.Unreachable("homeassistant.local", retryAt = android.os.SystemClock.elapsedRealtime() + 4_000),
+            "14-wifi-off" to LoadingOverlay.State.Offline(OfflineText.WIFI_OFF_TITLE, OfflineText.SETUP_HINT, OfflineText.SETUP_ACTION),
+        )) {
+            val b = Mockup.activity()
+            val o = LoadingOverlay(b)
+            b.setContentView(o, android.view.ViewGroup.LayoutParams(-1, -1))
+            o.show(state)
+            o.previewPhase(0.62f)
+            Mockup.idle()
+            Mockup.save("$prefix-$name", o, w, h)
+        }
+    }
+
+    /**   ./gradlew :kiosk:testDebugUnitTest --tests '*SetupMockups.phone*' -Ps1MockupDir=<dir> */
+    @Test
+    @Config(qualifiers = "w360dp-h640dp-port-xhdpi")
+    fun phonePortrait() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        phone("phone", 720, 1280)
+    }
+
+    @Test
+    @Config(qualifiers = "w640dp-h360dp-land-xhdpi")
+    fun phoneLandscape() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        phone("phone-land", 1280, 720)
+    }
 }

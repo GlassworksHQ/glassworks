@@ -57,6 +57,10 @@ import dev.glassworks.ui.Wrap
  * slider when let go, a duration or a time window when picked, a typed value on Save. A change that only
  * takes effect at start shows #33's banner with Restart now.
  *
+ * A narrow screen (a phone held upright, under [NARROW_DP] wide) has no room for both: the sidebar fills it as a list,
+ * a row opens its page across the whole width under a bar with "‹ Settings" and Done, and Back goes from the page to
+ * the list. Which one it is follows the screen as it turns (a phone turns without a new activity).
+ *
  * A full-screen overlay in MainActivity's window, above the setup screen. Main thread only.
  */
 class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
@@ -101,10 +105,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         foot.addView(g.primary("Done").apply { setPadding(0, px(12f), 0, px(12f)); setOnClickListener { hide() } }, FrameLayout.LayoutParams(-1, -2))
     }
 
-    /** Wide screens get a wider sidebar: about a fifth of the width. */
-    private val sideWidth = (resources.configuration.screenWidthDp * 0.22f).coerceIn(200f, 300f)
-    /** A tall screen (a tablet) puts the Overview's tiles two to a row; the S1's 480 dp put them in one. */
-    private val overviewPage = OverviewPage(context, if (resources.configuration.screenHeightDp >= 600) 2 else 4).apply { onPane = { id -> select(id) } }
+    /** The Overview's tiles go two to a row until [onMeasure] knows the page's width. */
+    private val overviewPage = OverviewPage(context, 2).apply { onPane = { id -> select(id) } }
 
     private val title = g.heading(32f).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.END }
     /** The pane's on/off, at top right ([SettingsSection.master]). */
@@ -132,10 +134,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         addView(banner.view, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
         addView(rows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f) })
     }
-    private val page = FrameLayout(context).apply {
-        val tall = resources.configuration.screenHeightDp >= 600
-        setPadding(px(if (tall) 36f else 28f), px(if (tall) 28f else 20f), px(if (tall) 36f else 28f), px(20f))
-    }
+    /** Its padding follows the screen ([onMeasure]). */
+    private val page = FrameLayout(context)
     /** A page taller than the card fades at the edge it continues past, and shows its scroll bar (#63 D5). */
     private val scroll = ScrollView(context).apply {
         isVerticalScrollBarEnabled = true
@@ -146,6 +146,35 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         addView(page, LayoutParams(-1, -2))
     }
     private val sheet = Sheet()
+
+    /** On a narrow screen, over a page: back to the list, and Done. */
+    private val pageBar = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(g.plain("‹  Settings").apply {
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            setPadding(px(16f), px(14f), px(16f), px(14f))
+            contentDescription = "Back to Settings"
+            setOnClickListener { toList() }
+        })
+        addView(View(context), LinearLayout.LayoutParams(0, 0, 1f))
+        addView(g.plain("Done").apply { setTextColor(TX); setPadding(px(16f), px(14f), px(16f), px(14f)); setOnClickListener { hide() } })
+        visibility = View.GONE
+    }
+    private val divider = View(context).apply { setBackgroundColor(BD) }
+    /** The page side: [pageBar] over the page's scroll. */
+    private val pageSide = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        addView(pageBar, LinearLayout.LayoutParams(-1, -2))
+        addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+    }
+
+    /** The layout was last set for a narrow screen. */
+    private var narrow: Boolean? = null
+    /** On a narrow screen, the list is up rather than a page. */
+    private var listUp = true
+    /** The sidebar's width and the page's padding were last set for this screen width, in dp. */
+    private var laidOutFor = -1
 
     /** Native items' views ([SettingsItem.Native], e.g. the radio's): made once, kept across show()s. */
     private val natives = LinkedHashMap<String, SettingsItem.NativeView>()
@@ -164,9 +193,9 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         elevation = 24 * g.dp // above the setup screen (20 dp) and the voice overlay (16 dp)
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            addView(sidebar.apply { setPadding(px(12f), px(18f), px(12f), px(14f)) }, LinearLayout.LayoutParams(px(sideWidth), -1))
-            addView(View(context).apply { setBackgroundColor(BD) }, LinearLayout.LayoutParams(px(1f).coerceAtLeast(1), -1))
-            addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
+            addView(sidebar.apply { setPadding(px(12f), px(18f), px(12f), px(14f)) }, LinearLayout.LayoutParams(px(200f), -1))
+            addView(divider, LinearLayout.LayoutParams(px(1f).coerceAtLeast(1), -1))
+            addView(pageSide, LinearLayout.LayoutParams(0, -1, 1f))
         }, LayoutParams(-1, -1))
         addView(sheet.view, LayoutParams(-1, -1))
         visibility = View.GONE
@@ -178,7 +207,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
      */
     fun show(m: Model) {
         model = m
-        if (!isShowing) { overviewPage.reset(); if (overview != null) current = SettingsNav.OVERVIEW }
+        if (!isShowing) { overviewPage.reset(); listUp = true; place(); if (overview != null) current = SettingsNav.OVERVIEW }
         // The Manage page stopped since the last opening: no Overview to draw.
         if (current == SettingsNav.OVERVIEW && overview == null) current = firstPage(m)
         if (current != SettingsNav.OVERVIEW && m.sections.none { it.id == current }) current = firstPage(m)
@@ -203,6 +232,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         when {
             sheet.isOpen -> sheet.close()
             natives.values.any { it.back() } -> {}
+            narrow == true && !listUp -> toList()
             else -> hide()
         }
     }
@@ -273,7 +303,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     private var pages = 0
 
     /** Previews (the mock-ups): a section's page, an open editor or picker, a native view, the restart banner. */
-    fun previewSection(id: String) { current = id; build() }
+    fun previewSection(id: String) { current = id; listUp = false; place(); build() }
     fun previewEdit(title: String, typed: String? = null) {
         when (val i = model?.sections?.flatMap { flat(it.items) }?.firstOrNull { titleOf(it) == title } ?: return) {
             is SettingsItem.Text -> { sheet.text(i) {}; typed?.let { sheet.field.setText(it) } }
@@ -311,8 +341,54 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     // ------------------------------------------------------------------ building
 
     private fun select(id: String) {
-        if (current == id) return
+        val opens = narrow == true && listUp
+        listUp = false
+        if (opens) place()
+        if (current == id) { if (opens) scroll.scrollTo(0, 0); return }
         sheet.close(); hideKeyboard(); current = id; build()
+    }
+
+    /** A narrow screen's page goes back to the list. */
+    private fun toList() {
+        sheet.close(); hideKeyboard()
+        listUp = true
+        place()
+    }
+
+    /** The page is on screen: always beside the sidebar, and on a narrow screen while the list isn't up. */
+    val pageShown: Boolean get() = narrow != true || !listUp
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        // The screen's own size, not the room left beside the keyboard: typing a value doesn't change the layout.
+        val c = resources.configuration
+        val n = c.screenWidthDp < NARROW_DP
+        if (n != narrow) { narrow = n; place() }
+        if (c.screenWidthDp != laidOutFor) {
+            laidOutFor = c.screenWidthDp
+            // Wide screens get a wider sidebar: about a fifth of the width.
+            val side = (c.screenWidthDp * 0.22f).coerceIn(200f, 300f)
+            if (!n) (sidebar.layoutParams as LinearLayout.LayoutParams).width = px(side)
+            val tall = c.screenHeightDp >= 600
+            val (h, top) = when { n -> 16f to 8f; tall -> 36f to 28f; else -> 28f to 20f }
+            page.setPadding(px(h), px(top), px(h), px(20f))
+            // Four tiles to a row where each gets about 150 dp (the S1); two on a tablet, whose page is tall, and on a phone.
+            val pageDp = if (n) c.screenWidthDp - 2 * h else c.screenWidthDp - side - 1 - 2 * h
+            overviewPage.columns = if (tall || pageDp < 4 * OVERVIEW_TILE_DP) 2 else 4
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    /** Sidebar and page side by side, or on a narrow screen the list or the page across the whole width. */
+    private fun place() {
+        val n = narrow ?: return
+        val side = sidebar.layoutParams as LinearLayout.LayoutParams
+        if (n) { side.width = 0; side.weight = 1f } else { side.weight = 0f; laidOutFor = -1 }
+        sidebar.layoutParams = side
+        sidebar.visibility = if (n && !listUp) View.GONE else View.VISIBLE
+        divider.visibility = if (n) View.GONE else View.VISIBLE
+        pageSide.visibility = if (n && listUp) View.GONE else View.VISIBLE
+        pageBar.visibility = if (n) View.VISIBLE else View.GONE
+        requestLayout()
     }
 
     private fun build() {
@@ -1017,11 +1093,19 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             addView(why, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(8f) })
             addView(buttons, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(14f) })
         }
-        val view = FrameLayout(context).apply {
+        val view = object : FrameLayout(context) {
+            // 560 dp, or the room less a margin on a narrow screen: from the width it has now, so a phone turned upright
+            // while a sheet is open keeps the card inside it.
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val lp = card.layoutParams as LayoutParams
+                val w = minOf(px(560f), MeasureSpec.getSize(widthMeasureSpec) - px(32f))
+                if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED && lp.width != w) lp.width = w
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            }
+        }.apply {
             setBackgroundColor(Color.argb(170, 10, 11, 15))
             isClickable = true
             setOnClickListener { close() }
-            // 560 dp, or the screen less a margin on a narrow portrait screen.
             addView(card, LayoutParams(minOf(px(560f), context.resources.displayMetrics.widthPixels - px(32f)), -2, Gravity.CENTER_HORIZONTAL or Gravity.TOP).apply { topMargin = px(40f) })
             visibility = View.GONE
         }
@@ -1245,6 +1329,13 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     }
 
     companion object {
+        /**
+         * Narrower than this, in dp, the menu shows its list or a page, not both: a phone held upright (360 to 430 dp).
+         * A 480 dp screen still has room for the sidebar beside a page of one tile to a row.
+         */
+        const val NARROW_DP = 480
+        /** The least an Overview tile gets before four to a row become two, in dp. */
+        const val OVERVIEW_TILE_DP = 150f
         const val RESTART_TEXT = SettingsChange.RESTART_TEXT
         const val OFF_BY_DEFAULT = SettingsChange.OFF_BY_DEFAULT
         /** Tags: a card's title row, a group's name inside a card, and a row's value (what [follow] updates). */

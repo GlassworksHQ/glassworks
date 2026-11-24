@@ -11,5 +11,6 @@
   { "name": "fel", "description": "Allwinner FEL boot over WebUSB, in the browser." },
   { "name": "ext4", "description": "ext4 and Android sparse images, in the browser." },
   { "name": "fastboot", "description": "Fastboot over WebUSB, for every frame Kiln installs." },
+  { "name": "odin", "description": "Samsung Download mode (Odin) over WebUSB." },
   { "name": "frame-card", "description": "The frame card and 3D renderer, for Kiln and the site." }
 ]

@@ -17,7 +17,14 @@ line of each version is what Home Assistant shows on the update card. A change o
   with the device's own views instead of a browser. Cards it can't draw yet show in a small browser view. It's off by
   default, and with it off the app works exactly as before.
 
+## [0.9.0] - 2026-11-24
+
+**The last release before 1.0. For Android 8 and newer it's the first release since 0.2.0, and brings everything in 0.3.0; the legacy build moves up from 0.3.0.**
+
+What 0.3.0 added (themes and the Assist edge glow, the notifications and Bluetooth proxy panes, setup with no touch on the lululemon Mirror) is in [its notes](https://github.com/GlassworksHQ/glassworks/blob/main/frames/generic-android/CHANGELOG.md#030---2026-11-23).
+
 ### Fixed
+- **Setup and settings fit a phone's screen.** On a phone, setup used to cut off its headings and hide what each step asks, and settings squeezed each page into a sliver beside its list. Now setup shows its steps across the top when the phone is upright, keeps every heading, QR code and button on screen, and scrolls a long step. Settings opens on its list of pages and shows each page across the whole screen, with **‹ Settings** to go back. Tablets and wall panels look the same as before.
 - **Kiln installs Glassworks on the Mirror again.** Since Kiln moved to Glass Panes image 3, building the Mirror's system stopped with "no room for … libxul.so". Kiln now clears out the image's own kiosk app and the apps a Mirror never uses before it adds Glassworks, so the app fits with room to spare.
 
 ## [0.3.0] - 2026-11-23

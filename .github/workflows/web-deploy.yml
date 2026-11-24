@@ -1,4 +1,5 @@
-# Deploys glassworks.dev (site/) and Kiln (kiln.glassworks.dev, kiln/apps/kiln) to Vercel production from main.
+# Deploys glassworks.dev (site/) and Kiln (kiln.glassworks.dev, kiln/apps/kiln) to Vercel production from main, and
+# Refract (refract.glassworks.dev, kiln/workers/refract), the Cloudflare Worker Kiln downloads through, before Kiln.
 #
 # Vercel's Git builds are off for both projects (git.deploymentEnabled false in their vercel.json), so a push
 # deploys nothing on its own. This workflow does it instead:
@@ -22,9 +23,14 @@
 #   - site: tools/ci/changes.py's `site` rule, the same one pr.yml's site job runs on (or every job's paths);
 #   - kiln: KILN in tools/ci/web_deploy.py, the app's npm workspaces and the repo files its build stages.
 #   - installer: kiln/s1-redirect, the redirect s1.edm.sh serves (the first installer's address, now Kiln's S1 page).
+#   - refract: REFRACT in tools/ci/web_deploy.py, the Worker's code, allowlist and release lines. Kiln's job waits
+#     for it and doesn't deploy when it fails, so a Kiln that names a new download never goes live before Refract
+#     serves it.
 #
 # Secrets: VERCEL_SITE_TOKEN, VERCEL_KILN_TOKEN and VERCEL_INSTALLER_TOKEN, one Vercel token per project. Variables:
 # VERCEL_ORG_ID, VERCEL_SITE_PROJECT_ID, VERCEL_KILN_PROJECT_ID, VERCEL_INSTALLER_PROJECT_ID. A missing one fails the job, so a deploy never skips silently.
+# Refract: the secret CLOUDFLARE_REFRACT_TOKEN (Workers Scripts, Workers Routes and DNS: Edit; kiln/workers/refract/README.md)
+# and the variable CLOUDFLARE_ACCOUNT_ID.
 name: Web deploy
 
 on:
@@ -37,7 +43,7 @@ on:
       project:
         description: What to deploy
         type: choice
-        options: [both, site, kiln, installer]   # both: site and kiln
+        options: [both, site, kiln, installer, refract]   # both: site and kiln
         default: both
 
 permissions:
@@ -60,6 +66,7 @@ jobs:
       site: ${{ steps.pick.outputs.site }}
       kiln: ${{ steps.pick.outputs.kiln }}
       installer: ${{ steps.pick.outputs.installer }}
+      refract: ${{ steps.pick.outputs.refract }}
     steps:
       # Full history without file contents: the base can be any number of commits back.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -188,9 +195,119 @@ jobs:
           ID: ${{ steps.start.outputs.id }}
         run: python3 tools/ci/web_deploy.py finish site --id "$ID" --state failure
 
-  kiln:
+  # Refract, the Cloudflare Worker at refract.glassworks.dev: kiln/workers/refract/deploy.sh (its typecheck, its
+  # tests, then wrangler deploy, with the wrangler its own lockfile pins). A deploy replaces the Worker at once, and
+  # what it serves is the allowlist in the repo, so a failed one leaves the one before it serving.
+  refract:
     needs: changes
-    if: needs.changes.outputs.kiln == 'true'
+    if: needs.changes.outputs.refract == 'true'
+    permissions:
+      contents: read
+      deployments: write   # the record of what it deployed
+    concurrency:   # as the others'
+      group: web-deploy-refract
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: refract.glassworks.dev
+      url: https://refract.glassworks.dev
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+          fetch-depth: 0       # the check's diff from the last deploy
+          filter: blob:none
+
+      - name: Check it still needs a deploy
+        id: check
+        env:
+          EVENT: ${{ github.event_name }}
+          PROJECT: ${{ inputs.project }}
+          STARTED_FOR: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/ci/web_deploy.py check refract --event "$EVENT" --started-for "$STARTED_FOR" \
+            --asked "${PROJECT:-refract}" --summary "$GITHUB_STEP_SUMMARY" | tee -a "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.check.outputs.deploy == 'true'
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: kiln/workers/refract/package-lock.json
+
+      - name: Install Refract's tools
+        if: steps.check.outputs.deploy == 'true'
+        run: npm ci --prefix kiln/workers/refract
+
+      # Before the upload: if the job stops after Cloudflare took it, this record says the live commit is unknown.
+      - name: Record the deploy as started
+        id: start
+        if: steps.check.outputs.deploy == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.check.outputs.commit }}
+        run: python3 tools/ci/web_deploy.py start refract --commit "$COMMIT" | tee -a "$GITHUB_OUTPUT"
+
+      # Then it reads the live listing until it has every id in the allowlist (Cloudflare switches over in seconds),
+      # so success means Kiln's downloads are there.
+      - name: Deploy to Cloudflare
+        if: steps.check.outputs.deploy == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_REFRACT_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          COMMIT: ${{ steps.check.outputs.commit }}
+        run: |
+          for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "${!v}" ]; then echo "::error::$v is not set: Refract was not deployed"; exit 1; fi
+          done
+          kiln/workers/refract/deploy.sh
+          for _ in 1 2 3 4 5 6; do
+            if python3 - <<'PY'
+          import json, sys, urllib.request
+          want = set(json.load(open('kiln/workers/refract/allowlist.json')))
+          req = urllib.request.Request('https://refract.glassworks.dev/', headers={'User-Agent': 'glassworks-web-deploy'})
+          live = {a['id'] for a in json.load(urllib.request.urlopen(req, timeout=30))['assets']}
+          missing = sorted(want - live)
+          print('missing from the live listing: ' + ', '.join(missing) if missing else 'every allowlist id is live')
+          sys.exit(1 if missing else 0)
+          PY
+            then
+              echo "Deployed Refract from main at $COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Refract deployed, but its live listing still lacks part of the allowlist"
+          exit 1
+
+      # Success makes this commit the next run's base. Without it the record stays unsettled, and the next push or
+      # schedule deploys again.
+      - name: Record the deploy as done
+        if: steps.check.outputs.deploy == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ID: ${{ steps.start.outputs.id }}
+        run: python3 tools/ci/web_deploy.py finish refract --id "$ID" --state success
+
+      - name: Record the deploy as failed
+        if: failure() && steps.start.outputs.id != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ID: ${{ steps.start.outputs.id }}
+        run: python3 tools/ci/web_deploy.py finish refract --id "$ID" --state failure
+
+  kiln:
+    # After Refract: Kiln downloads every APK and image through it, so a Refract deploy this run needed must have
+    # gone through first. Skipped (nothing of Refract's changed) is fine; failed or cancelled leaves Kiln for the
+    # next push or schedule, which deploys it once Refract is live. Kiln's check also holds it when the main it
+    # checked out has Refract inputs newer than Refract's last successful deploy (a push between the two checkouts).
+    needs: [changes, refract]
+    if: >-
+      ${{ !cancelled() && needs.changes.outputs.kiln == 'true'
+      && (needs.refract.result == 'success' || needs.refract.result == 'skipped') }}
     # One deploy per project at a time, and a running one is never cancelled: Vercel counts it against the free
     # plan's daily cap even then. A newer run waits (GitHub keeps only the newest waiting one), then checks out the
     # newest main and deploys only if something it builds from changed since the deploy before it.
@@ -219,11 +336,12 @@ jobs:
         id: check
         env:
           EVENT: ${{ github.event_name }}
+          PROJECT: ${{ inputs.project }}
           STARTED_FOR: ${{ github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 tools/ci/web_deploy.py check kiln --event "$EVENT" --started-for "$STARTED_FOR" \
-            --summary "$GITHUB_STEP_SUMMARY" | tee -a "$GITHUB_OUTPUT"
+            --asked "${PROJECT:-kiln}" --summary "$GITHUB_STEP_SUMMARY" | tee -a "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.check.outputs.deploy == 'true'
