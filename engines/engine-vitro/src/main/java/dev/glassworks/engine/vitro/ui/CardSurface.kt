@@ -19,6 +19,7 @@ import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
+import dev.glassworks.auth.OAuth
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -178,7 +179,7 @@ class VitroCardContext(
                 val conn = (URL(fullUrl).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 5_000
                     readTimeout = 8_000
-                    accessToken()?.takeIf { it.isNotEmpty() }?.let { setRequestProperty("Authorization", "Bearer $it") }
+                    haToken(fullUrl)?.let { setRequestProperty("Authorization", "Bearer $it") }
                 }
                 try {
                     if (conn.responseCode in 200..299) decodeDownsampled(conn.inputStream.use { it.readBytes() }) else null
@@ -204,7 +205,7 @@ class VitroCardContext(
                     connectTimeout = 5_000
                     readTimeout = 8_000
                     setRequestProperty("Accept", "application/json")
-                    accessToken()?.takeIf { it.isNotEmpty() }?.let { setRequestProperty("Authorization", "Bearer $it") }
+                    haToken(fullUrl)?.let { setRequestProperty("Authorization", "Bearer $it") }
                 }
                 try {
                     if (conn.responseCode in 200..299) {
@@ -218,6 +219,13 @@ class VitroCardContext(
             }.getOrNull()
             main.post { done(parsed) }
         }
+    }
+
+    /** The panel's token for [url] on Home Assistant's own origin; an image on any other host gets no credentials. */
+    private fun haToken(url: String): String? {
+        val ha = OAuth.origin(haBase) ?: return null
+        if (OAuth.origin(url) != ha) return null
+        return accessToken()?.takeIf { it.isNotEmpty() }
     }
 
     private fun absoluteUrl(raw: String): String = when {
@@ -245,6 +253,9 @@ class VitroCardContext(
         private val IMAGE_CACHE = object : LruCache<String, Bitmap>(IMAGE_CACHE_KB) {
             override fun sizeOf(key: String, value: Bitmap): Int = max(1, value.allocationByteCount / 1024)
         }
+
+        /** Drops every cached image: they were fetched with a sign-in (or a Home Assistant) that no longer holds. */
+        fun clearImageCache() = IMAGE_CACHE.evictAll()
 
         private fun decodeDownsampled(bytes: ByteArray): Bitmap? {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -338,10 +349,17 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     var activeCardCss: String? = null
         private set
 
+    /** The surface as it was before `card_mod` first restyled it, to go back to when a template drops the rule. */
+    private var baseBackground: android.graphics.drawable.Drawable? = null
+    private var baseClip = false
+    private var basePadding: IntArray? = null
+    private var restyled = false
+
     /** Parses one rendered `card_mod` CSS string and restyles the surface from it. */
     fun applyStyleCss(css: String) {
         val theme = ctx.theme
         val mod = ThemeResolver.parseCardMod(css, theme.vars)
+        val previous = activeCardMod
         activeCardMod = mod
         activeCardCss = css
         val radiusPx = (mod.borderRadiusDp ?: theme.cardBorderRadiusDp) * ctx.dp
@@ -350,6 +368,16 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         val gradient = mod.backgroundGradient
         val restyle = gradient != null || mod.backgroundColor != null || mod.borderColor != null ||
             mod.borderWidthDp != null || mod.borderRadiusDp != null
+        if (restyle && !seamless && !restyled) {
+            baseBackground = background
+            baseClip = clipToOutline
+            restyled = true
+        } else if (!restyle && restyled) {
+            // A template that no longer styles the surface: back to the card's own.
+            background = baseBackground
+            clipToOutline = baseClip
+            restyled = false
+        }
         if (restyle && !seamless) {
             val fillColor = mod.backgroundColor ?: theme.cardBackgroundColor
             val invisibleSurface = gradient == null && Color.alpha(fillColor) == 0 && strokePx == 0
@@ -369,10 +397,17 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         }
         val pad = mod.paddingInsets ?: mod.paddingDp?.let { dev.glassworks.engine.vitro.theme.EdgeInsetsDp(it, it, it, it) }
         if (pad != null) {
+            if (basePadding == null) basePadding = intArrayOf(paddingLeft, paddingTop, paddingRight, paddingBottom)
             setPadding(ctx.px(pad.left), ctx.px(pad.top), ctx.px(pad.right), ctx.px(pad.bottom))
             clearDefaultInnerPadding()
+        } else {
+            basePadding?.let { setPadding(it[0], it[1], it[2], it[3]) }
+            basePadding = null
         }
-        mod.opacity?.let { alpha = it.coerceIn(0f, 1f) }
+        when {
+            mod.opacity != null -> alpha = mod.opacity.coerceIn(0f, 1f)
+            previous.opacity != null -> alpha = 1f // the template dropped its `opacity`
+        }
         onCardModApplied(mod)
     }
 

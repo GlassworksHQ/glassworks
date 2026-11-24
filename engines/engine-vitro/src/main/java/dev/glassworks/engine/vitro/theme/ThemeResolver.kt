@@ -157,8 +157,10 @@ data class ResolvedTheme(
         append(":root {\n")
         for ((k, v) in vars) {
             if (k.startsWith("card-mod-")) continue
-            val safeVal = v.replace("\n", " ").replace(";", "")
-            append("  --").append(k).append(": ").append(safeVal).append(";\n")
+            // This block goes inside an island's <style>: no angle brackets, so a theme value can't close it.
+            val safeKey = k.filter { it != '<' && it != '>' && it != '\n' && it != ';' && it != '{' && it != '}' }
+            val safeVal = v.replace("\n", " ").replace(";", "").filter { it != '<' && it != '>' }
+            append("  --").append(safeKey).append(": ").append(safeVal).append(";\n")
         }
         append("}\n")
     }

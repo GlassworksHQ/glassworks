@@ -284,9 +284,10 @@ class VitroEngine(
 
             // New HA origin: start (or restart) the native WebSocket data plane.
             if (origin != currentOrigin) {
-                // Nothing of the previous Home Assistant carries over: not its token, not its entity states.
+                // Nothing of the previous Home Assistant carries over: not its token, entity states or images.
                 cachedToken = null
                 store.clear()
+                VitroCardContext.clearImageCache()
             }
             currentOrigin = origin
             displayedDashboard = null
@@ -470,6 +471,8 @@ class VitroEngine(
                 val base = currentOrigin ?: return
                 post {
                     // That client's reader has stopped: the load after sign-in starts a new one instead of reusing it.
+                    // Images fetched with the rejected sign-in go too.
+                    VitroCardContext.clearImageCache()
                     clientGeneration++
                     client?.close()
                     client = null
