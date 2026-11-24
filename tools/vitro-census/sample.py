@@ -29,9 +29,8 @@ def search(out):
             p = subprocess.run(["gh", "api", "-X", "GET", "search/code", "-f", "q=" + q, "-f", "per_page=100",
                                 "-f", f"page={page}"], capture_output=True, text=True)
             items = json.loads(p.stdout or "{}").get("items")
-            if items is None:
-                print("search failed:", p.stderr[:200], file=sys.stderr)
-                break
+            if items is None:  # fail before writing hits.json, so a draw never uses a partial search
+                sys.exit(f"search failed ({q!r}, page {page}): {(p.stderr or p.stdout)[:200]}")
             for it in items:
                 hits.setdefault(it["repository"]["full_name"], []).append([it["path"], it["html_url"]])
             if len(items) < 100:

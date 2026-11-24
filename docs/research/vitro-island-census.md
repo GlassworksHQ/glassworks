@@ -7,7 +7,9 @@ evidence: verified
 
 **Status (2026-11-24): measured, recommendation below.** After the native fast paths on `exp/vitro`, about a
 quarter of the cards in typical community dashboards still go to a web island, and one card type, `custom:button-card`, is
-nearly half of those. The rest is a long tail. Our own dashboards need no island once they are written as native cards.
+nearly half of those. The rest is a long tail. Our own dashboards, once written as native cards, use no card type that
+is routed to an island. This counts card types only: a native-routed card can still fall back for an option Vitro
+doesn't draw (#795), and nothing here was rendered on a panel.
 
 Tools: `tools/vitro-census/census.py` (read-only), `gh api` (GitHub code search, GraphQL for stars), the HA
 websocket (`lovelace/dashboards/list`, `lovelace/config`, `lovelace/resources`; reads only). Vitro at `3c795f0ad`.
@@ -34,9 +36,9 @@ select), `bubble-card`, `mini-graph-card`, `mini-media-player`, `clock-weather-c
 
 1. **Our own dashboards** (2026-11-24, verified)
    ```
-   $ node ws.mjs call '{"type":"lovelace/dashboards/list"}'     # 9 dashboards, all storage mode
-   $ node ws.mjs get <url_path>                                  # each of them
-   $ node ws.mjs call '{"type":"lovelace/config","force":true}'  # default dashboard: "No config found" (auto-generated)
+   $ node tools/vitro-census/ha-dashboards.mjs list              # 9 dashboards, all storage mode
+   $ node tools/vitro-census/ha-dashboards.mjs get <url_path>    # each of them
+   $ node tools/vitro-census/ha-dashboards.mjs get lovelace      # default dashboard: "No config found" (auto-generated)
    $ python3 tools/vitro-census/census.py <each>.json
    ```
    The default dashboard has no stored config (HA generates it), so it has no cards to count. Of the nine, the
@@ -116,8 +118,10 @@ select), `bubble-card`, `mini-graph-card`, `mini-media-player`, `clock-weather-c
    Caveats, so the numbers aren't over-read:
    - The queries ask for `type: custom:`, so every dashboard has at least one custom card. This over-states the
      island share for dashboards in general, and is the right population for this question.
-   - GitHub code search favours public, hand-written YAML. Storage-mode dashboards edited in the UI (most users)
-     are not in it, and they skew toward core and Mushroom cards. Treat the island share as an upper estimate.
+   - GitHub code search finds public YAML files, so the sample is dashboards people publish as code: mostly
+     hand-written YAML, plus the three storage-mode exports above. Dashboards edited only in the UI and never
+     published are not in it. Whether those use custom cards more or less often is untested, so this sample says
+     nothing about them.
    - `!include`d files that weren't matched are missing, so counts for those repos are partial.
    - The samples are not stratified by stars. Repos in the sample are real, personal setups.
 
@@ -214,7 +218,8 @@ a stated goal (Vitro already draws `history-graph`, `statistics-graph` and `mini
 Read-only throughout: the HA websocket helper only calls `lovelace/*` reads, and GitHub is read through the public API.
 
 ```
-mkdir -p ours && node ws.mjs get <url_path> > ours/<url_path>.json                 # one per dashboard
+export HA_URL=http://homeassistant.local:8123 HA_TOKEN=...                       # a long-lived token; read-only use
+mkdir -p ours && node tools/vitro-census/ha-dashboards.mjs get <url_path> > ours/<url_path>.json   # one per dashboard
 python3 tools/vitro-census/census.py ours/*.json                                  # native vs island, per card type
 OUT=$(mktemp -d)                                                                   # a new, empty folder
 python3 tools/vitro-census/sample.py fetch tools/vitro-census/sample-manifest.json "$OUT"     # the pinned sample
