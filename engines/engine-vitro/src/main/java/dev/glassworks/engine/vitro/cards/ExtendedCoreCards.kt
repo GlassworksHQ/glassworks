@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.cards
 
+import dev.glassworks.engine.vitro.ui.NumberText
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
@@ -1000,31 +1001,33 @@ internal class StatisticsChartView(context: Context, private val gridColor: Int,
         strokeWidth = 1f * dp
     }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 10f * dp }
-    private val path = Path()
     private var series: List<StatSeries> = emptyList()
     private var unit = ""
+
+    // Built once per data or size change, never in onDraw: one path per series and the two labels.
+    private val paths = ArrayList<Path>()
+    private val pathColors = ArrayList<Int>()
+    private var maxText = ""
+    private var minText = ""
+    private var empty = true
+    private var builtW = -1
+    private var builtH = -1
 
     fun update(s: List<StatSeries>, unitLabel: String) {
         series = s
         unit = unitLabel
+        builtW = -1
         invalidate()
     }
 
-    override fun onDraw(canvas: Canvas) {
-        gridPaint.color = gridColor
-        textPaint.color = labelColor
+    private fun rebuild(top: Float, bottom: Float) {
+        builtW = width
+        builtH = height
+        paths.clear()
+        pathColors.clear()
         val all = series.flatMap { it.points }
-        val top = 6f * dp
-        val bottom = height - 4f * dp
-        for (i in 0..3) {
-            val y = top + (bottom - top) * i / 3f
-            canvas.drawLine(0f, y, width.toFloat(), y, gridPaint)
-        }
-        if (all.isEmpty()) {
-            textPaint.textAlign = Paint.Align.CENTER
-            canvas.drawText("No statistics", width / 2f, height / 2f, textPaint)
-            return
-        }
+        empty = all.isEmpty()
+        if (empty) return
         val minT = all.minOf { it.first }
         val maxT = all.maxOf { it.first }
         var minV = all.minOf { it.second }
@@ -1033,19 +1036,42 @@ internal class StatisticsChartView(context: Context, private val gridColor: Int,
         val spanT = (maxT - minT).coerceAtLeast(1.0)
         val spanV = maxV - minV
         for (s in series) {
-            path.reset()
+            val path = Path()
             s.points.forEachIndexed { i, (t, v) ->
                 val x = ((t - minT) / spanT * width).toFloat()
                 val y = (bottom - (v - minV) / spanV * (bottom - top)).toFloat()
                 if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
-            linePaint.color = s.color
-            canvas.drawPath(path, linePaint)
+            paths += path
+            pathColors += s.color
+        }
+        val suffix = if (unit.isEmpty()) "" else " $unit"
+        maxText = formatNum(maxV) + suffix
+        minText = formatNum(minV) + suffix
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        gridPaint.color = gridColor
+        textPaint.color = labelColor
+        val top = 6f * dp
+        val bottom = height - 4f * dp
+        if (builtW != width || builtH != height) rebuild(top, bottom)
+        for (i in 0..3) {
+            val y = top + (bottom - top) * i / 3f
+            canvas.drawLine(0f, y, width.toFloat(), y, gridPaint)
+        }
+        if (empty) {
+            textPaint.textAlign = Paint.Align.CENTER
+            canvas.drawText("No statistics", width / 2f, height / 2f, textPaint)
+            return
+        }
+        for (i in paths.indices) {
+            linePaint.color = pathColors[i]
+            canvas.drawPath(paths[i], linePaint)
         }
         textPaint.textAlign = Paint.Align.LEFT
-        val suffix = if (unit.isEmpty()) "" else " $unit"
-        canvas.drawText(formatNum(maxV) + suffix, 2f * dp, top + textPaint.textSize, textPaint)
-        canvas.drawText(formatNum(minV) + suffix, 2f * dp, bottom - 3f * dp, textPaint)
+        canvas.drawText(maxText, 2f * dp, top + textPaint.textSize, textPaint)
+        canvas.drawText(minText, 2f * dp, bottom - 3f * dp, textPaint)
     }
 
     private fun formatNum(v: Double): String =
@@ -1682,9 +1708,16 @@ internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.co
 
     private fun fracOf(v: Double): Float = ((v - min) / (max - min)).toFloat().coerceIn(0f, 1f)
 
-    private fun pointAt(frac: Float, r: Float): Pair<Float, Float> {
+    // Reused by onDraw: one point on the ring and the texts, rebuilt only when their value changes.
+    private val pt = FloatArray(2)
+    private val shownMemo = NumberText()
+    private val currentMemo = NumberText()
+
+    /** The point at [frac] of the ring of radius [r], into [pt]. */
+    private fun pointAt(frac: Float, r: Float) {
         val a = Math.toRadians((START_ANGLE + SWEEP * frac).toDouble())
-        return (width / 2f + r * cos(a).toFloat()) to (height / 2f + r * sin(a).toFloat())
+        pt[0] = width / 2f + r * cos(a).toFloat()
+        pt[1] = height / 2f + r * sin(a).toFloat()
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -1702,20 +1735,23 @@ internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.co
             if (f > 0f) canvas.drawArc(oval, START_ANGLE, SWEEP * f, false, arcPaint)
         }
         current?.let { c ->
-            val (x, y) = pointAt(fracOf(c), r)
+            pointAt(fracOf(c), r)
+            val x = pt[0]
+            val y = pt[1]
             fill.color = ctx.theme.cardBackgroundColor
             canvas.drawCircle(x, y, strokeW * 0.3f, fill)
             fill.color = ctx.theme.primaryTextColor
             canvas.drawCircle(x, y, strokeW * 0.18f, fill)
         }
         if (shown != null) {
-            val (x, y) = pointAt(fracOf(shown), r)
+            pointAt(fracOf(shown), r)
             fill.color = Color.WHITE
-            canvas.drawCircle(x, y, strokeW * 0.42f, fill)
+            canvas.drawCircle(pt[0], pt[1], strokeW * 0.42f, fill)
         }
         canvas.drawText(status, cx, cy - 30f * dp, statusPaint)
-        canvas.drawText(shown?.let { "${it.roundToInt()}%" } ?: "–", cx, cy + 14f * dp, bigPaint)
-        current?.let { canvas.drawText("Currently ${it.roundToInt()}%", cx, cy + 36f * dp, subPaint) }
+        canvas.drawText(if (shown != null) shownMemo.of(shown) { "${it.roundToInt()}%" } else "–", cx, cy + 14f * dp, bigPaint)
+        val c = current
+        if (c != null) canvas.drawText(currentMemo.of(c) { "Currently ${it.roundToInt()}%" }, cx, cy + 36f * dp, subPaint)
     }
 
     private fun valueAt(x: Float, y: Float): Double {
