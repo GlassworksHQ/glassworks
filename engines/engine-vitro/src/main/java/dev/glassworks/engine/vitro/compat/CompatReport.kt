@@ -60,11 +60,15 @@ object CompatChecker {
         return CompatReport(out)
     }
 
-    private fun walk(card: CardConfig, path: String, scripts: IslandScripts, out: MutableList<CompatEntry>) {
+    private fun walk(card: CardConfig, path: String, scripts: IslandScripts, out: MutableList<CompatEntry>, descend: Boolean = true) {
         val here = "$path (${card.type})"
         val verdict = card.compat.effective(scripts)
         out += CompatEntry(here, verdict)
-        if (!verdict.isNative) return
-        CardRouter.producedCards(card, perEntity = false).forEach { (i, child) -> walk(child, "$here › card ${i + 1}", scripts, out) }
+        if (!verdict.isNative || !descend) return
+        // auto-entities' inner card is checked with its generated cards, but those aren't listed: they depend on states.
+        val generated = CardRouter.generatesCards(card)
+        CardRouter.producedCards(card, perEntity = false).forEach { (i, child) ->
+            walk(child, "$here › card ${i + 1}", scripts, out, descend = !generated)
+        }
     }
 }

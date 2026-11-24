@@ -625,6 +625,29 @@ class CompatCheckerTest {
             listOf("View 1 › card 1 (custom:auto-entities)", "View 1 › card 1 (custom:auto-entities) › card 1 (custom:acme-card)"),
             CompatChecker.check(view).entries.map { it.path },
         )
+        // `card_param: cards`: the inner card is checked with the cards auto-entities puts in it, and what the config
+        // wrote in that field is replaced, so it doesn't count. Neither the generated cards nor the replaced ones are listed.
+        val generated = LovelaceParser.parseView(
+            0,
+            JSONObject(
+                """{"cards": [{"type": "custom:auto-entities", "card_param": "cards", "entities": [{"entity": "light.a", "type": "tile"}],
+                    "card": {"type": "custom:layout-card", "layout_type": "custom:foo-layout"}}]}""",
+            ),
+        )
+        val genReport = CompatChecker.check(generated)
+        assertTrue(genReport.format(), genReport.islands.isEmpty())
+        assertEquals(
+            listOf("View 1 › card 1 (custom:auto-entities)", "View 1 › card 1 (custom:auto-entities) › card 1 (custom:layout-card)"),
+            genReport.entries.map { it.path },
+        )
+        val replaced = card(
+            """{"type": "custom:auto-entities", "card_param": "cards", "entities": [{"entity": "light.a", "type": "custom:mushroom-entity-card"}],
+                "card": {"type": "custom:layout-card", "cards": [{"type": "custom:acme-card"}]}}""",
+        )
+        val types = CardRouter.producedCards(replaced).flatMap { (_, c) -> listOf(c.type) + c.childCards.map { it.type } }
+        assertFalse(types.toString(), "custom:acme-card" in types)
+        assertTrue(types.toString(), "custom:mushroom-entity-card" in types)
+        assertTrue(CompatChecker.check(LovelaceParser.parseView(0, JSONObject("""{"cards": [${replaced.raw}]}"""))).islands.isEmpty())
         // Custom cards all the way down: the island runs them all.
         assertIsland(
             """{"type": "custom:auto-entities", "card": {"type": "custom:layout-card"}, "card_param": "cards",

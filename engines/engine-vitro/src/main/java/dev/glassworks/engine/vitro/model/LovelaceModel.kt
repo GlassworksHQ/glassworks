@@ -425,18 +425,34 @@ object CardRouter {
 
     /**
      * Every card [card]'s config produces, one level down, each with an index for report paths: a container's or a
-     * conditional's cards ([builtChildren]), auto-entities' `card:` (an `entities` card by default), and, with
-     * [perEntity], the cards auto-entities builds per entity under `card_param: cards`, one for each top-level
-     * `entities:` entry and include rule's `options` (a `tile` by default), as `AutoEntitiesCardView` builds them.
-     * Routing reads them all. The report leaves [perEntity] off, because which of those exist depends on live states.
+     * conditional's cards ([builtChildren]), and auto-entities' `card:` (an `entities` card by default) as
+     * `AutoEntitiesCardView` builds it, with its `card_param` field (`entities` by default) replaced. Under
+     * `card_param: cards`, that field holds one card per top-level `entities:` entry and include rule's `options` (a
+     * `tile` by default), so the inner card's own verdict sees them. With [perEntity] those generated cards are listed
+     * here too, for routing. The report leaves [perEntity] off and doesn't walk into the inner card's generated
+     * cards ([generatesCards]), because which of them exist depends on live states.
      */
     fun producedCards(card: CardConfig, perEntity: Boolean = true): List<IndexedValue<CardConfig>> {
         val out = builtChildren(card).toMutableList()
         if (card.type != "custom:auto-entities") return out
         val inner = card.raw.optJSONObject("card")?.let { JSONObject(it.toString()) } ?: JSONObject()
         if (!inner.has("type")) inner.put("type", "entities")
+        val param = card.raw.optString("card_param", "entities").ifEmpty { "entities" }
+        // auto-entities replaces this field with what it matched, so what the config wrote there never shows.
+        inner.remove(param)
+        val generated = if (param == "cards") generatedCards(card) else emptyList()
+        if (param == "cards") inner.put("cards", JSONArray().apply { generated.forEach { put(JSONObject(it.toString())) } })
         out += IndexedValue(out.size, LovelaceParser.parseCard(inner))
-        if (!perEntity || card.raw.optString("card_param", "entities") != "cards") return out
+        if (perEntity) generated.forEach { out += IndexedValue(out.size, LovelaceParser.parseCard(it)) }
+        return out
+    }
+
+    /** True when [card] is auto-entities building one card per entity: its inner card's cards are all generated. */
+    fun generatesCards(card: CardConfig): Boolean =
+        card.type == "custom:auto-entities" && card.raw.optString("card_param", "entities") == "cards"
+
+    /** The cards auto-entities builds per entity, one per `entities:` entry and include rule (no entity filled in). */
+    private fun generatedCards(card: CardConfig): List<JSONObject> {
         val templates = ArrayList<JSONObject>()
         card.raw.optJSONArray("entities")?.let { arr ->
             for (i in 0 until arr.length()) {
@@ -449,11 +465,8 @@ object CardRouter {
         card.raw.optJSONObject("filter")?.optJSONArray("include")?.let { rules ->
             for (i in 0 until rules.length()) templates += rules.optJSONObject(i)?.optJSONObject("options")?.let { JSONObject(it.toString()) } ?: JSONObject()
         }
-        for (t in templates) {
-            if (!t.has("type")) t.put("type", "tile")
-            out += IndexedValue(out.size, LovelaceParser.parseCard(t))
-        }
-        return out
+        templates.forEach { if (!it.has("type")) it.put("type", "tile") }
+        return templates
     }
 
     /** One top-level card `VitroView` builds for a view, with its section (null outside sections) and index. */
