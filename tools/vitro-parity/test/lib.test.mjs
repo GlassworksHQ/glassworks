@@ -218,3 +218,18 @@ test('capturableImage keeps only images HA served from /local or /static on its 
   assert.equal(capturableImage(`${o}/hacsfiles/x.png`, o, 200, 'image/png'), null);
   assert.equal(capturableImage('not a url', o, 200, 'image/png'), null);
 });
+
+test('aliasPaths files a redirected image under the path the page asked for too', async () => {
+  const { aliasPaths } = await import('../lib/assets.mjs');
+  const o = 'http://homeassistant.local:8123';
+  assert.deepEqual(aliasPaths([`${o}/local/actual.png`, `${o}/local/alias.png`], o, 200, 'image/png'), ['/local/actual.png', '/local/alias.png']);
+  // Every alias passes the same checks: another origin or /api in the chain isn't an asset path.
+  assert.deepEqual(aliasPaths([`${o}/static/x.png`, 'https://cdn.example.test/static/x.png', `${o}/api/image_proxy/x`], o, 200, 'image/png'), ['/static/x.png']);
+  assert.deepEqual(aliasPaths([`${o}/static/x.png`, `${o}/static/y.png`], o, 200, 'text/html'), []);
+});
+
+test('staleAssets lists the files nothing kept', async () => {
+  const { staleAssets } = await import('../lib/assets.mjs');
+  assert.deepEqual(staleAssets(['/static/a.png', '/static/b.png', '/local/c.jpg'], new Set(['/static/a.png'])), ['/local/c.jpg', '/static/b.png']);
+  assert.deepEqual(staleAssets(['/static/a.png'], ['/static/a.png']), []);
+});

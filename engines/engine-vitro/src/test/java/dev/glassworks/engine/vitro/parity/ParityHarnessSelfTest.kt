@@ -262,6 +262,23 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun theFixtureServerWithholdsAnImageHaCouldntLoad() {
+        val dir = java.nio.file.Files.createTempDirectory("assets").toFile()
+        File(dir, "static").mkdirs()
+        File(dir, "static/stale.png").writeBytes(byteArrayOf(1, 2, 3))
+        File(dir, "static/ok.png").writeBytes(byteArrayOf(4, 5))
+        fun get(http: FixtureHttp, path: String) = (java.net.URL(http.base + path).openConnection() as java.net.HttpURLConnection).run {
+            try { responseCode } finally { disconnect() }
+        }
+        FixtureHttp(dir, setOf("/static/stale.png")).use { http ->
+            // A file left from an earlier capture is never handed to Vitro once HA can't load that path.
+            assertEquals(404, get(http, "/static/stale.png"))
+            assertEquals(200, get(http, "/static/ok.png"))
+            assertEquals(listOf("/static/stale.png"), http.missing.toList())
+        }
+    }
+
+    @Test
     fun anImageTheCaptureDidntSaveIsAnInputGapUnlessHaMissedItToo() {
         val ref = ParityReference(File("none.png"), JSONObject().put("imagesHaMissing", org.json.JSONArray().put("/None")))
         val (gaps, haToo) = ParityInputs.missingImages(listOf("/static/x.png", "/None", "/static/x.png"), ref)

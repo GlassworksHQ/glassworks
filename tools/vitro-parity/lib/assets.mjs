@@ -51,3 +51,24 @@ export function capturableImage(url, origin, status, contentType) {
   if (!p.startsWith('/local/') && !p.startsWith('/static/')) return null;
   return p;
 }
+
+/**
+ * Every path one image body stands for: the URL that answered and each URL that redirected to it ([urls]: the
+ * response's URL, then its request's redirectedFrom() chain), as capturableImage accepts them with the final
+ * response's [status] and [contentType]. An <img> keeps the URL it asked for, so a redirected image is saved under
+ * that path too.
+ */
+export function aliasPaths(urls, origin, status, contentType) {
+  const out = new Set();
+  for (const url of urls) {
+    const p = capturableImage(url, origin, status, contentType);
+    if (p) out.add(p);
+  }
+  return [...out].sort();
+}
+
+/** The asset paths in [existing] that [kept] doesn't hold: files a full refresh found nothing drawing or fetching. */
+export function staleAssets(existing, kept) {
+  const keep = new Set(kept);
+  return [...existing].filter((p) => !keep.has(p)).sort();
+}
