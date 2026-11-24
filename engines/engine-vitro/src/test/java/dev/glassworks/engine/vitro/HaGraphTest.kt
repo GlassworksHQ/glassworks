@@ -191,4 +191,27 @@ class HaGraphTest {
         assertNull(StatisticsGraphCardView.rowTime("soon"))
         assertNull(StatisticsGraphCardView.rowTime(null))
     }
+
+    @Test
+    fun tinyIntervalsStopWhenTicksStopMoving() {
+        val scale = ECharts.valueScale(1e-23, 2e-23, null, null, 0.02)
+        assertTrue(scale.ticks.size < 100)
+        assertEquals(scale.ticks, scale.ticks.distinct())
+    }
+
+    @Test
+    fun aChartDescribesItsText() {
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val chart = dev.glassworks.engine.vitro.cards.ChartView(activity, 1f)
+        chart.heightCss = 60f
+        chart.setScene { _ ->
+            dev.glassworks.engine.vitro.cards.ChartScene().apply {
+                text(dev.glassworks.engine.vitro.cards.ChartScene.Text("Occupancy", 0f, 10f, android.graphics.Paint.Align.RIGHT, 0, false))
+                text(dev.glassworks.engine.vitro.cards.ChartScene.Text("12:00 PM", 50f, 40f, android.graphics.Paint.Align.CENTER, 0, false))
+            }
+        }
+        chart.measure(android.view.View.MeasureSpec.makeMeasureSpec(300, android.view.View.MeasureSpec.EXACTLY), android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED))
+        chart.layout(0, 0, 300, chart.measuredHeight)
+        assertEquals("Occupancy, 12:00 PM", chart.contentDescription.toString())
+    }
 }

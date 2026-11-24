@@ -105,7 +105,10 @@ object ECharts {
         if (t > lo) ticks += lo
         while (t <= hi + interval * 1e-9 && ticks.size < 100) {
             ticks += t
-            t = roundTo(t + interval, p)
+            val next = roundTo(t + interval, p)
+            // IntervalScale stops when rounding no longer moves the tick (an interval below what 20 places hold).
+            if (next <= t) break
+            t = next
         }
         if (ticks.last() < hi) ticks += hi
         return ValueScale(lo, hi, ticks)
@@ -447,7 +450,27 @@ class ChartView(context: Context, private val density: Float) : View(context) {
     fun setScene(builder: (widthCss: Float) -> ChartScene) {
         build = builder
         builtWidth = -1
+        ensureScene()
         invalidate()
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        ensureScene()
+    }
+
+    /**
+     * Builds the scene for the current width, once per data or size change, and describes its text (axis names and
+     * labels, timeline rows and state labels) as the view's content description: what HA's chart shows as text, for
+     * TalkBack and the parity harness, since none of it is a TextView.
+     */
+    private fun ensureScene() {
+        val b = build ?: return
+        if (width <= 0 || builtWidth == width) return
+        val sc = b(width / density)
+        scene = sc
+        builtWidth = width
+        contentDescription = sc.texts.joinToString(", ") { it.text }.takeIf { it.isNotEmpty() }
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -455,11 +478,7 @@ class ChartView(context: Context, private val density: Float) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        val b = build ?: return
-        if (builtWidth != width) {
-            scene = b(width / density)
-            builtWidth = width
-        }
+        ensureScene()
         val s = scene ?: return
         canvas.save()
         canvas.scale(density, density)
