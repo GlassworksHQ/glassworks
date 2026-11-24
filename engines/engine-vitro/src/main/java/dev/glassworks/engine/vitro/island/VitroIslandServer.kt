@@ -110,6 +110,8 @@ class VitroIslandServer(
         }
         if (path.startsWith("/__vitro/icon/")) {
             val iconName = path.removePrefix("/__vitro/icon/")
+            // A worker thread may wait for the catalog: a stand-in glyph here would be cached by the page for a day.
+            MdiIcons.catalogSize()
             val d = MdiIcons.pathDataFor(iconName)
             val svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="$d"/></svg>"""
             return HttpResponse(200, mapOf("Content-Type" to "image/svg+xml; charset=utf-8", "Cache-Control" to "max-age=86400"), svg.toByteArray(Charsets.UTF_8))

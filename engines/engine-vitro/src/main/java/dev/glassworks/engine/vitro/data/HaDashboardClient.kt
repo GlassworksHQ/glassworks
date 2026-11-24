@@ -16,6 +16,7 @@ import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -364,6 +365,10 @@ class HaDashboardClient(
             orphaned = pending.entries.map { it.key to it.value }
             pending.clear()
             subscriptions.clear()
+            // The next connection asks for its display data afresh; a request lost here never decrements.
+            displayRequested.clear()
+            displayPending.set(0)
+            displayChanged.set(false)
         }
         for ((id, cb) in orphaned) {
             runCatching {
@@ -387,7 +392,52 @@ class HaDashboardClient(
         start()
     }
 
+    /** Domains and platforms whose display data (icons, state labels) has been asked for on this connection. */
+    // newSetFromMap, not ConcurrentHashMap.newKeySet: KeySetView is API 24, and the Mirror runs Android 6.
+    private val displayRequested: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    private val displayPending = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /** Some display data arrived since the last re-render; without it (all refused) there is nothing to redraw. */
+    private val displayChanged = AtomicBoolean(false)
+
+    /**
+     * Asks HA for the icon and state translations the [entityIds] need (their domains, and the integrations of the
+     * ones with a translation key), the way HA's frontend loads them, and re-renders once they've all arrived.
+     */
+    private fun loadDisplayFor(entityIds: Collection<String>) {
+        val (domains, platforms) = HaDisplay.missingFor(entityIds)
+        val newDomains = domains.filter { displayRequested.add("d:$it") }
+        val newPlatforms = platforms.filter { displayRequested.add("p:$it") }
+        fun ask(type: String, category: String, names: List<String>, apply: (JSONObject) -> Unit) {
+            if (names.isEmpty()) return
+            val msg = JSONObject().put("type", type).put("category", category).put("integration", JSONArray(names))
+            if (type == "frontend/get_translations") msg.put("language", "en")
+            displayPending.incrementAndGet()
+            request(msg) { res ->
+                if (res.optBoolean("success", false)) {
+                    res.optJSONObject("result")?.let {
+                        apply(it)
+                        displayChanged.set(true)
+                    }
+                }
+                // Re-render once all of them are in, and only when something display-related changed: a second
+                // notification for nothing would look like a state change to every listener.
+                if (displayPending.decrementAndGet() == 0 && displayChanged.getAndSet(false)) store.renotifyAll()
+            }
+        }
+        ask("frontend/get_icons", "entity_component", newDomains) { HaDisplay.applyIcons(it, true, newDomains) }
+        ask("frontend/get_translations", "entity_component", newDomains) { HaDisplay.applyTranslations(it, true, newDomains) }
+        ask("frontend/get_icons", "entity", newPlatforms) { HaDisplay.applyIcons(it, false, newPlatforms) }
+        ask("frontend/get_translations", "entity", newPlatforms) { HaDisplay.applyTranslations(it, false, newPlatforms) }
+    }
+
+    private fun displayIds(): Collection<String> = activeEntityFilter.ifEmpty { store.all().keys }
+
     private fun onAuthenticated() {
+        displayRequested.clear()
+        displayPending.set(0)
+        // Icons and state labels are this Home Assistant's: a new connection loads them again.
+        HaDisplay.reset()
         // 0. HA config (unit_system, location_name, time_zone — needed by custom cards reading hass.config)
         request(JSONObject().put("type", "get_config")) { res ->
             if (res.optBoolean("success", false)) {
@@ -460,6 +510,12 @@ class HaDashboardClient(
         subscribe(JSONObject().put("type", "frontend/subscribe_user_data").put("key", "core")) { ev ->
             dispatchUserTheme(ev.optJSONObject("value"))
         }
+        // 7. Display data, after everything the first paint needs: the entity registry, then the icons and state
+        // translations for the view's entities.
+        request(JSONObject().put("type", "config/entity_registry/list_for_display")) { res ->
+            if (res.optBoolean("success", false)) res.optJSONObject("result")?.let(HaDisplay::applyRegistry)
+            loadDisplayFor(displayIds())
+        }
     }
 
     /** Reads `selectedTheme` (a theme name, or `{theme, dark}`) out of the `core` user data and tells the listener. */
@@ -483,11 +539,18 @@ class HaDashboardClient(
         if (filter.isNotEmpty()) {
             msg.put("entity_ids", JSONArray(filter.toList()))
         }
+        store.resetSnapshot()
         // The first event is the subscription's snapshot: an entity of [filter] missing from it is gone (deleted while
         // the panel was offline) and leaves the store. Later events are diffs.
         val first = AtomicBoolean(true)
         entitySubId = subscribe(msg) { ev ->
-            if (!closed.get()) store.applyCompressedEvent(ev, snapshotScope = if (first.getAndSet(false)) filter else null)
+            if (closed.get()) return@subscribe
+            val isFirst = first.getAndSet(false)
+            store.applyCompressedEvent(ev, snapshotScope = if (isFirst) filter else null)
+            if (isFirst) {
+                store.markSnapshot(filter.toSet())
+                loadDisplayFor(displayIds())
+            }
         }.takeIf { it > 0 }
     }
 

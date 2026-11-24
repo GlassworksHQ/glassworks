@@ -19,10 +19,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.IOException
-import java.net.ConnectException
 import java.net.HttpURLConnection
 import java.net.InetAddress
-import java.net.Socket
 import java.net.URL
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -337,7 +335,6 @@ class VitroIslandServerTest {
     fun stopTearsDownSocketsAndTheListener() {
         val slot = RecordingSlot()
         val (id, _) = island.registerSlot(slot)
-        val port = island.port
         val ws = WsClient.connect(wsUrl(id), readTimeoutMs = 5_000)
         try {
             ws.line()
@@ -350,12 +347,8 @@ class VitroIslandServerTest {
             assertNull("the socket is closed", after)
             assertEquals(-1, island.port)
             assertNull(island.origin)
-            try {
-                Socket(loopback, port).close()
-                throw AssertionError("nothing should listen on $port any more")
-            } catch (_: ConnectException) {
-                // Refused: the listener is gone.
-            }
+            // No request to the old port: another island server in a parallel test can be given the same ephemeral
+            // port and serve a slot with the same id and page. That the slot is cleared is checked after the restart below.
         } finally {
             ws.abort()
         }

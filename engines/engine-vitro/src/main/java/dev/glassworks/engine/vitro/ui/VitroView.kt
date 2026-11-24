@@ -594,7 +594,8 @@ class VitroView(
         } else {
             container
         }
-        val body = if (view.subview) {
+        // HA's subview back arrow is part of its toolbar, so a hidden header (the kiosk's) hides it too.
+        val body = if (view.subview && !hideHeader) {
             LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 val backRow = LinearLayout(context).apply {

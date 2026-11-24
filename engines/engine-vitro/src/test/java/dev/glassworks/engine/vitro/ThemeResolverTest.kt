@@ -558,14 +558,17 @@ class ThemeResolverTest {
     }
 
     @Test
-    fun stateActiveColorOverridesApplyToEveryDomain() {
+    fun stateActiveColorReachesOnlyDomainsHaLeavesUncolored() {
         val t = resolveWith("""{"state-light-active-color": "#ff00ff", "state-active-color": "#00ff00"}""")
         assertEquals(argb(0xFFFF00FF), t.activeColor("light")) // the domain key wins
-        assertEquals(argb(0xFF00FF00), t.activeColor("switch")) // the theme-wide key beats the built-in default
-        assertEquals(argb(0xFF00FF00), t.activeColor("fan"))
-        assertEquals(argb(0xFF00FF00), t.activeColor("cover"))
-        assertEquals(argb(0xFF00FF00), t.activeColor("climate"))
-        assertEquals(argb(0xFF00FF00), t.activeColor("binary_sensor"))
+        // HA's base theme colors these domains itself, so the theme-wide key never reaches them (measured in HA).
+        assertEquals(argb(0xFFFFC107), t.activeColor("switch"))
+        assertEquals(argb(0xFF00BCD4), t.activeColor("fan"))
+        assertEquals(argb(0xFF9C27B0), t.activeColor("cover"))
+        assertEquals(argb(0xFFFF8100), t.activeColor("climate"))
+        assertEquals(argb(0xFFFFC107), t.activeColor("binary_sensor"))
+        assertEquals(argb(0xFF03A9F4), t.activeColor("media_player"))
+        assertEquals(argb(0xFF00FF00), t.activeColor("automation")) // no base color: the theme-wide key applies
         assertEquals(argb(0xFF2196F3), t.activeColor("sensor")) // sensors and people keep their own colors
         assertEquals(argb(0xFF4CAF50), t.activeColor("person"))
     }

@@ -30,6 +30,7 @@ import android.widget.PopupMenu
 import android.widget.TextView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
+import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.ui.CardSurface
@@ -354,21 +355,48 @@ internal class BrightnessDialView(
 // alarm-panel
 // ---------------------------------------------------------------------------------------------
 
-/** Native HA `alarm-panel` card (`hui-alarm-panel-card`): state badge, arm/disarm buttons and a PIN pad. */
+/**
+ * Native HA `alarm-panel` card (`hui-alarm-panel-card`), at HA's measured sizes: a 24 px title with the state chip
+ * (32 px, the state's color, its shield icon), the arm or disarm buttons centered under it (32 px tonal pills), and
+ * when the panel takes a code, a 150 x 56 code field over a keypad of 56 px round keys 16 px apart.
+ */
 class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
-    private val titleView = extLabel(ctx, 16f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+    private val titleView = extLabel(ctx, 24f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
     }
-    private val badgeView = extLabel(ctx, 12f, 0xFFFFFFFF.toInt(), Inter.MEDIUM).apply {
-        setPadding(ctx.px(10f), ctx.px(5f), ctx.px(10f), ctx.px(5f))
+    private val chipIcon = MdiIconView(ctx.context)
+    private val chipLabel = extLabel(ctx, 12.25f, 0xFFFFFFFF.toInt(), Inter.REGULAR).apply { maxLines = 1 }
+    private val chip = LinearLayout(ctx.context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(ctx.px(8f), 0, ctx.px(16f), 0)
+        addView(chipIcon, LinearLayout.LayoutParams(ctx.px(18f), ctx.px(18f)).apply { marginEnd = ctx.px(8f) })
+        addView(chipLabel)
     }
-    private val actionsRow = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
-    private val codeView = extLabel(ctx, 20f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
-        gravity = Gravity.CENTER
-        letterSpacing = 0.3f
+    private val actionsRow = LinearLayout(ctx.context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_HORIZONTAL
     }
-    private val keypad = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+    private val codeLabel = extLabel(ctx, 14f, ctx.theme.secondaryTextColor).apply { text = "Code" }
+    private val codeView = extLabel(ctx, 14f, ctx.theme.primaryTextColor).apply { maxLines = 1 }
+    private val codeField = FrameLayout(ctx.context).apply {
+        // ha-input: a filled field, 4 px top corners, a 1 px indicator line along the bottom.
+        background = android.graphics.drawable.LayerDrawable(arrayOf(
+            GradientDrawable().apply {
+                cornerRadii = floatArrayOf(4f * ctx.dp, 4f * ctx.dp, 4f * ctx.dp, 4f * ctx.dp, 0f, 0f, 0f, 0f)
+                setColor(if (ctx.theme.dark) 0xFF363636.toInt() else 0xFFF5F5F5.toInt())
+            },
+            GradientDrawable().apply { setColor(if (ctx.theme.dark) 0xFFB1B1B1.toInt() else 0xFF6B6B6B.toInt()) },
+        )).apply { setLayerInsetTop(1, ctx.px(55f)) }
+        setPadding(ctx.px(16f), 0, ctx.px(16f), 0)
+        addView(codeLabel, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
+        addView(codeView, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM).apply { bottomMargin = ctx.px(10f) })
+    }
+    private val keypad = LinearLayout(ctx.context).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(ctx.px(12f), ctx.px(12f), ctx.px(12f), ctx.px(12f))
+    }
 
     /** HA's masked text field, for an alarm whose `code_format` is `text` (the keypad is for `number` codes). */
     private val textCode = EditText(ctx.context).apply {
@@ -383,46 +411,60 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
     private val armStates: List<String> = readStates(config.raw.optJSONArray("states"))
 
     init {
-        val pad = ctx.px(16f)
         val col = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, 0, 0, ctx.px(16f))
         }
+        // h1.card-header: 20 / 16 / 24 px around the title and the chip.
         val header = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(ctx.px(16f), ctx.px(20f), ctx.px(16f), ctx.px(24f))
             addView(titleView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            addView(badgeView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(8f) })
+            addView(chip, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(32f)).apply { marginStart = ctx.px(8f) })
         }
         col.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        col.addView(actionsRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(14f) })
-        col.addView(codeView, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(28f)).apply { topMargin = ctx.px(12f) })
-        col.addView(textCode, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(12f) })
+        col.addView(actionsRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        col.addView(codeField, LinearLayout.LayoutParams(ctx.px(150f), ctx.px(56f)).apply { topMargin = ctx.px(8f) })
+        col.addView(textCode, LinearLayout.LayoutParams(ctx.px(200f), WRAP_CONTENT).apply { topMargin = ctx.px(8f) })
         buildKeypad()
-        col.addView(keypad, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(6f) })
+        col.addView(keypad, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(8f) })
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
         val eid = config.entity
-        header.isClickable = true
-        header.setOnClickListener { eid?.let(ctx.openMoreInfo) }
+        chip.isClickable = true
+        chip.setOnClickListener { eid?.let(ctx.openMoreInfo) }
         if (eid != null) observe(eid, ::render) else render(null)
     }
 
     private fun buildKeypad() {
-        val keys = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf(KEY_CLEAR, "0", KEY_BACK))
+        // HA's keypad: 1-9, then clear and 0; the last cell stays empty.
+        val keys = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf(KEY_CLEAR, "0", ""))
         keys.forEachIndexed { rIdx, row ->
             val r = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
             row.forEachIndexed { cIdx, key ->
-                val b = extLabel(ctx, if (key.length == 1) 18f else 13f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
-                    text = key
-                    gravity = Gravity.CENTER
-                    background = pillBackground(CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.06f), 12f * ctx.dp)
-                    isClickable = true
-                    setOnClickListener { onKey(key) }
+                val b: View = when (key) {
+                    "" -> View(ctx.context)
+                    KEY_CLEAR -> FrameLayout(ctx.context).apply {
+                        addView(MdiIconView(ctx.context).apply { setIcon("mdi:close", ctx.theme.disabledTextColor) },
+                            LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
+                    }
+                    else -> extLabel(ctx, 24f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+                        text = key
+                        gravity = Gravity.CENTER
+                    }
                 }
-                r.addView(b, LinearLayout.LayoutParams(0, ctx.px(44f), 1f).apply { if (cIdx > 0) marginStart = ctx.px(8f) })
+                if (key.isNotEmpty()) {
+                    b.background = TileCardView.featureFill(ctx).apply { cornerRadius = 28f * ctx.dp }
+                    b.isClickable = true
+                    b.contentDescription = if (key == KEY_CLEAR) "Clear" else key
+                    b.setOnClickListener { onKey(key) }
+                    applyHaRipple(b, 28f * ctx.dp, ctx.theme.dark)
+                }
+                r.addView(b, LinearLayout.LayoutParams(ctx.px(56f), ctx.px(56f)).apply { if (cIdx > 0) marginStart = ctx.px(16f) })
             }
-            keypad.addView(r, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (rIdx > 0) topMargin = ctx.px(8f) })
+            keypad.addView(r, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { if (rIdx > 0) topMargin = ctx.px(16f) })
         }
     }
 
@@ -436,40 +478,52 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
     }
 
     private fun renderCode() {
-        codeView.text = "●".repeat(code.length)
+        // The label floats to the top of the field once there's a code, as the input's label does.
+        val empty = code.isEmpty()
+        codeView.text = "•".repeat(code.length)
+        codeView.visibility = if (empty) GONE else VISIBLE
+        codeLabel.textSize = if (empty) 14f else 12f
+        (codeLabel.layoutParams as FrameLayout.LayoutParams).apply {
+            gravity = if (empty) Gravity.CENTER_VERTICAL else Gravity.TOP
+            topMargin = if (empty) 0 else ctx.px(8f)
+            codeLabel.layoutParams = this
+        }
     }
 
     private fun render(s: EntityState?) {
         titleView.text = config.name ?: s?.friendlyName ?: "Alarm"
         val state = s?.state ?: "unknown"
-        badgeView.text = stateLabel(state)
-        badgeView.background = pillBackground(stateColor(state))
+        chipLabel.text = s?.let { HaDisplay.stateLabel(it) }?.takeIf { it != state } ?: stateLabel(state)
+        chipIcon.setIcon(stateIcon(state), 0xFFFFFFFF.toInt())
+        chip.background = pillBackground(stateColor(state), 16f * ctx.dp)
         val codeFormat = s?.attributes?.get("code_format")?.toString()
         val needsCode = codeFormat != null
         val textFormat = codeFormat == "text"
         keypad.visibility = if (needsCode && !textFormat) VISIBLE else GONE
-        codeView.visibility = if (needsCode && !textFormat) VISIBLE else GONE
+        codeField.visibility = if (needsCode && !textFormat) VISIBLE else GONE
         textCode.visibility = if (textFormat) VISIBLE else GONE
         renderCode()
 
         actionsRow.removeAllViews()
         val buttons = if (state == "disarmed" || s == null || s.isUnavailable) armStates else listOf("disarm")
-        buttons.forEachIndexed { idx, action ->
-            val b = extLabel(ctx, 13f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+        buttons.forEach { action ->
+            // ha-button: a 32 px tonal pill, 14 px / 500, 12 px padding (disarm in HA's danger colors).
+            val danger = action == "disarm"
+            val fg = if (danger) 0xFFF3676C.toInt() else ctx.theme.primaryColor
+            val bg = if (danger) 0xFF3E0913.toInt() else CardSurface.withAlpha(ctx.theme.primaryColor, 0.2f)
+            val b = extLabel(ctx, 14f, fg, Inter.MEDIUM).apply {
                 text = actionLabel(action)
                 gravity = Gravity.CENTER
-                setPadding(ctx.px(8f), ctx.px(10f), ctx.px(8f), ctx.px(10f))
-                background = GradientDrawable().apply {
-                    cornerRadius = 999f
-                    setColor(CardSurface.withAlpha(ctx.theme.primaryColor, 0.12f))
-                    setStroke(ctx.px(1f), CardSurface.withAlpha(ctx.theme.primaryColor, 0.5f))
-                }
+                setPadding(ctx.px(12f), 0, ctx.px(12f), 0)
+                background = pillBackground(bg)
                 setOnClickListener { run(action) }
                 // After the listener, which makes the view clickable again: an unavailable alarm takes no action.
                 isClickable = s != null && !s.isUnavailable
                 isEnabled = isClickable
             }
-            actionsRow.addView(b, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { if (idx > 0) marginStart = ctx.px(8f) })
+            actionsRow.addView(b, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(32f)).apply {
+                setMargins(ctx.px(4f), ctx.px(4f), ctx.px(4f), ctx.px(4f))
+            })
         }
     }
 
@@ -524,15 +578,26 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
             else -> state.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
         }
 
-        fun stateColor(state: String): Int = when (state) {
-            "disarmed" -> 0xFF4CAF50.toInt()
-            "armed_home" -> 0xFF2196F3.toInt()
-            "armed_away" -> 0xFFFFA000.toInt()
-            "armed_night" -> 0xFF3F51B5.toInt()
-            "armed_vacation", "armed_custom_bypass" -> 0xFF2196F3.toInt()
-            "pending", "arming", "disarming" -> 0xFFFF9800.toInt()
-            "triggered" -> 0xFFF44336.toInt()
+        /** HA's `--state-alarm_control_panel-*-color`: armed green, changing orange, triggered red, else inactive. */
+        fun stateColor(state: String): Int = when {
+            state.startsWith("armed") -> 0xFF4CAF50.toInt()
+            state == "pending" || state == "arming" || state == "disarming" -> 0xFFFF9800.toInt()
+            state == "triggered" -> 0xFFF44336.toInt()
             else -> 0xFF9E9E9E.toInt()
+        }
+
+        /** HA's alarm_control_panel state icons. */
+        fun stateIcon(state: String): String = when (state) {
+            "armed_home" -> "mdi:shield-home"
+            "armed_away" -> "mdi:shield-lock"
+            "armed_night" -> "mdi:shield-moon"
+            "armed_vacation" -> "mdi:shield-airplane"
+            "armed_custom_bypass" -> "mdi:security"
+            "pending", "arming" -> "mdi:shield-sync"
+            "disarming" -> "mdi:shield-sync"
+            "triggered" -> "mdi:bell-ring"
+            "disarmed" -> "mdi:shield-off"
+            else -> "mdi:shield"
         }
     }
 }

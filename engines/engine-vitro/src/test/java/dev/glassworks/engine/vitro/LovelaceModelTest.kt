@@ -668,7 +668,9 @@ class LovelaceModelTest {
         assertEquals("alarm_disarm", AlarmPanelCardView.serviceFor("disarm"))
         assertEquals("Armed home", AlarmPanelCardView.stateLabel("armed_home"))
         assertEquals(0xFFF44336.toInt(), AlarmPanelCardView.stateColor("triggered"))
-        assertEquals(0xFF4CAF50.toInt(), AlarmPanelCardView.stateColor("disarmed"))
+        // HA: armed states are green, disarmed falls back to --state-inactive-color.
+        assertEquals(0xFF4CAF50.toInt(), AlarmPanelCardView.stateColor("armed_night"))
+        assertEquals(0xFF9E9E9E.toInt(), AlarmPanelCardView.stateColor("disarmed"))
     }
 
     @Test
