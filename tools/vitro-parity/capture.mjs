@@ -479,7 +479,9 @@ async function settle(page, expectType, timeoutMs) {
   await page.waitForTimeout(800);
   let prev = null;
   for (let i = 0; i < 8; i++) {
-    const shot = await page.screenshot({ fullPage: true });
+    // CSS animations, transitions and Web Animations stopped at their end state, so a card that animates despite
+    // reduced motion doesn't leave an arbitrary frame (timers and requestAnimationFrame still run).
+    const shot = await page.screenshot({ fullPage: true, animations: 'disabled' });
     if (prev && shot.equals(prev)) return { info: await page.evaluate(SLOTS_JS), stable: true };
     prev = shot;
     await page.waitForTimeout(400);
@@ -560,7 +562,13 @@ async function capture() {
   };
   const sharedText = scrubText(JSON.stringify(shared, null, 1), creds);
   if (committed) checkDenylist(sharedText, 'refs/shared.json');
-  writeFileSync(join(refs, 'shared.json'), sharedText + '\n');
+  // Every reference is drawn with these inputs (themes, config): a partial refresh can't change them under the
+  // references it leaves alone. Written only after the whole capture succeeds.
+  const sharedFile = join(refs, 'shared.json');
+  const partial = Boolean(args.cases || args.frames);
+  if (partial && existsSync(sharedFile) && readFileSync(sharedFile, 'utf8') !== sharedText + '\n') {
+    fail('HA\'s shared inputs (version, config or themes) changed since the references were taken: run a full --refresh, without --cases or --frames');
+  }
 
   const browser = await launch();
   const now = pinnedNow(haConfig.time_zone);
@@ -606,7 +614,7 @@ async function capture() {
             // states): saved for Vitro's fixture server after the checks.
             drawn = await page.evaluate(DRAWN_IMAGES_JS, slots);
             // Kept in memory until every check passes: a failed case leaves no PNG behind.
-            png = await page.screenshot({ clip, fullPage: true });
+            png = await page.screenshot({ clip, fullPage: true, animations: 'disabled' });
             texts = [];
             for (const [i, s] of slots.entries()) for (const t of await page.evaluate(TEXTS_JS, s)) texts.push({ slot: i, ...roundRect(t) });
             // The templates Vitro asks for, rendered now.
@@ -687,6 +695,7 @@ async function capture() {
   await browser.close();
   ha.close();
   if (failures) fail(`${failures} capture(s) failed`);
+  writeFileSync(sharedFile, sharedText + '\n');
   // Only a full refresh that captured everything knows what no reference uses anymore: an image HA stopped loading
   // or drawing must not stay in assets/, where the fixture server would keep handing it to Vitro.
   if (!args.cases && !args.frames) {

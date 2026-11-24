@@ -11,6 +11,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -329,7 +330,6 @@ class ParityHarnessSelfTest {
         val ipv4 = Regex("""\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b""")
         val mac = Regex("""\b[0-9a-fA-F]{2}([:-])[0-9a-fA-F]{2}(\1[0-9a-fA-F]{2}){4}\b""")
         val jwt = Regex("""eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}""")
-        val tokenParam = Regex("""[?&](token|access_token|authSig)=(?!redacted)""")
         val privateKeys = Regex("""\"(ip_address|mac_address|serial_number|latitude|longitude|access_token|ssid|bssid|source_list|sound_mode_list|media_playlist|media_title|media_artist)\"\s*:""")
         val problems = ArrayList<String>()
         for (f in files) {
@@ -344,11 +344,45 @@ class ParityHarnessSelfTest {
             if (Regex("""\b[0-9a-f]{32}\b""").containsMatchIn(text)) problems += "$rel: an HA registry id"
             // The end of a MAC in a device name or hostname; a CSS colour (#34d399) is fine.
             if (MAC_FRAGMENT.containsMatchIn(text)) problems += "$rel: a MAC fragment"
-            if (tokenParam.containsMatchIn(text)) problems += "$rel: a token parameter"
+            if (FixtureScan.tokenParameter(text)) problems += "$rel: a token parameter"
             privateKeys.find(text)?.let { problems += "$rel: a private attribute (${it.groupValues[1]})" }
-            if (Regex("""https?://(?!127\.0\.0\.1|homeassistant\.local)[a-z0-9.-]+[:/]""").containsMatchIn(text)) problems += "$rel: an absolute URL to a host"
+            if (FixtureScan.externalHost(text)) problems += "$rel: an absolute URL to a host"
         }
         assertTrue(problems.joinToString("\n"), problems.isEmpty())
+    }
+
+    @Test
+    fun downsamplingWeighsEachPixelByItsOverlap() {
+        // 1.5x: three columns (black, white, black) are two CSS samples, each a third white: 85, not 127.
+        val b = Bitmap.createBitmap(3, 1, Bitmap.Config.ARGB_8888)
+        b.setPixel(0, 0, Color.BLACK); b.setPixel(1, 0, Color.WHITE); b.setPixel(2, 0, Color.BLACK)
+        val s = ParityDiff.downsample(b, 2, 1)
+        assertEquals(85, Color.red(s[0]))
+        assertEquals(85, Color.red(s[1]))
+        // 1x: every pixel is its own sample.
+        assertEquals(listOf(0, 255, 0), ParityDiff.downsample(b, 3, 1).map { Color.red(it) })
+    }
+
+    @Test
+    fun aMaskedNeighborDoesntExcuseADifference() {
+        // One unmasked pixel differs; its masked neighbor happens to hold the other image's colour.
+        val ha = Bitmap.createBitmap(2, 1, Bitmap.Config.ARGB_8888).apply { setPixel(0, 0, Color.WHITE); setPixel(1, 0, Color.BLACK) }
+        val vitro = Bitmap.createBitmap(2, 1, Bitmap.Config.ARGB_8888).apply { setPixel(0, 0, Color.BLACK); setPixel(1, 0, Color.WHITE) }
+        val d = ParityDiff.compare(ha, vitro, 2, 1, listOf(android.graphics.Rect(1, 0, 2, 1)))
+        assertEquals(1.0, d.tolerant, 0.0)
+    }
+
+    @Test
+    fun theFixtureScanReadsWholeValuesAndWholeHostnames() {
+        // Only the exact placeholder passes; one that merely starts with it is a value.
+        assertFalse(FixtureScan.tokenParameter("/api/camera_proxy/camera.a?token=redacted&x=1"))
+        assertTrue(FixtureScan.tokenParameter("/api/camera_proxy/camera.a?token=redactedExtra"))
+        assertTrue(FixtureScan.tokenParameter("?authSig=abc"))
+        // The whole hostname: a longer name that starts with an allowed one is another host, and a bare origin at the
+        // end of a JSON string counts.
+        assertFalse(FixtureScan.externalHost("""{"u": "http://homeassistant.local:8123/x", "v": "http://127.0.0.1/y"}"""))
+        assertTrue(FixtureScan.externalHost("""{"u": "http://homeassistant.local.example.test/x"}"""))
+        assertTrue(FixtureScan.externalHost("""{"u": "https://example.test"}"""))
     }
 
     @Test
@@ -364,4 +398,18 @@ class ParityHarnessSelfTest {
         assertTrue(File(root, "refs/shared.json").isFile)
         assertTrue(JSONObject(File(root, "refs/shared.json").readText()).has("themes"))
     }
+}
+
+/** The committed-fixture checks for a token parameter and an absolute URL to another host. */
+internal object FixtureScan {
+    private val TOKEN_PARAM = Regex("""[?&](token|access_token|authSig)=([^&"'\s#]*)""")
+    private val URL_HOST = Regex("""https?://([A-Za-z0-9.-]+)""")
+    private val ALLOWED_HOSTS = setOf("127.0.0.1", "homeassistant.local")
+
+    /** A token parameter with any value but exactly `redacted`. */
+    fun tokenParameter(text: String): Boolean = TOKEN_PARAM.findAll(text).any { it.groupValues[2] != "redacted" }
+
+    /** An absolute URL whose whole hostname isn't one the fixtures may name. */
+    fun externalHost(text: String): Boolean =
+        URL_HOST.findAll(text).any { it.groupValues[1].lowercase().trimEnd('.') !in ALLOWED_HOSTS }
 }

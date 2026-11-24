@@ -87,11 +87,20 @@ function denylist() {
   return readFileSync(p, 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
 }
 
+/**
+ * A whole-word, any-case matcher for a denylisted [word]. Unicode-aware: JavaScript's `\b` only knows ASCII word
+ * characters, so `José` would never match `José is home` with it (the guard would fail open). Not inside a longer
+ * word either way: `Max` doesn't match in `Maxwell`.
+ */
+export function denyPattern(word) {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, 'iu');
+}
+
 /** Fails when [text] contains a denied word (whole word, any case): the file is not written. */
 export function checkDenylist(text, what) {
   for (const w of denylist()) {
-    const re = new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-    if (re.test(text)) throw new Error(`${what} would contain a denied word (from the denylist): not written`);
+    if (denyPattern(w).test(text)) throw new Error(`${what} would contain a denied word (from the denylist): not written`);
   }
 }
 
@@ -110,7 +119,7 @@ export function findPrivate(text, creds) {
   if (new RegExp(JWT.source).test(s) || new RegExp(TOKEN_PARAM.source).test(s)) found.push('a token');
   if (creds && (s.includes(creds.token) || s.includes(creds.origin) || s.includes(new URL(creds.origin).host))) found.push("Home Assistant's address or token");
   for (const w of denylist()) {
-    if (new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(s)) { found.push('a denylisted word'); break; }
+    if (denyPattern(w).test(s)) { found.push('a denylisted word'); break; }
   }
   return found;
 }

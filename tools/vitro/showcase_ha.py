@@ -1066,12 +1066,20 @@ FILTERS = {
     "float": lambda v, d=0.0: _num(v, d), "int": lambda v, d=0: int(_num(v, d)), "round": _jinja_round, "abs": lambda v: abs(_num(v)),
     "upper": lambda v: str(v).upper(), "lower": lambda v: str(v).lower(), "title": lambda v: str(v).title(),
     "capitalize": lambda v: str(v).capitalize(), "string": str, "length": len, "count": len, "bool": lambda v: str(v).lower() in ("1", "true", "yes", "on"),
-    "default": lambda v, d="": d if v is None or v == "" else v, "replace": lambda v, a, b: str(v).replace(a, b),
+    "default": lambda v, d="": d if v is None or v == "" else v, "replace": lambda v, a, b: _bounded_replace(str(v), str(a), str(b)),
     "trim": lambda v: str(v).strip(),
 }
 
 
 MAX_TEMPLATE_OUTPUT = 64 * 1024
+
+
+def _bounded_replace(s, a, b):
+    """str.replace, refused before it allocates past MAX_TEMPLATE_OUTPUT (`'x' * 60000 | replace('x', 'yyyy')`)."""
+    n = len(s) + 1 if a == "" else s.count(a)
+    if len(s) + n * (len(b) - len(a)) > MAX_TEMPLATE_OUTPUT:
+        raise TemplateError("result too large")
+    return s.replace(a, b)
 _DATE_FIELDS = {"year", "month", "day", "hour", "minute", "second", "microsecond", "tzinfo"}
 
 
@@ -1171,6 +1179,10 @@ class _Eval:
             op = self.take()[1]
             r = self.mul()
             if not self.dry:
+                if op == "~" or (op == "+" and isinstance(v, (str, list)) and isinstance(r, (str, list))):
+                    # Concatenation: charged against the same budget as repetition, before it allocates.
+                    if len(str(v) if op == "~" else v) + len(str(r) if op == "~" else r) > MAX_TEMPLATE_OUTPUT:
+                        raise TemplateError("result too large")
                 v = str(v) + str(r) if op == "~" else v + r if op == "+" else v - r
         return v
 
@@ -1347,18 +1359,24 @@ def render_template(hub, template):
 
     def run(nodes):
         out = []
+        size = 0
         for n in nodes:
             if n[0] == "text":
-                out.append(n[1])
+                part = n[1]
             elif n[0] == "expr":
-                out.append(_show(_Eval(n[1], hub).run()))
+                part = _show(_Eval(n[1], hub).run())
             else:
                 for cond, body in n[1]:
                     if _Eval(cond, hub).run():
-                        out.append(run(body))
+                        part = run(body)
                         break
                 else:
-                    out.append(run(n[2]))
+                    part = run(n[2])
+            # The output as a whole stays in the budget too, not only each operation.
+            size += len(part)
+            if size > MAX_TEMPLATE_OUTPUT:
+                raise TemplateError("result too large")
+            out.append(part)
         return "".join(out)
     text = run(tree).strip()
     for m in re.finditer(r"""['"]((?:[a-z_]+)\.(?:[a-z0-9_]+))['"]""", template):
@@ -1750,23 +1768,31 @@ class Hub:
                     raise ServiceError(f"entity {eid} not found")
                 if domain not in ("todo", "homeassistant") and domain_of(eid) != domain:
                     raise ServiceError(f"{eid} is not a {domain} entity")
-            for eid in entity_ids:
-                if eid not in self.states:
-                    raise ServiceError(f"entity {eid} not found")
-                if domain == "todo":
-                    response = self._todo_service(eid, service, data, response)
-                    todo_touched.add(eid)
-                    continue
-                edomain = domain_of(eid)
-                if domain != "homeassistant" and edomain != domain:
-                    raise ServiceError(f"{eid} is not a {domain} entity")
-                try:
-                    state, attrs = self.dispatch(domain if domain != "homeassistant" else "homeassistant", service, eid, data)
-                except KeyError as e:
-                    raise ServiceError(f"missing {e}")
-                ch = self._apply(eid, state, attrs, now)
-                if ch:
-                    self._pending.append(ch)
+            # A target can still fail once dispatched (`homeassistant.turn_off` on a cover, a missing field): the
+            # call then changes nothing at all, so no earlier target is left changed but unannounced.
+            saved = (copy.deepcopy(self.states), copy.deepcopy(self.todos), self.todo_n)
+            try:
+                for eid in entity_ids:
+                    if domain == "todo":
+                        response = self._todo_service(eid, service, data, response)
+                        todo_touched.add(eid)
+                        continue
+                    try:
+                        state, attrs = self.dispatch(domain if domain != "homeassistant" else "homeassistant", service, eid, data)
+                    except KeyError as e:
+                        raise ServiceError(f"missing {e}")
+                    ch = self._apply(eid, state, attrs, now)
+                    if ch:
+                        self._pending.append(ch)
+            except BaseException:
+                # In place: anything holding the dicts keeps seeing the hub's own.
+                self.states.clear()
+                self.states.update(saved[0])
+                self.todos.clear()
+                self.todos.update(saved[1])
+                self.todo_n = saved[2]
+                self._pending = []
+                raise
             for eid in todo_touched:
                 open_items = sum(i["status"] == "needs_action" for i in self.todos[eid])
                 ch = self._apply(eid, str(open_items), None, now)
@@ -1774,11 +1800,14 @@ class Hub:
                     self._pending.append(ch)
             changes, self._pending = self._pending, []
             conns = list(self.conns)
+            # Templates and conditions rendered now, from this commit's state: a later commit before the announce
+            # must not make them report its state instead (and skip this one's).
+            rendered = {c: c.render_subs() for c in conns}
             # Taken before the hub lock goes: batches go out in the order they were committed.
             self.publish_lock.acquire()
         try:
             for c in conns:
-                c.changed(changes, todo_touched)
+                c.changed(changes, todo_touched, rendered[c])
         finally:
             self.publish_lock.release()
         return response
@@ -1841,6 +1870,10 @@ class Hub:
 
 # ---- the websocket API
 
+# A subscription made after the commit's render: rendered when it's announced instead.
+_LIVE = object()
+
+
 class Conn:
     def __init__(self, hub, sock):
         self.hub, self.sock, self.send_lock = hub, sock, threading.Lock()
@@ -1867,8 +1900,25 @@ class Conn:
     def event(self, mid, ev):
         self.send({"id": mid, "type": "event", "event": ev})
 
-    def changed(self, changes, todo_touched):
-        """What a service call changed: compressed diffs, state_changed events, templates and todo lists."""
+    def render_subs(self):
+        """Each template and condition subscription's result now (under the hub lock: one commit's state)."""
+        out = {}
+        for mid, sub in list(self.template_subs.items()):
+            try:
+                out[("t", mid)] = render_template(self.hub, sub[0])
+            except Exception as e:     # reported by push_template, never to the service caller
+                out[("t", mid)] = e
+        for mid, sub in list(self.cond_subs.items()):
+            try:
+                out[("c", mid)] = eval_condition(self.hub, sub[0])
+            except Exception as e:
+                out[("c", mid)] = e
+        return out
+
+    def changed(self, changes, todo_touched, rendered=None):
+        """What a service call changed: compressed diffs, state_changed events, templates and todo lists. [rendered]:
+        the templates' and conditions' results at the commit (render_subs); without it they're rendered now."""
+        rendered = rendered or {}
         try:
             for mid, wanted in list(self.entity_subs.items()):
                 diff = {c["entity_id"]: c["diff"] for c in changes if wanted is None or c["entity_id"] in wanted}
@@ -1881,18 +1931,23 @@ class Conn:
                                          "context": c["new"]["context"],
                                          "data": {"entity_id": c["entity_id"], "old_state": c["old"], "new_state": c["new"]}})
             for mid, sub in list(self.template_subs.items()):
-                self.push_template(mid, sub)
+                self.push_template(mid, sub, at=rendered.get(("t", mid), _LIVE))
             for mid, sub in list(self.cond_subs.items()):
-                self.push_condition(mid, sub)
+                self.push_condition(mid, sub, at=rendered.get(("c", mid), _LIVE))
             for mid, eid in list(self.todo_subs.items()):
                 if eid in todo_touched:
                     self.event(mid, {"items": self.hub.todos[eid]})
         except OSError:
             pass
 
-    def push_template(self, mid, sub, first=False):
+    def push_template(self, mid, sub, first=False, at=None):
         try:
-            text, seen = render_template(self.hub, sub[0])
+            if at is None or at is _LIVE:
+                text, seen = render_template(self.hub, sub[0])
+            elif isinstance(at, Exception):
+                raise at
+            else:
+                text, seen = at
         except Exception as e:     # any failure is this subscription's alone, never the service caller's
             if not isinstance(e, TemplateError):
                 e = TemplateError(repr(e))
@@ -1903,9 +1958,14 @@ class Conn:
             sub[1] = text
             self.event(mid, {"result": parse_result(text), "listeners": {"all": False, "domains": [], "entities": seen, "time": False}})
 
-    def push_condition(self, mid, sub, first=False):
+    def push_condition(self, mid, sub, first=False, at=None):
         try:
-            ok = eval_condition(self.hub, sub[0])
+            if at is None or at is _LIVE:
+                ok = eval_condition(self.hub, sub[0])
+            elif isinstance(at, Exception):
+                raise at
+            else:
+                ok = at
         except Exception as e:     # any failure is this subscription's alone
             if not isinstance(e, TemplateError):
                 e = TemplateError(repr(e))

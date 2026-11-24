@@ -27,15 +27,22 @@ sys.path.insert(0, os.path.join(HERE, "..", "perf"))
 
 import hafrontend  # noqa: E402
 
-_stub = None
-if not os.environ.get("GW_PERF_FRONTEND") and not os.path.exists(os.path.join(hafrontend.CACHE, f"hass_frontend-{hafrontend.VERSION}", ".unpacked")):
-    _stub = tempfile.TemporaryDirectory()
-    with open(os.path.join(_stub.name, "index.html"), "w") as f:
-        f.write("<html><head><title>stub frontend</title></head><body>stub</body></html>")
-    os.environ["GW_PERF_FRONTEND"] = _stub.name
-
 import showcase_ha as S  # noqa: E402
 from fakeha import ws_frame, ws_read  # noqa: E402
+
+
+def setUpModule():
+    """Offline, a stub frontend stands in for HA's (read when the server starts). The override and the stub go when
+    the module's tests end, setup failures included, so a later test in the process never sees a deleted folder."""
+    if os.environ.get("GW_PERF_FRONTEND") or os.path.exists(os.path.join(hafrontend.CACHE, f"hass_frontend-{hafrontend.VERSION}", ".unpacked")):
+        return
+    stub = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(stub.cleanup)
+    prior = os.environ.get("GW_PERF_FRONTEND")
+    unittest.addModuleCleanup(lambda: os.environ.__setitem__("GW_PERF_FRONTEND", prior) if prior is not None else os.environ.pop("GW_PERF_FRONTEND", None))
+    with open(os.path.join(stub.name, "index.html"), "w") as f:
+        f.write("<html><head><title>stub frontend</title></head><body>stub</body></html>")
+    os.environ["GW_PERF_FRONTEND"] = stub.name
 
 
 def _iso_z(t):
@@ -127,8 +134,6 @@ class ShowcaseTest(unittest.TestCase):
         cls.hub.close_all()
         cls.srv.shutdown()
         cls.srv.server_close()
-        if _stub:
-            _stub.cleanup()
 
     def setUp(self):
         self.ws = WS(self.port)
@@ -860,3 +865,25 @@ class SynthDataTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HubTest(unittest.TestCase):
+    """The hub without a server: a service batch that fails midway, and the template output budget."""
+
+    def test_a_target_that_fails_after_dispatch_leaves_no_earlier_change(self):
+        hub = S.Hub()
+        self.assertEqual(hub.states["light.desk_lamp"]["state"], "on")
+        with self.assertRaises(S.ServiceError):
+            # The blind has no turn_off: the lamp, dispatched first, must not stay off unannounced.
+            hub.call_service("homeassistant", "turn_off", {}, ["light.desk_lamp", "cover.studio_blind"])
+        self.assertEqual(hub.states["light.desk_lamp"]["state"], "on")
+        hub.call_service("homeassistant", "turn_off", {}, ["light.desk_lamp"])
+        self.assertEqual(hub.states["light.desk_lamp"]["state"], "off")
+
+    def test_concatenation_replace_and_the_whole_output_share_the_budget(self):
+        hub = S.Hub()
+        for tpl in ("{{ 'x' * 60000 ~ 'x' * 60000 }}", "{{ ('x' * 60000) | replace('x', 'yy') }}",
+                    "{{ 'x' * 40000 }}{{ 'y' * 40000 }}"):
+            with self.assertRaises(S.TemplateError, msg=tpl):
+                S.render_template(hub, tpl)
+        self.assertEqual(S.render_template(hub, "{{ 'ab' ~ 'cd' | replace('c', 'C') }}")[0], "abCd")
