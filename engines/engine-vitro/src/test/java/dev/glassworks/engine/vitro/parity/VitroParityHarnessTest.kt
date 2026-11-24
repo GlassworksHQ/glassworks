@@ -60,11 +60,16 @@ class VitroParityHarnessTest {
         val results = ArrayList<ParityResult>()
 
         var haVersion = "?"
+        // Baselines to write, staged until every selected corpus has run: one written before another corpus fails
+        // (an error, a missing reference) would accept its drift without the full run passing.
+        val staged = ArrayList<Pair<ParityBaseline, List<ParityResult>>>()
         try {
             Locale.setDefault(Locale.US)
             for ((label, root) in roots) {
                 val shared = ParityShared.load(root)
                 shared?.let { haVersion = it.haVersion }
+                // Each corpus starts from the harness's own zone: one without a zone doesn't inherit the last one's.
+                TimeZone.setDefault(tz)
                 shared?.haConfig?.optString("time_zone")?.takeIf { it.isNotBlank() }?.let { TimeZone.setDefault(TimeZone.getTimeZone(it)) }
                 val cases = ParityCase.loadAll(root).filter { ParityFiles.onlyCases == null || it.id in ParityFiles.onlyCases!! }
                 val baseline = ParityBaseline(File(root, "baseline.json"))
@@ -86,13 +91,16 @@ class VitroParityHarnessTest {
                     activity.setContentView(View(activity))
                 }
                 if (ParityFiles.collect) writeWanted(label, wanted)
-                if (ParityFiles.updateBaseline && !ParityFiles.collect) baseline.write(mine)
+                if (ParityFiles.updateBaseline && !ParityFiles.collect) staged += baseline to mine
                 results += mine
             }
         } finally {
             TimeZone.setDefault(tz)
             Locale.setDefault(locale)
         }
+        // Cases and frames that pass the ID checks can still pair up to nothing (a case only for s1, run on tablet).
+        if (results.isEmpty()) fail("Vitro parity: the selected cases and frames give no runs (a case runs only on the frames it lists)")
+        if (staged.isNotEmpty() && fatalResults(results, acceptDrift = true).isEmpty()) staged.forEach { (b, r) -> b.write(r) }
         if (!ParityFiles.collect) ParityReportWriter.write(outDir, results, haVersion)
         println("Vitro parity: ${results.count { it.status == ParityStatus.MATCH }} match, " +
             "${results.count { it.status == ParityStatus.DRIFT }} known drift, ${fatalResults(results, false).size} failing; report: ${File(outDir, "index.html")}")
@@ -114,15 +122,22 @@ class VitroParityHarnessTest {
         outDir: File,
         wanted: MutableMap<String, LinkedHashSet<String>>,
     ): ParityResult {
-        val ref = ParityReference.find(root, frame, case)
         return try {
+            // Inside the try: unreadable reference metadata is this case's error, not the end of the run.
+            val ref = ParityReference.find(root, frame, case)
             val render = renderer.render(case, ref)
             wanted.getOrPut(case.id) { LinkedHashSet() }.addAll(render.templatesAsked)
             val notes = ArrayList<String>()
-            if (render.templatesMissing.isNotEmpty() && ref != null) notes += "${render.templatesMissing.size} template(s) Vitro asked for have no rendered result in the reference (recapture)"
             if (ref != null && !ref.stable) notes += "HA's render was still moving when captured"
+            // Collect mode is how templates are found without a reference: they're only checked after it.
             if (ParityFiles.collect) return ParityResult(label, frame, case, ParityStatus.COLLECTED, null, emptyList(), notes, null)
             if (ref == null) return ParityResult(label, frame, case, ParityStatus.NO_REFERENCE, null, listOf("no refs/${frame.id}/${case.id}.png: run tools/vitro-parity/run.sh"), notes, null)
+            // A template Vitro asked for with no result in the reference is a gap in the inputs, like a missing image:
+            // grading would compare a card that never got its text.
+            if (render.templatesMissing.isNotEmpty()) {
+                return ParityResult(label, frame, case, ParityStatus.ERROR, null,
+                    listOf("capture input missing: ${render.templatesMissing.size} template(s) Vitro asked for have no rendered result in the reference (rerun tools/vitro-parity/run.sh --refresh)"), notes, null)
+            }
             // An image Vitro asks for that the capture didn't save is a gap in the inputs, not drift: comparing would
             // charge Vitro with a picture it was never given. One HA couldn't load either is no gap.
             val (gaps, alsoMissingInHa) = ParityInputs.missingImages(render.assetsMissing, ref)

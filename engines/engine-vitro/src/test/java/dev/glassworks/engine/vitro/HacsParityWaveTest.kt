@@ -417,6 +417,10 @@ class HacsParityWaveTest {
         assertTrue(AutoEntitiesFilter.matchValue("/^sensor\\.[ab]_/", "sensor.a_temp"))
         assertTrue(AutoEntitiesFilter.matchValue("!= off", "on"))
         assertTrue(AutoEntitiesFilter.matchValue(true, "on"))
+        // An attribute holding JSON true reads "true": the same boolean pattern matches it.
+        assertTrue(AutoEntitiesFilter.matchValue(true, "true"))
+        assertTrue(AutoEntitiesFilter.matchValue(false, "false"))
+        assertFalse(AutoEntitiesFilter.matchValue(true, "false"))
         assertFalse(AutoEntitiesFilter.matchValue("<= 5", "unavailable"))
         // A key Vitro can't evaluate (here `area`) never widens an include to everything.
         assertTrue(AutoEntitiesFilter.evaluate(JSONObject("""{"filter": {"include": [{"area": "kitchen"}]}}"""), st.all().values, st::get).isEmpty())
@@ -518,6 +522,24 @@ class HacsParityWaveTest {
             LayoutCardView.parseColumns("200px 1fr", 1280),
         )
         assertEquals(4, LayoutCardView.parseColumns("repeat(auto-fill, minmax(300px, 1fr))", 1280).size)
+        // A percentage is of the grid's width, a fixed size; as a minmax maximum it still sizes the track.
+        assertEquals(listOf(LayoutCardView.Track(0f, 200f), LayoutCardView.Track(1f, 0f)), LayoutCardView.parseColumns("25% 1fr", 800))
+        assertEquals(LayoutCardView.Track(0f, 400f), LayoutCardView.parseColumns("minmax(0px, 50%) 1fr", 800)[0])
+        assertEquals(LayoutCardView.Track(1f, 0f, 100f), LayoutCardView.parseColumns("minmax(100px, 1fr)", 800)[0])
+
+        // In a half-width column, a percentage track is of the grid's measured width, not the display's.
+        val half = LayoutCardView(
+            context(st),
+            card("""{"type": "custom:layout-card", "layout_type": "custom:grid-layout", "layout": {"grid-template-columns": "50% 1fr", "grid-gap": "0px"},
+                "cards": [{"type": "tile"}, {"type": "tile"}]}"""),
+            builder(st),
+            widthDp = 1280,
+        )
+        val px = { dp: Int -> (dp * activity.resources.displayMetrics.density).toInt() }
+        half.measure(View.MeasureSpec.makeMeasureSpec(px(640), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        half.layout(0, 0, half.measuredWidth, half.measuredHeight)
+        val first = half.tracks[0].getChildAt(0)
+        assertEquals(px(320).toFloat(), first.width.toFloat(), 2f)
 
         val horizontal = LayoutCardView(
             context(st),

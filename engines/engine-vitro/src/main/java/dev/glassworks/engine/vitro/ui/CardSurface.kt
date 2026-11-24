@@ -31,6 +31,7 @@ import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.LovelaceResource
 import dev.glassworks.engine.vitro.theme.CardModStyle
+import dev.glassworks.engine.vitro.theme.CssBackground
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import org.json.JSONObject
@@ -50,6 +51,12 @@ class VitroCardContext(
     val accessToken: () -> String?,
     val haConfig: () -> JSONObject = { JSONObject() },
     val callService: (domain: String, service: String, data: JSONObject?, target: JSONObject?) -> Unit,
+    /**
+     * [callService] that reports whether Home Assistant accepted the call (false too when it never reached HA).
+     * Without one (tests) it calls [callService] and reports nothing.
+     */
+    val callServiceThen: (domain: String, service: String, data: JSONObject?, target: JSONObject?, done: (Boolean) -> Unit) -> Unit =
+        { domain, service, data, target, _ -> callService(domain, service, data, target) },
     val callWs: (msg: JSONObject, done: (success: Boolean, result: Any?, error: JSONObject?) -> Unit) -> Unit = { _, done -> done(false, null, null) },
     val navigate: (path: String) -> Unit,
     val openMoreInfo: (entityId: String) -> Unit,
@@ -100,6 +107,7 @@ class VitroCardContext(
         accessToken = accessToken,
         haConfig = haConfig,
         callService = callService,
+        callServiceThen = callServiceThen,
         callWs = callWs,
         navigate = navigate,
         openMoreInfo = openMoreInfo,
@@ -178,6 +186,53 @@ class VitroCardContext(
         return impl(entityId, entityPicture, onFrame, onFallback)
     }
 
+    /**
+     * An optimistic write: shows [next] at once and calls the service. If HA turns the call down, the entity goes back
+     * to its last confirmed state (what HA reported, or what it accepted since), unless a newer state replaced the
+     * optimistic one meanwhile (that one is the truth): an entity HA didn't change sends no event that would correct
+     * it. Overlapping writes to one entity share that confirmed state, so a refused write never restores another
+     * write's refused value. With no [next] (nothing to show) it only calls. Main thread only.
+     */
+    fun callOptimistic(next: EntityState?, domain: String, service: String, data: JSONObject?, target: JSONObject? = null) {
+        if (next == null) {
+            callServiceThen(domain, service, data, target) {}
+            return
+        }
+        val id = next.entityId
+        val writes = optimisticWrites.getOrPut(store) { HashMap() }
+        val current = store[id]
+        val pending = writes[id] ?: current?.let { PendingWrites(it).also { p -> writes[id] = p } }
+        val seq = pending?.let { p ->
+            // The store holds something other than our last proposal: HA reported it meanwhile, so it is the
+            // confirmed state now, newer than every write issued so far.
+            if (current != null && p.latest != null && current !== p.latest) {
+                p.confirmed = current
+                p.confirmedSeq = p.issued
+            }
+            p.latest = next
+            p.outstanding++
+            ++p.issued
+        } ?: 0
+        store.putLocal(next)
+        callServiceThen(domain, service, data, target) { ok ->
+            main.post {
+                val p = pending ?: return@post
+                if (ok) {
+                    // HA accepted it: this is what the entity becomes, the state a later refusal goes back to (unless
+                    // HA has already reported something newer than this write).
+                    if (seq > p.confirmedSeq) {
+                        p.confirmed = next
+                        p.confirmedSeq = seq
+                    }
+                } else if (p.latest === next && store[id] === next) {
+                    // The newest write was refused and nothing newer replaced it: back to the confirmed state.
+                    store.putLocal(p.confirmed)
+                }
+                if (--p.outstanding == 0) writes.remove(id)
+            }
+        }
+    }
+
     /** HA's `toggle` for one entity: the domain's own service, with an optimistic flip for plain on/off states. */
     fun toggleEntity(entityId: String) {
         val domain = entityId.substringBefore('.')
@@ -191,11 +246,13 @@ class VitroCardContext(
             in TOGGLE_DOMAINS -> domain to "toggle"
             else -> "homeassistant" to "toggle"
         }
-        // Optimistic local state flip for instant native responsiveness.
-        if (cur != null && domain != "script" && cur.state in setOf("on", "off")) {
-            store.putLocal(cur.copy(state = if (cur.state == "on") "off" else "on"))
+        // Optimistic local state flip for instant native responsiveness (undone if HA turns the call down).
+        val flipped = if (cur != null && domain != "script" && cur.state in setOf("on", "off")) {
+            cur.copy(state = if (cur.state == "on") "off" else "on")
+        } else {
+            null
         }
-        callService(targetDomain, service, JSONObject().put("entity_id", entityId), null)
+        callOptimistic(flipped, targetDomain, service, JSONObject().put("entity_id", entityId))
     }
 
     /**
@@ -248,15 +305,24 @@ class VitroCardContext(
         val fullUrl = absoluteUrl(rawUrl)
         val cacheable = !LIVE_PARAM.containsMatchIn(fullUrl)
         pendingImageLoads.incrementAndGet()
-        val deliver = { bmp: Bitmap? -> main.post { try { done(bmp) } finally { pendingImageLoads.decrementAndGet() } } }
+        // The cache generation this load started under: a clear while it was in flight (another sign-in) keeps its
+        // image out of the cache and off the card.
+        val generation = cacheGeneration
+        val deliver = { bmp: Bitmap? ->
+            main.post {
+                try {
+                    done(bmp?.takeIf { generation == cacheGeneration })
+                } finally {
+                    pendingImageLoads.decrementAndGet()
+                }
+            }
+        }
         if (cacheable) {
             IMAGE_CACHE.get(fullUrl)?.takeIf { !it.isRecycled }?.let { hit ->
                 deliver(hit)
                 return
             }
         }
-        // The cache generation this load started under: a clear while it was in flight keeps its image out.
-        val generation = cacheGeneration
         IMAGE_POOL.execute {
             val bmp = runCatching {
                 val conn = (URL(fullUrl).openConnection() as HttpURLConnection).apply {
@@ -265,7 +331,8 @@ class VitroCardContext(
                     haToken(fullUrl)?.let { setRequestProperty("Authorization", "Bearer $it") }
                 }
                 try {
-                    if (conn.responseCode in 200..299) decodeDownsampled(conn.inputStream.use { it.readBytes() }) else null
+                    // Bounded before decoding: a huge asset (with or without a Content-Length) fails, not the heap.
+                    if (conn.responseCode in 200..299) decodeDownsampled(conn.inputStream.use { VitroIslandServer.readCapped(it, MAX_IMAGE_BYTES) }) else null
                 } finally {
                     conn.disconnect()
                 }
@@ -274,6 +341,22 @@ class VitroCardContext(
                 synchronized(IMAGE_CACHE) { if (generation == cacheGeneration) IMAGE_CACHE.put(fullUrl, bmp) }
             }
             deliver(bmp)
+        }
+    }
+
+    /** An embedded picture: the decoded [bitmap] (maybe sampled down) and the image's own [width] and [height]. */
+    class Embedded(val bitmap: Bitmap, val width: Int, val height: Int)
+
+    /**
+     * Decodes an embedded raster (`data:image/…;base64,…`) off the main thread and delivers it there, or null when it
+     * isn't one, is too big to read ([MAX_EMBEDDED_CHARS]) or doesn't decode. It is sampled down to at most
+     * [MAX_EMBEDDED_PIXELS], alpha kept (a small icon may carry a large source).
+     */
+    fun decodeEmbedded(dataUri: String, done: (Embedded?) -> Unit) {
+        pendingImageLoads.incrementAndGet()
+        IMAGE_POOL.execute {
+            val out = runCatching { decodeEmbeddedRaster(dataUri) }.getOrNull()
+            main.post { try { done(out) } finally { pendingImageLoads.decrementAndGet() } }
         }
     }
 
@@ -294,7 +377,8 @@ class VitroCardContext(
                 }
                 try {
                     if (conn.responseCode in 200..299) {
-                        JSONTokener(conn.inputStream.bufferedReader().use { it.readText() }).nextValue()
+                        val body = conn.inputStream.use { VitroIslandServer.readCapped(it, MAX_JSON_BYTES) }
+                        JSONTokener(String(body, Charsets.UTF_8)).nextValue()
                     } else {
                         null
                     }
@@ -333,6 +417,12 @@ class VitroCardContext(
 
         fun isToggleable(entityId: String?): Boolean = entityId != null && entityId.substringBefore('.') in TOGGLE_DOMAINS
 
+        /** The largest encoded image [loadImage] reads; past it the load fails (null). */
+        private const val MAX_IMAGE_BYTES = 12 shl 20
+
+        /** The largest REST answer [fetchJson] reads (a calendar's events, statistics); past it, null. */
+        private const val MAX_JSON_BYTES = 4 shl 20
+
         private val IMAGE_POOL = Executors.newFixedThreadPool(3) { r -> Thread(r, "vitro-img").apply { isDaemon = true } }
 
         /** Long-edge cap in px: plenty for a 1440x720 panel, 4x-8x less memory than full-size ARGB_8888. */
@@ -353,6 +443,43 @@ class VitroCardContext(
 
         @Volatile private var cacheGeneration = 0
 
+        /** The optimistic writes still waiting for HA, per store and entity ([callOptimistic]); main thread only. */
+        private class PendingWrites(var confirmed: EntityState) {
+            var latest: EntityState? = null
+            var outstanding = 0
+
+            /** Writes issued so far (each gets the next number), and the newest one [confirmed] reflects. */
+            var issued = 0
+            var confirmedSeq = 0
+        }
+
+        private val optimisticWrites = java.util.WeakHashMap<EntityStore, HashMap<String, PendingWrites>>()
+
+        /** Who the cached images were fetched as: the sign-in ([tokenSignIn]) of the last token used. */
+        private var imageSignIn: String? = null
+
+        /**
+         * The panel is about to use [token]. When it belongs to another sign-in than the last one (another account on
+         * the same Home Assistant, or the same one signed in again), images fetched with the old one go. A routine
+         * refresh of the same sign-in keeps them.
+         */
+        fun noteToken(token: String) = synchronized(IMAGE_CACHE) {
+            val who = tokenSignIn(token) ?: return@synchronized
+            if (imageSignIn != null && imageSignIn != who) clearImageCache()
+            imageSignIn = who
+        }
+
+        /**
+         * The sign-in a Home Assistant access token belongs to: its JWT `iss`, the refresh token it was issued from
+         * (the same across refreshes, new on every sign-in). Null when it isn't a JWT HA issued.
+         */
+        internal fun tokenSignIn(token: String): String? = runCatching {
+            val parts = token.split('.')
+            if (parts.size != 3) return null
+            val payload = android.util.Base64.decode(parts[1], android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+            JSONObject(String(payload, Charsets.UTF_8)).optString("iss").ifEmpty { null }
+        }.getOrNull()
+
         /**
          * True when [a] and [b] are the same origin: scheme, host and effective port (RFC 6454), so
          * `https://homeassistant.local` and `https://homeassistant.local:443` match and other ports don't.
@@ -369,6 +496,28 @@ class VitroCardContext(
                 origin.startsWith("http://") && origin.endsWith(":80") -> origin.removeSuffix(":80")
                 else -> origin
             }
+        }
+
+        /** The longest embedded image text read (about 6 MiB of image). */
+        private const val MAX_EMBEDDED_CHARS = 8 shl 20
+
+        /** Decoded pixels an embedded image may take (4 MiB as ARGB). */
+        private const val MAX_EMBEDDED_PIXELS = 1L shl 20
+
+        internal fun decodeEmbeddedRaster(dataUri: String): Embedded? {
+            val payload = dataUri.substringAfter(',', "")
+            if (payload.isEmpty() || payload.length > MAX_EMBEDDED_CHARS) return null
+            val bytes = android.util.Base64.decode(payload, android.util.Base64.DEFAULT)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            val w = bounds.outWidth
+            val h = bounds.outHeight
+            if (w <= 0 || h <= 0) return null
+            var sample = 1
+            while ((w / sample).toLong() * (h / sample) > MAX_EMBEDDED_PIXELS) sample *= 2
+            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+                ?: return null
+            return Embedded(bmp, w, h)
         }
 
         private fun decodeDownsampled(bytes: ByteArray): Bitmap? {
@@ -596,7 +745,9 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
             } else if (layers != null) {
                 // Gradients paint like the browser (angle, stop positions, layers), under the card's border.
                 background = android.graphics.drawable.LayerDrawable(arrayOf(
-                    CssBackgroundDrawable(layers, ctx.dp, radiusPx),
+                    // The layers lie on the card's resolved fill (a `background-color`, the shorthand's own color, or the
+                    // theme's card color under a lone `background-image`).
+                    CssBackgroundDrawable(CssBackground(layers.layers, fillColor), ctx.dp, radiusPx),
                     GradientDrawable().apply {
                         cornerRadius = radiusPx
                         setColor(Color.TRANSPARENT)
@@ -685,11 +836,13 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     }
 
     protected fun observe(entityId: String, onState: (EntityState?) -> Unit) {
-        onState(ctx.store[entityId])
-        val unsub = ctx.store.subscribe(entityId) { s ->
-            ctx.main.post { onState(s) }
+        // Subscribed before the first read, so a change between the two isn't missed; each render reads the store
+        // then, not the value a dispatch carried, so dispatches posted out of order never leave an older one on screen.
+        val unsub = ctx.store.subscribe(entityId) { _ ->
+            ctx.main.post { onState(ctx.store[entityId]) }
         }
         subscriptions += unsub
+        onState(ctx.store[entityId])
     }
 
     protected fun track(unsub: () -> Unit) {

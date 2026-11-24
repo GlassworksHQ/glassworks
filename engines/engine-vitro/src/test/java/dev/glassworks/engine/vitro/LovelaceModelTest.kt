@@ -1040,7 +1040,7 @@ class LovelaceModelTest {
         assertTrue(noneOf.evaluate(at("playing")))
         assertFalse(noneOf.evaluate(at("off")))
         assertFalse(noneOf.evaluate(at("unavailable")))
-        assertFalse(noneOf.evaluate(states())) // missing reads as "unavailable", which is excluded
+        assertTrue(noneOf.evaluate(states())) // missing reads as "unknown" (as in HA), which isn't excluded
 
         assertTrue(one.evaluate(at("playing")))
         assertFalse(one.evaluate(at("paused")))
@@ -1048,7 +1048,68 @@ class LovelaceModelTest {
         assertFalse(notOne.evaluate(at("off")))
 
         val unavailable = VisibilityCondition.parse(JSONObject("""{"entity": "sensor.gone", "state": "unavailable"}"""))
-        assertTrue(unavailable.evaluate(states()))
+        assertFalse(unavailable.evaluate(states())) // a deleted entity is "unknown", not "unavailable"
+        assertTrue(unavailable.evaluate(states("sensor.gone" to "unavailable")))
+        val unknown = VisibilityCondition.parse(JSONObject("""{"entity": "sensor.gone", "state": "unknown"}"""))
+        assertTrue(unknown.evaluate(states()))
+    }
+
+    @Test
+    fun conditionsReadTheConfiguredAttribute() {
+        val lamp = EntityState("light.desk", "on", mapOf("brightness" to 150, "effect" to "rainbow"))
+        val look: (String) -> EntityState? = { if (it == "light.desk") lamp else null }
+        val bright = VisibilityCondition.parse(JSONObject("""{"condition": "numeric_state", "entity": "light.desk", "attribute": "brightness", "above": 100}"""))
+        assertTrue(bright.evaluate(look))
+        val dim = VisibilityCondition.parse(JSONObject("""{"condition": "numeric_state", "entity": "light.desk", "attribute": "brightness", "below": 100}"""))
+        assertFalse(dim.evaluate(look))
+        val effect = VisibilityCondition.parse(JSONObject("""{"condition": "state", "entity": "light.desk", "attribute": "effect", "state": "rainbow"}"""))
+        assertTrue(effect.evaluate(look))
+        val other = VisibilityCondition.parse(JSONObject("""{"condition": "state", "entity": "light.desk", "attribute": "effect", "state": "on"}"""))
+        assertFalse(other.evaluate(look)) // the state is "on", the attribute isn't
+        val number = VisibilityCondition.parse(JSONObject("""{"condition": "state", "entity": "light.desk", "attribute": "brightness", "state": "150"}"""))
+        assertTrue(number.evaluate(look)) // compared as JavaScript's String(150)
+        val missing = VisibilityCondition.parse(JSONObject("""{"condition": "state", "entity": "light.desk", "attribute": "nope", "state": "unknown"}"""))
+        assertTrue(missing.evaluate(look))
+        // A list compares as JavaScript's String() writes it: "off,heat".
+        val climate = EntityState("climate.den", "heat", mapOf("hvac_modes" to listOf("off", "heat", null)))
+        val modes = VisibilityCondition.parse(JSONObject("""{"condition": "state", "entity": "climate.den", "attribute": "hvac_modes", "state": "off,heat,"}"""))
+        assertTrue(modes.evaluate({ if (it == "climate.den") climate else null }))
+    }
+
+    @Test
+    fun numbersCompareAsJavaScriptWritesThem() {
+        for ((v, js) in listOf(150.0 to "150", 0.0001 to "0.0001", 0.000001 to "0.000001", 1e-7 to "1e-7", 1.5 to "1.5",
+            -2.25 to "-2.25", 1e21 to "1e+21", 1e20 to "100000000000000000000", 123456.789 to "123456.789", 1.5e-10 to "1.5e-10")) {
+            assertEquals("$v", js, VisibilityCondition.jsNumber(v))
+        }
+        val sensor = EntityState("sensor.dose", "on", mapOf("level" to 0.0001))
+        val c = VisibilityCondition.parse(JSONObject("""{"condition": "state", "entity": "sensor.dose", "attribute": "level", "state": "0.0001"}"""))
+        assertTrue(c.evaluate({ if (it == "sensor.dose") sensor else null }))
+    }
+
+    @Test
+    fun stateOperandsThatNameAnEntityMatchItsState() {
+        val c = VisibilityCondition.parse(JSONObject("""{"condition": "state", "entity": "sensor.current", "state": "input_select.expected"}"""))
+        assertTrue(c.evaluate(states("sensor.current" to "eco", "input_select.expected" to "eco")))
+        assertFalse(c.evaluate(states("sensor.current" to "eco", "input_select.expected" to "comfort")))
+        val not = VisibilityCondition.parse(JSONObject("""{"condition": "state", "entity": "sensor.current", "state_not": ["off", "input_select.expected"]}"""))
+        assertFalse(not.evaluate(states("sensor.current" to "eco", "input_select.expected" to "eco")))
+        assertTrue(not.evaluate(states("sensor.current" to "eco", "input_select.expected" to "away")))
+        // A literal still matches as itself.
+        assertTrue(c.evaluate(states("sensor.current" to "input_select.expected")))
+        val refs = LinkedHashSet<String>().also { not.referencedEntities(it) }
+        assertEquals(setOf("sensor.current", "input_select.expected"), refs)
+    }
+
+    @Test
+    fun aGroupWithOneConditionObjectEvaluatesIt() {
+        val one = VisibilityCondition.parse(JSONObject("""{"condition": "and", "conditions": {"entity": "light.a", "state": "on"}}"""))
+        assertEquals(VisibilityCondition.And(listOf(VisibilityCondition.State("light.a", "on", null))), one)
+        assertFalse(one.evaluate(states("light.a" to "off")))
+        assertTrue(one.evaluate(states("light.a" to "on")))
+        val unreadable = VisibilityCondition.parse(JSONObject("""{"condition": "or", "conditions": "light.a"}"""))
+        assertFalse(unreadable.evaluate(states("light.a" to "on")))
+        assertEquals(VisibilityCondition.And(emptyList()), VisibilityCondition.parse(JSONObject("""{"condition": "and", "conditions": []}""")))
     }
 
     @Test
@@ -1213,6 +1274,16 @@ class LovelaceModelTest {
         MdiIcons.parseSvgPathInto("M2 12a10 10 0 0110 10", endSink)
         assertEquals(12f, ends.last().first, 0.01f)
         assertEquals(22f, ends.last().second, 0.01f)
+
+        // An exponent stays in its number (`1e1` is 10); a minus after a number still starts the next one.
+        ends.clear()
+        MdiIcons.parseSvgPathInto("M0 0L1e1 4", endSink)
+        assertEquals(10f, ends.last().first, 0.001f)
+        assertEquals(4f, ends.last().second, 0.001f)
+        ends.clear()
+        MdiIcons.parseSvgPathInto("M0 0L10-4l2.5E-1 1", endSink)
+        assertEquals(10.25f, ends.last().first, 0.001f)
+        assertEquals(-3f, ends.last().second, 0.001f)
 
         // S and T reflect the previous control point; lower-case forms are relative.
         val smooth = BoundsSink()

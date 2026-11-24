@@ -771,7 +771,14 @@ object MdCascade {
         // `border-*-style: none` (the initial value) means no border, whatever the width says.
         for (k in 0 until 4) {
             val style = sp["border-${SIDES[k]}-style"]?.trim()?.lowercase(Locale.ROOT)
-            if (style == null || style == "none" || style == "hidden" || style == "initial" || style == "unset") s.borderWidth[k] = 0f
+            if (style == null || style == "none" || style == "hidden" || style == "initial" || style == "unset") {
+                s.borderWidth[k] = 0f
+            } else {
+                // A visible side with no width or color of its own takes the initial ones: `medium` (3 px) and
+                // currentColor. An explicit width, zero included, stays.
+                if ("border-${SIDES[k]}-width" !in sp) s.borderWidth[k] = 3f
+                if ("border-${SIDES[k]}-color" !in sp) s.borderColor[k] = s.color
+            }
         }
     }
 

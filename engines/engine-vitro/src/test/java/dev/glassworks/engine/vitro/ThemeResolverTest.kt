@@ -339,6 +339,93 @@ class ThemeResolverTest {
     }
 
     @Test
+    fun theLaterOfBackgroundAndBackgroundImageWins() {
+        // A later shorthand resets the image (and sets the color)...
+        val reset = ThemeResolver.parseCardMod("ha-card { background-image: linear-gradient(#000, #fff); background: #123456; }")
+        assertNull(reset.backgroundLayers)
+        assertEquals(argb(0xFF123456), reset.backgroundColor)
+        // ...a later longhand keeps its gradient, on the shorthand's color.
+        val keep = ThemeResolver.parseCardMod("ha-card { background: #123456; background-image: linear-gradient(#000, #fff); }")
+        assertEquals(1, keep.backgroundLayers?.layers?.size)
+        assertEquals(argb(0xFF123456), keep.backgroundColor)
+        // `!important` beats order.
+        val important = ThemeResolver.parseCardMod("ha-card { background-image: linear-gradient(#000, #fff) !important; background: #123456; }")
+        assertEquals(1, important.backgroundLayers?.layers?.size)
+        // A lone background-image lies on the card's own fill: no color of its own here (the theme's shows).
+        val lone = ThemeResolver.parseCardMod("ha-card { background-color: #224466; background-image: linear-gradient(transparent, #fff); }")
+        assertEquals(argb(0xFF224466), lone.backgroundColor)
+    }
+
+    @Test
+    fun aGradientLayerKeepsTheColorAfterIt() {
+        val bg = CssBackground.parse("linear-gradient(transparent, #fff) #123456")!!
+        assertEquals(1, bg.layers.size)
+        assertEquals(argb(0xFF123456), bg.color)
+    }
+
+    @Test
+    fun aCornerDirectionDependsOnTheBox() {
+        val bg = CssBackground.parse("linear-gradient(to top right, #000, #fff)")!!
+        val g = bg.geometry(bg.layers[0], 200f, 100f, 1f)!!
+        // The top-left and bottom-right corners sit at the midpoint: equal distance along the ray from its center.
+        fun along(x: Float, y: Float) = (x - g.x0) * (g.x1 - g.x0) + (y - g.y0) * (g.y1 - g.y0)
+        assertEquals(along(0f, 0f), along(200f, 100f), 0.5f)
+        // An explicit angle stays fixed.
+        val fixed = CssBackground.parse("linear-gradient(45deg, #000, #fff)")!!
+        assertEquals(45f, (fixed.layers[0] as CssBackground.Linear).angleDeg)
+        assertNull((fixed.layers[0] as CssBackground.Linear).corner)
+    }
+
+    @Test
+    fun aTransitionHintMovesTheMidpoint() {
+        val bg = CssBackground.parse("linear-gradient(#000000 0%, 20%, #ffffff 100%)")!!
+        val stops = bg.layers[0].stops
+        assertEquals(3, stops.size)
+        assertEquals(0.2f, stops[1].pos!!, 0.0001f)
+        assertEquals(argb(0xFF7F7F7F), stops[1].color)
+        // A hint with no stop after it is invalid: no gradient.
+        assertNull(CssBackground.parse("linear-gradient(#000, #fff, 20%)"))
+    }
+
+    @Test
+    fun aSingleLinearBackdropKeepsItsParsedAngleAndPixelStops() {
+        val g = ThemeResolver.parseBackground("linear-gradient(.25turn, #000 10px, #fff 90px)", 0) as ThemeBackground.LinearGradient
+        assertEquals(90f, g.angleDeg, 0.001f)
+        assertEquals(10f, g.stops!![0].px!!, 0.001f)
+    }
+
+    @Test
+    fun aCyclicThemeVariableTakesItsFallback() {
+        val t = resolveWith("""{"a": "var(--a)", "primary-color": "var(--a, #123456)"}""")
+        assertEquals(argb(0xFF123456), t.primaryColor)
+        // Left out of what islands get, not exported empty (`--a: ;` would be valid and hide the fallback).
+        assertFalse(t.toCssRootBlock(), "--a:" in t.toCssRootBlock())
+        // A name that needs the invalid one without a fallback is invalid too; one with a fallback stays.
+        val chained = resolveWith("""{"a": "var(--a)", "b": "var(--a)", "c": "var(--a, #222222)", "primary-color": "var(--b, #123456)"}""")
+        assertEquals(argb(0xFF123456), chained.primaryColor)
+        assertFalse(chained.toCssRootBlock(), "--b:" in chained.toCssRootBlock())
+        assertTrue(chained.toCssRootBlock(), "--c: #222222" in chained.toCssRootBlock())
+        // A stylesheet with one missing reference keeps its other declarations.
+        val sheet = resolveWith("""{"card-mod-card": "ha-card { color: var(--missing); background: #123456; border-radius: 24px; }"}""")
+        assertEquals(argb(0xFF123456), sheet.cardBackgroundColor)
+        assertEquals(24f, sheet.cardBorderRadiusDp, 0.01f)
+    }
+
+    @Test
+    fun varExpansionIsBoundedWhileItGrows() {
+        // 4 KiB referenced 4,096 times would build 16 MiB before the old check; now it stops at the budget.
+        val big = "x".repeat(4096)
+        val refs = (1..4096).joinToString(" ") { "var(--big)" }
+        assertEquals("", ThemeResolver.resolveValue(refs, mapOf("big" to big), 0))
+        // A long value that doesn't grow stays whole.
+        val long = "a".repeat(100_000) + " var(--c)"
+        assertEquals("a".repeat(100_000) + " red", ThemeResolver.resolveValue(long, mapOf("c" to "red"), 0))
+        // A big substitution that a later, shrinking part of the same value pays back is fine.
+        val shrinks = "var(--big) var(--drop, ${"y".repeat(30_000)})"
+        assertEquals("x".repeat(20_000), ThemeResolver.resolveValue(shrinks, mapOf("big" to "x".repeat(20_000), "drop" to ""), 0))
+    }
+
+    @Test
     fun backgroundGradientWithOneStopIsNotAGradient() {
         assertEquals(ThemeBackground.Solid(0x33), ThemeResolver.parseBackground("linear-gradient(90deg, #ff0000)", 0x33))
     }

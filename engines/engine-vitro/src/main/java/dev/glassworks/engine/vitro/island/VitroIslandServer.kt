@@ -31,6 +31,13 @@ import java.util.concurrent.CopyOnWriteArraySet
  *   `hass.callWS`, `hass.callService`, `hass-more-info`, and auto-resize straight to Kotlin.
  * - Every other path (`/local/...`, `/hacsfiles/...`, `/api/...`) is strictly reverse-proxied to the
  *   panel's single configured Home Assistant ([session]) with the panel's Bearer token injected.
+ *
+ * Loopback is open to every app on the device, so the proxy (which spends the panel's token) answers only a client
+ * that holds this server's capability: a random cookie the island page sets, and the entry route sets for the
+ * legacy engine's pages in exchange for a one-time code ([entryUrl]). Other apps reach neither (slot ids are
+ * unguessable too). In depth: every request must name this server as its `Host` (a page whose own name resolves to
+ * 127.0.0.1, DNS rebinding, is refused); the proxy forwards only the paths HA's page and the islands use; a bridge
+ * needs the cookie or this server's own `Origin`. Refusals are logged without queries or tokens.
  */
 class VitroIslandServer(
     /**
@@ -54,6 +61,18 @@ class VitroIslandServer(
     private val activeSockets = ConcurrentHashMap<String, CopyOnWriteArraySet<WebSocketStreams>>()
     private val random = SecureRandom()
 
+    /** The proxy's capability, random per server: the [CAPABILITY_COOKIE] a client must send to use the panel's token. */
+    private val capability: String = hex(ByteArray(32).also(random::nextBytes))
+
+    private val capabilityCookie: Map<String, String>
+        get() = mapOf("Set-Cookie" to "$CAPABILITY_COOKIE=$capability; Path=/; HttpOnly; SameSite=Strict")
+
+    /** One-time entry codes ([entryUrl]) and when each stops working ([System.nanoTime]). */
+    private val entryCodes = ConcurrentHashMap<String, Long>()
+
+    /** How long an entry code works: the fallback loads it at once. A test shortens it. */
+    internal var entryCodeTtlNs: Long = 30_000_000_000L
+
     /** Guards a slot's removal against a socket of that slot registering at the same time. */
     private val slotLock = Any()
     private var server: HttpServer? = null
@@ -72,10 +91,13 @@ class VitroIslandServer(
             bindAddress = InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)),
             log = log,
             maxBody = 256 * 1024,
-            // An island's bridge socket holds a worker for as long as it is open, so leave room for the HTML,
-            // assets and API calls next to them.
+            // HTML, icons, assets and API calls. Bridge sockets run on threads of their own (below), so however many
+            // islands are open, these workers stay free for requests.
             workers = 16,
             queued = 64,
+            // Open bridges at once (one per island on screen, a replacement may overlap its old socket); past it a
+            // bridge is refused with 503 and the island retries.
+            upgradeThreads = MAX_BRIDGES,
         )
         s.start()
         server = s
@@ -94,9 +116,31 @@ class VitroIslandServer(
     fun registerSlot(handler: SlotHandler): Pair<String, String> {
         val base = ensureStarted()
         // Unguessable, so another app on the device can't open a live card's bridge by counting.
-        val id = "s" + ByteArray(16).also(random::nextBytes).joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+        val id = "s" + hex(ByteArray(16).also(random::nextBytes))
         slots[id] = handler
         return id to "$base/__vitro/island/$id"
+    }
+
+    /**
+     * The URL a browser loads to open [pathAndQuery] (a path on Home Assistant, `/config`, `/auth/authorize?…`)
+     * through the proxy: it sets the capability cookie and redirects there. Never log it; it carries the capability.
+     */
+    fun entryUrl(pathAndQuery: String): String {
+        val to = if (pathAndQuery.startsWith("/")) pathAndQuery else "/$pathAndQuery"
+        // A code good once and for [entryCodeTtlNs], not the capability: the URL left in the browser's history (or
+        // anywhere it gets copied) is worthless after it has been used.
+        val now = System.nanoTime()
+        entryCodes.entries.removeAll { now - it.value > 0 }
+        val code = hex(ByteArray(16).also(random::nextBytes))
+        entryCodes[code] = now + entryCodeTtlNs
+        return ensureStarted() + ENTRY + "?c=" + code + "&to=" + java.net.URLEncoder.encode(to, "UTF-8")
+    }
+
+    /** Spends entry code [code]: true when it was issued, unused and still in time. */
+    private fun spendEntryCode(code: String): Boolean {
+        if (code.isEmpty()) return false
+        val until = entryCodes.remove(code) ?: return false
+        return System.nanoTime() - until <= 0
     }
 
     fun unregisterSlot(id: String) {
@@ -109,10 +153,26 @@ class VitroIslandServer(
 
     private fun handle(req: HttpRequest): HttpResponse {
         val path = req.path
+        // DNS rebinding: a page on another name that resolves to 127.0.0.1 sends that name as its Host.
+        if (req.headers["host"]?.trim()?.lowercase() != "127.0.0.1:$port") {
+            log("refused: Host isn't this server (${req.method} ${firstSegment(path)})")
+            return HttpResponse.text(421, "Misdirected request")
+        }
         if (path.startsWith("/__vitro/island/")) {
             val id = path.removePrefix("/__vitro/island/")
             val slot = slots[id] ?: return HttpResponse.text(404, "Unknown island slot")
-            return HttpResponse.html(200, slot.html)
+            // The page's own requests (card scripts, `hass.callApi`) go through the proxy with this cookie.
+            return HttpResponse.html(200, slot.html, capabilityCookie)
+        }
+        if (path == ENTRY) {
+            val to = req.query["to"].orEmpty()
+            if (!spendEntryCode(req.query["c"].orEmpty())) {
+                log("refused: an unknown, used or expired entry code")
+                return HttpResponse.text(403, "Not allowed")
+            }
+            // A path on this origin only: `//host` or `/\host` would leave it.
+            if (!to.startsWith("/") || to.startsWith("//") || to.startsWith("/\\")) return HttpResponse.text(400, "Invalid path")
+            return HttpResponse(302, mapOf("Location" to to, "Cache-Control" to "no-store") + capabilityCookie, ByteArray(0))
         }
         if (path.startsWith("/__vitro/icon/")) {
             val iconName = path.removePrefix("/__vitro/icon/")
@@ -125,6 +185,11 @@ class VitroIslandServer(
         if (path.startsWith("/__vitro/ws/")) {
             val id = path.removePrefix("/__vitro/ws/")
             val slot = slots[id] ?: return HttpResponse.text(404, "Unknown island slot")
+            // The island page itself: it sends the cookie (same site) and this server's Origin.
+            if (!authorized(req) && req.headers["origin"]?.trim()?.lowercase() != "http://127.0.0.1:$port") {
+                log("refused: a bridge without the capability or this server's Origin")
+                return HttpResponse.text(403, "Not allowed")
+            }
             val wsKey = req.headers["sec-websocket-key"] ?: return HttpResponse.text(400, "Missing Sec-WebSocket-Key")
             return HttpResponse.webSocket(wsKey, idleMs = 120_000) { ws ->
                 runSlotSocket(id, slot, ws)
@@ -143,16 +208,29 @@ class VitroIslandServer(
             runCatching { ws.abort() }
             return
         }
-        val sendLock = Any()
+        // Sending only queues: the card's store observer calls this on HA's event thread, under the store's write
+        // lock, and a socket write has no deadline. One writer thread per bridge drains the queue. A browser that
+        // stops reading fills it; then the bridge is dropped (the island reconnects and gets a fresh snapshot) rather
+        // than queueing without bound or blocking Home Assistant's events.
+        val outbox = java.util.concurrent.ArrayBlockingQueue<ByteArray>(MAX_QUEUED_MESSAGES)
         val send: (JSONObject) -> Unit = { obj ->
-            synchronized(sendLock) {
-                runCatching {
-                    val bytes = (obj.toString() + "\n").toByteArray(Charsets.UTF_8)
+            if (!outbox.offer((obj.toString() + "\n").toByteArray(Charsets.UTF_8))) {
+                log("island bridge not reading: dropped")
+                runCatching { ws.abort() }
+            }
+        }
+        val writer = Thread({
+            try {
+                while (true) {
+                    val bytes = outbox.take()
                     ws.output.write(bytes)
                     ws.output.flush()
                 }
+            } catch (_: InterruptedException) {
+            } catch (_: Exception) {
+                runCatching { ws.abort() } // a failed write ends the bridge; the reader below sees it close
             }
-        }
+        }, "vitro-island-write").apply { isDaemon = true; start() }
         try {
             slot.onConnected(send)
             val input = BufferedInputStream(ws.input)
@@ -167,6 +245,7 @@ class VitroIslandServer(
         } catch (_: Exception) {
             // Connection closed by island or server stop.
         } finally {
+            writer.interrupt()
             set -= ws
             slot.onDisconnected()
         }
@@ -177,7 +256,27 @@ class VitroIslandServer(
      * `GET`, `POST`, `PUT`, `PATCH` and `DELETE` (what `hass.callApi` / `hass.fetchWithAuth` send), with the
      * panel's Bearer token injected. A `204 No Content` comes back with an empty body.
      */
+    /** True when [req] carries this server's capability cookie. */
+    private fun authorized(req: HttpRequest): Boolean {
+        val cookies = req.headers["cookie"] ?: return false
+        return cookies.split(';').any { c ->
+            val kv = c.trim()
+            kv.startsWith("$CAPABILITY_COOKIE=") &&
+                java.security.MessageDigest.isEqual(kv.substringAfter('=').toByteArray(), capability.toByteArray())
+        }
+    }
+
     private fun proxyToHa(req: HttpRequest): HttpResponse {
+        // Another app on the device must not borrow the panel's Home Assistant session.
+        if (!authorized(req)) {
+            log("refused: no capability (${req.method} ${firstSegment(req.path)})")
+            return HttpResponse.text(403, "Not allowed")
+        }
+        // Only what HA's page and the islands load: anything else isn't forwarded with the panel's token.
+        if (!proxied(req.path)) {
+            log("refused: not a proxied path (${req.method} ${firstSegment(req.path)})")
+            return HttpResponse.text(404, "Not found")
+        }
         val (origin, token) = session()
         val base = origin?.trimEnd('/') ?: return HttpResponse.text(503, "Home Assistant not configured")
         if (!req.path.startsWith("/")) return HttpResponse.text(400, "Invalid path")
@@ -233,6 +332,56 @@ class VitroIslandServer(
     }
 
     companion object {
+        /**
+         * Path prefixes the proxy forwards: HA's API and auth (the legacy engine's sign-in, `callApi`), the card
+         * resources (`/local`, `/hacsfiles`), HA's frontend bundles (modern and legacy builds), static files and media
+         * (`/media/local/…`, signed).
+         */
+        private val PROXIED_PREFIXES = listOf(
+            "/api/", "/auth/", "/local/", "/hacsfiles/", "/static/", "/frontend_latest/", "/frontend_es5/", "/media/",
+        )
+
+        /** Single files HA's page asks for at its root (manifest, service workers, the onboarding page). */
+        private val PROXIED_FILES = setOf(
+            "/manifest.json", "/sw-modern.js", "/sw-legacy.js", "/service_worker.js", "/robots.txt", "/onboarding.html",
+        )
+
+        /**
+         * HA's own pages (its panels: the legacy engine shows them for what Vitro doesn't draw natively). A dashboard
+         * with its own path always has a `-` in it (HA requires one), so a first segment with one is a page too.
+         */
+        private val HA_PANELS = setOf(
+            "config", "history", "logbook", "map", "energy", "developer-tools", "profile", "media-browser", "todo",
+            "calendar", "hassio", "lovelace", "home", "light", "climate", "security", "areas", "notifications", "tag",
+            "hacs",
+        )
+
+        /** True when the proxy forwards [path]; the root (`/`) is HA's default dashboard page. */
+        internal fun proxied(path: String): Boolean {
+            if (path == "/" || path in PROXIED_FILES) return true
+            if (PROXIED_PREFIXES.any { path.startsWith(it) }) return true
+            val first = path.removePrefix("/").substringBefore('/')
+            return first in HA_PANELS || ('-' in first && first.none { it == '.' })
+        }
+
+        /** The first path segment, for a refusal's log line: never the rest (ids) or the query. */
+        private fun firstSegment(path: String): String =
+            "/" + path.removePrefix("/").substringBefore('/').take(40) + if (path.removePrefix("/").contains('/')) "/…" else ""
+
+        /** The cookie that carries the proxy's capability. */
+        internal const val CAPABILITY_COOKIE = "vitro_cap"
+
+        /** The route that sets the capability cookie and redirects into the proxy ([entryUrl]). */
+        private const val ENTRY = "/__vitro/enter"
+
+        private fun hex(b: ByteArray): String = b.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+
+        /** Island bridges open at once, each on its own thread. */
+        internal const val MAX_BRIDGES = 48
+
+        /** Messages queued for one island before it counts as not reading and its bridge is dropped. */
+        internal const val MAX_QUEUED_MESSAGES = 512
+
         /** The longest bridge message (one JSON line) an island may send. */
         private const val MAX_BRIDGE_MESSAGE = 1 shl 20
 

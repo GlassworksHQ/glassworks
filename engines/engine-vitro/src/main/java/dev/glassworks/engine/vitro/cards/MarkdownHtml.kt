@@ -109,6 +109,8 @@ object MarkedLite {
             val fence = FENCE.find(line)
             if (fence != null && (fence.groupValues[2][0] == '~' || '`' !in fence.groupValues[3])) {
                 val marker = fence.groupValues[2]
+                // Each content line loses up to the opening fence's own indentation; more than that is kept.
+                val fenceIndent = fence.groupValues[1].length
                 val body = StringBuilder()
                 var j = i + 1
                 while (j < n) {
@@ -116,7 +118,8 @@ object MarkedLite {
                     // A closing fence is indented three spaces at most; four makes it code.
                     val indent = lines[j].length - lines[j].trimStart().length
                     if (indent <= 3 && t.length >= marker.length && t.all { it == marker[0] }) break
-                    body.append(lines[j]).append('\n')
+                    val lead = lines[j].takeWhile { it == ' ' }.length.coerceAtMost(fenceIndent)
+                    body.append(lines[j], lead, lines[j].length).append('\n')
                     j++
                 }
                 out.append("<pre><code>").append(escapeText(body.toString())).append("</code></pre>\n")

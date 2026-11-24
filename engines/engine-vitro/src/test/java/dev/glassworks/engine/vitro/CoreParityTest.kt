@@ -80,6 +80,80 @@ class CoreParityTest {
 
     private fun card(json: String) = JSONObject(json).let { CardConfig(it.getString("type"), it) }
 
+    @Test
+    fun aTokensSignInIsItsIssuer() {
+        fun jwt(payload: String) = "eyJhbGciOiJIUzI1NiJ9." +
+            android.util.Base64.encodeToString(payload.toByteArray(), android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP) +
+            ".c2ln"
+        // A refresh keeps the refresh token (iss); a new sign-in, of any account, gets a new one.
+        assertEquals("refresh-1", VitroCardContext.tokenSignIn(jwt("""{"iss":"refresh-1","iat":1,"exp":2}""")))
+        assertEquals("refresh-1", VitroCardContext.tokenSignIn(jwt("""{"iss":"refresh-1","iat":3,"exp":4}""")))
+        assertEquals("refresh-2", VitroCardContext.tokenSignIn(jwt("""{"iss":"refresh-2"}""")))
+        assertNull(VitroCardContext.tokenSignIn("not-a-jwt"))
+        assertNull(VitroCardContext.tokenSignIn(jwt("""{"sub":"x"}""")))
+    }
+
+    @Test
+    fun aToggleHaTurnsDownIsUndoneUnlessANewerStateArrived() {
+        val store = EntityStore()
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("switch.locked_out", "off", emptyMap()))
+        val answers = ArrayList<(Boolean) -> Unit>()
+        val base = context(store)
+        val ctx = VitroCardContext(
+            context = activity, haBase = base.haBase, store = store, theme = base.theme, resources = emptyList(),
+            accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            callServiceThen = { _, _, _, _, done -> answers += done },
+        )
+        ctx.toggleEntity("switch.locked_out")
+        assertEquals("on", store["switch.locked_out"]!!.state) // shown at once
+        answers.removeAt(0)(false) // a read-only user: HA refuses, and sends no event for an unchanged switch
+        ShadowLooper.idleMainLooper()
+        assertEquals("off", store["switch.locked_out"]!!.state)
+
+        ctx.toggleEntity("switch.locked_out")
+        // HA's own state arrives first (another client switched it): that one stays when the refusal comes.
+        val fromHa = dev.glassworks.engine.vitro.data.EntityState("switch.locked_out", "on", mapOf("by" to "other"))
+        store.putLocal(fromHa)
+        answers.removeAt(0)(false)
+        ShadowLooper.idleMainLooper()
+        assertTrue(store["switch.locked_out"] === fromHa)
+
+        ctx.toggleEntity("switch.locked_out")
+        answers.removeAt(0)(true)
+        ShadowLooper.idleMainLooper()
+        assertEquals("off", store["switch.locked_out"]!!.state)
+
+        // Two overlapping writes, both refused: back to the state HA confirmed, not the first write's "on".
+        ctx.toggleEntity("switch.locked_out") // on
+        ctx.toggleEntity("switch.locked_out") // off again, before HA answers the first
+        answers.removeAt(0)(false)
+        ShadowLooper.idleMainLooper()
+        answers.removeAt(0)(false)
+        ShadowLooper.idleMainLooper()
+        assertEquals("off", store["switch.locked_out"]!!.state)
+        // HA reports a newer state while a write is out; the next write, refused, goes back to HA's report.
+        ctx.toggleEntity("switch.locked_out") // on, pending
+        val reported = dev.glassworks.engine.vitro.data.EntityState("switch.locked_out", "on", mapOf("from" to "ha"))
+        store.putLocal(reported)
+        ctx.toggleEntity("switch.locked_out") // off, pending
+        answers.removeAt(0)(true) // the first was accepted, but HA's report is newer than it
+        ShadowLooper.idleMainLooper()
+        answers.removeAt(0)(false)
+        ShadowLooper.idleMainLooper()
+        assertTrue(store["switch.locked_out"] === reported)
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("switch.locked_out", "off", emptyMap()))
+
+        // The first accepted, the second refused: the accepted one stands.
+        ctx.toggleEntity("switch.locked_out") // on
+        ctx.toggleEntity("switch.locked_out") // off
+        answers.removeAt(0)(true)
+        ShadowLooper.idleMainLooper()
+        answers.removeAt(0)(false)
+        ShadowLooper.idleMainLooper()
+        assertEquals("on", store["switch.locked_out"]!!.state)
+    }
+
     private fun ViewGroup.all(): List<View> {
         val out = ArrayList<View>()
         for (i in 0 until childCount) {
@@ -377,11 +451,13 @@ class CoreParityTest {
         assertTrue(t.all().filterIsInstance<TextView>().any { it.text.toString() == "9 dB" })
         t.byDescription("Increase").performClick()
         assertEquals("input_number.set_value input_number.volume", calls.last().toString())
-        assertEquals(10L, calls.last().data!!.getLong("value"))
-        t.byDescription("Increase").performClick() // already at max
-        assertEquals(10L, calls.last().data!!.getLong("value"))
+        // getDouble, not getLong: 10.9 must not pass as 10.
+        assertEquals(10.0, calls.last().data!!.getDouble("value"), 0.0)
+        val before = calls.size
+        t.byDescription("Increase").performClick() // already at max: nothing, or the max again
+        assertTrue(calls.drop(before).all { it.data!!.getDouble("value") == 10.0 })
         t.byDescription("Decrease").performClick()
-        assertEquals(9L, calls.last().data!!.getLong("value"))
+        assertEquals(9.0, calls.last().data!!.getDouble("value"), 0.0)
 
         val counter = tile(store, calls, "counter.cups", """{"type": "numeric-input"}""")
         counter.byDescription("Increase").performClick()

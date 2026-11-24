@@ -89,6 +89,14 @@ SUPPORTED_TILE_FEATURES = {
     "vacuum-commands",
 }
 
+# Cards drawn natively only in some configurations: card type -> (option, its default, the native values). Any
+# other value is a web card when its script is installed, as the engine routes it. Same as configDependentTypes in
+# site/public/vitro-compat.json.
+CONFIG_DEPENDENT_TYPES = {
+    "custom:bubble-card": ("card_type", "button", {"button", "separator"}),
+    "custom:layout-card": ("layout_type", "masonry-layout", {"masonry-layout", "horizontal-layout", "vertical-layout", "grid-layout"}),
+}
+
 CONTAINER_TYPES = {
     "grid",
     "horizontal-stack",
@@ -143,6 +151,19 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
     ctype = str(card.get("type") or "").strip()
     check_card_mod(card, loc, warnings)
 
+    rule = CONFIG_DEPENDENT_TYPES.get(ctype)
+    if rule:
+        option, default, native = rule
+        raw = card.get(option)
+        value = raw.strip() if isinstance(raw, str) and raw.strip() else default
+        # The engine reads layout-card's `layout_type` with or without `custom:`; Bubble Card's `card_type` as written.
+        if option == "layout_type":
+            value = value.removeprefix("custom:")
+        if value not in native:
+            counts["tier3"] += 1
+            triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='{ctype}' with {option}: {value} (when its script is installed)")
+            return
+
     if ctype == "tile":
         for feat in card.get("features") or []:
             ftype = feat.get("type") if isinstance(feat, dict) else str(feat)
@@ -171,6 +192,15 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
             inner.pop(card.get("card_param") or "entities", None)
             walk_card(inner, f"{loc}.card", counts, triggers, warnings)
             if card.get("card_param") == "cards":
+                # The explicit entries: a string is a tile; a map keeps its type (tile when none) without `entity`.
+                entries = card.get("entities") or []
+                for i, entry in enumerate(entries if isinstance(entries, list) else []):
+                    if isinstance(entry, str):
+                        walk_card({"type": "tile"}, f"{loc}.entities[{i}]", counts, triggers, warnings)
+                    elif isinstance(entry, dict):
+                        built = dict({"type": "tile"}, **entry)
+                        built.pop("entity", None)
+                        walk_card(built, f"{loc}.entities[{i}]", counts, triggers, warnings)
                 rules = (card.get("filter") or {}).get("include") or []
                 for i, rule in enumerate(rules if isinstance(rules, list) else []):
                     opts = rule.get("options") if isinstance(rule, dict) else None

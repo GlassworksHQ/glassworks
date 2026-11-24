@@ -351,10 +351,14 @@ class VitroEngineTest {
             page.load("$base/auth/authorize?client_id=abc&redirect_uri=def")
             page.load("$base/config")
             page.load("https://example.com/config/blueprint/import")
-            assertEquals(
-                listOf("$loopback/auth/authorize?client_id=abc&redirect_uri=def", "$loopback/config", "https://example.com/config/blueprint/import"),
-                legacy.pages.single().loads.toList(),
-            )
+            // Through the server's entry route, with a one-time code it trades for the proxy's capability and redirects.
+            val loads = legacy.pages.single().loads.toList()
+            assertEquals(3, loads.size)
+            fun to(path: String) = "&to=" + java.net.URLEncoder.encode(path, "UTF-8")
+            assertTrue(loads[0], loads[0].startsWith("$loopback/__vitro/enter?c=") && loads[0].endsWith(to("/auth/authorize?client_id=abc&redirect_uri=def")))
+            assertTrue(loads[1], loads[1].startsWith("$loopback/__vitro/enter?c=") && loads[1].endsWith(to("/config")))
+            assertEquals("https://example.com/config/blueprint/import", loads[2])
+            assertTrue("each load has its own code", loads[0].substringBefore("&to=") != loads[1].substringBefore("&to="))
         } finally {
             engine.islandServer.stop()
         }
@@ -467,6 +471,45 @@ class VitroEngineTest {
         page.goBack()
         assertEquals(listOf("$base/wall-test/living"), host.pageStarts.toList())
         assertEquals(0, vitroView(page).currentViewIndex)
+    }
+
+    @Test
+    fun logLinesLeaveOutQueriesAndProxiedPaths() {
+        assertEquals("http://192.0.2.10:8123/auth/…?…", VitroEngine.forLog("http://192.0.2.10:8123/auth/authorize?client_id=a&state=secret"))
+        assertEquals("[3] GET /api/… -> 200", VitroEngine.forLog("[3] GET /api/states/sensor.private_thing -> 200"))
+        assertEquals("GET /__vitro/enter?…", VitroEngine.forLog("GET /__vitro/enter?c=capability&to=%2F"))
+        assertEquals("GET /__vitro/island/… -> 200", VitroEngine.forLog("GET /__vitro/island/s0123abcd -> 200"))
+        assertEquals("Connection reset", VitroEngine.forLog("Connection reset"))
+    }
+
+    @Test
+    fun backFollowsTabTapsAndLoadsInTheOrderTheyHappened() {
+        val page = readyPage()
+        val vv = vitroView(page)
+        // A tab tap after the load: back returns to the tab's previous view first, not the older load.
+        val wallTab = (0 until vv.childCount).asSequence().flatMap { vv.getChildAt(it).let { c -> if (c is android.view.ViewGroup) c.allViews() else sequenceOf(c) } }
+            .first { it.tag == 1 && it.isClickable }
+        wallTab.performClick()
+        idle()
+        assertEquals(1, vv.currentViewIndex)
+        page.goBack()
+        idle()
+        assertEquals(0, vv.currentViewIndex)
+        // A reload keeps the tab now shown, not the one the route was loaded with.
+        wallTab.performClick()
+        idle()
+        val readies = host.messages("ready").size
+        page.reload()
+        awaitMain("the reloaded config is on screen") { host.messages("ready").size > readies }
+        assertEquals(1, vv.currentViewIndex)
+    }
+
+    private fun android.view.ViewGroup.allViews(): Sequence<View> = sequence {
+        for (i in 0 until childCount) {
+            val c = getChildAt(i)
+            yield(c)
+            if (c is android.view.ViewGroup) yieldAll(c.allViews())
+        }
     }
 
     @Test
@@ -778,7 +821,7 @@ class VitroEngineTest {
         island.seedInitialStates { sent += it }
         assertEquals(1, sent.size)
         val seed = sent.single().getJSONObject("states")
-        assertEquals("patch", sent.single().getString("type"))
+        assertEquals("snapshot", sent.single().getString("type"))
         assertEquals(setOf("light.kitchen", "light.porch", "sensor.studio_power"), seed.keys().asSequence().toSet())
         assertEquals("on", seed.getJSONObject("light.kitchen").getString("state"))
 
@@ -806,6 +849,32 @@ class VitroEngineTest {
         // A watched entity that is removed goes out as null too.
         island.handleIslandMessage(JSONObject().put("type", "watch").put("entity_id", "light.gone")) {}
         assertTrue(island.patchFor(setOf("light.gone"))!!.getJSONObject("states").isNull("light.gone"))
+    }
+
+    @Test
+    fun aConnectGetsASnapshotEvenWhenTheStoreIsEmpty() {
+        // The island replaces its states with it: an entity removed while the bridge was down doesn't linger.
+        val island = islandWith(storeWith(), """{"type": "custom:button-card", "entity": "light.gone"}""")
+        val sent = mutableListOf<JSONObject>()
+        island.seedInitialStates { sent += it }
+        assertEquals("snapshot", sent.single().getString("type"))
+        assertEquals(0, sent.single().getJSONObject("states").length())
+        val html = WebIslandCardView.buildIslandHtml(cardContext(), islandCard())
+        assertTrue("the page replaces its states on a snapshot", html.contains("m.type === 'snapshot'"))
+    }
+
+    @Test
+    fun anInlineModuleWithAMixedCaseScriptEndStaysOneScript() {
+        val inline = "const a = \"</SCRIPT>\"; const b = \"</Script >\"; export const marker = \"mixed-case-end\";"
+        val resources = listOf(LovelaceResource("data:text/javascript;base64," + b64(inline), "module"))
+        val html = WebIslandCardView.buildIslandHtml(cardContext(resources = resources), islandCard())
+        // Where an HTML parser ends the module's script: the first `</script` in any case after its start.
+        val start = html.indexOf("<script type=\"module\">\n")
+        assertTrue(start >= 0)
+        val end = html.indexOf("</script", start, ignoreCase = true)
+        val body = html.substring(start, end)
+        assertTrue("the whole module is inside its script element", body.contains("export const marker = \"mixed-case-end\";"))
+        assertTrue(body.contains("<\\/SCRIPT>") && body.contains("<\\/Script >"))
     }
 
     @Test

@@ -109,6 +109,8 @@ class FakeHaServer {
     @Volatile var dashboardConfig: JSONObject = JSONObject(DASHBOARD_JSON)
     @Volatile var initialEntities: JSONObject = JSONObject(ENTITIES_JSON)
     @Volatile var history: JSONObject = JSONObject("""{"states": {}}""")
+    /** `history/history_during_period` answers with an error. */
+    @Volatile var failHistory: Boolean = false
     @Volatile var templateResult: Any = "21.5 °C"
 
     /** Everything the client sent, across every connection, in order. `auth` messages included. */
@@ -116,17 +118,25 @@ class FakeHaServer {
     val sockets = CopyOnWriteArrayList<Socket>()
     val connectUrls = CopyOnWriteArrayList<String>()
 
+    /** Orders a connection's registration against [shutdown]: shutdown can't miss a socket that is just opening. */
+    private val socketsLock = Any()
+
     fun connect(url: String): HaSocket {
-        if (refuseConnections) throw IOException("Connection refused")
-        connectUrls += url
-        return Socket().also { sockets += it }
+        val sock = synchronized(socketsLock) {
+            if (refuseConnections) throw IOException("Connection refused")
+            connectUrls += url
+            Socket().also { sockets += it }
+        }
+        sock.greet() // outside the lock: a test's greeting may take its time
+        return sock
     }
 
     fun commands(type: String): List<JSONObject> = received.filter { it.optString("type") == type }
 
-    /** The id the client gave its `subscribe_events` for [eventType]. */
+    /** The id the client gave its `subscribe_events` for [eventType] on the newest connection ([pushEvent] uses it). */
     fun eventSubscriptionId(eventType: String): Int? =
-        commands("subscribe_events").firstOrNull { it.optString("event_type") == eventType }?.optInt("id")
+        sockets.lastOrNull()?.received?.firstOrNull { it.optString("type") == "subscribe_events" && it.optString("event_type") == eventType }
+            ?.optInt("id")
 
     /** Pushes an `event` message for subscription [subscriptionId] over the newest connection. */
     fun pushEvent(subscriptionId: Int, event: JSONObject) {
@@ -140,8 +150,11 @@ class FakeHaServer {
 
     /** Closes every connection and refuses new ones, so reader threads wind down after a test. */
     fun shutdown() {
-        refuseConnections = true
-        sockets.forEach { it.close() }
+        val open = synchronized(socketsLock) {
+            refuseConnections = true
+            sockets.toList()
+        }
+        open.forEach { it.close() }
     }
 
     inner class Socket : HaSocket {
@@ -149,7 +162,10 @@ class FakeHaServer {
         @Volatile var closed = false
             private set
 
-        init {
+        /** What the client sent on this connection only ([FakeHaServer.received] has every connection's). */
+        val received = CopyOnWriteArrayList<JSONObject>()
+
+        internal fun greet() {
             greeting()?.let { inbox.offer(it.toString()) }
         }
 
@@ -179,6 +195,7 @@ class FakeHaServer {
 
     private fun handle(sock: Socket, m: JSONObject) {
         received += m
+        sock.received += m
         val id = m.optInt("id", -1)
         when (m.optString("type")) {
             "auth" ->
@@ -207,12 +224,9 @@ class FakeHaServer {
                 event(sock, id, JSONObject().put("a", initial))
             }
             "call_service" -> ok(sock, id, JSONObject().put("context", JSONObject().put("id", "ctx-1")))
-            "history/stream" -> {
-                ok(sock, id, JSONObject.NULL)
-                // Like a real server, the data comes after the call returned: the client records the
-                // subscription id it unsubscribes with only once subscribe() has returned.
-                eventLater(sock, id, history, delayMs = 50)
-            }
+            "ping" -> sock.push(JSONObject().put("id", id).put("type", "pong"))
+            "history/history_during_period" ->
+                if (failHistory) fail(sock, id, "unknown_error") else ok(sock, id, history.optJSONObject("states") ?: JSONObject())
             "render_template" -> {
                 ok(sock, id, JSONObject.NULL)
                 event(sock, id, JSONObject().put("result", templateResult))
@@ -236,17 +250,6 @@ class FakeHaServer {
 
     private fun event(sock: Socket, id: Int, ev: JSONObject) {
         sock.push(JSONObject().put("id", id).put("type", "event").put("event", ev))
-    }
-
-    private fun eventLater(sock: Socket, id: Int, ev: JSONObject, delayMs: Long) {
-        Thread {
-            try {
-                Thread.sleep(delayMs)
-            } catch (_: InterruptedException) {
-                return@Thread
-            }
-            event(sock, id, ev)
-        }.apply { isDaemon = true }.start()
     }
 }
 

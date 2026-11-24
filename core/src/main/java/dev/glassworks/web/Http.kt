@@ -57,8 +57,9 @@ class HttpResponse(
     fun with(extra: Map<String, String>) = HttpResponse(status, headers + extra, body, upgrade)
 
     /**
-     * What runs on an upgraded connection, on its worker, until it returns; then the connection closes. No request
-     * deadline any more: a read waits at most [idleMs].
+     * What runs on an upgraded connection until it returns; then the connection closes. It runs on the request's
+     * worker, or on a thread of its own when the server has [HttpServer]'s `upgradeThreads`. No request deadline any
+     * more: a read waits at most [idleMs].
      */
     class Upgrade(val idleMs: Int, val run: (InputStream, OutputStream) -> Unit)
 
@@ -103,7 +104,15 @@ class HttpServer(
      * It counts from when a worker picks the connection up, not from accept: time in the queue comes first.
      */
     private val requestDeadlineMs: Long = 10_000L,
+    /**
+     * Upgraded connections (WebSockets) that may run at once on threads of their own, off the worker pool, so
+     * long-lived ones never keep plain requests waiting. Past it an upgrade is answered 503. Zero (the default) runs
+     * them on the request's worker.
+     */
+    upgradeThreads: Int = 0,
 ) {
+    private val upgradeSlots: java.util.concurrent.Semaphore? =
+        upgradeThreads.takeIf { it > 0 }?.let { java.util.concurrent.Semaphore(it) }
     private var serverSocket: ServerSocket? = null
     @Volatile private var running = false
     private val pool = ThreadPoolExecutor(workers, workers, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(queued)) { r ->
@@ -156,29 +165,70 @@ class HttpServer(
 
     private fun serve(s: Socket) {
         val id = ids.incrementAndGet()
-        try { serveOn(s, id) } finally { open -= s }
+        var handedOff = false
+        try {
+            handedOff = serveOn(s, id)
+        } finally {
+            if (!handedOff) {
+                try { s.close() } catch (_: IOException) {}
+                open -= s
+            }
+        }
     }
 
-    private fun serveOn(s: Socket, id: Int) {
-        s.use { sock ->
-            try {
-                val deadline = DeadlineInput(sock, System.nanoTime() + requestDeadlineMs * 1_000_000)
-                val input = BufferedInputStream(deadline)
-                val req = try { read(input, maxBody, sock.inetAddress?.hostAddress) } catch (e: TooLarge) {
-                    write(sock.getOutputStream(), HttpResponse.text(413, "Too large"), head = false); return
-                } ?: return
-                val res = try { front?.invoke(req) ?: handler(req) } catch (t: Throwable) {
-                    log("[$id] ${req.method} ${req.path} failed: $t")
-                    HttpResponse.text(500, "Something went wrong on the panel.")
-                }
-                log("[$id] ${req.method} ${req.path} -> ${res.status}")
-                write(sock.getOutputStream(), res, head = req.method == "HEAD")
-                val up = res.upgrade ?: return
-                deadline.idleMs = up.idleMs
-                try { up.run(input, sock.getOutputStream()) } catch (t: RuntimeException) { log("[$id] ${req.path} upgraded connection failed: $t") }
-            } catch (e: IOException) {
-                log("[$id] ${e.message}")
+    /** Serves one request on [sock]; true when an upgrade thread now owns the connection (and closes it). */
+    private fun serveOn(sock: Socket, id: Int): Boolean {
+        var slot = false
+        try {
+            val deadline = DeadlineInput(sock, System.nanoTime() + requestDeadlineMs * 1_000_000)
+            val input = BufferedInputStream(deadline)
+            val req = try { read(input, maxBody, sock.inetAddress?.hostAddress) } catch (e: TooLarge) {
+                write(sock.getOutputStream(), HttpResponse.text(413, "Too large"), head = false); return false
+            } ?: return false
+            var res = try { front?.invoke(req) ?: handler(req) } catch (t: Throwable) {
+                log("[$id] ${req.method} ${req.path} failed: $t")
+                HttpResponse.text(500, "Something went wrong on the panel.")
             }
+            val slots = upgradeSlots
+            if (res.upgrade != null && slots != null) {
+                slot = slots.tryAcquire()
+                if (!slot) res = HttpResponse.text(503, "Too many open connections. Try again in a moment.")
+            }
+            log("[$id] ${req.method} ${req.path} -> ${res.status}")
+            write(sock.getOutputStream(), res, head = req.method == "HEAD")
+            val up = res.upgrade ?: return false
+            deadline.idleMs = up.idleMs
+            if (slots == null) {
+                runUpgrade(up, input, sock, req.path, id)
+                return false
+            }
+            val t = Thread({
+                try {
+                    runUpgrade(up, input, sock, req.path, id)
+                } finally {
+                    slots.release()
+                    try { sock.close() } catch (_: IOException) {}
+                    open -= sock
+                }
+            }, "glassworks-http-upgrade").apply { isDaemon = true }
+            t.start()
+            slot = false // the thread releases it now
+            return true
+        } catch (e: IOException) {
+            log("[$id] ${e.message}")
+            return false
+        } finally {
+            if (slot) upgradeSlots?.release()
+        }
+    }
+
+    private fun runUpgrade(up: HttpResponse.Upgrade, input: InputStream, sock: Socket, path: String, id: Int) {
+        try {
+            up.run(input, sock.getOutputStream())
+        } catch (t: RuntimeException) {
+            log("[$id] $path upgraded connection failed: $t")
+        } catch (e: IOException) {
+            log("[$id] $path upgraded connection ended: ${e.message}")
         }
     }
 

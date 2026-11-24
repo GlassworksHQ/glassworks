@@ -198,7 +198,8 @@ class FixtureHttp(
             val dir = if (fixture) fixtures!! else assets
             val rel = if (fixture) path.removePrefix(ParityCase.FIXTURE_PREFIX) else path.removePrefix("/")
             val f = File(dir, rel).canonicalFile
-            if (path !in haMissing && f.isFile && f.path.startsWith(dir.canonicalPath + File.separator)) {
+            // Contained by path component, not by string prefix: `assets-other/x` isn't inside `assets`.
+            if (path !in haMissing && f.isFile && f.toPath().startsWith(dir.canonicalFile.toPath())) {
                 val bytes = f.readBytes()
                 ex.sendResponseHeaders(200, bytes.size.toLong())
                 ex.responseBody.use { it.write(bytes) }
@@ -228,8 +229,9 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
     fun render(case: ParityCase, ref: ParityReference?): VitroRender {
         // HaDisplay is process-wide: hold the case's display data while it renders, and nothing after.
         HaDisplay.reset()
-        ref?.display?.let(::applyDisplay)
         try {
+            // Inside the try: a setup that fails halfway (a bad `requested.domains`) is cleared too.
+            ref?.display?.let(::applyDisplay)
             return renderWithDisplay(case, ref)
         } finally {
             HaDisplay.reset()

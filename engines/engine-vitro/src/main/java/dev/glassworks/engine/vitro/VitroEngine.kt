@@ -70,7 +70,7 @@ class VitroEngine(
      */
     val islandServer: VitroIslandServer = VitroIslandServer(
         session = { activePage?.islandSession() ?: (null to null) },
-        log = { msg -> Log.d(logTag, "island: $msg") },
+        log = { msg -> Log.d(logTag, "island: ${forLog(msg)}") },
     )
 
     /**
@@ -185,6 +185,12 @@ class VitroEngine(
         fun tokenFor(origin: String?): String? =
             cachedSession?.takeIf { VitroCardContext.sameOrigin(it.first, origin) }?.second
         private val history = ArrayDeque<String>()
+
+        /** Records [url] for back; a wall panel runs for months, so only the last [MAX_HISTORY] are kept. */
+        private fun remember(url: String) {
+            history.addLast(url)
+            while (history.size > MAX_HISTORY) history.removeFirst()
+        }
         private var firstPaintReported = false
 
         private val port = object : PagePort {
@@ -209,11 +215,18 @@ class VitroEngine(
                 // not even for the default dashboard, whose path is null too.
                 val owns = displayedDashboard != null && displayedDashboard == (currentOrigin to currentDashboardPath)
                 val path = if (owns) buildViewUrl(currentOrigin, currentDashboardPath, v.path ?: v.index.toString()) else null
+                if (owns) {
+                    // A reload or a config refresh comes back to this view, not the one the route was loaded with.
+                    pendingViewPath = v.path ?: v.index.toString()
+                }
                 if (path != null && path != currentUrl) {
                     currentUrl = path
                     host.onLocationChange(path)
                 }
             }
+            // One chronological history for back: a tab tap goes in it like a load does.
+            vitroView.onTabNavigation = { currentUrl?.let(::remember) }
+            vitroView.pageBack = { backInHistory() }
             vitroView.onThemeResolved = { theme -> reportThemeToHost(theme) }
             vitroView.contextFactory = { theme ->
                 val haBase = currentOrigin.orEmpty()
@@ -228,6 +241,10 @@ class VitroEngine(
                     haUser = { client?.currentUser ?: JSONObject() },
                     callService = { domain, service, data, target ->
                         client?.callService(domain, service, data, target)
+                    },
+                    callServiceThen = { domain, service, data, target, done ->
+                        val c = client
+                        if (c != null) c.callService(domain, service, data, target, done) else done(false)
                     },
                     callWs = { msg, done ->
                         val c = client
@@ -269,7 +286,7 @@ class VitroEngine(
                 load(redirected)
                 return
             }
-            currentUrl?.let { if (it != url) history.addLast(it) }
+            currentUrl?.let { if (it != url) remember(it) }
             currentUrl = url
 
             if (!LovelaceParser.isDashboardUrl(url)) {
@@ -330,7 +347,7 @@ class VitroEngine(
                     // The panel's token is for the Home Assistant it is set to: never hand it to another origin.
                     val allowed = configuredOrigin()
                     if (allowed != null && !VitroCardContext.sameOrigin(allowed, origin)) {
-                        Log.w(logTag, "Not sending the Home Assistant token to $origin: the panel is set to $allowed")
+                        Log.w(logTag, "Not sending the Home Assistant token to a dashboard on another origin than the panel's")
                         done(null)
                     } else {
                         tokenProvider(force) { tok ->
@@ -338,11 +355,13 @@ class VitroEngine(
                             // was on its way, and then this token is the next one's, not this client's.
                             val stillAllowed = configuredOrigin().let { it == null || VitroCardContext.sameOrigin(it, origin) }
                             if (!stillAllowed) {
-                                Log.w(logTag, "Dropping a token that arrived for $origin after the panel moved to another Home Assistant")
+                                Log.w(logTag, "Dropping a token that arrived after the panel moved to another Home Assistant")
                                 done(null)
                                 return@tokenProvider
                             }
                             if (tok != null && generation == clientGeneration) {
+                                // Another sign-in than the cached images were fetched with: they go before it is used.
+                                VitroCardContext.noteToken(tok)
                                 cachedToken = tok
                                 cachedSession = origin to tok
                             }
@@ -374,13 +393,18 @@ class VitroEngine(
                 activeFallback.goBack()
                 return
             }
-            if (history.isNotEmpty()) {
-                val prev = history.removeLast()
-                currentUrl = null // don't push onto history again
-                load(prev)
-                return
-            }
-            vitroView.goBack()
+            // Every view change (load or tab) is in [history], so it alone says where back goes. The view's own back
+            // stack mirrors it, and replaying that after the history would revisit views already gone back through.
+            backInHistory()
+        }
+
+        /** Loads the previous entry of the page's history; false when there is none. */
+        private fun backInHistory(): Boolean {
+            if (history.isEmpty()) return false
+            val prev = history.removeLast()
+            currentUrl = null // don't push onto history again
+            load(prev)
+            return true
         }
 
         override fun restart() {
@@ -462,7 +486,8 @@ class VitroEngine(
 
         private fun openInFallback(url: String) {
             val target = loopbackUrl(url)
-            Log.i(logTag, "Routing non-dashboard URL to fallback engine: $target")
+            // The URL asked for, not [target]: an entry URL carries the proxy's capability.
+            Log.i(logTag, "Routing non-dashboard URL to fallback engine: ${forLog(url)}")
             val fp = fallbackPage ?: fallback.open(activity, host, backgroundColor).also { created ->
                 fallbackPage = created
                 container.addView(created.view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -474,14 +499,15 @@ class VitroEngine(
 
         /**
          * A locked-down fallback loads only one origin, the island server's. A Home Assistant URL (`/auth/authorize`)
-         * moves to it, so the server proxies it to [currentOrigin], and to nothing else.
+         * moves to it, so the server proxies it to [currentOrigin], and to nothing else. It goes in through the
+         * server's entry route, which gives the browser the proxy's capability cookie and redirects to the path.
          */
         private fun loopbackUrl(url: String): String {
             val ha = proxyOrigin ?: return url
             if (!fallback.lockedDown || OAuth.origin(url) != ha) return url
             val afterScheme = url.trim().substringAfter("://")
             val rest = afterScheme.indexOfFirst { it == '/' || it == '?' || it == '#' }.let { if (it < 0) "" else afterScheme.substring(it) }
-            return islandServer.ensureStarted() + (if (rest.startsWith("/")) rest else "/$rest")
+            return islandServer.entryUrl(if (rest.startsWith("/")) rest else "/$rest")
         }
 
         private fun signalReady(why: String) {
@@ -578,7 +604,7 @@ class VitroEngine(
             }
 
             override fun onDisconnected(reason: String) {
-                Log.w(logTag, "HA WebSocket disconnected: $reason")
+                Log.w(logTag, "HA WebSocket disconnected: ${forLog(reason)}")
                 post {
                     if (firstPaintReported) {
                         vitroView.setConnectionBanner("Connection lost. Reconnecting…")
@@ -595,6 +621,19 @@ class VitroEngine(
 
         /** The dashboard path while the fallback shows a non-dashboard page: no real path equals it. */
         private const val NO_DASHBOARD = "\u0000fallback"
+
+        private val LOG_QUERY = Regex("""[?#][^\s"'<>]*""")
+        private val LOG_PROXIED = Regex("""/(api|local|hacsfiles|static|auth|__vitro/island|__vitro/ws|__vitro/enter)/[^\s?#"'<>]*""")
+
+        /**
+         * [text] as it may go to logcat: no query or fragment (an OAuth `state`, a camera token, the proxy's
+         * capability), and no path below the proxied prefixes (entity ids, slot ids, resource names).
+         */
+        internal fun forLog(text: String): String =
+            text.replace(LOG_QUERY, "?…").replace(LOG_PROXIED) { "/${it.groupValues[1]}/…" }
+
+        /** Back steps a page keeps. */
+        private const val MAX_HISTORY = 50
 
         internal fun buildViewUrl(origin: String?, dashPath: String?, viewPath: String): String? {
             if (origin.isNullOrBlank()) return null

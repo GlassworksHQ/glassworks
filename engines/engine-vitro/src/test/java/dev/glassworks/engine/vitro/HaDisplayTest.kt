@@ -51,16 +51,27 @@ class HaDisplayTest {
         HaDisplay.applyRegistry(JSONObject("""{"entities": [
             {"ei": "light.sunset", "di": "d1", "en": "Sunset"},
             {"ei": "light.ball", "di": "d2"},
-            {"ei": "light.strip", "di": "d3", "en": "LED Strip accent"},
+            {"ei": "light.strip", "di": "d3", "en": "Accent"},
+            {"ei": "switch.desk", "di": "d4", "en": "Desktop"},
+            {"ei": "sensor.fridge", "di": "d5", "en": "Fridge temperature"},
+            {"ei": "light.hall", "di": "d6", "en": "hall"},
             {"ei": "light.loose"}]}"""))
         HaDisplay.applyDevices(org.json.JSONArray("""[
             {"id": "d1", "name": "ZG-305Z", "name_by_user": "Sunset Lamp"},
             {"id": "d2", "name": "Ball Lamp", "name_by_user": null},
-            {"id": "d3", "name": "LED Strip"}]"""))
+            {"id": "d3", "name": "LED Strip"},
+            {"id": "d4", "name": "Desk"},
+            {"id": "d5", "name": "Fridge"},
+            {"id": "d6", "name": "Hall"}]"""))
         assertEquals("Sunset Lamp Sunset", HaDisplay.deviceEntityName("light.sunset"))
         assertEquals("Ball Lamp", HaDisplay.deviceEntityName("light.ball"))
-        // As hass.formatEntityName: the entity's name isn't trimmed of the device's ("Fridge Fridge temperature").
-        assertEquals("LED Strip LED Strip accent", HaDisplay.deviceEntityName("light.strip"))
+        assertEquals("LED Strip Accent", HaDisplay.deviceEntityName("light.strip"))
+        // The entity's own name stays whole: no device-name prefix is cut off it ("Desk" + "Desktop").
+        assertEquals("Desk Desktop", HaDisplay.deviceEntityName("switch.desk"))
+        // As hass.formatEntityName: "Fridge" + "Fridge temperature" stays "Fridge Fridge temperature".
+        assertEquals("Fridge Fridge temperature", HaDisplay.deviceEntityName("sensor.fridge"))
+        // An entity named exactly like its device shows the device's name once.
+        assertEquals("Hall", HaDisplay.deviceEntityName("light.hall"))
         assertNull(HaDisplay.deviceEntityName("light.loose"))
     }
 

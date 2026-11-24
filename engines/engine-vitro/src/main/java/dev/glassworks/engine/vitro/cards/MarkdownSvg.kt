@@ -20,6 +20,7 @@ import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.math.tan
@@ -44,6 +45,12 @@ class MdSvg private constructor(
         val attrs: Map<String, String>,
         val matrix: Matrix?,
         val text: String? = null,
+        /**
+         * A group's opacity, as a marker rather than a shape: the shapes up to the matching [endsLayer] marker are
+         * drawn into one layer, composited once at this alpha (children's own alphas don't stack where they overlap).
+         */
+        val layerAlpha: Float? = null,
+        val endsLayer: Boolean = false,
     ) {
         /** Its paint, resolved from [attrs] on the first draw and reused by every draw after it. */
         var style: ShapeStyle? = null
@@ -93,7 +100,16 @@ class MdSvg private constructor(
             canvas.scale(s, s)
         }
         canvas.translate(-viewBox.left, -viewBox.top)
-        for (shape in shapes) drawShape(canvas, shape, context)
+        val base = canvas.saveCount
+        val layers = ArrayList<Int>()
+        for (shape in shapes) {
+            when {
+                shape.layerAlpha != null -> layers += canvas.saveLayerAlpha(null, (shape.layerAlpha * 255f).roundToInt().coerceIn(0, 255))
+                shape.endsLayer -> if (layers.isNotEmpty()) canvas.restoreToCount(layers.removeAt(layers.lastIndex))
+                else -> drawShape(canvas, shape, context)
+            }
+        }
+        canvas.restoreToCount(base)
         canvas.restore()
     }
 
@@ -117,11 +133,17 @@ class MdSvg private constructor(
         if (path != null && stroke != null && !dashes.isNullOrEmpty() && dashes.any { it > 0f }) {
             val scale = a["pathLength"]?.toFloatOrNull()?.takeIf { it > 0f }?.let { PathMeasure(path, false).length / it } ?: 1f
             val list = (if (dashes.size % 2 == 1) dashes + dashes else dashes).map { it * scale }
-            if (list[0] <= 0f) {
-                // A zero-length dash still draws its round or square cap.
+            val anyOn = list.indices.any { it % 2 == 0 && list[it] > 0f }
+            if (list[0] <= 0f && !anyOn) {
+                // Only zero-length dashes: a round or square cap still draws its dot; a butt cap draws nothing.
                 if (cap != Paint.Cap.BUTT) capDot = FloatArray(2).also { PathMeasure(path, false).getPosTan(0f, it, null) }
                 else strokeHidden = true
+            } else if (list[0] <= 0f && cap != Paint.Cap.BUTT) {
+                // A zero-length first dash with a cap: its dot, and the pattern's later dashes.
+                capDot = FloatArray(2).also { PathMeasure(path, false).getPosTan(0f, it, null) }
+                dash = DashPathEffect(list.map { it.coerceAtLeast(0.001f) }.toFloatArray(), 0f)
             } else {
+                // (A zero-length butt dash comes out as a sliver too thin to see; the later ones paint.)
                 dash = DashPathEffect(list.map { it.coerceAtLeast(0.001f) }.toFloatArray(), 0f)
             }
         }
@@ -213,6 +235,12 @@ class MdSvg private constructor(
             dot != null -> {
                 paint.style = Paint.Style.FILL
                 canvas.drawCircle(dot[0], dot[1], st.strokeWidth / 2f, paint)
+                // The pattern's later dashes, when it has any.
+                st.dash?.let { d ->
+                    paint.style = Paint.Style.STROKE
+                    paint.pathEffect = d
+                    canvas.drawPath(path, paint)
+                }
             }
             st.dash != null -> {
                 paint.pathEffect = st.dash
@@ -273,6 +301,8 @@ class MdSvg private constructor(
             var ih: Float? = null
             // Inherited presentation attributes and transforms of open <g>/<svg> elements.
             val inherited = ArrayList<Pair<Map<String, String>, Matrix?>>()
+            // Per open <g>/<svg>, alongside [inherited]: whether it opened an opacity layer that its close ends.
+            val layered = ArrayList<Boolean>()
             var pos = 0
             var openText: Pair<Map<String, String>, Matrix?>? = null
             val textBuf = StringBuilder()
@@ -285,7 +315,10 @@ class MdSvg private constructor(
                 val selfClose = m.groupValues[4] == "/"
                 if (closing) {
                     when (name) {
-                        "g", "svg" -> if (inherited.isNotEmpty()) inherited.removeAt(inherited.size - 1)
+                        "g", "svg" -> {
+                            if (inherited.isNotEmpty()) inherited.removeAt(inherited.size - 1)
+                            if (layered.isNotEmpty() && layered.removeAt(layered.size - 1)) shapes += Shape(null, emptyMap(), null, endsLayer = true)
+                        }
                         "text", "tspan" -> openText?.let { (a, mx) ->
                             if (name == "text") {
                                 shapes += Shape(null, a, mx, MdHtml.decodeEntities(textBuf.toString().trim()))
@@ -324,9 +357,19 @@ class MdSvg private constructor(
                             iw = own["width"]?.let { MdCascade.length(it, 16f, 0f) }
                             ih = own["height"]?.let { MdCascade.length(it, 16f, 0f) }
                         }
-                        if (!selfClose) inherited += own to matrix
+                        if (!selfClose) {
+                            inherited += own to matrix
+                            layered += false
+                        }
                     }
-                    "g" -> if (!selfClose) inherited += own to matrix
+                    "g" -> if (!selfClose) {
+                        inherited += own to matrix
+                        // A group's opacity applies to the group drawn as a whole.
+                        val alpha = own["opacity"]?.let { MarkdownInline.parseOpacity(it) }?.coerceIn(0f, 1f)
+                        val layer = alpha != null && alpha < 1f
+                        if (layer) shapes += Shape(null, emptyMap(), null, layerAlpha = alpha)
+                        layered += layer
+                    }
                     "text" -> if (!selfClose) { openText = attrs to matrix; textBuf.setLength(0) }
                     "path" -> own["d"]?.let { shapes += Shape(pathData(it), attrs, matrix) }
                     "circle" -> {
@@ -488,10 +531,13 @@ class MdSvg private constructor(
             return p
         }
 
-        /** Reads one arc flag at [i]: a whole `0` / `1` token, or the first digit of a run like `011`. */
+        /**
+         * Reads one arc flag at [i]: a flag is one `0` or `1`, so a token like `011.5` is the flags 0 and 1 and then
+         * the coordinate 1.5.
+         */
         private fun flag(tokens: MutableList<String>, i: Int): Pair<Boolean, Int> {
             val t = tokens[i]
-            if (t.length > 1 && (t[0] == '0' || t[0] == '1') && t.all { it.isDigit() }) {
+            if (t.length > 1 && (t[0] == '0' || t[0] == '1') && (t[1].isDigit() || t[1] == '.')) {
                 tokens[i] = t.substring(1) // "011" is the flag 0, then "11"
                 return (t[0] == '1') to i
             }

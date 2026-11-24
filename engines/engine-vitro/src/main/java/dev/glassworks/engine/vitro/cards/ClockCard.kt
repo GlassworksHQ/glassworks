@@ -55,6 +55,11 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     private val dateFormat: ClockDate? = ClockDate.of(raw.opt("date_format"))
     private val dateLines = ArrayList<DateLine>()
     private var appliedZone: String? = null
+    /**
+     * The zone the date line is written in. Declared before `init`, which renders and sets it: a property initialized
+     * after `init` would overwrite it with the device's zone, and later ticks (same [appliedZone]) never fix it.
+     */
+    private var dateZone: TimeZone = TimeZone.getDefault()
     private var running = false
     private var cardCss: String? = null
 
@@ -248,8 +253,6 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
             dateLines.forEachIndexed { i, line -> line.text.setLine(lines.getOrElse(i) { "" }) }
         }
     }
-
-    private var dateZone: TimeZone = TimeZone.getDefault()
 
     /** The date text after the clock's last render (tests). */
     internal val renderedDate: String get() = dateLines.joinToString("\n") { it.text.text.toString() }

@@ -107,7 +107,8 @@ object ParityDiff {
             var nearB = false
             for (dy in -1..1) for (dx in -1..1) {
                 val xx = x + dx; val yy = y + dy
-                if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue
+                // A masked neighbor isn't compared either: it can't excuse an unmasked pixel.
+                if (xx < 0 || yy < 0 || xx >= w || yy >= h || masked.any { it.contains(xx, yy) }) continue
                 val j = yy * w + xx
                 if (!nearA && yiq(a[i], b[j]) <= MAX_DELTA) nearA = true
                 if (!nearB && yiq(b[i], a[j]) <= MAX_DELTA) nearB = true
