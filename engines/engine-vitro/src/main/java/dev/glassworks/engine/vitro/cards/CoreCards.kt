@@ -1925,23 +1925,34 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
 
 /** Native HA `glance` card, in `hui-glance-card`'s order: name on top, icon in the middle, state at the bottom. */
 class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
+    /**
+     * hui-glance-card as measured: the entities card's header (20 / 16 / 24, 24 px title), then items in a
+     * `0 16px 4px` box (16 px on top without a header), each `0 4px` wide with 12 px under it: the name on a 22.4 px
+     * line, the 40 px state badge 8 px above and below, the state (as HA formats it, no tile extras) on 22.4 px.
+     */
     init {
-        val pad = ctx.px(14f)
-        val root = LinearLayout(ctx.context).apply {
+        val root = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+        val title = config.title
+        if (title != null) {
+            root.addView(textView(ctx, 24f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
+                text = title
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(ctx.px(16f), ctx.px(20f), ctx.px(16f), ctx.px(24f))
+            }, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(20f + 28.8f + 24f)))
+        }
+        val grid = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
+            setPadding(ctx.px(16f), if (title == null) ctx.px(16f) else 0, ctx.px(16f), ctx.px(4f))
         }
-        config.title?.let { t ->
-            root.addView(textView(ctx, 22f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
-                text = t
-                setPadding(0, 0, 0, ctx.px(8f))
-            })
-        }
+        root.addView(grid, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         val showName = config.raw.optBoolean("show_name", true)
         val showState = config.raw.optBoolean("show_state", true)
         val showIcon = config.raw.optBoolean("show_icon", true)
         val entities = config.entities().filter { it.isEntity }
         val cols = config.raw.optInt("columns", minOf(entities.size.coerceAtLeast(1), 5)).coerceIn(1, 6)
+        val line = (22.4f * ctx.dp).roundToInt()
 
         entities.chunked(cols).forEach { chunk ->
             val row = LinearLayout(ctx.context).apply {
@@ -1952,22 +1963,22 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                 val cell = LinearLayout(ctx.context).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER_HORIZONTAL
-                    setPadding(ctx.px(4f), ctx.px(6f), ctx.px(4f), ctx.px(6f))
+                    setPadding(ctx.px(4f), 0, ctx.px(4f), 0)
                     isClickable = true
                     applyHaRipple(this, 8f * ctx.dp, ctx.theme.dark)
                 }
                 val icon = MdiIconView(ctx.context)
-                val name = textView(ctx, 13f, ctx.theme.primaryTextColor).apply {
+                val name = textView(ctx, 14f, ctx.theme.primaryTextColor).apply {
                     maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER
                 }
-                val state = textView(ctx, 13f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
+                val state = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
                     maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER
                 }
-                if (showName) cell.addView(name, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                if (showName) cell.addView(name, LinearLayout.LayoutParams(MATCH_PARENT, line))
                 if (showIcon) cell.addView(icon, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply {
-                    topMargin = ctx.px(10f); bottomMargin = ctx.px(10f)
+                    topMargin = ctx.px(16f); bottomMargin = ctx.px(16f)
                 })
-                if (showState) cell.addView(state, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                if (showState) cell.addView(state, LinearLayout.LayoutParams(MATCH_PARENT, line))
                 cell.setOnClickListener {
                     ctx.performAction(e.tapAction ?: ActionConfig("more-info"), e.entity)
                 }
@@ -1977,11 +1988,11 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                     val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                     icon.setIcon(MdiIcons.resolveIconName(e.icon, s), tint)
                     name.text = e.name ?: s?.friendlyName ?: e.entity
-                    state.text = s?.formattedState() ?: "…"
+                    state.text = s?.plainState() ?: "…"
                 }
-                row.addView(cell, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                row.addView(cell, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { bottomMargin = ctx.px(12f) })
             }
-            root.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            grid.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
         addView(root, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
     }
