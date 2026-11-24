@@ -213,3 +213,14 @@ test('imagePaths finds image and picture values and Markdown <img> sources', asy
   };
   assert.deepEqual(imagePaths(card).sort(), ['/local/d.png', '/local/g.png', '/local/h.png', '/static/icons/a.png', '/static/icons/b.png', '/static/icons/c.png']);
 });
+
+test('imagePaths reads <img src> as HTML does: quotes, bare values, code and protocol-relative URLs', async () => {
+  const { imagePaths } = await import('../lib/assets.mjs');
+  const md = (content) => imagePaths({ type: 'markdown', content }).sort();
+  assert.deepEqual(md(`<img src="/local/kid's.png"> <img src='/local/say "hi".png'>`), ['/local/kid\'s.png', '/local/say "hi".png']);
+  assert.deepEqual(md('<img alt=x src=/local/bare.png width=10>'), ['/local/bare.png']);
+  assert.deepEqual(md('<img data-src="/local/no.png" src="/local/yes.png">'), ['/local/yes.png']);
+  assert.deepEqual(md('<img src="//cdn.example.test/a.png"> <img src="/local/a.png#frag">'), ['/local/a.png']);
+  assert.deepEqual(md('Code `<img src="/local/span.png">` and\n```\n<img src="/local/fence.png">\n```\nthen <img src="/local/real.png">'), ['/local/real.png']);
+  assert.deepEqual(imagePaths({ type: 'picture', image: '//cdn.example.test/x.png' }), []);
+});
