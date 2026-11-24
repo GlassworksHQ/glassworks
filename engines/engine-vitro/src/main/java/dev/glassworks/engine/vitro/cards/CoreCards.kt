@@ -2162,7 +2162,7 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
 /**
  * Native HA `picture`, `picture-entity`, and `picture-glance` card.
  * With `camera_view: live` (or a `camera.*` entity) it plays HA's MJPEG stream while attached, falling back to a
- * snapshot every [LiveCameraFeed.POLL_MS] when the stream isn't available, and shows a green "LIVE" badge.
+ * snapshot every [LiveCameraFeed.POLL_MS] when the stream isn't available (no badge: HA draws none).
  * A `picture-glance` with `entities` gets HA's row of tappable entity icons on the right of its caption bar.
  */
 class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
@@ -2171,23 +2171,55 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
     }
+    /** The footer's state, at the end when the name shows too. */
+    private val stateCaption = textView(ctx, 16f, Color.WHITE, Inter.REGULAR).apply {
+        maxLines = 1
+        gravity = Gravity.CENTER_VERTICAL or Gravity.END
+    }
     private val liveEntityId: String? = (config.entity ?: config.raw.optString("camera_image", "").ifEmpty { null })
         ?.takeIf { config.raw.optString("camera_view") == "live" || it.startsWith("camera.") }
     private val isLive = liveEntityId != null
     private var latestPicture: String? = null
     private val feed: LiveCameraFeed? = liveEntityId?.let { id ->
-        LiveCameraFeed(ctx, id, { latestPicture }) { bmp -> img.setImageBitmap(bmp) }
+        LiveCameraFeed(ctx, id, { latestPicture }) { bmp -> showBitmap(bmp) }
     }
 
     /** Width / height, from `aspect_ratio` (`16:9`, `4:3`, `50%` = height as % of width, or a decimal). */
     private val aspect: Float = parseAspectRatio(config.raw.opt("aspect_ratio")?.toString())
+    /** Without `aspect_ratio`, HA's picture-entity takes the image's own shape once it has loaded. */
+    private val naturalAspect = config.type == "picture-entity" && !config.raw.has("aspect_ratio")
+    private var imageAspect: Float? = null
+
+    private fun showBitmap(bmp: android.graphics.Bitmap) {
+        img.setImageBitmap(bmp)
+        if (naturalAspect && bmp.height > 0) {
+            val a = bmp.width.toFloat() / bmp.height
+            if (imageAspect == null || kotlin.math.abs(imageAspect!! - a) > 0.01f) {
+                imageAspect = a
+                requestLayout()
+            }
+        }
+    }
 
     init {
         addView(img, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         val showName = config.raw.optBoolean("show_name", true)
         val showState = config.raw.optBoolean("show_state", true)
         val glanceEntities = if (config.type == "picture-glance") config.entities().filter { it.isEntity } else emptyList()
-        if (config.type != "picture" && (showName || showState || glanceEntities.isNotEmpty())) {
+        if (config.type == "picture-entity" && (showName || showState)) {
+            // hui-picture-entity-card's footer: 16 px white text on rgba(0,0,0,.3), 16 px padding; name and state
+            // spread apart, or one of them centered (`.single`).
+            caption.textSize = ctx.scaledSp(16f)
+            caption.typeface = Inter.typeface(ctx.context, Inter.REGULAR, ctx.scaledSp(16f))
+            caption.gravity = Gravity.CENTER_VERTICAL or if (showName && showState) Gravity.START else Gravity.CENTER_HORIZONTAL
+            val bar = FrameLayout(ctx.context).apply {
+                setBackgroundColor(0x4D000000)
+                setPadding(ctx.px(16f), 0, ctx.px(16f), 0)
+                addView(caption, LayoutParams(MATCH_PARENT, ctx.px(48f)))
+                if (showName && showState) addView(stateCaption, LayoutParams(MATCH_PARENT, ctx.px(48f)))
+            }
+            addView(bar, LayoutParams(MATCH_PARENT, ctx.px(48f), Gravity.BOTTOM))
+        } else if (config.type != "picture" && (showName || showState || glanceEntities.isNotEmpty())) {
             val bar = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -2201,13 +2233,10 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             }
             addView(bar, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
         }
-        if (isLive && showState) addView(buildLiveBadge(), LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
-            topMargin = ctx.px(8f); marginEnd = ctx.px(8f)
-        })
 
         val staticImage = config.raw.optString("image", "").ifEmpty { null }
         if (staticImage != null) {
-            ctx.loadImage(staticImage) { bmp -> if (bmp != null) img.setImageBitmap(bmp) }
+            ctx.loadImage(staticImage) { bmp -> if (bmp != null) showBitmap(bmp) }
         }
         // HA's picture-glance labels its bar with `title`; the other picture cards use `name`.
         val label = if (config.type == "picture-glance") config.title ?: config.name else config.name
@@ -2218,16 +2247,21 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             setOnClickListener { ctx.performAction(ActionConfig.parse(config.raw.optJSONObject("tap_action")), eid) }
             bindHoldAction(holdActionFor(config.raw, eid), eid)
             observe(eid) { s ->
-                val parts = buildList {
-                    if (showName) add(label ?: s?.friendlyName ?: eid)
-                    if (showState && s != null && glanceEntities.isEmpty()) add(s.formattedState())
+                if (config.type == "picture-entity" && showName && showState) {
+                    caption.text = label ?: s?.friendlyName ?: eid
+                    stateCaption.text = s?.formattedState().orEmpty()
+                } else {
+                    val parts = buildList {
+                        if (showName) add(label ?: s?.friendlyName ?: eid)
+                        if (showState && s != null && glanceEntities.isEmpty()) add(s.formattedState())
+                    }
+                    caption.text = parts.joinToString(" · ")
                 }
-                caption.text = parts.joinToString(" · ")
                 if (staticImage == null) {
                     latestPicture = s?.entityPicture
                     // Live cards are refreshed by the feed; others load once per state change.
                     if (!isLive) latestPicture?.let { pic ->
-                        ctx.loadImage(pic) { bmp -> if (bmp != null) img.setImageBitmap(bmp) }
+                        ctx.loadImage(pic) { bmp -> if (bmp != null) showBitmap(bmp) }
                     }
                 }
             }
@@ -2267,29 +2301,8 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             super.onMeasure(widthMeasureSpec, heightMeasureSpec)
             return
         }
-        val height = (width / aspect).toInt().coerceAtLeast(1)
+        val height = (width / (imageAspect ?: aspect)).toInt().coerceAtLeast(1)
         super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
-    }
-
-    private fun buildLiveBadge(): LinearLayout = LinearLayout(ctx.context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(ctx.px(7f), ctx.px(3f), ctx.px(8f), ctx.px(3f))
-        background = GradientDrawable().apply {
-            cornerRadius = 999f
-            setColor(0x88000000.toInt())
-        }
-        val dot = View(ctx.context).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0xFF4CAF50.toInt())
-            }
-        }
-        addView(dot, LinearLayout.LayoutParams(ctx.px(6f), ctx.px(6f)).apply { marginEnd = ctx.px(5f) })
-        addView(textView(ctx, 10f, Color.WHITE, Inter.MEDIUM).apply {
-            text = "LIVE"
-            letterSpacing = 0.08f
-        })
     }
 
     override fun onAttachedToWindow() {
