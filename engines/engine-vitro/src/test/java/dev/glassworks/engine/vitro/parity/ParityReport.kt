@@ -24,8 +24,10 @@ data class TextCheck(
     val text: String, val sizeHa: Double, val sizeVitro: Double?, val dx: Double?, val dy: Double?,
     /** Vitro has the text but cuts it with an ellipsis while HA shows it whole: counted as missing. */
     val elided: Boolean = false,
+    /** Vitro draws the text on a canvas and describes it for screen readers: present, with nothing to measure. */
+    val described: Boolean = false,
 ) {
-    val found get() = sizeVitro != null
+    val found get() = sizeVitro != null || described
 }
 
 /** The structural and pixel numbers for one case on one frame. */
@@ -135,6 +137,7 @@ object ParityCompare {
 
         val texts = ArrayList<TextCheck>()
         val vitroTexts = (0 until render.slots.size).associateWith { render.texts(it) }
+        val describedTexts = (0 until render.slots.size).associateWith { render.describedTexts(it) }
         val used = HashMap<VitroText, Int>()
         for (t in ref.texts) {
             val needle = t.text.replace(Regex("\\s+"), " ").trim()
@@ -159,7 +162,8 @@ object ParityCompare {
                 continue
             }
             if (hit == null) {
-                texts += TextCheck(t.text, t.size, null, null, null)
+                val drawn = describedTexts[t.slot].orEmpty().any { indexOfFolded(it, needle) >= 0 }
+                texts += TextCheck(t.text, t.size, null, null, null, described = drawn)
                 continue
             }
             val (vt, idx) = hit
@@ -255,7 +259,7 @@ object ParityReportWriter {
             put("pixelTolerant", m.pixel.tolerant); put("pixelStrict", m.pixel.strict); put("meanLuma", m.pixel.meanLuma)
             put("bounds", if (m.bounds.isInfinite()) JSONObject.NULL else m.bounds); put("slotsHa", JSONArray(m.haSlots.map(::rectJson))); put("slotsVitro", JSONArray(m.vitroSlots.map(::rectJson)))
             put("fontDelta", m.fontDelta); put("positionDelta", m.positionDelta); put("missingTexts", JSONArray(m.missingTexts))
-            put("texts", JSONArray(m.texts.map { t -> JSONObject().put("text", t.text).put("sizeHa", t.sizeHa).put("sizeVitro", t.sizeVitro ?: JSONObject.NULL).put("dx", t.dx ?: JSONObject.NULL).put("dy", t.dy ?: JSONObject.NULL) }))
+            put("texts", JSONArray(m.texts.map { t -> JSONObject().put("text", t.text).put("sizeHa", t.sizeHa).put("sizeVitro", t.sizeVitro ?: JSONObject.NULL).put("dx", t.dx ?: JSONObject.NULL).put("dy", t.dy ?: JSONObject.NULL).apply { if (t.described) put("described", true) } }))
         }
         put("reasons", JSONArray(r.reasons)); put("notes", JSONArray(r.notes)); r.image?.let { put("image", it) }
     }

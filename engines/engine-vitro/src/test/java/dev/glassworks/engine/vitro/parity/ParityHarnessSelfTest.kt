@@ -173,6 +173,17 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun aTextDrawnOnACanvasCountsWhenItsViewDescribesIt() {
+        // A dial's "Off" lives in its content description: present, with no size or position to compare.
+        val described = TextCheck("Off", 36.0, null, null, null, described = true)
+        val missing = TextCheck("17.5 °C", 16.0, null, null, null)
+        val pixels = PixelDiff(0.0, 0.0, 0.0, android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888))
+        val m = ParityMeasure(pixels, 0.0, emptyList(), emptyList(), listOf(described, missing))
+        assertEquals(listOf("17.5 °C"), m.missingTexts)
+        assertEquals(0.0, m.fontDelta, 0.0)
+    }
+
+    @Test
     fun aTextHaCutsItselfIsNotChargedToVitro() {
         val slot = CssRect(0.0, 0.0, 246.0, 120.0)
         fun t(w: Double, clipped: Boolean? = null) = RefText(0, "Entryway Ceiling Light", CssRect(56.0, 17.0, w, 16.0), 14.0, 500, "none", clipped)

@@ -454,6 +454,8 @@ private class GaugeCanvasView(context: Context, private var activeColor: Int, pr
     /** `hui-gauge-card`'s needle sweep: the arc eases to [frac] over 240 ms on screen and snaps before attach. */
     fun update(frac: Float, label: String, color: Int = activeColor) {
         text = label
+        // The value it draws, as HA's page has it as text: for TalkBack and the parity harness.
+        if (contentDescription?.toString() != label) contentDescription = label
         activeColor = color
         val to = frac.coerceIn(0f, 1f)
         if (to == targetFraction) {
@@ -733,7 +735,7 @@ internal class ThermostatDialView(
 
     /** The thermometer and the current temperature, centered on [centerY]. */
     private fun drawCurrent(canvas: Canvas, cur: Double, color: Int, paint: Paint, iconSize: Float, centerY: Float) {
-        val curText = offCurMemo.of(cur) { v -> HaDisplay.formatValue(v, 1).let { if ('.' in it) it else String.format(Locale.US, "%.1f", v) } + " " + unit }
+        val curText = offCurText(cur)
         paint.color = color
         val textW = paint.measureText(curText)
         val gap = 4f * dp
@@ -751,6 +753,33 @@ internal class ThermostatDialView(
     private val iconMatrix = Matrix()
     private val iconPath = Path()
     private val oval = RectF()
+
+    // The texts the dial draws, built once per value (onDraw and the description share them).
+    private fun offCurText(cur: Double) =
+        offCurMemo.of(cur) { v -> HaDisplay.formatValue(v, 1).let { if ('.' in it) it else String.format(Locale.US, "%.1f", v) } + " " + unit }
+    private fun curText(cur: Double) = curMemo.of(cur) { v -> String.format(Locale.US, "%.1f %s", v, unit) }
+    private fun labelText() = labelMemo.of(action, mode) { (action ?: mode).replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) } }
+
+    /**
+     * The texts the dial draws, in order, as its content description: what HA's page has as text (the state or the
+     * action, the target, the current temperature), so TalkBack reads them and the parity harness finds them.
+     */
+    private fun describe() {
+        val cur = current
+        val t = target
+        val parts = ArrayList<String>(3)
+        if (t == null) {
+            if (stateLabel.isNotEmpty()) parts += stateLabel
+            if (cur != null && showCurrentInDial) parts += offCurText(cur)
+        } else {
+            parts += labelText()
+            val (whole, dec) = splitTemp(t, step)
+            parts += "$whole$dec $unit"
+            if (cur != null && showCurrentInDial) parts += curText(cur)
+        }
+        val text = parts.joinToString(", ")
+        if (contentDescription?.toString() != text) contentDescription = text
+    }
 
     private var min = 7.0
     private var max = 35.0
@@ -787,6 +816,7 @@ internal class ThermostatDialView(
         if (!dragging) setTarget(target)
         this.mode = mode
         this.action = action
+        describe()
         invalidate()
     }
 
@@ -796,6 +826,7 @@ internal class ThermostatDialView(
         val next = snap(t + sign * step)
         if (next == t) return
         setTarget(next)
+        describe()
         invalidate()
         onCommit(next)
     }
@@ -823,6 +854,7 @@ internal class ThermostatDialView(
         targetAnimator = null
         target = value
         shownTarget = value
+        describe()
     }
 
     override fun onDetachedFromWindow() {
@@ -937,7 +969,7 @@ internal class ThermostatDialView(
             if (cur != null && showCurrentInDial) drawCurrent(canvas, cur, ctx.theme.primaryTextColor, offCurPaint, 16f * dp, cy + 48.8f * dp)
             return
         }
-        val labelText = labelMemo.of(action, mode) { (action ?: mode).replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) } }
+        val labelText = labelText()
         labelPaint.color = activeTint ?: ctx.theme.secondaryTextColor
         canvas.drawText(labelText, cx, cy - 34f * dp, labelPaint)
 
@@ -971,7 +1003,7 @@ internal class ThermostatDialView(
         }
 
         if (cur != null && showCurrentInDial) {
-            val curText = curMemo.of(cur) { v -> String.format(Locale.US, "%.1f %s", v, unit) }
+            val curText = curText(cur)
             val curColor = if (action == "heating") HEAT_COLOR else if (action == "cooling") COOL_COLOR else ctx.theme.secondaryTextColor
             curPaint.color = curColor
             val iconSize = 14f * dp
