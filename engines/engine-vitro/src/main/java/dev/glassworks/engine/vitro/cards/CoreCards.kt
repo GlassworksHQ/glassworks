@@ -212,6 +212,14 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     private var inlineFeatures: View? = null
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        mushroom?.row?.let { row ->
+            // Mushroom 5's `.container { margin: calc(-1 * var(--ha-card-border-width, 1px)) }`: the variable, not the
+            // border drawn. With the theme's border the content covers it; with `border: none` (card-mod) it runs past
+            // each edge by the variable, and the card is that much shorter than its 56 px content (the S1's alarm row).
+            val m = drawnBorderPx - (ctx.theme.cardBorderWidthDp * ctx.dp).toInt()
+            val lp = row.layoutParams as MarginLayoutParams
+            if (lp.topMargin != m || lp.leftMargin != m) lp.setMargins(m, m, m, m)
+        }
         inlineFeatures?.let { slot ->
             if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
                 // hui-card-features beside the content: calc(50% - var(--column-gap) / 2 - 12px), 12 px end padding.
