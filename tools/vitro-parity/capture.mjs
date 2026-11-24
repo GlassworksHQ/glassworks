@@ -23,12 +23,14 @@
 import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { connect, loadCredentials, redact } from './lib/ha.mjs';
 import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate, hasMacFragment } from './lib/scrub.mjs';
 import { parseArgs, pick } from './lib/args.mjs';
 import { aliasPaths, assetDestination, canonicalPath, capturableImage, staleAssets } from './lib/assets.mjs';
 import { applyEntityEvent } from './lib/states.mjs';
+import { imageOutcomes, noteSaved } from './lib/images.mjs';
 import { buildDisplay } from './lib/display.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
 
@@ -124,6 +126,9 @@ async function saveHarness(ha, config, caseIds) {
   await ha.call({ type: 'lovelace/config/save', url_path: HARNESS, config });
 }
 
+
+/** Path -> sha256 of the image this run saved there: a second, different one is a conflict (noteSaved). */
+const savedDigests = new Map();
 
 /** Asset paths this run saved or found unchanged; a full, clean refresh deletes every other file in assets/. */
 const keptAssets = new Set();
@@ -341,36 +346,34 @@ function recordStates(page) {
  * whatever HA drew, Vitro's fixture server serves.
  */
 function recordImages(page) {
-  const loaded = new Map();
-  const failed = new Set();
+  const images = imageOutcomes();
   const chain = (res) => {
     const urls = [res.url()];
     for (let r = res.request().redirectedFrom(); r; r = r.redirectedFrom()) urls.push(r.url());
     return urls;
   };
-  const onOrigin = (url) => {
+  const onOrigin = (urls) => urls.map((url) => {
     try { const u = new URL(url); return u.origin === creds.origin ? u.pathname : null; } catch { return null; }
-  };
+  }).filter(Boolean);
   page.on('response', (res) => {
     const urls = chain(res);
     const paths = aliasPaths(urls, creds.origin, res.status(), res.headers()['content-type']);
     if (paths.length) {
       // One body under every path that led to it: a redirected <img> keeps the URL it asked for.
-      const body = res.body().catch(() => null);
-      for (const p of paths) if (!loaded.has(p)) loaded.set(p, body);
+      images.success(paths, res.body().catch(() => null));
       return;
     }
     if (res.request().resourceType() !== 'image') return;
     // An image request that got an error, or a 2xx that isn't an image (HA shows nothing there either).
-    if (res.status() >= 400 || (res.status() >= 200 && res.status() < 300)) {
-      for (const u of urls) { const p = onOrigin(u); if (p) failed.add(p); }
-    }
+    if (res.status() >= 400 || (res.status() >= 200 && res.status() < 300)) images.failure(onOrigin(urls));
   });
   page.on('requestfailed', (req) => {
     if (req.resourceType() !== 'image') return;
-    for (let r = req; r; r = r.redirectedFrom()) { const p = onOrigin(r.url()); if (p) failed.add(p); }
+    const urls = [];
+    for (let r = req; r; r = r.redirectedFrom()) urls.push(r.url());
+    images.failure(onOrigin(urls));
   });
-  return { loaded, failed };
+  return images;
 }
 
 /**
@@ -391,6 +394,8 @@ async function saveDrawnImages(images, drawn) {
     const bytes = await images.loaded.get(path);
     if (!bytes) throw new Error(`image ${path}: HA loaded it but its body couldn't be read`);
     const out = assetDestination(join(corpusRoot, 'assets'), path, committed);
+    const conflict = noteSaved(savedDigests, path, createHash('sha256').update(bytes).digest('hex'));
+    if (conflict) throw new Error(conflict);
     keptAssets.add(path);
     if (existsSync(out) && readFileSync(out).equals(bytes)) continue;
     mkdirSync(dirname(out), { recursive: true });
@@ -591,12 +596,13 @@ async function capture() {
             }
             ids = referencedEntities(config, states);
             drawnStates = snapshotStates(states, ids);
+            // The images the screenshot shows, read just before it and checked again after (bracketed like the
+            // states): saved for Vitro's fixture server after the checks.
+            drawn = await page.evaluate(DRAWN_IMAGES_JS, slots);
             // Kept in memory until every check passes: a failed case leaves no PNG behind.
             png = await page.screenshot({ clip, fullPage: true });
             texts = [];
             for (const [i, s] of slots.entries()) for (const t of await page.evaluate(TEXTS_JS, s)) texts.push({ slot: i, ...roundRect(t) });
-            // The images the screenshot shows, read with it: saved for Vitro's fixture server after the checks.
-            drawn = await page.evaluate(DRAWN_IMAGES_JS, slots);
             // The templates Vitro asks for, rendered now.
             templates = {};
             for (const tpl of wanted[c.id] || []) {

@@ -233,3 +233,30 @@ test('staleAssets lists the files nothing kept', async () => {
   assert.deepEqual(staleAssets(['/static/a.png', '/static/b.png', '/local/c.jpg'], new Set(['/static/a.png'])), ['/local/c.jpg', '/static/b.png']);
   assert.deepEqual(staleAssets(['/static/a.png'], ['/static/a.png']), []);
 });
+
+test('imageOutcomes keeps the latest outcome per path', async () => {
+  const { imageOutcomes } = await import('../lib/images.mjs');
+  const t = imageOutcomes();
+  // A failure a retry recovers from isn't HA-missing.
+  t.failure(['/local/a.png']);
+  t.success(['/local/a.png'], 'body-1');
+  assert.equal(t.failed.has('/local/a.png'), false);
+  assert.equal(t.loaded.get('/local/a.png'), 'body-1');
+  // A later response with new bytes replaces the body.
+  t.success(['/local/a.png', '/local/alias.png'], 'body-2');
+  assert.equal(t.loaded.get('/local/a.png'), 'body-2');
+  assert.equal(t.loaded.get('/local/alias.png'), 'body-2');
+  // A later failure drops the body.
+  t.failure(['/local/a.png']);
+  assert.equal(t.loaded.has('/local/a.png'), false);
+  assert.equal(t.failed.has('/local/a.png'), true);
+});
+
+test('noteSaved reports one path saved with two different images in a run', async () => {
+  const { noteSaved } = await import('../lib/images.mjs');
+  const seen = new Map();
+  assert.equal(noteSaved(seen, '/static/x.png', 'aaa'), null);
+  assert.equal(noteSaved(seen, '/static/x.png', 'aaa'), null);
+  assert.match(noteSaved(seen, '/static/x.png', 'bbb'), /changed during the run/);
+  assert.equal(noteSaved(seen, '/static/y.png', 'bbb'), null);
+});
