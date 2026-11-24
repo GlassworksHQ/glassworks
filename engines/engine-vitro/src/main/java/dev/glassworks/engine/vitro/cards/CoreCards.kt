@@ -20,6 +20,7 @@ import android.text.TextUtils
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.animation.PathInterpolator
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -911,7 +912,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         fun infoStyle(size: Float, weight: Int, lh: Float, ls: Float) = MdStyle().apply {
             fontSize = size; fontWeight = weight; lineHeight = lh; letterSpacing = ls; color = primaryText
         }
-        val primary = MarkdownRenderer.cssLine(ctx.context, dp, "", infoStyle(14f, 500, 22.4f, 0.1f)).apply {
+        // Vertical (`fixed-info-height`): the primary sits on a 16 px line, centered in a 32 px box.
+        val primary = MarkdownRenderer.cssLine(ctx.context, dp, "", infoStyle(14f, 500, if (vertical) 16f else 22.4f, 0.1f)).apply {
             ellipsize = TextUtils.TruncateAt.END
         }
         val secondary = MarkdownRenderer.cssLine(ctx.context, dp, "", infoStyle(12f, 400, 14.4f, 0.4f)).apply {
@@ -927,7 +929,13 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val labels = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = if (vertical) Gravity.CENTER_HORIZONTAL else Gravity.START
-            addView(primary, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            if (vertical) {
+                addView(FrameLayout(ctx.context).apply {
+                    addView(primary, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
+                }, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(32f)).apply { bottomMargin = ctx.px(2f) })
+            } else {
+                addView(primary, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            }
             addView(secondary, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
         val gap = ctx.px(4f)
@@ -936,12 +944,16 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             gravity = if (vertical) Gravity.CENTER_HORIZONTAL or Gravity.TOP else Gravity.CENTER_VERTICAL
             clipChildren = false
             clipToPadding = false
-            if (vertical) setPadding(ctx.px(8f), gap, ctx.px(8f), ctx.px(10f)) else setPadding(gap, 0, ctx.px(10f), 0)
+            // HA's tile content: vertical is a centered column with 10 / 8 px padding and 2 px gaps.
+            if (vertical) setPadding(ctx.px(8f), ctx.px(10f), ctx.px(8f), ctx.px(10f)) else setPadding(gap, 0, ctx.px(10f), 0)
             minimumHeight = ctx.px(56f)
             addView(avatarFrame, LinearLayout.LayoutParams(shapeBox, shapeBox).apply {
-                if (vertical) bottomMargin = gap else marginEnd = gap
+                if (vertical) bottomMargin = ctx.px(2f) else marginEnd = gap
             })
             addView(labels, LinearLayout.LayoutParams(if (vertical) MATCH_PARENT else 0, WRAP_CONTENT, if (vertical) 0f else 1f))
+            // HA's vertical tile draws its info 6 px into the icon's 48 px box (measured in HA's DOM: the info
+            // starts 44 px under the icon box's top while the column is centered as if it didn't).
+            if (vertical) labels.translationY = -6f * ctx.dp
         }
         addView(row, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
         mushroom = MushroomTemplateViews(row, avatar, icon, picture, badge, badgeIcon, primary, secondary)
@@ -1905,10 +1917,10 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
  */
 class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
     /** The `ha-markdown-element` box the rendered content fills, rebuilt on each update. */
-    val body = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+    val body = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL; unclip() }
 
     /** The `ha-markdown` host: its padding comes from HA's card styles and the card's sheet. */
-    private val host = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+    private val host = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL; unclip() }
     private val renderer = MarkdownRenderer(ctx)
     private val textOnly = config.raw.optBoolean("text_only", false)
     private val hasHeader = !textOnly && config.title != null
@@ -1920,7 +1932,10 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
 
     init {
         dropSurfaceIfTextOnly()
-        val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+        // Content taller than the card's slot overflows visibly, as `ha-markdown` does in the browser (its padding
+        // box is no clip): a 56 px text-only card with a big heading keeps its descenders.
+        val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL; unclip() }
+        if (textOnly) unclip()
         if (hasHeader) {
             col.addView(TextView(ctx.context).apply {
                 text = config.title
@@ -1959,6 +1974,11 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
     }
 
     private fun isTemplate(s: String) = "{{" in s || "{%" in s
+
+    private fun android.view.ViewGroup.unclip() {
+        clipChildren = false
+        clipToPadding = false
+    }
 
     private fun dropSurfaceIfTextOnly() {
         // HA's `.text-only { background: none; border: none; box-shadow: none }` outranks card-mod's `ha-card`.
@@ -2191,21 +2211,20 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
  * Native Tier 2 fast-path for `custom:mushroom-chips-card`: entity, template, weather, light, action, menu, back
  * and spacer chips. Template chips render `content`, `icon` and `icon_color` live through `render_template`;
  * `conditional` chips (`conditions` + `chip`) show and hide with the entities they reference. Like Mushroom, a
- * chip's own `visibility` and `card_mod` are ignored. Chips are 36 px pills (`--chip-height`): 0.28 x height
- * padding, an 0.5 x height icon and a bold 0.3 x height label.
+ * chip's own `visibility` and `card_mod` are ignored. The card is Mushroom's bare `ha-card` around a wrapping flex
+ * row (`gap: --chip-spacing`, `alignment` start / end / center / justify); each chip follows [ChipStyle].
  */
-/** Mushroom's default `--chip-height`, in CSS px. */
-private const val CHIP_HEIGHT = 36f
-
-class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfig) : LinearLayout(ctx.context) {
+class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfig) : ViewGroup(ctx.context) {
     private val subscriptions = ArrayList<() -> Unit>()
+    private val style = ChipStyle.resolve(ctx, ThemeResolver.parseCardMod(config.raw.optJSONObject("card_mod"), ctx.theme.vars).customProperties)
+    private val alignment = config.raw.optString("alignment")
+    private val spacingPx = ctx.px(style.spacing)
+    private val spacers = HashSet<View>()
 
     init {
-        orientation = HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL or when (config.raw.optString("alignment")) {
-            "center" -> Gravity.CENTER_HORIZONTAL
-            "end" -> Gravity.END
-            else -> Gravity.START
+        // card_mod's padding on the chips card's `ha-card` (Mushroom's own is none).
+        ThemeResolver.parseCardMod(config.raw.optJSONObject("card_mod"), ctx.theme.vars).paddingInsets?.let { p ->
+            setPadding(ctx.px(p.left), ctx.px(p.top), ctx.px(p.right), ctx.px(p.bottom))
         }
         val chips = config.raw.optJSONArray("chips")
         if (chips != null) {
@@ -2218,11 +2237,9 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         val inner = if (conditional) c.optJSONObject("chip") ?: return else c
         val conditions = if (conditional) VisibilityCondition.parseList(c.optJSONArray("conditions")) else emptyList()
         val view = if (inner.optString("type") == "spacer") {
-            View(ctx.context).also { addView(it, LayoutParams(0, 1, 1f)) }
+            View(ctx.context).also { spacers += it; addView(it, LayoutParams(0, 1)) }
         } else {
-            buildChip(inner).also {
-                addView(it, LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = ctx.px(8f) })
-            }
+            buildChip(inner).also { addView(it, LayoutParams(WRAP_CONTENT, WRAP_CONTENT)) }
         }
         if (conditions.isEmpty()) return
         val widthDp = ctx.context.resources.configuration.screenWidthDp.takeIf { it > 0 } ?: 1024
@@ -2237,32 +2254,120 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         ids.forEach { id -> subscriptions += ctx.store.subscribe(id) { ctx.main.post { refresh() } } }
     }
 
+    /** The visible children split into flex lines, as `flex-wrap: wrap` breaks them for [innerWidth]. */
+    private fun lines(innerWidth: Int): List<List<View>> {
+        val out = ArrayList<List<View>>()
+        var line = ArrayList<View>()
+        var used = 0
+        for (i in 0 until childCount) {
+            val v = getChildAt(i)
+            if (v.visibility == GONE) continue
+            val w = if (v in spacers) 0 else v.measuredWidth
+            val need = if (line.isEmpty()) w else used + spacingPx + w
+            if (line.isNotEmpty() && need > innerWidth) {
+                out += line; line = ArrayList(); used = w
+            } else {
+                used = need
+            }
+            line += v
+        }
+        if (line.isNotEmpty()) out += line
+        return out
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val width = MeasureSpec.getSize(widthMeasureSpec)
+        val unbounded = MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED
+        val inner = if (unbounded) Int.MAX_VALUE else (width - paddingLeft - paddingRight).coerceAtLeast(0)
+        val childSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+        for (i in 0 until childCount) {
+            val v = getChildAt(i)
+            if (v.visibility == GONE) continue
+            if (v in spacers) v.measure(MeasureSpec.makeMeasureSpec(0, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(1, MeasureSpec.EXACTLY))
+            else v.measure(childSpec, childSpec)
+        }
+        val ls = lines(inner)
+        var h = 0
+        var maxW = 0
+        ls.forEachIndexed { i, line ->
+            if (i > 0) h += spacingPx
+            h += line.maxOf { if (it in spacers) 0 else it.measuredHeight }
+            maxW = maxOf(maxW, line.sumOf { if (it in spacers) 0 else it.measuredWidth } + spacingPx * (line.size - 1))
+        }
+        val w = if (unbounded) maxW + paddingLeft + paddingRight else width
+        setMeasuredDimension(w, resolveSize(h + paddingTop + paddingBottom, heightMeasureSpec))
+    }
+
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        val inner = (r - l - paddingLeft - paddingRight).coerceAtLeast(0)
+        val rtl = layoutDirection == LAYOUT_DIRECTION_RTL
+        var y = paddingTop
+        for (line in lines(inner)) {
+            val lineH = line.maxOf { if (it in spacers) 0 else it.measuredHeight }
+            val content = line.sumOf { if (it in spacers) 0 else it.measuredWidth } + spacingPx * (line.size - 1)
+            val free = (inner - content).coerceAtLeast(0)
+            val nSpacers = line.count { it in spacers }
+            // Spacer chips grow (flex-grow: 1) and take the free space; otherwise `justify-content` places the line.
+            var x = when {
+                nSpacers > 0 -> 0
+                alignment == "end" -> free
+                alignment == "center" -> free / 2
+                else -> 0
+            }
+            val between = if (nSpacers == 0 && alignment == "justify" && line.size > 1) free / (line.size - 1) else 0
+            for (v in line) {
+                val w = if (v in spacers) free / nSpacers else v.measuredWidth
+                // align-items: flex-start: chips sit at the top of the line.
+                val left = if (rtl) paddingLeft + inner - x - w else paddingLeft + x
+                v.layout(left, y, left + w, y + if (v in spacers) 1 else v.measuredHeight)
+                x += w + spacingPx + between
+            }
+            y += lineH + spacingPx
+        }
+    }
+
     private fun buildChip(c: JSONObject): LinearLayout {
         val type = c.optString("type", "entity")
+        val st = style
+        val border = if (st.borderWidth > 0f) ctx.px(st.borderWidth).coerceAtLeast(1) else 0
+        val radiusPx = ctx.dp * st.radius
         val chip = LinearLayout(ctx.context).apply {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
             background = GradientDrawable().apply {
-                cornerRadius = 999f
-                setColor(ctx.theme.cardBackgroundColor)
-                setStroke(ctx.px(1f).coerceAtLeast(1), ctx.theme.cardBorderColor)
+                cornerRadius = radiusPx
+                setColor(st.background)
+                if (border > 0) setStroke(border, st.borderColor)
             }
-            val border = ctx.px(1f).coerceAtLeast(1)
-            minimumHeight = ctx.px(CHIP_HEIGHT) + 2 * border
-            setPadding(ctx.px(CHIP_HEIGHT * 0.28f) + border, border, ctx.px(CHIP_HEIGHT * 0.28f) + border, border)
+            // box-sizing: content-box: the border sits outside --chip-height.
+            val h = ctx.px(st.height)
+            minimumHeight = h + 2 * border
+            minimumWidth = h + 2 * border
+            setPadding(ctx.px(st.paddingX) + border, border, ctx.px(st.paddingX) + border, border)
             isClickable = true
-            applyHaRipple(this, 999f, ctx.theme.dark)
+            applyHaRipple(this, radiusPx, ctx.theme.dark)
         }
         val icon = MdiIconView(ctx.context)
-        val label = textView(ctx, CHIP_HEIGHT * 0.3f, ctx.theme.primaryTextColor, 700).apply {
+        val label = TextView(ctx.context).apply {
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, st.fontSize * ctx.dp * ctx.theme.fontScale)
+            setTextColor(st.textColor)
+            typeface = MdFonts.typeface(ctx.context, st.fontWeight, false, false, st.fontSize)
+            includeFontPadding = false
             maxLines = 1
-            typeface = MdFonts.typeface(ctx.context, 700, false, false, CHIP_HEIGHT * 0.3f)
         }
-        chip.addView(icon, LayoutParams(ctx.px(CHIP_HEIGHT * 0.5f), ctx.px(CHIP_HEIGHT * 0.5f)))
-        chip.addView(label, LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(CHIP_HEIGHT * 0.12f) })
+        val iconSize = ctx.px(st.iconSize)
+        // ::slotted(*:not(:last-child)) { margin-right: 0.15em }: the gap after the icon when a label follows.
+        val iconLp = LinearLayout.LayoutParams(iconSize, iconSize)
+        chip.addView(icon, iconLp)
+        chip.addView(label, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+        fun syncGap() {
+            iconLp.marginEnd = if (label.visibility == VISIBLE && icon.visibility == VISIBLE) ctx.px(st.height * 0.15f) else 0
+            icon.layoutParams = iconLp
+        }
         fun setLabel(text: String) {
             label.text = text
             label.visibility = if (text.isEmpty()) GONE else VISIBLE
+            syncGap()
         }
 
         val eid = c.optString("entity", "").ifEmpty { null }
@@ -2280,11 +2385,12 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
             "template" -> {
                 var iconName = "mdi:home"
                 var iconColor: Int? = null
-                fun paintIcon() = icon.setIcon(iconName.ifBlank { "mdi:home" }, iconColor ?: ctx.theme.primaryTextColor)
+                fun paintIcon() = icon.setIcon(iconName.ifBlank { "mdi:home" }, iconColor ?: st.textColor)
                 bindChipField(c, "content", eid) { setLabel(it) }
-                bindChipField(c, "icon", eid) { iconName = it; icon.visibility = if (it.isBlank()) GONE else VISIBLE; paintIcon() }
+                bindChipField(c, "icon", eid) { iconName = it; icon.visibility = if (it.isBlank()) GONE else VISIBLE; syncGap(); paintIcon() }
                 bindChipField(c, "icon_color", eid) { iconColor = MushroomColors.parse(it, ctx.theme); paintIcon() }
                 if (c.optString("icon").isBlank()) icon.visibility = GONE
+                syncGap()
                 paintIcon()
             }
             "back", "menu", "action" -> {
@@ -2293,7 +2399,7 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
                     "menu" -> "mdi:menu"
                     else -> "mdi:flash"
                 }
-                icon.setIcon(c.optString("icon", "").ifEmpty { fallback }, staticColor ?: ctx.theme.primaryTextColor)
+                icon.setIcon(c.optString("icon", "").ifEmpty { fallback }, staticColor ?: st.textColor)
                 setLabel("")
             }
             else -> if (eid != null) {
@@ -2333,7 +2439,6 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         }
         return chip
     }
-
 
     /** Applies a chip field now when static, or every time HA re-renders it when it is a template. */
     private fun bindChipField(c: JSONObject, key: String, entityId: String?, apply: (String) -> Unit) {
@@ -2709,5 +2814,68 @@ internal class MediaProgressView(private val ctx: VitroCardContext) : View(ctx.c
         fill.color = ctx.theme.primaryColor
         canvas.drawRect(0f, 0f, w, h, track)
         canvas.drawRect(0f, 0f, w * fraction, h, fill)
+    }
+}
+
+/**
+ * Mushroom's chip variables for one chips card, in CSS px: `--chip-height` (36), `--chip-padding` (`0 0.25em`),
+ * `--chip-icon-size` (0.5em), `--chip-font-size` (0.3em), `--chip-font-weight` (bold), `--chip-spacing` (8),
+ * `--chip-border-radius` (19), `--chip-background`, `--chip-border-width` / `-color` (the card's) and the text and
+ * icon color (`--primary-text-color`). Each is read from the card's own and inherited `card_mod` variables, then
+ * the theme, then the theme's `--mush-chip-*`, then Mushroom's default; `em` is the chip height, as Mushroom sets
+ * `font-size: var(--chip-height)` on the chip.
+ */
+internal class ChipStyle(
+    val height: Float,
+    val paddingX: Float,
+    val iconSize: Float,
+    val fontSize: Float,
+    val fontWeight: Int,
+    val spacing: Float,
+    val radius: Float,
+    val background: Int,
+    val borderWidth: Float,
+    val borderColor: Int,
+    val textColor: Int,
+) {
+    companion object {
+        fun resolve(ctx: VitroCardContext, own: Map<String, String>): ChipStyle {
+            val theme = ctx.theme
+            val vars = theme.vars + ctx.cardVars + own
+            fun raw(name: String): String? = (vars["chip-$name"] ?: vars["mush-chip-$name"])
+                ?.let { ThemeResolver.resolveValue(it, vars, 0) }?.trim()?.takeIf { it.isNotEmpty() }
+            fun len(v: String?, em: Float): Float? {
+                val m = Regex("""^(-?[\d.]+)(px|em|rem)?$""").find(v?.trim().orEmpty()) ?: return null
+                val n = m.groupValues[1].toFloatOrNull() ?: return null
+                return when (m.groupValues[2]) { "em" -> n * em; "rem" -> n * 16f; else -> n }
+            }
+            fun color(v: String?): Int? {
+                val s = v?.trim()?.lowercase(Locale.ROOT) ?: return null
+                return if (s == "none" || s == "transparent") 0 else ThemeResolver.parseColor(s)
+            }
+            fun varColor(vararg names: String): Int? =
+                names.firstNotNullOfOrNull { n -> vars[n]?.let { color(ThemeResolver.resolveValue(it, vars, 0)) } }
+            val h = len(raw("height"), 16f) ?: 36f
+            val pad = raw("padding")?.split(Regex("""\s+"""))?.let { p -> len(p.getOrNull(1) ?: p[0], h) } ?: (0.25f * h)
+            val weight = when (val w = raw("font-weight")?.lowercase(Locale.ROOT)) {
+                null, "bold" -> 700
+                "normal" -> 400
+                else -> w.toIntOrNull()?.coerceIn(100, 900) ?: 700
+            }
+            val text = varColor("primary-text-color") ?: theme.primaryTextColor
+            return ChipStyle(
+                height = h,
+                paddingX = pad,
+                iconSize = len(raw("icon-size"), h) ?: (0.5f * h),
+                fontSize = len(raw("font-size"), h) ?: (0.3f * h),
+                fontWeight = weight,
+                spacing = len(raw("spacing"), h) ?: 8f,
+                radius = len(raw("border-radius"), h) ?: 19f,
+                background = color(raw("background")) ?: varColor("ha-card-background", "card-background-color") ?: theme.cardBackgroundColor,
+                borderWidth = len(raw("border-width"), h) ?: vars["ha-card-border-width"]?.let { len(ThemeResolver.resolveValue(it, vars, 0), h) } ?: theme.cardBorderWidthDp,
+                borderColor = color(raw("border-color")) ?: varColor("ha-card-border-color", "divider-color") ?: theme.cardBorderColor,
+                textColor = text,
+            )
+        }
     }
 }
