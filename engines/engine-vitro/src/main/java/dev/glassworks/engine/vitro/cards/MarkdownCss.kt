@@ -500,12 +500,17 @@ object MdCascade {
         s.custom = custom
 
         // 2. Everything else as longhands; later declarations win.
+        // `revert` outside the browser's sheet rolls back to the browser's value (sorted first, so already known).
         val specified = LinkedHashMap<String, String>()
+        val browser = HashMap<String, String>()
         for (d in decls) {
             if (d.name.startsWith("--")) continue
             val v = resolveVars(d.value, custom, ctx.themeVars)
             if (v == null) { specified[d.name] = "unset"; continue }
-            expand(d.name, v).forEach { (n, value) -> specified[n] = value }
+            expand(d.name, v).forEach { (n, value) ->
+                if (d.origin == 0) browser[n] = value
+                specified[n] = if (d.origin > 0 && value.trim().equals("revert", ignoreCase = true)) browser[n] ?: "unset" else value
+            }
         }
         applySpecified(s, parent, specified)
         return s

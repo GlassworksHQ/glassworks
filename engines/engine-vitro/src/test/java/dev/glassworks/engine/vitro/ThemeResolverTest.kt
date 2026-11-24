@@ -482,12 +482,12 @@ class ThemeResolverTest {
         val t = resolveWith("""{"state-light-active-color": "#ff00ff", "state-lock-active-color": "#00ffff"}""")
         assertEquals(argb(0xFFFF00FF), t.activeColor("light"))
         assertEquals(argb(0xFF00FFFF), t.activeColor("lock")) // a domain the table does not list
-        assertEquals(argb(0xFFFF8100), t.activeColor("climate")) // heat color
+        assertEquals(argb(0xFFFF6F22), t.activeColor("climate")) // heat color
         assertEquals(argb(0xFFFFC107), t.activeColor("switch"))
         assertEquals(argb(0xFFFFC107), t.activeColor("input_boolean"))
         assertEquals(argb(0xFFFFC107), t.activeColor("binary_sensor"))
         assertEquals(argb(0xFF00BCD4), t.activeColor("fan")) // HA 2026 cyan
-        assertEquals(argb(0xFF9C27B0), t.activeColor("cover"))
+        assertEquals(argb(0xFF926BC7), t.activeColor("cover"))
         assertEquals(argb(0xFF4CAF50), t.activeColor("person"))
         assertEquals(argb(0xFF4CAF50), t.activeColor("device_tracker"))
         assertEquals(argb(0xFF2196F3), t.activeColor("sensor")) // HA blue
@@ -604,8 +604,8 @@ class ThemeResolverTest {
         // HA's base theme colors these domains itself, so the theme-wide key never reaches them (measured in HA).
         assertEquals(argb(0xFFFFC107), t.activeColor("switch"))
         assertEquals(argb(0xFF00BCD4), t.activeColor("fan"))
-        assertEquals(argb(0xFF9C27B0), t.activeColor("cover"))
-        assertEquals(argb(0xFFFF8100), t.activeColor("climate"))
+        assertEquals(argb(0xFF926BC7), t.activeColor("cover"))
+        assertEquals(argb(0xFFFF6F22), t.activeColor("climate"))
         assertEquals(argb(0xFFFFC107), t.activeColor("binary_sensor"))
         assertEquals(argb(0xFF03A9F4), t.activeColor("media_player"))
         assertEquals(argb(0xFF00FF00), t.activeColor("automation")) // no base color: the theme-wide key applies

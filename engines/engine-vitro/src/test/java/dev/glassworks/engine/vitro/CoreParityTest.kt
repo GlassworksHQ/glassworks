@@ -28,6 +28,7 @@ import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -271,6 +272,37 @@ class CoreParityTest {
         assertTrue(t.all().none { it is dev.glassworks.engine.vitro.cards.HaHorizontalSliderView })
     }
 
+    @Test
+    fun thermostatShowsModesOnlyAsAFeatureAndStepsOnlyWithATarget() {
+        val store = EntityStore()
+        store.putLocal(EntityState("climate.ac", "off", mapOf("hvac_modes" to listOf("off", "heat"), "current_temperature" to 17.5)))
+        val plain = dev.glassworks.engine.vitro.cards.ThermostatCardView(context(store), card("""{"type": "thermostat", "entity": "climate.ac"}"""))
+        // HA's card has no mode bar unless the climate-hvac-modes feature is configured, and no − / + without a target.
+        assertTrue(plain.all().none { it.contentDescription == "heat" })
+        val raise = plain.all().single { it.contentDescription == "Raise target temperature" }
+        assertEquals(View.GONE, (raise.parent as View).visibility)
+        val withModes = dev.glassworks.engine.vitro.cards.ThermostatCardView(context(store), card(
+            """{"type": "thermostat", "entity": "climate.ac", "features": [{"type": "climate-hvac-modes"}]}""",
+        ))
+        assertTrue(withModes.all().any { it.contentDescription == "heat" })
+    }
+
+    @Test
+    fun buttonIconIsFortyPercentWideAndAtMostEightyPercentOfTheContentHeight() {
+        val store = EntityStore()
+        store.putLocal(EntityState("light.cactus", "off", mapOf("friendly_name" to "Cactus")))
+        val dp = activity.resources.displayMetrics.density
+        fun iconSize(w: Int, h: Int?): Int {
+            val b = dev.glassworks.engine.vitro.cards.ButtonCardView(context(store), card("""{"type": "button", "entity": "light.cactus", "show_state": true}"""))
+            val hs = h?.let { View.MeasureSpec.makeMeasureSpec((it * dp).toInt(), View.MeasureSpec.EXACTLY) } ?: View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            b.measure(View.MeasureSpec.makeMeasureSpec((w * dp).toInt(), View.MeasureSpec.EXACTLY), hs)
+            return (b.all().filterIsInstance<dev.glassworks.engine.vitro.ui.MdiIconView>().single().measuredWidth / dp).toInt()
+        }
+        // HA: 246 x 120 gives a 78.7 px icon (80% of the content height); 165 wide with free height gives 65.3 (40%).
+        assertEquals(78f, iconSize(246, 120).toFloat(), 2f)
+        assertEquals(65f, iconSize(165, null).toFloat(), 2f)
+    }
+
     // ---- Tile features ----
 
     private fun tile(store: EntityStore, calls: MutableList<Call>, entity: String, feature: String) =
@@ -356,6 +388,57 @@ class CoreParityTest {
         assertEquals("counter.increment counter.cups", calls.last().toString())
         counter.byDescription("Decrease").performClick()
         assertEquals("counter.decrement counter.cups", calls.last().toString())
+    }
+
+    @Test
+    fun brightnessFeatureFollowsHa() {
+        // HA's 1..100 brightness_pct slider: brightness 13 is 5 %, (5 - 1) / 99 of the way; 1 is the floor.
+        assertEquals(4f / 99f, dev.glassworks.engine.vitro.cards.brightnessFraction(13), 1e-6f)
+        assertEquals(0f, dev.glassworks.engine.vitro.cards.brightnessFraction(1), 1e-6f)
+        assertEquals(1f, dev.glassworks.engine.vitro.cards.brightnessFraction(255), 1e-6f)
+        // A light that can only switch has no brightness feature, as in HA.
+        val store = EntityStore()
+        store.putLocal(EntityState("light.plain", "off", mapOf("supported_color_modes" to listOf("onoff"))))
+        store.putLocal(EntityState("light.dim", "on", mapOf("supported_color_modes" to listOf("brightness"), "brightness" to 13)))
+        fun feature(id: String) = tile(store, ArrayList(), id, """{"type": "light-brightness"}""").all()
+            .single { it.tag?.toString()?.endsWith("light-brightness") == true }
+        assertEquals(View.GONE, feature("light.plain").visibility)
+        assertEquals(View.VISIBLE, feature("light.dim").visibility)
+    }
+
+    @Test
+    fun weatherChipFollowsMushroom() {
+        val fog = EntityState("weather.home", "fog", mapOf("temperature" to 8.7, "temperature_unit" to "°C"))
+        // Conditions first, then the temperature, each only when asked for, joined by Mushroom's " ⸱ ".
+        assertEquals("Fog \u2E31 8.7 °C", dev.glassworks.engine.vitro.cards.weatherChipLabel(JSONObject("""{"show_conditions": true, "show_temperature": true}"""), fog))
+        assertEquals("8.7 °C", dev.glassworks.engine.vitro.cards.weatherChipLabel(JSONObject("""{"show_temperature": true}"""), fog))
+        assertEquals("", dev.glassworks.engine.vitro.cards.weatherChipLabel(JSONObject("{}"), fog))
+        // HA's weather pictures: every condition HA draws, none for "exceptional" (HA keeps the MDI glyph there).
+        for (c in dev.glassworks.engine.vitro.ui.HaWeatherSvg.CONDITIONS) {
+            val svg = dev.glassworks.engine.vitro.ui.HaWeatherSvg.forCondition(c, mushroom = true)
+            assertTrue(c, svg != null && svg.viewBox.width() == 17f)
+        }
+        assertNull(dev.glassworks.engine.vitro.ui.HaWeatherSvg.forCondition("exceptional"))
+    }
+
+    @Test
+    fun contentSitsInsideTheCardBorder() {
+        // ha-card's `border: 1px solid` wraps its content: the card is its content, its padding and both borders.
+        val ctx = context(EntityStore())
+        val border = (ctx.theme.cardBorderWidthDp * ctx.dp).toInt()
+        assertTrue(border > 0)
+        val surface = object : dev.glassworks.engine.vitro.ui.CardSurface(ctx) {}
+        surface.addView(View(activity), android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 100))
+        surface.setPadding(10, 10, 10, 10)
+        fun height(): Int {
+            surface.measure(View.MeasureSpec.makeMeasureSpec(300, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            return surface.measuredHeight
+        }
+        assertEquals(100 + 20 + 2 * border, height())
+        assertEquals(10 + border, surface.paddingTop)
+        // A card with no border and no fill puts its content where the border was.
+        surface.applyStyleCss("ha-card { border-width: 0; background: transparent; }")
+        assertEquals(120, height())
     }
 
     @Test

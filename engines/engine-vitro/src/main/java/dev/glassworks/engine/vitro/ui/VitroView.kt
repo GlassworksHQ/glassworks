@@ -144,7 +144,7 @@ class VitroView(
         textSize = 14f
         setTextColor(0xFFA1A1AA.toInt())
         gravity = Gravity.CENTER
-        typeface = Inter.typeface(context, Inter.REGULAR, 14f)
+        typeface = VitroFonts.typeface(context, Inter.REGULAR, 14f)
     }
 
     /** One top-bar tab and the dashboard view it opens. */
@@ -164,7 +164,7 @@ class VitroView(
         text = "Connection lost. Reconnecting…"
         textSize = 13f
         setTextColor(0xFFFFFFFF.toInt())
-        typeface = Inter.typeface(context, Inter.MEDIUM, 13f)
+        typeface = VitroFonts.typeface(context, Inter.MEDIUM, 13f)
         includeFontPadding = false
     }
     private val connectionBanner = LinearLayout(context).apply {
@@ -407,7 +407,7 @@ class VitroView(
             val label = TextView(context).apply {
                 text = v.title
                 textSize = 13f
-                typeface = Inter.typeface(context, Inter.MEDIUM, 13f)
+                typeface = VitroFonts.typeface(context, Inter.MEDIUM, 13f)
                 includeFontPadding = false
             }
             row.addView(label, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
@@ -449,6 +449,7 @@ class VitroView(
         hideStatus()
 
         val theme = ThemeResolver.resolve(themeCatalog, darkMode, viewCfg.theme ?: userThemeName, viewCfg.background)
+        VitroFonts.face = VitroFonts.faceFor(theme)
         applyBackdrop(theme)
         highlightTab(index, theme)
         onThemeResolved?.invoke(theme)
@@ -660,7 +661,7 @@ class VitroView(
                     text = "←  ${view.title}"
                     textSize = 18f
                     setTextColor(ctx.theme.primaryTextColor)
-                    typeface = Inter.typeface(context, Inter.MEDIUM, 18f)
+                    typeface = VitroFonts.typeface(context, Inter.MEDIUM, 18f)
                 })
                 addView(backRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
                 addView(withBadges, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -715,7 +716,7 @@ class VitroView(
         if (showIcon) pill.addView(icon, LinearLayout.LayoutParams(px(18f), px(18f)).apply { marginEnd = px(8f) })
         fun line(sp: Float, weight: Int, color: Int) = TextView(context).apply {
             textSize = sp
-            typeface = Inter.typeface(context, weight, sp)
+            typeface = VitroFonts.typeface(context, weight, sp)
             setTextColor(color)
             includeFontPadding = false
             maxLines = 1
@@ -798,7 +799,7 @@ class VitroView(
                 text = title
                 textSize = 15f
                 setTextColor(ctx.theme.primaryTextColor)
-                typeface = Inter.typeface(context, Inter.MEDIUM, 15f)
+                typeface = VitroFonts.typeface(context, Inter.MEDIUM, 15f)
                 setPadding(px(4f), 0, px(4f), 0)
             }, HaGridLayout.LayoutParams(columns))
         }

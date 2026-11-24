@@ -100,51 +100,57 @@ class MdSvg private constructor(
             return
         }
         val path = shape.path ?: run { canvas.restore(); return }
-        color(fill, opacity * (a["fill-opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f))?.let { c ->
-            paint.reset()
-            paint.isAntiAlias = true
-            paint.style = Paint.Style.FILL
-            paint.color = c
-            canvas.drawPath(path, paint)
-        }
-        color(stroke, opacity * (a["stroke-opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f))?.let { c ->
-            paint.reset()
-            paint.isAntiAlias = true
-            paint.style = Paint.Style.STROKE
-            paint.color = c
-            paint.strokeWidth = a["stroke-width"]?.let { num(it) } ?: 1f
-            paint.strokeCap = when (a["stroke-linecap"]) {
-                "round" -> Paint.Cap.ROUND
-                "square" -> Paint.Cap.SQUARE
-                else -> Paint.Cap.BUTT
-            }
-            paint.strokeJoin = when (a["stroke-linejoin"]) {
-                "round" -> Paint.Join.ROUND
-                "bevel" -> Paint.Join.BEVEL
-                else -> Paint.Join.MITER
-            }
-            val dashes = a["stroke-dasharray"]?.split(Regex("""[\s,]+"""))?.mapNotNull { it.toFloatOrNull() }
-                ?.filter { it >= 0f }
-            if (!dashes.isNullOrEmpty() && dashes.any { it > 0f }) {
-                val scale = a["pathLength"]?.toFloatOrNull()?.takeIf { it > 0f }?.let { PathMeasure(path, false).length / it } ?: 1f
-                val list = (if (dashes.size % 2 == 1) dashes + dashes else dashes).map { it * scale }
-                if (list[0] <= 0f) {
-                    // A zero-length dash still draws its round or square cap.
-                    if (paint.strokeCap != Paint.Cap.BUTT) {
-                        val pm = PathMeasure(path, false)
-                        val pos = FloatArray(2)
-                        pm.getPosTan(0f, pos, null)
-                        paint.style = Paint.Style.FILL
-                        canvas.drawCircle(pos[0], pos[1], paint.strokeWidth / 2f, paint)
-                    }
-                } else {
-                    paint.pathEffect = DashPathEffect(list.map { it.coerceAtLeast(0.001f) }.toFloatArray(), 0f)
-                    canvas.drawPath(path, paint)
-                }
-            } else {
+        val drawFill = {
+            color(fill, opacity * (a["fill-opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f))?.let { c ->
+                paint.reset()
+                paint.isAntiAlias = true
+                paint.style = Paint.Style.FILL
+                paint.color = c
                 canvas.drawPath(path, paint)
             }
         }
+        val drawStroke = {
+            color(stroke, opacity * (a["stroke-opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f))?.let { c ->
+                paint.reset()
+                paint.isAntiAlias = true
+                paint.style = Paint.Style.STROKE
+                paint.color = c
+                paint.strokeWidth = a["stroke-width"]?.let { num(it) } ?: 1f
+                paint.strokeCap = when (a["stroke-linecap"]) {
+                    "round" -> Paint.Cap.ROUND
+                    "square" -> Paint.Cap.SQUARE
+                    else -> Paint.Cap.BUTT
+                }
+                paint.strokeJoin = when (a["stroke-linejoin"]) {
+                    "round" -> Paint.Join.ROUND
+                    "bevel" -> Paint.Join.BEVEL
+                    else -> Paint.Join.MITER
+                }
+                val dashes = a["stroke-dasharray"]?.split(Regex("""[\s,]+"""))?.mapNotNull { it.toFloatOrNull() }
+                    ?.filter { it >= 0f }
+                if (!dashes.isNullOrEmpty() && dashes.any { it > 0f }) {
+                    val scale = a["pathLength"]?.toFloatOrNull()?.takeIf { it > 0f }?.let { PathMeasure(path, false).length / it } ?: 1f
+                    val list = (if (dashes.size % 2 == 1) dashes + dashes else dashes).map { it * scale }
+                    if (list[0] <= 0f) {
+                        // A zero-length dash still draws its round or square cap.
+                        if (paint.strokeCap != Paint.Cap.BUTT) {
+                            val pm = PathMeasure(path, false)
+                            val pos = FloatArray(2)
+                            pm.getPosTan(0f, pos, null)
+                            paint.style = Paint.Style.FILL
+                            canvas.drawCircle(pos[0], pos[1], paint.strokeWidth / 2f, paint)
+                        }
+                    } else {
+                        paint.pathEffect = DashPathEffect(list.map { it.coerceAtLeast(0.001f) }.toFloatArray(), 0f)
+                        canvas.drawPath(path, paint)
+                    }
+                } else {
+                    canvas.drawPath(path, paint)
+                }
+            }
+        }
+        // `paint-order: stroke` paints the stroke under the fill.
+        if (a["paint-order"]?.trim()?.startsWith("stroke") == true) { drawStroke(); drawFill() } else { drawFill(); drawStroke() }
         canvas.restore()
     }
 
@@ -308,7 +314,7 @@ class MdSvg private constructor(
 
         private val INHERITABLE = setOf(
             "fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "fill-opacity",
-            "stroke-opacity", "font-size", "font-weight", "font-family", "text-anchor",
+            "stroke-opacity", "font-size", "font-weight", "font-family", "text-anchor", "paint-order",
         )
 
         private fun num(v: String?): Float = v?.trim()?.removeSuffix("px")?.toFloatOrNull() ?: 0f

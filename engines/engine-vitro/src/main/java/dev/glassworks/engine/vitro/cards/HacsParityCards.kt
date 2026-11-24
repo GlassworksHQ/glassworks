@@ -29,6 +29,7 @@ import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.bindHoldAction
 import dev.glassworks.ui.Inter
+import dev.glassworks.engine.vitro.ui.VitroFonts
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -51,7 +52,7 @@ private fun label(ctx: VitroCardContext, sp: Float, color: Int, weight: Int = In
         val scaled = ctx.scaledSp(sp)
         textSize = scaled
         setTextColor(color)
-        typeface = Inter.typeface(ctx.context, weight, scaled)
+        typeface = VitroFonts.typeface(ctx.context, weight, scaled)
         includeFontPadding = false
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
@@ -91,6 +92,8 @@ private fun iconOr(name: String, fallback: String): String = if (MdiIcons.has(na
  * controls in their own `init`, then call [start].
  */
 abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config: CardConfig) : CardSurface(ctx) {
+    // HA's tile and Mushroom's cards lay their content out from the card's outer edge.
+    override val contentInsideBorder: Boolean get() = false
     protected val eid: String? = config.entity
     protected val shape = FrameLayout(ctx.context)
     protected val shapeIcon = MdiIconView(ctx.context)
@@ -176,10 +179,10 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
         val sp = mod.fontSizeSp ?: return
         val scaled = ctx.scaledSp(sp)
         primary.textSize = scaled
-        primary.typeface = Inter.typeface(ctx.context, Inter.MEDIUM, scaled)
+        primary.typeface = VitroFonts.typeface(ctx.context, Inter.MEDIUM, scaled)
         val sub = ctx.scaledSp((sp * 0.75f).coerceAtLeast(12f))
         secondary.textSize = sub
-        secondary.typeface = Inter.typeface(ctx.context, Inter.REGULAR, sub)
+        secondary.typeface = VitroFonts.typeface(ctx.context, Inter.REGULAR, sub)
     }
 
     /** Subscribes to the card's entity (or renders once without one). Call last in the subclass `init`. */

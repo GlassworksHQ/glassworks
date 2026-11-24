@@ -146,59 +146,121 @@ object MdiIcons {
         entity?.let { dev.glassworks.engine.vitro.data.HaDisplay.icon(it) }?.let { return it }
         val domain = entity?.domain.orEmpty()
         val dc = entity?.deviceClass.orEmpty()
-        val on = entity?.isActive == true
+        val st = entity?.state.orEmpty()
+        // HA's own default icons (core's entity_component icons.json, as frontend/get_icons returns them), used until
+        // the live data arrives: the domain's (or device class's) default, or its icon for the current state.
         return when (domain) {
-            "light" -> "mdi:lightbulb"
-            "switch", "input_boolean" -> "mdi:power"
-            "climate" -> "mdi:thermometer"
-            "fan" -> "mdi:fan"
-            "cover" -> when (dc) {
-                "garage" -> "mdi:garage"
-                "blind", "shade", "shutter" -> "mdi:blinds"
-                "curtain" -> "mdi:curtains"
-                else -> if (on) "mdi:window-open" else "mdi:window-closed"
+            "light" -> if (st == "off") "mdi:lightbulb-off" else "mdi:lightbulb"
+            "switch" -> if (dc == "outlet") { if (st == "off") "mdi:power-plug-off" else "mdi:power-plug" }
+                else if (st == "off") "mdi:toggle-switch-variant-off" else "mdi:toggle-switch-variant"
+            "input_boolean" -> if (st == "off") "mdi:close-circle-outline" else "mdi:check-circle-outline"
+            "fan" -> if (st == "off") "mdi:fan-off" else "mdi:fan"
+            "climate" -> "mdi:thermostat"
+            "cover" -> {
+                val (open, closed) = when (dc) {
+                    "blind" -> "mdi:blinds-horizontal" to "mdi:blinds-horizontal-closed"
+                    "curtain" -> "mdi:curtains" to "mdi:curtains-closed"
+                    "shade" -> "mdi:roller-shade" to "mdi:roller-shade-closed"
+                    "shutter" -> "mdi:window-shutter-open" to "mdi:window-shutter"
+                    "garage" -> "mdi:garage-open" to "mdi:garage"
+                    "door" -> "mdi:door-open" to "mdi:door-closed"
+                    "gate" -> "mdi:gate-open" to "mdi:gate"
+                    "awning" -> "mdi:awning-outline" to "mdi:awning-outline"
+                    else -> "mdi:window-open" to "mdi:window-closed"
+                }
+                when (st) {
+                    "closed" -> closed
+                    "closing" -> "mdi:arrow-down-box"
+                    "opening" -> "mdi:arrow-up-box"
+                    else -> open
+                }
             }
-            "lock" -> if (on) "mdi:lock-open" else "mdi:lock"
-            "camera" -> "mdi:cctv"
-            "media_player" -> if (on) "mdi:play" else "mdi:speaker"
-            "weather" -> weatherIcon(entity?.state.orEmpty())
-            "person", "device_tracker" -> "mdi:account"
+            "lock" -> when (st) {
+                "jammed" -> "mdi:lock-alert"
+                "locking", "unlocking", "opening" -> "mdi:lock-clock"
+                "open", "unlocked" -> "mdi:lock-open-variant"
+                else -> "mdi:lock"
+            }
+            "camera" -> if (st == "off") "mdi:video-off" else "mdi:video"
+            "media_player" -> when (dc) {
+                "speaker" -> when (st) { "off" -> "mdi:speaker-off"; "paused" -> "mdi:speaker-pause"; "playing" -> "mdi:speaker-play"; else -> "mdi:speaker" }
+                "tv" -> when (st) { "off" -> "mdi:television-off"; "paused" -> "mdi:television-pause"; "playing" -> "mdi:television-play"; else -> "mdi:television" }
+                "receiver" -> if (st == "off") "mdi:audio-video-off" else "mdi:audio-video"
+                else -> when (st) { "off" -> "mdi:cast-off"; "paused", "playing" -> "mdi:cast-connected"; else -> "mdi:cast" }
+            }
+            "weather" -> weatherIcon(st)
+            "person", "device_tracker" -> if (st == "not_home") "mdi:account-arrow-right" else "mdi:account"
             "scene" -> "mdi:palette"
-            "script" -> "mdi:script-text"
-            "todo" -> "mdi:checkbox-marked"
-            "schedule", "timer" -> "mdi:clock"
-            "calendar" -> "mdi:calendar"
-            "alarm_control_panel" -> if (entity?.state.orEmpty().startsWith("armed")) "mdi:shield-lock" else "mdi:shield-home"
+            "script" -> if (st == "on") "mdi:script-text-play" else "mdi:script-text"
+            "automation" -> if (st == "off") "mdi:robot-off" else "mdi:robot"
+            "todo" -> "mdi:clipboard-list"
+            "schedule" -> "mdi:calendar-clock"
+            "timer" -> "mdi:timer-outline"
+            "calendar" -> when (st) { "off" -> "mdi:calendar-blank"; "on" -> "mdi:calendar-check"; else -> "mdi:calendar" }
+            "alarm_control_panel" -> when (st) {
+                "armed_away" -> "mdi:shield-lock"
+                "armed_custom_bypass" -> "mdi:security"
+                "armed_home" -> "mdi:shield-home"
+                "armed_night" -> "mdi:shield-moon"
+                "armed_vacation" -> "mdi:shield-airplane"
+                "disarmed" -> "mdi:shield-off"
+                "pending" -> "mdi:shield-outline"
+                "triggered" -> "mdi:bell-ring"
+                else -> "mdi:shield"
+            }
             "select", "input_select" -> "mdi:format-list-bulleted"
-            "number", "input_number" -> "mdi:tune"
-            "text", "input_text" -> "mdi:text-box"
-            "button", "input_button" -> "mdi:gesture-tap-button"
+            "number", "input_number" -> "mdi:ray-vertex"
+            "text", "input_text" -> "mdi:form-textbox"
+            "button", "input_button" -> "mdi:button-pointer"
             "vacuum" -> "mdi:robot-vacuum"
             "image" -> "mdi:image"
-            "assist_satellite" -> "mdi:microphone"
-            "humidifier" -> "mdi:water"
-            "siren" -> "mdi:bell"
-            "binary_sensor" -> when (dc) {
-                "door" -> if (on) "mdi:door-open" else "mdi:door-closed"
-                "window" -> if (on) "mdi:window-open" else "mdi:window-closed"
-                "garage_door" -> "mdi:garage"
-                "motion", "occupancy", "presence" -> "mdi:motion-sensor"
-                "smoke", "heat" -> "mdi:fire"
-                "moisture" -> "mdi:water"
-                "problem", "safety", "tamper" -> "mdi:alert"
-                "connectivity" -> "mdi:wifi"
-                else -> "mdi:checkbox-blank-circle"
+            "assist_satellite" -> "mdi:account-voice"
+            "humidifier" -> if (st == "off") "mdi:air-humidifier-off" else "mdi:air-humidifier"
+            "siren" -> "mdi:bullhorn"
+            "update" -> if (st == "off") "mdi:package" else "mdi:package-up"
+            "valve" -> when (st) { "closed" -> "mdi:valve-closed"; "closing", "opening" -> "mdi:valve"; else -> "mdi:valve-open" }
+            "binary_sensor" -> {
+                val on = st == "on"
+                when (dc) {
+                    "battery" -> if (on) "mdi:battery-outline" else "mdi:battery"
+                    "connectivity" -> if (on) "mdi:check-network-outline" else "mdi:close-network-outline"
+                    "door" -> if (on) "mdi:door-open" else "mdi:door-closed"
+                    "garage_door" -> if (on) "mdi:garage-open" else "mdi:garage"
+                    "lock" -> if (on) "mdi:lock-open" else "mdi:lock"
+                    "moisture" -> if (on) "mdi:water" else "mdi:water-off"
+                    "motion" -> if (on) "mdi:motion-sensor" else "mdi:motion-sensor-off"
+                    "occupancy", "presence" -> if (on) "mdi:home" else "mdi:home-outline"
+                    "opening" -> if (on) "mdi:square-outline" else "mdi:square"
+                    "plug", "power" -> if (on) "mdi:power-plug" else "mdi:power-plug-off"
+                    "problem" -> if (on) "mdi:alert-circle" else "mdi:check-circle"
+                    "smoke" -> if (on) "mdi:smoke-detector-variant-alert" else "mdi:smoke-detector-variant"
+                    "window" -> if (on) "mdi:window-open" else "mdi:window-closed"
+                    else -> if (on) "mdi:checkbox-marked-circle" else "mdi:radiobox-blank"
+                }
             }
             "sensor" -> when (dc) {
                 "temperature" -> "mdi:thermometer"
                 "humidity" -> "mdi:water-percent"
-                "power", "energy", "voltage", "current" -> "mdi:flash"
-                "battery" -> "mdi:battery"
-                "moisture" -> "mdi:water"
-                "illuminance" -> "mdi:white-balance-sunny"
-                else -> "mdi:gauge"
+                "power" -> "mdi:flash"
+                "energy" -> "mdi:lightning-bolt"
+                "voltage" -> "mdi:sine-wave"
+                "current" -> "mdi:current-ac"
+                "battery" -> "mdi:battery-unknown"
+                "illuminance" -> "mdi:brightness-5"
+                "pressure" -> "mdi:gauge"
+                "carbon_dioxide" -> "mdi:molecule-co2"
+                "pm25", "pm10", "pm1" -> "mdi:molecule"
+                "aqi" -> "mdi:air-filter"
+                "duration" -> "mdi:progress-clock"
+                "timestamp" -> "mdi:clock"
+                "date" -> "mdi:calendar"
+                "monetary" -> "mdi:cash"
+                "signal_strength" -> "mdi:wifi"
+                "gas" -> "mdi:meter-gas"
+                "water", "moisture" -> "mdi:water"
+                else -> "mdi:eye"
             }
-            else -> "mdi:home"
+            else -> "mdi:bookmark"
         }
     }
 
@@ -737,7 +799,12 @@ class MdiIconView(context: Context) : View(context) {
     var tintColor: Int = 0xFFFFFFFF.toInt()
         set(v) { if (field != v) { field = v; paint.color = v; invalidate() } }
 
+    /** A picture drawn instead of the glyph, filling the box (HA's weather pictures); [setIcon] clears it. */
+    var picture: dev.glassworks.engine.vitro.cards.MdSvg? = null
+        set(v) { if (field !== v) { field = v; invalidate() } }
+
     fun setIcon(name: String, color: Int = tintColor) {
+        picture = null
         iconPath = MdiIcons.pathFor(name)
         tintColor = color
         paint.color = color
@@ -750,6 +817,14 @@ class MdiIconView(context: Context) : View(context) {
         val scale = minOf(availW, availH) / 24f
         val dx = paddingLeft + (availW - 24f * scale) / 2f
         val dy = paddingTop + (availH - 24f * scale) / 2f
+        picture?.let { pic ->
+            val side = minOf(availW, availH)
+            canvas.save()
+            canvas.translate(paddingLeft + (availW - side) / 2f, paddingTop + (availH - side) / 2f)
+            pic.draw(canvas, side, side, context)
+            canvas.restore()
+            return
+        }
         matrix.reset()
         matrix.setScale(scale, scale)
         matrix.postTranslate(dx, dy)
