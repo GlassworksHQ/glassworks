@@ -38,6 +38,7 @@ import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.bindHoldAction
 import dev.glassworks.ui.Inter
+import dev.glassworks.engine.vitro.ui.VitroFonts
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -58,7 +59,7 @@ private fun label(ctx: VitroCardContext, sp: Float, color: Int, weight: Int = In
     TextView(ctx.context).apply {
         textSize = sp
         setTextColor(color)
-        typeface = Inter.typeface(ctx.context, weight, sp)
+        typeface = VitroFonts.typeface(ctx.context, weight, sp)
         includeFontPadding = false
     }
 
@@ -346,7 +347,7 @@ private class GaugeCanvasView(context: Context, private var activeColor: Int, pr
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = textColor
         textSize = spToPx(context, 34f)
-        typeface = Inter.typeface(context, Inter.REGULAR, 34f)
+        typeface = VitroFonts.typeface(context, Inter.REGULAR, 34f)
         textAlign = Paint.Align.CENTER
     }
     private val oval = RectF()
@@ -610,7 +611,7 @@ internal class ThermostatDialView(
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private fun textPaint(size: Float, weight: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = spToPx(ctx.context, size)
-        typeface = Inter.typeface(ctx.context, weight, size)
+        typeface = VitroFonts.typeface(ctx.context, weight, size)
     }
     private val labelPaint = textPaint(14f, Inter.MEDIUM).apply { textAlign = Paint.Align.CENTER }
     private val bigPaint = textPaint(44f, Inter.REGULAR)
@@ -1409,18 +1410,18 @@ internal class GaugeRingView(
     }
     private val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = textColor
-        typeface = Inter.typeface(context, Inter.MEDIUM, 32f)
+        typeface = VitroFonts.typeface(context, Inter.MEDIUM, 32f)
         textAlign = Paint.Align.LEFT
         fontFeatureSettings = "tnum"
     }
     private val unitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = secondaryColor
-        typeface = Inter.typeface(context, Inter.REGULAR, 14f)
+        typeface = VitroFonts.typeface(context, Inter.REGULAR, 14f)
         textAlign = Paint.Align.LEFT
     }
     private val secondaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = secondaryColor
-        typeface = Inter.typeface(context, Inter.REGULAR, 12f)
+        typeface = VitroFonts.typeface(context, Inter.REGULAR, 12f)
         textAlign = Paint.Align.CENTER
         fontFeatureSettings = "tnum"
     }

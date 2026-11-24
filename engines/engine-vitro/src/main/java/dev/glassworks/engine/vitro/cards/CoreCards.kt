@@ -44,6 +44,7 @@ import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.bindHoldAction
 import dev.glassworks.ui.Inter
+import dev.glassworks.engine.vitro.ui.VitroFonts
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -117,7 +118,7 @@ private fun textView(ctx: VitroCardContext, sp: Float, color: Int, weight: Int =
         val scaled = ctx.scaledSp(sp)
         textSize = scaled
         setTextColor(color)
-        typeface = Inter.typeface(ctx.context, weight, scaled)
+        typeface = VitroFonts.typeface(ctx.context, weight, scaled)
         includeFontPadding = false
     }
 
@@ -263,9 +264,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         // Mushroom 5's tile info sets its own font sizes; a font-size on ha-card doesn't reach it.
         if (mushroom == null) {
             titleView.textSize = scaled
-            titleView.typeface = Inter.typeface(ctx.context, Inter.MEDIUM, scaled)
+            titleView.typeface = VitroFonts.typeface(ctx.context, Inter.MEDIUM, scaled)
             stateView.textSize = sub
-            stateView.typeface = Inter.typeface(ctx.context, Inter.REGULAR, sub)
+            stateView.typeface = VitroFonts.typeface(ctx.context, Inter.REGULAR, sub)
             // The line boxes grow with the text (line-height 1.6 and 1.2).
             titleView.layoutParams?.let { it.height = (scaled * 1.6f * ctx.dp).roundToInt(); titleView.layoutParams = it }
             stateView.layoutParams?.let { it.height = (sub * 1.2f * ctx.dp).roundToInt(); stateView.layoutParams = it }
@@ -2210,7 +2211,7 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 text = config.title
                 setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, 24f * ctx.dp)
                 setTextColor(ctx.theme.primaryTextColor)
-                typeface = Inter.typeface(ctx.context, Inter.REGULAR, 24f)
+                typeface = VitroFonts.typeface(ctx.context, Inter.REGULAR, 24f)
                 includeFontPadding = false
                 letterSpacing = -0.012f
                 setPadding(ctx.px(16f), ctx.px(20f), ctx.px(16f), ctx.px(24f))
@@ -2389,7 +2390,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             // hui-picture-entity-card's footer: 16 px white text on rgba(0,0,0,.3), 16 px padding; name and state
             // spread apart, or one of them centered (`.single`).
             caption.textSize = ctx.scaledSp(16f)
-            caption.typeface = Inter.typeface(ctx.context, Inter.REGULAR, ctx.scaledSp(16f))
+            caption.typeface = VitroFonts.typeface(ctx.context, Inter.REGULAR, ctx.scaledSp(16f))
             caption.gravity = Gravity.CENTER_VERTICAL or if (showName && showState) Gravity.START else Gravity.CENTER_HORIZONTAL
             val bar = FrameLayout(ctx.context).apply {
                 setBackgroundColor(0x4D000000)

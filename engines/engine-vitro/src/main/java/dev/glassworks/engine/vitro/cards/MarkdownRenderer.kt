@@ -41,7 +41,7 @@ import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.platform.Platform
-import dev.glassworks.ui.Inter
+import dev.glassworks.engine.vitro.ui.VitroFonts
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -1063,24 +1063,22 @@ class CssLineText(context: Context) : TextView(context) {
     }
 }
 
-/** Typefaces for CSS weights: Inter where the platform can vary it, else Roboto's light / regular / medium / bold. */
+/** Typefaces for CSS weights in the theme's face ([VitroFonts]): Inter where the platform can vary it, else Roboto's light / regular / medium / bold. */
 object MdFonts {
     private val cache = HashMap<Long, Typeface>()
 
     fun typeface(context: Context, weight: Int, italic: Boolean, mono: Boolean, sizePx: Float): Typeface {
         val w = weight.coerceIn(100, 900)
-        val key = (w.toLong() shl 8) or (if (italic) 1L else 0L) or (if (mono) 2L else 0L) or
-            ((if (Platform.hasFontBuilder) sizePx.roundToInt().coerceIn(14, 32) else 0).toLong() shl 20)
+        val inter = Platform.hasFontBuilder && VitroFonts.face == VitroFonts.Face.INTER
+        val key = (w.toLong() shl 8) or (if (italic) 1L else 0L) or (if (mono) 2L else 0L) or (if (inter) 4L else 0L) or
+            ((if (inter) sizePx.roundToInt().coerceIn(14, 32) else 0).toLong() shl 20)
         cache[key]?.let { return it }
         val base = when {
             mono -> Typeface.create(Typeface.MONOSPACE, if (w >= 600) Typeface.BOLD else Typeface.NORMAL)
-            Platform.hasFontBuilder -> Inter.typeface(context, w, sizePx)
-            w <= 350 -> Typeface.create("sans-serif-light", Typeface.NORMAL)
-            w < 450 -> Typeface.create("sans-serif", Typeface.NORMAL)
-            w < 550 -> Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            else -> Typeface.create("sans-serif", Typeface.BOLD)
+            inter -> VitroFonts.typeface(context, w, sizePx)
+            else -> VitroFonts.system(w)
         }
-        val tf = if (italic) Typeface.create(base, if (w >= 600 && !Platform.hasFontBuilder) Typeface.BOLD_ITALIC else Typeface.ITALIC) else base
+        val tf = if (italic) Typeface.create(base, if (w >= 600 && !inter) Typeface.BOLD_ITALIC else Typeface.ITALIC) else base
         cache[key] = tf
         return tf
     }
