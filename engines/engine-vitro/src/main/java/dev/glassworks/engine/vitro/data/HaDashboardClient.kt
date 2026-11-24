@@ -324,7 +324,8 @@ class HaDashboardClient(
     }
 
     /** Domains and platforms whose display data (icons, state labels) has been asked for on this connection. */
-    private val displayRequested = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    // A set over a ConcurrentHashMap through Collections: the map's own key-set view is API 24, the Mirror runs 23.
+    private val displayRequested: MutableSet<String> = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
     private val displayPending = java.util.concurrent.atomic.AtomicInteger(0)
 
     /**

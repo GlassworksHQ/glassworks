@@ -9,6 +9,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
+import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
@@ -29,10 +30,11 @@ object HaDisplay {
     private val componentIcons = ConcurrentHashMap<String, JSONObject>()
     private val platformIcons = ConcurrentHashMap<String, JSONObject>()
     private val stateLabels = ConcurrentHashMap<String, String>()
-    private val translatedDomains = ConcurrentHashMap.newKeySet<String>()
-    private val translatedPlatforms = ConcurrentHashMap.newKeySet<String>()
-    private val iconDomains = ConcurrentHashMap.newKeySet<String>()
-    private val iconPlatforms = ConcurrentHashMap.newKeySet<String>()
+    // Sets over a ConcurrentHashMap through Collections, which API 23 has (the map's own key-set view is API 24).
+    private val translatedDomains = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    private val translatedPlatforms = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    private val iconDomains = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    private val iconPlatforms = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
     /** Forgets everything (a new connection, or tests). */
     fun reset() {
