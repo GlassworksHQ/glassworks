@@ -172,8 +172,8 @@ function flowScalar(s: string, pos: { i: number }, line: number, isKey: boolean)
   }
   pos.i = i;
   const raw = s.slice(start, i);
-  // An alias inside [ ] or { } would read as the text "*name" and skip the card it stands for: refuse it instead.
-  if (!isKey && /^\*\S+$/.test(raw.trim())) {
+  // An alias inside [ ] or { } (a value, or a map key) would read as the text "*name": refuse it instead.
+  if (/^\*\S+$/.test(raw.trim())) {
     throw new YamlError(`alias ${raw.trim()} inside a flow collection isn't supported; use a block list`, line);
   }
   return isKey ? raw.trim() : scalar(raw, line);

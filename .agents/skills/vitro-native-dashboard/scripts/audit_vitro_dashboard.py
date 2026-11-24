@@ -164,8 +164,12 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
         if ctype == "custom:auto-entities":
             # Its cards are built at runtime: the inner card (entities by default), and with `card_param: cards`
             # each include rule's `options` card.
-            walk_card(card.get("card") if isinstance(card.get("card"), dict) else {"type": "entities"},
-                      f"{loc}.card", counts, triggers, warnings)
+            # As the runtime builds it: a copy, `type: entities` when it names none, and without the list that
+            # `card_param` (default `entities`) is filled in with at runtime.
+            inner = dict(card["card"]) if isinstance(card.get("card"), dict) else {}
+            inner.setdefault("type", "entities")
+            inner.pop(card.get("card_param") or "entities", None)
+            walk_card(inner, f"{loc}.card", counts, triggers, warnings)
             if card.get("card_param") == "cards":
                 rules = (card.get("filter") or {}).get("include") or []
                 for i, rule in enumerate(rules if isinstance(rules, list) else []):

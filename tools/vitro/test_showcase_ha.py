@@ -847,6 +847,9 @@ class SynthDataTest(unittest.TestCase):
         # Repetition is bounded before it allocates.
         with self.assertRaises(S.TemplateError):
             S.render_template(hub, "{{ 'x' * 1000000000 }}")
+        with self.assertRaises(S.TemplateError):
+            S.render_template(hub, "{{ '%1000000000s' % 'x' }}")
+        self.assertEqual(S.render_template(hub, "{{ 7 % 4 }}")[0].strip(), "3")       # numeric modulo still works
         # state_attr hands out a copy: changing what it returns leaves the home alone.
         hub.states["select.studio_scene"]["attributes"]["options"] = ["a", "b"]
         got = hub.states["select.studio_scene"]["attributes"]["options"]

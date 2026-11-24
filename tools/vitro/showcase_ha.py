@@ -1186,6 +1186,9 @@ class _Eval:
                 seq, n = (v, r) if isinstance(v, (str, list)) else (r, v)
                 if not isinstance(n, int) or len(seq) * max(n, 0) > MAX_TEMPLATE_OUTPUT:
                     raise TemplateError("result too large")
+            if op == "%" and isinstance(v, str):
+                # printf-style formatting: a width like '%1000000000s' allocates before any check could see it.
+                raise TemplateError("string % formatting is not supported")
             v = v * r if op == "*" else v / r if op == "/" else v % r
         return v
 
