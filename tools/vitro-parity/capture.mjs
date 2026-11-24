@@ -164,8 +164,11 @@ async function prepare() {
     const cfg = await ha.call({ type: 'lovelace/config', url_path: c.dashboard, force: true });
     mkdirSync(join(corpusRoot, 'dashboards'), { recursive: true });
     writeFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), JSON.stringify(cfg, null, 1) + '\n');
-    // The images the dashboard shows directly (`image: /local/...`), for Vitro's fixture server.
-    for (const p of imagePaths(cfg)) await fetchAsset(p).catch((e) => log(`  image ${p}: ${scrubText(String(e.message), creds)}`));
+    // The images the dashboard shows directly (`image: /local/...`), for Vitro's fixture server. A missing one
+    // would make Vitro draw the card without its picture and count that as drift, so it fails the run instead.
+    const missing = [];
+    for (const p of imagePaths(cfg)) await fetchAsset(p).catch((e) => missing.push(scrubText(`${p}: ${e.message}`, creds)));
+    if (missing.length) fail(`${c.id}: ${missing.length} dashboard image(s) couldn't be fetched, so the case can't be compared:\n  ${missing.join('\n  ')}`);
     log(`dashboard ${c.dashboard}`);
   }
   ha.close();
