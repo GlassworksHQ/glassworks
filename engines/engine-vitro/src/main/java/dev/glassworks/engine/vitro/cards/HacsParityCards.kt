@@ -646,17 +646,25 @@ class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
 
     /** The value the last press sent, until HA reports a state: quick presses add up instead of repeating. */
     private var pendingValue: Double? = null
-    private var pendingFrom: String? = null
+    private var pendingSince = 0L
+
+    private companion object {
+        /** How long a pressed value waits for HA to report it before the buttons count from HA's state again. */
+        const val PENDING_MS = 5_000L
+    }
 
     private fun step(dir: Int) {
         val s = eid?.let { ctx.store[it] } ?: return
         val (min, max, stepSize) = bounds(s)
         // A new state from HA (accepted or not) ends the pending value.
-        if (pendingFrom != s.state) pendingValue = null
+        // The pending target holds until HA reports it (an earlier press's ack doesn't end it), or for 5 s at most,
+        // so a refused write doesn't keep the buttons ahead of the device.
+        val now = android.os.SystemClock.uptimeMillis()
+        if (pendingValue == s.state.toDoubleOrNull() || now - pendingSince > PENDING_MS) pendingValue = null
         val cur = pendingValue ?: s.state.toDoubleOrNull() ?: min
         val next = snap(cur + dir * stepSize, min, max, stepSize)
         pendingValue = next
-        pendingFrom = s.state
+        pendingSince = now
         setValue(next)
     }
 

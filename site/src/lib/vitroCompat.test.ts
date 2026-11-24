@@ -267,6 +267,7 @@ describe("parseYaml", () => {
   it("refuses an alias inside a flow collection rather than reading it as text", () => {
     expect(() => parseYaml("base: &b\n  type: custom:button-card\nviews:\n  - cards: [*b]\n")).toThrow(/alias \*b/);
     expect(() => parseYaml("k: &k type\nviews:\n  - cards: [{*k : custom:button-card}]\n")).toThrow(/alias \*k/);
+    expect(() => parseYaml("k: &k type\nviews:\n  - cards: [*k : custom:button-card]\n")).toThrow(/alias \*k/);
   });
 
     it("reads only the first document and ignores a leading marker", () => {

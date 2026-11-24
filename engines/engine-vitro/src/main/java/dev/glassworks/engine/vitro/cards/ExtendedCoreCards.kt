@@ -607,7 +607,8 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
 // ---------------------------------------------------------------------------------------------
 
 /** One item of a `todo.*` list, as `todo/item/list` returns it. */
-data class TodoItem(val uid: String, val summary: String, val completed: Boolean)
+/** [pending]: added here and not yet listed by Home Assistant (its [uid] is made up; a real one can look alike). */
+data class TodoItem(val uid: String, val summary: String, val completed: Boolean, val pending: Boolean = false)
 
 /** Native HA `todo-list` card (`hui-todo-list-card`): live items, checkboxes, completed section and add row. */
 class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
@@ -760,7 +761,7 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     private fun toggle(item: TodoItem) {
         val eid = config.entity ?: return
         // A row just added has no Home Assistant uid yet: nothing to update until the list comes back with it.
-        if (item.uid.startsWith(LOCAL_UID)) return
+        if (item.pending) return
         val now = !item.completed
         items = items.map { if (it.uid == item.uid) it.copy(completed = now) else it }
         fetchGeneration++ // a fetch already in flight must not undo the optimistic flip
@@ -783,7 +784,7 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         val text = input.text?.toString()?.trim().orEmpty()
         if (text.isEmpty()) return
         input.setText("")
-        val local = TodoItem(uid = "$LOCAL_UID${System.nanoTime()}", summary = text, completed = false)
+        val local = TodoItem(uid = "$LOCAL_UID${System.nanoTime()}", summary = text, completed = false, pending = true)
         items = items + local
         fetchGeneration++
         renderItems()

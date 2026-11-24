@@ -574,7 +574,11 @@ class VitroView(
         // Panel view: single full-viewport card (e.g. custom:mirror-home-card, custom:tablet-home-card).
         if (view.type == "panel" && view.cards.isNotEmpty()) {
             val card = view.cards.first()
-            return wrapVisibility(card, buildCard(card, ctx, fillViewport = true), ctx)
+            // In a full-viewport frame: the cached-view switch shows and hides the frame, the card's conditions the
+            // card inside it, so returning to the view can't undo a hidden card.
+            return FrameLayout(context).apply {
+                addView(wrapVisibility(card, buildCard(card, ctx, fillViewport = true), ctx), FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            }
         }
 
         val scroll = ScrollView(context).apply {
@@ -1139,7 +1143,9 @@ class VitroView(
         var delay = PERIODIC_CHECK_MS - now % PERIODIC_CHECK_MS + 250L
         if (checkBoundaries.isNotEmpty()) {
             val cal = java.util.Calendar.getInstance().apply { timeInMillis = now }
-            val nowSec = VisibilityCondition.currentLocalSeconds()
+            // All from one clock sample: a second read could cross the boundary and push it to tomorrow.
+            val nowSec = cal.get(java.util.Calendar.HOUR_OF_DAY) * 3_600 + cal.get(java.util.Calendar.MINUTE) * 60 +
+                cal.get(java.util.Calendar.SECOND)
             val msInSecond = cal.get(java.util.Calendar.MILLISECOND)
             for (b in checkBoundaries.values.flatten()) {
                 val ahead = ((b - nowSec) % 86_400 + 86_400) % 86_400

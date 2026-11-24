@@ -641,9 +641,18 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val timeLabel = timeLabel()
         addCentered(stateLabel)
         addCentered(timeLabel, topDp = 4f)
+        // One lock write at a time: a second tap while one is pending would make the rollbacks restore each other's
+        // optimistic states.
+        var writing = false
         val pill = VerticalTogglePillView(ctx.context, theme.activeColor("lock"), theme.dark).apply {
-            onToggle = { locked ->
+            onToggle = toggle@{ locked ->
+                val reset = { setOn(ctx.store[id]?.state.let { it == "locked" || it == "locking" }) }
+                if (writing) {
+                    reset()
+                    return@toggle
+                }
                 val send = { code: String? ->
+                    writing = true
                     val before = ctx.store[id]
                     val optimistic = before?.copy(state = if (locked) "locked" else "unlocked")
                     optimistic?.let { ctx.store.putLocal(it) }
@@ -654,12 +663,14 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                     // HA turned it down: put back the state from before the optimistic flip, unless a newer state from
                     // HA has replaced the flip meanwhile (that one is the truth).
                     ctx.callWs(msg) { ok, _, _ ->
-                        if (!ok && before != null) ctx.main.post { if (ctx.store[id] === optimistic) ctx.store.putLocal(before) }
+                        ctx.main.post {
+                            writing = false
+                            if (!ok && before != null && ctx.store[id] === optimistic) ctx.store.putLocal(before)
+                        }
                     }
                 }
                 // A lock with a `code_format` asks for its code first, as HA's more-info does. Cancelled, the pill
                 // (which already moved) goes back to the lock's state.
-                val reset = { setOn(ctx.store[id]?.state.let { it == "locked" || it == "locking" }) }
                 if (ctx.store[id]?.attributes?.get("code_format") != null) askCode(send, reset) else send(null)
             }
         }

@@ -489,6 +489,14 @@ object MarkedLite {
             parens = -1 // no balancing after the `<…>`: the next `)` closes
         }
         while (k < to) {
+            // A quoted title after the destination (`"Floor (draft"`): its parentheses don't count.
+            if ((s[k] == '"' || s[k] == '\'') && k > 0 && (s[k - 1] == ' ' || s[k - 1] == '\t')) {
+                val end = s.indexOf(s[k], k + 1)
+                if (end in 0 until to) {
+                    k = end + 1
+                    continue
+                }
+            }
             when (s[k]) {
                 '\\' -> k++
                 '(' -> if (parens >= 0) parens++
