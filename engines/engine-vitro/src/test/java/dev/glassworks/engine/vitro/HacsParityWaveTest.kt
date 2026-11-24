@@ -412,10 +412,28 @@ class HacsParityWaveTest {
         val stack = StackInCardView(context(st), cfg, builder(st))
         assertTrue("Living room" in stack.texts())
         assertEquals(2, stack.children.size)
+        // stack-in-card's inline style: no fill, no rounding, no shadow; the card keeps its (theme's) border.
         for (child in stack.children) {
-            assertNull("child surface stripped", child.background)
+            val surface = child.background as android.graphics.drawable.GradientDrawable
+            assertEquals("no fill", android.graphics.Color.TRANSPARENT, surface.color!!.defaultColor)
+            assertEquals("square", 0f, surface.cornerRadius, 0f)
+            assertEquals(0f, child.elevation, 0f)
             assertTrue((child as CardSurface).seamless)
         }
+        // As VitroView builds a child: its own card (a Markdown card for markdown), its card_mod applied, then the stack.
+        val styled: (CardConfig) -> View = { c ->
+            val v = if (c.type == "markdown") dev.glassworks.engine.vitro.cards.MarkdownCardView(context(st), c) else builder(st)(c)
+            v.also { (it as CardSurface).applyCardMod(c) }
+        }
+        // A child's card_mod `border: none` takes the border off, and its background can't come back.
+        val bare = StackInCardView(context(st), card("""{"type": "custom:stack-in-card", "cards": [{"type": "tile", "entity": "light.a",
+            "card_mod": {"style": "ha-card { background: red; border: none; }"}}]}"""), styled)
+        assertNull("no border, no fill", bare.children[0].background)
+        // A text-only Markdown card has no border of its own (`.text-only`), in a stack too.
+        val heading = StackInCardView(context(st), card("""{"type": "custom:stack-in-card", "cards": [
+            {"type": "markdown", "content": "Climate", "text_only": true}, {"type": "tile", "entity": "light.a"}]}"""), styled)
+        assertNull(heading.children[0].background)
+        assertNotNull(heading.children[1].background)
         assertNotNull("the stack keeps its own surface", stack.background)
         val row = stack.children[0].parent as LinearLayout
         assertEquals(LinearLayout.HORIZONTAL, row.orientation)

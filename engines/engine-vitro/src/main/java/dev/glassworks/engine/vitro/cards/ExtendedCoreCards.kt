@@ -1109,7 +1109,7 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
     private fun load(url: String) {
         if (url == loadedUrl) return
         loadedUrl = url
-        ctx.loadImage(url) { bmp ->
+        ctx.loadImage(url, this) { bmp ->
             if (bmp == null || url != loadedUrl) return@loadImage
             imageView.setImageBitmap(bmp)
             if (fixedRatio == null && bmp.width > 0) {
