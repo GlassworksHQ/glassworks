@@ -153,6 +153,50 @@ class ParityHarnessSelfTest {
         assertEquals(1, ParityFiles.unknownSelections(null, setOf("clock"), setOf("s2"), setOf("s1")).size)
     }
 
+    @Test
+    fun caseInsensitiveSearchKeepsIndicesInTheOriginalText() {
+        // "İ".lowercase() is two chars: a folded copy would shift every index after it.
+        assertEquals(1, ParityCompare.indexOfFolded("İX", "x"))
+        assertEquals(3, ParityCompare.indexOfFolded("İ  Open", "open"))
+        assertEquals(-1, ParityCompare.indexOfFolded("İX", "y"))
+        assertEquals(5, ParityCompare.indexOfFolded("open open", "OPEN", 1))
+    }
+
+    @Test
+    fun aKnownCardCountMismatchIsAcceptedButAChangedOneIsNot() {
+        val f = File.createTempFile("baseline", ".json")
+        val extra = measure(pixel = 0.5, ha = 3, vitro = 4)
+        ParityBaseline(f).write(listOf(result(ParityStatus.REGRESSION, extra)))
+        assertEquals(1, JSONObject(f.readText()).getJSONObject("s1/c").getInt("slotDelta"))
+        assertTrue(ParityBaseline(f).worse("s1/c", extra).isEmpty())
+        assertTrue(ParityBaseline(f).worse("s1/c", measure(pixel = 0.5, ha = 3, vitro = 5)).isNotEmpty())
+        // An entry without a mismatch rejects a new one, even when nothing else moved.
+        f.writeText(JSONObject().put("s1/c", entry(0.5, 0)).toString())
+        assertTrue(ParityBaseline(f).worse("s1/c", extra).isNotEmpty())
+        assertTrue(ParityBaseline(f).worse("s1/c", measure(pixel = 0.5, ha = 3, vitro = 3)).isEmpty())
+    }
+
+    @Test
+    fun aPinnedCardStaysAtThePanelsEdgeWhenThePageIsTaller() {
+        org.robolectric.RuntimeEnvironment.setQualifiers(frame.qualifiers)
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val root = java.nio.file.Files.createTempDirectory("parity").toFile()
+        File(root, "dashboards").mkdirs()
+        val pinned = JSONObject().put("type", "tile").put("entity", "sensor.x")
+            .put("card_mod", JSONObject().put("style", "ha-card { position: fixed; left: 16px; bottom: 16px; width: 200px; }"))
+        val view = JSONObject().put("path", "home").put("type", "sections").put("sections", org.json.JSONArray().put(
+            JSONObject().put("type", "grid").put("cards", org.json.JSONArray().put(JSONObject().put("type", "tile").put("entity", "sensor.x")).put(pinned)),
+        ))
+        File(root, "dashboards/tall.json").writeText(JSONObject().put("views", org.json.JSONArray().put(view)).toString())
+        val dash = ParityCase("tall", "tall", null, "tall", "home", null, true, null, 1, Threshold(), emptyList())
+        // HA's page is 1500 CSS px tall, so the render grows to 1500 while the panel is 480.
+        val ref = ParityReference(File(root, "none.png"), JSONObject().put("now", 0L).put("docSize", JSONObject().put("height", 1500)))
+        val render = ParityRenderer(activity, frame, root, null).render(dash, ref)
+        assertEquals((1500 * frame.density).toInt(), render.bitmap.height)
+        val card = render.slots.last()
+        assertEquals("anchored 16 px above the panel's bottom: $card", 480.0 - 16.0, card.bottom, 1.5)
+    }
+
     /** CLAUDE.md hard rule 2: no tokens, addresses, MACs or serials in fixtures, references or reports. */
     @Test
     fun committedFixturesHoldNothingPrivate() {

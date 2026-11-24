@@ -25,15 +25,19 @@ HERE="$ROOT/tools/vitro-parity"
 LOCAL_DEFAULT="$HOME/.t3/glassworks-m1/vitro-parity/harness-local"
 
 refresh=0 local_dir="" frames="" cases="" update=0 out=""
+# An option that takes a value must get a non-empty one: `--cases ""` is an error, not "every case".
+need_value() {
+  if [ $# -lt 2 ] || [ -z "$2" ] || [ "${2#--}" != "$2" ]; then echo "$1 needs a value" >&2; exit 2; fi
+}
 while [ $# -gt 0 ]; do
   case "$1" in
     --refresh) refresh=1 ;;
     --local)
       if [ $# -gt 1 ] && [ "${2#--}" = "$2" ]; then local_dir="$2"; shift; else local_dir="$LOCAL_DEFAULT"; fi ;;
-    --frames) frames="$2"; shift ;;
-    --cases) cases="$2"; shift ;;
+    --frames) need_value "$@"; frames="$2"; shift ;;
+    --cases) need_value "$@"; cases="$2"; shift ;;
     --update-baseline) update=1 ;;
-    --out) out="$2"; shift ;;
+    --out) need_value "$@"; out="$2"; shift ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac

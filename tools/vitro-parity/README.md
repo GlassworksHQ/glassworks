@@ -64,11 +64,21 @@ Write `corpus/<case>.json`, then run `tools/vitro-parity/run.sh --refresh --case
 
 A refresh takes new references with live states, so the scores of cases that drift move a little with it. After a refresh with no Vitro change, run `run.sh --update-baseline` and commit the references and the baseline together (the reasons stay).
 
+> **An update records whatever drifts now, regressions included.** `--update-baseline` rewrites the entry of every case it measures: a real regression becomes "known drift", and the next run stops reporting it. Before you commit `baseline.json`, read its diff: every entry that got worse must be a change you mean to accept, not a Vitro bug. Keep the entry of a case with an open regression as it is (run the update with `--cases` for the others); `tile-select` is one today, until exp/vitro's fix for its capitalized option lands, and its entry says so.
+
 A case over its threshold is a **known drift** if `baseline.json` lists it and it hasn't got worse, with 2% pixels, 1 px bounds and 0.5 px font of slack. Otherwise it's a **regression** and the test fails. A listed case that comes back within its threshold gets a note to drop it from the baseline. The audit (#794) works through the baseline until each case either matches or carries a reason.
 
 ## Privacy
 
 Committed fixtures hold no tokens, origins, IPs (except RFC 5737), MACs, serials, locations or personal media lists. `lib/scrub.mjs` drops them before anything is written. Every output is also checked against a local denylist (`~/.t3/glassworks-m1/vitro-parity/deny.txt`, one name per line, never committed), and `ParityHarnessSelfTest` scans the committed JSON in CI. Real dashboards stay in the local corpus.
+
+The screenshot shows what the JSON scrubs, so for the committed corpus the capture also checks the raw text HA drew in the card and the rendered templates (`findPrivate`), and writes neither file when they show an address, a token or a denylisted word.
+
+Some checks stay manual, because no tool reads pixels or image metadata:
+
+- **Look at every new or changed PNG** in `refs/` before you commit it: a picture, a camera still or a chart can show what no text check sees.
+- **Inspect every image added to `assets/`**, its pixels and its metadata (`exiftool <file>`), even one from HA's `/static`.
+- Keep the committed corpus to synthetic or harmless entities, and leave cameras and personal media out of it.
 
 ## Limits
 

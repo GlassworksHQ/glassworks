@@ -7,16 +7,26 @@ import { posix, resolve, sep } from 'node:path';
  * The file under [assetsDir] for HA path [path] (`/static/icons/x.png`), or a thrown error when the path isn't a
  * plain absolute path that stays inside assets/: `..` or `.` segments (also percent-encoded, which fetch would
  * normalize to another HA path, Bearer token included), backslashes, or, for the committed corpus, anything
- * outside HA's own /static.
+ * outside HA's own /static. Every check runs on the path as given and as fetch's URL parser would canonicalize it,
+ * so nothing the parser strips or resolves (tabs, newlines, dot segments) can change which path is requested.
  */
 export function assetDestination(assetsDir, path, committed) {
   if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//')) throw new Error(`asset ${path}: not an absolute HA path`);
+  // Tabs and newlines first: URL parsing drops them, so "/static/.\t./api/states" would reach /api/states.
+  if (/[\u0000-\u001f\u007f]/.test(path)) throw new Error(`asset ${JSON.stringify(path)}: control characters`);
   if (/\\|%2e|%2f|%5c/i.test(path)) throw new Error(`asset ${path}: encoded or backslash path`);
   if (path.split('/').some((seg) => seg === '..' || seg === '.')) throw new Error(`asset ${path}: dot segments`);
   if (posix.normalize(path) !== path) throw new Error(`asset ${path}: not a normalized path`);
+  // What fetch will actually request: the WHATWG-canonical path must be this very path.
+  if (canonicalPath(path) !== path) throw new Error(`asset ${path}: the URL would request ${canonicalPath(path)}`);
   if (committed && !path.startsWith('/static/')) throw new Error(`asset ${path}: the committed corpus may only show HA's own /static images`);
   const root = resolve(assetsDir);
   const out = resolve(root, path.slice(1));
   if (!out.startsWith(root + sep)) throw new Error(`asset ${path}: outside assets/`);
   return out;
+}
+
+/** The path a URL with this path (and maybe a query) requests, after WHATWG URL parsing (what fetch does). */
+export function canonicalPath(pathAndQuery) {
+  return new URL(pathAndQuery, 'http://homeassistant.local').pathname;
 }

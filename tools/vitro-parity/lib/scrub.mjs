@@ -74,3 +74,22 @@ export function checkDenylist(text, what) {
     if (re.test(text)) throw new Error(`${what} would contain a denied word (from the denylist): not written`);
   }
 }
+
+/**
+ * What in [text] (a card's drawn text, its rendered templates) must not reach a committed screenshot: an IPv4
+ * address outside RFC 5737, a MAC, a token, the HA origin or host, a denylisted word. The PNG shows what the JSON
+ * scrubs, so this runs on the raw text before anything is written. Returns the kinds found (never the values).
+ */
+export function findPrivate(text, creds) {
+  const s = String(text);
+  const found = [];
+  const ips = [...s.matchAll(new RegExp(IPV4.source, 'g'))].filter((m) => m.slice(1, 5).every((p) => +p <= 255));
+  if (ips.length) found.push('an IPv4 address');
+  if (new RegExp(MAC.source, 'i').test(s)) found.push('a MAC address');
+  if (new RegExp(JWT.source).test(s) || new RegExp(TOKEN_PARAM.source).test(s)) found.push('a token');
+  if (creds && (s.includes(creds.token) || s.includes(creds.origin) || s.includes(new URL(creds.origin).host))) found.push("Home Assistant's address or token");
+  for (const w of denylist()) {
+    if (new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(s)) { found.push('a denylisted word'); break; }
+  }
+  return found;
+}

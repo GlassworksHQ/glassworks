@@ -76,6 +76,22 @@ internal fun pct(v: Double) = String.format(Locale.ROOT, "%.1f%%", v * 100)
 internal fun num(v: Double) = if (v.isInfinite()) "∞" else String.format(Locale.ROOT, "%.1f", v)
 
 object ParityCompare {
+    /** [c] lowercased on its own: one char in, one char out (String.lowercase can turn "İ" into two). */
+    private fun fold(c: Char): Char = Character.toLowerCase(c)
+
+    /**
+     * Where [needle] first occurs in [haystack] at or after [from], ignoring case, as an index into [haystack] itself:
+     * chars are folded one by one, so the index stays valid for [VitroText.offsets]. -1 when absent.
+     */
+    fun indexOfFolded(haystack: String, needle: String, from: Int = 0): Int {
+        if (needle.isEmpty()) return if (from <= haystack.length) from else -1
+        outer@ for (i in from.coerceAtLeast(0)..haystack.length - needle.length) {
+            for (j in needle.indices) if (fold(haystack[i + j]) != fold(needle[j])) continue@outer
+            return i
+        }
+        return -1
+    }
+
     fun measure(case: ParityCase, frame: ParityFrame, ref: ParityReference, render: VitroRender): Pair<ParityMeasure, Bitmap> {
         val d = frame.density
         val refBmp = BitmapFactory.decodeFile(ref.png.path) ?: error("can't decode ${ref.png}")
@@ -111,11 +127,11 @@ object ParityCompare {
         val vitroTexts = (0 until render.slots.size).associateWith { render.texts(it) }
         val used = HashMap<VitroText, Int>()
         for (t in ref.texts) {
-            val needle = t.text.replace(Regex("\\s+"), " ").trim().lowercase(Locale.ROOT)
+            val needle = t.text.replace(Regex("\\s+"), " ").trim()
             val candidates = vitroTexts[t.slot].orEmpty()
             var hit: Pair<VitroText, Int>? = null
             for (vt in candidates) {
-                val idx = vt.normalized.lowercase(Locale.ROOT).indexOf(needle, used[vt] ?: 0)
+                val idx = indexOfFolded(vt.normalized, needle, used[vt] ?: 0)
                 if (idx >= 0) { hit = vt to idx; break }
             }
             if (hit == null) {
@@ -148,6 +164,9 @@ class ParityBaseline(private val file: File) {
             if (m.bounds > known + BOUNDS_SLACK) add("bounds Δ${num(m.bounds)} > baseline ${num(known)}")
             if (m.fontDelta > b.optDouble("font", 0.0) + FONT_SLACK) add("font Δ${num(m.fontDelta)} > baseline ${num(b.optDouble("font"))}")
             if (m.missingTexts.size > b.optInt("missingText", 0)) add("${m.missingTexts.size} texts missing > baseline ${b.optInt("missingText")}")
+            // Vitro's card count minus HA's: a known mismatch is accepted as it is, a new or changed one isn't.
+            val slots = m.slotsVitro - m.slotsHa
+            if (slots != 0 && slots != b.optInt("slotDelta", 0)) add("Vitro shows ${m.slotsVitro} card(s) for HA's ${m.slotsHa}; baseline: ${b.optInt("slotDelta", 0)} more")
         }
     }
 
@@ -159,7 +178,8 @@ class ParityBaseline(private val file: File) {
         val out = JSONObject()
         out.put("_comment", "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: " +
             "${pct(PIXEL_SLACK)} pixels, $BOUNDS_SLACK px bounds, $FONT_SLACK px font). Regenerate with " +
-            "-PvitroParityUpdateBaseline=true; keep or write each \"reason\". #794 empties this file.")
+            "-PvitroParityUpdateBaseline=true; keep or write each \"reason\". An update records regressions too: read the " +
+            "diff before committing it, and keep the entries of cases with an open regression. #794 empties this file.")
         val entries = java.util.TreeMap<String, Any>()
         for (k in json.keys().asSequence().filter { it !in ran && !it.startsWith("_") }) entries[k] = json.get(k)
         for (r in results) {
@@ -168,6 +188,7 @@ class ParityBaseline(private val file: File) {
             entries[r.key] = JSONObject()
                 .put("pixel", round(m.pixel.tolerant, 4)).put("bounds", if (m.bounds.isInfinite()) UNBOUNDED else round(m.bounds, 1))
                 .put("font", round(m.fontDelta, 1)).put("missingText", m.missingTexts.size)
+                .apply { if (m.slotsVitro != m.slotsHa) put("slotDelta", m.slotsVitro - m.slotsHa) }
                 .put("reason", entry(r.key)?.optString("reason")?.takeIf { it.isNotBlank() } ?: "not triaged yet (#794)")
         }
         entries.forEach { (k, v) -> out.put(k, v) }

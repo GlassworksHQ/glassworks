@@ -257,9 +257,18 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         }
     }
 
+    /**
+     * Lays [v] out at [w] x [h]. A render taller than the panel (a full page, like HA's screenshot) keeps the pinned
+     * cards' overlay at the panel's own size, as on the device: a `position: fixed` card stays anchored to the
+     * panel's edges (HA's page is captured at scroll 0, where its fixed cards sit too), not to the content's.
+     */
     private fun layout(v: View, w: Int, h: Int) {
         v.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
         v.layout(0, 0, w, h)
+        val overlay = (v as? VitroView)?.overlayLayer ?: return
+        val panelH = minOf(h, frame.pxHeight)
+        overlay.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(panelH, View.MeasureSpec.EXACTLY))
+        overlay.layout(0, 0, w, panelH)
     }
 
     /**
@@ -269,8 +278,7 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
     private fun step(view: View) {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(400))
         Thread.sleep(25)
-        view.measure(View.MeasureSpec.makeMeasureSpec(view.width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(view.height, View.MeasureSpec.EXACTLY))
-        view.layout(0, 0, view.width, view.height)
+        layout(view, view.width, view.height)
     }
 
     private fun settle(view: View, ref: ParityReference?) {
@@ -287,7 +295,6 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         // The clock shows the instant HA's page was frozen at (refs/*.json "now").
         ref?.let { r -> ParityViews.all(view).filterIsInstance<ClockCardView>().forEach { it.renderAt(Date(r.now)) } }
         shadowOf(Looper.getMainLooper()).idle()
-        view.measure(View.MeasureSpec.makeMeasureSpec(view.width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(max(1, view.height), View.MeasureSpec.EXACTLY))
-        view.layout(0, 0, view.width, view.height)
+        layout(view, view.width, max(1, view.height))
     }
 }

@@ -25,9 +25,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect, loadCredentials, redact } from './lib/ha.mjs';
-import { referencedEntities, scrubStates, scrubText, checkDenylist } from './lib/scrub.mjs';
+import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate } from './lib/scrub.mjs';
 import { parseArgs, pick } from './lib/args.mjs';
-import { assetDestination } from './lib/assets.mjs';
+import { assetDestination, canonicalPath } from './lib/assets.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEFAULT_CORPUS = join(ROOT, 'engines', 'engine-vitro', 'src', 'test', 'parity');
@@ -128,7 +128,7 @@ function imagePaths(card) {
 async function fetchAsset(path, url = path) {
   // Checked before the fetch: a path that leaves assets/ (or /static/, for the committed corpus) is never requested.
   const out = assetDestination(join(corpusRoot, 'assets'), path, committed);
-  if (url !== path && !url.startsWith(path + '?')) throw new Error(`asset ${path}: fetch URL is another path`);
+  if ((url !== path && !url.startsWith(path + '?')) || canonicalPath(url) !== path) throw new Error(`asset ${path}: fetch URL is another path`);
   const res = await fetch(creds.origin + url, { headers: { Authorization: `Bearer ${creds.token}` } });
   if (!res.ok) throw new Error(`asset ${path}: HTTP ${res.status}`);
   mkdirSync(dirname(out), { recursive: true });
@@ -311,6 +311,11 @@ async function newPage(browser, frame, dark, now, cardModUrl, tz) {
   return { ctx, page, states };
 }
 
+/** A deep copy of the states of [ids] (sorted), as the page holds them right now. */
+function snapshotStates(states, ids) {
+  return JSON.parse(JSON.stringify(Object.fromEntries([...ids].sort().filter((id) => states[id]).map((id) => [id, states[id]]))));
+}
+
 /** The element HA renders a card type as: hui-tile-card, or the custom element's own name. */
 const cardElement = (card) => (card.type.startsWith('custom:') ? card.type.slice(7) : `hui-${card.type}-card`);
 
@@ -407,27 +412,46 @@ async function capture() {
           } else {
             await page.evaluate((p) => { history.pushState(null, '', p); window.dispatchEvent(new CustomEvent('location-changed', { detail: { replace: false } })); scrollTo(0, 0); }, path);
           }
-          const { info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000);
-          if (!info.slots.length && c.card) throw new Error('no card on the page');
-          if (!info.slots.length) log(`${frame.id}/${c.id}: HA shows no card (all hidden?): comparing the whole page`);
+          const config = c.card ?? JSON.parse(readFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), 'utf8'));
           const outDir = join(refs, frame.id);
           mkdirSync(outDir, { recursive: true });
-          let clip, slots;
-          if (c.card) {
-            slots = [info.slots[0]];
-            clip = clipFor(slots[0], info);
-          } else {
-            slots = info.slots;
-            clip = { x: 0, y: 0, width: info.docW, height: info.docH };
+          let info, stable, clip, slots, png, texts, templates, ids, drawnStates;
+          // The PNG, its texts and the states saved with them must be one instant: an entity that changes while
+          // they're taken makes the pair disagree, so the capture starts over (three tries).
+          for (let attempt = 1; ; attempt++) {
+            ({ info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000));
+            if (!info.slots.length && c.card) throw new Error('no card on the page');
+            if (!info.slots.length) log(`${frame.id}/${c.id}: HA shows no card (all hidden?): comparing the whole page`);
+            if (c.card) {
+              slots = [info.slots[0]];
+              clip = clipFor(slots[0], info);
+            } else {
+              slots = info.slots;
+              clip = { x: 0, y: 0, width: info.docW, height: info.docH };
+            }
+            ids = referencedEntities(config, states);
+            drawnStates = snapshotStates(states, ids);
+            // Kept in memory until every check passes: a failed case leaves no PNG behind.
+            png = await page.screenshot({ clip, fullPage: true });
+            texts = [];
+            for (const [i, s] of slots.entries()) for (const t of await page.evaluate(TEXTS_JS, s)) texts.push({ slot: i, ...roundRect(t) });
+            // The templates Vitro asks for, rendered now.
+            templates = {};
+            for (const tpl of wanted[c.id] || []) {
+              const r = await ha.renderTemplate(tpl);
+              templates[tpl] = r.error ? { error: String(r.error) } : { result: typeof r.result === 'string' ? r.result : JSON.stringify(r.result) };
+            }
+            if (JSON.stringify(snapshotStates(states, ids)) === JSON.stringify(drawnStates)) break;
+            if (attempt >= 3) throw new Error('entity states kept changing during the capture (3 tries)');
+            log(`${frame.id}/${c.id}: an entity changed during the capture: again`);
           }
-          // Kept in memory until the JSON passes the checks: a failed case leaves no PNG behind.
-          const png = await page.screenshot({ clip, fullPage: true });
-          const texts = [];
-          for (const [i, s] of slots.entries()) for (const t of await page.evaluate(TEXTS_JS, s)) texts.push({ slot: i, ...roundRect(t) });
-          // The states HA drew with, for the entities the case reads; the templates Vitro asks for, rendered now.
-          const config = c.card ?? JSON.parse(readFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), 'utf8'));
-          const ids = referencedEntities(config, states);
-          const caseStates = scrubStates(Object.fromEntries([...ids].sort().filter((id) => states[id]).map((id) => [id, states[id]])), creds, { keepPictures: !committed });
+          // The screenshot shows what the JSON scrubs: check the raw text HA drew and the templates before writing.
+          if (committed) {
+            const shown = findPrivate(JSON.stringify({ texts, templates }), creds);
+            if (shown.length) throw new Error(`the card shows ${shown.join(', ')}: neither its PNG nor its JSON is written`);
+          }
+          const shownStates = drawnStates; // the states the PNG shows
+          const caseStates = scrubStates(shownStates, creds, { keepPictures: !committed });
           // A local corpus also keeps the pictures its entities show (plants, artwork), for Vitro's fixture server.
           if (!committed) {
             for (const id of ids) {
@@ -435,11 +459,6 @@ async function capture() {
               if (typeof pic !== 'string') continue;
               if (pic.startsWith('/')) await fetchAsset(pic.split('?')[0], pic).catch((e) => log(`  picture: ${scrubText(String(e.message), creds)}`));
             }
-          }
-          const templates = {};
-          for (const tpl of wanted[c.id] || []) {
-            const r = await ha.renderTemplate(tpl);
-            templates[tpl] = r.error ? { error: String(r.error) } : { result: typeof r.result === 'string' ? r.result : JSON.stringify(r.result) };
           }
           const ref = {
             case: c.id, frame: frame.id, haVersion: haConfig.version, now, stable,
@@ -449,7 +468,7 @@ async function capture() {
           };
           if (!committed) {
             // Pictures that templates point at (a plant's image entity inside Markdown, say), unredacted from the raw text.
-            const raw = JSON.stringify({ templates, states: Object.fromEntries([...ids].map((id) => [id, states[id]])) });
+            const raw = JSON.stringify({ templates, states: shownStates });
             for (const m of new Set(raw.match(/\/api\/[a-z_]+_proxy\/[^"'\s)\\]+/g) || [])) {
               await fetchAsset(m.split('?')[0], m.replace(/&amp;/g, '&')).catch((e) => log(`  picture: ${scrubText(String(e.message), creds)}`));
             }
