@@ -268,9 +268,12 @@ const DRAWN_IMAGES_JS = (slots) => {
 /** Runs in the page: the text a slot shows, with its box and font, relative to the slot (CSS px). */
 const TEXTS_JS = (slot) => {
   const out = [];
+  // The element that lays [e] out: the <slot> it is assigned to (its box sits in the shadow root's flat tree, where
+  // Mushroom's `.primary` cuts the line with an ellipsis), else its parent, else its shadow root's host.
+  const up = (e) => e.assignedSlot || e.parentElement || (e.getRootNode && e.getRootNode().host);
   const within = (r) => r.width > 0 && r.height > 0 && r.right > slot.x - scrollX - 1 && r.left < slot.x - scrollX + slot.w + 1 && r.bottom > slot.y - scrollY - 1 && r.top < slot.y - scrollY + slot.h + 1;
   const visible = (el) => {
-    for (let e = el; e && e.nodeType === 1; e = e.parentElement || (e.getRootNode && e.getRootNode().host)) {
+    for (let e = el; e && e.nodeType === 1; e = up(e)) {
       const s = getComputedStyle(e);
       if (s.display === 'none' || s.visibility === 'hidden' || +s.opacity === 0) return false;
       // Visually hidden, for screen readers only (HA's select keeps its "Option" label this way): a 1x1 or
@@ -290,11 +293,14 @@ const TEXTS_JS = (slot) => {
         const range = document.createRange();
         range.selectNodeContents(n);
         const r = range.getBoundingClientRect();
-        if (!within(r) || !visible(n.parentElement)) continue;
-        const s = getComputedStyle(n.parentElement);
-        // HA cuts this text itself when an ancestor that hides its overflow is narrower than the text.
+        // A text node can be slotted itself; its box is then the slot's.
+        const box = n.assignedSlot || n.parentElement;
+        if (!within(r) || !visible(box)) continue;
+        const s = getComputedStyle(box);
+        // HA cuts this text itself when an ancestor that hides its overflow is narrower than the text. Ancestors in
+        // the flat tree: a slotted span's own parent never clips it, the slot's container in the shadow root does.
         let clipped = false;
-        for (let e = n.parentElement; e && e.nodeType === 1 && !clipped; e = e.parentElement || (e.getRootNode && e.getRootNode().host)) {
+        for (let e = box; e && e.nodeType === 1 && !clipped; e = up(e)) {
           const es = getComputedStyle(e);
           if (es.overflowX === 'visible' && es.textOverflow !== 'ellipsis') continue;
           const er = e.getBoundingClientRect();
