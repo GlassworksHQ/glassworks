@@ -1,0 +1,97 @@
+{
+ "case": "tile-select",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1795509858480,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Kitchen Blind Position",
+   "x": 56,
+   "y": 17.61,
+   "w": 139.92,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "open",
+   "x": 56,
+   "y": 37,
+   "w": 28.16,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Option",
+   "x": 31,
+   "y": 86.5,
+   "w": 37.69,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "open",
+   "x": 32,
+   "y": 79,
+   "w": 31.98,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "input_select.kitchen_blind_position": {
+   "s": "open",
+   "a": {
+    "options": [
+     "open",
+     "closed"
+    ],
+    "editable": true,
+    "icon": "mdi:blinds",
+    "friendly_name": "Kitchen Blind Position"
+   },
+   "lc": 1795504897.1554313
+  }
+ },
+ "templates": {}
+}

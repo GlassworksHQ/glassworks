@@ -1,0 +1,69 @@
+{
+ "case": "tile-toggle",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1795509858480,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 262,
+  "height": 200
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 246,
+   "h": 184,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Guest mode",
+   "x": 84.61,
+   "y": 67.59,
+   "w": 76.77,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Off",
+   "x": 114.09,
+   "y": 93.8,
+   "w": 17.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "input_boolean.guest_mode": {
+   "s": "off",
+   "a": {
+    "editable": true,
+    "icon": "mdi:account-multiple",
+    "friendly_name": "Guest mode"
+   },
+   "lc": 1795504897.1536012
+  }
+ },
+ "templates": {}
+}

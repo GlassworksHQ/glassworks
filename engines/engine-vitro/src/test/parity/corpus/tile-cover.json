@@ -1,0 +1,4 @@
+{
+  "title": "Tile: a cover with open/close buttons",
+  "card": { "type": "tile", "entity": "cover.kitchen_blind", "features": [{ "type": "cover-open-close" }] }
+}

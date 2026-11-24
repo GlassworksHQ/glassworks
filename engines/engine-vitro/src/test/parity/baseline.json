@@ -1,0 +1,416 @@
+{
+ "_comment": "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: 2.0% pixels, 1.0 px bounds, 0.5 px font). Regenerate with -PvitroParityUpdateBaseline=true; keep or write each \"reason\". #794 empties this file.",
+ "mirror/button": {
+  "pixel": 0.0468,
+  "bounds": 27.3,
+  "font": 2,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "mirror/clock": {
+  "pixel": 0.0503,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "digits are Inter in Vitro and Roboto in HA; same time, size and box"
+ },
+ "mirror/entities": {
+  "pixel": 0.039,
+  "bounds": 28.5,
+  "font": 2,
+  "missingText": 2,
+  "reason": "Vitro shows raw sensor precision (1.1111 °C) where HA uses the entity registry display_precision (1.1 °C); title row shorter, so rows sit higher"
+ },
+ "mirror/glance": {
+  "pixel": 0.0334,
+  "bounds": 40.9,
+  "font": 2,
+  "missingText": 2,
+  "reason": "same raw-precision gap as entities (display_precision); rows are tighter than HA, so the card is ~41 px shorter"
+ },
+ "mirror/grid": {
+  "pixel": 0.0547,
+  "bounds": 13.1,
+  "font": 2,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "mirror/heading": {
+  "pixel": 0.0527,
+  "bounds": 8.4,
+  "font": 1,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "mirror/markdown-cardmod": {
+  "pixel": 0.0112,
+  "bounds": 2.7,
+  "font": 0.3,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "mirror/mushroom-chips": {
+  "pixel": 0.0279,
+  "bounds": 0.7,
+  "font": 0,
+  "missingText": 2,
+  "reason": "not triaged yet (#794)"
+ },
+ "mirror/mushroom-chips-cardmod": {
+  "pixel": 0.0071,
+  "bounds": 0.7,
+  "font": 1.2,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "mirror/picture-entity": {
+  "pixel": 0.7541,
+  "bounds": 362,
+  "font": 3,
+  "missingText": 0,
+  "reason": "Vitro draws the image letterboxed at a fixed short height instead of at its own aspect ratio, without HA's grey filter for an off entity, and puts the state next to the name instead of at the right"
+ },
+ "mirror/stack-in-card": {
+  "pixel": 0.0016,
+  "bounds": 2.3,
+  "font": 0,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "mirror/thermostat": {
+  "pixel": 0.0201,
+  "bounds": 38,
+  "font": 0,
+  "missingText": 2,
+  "reason": "off: Vitro shows \"Off\" small with a dash and adds +/- and mode buttons; HA shows a large \"Off\" and no controls, so Vitro is ~38 px taller"
+ },
+ "mirror/tile-cover": {
+  "pixel": 0.0298,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "mirror/tile-fan": {
+  "pixel": 0.0456,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "mirror/tile-light": {
+  "pixel": 0.048,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "mirror/tile-number": {
+  "pixel": 0.0283,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "mirror/tile-select": {
+  "pixel": 0.0316,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "mirror/tile-sensor": {
+  "pixel": 0.0115,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "mirror/tile-toggle": {
+  "pixel": 0.095,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "vertical tile: Vitro shows \"…\" for the name, and an Off/On segmented control instead of HA's toggle switch feature"
+ },
+ "mirror/vertical-stack": {
+  "pixel": 0.0236,
+  "bounds": 8.4,
+  "font": 0,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/button": {
+  "pixel": 0.0468,
+  "bounds": 27.3,
+  "font": 2,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/clock": {
+  "pixel": 0.0503,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "digits are Inter in Vitro and Roboto in HA; same time, size and box"
+ },
+ "s1/entities": {
+  "pixel": 0.039,
+  "bounds": 28.5,
+  "font": 2,
+  "missingText": 2,
+  "reason": "Vitro shows raw sensor precision (1.1111 °C) where HA uses the entity registry display_precision (1.1 °C); title row shorter, so rows sit higher"
+ },
+ "s1/glance": {
+  "pixel": 0.0338,
+  "bounds": 40.9,
+  "font": 2,
+  "missingText": 2,
+  "reason": "same raw-precision gap as entities (display_precision); rows are tighter than HA, so the card is ~41 px shorter"
+ },
+ "s1/grid": {
+  "pixel": 0.0557,
+  "bounds": 4.2,
+  "font": 2,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/heading": {
+  "pixel": 0.0524,
+  "bounds": 8.4,
+  "font": 1,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/markdown-cardmod": {
+  "pixel": 0.0082,
+  "bounds": 2.7,
+  "font": 0.3,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/mushroom-chips": {
+  "pixel": 0.0279,
+  "bounds": 0.7,
+  "font": 0,
+  "missingText": 2,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/mushroom-chips-cardmod": {
+  "pixel": 0.0051,
+  "bounds": 0.7,
+  "font": 1.2,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/picture-entity": {
+  "pixel": 0.7846,
+  "bounds": 362,
+  "font": 3,
+  "missingText": 0,
+  "reason": "Vitro draws the image letterboxed at a fixed short height instead of at its own aspect ratio, without HA's grey filter for an off entity, and puts the state next to the name instead of at the right"
+ },
+ "s1/stack-in-card": {
+  "pixel": 0.0011,
+  "bounds": 2.3,
+  "font": 0,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/thermostat": {
+  "pixel": 0.0201,
+  "bounds": 38,
+  "font": 0,
+  "missingText": 2,
+  "reason": "off: Vitro shows \"Off\" small with a dash and adds +/- and mode buttons; HA shows a large \"Off\" and no controls, so Vitro is ~38 px taller"
+ },
+ "s1/tile-cover": {
+  "pixel": 0.0298,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/tile-fan": {
+  "pixel": 0.0456,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/tile-light": {
+  "pixel": 0.048,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/tile-number": {
+  "pixel": 0.0283,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/tile-select": {
+  "pixel": 0.0316,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/tile-sensor": {
+  "pixel": 0.0116,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "s1/tile-toggle": {
+  "pixel": 0.095,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "vertical tile: Vitro shows \"…\" for the name, and an Off/On segmented control instead of HA's toggle switch feature"
+ },
+ "s1/vertical-stack": {
+  "pixel": 0.0236,
+  "bounds": 8.4,
+  "font": 0,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "tablet/button": {
+  "pixel": 0.05,
+  "bounds": 27,
+  "font": 2,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "tablet/clock": {
+  "pixel": 0.0574,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "digits are Inter in Vitro and Roboto in HA; same time, size and box"
+ },
+ "tablet/entities": {
+  "pixel": 0.0416,
+  "bounds": 27.8,
+  "font": 2,
+  "missingText": 2,
+  "reason": "Vitro shows raw sensor precision (1.1111 °C) where HA uses the entity registry display_precision (1.1 °C); title row shorter, so rows sit higher"
+ },
+ "tablet/glance": {
+  "pixel": 0.0343,
+  "bounds": 41.6,
+  "font": 2,
+  "missingText": 2,
+  "reason": "same raw-precision gap as entities (display_precision); rows are tighter than HA, so the card is ~41 px shorter"
+ },
+ "tablet/grid": {
+  "pixel": 0.0599,
+  "bounds": 14.7,
+  "font": 2,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "tablet/heading": {
+  "pixel": 0.0571,
+  "bounds": 8.4,
+  "font": 1,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "tablet/markdown-cardmod": {
+  "pixel": 0.0056,
+  "bounds": 2.5,
+  "font": 0,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "tablet/mushroom-chips": {
+  "pixel": 0.0278,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 2,
+  "reason": "not triaged yet (#794)"
+ },
+ "tablet/mushroom-chips-cardmod": {
+  "pixel": 0.0042,
+  "bounds": 0,
+  "font": 1.2,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "tablet/picture-entity": {
+  "pixel": 0.7549,
+  "bounds": 362,
+  "font": 3,
+  "missingText": 0,
+  "reason": "Vitro draws the image letterboxed at a fixed short height instead of at its own aspect ratio, without HA's grey filter for an off entity, and puts the state next to the name instead of at the right"
+ },
+ "tablet/thermostat": {
+  "pixel": 0.0199,
+  "bounds": 38,
+  "font": 0,
+  "missingText": 2,
+  "reason": "off: Vitro shows \"Off\" small with a dash and adds +/- and mode buttons; HA shows a large \"Off\" and no controls, so Vitro is ~38 px taller"
+ },
+ "tablet/tile-cover": {
+  "pixel": 0.0311,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "tablet/tile-fan": {
+  "pixel": 0.0461,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "tablet/tile-light": {
+  "pixel": 0.0516,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "tablet/tile-number": {
+  "pixel": 0.0283,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "not triaged yet (#794)"
+ },
+ "tablet/tile-select": {
+  "pixel": 0.033,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "tablet/tile-sensor": {
+  "pixel": 0.0124,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ },
+ "tablet/tile-toggle": {
+  "pixel": 0.0938,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "vertical tile: Vitro shows \"…\" for the name, and an Off/On segmented control instead of HA's toggle switch feature"
+ },
+ "tablet/vertical-stack": {
+  "pixel": 0.0247,
+  "bounds": 8.4,
+  "font": 0,
+  "missingText": 1,
+  "reason": "not triaged yet (#794)"
+ }
+}

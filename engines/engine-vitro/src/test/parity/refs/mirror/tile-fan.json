@@ -1,0 +1,74 @@
+{
+ "case": "tile-fan",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1795509858480,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Air purifier",
+   "x": 56,
+   "y": 17.61,
+   "w": 67.64,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "20%",
+   "x": 56,
+   "y": 37,
+   "w": 23.47,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "fan.air_purifier": {
+   "s": "on",
+   "a": {
+    "preset_modes": [
+     "auto"
+    ],
+    "percentage": 20,
+    "percentage_step": 10,
+    "preset_mode": null,
+    "friendly_name": "Air purifier",
+    "supported_features": 57
+   },
+   "lc": 1795504930.0582252
+  }
+ },
+ "templates": {}
+}

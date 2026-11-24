@@ -1,0 +1,152 @@
+{
+ "case": "stack-in-card",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1795509858480,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 12,
+  "y": 12,
+  "width": 936,
+  "height": 161
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 20,
+   "y": 20,
+   "w": 920,
+   "h": 145,
+   "type": "stack-in-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Climate",
+   "x": 5,
+   "y": 3,
+   "w": 34.97,
+   "h": 11,
+   "size": 9.38,
+   "weight": 700,
+   "color": "rgb(244, 244, 245)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "AC",
+   "x": 57,
+   "y": 35.61,
+   "w": 19.89,
+   "h": 17,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(244, 244, 245)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Off",
+   "x": 57,
+   "y": 55,
+   "w": 18.8,
+   "h": 15,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(244, 244, 245)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Air purifier",
+   "x": 57,
+   "y": 99.61,
+   "w": 72.58,
+   "h": 17,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(244, 244, 245)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "On",
+   "x": 57,
+   "y": 119,
+   "w": 17.08,
+   "h": 15,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(244, 244, 245)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "climate.ac": {
+   "s": "off",
+   "a": {
+    "hvac_modes": [
+     "off",
+     "heat",
+     "cool",
+     "auto",
+     "dry",
+     "fan_only"
+    ],
+    "min_temp": 16,
+    "max_temp": 31,
+    "target_temp_step": 0.5,
+    "fan_modes": [
+     "low",
+     "medium",
+     "high",
+     "auto"
+    ],
+    "current_temperature": 17.5,
+    "temperature_unit": "°C",
+    "temperature": null,
+    "target_temp_high": null,
+    "target_temp_low": null,
+    "fan_mode": "auto",
+    "hvac_action": "off",
+    "unit_state": "normal",
+    "mode_conflict": false,
+    "friendly_name": "AC",
+    "supported_features": 395
+   },
+   "lc": 1795504922.749542,
+   "lu": 1795505706.0540895
+  },
+  "fan.air_purifier": {
+   "s": "on",
+   "a": {
+    "preset_modes": [
+     "auto"
+    ],
+    "percentage": 20,
+    "percentage_step": 10,
+    "preset_mode": null,
+    "friendly_name": "Air purifier",
+    "supported_features": 57
+   },
+   "lc": 1795504930.0582252
+  }
+ },
+ "templates": {
+  "{{ states('climate.ac') | title }}": {
+   "result": "Off"
+  },
+  "{{ states('fan.air_purifier') | title }}": {
+   "result": "On"
+  }
+ }
+}

@@ -1,0 +1,187 @@
+{
+ "case": "glance",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1795509858480,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 208
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 191.58,
+   "type": "hui-glance-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Living room",
+   "x": 17,
+   "y": 21,
+   "w": 121.97,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Temp",
+   "x": 57.64,
+   "y": 76.8,
+   "w": 35.22,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "20.7 °C",
+   "x": 52.7,
+   "y": 155.19,
+   "w": 45.08,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Humidity",
+   "x": 163.81,
+   "y": 76.8,
+   "w": 55.86,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "48%",
+   "x": 178.75,
+   "y": 155.19,
+   "w": 25.98,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Cactus",
+   "x": 286.45,
+   "y": 76.8,
+   "w": 43.58,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Off",
+   "x": 298.56,
+   "y": 155.19,
+   "w": 19.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Blind",
+   "x": 409.17,
+   "y": 76.8,
+   "w": 31.14,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Open",
+   "x": 408.44,
+   "y": 155.19,
+   "w": 32.63,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "cover.kitchen_blind": {
+   "s": "open",
+   "a": {
+    "is_closed": false,
+    "current_position": 100,
+    "assumed_state": true,
+    "friendly_name": "Kitchen Blind",
+    "supported_features": 11
+   },
+   "lc": 1795505391.0030644
+  },
+  "light.living_room_cactus": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": null,
+    "friendly_name": "Cactus",
+    "supported_features": 0
+   },
+   "lc": 1795508121.7617655
+  },
+  "sensor.living_room_airdot_living_room_humidity": {
+   "s": "48.3199996948242",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "%",
+    "device_class": "humidity",
+    "friendly_name": "AirDot Living Room Humidity"
+   },
+   "lc": 1795509724.9274118
+  },
+  "sensor.living_room_airdot_living_room_temperature": {
+   "s": "20.7299995422363",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "AirDot Living Room Temperature"
+   },
+   "lc": 1795509864.911154
+  }
+ },
+ "templates": {}
+}

@@ -1,0 +1,4 @@
+{
+  "title": "Tile: a fan with the speed feature",
+  "card": { "type": "tile", "entity": "fan.air_purifier", "features": [{ "type": "fan-speed" }] }
+}

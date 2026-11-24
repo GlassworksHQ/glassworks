@@ -1,0 +1,62 @@
+{
+ "case": "mushroom-chips-cardmod",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1795509858480,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 12,
+  "y": 12,
+  "width": 936,
+  "height": 54
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 20,
+   "y": 20,
+   "w": 920,
+   "h": 38,
+   "type": "mushroom-chips-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "CO2 543",
+   "x": 37.8,
+   "y": 15.2,
+   "w": 41.66,
+   "h": 11,
+   "size": 9.6,
+   "weight": 700,
+   "color": "rgb(52, 211, 153)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.living_room_airdot_living_room_co2": {
+   "s": "543.0",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "ppm",
+    "device_class": "carbon_dioxide",
+    "friendly_name": "AirDot Living Room CO2"
+   },
+   "lc": 1795509864.8948421
+  }
+ },
+ "templates": {
+  "CO2 {{ states('sensor.living_room_airdot_living_room_co2') | int(0) }}": {
+   "result": "CO2 543"
+  }
+ }
+}

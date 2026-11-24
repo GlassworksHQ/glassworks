@@ -1,0 +1,141 @@
+{
+ "case": "vertical-stack",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1795509858480,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 170
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 153.59,
+   "type": "hui-vertical-stack-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Kitchen",
+   "x": 30,
+   "y": 3,
+   "w": 54.34,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Kitchen Blind",
+   "x": 56,
+   "y": 46.2,
+   "w": 83.92,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Open",
+   "x": 56,
+   "y": 65.59,
+   "w": 29.56,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "·",
+   "x": 85.56,
+   "y": 65.59,
+   "w": 10.28,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "100%",
+   "x": 95.84,
+   "y": 65.59,
+   "w": 30.61,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Fridge power",
+   "x": 56,
+   "y": 110.2,
+   "w": 82.75,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "10 W",
+   "x": 56,
+   "y": 129.59,
+   "w": 28.7,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "cover.kitchen_blind": {
+   "s": "open",
+   "a": {
+    "is_closed": false,
+    "current_position": 100,
+    "assumed_state": true,
+    "friendly_name": "Kitchen Blind",
+    "supported_features": 11
+   },
+   "lc": 1795505391.0030644
+  },
+  "sensor.kitchen_fridge_power": {
+   "s": "10.0",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "W",
+    "device_class": "power",
+    "friendly_name": "Fridge Power"
+   },
+   "lc": 1795509482.0551987
+  }
+ },
+ "templates": {}
+}

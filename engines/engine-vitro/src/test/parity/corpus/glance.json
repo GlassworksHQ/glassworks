@@ -1,0 +1,13 @@
+{
+  "title": "Glance: four entities",
+  "card": {
+    "type": "glance",
+    "title": "Living room",
+    "entities": [
+      { "entity": "sensor.living_room_airdot_living_room_temperature", "name": "Temp" },
+      { "entity": "sensor.living_room_airdot_living_room_humidity", "name": "Humidity" },
+      { "entity": "light.living_room_cactus", "name": "Cactus" },
+      { "entity": "cover.kitchen_blind", "name": "Blind" }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "title": "Tile: a plain sensor",
+  "card": { "type": "tile", "entity": "sensor.living_room_airdot_living_room_co2", "name": "CO2" }
+}
