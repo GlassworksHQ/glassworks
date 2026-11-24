@@ -278,6 +278,23 @@ class CardModAndOverlayTest {
     }
 
     @Test
+    fun pictureBackdropIsItsOwnCachedLayer() {
+        // A gradient backdrop is drawn by its own view on a hardware layer (rasterized once, composited per frame),
+        // in place of the root's color; a solid one stays the root's color.
+        val gradient = vitroView(EntityStore(), """{"views": [{"title": "Home", "type": "sections",
+            "background": "radial-gradient(circle at 20% 10%, #123456, transparent 40%), #000000",
+            "sections": [{"type": "grid", "cards": []}]}]}""")
+        val backdrop = gradient.getChildAt(0)
+        assertTrue(backdrop.background is dev.glassworks.engine.vitro.ui.CssBackgroundDrawable)
+        assertEquals(View.LAYER_TYPE_HARDWARE, backdrop.layerType)
+        assertEquals(null, gradient.background)
+        val solid = vitroView(EntityStore(), """{"views": [{"title": "Home", "type": "sections",
+            "background": "#102030", "sections": [{"type": "grid", "cards": []}]}]}""")
+        assertEquals(null, solid.getChildAt(0).background)
+        assertTrue(solid.background is android.graphics.drawable.ColorDrawable)
+    }
+
+    @Test
     fun fixedCardLandsInTheOverlayLayer() {
         val store = EntityStore()
         store.putLocal(EntityState("light.lounge", "on", mapOf("friendly_name" to "Lounge")))
