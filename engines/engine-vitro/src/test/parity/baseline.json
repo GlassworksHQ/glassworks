@@ -21,13 +21,6 @@
   "missingText": 0,
   "reason": "of the card_mod sheet Vitro applies only :host ha-card (the border); not :host { --card-text-align } (text stays left), ha-card:has(...) (no tint), or :has() in the ha-markdown$ sheet (heading not green, the bold paragraph 14 px, not 18). #791"
  },
- "mirror/markdown-img-natural": {
-  "pixel": 0.1826,
-  "bounds": 212.2,
-  "font": 0.3,
-  "missingText": 0,
-  "reason": "Vitro drops a Markdown <img> with no width or height; HA shows it at its natural size (192 px here), so Vitro's card is 212 px shorter. #791"
- },
  "mirror/mushroom-chips": {
   "pixel": 0.0234,
   "bounds": 0.7,
@@ -63,13 +56,6 @@
   "missingText": 0,
   "reason": "of the card_mod sheet Vitro applies only :host ha-card (the border); not :host { --card-text-align } (text stays left), ha-card:has(...) (no tint), or :has() in the ha-markdown$ sheet (heading not green, the bold paragraph 14 px, not 18). #791"
  },
- "s1/markdown-img-natural": {
-  "pixel": 0.1825,
-  "bounds": 212.2,
-  "font": 0.3,
-  "missingText": 0,
-  "reason": "Vitro drops a Markdown <img> with no width or height; HA shows it at its natural size (192 px here), so Vitro's card is 212 px shorter. #791"
- },
  "s1/mushroom-chips": {
   "pixel": 0.0234,
   "bounds": 0.7,
@@ -104,13 +90,6 @@
   "font": 4,
   "missingText": 0,
   "reason": "of the card_mod sheet Vitro applies only :host ha-card (the border); not :host { --card-text-align } (text stays left), ha-card:has(...) (no tint), or :has() in the ha-markdown$ sheet (heading not green, the bold paragraph 14 px, not 18). #791"
- },
- "tablet/markdown-img-natural": {
-  "pixel": 0.1803,
-  "bounds": 212.2,
-  "font": 0.1,
-  "missingText": 0,
-  "reason": "Vitro drops a Markdown <img> with no width or height; HA shows it at its natural size (192 px here), so Vitro's card is 212 px shorter. #791"
  },
  "tablet/thermostat": {
   "pixel": 0.0019,
