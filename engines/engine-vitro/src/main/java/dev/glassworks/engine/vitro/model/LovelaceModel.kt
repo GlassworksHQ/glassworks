@@ -415,7 +415,8 @@ object CardRouter {
      */
     fun cardModInIsland(resources: List<LovelaceResource>): Boolean =
         // The island loads every type but `css` as a script (`WebIslandCardView.buildIslandHtml`).
-        resources.any { it.type != "css" && "card-mod" in it.url.lowercase() }
+        // Match the script's file name, not a query (`/local/theme.js?variant=card-mod` isn't card-mod).
+        resources.any { r -> r.type != "css" && r.url.substringBefore('?').substringBefore('#').substringAfterLast('/').lowercase() == "card-mod.js" }
 
     /** One top-level card `VitroView` builds for a view, with its section (null outside sections) and index. */
     data class ViewRoot(val section: Int?, val index: Int, val card: CardConfig)

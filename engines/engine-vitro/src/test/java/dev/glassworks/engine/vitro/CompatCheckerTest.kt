@@ -306,6 +306,13 @@ class CompatCheckerTest {
         )
         assertEquals("-webkit-image-set(\"…\" 1x)", CardCompat.loggable("-webkit-image-set('/api/image/a?token=abc' 1x)"))
         assertEquals("\"Roboto\", sans-serif", CardCompat.loggable("\"Roboto\", sans-serif"))
+        // Every image-set() source is an address, relative ones included; so is any quoted string with a query.
+        assertEquals(
+            "image-set(\"…\" 1x), linear-gradient(red, blue)",
+            CardCompat.loggable("image-set(\"a.png?sig=abc\" 1x), linear-gradient(red, blue)"),
+        )
+        assertEquals("image-set(\"…\" 1x, \"…\" 2x)", CardCompat.loggable("image-set(\"a.png\" 1x, 'b.png' 2x)"))
+        assertEquals("\"…\"", CardCompat.loggable("\"img.png?token=abc\""))
         // A declaration cut inside a quoted address (a `;` in it) leaves the rest of the address out.
         assertEquals("…", CardCompat.loggable("url(\"https://h/a?sig=abc"))
         assertEquals("#fff image-set(…", CardCompat.loggable("#fff image-set('https://h/a?sig=abc"))
@@ -530,6 +537,10 @@ class CompatCheckerTest {
     fun aFocusStateOfTheCardIsNotTheCardAtRest() {
         assertFalse(ThemeResolver.isHostSelector("ha-card.warning:focus-visible"))
         assertFalse(ThemeResolver.isHostSelector("ha-card.warning:focus"))
+        // A comma inside a quoted attribute value doesn't split the selector list.
+        assertFalse(ThemeResolver.isHostSelector("ha-card[data-state=\"on,off\"] .primary"))
+        assertEquals(null, ThemeResolver.parseCardMod("ha-card[data-state=\"on,off\"] .primary { opacity: 0 }").opacity)
+        assertTrue(ThemeResolver.isHostSelector("ha-card, :host"))
         assertEquals(null, ThemeResolver.parseCardMod("ha-card.warning:focus-visible { opacity: 0 }").opacity)
         assertNative("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card.warning:focus-visible { opacity: 0 }")}}}""")
     }
@@ -542,6 +553,12 @@ class CompatCheckerTest {
         assertNative(pinnedWidth("50%"))
         assertNative(pinnedWidth("20rem"))
         assertIsland(pinnedWidth("calc(100% - 24px)"), "a pinned width")
+        // Offsets too: the overlay can't read `calc()`.
+        assertIsland(
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card { position: fixed; left: 0; top: calc(50% - 24px) }")}}}""",
+            "a pinned offset",
+        )
+        assertNative("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card { position: fixed; left: 24px; bottom: 5% }")}}}""")
     }
 
     @Test
@@ -614,6 +631,9 @@ class CompatCheckerTest {
         assertFalse(CardRouter.cardModInIsland(emptyList()))
         // A stylesheet isn't card-mod: the island loads `css` resources as styles, not scripts.
         assertFalse(CardRouter.cardModInIsland(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/local/card-mod-preview.css", "css"))))
+        // The file name decides, not a query.
+        assertFalse(CardRouter.cardModInIsland(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/local/theme.js?variant=card-mod", "module"))))
+        assertTrue(CardRouter.cardModInIsland(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/local/community/lovelace-card-mod/card-mod.js?v=4.2.1", "module"))))
     }
 
     @Test

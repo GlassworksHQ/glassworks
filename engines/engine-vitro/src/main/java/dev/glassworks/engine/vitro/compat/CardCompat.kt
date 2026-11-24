@@ -138,15 +138,33 @@ object CardCompat {
      * address (`://`, or a leading `/`), in `image-set()` or any other function, becomes `"…"`. A long value is cut.
      */
     internal fun loggable(value: String): String {
-        val noUrls = QUOTED.replace(URL_FN.replace(value.trim()) { "url(…)" }) { m ->
+        val unquoted = URL_FN.replace(value.trim()) { "url(…)" }
+        // Every source inside `image-set()` is an address, relative ones included.
+        val imageSets = IMAGE_SET.findAll(unquoted).map { m -> m.range.first..closingParen(unquoted, m.range.last) }.toList()
+        val noUrls = QUOTED.replace(unquoted) { m ->
             val inner = m.value.substring(1, m.value.length - 1).trim()
-            if ("://" in inner || inner.startsWith("/")) "\"…\"" else m.value
+            val address = imageSets.any { m.range.first in it } || "://" in inner || inner.startsWith("/") || '?' in inner || '=' in inner
+            if (address) "\"…\"" else m.value
         }
         // A declaration split inside a quoted address (a `;` in it) leaves an unterminated `url(` or quote: cut there.
         val masked = QUOTED.replace(noUrls) { "x".repeat(it.value.length) }
         val open = UNTERMINATED.find(masked)?.range?.first
         val safe = if (open != null) noUrls.substring(0, open) + "…" else noUrls
         return if (safe.length <= MAX_LOGGED_VALUE) safe else safe.take(MAX_LOGGED_VALUE) + "…"
+    }
+
+    private val IMAGE_SET = Regex("""(?:-webkit-)?image-set\(""", RegexOption.IGNORE_CASE)
+
+    /** The index of the `)` closing the `(` at [open], or the end of [s]. */
+    private fun closingParen(s: String, open: Int): Int {
+        var depth = 0
+        for (k in open until s.length) {
+            when (s[k]) {
+                '(' -> depth++
+                ')' -> if (--depth == 0) return k
+            }
+        }
+        return s.length - 1
     }
 
     private val UNTERMINATED = Regex("""url\((?!…\))|["']""", RegexOption.IGNORE_CASE)
@@ -524,9 +542,13 @@ object CardCompat {
         "background", "background-image" -> backgroundProblem(value, allowGradient = true)
         "border" -> if (SPACE.split(value).any { it in BORDER_STYLE_WORDS }) "isn't drawn natively (only solid borders)" else null
         "position" -> if (value in setOf("fixed", "absolute", "static", "relative", "initial", "unset", "inherit")) null else "isn't drawn natively"
-        "top", "right", "bottom", "left" -> {
-            if (!pinned && position != null && position != "static") notes += gap("position: relative", shown)
-            null
+        "top", "right", "bottom", "left" -> when {
+            // The overlay reads a pinned offset as px, dp, rem/em or %; `calc()` would put the card at the edge.
+            pinned -> if (value == "auto" || PINNED_WIDTH.matches(value)) null else "isn't drawn natively (a pinned offset is px, rem or %)"
+            else -> {
+                if (position != null && position != "static") notes += gap("position: relative", shown)
+                null
+            }
         }
         "width" -> when {
             value in setOf("auto", "100%", "initial", "unset") -> null

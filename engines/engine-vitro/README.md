@@ -98,7 +98,7 @@ To check your own dashboards without a panel, save each Lovelace config (`lovela
 VITRO_PARITY_DIR=/path/to/folder ./gradlew :engine-vitro:testDebugUnitTest --tests '*CompatCheckerLocal*' -i
 ```
 
-This check reads only the exported configs, not the resource list, so it assumes card-mod is a Lovelace resource the islands can load. With card-mod installed only as a frontend module, a card that falls back just for its card-mod styles stays native on the panel even though the check lists it as an island.
+The report covers the cards in the dashboard config. Cards that `auto-entities` builds at runtime from matched entities aren't in it, so an island one of them opens doesn't show in the counts or the log. This check reads only the exported configs, not the resource list, so it assumes card-mod is a Lovelace resource the islands can load. With card-mod installed only as a frontend module, a card that falls back just for its card-mod styles stays native on the panel even though the check lists it as an island.
 
 ## Key optimizations
 
