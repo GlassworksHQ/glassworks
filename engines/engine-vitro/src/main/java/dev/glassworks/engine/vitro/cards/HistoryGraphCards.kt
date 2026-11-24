@@ -613,7 +613,7 @@ object HaTimelineChart {
                 if (oe <= os) continue
                 val d = (durations[g.state] ?: 0.0) + (oe - os)
                 durations[g.state] = d
-                labels.putIfAbsent(g.state, g.label)
+                if (g.state !in labels) labels[g.state] = g.label
                 if (d > bestDur) { bestDur = d; best = g.state }
             }
             while (index < to && segs[index].end <= frameEnd) index++
