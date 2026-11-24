@@ -263,14 +263,22 @@ class ParityWs(recorded: JSONArray?) {
         }
     }
 
-    /** A subscription: its recorded events, in order, each through [deliver]. Returns the unsubscribe handle. */
-    fun subscribe(msg: JSONObject, deliver: (Runnable) -> Unit, onEvent: (JSONObject) -> Unit): () -> Unit {
+    /**
+     * A subscription: its recorded events, in order, each through [deliver], or its recorded rejection to [onError].
+     * Returns the unsubscribe handle.
+     */
+    fun subscribe(msg: JSONObject, deliver: (Runnable) -> Unit, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit = {}): () -> Unit {
         val hit = find(msg)
         if (hit == null) {
             unmatched += canonical(msg)
             return {}
         }
         var live = true
+        if (hit.has("error")) {
+            val error = hit.optJSONObject("error")
+            deliver(Runnable { if (live) onError(error) })
+            return { live = false }
+        }
         val events = hit.optJSONArray("events") ?: JSONArray()
         for (i in 0 until events.length()) {
             val ev = events.optJSONObject(i) ?: continue

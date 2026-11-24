@@ -20,6 +20,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import java.io.IOException
 import java.time.Instant
@@ -555,6 +556,21 @@ class HaDashboardClientTest {
         // One-shot: the client unsubscribes after the first series.
         val subId = msg.getInt("id")
         awaitCondition("history unsubscribe") { server.commands("unsubscribe_events").any { it.getInt("subscription") == subId } }
+    }
+
+    @Test
+    fun subscribeWsDeliversEventsAndReportsARejectionOnce() {
+        val c = connected()
+        // Delivered: a history stream's events, until cancelled.
+        val events = CompletableFuture<JSONObject>()
+        val cancel = c.subscribeWs(JSONObject().put("type", "history/stream").put("entity_ids", org.json.JSONArray(listOf("sensor.kitchen_temp"))), { events.complete(it) }, { fail("no error expected: $it") })
+        events.get(10, TimeUnit.SECONDS)
+        cancel()
+        // Rejected: the command's error reaches onError, once.
+        val errors = java.util.concurrent.LinkedBlockingQueue<String>()
+        c.subscribeWs(JSONObject().put("type", "bogus/stream"), { fail("no event expected") }, { errors.put(it?.optString("code") ?: "null") })
+        assertEquals("unknown_command", errors.poll(10, TimeUnit.SECONDS))
+        assertNull(errors.poll(300, TimeUnit.MILLISECONDS))
     }
 
     @Test

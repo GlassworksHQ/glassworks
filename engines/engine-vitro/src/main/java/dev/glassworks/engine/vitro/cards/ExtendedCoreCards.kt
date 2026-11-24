@@ -167,6 +167,9 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
             if (!s.isActive) return null
             return ThemeResolver.parseColor(ctx.theme.vars["$cfg-color"]) ?: MushroomColors.parse(cfg, ctx.theme)
         }
+        // The reported color comes before the domain's (`rgb_color`, as a light reports it).
+        val rgb = (s.attributes["rgb_color"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
+        if (rgb != null && rgb.size >= 3) return android.graphics.Color.rgb(rgb[0], rgb[1], rgb[2])
         return iconColorFor(ctx, s)
     }
 

@@ -235,6 +235,8 @@ private fun cardHeader(ctx: VitroCardContext, title: String, onLink: () -> Unit)
     row.addView(tv, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
     val chevron = MdiIconView(ctx.context).apply {
         setIcon("mdi:chevron-right", ctx.theme.primaryTextColor)
+        // HA's aria-label and tooltip for the link: the panel's name.
+        contentDescription = "History"
         isClickable = true
         setOnClickListener { onLink() }
     }
@@ -674,6 +676,12 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
     private var statsHistory: HistoryResult? = null
     private var generation = 0
 
+    /** The rejected stream's message: it stays on screen over any history held until a stream delivers again. */
+    private var streamError: String? = null
+
+    /** A render skipped while the card was hidden (a cached view): done when it shows again. */
+    private var renderPending = false
+
     init {
         val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
         config.title?.let {
@@ -730,6 +738,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         unsubscribe = ctx.subscribeWs(msg, { ev ->
             ctx.main.post {
                 if (stream !== s) return@post
+                streamError = null
                 val combined = s.process(ev, ctx.now())
                 stateHistory = HaHistory.compute({ ctx.store[it] }, combined, entityIds, temperatureUnit())
                 render()
@@ -740,10 +749,9 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
                 // HA shows the error instead of the charts (`ui.components.history_charts.error`).
                 stream = null
                 unsubscribe = null
-                charts.removeAllViews()
                 val why = error?.optString("message")?.takeIf { it.isNotEmpty() } ?: error?.optString("code").orEmpty()
-                info.text = if (why.isEmpty()) "Unable to load history" else "Unable to load history: $why"
-                info.visibility = VISIBLE
+                streamError = if (why.isEmpty()) "Unable to load history" else "Unable to load history: $why"
+                render()
             }
         })
         if (hours >= 1) {
@@ -769,8 +777,26 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
 
     private fun temperatureUnit(): String? = ctx.haConfig().optJSONObject("unit_system")?.optString("temperature")?.takeIf { it.isNotEmpty() }
 
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (renderPending && isShown) render()
+    }
+
     private fun render() {
+        streamError?.let {
+            renderPending = false
+            charts.removeAllViews()
+            info.text = it
+            info.visibility = VISIBLE
+            return
+        }
         val h = stateHistory ?: return
+        // A hidden card (a cached view) keeps its history but builds nothing until it shows.
+        if (!isShown && isAttachedToWindow) {
+            renderPending = true
+            return
+        }
+        renderPending = false
         val history = HaHistory.merge(h, statsHistory)
         charts.removeAllViews()
         if (history.line.isEmpty() && history.timeline.isEmpty()) {
@@ -928,7 +954,8 @@ private class LineChartHost(ctx: VitroCardContext, spec: LineChartSpec) : Linear
 class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
     private val ids: List<String> = statisticIds(config)
     private val days: Double = config.raw.optDouble("days_to_show", 30.0).takeIf { !it.isNaN() && it != 0.0 } ?: 30.0
-    private val period: String = config.raw.optString("period", "hour").ifEmpty { "hour" }
+    /** The recorder period: `auto` (without an energy date selection) and none are HA's default, `hour`. */
+    private val period: String = config.raw.optString("period", "hour").takeIf { it.isNotEmpty() && it != "auto" } ?: "hour"
     private val statTypes: List<String> = readStatTypes(config.raw.opt("stat_types"))
     private val chart = ChartView(ctx.context, ctx.dp)
     private val legend = ChartLegendView(ctx)
@@ -1067,7 +1094,10 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
             // The current state at now when the statistics reach within 10 minutes of it.
             val now = ctx.now().toDouble()
             val current = ctx.store[id]?.state?.toDoubleOrNull()?.takeIf { it.isFinite() }
-            if (now - limit <= 600_000 && current != null) {
+            // Only in the chart's unit (or when either is unknown): a live value in another unit isn't converted.
+            val statUnit = displayUnit(id, metadata[id])
+            val sameUnit = unit == null || statUnit == null || unit == statUnit
+            if (now - limit <= 600_000 && current != null && sameUnit) {
                 for (t in types) if (t != "sum" && t != "change") { xs.getValue(t) += now; ys.getValue(t) += current }
             }
             val built = HashMap<String, ChartLine>()

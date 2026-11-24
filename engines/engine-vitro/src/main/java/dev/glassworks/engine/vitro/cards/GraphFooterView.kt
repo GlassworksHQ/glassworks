@@ -45,6 +45,14 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
         strokeJoin = Paint.Join.ROUND
     }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val errorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ctx.theme.secondaryTextColor
+        textSize = 14f * dp
+        textAlign = Paint.Align.CENTER
+    }
+
+    /** HA's footer error (`ui.components.history_charts.error`) while the stream is rejected; null otherwise. */
+    private var error: String? = null
 
     private var stream: HaGraph.Stream? = null
     private var history: List<HistoryState>? = null
@@ -102,6 +110,7 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
         unsubscribe = ctx.subscribeWs(msg, { ev ->
             ctx.main.post {
                 if (stream !== s) return@post
+                error = null
                 val combined = s.process(ev, ctx.now())
                 var states: List<HistoryState> = combined[id].orEmpty()
                 // No history: the current state alone (limitedHistoryFromStateObj).
@@ -110,9 +119,19 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
                 builtFor = -1
                 invalidate()
             }
-        }, { _ ->
-            // A rejected stream: HA's footer shows the error instead of a line; this one draws nothing.
-            ctx.main.post { if (stream === s) { stream = null; unsubscribe = null; history = null; builtFor = -1; invalidate() } }
+        }, { err ->
+            // A rejected stream: HA's footer shows the error instead of a line.
+            ctx.main.post {
+                if (stream !== s) return@post
+                stream = null
+                unsubscribe = null
+                history = null
+                builtFor = -1
+                val why = err?.optString("message")?.takeIf { it.isNotEmpty() } ?: err?.optString("code").orEmpty()
+                error = if (why.isEmpty()) "Unable to load history" else "Unable to load history: $why"
+                contentDescription = error
+                invalidate()
+            }
         })
     }
 
@@ -139,6 +158,10 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
     }
 
     override fun onDraw(canvas: Canvas) {
+        error?.let {
+            canvas.drawText(it, width / 2f, height / 2f - (errorPaint.ascent() + errorPaint.descent()) / 2f, errorPaint)
+            return
+        }
         if (builtFor != width) rebuild()
         val p = line ?: return
         canvas.drawPath(fill, fillPaint)

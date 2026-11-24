@@ -685,8 +685,10 @@ class HaDashboardClient(
         subscriptions[id] = { ev -> onEvent(id, ev) }
         pending[id] = { res ->
             if (!res.optBoolean("success", false)) {
-                // A cancelled subscription is already gone: only a live one reports the rejection.
-                if (subscriptions.remove(id) != null) onError?.invoke(res.optJSONObject("error"))
+                subscriptions.remove(id)
+                // Only an explicit cancel keeps it quiet: a rejection or a lost connection (which clears the
+                // subscriptions before it answers this) is reported once.
+                if (!cancelledSubs.remove(id)) onError?.invoke(res.optJSONObject("error"))
             }
         }
         if (!send(msg)) {
@@ -697,7 +699,11 @@ class HaDashboardClient(
         id
     }
 
+    /** Subscriptions cancelled before their result came: their failure is the cancel's, not an error to report. */
+    private val cancelledSubs: MutableSet<Int> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
+
     private fun unsubscribe(subscriptionId: Int) {
+        if (pending.containsKey(subscriptionId)) cancelledSubs += subscriptionId
         subscriptions.remove(subscriptionId)
         val msg = JSONObject().put("type", "unsubscribe_events").put("subscription", subscriptionId)
         request(msg) {}
