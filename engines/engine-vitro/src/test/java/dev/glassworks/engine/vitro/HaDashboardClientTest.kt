@@ -797,9 +797,13 @@ class HaDashboardClientTest {
         awaitCondition("reconnected") { server.connectUrls.size == 2 && server.commands("subscribe_entities").size == 2 }
         // Only the first connection's startup request: nothing for the fallback page's "dashboard".
         assertEquals(1, server.commands("lovelace/config").size)
-        // Taking the dashboards back fetches again.
-        c.fetchDashboard("wall-test")
-        awaitCondition("fetched") { listener.configs.any { it.first == "wall-test" } }
+        // Reclaiming the dashboard shown before fetches it, since refetches were skipped meanwhile.
+        c.claimDashboard(null)
+        awaitCondition("refetched on claim") { server.commands("lovelace/config").size == 2 }
+        // A claim with nothing skipped stays instant (no request).
+        c.claimDashboard(null)
+        Thread.sleep(100)
+        assertEquals(2, server.commands("lovelace/config").size)
     }
 
     @Test

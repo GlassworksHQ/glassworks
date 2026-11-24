@@ -646,4 +646,22 @@ class ThemeResolverTest {
         assertEquals(16f, mod.paddingInsets!!.top, 0.001f)
         assertEquals("16px", mod.customProperties["inset"])
     }
+
+    @Test
+    fun cyclicCardPropertiesAreInvalidAndExpansionIsBounded() {
+        // Doubles on every pass with no theme: invalid, not 134 million references on the main thread.
+        val t0 = System.nanoTime()
+        val doubling = ThemeResolver.parseCardMod("ha-card { --a: var(--a) var(--a); padding: var(--a); }")
+        assertTrue((System.nanoTime() - t0) / 1_000_000 < 2_000)
+        assertEquals(null, doubling.paddingInsets)
+        // A mutual cycle falls back like a missing variable.
+        val mutual = ThemeResolver.parseCardMod("ha-card { --a: var(--b); --b: var(--a); padding: var(--a, 12px); }")
+        assertEquals(12f, mutual.paddingInsets!!.top, 0.001f)
+        // A deep chain that isn't a cycle still resolves.
+        val chain = (1..6).joinToString(" ") { "--v$it: var(--v${it + 1});" } + " --v7: 9px;"
+        val deep = ThemeResolver.parseCardMod("ha-card { $chain padding: var(--v1); }")
+        assertEquals(9f, deep.paddingInsets!!.top, 0.001f)
+        // Expansion past the cap is empty, as an invalid value.
+        assertEquals("", ThemeResolver.resolveValue("var(--x)", mapOf("x" to "y".repeat(20_000)), 0))
+    }
 }

@@ -1454,7 +1454,8 @@ class LayoutCardView(
             val r = row ?: return
             if (used < cols) {
                 val rest = tracksSpec.subList(used, cols)
-                r.addView(Space(ctx.context), LayoutParams(ctx.px(rest.sumOf { it.fixedDp.toDouble() }.toFloat()), 1, rest.sumOf { it.fr.toDouble() }.toFloat()).apply {
+                // The rest's own gutters too, so the weighted columns keep their widths on a short row.
+                r.addView(Space(ctx.context), LayoutParams(ctx.px(rest.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (rest.size - 1)), 1, rest.sumOf { it.fr.toDouble() }.toFloat()).apply {
                     marginStart = ctx.px(gap)
                 })
             }

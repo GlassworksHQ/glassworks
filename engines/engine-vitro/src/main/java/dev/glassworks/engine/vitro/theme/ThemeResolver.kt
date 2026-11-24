@@ -466,8 +466,38 @@ object ThemeResolver {
     /** Recursively substitutes `var(--name, fallback)` up to depth 8. */
     fun resolveValue(input: String, map: Map<String, String>, depth: Int): String {
         if (depth >= 8 || "var(" !in input) return input.trim()
+        // Bounded like the browser's: a value that grows past the limit (`--a: var(--a) var(--a)` doubles every pass)
+        // is invalid, an empty value, instead of filling the heap on the main thread.
+        if (input.length > MAX_VAR_EXPANSION) return ""
         val replaced = substituteVars(input) { key, fallback -> map[key] ?: fallback }
+        if (replaced.length > MAX_VAR_EXPANSION) return ""
         return if (replaced == input) replaced.trim() else resolveValue(replaced, map, depth + 1)
+    }
+
+    /** The longest a value may grow while its `var()`s are substituted. */
+    private const val MAX_VAR_EXPANSION = 16 * 1024
+
+    private val VAR_NAME = Regex("""var\(\s*--([\w-]+)""")
+
+    /**
+     * The names in [raw] (name -> value, no `--`) that take part in a reference cycle (`--a: var(--a)`,
+     * `--a: var(--b); --b: var(--a)`). As in CSS they are invalid at computed-value time: a `var()` of one
+     * takes its fallback, as for a name that isn't there.
+     */
+    internal fun cyclicNames(raw: Map<String, String>): Set<String> {
+        val refs = raw.mapValues { (_, v) -> VAR_NAME.findAll(v).map { it.groupValues[1] }.filter { it in raw }.toSet() }
+        val cyclic = HashSet<String>()
+        for (start in raw.keys) {
+            // Does a path from start's references lead back to start?
+            val seen = HashSet<String>()
+            val stack = ArrayDeque(refs[start].orEmpty())
+            while (stack.isNotEmpty()) {
+                val n = stack.removeLast()
+                if (n == start) { cyclic += start; break }
+                if (seen.add(n)) stack.addAll(refs[n].orEmpty())
+            }
+        }
+        return cyclic
     }
 
     /**
@@ -679,10 +709,12 @@ object ThemeResolver {
                 winner.replace(IMPORTANT, "").trim()
             }
         // The card's own custom properties come before the theme's, as they would on its ha-card, and they may refer
-        // to each other (`--inset: var(--spacing)`): resolved against that whole scope.
-        val rawScope = if (rawCustom.isEmpty()) vars else vars + rawCustom
+        // to each other (`--inset: var(--spacing)`): resolved against that whole scope. Names in a cycle are invalid:
+        // left out of the scope (the theme's value of that name included), so their `var()` takes its fallback.
+        val cyclic = if (rawCustom.isEmpty()) emptySet() else cyclicNames(rawCustom)
+        val rawScope = if (rawCustom.isEmpty()) vars else (vars + rawCustom) - cyclic
         val custom = rawCustom.mapValues { resolveValue(it.value, rawScope, 0) }
-        val scope = if (custom.isEmpty()) vars else vars + custom
+        val scope = if (custom.isEmpty()) vars else (vars + custom) - cyclic
         // Most of the properties asked for below aren't there: skip the pattern when the name isn't in the text at all
         // (the pattern matches ASCII case-insensitively, so a lowercase miss is always a pattern miss).
         val lowerDecls = decls.lowercase(Locale.ROOT)

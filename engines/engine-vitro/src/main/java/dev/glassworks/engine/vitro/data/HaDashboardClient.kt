@@ -181,7 +181,12 @@ class HaDashboardClient(
     fun claimDashboard(urlPath: String?) {
         requestedDashboardPath = urlPath
         dashboardActive = true
+        // A lovelace_updated or reconnect skipped while the fallback showed: the dashboard may have changed.
+        if (missedRefetch) fetchDashboard(urlPath)
     }
+
+    /** A refetch was skipped while the page showed the fallback; the next claim fetches instead of reusing. */
+    @Volatile private var missedRefetch = false
 
     /** The page left the dashboards for the fallback; the next [fetchDashboard] or [claimDashboard] takes them back. */
     fun releaseDashboard() {
@@ -190,13 +195,14 @@ class HaDashboardClient(
 
     /** Fetches the requested dashboard again (reconnect, `lovelace_updated`), unless the page has left the dashboards. */
     private fun refetchDashboard() {
-        if (dashboardActive) fetchDashboard(requestedDashboardPath)
+        if (dashboardActive) fetchDashboard(requestedDashboardPath) else missedRefetch = true
     }
 
     /** Loads a different Lovelace dashboard config over the live socket. */
     fun fetchDashboard(urlPath: String?) {
         requestedDashboardPath = urlPath
         dashboardActive = true
+        missedRefetch = false
         val msg = JSONObject().put("type", "lovelace/config")
         if (!urlPath.isNullOrEmpty()) msg.put("url_path", urlPath)
         request(msg) { res ->
