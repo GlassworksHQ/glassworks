@@ -2289,9 +2289,22 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
 
     /** Width / height, from `aspect_ratio` (`16:9`, `4:3`, `50%` = height as % of width, or a decimal). */
     private val aspect: Float = parseAspectRatio(config.raw.opt("aspect_ratio")?.toString())
+    /** `state_filter`: a CSS filter per state. */
+    private val stateFilters: JSONObject? = config.raw.optJSONObject("state_filter")
     /** Without `aspect_ratio`, HA's picture-entity takes the image's own shape once it has loaded. */
     private val naturalAspect = config.type == "picture-entity" && !config.raw.has("aspect_ratio")
     private var imageAspect: Float? = null
+
+    /**
+     * hui-image's filter: the card's `state_filter` for the state, else `grayscale(100%)` while the entity is missing
+     * or closed / locked / not_home / off.
+     */
+    private fun applyStateFilter(s: EntityState?) {
+        val state = s?.state ?: "unavailable"
+        val configured = stateFilters?.optString(state)?.takeIf { it.isNotBlank() }
+        val css = configured ?: if (s == null || state in STATES_OFF) "grayscale(100%)" else null
+        img.colorFilter = CssFilter.matrix(css)?.let { android.graphics.ColorMatrixColorFilter(it) }
+    }
 
     private fun showBitmap(bmp: android.graphics.Bitmap) {
         img.setImageBitmap(bmp)
@@ -2350,6 +2363,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             setOnClickListener { ctx.performAction(ActionConfig.parse(config.raw.optJSONObject("tap_action")), eid) }
             bindHoldAction(holdActionFor(config.raw, eid), eid)
             observe(eid) { s ->
+                applyStateFilter(s)
                 if (config.type == "picture-entity" && showName && showState) {
                     caption.text = label ?: s?.friendlyName ?: eid
                     stateCaption.text = s?.formattedState().orEmpty()
@@ -2427,6 +2441,8 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             ?: ActionConfig(if (entry.entity.substringBefore('.') in GLANCE_TOGGLE_DOMAINS) "toggle" else "more-info")
 
         const val DEFAULT_ASPECT = 16f / 9f
+        /** hui-image's STATES_OFF: the states its default grey filter applies to. */
+        private val STATES_OFF = setOf("closed", "locked", "not_home", "off")
 
         fun parseAspectRatio(raw: String?): Float {
             val s = raw?.trim()?.lowercase(Locale.ROOT).orEmpty()
