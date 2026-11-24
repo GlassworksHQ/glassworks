@@ -488,6 +488,39 @@ class MarkdownEngineTest {
     }
 
     @Test
+    fun hostAndHasSelectorsMatchAsInTheBrowser() {
+        val CssSelector = dev.glassworks.engine.vitro.cards.CssSelector
+        val host = MdNode("hui-markdown-card", mapOf(CssSelector.HOST_ATTR to ""))
+        val card = host.add(MdNode("ha-card", mapOf("class" to "with-header")))
+        val md = card.add(MdNode("ha-markdown"))
+        val el = md.add(MdNode("ha-markdown-element"))
+        val h3 = el.add(MdNode("h3"))
+        val p1 = el.add(MdNode("p")); val strong = p1.add(MdNode("strong"))
+        val p2 = el.add(MdNode("p"))
+        fun m(sel: String, n: MdNode) = CssSelector.parse(sel)!!.matches(n)
+        // :host is the sheet's host element; :host(<compound>) also tests it; `:host x` reaches inside.
+        assertTrue(m(":host", host)); assertFalse(m(":host", card))
+        assertTrue(m(":host ha-card", card)); assertTrue(m(":host > ha-card.with-header", card))
+        assertFalse(m(":host(.other)", host))
+        // :has(): a descendant by default, or as its combinator says; scoped to the subject.
+        assertTrue(m("ha-card:has(ha-markdown)", card)); assertFalse(m("ha-markdown:has(ha-card)", md))
+        assertTrue(m("ha-markdown-element:has(h3) h3", h3))
+        assertTrue(m("p:has(strong)", p1)); assertFalse(m("p:has(strong)", p2))
+        assertTrue(m("p:has(> strong)", p1)); assertFalse(m("ha-markdown-element:has(> strong)", el))
+        assertTrue(m("h3:has(+ p)", h3)); assertTrue(m("h3:has(~ p strong)", h3)); assertFalse(m("p:has(+ h3)", p1))
+        assertTrue(m("ha-card:has(h3, video)", card)); assertFalse(m("ha-card:has(video)", card))
+        // Specificity: :has() as its most specific argument; :host a pseudo-class plus its argument.
+        assertEquals(CssSelector.parse("p strong")!!.specificity + 1, CssSelector.parse("p:has(p strong)")!!.specificity)
+        assertEquals(200, CssSelector.parse(":host(.x)")!!.specificity)
+        // A card with `:host { --card-text-align: center }` centers its Markdown.
+        val view = MarkdownCardView(context(), card("""{"type": "markdown", "content": "Hi",
+            "card_mod": {"style": {".": ":host { --card-text-align: center; }"}}}"""))
+        view.applyCardMod(card("""{"type": "markdown", "card_mod": {"style": {".": ":host { --card-text-align: center; }"}}}"""))
+        assertEquals(Gravity.CENTER_HORIZONTAL, view.body.all().filterIsInstance<TextView>().single().gravity and Gravity.HORIZONTAL_GRAVITY_MASK)
+        assertTrue(strong.parent === p1)
+    }
+
+    @Test
     fun anImageWithNoSizeTakesItsNaturalSize() {
         // One CSS px per image pixel, at most the line's width (`max-width: 100%`) with the height in proportion; its line
         // box grows with it.

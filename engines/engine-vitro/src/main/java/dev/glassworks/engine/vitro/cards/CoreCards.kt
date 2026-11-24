@@ -2345,16 +2345,28 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             cardCss = css
             cardSheet = MdSheet.parse(css)
             rerender()
+        } else {
+            // card-mod just rebuilt the surface: the cascade's fill goes back on it.
+            cascadeFill?.let { fillFromCascade(it) }
         }
     }
 
+    /** The card's fill from the cascade (a `:has()` rule), when it has one; see [rerender]. */
+    private var cascadeFill: Int? = null
+
     private fun rerender() {
         val md = content ?: return
-        // ha-card > ha-markdown, styled by HA's card styles and the card's "." sheet.
+        // The card's host > ha-card > ha-markdown, styled by HA's card styles and the card's "." sheet (whose `:host`
+        // is that host: its custom properties, `--card-text-align` say, flow into the card).
         val classes = listOfNotNull("text-only".takeIf { textOnly }, "with-header".takeIf { hasHeader }).joinToString(" ")
-        val haCard = MdNode("ha-card", if (classes.isEmpty()) emptyMap() else mapOf("class" to classes))
+        val cardHost = MdNode("hui-markdown-card", mapOf(CssSelector.HOST_ATTR to ""))
+        val haCard = cardHost.add(MdNode("ha-card", if (classes.isEmpty()) emptyMap() else mapOf("class" to classes)))
         val haMarkdown = haCard.add(MdNode("ha-markdown"))
-        MdCascade.apply(haCard, renderer.defaultRootStyle(), listOf(CARD_HOST to 1, cardSheet to 2, CARD_STYLES to 3), ctx.theme.vars)
+        MdCascade.apply(cardHost, renderer.defaultRootStyle(), listOf(CARD_HOST to 1, cardSheet to 2, CARD_STYLES to 3), ctx.theme.vars)
+        // A card rule the surface's own reading can't place (`ha-card:has(ha-markdown) { background }`, which needs
+        // the card's content): the cascade's background for ha-card fills the card.
+        cascadeFill = if (!textOnly && cardCss?.contains(":has(") == true) haCard.style?.background else null
+        cascadeFill?.let { fillFromCascade(it) }
         val ms = haMarkdown.style!!
         host.setPadding(
             (ms.padding[3] * ctx.dp).roundToInt(), (ms.padding[0] * ctx.dp).roundToInt(),

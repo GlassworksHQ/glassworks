@@ -90,21 +90,32 @@ class CssSelector private constructor(
     val specificity: Int,
 ) {
     private class AttrTest(val name: String, val op: String?, val value: String)
-    private class Pseudo(val name: String, val a: Int = 0, val b: Int = 0, val inner: List<Compound> = emptyList())
+    private class Pseudo(
+        val name: String,
+        val a: Int = 0,
+        val b: Int = 0,
+        val inner: List<Compound> = emptyList(),
+        /** `:has()`'s relative selectors: the combinator before each (' ' when none is written) and the selector. */
+        val relative: List<Pair<Char, CssSelector>> = emptyList(),
+    )
     private class Compound(val tag: String?, val attrs: List<AttrTest>, val pseudos: List<Pseudo>, val never: Boolean)
 
-    fun matches(node: MdNode): Boolean = !node.isText && matchFrom(parts.size - 1, node)
+    fun matches(node: MdNode): Boolean = !node.isText && matchFrom(parts.size - 1, node, null)
 
-    private fun matchFrom(idx: Int, node: MdNode): Boolean {
+    /**
+     * Matches right to left. [leftmost], for a `:has()` relative selector, says where its leftmost compound may be
+     * (inside the subject, its child, its next sibling ...); null for an ordinary selector.
+     */
+    private fun matchFrom(idx: Int, node: MdNode, leftmost: ((MdNode) -> Boolean)?): Boolean {
         if (!compoundMatches(parts[idx], node)) return false
-        if (idx == 0) return true
+        if (idx == 0) return leftmost?.invoke(node) ?: true
         when (combinators[idx - 1]) {
-            '>' -> return node.parent?.let { matchFrom(idx - 1, it) } ?: false
-            '+' -> return previousElement(node)?.let { matchFrom(idx - 1, it) } ?: false
+            '>' -> return node.parent?.let { matchFrom(idx - 1, it, leftmost) } ?: false
+            '+' -> return previousElement(node)?.let { matchFrom(idx - 1, it, leftmost) } ?: false
             '~' -> {
                 var p = previousElement(node)
                 while (p != null) {
-                    if (matchFrom(idx - 1, p)) return true
+                    if (matchFrom(idx - 1, p, leftmost)) return true
                     p = previousElement(p)
                 }
                 return false
@@ -112,12 +123,36 @@ class CssSelector private constructor(
             else -> {
                 var p = node.parent
                 while (p != null) {
-                    if (matchFrom(idx - 1, p)) return true
+                    if (matchFrom(idx - 1, p, leftmost)) return true
                     p = p.parent
                 }
                 return false
             }
         }
+    }
+
+    /**
+     * `:has(<relative selector>)` for [subject]: some element, placed against the subject by [comb] (a descendant, a
+     * child, the next sibling, a later sibling), starts a chain [sel] matches.
+     */
+    private fun hasMatch(subject: MdNode, comb: Char, sel: CssSelector): Boolean {
+        val leftmost: (MdNode) -> Boolean = when (comb) {
+            '>' -> { n -> n.parent === subject }
+            '+' -> { n -> previousElement(n) === subject }
+            '~' -> { n -> generateSequence(previousElement(n)) { previousElement(it) }.any { it === subject } }
+            else -> { n -> generateSequence(n.parent) { it.parent }.any { it === subject } }
+        }
+        // Where the rightmost element can be: inside the subject, or (for sibling combinators) inside its parent.
+        val scope = if (comb == '+' || comb == '~') subject.parent ?: return false else subject
+        fun walk(n: MdNode): Boolean {
+            for (c in n.children) {
+                if (c.isText) continue
+                if (sel.matchFrom(sel.parts.size - 1, c, leftmost)) return true
+                if (walk(c)) return true
+            }
+            return false
+        }
+        return walk(scope)
     }
 
     private fun compoundMatches(c: Compound, node: MdNode): Boolean {
@@ -158,6 +193,9 @@ class CssSelector private constructor(
             "root" -> parent == null
             "not" -> p.inner.none { compoundMatches(it, node) }
             "is", "where" -> p.inner.any { compoundMatches(it, node) }
+            // The shadow host the sheet belongs to (a card's host element), optionally with a compound it must match.
+            "host" -> HOST_ATTR in node.attrs && p.inner.all { compoundMatches(it, node) }
+            "has" -> p.relative.any { (comb, sel) -> hasMatch(node, comb, sel) }
             else -> false
         }
     }
@@ -176,6 +214,14 @@ class CssSelector private constructor(
             val n = (pos - b) / a
             return n >= 0 && n * a + b == pos
         }
+
+        /**
+         * Marks the element a sheet's `:host` is (the card's host element in a card's cascade tree). An attribute no
+         * Markdown can carry: HA's sanitizer keeps no `data-` attributes.
+         */
+        const val HOST_ATTR = "data-vitro-host"
+
+        private val ATTRIBUTE_TEST = Regex("""^([\w-]+)\s*(?:([~|^$*]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\s\]]+))\s*(?:\s[iIsS])?)?$""")
 
         private val NTH = Regex("""^([+-]?\d*)n\s*(?:([+-])\s*(\d+))?$""")
 
@@ -259,7 +305,7 @@ class CssSelector private constructor(
                         val close = sel.indexOf(']', i)
                         if (close < 0) return null
                         val body = sel.substring(i + 1, close).trim()
-                        val m = Regex("""^([\w-]+)\s*(?:([~|^$*]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\s\]]+))\s*(?:\s[iIsS])?)?$""").matchEntire(body)
+                        val m = ATTRIBUTE_TEST.matchEntire(body)
                             ?: return null
                         val value = m.groupValues[3].ifEmpty { m.groupValues[4].ifEmpty { m.groupValues[5] } }
                         attrs += AttrTest(m.groupValues[1].lowercase(Locale.ROOT), m.groupValues[2].ifEmpty { null }, value)
@@ -299,7 +345,29 @@ class CssSelector private constructor(
                             }
                             "first-child", "last-child", "only-child", "first-of-type", "last-of-type",
                             "only-of-type", "empty", "root" -> { pseudos += Pseudo(name); spec += 100 }
-                            else -> { never = true; spec += 100 } // :hover, :host, :has … never match here
+                            // `:host` and `:host(<compound>)`: a pseudo-class, plus its argument's specificity.
+                            "host" -> {
+                                val inner = arg?.trim()?.takeIf { it.isNotEmpty() }?.let { a ->
+                                    val r = parseCompound(a, 0) ?: return null
+                                    if (r.second != a.length) return null
+                                    r
+                                }
+                                pseudos += Pseudo(name, inner = listOfNotNull(inner?.first))
+                                spec += 100 + (inner?.third ?: 0)
+                            }
+                            // `:has(<relative selector list>)`: as specific as its most specific argument.
+                            "has" -> {
+                                val relative = splitTopLevel(arg.orEmpty(), ',').map { part ->
+                                    var p = part.trim()
+                                    val comb = p.firstOrNull()?.takeIf { it == '>' || it == '+' || it == '~' } ?: ' '
+                                    if (comb != ' ') p = p.substring(1).trim()
+                                    comb to (parse(p) ?: return null)
+                                }
+                                if (relative.isEmpty()) return null
+                                pseudos += Pseudo(name, relative = relative)
+                                spec += relative.maxOf { it.second.specificity }
+                            }
+                            else -> { never = true; spec += 100 } // :hover, :focus … never match here
                         }
                     }
                     else -> break

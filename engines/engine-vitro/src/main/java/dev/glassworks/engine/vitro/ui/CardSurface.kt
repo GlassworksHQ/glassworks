@@ -350,6 +350,11 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         super.setPadding(left + b, top + b, right + b, bottom + b)
     }
 
+    /** Fills the card with [color] from a cascade that knows its content, keeping its radius and border. */
+    protected fun fillFromCascade(color: Int) {
+        (background as? GradientDrawable)?.let { (it.mutate() as GradientDrawable).setColor(color) }
+    }
+
     /** No fill and no border (`background: none; border: none`): the content takes the border's place too. */
     protected fun dropSurface() {
         background = null
