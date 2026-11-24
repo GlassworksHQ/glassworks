@@ -56,18 +56,23 @@ import org.robolectric.shadows.ShadowLooper
 class VisualParityWave2Test {
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
 
-    private fun context(store: EntityStore = EntityStore()) = VitroCardContext(
+    private fun context(
+        store: EntityStore = EntityStore(),
+        haConfig: JSONObject = JSONObject(),
+        subscribeTemplate: (String, (String) -> Unit) -> () -> Unit = { _, _ -> {} },
+    ) = VitroCardContext(
         context = activity,
         haBase = FakeHaServer.BASE,
         store = store,
         theme = ThemeResolver.resolve(ThemeCatalog(), true),
         resources = emptyList(),
         accessToken = { FakeHaServer.TOKEN },
+        haConfig = { haConfig },
         callService = { _, _, _, _ -> },
         navigate = {},
         openMoreInfo = {},
         fetchHistory = { _, _, _ -> },
-        subscribeTemplate = { _, _ -> {} },
+        subscribeTemplate = subscribeTemplate,
     )
 
     private fun card(json: String) = JSONObject(json).let { CardConfig(it.getString("type"), it) }
@@ -349,5 +354,173 @@ class VisualParityWave2Test {
             assertEquals("$t is Tier 2", CardTier.NATIVE_HACS, CardRouter.tier(card("""{"type": "$t"}""")))
         }
         assertEquals(14, CardRouter.NATIVE_HACS_TYPES.size)
+    }
+
+    // ---- Mirror polish: clock zone and alignment, icons, markdown images, chip card-mod, to-do limits ----
+
+    @Test
+    fun clockFormatsInHomeAssistantsTimeZoneNotTheDevices() {
+        val prev = java.util.TimeZone.getDefault()
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))
+        try {
+            // Any instant: Los Angeles is 7-8 hours behind UTC, so the two clocks must differ.
+            val instant = java.util.Date(1_795_496_000_000L - (1_795_496_000_000L % 60_000L))
+            val utcFmt = java.text.SimpleDateFormat("h:mm", java.util.Locale.getDefault()).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+            val laFmt = java.text.SimpleDateFormat("h:mm", java.util.Locale.getDefault()).apply { timeZone = java.util.TimeZone.getTimeZone("America/Los_Angeles") }
+            val la = ClockCardView(
+                context(haConfig = JSONObject().put("time_zone", "America/Los_Angeles")),
+                card("""{"type": "clock", "time_format": "12"}"""),
+            )
+            la.renderAt(instant)
+            assertEquals(laFmt.format(instant), la.renderedTime)
+            val utc = ClockCardView(context(haConfig = JSONObject().put("time_zone", "UTC")), card("""{"type": "clock", "time_format": "12"}"""))
+            utc.renderAt(instant)
+            assertEquals(utcFmt.format(instant), utc.renderedTime)
+            assertTrue(la.renderedTime != utc.renderedTime)
+            // No HA zone: the device's zone.
+            val none = ClockCardView(context(), card("""{"type": "clock", "time_format": "12"}"""))
+            none.renderAt(instant)
+            assertEquals(utcFmt.format(instant), none.renderedTime)
+        } finally {
+            java.util.TimeZone.setDefault(prev)
+        }
+    }
+
+    @Test
+    fun clockFollowsCardModTextAlignAndZeroPadding() {
+        val left = ClockCardView(
+            context(),
+            card("""{"type": "clock", "time_format": "12", "card_mod": {"style": "ha-card { text-align: left; padding: 0; background: none }"}}"""),
+        )
+        assertEquals(Gravity.START, left.horizontalGravity)
+        val col = left.getChildAt(0) as LinearLayout
+        assertEquals(0, col.paddingStart)
+        assertEquals(Gravity.START, col.gravity and Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK)
+        val row = col.getChildAt(0) as LinearLayout
+        assertEquals(Gravity.START, row.gravity and Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK)
+        // AM/PM alone sits on the digits' baseline, not mid-height.
+        assertEquals(Gravity.BOTTOM, row.gravity and Gravity.VERTICAL_GRAVITY_MASK)
+        val side = row.getChildAt(1) as LinearLayout
+        assertEquals(Gravity.BOTTOM, side.gravity and Gravity.VERTICAL_GRAVITY_MASK)
+        assertTrue(side.paddingBottom > 0)
+
+        val right = ClockCardView(context(), card("""{"type": "clock", "card_mod": {"style": "text-align: end"}}"""))
+        assertEquals(Gravity.END, right.horizontalGravity)
+        val centered = ClockCardView(context(), card("""{"type": "clock"}"""))
+        assertEquals(Gravity.CENTER_HORIZONTAL, centered.horizontalGravity)
+        assertTrue((centered.getChildAt(0) as LinearLayout).paddingStart > 0)
+    }
+
+    @Test
+    fun mirrorDashboardIconsExistAndParse() {
+        val names = listOf(
+            "circle", "circle-small", "flash-alert", "wrench", "table-furniture", "hvac", "stove", "weather-fog",
+            "weather-cloudy", "weather-rainy", "weather-partly-cloudy", "weather-night", "weather-sunny", "cart", "cart-outline",
+        )
+        for (n in names) {
+            assertTrue("mdi:$n is known", dev.glassworks.engine.vitro.ui.MdiIcons.has("mdi:$n"))
+            val bounds = android.graphics.RectF()
+            dev.glassworks.engine.vitro.ui.MdiIcons.pathFor("mdi:$n").computeBounds(bounds, true)
+            assertTrue("mdi:$n draws inside 24x24: $bounds", bounds.width() > 1f && bounds.left >= -0.5f && bounds.right <= 24.5f && bounds.bottom <= 24.5f)
+        }
+    }
+
+    @Test
+    fun markdownTableWithBlankHeaderDrawsNoHeaderRow() {
+        val md = "|   |   |\n|---|--:|\n| Temp | 21 °C |\n| Humidity | 40 % |"
+        val table = parseMarkdownBlocks(md).single() as MdBlock.Table
+        assertTrue(table.header.all { it.isBlank() })
+        val box = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        MarkdownRenderer(context()).render(md, box)
+        val layout = box.getChildAt(0) as android.widget.TableLayout
+        // Two rows and one hairline between them; no empty header row or top rule.
+        assertEquals(3, layout.childCount)
+        val firstRow = layout.getChildAt(0) as android.widget.TableRow
+        assertEquals("Temp", (firstRow.getChildAt(0) as TextView).text.toString())
+
+        val headed = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        MarkdownRenderer(context()).render("| A | B |\n|---|---|\n| 1 | 2 |", headed)
+        assertEquals(3, (headed.getChildAt(0) as android.widget.TableLayout).childCount)
+    }
+
+    @Test
+    fun markdownHtmlImageLinesBecomeNativeImages() {
+        val md = """
+            ### Now playing
+            <img src="/api/media_player_proxy/media_player.kitchen?token=x" style="width:140px;height:140px;border-radius:24px">
+
+            <div style="text-align:right"><img src="/local/a.png" width="64" height="32"></div>
+
+            <div style="text-align:center">
+            <img src="/local/b.png" style="margin-left:auto">
+            </div>
+        """.trimIndent()
+        val blocks = parseMarkdownBlocks(md)
+        val images = blocks.filterIsInstance<MdBlock.Image>()
+        assertEquals(3, images.size)
+        assertEquals(MdBlock.Image("/api/media_player_proxy/media_player.kitchen?token=x", 140f, 140f, 24f, "start"), images[0])
+        assertEquals(MdBlock.Image("/local/a.png", 64f, 32f, 0f, "end"), images[1])
+        assertEquals("end", images[2].align)
+        assertFalse(blocks.any { it is MdBlock.Paragraph && "<" in it.text })
+
+        val box = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        MarkdownRenderer(context()).render(md, box)
+        val views = box.all().filter { it.tag == MarkdownRenderer.IMAGE_TAG }.map { it as android.widget.ImageView }
+        assertEquals(3, views.size)
+        val first = views[0]
+        assertEquals(android.widget.ImageView.ScaleType.CENTER_CROP, first.scaleType)
+        assertTrue(first.clipToOutline)
+        assertEquals((140f * activity.resources.displayMetrics.density).toInt(), first.layoutParams.width)
+        assertEquals(Gravity.END, (views[1].layoutParams as LinearLayout.LayoutParams).gravity)
+    }
+
+    @Test
+    fun chipCardModTintsItsPillBorderAndLabel() {
+        val templates = HashMap<String, (String) -> Unit>()
+        val chips = dev.glassworks.engine.vitro.cards.MushroomChipsCardView(
+            context(subscribeTemplate = { tpl, cb -> templates[tpl] = cb; {} }),
+            card(
+                """{"type": "custom:mushroom-chips-card", "chips": [
+                     {"type": "template", "content": "Peak", "icon": "mdi:flash-alert",
+                      "card_mod": {"style": "ha-card { background: #112233; border: 2px solid #445566; border-radius: 8px; color: #fbbf24 }"}},
+                     {"type": "template", "content": "AQI",
+                      "card_mod": {"style": "ha-card { color: {{ '#4ade80' }} }"}}
+                   ]}""",
+            ),
+        )
+        val peak = chips.getChildAt(0) as LinearLayout
+        val pill = peak.background as android.graphics.drawable.GradientDrawable
+        assertEquals(0xFF112233.toInt(), pill.color!!.defaultColor)
+        assertEquals(8f * activity.resources.displayMetrics.density, pill.cornerRadius, 0.01f)
+        val peakLabel = peak.all().filterIsInstance<TextView>().single()
+        assertEquals(0xFFFBBF24.toInt(), peakLabel.currentTextColor)
+
+        val aqi = chips.getChildAt(1) as LinearLayout
+        val aqiLabel = aqi.all().filterIsInstance<TextView>().single()
+        val before = aqiLabel.currentTextColor
+        assertTrue(before != 0xFF4ADE80.toInt())
+        val live = templates.entries.single { "#4ade80" in it.key }.value
+        live("ha-card { color: #4ade80 }")
+        ShadowLooper.idleMainLooper()
+        assertEquals(0xFF4ADE80.toInt(), aqiLabel.currentTextColor)
+    }
+
+    @Test
+    fun todoListHonorsHideCreateAndMaxItems() {
+        val items = (1..5).map { dev.glassworks.engine.vitro.cards.TodoItem("u$it", "Item $it", false) }
+        val capped = dev.glassworks.engine.vitro.cards.TodoListCardView(
+            context(),
+            card("""{"type": "todo-list", "entity": "todo.shopping", "hide_create": true, "max_items": 3}"""),
+        )
+        assertFalse(capped.addRowVisible)
+        capped.setItemsForTest(items)
+        // Three items plus a "+ 2 more" line.
+        assertEquals(4, capped.activeRowCount)
+        assertTrue(capped.all().filterIsInstance<TextView>().any { it.text.toString() == "+ 2 more" })
+
+        val open = dev.glassworks.engine.vitro.cards.TodoListCardView(context(), card("""{"type": "todo-list", "entity": "todo.shopping"}"""))
+        assertTrue(open.addRowVisible)
+        open.setItemsForTest(items)
+        assertEquals(5, open.activeRowCount)
     }
 }

@@ -540,6 +540,11 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     private var completedExpanded = true
     private var fetchGeneration = 0
     private val hideCompleted = config.raw.optBoolean("hide_completed", false)
+    /** `hide_create: true` drops the add-item row (display-only dashboards). */
+    private val hideCreate = config.raw.optBoolean("hide_create", false)
+    /** `max_items` caps the active rows; the rest collapse into a "+ N more" line. 0 shows them all. */
+    private val maxItems = config.raw.optInt("max_items", 0).coerceAtLeast(0)
+    private val addRow: LinearLayout
 
     init {
         val pad = ctx.px(16f)
@@ -556,9 +561,10 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             renderItems()
         }
 
-        val addRow = LinearLayout(ctx.context).apply {
+        addRow = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            if (hideCreate) visibility = GONE
         }
         input.apply {
             hint = "Add item"
@@ -652,7 +658,15 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         completedBox.removeAllViews()
         val active = items.filter { !it.completed }
         val done = items.filter { it.completed }
-        active.forEach { activeBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)) }
+        val shown = if (maxItems > 0) active.take(maxItems) else active
+        shown.forEach { activeBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)) }
+        val hidden = active.size - shown.size
+        if (hidden > 0) {
+            activeBox.addView(extLabel(ctx, 12f, ctx.theme.secondaryTextColor).apply {
+                text = "+ $hidden more"
+                setPadding(ctx.px(34f), ctx.px(2f), 0, ctx.px(4f))
+            })
+        }
         if (active.isEmpty()) {
             activeBox.addView(extLabel(ctx, 13f, ctx.theme.secondaryTextColor).apply {
                 text = if (items.isEmpty()) "No items" else "All done"
@@ -687,6 +701,14 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         }
         row.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         return row
+    }
+
+    /** Test hooks: whether the add row shows, and the active box's rows (items plus any "+ N more" line). */
+    internal val addRowVisible: Boolean get() = addRow.visibility == VISIBLE
+    internal val activeRowCount: Int get() = activeBox.childCount
+    internal fun setItemsForTest(list: List<TodoItem>) {
+        items = list
+        renderItems()
     }
 
     companion object {

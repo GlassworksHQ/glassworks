@@ -35,6 +35,7 @@ import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.EntityRowConfig
 import dev.glassworks.engine.vitro.model.VisibilityCondition
+import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
@@ -44,6 +45,7 @@ import dev.glassworks.ui.Inter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -1877,6 +1879,16 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
     private val lightDigits = cardModLightWeight(cardModStyle)
     private val baseTimeSp = fontOverrideSp ?: if (large) 52f else 42f
     private val baseSideSp = if (fontOverrideSp != null) (fontOverrideSp * 0.26f).coerceIn(12f, 44f) else if (large) 20f else 16f
+    private val parsedMod = ThemeResolver.parseCardMod(config.raw.optJSONObject("card_mod"), ctx.theme.vars)
+    /** `text-align` from card-mod: [Gravity.START], [Gravity.END] or [Gravity.CENTER_HORIZONTAL]. */
+    private val alignGravity = when (parsedMod.textAlign ?: CARD_MOD_TEXT_ALIGN.find(cardModStyle)?.groupValues?.get(1)?.lowercase(Locale.ROOT)) {
+        "left", "start" -> Gravity.START
+        "right", "end" -> Gravity.END
+        else -> Gravity.CENTER_HORIZONTAL
+    }
+    private val zeroPadding = parsedMod.paddingDp == 0f
+    private val haConfig = ctx.haConfig
+    private var appliedZone: String? = null
     private var appliedScale = 1f
     private var running = false
 
@@ -1892,12 +1904,16 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
     init {
         val col = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(ctx.px(16f), ctx.px(18f), ctx.px(16f), ctx.px(18f))
+            gravity = alignGravity or Gravity.CENTER_VERTICAL
+            val side = if (zeroPadding) 0 else ctx.px(16f)
+            val vertical = if (zeroPadding) 0 else ctx.px(18f)
+            setPadding(side, vertical, side, vertical)
         }
+        // AM/PM alone (no seconds) sits on the digits' baseline, as "8:52 PM"; a seconds stack stays centered.
+        val ampmOnly = !showSeconds && !format24
         val row = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+            gravity = alignGravity or if (ampmOnly) Gravity.BOTTOM else Gravity.CENTER_VERTICAL
         }
         // Sized to fit a half-width sections card; `clock_size: large` grows it.
         val timeSp = baseTimeSp
@@ -1913,17 +1929,25 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
         if (showSeconds || !format24) {
             val side = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_VERTICAL
+                gravity = if (ampmOnly) Gravity.BOTTOM else Gravity.CENTER_VERTICAL
+                // Lift the suffix off the digits' descender gap so it lines up with their baseline.
+                if (ampmOnly) setPadding(0, 0, 0, (ctx.dp * baseTimeSp * 0.14f).roundToInt())
                 if (showSeconds) addView(secondsView)
                 // Seconds and AM/PM sit tight together, as in HA's stacked clock column.
                 if (!format24) addView(ampmView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
                     if (showSeconds) topMargin = -ctx.px(2f)
                 })
             }
-            row.addView(side, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(8f) })
+            row.addView(side, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
+                marginStart = ctx.px(8f)
+                if (ampmOnly) gravity = Gravity.BOTTOM
+            })
         }
-        col.addView(row, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-        if (showDate) col.addView(dateView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(4f) })
+        col.addView(row, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { gravity = alignGravity })
+        if (showDate) col.addView(dateView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
+            topMargin = ctx.px(4f)
+            gravity = alignGravity
+        })
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         render(Date())
     }
@@ -1963,7 +1987,20 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
         return (available / needed).coerceIn(MIN_CLOCK_SCALE, 1f)
     }
 
+    /**
+     * Formats in Home Assistant's `time_zone` (from `get_config`), not the device's: a panel whose OS stays on UTC
+     * must still show the house's time. Re-checked each tick, since the config can arrive after the card is built.
+     */
+    private fun applyZone() {
+        val tzId = runCatching { haConfig().optString("time_zone", "") }.getOrDefault("").trim()
+        if (tzId == appliedZone) return
+        appliedZone = tzId
+        val zone = if (tzId.isEmpty()) TimeZone.getDefault() else TimeZone.getTimeZone(tzId)
+        listOf(timeFormatter, secondsFormatter, ampmFormatter, dateFormatter).forEach { it.timeZone = zone }
+    }
+
     private fun render(now: Date) {
+        applyZone()
         timeView.text = timeFormatter.format(now)
         if (showSeconds) secondsView.text = secondsFormatter.format(now)
         if (!format24) ampmView.text = ampmFormatter.format(now).uppercase(Locale.getDefault())
@@ -1986,11 +2023,18 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
     internal val digitsSp: Float get() = baseTimeSp
     internal val sideSp: Float get() = baseSideSp
     internal val digitsLight: Boolean get() = lightDigits
+    internal val horizontalGravity: Int get() = alignGravity
+    internal val renderedTime: String get() = timeView.text.toString()
+    internal val renderedAmPm: String get() = ampmView.text.toString()
+
+    /** Re-renders [now] (tests). */
+    internal fun renderAt(now: Date) = render(now)
 
     internal companion object {
         /** 42 sp shrinks to no less than 30 sp (16 sp side text to ~11.5 sp). */
         private const val MIN_CLOCK_SCALE = 30f / 42f
         private val CARD_MOD_FONT_SIZE = Regex("""font-size\s*:\s*(\d+(?:\.\d+)?)\s*px""", RegexOption.IGNORE_CASE)
+        private val CARD_MOD_TEXT_ALIGN = Regex("""text-align\s*:\s*(left|start|right|end|center)""", RegexOption.IGNORE_CASE)
         private val CARD_MOD_LIGHT = Regex("""font-weight\s*:\s*(100|200|300|light|lighter|thin|extralight)\b""", RegexOption.IGNORE_CASE)
 
         /** The digits' size from a card-mod `font-size: Npx` (clamped to 18..220 sp), or null without one. */
@@ -2289,6 +2333,7 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         }
 
         val eid = c.optString("entity", "").ifEmpty { null }
+        bindChipCardMod(c, eid, chip, label)
         val defaultTap = when {
             type == "back" || type == "menu" || type == "action" -> "none"
             eid != null -> "more-info"
@@ -2355,6 +2400,41 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
             }
         }
         return chip
+    }
+
+    /**
+     * A chip's own `card_mod.style` restyles its pill (fill or gradient, border, radius) and its label's `color`.
+     * A Jinja style is rendered by HA and re-applied each time it changes.
+     */
+    private fun bindChipCardMod(c: JSONObject, entityId: String?, chip: View, label: TextView) {
+        val raw = ThemeResolver.cardModStyleString(c.optJSONObject("card_mod")) ?: return
+        if (isTemplate(raw)) {
+            subscriptions += ctx.subscribeTemplate(withEntityVariable(raw, entityId)) { rendered ->
+                ctx.main.post { applyChipStyle(rendered, chip, label) }
+            }
+        } else {
+            applyChipStyle(raw, chip, label)
+        }
+    }
+
+    private fun applyChipStyle(css: String, chip: View, label: TextView) {
+        val mod = ThemeResolver.parseCardMod(css, ctx.theme.vars)
+        val gradient = mod.backgroundGradient
+        val pill = chip.background as? GradientDrawable
+        if (pill != null) {
+            if (gradient != null) {
+                pill.orientation = CardSurface.orientationFor(gradient.angleDeg)
+                pill.colors = gradient.colors
+            } else {
+                mod.backgroundColor?.let { pill.setColor(it) }
+            }
+            if (mod.borderWidthDp != null || mod.borderColor != null) {
+                val widthPx = mod.borderWidthDp?.let { (it * ctx.dp).roundToInt() } ?: ctx.px(1f).coerceAtLeast(1)
+                pill.setStroke(widthPx, mod.borderColor ?: ctx.theme.cardBorderColor)
+            }
+            mod.borderRadiusDp?.let { pill.cornerRadius = it * ctx.dp }
+        }
+        mod.textColor?.let { label.setTextColor(it) }
     }
 
     /** Applies a chip field now when static, or every time HA re-renders it when it is a template. */

@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro.cards
 import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.Matrix
+import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
@@ -31,8 +32,10 @@ import android.text.style.URLSpan
 import android.text.style.UnderlineSpan
 import android.view.Gravity
 import android.view.View
+import android.view.ViewOutlineProvider
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TableLayout
 import android.widget.TableRow
@@ -72,6 +75,19 @@ sealed class MdBlock {
         val trackColor: Int?,
         val gapDp: Float,
         val segments: List<BarSegment>,
+    ) : MdBlock()
+
+    /**
+     * A standalone HTML `<img>` line (optionally inside a `<div style="text-align:right">` / `<p>` wrapper), drawn as
+     * a native image. Sizes come from the `width` / `height` attributes or the `style`; null means "fit".
+     * [align] is `start`, `center` or `end`.
+     */
+    data class Image(
+        val src: String,
+        val widthDp: Float?,
+        val heightDp: Float?,
+        val radiusDp: Float,
+        val align: String,
     ) : MdBlock()
 }
 
@@ -258,6 +274,44 @@ private val BULLET = Regex("""^(\s*)[-*+]\s+(.*)$""")
 private val ORDERED = Regex("""^(\s*)(\d{1,9})[.)]\s+(.*)$""")
 private val QUOTE = Regex("""^\s{0,3}>\s?(.*)$""")
 private val TABLE_SEPARATOR = Regex("""^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$""")
+private val IMG_LINE = Regex(
+    """^(?:<(div|p)\b([^>]*)>\s*)?<img\b([^>]*?)/?>\s*(?:</(?:div|p)>)?$""",
+    RegexOption.IGNORE_CASE,
+)
+private val WRAPPER_ONLY = Regex("""^(?:\s*</?(?:div|p)\b[^>]*>\s*)+$""", RegexOption.IGNORE_CASE)
+private val WRAPPER_OPEN = Regex("""^\s*<(?:div|p)\b([^>]*)>\s*$""", RegexOption.IGNORE_CASE)
+
+/** `left`/`center`/`right` (CSS or the old `align` attribute) → `start`/`center`/`end`, or null. */
+private fun mdAlign(value: String?): String? = when (value?.trim()?.lowercase(Locale.ROOT)) {
+    "left", "start" -> "start"
+    "center", "middle" -> "center"
+    "right", "end" -> "end"
+    else -> null
+}
+
+/** One `<img>` tag's attributes (plus its wrapper's) as an [MdBlock.Image], or null without a `src`. */
+internal fun parseHtmlImage(imgAttrs: String, wrapperAttrs: String?): MdBlock.Image? {
+    val src = MarkdownInline.attr(imgAttrs, "src")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val css = MdCss.parse(MarkdownInline.attr(imgAttrs, "style"))
+    fun dim(key: String): Float? =
+        (MdCss.lengthDp(css[key]) ?: MarkdownInline.attr(imgAttrs, key)?.let { MdCss.lengthDp(it) })
+            ?.takeIf { it > 0f }?.coerceAtMost(2000f)
+    val radius = (MdCss.lengthDp(css["border-radius"]) ?: 0f).coerceIn(0f, 1000f)
+    val ml = css["margin-left"]?.trim()?.lowercase(Locale.ROOT)
+    val mr = css["margin-right"]?.trim()?.lowercase(Locale.ROOT)
+    val margin = css["margin"]?.trim()?.lowercase(Locale.ROOT)?.split(' ')?.filter { it.isNotEmpty() }.orEmpty()
+    val marginAuto = margin.size in 2..4 && margin[1] == "auto"
+    val own = when {
+        ml == "auto" && mr == "auto" || marginAuto -> "center"
+        ml == "auto" -> "end"
+        mr == "auto" -> "start"
+        else -> mdAlign(css["float"]) ?: mdAlign(MarkdownInline.attr(imgAttrs, "align"))
+    }
+    val wrapperCss = wrapperAttrs?.let { MdCss.parse(MarkdownInline.attr(it, "style")) }.orEmpty()
+    val wrap = mdAlign(wrapperCss["text-align"]) ?: wrapperAttrs?.let { mdAlign(MarkdownInline.attr(it, "align")) }
+    return MdBlock.Image(src, dim("width"), dim("height"), radius, own ?: wrap ?: "start")
+}
+
 private val CENTER_OPEN = Regex("""<center>""", RegexOption.IGNORE_CASE)
 private val CENTER_CLOSE = Regex("""</center>""", RegexOption.IGNORE_CASE)
 
@@ -322,6 +376,18 @@ private fun parseLines(chunk: String): List<MdBlock> {
         val trimmed = line.trim()
         when {
             trimmed.isEmpty() -> flush()
+            IMG_LINE.matches(trimmed) -> {
+                val m = IMG_LINE.find(trimmed)!!
+                // A wrapper opened on the line before (`<div style="text-align:right">` alone) sets the alignment.
+                var wrapper = m.groupValues[2].takeIf { m.groupValues[1].isNotEmpty() }
+                if (wrapper == null && para.size == 1) {
+                    WRAPPER_OPEN.find(para[0].trim())?.let { wrapper = it.groupValues[1]; para.clear() }
+                }
+                flush()
+                val img = parseHtmlImage(m.groupValues[3], wrapper)
+                if (img != null) out += img else para += line
+            }
+            WRAPPER_ONLY.matches(trimmed) && para.isEmpty() && out.lastOrNull() is MdBlock.Image -> Unit
             HTML_RULE.matches(line) || RULE.matches(line) -> { flush(); out += MdBlock.Rule }
             HEADING.matches(trimmed) -> {
                 flush()
@@ -910,6 +976,17 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                 })
                 is MdBlock.Quote -> into.addView(quote(block), lp(bottom = 8f))
                 is MdBlock.Table -> into.addView(table(block), lp(bottom = 8f))
+                is MdBlock.Image -> into.addView(image(block), LinearLayout.LayoutParams(
+                    block.widthDp?.let { ctx.px(it) } ?: MATCH_PARENT,
+                    block.heightDp?.let { ctx.px(it) } ?: WRAP_CONTENT,
+                ).apply {
+                    gravity = when (if (centered && block.align == "start") "center" else block.align) {
+                        "center" -> Gravity.CENTER_HORIZONTAL
+                        "end" -> Gravity.END
+                        else -> Gravity.START
+                    }
+                    bottomMargin = ctx.px(8f)
+                })
                 is MdBlock.Center -> {
                     val inner = LinearLayout(ctx.context).apply {
                         orientation = LinearLayout.VERTICAL
@@ -1032,6 +1109,24 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         }
     }
 
+    /** An [MdBlock.Image]: cropped to its box (rounded when it has a radius), loaded from HA in the background. */
+    private fun image(img: MdBlock.Image): ImageView = ImageView(ctx.context).apply {
+        tag = IMAGE_TAG
+        val sized = img.widthDp != null && img.heightDp != null
+        scaleType = if (sized) ImageView.ScaleType.CENTER_CROP else ImageView.ScaleType.FIT_CENTER
+        adjustViewBounds = !sized
+        if (img.radiusDp > 0f) {
+            val r = img.radiusDp * ctx.dp
+            background = GradientDrawable().apply { cornerRadius = r }
+            outlineProvider = object : ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: Outline) =
+                    outline.setRoundRect(0, 0, view.width, view.height, r)
+            }
+            clipToOutline = true
+        }
+        ctx.loadImage(img.src) { bmp -> if (bmp != null) setImageBitmap(bmp) }
+    }
+
     private fun table(t: MdBlock.Table): TableLayout = TableLayout(ctx.context).apply {
         isStretchAllColumns = true
         isShrinkAllColumns = true
@@ -1051,10 +1146,13 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         }
         fun hairline() = View(ctx.context).apply { setBackgroundColor(theme.dividerColor) }
         val hairlineLp = { TableLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)) }
-        addView(TableRow(ctx.context).apply {
-            t.header.forEachIndexed { i, h -> addView(cell(h, true, t.aligns[i])) }
-        })
-        addView(hairline(), hairlineLp())
+        // A header of blank cells (a borderless key/value table) draws no header row and no top rule.
+        if (t.header.any { it.isNotBlank() }) {
+            addView(TableRow(ctx.context).apply {
+                t.header.forEachIndexed { i, h -> addView(cell(h, true, t.aligns[i])) }
+            })
+            addView(hairline(), hairlineLp())
+        }
         t.rows.forEachIndexed { r, row ->
             addView(TableRow(ctx.context).apply {
                 row.forEachIndexed { i, c -> addView(cell(c, false, t.aligns.getOrElse(i) { "start" })) }
@@ -1071,5 +1169,6 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         const val QUOTE_BAR_TAG = "md-quote-bar"
         const val STACKED_BAR_TAG = "md-stacked-bar"
         const val STACKED_SEGMENT_TAG = "md-stacked-segment"
+        const val IMAGE_TAG = "md-image"
     }
 }

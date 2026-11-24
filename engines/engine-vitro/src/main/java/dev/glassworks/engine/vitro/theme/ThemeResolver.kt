@@ -54,6 +54,10 @@ data class CardModStyle(
     val fixedCenterY: Boolean = false,
     /** `transform: translateX(-50%)` / `translate(-50%, y)`: center horizontally. */
     val fixedCenterX: Boolean = false,
+    /** `color:` (the text color, not `background-color`). */
+    val textColor: Int? = null,
+    /** `text-align:` lowercased (`left`, `start`, `center`, `right`, `end`), or null. */
+    val textAlign: String? = null,
 )
 
 /** Resolved, native-ready Home Assistant theme for one view or card. */
@@ -581,6 +585,8 @@ object ThemeResolver {
             fixedWidth = prop("width"),
             fixedCenterY = centerY,
             fixedCenterX = centerX,
+            textColor = prop("color")?.let(::parseColor),
+            textAlign = prop("text-align")?.lowercase(Locale.ROOT),
         )
     }
 
