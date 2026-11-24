@@ -51,7 +51,14 @@ class VitroRender(
     /** History or statistics calls Vitro made that HA's page didn't (ParityWs.canonical form). */
     val wsUnmatched: List<String> = emptyList(),
 ) {
-    /** The texts under slot [i]: every visible TextView with text. Canvas-drawn text is not here. */
+    /**
+     * The texts slot [i] draws on a canvas (a thermostat dial, a gauge), from the content description those views set
+     * for screen readers: whitespace collapsed. They have no position or size to compare, only presence.
+     */
+    fun describedTexts(i: Int): List<String> = ParityViews.describedViews(slotViews[i])
+        .map { it.contentDescription.toString().replace(Regex("\\s+"), " ").trim() }
+
+    /** The texts under slot [i]: every visible TextView with text. Canvas-drawn text is in [describedTexts]. */
     fun texts(i: Int): List<VitroText> = ParityViews.textViews(slotViews[i]).map { tv ->
         val raw = tv.text.toString()
         val sb = StringBuilder()
@@ -135,6 +142,11 @@ object ParityViews {
 
     fun textViews(slot: View): List<TextView> = all(slot).filterIsInstance<TextView>()
         .filter { it.text.isNotBlank() && it.width > 0 && it.height > 0 && shown(it, slot) }.toList()
+
+    /** The views that draw their own text, described for screen readers: shown leaves that aren't TextViews. */
+    fun describedViews(slot: View): List<View> = all(slot)
+        .filter { it !is TextView && it !is android.view.ViewGroup && !it.contentDescription.isNullOrBlank() }
+        .filter { it.width > 0 && it.height > 0 && shown(it, slot) }.toList()
 
     /**
      * The top-level card slots of a sections view, in order: each section's grid cells, like the HA side's

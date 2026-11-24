@@ -1574,6 +1574,7 @@ internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.co
         this.target = target
         this.on = on
         this.status = status
+        describe()
         if (dragTarget == null) invalidate()
     }
 
@@ -1582,6 +1583,7 @@ internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.co
         val next = HumidifierCardView.snapHumidity(t + sign, min, max)
         if (next.toDouble() == t) return
         target = next.toDouble()
+        describe()
         invalidate()
         onCommit(next)
     }
@@ -1594,6 +1596,18 @@ internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.co
     private val pt = FloatArray(2)
     private val shownMemo = NumberText()
     private val currentMemo = NumberText()
+    private fun shownText(shown: Double?) = if (shown != null) shownMemo.of(shown) { "${it.roundToInt()}%" } else "–"
+    private fun currentText(c: Double) = currentMemo.of(c) { "Currently ${it.roundToInt()}%" }
+
+    /**
+     * The texts the dial draws, in order, as its content description (the status, the target, the current humidity):
+     * what HA's page has as text, so TalkBack reads them and the parity harness finds them.
+     */
+    private fun describe() {
+        val text = listOfNotNull(status.takeIf { it.isNotEmpty() }, shownText(dragTarget ?: target), current?.let(::currentText))
+            .joinToString(", ")
+        if (contentDescription?.toString() != text) contentDescription = text
+    }
 
     /** The point at [frac] of the ring of radius [r], into [pt]. */
     private fun pointAt(frac: Float, r: Float) {
@@ -1631,9 +1645,9 @@ internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.co
             canvas.drawCircle(pt[0], pt[1], strokeW * 0.42f, fill)
         }
         canvas.drawText(status, cx, cy - 30f * dp, statusPaint)
-        canvas.drawText(if (shown != null) shownMemo.of(shown) { "${it.roundToInt()}%" } else "–", cx, cy + 14f * dp, bigPaint)
+        canvas.drawText(shownText(shown), cx, cy + 14f * dp, bigPaint)
         val c = current
-        if (c != null) canvas.drawText(currentMemo.of(c) { "Currently ${it.roundToInt()}%" }, cx, cy + 36f * dp, subPaint)
+        if (c != null) canvas.drawText(currentText(c), cx, cy + 36f * dp, subPaint)
     }
 
     private fun valueAt(x: Float, y: Float): Double {
@@ -1673,6 +1687,7 @@ internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.co
                 invalidate()
             }
         }
+        describe()
         return true
     }
 

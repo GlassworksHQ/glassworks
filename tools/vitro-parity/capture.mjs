@@ -291,8 +291,12 @@ const TEXTS_JS = (slot) => {
       if (n.nodeType === 3) {
         const text = n.textContent.replace(/\s+/g, ' ').trim();
         if (!text || !n.parentElement) continue;
+        // The run's box from its first to its last non-space character: a leading space (" text." after a <b>) would
+        // start HA's box a space before Vitro's, which measures from the text.
+        const raw = n.textContent;
         const range = document.createRange();
-        range.selectNodeContents(n);
+        range.setStart(n, raw.length - raw.trimStart().length);
+        range.setEnd(n, raw.trimEnd().length);
         const r = range.getBoundingClientRect();
         // A text node can be slotted itself; its box is then the slot's.
         const box = n.assignedSlot || n.parentElement;
