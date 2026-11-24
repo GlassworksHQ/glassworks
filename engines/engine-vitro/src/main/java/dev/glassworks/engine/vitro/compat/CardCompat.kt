@@ -122,9 +122,11 @@ object CardCompat {
     /**
      * True when `auto-entities` builds built-in cards at runtime: its `card:` (an `entities` card by default), or with
      * `card_param: cards` one card per entity, from each top-level `entities:` entry and each rule's `options`
-     * (a `tile` by default), the way [dev.glassworks.engine.vitro.cards.AutoEntitiesCardView] builds them.
+     * (a `tile` by default), the way [dev.glassworks.engine.vitro.cards.AutoEntitiesCardView] builds them. Also
+     * `stack-in-card`, which (0.2.0) builds a built-in `vertical-stack` or `horizontal-stack` around its cards.
      */
     private fun generatesBuiltInCards(card: CardConfig): Boolean {
+        if (card.type == "custom:stack-in-card") return true
         if (card.type != "custom:auto-entities") return false
         val inner = card.raw.optJSONObject("card")?.optString("type", "")?.ifEmpty { null } ?: "entities"
         if (!inner.startsWith("custom:")) return true

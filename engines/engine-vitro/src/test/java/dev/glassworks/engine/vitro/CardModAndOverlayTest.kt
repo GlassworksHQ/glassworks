@@ -302,6 +302,29 @@ class CardModAndOverlayTest {
     }
 
     @Test
+    fun anIslandThatLoadsCardModGetsTheMarginOnce() {
+        fun islandParent(resources: List<dev.glassworks.engine.vitro.model.LovelaceResource>): ViewGroup? {
+            val vv = vitroView(
+                EntityStore(),
+                """{"views": [{"cards": [{"type": "custom:acme-card", "card_mod": {"style": "ha-card { margin: 12px }"}}]}]}""",
+                resources,
+            )
+            fun find(v: View): dev.glassworks.engine.vitro.cards.WebIslandCardView? = when (v) {
+                is dev.glassworks.engine.vitro.cards.WebIslandCardView -> v
+                is ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { find(v.getChildAt(it)) }
+                else -> null
+            }
+            return assertNotNull(find(vv)).parent as? ViewGroup
+        }
+        val dp = activity.resources.displayMetrics.density
+        // card-mod in the island draws the margin there, so the native frame adds no padding around it.
+        val styled = islandParent(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-card-mod/card-mod.js", "module")))
+        assertEquals(0, styled?.paddingLeft ?: 0)
+        // Without card-mod there, the native frame is the only layer that insets it.
+        assertEquals((12 * dp).toInt(), islandParent(emptyList())?.paddingLeft)
+    }
+
+    @Test
     fun resourcesArrivingLaterRebuildTheViews() {
         // Built before the resources arrive, a card-mod-only fallback stays native; once card-mod arrives, the view
         // is rebuilt and the card goes to its island.

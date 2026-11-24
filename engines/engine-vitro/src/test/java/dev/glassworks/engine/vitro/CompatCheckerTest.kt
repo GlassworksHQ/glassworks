@@ -349,7 +349,7 @@ class CompatCheckerTest {
             JSONObject(
                 """{"cards": [
                   {"type": "vertical-stack", "cards": [{"type": "tile", "entity": "light.a"}, {"type": "custom:acme-card"}]},
-                  {"type": "custom:stack-in-card", "card_mod": {"style": "@media (min-width: 1px) { :host { margin: 0 } }"},
+                  {"type": "custom:vertical-stack-in-card", "card_mod": {"style": "@media (min-width: 1px) { :host { margin: 0 } }"},
                    "cards": [{"type": "custom:mushroom-entity-card", "entity": "light.b"}, {"type": "custom:mushroom-entity-card", "entity": "light.c"}]}
                 ]}""",
             ),
@@ -360,10 +360,17 @@ class CompatCheckerTest {
         val report = CompatChecker.check(view)
         // The first stack and its two cards, then the second stack alone: the island draws what's inside it.
         assertEquals(4, report.entries.size)
-        assertEquals(listOf("View 1 › card 1 (vertical-stack) › card 2 (custom:acme-card)", "View 1 › card 2 (custom:stack-in-card)"), report.islands.map { it.path })
+        assertEquals(listOf("View 1 › card 1 (vertical-stack) › card 2 (custom:acme-card)", "View 1 › card 2 (custom:vertical-stack-in-card)"), report.islands.map { it.path })
         val text = report.format()
         assertTrue(text, text.startsWith("4 cards: 2 native, 2 island"))
-        assertTrue(text, "ISLAND View 1 › card 2 (custom:stack-in-card)\n  - card_mod `@media` rules aren't evaluated natively" in text)
+        assertTrue(text, "ISLAND View 1 › card 2 (custom:vertical-stack-in-card)\n  - card_mod `@media` rules aren't evaluated natively" in text)
+        // stack-in-card builds a built-in stack around its cards, which the island would draw as a summary: native.
+        val sic = verdict(
+            """{"type": "custom:stack-in-card", "card_mod": {"style": "@media (min-width: 1px) { :host { margin: 0 } }"},
+                "cards": [{"type": "custom:mushroom-entity-card", "entity": "light.b"}]}""",
+        )
+        assertEquals(CardRoute.NATIVE, sic.route)
+        assertTrue(sic.notes.toString(), sic.notes.any { "`@media`" in it && "built-in cards inside it" in it })
     }
 
     @Test

@@ -1032,9 +1032,11 @@ class VitroView(
         }
         // An island that loads card-mod styles its card itself: styling the native frame too would apply it twice
         // (a 0.5 opacity would show as 0.25).
-        if (!(built is WebIslandCardView && IslandScripts.of(ctx.resources).cardMod)) (built as? CardSurface)?.applyCardMod(card)
+        val islandStyles = built is WebIslandCardView && IslandScripts.of(ctx.resources).cardMod
+        if (!islandStyles) (built as? CardSurface)?.applyCardMod(card)
         // `margin` on the card insets it inside its slot, as an outer margin does in the browser.
-        val margin = stackMod.marginInsets ?: return built
+        // Not around an island that applies card-mod: its `margin` is drawn there, and twice would double the inset.
+        val margin = stackMod.marginInsets?.takeUnless { islandStyles } ?: return built
         return FrameLayout(context).apply {
             setPadding(px(margin.left), px(margin.top), px(margin.right), px(margin.bottom))
             addView(built, LayoutParams(MATCH_PARENT, MATCH_PARENT))
