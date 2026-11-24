@@ -103,7 +103,7 @@
   },
   {
    "slot": 0,
-   "text": "61 W",
+   "text": "50 W",
    "x": 56,
    "y": 129.59,
    "w": 28.7,
@@ -127,15 +127,82 @@
    "lc": 1795505391.0030644
   },
   "sensor.kitchen_fridge_power": {
-   "s": "61.0",
+   "s": "50.0",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "W",
     "device_class": "power",
     "friendly_name": "Fridge Power"
    },
-   "lc": 1795511218.9105065
+   "lc": 1795522833.0296257
   }
  },
- "templates": {}
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "cover.kitchen_blind",
+    "pl": "template",
+    "en": "Kitchen Blind"
+   },
+   {
+    "ei": "sensor.kitchen_fridge_power",
+    "pl": "localthings",
+    "tk": "power_watts",
+    "dp": 0,
+    "di": "device-1",
+    "en": "Power"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Fridge"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "cover",
+    "sensor"
+   ],
+   "platforms": [
+    "localthings"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "cover": {
+     "_": {
+      "default": "mdi:window-open",
+      "state": {
+       "closed": "mdi:window-closed",
+       "closing": "mdi:arrow-down-box",
+       "opening": "mdi:arrow-up-box"
+      }
+     }
+    },
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "power": {
+      "default": "mdi:flash"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.cover.entity_component._.state.closed": "Closed",
+    "component.cover.entity_component._.state.closing": "Closing",
+    "component.cover.entity_component._.state.open": "Open",
+    "component.cover.entity_component._.state.opening": "Opening",
+    "component.cover.entity_component._.state.stopped": "Stopped",
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
 }

@@ -14,6 +14,17 @@ const PRIVATE_KEY = /(^|_)(ip|ips|ip_address|ipv4|ipv6|ip_addresses|mac|mac_addr
 
 const IPV4 = /\b(?!192\.0\.2\.|198\.51\.100\.|203\.0\.113\.)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b/g;
 const MAC = /\b[0-9a-f]{2}([:-])[0-9a-f]{2}(\1[0-9a-f]{2}){4}\b/gi;
+/**
+ * A 6- or 12-hex-digit run mixing digits and letters, set off by anything but a letter or digit, as device names
+ * and hostnames carry the end of a MAC ("airdot-4c83f8", "AirDot_a1b2c3d4e5f6": `_` and `-` separate it too). Not
+ * a CSS colour (`#34d399`). ParityHarnessSelfTest's MAC_FRAGMENT is the same pattern.
+ */
+const MAC_FRAGMENT = /(?<![#0-9a-z])(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])(?:[0-9a-f]{6}|[0-9a-f]{12})(?![0-9a-z])/i;
+
+/** Whether [text] holds a MAC fragment (see MAC_FRAGMENT). */
+export function hasMacFragment(text) {
+  return MAC_FRAGMENT.test(String(text));
+}
 const JWT = /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g;
 const TOKEN_PARAM = /([?&](token|access_token|authSig)=)[^&"'\s]+/g;
 
@@ -95,6 +106,7 @@ export function findPrivate(text, creds) {
   const ips = [...s.matchAll(new RegExp(IPV4.source, 'g'))].filter((m) => m.slice(1, 5).every((p) => +p <= 255));
   if (ips.length) found.push('an IPv4 address');
   if (new RegExp(MAC.source, 'i').test(s)) found.push('a MAC address');
+  if (MAC_FRAGMENT.test(s)) found.push('a MAC fragment');
   if (new RegExp(JWT.source).test(s) || new RegExp(TOKEN_PARAM.source).test(s)) found.push('a token');
   if (creds && (s.includes(creds.token) || s.includes(creds.origin) || s.includes(new URL(creds.origin).host))) found.push("Home Assistant's address or token");
   for (const w of denylist()) {
