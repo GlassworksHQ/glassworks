@@ -23,6 +23,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import dev.glassworks.auth.OAuth
 import dev.glassworks.engine.Engine
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
@@ -116,7 +117,15 @@ class VitroTestActivity : Activity() {
         }
         url = prefs.getString(KEY_URL, null)
         applyHudVisibility(prefs.getBoolean(KEY_HUD, true))
-        if (url != before || intent.hasExtra(EXTRA_TOKEN)) load()
+        if (intent.hasExtra(EXTRA_TOKEN)) {
+            // A new token: sign in again (restart drops the client), rather than reuse the one already connected.
+            loads++
+            status = "restarting"
+            page?.restart()
+            if (url != before) load()
+        } else if (url != before) {
+            load()
+        }
     }
 
     override fun onResume() {
@@ -138,7 +147,12 @@ class VitroTestActivity : Activity() {
     private fun saveExtras(i: Intent?) {
         i ?: return
         val edit = getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-        i.getStringExtra(EXTRA_URL)?.takeIf { it.isNotBlank() }?.let { edit.putString(KEY_URL, it) }
+        i.getStringExtra(EXTRA_URL)?.takeIf { it.isNotBlank() }?.let { next ->
+            // The saved token is for the origin it came with: a URL on another origin without its own token drops it.
+            val before = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_URL, null)
+            if (!i.hasExtra(EXTRA_TOKEN) && OAuth.origin(next) != before?.let(OAuth::origin)) edit.remove(KEY_TOKEN)
+            edit.putString(KEY_URL, next)
+        }
         if (i.hasExtra(EXTRA_TOKEN)) edit.putString(KEY_TOKEN, i.getStringExtra(EXTRA_TOKEN).orEmpty())
         if (i.hasExtra(EXTRA_HUD)) edit.putBoolean(KEY_HUD, i.getBooleanExtra(EXTRA_HUD, true))
         if (i.hasExtra(EXTRA_DARK)) edit.putBoolean(KEY_DARK, i.getBooleanExtra(EXTRA_DARK, true))
