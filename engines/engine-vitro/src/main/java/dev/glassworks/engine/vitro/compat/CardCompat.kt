@@ -85,6 +85,18 @@ object CardCompat {
     private fun needsHaFrontend(card: CardConfig): Boolean =
         !card.type.startsWith("custom:") || card.childCards.any(::needsHaFrontend)
 
+    /**
+     * A CSS value as the checker may log it. The reasons go to logcat and the HUD, so a `url(...)` (which can carry a
+     * signed or tokenised address) is shown without its address, and a long value is cut short.
+     */
+    internal fun loggable(value: String): String {
+        val noUrls = URL_FN.replace(value.trim()) { "url(…)" }
+        return if (noUrls.length <= MAX_LOGGED_VALUE) noUrls else noUrls.take(MAX_LOGGED_VALUE) + "…"
+    }
+
+    private val URL_FN = Regex("""url\(\s*(?:"[^"]*"|'[^']*'|[^)]*)\s*\)""", RegexOption.IGNORE_CASE)
+    private const val MAX_LOGGED_VALUE = 80
+
     // -------------------------------------------------------------------------------------------------------------
     // Options
     // -------------------------------------------------------------------------------------------------------------
@@ -384,7 +396,7 @@ object CardCompat {
         val position = if (host) hostPosition else byName["position"]
         val pinned = position == "fixed" || position == "absolute"
         for ((name, rawValue) in decls) {
-            val shown = "`$name: ${rawValue.trim()}`"
+            val shown = "`$name: ${loggable(rawValue)}`"
             val value = rawValue.trim().lowercase(Locale.ROOT)
             // A templated or var() value can't be checked here: the property alone decides.
             val checkable = TPL !in value && "var(" !in value

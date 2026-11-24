@@ -5,6 +5,7 @@
 package dev.glassworks.engine.vitro
 
 import dev.glassworks.engine.vitro.cards.CssSelector
+import dev.glassworks.engine.vitro.compat.CardCompat
 import dev.glassworks.engine.vitro.compat.CardRoute
 import dev.glassworks.engine.vitro.compat.CardVerdict
 import dev.glassworks.engine.vitro.compat.CompatChecker
@@ -292,6 +293,15 @@ class CompatCheckerTest {
     }
 
     // ---- Routing ----
+
+    @Test
+    fun loggedReasonsDropUrlsAndCapLongValues() {
+        assertEquals("url(…) no-repeat", CardCompat.loggable("url('https://example.invalid/a.png?token=abc') no-repeat"))
+        assertEquals("url(…), url(…)", CardCompat.loggable("url(\"x\"), url(y)"))
+        val long = CardCompat.loggable("a".repeat(200))
+        assertEquals(81, long.length)
+        assertTrue(long.endsWith("…"))
+    }
 
     @Test
     fun theVerdictIsDecidedOncePerCard() {
