@@ -1,53 +1,25 @@
 {
  "_comment": "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: 2.0% pixels, 1.0 px bounds, 0.5 px font). Regenerate with -PvitroParityUpdateBaseline=true; keep or write each \"reason\". An update records regressions too: read the diff before committing it, and keep the entries of cases with an open regression. #794 empties this file.",
- "mirror/button": {
-  "pixel": 0.0802,
-  "bounds": 27.3,
-  "font": 2,
-  "missingText": 1,
-  "reason": "not triaged yet (#794)"
- },
- "mirror/clock": {
-  "pixel": 0.0981,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "digits are Inter in Vitro and Roboto in HA; same time, size and box"
- },
  "mirror/entities": {
-  "pixel": 0.0698,
-  "bounds": 28.5,
-  "font": 2,
+  "pixel": 0.0144,
+  "bounds": 1.1,
+  "font": 0,
   "missingText": 2,
-  "reason": "Vitro shows raw sensor precision (1.1111 °C) where HA uses the entity registry display_precision (1.1 °C); title row shorter, so rows sit higher"
+  "reason": "display precision only: HA formats 1.1111 °C / 61.0 W with the entity registry's display_precision (1.1 °C, 61 W), which the harness doesn't capture, so Vitro shows the raw state. Layout and card height match"
  },
  "mirror/glance": {
-  "pixel": 0.0652,
-  "bounds": 40.9,
-  "font": 2,
+  "pixel": 0.0181,
+  "bounds": 0.2,
+  "font": 0,
   "missingText": 2,
-  "reason": "same raw-precision gap as entities (display_precision); rows are tighter than HA, so the card is ~41 px shorter"
- },
- "mirror/grid": {
-  "pixel": 0.1034,
-  "bounds": 13.1,
-  "font": 2,
-  "missingText": 0,
-  "reason": "not triaged yet (#794)"
+  "reason": "display precision only: 20.6849 °C / 48.35% where HA uses the registry's display_precision (20.7 °C, 48%), not captured by the harness. Layout and card height match"
  },
  "mirror/heading": {
-  "pixel": 0.0519,
+  "pixel": 0.0396,
   "bounds": 0.3,
-  "font": 1,
-  "missingText": 1,
-  "reason": "not triaged yet (#794)"
- },
- "mirror/markdown-basic": {
-  "pixel": 0.0371,
-  "bounds": 1.6,
   "font": 0,
-  "missingText": 0,
-  "reason": "not triaged yet (#794)"
+  "missingText": 1,
+  "reason": "display precision only: the temperature badge shows the raw 20.6849 °C (HA: display_precision, 20.7 °C), which widens it and shifts the next badge"
  },
  "mirror/markdown-cardmod": {
   "pixel": 0.0184,
@@ -57,130 +29,67 @@
   "reason": "not triaged yet (#794)"
  },
  "mirror/mushroom-chips": {
-  "pixel": 0.0572,
+  "pixel": 0.0461,
+  "bounds": 0.7,
+  "font": 0,
+  "missingText": 1,
+  "reason": "display precision only: the first chip shows the raw 20.6849 °C (HA: 20.7 °C), which widens it and shifts the other chips ~70 px; each chip's content matches"
+ },
+ "mirror/thermostat": {
+  "pixel": 0.0015,
   "bounds": 0.7,
   "font": 0,
   "missingText": 2,
-  "reason": "not triaged yet (#794)"
- },
- "mirror/mushroom-template": {
-  "pixel": 0.0209,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "not triaged yet (#794)"
- },
- "mirror/picture-entity": {
-  "pixel": 0.574,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "layout, size, footer and state now match HA; Vitro doesn't apply HA's grey filter to the image of an entity that is off, so the image stays in colour"
- },
- "mirror/stack-in-card": {
-  "pixel": 0.013,
-  "bounds": 2.3,
-  "font": 0,
-  "missingText": 0,
-  "reason": "not triaged yet (#794)"
- },
- "mirror/thermostat": {
-  "pixel": 0.0255,
-  "bounds": 38,
-  "font": 0,
-  "missingText": 2,
-  "reason": "off: Vitro shows \"Off\" small with a dash and adds +/- and mode buttons; HA shows a large \"Off\" and no controls, so Vitro is ~38 px taller"
- },
- "mirror/tile-cover": {
-  "pixel": 0.0265,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "not triaged yet (#794)"
+  "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
  },
  "mirror/tile-light": {
-  "pixel": 0.0422,
+  "pixel": 0.0345,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "not triaged yet (#794)"
  },
  "mirror/tile-light-off-light-theme": {
-  "pixel": 0.0306,
+  "pixel": 0.0292,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "not triaged yet (#794)"
- },
- "mirror/tile-select": {
-  "pixel": 0.0239,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "pixels just over 2% (the select pill's spacing); the value is at 14 px and verbatim like HA's. HA's visually hidden \"Option\" label is no longer counted: the capture skips visually hidden text"
  },
  "mirror/tile-sensor": {
-  "pixel": 0.0207,
+  "pixel": 0.0096,
   "bounds": 0,
   "font": 0,
   "missingText": 1,
-  "reason": "not triaged yet (#794)"
+  "reason": "display precision only: 523.0 ppm where HA shows the registry's display_precision (523 ppm), not captured by the harness"
  },
  "mirror/vertical-stack": {
-  "pixel": 0.0153,
-  "bounds": 2.4,
+  "pixel": 0.008,
+  "bounds": 0.3,
   "font": 0,
   "missingText": 1,
-  "reason": "not triaged yet (#794)"
- },
- "s1/button": {
-  "pixel": 0.0805,
-  "bounds": 27.3,
-  "font": 2,
-  "missingText": 1,
-  "reason": "not triaged yet (#794)"
- },
- "s1/clock": {
-  "pixel": 0.0981,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "digits are Inter in Vitro and Roboto in HA; same time, size and box"
+  "reason": "display precision only: the power tile shows the raw 61.0 W (HA: the registry's display_precision, 61 W), not captured by the harness. Heights match"
  },
  "s1/entities": {
-  "pixel": 0.0698,
-  "bounds": 28.5,
-  "font": 2,
+  "pixel": 0.0144,
+  "bounds": 1.1,
+  "font": 0,
   "missingText": 2,
-  "reason": "Vitro shows raw sensor precision (1.1111 °C) where HA uses the entity registry display_precision (1.1 °C); title row shorter, so rows sit higher"
+  "reason": "display precision only: HA formats 1.1111 °C / 61.0 W with the entity registry's display_precision (1.1 °C, 61 W), which the harness doesn't capture, so Vitro shows the raw state. Layout and card height match"
  },
  "s1/glance": {
-  "pixel": 0.0655,
-  "bounds": 40.9,
-  "font": 2,
+  "pixel": 0.018,
+  "bounds": 0.2,
+  "font": 0,
   "missingText": 2,
-  "reason": "same raw-precision gap as entities (display_precision); rows are tighter than HA, so the card is ~41 px shorter"
- },
- "s1/grid": {
-  "pixel": 0.1003,
-  "bounds": 4.2,
-  "font": 2,
-  "missingText": 0,
-  "reason": "not triaged yet (#794)"
+  "reason": "display precision only: 20.6849 °C / 48.35% where HA uses the registry's display_precision (20.7 °C, 48%), not captured by the harness. Layout and card height match"
  },
  "s1/heading": {
-  "pixel": 0.0517,
+  "pixel": 0.0411,
   "bounds": 0.3,
-  "font": 1,
-  "missingText": 1,
-  "reason": "not triaged yet (#794)"
- },
- "s1/markdown-basic": {
-  "pixel": 0.0371,
-  "bounds": 1.6,
   "font": 0,
-  "missingText": 0,
-  "reason": "not triaged yet (#794)"
+  "missingText": 1,
+  "reason": "display precision only: the temperature badge shows the raw 20.6849 °C (HA: display_precision, 20.7 °C), which widens it and shifts the next badge"
  },
  "s1/markdown-cardmod": {
   "pixel": 0.0133,
@@ -190,130 +99,67 @@
   "reason": "not triaged yet (#794)"
  },
  "s1/mushroom-chips": {
-  "pixel": 0.0572,
+  "pixel": 0.0461,
+  "bounds": 0.7,
+  "font": 0,
+  "missingText": 1,
+  "reason": "display precision only: the first chip shows the raw 20.6849 °C (HA: 20.7 °C), which widens it and shifts the other chips ~70 px; each chip's content matches"
+ },
+ "s1/thermostat": {
+  "pixel": 0.0015,
   "bounds": 0.7,
   "font": 0,
   "missingText": 2,
-  "reason": "not triaged yet (#794)"
- },
- "s1/mushroom-template": {
-  "pixel": 0.0204,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "not triaged yet (#794)"
- },
- "s1/picture-entity": {
-  "pixel": 0.574,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "layout, size, footer and state now match HA; Vitro doesn't apply HA's grey filter to the image of an entity that is off, so the image stays in colour"
- },
- "s1/stack-in-card": {
-  "pixel": 0.0066,
-  "bounds": 2.3,
-  "font": 0,
-  "missingText": 0,
-  "reason": "not triaged yet (#794)"
- },
- "s1/thermostat": {
-  "pixel": 0.0255,
-  "bounds": 38,
-  "font": 0,
-  "missingText": 2,
-  "reason": "off: Vitro shows \"Off\" small with a dash and adds +/- and mode buttons; HA shows a large \"Off\" and no controls, so Vitro is ~38 px taller"
- },
- "s1/tile-cover": {
-  "pixel": 0.0265,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "not triaged yet (#794)"
+  "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
  },
  "s1/tile-light": {
-  "pixel": 0.0422,
+  "pixel": 0.0345,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "not triaged yet (#794)"
  },
  "s1/tile-light-off-light-theme": {
-  "pixel": 0.0306,
+  "pixel": 0.0292,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "not triaged yet (#794)"
- },
- "s1/tile-select": {
-  "pixel": 0.0239,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "pixels just over 2% (the select pill's spacing); the value is at 14 px and verbatim like HA's. HA's visually hidden \"Option\" label is no longer counted: the capture skips visually hidden text"
  },
  "s1/tile-sensor": {
-  "pixel": 0.0201,
+  "pixel": 0.0096,
   "bounds": 0,
   "font": 0,
   "missingText": 1,
-  "reason": "not triaged yet (#794)"
+  "reason": "display precision only: 523.0 ppm where HA shows the registry's display_precision (523 ppm), not captured by the harness"
  },
  "s1/vertical-stack": {
-  "pixel": 0.0153,
-  "bounds": 2.4,
+  "pixel": 0.008,
+  "bounds": 0.3,
   "font": 0,
   "missingText": 1,
-  "reason": "not triaged yet (#794)"
- },
- "tablet/button": {
-  "pixel": 0.0786,
-  "bounds": 27,
-  "font": 2,
-  "missingText": 1,
-  "reason": "not triaged yet (#794)"
- },
- "tablet/clock": {
-  "pixel": 0.0993,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "digits are Inter in Vitro and Roboto in HA; same time, size and box"
+  "reason": "display precision only: the power tile shows the raw 61.0 W (HA: the registry's display_precision, 61 W), not captured by the harness. Heights match"
  },
  "tablet/entities": {
-  "pixel": 0.0629,
-  "bounds": 27.8,
-  "font": 2,
+  "pixel": 0.0104,
+  "bounds": 0.3,
+  "font": 0,
   "missingText": 2,
-  "reason": "Vitro shows raw sensor precision (1.1111 °C) where HA uses the entity registry display_precision (1.1 °C); title row shorter, so rows sit higher"
+  "reason": "display precision only: HA formats 1.1111 °C / 61.0 W with the entity registry's display_precision (1.1 °C, 61 W), which the harness doesn't capture, so Vitro shows the raw state. Layout and card height match"
  },
  "tablet/glance": {
-  "pixel": 0.0588,
-  "bounds": 41.6,
-  "font": 2,
+  "pixel": 0.0195,
+  "bounds": 0.1,
+  "font": 0,
   "missingText": 2,
-  "reason": "same raw-precision gap as entities (display_precision); rows are tighter than HA, so the card is ~41 px shorter"
- },
- "tablet/grid": {
-  "pixel": 0.0998,
-  "bounds": 14.7,
-  "font": 2,
-  "missingText": 0,
-  "reason": "not triaged yet (#794)"
+  "reason": "display precision only: 20.6849 °C / 48.35% where HA uses the registry's display_precision (20.7 °C, 48%), not captured by the harness. Layout and card height match"
  },
  "tablet/heading": {
-  "pixel": 0.0539,
+  "pixel": 0.0416,
   "bounds": 0.1,
-  "font": 1,
-  "missingText": 1,
-  "reason": "not triaged yet (#794)"
- },
- "tablet/markdown-basic": {
-  "pixel": 0.0284,
-  "bounds": 1.8,
   "font": 0,
-  "missingText": 0,
-  "reason": "not triaged yet (#794)"
+  "missingText": 1,
+  "reason": "display precision only: the temperature badge shows the raw 20.6849 °C (HA: display_precision, 20.7 °C), which widens it and shifts the next badge"
  },
  "tablet/markdown-cardmod": {
   "pixel": 0.0089,
@@ -323,66 +169,45 @@
   "reason": "not triaged yet (#794)"
  },
  "tablet/mushroom-chips": {
-  "pixel": 0.058,
+  "pixel": 0.0507,
   "bounds": 0,
   "font": 0,
-  "missingText": 2,
-  "reason": "not triaged yet (#794)"
- },
- "tablet/picture-entity": {
-  "pixel": 0.5738,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "layout, size, footer and state now match HA; Vitro doesn't apply HA's grey filter to the image of an entity that is off, so the image stays in colour"
+  "missingText": 1,
+  "reason": "display precision only: the first chip shows the raw 20.6849 °C (HA: 20.7 °C), which widens it and shifts the other chips ~70 px; each chip's content matches"
  },
  "tablet/thermostat": {
-  "pixel": 0.0256,
-  "bounds": 38,
-  "font": 0,
-  "missingText": 2,
-  "reason": "off: Vitro shows \"Off\" small with a dash and adds +/- and mode buttons; HA shows a large \"Off\" and no controls, so Vitro is ~38 px taller"
- },
- "tablet/tile-cover": {
-  "pixel": 0.0218,
+  "pixel": 0.0019,
   "bounds": 0,
   "font": 0,
-  "missingText": 0,
-  "reason": "not triaged yet (#794)"
+  "missingText": 2,
+  "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
  },
  "tablet/tile-light": {
-  "pixel": 0.0373,
+  "pixel": 0.0268,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "not triaged yet (#794)"
  },
  "tablet/tile-light-off-light-theme": {
-  "pixel": 0.0281,
+  "pixel": 0.026,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "not triaged yet (#794)"
- },
- "tablet/tile-select": {
-  "pixel": 0.0204,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "pixels just over 2% (the select pill's spacing); the value is at 14 px and verbatim like HA's. HA's visually hidden \"Option\" label is no longer counted: the capture skips visually hidden text"
  },
  "tablet/tile-sensor": {
-  "pixel": 0.0208,
+  "pixel": 0.0095,
   "bounds": 0,
   "font": 0,
   "missingText": 1,
-  "reason": "not triaged yet (#794)"
+  "reason": "display precision only: 523.0 ppm where HA shows the registry's display_precision (523 ppm), not captured by the harness"
  },
  "tablet/vertical-stack": {
-  "pixel": 0.0168,
-  "bounds": 1.9,
+  "pixel": 0.0067,
+  "bounds": 0.1,
   "font": 0,
   "missingText": 1,
-  "reason": "not triaged yet (#794)"
+  "reason": "display precision only: the power tile shows the raw 61.0 W (HA: the registry's display_precision, 61 W), not captured by the harness. Heights match"
  }
 }
