@@ -8,6 +8,9 @@
 //     ~/.t3/glassworks-m1/vitro-parity/ha.json). It WRITES ONE DASHBOARD ONLY: `vitro-harness` (admin-only,
 //     not in the sidebar), created if missing and overwritten on every run. It never changes an entity
 //     state or any other dashboard; everything else is read-only (states, themes, config, render_template).
+//   - A case's own stylesheets and fonts (`resources`, #811): served to HA's page from the corpus's fixtures/ folder
+//     at /local/vitro-harness-fixtures/ (a route in the browser; the request never reaches HA) and put in the page
+//     as HA's loadCSS does. Nothing is added to HA's Lovelace resources.
 //   - The corpus folder (default engines/engine-vitro/src/test/parity, or --root): writes refs/<frame>/<case>.png
 //     and .json, refs/shared.json, and assets/ (HA's own /static images a case shows). For --root pointing
 //     at a local corpus, also dashboards/<url_path>.json (the real dashboards' configs).
@@ -33,6 +36,7 @@ import { applyEntityEvent, unmetExpectations } from './lib/states.mjs';
 import { imageOutcomes, noteSaved } from './lib/images.mjs';
 import { buildDisplay } from './lib/display.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
+import { FIXTURE_PREFIX, fixtureFile, fixtureResources } from './lib/fixtures.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEFAULT_CORPUS = join(ROOT, 'engines', 'engine-vitro', 'src', 'test', 'parity');
@@ -447,6 +451,13 @@ async function newPage(browser, frame, dark, now, cardModUrl, tz) {
       }
     }, 100);
   }, [creds.origin, creds.token, dark, now, cardModUrl, HUI_CSS]);
+  // A case's fixture stylesheets and fonts: answered here, never by HA.
+  const fixturesDir = join(corpusRoot, 'fixtures');
+  await ctx.route((url) => url.origin === creds.origin && url.pathname.startsWith(FIXTURE_PREFIX), async (route) => {
+    const hit = fixtureFile(fixturesDir, new URL(route.request().url()).pathname);
+    if (!hit || !existsSync(hit.file)) return route.fulfill({ status: 404, body: '' });
+    return route.fulfill({ status: 200, contentType: hit.type, body: readFileSync(hit.file) });
+  });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => log(`  pageerror: ${scrubText(e.message, creds).slice(0, 200)}`));
   const states = recordStates(page);
@@ -577,11 +588,28 @@ async function capture() {
         images.failed.clear();
         try {
           const path = c.card ? `/${HARNESS}/${c.id}` : `/${c.dashboard}/${c.view}`;
-          if (!loaded || c.dashboard) {
+          const resources = fixtureResources(c);
+          // A case with its own stylesheets gets a page of its own, and the next case a fresh one: what a sheet
+          // declares (a font) stays in the page it was added to.
+          if (!loaded || c.dashboard || resources.length) {
             await page.goto(creds.origin + path, { waitUntil: 'load', timeout: 45000 });
-            loaded = !c.dashboard;
+            loaded = !c.dashboard && !resources.length;
           } else {
             await page.evaluate((p) => { history.pushState(null, '', p); window.dispatchEvent(new CustomEvent('location-changed', { detail: { replace: false } })); scrollTo(0, 0); }, path);
+          }
+          if (resources.length) {
+            // As HA's loadLovelaceResources does for `type: css`: a <link rel=stylesheet> in <head>, per resource.
+            await page.evaluate(async (urls) => {
+              await Promise.all(urls.map((href) => new Promise((ok, fail) => {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.type = 'text/css';
+                link.onload = ok;
+                link.onerror = () => fail(new Error(`fixture stylesheet ${href} didn't load`));
+                link.href = href;
+                document.head.appendChild(link);
+              })));
+            }, resources.map((r) => new URL(r.url, creds.origin).toString()));
           }
           const config = c.card ?? JSON.parse(readFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), 'utf8'));
           const outDir = join(refs, frame.id);

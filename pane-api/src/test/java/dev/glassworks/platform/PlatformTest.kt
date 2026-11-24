@@ -40,6 +40,7 @@ class PlatformTest {
         Triple("hasForegroundServiceTypes", 29) { it.hasForegroundServiceTypes },
         Triple("hasSettingsPanel", 29) { it.hasSettingsPanel },
         Triple("hasFontBuilder", 29) { it.hasFontBuilder },
+        Triple("hasTypefaceBuilder", 26) { it.hasTypefaceBuilder },
         Triple("hasWindowInsetsController", 30) { it.hasWindowInsetsController },
         Triple("hasSystemCameraIndicator", 31) { it.hasSystemCameraIndicator },
         Triple("canInstallWithoutUserAction", 31) { it.canInstallWithoutUserAction },

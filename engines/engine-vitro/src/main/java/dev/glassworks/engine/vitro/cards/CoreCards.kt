@@ -2862,7 +2862,7 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         val label = TextView(ctx.context).apply {
             setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, st.fontSize * ctx.dp * ctx.theme.fontScale)
             setTextColor(st.textColor)
-            typeface = MdFonts.typeface(ctx.context, st.fontWeight, false, false, st.fontSize)
+            typeface = MdFonts.typeface(ctx.context, st.fontWeight, false, null, st.fontSize)
             includeFontPadding = false
             maxLines = 1
         }

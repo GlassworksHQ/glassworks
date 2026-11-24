@@ -56,6 +56,11 @@ data class CardModStyle(
     val fontSizeSp: Float? = null,
     /** `font-weight:` as a CSS weight (100..900); keywords map to 300/400/500/600/700. */
     val fontWeight: Int? = null,
+    /**
+     * `font-family:` on the card, a CSS list with its `var()`s resolved, or null. Every text inside the card inherits
+     * it, as in the browser; `inherit` and the other keywords leave the theme's.
+     */
+    val fontFamily: String? = null,
     /** `letter-spacing:` in em (`2px` is divided by the font size, 16 when none is set). */
     val letterSpacingEm: Float? = null,
     /** Duration of a `transition:` on `opacity` (or `all`), in ms, clamped to 0..3000. */
@@ -265,6 +270,8 @@ object ThemeResolver {
     private val PX_NUMBER = Regex("""([\d.]+)px""")
     private val WHITESPACE = Regex("""\s+""")
     private val CUSTOM_PROPERTY = Regex("""(?:^|[;\n{])\s*--([\w-]+)\s*:\s*([^;\n]+)""")
+    /** `font-family` values that keep the inherited list. */
+    private val FONT_KEYWORDS = setOf("inherit", "initial", "unset", "revert", "revert-layer")
     private val LETTER_SPACING = Regex("""(-?[\d.]+)\s*(em|px|rem)?""", RegexOption.IGNORE_CASE)
     private val TRANSLATE = Regex("""translate\(([^,)]+)(?:,([^)]+))?\)""")
     private val STOP_PERCENT = Regex("""\s+[\d.]+%$""")
@@ -769,6 +776,7 @@ object ThemeResolver {
             ?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }
         val fontSize = prop("font-size")?.let { parseDimensionDp(it, -1f) }?.takeIf { it > 0f }
         val fontWeight = prop("font-weight")?.let(::parseFontWeight)
+        val fontFamily = prop("font-family")?.takeUnless { it.lowercase(Locale.ROOT) in FONT_KEYWORDS }
         val letterSpacing = prop("letter-spacing")?.let { ls ->
             val m = LETTER_SPACING.find(ls) ?: return@let null
             val v = m.groupValues[1].toFloatOrNull() ?: return@let null
@@ -801,6 +809,7 @@ object ThemeResolver {
             gapDp = gap,
             fontSizeSp = fontSize,
             fontWeight = fontWeight,
+            fontFamily = fontFamily,
             letterSpacingEm = letterSpacing,
             transitionOpacityMs = transitionMs,
             positionFixed = position == "fixed" || position == "absolute",

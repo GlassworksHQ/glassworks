@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.parity
 
+import dev.glassworks.engine.vitro.model.LovelaceResource
 import dev.glassworks.testing.RepoFiles
 import org.json.JSONArray
 import org.json.JSONObject
@@ -111,6 +112,12 @@ data class ParityCase(
     val threshold: Threshold,
     /** Regions (CSS px, relative to the card) left out of the pixel diff, each with a reason. */
     val masks: List<Pair<CssRect, String>>,
+    /**
+     * Lovelace resources the case's page loads (`type: css` only), each a file of the corpus's `fixtures/` folder at
+     * [FIXTURE_PREFIX]: HA's page gets them from the capture (it never writes a resource to HA), Vitro from the
+     * fixture server.
+     */
+    val resources: List<LovelaceResource> = emptyList(),
 ) {
     fun runsOn(frame: ParityFrame) = frames == null || frame.id in frames
 
@@ -152,8 +159,20 @@ data class ParityCase(
                 span = o.optInt("span", 1),
                 threshold = Threshold.parse(o.optJSONObject("threshold")),
                 masks = masks,
+                resources = o.optJSONArray("resources")?.let { a ->
+                    (0 until a.length()).map { a.getJSONObject(it) }.map { r ->
+                        val url = r.getString("url")
+                        require(r.optString("type") == "css" && url.startsWith(FIXTURE_PREFIX)) {
+                            "$id: a resource is a `type: css` file under $FIXTURE_PREFIX (corpus fixtures/), not $url"
+                        }
+                        LovelaceResource(url = url, type = "css")
+                    }
+                }.orEmpty(),
             )
         }
+
+        /** Where a case's fixture resources live on HA's origin: a path HA doesn't serve, answered by the capture. */
+        const val FIXTURE_PREFIX = "/local/vitro-harness-fixtures/"
     }
 }
 

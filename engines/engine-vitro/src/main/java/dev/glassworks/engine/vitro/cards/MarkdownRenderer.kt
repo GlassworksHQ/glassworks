@@ -1108,7 +1108,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         }
     }
 
-    private fun typefaceFor(s: MdStyle): Typeface = MdFonts.typeface(ctx.context, s.fontWeight, s.italic, s.mono, s.fontSize)
+    private fun typefaceFor(s: MdStyle): Typeface = MdFonts.typeface(ctx.context, s.fontWeight, s.italic, s.fontFamily, s.fontSize)
 
     companion object {
         /**
@@ -1116,7 +1116,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
          * the half-leading above and below the glyphs), for cards that lay out HA's DOM by hand.
          */
         fun cssLine(context: Context, dp: Float, text: CharSequence, s: MdStyle): TextView = CssLineText(context).apply {
-            val tf = MdFonts.typeface(context, s.fontWeight, s.italic, s.mono, s.fontSize)
+            val tf = MdFonts.typeface(context, s.fontWeight, s.italic, s.fontFamily, s.fontSize)
             setTextSize(TypedValue.COMPLEX_UNIT_PX, s.fontSize * dp)
             typeface = tf
             setTextColor(s.color)
@@ -1163,25 +1163,13 @@ class CssLineText(context: Context) : TextView(context) {
     }
 }
 
-/** Typefaces for CSS weights in the theme's face ([VitroFonts]): Inter where the platform can vary it, else Roboto's light / regular / medium / bold. */
+/**
+ * Typefaces for Markdown's styles: [fontFamily] (a CSS list, null for the card's own font) at a CSS weight, through
+ * [VitroFonts], so a web font a stylesheet declares draws here too. [sizePx] picks Inter's optical size.
+ */
 object MdFonts {
-    private val cache = HashMap<Long, Typeface>()
-
-    fun typeface(context: Context, weight: Int, italic: Boolean, mono: Boolean, sizePx: Float): Typeface {
-        val w = weight.coerceIn(100, 900)
-        val inter = Platform.hasFontBuilder && VitroFonts.face == VitroFonts.Face.INTER
-        val key = (w.toLong() shl 8) or (if (italic) 1L else 0L) or (if (mono) 2L else 0L) or (if (inter) 4L else 0L) or
-            ((if (inter) sizePx.roundToInt().coerceIn(14, 32) else 0).toLong() shl 20)
-        cache[key]?.let { return it }
-        val base = when {
-            mono -> Typeface.create(Typeface.MONOSPACE, if (w >= 600) Typeface.BOLD else Typeface.NORMAL)
-            inter -> VitroFonts.typeface(context, w, sizePx)
-            else -> VitroFonts.system(w)
-        }
-        val tf = if (italic) Typeface.create(base, if (w >= 600 && !inter) Typeface.BOLD_ITALIC else Typeface.ITALIC) else base
-        cache[key] = tf
-        return tf
-    }
+    fun typeface(context: Context, weight: Int, italic: Boolean, fontFamily: String?, sizePx: Float): Typeface =
+        VitroFonts.typeface(context, weight.coerceIn(100, 900), sizePx, italic, fontFamily)
 }
 
 /**

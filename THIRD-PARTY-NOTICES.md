@@ -258,6 +258,17 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
   synthesised with Piper's `en_US-kristin-medium` voice (https://huggingface.co/rhasspy/piper-voices,
   MIT; trained from scratch on public-domain LibriVox recordings) by `tools/voice/mww_reference.py`.
   No recording of a person.
+- `engines/engine-vitro/src/test/parity/fixtures/fonts/` (Vitro's web-font tests and parity cases, not in the APK):
+  three fonts from google/fonts at commit `83c62e30d87daa70216dab6b984d00d20d96d585`, subset to Latin with
+  fontTools `pyftsubset` and saved as TTF, WOFF and WOFF2. None has a Reserved Font Name. Licence: OFL-1.1
+  (`LICENSES/OFL-1.1.txt`; each font's own `OFL.txt` sits next to it).
+  - **Bitter** (`ofl/bitter/Bitter[wght].ttf`, SHA-256 `ef2b9a711fb02f1e5823b34da1b7450e0fc76793b7d733a8b41006e24916d4a7`):
+    Copyright 2011 The Bitter Project Authors.
+  - **Pacifico** (`ofl/pacifico/Pacifico-Regular.ttf`, SHA-256 `5b6c0d5334a7bf77dea52b975c5a0c408878c0f7115ed5b6fb151f634b7bf701`):
+    Copyright 2018 The Pacifico Project Authors.
+  - **Comic Neue** (`ofl/comicneue/ComicNeue-Regular.ttf` and `-Bold.ttf`, SHA-256
+    `a0ee5a37c8b27c4db0700137d928598b1e23b0089e1546a8961909176b779360` and
+    `3e7e5fccfd7e0788f317b43312151c1bd5cf058c9697a8d83eac3939050bd61e`): Copyright 2014 The Comic Neue Project Authors.
 
 ---
 
