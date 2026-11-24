@@ -1119,33 +1119,25 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
             clipToOutline = true
         }
-        body.addView(image, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(8f) })
+        val frame = FrameLayout(ctx.context).apply {
+            addView(image, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            addView(liveBadge(), LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
+                topMargin = ctx.px(10f); marginEnd = ctx.px(10f)
+            })
+        }
+        body.addView(frame, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(8f) })
         val status = text(14f, theme.secondaryTextColor, Inter.MEDIUM)
         body.addView(status, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(12f) })
 
-        var picture: String? = null
-        var polling = true
-        var inFlight = false
-        val poll = object : Runnable {
-            override fun run() {
-                if (!polling) return
-                val pic = picture
-                if (pic != null && !inFlight) {
-                    inFlight = true
-                    val sep = if ('?' in pic) '&' else '?'
-                    ctx.loadImage("$pic${sep}t=${System.currentTimeMillis()}") { bmp ->
-                        inFlight = false
-                        if (polling && bmp != null) image.setImageBitmap(bmp)
-                    }
-                }
-                ctx.main.postDelayed(this, CAMERA_POLL_MS)
-            }
-        }
+        var picture: String? = ctx.store[id]?.entityPicture
+        // MJPEG first, snapshots every 1.5 s if the stream isn't there; posted so the first state bind lands first.
+        val feed = LiveCameraFeed(ctx, id, { picture }) { bmp -> image.setImageBitmap(bmp) }
+        var open = true
         releasers += {
-            polling = false
-            ctx.main.removeCallbacks(poll)
+            open = false
+            feed.stop()
         }
-        ctx.main.post(poll)
+        ctx.main.post { if (open) feed.start() }
         return { s ->
             picture = s?.entityPicture
             val label = when (s?.state) {
@@ -1157,6 +1149,27 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
             status.text = listOf(label, relativeTime(s)).filter { it.isNotEmpty() }.joinToString(" · ")
         }
+    }
+
+    /** The green `LIVE` pill over the camera picture. */
+    private fun liveBadge(): LinearLayout = LinearLayout(ctx.context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(ctx.px(8f), ctx.px(4f), ctx.px(10f), ctx.px(4f))
+        background = GradientDrawable().apply {
+            cornerRadius = 999f
+            setColor(0xE62E7D32.toInt())
+        }
+        addView(View(ctx.context).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.WHITE)
+            }
+        }, LinearLayout.LayoutParams(ctx.px(6f), ctx.px(6f)).apply { marginEnd = ctx.px(6f) })
+        addView(text(11f, Color.WHITE, Inter.MEDIUM).apply {
+            this.text = "LIVE"
+            letterSpacing = 0.08f
+        })
     }
 
     /** HA's sensor More-Info: a summary row, then the 24 h history chart. Also the History tab of every control. */
@@ -1382,7 +1395,6 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         /** The bottom sheet's start offset before its real height is known, and its least exit travel. */
         const val SHEET_FALLBACK_DP = 220f
         const val EXIT_MIN_DP = 180f
-        const val CAMERA_POLL_MS = 1_500L
         const val TIME_REFRESH_MS = 30_000L
         const val HISTORY_TIMEOUT_MS = 8_000L
 

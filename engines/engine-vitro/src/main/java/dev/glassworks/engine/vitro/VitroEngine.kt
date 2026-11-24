@@ -30,6 +30,7 @@ import dev.glassworks.engine.vitro.model.DashboardConfig
 import dev.glassworks.engine.vitro.model.DashboardSummary
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.model.LovelaceResource
+import dev.glassworks.engine.vitro.net.MjpegStreamPlayer
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.ui.VitroCardContext
@@ -176,6 +177,17 @@ class VitroEngine(
                     fetchForecast = { id, kind, done -> client?.fetchForecast(id, kind, done) },
                     subscribeTemplate = { tpl, onRendered ->
                         client?.subscribeTemplate(tpl, onRendered) ?: {}
+                    },
+                    cameraStream = { entityId, picture, onFrame, onFallback ->
+                        val streamUrl = MjpegStreamPlayer.streamUrl(haBase, entityId, picture)
+                        if (streamUrl == null) {
+                            onFallback()
+                            ({})
+                        } else {
+                            val player = MjpegStreamPlayer(streamUrl, cachedToken, onFrame = onFrame, onError = onFallback)
+                            player.start()
+                            ({ player.stop() })
+                        }
                     },
                     islandServer = islandServer,
                     openIslandPage = { _ ->

@@ -58,6 +58,11 @@ class VitroCardContext(
     val fetchForecast: (entityId: String, forecastType: String, done: (List<ForecastDay>) -> Unit) -> Unit = { _, _, _ -> },
     /** HA's `auth/current_user` result (`id`, `name`, `is_admin`, `is_owner`), empty until it arrives. */
     val haUser: () -> JSONObject = { JSONObject() },
+    /**
+     * Opens HA's live MJPEG feed for a camera and returns its stop handle. Null (tests, no engine) means there's no
+     * stream, so [startCameraStream] reports a fallback straight away and cards poll snapshots instead.
+     */
+    val cameraStream: ((entityId: String, entityPicture: String?, onFrame: (Bitmap) -> Unit, onFallback: () -> Unit) -> () -> Unit)? = null,
 ) {
     val dp: Float = context.resources.displayMetrics.density
     val main: Handler = Handler(Looper.getMainLooper())
@@ -103,6 +108,25 @@ class VitroCardContext(
             }
             "url" -> action.urlPath?.let(navigate)
         }
+    }
+
+    /**
+     * Streams [entityId]'s live MJPEG feed: decoded frames reach [onFrame] on the main thread, and [onFallback] runs
+     * on the main thread if the stream can't start or drops. Returns the stop handle; call it on detach or close.
+     * Cards never see the stream address or the token.
+     */
+    fun startCameraStream(
+        entityId: String,
+        entityPicture: String?,
+        onFrame: (Bitmap) -> Unit,
+        onFallback: () -> Unit,
+    ): () -> Unit {
+        val impl = cameraStream
+        if (impl == null) {
+            onFallback()
+            return {}
+        }
+        return impl(entityId, entityPicture, onFrame, onFallback)
     }
 
     /** HA's `toggle` for one entity: the domain's own service, with an optimistic flip for plain on/off states. */

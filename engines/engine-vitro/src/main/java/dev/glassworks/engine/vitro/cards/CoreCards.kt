@@ -33,6 +33,7 @@ import org.json.JSONObject
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
+import dev.glassworks.engine.vitro.model.EntityRowConfig
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
@@ -1518,47 +1519,43 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
 
 /**
  * Native HA `picture`, `picture-entity`, and `picture-glance` card.
- * With `camera_view: live` (or a `camera.*` entity) it polls the entity picture as a snapshot every
- * [LIVE_INTERVAL_MS] while attached and shows a green "LIVE" badge.
+ * With `camera_view: live` (or a `camera.*` entity) it plays HA's MJPEG stream while attached, falling back to a
+ * snapshot every [LiveCameraFeed.POLL_MS] when the stream isn't available, and shows a green "LIVE" badge.
+ * A `picture-glance` with `entities` gets HA's row of tappable entity icons on the right of its caption bar.
  */
 class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
     private val img = ImageView(ctx.context).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
-    private val caption = textView(ctx, 13f, Color.WHITE, Inter.MEDIUM)
+    private val caption = textView(ctx, 13f, Color.WHITE, Inter.MEDIUM).apply {
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+    }
     private val liveEntityId: String? = (config.entity ?: config.raw.optString("camera_image", "").ifEmpty { null })
         ?.takeIf { config.raw.optString("camera_view") == "live" || it.startsWith("camera.") }
     private val isLive = liveEntityId != null
     private var latestPicture: String? = null
-    private var polling = false
-    private var inFlight = false
+    private val feed: LiveCameraFeed? = liveEntityId?.let { id ->
+        LiveCameraFeed(ctx, id, { latestPicture }) { bmp -> img.setImageBitmap(bmp) }
+    }
 
     /** Width / height, from `aspect_ratio` (`16:9`, `4:3`, `50%` = height as % of width, or a decimal). */
     private val aspect: Float = parseAspectRatio(config.raw.opt("aspect_ratio")?.toString())
-
-    private val pollTick = object : Runnable {
-        override fun run() {
-            if (!polling) return
-            val pic = latestPicture
-            if (pic != null && !inFlight) {
-                inFlight = true
-                val sep = if ('?' in pic) '&' else '?'
-                ctx.loadImage("$pic${sep}t=${System.currentTimeMillis()}") { bmp ->
-                    inFlight = false
-                    if (polling && bmp != null) img.setImageBitmap(bmp)
-                }
-            }
-            ctx.main.postDelayed(this, LIVE_INTERVAL_MS)
-        }
-    }
 
     init {
         addView(img, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         val showName = config.raw.optBoolean("show_name", true)
         val showState = config.raw.optBoolean("show_state", true)
-        if (config.type != "picture" && (showName || showState)) {
+        val glanceEntities = if (config.type == "picture-glance") config.entities().filter { it.isEntity } else emptyList()
+        if (config.type != "picture" && (showName || showState || glanceEntities.isNotEmpty())) {
             val bar = LinearLayout(ctx.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
                 setBackgroundColor(0x88000000.toInt())
-                setPadding(ctx.px(12f), ctx.px(8f), ctx.px(12f), ctx.px(8f))
-                addView(caption)
+                setPadding(ctx.px(12f), ctx.px(8f), ctx.px(8f), ctx.px(8f))
+                addView(caption, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            }
+            if (glanceEntities.isNotEmpty()) {
+                bar.setPadding(ctx.px(12f), ctx.px(2f), ctx.px(4f), ctx.px(2f))
+                bar.addView(buildGlanceIcons(glanceEntities), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
             }
             addView(bar, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
         }
@@ -1570,6 +1567,9 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         if (staticImage != null) {
             ctx.loadImage(staticImage) { bmp -> if (bmp != null) img.setImageBitmap(bmp) }
         }
+        // HA's picture-glance labels its bar with `title`; the other picture cards use `name`.
+        val label = if (config.type == "picture-glance") config.title ?: config.name else config.name
+        if (label != null) caption.text = label
         val eid = config.entity ?: config.raw.optString("camera_image", "").ifEmpty { null }
         if (eid != null) {
             isClickable = true
@@ -1577,17 +1577,43 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             bindHoldAction(holdActionFor(config.raw, eid), eid)
             observe(eid) { s ->
                 val parts = buildList {
-                    if (showName) add(config.name ?: s?.friendlyName ?: eid)
-                    if (showState && s != null) add(s.formattedState())
+                    if (showName) add(label ?: s?.friendlyName ?: eid)
+                    if (showState && s != null && glanceEntities.isEmpty()) add(s.formattedState())
                 }
                 caption.text = parts.joinToString(" · ")
                 if (staticImage == null) {
                     latestPicture = s?.entityPicture
-                    // Live cards are refreshed by the poller; others load once per state change.
+                    // Live cards are refreshed by the feed; others load once per state change.
                     if (!isLive) latestPicture?.let { pic ->
                         ctx.loadImage(pic) { bmp -> if (bmp != null) img.setImageBitmap(bmp) }
                     }
                 }
+            }
+        }
+    }
+
+    /** HA picture-glance's entity icons: 24 dp icons in 36 dp touch targets, 4 dp apart, each with its own actions. */
+    private fun buildGlanceIcons(entries: List<EntityRowConfig>): LinearLayout = LinearLayout(ctx.context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL or Gravity.END
+        entries.forEachIndexed { index, entry ->
+            val icon = MdiIconView(ctx.context)
+            val target = FrameLayout(ctx.context).apply {
+                isClickable = true
+                isFocusable = true
+                applyHaRipple(this, 999f, true)
+                addView(icon, LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
+                setOnClickListener { ctx.performAction(glanceTapAction(entry), entry.entity) }
+                bindHoldAction(ctx, entry.holdAction ?: ActionConfig("more-info"), entry.entity)
+            }
+            addView(target, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)).apply {
+                if (index > 0) marginStart = ctx.px(4f)
+            })
+            observe(entry.entity) { s ->
+                val name = s?.friendlyName ?: entry.entity
+                target.contentDescription = entry.name ?: name
+                val tint = if (s != null && s.isActive) ctx.theme.activeColor(s.domain) else GLANCE_INACTIVE
+                icon.setIcon(MdiIcons.resolveIconName(entry.icon, s), tint)
             }
         }
     }
@@ -1626,21 +1652,22 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        if (isLive && !polling) {
-            polling = true
-            pollTick.run()
-        }
+        feed?.start()
     }
 
     override fun onDetachedFromWindow() {
-        polling = false
-        inFlight = false
-        ctx.main.removeCallbacks(pollTick)
+        feed?.stop()
         super.onDetachedFromWindow()
     }
 
-    private companion object {
-        const val LIVE_INTERVAL_MS = 1_500L
+    internal companion object {
+        private const val GLANCE_INACTIVE = 0xCCFFFFFF.toInt()
+        private val GLANCE_TOGGLE_DOMAINS = setOf("light", "switch", "fan", "cover", "lock", "input_boolean", "media_player")
+
+        /** picture-glance's per-icon `tap_action`: the configured one, else `toggle` for switchable domains. */
+        fun glanceTapAction(entry: EntityRowConfig): ActionConfig = entry.tapAction
+            ?: ActionConfig(if (entry.entity.substringBefore('.') in GLANCE_TOGGLE_DOMAINS) "toggle" else "more-info")
+
         const val DEFAULT_ASPECT = 16f / 9f
 
         fun parseAspectRatio(raw: String?): Float {
