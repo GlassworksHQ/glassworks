@@ -106,6 +106,9 @@ open class PlatformApi(
     /** `Settings.Panel` (the Wi-Fi sheet over the app) exists (Android 10). */
     val hasSettingsPanel: Boolean get() = apiLevel >= 29
 
+    /** `TextView.setFallbackLineSpacing` exists, so text can keep CSS line boxes exact (Android 9). */
+    val hasFallbackLineSpacing: Boolean get() = apiLevel >= 28
+
     /** `Font.Builder` can load a variable font from memory (Android 10). */
     val hasFontBuilder: Boolean get() = apiLevel >= 29
 
