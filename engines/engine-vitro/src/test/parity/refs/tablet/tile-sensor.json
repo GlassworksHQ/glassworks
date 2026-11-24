@@ -43,7 +43,7 @@
   },
   {
    "slot": 0,
-   "text": "523 ppm",
+   "text": "501 ppm",
    "x": 56,
    "y": 32,
    "w": 49.97,
@@ -56,15 +56,58 @@
  ],
  "states": {
   "sensor.living_room_airdot_living_room_co2": {
-   "s": "523.0",
+   "s": "501.0",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "ppm",
     "device_class": "carbon_dioxide",
     "friendly_name": "AirDot Living Room CO2"
    },
-   "lc": 1795511764.9697762
+   "lc": 1795523044.967825
   }
  },
- "templates": {}
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.living_room_airdot_living_room_co2",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "device-1",
+    "en": "CO2"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "AirDot Living Room"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "carbon_dioxide": {
+      "default": "mdi:molecule-co2"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
 }

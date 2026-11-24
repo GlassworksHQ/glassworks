@@ -25,10 +25,11 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { connect, loadCredentials, redact } from './lib/ha.mjs';
-import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate } from './lib/scrub.mjs';
+import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate, hasMacFragment } from './lib/scrub.mjs';
 import { parseArgs, pick } from './lib/args.mjs';
 import { assetDestination, canonicalPath } from './lib/assets.mjs';
 import { applyEntityEvent } from './lib/states.mjs';
+import { buildDisplay } from './lib/display.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -401,6 +402,33 @@ async function capture() {
     ha.call({ type: 'get_config' }), ha.call({ type: 'frontend/get_themes' }), ha.call({ type: 'lovelace/resources' }),
   ]);
   const cardModUrl = resources.map((r) => r.url).find((u) => /card-mod\.js/.test(u)) || null;
+  // The display data Vitro reads live (HaDisplay): fetched once, cut down per case.
+  const [registry, devices] = await Promise.all([ha.call({ type: 'config/entity_registry/list_for_display' }), ha.call({ type: 'config/device_registry/list' })]);
+  const displayCache = new Map();
+  const fetchDisplay = async (type, category, names) => {
+    const want = names.filter((n) => !displayCache.has(`${type}|${category}|${n}`));
+    if (want.length) {
+      const res = await ha.call({ type, category, integration: want, ...(type === 'frontend/get_translations' ? { language: 'en' } : {}) });
+      for (const n of want) {
+        let mine;
+        if (type === 'frontend/get_icons') mine = res.resources?.[n];
+        else mine = Object.fromEntries(Object.entries(res.resources || {}).filter(([k]) => k.startsWith(`component.${n}.`)));
+        displayCache.set(`${type}|${category}|${n}`, mine);
+      }
+    }
+  };
+  const displayFor = async (ids, shown) => {
+    const first = buildDisplay(ids, registry, devices, () => undefined, () => undefined);
+    const { domains, platforms } = first.requested;
+    await fetchDisplay('frontend/get_icons', 'entity_component', domains);
+    await fetchDisplay('frontend/get_icons', 'entity', platforms);
+    await fetchDisplay('frontend/get_translations', 'entity_component', domains);
+    await fetchDisplay('frontend/get_translations', 'entity', platforms);
+    const deviceClasses = Object.fromEntries(Object.entries(shown).map(([id, st]) => [id, st.a?.device_class]).filter(([, dc]) => dc));
+    return buildDisplay(ids, registry, devices,
+      (category, n) => displayCache.get(`frontend/get_icons|${category}|${n}`),
+      (category, n) => displayCache.get(`frontend/get_translations|${category}|${n}`), deviceClasses);
+  };
   if (!cardModUrl) log('card-mod is not a Lovelace resource: card_mod styles will not apply in HA');
   const cases = loadCases();
   const wantedFile = args.templates || join(ROOT, 'engines', 'engine-vitro', 'build', 'vitro-parity', committed ? 'templates-wanted.json' : 'templates-wanted-local.json');
@@ -487,11 +515,17 @@ async function capture() {
               if (pic.startsWith('/')) await fetchAsset(pic.split('?')[0], pic).catch((e) => log(`  picture: ${scrubText(String(e.message), creds)}`));
             }
           }
+          const display = await displayFor(ids, shownStates);
+          // Device names can carry a MAC fragment (an ESPHome default like "AirDot 4c83f8"): check the block too.
+          if (committed) {
+            const inDisplay = findPrivate(JSON.stringify(display), creds);
+            if (inDisplay.length) throw new Error(`the display data holds ${inDisplay.join(', ')}: neither file is written`);
+          }
           const ref = {
             case: c.id, frame: frame.id, haVersion: haConfig.version, now, stable,
             viewport: { width: frame.width, height: frame.height, density: frame.density },
             clip, docSize: { width: info.docW, height: info.docH }, slots: slots.map(roundRect), texts,
-            states: caseStates, templates,
+            states: caseStates, templates, display,
           };
           if (!committed) {
             // Pictures that templates point at (a plant's image entity inside Markdown, say), unredacted from the raw text.
@@ -501,7 +535,12 @@ async function capture() {
             }
           }
           const text = scrubText(JSON.stringify(ref, null, 1), creds);
-          if (committed) checkDenylist(text, `refs/${frame.id}/${c.id}`);
+          if (committed) {
+            checkDenylist(text, `refs/${frame.id}/${c.id}`);
+            // scrubText replaces whole addresses, not the end of a MAC in a name: check everything that's written
+            // (states, texts, templates, display data), not just what the card draws.
+            if (hasMacFragment(text)) throw new Error('the reference holds a MAC fragment (a device or entity name?): neither file is written');
+          }
           writeFileSync(join(outDir, `${c.id}.png`), png);
           writeFileSync(join(outDir, `${c.id}.json`), text + '\n');
           log(`${frame.id}/${c.id}: ${slots.length} card(s), ${texts.length} texts, ${Object.keys(caseStates).length} states, ${Object.keys(templates).length} templates${stable ? '' : ' (still moving)'} in ${Date.now() - t0} ms`);

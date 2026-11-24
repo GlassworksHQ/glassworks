@@ -81,5 +81,29 @@
    "lc": 1795504897.1554313
   }
  },
- "templates": {}
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "input_select.kitchen_blind_position",
+    "pl": "input_select",
+    "en": "Kitchen Blind Position"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "input_select"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {},
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {},
+   "entity": {}
+  }
+ }
 }
