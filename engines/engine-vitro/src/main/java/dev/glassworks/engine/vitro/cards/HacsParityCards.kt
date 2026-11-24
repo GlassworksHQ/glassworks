@@ -632,11 +632,20 @@ class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
     private fun snap(v: Double, min: Double, max: Double, step: Double): Double =
         (min + Math.round((v - min) / step) * step).coerceIn(min, max)
 
+    /** The value the last press sent, until HA reports a state: quick presses add up instead of repeating. */
+    private var pendingValue: Double? = null
+    private var pendingFrom: String? = null
+
     private fun step(dir: Int) {
         val s = eid?.let { ctx.store[it] } ?: return
         val (min, max, stepSize) = bounds(s)
-        val cur = s.state.toDoubleOrNull() ?: min
-        setValue(snap(cur + dir * stepSize, min, max, stepSize))
+        // A new state from HA (accepted or not) ends the pending value.
+        if (pendingFrom != s.state) pendingValue = null
+        val cur = pendingValue ?: s.state.toDoubleOrNull() ?: min
+        val next = snap(cur + dir * stepSize, min, max, stepSize)
+        pendingValue = next
+        pendingFrom = s.state
+        setValue(next)
     }
 
     private fun setValue(v: Double) {
@@ -922,12 +931,11 @@ class MiniMediaPlayerCardView(ctx: VitroCardContext, private val config: CardCon
     private fun setArtwork(url: String?) {
         if (url == artUrl) return
         artUrl = url
-        if (url == null) {
-            backdrop.setImageDrawable(null); backdrop.visibility = GONE; scrim.visibility = GONE
-            thumb.setImageDrawable(null); thumb.visibility = GONE; iconView.visibility = VISIBLE
-            iconBox.background = null
-            return
-        }
+        // The previous track's art goes at once: until (or unless) the new one loads, the icon shows.
+        backdrop.setImageDrawable(null); backdrop.visibility = GONE; scrim.visibility = GONE
+        thumb.setImageDrawable(null); thumb.visibility = GONE; iconView.visibility = VISIBLE
+        iconBox.background = null
+        if (url == null) return
         ctx.loadImage(url) { bmp ->
             if (artUrl != url) return@loadImage
             if (bmp == null) return@loadImage
@@ -1025,7 +1033,10 @@ object AutoEntitiesFilter {
         val ordered = states.sortedBy { it.entityId }
         for (rule in include) {
             val opts = rule.optJSONObject("options")
-            for (s in ordered) if (matches(rule, s, lookup)) out += Match(s.entityId, opts)
+            var ruleMatches = ordered.filter { matches(rule, it, lookup) }.map { Match(it.entityId, opts) }
+            // A rule's own `sort` (and its `count`) applies to its matches before they join the others.
+            rule.optJSONObject("sort")?.let { ruleMatches = sort(ruleMatches, it, lookup) }
+            out += ruleMatches
         }
         var result = out.filter { m -> val s = lookup(m.entityId); s == null || exclude.none { matches(it, s, lookup) } }
         if (raw.optBoolean("unique", false)) result = result.distinctBy { it.entityId }
@@ -1051,7 +1062,8 @@ object AutoEntitiesFilter {
                     attrs.keys().asSequence().all { a -> matchValue(attrs.opt(a), attributeString(s, a)) }
                 } ?: false
                 "group" -> (lookup(v?.toString().orEmpty())?.attributes?.get("entity_id") as? List<*>)?.any { it?.toString() == s.entityId } == true
-                "not" -> (v as? JSONObject)?.let { !matches(it, s, lookup) } ?: false
+                // `not` over a rule Vitro can't evaluate is no match either, never everything.
+                "not" -> (v as? JSONObject)?.let { supported(it) && !matches(it, s, lookup) } ?: false
                 "or" -> (v as? JSONArray)?.let { arr -> (0 until arr.length()).any { i -> arr.optJSONObject(i)?.let { matches(it, s, lookup) } == true } } ?: false
                 "and" -> (v as? JSONArray)?.let { arr -> (0 until arr.length()).all { i -> arr.optJSONObject(i)?.let { matches(it, s, lookup) } == true } } ?: false
                 else -> false
@@ -1059,6 +1071,17 @@ object AutoEntitiesFilter {
             if (!ok) return false
         }
         return keys.all { it in RULE_KEYS }
+    }
+
+    /** True when every key of [rule], nested ones included, is one Vitro evaluates. */
+    private fun supported(rule: JSONObject): Boolean = rule.keys().asSequence().all { k ->
+        k in RULE_KEYS && when (k) {
+            "not" -> (rule.opt(k) as? JSONObject)?.let(::supported) ?: false
+            "or", "and" -> (rule.opt(k) as? JSONArray)?.let { arr ->
+                (0 until arr.length()).all { i -> arr.optJSONObject(i)?.let(::supported) ?: false }
+            } ?: false
+            else -> true
+        }
     }
 
     /** An attribute as text, `a:b` reaching into a nested map. */
@@ -1128,14 +1151,21 @@ object AutoEntitiesFilter {
                 else -> null
             }
         }
-        if (method == "none" || method.isEmpty()) return if (sort.optBoolean("reverse", false)) list.reversed() else list
+        // auto-entities' `first` and `count`: a window over the sorted list.
+        fun window(l: List<Match>): List<Match> {
+            val first = sort.optInt("first", 0).coerceAtLeast(0)
+            val count = if (sort.has("count")) sort.optInt("count", -1) else -1
+            val from = l.drop(first)
+            return if (count >= 0) from.take(count) else from
+        }
+        if (method == "none" || method.isEmpty()) return window(if (sort.optBoolean("reverse", false)) list.reversed() else list)
         val cmp: Comparator<Match> = if (numeric || method == "last_changed" || method == "last_updated") {
             compareBy(nullsLast()) { m: Match -> key(m)?.toDoubleOrNull() }
         } else {
             compareBy(nullsLast()) { m: Match -> key(m)?.let { if (ignoreCase) it.lowercase(Locale.ROOT) else it } }
         }
         val sorted = list.sortedWith(cmp)
-        return if (sort.optBoolean("reverse", false)) sorted.reversed() else sorted
+        return window(if (sort.optBoolean("reverse", false)) sorted.reversed() else sorted)
     }
 }
 
@@ -1168,7 +1198,8 @@ class AutoEntitiesCardView(
         pending = true
         ctx.main.post {
             pending = false
-            refresh()
+            // Detached meanwhile: build nothing (its cards would subscribe and never detach); attaching refreshes.
+            if (unsubscribe != null) refresh()
         }
     }
 
@@ -1401,12 +1432,22 @@ class LayoutCardView(
         }
         for (child in config.childCards) {
             val span = spanOf(child, cols)
-            if (row == null || used + span > cols) {
+            // An explicit start line (`grid-column: 3 / 4`, `3 / span 2`, `3`) puts the card in that column.
+            val start = startOf(child, cols)?.coerceAtMost(cols - span)
+            if (row == null || used + span > cols || (start != null && start < used)) {
                 closeRow()
                 row = LinearLayout(ctx.context).apply { orientation = HORIZONTAL }
                 addView(row, LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (tracks.isNotEmpty()) topMargin = ctx.px(gap) })
                 tracks += row!!
                 used = 0
+            }
+            if (start != null && start > used) {
+                val skipped = tracksSpec.subList(used, start)
+                row!!.addView(Space(ctx.context), LayoutParams(
+                    ctx.px(skipped.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (skipped.size - 1)), 1,
+                    skipped.sumOf { it.fr.toDouble() }.toFloat(),
+                ).apply { if (used > 0) marginStart = ctx.px(gap) })
+                used = start
             }
             val spanned = tracksSpec.subList(used, used + span)
             val fixed = spanned.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (span - 1)
@@ -1415,6 +1456,13 @@ class LayoutCardView(
             used += span
         }
         closeRow()
+    }
+
+    /** The 0-based column of an explicit `grid-column` start line, or null for automatic placement. */
+    private fun startOf(child: CardConfig, cols: Int): Int? {
+        val raw = child.raw.optJSONObject("view_layout")?.optString("grid-column", "").orEmpty().trim()
+        val line = Regex("""^(\d+)\s*(?:/.*)?$""").find(raw)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        return (line - 1).takeIf { it in 0 until cols }
     }
 
     private fun spanOf(child: CardConfig, cols: Int): Int {
