@@ -29,6 +29,7 @@ import dev.glassworks.engine.Page
 import dev.glassworks.engine.PageHost
 import dev.glassworks.engine.PagePort
 import dev.glassworks.engine.vitro.VitroEngine
+import dev.glassworks.platform.Platform
 import org.json.JSONObject
 
 /**
@@ -214,7 +215,7 @@ class VitroTestActivity : Activity() {
         } else {
             buildString {
                 appendLine(head)
-                appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) $abi")
+                appendLine("Android ${Build.VERSION.RELEASE} (API ${Platform.apiLevel}) $abi")
                 appendLine("RAM ${mi.totalMem shr 20}MB total, ${mi.availMem shr 20}MB free")
                 appendLine("PSS ${pssMb}MB  heap ${heapMb}MB")
                 appendLine("view ${m.viewTitle.ifEmpty { "-" }} ${m.viewType}".trimEnd())

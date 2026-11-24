@@ -6,6 +6,7 @@ package dev.glassworks.engine.vitro
 
 import dev.glassworks.engine.vitro.theme.CardModStyle
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
+import dev.glassworks.engine.vitro.theme.CssBackground
 import dev.glassworks.engine.vitro.theme.ThemeBackground
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
@@ -510,28 +511,64 @@ class ThemeResolverTest {
     }
 
     @Test
-    fun radialGradientIsParsedWithItsStops() {
-        val g = ThemeResolver.parseBackground("radial-gradient(circle at top left, #112233 0%, #445566 60%, rgba(0, 0, 0, 0.8) 100%)", 0)
-            as ThemeBackground.RadialGradient
-        assertArrayEquals(intArrayOf(argb(0xFF112233), argb(0xFF445566), argb(0xCC000000)), g.colors)
+    fun radialGradientIsParsedWithItsStopsShapeAndPosition() {
+        val bg = ThemeResolver.parseBackground("radial-gradient(circle at top left, #112233 0%, #445566 60%, rgba(0, 0, 0, 0.8) 100%)", 0)
+            as ThemeBackground.Layers
+        val g = bg.css.layers.single() as CssBackground.Radial
+        assertTrue(g.circle)
+        assertEquals(CssBackground.Length(0f, true), g.posX)
+        assertEquals(CssBackground.Length(0f, true), g.posY)
+        assertEquals(listOf(argb(0xFF112233), argb(0xFF445566), argb(0xCC000000)), g.stops.map { it.color })
+        assertEquals(listOf(0f, 0.6f, 1f), g.stops.map { it.pos })
 
-        val plain = ThemeResolver.parseBackground("radial-gradient(#000000, #ffffff)", 0) as ThemeBackground.RadialGradient
-        assertEquals(2, plain.colors.size)
+        val plain = ThemeResolver.parseBackground("radial-gradient(#000000, #ffffff)", 0) as ThemeBackground.Layers
+        assertEquals(2, plain.css.layers.single().stops.size)
 
         assertEquals(ThemeBackground.Solid(0x44), ThemeResolver.parseBackground("radial-gradient(#ff0000)", 0x44))
         val themed = resolveWith("""{"lovelace-background": "radial-gradient(circle, #101020, #000000)"}""")
-        assertTrue(themed.background is ThemeBackground.RadialGradient)
+        assertTrue(themed.background is ThemeBackground.Layers)
     }
 
     @Test
-    fun stateActiveColorOverridesApplyToEveryDomain() {
+    fun layeredBackgroundsKeepEveryLayerTheColorAndTheirGeometry() {
+        val bg = ThemeResolver.parseBackground(
+            "radial-gradient(1200px 700px at -10% -20%, rgba(56, 189, 248, 0.13), transparent 60%), " +
+                "radial-gradient(900px 600px at 110% 120%, rgba(167, 139, 250, 0.14), transparent 60%), #0a0b0f",
+            0,
+        ) as ThemeBackground.Layers
+        assertEquals(argb(0xFF0A0B0F), bg.css.color)
+        val top = bg.css.layers[0] as CssBackground.Radial
+        assertEquals(1200f, top.sizeX)
+        assertEquals(700f, top.sizeY)
+        assertEquals(CssBackground.Length(-10f, true), top.posX)
+        // A 1280 x 800 box at 2x: the ellipse's center and radii, and `transparent` taking the color's RGB at alpha 0.
+        val geo = bg.css.geometry(top, 2560f, 1600f, 2f)!!
+        assertEquals(-256f, geo.x0, 0.01f)
+        assertEquals(-320f, geo.y0, 0.01f)
+        assertEquals(2400f, geo.rx, 0.01f)
+        assertEquals(1400f, geo.ry, 0.01f)
+        assertEquals(listOf(0f, 0.6f), geo.positions.toList())
+        assertEquals(0x0038BDF8, geo.colors[1])
+
+        val linear = CssBackground.parse("linear-gradient(to right, red 10px, blue)")!!.layers.single()
+        val lg = CssBackground(listOf(linear), null).geometry(linear, 200f, 100f, 1f)!!
+        assertEquals(0f, lg.x0, 0.01f)
+        assertEquals(200f, lg.x1, 0.01f)
+        assertEquals(0.05f, lg.positions[0], 0.001f)
+    }
+
+    @Test
+    fun stateActiveColorReachesOnlyDomainsHaLeavesUncolored() {
         val t = resolveWith("""{"state-light-active-color": "#ff00ff", "state-active-color": "#00ff00"}""")
         assertEquals(argb(0xFFFF00FF), t.activeColor("light")) // the domain key wins
-        assertEquals(argb(0xFF00FF00), t.activeColor("switch")) // the theme-wide key beats the built-in default
-        assertEquals(argb(0xFF00FF00), t.activeColor("fan"))
-        assertEquals(argb(0xFF00FF00), t.activeColor("cover"))
-        assertEquals(argb(0xFF00FF00), t.activeColor("climate"))
-        assertEquals(argb(0xFF00FF00), t.activeColor("binary_sensor"))
+        // HA's base theme colors these domains itself, so the theme-wide key never reaches them (measured in HA).
+        assertEquals(argb(0xFFFFC107), t.activeColor("switch"))
+        assertEquals(argb(0xFF00BCD4), t.activeColor("fan"))
+        assertEquals(argb(0xFF9C27B0), t.activeColor("cover"))
+        assertEquals(argb(0xFFFF8100), t.activeColor("climate"))
+        assertEquals(argb(0xFFFFC107), t.activeColor("binary_sensor"))
+        assertEquals(argb(0xFF03A9F4), t.activeColor("media_player"))
+        assertEquals(argb(0xFF00FF00), t.activeColor("automation")) // no base color: the theme-wide key applies
         assertEquals(argb(0xFF2196F3), t.activeColor("sensor")) // sensors and people keep their own colors
         assertEquals(argb(0xFF4CAF50), t.activeColor("person"))
     }

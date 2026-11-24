@@ -212,6 +212,36 @@ class CoreParityTest {
         assertEquals(View.VISIBLE, hallChip.visibility)
     }
 
+    @Test
+    fun chipVariablesFromCardModSizeColorAndJustifyTheChips() {
+        val chips = MushroomChipsCardView(
+            context(EntityStore()),
+            card(
+                """{"type": "custom:mushroom-chips-card", "alignment": "justify", "chips": [
+                     {"type": "template", "icon": "mdi:home", "content": "Good"},
+                     {"type": "template", "icon": "mdi:home", "content": "Chat"}],
+                   "card_mod": {"style": "ha-card { padding: 4px 0 0 8px; --chip-height: 32px; --chip-border-radius: 99px; --chip-background: rgba(52,211,153,0.16); --primary-text-color: #34d399; }"}}""",
+            ),
+        )
+        val dp = activity.resources.displayMetrics.density
+        chips.measure(View.MeasureSpec.makeMeasureSpec((400 * dp).toInt(), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        chips.layout(0, 0, chips.measuredWidth, chips.measuredHeight)
+        assertEquals((8 * dp).toInt(), chips.paddingLeft)
+        assertEquals((4 * dp).toInt(), chips.paddingTop)
+        val first = chips.getChildAt(0) as LinearLayout
+        val border = (1 * dp).toInt().coerceAtLeast(1)
+        // content-box: the 1 px border sits outside --chip-height.
+        assertEquals((32 * dp).toInt() + 2 * border, first.minimumHeight)
+        assertEquals(0x2934D399, (first.background as android.graphics.drawable.GradientDrawable).color!!.defaultColor)
+        val label = first.all().filterIsInstance<TextView>().single()
+        assertEquals(9.6f * dp, label.textSize, 0.5f)
+        assertEquals(0xFF34D399.toInt(), label.currentTextColor)
+        // justify-content: space-between puts the last chip against the end.
+        val second = chips.getChildAt(1)
+        assertEquals(chips.width - chips.paddingRight, second.right)
+        assertEquals(chips.paddingLeft, first.left)
+    }
+
     // ---- Tile features ----
 
     private fun tile(store: EntityStore, calls: MutableList<Call>, entity: String, feature: String) =

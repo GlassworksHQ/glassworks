@@ -77,6 +77,7 @@ import dev.glassworks.engine.vitro.model.ViewConfig
 import dev.glassworks.engine.vitro.model.VisibilityCondition
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
 import dev.glassworks.engine.vitro.theme.CardModStyle
+import dev.glassworks.engine.vitro.theme.CssBackground
 import dev.glassworks.engine.vitro.theme.ThemeBackground
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
@@ -542,16 +543,12 @@ class VitroView(
     private fun applyBackdrop(theme: ResolvedTheme) {
         when (val bg = theme.background) {
             is ThemeBackground.Solid -> setBackgroundColor(bg.color)
-            is ThemeBackground.LinearGradient -> {
-                val orientation = when (((bg.angleDeg % 360f) + 360f) % 360f) {
-                    in 45f..135f -> GradientDrawable.Orientation.LEFT_RIGHT
-                    in 135f..225f -> GradientDrawable.Orientation.TOP_BOTTOM
-                    in 225f..315f -> GradientDrawable.Orientation.RIGHT_LEFT
-                    else -> GradientDrawable.Orientation.BOTTOM_TOP
-                }
-                background = GradientDrawable(orientation, bg.colors)
-            }
+            is ThemeBackground.LinearGradient -> background = CssBackgroundDrawable(
+                CssBackground(listOf(CssBackground.Linear(bg.angleDeg, bg.colors.map { CssBackground.Stop(it, null, null) })), null),
+                dp,
+            )
             is ThemeBackground.RadialGradient -> background = RadialBackdrop(bg.colors)
+            is ThemeBackground.Layers -> background = CssBackgroundDrawable(bg.css, dp)
             is ThemeBackground.ImageUrl -> {
                 setBackgroundColor(bg.fallbackColor)
                 contextFactory?.invoke(theme)?.loadImage(bg.url) { bmp ->
@@ -593,7 +590,8 @@ class VitroView(
         } else {
             container
         }
-        val body = if (view.subview) {
+        // HA's subview back arrow is part of its toolbar, so a hidden header (the kiosk's) hides it too.
+        val body = if (view.subview && !hideHeader) {
             LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 val backRow = LinearLayout(context).apply {
@@ -829,11 +827,14 @@ class VitroView(
         // Custom properties set on a card (`ha-card { --vertical-stack-card-gap: 8px }`) inherit into the cards
         // inside it, as they do through the browser's shadow roots.
         val outerVars = inheritedCardVars
+        val outerCtxVars = ctx.cardVars
         inheritedCardVars = if (stackMod.customProperties.isEmpty()) outerVars else outerVars + stackMod.customProperties
+        ctx.cardVars = inheritedCardVars
         try {
             return buildCardWithVars(card, ctx, fillViewport, childBuilder, stackMod)
         } finally {
             inheritedCardVars = outerVars
+            ctx.cardVars = outerCtxVars
         }
     }
 

@@ -441,16 +441,22 @@ class EntityStoreTest {
         assertTrue(entity("cover.garage", "open").isActive)
         assertTrue(entity("cover.garage", "opening").isActive)
         assertFalse(entity("cover.garage", "closed").isActive)
-        assertFalse(entity("cover.garage", "closing").isActive)
+        // HA's stateActive(): a cover is active unless closed, a player unless standby or off.
+        assertTrue(entity("cover.garage", "closing").isActive)
         assertTrue(entity("media_player.lounge", "playing").isActive)
         assertTrue(entity("media_player.lounge", "buffering").isActive)
-        assertFalse(entity("media_player.lounge", "paused").isActive)
+        assertTrue(entity("media_player.lounge", "paused").isActive)
+        assertTrue(entity("media_player.lounge", "idle").isActive)
+        assertFalse(entity("media_player.lounge", "standby").isActive)
+        assertFalse(entity("media_player.lounge", "off").isActive)
         assertTrue(entity("person.alex", "home").isActive)
         assertFalse(entity("person.alex", "not_home").isActive)
         assertTrue(entity("device_tracker.phone", "home").isActive)
         assertTrue(entity("vacuum.hall", "cleaning").isActive)
         assertTrue(entity("vacuum.hall", "returning").isActive)
         assertFalse(entity("vacuum.hall", "docked").isActive)
+        assertFalse(entity("vacuum.hall", "idle").isActive)
+        assertTrue(entity("vacuum.hall", "error").isActive)
     }
 
     // ---- Relative last-changed text ----

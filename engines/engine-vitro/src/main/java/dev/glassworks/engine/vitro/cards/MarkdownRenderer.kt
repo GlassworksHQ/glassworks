@@ -18,7 +18,6 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
-import android.os.Build
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextPaint
@@ -41,6 +40,7 @@ import android.widget.TextView
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
+import dev.glassworks.platform.Platform
 import dev.glassworks.ui.Inter
 import java.util.Locale
 import kotlin.math.max
@@ -813,7 +813,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         includeFontPadding = false
         setLineSpacing(0f, 1f)
         setPadding(0, 0, 0, 0)
-        if (Build.VERSION.SDK_INT >= 28) isFallbackLineSpacing = false
+        if (Platform.hasFallbackLineSpacing) isFallbackLineSpacing = false
         if (s.letterSpacing != 0f && s.fontSize > 0f) letterSpacing = s.letterSpacing / s.fontSize
     }
 
@@ -1015,7 +1015,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             setLineSpacing(0f, 1f)
             setPadding(0, 0, 0, 0)
             maxLines = 1
-            if (Build.VERSION.SDK_INT >= 28) isFallbackLineSpacing = false
+            if (Platform.hasFallbackLineSpacing) isFallbackLineSpacing = false
             if (s.letterSpacing != 0f && s.fontSize > 0f) letterSpacing = s.letterSpacing / s.fontSize
             val p = TextPaint().apply { typeface = tf; textSize = s.fontSize * dp }
             val fm = p.fontMetrics
@@ -1061,17 +1061,17 @@ object MdFonts {
     fun typeface(context: Context, weight: Int, italic: Boolean, mono: Boolean, sizePx: Float): Typeface {
         val w = weight.coerceIn(100, 900)
         val key = (w.toLong() shl 8) or (if (italic) 1L else 0L) or (if (mono) 2L else 0L) or
-            ((if (Build.VERSION.SDK_INT >= 29) sizePx.roundToInt().coerceIn(14, 32) else 0).toLong() shl 20)
+            ((if (Platform.hasFontBuilder) sizePx.roundToInt().coerceIn(14, 32) else 0).toLong() shl 20)
         cache[key]?.let { return it }
         val base = when {
             mono -> Typeface.create(Typeface.MONOSPACE, if (w >= 600) Typeface.BOLD else Typeface.NORMAL)
-            Build.VERSION.SDK_INT >= 29 -> Inter.typeface(context, w, sizePx)
+            Platform.hasFontBuilder -> Inter.typeface(context, w, sizePx)
             w <= 350 -> Typeface.create("sans-serif-light", Typeface.NORMAL)
             w < 450 -> Typeface.create("sans-serif", Typeface.NORMAL)
             w < 550 -> Typeface.create("sans-serif-medium", Typeface.NORMAL)
             else -> Typeface.create("sans-serif", Typeface.BOLD)
         }
-        val tf = if (italic) Typeface.create(base, if (w >= 600 && Build.VERSION.SDK_INT < 29) Typeface.BOLD_ITALIC else Typeface.ITALIC) else base
+        val tf = if (italic) Typeface.create(base, if (w >= 600 && !Platform.hasFontBuilder) Typeface.BOLD_ITALIC else Typeface.ITALIC) else base
         cache[key] = tf
         return tf
     }

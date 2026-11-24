@@ -70,6 +70,13 @@ class VitroCardContext(
     val dp: Float = context.resources.displayMetrics.density
     val main: Handler = Handler(Looper.getMainLooper())
 
+    /**
+     * CSS custom properties in force for the card being built: the ones its enclosing cards and its own `card_mod`
+     * set on `ha-card` (names without `--`). The view sets them around each card's construction, so a card reads
+     * them in its constructor, the way a browser inherits them through the card's shadow roots.
+     */
+    var cardVars: Map<String, String> = emptyMap()
+
     fun px(dpVal: Float): Int = (dpVal * dp).toInt()
 
     /** [sp] scaled by the theme's text size ([ResolvedTheme.fontScale]); pass the result to `setTextSize(SP, …)`. */
@@ -142,6 +149,9 @@ class VitroCardContext(
         val (targetDomain, service) = when (domain) {
             "lock" -> "lock" to if (cur?.state == "locked") "unlock" else "lock"
             "script" -> "script" to "turn_on"
+            // HA's toggle on things that can only fire: press the button, activate the scene.
+            "button", "input_button" -> domain to "press"
+            "scene" -> "scene" to "turn_on"
             in TOGGLE_DOMAINS -> domain to "toggle"
             else -> "homeassistant" to "toggle"
         }
