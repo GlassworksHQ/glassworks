@@ -70,6 +70,15 @@ data class CardModStyle(
     val textColor: Int? = null,
     /** `text-align:` lowercased (`left`, `start`, `center`, `right`, `end`), or null. */
     val textAlign: String? = null,
+    /**
+     * CSS custom properties declared on the card (`ha-card { --card-text-align: right; }`), names without `--`,
+     * values with `var()` resolved. In the browser they inherit into every shadow root of the card, so a card
+     * reads them the way HA's own CSS does (`--card-text-align`, `--markdown-image-border-radius`,
+     * `--ha-clock-card-digital-font-size-large`, `--vertical-stack-card-gap`, ...), falling back to the theme.
+     */
+    val customProperties: Map<String, String> = emptyMap(),
+    /** CSS `margin` on the card (an inset inside its grid cell or stack slot), in dp. */
+    val marginInsets: EdgeInsetsDp? = null,
 )
 
 /** Resolved, native-ready Home Assistant theme for one view or card. */
@@ -99,7 +108,7 @@ data class ResolvedTheme(
     val cardElevationDp: Float = 0f,
     /** Gap between cards: `--masonry-view-card-margin` or `--ha-view-sections-column-gap`, clamped to 4..24 dp. */
     val cardGapDp: Float = 8f,
-    /** Outer padding of a view: `--ha-view-sections-padding` / `--masonry-view-padding` / `--vitro-view-padding`, else [cardGapDp]. */
+    /** Outer padding of a view: `--masonry-view-padding` / `--vitro-view-padding`, else [cardGapDp] (masonry and panel views; sections views use HA's `--ha-view-sections-*` variables). */
     val viewPaddingDp: Float = cardGapDp,
     /**
      * Variable names the theme itself set (as opposed to HA defaults Vitro fills in). Null treats every entry
@@ -340,7 +349,7 @@ object ThemeResolver {
 
         val cardGap = (resolved["masonry-view-card-margin"] ?: resolved["ha-view-sections-column-gap"])
             ?.let { parseDimensionDp(it, 8f) }?.coerceIn(4f, 24f) ?: 8f
-        val viewPad = (resolved["ha-view-sections-padding"] ?: resolved["masonry-view-padding"] ?: resolved["vitro-view-padding"])
+        val viewPad = (resolved["masonry-view-padding"] ?: resolved["vitro-view-padding"])
             ?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }?.coerceIn(0f, 48f) ?: cardGap
 
         return ResolvedTheme(
@@ -532,6 +541,8 @@ object ThemeResolver {
         val cleaned = JINJA_PATTERN.replace(CSS_COMMENT.replace(css, " "), " ")
         if (cleaned.isBlank()) return CardModStyle()
         val (decls, otherRules) = hostDeclarations(cleaned)
+        val custom = Regex("""(?:^|[;\n{])\s*--([\w-]+)\s*:\s*([^;\n]+)""").findAll(decls)
+            .associate { it.groupValues[1] to resolveValue(it.groupValues[2].trim(), vars, 0) }
         fun prop(name: String): String? =
             Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;!\n]+)""", RegexOption.IGNORE_CASE).findAll(decls)
                 .lastOrNull()?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
@@ -541,8 +552,10 @@ object ThemeResolver {
         val bgShort = prop("background")
         val gradient = listOfNotNull(bgImage, bgShort).firstOrNull { "linear-gradient" in it.lowercase(Locale.ROOT) }
             ?.let { parseBackground(it, 0) as? ThemeBackground.LinearGradient }
-        val bg = prop("background-color")?.let(::parseColor)
-            ?: bgShort?.takeIf { gradient == null || "gradient" !in it.lowercase(Locale.ROOT) }?.let(::parseColor)
+        // `background: none` (the dashboard's usual "bare card") is a transparent fill.
+        fun fill(v: String): Int? = if (v.trim().equals("none", ignoreCase = true)) 0 else parseColor(v)
+        val bg = prop("background-color")?.let(::fill)
+            ?: bgShort?.takeIf { gradient == null || "gradient" !in it.lowercase(Locale.ROOT) }?.let(::fill)
         val radius = prop("border-radius")?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }
         val opacity = prop("opacity")?.let { o ->
             if (o.endsWith("%")) o.dropLast(1).toFloatOrNull()?.div(100f) else o.toFloatOrNull()
@@ -617,8 +630,72 @@ object ThemeResolver {
             fixedCenterX = centerX,
             textColor = prop("color")?.let(::parseColor),
             textAlign = prop("text-align")?.lowercase(Locale.ROOT),
+            customProperties = custom,
+            marginInsets = parseEdgeInsets(
+                shorthand = prop("margin"),
+                top = prop("margin-top"),
+                right = prop("margin-right"),
+                bottom = prop("margin-bottom"),
+                left = prop("margin-left"),
+            ),
         )
     }
+
+    /**
+     * One entry of a card's `card_mod.style` selector map, such as `"ha-markdown$"` or `"hui-clock-card-digital$"`
+     * (the CSS card-mod injects into that element's shadow root). A plain-string style only has `"."`.
+     */
+    fun cardModSheet(cardMod: JSONObject?, key: String): String? {
+        val style = cardMod?.opt("style") ?: return null
+        val raw = when {
+            style is String -> style.takeIf { key == "." }
+            style is JSONObject -> style.opt(key) as? String
+            else -> null
+        }
+        return raw?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * Splits a CSS sheet into `(selector, declarations)` rules the way the browser reads it: comments and Jinja
+     * dropped, `!important` ignored, bare top-level declarations dropped (they are not valid CSS, so card-mod's
+     * `<style>` ignores them). A comma selector list stays one rule; declarations keep source order.
+     */
+    fun cssRules(css: String): List<Pair<String, List<Pair<String, String>>>> {
+        val cleaned = JINJA_PATTERN.replace(CSS_COMMENT.replace(css, " "), " ")
+        val out = ArrayList<Pair<String, List<Pair<String, String>>>>()
+        var depth = 0
+        var segStart = 0
+        var bodyStart = 0
+        var selector = ""
+        for (i in cleaned.indices) {
+            when (cleaned[i]) {
+                '{' -> {
+                    if (depth == 0) {
+                        selector = cleaned.substring(segStart, i).trim()
+                        bodyStart = i + 1
+                    }
+                    depth++
+                }
+                '}' -> if (depth > 0) {
+                    depth--
+                    if (depth == 0) {
+                        val decls = cleaned.substring(bodyStart, i).split(';').mapNotNull { d ->
+                            val c = d.indexOf(':').takeIf { it > 0 } ?: return@mapNotNull null
+                            val name = d.substring(0, c).trim().lowercase(Locale.ROOT)
+                            val value = d.substring(c + 1).replace(IMPORTANT, "").trim()
+                            if (name.isEmpty() || value.isEmpty()) null else name to value
+                        }
+                        if (selector.isNotEmpty() && !selector.startsWith("@")) out += selector to decls
+                        segStart = i + 1
+                    }
+                }
+                ';' -> if (depth == 0) segStart = i + 1
+            }
+        }
+        return out
+    }
+
+    private val IMPORTANT = Regex("""\s*!\s*important\s*$""", RegexOption.IGNORE_CASE)
 
     /**
      * The raw `card_mod.style` of a card: a string, or the `"."` entry of a selector map (the card itself).
@@ -639,9 +716,8 @@ object ThemeResolver {
     fun parseCardMod(cardMod: JSONObject?, vars: Map<String, String>): CardModStyle =
         cardModStyleString(cardMod)?.let { parseCardMod(it, vars) } ?: CardModStyle()
 
-    /** Declarations of `ha-card` / `:host` blocks plus bare top-level ones, and whether any other rule exists. */
+    /** Declarations of the card's own `ha-card` / `:host` rules, and whether any other rule exists. */
     private fun hostDeclarations(css: String): Pair<String, Boolean> {
-        val top = StringBuilder()
         val host = StringBuilder()
         var other = false
         var depth = 0
@@ -664,19 +740,16 @@ object ThemeResolver {
                         segStart = i + 1
                     }
                 }
-                ';' -> if (depth == 0) {
-                    top.append(css, segStart, i + 1).append('\n')
-                    segStart = i + 1
-                }
+                // A declaration outside any rule is not valid CSS: card-mod's <style> drops it, so Vitro does too.
+                ';' -> if (depth == 0) segStart = i + 1
             }
         }
-        if (depth == 0 && segStart < css.length) top.append(css.substring(segStart))
-        return (top.toString() + "\n" + host) to other
+        return host.toString().replace(Regex("""\s*!\s*important""", RegexOption.IGNORE_CASE), "") to other
     }
 
     private fun isHostSelector(selector: String): Boolean = selector.split(',').any { raw ->
-        val s = raw.trim().lowercase(Locale.ROOT)
-        s == "ha-card" || s == ":host" || s == "." ||
+        val s = raw.trim().lowercase(Locale.ROOT).replace(Regex("""\s+"""), " ")
+        s == "ha-card" || s == ":host" || s == "." || s == ":host ha-card" || s == ":host > ha-card" ||
             (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && ":hover" !in s && ":active" !in s)
     }
 

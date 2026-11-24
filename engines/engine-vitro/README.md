@@ -46,6 +46,20 @@ Vitro reads the themes Home Assistant already has, so a dashboard looks the same
 
 The resolved variables are also exported to Tier 3 islands, so native and custom cards match.
 
+## Rendering like Home Assistant does
+
+Vitro follows Home Assistant's own rules, so a dashboard never looks right only in Vitro:
+
+| Part | What Vitro does |
+|---|---|
+| Markdown | Markdown follows HA's sanitizer: inline `style` and `class` attributes are dropped, and tags outside HA's whitelist show as text. Style the rendered Markdown through card-mod sheets instead. Content goes through the same steps as in the browser (`marked` with line breaks, then the sanitizer), and every element gets its style from the browser defaults, HA's markdown styles and the card's sheets. |
+| card-mod | `card_mod.style` is a string or a selector map. The `"."` sheet styles the card (`ha-card { … }`, `:host { … }`) and `ha-markdown`; `"ha-markdown$"` styles the rendered Markdown and `"hui-clock-card-digital$"` the clock's digits. Declarations outside a rule are ignored, as they are in the browser. HA's own styles win specificity ties, so write `ha-markdown-element h2 { … }` to beat HA's `h2`. Custom properties set on the card, such as `--card-text-align`, `--mdc-icon-size` or `--vertical-stack-card-gap`, reach everything inside it. |
+| Markdown sheets | Selectors by element, descendant and child, `:first-child`, `:last-child`, `:nth-child()`, `:first-of-type`, `:last-of-type`, `:nth-of-type()` (including `2n+1` forms), `:not()` and attribute selectors such as `td[width="0%"]`. Properties for typography, color and opacity, margins (they collapse like CSS), padding, width and height, backgrounds, border-radius and borders. |
+| HTML tables | `<table role="presentation">` rows and proportional bars: `<td width="N%" align valign>`, `border-spacing`, `table-layout: fixed`, cell backgrounds, and a rounded `overflow: hidden` table. |
+| Images | `<img width height>`, block images (`display: block`, `width: 100%`), and `data:image/svg+xml` images built with Jinja, drawn natively from a small SVG subset. |
+| Sections | HA's grid: the `--ha-view-sections-*` gaps and column widths, 12 columns per section with `--ha-section-grid-*` gaps, and each card's `grid_options` (or the size its type reports, such as a large clock's 6 x 2). Hidden cards and sections leave no gap. |
+| Cards | The clock reads `clock_size`, `time_format`, `time_zone`, `no_background` and the `--ha-clock-card-digital-font-size-*` variables. Mushroom chips honor `conditional` chips and ignore a chip's own `visibility` and `card_mod`, like Mushroom does. stack-in-card follows version 0.2.0. A card's `margin` insets it in its slot. |
+
 ## Key optimizations
 
 - **View-scoped entity subscriptions:** Deep-scans the active view's config (including nested custom-card config objects) and passes only those `entity_id`s to `subscribe_entities`.

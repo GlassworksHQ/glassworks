@@ -1210,10 +1210,11 @@ class AutoEntitiesCardView(
 // ---------------------------------------------------------------------------------------------------------------
 
 /**
- * Native `custom:stack-in-card` (`mode: vertical | horizontal`): every child card drawn inside this one surface,
- * with the children's own backgrounds, borders and shadows taken off so they read as one card. `keep:
- * { background: true }` keeps the children's backgrounds (and `border_radius: true` their rounding), `keep:
- * { margin: true }` the gaps between them. An optional `title` heads the card.
+ * Native `custom:stack-in-card` (`mode: vertical | horizontal`), after stack-in-card 0.2.0: the cards sit in a
+ * plain vertical (or horizontal) stack inside this one surface, with the stack's usual gap
+ * (`--vertical-stack-card-gap`, 8 px by default), and lose their own backgrounds and shadows so they read as one
+ * card. `keep: { background: true }` keeps the backgrounds (and `border_radius: true` their rounding);
+ * `keep: { margin: true }` also pads the stack 8 px. An optional `title` heads the card.
  */
 open class StackInCardView(
     ctx: VitroCardContext,
@@ -1235,19 +1236,21 @@ open class StackInCardView(
                 setPadding(ctx.px(16f), ctx.px(14f), ctx.px(16f), ctx.px(4f))
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
+        // stack-in-card 0.2.0 wraps the cards in a plain vertical/horizontal stack; `keep.margin` turns on
+        // `outer_padding`, 8 px around that stack.
+        val outerPadding = if (keep.has("outer_padding")) keep.optBoolean("outer_padding") else keep.optBoolean("margin", false)
         stack = LinearLayout(ctx.context).apply {
             orientation = if (horizontal) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-            if (keep.optBoolean("background", false) || keep.optBoolean("margin", false)) {
-                val pad = ctx.px(10f)
+            if (outerPadding) {
+                val pad = ctx.px(8f)
                 setPadding(pad, pad, pad, pad)
             }
         }
-        val modGap = dev.glassworks.engine.vitro.theme.ThemeResolver.parseCardMod(config.raw.optJSONObject("card_mod"), ctx.theme.vars).gapDp
-        val gap = when {
-            modGap != null -> ctx.px(modGap)
-            keep.optBoolean("margin", false) -> ctx.px(ctx.theme.cardGapDp)
-            else -> 0
-        }
+        // The inner stack's gap: `--vertical-stack-card-gap` (or the horizontal one), then `--stack-card-gap`, 8 px.
+        val vars = dev.glassworks.engine.vitro.theme.ThemeResolver.parseCardMod(config.raw.optJSONObject("card_mod"), ctx.theme.vars).customProperties
+        val gapVar = listOf(if (horizontal) "horizontal-stack-card-gap" else "vertical-stack-card-gap", "stack-card-gap")
+            .firstNotNullOfOrNull { vars[it] ?: ctx.theme.vars[it] }
+        val gap = ctx.px(dev.glassworks.engine.vitro.theme.ThemeResolver.parseDimensionDp(gapVar, 8f))
         children = config.childCards.mapIndexed { idx, child ->
             val v = build(child)
             strip(v)
@@ -1263,10 +1266,8 @@ open class StackInCardView(
         addView(column, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
     }
 
-    override fun clearDefaultInnerPadding() {
-        super.clearDefaultInnerPadding()
-        stack.setPadding(0, 0, 0, 0)
-    }
+    // card-mod padding on the outer ha-card adds to the inner stack's own padding, as in the browser.
+    override fun clearDefaultInnerPadding() = Unit
 
     /** Takes the surface off every card in [v]'s tree, so the children share this card's one surface. */
     private fun strip(v: View) {

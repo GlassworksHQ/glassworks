@@ -18,14 +18,8 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TableLayout
 import android.widget.TextView
-import dev.glassworks.engine.vitro.cards.MarkdownCardView
-import dev.glassworks.engine.vitro.cards.MarkdownInline
-import dev.glassworks.engine.vitro.cards.MarkdownRenderer
-import dev.glassworks.engine.vitro.cards.MdBlock
-import dev.glassworks.engine.vitro.cards.MdiIconSpan
 import dev.glassworks.engine.vitro.cards.MushroomChipsCardView
 import dev.glassworks.engine.vitro.cards.TileCardView
-import dev.glassworks.engine.vitro.cards.parseMarkdownBlocks
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.model.CardConfig
@@ -104,154 +98,14 @@ class CoreParityTest {
 
     // ---- Markdown blocks ----
 
-    @Test
-    fun markdownSplitsIntoHeadingsRulesTablesListsQuotesAndCenter() {
-        val blocks = parseMarkdownBlocks(
-            """
-            # Home
-            ## Lights
-            #### Small
-            Plain **text**
-            second line
-            ---
-            <hr/>
-            | Room | Temp |
-            |:-----|-----:|
-            | Lounge | 21 °C |
-            | Kitchen | 19 °C |
-
-            - one
-            * two
-              - nested
-            1. first
-            2. second
-            > quoted *words*
-            > still quoted
-            <center>Centered **bold**</center>
-            """.trimIndent(),
-        )
-        assertEquals(MdBlock.Heading(1, "Home"), blocks[0])
-        assertEquals(MdBlock.Heading(2, "Lights"), blocks[1])
-        assertEquals(MdBlock.Heading(4, "Small"), blocks[2])
-        assertEquals(MdBlock.Paragraph("Plain **text**\nsecond line"), blocks[3])
-        assertEquals(MdBlock.Rule, blocks[4])
-        assertEquals(MdBlock.Rule, blocks[5])
-        val table = blocks[6] as MdBlock.Table
-        assertEquals(listOf("Room", "Temp"), table.header)
-        assertEquals(listOf(listOf("Lounge", "21 °C"), listOf("Kitchen", "19 °C")), table.rows)
-        assertEquals(listOf("start", "end"), table.aligns)
-        assertEquals(MdBlock.ListItem(false, "•", "one", 0), blocks[7])
-        assertEquals(MdBlock.ListItem(false, "•", "two", 0), blocks[8])
-        assertEquals(MdBlock.ListItem(false, "•", "nested", 1), blocks[9])
-        assertEquals(MdBlock.ListItem(true, "1.", "first", 0), blocks[10])
-        assertEquals(MdBlock.ListItem(true, "2.", "second", 0), blocks[11])
-        assertEquals(MdBlock.Quote("quoted *words*\nstill quoted"), blocks[12])
-        assertEquals(MdBlock.Center(listOf(MdBlock.Paragraph("Centered **bold**"))), blocks[13])
-        assertEquals(14, blocks.size)
-    }
-
     // ---- Markdown inline ----
-
-    private val inline = MarkdownInline(linkColor = 0xFF03A9F4.toInt(), codeBackground = 0x14FFFFFF, iconSizePx = 16)
 
     private inline fun <reified T : Any> Spanned.spansOf(): List<T> =
         getSpans(0, length, T::class.java).sortedBy { getSpanStart(it) }
 
     private fun Spanned.covered(span: Any): String = subSequence(getSpanStart(span), getSpanEnd(span)).toString()
 
-    @Test
-    fun inlineMarkdownBecomesSpans() {
-        val text = inline.render(
-            "**Bold** and *it* and __b2__ and _i2_ ~~gone~~ `code` [HA](https://example.org) <b>hb</b> <em>he</em> <s>hs</s> <code>hc</code>",
-            0xFFFFFFFF.toInt(),
-        )
-        assertEquals("Bold and it and b2 and i2 gone code HA hb he hs hc", text.toString())
-        val bold = text.spansOf<StyleSpan>().filter { it.style == Typeface.BOLD }.map { text.covered(it) }
-        val italic = text.spansOf<StyleSpan>().filter { it.style == Typeface.ITALIC }.map { text.covered(it) }
-        assertEquals(listOf("Bold", "b2", "hb"), bold)
-        assertEquals(listOf("it", "i2", "he"), italic)
-        assertEquals(listOf("gone", "hs"), text.spansOf<StrikethroughSpan>().map { text.covered(it) })
-        assertEquals(listOf("code", "hc"), text.spansOf<TypefaceSpan>().filter { it.family == "monospace" }.map { text.covered(it) })
-        val link = text.spansOf<ForegroundColorSpan>().single { it.foregroundColor == 0xFF03A9F4.toInt() }
-        assertEquals("HA", text.covered(link))
-        assertEquals(listOf("HA"), text.spansOf<UnderlineSpan>().map { text.covered(it) })
-    }
-
-    @Test
-    fun snakeCaseAndArithmeticStayLiteral() {
-        assertEquals("light_kitchen_main is 2 * 3 * 4", inline.render("light_kitchen_main is 2 * 3 * 4", 0).toString())
-        assertTrue(inline.render("light_kitchen_main", 0).spansOf<StyleSpan>().isEmpty())
-    }
-
-    @Test
-    fun fontAndSpanColorsBreaksAndEntities() {
-        val text = inline.render(
-            """<font color="red">Alarm</font><br>On <span style="color: #00ff00">green</span><br/>5&deg;C &amp; up""",
-            0xFFFFFFFF.toInt(),
-        )
-        assertEquals("Alarm\nOn green\n5°C & up", text.toString())
-        val colors = text.spansOf<ForegroundColorSpan>().associate { text.covered(it) to it.foregroundColor }
-        assertEquals(0xFFF44336.toInt(), colors["Alarm"]) // HA's red
-        assertEquals(0xFF00FF00.toInt(), colors["green"])
-    }
-
-    @Test
-    fun haIconBecomesATintedImageSpan() {
-        val text = inline.render(
-            """<ha-icon icon="mdi:lightbulb"></ha-icon> Lamp <font color="#ff9800"><ha-icon icon="mdi:fire"/></font>""",
-            0xFFEEEEEE.toInt(),
-        )
-        val icons = text.spansOf<MdiIconSpan>().sortedBy { text.getSpanStart(it) }
-        assertEquals(listOf("mdi:lightbulb", "mdi:fire"), icons.map { it.iconName })
-        assertEquals(0xFFEEEEEE.toInt(), icons[0].color) // the text color
-        assertEquals(0xFFFF9800.toInt(), icons[1].color) // the enclosing font color
-        assertEquals("￼ Lamp ￼", text.toString())
-    }
-
     // ---- Markdown card ----
-
-    @Test
-    fun markdownCardRendersNativeViewsAndRebuildsOnEveryTemplateUpdate() {
-        val templates = Templates()
-        val view = MarkdownCardView(
-            context(EntityStore(), templates = templates),
-            card("""{"type": "markdown", "content": "# {{ states('sensor.t') }}\n| A | B |\n|---|---|\n| 1 | 2 |"}"""),
-        )
-        templates.push("sensor.t", "# Climate\nIt is **warm**\n\n| Room | Temp |\n|---|---|\n| Lounge | 21 |\n\n---\n- fan on")
-        val body = view.body
-        val heading = body.getChildAt(0) as TextView
-        val para = body.getChildAt(1) as TextView
-        assertEquals("Climate", heading.text.toString())
-        assertTrue(heading.textSize > para.textSize)
-        assertEquals("It is warm", para.text.toString())
-        assertTrue((para.text as Spanned).spansOf<StyleSpan>().any { it.style == Typeface.BOLD })
-        val table = body.getChildAt(2) as TableLayout
-        val cells = table.all().filterIsInstance<TextView>().map { it.text.toString() }
-        assertEquals(listOf("Room", "Temp", "Lounge", "21"), cells)
-        assertEquals(MarkdownRenderer.RULE_TAG, body.getChildAt(3).tag)
-        val item = body.getChildAt(4) as LinearLayout
-        assertEquals(listOf("•", "fan on"), item.all().filterIsInstance<TextView>().map { it.text.toString() })
-
-        // A later render replaces everything; nothing from the first one is left behind.
-        templates.push("sensor.t", "Just text")
-        assertEquals(1, body.childCount)
-        assertEquals("Just text", (body.getChildAt(0) as TextView).text.toString())
-        assertFalse(body.all().filterIsInstance<TextView>().any { "{{" in it.text })
-    }
-
-    @Test
-    fun staticMarkdownQuotesAndCenterRender() {
-        val view = MarkdownCardView(
-            context(EntityStore()),
-            card("""{"type": "markdown", "content": "> careful\n\n<center>**Hi**</center>"}"""),
-        )
-        val quote = view.body.getChildAt(0) as LinearLayout
-        assertEquals(MarkdownRenderer.QUOTE_BAR_TAG, quote.getChildAt(0).tag)
-        val center = view.body.getChildAt(1) as LinearLayout
-        val hi = center.getChildAt(0) as TextView
-        assertEquals("Hi", hi.text.toString())
-        assertEquals(android.view.Gravity.CENTER_HORIZONTAL, hi.gravity and android.view.Gravity.HORIZONTAL_GRAVITY_MASK)
-    }
 
     // ---- Mushroom template card ----
 
@@ -326,7 +180,7 @@ class CoreParityTest {
     }
 
     @Test
-    fun conditionalAndVisibilityChipsFollowState() {
+    fun conditionalChipsFollowStateAndChipVisibilityIsIgnored() {
         val store = EntityStore()
         store.putLocal(EntityState("input_boolean.guest", "off", emptyMap()))
         store.putLocal(EntityState("binary_sensor.door", "off", emptyMap()))
@@ -344,12 +198,12 @@ class CoreParityTest {
         )
         val (guestChip, hallChip) = (0 until chips.childCount).map { chips.getChildAt(it) }
         assertEquals(View.GONE, guestChip.visibility)
-        assertEquals(View.GONE, hallChip.visibility)
+        // Mushroom ignores a chip's own `visibility`: only `conditional` chips come and go.
+        assertEquals(View.VISIBLE, hallChip.visibility)
 
         store.putLocal(EntityState("input_boolean.guest", "on", emptyMap()))
         ShadowLooper.idleMainLooper()
         assertEquals(View.VISIBLE, guestChip.visibility)
-        assertEquals(View.GONE, hallChip.visibility)
 
         store.putLocal(EntityState("binary_sensor.door", "on", emptyMap()))
         store.putLocal(EntityState("input_boolean.guest", "off", emptyMap()))

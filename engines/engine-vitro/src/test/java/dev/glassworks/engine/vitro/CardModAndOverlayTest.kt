@@ -130,7 +130,7 @@ class CardModAndOverlayTest {
         val theme = ThemeResolver.resolve(
             ThemeCatalog(
                 defaultTheme = "mirror",
-                themes = mapOf("mirror" to ThemeCatalog.ThemeDefinition(base = mapOf("ha-view-sections-padding" to "28px", "masonry-view-card-margin" to "14px"))),
+                themes = mapOf("mirror" to ThemeCatalog.ThemeDefinition(base = mapOf("masonry-view-padding" to "28px", "masonry-view-card-margin" to "14px"))),
             ),
         )
         assertEquals(28f, theme.viewPaddingDp)
@@ -150,7 +150,7 @@ class CardModAndOverlayTest {
         assertTrue(mod.fixedCenterY)
         assertFalse(mod.fixedCenterX)
 
-        val both = ThemeResolver.parseCardMod("position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%)")
+        val both = ThemeResolver.parseCardMod("ha-card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) }")
         assertTrue(both.positionFixed)
         assertTrue(both.fixedCenterX)
         assertTrue(both.fixedCenterY)
@@ -168,13 +168,22 @@ class CardModAndOverlayTest {
 
         // Other selectors don't leak into the card's own declarations; `to right` maps to 90 degrees.
         val mixed = ThemeResolver.parseCardMod(
-            "background: linear-gradient(to right, #000000, #ffffff); .name { font-size: 40px }",
+            "ha-card { background: linear-gradient(to right, #000000, #ffffff) } .name { font-size: 40px }",
         )
         assertEquals(90f, mixed.backgroundGradient?.angleDeg)
         assertNull(mixed.fontSizeSp)
         assertTrue(mixed.hasComplexSelectors)
-        assertEquals(400L, ThemeResolver.parseCardMod("transition: all 400ms linear").transitionOpacityMs)
-        assertNull(ThemeResolver.parseCardMod("transition: transform 1s").transitionOpacityMs)
+        assertEquals(400L, ThemeResolver.parseCardMod("ha-card { transition: all 400ms linear }").transitionOpacityMs)
+        assertNull(ThemeResolver.parseCardMod("ha-card { transition: transform 1s }").transitionOpacityMs)
+        // A declaration outside any rule is invalid CSS: card-mod (and so Vitro) ignores it.
+        assertNull(ThemeResolver.parseCardMod("background: #112233; font-size: 20px").backgroundColor)
+        assertNull(ThemeResolver.parseCardMod("background: #112233; font-size: 20px").fontSizeSp)
+        // Card-scoped custom properties, margins and `background: none`.
+        val vars2 = ThemeResolver.parseCardMod("ha-card { --card-text-align: right; margin: 4px 8px; background: none }")
+        assertEquals("right", vars2.customProperties["card-text-align"])
+        assertEquals(8f, vars2.marginInsets?.left)
+        assertEquals(4f, vars2.marginInsets?.top)
+        assertEquals(0, vars2.backgroundColor)
     }
 
     // ---- CardSurface.applyCardMod ----
@@ -331,7 +340,7 @@ class CardModAndOverlayTest {
     @Test
     fun parsedFixedCardKeepsGradientBackgroundType() {
         // A pinned capsule's gradient comes from parseBackground, so it's a real LinearGradient.
-        val mod = ThemeResolver.parseCardMod("background-image: linear-gradient(180deg, #000000 0%, #ffffff 100%)")
+        val mod = ThemeResolver.parseCardMod("ha-card { background-image: linear-gradient(180deg, #000000 0%, #ffffff 100%) }")
         assertTrue(mod.backgroundGradient is ThemeBackground.LinearGradient)
         assertEquals(180f, mod.backgroundGradient?.angleDeg)
     }

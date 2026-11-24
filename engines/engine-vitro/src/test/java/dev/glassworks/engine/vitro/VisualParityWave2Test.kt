@@ -21,15 +21,8 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.BarCardView
-import dev.glassworks.engine.vitro.cards.BarSegment
 import dev.glassworks.engine.vitro.cards.ClockCardView
-import dev.glassworks.engine.vitro.cards.FontWeightSpan
-import dev.glassworks.engine.vitro.cards.LetterSpacingSpan
-import dev.glassworks.engine.vitro.cards.MarkdownInline
-import dev.glassworks.engine.vitro.cards.MarkdownRenderer
-import dev.glassworks.engine.vitro.cards.MdBlock
 import dev.glassworks.engine.vitro.cards.ModernCircularGaugeCardView
-import dev.glassworks.engine.vitro.cards.parseMarkdownBlocks
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.model.CardConfig
@@ -95,149 +88,9 @@ class VisualParityWave2Test {
 
     // ---- Markdown typography ----
 
-    private val inline = MarkdownInline(
-        linkColor = 0xFF03A9F4.toInt(),
-        codeBackground = 0x14FFFFFF,
-        iconSizePx = 16,
-        density = 2f,
-        fontScale = 1f,
-        typefaceFor = { Typeface.DEFAULT },
-    )
-
-    @Test
-    fun spanStyleCarriesSizeWeightLetterSpacingAndTransform() {
-        val out = inline.render(
-            """<span style="font-size:52px;font-weight:300;letter-spacing:0.1em;text-transform:uppercase">good morning</span>""",
-            Color.WHITE,
-        )
-        assertEquals("GOOD MORNING", out.toString())
-        val size = out.spansOf<AbsoluteSizeSpan>().single()
-        assertEquals(104, size.size) // 52 CSS px at density 2
-        assertFalse(size.dip)
-        assertEquals(300, out.spansOf<FontWeightSpan>().single().weight)
-        assertEquals(0.1f, out.spansOf<LetterSpacingSpan>().single().em!!, 1e-6f)
-        assertTrue(out.spansOf<StyleSpan>().isEmpty())
-    }
-
-    @Test
-    fun relativeSizesBoldWeightsOpacityAndLowercase() {
-        val out = inline.render(
-            """<span style="font-size:0.75em">a</span><span style="font-size:150%">b</span>""" +
-                """<span style="font-weight:bold">c</span><span style="color:#ffffff;opacity:0.5;text-transform:lowercase">DIM</span>""",
-            Color.WHITE,
-        )
-        assertEquals("abcdim", out.toString())
-        val rel = out.spansOf<RelativeSizeSpan>()
-        assertEquals(listOf(0.75f, 1.5f), rel.map { it.sizeChange })
-        assertEquals(Typeface.BOLD, out.spansOf<StyleSpan>().single().style)
-        val dim = out.spansOf<ForegroundColorSpan>().single()
-        assertEquals(128, Color.alpha(dim.foregroundColor))
-        assertEquals(0xFFFFFF, dim.foregroundColor and 0xFFFFFF)
-    }
-
-    @Test
-    fun blockTextAlignIsAnAlignmentSpanInline() {
-        val out = inline.render("""<div style="text-align:center">Centered</div>""", Color.WHITE)
-        assertEquals("Centered", out.toString())
-        assertEquals(Layout.Alignment.ALIGN_CENTER, out.spansOf<AlignmentSpan.Standard>().single().alignment)
-    }
-
-    @Test
-    fun aWrappingParagraphStyleSetsGravityAndLetterSpacing() {
-        val into = LinearLayout(activity)
-        MarkdownRenderer(context()).render(
-            """<p style="text-align:right;letter-spacing:0.14em;font-size:12px">LIVING ROOM</p>""",
-            into,
-        )
-        val tv = into.getChildAt(0) as TextView
-        assertEquals(Gravity.END, tv.gravity and Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK)
-        assertEquals(0.14f, tv.letterSpacing, 1e-6f)
-        assertEquals("LIVING ROOM", tv.text.toString())
-    }
-
     // ---- Markdown stacked bars ----
 
-    @Test
-    fun aFlexRowOfWidthDivsIsAStackedBar() {
-        val blocks = parseMarkdownBlocks(
-            """<div style="display:flex;height:10px;border-radius:5px;overflow:hidden;gap:2px"><div style="width:40%;background:#38bdf8"></div><div style="width:60%;background:#34d399"></div></div>""",
-        )
-        assertEquals(
-            listOf(
-                MdBlock.StackedBar(
-                    heightDp = 10f, radiusDp = 5f, trackColor = null, gapDp = 2f,
-                    segments = listOf(BarSegment(40f, 0xFF38BDF8.toInt()), BarSegment(60f, 0xFF34D399.toInt())),
-                ),
-            ),
-            blocks,
-        )
-    }
-
-    @Test
-    fun aSingleProgressBarKeepsItsTrackAndTheTextAroundIt() {
-        val blocks = parseMarkdownBlocks(
-            "**Battery**\n" +
-                """<div style="background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px"><div style="width: 65%; height: 100%; background: #fbbf24"></div></div>""" +
-                "\n65% left",
-        )
-        assertEquals(3, blocks.size)
-        assertEquals(MdBlock.Paragraph("**Battery**"), blocks[0])
-        val bar = blocks[1] as MdBlock.StackedBar
-        assertEquals(8f, bar.heightDp)
-        assertEquals(4f, bar.radiusDp)
-        assertNotNull(bar.trackColor)
-        assertEquals(listOf(BarSegment(65f, 0xFFFBBF24.toInt())), bar.segments)
-        assertEquals(MdBlock.Paragraph("65% left"), blocks[2])
-    }
-
-    @Test
-    fun plainDivsStayParagraphs() {
-        val md = """<div style="color:red">Not a bar</div>"""
-        assertEquals(listOf(MdBlock.Paragraph(md)), parseMarkdownBlocks(md))
-    }
-
-    @Test
-    fun aStackedBarRendersWeightedClippedSegments() {
-        val into = LinearLayout(activity)
-        MarkdownRenderer(context()).render(
-            """<div style="display:flex;height:10px;border-radius:5px"><div style="width:40%;background:#38bdf8"></div><div style="width:60%;background:#34d399"></div></div>""",
-            into,
-        )
-        val bar = into.all().single { it.tag == MarkdownRenderer.STACKED_BAR_TAG } as LinearLayout
-        assertTrue(bar.clipToOutline)
-        assertEquals(100f, bar.weightSum)
-        assertEquals(2, bar.childCount)
-        val weights = (0 until bar.childCount).map { (bar.getChildAt(it).layoutParams as LinearLayout.LayoutParams).weight }
-        assertEquals(listOf(40f, 60f), weights)
-        assertTrue((0 until bar.childCount).all { bar.getChildAt(it).tag == MarkdownRenderer.STACKED_SEGMENT_TAG })
-    }
-
     // ---- Clock ----
-
-    @Test
-    fun cardModFontSizeAndLightWeightSizeTheClock() {
-        val big = ClockCardView(
-            context(),
-            card("""{"type": "clock", "card_mod": {"style": "ha-card { font-size: 164px; font-weight: 300; }"}}"""),
-        )
-        assertEquals(164f, big.digitsSp)
-        assertEquals(164f * 0.26f, big.sideSp, 1e-4f)
-        assertTrue(big.digitsLight)
-
-        val plain = ClockCardView(context(), card("""{"type": "clock"}"""))
-        assertEquals(42f, plain.digitsSp)
-        assertEquals(16f, plain.sideSp)
-        assertFalse(plain.digitsLight)
-
-        val large = ClockCardView(context(), card("""{"type": "clock", "clock_size": "large"}"""))
-        assertEquals(52f, large.digitsSp)
-        assertEquals(20f, large.sideSp)
-
-        val huge = ClockCardView(context(), card("""{"type": "clock", "card_mod": {"style": "ha-card { font-size: 400px }"}}"""))
-        assertEquals(220f, huge.digitsSp)
-        assertEquals(44f, huge.sideSp)
-        assertFalse(huge.digitsLight)
-    }
 
     // ---- custom:modern-circular-gauge ----
 
@@ -387,31 +240,6 @@ class VisualParityWave2Test {
     }
 
     @Test
-    fun clockFollowsCardModTextAlignAndZeroPadding() {
-        val left = ClockCardView(
-            context(),
-            card("""{"type": "clock", "time_format": "12", "card_mod": {"style": "ha-card { text-align: left; padding: 0; background: none }"}}"""),
-        )
-        assertEquals(Gravity.START, left.horizontalGravity)
-        val col = left.getChildAt(0) as LinearLayout
-        assertEquals(0, col.paddingStart)
-        assertEquals(Gravity.START, col.gravity and Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK)
-        val row = col.getChildAt(0) as LinearLayout
-        assertEquals(Gravity.START, row.gravity and Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK)
-        // AM/PM alone sits on the digits' baseline, not mid-height.
-        assertEquals(Gravity.BOTTOM, row.gravity and Gravity.VERTICAL_GRAVITY_MASK)
-        val side = row.getChildAt(1) as LinearLayout
-        assertEquals(Gravity.BOTTOM, side.gravity and Gravity.VERTICAL_GRAVITY_MASK)
-        assertTrue(side.paddingBottom > 0)
-
-        val right = ClockCardView(context(), card("""{"type": "clock", "card_mod": {"style": "text-align: end"}}"""))
-        assertEquals(Gravity.END, right.horizontalGravity)
-        val centered = ClockCardView(context(), card("""{"type": "clock"}"""))
-        assertEquals(Gravity.CENTER_HORIZONTAL, centered.horizontalGravity)
-        assertTrue((centered.getChildAt(0) as LinearLayout).paddingStart > 0)
-    }
-
-    @Test
     fun mirrorDashboardIconsExistAndParse() {
         val names = listOf(
             "circle", "circle-small", "flash-alert", "wrench", "table-furniture", "hvac", "stove", "weather-fog",
@@ -423,86 +251,6 @@ class VisualParityWave2Test {
             dev.glassworks.engine.vitro.ui.MdiIcons.pathFor("mdi:$n").computeBounds(bounds, true)
             assertTrue("mdi:$n draws inside 24x24: $bounds", bounds.width() > 1f && bounds.left >= -0.5f && bounds.right <= 24.5f && bounds.bottom <= 24.5f)
         }
-    }
-
-    @Test
-    fun markdownTableWithBlankHeaderDrawsNoHeaderRow() {
-        val md = "|   |   |\n|---|--:|\n| Temp | 21 °C |\n| Humidity | 40 % |"
-        val table = parseMarkdownBlocks(md).single() as MdBlock.Table
-        assertTrue(table.header.all { it.isBlank() })
-        val box = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-        MarkdownRenderer(context()).render(md, box)
-        val layout = box.getChildAt(0) as android.widget.TableLayout
-        // Borderless key-value table: two rows, no empty header row or hairlines.
-        assertEquals(2, layout.childCount)
-        val firstRow = layout.getChildAt(0) as android.widget.TableRow
-        assertEquals("Temp", (firstRow.getChildAt(0) as TextView).text.toString())
-
-        val headed = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-        MarkdownRenderer(context()).render("| A | B |\n|---|---|\n| 1 | 2 |", headed)
-        assertEquals(3, (headed.getChildAt(0) as android.widget.TableLayout).childCount)
-    }
-
-    @Test
-    fun markdownHtmlImageLinesBecomeNativeImages() {
-        val md = """
-            ### Now playing
-            <img src="/api/media_player_proxy/media_player.kitchen?token=x" style="width:140px;height:140px;border-radius:24px">
-
-            <div style="text-align:right"><img src="/local/a.png" width="64" height="32"></div>
-
-            <div style="text-align:center">
-            <img src="/local/b.png" style="margin-left:auto">
-            </div>
-        """.trimIndent()
-        val blocks = parseMarkdownBlocks(md)
-        val images = blocks.filterIsInstance<MdBlock.Image>()
-        assertEquals(3, images.size)
-        assertEquals(MdBlock.Image("/api/media_player_proxy/media_player.kitchen?token=x", 140f, 140f, 24f, "start"), images[0])
-        assertEquals(MdBlock.Image("/local/a.png", 64f, 32f, 0f, "end"), images[1])
-        assertEquals("end", images[2].align)
-        assertFalse(blocks.any { it is MdBlock.Paragraph && "<" in it.text })
-
-        val box = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-        MarkdownRenderer(context()).render(md, box)
-        val views = box.all().filter { it.tag == MarkdownRenderer.IMAGE_TAG }.map { it as android.widget.ImageView }
-        assertEquals(3, views.size)
-        val first = views[0]
-        assertEquals(android.widget.ImageView.ScaleType.CENTER_CROP, first.scaleType)
-        assertTrue(first.clipToOutline)
-        assertEquals((140f * activity.resources.displayMetrics.density).toInt(), first.layoutParams.width)
-        assertEquals(Gravity.END, (views[1].layoutParams as LinearLayout.LayoutParams).gravity)
-    }
-
-    @Test
-    fun chipCardModTintsItsPillBorderAndLabel() {
-        val templates = HashMap<String, (String) -> Unit>()
-        val chips = dev.glassworks.engine.vitro.cards.MushroomChipsCardView(
-            context(subscribeTemplate = { tpl, cb -> templates[tpl] = cb; {} }),
-            card(
-                """{"type": "custom:mushroom-chips-card", "chips": [
-                     {"type": "template", "content": "Peak", "icon": "mdi:flash-alert",
-                      "card_mod": {"style": "ha-card { background: #112233; border: 2px solid #445566; border-radius: 8px; color: #fbbf24 }"}},
-                     {"type": "template", "content": "AQI",
-                      "card_mod": {"style": "ha-card { color: {{ '#4ade80' }} }"}}
-                   ]}""",
-            ),
-        )
-        val peak = chips.getChildAt(0) as LinearLayout
-        val pill = peak.background as android.graphics.drawable.GradientDrawable
-        assertEquals(0xFF112233.toInt(), pill.color!!.defaultColor)
-        assertEquals(8f * activity.resources.displayMetrics.density, pill.cornerRadius, 0.01f)
-        val peakLabel = peak.all().filterIsInstance<TextView>().single()
-        assertEquals(0xFFFBBF24.toInt(), peakLabel.currentTextColor)
-
-        val aqi = chips.getChildAt(1) as LinearLayout
-        val aqiLabel = aqi.all().filterIsInstance<TextView>().single()
-        val before = aqiLabel.currentTextColor
-        assertTrue(before != 0xFF4ADE80.toInt())
-        val live = templates.entries.single { "#4ade80" in it.key }.value
-        live("ha-card { color: #4ade80 }")
-        ShadowLooper.idleMainLooper()
-        assertEquals(0xFF4ADE80.toInt(), aqiLabel.currentTextColor)
     }
 
     @Test

@@ -489,11 +489,13 @@ class VitroView(
      * Sends a `position: fixed` card to the current view's overlay instead of the scrolling layout. False (and
      * nothing happens) for every other card, or outside a view build.
      */
-    private fun pinIfFixed(card: CardConfig, ctx: VitroCardContext): Boolean {
+    private fun pinIfFixed(card: CardConfig, ctx: VitroCardContext, sectionVisibility: List<VisibilityCondition> = emptyList()): Boolean {
         val sink = pendingPinned ?: return false
         val mod = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), ctx.theme.vars)
         if (!mod.positionFixed) return false
-        sink += wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx) to pinnedLayoutParams(mod)
+        // A fixed card still lives in its section: when the section hides, so does the card.
+        val view = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx, sectionVisibility)
+        sink += view to pinnedLayoutParams(mod)
         return true
     }
 
@@ -575,7 +577,7 @@ class VitroView(
         val outerPad = px(ctx.theme.viewPaddingDp)
 
         val container: View = if (view.type == "sections" && view.sections.isNotEmpty()) {
-            buildSectionsLayout(view, ctx, widthDp, outerPad, gap)
+            buildSectionsLayout(view, ctx, widthDp)
         } else {
             buildMasonryLayout(view.cards, ctx, widthDp, outerPad, gap)
         }
@@ -696,86 +698,71 @@ class VitroView(
         return pill
     }
 
-    private fun buildSectionsLayout(
-        view: ViewConfig,
-        ctx: VitroCardContext,
-        widthDp: Int,
-        outerPad: Int,
-        gap: Int,
-    ): View {
-        val cols = when {
-            widthDp < 560 -> 1
-            widthDp < 920 -> minOf(2, view.maxColumns)
-            widthDp < 1280 -> minOf(3, view.maxColumns)
-            else -> minOf(4, view.maxColumns)
-        }.coerceAtLeast(1)
-
-        val root = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(outerPad, outerPad, outerPad, outerPad)
+    /**
+     * HA's sections view (`hui-sections-view.ts`): horizontal padding of `--ha-view-sections-column-gap` (the
+     * narrow gap at 600 px and below), as many columns of at least `--ha-view-sections-column-min-width` as fit
+     * (at most `max_columns`, and no more than the sections need), each at most
+     * `--ha-view-sections-column-max-width` wide and centered, `--ha-view-sections-row-gap` between sections
+     * and above and below them. Hidden sections take no room.
+     */
+    private fun buildSectionsLayout(view: ViewConfig, ctx: VitroCardContext, widthDp: Int): View {
+        val vars = ctx.theme.vars
+        fun dim(name: String, def: Float) = ThemeResolver.parseDimensionDp(vars[name], def)
+        val narrow = widthDp <= 600
+        val colGap = if (narrow) dim("ha-view-sections-narrow-column-gap", 8f) else dim("ha-view-sections-column-gap", 32f)
+        val rowGap = dim("ha-view-sections-row-gap", 24f)
+        val maxW = dim("ha-view-sections-column-max-width", 500f)
+        val minW = dim("ha-view-sections-column-min-width", 320f)
+        val fit = kotlin.math.floor((widthDp - 2 * colGap + colGap) / (minW + colGap)).toInt().coerceAtLeast(1)
+        val totalSpan = view.sections.sumOf { it.columnSpan }.coerceAtLeast(1)
+        val cols = minOf(fit, view.maxColumns, totalSpan).coerceAtLeast(1)
+        val grid = HaGridLayout(context, cols, px(colGap), px(rowGap), stretch = false).apply {
+            setPadding(px(colGap), px(rowGap), px(colGap), px(rowGap))
+            maxContentWidth = px(cols * maxW + (cols - 1) * colGap)
         }
-        val columns = (0 until cols).map { i ->
-            LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                root.addView(this, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
-                    if (i > 0) marginStart = gap
-                })
-            }
+        for (sec in view.sections) {
+            val span = sec.columnSpan.coerceIn(1, cols)
+            val built = wrapConditions(sec.visibility, buildSection(sec, ctx, span), ctx)
+            grid.addView(built, HaGridLayout.LayoutParams(span))
         }
-
-        view.sections.forEachIndexed { idx, sec ->
-            val col = columns[idx % cols]
-            val built = wrapConditions(sec.visibility, buildSection(sec, ctx, gap), ctx)
-            col.addView(built, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-                bottomMargin = px(14f)
-            })
-        }
-        return root
+        return grid
     }
 
-    private fun buildSection(section: SectionConfig, ctx: VitroCardContext, gap: Int): View {
-        val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    /**
+     * HA's grid section (`hui-grid-section.ts`): a 12-column grid per section column with
+     * `--ha-section-grid-row-gap` / `--ha-section-grid-column-gap` between cards. A card spans its
+     * [HaGridSize] columns, and a card with a fixed number of rows is that many `--ha-section-grid-row-height`
+     * rows tall; cards in a row stretch to the row's height.
+     */
+    private fun buildSection(section: SectionConfig, ctx: VitroCardContext, span: Int): View {
+        val vars = ctx.theme.vars
+        fun dim(name: String, def: Float) = ThemeResolver.parseDimensionDp(vars[name], def)
+        val rowGap = dim("ha-section-grid-row-gap", 8f)
+        val colGap = dim("ha-section-grid-column-gap", 8f)
+        val rowHeight = dim("ha-section-grid-row-height", 56f)
+        val columns = 12 * span
+        val grid = HaGridLayout(context, columns, px(colGap), px(rowGap), stretch = true)
         section.title?.let { title ->
-            box.addView(TextView(context).apply {
+            grid.addView(TextView(context).apply {
                 text = title
                 textSize = 15f
                 setTextColor(ctx.theme.primaryTextColor)
                 typeface = Inter.typeface(context, Inter.MEDIUM, 15f)
-                setPadding(px(4f), 0, px(4f), px(8f))
-            })
-        }
-        // Pack section cards in a 2-column sub-grid (matching HA's 12-column section units: <=6 = half, >6 = full).
-        var pendingHalfRow: LinearLayout? = null
-        // A half-width card left alone in its row keeps half the width: switch it to WRAP_CONTENT so the
-        // 1px spacer on the right doesn't collapse a MATCH_PARENT row height to 1px.
-        fun closeHalfRow() {
-            val row = pendingHalfRow ?: return
-            (row.getChildAt(0)?.layoutParams as? LinearLayout.LayoutParams)?.height = WRAP_CONTENT
-            row.addView(View(context), LinearLayout.LayoutParams(0, 1, 1f).apply { marginStart = gap })
-            pendingHalfRow = null
+                setPadding(px(4f), 0, px(4f), 0)
+            }, HaGridLayout.LayoutParams(columns))
         }
         for (card in section.cards) {
-            if (pinIfFixed(card, ctx)) continue
-            val isHalf = isHalfWidth(card)
-            val cardView = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
-            if (isHalf) {
-                val row = pendingHalfRow
-                if (row == null) {
-                    val newRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-                    newRow.addView(cardView, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
-                    box.addView(newRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = gap })
-                    pendingHalfRow = newRow
-                } else {
-                    row.addView(cardView, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { marginStart = gap })
-                    pendingHalfRow = null
-                }
-            } else {
-                closeHalfRow()
-                box.addView(cardView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = gap })
+            if (pinIfFixed(card, ctx, section.visibility)) {
+                // HA keeps the fixed card's grid slot (empty, but it still takes a row gap) while it's shown.
+                grid.addView(wrapVisibility(card, View(context), ctx), HaGridLayout.LayoutParams(columns))
+                continue
             }
+            val size = HaGridSize.of(card)
+            val cardView = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
+            val fixed = size.rows?.let { r -> px(r * (rowHeight + rowGap) - rowGap) }
+            grid.addView(cardView, HaGridLayout.LayoutParams(size.columns?.coerceAtMost(columns) ?: columns, fixed))
         }
-        closeHalfRow()
-        return box
+        return grid
     }
 
     private fun buildMasonryLayout(
@@ -839,7 +826,39 @@ class VitroView(
         }
         val childBuilder: CardBuilder = { child -> wrapVisibility(child, buildCard(child, ctx, false), ctx) }
         val stackMod = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), ctx.theme.vars)
-        val stackGap = px(stackMod.gapDp ?: ctx.theme.cardGapDp)
+        // Custom properties set on a card (`ha-card { --vertical-stack-card-gap: 8px }`) inherit into the cards
+        // inside it, as they do through the browser's shadow roots.
+        val outerVars = inheritedCardVars
+        inheritedCardVars = if (stackMod.customProperties.isEmpty()) outerVars else outerVars + stackMod.customProperties
+        try {
+            return buildCardWithVars(card, ctx, fillViewport, childBuilder, stackMod)
+        } finally {
+            inheritedCardVars = outerVars
+        }
+    }
+
+    /** Card-scoped custom properties in force while building the current card's children. */
+    private var inheritedCardVars: Map<String, String> = emptyMap()
+
+    /** A gap from HA's stack and grid variables (`--grid-card-gap`, `--vertical-stack-card-gap`, ...), 8 px by default. */
+    private fun cardGap(ctx: VitroCardContext, vararg names: String): Int {
+        for (n in names) {
+            val v = inheritedCardVars[n] ?: ctx.theme.vars[n] ?: continue
+            return px(ThemeResolver.parseDimensionDp(ThemeResolver.resolveValue(v, ctx.theme.vars, 0), 8f))
+        }
+        return px(8f)
+    }
+
+    private fun buildCardWithVars(
+        card: CardConfig,
+        ctx: VitroCardContext,
+        fillViewport: Boolean,
+        childBuilder: CardBuilder,
+        stackMod: CardModStyle,
+    ): View {
+        val verticalGap = cardGap(ctx, "vertical-stack-card-gap", "stack-card-gap")
+        val horizontalGap = cardGap(ctx, "horizontal-stack-card-gap", "stack-card-gap")
+        val gridGap = cardGap(ctx, "grid-card-gap")
         fun LinearLayout.applyStackPadding() {
             stackMod.paddingInsets?.let { p ->
                 setPadding(ctx.px(p.left), ctx.px(p.top), ctx.px(p.right), ctx.px(p.bottom))
@@ -852,7 +871,7 @@ class VitroView(
                 applyStackPadding()
                 card.childCards.forEachIndexed { idx, child ->
                     addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-                        if (idx > 0) topMargin = stackGap
+                        if (idx > 0) topMargin = verticalGap
                     })
                 }
             }
@@ -862,7 +881,7 @@ class VitroView(
                 val childH = if (card.childCards.size >= 2) MATCH_PARENT else WRAP_CONTENT
                 card.childCards.forEachIndexed { idx, child ->
                     addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), LinearLayout.LayoutParams(0, childH, 1f).apply {
-                        if (idx > 0) marginStart = stackGap
+                        if (idx > 0) marginStart = horizontalGap
                     })
                 }
             }
@@ -875,11 +894,11 @@ class VitroView(
                     val childH = if (chunk.size >= 2) MATCH_PARENT else WRAP_CONTENT
                     chunk.forEachIndexed { cIdx, child ->
                         r.addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), LinearLayout.LayoutParams(0, childH, 1f).apply {
-                            if (cIdx > 0) marginStart = stackGap
+                            if (cIdx > 0) marginStart = gridGap
                         })
                     }
                     addView(r, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-                        if (rIdx > 0) topMargin = stackGap
+                        if (rIdx > 0) topMargin = gridGap
                     })
                 }
             }
@@ -942,11 +961,21 @@ class VitroView(
             else -> WebIslandCardView(ctx, card, fillViewport = fillViewport)
         }
         (built as? CardSurface)?.applyCardMod(card)
-        return built
+        // `margin` on the card insets it inside its slot, as an outer margin does in the browser.
+        val margin = stackMod.marginInsets ?: return built
+        return FrameLayout(context).apply {
+            setPadding(px(margin.left), px(margin.top), px(margin.right), px(margin.bottom))
+            addView(built, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        }
     }
 
-    private fun wrapVisibility(card: CardConfig, view: View, ctx: VitroCardContext): View {
-        val conds = card.visibility + VisibilityCondition.parseList(card.raw.optJSONArray("conditions"))
+    private fun wrapVisibility(
+        card: CardConfig,
+        view: View,
+        ctx: VitroCardContext,
+        extra: List<VisibilityCondition> = emptyList(),
+    ): View {
+        val conds = extra + card.visibility + VisibilityCondition.parseList(card.raw.optJSONArray("conditions"))
         if (conds.isEmpty()) return view
         val transitionMs = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), ctx.theme.vars).transitionOpacityMs
         return wrapConditions(conds, view, ctx, transitionMs)
@@ -1109,12 +1138,6 @@ class VitroView(
                 "sensor" -> SENSOR_BLUE
                 else -> if (s.isActive) theme.activeColor(s.domain) else theme.stateIconColor
             }
-        }
-
-        /** HA's sections default width: a card is half-width at <= 6 of 12 columns; `clock` defaults to 6. */
-        fun isHalfWidth(card: CardConfig): Boolean {
-            val cols = card.gridOptionsColumns() ?: if (card.type == "clock") 6 else null
-            return cols != null && cols <= 6
         }
 
         const val HOME_GREEN = 0xFF4CAF50.toInt()

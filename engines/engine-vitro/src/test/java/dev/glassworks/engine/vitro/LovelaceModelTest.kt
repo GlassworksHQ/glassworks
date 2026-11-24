@@ -26,6 +26,7 @@ import dev.glassworks.engine.vitro.model.VisibilityCondition
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.MdiIcons
+import dev.glassworks.engine.vitro.ui.HaGridSize
 import dev.glassworks.engine.vitro.ui.VitroView
 import org.json.JSONArray
 import org.json.JSONObject
@@ -734,7 +735,7 @@ class LovelaceModelTest {
     }
 
     @Test
-    fun headingBadgesAreSubscribedAndAClockDefaultsToHalfWidth() {
+    fun headingBadgesAreSubscribedAndCardsTakeHaGridSizes() {
         val v = view(
             """{"type": "sections", "sections": [{"cards": [
                 {"type": "heading", "heading": "Studio", "badges": [{"type": "entity", "entity": "sensor.studio_power"}, "light.desk"]},
@@ -744,9 +745,14 @@ class LovelaceModelTest {
         val refs = CardRouter.referencedEntities(v)
         assertTrue("sensor.studio_power" in refs)
         assertTrue("light.desk" in refs)
-        assertTrue(VitroView.isHalfWidth(card("""{"type": "clock"}""")))
-        assertFalse(VitroView.isHalfWidth(card("""{"type": "clock", "grid_options": {"columns": 12}}""")))
-        assertFalse(VitroView.isHalfWidth(card("""{"type": "tile", "entity": "light.a"}""")))
+        // HA's own grid sizes: a clock is 6 of 12 columns (2 rows when large), a tile 6 x 1, markdown full width.
+        assertEquals(HaGridSize(6, 1), HaGridSize.of(card("""{"type": "clock"}""")))
+        assertEquals(HaGridSize(6, 2), HaGridSize.of(card("""{"type": "clock", "clock_size": "large"}""")))
+        assertEquals(HaGridSize(12, 2), HaGridSize.of(card("""{"type": "clock", "clock_size": "large", "grid_options": {"columns": 12}}""")))
+        assertEquals(HaGridSize(6, 1), HaGridSize.of(card("""{"type": "tile", "entity": "light.a"}""")))
+        assertEquals(HaGridSize(12, null), HaGridSize.of(card("""{"type": "markdown", "content": "x"}""")))
+        assertEquals(HaGridSize(null, null), HaGridSize.of(card("""{"type": "markdown", "grid_options": {"columns": "full"}}""")))
+        assertEquals(HaGridSize(9, 3), HaGridSize.of(card("""{"type": "markdown", "layout_options": {"grid_columns": 3, "grid_rows": 3}}""")))
     }
 
     @Test

@@ -327,11 +327,16 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         }
     }
 
+    /** The card's own `card_mod` CSS as last applied (templates rendered), for cards that read more of it. */
+    var activeCardCss: String? = null
+        private set
+
     /** Parses one rendered `card_mod` CSS string and restyles the surface from it. */
     fun applyStyleCss(css: String) {
         val theme = ctx.theme
         val mod = ThemeResolver.parseCardMod(css, theme.vars)
         activeCardMod = mod
+        activeCardCss = css
         val radiusPx = (mod.borderRadiusDp ?: theme.cardBorderRadiusDp) * ctx.dp
         val strokePx = ((mod.borderWidthDp ?: theme.cardBorderWidthDp) * ctx.dp).toInt()
         val strokeColor = mod.borderColor ?: theme.cardBorderColor
