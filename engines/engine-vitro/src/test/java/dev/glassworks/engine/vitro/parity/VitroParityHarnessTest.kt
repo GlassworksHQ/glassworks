@@ -83,7 +83,7 @@ class VitroParityHarnessTest {
             TimeZone.setDefault(tz)
             Locale.setDefault(locale)
         }
-        ParityReportWriter.write(outDir, results, haVersion)
+        if (!ParityFiles.collect) ParityReportWriter.write(outDir, results, haVersion)
         println("Vitro parity: ${results.count { it.status == ParityStatus.MATCH }} match, " +
             "${results.count { it.status == ParityStatus.DRIFT }} known drift, ${failures.size} failing; report: ${File(outDir, "index.html")}")
         if (!ParityFiles.collect && !ParityFiles.updateBaseline && failures.isNotEmpty()) {

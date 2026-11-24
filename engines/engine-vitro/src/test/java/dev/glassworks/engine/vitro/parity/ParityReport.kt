@@ -29,10 +29,13 @@ data class ParityMeasure(
     val pixel: PixelDiff,
     /** Largest edge difference of the card slot(s), CSS px. */
     val bounds: Double,
-    val slotsHa: Int,
-    val slotsVitro: Int,
+    val haSlots: List<CssRect>,
+    val vitroSlots: List<CssRect>,
     val texts: List<TextCheck>,
 ) {
+    val slotsHa: Int get() = haSlots.size
+    val slotsVitro: Int get() = vitroSlots.size
+
     val fontDelta: Double get() = texts.mapNotNull { t -> t.sizeVitro?.let { abs(it - t.sizeHa) } }.maxOrNull() ?: 0.0
     val positionDelta: Double get() = texts.mapNotNull { t -> if (t.dx == null || t.dy == null) null else max(abs(t.dx), abs(t.dy)) }.maxOrNull() ?: 0.0
     val missingTexts: List<String> get() = texts.filter { !it.found }.map { it.text }
@@ -81,7 +84,12 @@ object ParityCompare {
         val pixel = ParityDiff.compare(refBmp, vitroCrop, sw, sh, masks)
 
         val n = minOf(haSlots.size, render.slots.size)
-        var bounds = if (n == 0 || haSlots.size != render.slots.size && case.card != null) Double.POSITIVE_INFINITY else 0.0
+        // A card case needs its one card on both sides; a dashboard compares the slots both have (counts go in the notes).
+        var bounds = when {
+            case.card != null && (n == 0 || haSlots.size != render.slots.size) -> Double.POSITIVE_INFINITY
+            case.card == null && n == 0 && haSlots.size + render.slots.size > 0 -> Double.POSITIVE_INFINITY
+            else -> 0.0
+        }
         for (i in 0 until n) {
             val a = haSlots[i]
             val b = render.slots[i]
@@ -110,7 +118,7 @@ object ParityCompare {
             texts += TextCheck(t.text, t.size, size, (x - slotV.x) - t.box.x, (center - slotV.y) - (t.box.y + t.box.h / 2))
         }
         val side = ParityDiff.sideBySide(refBmp, vitroCrop, pixel.image, "${pct(pixel.tolerant)} differ", d)
-        return ParityMeasure(pixel, bounds, haSlots.size, render.slots.size, texts) to side
+        return ParityMeasure(pixel, bounds, haSlots, render.slots, texts) to side
     }
 }
 
@@ -131,20 +139,26 @@ class ParityBaseline(private val file: File) {
         }
     }
 
+    /** Rewrites the entries of the cases in [results]; entries for cases that didn't run stay as they are. */
     fun write(results: List<ParityResult>) {
+        if (results.isEmpty()) return
+        val ran = results.map { it.key }.toSet()
         val out = JSONObject()
         out.put("_comment", "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: " +
             "${pct(PIXEL_SLACK)} pixels, $BOUNDS_SLACK px bounds, $FONT_SLACK px font). Regenerate with " +
             "-PvitroParityUpdateBaseline=true; keep or write each \"reason\". #794 empties this file.")
-        for (r in results.sortedBy { it.key }) {
+        val entries = java.util.TreeMap<String, Any>()
+        for (k in json.keys().asSequence().filter { it !in ran && !it.startsWith("_") }) entries[k] = json.get(k)
+        for (r in results) {
             val m = r.measure ?: continue
             if (m.over(r.case.threshold).isEmpty()) continue
             val bounds = if (m.bounds.isInfinite()) 1e9 else m.bounds
-            out.put(r.key, JSONObject()
+            entries[r.key] = JSONObject()
                 .put("pixel", round(m.pixel.tolerant, 4)).put("bounds", round(bounds, 1))
                 .put("font", round(m.fontDelta, 1)).put("missingText", m.missingTexts.size)
-                .put("reason", entry(r.key)?.optString("reason")?.takeIf { it.isNotBlank() } ?: "not triaged yet (#794)"))
+                .put("reason", entry(r.key)?.optString("reason")?.takeIf { it.isNotBlank() } ?: "not triaged yet (#794)")
         }
+        entries.forEach { (k, v) -> out.put(k, v) }
         file.writeText(out.toString(1) + "\n")
     }
 
@@ -170,12 +184,14 @@ object ParityReportWriter {
         put("corpus", r.corpus); put("frame", r.frame.id); put("case", r.case.id); put("title", r.case.title); put("status", r.status.name.lowercase())
         r.measure?.let { m ->
             put("pixelTolerant", m.pixel.tolerant); put("pixelStrict", m.pixel.strict); put("meanLuma", m.pixel.meanLuma)
-            put("bounds", if (m.bounds.isInfinite()) JSONObject.NULL else m.bounds); put("slotsHa", m.slotsHa); put("slotsVitro", m.slotsVitro)
+            put("bounds", if (m.bounds.isInfinite()) JSONObject.NULL else m.bounds); put("slotsHa", JSONArray(m.haSlots.map(::rectJson))); put("slotsVitro", JSONArray(m.vitroSlots.map(::rectJson)))
             put("fontDelta", m.fontDelta); put("positionDelta", m.positionDelta); put("missingTexts", JSONArray(m.missingTexts))
             put("texts", JSONArray(m.texts.map { t -> JSONObject().put("text", t.text).put("sizeHa", t.sizeHa).put("sizeVitro", t.sizeVitro ?: JSONObject.NULL).put("dx", t.dx ?: JSONObject.NULL).put("dy", t.dy ?: JSONObject.NULL) }))
         }
         put("reasons", JSONArray(r.reasons)); put("notes", JSONArray(r.notes)); r.image?.let { put("image", it) }
     }
+
+    private fun rectJson(r: CssRect) = JSONArray(listOf(r.x, r.y, r.w, r.h).map { Math.round(it * 10) / 10.0 })
 
     private fun counts(results: List<ParityResult>) = ParityStatus.values().mapNotNull { s -> results.count { it.status == s }.takeIf { it > 0 }?.let { "$it ${s.label}" } }.joinToString(", ")
 

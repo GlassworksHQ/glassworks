@@ -123,19 +123,29 @@ object ParityViews {
 
     /**
      * The top-level card slots of a sections view, in order: each section's grid cells, like the HA side's
-     * `hui-grid-section .container > .card`. Hidden cards (GONE) and a section's title are skipped.
+     * `hui-grid-section .container > .card`. Hidden cards (GONE) and a section's title are skipped; a pinned card
+     * (in [pinned], VitroView's overlay, in order) takes its placeholder's place.
      */
-    fun cardSlots(viewRoot: View): List<View> {
+    fun cardSlots(viewRoot: View, pinned: List<View> = emptyList()): List<View> {
         val grids = all(viewRoot).filterIsInstance<HaGridLayout>().toList()
         val sectionsGrid = grids.firstOrNull() ?: return emptyList()
         val out = ArrayList<View>()
+        val pins = pinned.iterator()
         for (i in 0 until sectionsGrid.childCount) {
             val section = sectionsGrid.getChildAt(i)
             if (section.visibility != View.VISIBLE) continue
             val grid = all(section).filterIsInstance<HaGridLayout>().firstOrNull() ?: continue
             for (j in 0 until grid.childCount) {
                 val c = grid.getChildAt(j)
-                if (c.visibility != View.VISIBLE || c.width == 0 || c.height == 0) continue
+                // A pinned card (card-mod `position: fixed`) leaves a bare placeholder here and draws in the overlay,
+                // in the same order; a hidden one still takes its overlay entry.
+                if (c.javaClass == View::class.java) {
+                    val pin = if (pins.hasNext()) pins.next() else null
+                    if (pin != null && c.visibility == View.VISIBLE && pin.visibility == View.VISIBLE && pin.width > 0 && pin.height > 0) out += pin
+                    continue
+                }
+                if (c.visibility != View.VISIBLE) continue
+                if (c.width == 0 || c.height == 0) continue
                 if (c is TextView) continue // the section's title
                 out += c
             }
@@ -215,16 +225,25 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
             settle(view, ref)
             // Like a full-page screenshot: as tall as the content.
             val scroll = ParityViews.all(view).filterIsInstance<ScrollView>().firstOrNull { it.isShown && it.childCount > 0 }
-            val contentH = scroll?.getChildAt(0)?.height ?: h
+            // HA's page may run longer than its cards (its view's bottom padding): lay Vitro out as tall, so the
+            // extra is compared as page background, not as a missing strip. Card bounds still tell the two apart.
+            val haPageH = ref?.json?.optJSONObject("docSize")?.optDouble("height")?.let { Math.round(it * frame.density).toInt() } ?: 0
+            val contentH = max(scroll?.getChildAt(0)?.height ?: h, haPageH)
             if (contentH > h) {
                 h = contentH
                 layout(view, w, h)
                 settle(view, ref)
             }
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-            view.draw(Canvas(bmp))
+            // What shows through where Vitro paints nothing (a radial backdrop's transparent stops): the window
+            // behind the engine, black like the kiosk's.
+            val canvas = Canvas(bmp)
+            canvas.drawColor(Color.BLACK)
+            view.draw(canvas)
             val content = scroll?.getChildAt(0) ?: view
-            val slotViews = ParityViews.cardSlots(content)
+            val overlay = (0 until view.overlayLayer.childCount).map { view.overlayLayer.getChildAt(it) }.firstOrNull { it.visibility == View.VISIBLE }
+            val pinned = (overlay as? ViewGroup)?.let { g -> (0 until g.childCount).map { g.getChildAt(it) } }.orEmpty()
+            val slotViews = ParityViews.cardSlots(content, pinned)
             val slots = slotViews.map { s ->
                 val (x, y) = ParityViews.offsetIn(view, s)
                 CssRect(x / frame.density.toDouble(), y / frame.density.toDouble(), s.width / frame.density.toDouble(), s.height / frame.density.toDouble())

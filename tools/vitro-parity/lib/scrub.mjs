@@ -30,12 +30,16 @@ export function scrubText(text, creds) {
   });
 }
 
-/** Compressed states ({id: {s, a, lc, lu}}) without private attributes or context ids. */
-export function scrubStates(states, creds) {
+/**
+ * Compressed states ({id: {s, a, lc, lu}}) without private attributes or context ids. keepPictures keeps
+ * entity_picture (its token parameter still redacted), for a local corpus that never leaves the computer.
+ */
+export function scrubStates(states, creds, { keepPictures = false } = {}) {
   const out = {};
   for (const [id, st] of Object.entries(states)) {
     const a = {};
     for (const [k, v] of Object.entries(st.a || {})) {
+      if (keepPictures && k === 'entity_picture') { a[k] = v; continue; }
       if (PRIVATE_KEY.test(k) || PRIVATE_LIST.test(k)) continue;
       a[k] = v;
     }

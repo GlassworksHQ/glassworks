@@ -112,10 +112,11 @@ function imagePaths(card) {
   return [...out];
 }
 
-async function fetchAsset(path) {
+/** Saves an image HA serves at [path] (fetched from [url], default the path) under assets/. */
+async function fetchAsset(path, url = path) {
   if (committed && !path.startsWith('/static/')) fail(`${path}: the committed corpus may only show HA's own /static images`);
-  const res = await fetch(creds.origin + path, { headers: { Authorization: `Bearer ${creds.token}` } });
-  if (!res.ok) fail(`asset ${path}: HTTP ${res.status}`);
+  const res = await fetch(creds.origin + url, { headers: { Authorization: `Bearer ${creds.token}` } });
+  if (!res.ok) throw new Error(`asset ${path}: HTTP ${res.status}`);
   const out = join(corpusRoot, 'assets', path.replace(/^\//, ''));
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, Buffer.from(await res.arrayBuffer()));
@@ -170,11 +171,19 @@ const SLOTS_JS = () => {
   for (const sec of all.filter((e) => e.localName === 'hui-grid-section')) {
     for (const cell of sec.shadowRoot.querySelectorAll('.container > .card')) {
       if (cell.classList.contains('hidden')) continue;
-      const r = cell.getBoundingClientRect();
-      if (r.width < 1 || r.height < 1) continue;
       const card = cell.querySelector('hui-card');
       const inner = card && [...(card.children)].find((c) => c.localName !== 'style');
-      slots.push({ x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height, type: inner ? inner.localName : null });
+      let r = cell.getBoundingClientRect();
+      let fixed = false;
+      // A card card-mod pins (`position: fixed`) leaves its grid cell empty: its own box is the slot.
+      if ((r.width < 1 || r.height < 1) && inner) {
+        const ir = inner.getBoundingClientRect();
+        const ha = inner.shadowRoot && inner.shadowRoot.querySelector('ha-card');
+        r = ir.width >= 1 && ir.height >= 1 ? ir : (ha ? ha.getBoundingClientRect() : ir);
+        fixed = true;
+      }
+      if (r.width < 1 || r.height < 1) continue;
+      slots.push({ x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height, type: inner ? inner.localName : null, ...(fixed ? { fixed } : {}) });
     }
   }
   return { slots, docW: document.documentElement.scrollWidth, docH: document.documentElement.scrollHeight };
@@ -298,6 +307,8 @@ async function settle(page, expectType, timeoutMs) {
     info = await page.evaluate(SLOTS_JS);
     // After an in-app navigation the last view's card can linger for a moment: wait for this case's card.
     if (info.slots.length && (!expectType || info.slots[0].type === expectType)) break;
+    // A real dashboard can legitimately show no card (everything hidden by conditions, e.g. a night mode).
+    if (!expectType && Date.now() - t0 > 8000) break;
     await page.waitForTimeout(250);
   }
   if (expectType && info.slots[0]?.type !== expectType) throw new Error(`expected <${expectType}>, the page shows <${info.slots[0]?.type}>`);
@@ -345,7 +356,7 @@ async function capture() {
     themes,
   };
   const sharedText = scrubText(JSON.stringify(shared, null, 1), creds);
-  checkDenylist(sharedText, 'refs/shared.json');
+  if (committed) checkDenylist(sharedText, 'refs/shared.json');
   writeFileSync(join(refs, 'shared.json'), sharedText + '\n');
 
   const browser = await launch();
@@ -369,7 +380,8 @@ async function capture() {
             await page.evaluate((p) => { history.pushState(null, '', p); window.dispatchEvent(new CustomEvent('location-changed', { detail: { replace: false } })); scrollTo(0, 0); }, path);
           }
           const { info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000);
-          if (!info.slots.length) throw new Error('no card on the page');
+          if (!info.slots.length && c.card) throw new Error('no card on the page');
+          if (!info.slots.length) log(`${frame.id}/${c.id}: HA shows no card (all hidden?): comparing the whole page`);
           const outDir = join(refs, frame.id);
           mkdirSync(outDir, { recursive: true });
           let clip, slots;
@@ -386,7 +398,15 @@ async function capture() {
           // The states HA drew with, for the entities the case reads; the templates Vitro asks for, rendered now.
           const config = c.card ?? JSON.parse(readFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), 'utf8'));
           const ids = referencedEntities(config, states);
-          const caseStates = scrubStates(Object.fromEntries([...ids].sort().filter((id) => states[id]).map((id) => [id, states[id]])), creds);
+          const caseStates = scrubStates(Object.fromEntries([...ids].sort().filter((id) => states[id]).map((id) => [id, states[id]])), creds, { keepPictures: !committed });
+          // A local corpus also keeps the pictures its entities show (plants, artwork), for Vitro's fixture server.
+          if (!committed) {
+            for (const id of ids) {
+              const pic = states[id]?.a?.entity_picture;
+              if (typeof pic !== 'string') continue;
+              if (pic.startsWith('/')) await fetchAsset(pic.split('?')[0], pic).catch((e) => log(`  picture: ${scrubText(String(e.message), creds)}`));
+            }
+          }
           const templates = {};
           for (const tpl of wanted[c.id] || []) {
             const r = await ha.renderTemplate(tpl);
@@ -398,8 +418,15 @@ async function capture() {
             clip, docSize: { width: info.docW, height: info.docH }, slots: slots.map(roundRect), texts,
             states: caseStates, templates,
           };
+          if (!committed) {
+            // Pictures that templates point at (a plant's image entity inside Markdown, say), unredacted from the raw text.
+            const raw = JSON.stringify({ templates, states: Object.fromEntries([...ids].map((id) => [id, states[id]])) });
+            for (const m of new Set(raw.match(/\/api\/[a-z_]+_proxy\/[^"'\s)\\]+/g) || [])) {
+              await fetchAsset(m.split('?')[0], m.replace(/&amp;/g, '&')).catch((e) => log(`  picture: ${scrubText(String(e.message), creds)}`));
+            }
+          }
           const text = scrubText(JSON.stringify(ref, null, 1), creds);
-          checkDenylist(text, `refs/${frame.id}/${c.id}.json`);
+          if (committed) checkDenylist(text, `refs/${frame.id}/${c.id}.json`);
           writeFileSync(join(outDir, `${c.id}.json`), text + '\n');
           log(`${frame.id}/${c.id}: ${slots.length} card(s), ${texts.length} texts, ${Object.keys(caseStates).length} states, ${Object.keys(templates).length} templates${stable ? '' : ' (still moving)'} in ${Date.now() - t0} ms`);
         } catch (e) {
