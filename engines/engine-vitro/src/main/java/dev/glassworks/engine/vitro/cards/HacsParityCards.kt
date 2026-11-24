@@ -129,13 +129,20 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
             addView(primary, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             addView(secondary, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
-        val header = LinearLayout(ctx.context).apply {
+        // mushroom-state-item: the shape and the info. With `layout: horizontal` it and the actions are flex: 1
+        // halves of the row, so a long title truncates at the middle as in HA.
+        val stateItem = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             if (!config.raw.optBoolean("hide_icon", false)) {
                 addView(shape, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)).apply { marginEnd = ctx.px(10f) })
             }
             addView(texts, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        }
+        val header = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(stateItem, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             if (horizontal) addView(controls, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginStart = ctx.px(10f) })
         }
         if (hideName) primary.visibility = GONE
