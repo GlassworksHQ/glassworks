@@ -75,6 +75,8 @@ class WebFontsTest {
 
     @After
     fun tearDown() {
+        // Nothing of this test's may stay queued: the loader is one object for the whole test JVM.
+        drain()
         WebFonts.removeListener(listener)
         WebFonts.reset()
         WebFonts.fetcher = realFetcher

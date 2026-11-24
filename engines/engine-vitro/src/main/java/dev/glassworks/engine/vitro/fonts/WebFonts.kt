@@ -193,6 +193,8 @@ object WebFonts {
         variants.clear()
         waiting.clear()
         pinned.clear()
+        // A notice still queued for the old fonts runs anyway; a new one mustn't wait for it.
+        notifyQueued = false
     }
 
     /**
