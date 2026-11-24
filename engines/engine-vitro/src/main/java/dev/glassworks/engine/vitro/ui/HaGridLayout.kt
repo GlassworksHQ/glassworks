@@ -172,7 +172,9 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                     val inline = features > 0 && !vertical && raw.optString("features_position") == "inline"
                     HaGridSize(if (inline) 12 else 6, 1 + (if (inline) 0 else features) + if (vertical) 1 else 0)
                 }
-                "entity", "sensor", "button", "light", "area", "picture-entity", "picture-glance", "picture" -> HaGridSize(6, null)
+                "entity", "sensor", "button", "light", "area", "picture-glance", "picture" -> HaGridSize(6, null)
+                // Measured in HA: a picture-entity card spans the section's full width at its image's height.
+                "picture-entity" -> HaGridSize(12, null)
                 "heading" -> HaGridSize(null, null)
                 "custom:mushroom-template-card" -> {
                     val hasContent = listOf("icon", "picture", "primary", "secondary").any { raw.optString(it).isNotBlank() }
