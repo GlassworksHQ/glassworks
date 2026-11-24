@@ -276,4 +276,20 @@ class HaGraphTest {
         assertEquals(0.0, fit.min, 0.0)
         assertEquals(26.0, fit.max, 0.0)
     }
+
+    @Test
+    fun aFontContextKeepsTheClockAndTheSubscriptions() {
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val subscribe: (JSONObject, (JSONObject) -> Unit, (JSONObject?) -> Unit) -> () -> Unit = { _, _, _ -> {} }
+        val ctx = dev.glassworks.engine.vitro.ui.VitroCardContext(
+            context = activity, haBase = "http://192.0.2.1", store = dev.glassworks.engine.vitro.data.EntityStore(),
+            theme = dev.glassworks.engine.vitro.theme.ThemeResolver.resolve(dev.glassworks.engine.vitro.theme.ThemeCatalog(), true),
+            resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} }, subscribeWs = subscribe, now = { 42L },
+        )
+        // A card with its own font-family gets a derived context: its graphs still read the same clock and stream.
+        val derived = ctx.withFontFamily("Roboto")
+        assertEquals(42L, derived.now())
+        assertTrue(derived.subscribeWs === subscribe)
+    }
 }

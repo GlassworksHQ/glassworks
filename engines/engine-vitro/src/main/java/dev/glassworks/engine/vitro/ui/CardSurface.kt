@@ -128,6 +128,8 @@ class VitroCardContext(
         fetchForecast = fetchForecast,
         haUser = haUser,
         cameraStream = cameraStream,
+        subscribeWs = subscribeWs,
+        now = now,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout
