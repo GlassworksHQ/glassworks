@@ -113,7 +113,15 @@ class VitroView(
     private val dp = resources.displayMetrics.density
     private fun px(v: Float) = (v * dp).toInt()
 
+
     private val shell = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+
+    /**
+     * The theme's backdrop when it is a picture (gradients, layers, an image): its own view under everything, on a
+     * hardware layer, so the GPU rasterizes it once per size or theme and every later frame (a live value changing)
+     * only composites it. Drawn on the root, it was shaded again on every frame. A solid color stays the root's.
+     */
+    private val backdrop = View(context).apply { setLayerType(LAYER_TYPE_HARDWARE, null) }
     private val tabScroll = HorizontalScrollView(context).apply {
         isHorizontalScrollBarEnabled = false
         visibility = GONE
@@ -225,6 +233,7 @@ class VitroView(
     init {
         MdiIcons.init(context)
         setBackgroundColor(backgroundColor)
+        addView(backdrop, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         tabScroll.addView(tabBar, LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
         shell.addView(tabScroll, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         shell.addView(contentHost, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
@@ -550,18 +559,27 @@ class VitroView(
     }
 
     private fun applyBackdrop(theme: ResolvedTheme) {
+        // A picture replaces the root's color, as it did when it was the root's own background.
+        fun picture(d: android.graphics.drawable.Drawable) {
+            background = null
+            backdrop.background = d
+        }
+        fun color(c: Int) {
+            backdrop.background = null
+            setBackgroundColor(c)
+        }
         when (val bg = theme.background) {
-            is ThemeBackground.Solid -> setBackgroundColor(bg.color)
-            is ThemeBackground.LinearGradient -> background = CssBackgroundDrawable(
+            is ThemeBackground.Solid -> color(bg.color)
+            is ThemeBackground.LinearGradient -> picture(CssBackgroundDrawable(
                 CssBackground(listOf(CssBackground.Linear(bg.angleDeg, bg.stops ?: bg.colors.map { CssBackground.Stop(it, null, null) })), null),
                 dp,
-            )
-            is ThemeBackground.RadialGradient -> background = RadialBackdrop(bg.colors)
-            is ThemeBackground.Layers -> background = CssBackgroundDrawable(bg.css, dp)
+            ))
+            is ThemeBackground.RadialGradient -> picture(RadialBackdrop(bg.colors))
+            is ThemeBackground.Layers -> picture(CssBackgroundDrawable(bg.css, dp))
             is ThemeBackground.ImageUrl -> {
-                setBackgroundColor(bg.fallbackColor)
+                color(bg.fallbackColor)
                 contextFactory?.invoke(theme)?.loadImage(bg.url) { bmp ->
-                    if (bmp != null) background = BitmapDrawable(resources, bmp)
+                    if (bmp != null) picture(BitmapDrawable(resources, bmp))
                 }
             }
         }
