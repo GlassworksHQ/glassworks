@@ -43,25 +43,28 @@ data class CompatReport(val entries: List<CompatEntry>) {
 
 /** Builds [CompatReport]s by walking a dashboard the way `VitroView` builds it. */
 object CompatChecker {
-    fun check(dashboard: DashboardConfig, cardModInIsland: Boolean = true): CompatReport =
-        CompatReport(dashboard.views.flatMap { check(it, cardModInIsland).entries })
+    fun check(dashboard: DashboardConfig, scripts: IslandScripts = IslandScripts.ANY): CompatReport =
+        CompatReport(dashboard.views.flatMap { check(it, scripts).entries })
 
-    /** [cardModInIsland]: whether card-mod is a Lovelace resource, so an island can apply it ([CardVerdict.inIsland]). */
-    fun check(view: ViewConfig, cardModInIsland: Boolean = true): CompatReport {
+    /**
+     * [scripts]: the dashboard's Lovelace resources as an island loads them ([CardVerdict.inIsland]). Without them
+     * ([IslandScripts.ANY]) the report assumes every card's script and card-mod are there.
+     */
+    fun check(view: ViewConfig, scripts: IslandScripts = IslandScripts.ANY): CompatReport {
         val out = ArrayList<CompatEntry>()
         val viewName = view.path ?: view.title
         for (root in CardRouter.viewRoots(view)) {
             val where = root.section?.let { "$viewName › section ${it + 1} › card ${root.index + 1}" } ?: "$viewName › card ${root.index + 1}"
-            walk(root.card, where, cardModInIsland, out)
+            walk(root.card, where, scripts, out)
         }
         return CompatReport(out)
     }
 
-    private fun walk(card: CardConfig, path: String, cardModInIsland: Boolean, out: MutableList<CompatEntry>) {
+    private fun walk(card: CardConfig, path: String, scripts: IslandScripts, out: MutableList<CompatEntry>) {
         val here = "$path (${card.type})"
-        val verdict = card.compat.effective(cardModInIsland)
+        val verdict = card.compat.effective(scripts)
         out += CompatEntry(here, verdict)
         if (!verdict.isNative) return
-        card.childCards.forEachIndexed { i, child -> walk(child, "$here › card ${i + 1}", cardModInIsland, out) }
+        CardRouter.builtChildren(card).forEach { (i, child) -> walk(child, "$here › card ${i + 1}", scripts, out) }
     }
 }

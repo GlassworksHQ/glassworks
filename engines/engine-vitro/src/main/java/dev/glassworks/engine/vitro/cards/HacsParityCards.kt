@@ -21,6 +21,7 @@ import android.widget.TextView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
+import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.MdiIconView
@@ -1378,7 +1379,7 @@ class LayoutCardView(
         val out = ArrayList<ArrayList<CardConfig>>().apply { add(ArrayList()) }
         for (c in config.childCards) {
             if (c.raw.optJSONObject("view_layout")?.optBoolean("column_break", false) == true && out.last().isNotEmpty()) out.add(ArrayList())
-            if (c.type != "custom:layout-break") out.last() += c
+            if (c.type != CardRouter.LAYOUT_BREAK) out.last() += c
         }
         return out.filter { it.isNotEmpty() }
     }

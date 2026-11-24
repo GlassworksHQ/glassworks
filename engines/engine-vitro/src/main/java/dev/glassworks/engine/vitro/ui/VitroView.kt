@@ -69,6 +69,7 @@ import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.compat.CompatChecker
+import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.CardTier
 import dev.glassworks.engine.vitro.model.DashboardConfig
@@ -153,8 +154,8 @@ class VitroView(
     private var moreInfo: MoreInfoSheet? = null
     private val viewCache = LinkedHashMap<Int, View>()
 
-    /** For each cached view, whether its islands could load card-mod when it was built ([CardRouter.cardModInIsland]). */
-    private val builtCardModInIsland = HashMap<Int, Boolean>()
+    /** For each cached view, the scripts its islands could load when it was built ([IslandScripts]). */
+    private val builtScripts = HashMap<Int, IslandScripts>()
 
     /** Views the user came from, newest last; [goBack] pops it. Capped at [MAX_BACK_STACK]. */
     private val viewBackStack = ArrayDeque<Int>()
@@ -219,7 +220,7 @@ class VitroView(
             if (field == v) return
             field = v
             viewCache.clear()
-            builtCardModInIsland.clear()
+            builtScripts.clear()
             contentHost.removeAllViews()
             clearOverlay()
             dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
@@ -288,11 +289,25 @@ class VitroView(
         statusLabel.visibility = GONE
     }
 
+    /**
+     * A different Home Assistant server: forget the previous one's dashboard, views and resources, so none of it is
+     * rebuilt with the new server's resources before the new dashboard arrives.
+     */
+    fun resetForServer() {
+        dashboard = null
+        viewBackStack.clear()
+        viewCache.clear()
+        builtScripts.clear()
+        contentHost.removeAllViews()
+        clearOverlay()
+        resourcesList = emptyList()
+    }
+
     fun setThemes(catalog: ThemeCatalog) {
         if (catalog == themeCatalog) return
         themeCatalog = catalog
         viewCache.clear()
-        builtCardModInIsland.clear()
+        builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
@@ -306,7 +321,7 @@ class VitroView(
         userThemeName = nextTheme
         darkMode = nextDark
         viewCache.clear()
-        builtCardModInIsland.clear()
+        builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
@@ -316,7 +331,7 @@ class VitroView(
         dashboard = config
         viewBackStack.clear()
         viewCache.clear()
-        builtCardModInIsland.clear()
+        builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
         val idx = resolveViewIndex(config, initialViewPath)
@@ -454,7 +469,7 @@ class VitroView(
             viewCache.remove(index)?.let { contentHost.removeView(it) }
             overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
             viewCache[index] = built
-            builtCardModInIsland[index] = CardRouter.cardModInIsland(cardCtx.resources)
+            builtScripts[index] = IslandScripts.of(cardCtx.resources)
             contentHost.addView(built, LayoutParams(MATCH_PARENT, MATCH_PARENT))
             if (pinned.isNotEmpty()) {
                 val frame = FrameLayout(context).apply {
@@ -482,9 +497,9 @@ class VitroView(
 
         val elapsed = SystemClock.elapsedRealtime() - t0
         // The report follows the tree on screen: a cached tree keeps the card-mod state it was built with.
-        val cardModInIsland = builtCardModInIsland[index] ?: CardRouter.cardModInIsland(resourcesList)
-        val compat = CompatChecker.check(viewCfg, cardModInIsland)
-        val tiers = CardRouter.tierCounts(viewCfg, cardModInIsland)
+        val scripts = builtScripts[index] ?: IslandScripts.of(resourcesList)
+        val compat = CompatChecker.check(viewCfg, scripts)
+        val tiers = CardRouter.tierCounts(viewCfg, scripts)
         val entities = CardRouter.referencedEntities(viewCfg)
         val metrics = VitroMetrics(
             viewTitle = viewCfg.title,
@@ -556,12 +571,13 @@ class VitroView(
         }
         val horizontal = when {
             mod.fixedCenterX -> Gravity.CENTER_HORIZONTAL
-            mod.fixedRight != null -> Gravity.END
+            // Both insets with a width: `left` wins, as CSS resolves it in a left-to-right page.
+            mod.fixedLeft == null && mod.fixedRight != null -> Gravity.END
             else -> Gravity.START
         }
         val vertical = when {
             mod.fixedCenterY -> Gravity.CENTER_VERTICAL
-            mod.fixedBottom != null -> Gravity.BOTTOM
+            mod.fixedTop == null && mod.fixedBottom != null -> Gravity.BOTTOM
             else -> Gravity.TOP
         }
         val w = length(mod.fixedWidth, viewportW)?.takeIf { it > 0 } ?: WRAP_CONTENT
@@ -916,7 +932,7 @@ class VitroView(
             }
         }
         // Anything outside Vitro's supported set goes to an island on purpose (CardCompat), decided once per card.
-        val built: View = if (card.compat.inIsland(CardRouter.cardModInIsland(ctx.resources))) {
+        val built: View = if (card.compat.inIsland(IslandScripts.of(ctx.resources))) {
             WebIslandCardView(ctx, card, fillViewport = fillViewport)
         } else when (card.type) {
             // Layout containers
@@ -1016,7 +1032,7 @@ class VitroView(
         }
         // An island that loads card-mod styles its card itself: styling the native frame too would apply it twice
         // (a 0.5 opacity would show as 0.25).
-        if (!(built is WebIslandCardView && CardRouter.cardModInIsland(ctx.resources))) (built as? CardSurface)?.applyCardMod(card)
+        if (!(built is WebIslandCardView && IslandScripts.of(ctx.resources).cardMod)) (built as? CardSurface)?.applyCardMod(card)
         // `margin` on the card insets it inside its slot, as an outer margin does in the browser.
         val margin = stackMod.marginInsets ?: return built
         return FrameLayout(context).apply {

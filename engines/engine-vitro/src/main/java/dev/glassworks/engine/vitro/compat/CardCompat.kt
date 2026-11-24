@@ -38,20 +38,32 @@ data class CardVerdict(
     val isNative: Boolean get() = route == CardRoute.NATIVE
 
     /**
-     * Whether the card is built in an island. With [cardModInIsland] false (card-mod isn't a Lovelace resource, so
-     * the island can't load it), a fallback for card_mod alone would lose that style in the island too, so the card
-     * stays native.
+     * Whether the card is built in an island, which only helps when the island can draw it: it runs the card's own
+     * script, which it loads from the dashboard's Lovelace resources ([scripts]). A card Vitro also draws natively
+     * goes there only when a resource provides its script, and, for a card_mod-only fallback, card-mod too.
+     * Otherwise it stays native. A custom card with no native renderer goes there regardless: it's its only chance.
      */
-    fun inIsland(cardModInIsland: Boolean = true): Boolean = route == CardRoute.ISLAND && (cardModInIsland || !cardModOnly)
+    fun inIsland(scripts: IslandScripts = IslandScripts.ANY): Boolean = route == CardRoute.ISLAND &&
+        (type !in VitroSupport.HACS_CARD_TYPES || (scripts.provides(type) && (!cardModOnly || scripts.cardMod)))
 
-    /** This verdict as the view builds it: native, with the reasons as notes, when [inIsland] says the card stays. */
-    fun effective(cardModInIsland: Boolean = true): CardVerdict =
-        if (route != CardRoute.ISLAND || inIsland(cardModInIsland)) this
-        else copy(
-            route = CardRoute.NATIVE,
-            reasons = emptyList(),
-            notes = notes + reasons.map { "would fall back for $it, but the island can't load card-mod (it isn't a Lovelace resource)" },
-        )
+    /**
+     * This verdict as the view builds it with [scripts]: native, with the reasons as notes, when [inIsland] says the
+     * card stays; for a card with no native renderer, a note when no registered script seems to define it.
+     */
+    fun effective(scripts: IslandScripts = IslandScripts.ANY): CardVerdict = when {
+        route != CardRoute.ISLAND -> this
+        inIsland(scripts) ->
+            if (type !in VitroSupport.HACS_CARD_TYPES && type.startsWith("custom:") && !scripts.mentions(type)) {
+                copy(notes = notes + "no Lovelace resource seems to provide `$type`, so the island may not draw it")
+            } else {
+                this
+            }
+        else -> {
+            val why = if (!scripts.provides(type)) "the island has no script for `$type` (no Lovelace resource provides it)"
+            else "the island can't load card-mod (it isn't a Lovelace resource)"
+            copy(route = CardRoute.NATIVE, reasons = emptyList(), notes = notes + reasons.map { "would fall back for $it, but $why" })
+        }
+    }
 }
 
 /**
@@ -315,10 +327,15 @@ object CardCompat {
         // [ThemeResolver.parseCardMod], the last `!important` one wins, else the last one.
         // The offsets settle the same way, so a centering transform is checked against the offset it pairs with.
         val hostDecls = rules.filter { (_, _, v) -> v.any { it is Sel.Honored && it.host } }.flatMap { (_, decls, _) -> decls }
-        val hostPlacement = (listOf("position") + OFFSETS).mapNotNull { name ->
+        val hostPlacement = (listOf("position", "width", "transform") + OFFSETS).mapNotNull { name ->
             val all = hostDecls.filter { it.first == name }
             (all.lastOrNull { it.third } ?: all.lastOrNull())?.let { name to it.second.trim().lowercase(Locale.ROOT) }
         }.toMap()
+        // A pinned card's geometry as a whole: only the forms the overlay places exactly ([pinnedGeometryProblem]).
+        val surfaceSheet = sheet == Sheet.CARD || sheet == Sheet.MARKDOWN_CARD || sheet == Sheet.CLOCK_CARD
+        if (surfaceSheet && hostPlacement["position"].let { it == "fixed" || it == "absolute" }) {
+            pinnedGeometryProblem(hostPlacement)?.let { propertyReasons += "card_mod `$key` pinned card: $it" }
+        }
         for ((_, important, verdicts) in rules) {
             val decls = important.map { it.first to it.second }
             // Card-mod keeps `!important`; the cascade inside Markdown and the clock doesn't honor it yet.
@@ -522,7 +539,7 @@ object CardCompat {
                 continue
             }
             if (!checkable) continue
-            val problem = if (asCard) checkCardValue(name, value, pinned, position, placement, shown, notes)
+            val problem = if (asCard) checkCardValue(name, value, pinned, position, shown, notes)
             else if (asCascade) checkCascadeValue(sheet, name, value, position, shown, notes)
             else null
             problem?.let { reasons += "card_mod `$key` $shown $it" }
@@ -535,7 +552,6 @@ object CardCompat {
         value: String,
         pinned: Boolean,
         position: String?,
-        placement: Map<String, String>,
         shown: String,
         notes: MutableSet<String>,
     ): String? = when (name) {
@@ -544,7 +560,7 @@ object CardCompat {
         "position" -> if (value in setOf("fixed", "absolute", "static", "relative", "initial", "unset", "inherit")) null else "isn't drawn natively"
         "top", "right", "bottom", "left" -> when {
             // The overlay reads a pinned offset as px, dp, rem/em or %; `calc()` would put the card at the edge.
-            pinned -> if (value == "auto" || PINNED_WIDTH.matches(value)) null else "isn't drawn natively (a pinned offset is px, rem or %)"
+            pinned -> if (value in UNSET || PINNED_WIDTH.matches(value)) null else "isn't drawn natively (a pinned offset is px, rem or %)"
             else -> {
                 if (position != null && position != "static") notes += gap("position: relative", shown)
                 null
@@ -559,7 +575,7 @@ object CardCompat {
         "height" -> if (value in setOf("auto", "100%", "initial", "unset", "inherit", "fit-content")) null else "isn't drawn natively (only `auto` and `100%`)"
         "transform" -> when {
             value == "none" -> null
-            pinned && centersAtHalf(value, placement) -> null
+            pinned && centeredAxes(value) != null -> null
             else -> "isn't drawn natively (only centering a pinned card at `left: 50%` / `top: 50%`)"
         }
         "box-shadow" -> when {
@@ -574,28 +590,53 @@ object CardCompat {
     }
 
     /**
-     * True for a transform the pinned overlay places exactly. The overlay centers an axis in the viewport and ignores
-     * that axis's offset, which is what HA does only for the centering idiom: `left: 50%` with a `-50%` X translate,
-     * `top: 50%` with a `-50%` Y translate. Every other translate is `0`. So `translate(-50%, 12px)` (the 12px is
-     * dropped) and `top: 0` with `translate(-50%, -50%)` (HA moves the card up by half its height) don't count.
+     * Which axes a pinned card's transform centers (`x` to `y`), or null for a transform the overlay can't apply:
+     * every function is a translate whose arguments are `-50%` or `0`, with at most one `-50%` shift per axis
+     * (`translate(-50%, 12px)` would drop the 12px, `translateX(-50%) translateX(-50%)` is a whole width).
      */
-    private fun centersAtHalf(value: String, placement: Map<String, String>): Boolean {
-        // The overlay centers each axis once: two `-50%` shifts on one axis (`translateX(-50%) translateX(-50%)`) don't fit.
+    private fun centeredAxes(value: String): Pair<Boolean, Boolean>? {
+        if (value == "none") return false to false
         var x = 0
         var y = 0
         for (fn in CssSelector.splitTopLevel(value, ' ').filter { it.isNotBlank() }) {
-            val m = TRANSLATE.matchEntire(fn) ?: return false
+            val m = TRANSLATE.matchEntire(fn) ?: return null
             val args = CssSelector.splitTopLevel(m.groupValues[2], ',').map { it.trim() }
             val maxArgs = if (m.groupValues[1] == "translate") 2 else 1
-            if (args.size !in 1..maxArgs || args.any { it !in CENTER_OR_ZERO }) return false
+            if (args.size !in 1..maxArgs || args.any { it !in CENTER_OR_ZERO }) return null
             when (m.groupValues[1]) {
                 "translate" -> { if (args[0] == "-50%") x++; if (args.getOrNull(1) == "-50%") y++ }
                 "translatex" -> if (args[0] == "-50%") x++
                 "translatey" -> if (args[0] == "-50%") y++
             }
         }
-        return x <= 1 && y <= 1 && (x == 0 || placement["left"] == "50%") && (y == 0 || placement["top"] == "50%")
+        return if (x > 1 || y > 1) null else (x == 1) to (y == 1)
     }
+
+    /**
+     * Why the overlay can't place a pinned card the way HA does, or null when it can. The overlay draws exactly:
+     * at most one horizontal inset (two only with a `width`, where `left` wins as in CSS) and one vertical inset,
+     * and the centering idiom, `left: 50%` / `top: 50%` with a `-50%` translate on that axis and no opposite inset.
+     * `auto`, `unset` and `initial` count as no inset. Each value's form is checked on its own declaration.
+     */
+    private fun pinnedGeometryProblem(placement: Map<String, String>): String? {
+        fun inset(name: String) = placement[name]?.takeUnless { it in UNSET }
+        val left = inset("left")
+        val right = inset("right")
+        val top = inset("top")
+        val bottom = inset("bottom")
+        val width = placement["width"]?.takeUnless { it in UNSET }
+        val (cx, cy) = placement["transform"]?.let(::centeredAxes) ?: (false to false)
+        return when {
+            cx && (left != "50%" || right != null) || cy && (top != "50%" || bottom != null) ->
+                "isn't drawn natively (only centering a pinned card at `left: 50%` / `top: 50%`)"
+            left != null && right != null && width == null ->
+                "`left` and `right` without a `width` stretch it between them, which the overlay doesn't draw"
+            top != null && bottom != null -> "`top` and `bottom` stretch it between them, which the overlay doesn't draw"
+            else -> null
+        }
+    }
+
+    private val UNSET = setOf("auto", "unset", "initial")
 
     /** Why a cascade value can't be drawn, or null when it can. */
     private fun checkCascadeValue(sheet: Sheet, name: String, value: String, position: String?, shown: String, notes: MutableSet<String>): String? = when (name) {
@@ -625,7 +666,7 @@ object CardCompat {
     }
 
     private fun backgroundProblem(value: String, allowGradient: Boolean): String? = when {
-        "url(" in value -> "isn't drawn natively (background images)"
+        "url(" in value || "image-set(" in value -> "isn't drawn natively (background images)"
         "radial-gradient" in value || "conic-gradient" in value || "repeating-" in value -> "isn't drawn natively (only linear gradients)"
         !allowGradient && "gradient" in value -> "isn't drawn natively (no gradients inside Markdown)"
         CssSelector.splitTopLevel(value, ',').size > 1 -> "isn't drawn natively (layered backgrounds)"

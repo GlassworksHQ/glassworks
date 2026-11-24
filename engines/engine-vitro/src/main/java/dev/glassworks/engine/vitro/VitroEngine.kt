@@ -242,7 +242,8 @@ class VitroEngine(
                 return
             }
 
-            // New HA origin: start (or restart) the native WebSocket data plane.
+            // New HA origin: start (or restart) the native WebSocket data plane, and drop the old server's views.
+            if (currentOrigin != null && currentOrigin != origin) vitroView.resetForServer()
             currentOrigin = origin
             firstPaintReported = false
             vitroView.showStatus("Connecting to Home Assistant…")

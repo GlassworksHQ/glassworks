@@ -56,6 +56,19 @@ object VitroSupport {
         "custom:vertical-stack-in-card", "custom:layout-card",
     )
 
+    /**
+     * The script files (Lovelace resource file names) that define each card in [HACS_CARD_TYPES]. An island can draw
+     * one of these cards only when a resource with one of its files is registered ([IslandScripts.provides]).
+     */
+    val CARD_SCRIPTS: Map<String, Set<String>> = HACS_CARD_TYPES.associateWith { type ->
+        when {
+            type.startsWith("custom:mushroom-") -> setOf("mushroom.js")
+            type == "custom:mini-graph-card" -> setOf("mini-graph-card-bundle.js", "mini-graph-card.js")
+            type == "custom:mini-media-player" -> setOf("mini-media-player-bundle.js", "mini-media-player.js")
+            else -> setOf(type.removePrefix("custom:") + ".js")
+        }
+    }
+
     /** HA's stacks: no `ha-card` of their own, so card-mod's `ha-card { }` in them matches nothing in HA either. */
     val STACK_TYPES: Set<String> = setOf("vertical-stack", "horizontal-stack", "grid", "conditional")
 

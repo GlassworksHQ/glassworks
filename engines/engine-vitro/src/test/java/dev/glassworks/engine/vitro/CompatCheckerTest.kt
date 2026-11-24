@@ -9,6 +9,7 @@ import dev.glassworks.engine.vitro.compat.CardCompat
 import dev.glassworks.engine.vitro.compat.CardRoute
 import dev.glassworks.engine.vitro.compat.CardVerdict
 import dev.glassworks.engine.vitro.compat.CompatChecker
+import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.compat.VitroSupport
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.CardTier
@@ -612,28 +613,116 @@ class CompatCheckerTest {
         )
     }
 
+    private fun res(vararg urls: String) = IslandScripts.of(urls.map { u ->
+        dev.glassworks.engine.vitro.model.LovelaceResource(u, if (u.endsWith(".css")) "css" else "module")
+    })
+
     @Test
-    fun aCardModFallbackNeedsCardModInTheIsland() {
-        val c = card("""{"type": "custom:mushroom-template-card", "card_mod": {"style": {"mushroom-shape-icon$": ".shape { color: red }"}}}""")
-        assertTrue(c.compat.cardModOnly)
-        assertTrue(c.compat.inIsland(cardModInIsland = true))
-        // card-mod only as a frontend module: the island couldn't apply the style either, so the card stays native.
-        assertFalse(c.compat.inIsland(cardModInIsland = false))
-        assertEquals(CardTier.NATIVE_HACS, CardRouter.tier(c, cardModInIsland = false))
-        // A card the island draws for other reasons still goes there.
-        assertTrue(card("""{"type": "custom:acme-card"}""").compat.inIsland(cardModInIsland = false))
-        val view = LovelaceParser.parseView(0, JSONObject("""{"cards": [${c.raw}]}"""))
-        val report = CompatChecker.check(view, cardModInIsland = false)
+    fun aCardGoesToTheIslandOnlyWhenTheIslandCanDrawIt() {
+        val mushroom = "/hacsfiles/lovelace-mushroom/mushroom.js?hacstag=1"
+        val cardMod = "/hacsfiles/lovelace-card-mod/card-mod.js?hacstag=1"
+        // A native Mushroom card with an unsupported selector: the island needs Mushroom's script.
+        val styled = card("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card .shape { color: red }")}}}""")
+        assertTrue("a card_mod selector is a card_mod reason", styled.compat.cardModOnly)
+        assertTrue(styled.compat.inIsland(res(mushroom, cardMod)))
+        assertFalse(styled.compat.inIsland(res(cardMod)))
+        assertEquals(CardTier.NATIVE_HACS, CardRouter.tier(styled, res(cardMod)))
+        val view = LovelaceParser.parseView(0, JSONObject("""{"cards": [${styled.raw}]}"""))
+        val report = CompatChecker.check(view, res(cardMod))
         assertTrue(report.islands.isEmpty())
-        assertTrue(report.notes.toString(), report.notes.any { "card-mod" in it.second && "Lovelace resource" in it.second })
+        assertTrue(report.notes.toString(), report.notes.any { "no script for `custom:mushroom-template-card`" in it.second })
+        // Without the resource list (the offline check), every script is assumed there.
         assertEquals(1, CompatChecker.check(view).islands.size)
-        assertTrue(CardRouter.cardModInIsland(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-card-mod/card-mod.js?hacstag=1", "module"))))
-        assertFalse(CardRouter.cardModInIsland(emptyList()))
-        // A stylesheet isn't card-mod: the island loads `css` resources as styles, not scripts.
-        assertFalse(CardRouter.cardModInIsland(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/local/card-mod-preview.css", "css"))))
-        // The file name decides, not a query.
-        assertFalse(CardRouter.cardModInIsland(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/local/theme.js?variant=card-mod", "module"))))
-        assertTrue(CardRouter.cardModInIsland(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/local/community/lovelace-card-mod/card-mod.js?v=4.2.1", "module"))))
+
+        // A card_mod-only fallback also needs card-mod.
+        val pathOnly = card("""{"type": "custom:mushroom-template-card", "card_mod": {"style": {"mushroom-shape-icon$": ".shape { color: red }"}}}""")
+        assertTrue(pathOnly.compat.cardModOnly)
+        assertTrue(pathOnly.compat.inIsland(res(mushroom, cardMod)))
+        assertFalse(pathOnly.compat.inIsland(res(mushroom)))
+        assertTrue(CompatChecker.check(LovelaceParser.parseView(0, JSONObject("""{"cards": [${pathOnly.raw}]}""")), res(mushroom))
+            .notes.any { "can't load card-mod" in it.second })
+
+        // A custom card with no native renderer goes there regardless, with a note when nothing seems to provide it.
+        val acme = card("""{"type": "custom:acme-card"}""")
+        assertTrue(acme.compat.inIsland(res()))
+        val acmeView = LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "custom:acme-card"}]}"""))
+        assertTrue(CompatChecker.check(acmeView, res()).notes.any { "may not draw it" in it.second })
+        assertTrue(CompatChecker.check(acmeView, res("/local/acme-card.js")).notes.isEmpty())
+    }
+
+    @Test
+    fun islandScriptsMatchFileNames() {
+        // Every card Vitro draws natively has a known script.
+        assertEquals(VitroSupport.HACS_CARD_TYPES, VitroSupport.CARD_SCRIPTS.keys)
+        assertTrue(res("/hacsfiles/Bubble-Card/bubble-card.js?hacstag=2").provides("custom:bubble-card"))
+        assertTrue(res("/hacsfiles/mini-graph-card/mini-graph-card-bundle.js").provides("custom:mini-graph-card"))
+        assertFalse(res("/local/other.js").provides("custom:bubble-card"))
+        // card-mod by file name: not from a stylesheet or a query.
+        assertTrue(res("/local/community/lovelace-card-mod/card-mod.js?v=4.2.1").cardMod)
+        assertFalse(res().cardMod)
+        assertFalse(res("/local/card-mod-preview.css").cardMod)
+        assertFalse(res("/local/theme.js?variant=card-mod").cardMod)
+        assertTrue(res("/local/acme.js").mentions("custom:acme-card"))
+        assertFalse(res("/local/other.js").mentions("custom:acme-card"))
+    }
+
+    @Test
+    fun pinnedGeometryIsAnAllowList() {
+        // Only what the overlay places exactly stays native; everything else on a pinned card is a reason.
+        val table = listOf(
+            "top: 0; left: 0" to true,
+            "bottom: 24px; right: 5%" to true,
+            "top: 1.5rem; right: auto; left: 24px" to true,
+            "left: 24px; right: 24px; width: 300px" to true,
+            "left: 50%; top: 50%; transform: translate(-50%, -50%)" to true,
+            "right: 20px; top: 50%; transform: translateY(-50%)" to true,
+            "left: 50%; bottom: 0; transform: translateX(-50%)" to true,
+            "top: unset; bottom: 0; left: initial; right: 0" to true,
+            "left: 24px; right: 24px" to false,
+            "left: 24px; right: 24px; width: auto" to false,
+            "top: 0; bottom: 0" to false,
+            "top: calc(50% - 24px); left: 0" to false,
+            "left: 50%; right: 0; transform: translateX(-50%)" to false,
+            "top: 50%; bottom: 10px; transform: translateY(-50%)" to false,
+            "top: 0; left: 50%; transform: translate(-50%, -50%)" to false,
+        )
+        for ((geometry, native) in table) {
+            val v = verdict("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card { position: fixed; $geometry }")}}}""")
+            assertEquals("`$geometry`: ${v.reasons}", native, v.isNative)
+        }
+        // A built-in card keeps its native renderer and notes it.
+        assertIsland("""{"type": "markdown", "content": "x", "card_mod": {"style": ${style("ha-card { position: fixed; left: 24px; right: 24px }")}}}""", "pinned card")
+    }
+
+    @Test
+    fun imageSetIsABackgroundImage() {
+        fun mushroomWith(css: String) = """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(css)}}}"""
+        assertIsland(mushroomWith("ha-card { background-image: image-set(\"wood.png\" 1x) }"), "background images")
+        assertIsland(mushroomWith("ha-card { background: -webkit-image-set('wood.png' 1x) }"), "background images")
+        assertNative(mushroomWith("ha-card { background-image: none }"))
+        assertNative(mushroomWith("ha-card { background-image: linear-gradient(#123, #456) }"))
+    }
+
+    @Test
+    fun aVerticalLayoutBreakIsNoCard() {
+        val view = LovelaceParser.parseView(
+            0,
+            JSONObject(
+                """{"cards": [{"type": "custom:layout-card", "layout_type": "custom:vertical-layout",
+                    "cards": [{"type": "tile", "entity": "light.a"}, {"type": "custom:layout-break"}, {"type": "tile", "entity": "light.b"}]}]}""",
+            ),
+        )
+        val report = CompatChecker.check(view)
+        assertTrue(report.format(), report.islands.isEmpty())
+        // The original indices stay in the paths.
+        assertEquals(
+            listOf("View 1 › card 1 (custom:layout-card)", "View 1 › card 1 (custom:layout-card) › card 1 (tile)", "View 1 › card 1 (custom:layout-card) › card 3 (tile)"),
+            report.entries.map { it.path },
+        )
+        assertEquals(0, CardRouter.tierCounts(view)[CardTier.WEB_ISLAND])
+        // In other layouts the marker isn't consumed, so it stays a card.
+        val masonry = LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "custom:layout-card", "cards": [{"type": "custom:layout-break"}]}]}"""))
+        assertEquals(1, CompatChecker.check(masonry).islands.size)
     }
 
     @Test

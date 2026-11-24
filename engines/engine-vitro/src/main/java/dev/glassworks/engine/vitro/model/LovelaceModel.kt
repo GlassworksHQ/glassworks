@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro.model
 import dev.glassworks.engine.vitro.compat.CardCompat
 import dev.glassworks.engine.vitro.compat.CardRoute
 import dev.glassworks.engine.vitro.compat.CardVerdict
+import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.compat.VitroSupport
 import dev.glassworks.engine.vitro.data.EntityState
 import org.json.JSONArray
@@ -383,25 +384,25 @@ object CardRouter {
      * The card's tier. A card of a native type still goes to an island when something in its config is outside
      * [VitroSupport] ([CardConfig.compat]).
      */
-    fun tier(card: CardConfig, cardModInIsland: Boolean = true): CardTier = when {
-        card.compat.inIsland(cardModInIsland) -> CardTier.WEB_ISLAND
+    fun tier(card: CardConfig, scripts: IslandScripts = IslandScripts.ANY): CardTier = when {
+        card.compat.inIsland(scripts) -> CardTier.WEB_ISLAND
         card.type in NATIVE_CORE_TYPES -> CardTier.NATIVE_CORE
         card.type in NATIVE_HACS_TYPES -> CardTier.NATIVE_HACS
         else -> CardTier.WEB_ISLAND
     }
 
     /** Counts how many cards in [view] fall into each [CardTier] (flattening layout containers). */
-    fun tierCounts(view: ViewConfig, cardModInIsland: Boolean = true): Map<CardTier, Int> {
+    fun tierCounts(view: ViewConfig, scripts: IslandScripts = IslandScripts.ANY): Map<CardTier, Int> {
         val counts = linkedMapOf(
             CardTier.NATIVE_CORE to 0,
             CardTier.NATIVE_HACS to 0,
             CardTier.WEB_ISLAND to 0,
         )
         fun walk(c: CardConfig) {
-            if (c.childCards.isNotEmpty() && c.type in CONTAINER_TYPES && !c.compat.inIsland(cardModInIsland)) {
-                c.childCards.forEach(::walk)
+            if (c.childCards.isNotEmpty() && c.type in CONTAINER_TYPES && !c.compat.inIsland(scripts)) {
+                builtChildren(c).forEach { walk(it.value) }
             } else {
-                val t = tier(c, cardModInIsland)
+                val t = tier(c, scripts)
                 counts[t] = (counts[t] ?: 0) + 1
             }
         }
@@ -410,13 +411,17 @@ object CardRouter {
     }
 
     /**
-     * Whether an island can apply card-mod: only when card-mod is one of the dashboard's Lovelace [resources], which
-     * the island loads. Installed only as a frontend module, it isn't there.
+     * The children a container builds, with their index in its `cards:`. A vertical layout-card consumes its
+     * `custom:layout-break` markers instead of building them ([dev.glassworks.engine.vitro.cards.LayoutCardView]).
      */
-    fun cardModInIsland(resources: List<LovelaceResource>): Boolean =
-        // The island loads every type but `css` as a script (`WebIslandCardView.buildIslandHtml`).
-        // Match the script's file name, not a query (`/local/theme.js?variant=card-mod` isn't card-mod).
-        resources.any { r -> r.type != "css" && r.url.substringBefore('?').substringBefore('#').substringAfterLast('/').lowercase() == "card-mod.js" }
+    fun builtChildren(card: CardConfig): List<IndexedValue<CardConfig>> {
+        val all = card.childCards.withIndex().toList()
+        if (card.type != "custom:layout-card") return all
+        val layout = card.raw.optString("layout_type", "masonry-layout").removePrefix("custom:")
+        return if (layout == "vertical-layout" || layout == "vertical") all.filter { it.value.type != LAYOUT_BREAK } else all
+    }
+
+    const val LAYOUT_BREAK = "custom:layout-break"
 
     /** One top-level card `VitroView` builds for a view, with its section (null outside sections) and index. */
     data class ViewRoot(val section: Int?, val index: Int, val card: CardConfig)

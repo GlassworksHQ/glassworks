@@ -668,11 +668,12 @@ object ThemeResolver {
             letterSpacingEm = letterSpacing,
             transitionOpacityMs = transitionMs,
             positionFixed = position == "fixed" || position == "absolute",
-            fixedTop = prop("top"),
-            fixedRight = prop("right"),
-            fixedBottom = prop("bottom"),
-            fixedLeft = prop("left"),
-            fixedWidth = prop("width"),
+            // `auto` (and `unset`, `initial`) is no inset: the overlay must not anchor the card to that edge.
+            fixedTop = prop("top")?.let(::inset),
+            fixedRight = prop("right")?.let(::inset),
+            fixedBottom = prop("bottom")?.let(::inset),
+            fixedLeft = prop("left")?.let(::inset),
+            fixedWidth = prop("width")?.let(::inset),
             fixedCenterY = centerY,
             fixedCenterX = centerX,
             textColor = prop("color")?.let(::parseColor),
@@ -812,6 +813,8 @@ object ThemeResolver {
             (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && !INTERACTION.containsMatchIn(s) &&
                 !hasCombinator(s) && !PSEUDO_ELEMENT.containsMatchIn(s.replace(Regex("""\[[^\]]*\]"""), "[]")))
     }
+
+    private fun inset(value: String): String? = value.takeUnless { it.trim().lowercase(Locale.ROOT) in setOf("auto", "unset", "initial") }
 
     /** States a card is in only while touched or focused: a rule for one isn't the card at rest. */
     private val INTERACTION = Regex(""":(hover|active|focus|focus-visible|focus-within)\b""")

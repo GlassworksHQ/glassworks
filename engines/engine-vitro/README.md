@@ -82,7 +82,11 @@ Some things never send a card to an island:
 - **Things that don't change the look on a touch panel**, such as `cursor`, `transition`, `user-select`, `pointer-events: auto`, `will-change`, `-webkit-tap-highlight-color`, `outline: none`, and `:hover`, `:focus` and `:active` rules. Each one is listed with its reason in `VitroSupport`.
 - **Known gaps** that Vitro still draws natively, because an island wouldn't do better or the native work is underway: `backdrop-filter` (an island can't blur the native view behind it either), `text-overflow` and `white-space: nowrap` (they only show when text doesn't fit), small `position: relative` nudges, inline tile features, the Mushroom chips card's own card-mod, and card variables a native card doesn't read. The checker lists these as notes.
 
-The island runs a custom card's own code, so a custom card there looks exactly as it does in Home Assistant. It doesn't include Home Assistant's own built-in cards yet, so a built-in card Vitro draws (a `tile`, say) stays native even when its config has something outside the supported set, and the checker notes what it would have fallen back for. The same goes for a custom container Vitro draws, such as stack-in-card or layout-card, when a built-in card sits anywhere inside it, since that card would show as a plain summary in the island. Built-in cards Vitro has no renderer for at all, such as `map` or the `energy-*` cards, still go to the island. The island loads the dashboard's Lovelace resources, so when card-mod is installed only as a frontend module, a custom card that would fall back just for its card-mod styles stays native: the island couldn't apply them either.
+A card goes to the island only when the island can draw it. The island runs the card's own code with a small stand-in for Home Assistant's frontend, and loads that code from the dashboard's Lovelace resources. That has three consequences:
+
+- **Built-in cards stay native.** The island doesn't include Home Assistant's built-in cards, so a built-in card Vitro draws (a `tile`, say) stays native even when its config has something outside the supported set, and the checker notes what it would have fallen back for. The same goes for a custom container Vitro draws, such as stack-in-card or layout-card, when a built-in card sits anywhere inside it, since that card would show as a plain summary in the island. A custom wrapper Vitro doesn't know that builds built-in cards through `loadCardHelpers` shows them as summaries too.
+- **A custom card Vitro also draws natively** (Mushroom, Bubble Card, mini-graph-card and the rest of the HACS list) goes to the island only when a Lovelace resource provides its script, matched by file name (`mushroom.js`, `bubble-card.js`, ...). For a fallback caused by card-mod styles alone, card-mod has to be a resource too. Otherwise the card stays native, and the checker notes what it would have fallen back for and that the island has no script for it.
+- **A custom card with no native renderer** goes to the island regardless, since that's its only chance to draw. The checker notes it when no resource seems to provide its script. Built-in cards Vitro has no renderer for, such as `map` or the `energy-*` cards, go to the island too.
 
 ### The compatibility checker
 
@@ -90,7 +94,7 @@ The checker reports every card Vitro builds in a view, whether it renders native
 
 - **Logcat:** each time Vitro builds a view, it logs one `Island <where>: <why>` line per fallback under the `Glassworks.Vitro` tag.
 - **The test app:** tap the HUD to expand it. It lists the islands in the current view.
-- **From code or a test:** `CompatChecker.check(dashboard, CardRouter.cardModInIsland(resources)).format()` gives the same report as text, starting with a line such as `116 cards: 116 native, 0 island (fully native)`. Pass the dashboard's Lovelace resources so the report knows whether islands can load card-mod. Without them, it assumes they can.
+- **From code or a test:** `CompatChecker.check(dashboard, IslandScripts.of(resources)).format()` gives the same report as text, starting with a line such as `116 cards: 116 native, 0 island (fully native)`. Pass the dashboard's Lovelace resources so the report knows which scripts the islands can load. Without them, it assumes every card's script and card-mod are there.
 
 To check your own dashboards without a panel, save each Lovelace config (`lovelace/config` over the WebSocket API) as a `*-new.json` file in one folder and run:
 
@@ -98,7 +102,7 @@ To check your own dashboards without a panel, save each Lovelace config (`lovela
 VITRO_PARITY_DIR=/path/to/folder ./gradlew :engine-vitro:testDebugUnitTest --tests '*CompatCheckerLocal*' -i
 ```
 
-The report covers the cards in the dashboard config. Cards that `auto-entities` builds at runtime from matched entities aren't in it, so an island one of them opens doesn't show in the counts or the log. This check reads only the exported configs, not the resource list, so it assumes card-mod is a Lovelace resource the islands can load. With card-mod installed only as a frontend module, a card that falls back just for its card-mod styles stays native on the panel even though the check lists it as an island.
+The report covers the cards in the dashboard config. Cards that `auto-entities` builds at runtime from matched entities aren't in it, so an island one of them opens doesn't show in the counts or the log. This check reads only the exported configs, not the resource list, so it assumes every card's script and card-mod are Lovelace resources the islands can load. On the panel, a card whose script or card-mod isn't a resource stays native even though the check lists it as an island.
 
 ## Key optimizations
 

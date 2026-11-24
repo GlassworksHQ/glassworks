@@ -310,7 +310,10 @@ class CardModAndOverlayTest {
             """{"views": [{"cards": [{"type": "custom:mushroom-template-card", "card_mod": {"style": {"mushroom-shape-icon$": ".shape { color: red }"}}}]}]}""",
         )
         assertEquals(0, vv.lastMetrics.webIslandCards)
-        val cardMod = listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-card-mod/card-mod.js?hacstag=1", "module"))
+        val cardMod = listOf(
+            dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-mushroom/mushroom.js?hacstag=1", "module"),
+            dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-card-mod/card-mod.js?hacstag=1", "module"),
+        )
         vv.resourcesList = cardMod
         assertEquals(1, vv.lastMetrics.webIslandCards)
         assertFalse(vv.lastMetrics.cacheHit)
@@ -319,6 +322,31 @@ class CardModAndOverlayTest {
         val metrics = vv.lastMetrics
         vv.resourcesList = cardMod.toList()
         assertTrue(metrics === vv.lastMetrics)
+    }
+
+    @Test
+    fun aNewServerDropsTheOldDashboard() {
+        // The new server's resources must not rebuild the old server's dashboard before its own arrives.
+        val vv = vitroView(EntityStore(), """{"views": [{"cards": [{"type": "tile", "entity": "light.a"}]}]}""")
+        assertNotNull(vv.dashboard)
+        vv.resetForServer()
+        assertNull(vv.dashboard)
+        val metrics = vv.lastMetrics
+        vv.resourcesList = listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/local/other.js", "module"))
+        assertTrue("nothing rebuilt", metrics === vv.lastMetrics)
+    }
+
+    @Test
+    fun autoIsNoInsetAndLeftWinsOverRight() {
+        val vv = VitroView(activity, EntityStore(), 0xFF000000.toInt())
+        val dp = activity.resources.displayMetrics.density
+        // `right: auto` doesn't anchor the card to the right edge.
+        val auto = vv.pinnedLayoutParams(ThemeResolver.parseCardMod("ha-card { position: fixed; left: 24px; right: auto; top: auto; bottom: 0; width: 120px }"))
+        assertEquals(Gravity.START or Gravity.BOTTOM, auto.gravity)
+        assertEquals((24 * dp).toInt(), auto.marginStart)
+        // Both insets with a width: `left` wins, as in CSS.
+        val both = vv.pinnedLayoutParams(ThemeResolver.parseCardMod("ha-card { position: fixed; left: 24px; right: 24px; top: 0; width: 120px }"))
+        assertEquals(Gravity.START or Gravity.TOP, both.gravity)
     }
 
     @Test
