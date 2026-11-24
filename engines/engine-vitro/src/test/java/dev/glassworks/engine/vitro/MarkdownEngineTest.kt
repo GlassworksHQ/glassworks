@@ -487,6 +487,28 @@ class MarkdownEngineTest {
         assertEquals(Gravity.CENTER_HORIZONTAL, plain.horizontalGravity)
     }
 
+    @Test
+    fun clockDateFormatFollowsHa() {
+        val monday = java.util.GregorianCalendar(java.util.TimeZone.getTimeZone("UTC"), java.util.Locale.US).apply {
+            clear(); set(2026, java.util.Calendar.NOVEMBER, 23, 10, 8)
+        }.time
+        val utc = java.util.TimeZone.getTimeZone("UTC")
+        fun fmt(v: Any?) = dev.glassworks.engine.vitro.cards.ClockDate.of(v)?.format(monday, java.util.Locale.US, utc)
+        // Values get one space between them; separators are written as they are; a new line starts another line.
+        assertEquals("Monday November 23", fmt(org.json.JSONArray(listOf("weekday-long", "month-long", "day-numeric"))))
+        assertEquals("23/11/2026", fmt(org.json.JSONArray(listOf("day-2-digit", "separator-slash", "month-2-digit", "separator-slash", "year-numeric"))))
+        assertEquals("Mon, Nov 23\n26", fmt(org.json.JSONArray(listOf("weekday-short", "separator-comma", "month-short", "day-numeric", "separator-new-line", "year-2-digit"))))
+        assertEquals("2026-11-23", fmt("iso"))
+        assertEquals("Monday, November 23, 2026", fmt("full"))
+        // No date: none, an empty list, an unknown preset or only unknown parts.
+        assertNull(fmt(null)); assertNull(fmt(org.json.JSONArray())); assertNull(fmt("fancy")); assertNull(fmt(org.json.JSONArray(listOf("nope"))))
+
+        val clock = ClockCardView(context(JSONObject().put("time_zone", "UTC")), card(
+            """{"type": "clock", "clock_size": "large", "time_format": "12", "date_format": ["weekday-long", "month-long", "day-numeric"]}"""))
+        clock.renderAt(monday)
+        assertEquals(java.text.SimpleDateFormat("EEEE MMMM d", java.util.Locale.getDefault()).apply { timeZone = utc }.format(monday), clock.renderedDate)
+    }
+
     // ---- stack-in-card ----
 
     @Test

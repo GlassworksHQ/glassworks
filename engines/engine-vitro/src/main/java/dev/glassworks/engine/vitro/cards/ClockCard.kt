@@ -50,6 +50,10 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     private lateinit var minuteView: TextView
     private var secondView: TextView? = null
     private var ampmView: TextView? = null
+
+    /** HA's `date_format`: a preset, or the parts of the date line ([ClockDate]); null when the card shows no date. */
+    private val dateFormat: ClockDate? = ClockDate.of(raw.opt("date_format"))
+    private val dateLines = ArrayList<DateLine>()
     private var appliedZone: String? = null
     private var running = false
     private var cardCss: String? = null
@@ -117,6 +121,10 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         val minute = parts.add(MdNode("div", mapOf("class" to "time-part minute")))
         val second = if (showSeconds) parts.add(MdNode("div", mapOf("class" to "time-part second"))) else null
         val ampm = if (use12h) parts.add(MdNode("div", mapOf("class" to "time-part am-pm"))) else null
+        // `.date-container > .date > .date-line` per line, when the card shows a date.
+        val date = dateFormat?.let {
+            shadow.add(MdNode("div", mapOf("class" to "date-container"))).add(MdNode("div", mapOf("class" to "date$sizeClass")))
+        }
         val digitalSheet = MdSheet.parse(ThemeResolver.cardModSheet(raw.optJSONObject("card_mod"), "hui-clock-card-digital$"))
         MdCascade.apply(shadow, digital.style!!, listOf(digitalSheet to 2, DIGITAL_STYLES to 3), vars)
 
@@ -174,7 +182,23 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         secondView = second?.let { n -> MarkdownRenderer.cssLine(ctx.context, dp, "", n.style!!).also { partsView.addSide(it, n.style!!, top = true) } }
         ampmView = ampm?.let { n -> MarkdownRenderer.cssLine(ctx.context, dp, "", n.style!!).also { partsView.addSide(it, n.style!!, top = false) } }
         row.addView(partsView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        wrapper.addView(row)
+        dateLines.clear()
+        val column = if (date == null) row else LinearLayout(ctx.context).apply {
+            // hui-clock-card-digital: the clock container, then the date container under it.
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            val ds = date.style!!
+            val top = (date.parent!!.style!!.margin[0].takeIf { !it.isNaN() } ?: 0f) * dp
+            repeat(dateFormat!!.lineCount) { i ->
+                val line = DateLine(ctx.context, MarkdownRenderer.cssLine(ctx.context, dp, "", ds))
+                dateLines += line
+                addView(line, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    if (i == 0) topMargin = top.roundToInt()
+                })
+            }
+        }
+        wrapper.addView(column)
         appliedZone = null
         render(Date())
     }
@@ -202,6 +226,7 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         appliedZone = key
         val zone = local ?: TimeZone.getTimeZone(tzId)
         listOf(hourFormat, minuteFormat, secondFormat, ampmFormat).forEach { it.timeZone = zone }
+        dateZone = zone
     }
 
     private fun TextView.setLine(t: String) {
@@ -218,6 +243,51 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         minuteView.setLine(minuteFormat.format(now))
         secondView?.setLine(secondFormat.format(now))
         ampmView?.setLine(ampmFormat.format(now).uppercase(Locale.getDefault()))
+        dateFormat?.let { f ->
+            val lines = f.format(now, Locale.getDefault(), dateZone).split('\n')
+            dateLines.forEachIndexed { i, line -> line.text.setLine(lines.getOrElse(i) { "" }) }
+        }
+    }
+
+    private var dateZone: TimeZone = TimeZone.getDefault()
+
+    /** The date text after the clock's last render (tests). */
+    internal val renderedDate: String get() = dateLines.joinToString("\n") { it.text.text.toString() }
+
+    /**
+     * One line of the date: `.date { overflow: hidden; white-space: nowrap; text-align: center }` around HA's
+     * `ha-marquee-text`. A line that fits is centered. A longer one scrolls in HA, and rests with its end at the box's
+     * end and its start cut off (the large clock's "onday November 23"): Vitro draws that resting position, without
+     * the scroll. The box is the font's normal line height, the line box (`line-height: 1.1`) at its bottom.
+     */
+    private class DateLine(context: Context, val text: TextView) : ViewGroup(context) {
+        init {
+            addView(text)
+        }
+
+        // `overflow: hidden`: the line is cut at the box (clipChildren only cuts a child at its own bounds).
+        override fun dispatchDraw(canvas: android.graphics.Canvas) {
+            canvas.save()
+            canvas.clipRect(0, 0, width, height)
+            super.dispatchDraw(canvas)
+            canvas.restore()
+        }
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val unspecified = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+            text.measure(unspecified, unspecified)
+            val fm = text.paint.fontMetrics
+            val normal = kotlin.math.ceil(fm.descent - fm.ascent).toInt()
+            setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), max(normal, text.measuredHeight))
+        }
+
+        override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+            val w = r - l
+            val tw = text.measuredWidth
+            val x = if (tw <= w) (w - tw) / 2 else w - tw
+            val y = (b - t) - text.measuredHeight
+            text.layout(x, y, x + tw, y + text.measuredHeight)
+        }
     }
 
     override fun onAttachedToWindow() {
@@ -315,9 +385,17 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
                 if (s.top) topH = max(topH, s.view.measuredHeight) else bottomH = max(bottomH, s.view.measuredHeight)
             }
             val h = max(digits.measuredHeight, topH + bottomH)
-            // The digits span both rows: what they need beyond the rows' own content is shared between the rows.
+            // The digits span both rows: what they need beyond the rows' own content goes to the rows, as the grid does
+            // it. A row with nothing in it (no seconds, or no AM/PM) has no limit and takes it all, so a lone AM/PM
+            // sits at the bottom (HA's DOM); with both rows filled it is shared.
             val extra = (h - topH - bottomH).coerceAtLeast(0)
-            rowTop = topH + extra / 2
+            val hasTop = sides.any { it.top }
+            val hasBottom = sides.any { !it.top }
+            rowTop = topH + when {
+                hasBottom && !hasTop -> extra
+                hasTop && !hasBottom -> 0
+                else -> extra / 2
+            }
             rowBottom = h - rowTop
             setMeasuredDimension(digits.measuredWidth + sideW, h)
         }
@@ -363,7 +441,7 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
             """.trimIndent(),
         )
 
-        /** `hui-clock-card-digital`'s styles (the date line isn't drawn yet). */
+        /** `hui-clock-card-digital`'s styles. */
         val DIGITAL_STYLES = MdSheet.parse(
             """
             .clock-container { display: flex; justify-content: center }
@@ -375,7 +453,89 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
             .time-parts .time-part.second { line-height: 0.9; opacity: 0.4 }
             .time-parts .time-part.am-pm { line-height: 0.9; opacity: 0.6 }
             .time-parts .time-part.second, .time-parts .time-part.am-pm { font-size: var(--ha-font-size-xs); margin-left: 4px }
+            .date-container { margin-top: var(--ha-space-1) }
+            .date { text-align: center; opacity: 0.8; font-size: var(--ha-font-size-s); line-height: 1.1 }
+            .date.size-medium { font-size: var(--ha-font-size-l) }
+            .date.size-large { font-size: var(--ha-font-size-2xl) }
             """.trimIndent(),
         )
     }
 }
+
+/**
+ * HA's clock `date_format` (`clock-date-format.ts`): a preset (`short`, `medium`, `long`, `full`: the locale's date
+ * styles; `iso`: YYYY-MM-DD), or a list of parts. Value parts are the locale's field forms, separator parts are written
+ * as they are (`separator-new-line` starts a line), and adjacent values get one space between them.
+ */
+internal class ClockDate private constructor(private val preset: String?, private val parts: List<String>) {
+    /** How many lines the date has (one per `separator-new-line`, plus one). */
+    val lineCount: Int get() = if (preset != null) 1 else parts.count { it == "separator-new-line" } + 1
+
+    // Formatters for the last locale and zone, and the last minute's text: the clock ticks every few seconds and the
+    // date only changes with the minute (HA formats it once per minute too).
+    private var formatsFor: Pair<Locale, TimeZone>? = null
+    private var formats: List<java.text.DateFormat?> = emptyList()
+    private var lastMinute = Long.MIN_VALUE
+    private var last = ""
+
+    fun format(date: Date, locale: Locale, zone: TimeZone): String {
+        val minute = date.time / 60_000L
+        if (formatsFor == locale to zone && minute == lastMinute) return last
+        if (formatsFor != locale to zone) {
+            formatsFor = locale to zone
+            formats = if (preset != null) listOf(presetFormat(preset, locale)) else parts.map { p -> PATTERNS[p]?.let { SimpleDateFormat(it, locale) } }
+            formats.forEach { it?.timeZone = zone }
+        }
+        lastMinute = minute
+        last = if (preset != null) formats[0]!!.format(date) else buildString {
+            var lastWasValue = false
+            parts.forEachIndexed { i, part ->
+                val separator = SEPARATORS[part]
+                if (separator != null) {
+                    append(separator)
+                    lastWasValue = false
+                } else {
+                    val value = formats[i]?.format(date).orEmpty()
+                    if (value.isNotEmpty()) {
+                        if (lastWasValue) append(' ')
+                        append(value)
+                        lastWasValue = true
+                    }
+                }
+            }
+        }
+        return last
+    }
+
+    private fun presetFormat(preset: String, locale: Locale): java.text.DateFormat = when (preset) {
+        "iso" -> SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
+        "short" -> java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT, locale)
+        "medium" -> java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM, locale)
+        "long" -> java.text.DateFormat.getDateInstance(java.text.DateFormat.LONG, locale)
+        else -> java.text.DateFormat.getDateInstance(java.text.DateFormat.FULL, locale)
+    }
+
+    companion object {
+        private val PRESETS = setOf("short", "medium", "long", "full", "iso")
+        private val PATTERNS = mapOf(
+            "weekday-short" to "EEE", "weekday-long" to "EEEE",
+            "day-numeric" to "d", "day-2-digit" to "dd",
+            "month-short" to "MMM", "month-long" to "MMMM", "month-numeric" to "M", "month-2-digit" to "MM",
+            "year-2-digit" to "yy", "year-numeric" to "yyyy",
+        )
+        private val SEPARATORS = mapOf(
+            "separator-dash" to "-", "separator-slash" to "/", "separator-dot" to ".",
+            "separator-comma" to ", ", "separator-new-line" to "\n",
+        )
+
+        /** The card's `date_format`, or null when it shows no date (none, an empty list, an unknown value). */
+        fun of(value: Any?): ClockDate? = when (value) {
+            is String -> if (value in PRESETS) ClockDate(value, emptyList()) else null
+            is org.json.JSONArray -> (0 until value.length()).map { value.optString(it) }
+                .filter { it in PATTERNS || it in SEPARATORS }
+                .takeIf { it.isNotEmpty() }?.let { ClockDate(null, it) }
+            else -> null
+        }
+    }
+}
+
