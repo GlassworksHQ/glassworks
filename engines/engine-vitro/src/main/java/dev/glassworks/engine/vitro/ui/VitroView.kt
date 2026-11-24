@@ -864,7 +864,8 @@ class VitroView(
                 setPadding(ctx.px(p.left), ctx.px(p.top), ctx.px(p.right), ctx.px(p.bottom))
             }
         }
-        val built: View = when (card.type) {
+        // Anything outside Vitro's supported set goes to an island on purpose (CardCompat), decided once per card.
+        val built: View = if (!card.compat.isNative) WebIslandCardView(ctx, card, fillViewport = fillViewport) else when (card.type) {
             // Layout containers
             "vertical-stack" -> LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL

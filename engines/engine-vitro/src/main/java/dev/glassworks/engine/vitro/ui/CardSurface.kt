@@ -366,6 +366,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
             clearDefaultInnerPadding()
         }
         mod.opacity?.let { alpha = it.coerceIn(0f, 1f) }
+        if (!seamless) mod.elevationDp?.let { elevation = it * ctx.dp }
         onCardModApplied(mod)
     }
 

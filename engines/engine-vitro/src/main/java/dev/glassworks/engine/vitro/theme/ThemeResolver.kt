@@ -79,6 +79,8 @@ data class CardModStyle(
     val customProperties: Map<String, String> = emptyMap(),
     /** CSS `margin` on the card (an inset inside its grid cell or stack slot), in dp. */
     val marginInsets: EdgeInsetsDp? = null,
+    /** `box-shadow` on the card as a native elevation in dp (`none` is 0), or null to keep the theme's. */
+    val elevationDp: Float? = null,
 )
 
 /** Resolved, native-ready Home Assistant theme for one view or card. */
@@ -638,6 +640,7 @@ object ThemeResolver {
                 bottom = prop("margin-bottom"),
                 left = prop("margin-left"),
             ),
+            elevationDp = prop("box-shadow")?.let(::parseBoxShadowElevationDp),
         )
     }
 
@@ -747,7 +750,8 @@ object ThemeResolver {
         return host.toString().replace(Regex("""\s*!\s*important""", RegexOption.IGNORE_CASE), "") to other
     }
 
-    private fun isHostSelector(selector: String): Boolean = selector.split(',').any { raw ->
+    /** True when [selector] (a comma list) styles the card itself: `ha-card`, `:host`, `:host ha-card`, `ha-card.x`. */
+    internal fun isHostSelector(selector: String): Boolean = selector.split(',').any { raw ->
         val s = raw.trim().lowercase(Locale.ROOT).replace(Regex("""\s+"""), " ")
         s == "ha-card" || s == ":host" || s == "." || s == ":host ha-card" || s == ":host > ha-card" ||
             (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && ":hover" !in s && ":active" !in s)
