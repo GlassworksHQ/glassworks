@@ -307,8 +307,9 @@ only the generic lines can run (`what: generic-android`).
    their `.sha256`, its notes are the version's changelog section, its version is still higher than its line's last
    release or beta (another run may have published since), and a tag that exists already names this run's commit.
    Then, item by item, pushes the tag over SSH with the tag deploy key and creates the release with every file in one
-   `gh release create`, so a release never has half its ABIs. The S1 app's stable is `--latest`; everything else is
-   `--latest=false`, so `releases/latest` stays the S1 app's (panels up to 0.4.3 read only that).
+   `gh release create`, so a release never has half its ABIs. A line marked `latest` in its frame's data gets
+   `--latest` on a stable; everything else is `--latest=false`. No line is marked until 1.0.0, so `releases/latest`
+   stays `v0.4.4`, the one release panels up to 0.4.3 can read ([Tags](#tags)).
 
 The radio bundle and the frame bundle are not published on their own (the Silicon Labs libcpc may only be
 distributed inside the product): the radio bundle is inside the `armeabi-v7a` APK, the frame bundle only in its zip.
@@ -344,8 +345,11 @@ checked out, in the project's environment, and marks it a success once Vercel ta
 that commit. When a newer record never reached success, the next run deploys anyway, because what's live is
 unknown. Each run's summary lists what it deployed, from which commit, and why.
 
-Refract (refract.glassworks.dev), the Cloudflare Worker Kiln downloads every APK and image through, isn't on Vercel
-and isn't in `web-deploy.yml`: it deploys by hand ([its README](../kiln/workers/refract/README.md#deploying)).
+Refract (refract.glassworks.dev), the Cloudflare Worker Kiln downloads every APK and image through, deploys from the
+same workflow, to Cloudflare, when its code, allowlist or release lines changed. Kiln's job waits for it, and Kiln
+doesn't deploy a commit whose Refract files changed since Refract's last successful deploy (when that deploy failed,
+or main moved on in between), so a Kiln that names a new download never goes live before Refract serves it. Running
+the workflow by hand for Kiln deploys Refract first when it needs it ([its README](../kiln/workers/refract/README.md#deploying)).
 
 Versions are `MAJOR.MINOR.PATCH`. For the app lines minor and patch are below 100, and the versionCode is
 `major*10000 + minor*100 + patch`, so `1.2.3` is 10203. Frame versions take each part up to 999. SemVer pre-release
@@ -401,14 +405,22 @@ models may get their own frame). From 0.4.4 the app accepts both `v1.2.3` and
 after it. Apps up to **0.4.3** only read `releases/latest` and only understand `v1.2.3`.
 
 - `v0.4.4` is the last plain tag. Every S1 release after it is tagged `aqara-s1-plus-v1.2.3` (maintainer,
-  2026-11-19). A panel on 0.4.3 or older is offered 0.4.4 only while that is `releases/latest`.
-  After the next release it sees no update, and needs Kiln or `adb install -r`.
+  2026-11-19).
+- **`v0.4.4` stays `releases/latest` until 1.0.0** (maintainer, 2026-11-23): the S1 line's `latest` is `false`
+  in `frames/aqara-s1-plus/design/frame.json`, so the releases before 1.0.0 don't take it. A panel on 0.4.3 is
+  offered 0.4.4, and once on 0.4.4 it reads the whole list and is offered the newest S1 release: two updates from
+  Home Assistant, no reinstall. 0.4.3 doesn't update by itself, so this gives its owners until 1.0.0 to press
+  Install. GitHub's page shows 0.4.4 as *Latest* meanwhile; nothing else reads it (Kiln, the site and the apps from
+  0.4.4 on pick from the list).
+- **1.0.0 sets `latest` back to `true`**, in the same PR as its changelog sections, and is published as
+  `releases/latest`. That PR also changes `test_no_line_is_releases_latest_while_v0_4_4_holds_it` in
+  `tools/release/test/test_release_plan.py` to expect the S1 line (the other tests read the flag from the data). A panel still on 0.4.3 after that sees no update, and needs Kiln or `adb install -r`.
 - The app's blueprint links point at its own release's tag, which `ReleaseLine.tag` builds
   (`aqara-s1-plus-v1.2.3` on the S1). A release tagged any other way gets links to files that aren't
   there ([Blueprints](blueprints.md#which-version-you-get)). The generic app and its legacy build do
   the same with their own tags.
-- An S1 stable is always published with `--latest` (the frames' data marks its line `latest`), and every other frame's
-  or library's release with `--latest=false`, so `releases/latest` stays an S1 release.
+- Every other frame's or library's release is published with `--latest=false`, so `releases/latest` stays an S1
+  release.
 
 First add a `## [1.0.0] - <date>` section to [CHANGELOG.md](../CHANGELOG.md) (move the
 
@@ -456,7 +468,7 @@ gh workflow run release.yml --repo GlassworksHQ/glassworks --ref main -f version
 ```
 
 The workflow builds and checks everything as usual, and publishes each app line with `--prerelease` and
-`--latest=false`, " beta" after the title. `releases/latest` stays the S1 app's last stable, and Kiln, which installs
+`--latest=false`, " beta" after the title. `releases/latest` doesn't move, and Kiln, which installs
 stable releases only, doesn't offer it. **Frame releases have no betas** (the apps' frame check skips pre-releases):
 a beta run skips them, and fails if you name one.
 
@@ -467,13 +479,14 @@ stable is 0.6.0 promoted, or 0.6.1 and up.
 ### Promote a beta
 
 ```sh
-gh release edit aqara-s1-plus-v0.6.0 --repo GlassworksHQ/glassworks --prerelease=false --latest \
+gh release edit aqara-s1-plus-v0.6.0 --repo GlassworksHQ/glassworks --prerelease=false --latest=false \
   --title "Glassworks for the Aqara S1 Plus 0.6.0"
 gh release edit generic-android-legacy-v0.3.0 --repo GlassworksHQ/glassworks --prerelease=false --latest=false \
   --title "Glassworks for generic Android, legacy build 0.3.0"
 ```
 
-`--latest` for the S1 app only, as when it is published; every other line keeps `--latest=false`. Panels on Stable
+`--latest=false` for every line while `v0.4.4` holds `releases/latest` (until 1.0.0, [Tags](#tags)); after that,
+`--latest` for the S1 app only, as when it is published. Panels on Stable
 see it at their next check. A beta with a bug is fixed by a higher version, beta or stable: panels that run it are
 never offered anything lower.
 

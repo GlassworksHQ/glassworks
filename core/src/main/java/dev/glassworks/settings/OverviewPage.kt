@@ -23,10 +23,20 @@ import dev.glassworks.ui.Wrap
 /**
  * The settings menu's first page, the Manage page's Overview on the panel: what it runs and since when,
  * with Reload dashboard, Restart app and Check for updates; Home Assistant, Wi-Fi, the engine and memory
- * as tiles ([columns] to a row); then every pane with its state, each opening its page ([onPane]). All
+ * as tiles ([columns] to a row, which the menu sets from the page's width); then every pane with its state, each opening its page ([onPane]). All
  * from the Manage page's own [PanelStatus] and [PanelActions]. Main thread.
  */
-class OverviewPage(context: Context, private val columns: Int) : LinearLayout(context) {
+class OverviewPage(context: Context, columns: Int) : LinearLayout(context) {
+
+    /** Tiles to a row. A change draws the page again, from what it was last drawn from. */
+    var columns = columns
+        set(v) {
+            if (field == v) return
+            field = v
+            drawn = null
+            val s = last ?: return
+            bind(s, actions ?: return)
+        }
 
     var onPane: ((String) -> Unit)? = null
 
@@ -65,7 +75,16 @@ class OverviewPage(context: Context, private val columns: Int) : LinearLayout(co
         setPadding(p, p, p, p)
     }
 
-    private fun hero(s: PanelStatus, a: PanelActions) = LinearLayout(context).apply {
+    /** The status and its actions, after the stack art; a hero narrower than [HERO_ART_DP] (a phone) leaves the art out. */
+    private fun hero(s: PanelStatus, a: PanelActions) = object : LinearLayout(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val art = getChildAt(0)
+            val want = if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED &&
+                MeasureSpec.getSize(widthMeasureSpec) < g.px(HERO_ART_DP)) View.GONE else View.VISIBLE
+            if (art.visibility != want) art.visibility = want
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        }
+    }.apply {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         background = g.surface(Tokens.R_TILE.toFloat())
@@ -193,5 +212,7 @@ class OverviewPage(context: Context, private val columns: Int) : LinearLayout(co
         const val GAP = 12f
         /** A row's least height, in dp: a finger's width on the S1. */
         const val ROW_MIN = 52f
+        /** A hero narrower than this, in dp, leaves its stack art out. */
+        const val HERO_ART_DP = 460f
     }
 }

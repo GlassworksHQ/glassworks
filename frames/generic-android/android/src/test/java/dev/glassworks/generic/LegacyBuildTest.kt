@@ -92,17 +92,15 @@ class LegacyBuildTest {
         override fun isContentProcess(processName: String) = false
     }
 
-    /** #198: the legacy GeckoView holds pages to one origin, so with Vitro on it is told the loopback island server's. */
-    @Test fun theLegacyEngineIsToldTheLoopbackOriginOnlyWhenVitroIsOn() {
+    /** #198: the legacy GeckoView holds pages to one origin, so under Vitro it is told the loopback island server's. */
+    @Test fun theLegacyEngineIsToldTheLoopbackOriginOnlyUnderVitro() {
         val app = RuntimeEnvironment.getApplication()
         val build = AppBuild("1.0.0", 10000, debug = false, product = GenericApp.PRODUCT)
-        val prefs = KioskPrefs(app)
-        prefs.urlSetting = "http://192.0.2.10:8123/lovelace/0"
+        KioskPrefs(app).urlSetting = "http://192.0.2.10:8123/lovelace/0"
         val real = GenericApp.engineSettings(app, build, GenericApp.LEGACY_APPLICATION_ID).dashboard
         assertTrue(real.toString(), real?.startsWith("http://192.0.2.10:8123") == true)
         val vitro = VitroEngine(fallback = NoEngine(), settings = { EngineSettings(emptyList(), 1f, false) })
         try {
-            prefs.vitroEnabled = true
             val legacy = GenericApp.geckoSettings(app, build, GenericApp.LEGACY_APPLICATION_ID) { vitro }
             assertTrue(legacy.dashboard.toString(), legacy.dashboard?.startsWith("http://127.0.0.1:") == true)
             assertEquals(vitro.fallbackDashboardOrigin(), legacy.dashboard)
@@ -111,9 +109,8 @@ class LegacyBuildTest {
             assertEquals("the generic app's GeckoView keeps Home Assistant's address", real,
                 GenericApp.geckoSettings(app, build, "dev.glassworks.generic_android") { throw AssertionError("no Vitro needed") }.dashboard)
 
-            prefs.vitroEnabled = false
-            assertEquals("Vitro off: the legacy engine keeps the real address", real,
-                GenericApp.geckoSettings(app, build, GenericApp.LEGACY_APPLICATION_ID) { throw AssertionError("no Vitro needed") }.dashboard)
+            assertEquals("no Vitro: the legacy engine keeps the real address", real,
+                GenericApp.geckoSettings(app, build, GenericApp.LEGACY_APPLICATION_ID) { null }.dashboard)
         } finally {
             vitro.islandServer.stop()
         }

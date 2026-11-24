@@ -3,10 +3,10 @@
  *
  *   npm run brand
  *
- * Badges (30 px, for a row of shields): core, pane, kiln, library.
+ * Badges (30 px, for a row of shields): core, pane, kiln, vitro, library.
  * Banners (640 × 180, for the top of a README): glassworks (the whole stack,
  * for the org profile and the main README), principles (the page of rules every
- * part follows), core, pane, kiln, one per library in src/lib/libraries.json, and
+ * part follows), core, pane, kiln, vitro, one per library in src/lib/libraries.json, and
  * one per frame with a tagline in frames/ (frame.mjs). Each in -on-dark
  * and -on-light.
  *
@@ -15,11 +15,14 @@
  * stable) and roadmap, from src/lib/info-badges.json.
  *
  * Part icons (34 × 33, transparent, for tables and lists): frame, core, pane,
- * kiln. A tiny stack whose solid plate says where the part sits.
+ * kiln. A tiny stack whose solid plate says where the part sits. And vitro,
+ * whose plates are cast into one: its own mark at the same size.
  *
  * The mark and everything built from it: mark-on-*, mark-mono, kiln-on-dark,
  * lockup-on-*, lockup-kiln-on-dark, app-icon, favicon (also src/app/icon.svg),
  * and Kiln's app-icon-kiln and favicon-kiln (the same, with the ember floor),
+ * and Vitro's: vitro, app-icon-vitro and favicon-vitro (its cast slab, from
+ * vitroMark in markGeometry.ts), with its badge, part icon and banner,
  * and the frame badge, "Built on Glassworks" (badge-on-*). The mark's shape
  * comes from src/lib/markGeometry.ts, the same file <Mark> draws from.
  */
@@ -27,7 +30,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { measure, text } from "./text.mjs";
-import { BH, BW, PART, cellGuides, markBody, markIcon, partBanner } from "./banner.mjs";
+import { BH, BW, PART, VITRO_EDGE, cellGuides, markBody, markIcon, partBanner, partMark, vitroBody } from "./banner.mjs";
 import { frameBanner } from "./frame.mjs";
 import { existsSync, readdirSync } from "node:fs";
 import {
@@ -117,7 +120,7 @@ function partBadge(t, id) {
     guide(`M${cell} 0V30`, t, { op: 0.6, w: 0.6, dash: "2 1.4" }) +
     `<rect ${pill} fill="none" stroke="${light ? "#c9ccd4" : "#3a3d46"}"/>` +
     `<rect ${pill} fill="none" stroke="url(#rim)" mask="url(#lit-edge)"/>` +
-    markIcon(t, cell / 2 - 10, 5, 20, p.lit, Boolean(p.lit)) +
+    partMark(t, id, cell / 2 - 10, 5, 20) +
     text("Glassworks", { size: SZ, x: cell + 12, y: 19.73, fill: t.mu }) +
     text(p.name, { font: "semibold", size: SZ, x: cell + 12 + wa + SPACE(), y: 19.73, fill: t.fg });
   return svg(w, 30, `Glassworks ${p.name}`, body, t);
@@ -169,7 +172,7 @@ function lockup(ink, { kiln = false } = {}) {
 }
 
 /* kiln: Kiln's mark (the ember floor) on Kiln's room light, sky and ember, in place of sky and violet */
-function appIcon({ kiln = false } = {}) {
+function appIcon({ kiln = false, vitro = false } = {}) {
   const [glow, glowOp] = kiln ? ["#f43f5e", ".18"] : ["#a78bfa", ".2"];
   const defs =
     grad("lit", kiln ? EMBER_STOPS : LIT_STOPS) +
@@ -178,12 +181,14 @@ function appIcon({ kiln = false } = {}) {
   const body =
     `<rect width="512" height="512" rx="112" fill="#0a0b0f"/><rect width="512" height="512" rx="112" fill="url(#sky)"/><rect width="512" height="512" rx="112" fill="url(#vio)"/>` +
     `<rect x=".5" y=".5" width="511" height="511" rx="111.5" fill="none" stroke="#fff" stroke-opacity=".08"/>` +
-    `<g transform="translate(96 96) scale(2.6667)">${markBody({ kiln })}</g>`;
-  return plainSvg(512, 512, kiln ? "Glassworks Kiln" : "Glassworks", defs, body);
+    `<g transform="translate(96 96) scale(2.6667)">${vitro ? vitroBody() : markBody({ kiln })}</g>`;
+  return plainSvg(512, 512, kiln ? "Glassworks Kiln" : vitro ? "Glassworks Vitro" : "Glassworks", defs, body);
 }
 
 /* the favicon follows the OS theme: ink is set by a style block. kiln: the small cut of Kiln's mark */
-function favicon({ kiln = false } = {}) {
+function favicon({ kiln = false, vitro = false } = {}) {
+  // Vitro's mark has no outlined plates, so it needs no ink and looks the same on either theme
+  if (vitro) return plainSvg(120, 120, "Glassworks Vitro", grad("lit", LIT_STOPS), vitroBody({ cut: "small" }));
   const style = `<style>.i{stroke:#0c0e13}@media (prefers-color-scheme:dark){.i{stroke:#f4f4f5}}</style>`;
   return plainSvg(120, 120, kiln ? "Glassworks Kiln" : "Glassworks", grad("lit", kiln ? EMBER_STOPS : LIT_STOPS),
     style + markBody({ inkClass: "i", cut: "small", kiln }));
@@ -263,10 +268,17 @@ const ICON = {
   core: { label: "Glassworks Core", level: 1 },
   pane: { label: "Glassworks Pane", level: 0 },
   kiln: { label: "Glassworks Kiln", level: 2 },
+  vitro: { label: "Glassworks Vitro" },
 };
 
 function partIcon(t, id) {
   const { label, level } = ICON[id];
+  // Vitro isn't a plate of the stack but the plates cast into one: its icon is its mark, at the same size
+  if (id === "vitro") {
+    const w = 2 + C * 32 + 2;
+    const h = 34;
+    return svg(w, h, label, vitroIconIn(w, h), t);
+  }
   const W = 20, D = 12, r = 2.6, step = 7, top0 = 2, cx = 2 + C * D;
   const fill = { frame: t.fg, core: t.fg, pane: "url(#lit)", kiln: "url(#ember)" }[id];
   const paths = [];
@@ -436,6 +448,90 @@ function kilnBanner(t) {
   );
 }
 
+/** Vitro's mark (the small cut) centred in a w × h box. */
+function vitroIconIn(w, h) {
+  const k = Math.min(w, h) / 120;
+  return `<g transform="translate(${((w - 120 * k) / 2).toFixed(2)} ${((h - 120 * k) / 2).toFixed(2)}) scale(${k.toFixed(4)})">${vitroBody({ cut: "small" })}</g>`;
+}
+
+/** A plate's rounded rect in page coordinates, at height z. */
+function isoRect(p, x0, y0, w, h, r, z = 0, seg = 6) {
+  const pts = [];
+  const corner = (ox, oy, a0) => {
+    for (let i = 0; i <= seg; i++) {
+      const a = a0 + (i * Math.PI) / 2 / seg;
+      pts.push(p(ox + r * Math.cos(a), oy + r * Math.sin(a), z));
+    }
+  };
+  corner(x0 + w - r, y0 + r, -Math.PI / 2);
+  corner(x0 + w - r, y0 + h - r, 0);
+  corner(x0 + r, y0 + h - r, Math.PI / 2);
+  corner(x0 + r, y0 + r, Math.PI);
+  return pts;
+}
+const ptsPath = (pts) => `M${pts.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join("L")}Z`;
+function hull2(points) {
+  const P = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [];
+  const up = [];
+  for (const q of P) {
+    while (lo.length >= 2 && cross(lo.at(-2), lo.at(-1), q) <= 0) lo.pop();
+    lo.push(q);
+  }
+  for (const q of P.reverse()) {
+    while (up.length >= 2 && cross(up.at(-2), up.at(-1), q) <= 0) up.pop();
+    up.push(q);
+  }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+
+/** A stack plate cast solid: a lit face with the dashboard's cards set in it, on a thick edge. */
+function castPlate(ox, oy, s, thick) {
+  const p = project(ox, oy, s);
+  const face = isoRect(p, 0, 0, 200, 120, 9, 0, 8);
+  const edge = hull2([...face, ...isoRect(p, 0, 0, 200, 120, 9, -thick, 8)]);
+  const cards = [
+    [10, 10, 87, 100, 0.42],
+    [103, 10, 87, 47, 0.26],
+    [103, 63, 87, 47, 0.26],
+  ];
+  return (
+    `<defs>${VITRO_EDGE}</defs><path d="${ptsPath(edge)}" fill="url(#vitroEdge)"/><path d="${ptsPath(face)}" fill="url(#lit)"/>` +
+    cards.map(([x, y, w, h, o]) => `<path d="${ptsPath(isoRect(p, x, y, w, h, 6))}" fill="#fff" fill-opacity="${o}"/>`).join("")
+  );
+}
+
+/** Vitro: the plates above come down and cast into one lit slab, the dashboard drawn natively. */
+function vitroBanner(t) {
+  const s = 0.55;
+  const ox = 56 + backCorner(s);
+  const y = 6;
+  const gap = 20;
+  const slab = y + gap * 3;
+  const [gx, gy] = project(ox, slab, s)(100, 60);
+  const p = project(ox, 0, s);
+  const corners = [[0, 0], [200, 0], [200, 120], [0, 120]];
+  const drop = corners
+    .map(([a, b]) => {
+      const [x0, y0] = p(a, b);
+      return `M${x0.toFixed(2)} ${(y0 + y + gap).toFixed(2)}L${x0.toFixed(2)} ${(y0 + slab - 2).toFixed(2)}`;
+    })
+    .join("");
+  return partBanner(
+    t,
+    "vitro",
+    "Glassworks Vitro",
+    cellGuides(t, ox, s, [y, slab, slab + plateHeight(s)]) +
+      `<ellipse cx="${gx.toFixed(2)}" cy="${(gy + 6).toFixed(2)}" rx="96" ry="38" fill="#a78bfa" opacity=".35" filter="url(#softL)"/>` +
+      plate(t, ox, y, s, "ghost", { op: 0.25 }) +
+      plate(t, ox, y + gap, s, "ghost", { op: 0.4 }) +
+      guide(drop, t, { op: 0.45, w: 0.7, dash: "3 2.4", color: t.name === "dark" ? "#7dd3fc" : "#0369a1" }) +
+      castPlate(ox, slab, s, 22),
+    { kicker: "GLASSWORKS · ENGINE", nameA: "Glassworks", nameB: "Vitro", code: "engines/engine-vitro", desc: "Home Assistant dashboards, drawn natively.", haze: "litHaze" },
+  );
+}
+
 const DISCORD_PATH =
   "M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z";
 
@@ -523,6 +619,7 @@ for (const t of Object.values(THEMES)) {
   write(`banner-core-${on}.svg`, coreBanner(t));
   write(`banner-pane-${on}.svg`, paneBanner(t));
   write(`banner-kiln-${on}.svg`, kilnBanner(t));
+  write(`banner-vitro-${on}.svg`, vitroBanner(t));
   write(`banner-principles-${on}.svg`, principlesBanner(t));
   for (const lib of libraries) write(`banner-library-${lib.name}-${on}.svg`, libraryBanner(t, lib));
   for (const f of frames) write(`banner-frame-${f.id}-${on}.svg`, frameBanner(t, f));
@@ -539,10 +636,14 @@ write("kiln-on-dark.svg", plainSvg(120, 120, "Glassworks Kiln", grad("lit", EMBE
 write("lockup-on-dark.svg", lockup(ink.dark));
 write("lockup-on-light.svg", lockup(ink.light));
 write("lockup-kiln-on-dark.svg", lockup(ink.dark, { kiln: true }));
+// Vitro's mark has no outlined plates, so one file serves both themes
+write("vitro.svg", plainSvg(120, 120, "Glassworks Vitro", grad("lit", LIT_STOPS), vitroBody()));
 write("app-icon.svg", appIcon());
 write("app-icon-kiln.svg", appIcon({ kiln: true }));
+write("app-icon-vitro.svg", appIcon({ vitro: true }));
 write("favicon.svg", favicon());
 write("favicon-kiln.svg", favicon({ kiln: true }));
+write("favicon-vitro.svg", favicon({ vitro: true }));
 writeFileSync(join(root, "src/app/icon.svg"), favicon());
 written.push("../../src/app/icon.svg");
 

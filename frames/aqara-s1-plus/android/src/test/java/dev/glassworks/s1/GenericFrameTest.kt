@@ -197,10 +197,10 @@ class GenericFrameTest {
 
     @Test fun theAppLogsTheFrameItPicked() {
         ShadowLog.clear()
-        KioskApp().glassworks
+        attachedKioskApp().glassworks
         assertTrue(ShadowLog.getLogsForTag("Glassworks").any { it.msg == "Frame: generic-android (tangorpro)" })
         ShadowBuild.setHardware(AqaraS1Plus.HARDWARE)
-        KioskApp().glassworks
+        attachedKioskApp().glassworks
         assertTrue(ShadowLog.getLogsForTag("Glassworks").any { it.msg == "Frame: aqara-s1-plus (sun50iw10p1)" })
     }
 

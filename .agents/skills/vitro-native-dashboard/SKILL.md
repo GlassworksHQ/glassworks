@@ -11,7 +11,7 @@ description: >-
 
 # Rewrite a Home Assistant Dashboard to Be 100% Vitro-Native
 
-Glassworks' **Vitro** engine renders **31 built-in Lovelace cards (Tier 1)** and **26 popular HACS cards (Tier 2)** directly in native Android Views with zero browser overhead (~114 MB RAM vs ~636 MB with GeckoView). Any unrecognized `custom:*` card triggers a **Tier 3 GeckoView micro-island**, which spins up the full browser engine and wipes out the memory savings.
+Glassworks' **Vitro** engine renders **31 built-in Lovelace cards (Tier 1)** and **26 popular HACS cards (Tier 2)** directly in native Android Views, without a browser. Any unrecognized `custom:*` card triggers a **Tier 3 GeckoView micro-island**, which starts the full browser engine for that card. Vitro's memory use hasn't been measured against GeckoView yet, so don't promise the user a number.
 
 Use this workflow to rewrite an existing dashboard into a **100% Vitro-native** dashboard and theme that keeps the same visual layout, aesthetic, entities, and actions with **zero Tier 3 GeckoView triggers**.
 
@@ -66,6 +66,6 @@ Confirm:
 
 ### 5. Visually verify
 
-If a device or emulator is available, open the rewritten dashboard in Glassworks with Vitro enabled (`Settings → Home Assistant & dashboard → Vitro renderer` or `--ez vitro true`) and check:
+If a device or emulator is available, open the rewritten dashboard in Glassworks with Vitro enabled (`Settings → Labs → Vitro renderer` or `--ez vitro true`; either takes effect after the app restarts) and check:
 - Visual parity against the original dashboard at the target frame's real aspect ratio (portrait for mirrors, 2:1 `1440×720` for S1 Plus, 16:10 for docked tablets).
 - `adb shell ps -A | grep glassworks` shows **no `:sandboxed_tab` or `:gpu` GeckoView processes** running.

@@ -122,6 +122,8 @@ class SettingsLayoutMockups {
             Mockup.save("$prefix-$name", o, w, h)
         }
         shot("01-overview", null)
+        // A narrow screen opens on the list (01); its Overview is a page like any other.
+        if (w < h) shot("01b-overview-page", dev.glassworks.manage.SettingsNav.OVERVIEW)
         shot("02-dashboard", "dashboard")
         shot("03-screen", "screen")
         shot("04-voice", "assist")
@@ -193,6 +195,30 @@ class SettingsLayoutMockups {
         Mockup.idle()
         Mockup.save("layout-mirror-08-device", o, Mockup.H, Mockup.W)
         manageDevice("layout-mirror-08-device")
+    }
+
+    /**
+     * A phone (the generic app on a made-up Pixel 8), 360x640 dp at xhdpi, the smallest common phone: portrait, the way a phone
+     * is held, and on its side.
+     */
+    @Test
+    @Config(qualifiers = "w360dp-h640dp-port-xhdpi")
+    fun phonePortrait() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        app.applicationInfo.targetSdkVersion = 35
+        shots("layout-phone", 720, 1280) {
+            menu(dev.glassworks.s1.frame.TestFrames.phone(app), "Pixel 8", listOf(panes.voice(), panes.music(), panes.timeZone()), setOf("diagnostics"), "3.1 of 8 GB")
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w640dp-h360dp-land-xhdpi")
+    fun phoneLandscape() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        app.applicationInfo.targetSdkVersion = 35
+        shots("layout-phone-land", 1280, 720) {
+            menu(dev.glassworks.s1.frame.TestFrames.phone(app), "Pixel 8", listOf(panes.voice(), panes.music(), panes.timeZone()), setOf("diagnostics"), "3.1 of 8 GB")
+        }
     }
 
     private fun aPixelTablet() {

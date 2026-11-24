@@ -9,6 +9,16 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Vitro, an experimental native dashboard renderer, in a new Labs section.** Turn on *Vitro renderer* under
+  *Settings → Labs*, on the panel or the Manage page, and after the app restarts your Home Assistant dashboard is drawn
+  with the panel's own views instead of a browser. Cards it can't draw yet show in a small browser view. It's off by
+  default, and with it off the panel works exactly as before.
+
+## [0.9.0] - 2026-11-24
+
+**S1 Kiosk is now Glassworks, in its last release before 1.0: a browser Manage page for every panel, themes and an edge glow for Assist, notifications and Bluetooth proxy panes, and frame updates from Home Assistant.**
+
+### Added
 - **Frame updates install from Home Assistant.** On a panel with the frame loader, Install on the Frame update card
   (or an automation's `update.install`) downloads the S1's signed frame bundle, checks it, and restarts the panel
   once to load it. The card shows the download's progress, and says why when it stops: a download that doesn't match,
