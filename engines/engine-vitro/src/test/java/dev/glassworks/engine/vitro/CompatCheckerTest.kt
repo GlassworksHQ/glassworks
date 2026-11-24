@@ -64,6 +64,23 @@ class CompatCheckerTest {
     // ---- Real dashboard idioms: must stay native ----
 
     @Test
+    fun aRepeatedSheetGivesTheSameVerdictAsAFreshCheck() {
+        // The sheet check is kept per text; a cached answer must be the fresh one, reasons and notes in order, and a
+        // sheet that reports into the same set twice (reasons and property reasons) must too.
+        fun card(css: String) = LovelaceParser.parseCard(JSONObject().put("type", "markdown").put("content", "x")
+            .put("card_mod", JSONObject().put("style", JSONObject()
+                .put(".", "ha-card { position: fixed; top: 10px; width: 50%; color: red !important } ha-card::before { color: red }")
+                .put("ha-markdown$", css))))
+        val css = "ha-markdown-element h1 { font-family: Comic Sans; color: red !important } ha-markdown-element div:hover { color: blue } @media (x) { a { b: c } }"
+        val first = CardCompat.check(card(css))
+        val again = CardCompat.check(card(css))
+        assertEquals(first, again)
+        assertEquals(first.reasons.toList(), again.reasons.toList())
+        assertEquals(first.notes.toList(), again.notes.toList())
+        assertTrue(first.reasons.isNotEmpty() || first.notes.isNotEmpty())
+    }
+
+    @Test
     fun mirrorTextOnlyMarkdownWithTypographySheetIsNative() {
         val v = assertNative(
             """{"type": "markdown", "text_only": true,

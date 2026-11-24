@@ -309,7 +309,54 @@ object CardCompat {
     /** At-rules a card sheet may hold without changing the look on its own. */
     private val HARMLESS_AT_RULES = setOf("keyframes", "-webkit-keyframes", "charset")
 
+    /**
+     * [checkSheetUncached], once per (card type, key, text, sheet): every card is checked when a view builds, and
+     * dashboards often repeat a card_mod sheet across cards and across views. The check
+     * only adds strings to its three sets, so the adds are recorded in order and replayed into the caller's sets,
+     * which leaves them exactly as a fresh check would (the same strings, in the same order, the same set when two are
+     * one). At most [SHEET_CACHE] results are kept.
+     */
     private fun checkSheet(
+        type: String,
+        key: String,
+        rawCss: String,
+        sheet: Sheet,
+        reasons: MutableSet<String>,
+        propertyReasons: MutableSet<String>,
+        notes: MutableSet<String>,
+    ) {
+        val cacheKey = listOf(type, key, rawCss, sheet)
+        val adds = synchronized(sheetCache) { sheetCache[cacheKey] } ?: run {
+            val log = ArrayList<Pair<Int, String>>()
+            checkSheetUncached(type, key, rawCss, sheet, AddLog(0, log), AddLog(1, log), AddLog(2, log))
+            synchronized(sheetCache) { sheetCache[cacheKey] = log }
+            log
+        }
+        for ((target, value) in adds) {
+            when (target) {
+                0 -> reasons += value
+                1 -> propertyReasons += value
+                else -> notes += value
+            }
+        }
+    }
+
+    /** A set that only records what is added to it, tagged with which of the check's sets it stands for. */
+    private class AddLog(private val tag: Int, private val log: MutableList<Pair<Int, String>>) : java.util.AbstractSet<String>() {
+        override fun add(element: String): Boolean {
+            log += tag to element
+            return true
+        }
+        override val size: Int get() = throw UnsupportedOperationException("the check only adds")
+        override fun iterator(): MutableIterator<String> = throw UnsupportedOperationException("the check only adds")
+    }
+
+    private const val SHEET_CACHE = 256
+    private val sheetCache = object : LinkedHashMap<List<Any>, List<Pair<Int, String>>>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<List<Any>, List<Pair<Int, String>>>?) = size > SHEET_CACHE
+    }
+
+    private fun checkSheetUncached(
         type: String,
         key: String,
         rawCss: String,
@@ -384,7 +431,7 @@ object CardCompat {
 
     private fun classifySelector(sel: String, sheet: Sheet): Sel {
         if (TPL in sel) return Sel.Unchecked(sel.replace(TPL, "{{ … }}"))
-        val norm = sel.lowercase(Locale.ROOT).replace(Regex("""\s+"""), " ")
+        val norm = sel.lowercase(Locale.ROOT).replace(SELECTOR_SPACES, " ")
         if (sheet == Sheet.STACK) {
             // A stack has no ha-card of its own: `ha-card …` in its sheet matches nothing in HA either.
             if (norm == ":host") return Sel.Honored(host = true)
@@ -425,7 +472,11 @@ object CardCompat {
         }
     }
 
-    private fun stripAttributeValues(sel: String): String = sel.replace(Regex("""\[[^\]]*\]"""), "[]")
+    private fun stripAttributeValues(sel: String): String = sel.replace(ATTRIBUTE_VALUE, "[]")
+
+    // Compiled once: every card's selectors pass through here when a view builds.
+    private val SELECTOR_SPACES = Regex("""\s+""")
+    private val ATTRIBUTE_VALUE = Regex("""\[[^\]]*\]""")
 
     private val FUNCTIONAL = Regex(""":(not|is|where|matches|-webkit-any|has)\(""")
 
@@ -519,7 +570,8 @@ object CardCompat {
         val position = placement["position"]
         val pinned = position == "fixed" || position == "absolute"
         for ((name, rawValue) in decls) {
-            val shown = "`$name: ${loggable(rawValue)}`"
+            // How the declaration reads in a reason or note: built only when one is written.
+            val shown = { "`$name: ${loggable(rawValue)}`" }
             val value = rawValue.trim().lowercase(Locale.ROOT)
             // A templated or var() value can't be checked here: the property alone decides.
             val checkable = TPL !in value && "var(" !in value
@@ -536,10 +588,10 @@ object CardCompat {
                 when {
                     name in VitroSupport.BENIGN_PROPERTIES -> Unit
                     benignValues != null && value in benignValues -> Unit
-                    name in VitroSupport.KNOWN_GAP_PROPERTIES -> notes += gap(name, shown)
+                    name in VitroSupport.KNOWN_GAP_PROPERTIES -> notes += gap(name, shown())
                     // Offsets without a position do nothing in the browser either.
                     name in OFFSETS && (position == null || position == "static") -> Unit
-                    else -> reasons += "card_mod `$key` $shown isn't supported here"
+                    else -> reasons += "card_mod `$key` ${shown()} isn't supported here"
                 }
                 continue
             }
@@ -547,7 +599,7 @@ object CardCompat {
             val problem = if (asCard) checkCardValue(name, value, pinned, position, shown, notes)
             else if (asCascade) checkCascadeValue(sheet, name, value, position, shown, notes)
             else null
-            problem?.let { reasons += "card_mod `$key` $shown $it" }
+            problem?.let { reasons += "card_mod `$key` ${shown()} $it" }
         }
     }
 
@@ -557,7 +609,7 @@ object CardCompat {
         value: String,
         pinned: Boolean,
         position: String?,
-        shown: String,
+        shown: () -> String,
         notes: MutableSet<String>,
     ): String? = when (name) {
         "background", "background-image" -> backgroundProblem(value, allowGradient = true)
@@ -567,7 +619,7 @@ object CardCompat {
             // The overlay reads a pinned offset as px, dp, rem/em or %; `calc()` would put the card at the edge.
             pinned -> if (value in UNSET || PINNED_WIDTH.matches(value)) null else "isn't drawn natively (a pinned offset is px, rem or %)"
             else -> {
-                if (position != null && position != "static") notes += gap("position: relative", shown)
+                if (position != null && position != "static") notes += gap("position: relative", shown())
                 null
             }
         }
@@ -587,7 +639,7 @@ object CardCompat {
             value == "none" -> null
             "inset" in value -> "isn't drawn natively (inset shadow)"
             else -> {
-                if (GLOW.containsMatchIn(value)) notes += gap("box-shadow: glow", shown)
+                if (GLOW.containsMatchIn(value)) notes += gap("box-shadow: glow", shown())
                 null
             }
         }
@@ -644,7 +696,7 @@ object CardCompat {
     private val UNSET = setOf("auto", "unset", "initial")
 
     /** Why a cascade value can't be drawn, or null when it can. */
-    private fun checkCascadeValue(sheet: Sheet, name: String, value: String, position: String?, shown: String, notes: MutableSet<String>): String? = when (name) {
+    private fun checkCascadeValue(sheet: Sheet, name: String, value: String, position: String?, shown: () -> String, notes: MutableSet<String>): String? = when (name) {
         "display" -> if (sheet == Sheet.CLOCK_CARD || sheet == Sheet.CLOCK_DIGITAL || value in VitroSupport.MARKDOWN_DISPLAY) null
         else "isn't laid out natively"
         "background", "background-color" -> backgroundProblem(value, allowGradient = false)
@@ -653,13 +705,13 @@ object CardCompat {
             if (families.any { FONT_FAMILY_OK.matches(it) || "mono" in it }) null else "uses a font Vitro doesn't bundle"
         }
         "white-space" -> {
-            if (value == "nowrap") notes += gap("white-space: nowrap", shown)
+            if (value == "nowrap") notes += gap("white-space: nowrap", shown())
             null
         }
         "position" -> when (value) {
             "static", "initial", "unset" -> null
             "relative" -> {
-                notes += gap("position: relative", shown)
+                notes += gap("position: relative", shown())
                 null
             }
             else -> "isn't laid out natively"
