@@ -226,6 +226,10 @@ python3 tools/vitro-census/sample.py fetch tools/vitro-census/sample-manifest.js
 python3 tools/vitro-census/census.py --per-dir --min-cards 5 "$OUT"/comm/*/*.yaml            # the numbers above
 ```
 
+Because an `http://` `HA_URL` means `ws://`, which is unencrypted, anyone observing the network path can read the
+token: use it only on a trusted local network, or connect over `https://` (`wss://`) if Home Assistant serves HTTPS.
+The helper prints a warning when it isn't `https://`.
+
 `census.py` reads the native set out of `ui/VitroView.kt`, so it follows the code: rerun it after a new fast path to
 see the island share drop. `sample.py search` and `draw` make a fresh sample (code search results change over time).
 

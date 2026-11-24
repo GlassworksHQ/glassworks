@@ -8,7 +8,8 @@
 //   HA_URL=http://homeassistant.local:8123 HA_TOKEN=<long-lived token> node tools/vitro-census/ha-dashboards.mjs list
 //   HA_URL=... HA_TOKEN=... node tools/vitro-census/ha-dashboards.mjs get <url_path>   # "lovelace" for the default one
 //
-// Needs Node 22+ (built-in WebSocket).
+// Needs Node 22+ (built-in WebSocket). With an http:// HA_URL the token crosses the network unencrypted, as any
+// plain-HTTP Home Assistant client's does; use https:// (wss://) when Home Assistant serves HTTPS.
 const [, , cmd, urlPath] = process.argv;
 const { HA_URL, HA_TOKEN } = process.env;
 if (!HA_URL || !HA_TOKEN || !['list', 'get'].includes(cmd) || (cmd === 'get' && !urlPath)) {
@@ -18,6 +19,9 @@ if (!HA_URL || !HA_TOKEN || !['list', 'get'].includes(cmd) || (cmd === 'get' && 
 const msg = cmd === 'list'
   ? { type: 'lovelace/dashboards/list' }
   : { type: 'lovelace/config', url_path: urlPath === 'lovelace' ? null : urlPath, force: true };
+if (!/^https:/i.test(HA_URL)) {
+  console.error('warning: HA_URL is not https://, so the token is sent unencrypted; use https:// when Home Assistant serves it');
+}
 const ws = new WebSocket(HA_URL.replace(/^http/, 'ws').replace(/\/$/, '') + '/api/websocket');
 ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
@@ -26,9 +30,9 @@ ws.onmessage = (e) => {
   else if (m.type === 'auth_invalid') { console.error('auth invalid'); process.exit(1); }
   else if (m.id === 1) {
     if (!m.success) { console.error(JSON.stringify(m.error)); process.exit(1); }
-    process.stdout.write(JSON.stringify(m.result, null, 1) + '\n');
     ws.close();
-    process.exit(0);
+    // Exit only once stdout has flushed: a large dashboard written to a pipe would otherwise be cut short.
+    process.stdout.write(JSON.stringify(m.result, null, 1) + '\n', () => process.exit(0));
   }
 };
 ws.onerror = () => { console.error('websocket error'); process.exit(1); };
