@@ -5,9 +5,11 @@
 package dev.glassworks.engine.vitro
 
 import android.app.Activity
+import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -67,7 +69,7 @@ class VitroEngine(
      * (a locked-down [fallback]) is held to one origin, so [fallbackDashboardOrigin] gives it this one up front.
      */
     val islandServer: VitroIslandServer = VitroIslandServer(
-        haBase = { activePage?.currentOrigin },
+        haBase = { activePage?.proxyOrigin },
         accessToken = { activePage?.cachedToken },
         log = { msg -> Log.d(logTag, "island: $msg") },
     )
@@ -100,6 +102,8 @@ class VitroEngine(
         startedSettings = cfg
         MdiIcons.init(activity.applicationContext)
         Log.i(logTag, "Starting $VERSION_NAME (native Lovelace renderer; fallback=${fallback.name.ifEmpty { "lazy" }})")
+        // A recreated activity opens a new page: the old one's socket and reader thread go with it.
+        activePage?.dispose()
         return VitroPage(activity, host, background).also { activePage = it }
     }
 
@@ -129,6 +133,40 @@ class VitroEngine(
         private var currentUrl: String? = null
         @Volatile var currentOrigin: String? = null
         private var currentDashboardPath: String? = null
+
+        /** The origin and dashboard path of the config [vitroView] shows, set when it arrives. */
+        private var displayedDashboard: Pair<String?, String?>? = null
+
+        /** Bumped for every new client: callbacks of a client that was replaced or closed are dropped. */
+        private var clientGeneration = 0
+        private var disposed = false
+
+        /** The Home Assistant origin the app is set to (the settings' dashboard), the only one its token is for. */
+        private fun configuredOrigin(): String? = settings(activity.applicationContext).dashboard?.let(OAuth::origin)
+
+        /** Where the island server proxies to: the loaded origin, or before any load the configured one (sign-in first). */
+        val proxyOrigin: String? get() = currentOrigin ?: configuredOrigin()
+
+        private val lifecycle = object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityDestroyed(a: Activity) { if (a === activity) dispose() }
+            override fun onActivityCreated(a: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityStarted(a: Activity) {}
+            override fun onActivityResumed(a: Activity) {}
+            override fun onActivityPaused(a: Activity) {}
+            override fun onActivityStopped(a: Activity) {}
+            override fun onActivitySaveInstanceState(a: Activity, outState: Bundle) {}
+        }
+
+        /** The activity is gone: close the Home Assistant connection, so its reader thread no longer holds this page. */
+        fun dispose() {
+            if (disposed) return
+            disposed = true
+            activity.application.unregisterActivityLifecycleCallbacks(lifecycle)
+            clientGeneration++
+            client?.close()
+            client = null
+            if (activePage === this) activePage = null
+        }
         private var pendingViewPath: String? = null
         @Volatile var cachedToken: String? = null
         private val history = ArrayDeque<String>()
@@ -143,6 +181,7 @@ class VitroEngine(
         override val view: View get() = container
 
         init {
+            activity.application.registerActivityLifecycleCallbacks(lifecycle)
             container.addView(vitroView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             vitroView.onMetrics = { m -> lastMetrics = m }
             vitroView.onViewSelected = { v ->
@@ -228,8 +267,9 @@ class VitroEngine(
             host.onPageStart(url)
             host.onLocationChange(url)
 
-            // Same HA origin + same dashboard already loaded -> instant in-memory view switch!
-            if (origin == currentOrigin && dashPath == currentDashboardPath && vitroView.dashboard != null && client != null) {
+            // Same HA origin + same dashboard already shown -> instant in-memory view switch! The shown config's own key
+            // counts, not the last request's: that one may still be loading while the old dashboard is on screen.
+            if (origin == currentOrigin && displayedDashboard == (origin to dashPath) && vitroView.dashboard != null && client != null) {
                 vitroView.navigateToView(viewPath)
                 signalReady("view")
                 return
@@ -243,21 +283,35 @@ class VitroEngine(
             }
 
             // New HA origin: start (or restart) the native WebSocket data plane.
+            if (origin != currentOrigin) {
+                // Nothing of the previous Home Assistant carries over: not its token, not its entity states.
+                cachedToken = null
+                store.clear()
+            }
             currentOrigin = origin
+            displayedDashboard = null
             firstPaintReported = false
             vitroView.showStatus("Connecting to Home Assistant…")
             client?.close()
+            val generation = ++clientGeneration
             val wsClient = HaDashboardClient(
                 haBase = origin,
                 tokenProvider = { force, done ->
-                    tokenProvider(force) { tok ->
-                        if (tok != null) cachedToken = tok
-                        done(tok)
+                    // The panel's token is for the Home Assistant it is set to: never hand it to another origin.
+                    val allowed = configuredOrigin()
+                    if (allowed != null && allowed != origin) {
+                        Log.w(logTag, "Not sending the Home Assistant token to $origin: the panel is set to $allowed")
+                        done(null)
+                    } else {
+                        tokenProvider(force) { tok ->
+                            if (tok != null && generation == clientGeneration) cachedToken = tok
+                            done(tok)
+                        }
                     }
                 },
                 store = store,
                 connect = socketFactory,
-                listener = wsListener,
+                listener = WsListener(generation),
             )
             client = wsClient
             wsClient.start(dashPath)
@@ -291,6 +345,7 @@ class VitroEngine(
         override fun restart() {
             fallbackPage?.restart()
             // The island server stays up: its port is the locked-down fallback's one allowed origin for the process.
+            clientGeneration++
             client?.close()
             client = null
             currentOrigin = null
@@ -372,7 +427,7 @@ class VitroEngine(
          * moves to it, so the server proxies it to [currentOrigin], and to nothing else.
          */
         private fun loopbackUrl(url: String): String {
-            val ha = currentOrigin ?: return url
+            val ha = proxyOrigin ?: return url
             if (!fallback.lockedDown || OAuth.origin(url) != ha) return url
             val afterScheme = url.trim().substringAfter("://")
             val rest = afterScheme.indexOfFirst { it == '/' || it == '?' || it == '#' }.let { if (it < 0) "" else afterScheme.substring(it) }
@@ -398,16 +453,26 @@ class VitroEngine(
             main.post { host.onPortMessage(port, msg) }
         }
 
-        private val wsListener = object : HaDashboardClient.Listener {
+        /** The listener of the client of [generation]; once that client is replaced or closed, its calls do nothing. */
+        private inner class WsListener(private val generation: Int) : HaDashboardClient.Listener {
+            /** Runs [block] on the main thread if this listener's client is still the page's. */
+            private fun post(block: () -> Unit) {
+                main.post { if (generation == clientGeneration) block() }
+            }
+
             override fun onConnected(haVersion: String) {
                 Log.i(logTag, "Connected to Home Assistant $haVersion over native WebSocket")
-                main.post { vitroView.setConnectionBanner(null) }
+                post { vitroView.setConnectionBanner(null) }
             }
 
             override fun onAuthRequired() {
                 Log.i(logTag, "Home Assistant requires authentication; handing off to sign-in flow")
                 val base = currentOrigin ?: return
-                main.post {
+                post {
+                    // That client's reader has stopped: the load after sign-in starts a new one instead of reusing it.
+                    clientGeneration++
+                    client?.close()
+                    client = null
                     host.onLocationChange("$base/auth/authorize")
                 }
             }
@@ -417,34 +482,46 @@ class VitroEngine(
                 for (d in dashboards) {
                     arr.put(JSONObject().put("url_path", d.urlPath).put("title", d.title))
                 }
-                main.post {
+                post {
                     host.onPortMessage(port, JSONObject().put("type", "dashboards").put("json", arr.toString()))
                 }
             }
 
             override fun onResources(resources: List<LovelaceResource>) {
-                main.post { vitroView.resourcesList = resources }
+                post { vitroView.resourcesList = resources }
             }
 
             override fun onThemes(catalog: ThemeCatalog) {
-                main.post { vitroView.setThemes(catalog) }
+                post { vitroView.setThemes(catalog) }
             }
 
             override fun onUserTheme(themeName: String?, dark: Boolean?) {
-                main.post { vitroView.setUserTheme(themeName, dark) }
+                post { vitroView.setUserTheme(themeName, dark) }
             }
 
             override fun onDashboardConfig(urlPath: String?, config: DashboardConfig) {
-                main.post {
+                post {
+                    // An older request's answer for a dashboard the page has left must not replace the current one.
+                    if (urlPath != currentDashboardPath) return@post
+                    displayedDashboard = currentOrigin to urlPath
                     vitroView.setConnectionBanner(null)
                     vitroView.setDashboard(config, pendingViewPath)
                     signalReady("vitro")
                 }
             }
 
+            override fun onDashboardConfigFailed(urlPath: String?, code: String) {
+                Log.w(logTag, "Home Assistant has no dashboard config for ${urlPath ?: "the default dashboard"}: $code")
+                post {
+                    if (urlPath != currentDashboardPath) return@post
+                    // HA's own frontend decides what such a dashboard shows (an auto-generated one, or its error page).
+                    currentUrl?.let(::openInFallback)
+                }
+            }
+
             override fun onDisconnected(reason: String) {
                 Log.w(logTag, "HA WebSocket disconnected: $reason")
-                main.post {
+                post {
                     if (firstPaintReported) {
                         vitroView.setConnectionBanner("Connection lost. Reconnecting…")
                     } else {
