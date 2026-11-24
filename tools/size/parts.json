@@ -8,6 +8,11 @@
              "libplugin-container.so"],
   "assets": ["assets/omni.ja"]
  },
+ "engines": {
+  "_why": "Engines an app ships beside GeckoView, each its own row (Engine (<id>)).",
+  "vitro": {"dex": ["dev.glassworks.engine.vitro."], "assets": ["assets/vitro-mdi.tsv"],
+            "_why": "Vitro, the native Lovelace renderer, and its bundled Material Design icon table (vitro-mdi.tsv.gz, which the build stores decompressed)"}
+ },
  "core_assets": ["assets/extension/", "assets/dexopt/", "assets/licenses/", "assets/blueprints.json", "assets/setup/", "assets/manage/"],
  "libraries": {
   "bouncycastle": {"dex": ["org.bouncycastle."], "files": ["org/bouncycastle/"], "used_by": ["core", "sendspin"],

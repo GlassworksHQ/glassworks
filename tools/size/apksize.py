@@ -83,9 +83,11 @@ def parse_classes(text):
 # ---- who owns what
 
 def owner_of_class(name, parts):
-    """("engine"|"core"|"pane"|"library", id or None): the longest matching dex prefix wins."""
+    """("engine"|"core"|"pane"|"library", id or None): the longest matching dex prefix wins. GeckoView is
+    ("engine", None); another engine (parts.json `engines`, e.g. Vitro) is ("engine", its id)."""
     best, who = "", ("core", None)
     cands = [(p, ("engine", None)) for p in parts["engine"]["dex"]]
+    cands += [(p, ("engine", k)) for k, v in parts.get("engines", {}).items() if not k.startswith("_") for p in v.get("dex", [])]
     cands += [(p, ("library", k)) for k, v in parts["libraries"].items() for p in v.get("dex", [])]
     cands += [(p, ("pane", k)) for k, v in parts["panes"].items() for p in v.get("dex", [])]
     for prefix, w in cands:
@@ -114,6 +116,9 @@ def owner_of_file(path, parts, lint):
     if path.startswith("assets/"):
         if path in parts["engine"]["assets"]:
             return ("engine", None), "assets"
+        for k, v in parts.get("engines", {}).items():
+            if not k.startswith("_") and path in v.get("assets", []):
+                return ("engine", k), "assets"
         m = re.match(r"assets/panes/([^/]+)/", path)
         if m:
             if m.group(1) in parts["panes"]:
@@ -183,7 +188,11 @@ def rows(b, parts):
     libraries only it uses), each shared library, and the zip's own overhead."""
     o = b["owners"]
     get = lambda k: dict(o.get(k, empty()))  # noqa: E731
-    out = {"engine": get("engine"), "core": get("core")}
+    out = {"engine": get("engine")}
+    for eid in parts.get("engines", {}):
+        if not eid.startswith("_"):
+            out[f"engine:{eid}"] = get(f"engine:{eid}")
+    out["core"] = get("core")
     for pid in parts["panes"]:
         out[f"pane:{pid}"] = get(f"pane:{pid}")
     for lid, lib in parts["libraries"].items():
@@ -295,7 +304,7 @@ def signed(n):
 def label(key):
     kind, _, rid = key.partition(":")
     return {"engine": "Engine (GeckoView)", "core": "Core", "zip-overhead": "Zip overhead"}.get(key) or \
-        (f"Pane `{rid}`" if kind == "pane" else f"Shared library `{rid}`")
+        (f"Engine ({rid.capitalize()})" if kind == "engine" else f"Pane `{rid}`" if kind == "pane" else f"Shared library `{rid}`")
 
 
 def validate(rep):
@@ -320,7 +329,7 @@ def validate(rep):
                 raise ValueError(f"{abi}: more than {MAX_ROWS} rows")
             for key, r in rs.items():
                 kind, _, rid = key.partition(":")
-                if key not in ("engine", "core", "zip-overhead") and not (kind in ("pane", "shared") and ID_RE.match(rid)):
+                if key not in ("engine", "core", "zip-overhead") and not (kind in ("engine", "pane", "shared") and ID_RE.match(rid)):
                     raise ValueError(f"bad row {key!r}")
                 for k in KINDS + ("total",):
                     if not isinstance(r.get(k), int) or isinstance(r.get(k), bool):
