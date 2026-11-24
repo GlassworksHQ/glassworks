@@ -1,0 +1,12 @@
+{
+  "title": "Heading with an icon and entity badges",
+  "card": {
+    "type": "heading",
+    "heading": "Living room",
+    "icon": "mdi:sofa",
+    "badges": [
+      { "type": "entity", "entity": "sensor.living_room_airdot_living_room_temperature" },
+      { "type": "entity", "entity": "light.living_room_cactus" }
+    ]
+  }
+}

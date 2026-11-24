@@ -1,0 +1,165 @@
+{
+ "case": "markdown-table",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1795457280000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 12,
+  "y": 12,
+  "width": 696,
+  "height": 148
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 20,
+   "y": 20,
+   "w": 680,
+   "h": 131.56,
+   "type": "hui-markdown-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Inside",
+   "x": 22,
+   "y": 22,
+   "w": 49.58,
+   "h": 15,
+   "size": 12,
+   "weight": 600,
+   "color": "rgb(99, 99, 107)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "text": "Living Room",
+   "x": 54,
+   "y": 51.78,
+   "w": 87.03,
+   "h": 19,
+   "size": 15,
+   "weight": 400,
+   "color": "rgb(161, 161, 170)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "20.7°",
+   "x": 571.31,
+   "y": 51.19,
+   "w": 42.69,
+   "h": 20,
+   "size": 17,
+   "weight": 400,
+   "color": "rgb(244, 244, 245)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "48%",
+   "x": 624.3,
+   "y": 51.78,
+   "w": 33.7,
+   "h": 19,
+   "size": 15,
+   "weight": 400,
+   "color": "rgb(99, 99, 107)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Fridge",
+   "x": 54,
+   "y": 87.97,
+   "w": 45.06,
+   "h": 19,
+   "size": 15,
+   "weight": 400,
+   "color": "rgb(161, 161, 170)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "1.1°",
+   "x": 588.98,
+   "y": 87.38,
+   "w": 25.02,
+   "h": 20,
+   "size": 17,
+   "weight": 400,
+   "color": "rgb(244, 244, 245)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "61 W",
+   "x": 623.59,
+   "y": 87.97,
+   "w": 34.41,
+   "h": 19,
+   "size": 15,
+   "weight": 400,
+   "color": "rgb(99, 99, 107)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.kitchen_fridge_fridge_temperature": {
+   "s": "1.11111111111111",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "icon": "mdi:thermometer",
+    "friendly_name": "Fridge Fridge temperature"
+   },
+   "lc": 1795504918.0331674
+  },
+  "sensor.kitchen_fridge_power": {
+   "s": "61.0",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "W",
+    "device_class": "power",
+    "friendly_name": "Fridge Power"
+   },
+   "lc": 1795511218.9105065
+  },
+  "sensor.living_room_airdot_living_room_humidity": {
+   "s": "48.3400001525879",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "%",
+    "device_class": "humidity",
+    "friendly_name": "AirDot Living Room Humidity"
+   },
+   "lc": 1795511754.9333723
+  },
+  "sensor.living_room_airdot_living_room_temperature": {
+   "s": "20.6849994659424",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "AirDot Living Room Temperature"
+   },
+   "lc": 1795511724.9347365
+  }
+ },
+ "templates": {
+  "###### Inside\n<table role=\"presentation\"><tr><td><ha-icon icon=\"mdi:sofa\"></ha-icon></td><td>Living Room</td><td>{{ '%.1f' | format(states('sensor.living_room_airdot_living_room_temperature') | float(0)) }}°</td><td>{{ states('sensor.living_room_airdot_living_room_humidity') | float(0) | round(0) | int }}%</td></tr><tr><td><ha-icon icon=\"mdi:fridge\"></ha-icon></td><td>Fridge</td><td>{{ '%.1f' | format(states('sensor.kitchen_fridge_fridge_temperature') | float(0)) }}°</td><td>{{ states('sensor.kitchen_fridge_power') | float(0) | round(0) | int }} W</td></tr></table>": {
+   "result": "###### Inside\n<table role=\"presentation\"><tr><td><ha-icon icon=\"mdi:sofa\"></ha-icon></td><td>Living Room</td><td>20.7°</td><td>48%</td></tr><tr><td><ha-icon icon=\"mdi:fridge\"></ha-icon></td><td>Fridge</td><td>1.1°</td><td>61 W</td></tr></table>"
+  }
+ }
+}

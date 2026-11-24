@@ -1,0 +1,70 @@
+{
+ "case": "tile-sensor",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1795457280000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 262,
+  "height": 72
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "CO2",
+   "x": 56,
+   "y": 12.61,
+   "w": 27.08,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "523 ppm",
+   "x": 56,
+   "y": 32,
+   "w": 49.97,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.living_room_airdot_living_room_co2": {
+   "s": "523.0",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "ppm",
+    "device_class": "carbon_dioxide",
+    "friendly_name": "AirDot Living Room CO2"
+   },
+   "lc": 1795511804.9081435
+  }
+ },
+ "templates": {}
+}

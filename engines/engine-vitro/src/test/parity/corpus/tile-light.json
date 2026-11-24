@@ -1,0 +1,4 @@
+{
+  "title": "Tile: a light with the brightness feature",
+  "card": { "type": "tile", "entity": "light.entryway_ceiling_halo", "features": [{ "type": "light-brightness" }] }
+}

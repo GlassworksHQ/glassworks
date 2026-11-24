@@ -1,0 +1,4 @@
+{
+  "title": "Button: a light, name and state",
+  "card": { "type": "button", "entity": "light.living_room_cactus", "show_state": true }
+}
