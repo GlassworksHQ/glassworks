@@ -175,9 +175,15 @@ class VitroEngine(
         /** The island proxy's origin and its token: the token only when it was issued for that very origin. */
         fun islandSession(): Pair<String?, String?> {
             val origin = proxyOrigin
-            val session = cachedSession
-            return origin to session?.takeIf { it.first == origin }?.second
+            return origin to tokenFor(origin)
         }
+
+        /**
+         * The token for [origin], read when a request goes out: only one issued for that origin. An image or stream
+         * queued for the old Home Assistant never gets the next one's token.
+         */
+        fun tokenFor(origin: String?): String? =
+            cachedSession?.takeIf { VitroCardContext.sameOrigin(it.first, origin) }?.second
         private val history = ArrayDeque<String>()
         private var firstPaintReported = false
 
@@ -217,7 +223,7 @@ class VitroEngine(
                     store = store,
                     theme = theme,
                     resources = vitroView.resourcesList,
-                    accessToken = { cachedToken },
+                    accessToken = { tokenFor(haBase) },
                     haConfig = { client?.haConfig ?: JSONObject() },
                     haUser = { client?.currentUser ?: JSONObject() },
                     callService = { domain, service, data, target ->
@@ -240,7 +246,7 @@ class VitroEngine(
                             onFallback()
                             ({})
                         } else {
-                            val player = MjpegStreamPlayer(streamUrl, cachedToken, onFrame = onFrame, onError = onFallback)
+                            val player = MjpegStreamPlayer(streamUrl, tokenFor(haBase), onFrame = onFrame, onError = onFallback)
                             player.start()
                             ({ player.stop() })
                         }
@@ -327,6 +333,14 @@ class VitroEngine(
                         done(null)
                     } else {
                         tokenProvider(force) { tok ->
+                            // Checked again on delivery: the panel's Home Assistant may have changed while the token
+                            // was on its way, and then this token is the next one's, not this client's.
+                            val stillAllowed = configuredOrigin().let { it == null || VitroCardContext.sameOrigin(it, origin) }
+                            if (!stillAllowed) {
+                                Log.w(logTag, "Dropping a token that arrived for $origin after the panel moved to another Home Assistant")
+                                done(null)
+                                return@tokenProvider
+                            }
                             if (tok != null && generation == clientGeneration) {
                                 cachedToken = tok
                                 cachedSession = origin to tok

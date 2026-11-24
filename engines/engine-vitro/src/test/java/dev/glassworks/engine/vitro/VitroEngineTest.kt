@@ -823,4 +823,42 @@ class VitroEngineTest {
         assertFalse(same("http://homeassistant.local/a", "https://homeassistant.local"))
         assertFalse(same("https://images.example/a.png", "https://homeassistant.local"))
     }
+
+    @Test
+    fun aTokenThatArrivesAfterThePanelMovedIsNotDeliveredOrKept() {
+        // The panel is set to this HA when the token is asked for, and to another one by the time it arrives.
+        var current = settings
+        val engine = VitroEngine(
+            fallback = fallback,
+            settings = { current },
+            enabled = { true },
+            tokenProvider = { _, done ->
+                current = settings.copy(dashboard = "http://192.0.2.99:8123/lovelace/0")
+                done(FakeHaServer.TOKEN)
+            },
+            socketFactory = server::connect,
+        ).also { engines += it }
+        val page = openPage(engine)
+        page.load("$base/wall-test/living")
+        awaitMain("auth sent") { server.commands("auth").isNotEmpty() }
+        // The client got no token: the auth carries none, and nothing serves it to images or the island proxy.
+        assertEquals("", server.commands("auth").first().optString("access_token"))
+        assertEquals(null, engine.islandServer.let { _ ->
+            val f = page.javaClass.getDeclaredMethod("tokenFor", String::class.java)
+            f.invoke(page, base) as String?
+        })
+    }
+
+    @Test
+    fun theImageAndStreamTokenIsOnlyTheOneIssuedForTheirOrigin() {
+        val engine = vitro()
+        val page = openPage(engine)
+        page.load("$base/wall-test/living")
+        awaitMain("connected") { server.commands("subscribe_entities").isNotEmpty() }
+        val tokenFor = page.javaClass.getDeclaredMethod("tokenFor", String::class.java)
+        assertEquals(FakeHaServer.TOKEN, tokenFor.invoke(page, base))
+        assertEquals(FakeHaServer.TOKEN, tokenFor.invoke(page, "$base/"))
+        // A request still queued for another Home Assistant gets nothing.
+        assertEquals(null, tokenFor.invoke(page, "http://192.0.2.99:8123"))
+    }
 }
