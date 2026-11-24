@@ -240,6 +240,22 @@ class VitroCardContext(
         }
     }
 
+    /** An embedded picture: the decoded [bitmap] (maybe sampled down) and the image's own [width] and [height]. */
+    class Embedded(val bitmap: Bitmap, val width: Int, val height: Int)
+
+    /**
+     * Decodes an embedded raster (`data:image/…;base64,…`) off the main thread and delivers it there, or null when it
+     * isn't one, is too big to read ([MAX_EMBEDDED_CHARS]) or doesn't decode. It is sampled down to at most
+     * [MAX_EMBEDDED_PIXELS], alpha kept (a small icon may carry a large source).
+     */
+    fun decodeEmbedded(dataUri: String, done: (Embedded?) -> Unit) {
+        pendingImageLoads.incrementAndGet()
+        IMAGE_POOL.execute {
+            val out = runCatching { decodeEmbeddedRaster(dataUri) }.getOrNull()
+            main.post { try { done(out) } finally { pendingImageLoads.decrementAndGet() } }
+        }
+    }
+
     /**
      * `GET`s an HA REST path (e.g. `/api/calendars/calendar.home?start=…&end=…`) with the panel's bearer token on
      * the shared daemon pool and delivers the parsed [JSONObject] / [JSONArray] on the main thread, or null on any
@@ -364,6 +380,28 @@ class VitroCardContext(
                 origin.startsWith("http://") && origin.endsWith(":80") -> origin.removeSuffix(":80")
                 else -> origin
             }
+        }
+
+        /** The longest embedded image text read (about 6 MiB of image). */
+        private const val MAX_EMBEDDED_CHARS = 8 shl 20
+
+        /** Decoded pixels an embedded image may take (4 MiB as ARGB). */
+        private const val MAX_EMBEDDED_PIXELS = 1L shl 20
+
+        internal fun decodeEmbeddedRaster(dataUri: String): Embedded? {
+            val payload = dataUri.substringAfter(',', "")
+            if (payload.isEmpty() || payload.length > MAX_EMBEDDED_CHARS) return null
+            val bytes = android.util.Base64.decode(payload, android.util.Base64.DEFAULT)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            val w = bounds.outWidth
+            val h = bounds.outHeight
+            if (w <= 0 || h <= 0) return null
+            var sample = 1
+            while ((w / sample).toLong() * (h / sample) > MAX_EMBEDDED_PIXELS) sample *= 2
+            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+                ?: return null
+            return Embedded(bmp, w, h)
         }
 
         private fun decodeDownsampled(bytes: ByteArray): Bitmap? {
