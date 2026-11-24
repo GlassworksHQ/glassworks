@@ -286,6 +286,22 @@ class CoreParityTest {
         assertTrue(withModes.all().any { it.contentDescription == "heat" })
     }
 
+    @Test
+    fun buttonIconIsFortyPercentWideAndAtMostEightyPercentOfTheContentHeight() {
+        val store = EntityStore()
+        store.putLocal(EntityState("light.cactus", "off", mapOf("friendly_name" to "Cactus")))
+        val dp = activity.resources.displayMetrics.density
+        fun iconSize(w: Int, h: Int?): Int {
+            val b = dev.glassworks.engine.vitro.cards.ButtonCardView(context(store), card("""{"type": "button", "entity": "light.cactus", "show_state": true}"""))
+            val hs = h?.let { View.MeasureSpec.makeMeasureSpec((it * dp).toInt(), View.MeasureSpec.EXACTLY) } ?: View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            b.measure(View.MeasureSpec.makeMeasureSpec((w * dp).toInt(), View.MeasureSpec.EXACTLY), hs)
+            return (b.all().filterIsInstance<dev.glassworks.engine.vitro.ui.MdiIconView>().single().measuredWidth / dp).toInt()
+        }
+        // HA: 246 x 120 gives a 78.7 px icon (80% of the content height); 165 wide with free height gives 65.3 (40%).
+        assertEquals(78f, iconSize(246, 120).toFloat(), 2f)
+        assertEquals(65f, iconSize(165, null).toFloat(), 2f)
+    }
+
     // ---- Tile features ----
 
     private fun tile(store: EntityStore, calls: MutableList<Call>, entity: String, feature: String) =

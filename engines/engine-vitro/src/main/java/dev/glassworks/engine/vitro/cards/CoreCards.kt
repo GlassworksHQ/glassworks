@@ -1998,25 +1998,46 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
     }
 }
 
-/** Native HA `button` card. */
+/**
+ * Native HA `button` card (`hui-button-card`), at its CSS: `padding: 4% 0`, the icon 40% of the card's width (at
+ * most 80% of its content height when the card's height is fixed), in the state color or `--state-icon-color` when
+ * off; the name (16 px on 19.2 px, 8 px under the icon) and, with `show_state`, the state (12.6 px, secondary).
+ */
 class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
-    init {
-        val col = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(ctx.px(14f), ctx.px(16f), ctx.px(14f), ctx.px(16f))
+    private val icon = MdiIconView(ctx.context)
+    // Content taller than the card (a 2-row button with its state) spills evenly above and below the center, as
+    // HA's flex column does, instead of squeezing its last line.
+    private val col = object : LinearLayout(ctx.context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val h = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.AT_MOST) MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED) else heightMeasureSpec
+            super.onMeasure(widthMeasureSpec, h)
         }
-        val icon = MdiIconView(ctx.context)
-        val label = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+    }.apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+    }
+    private val iconLp = LinearLayout.LayoutParams(ctx.px(40f), ctx.px(40f))
+
+    init {
+        val showName = config.raw.optBoolean("show_name", true)
+        val showState = config.raw.optBoolean("show_state", false)
+        val showIcon = config.raw.optBoolean("show_icon", true)
+        val label = textView(ctx, 16f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
             gravity = Gravity.CENTER
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
         }
-        col.addView(icon, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)))
-        if (config.raw.optBoolean("show_name", true)) {
-            col.addView(label, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(8f) })
+        val state = textView(ctx, 12.6f, ctx.theme.secondaryTextColor, Inter.REGULAR).apply {
+            gravity = Gravity.CENTER
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
         }
-        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        if (showIcon) col.addView(icon, iconLp)
+        if (showName) col.addView(label, LinearLayout.LayoutParams(MATCH_PARENT, (19.2f * ctx.dp).roundToInt()).apply {
+            if (showIcon) topMargin = ctx.px(8f)
+        })
+        if (showState) col.addView(state, LinearLayout.LayoutParams(MATCH_PARENT, (15.12f * ctx.dp).roundToInt()))
+        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER))
 
         val eid = config.entity
         val tap = ActionConfig.parse(
@@ -2030,13 +2051,30 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
         if (eid != null) {
             observe(eid) { s ->
                 val active = s?.isActive == true
-                icon.setIcon(MdiIcons.resolveIconName(config.icon, s), if (active) ctx.theme.activeColor(s.domain) else ctx.theme.secondaryTextColor)
+                icon.setIcon(MdiIcons.resolveIconName(config.icon, s), if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor)
                 label.text = config.name ?: s?.friendlyName ?: eid
+                state.text = s?.plainState().orEmpty()
             }
         } else {
-            icon.setIcon(config.icon ?: "mdi:home", ctx.theme.primaryColor)
-            label.text = config.name ?: "Button"
+            icon.setIcon(config.icon ?: "mdi:home", ctx.theme.stateIconColor)
+            label.text = config.name.orEmpty()
         }
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val w = MeasureSpec.getSize(widthMeasureSpec)
+        if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED && w > 0) {
+            val border = (ctx.theme.cardBorderWidthDp * ctx.dp).roundToInt()
+            val pad = (w * 0.04f).roundToInt()
+            col.setPadding(0, pad, 0, pad)
+            var size = (0.4f * (w - 2 * border)).roundToInt()
+            if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
+                val content = MeasureSpec.getSize(heightMeasureSpec) - 2 * border - 2 * pad
+                size = minOf(size, (0.8f * content).roundToInt())
+            }
+            if (iconLp.width != size) { iconLp.width = size; iconLp.height = size }
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 }
 
