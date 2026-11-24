@@ -403,8 +403,12 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         (background as? GradientDrawable)?.let { (it.mutate() as GradientDrawable).setColor(color) }
     }
 
+    /** True once the card's own style dropped its surface ([dropSurface]): a stack keeps it borderless too. */
+    private var surfaceDropped = false
+
     /** No fill and no border (`background: none; border: none`): the content takes the border's place too. */
     protected fun dropSurface() {
+        surfaceDropped = true
         background = null
         clipToOutline = false
         setBorderInset(0)
@@ -447,19 +451,42 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     var seamless: Boolean = false
         private set
 
-    /** Drops the card's background, border and shadow so it shares a parent card's surface (stack-in-card). */
+    /**
+     * Shares a parent card's surface (stack-in-card): no shadow, and unless [keepBackground], no fill and no rounding,
+     * the card keeping only its border ([applySeamlessSurface]).
+     */
     fun makeSeamless(keepBackground: Boolean = false, keepRadius: Boolean = false) {
         seamless = !keepBackground
         shadowless = true
         baselineElevationDp = 0f
         elevation = 0f
         if (!keepBackground) {
-            background = null
-            clipToOutline = false
-            setBorderInset(0)
+            applySeamlessSurface(activeCardMod)
         } else if (!keepRadius) {
             (background as? GradientDrawable)?.mutate()?.let { (it as GradientDrawable).cornerRadius = 0f }
         }
+    }
+
+    /**
+     * stack-in-card's style on a card it holds is inline (`box-shadow: none; background: transparent;
+     * border-radius: 0px`), so card_mod can't bring those back, but the card keeps its border: the theme's, or the one
+     * its card_mod sets (`border: none` takes it off). Square, unfilled, so the stack's cards read as rows of one card.
+     * A card whose own style has no border (a text-only Markdown card's `.text-only`, which outranks card_mod's
+     * `ha-card`) stays without one.
+     */
+    private fun applySeamlessSurface(mod: CardModStyle) {
+        val strokePx = if (surfaceDropped) 0 else ((mod.borderWidthDp ?: ctx.theme.cardBorderWidthDp) * ctx.dp).toInt()
+        val strokeColor = mod.borderColor ?: ctx.theme.cardBorderColor
+        clipToOutline = false
+        background = if (strokePx > 0 && Color.alpha(strokeColor) > 0) {
+            GradientDrawable().apply {
+                setColor(Color.TRANSPARENT)
+                setStroke(strokePx, strokeColor)
+            }
+        } else {
+            null
+        }
+        setBorderInset(strokePx)
     }
 
     /** The card's own `card_mod` as last applied (re-rendered live for templated styles). Empty when none. */
@@ -578,6 +605,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
             // The template dropped its `opacity`: back to the theme's card opacity, or opaque.
             previous.opacity != null -> alpha = ctx.theme.cardMod.opacity?.coerceIn(0f, 1f) ?: 1f
         }
+        if (seamless) applySeamlessSurface(mod)
         // A templated style re-renders here: when it stops setting `box-shadow`, the theme's shadow comes back.
         if (!shadowless) elevation = (mod.elevationDp ?: baselineElevationDp) * ctx.dp
         onCardModApplied(mod)
