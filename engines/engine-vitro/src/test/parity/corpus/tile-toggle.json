@@ -1,0 +1,4 @@
+{
+  "title": "Tile: input_boolean with the toggle feature, vertical",
+  "card": { "type": "tile", "entity": "input_boolean.guest_mode", "vertical": true, "features": [{ "type": "toggle" }] }
+}

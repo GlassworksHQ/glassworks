@@ -27,3 +27,26 @@ dependencies {
     testImplementation("org.json:json:20250517")
     testImplementation("org.robolectric:robolectric:4.17")
 }
+
+// The parity harness (#793, src/test/parity, VitroParityHarnessTest): its corpus and Home Assistant's reference
+// renders are test inputs, and -PvitroParity* options reach the test (tools/vitro-parity/README.md).
+tasks.withType<Test>().configureEach {
+    inputs.dir("src/test/parity").withPropertyName("vitroParity").withPathSensitivity(PathSensitivity.RELATIVE)
+    val options = mapOf(
+        "vitroParityOut" to "vitro.parity.out",
+        "vitroParityLocal" to "vitro.parity.local",
+        "vitroParityCollect" to "vitro.parity.collect",
+        "vitroParityUpdateBaseline" to "vitro.parity.updateBaseline",
+        "vitroParityCases" to "vitro.parity.cases",
+        "vitroParityFrames" to "vitro.parity.frames",
+    )
+    for ((prop, sys) in options) {
+        (project.findProperty(prop) as String?)?.let {
+            systemProperty(sys, it)
+            // A run with options (another corpus, collect mode) is never UP-TO-DATE.
+            outputs.upToDateWhen { false }
+        }
+    }
+    // Native graphics renders every case at three panel sizes: give it room.
+    maxHeapSize = "2g"
+}

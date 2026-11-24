@@ -1,0 +1,4 @@
+{
+  "title": "Tile: input_number with numeric-input",
+  "card": { "type": "tile", "entity": "input_number.pre_cool_target", "features": [{ "type": "numeric-input", "style": "buttons" }] }
+}
