@@ -579,17 +579,69 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         custom = emptyMap()
     }
 
-    /** Clears [into] (the `ha-markdown-element` box) and fills it with [markdown]. */
+    /**
+     * Fills [into] (the `ha-markdown-element` box) with [markdown]. When only text changed since the last render into
+     * the same box (the same elements, attributes, computed styles and sheet: a clock's minute, a sensor's value), the
+     * text views of the changed runs get their new text in place ([updateInPlace]); anything else is built again.
+     */
     fun render(markdown: String, into: LinearLayout, parentStyle: MdStyle = defaultRootStyle(), sheet: MdSheet = MdSheet.EMPTY) {
         val root = MdHtml.fromMarkdown(markdown)
         MdCascade.apply(root, parentStyle, sheet, ctx.theme.vars)
+        val prev = last
+        if (prev != null && prev.into === into && prev.sheet === sheet && into.childCount > 0 &&
+            MdTreeCompare.sameStyle(prev.parentStyle, parentStyle) && updateInPlace(prev, root)
+        ) {
+            prev.root = root
+            prev.parentStyle = parentStyle
+            return
+        }
         into.removeAllViews()
         into.orientation = LinearLayout.VERTICAL
         into.clipChildren = false
         into.clipToPadding = false
         val rs = root.style!!
         into.alpha = rs.opacity
-        fill(into, root)
+        val runs = ArrayList<RunRecord>()
+        recording = runs
+        try {
+            fill(into, root)
+        } finally {
+            recording = null
+        }
+        last = Rendered(into, sheet, parentStyle, root, runs)
+    }
+
+    /** One inline run as built: its nodes and block (as child-index paths from the root) and the view it made. */
+    private class RunRecord(val paths: List<IntArray>, val blockPath: IntArray, val view: View?)
+
+    /** The last full render: what [updateInPlace] compares the next one with. */
+    private class Rendered(val into: LinearLayout, val sheet: MdSheet, var parentStyle: MdStyle, var root: MdNode, val runs: List<RunRecord>)
+
+    private var last: Rendered? = null
+    private var recording: MutableList<RunRecord>? = null
+
+    /**
+     * Puts the new text of [root] into the views of [prev] when [root] differs from the last render only in the
+     * content of text nodes. Each changed run is built as a full render would build it, and its text moved into the
+     * existing view (its other settings come from the block's style, which is equal). False, with nothing changed, when
+     * the structure or any style differs, or a changed run has no view or shows an image: then the caller rebuilds.
+     */
+    private fun updateInPlace(prev: Rendered, root: MdNode): Boolean {
+        if (!MdTreeCompare.sameExceptText(prev.root, root)) return false
+        val updates = ArrayList<Pair<TextView, CharSequence>>()
+        for (rec in prev.runs) {
+            val oldNodes = rec.paths.map { MdTreeCompare.nodeAt(prev.root, it) ?: return false }
+            val newNodes = rec.paths.map { MdTreeCompare.nodeAt(root, it) ?: return false }
+            if (oldNodes.indices.all { MdTreeCompare.sameText(oldNodes[it], newNodes[it]) }) continue
+            val old = rec.view as? TextView ?: return false
+            if (old.tag == IMAGE_TAG) return false
+            val block = MdTreeCompare.nodeAt(root, rec.blockPath)?.style ?: return false
+            val fresh = inlineView(newNodes, block) as? TextView ?: return false
+            if (fresh.tag == IMAGE_TAG) return false
+            updates += old to fresh.text
+        }
+        for ((view, text) in updates) view.text = text
+        return true
     }
 
     /** Lays [node]'s children into [box]: block children as views, runs of inline content as text lines. */
@@ -598,7 +650,9 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         val run = ArrayList<MdNode>()
         fun flushRun() {
             if (run.isEmpty()) return
-            inlineView(run.toList(), node.style!!)?.let { built += Built(it, 0f, 0f, 0f, 0f) }
+            val view = inlineView(run.toList(), node.style!!)
+            recording?.add(RunRecord(run.map { MdTreeCompare.pathOf(it) }, MdTreeCompare.pathOf(node), view))
+            view?.let { built += Built(it, 0f, 0f, 0f, 0f) }
             run.clear()
         }
         for (child in node.children) {
@@ -1152,6 +1206,70 @@ class MdListSymbol(
             }
         }
         return null
+    }
+}
+
+/**
+ * Compares two cascaded Markdown trees for [MarkdownRenderer]'s in-place text updates: the same elements, attributes
+ * and computed styles everywhere, text content aside. Styles are compared field by field (every [MdStyle] field,
+ * found by reflection so a new one is never missed); a field it can't compare makes them different.
+ */
+internal object MdTreeCompare {
+    private val styleFields: List<java.lang.reflect.Field> by lazy {
+        MdStyle::class.java.declaredFields
+            .filter { !java.lang.reflect.Modifier.isStatic(it.modifiers) }
+            .onEach { it.isAccessible = true }
+    }
+
+    fun sameStyle(a: MdStyle?, b: MdStyle?): Boolean {
+        if (a === b) return true
+        if (a == null || b == null) return false
+        for (f in styleFields) {
+            val x = f.get(a)
+            val y = f.get(b)
+            val same = when (x) {
+                is FloatArray -> y is FloatArray && x.contentEquals(y)
+                is IntArray -> y is IntArray && x.contentEquals(y)
+                null -> y == null
+                is String, is Number, is Boolean, is Map<*, *>, is CssLen -> x == y
+                else -> false
+            }
+            if (!same) return false
+        }
+        return true
+    }
+
+    /** Same tags, attributes, children and computed styles all the way down; text nodes' content may differ. */
+    fun sameExceptText(a: MdNode, b: MdNode): Boolean {
+        if (a.tag != b.tag || a.attrs != b.attrs || a.children.size != b.children.size) return false
+        if (!a.isText && !sameStyle(a.style, b.style)) return false
+        for (i in a.children.indices) if (!sameExceptText(a.children[i], b.children[i])) return false
+        return true
+    }
+
+    /** Whether two nodes in the same place carry the same text, all the way down. */
+    fun sameText(a: MdNode, b: MdNode): Boolean {
+        if (a.text != b.text || a.children.size != b.children.size) return false
+        for (i in a.children.indices) if (!sameText(a.children[i], b.children[i])) return false
+        return true
+    }
+
+    /** [n]'s place from its root, as child indices. */
+    fun pathOf(n: MdNode): IntArray {
+        val out = ArrayList<Int>()
+        var cur = n
+        while (true) {
+            val parent = cur.parent ?: break
+            out += parent.children.indexOfFirst { it === cur }
+            cur = parent
+        }
+        return out.asReversed().toIntArray()
+    }
+
+    fun nodeAt(root: MdNode, path: IntArray): MdNode? {
+        var cur = root
+        for (i in path) cur = cur.children.getOrNull(i) ?: return null
+        return cur
     }
 }
 
