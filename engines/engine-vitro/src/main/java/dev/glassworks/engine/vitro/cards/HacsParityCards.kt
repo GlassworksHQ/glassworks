@@ -107,6 +107,9 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
     protected val secondary = label(ctx, 12f, ctx.theme.primaryTextColor).apply {
         gravity = Gravity.CENTER_VERTICAL; letterSpacing = 0.4f / 12f
     }
+    /** mushroom-badge-icon: a 16 px disc with a white 12 px icon on the shape's top right ([setBadge]). */
+    protected val badge = FrameLayout(ctx.context).apply { visibility = GONE }
+    private val badgeIcon = MdiIconView(ctx.context).also { badge.addView(it, FrameLayout.LayoutParams(ctx.px(12f), ctx.px(12f), Gravity.CENTER)) }
     /** `layout: horizontal`: the controls share the info's row. */
     protected val horizontal = config.raw.optString("layout") == "horizontal"
     /** `--control-height`: 42 px, or the icon's 36 px beside the info. */
@@ -118,9 +121,12 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
     private var pictureUrl: String? = null
 
     init {
+        // Beside the info (horizontal), the card is one padded row. Under it, as mushroom-card lays it out: the state
+        // item (10 px around) takes the height the actions leave, its content centered; the actions are 0 12 12 px
+        // around 42 px controls.
         val column = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(ctx.px(10f), ctx.px(10f), ctx.px(10f), ctx.px(10f))
+            if (horizontal) setPadding(ctx.px(10f), ctx.px(10f), ctx.px(10f), ctx.px(10f))
         }
         shape.addView(shapeIcon, FrameLayout.LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
         shape.addView(shapePicture, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -137,9 +143,18 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
         // halves of the row, so a long title truncates at the middle as in HA.
         val stateItem = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
+            clipChildren = false
             gravity = Gravity.CENTER_VERTICAL
             if (!config.raw.optBoolean("hide_icon", false)) {
-                addView(shape, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)).apply { marginEnd = ctx.px(10f) })
+                // The shape, and Mushroom's badge on its top right (16 px, 3 px past the shape's edge).
+                addView(FrameLayout(ctx.context).apply {
+                    clipChildren = false
+                    clipToPadding = false
+                    addView(shape, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                    addView(badge, FrameLayout.LayoutParams(ctx.px(16f), ctx.px(16f), Gravity.TOP or Gravity.END).apply {
+                        topMargin = -ctx.px(3f); rightMargin = -ctx.px(3f)
+                    })
+                }, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)).apply { marginEnd = ctx.px(10f) })
             }
             addView(texts, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             // The state item keeps its own 10 px end padding inside its half (HA: a 129 px info box in a 400 px card).
@@ -153,9 +168,16 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
         }
         if (hideName) primary.visibility = GONE
         if (hideState) secondary.visibility = GONE
-        column.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        if (!horizontal) column.addView(controls, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        addView(column, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
+        if (horizontal) {
+            column.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            addView(column, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
+        } else {
+            header.setPadding(ctx.px(10f), ctx.px(10f), ctx.px(10f), ctx.px(10f))
+            column.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
+            controls.setPadding(ctx.px(12f), 0, ctx.px(12f), ctx.px(12f))
+            column.addView(controls, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            addView(column, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        }
 
         // Standard Mushroom `--mush-icon-border-radius`: circular by default, rounded square when a px/dp value is set.
         val iconRadius = mushIconRadiusPx(ctx)
@@ -187,12 +209,14 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
 
     /** Subscribes to the card's entity (or renders once without one). Call last in the subclass `init`. */
     protected fun start() {
+        // No control rows: no actions block (its padding would add 12 px under the info).
+        if (controls.childCount == 0) controls.visibility = GONE
         val id = eid
         if (id != null) observe(id) { s -> renderShell(s) } else renderShell(null)
     }
 
     private fun renderShell(s: EntityState?) {
-        primary.text = config.name ?: s?.friendlyName ?: eid ?: ""
+        primary.text = config.name ?: s?.displayName ?: eid ?: ""
         render(s)
     }
 
@@ -241,12 +265,43 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
         secondary.text = text
     }
 
+    /** Shows Mushroom's badge on the shape: [icon] (white) on a [color] disc; null hides it. */
+    protected fun setBadge(icon: String?, color: Int) {
+        badge.visibility = if (icon == null) GONE else VISIBLE
+        if (icon == null) return
+        badgeIcon.setIcon(icon, Color.WHITE)
+        badge.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) }
+    }
+
+    /** Mushroom's `.shape.disabled` (an off light, a closed cover): the theme's disabled color, its disc at 20%. */
+    protected fun setShapeDisabled(iconName: String) {
+        val c = ctx.theme.disabledTextColor
+        shapeIcon.setIcon(config.icon ?: iconName, c)
+        val radius = mushIconRadiusPx(ctx)
+        shape.background = GradientDrawable().apply {
+            if (radius != null) {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = radius
+            } else {
+                shape = GradientDrawable.OVAL
+            }
+            setColor(CardSurface.withAlpha(c, 0.2f))
+        }
+    }
+
+    /** A `mushroom-slider` in [color]: its track at 20%, the fill from the left; off, the disabled color. */
+    internal fun mushroomSlider(color: Int, onCommit: (Float) -> Unit): HaHorizontalSliderView =
+        HaHorizontalSliderView(ctx, color, onCommit = onCommit).apply {
+            mushroom = true
+            inactiveColor = ctx.theme.disabledTextColor
+        }
+
     /** A new horizontal control row in [controls]. */
     protected fun controlRow(): LinearLayout = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL or (if (horizontal) Gravity.END else Gravity.START)
         controls.addView(this, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-            if (!horizontal || controls.childCount > 0) topMargin = ctx.px(10f)
+            if (controls.childCount > 0) topMargin = ctx.px(if (horizontal) 10f else 12f)
         })
     }
 
@@ -433,12 +488,13 @@ class MushroomLockCardView(ctx: VitroCardContext, config: CardConfig) : Mushroom
 class MushroomAlarmControlPanelCardView(ctx: VitroCardContext, config: CardConfig) : MushroomShellCardView(ctx, config) {
     private val states = stringList(config.raw, "states", listOf("armed_home", "armed_away"))
     private val row = controlRow()
+    // Mushroom's buttons: one icon each (its `_n` map), no label.
     private val armButtons = states.associateWith { st ->
-        pill(ARM_ICONS[st] ?: "mdi:shield-lock", "Arm " + st.removePrefix("armed_").replace('_', ' ')) {
+        mushroomButton(BUTTON_ICONS[st] ?: "mdi:shield", "Arm " + st.removePrefix("armed_").replace('_', ' ')) {
             call("alarm_control_panel", "alarm_arm_${st.removePrefix("armed_")}", ::withCode)
         }
     }
-    private val disarmButton = pill("mdi:shield-off-outline", "Disarm") { call("alarm_control_panel", "alarm_disarm", ::withCode) }
+    private val disarmButton = mushroomButton("mdi:shield-off", "Disarm") { call("alarm_control_panel", "alarm_disarm", ::withCode) }
 
     init {
         armButtons.values.forEach { addCell(row, it) }
@@ -450,52 +506,37 @@ class MushroomAlarmControlPanelCardView(ctx: VitroCardContext, config: CardConfi
         config.raw.optString("code", "").takeIf { it.isNotEmpty() }?.let { data.put("code", it) }
     }
 
-    private fun pill(icon: String, text: String, onClick: () -> Unit): LinearLayout = LinearLayout(ctx.context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER
-        isClickable = true
-        contentDescription = text
-        setPadding(ctx.px(10f), 0, ctx.px(10f), 0)
-        background = GradientDrawable().apply {
-            cornerRadius = ctx.px(12f).toFloat()
-            setColor(CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.06f))
-        }
-        addView(MdiIconView(ctx.context).apply { setIcon(icon, ctx.theme.primaryTextColor) },
-            LinearLayout.LayoutParams(ctx.px(18f), ctx.px(18f)).apply { marginEnd = ctx.px(6f) })
-        addView(label(ctx, 13f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply { this.text = titleCase(text.removePrefix("Arm ")) })
-        setOnClickListener { onClick() }
-    }
-
     override fun render(s: EntityState?) {
         val state = s?.state.orEmpty()
-        val color = when {
-            state == "disarmed" -> LOCKED_GREEN
-            state == "triggered" -> ALERT_RED
-            state == "pending" || state == "arming" || state == "disarming" -> PENDING_ORANGE
-            state.startsWith("armed") -> ALERT_RED
-            else -> ctx.theme.secondaryTextColor
+        // Mushroom's alarm colors, by the state's first word: disarmed --rgb-info, armed --rgb-success, triggered
+        // --rgb-danger, unavailable --rgb-warning, the rest grey. The icon is HA's for the state.
+        val color = when (state.substringBefore('_')) {
+            "disarmed" -> INFO_BLUE
+            "armed" -> SUCCESS_GREEN
+            "triggered" -> DANGER_RED
+            "unavailable" -> WARNING_ORANGE
+            else -> GREY
         }
-        val icon = when {
-            state == "disarmed" -> "mdi:shield-off-outline"
-            state == "triggered" -> "mdi:bell-ring"
-            state == "pending" || state == "arming" -> iconOr("mdi:shield-sync", "mdi:shield-lock")
-            else -> ARM_ICONS[state] ?: "mdi:shield-home"
-        }
-        setShape(iconOr(icon, "mdi:shield-home"), color, s != null && !s.isUnavailable)
-        setSecondary(s?.let { titleCase(it.state) } ?: "…")
+        setShape(MdiIcons.resolveIconName(null, s).takeIf { s != null } ?: "mdi:shield", color, s != null)
+        setSecondary(s?.formattedState() ?: "…")
         val disarmed = state == "disarmed"
         armButtons.values.forEach { it.visibility = if (disarmed) VISIBLE else GONE }
         disarmButton.visibility = if (!disarmed && s != null && !s.isUnavailable) VISIBLE else GONE
     }
 
     private companion object {
-        val ARM_ICONS = mapOf(
-            "armed_home" to "mdi:shield-home",
-            "armed_away" to "mdi:shield-lock",
-            "armed_night" to "mdi:shield-moon",
-            "armed_vacation" to "mdi:shield-airplane",
-            "armed_custom_bypass" to "mdi:security",
+        val BUTTON_ICONS = mapOf(
+            "armed_home" to "mdi:home",
+            "armed_away" to "mdi:lock",
+            "armed_night" to "mdi:moon-waning-crescent",
+            "armed_vacation" to "mdi:airplane",
+            "armed_custom_bypass" to "mdi:shield",
         )
+        val INFO_BLUE = 0xFF2196F3.toInt()
+        val SUCCESS_GREEN = 0xFF4CAF50.toInt()
+        val DANGER_RED = 0xFFDB4437.toInt()
+        val WARNING_ORANGE = 0xFFFFA600.toInt()
+        val GREY = 0xFF9E9E9E.toInt()
     }
 }
 
@@ -541,14 +582,19 @@ class MushroomVacuumCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
 
     override fun render(s: EntityState?) {
         val active = s?.isActive == true
-        setShape(iconOr("mdi:robot-vacuum", "mdi:robot-vacuum"), ctx.theme.activeColor("vacuum"), active)
-        val battery = (s?.attributes?.get("battery_level") as? Number)?.toInt()
-        val status = (s?.attributes?.get("status") as? String)?.takeIf { it.isNotBlank() } ?: s?.let { titleCase(it.state) } ?: "…"
-        setSecondary(if (battery != null) "$status · $battery%" else status)
+        // Mushroom: HA's icon for the entity (its own `icon` first), teal (--rgb-state-vacuum) while active, the
+        // disabled look otherwise; HA's state label under the name ("Docked").
+        val icon = MdiIcons.resolveIconName(null, s).takeIf { s != null } ?: "mdi:robot-vacuum"
+        if (active) setShape(icon, TEAL, true) else setShapeDisabled(icon)
+        setSecondary(s?.formattedState() ?: "…")
         val cleaning = s?.state == "cleaning"
         startPauseIcon.setIcon(if (cleaning) "mdi:pause" else "mdi:play", ctx.theme.primaryTextColor)
         startPause?.contentDescription = if (cleaning) "Pause" else "Start"
         controls.visibility = if (s == null || s.isUnavailable) GONE else VISIBLE
+    }
+
+    private companion object {
+        val TEAL = 0xFF009688.toInt()
     }
 }
 
@@ -617,6 +663,8 @@ class MushroomHumidifierCardView(ctx: VitroCardContext, config: CardConfig) : Mu
  */
 class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : MushroomShellCardView(ctx, config) {
     private val buttons = config.raw.optString("display_mode", "").let { it == "buttons" }
+    /** `--rgb-state-number`: Mushroom's blue, unless `icon_color` sets one. */
+    private val color = MushroomColors.parse(config.raw.optString("icon_color").ifEmpty { "blue" }, ctx.theme) ?: ctx.theme.primaryColor
     private val valueLabel = label(ctx, 15f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply { gravity = Gravity.CENTER }
     private var slider: HaHorizontalSliderView? = null
 
@@ -627,11 +675,13 @@ class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
             addCell(row, valueLabel, 1.4f)
             addCell(row, mushroomButton("mdi:plus", "Increase") { step(+1) })
         } else {
-            val s = HaHorizontalSliderView(ctx, ctx.theme.primaryColor) { frac ->
+            val s = HaHorizontalSliderView(ctx, color) { frac ->
                 val st = eid?.let { ctx.store[it] }
                 val (min, max, stepSize) = bounds(st)
                 setValue(snap(min + frac * (max - min), min, max, stepSize))
             }
+            s.mushroom = true
+            s.inactiveColor = ctx.theme.disabledTextColor
             slider = s
             addCell(row, s)
         }
@@ -680,7 +730,7 @@ class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
     }
 
     override fun render(s: EntityState?) {
-        setShape(MdiIcons.resolveIconName(null, s).takeIf { s != null } ?: "mdi:tune", ctx.theme.primaryColor, s != null && !s.isUnavailable)
+        setShape(MdiIcons.resolveIconName(null, s).takeIf { s != null } ?: "mdi:tune", color, s != null && !s.isUnavailable)
         setSecondary(s?.formattedState() ?: "…")
         val (min, max, stepSize) = bounds(s)
         val v = s?.state?.toDoubleOrNull()
@@ -699,6 +749,341 @@ class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// custom:mushroom-light-card, -fan-card, -cover-card with their controls
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Mushroom's state separator in a secondary line ("Open ⸱ 100%"). */
+private const val MUSH_SEPARATOR = " \u2E31 "
+
+/**
+ * `custom:mushroom-light-card` with controls (without, [TileCardView] draws it): Mushroom's light card, the state
+ * (or the brightness) under the name and, under them, the brightness, color temperature or color slider; with more
+ * than one, buttons switch between them. Off, the shape and the slider take the disabled color.
+ */
+class MushroomLightCardView(ctx: VitroCardContext, config: CardConfig) : MushroomShellCardView(ctx, config) {
+    private val wanted = listOfNotNull(
+        "brightness_control".takeIf { config.raw.optBoolean("show_brightness_control") },
+        "color_temp_control".takeIf { config.raw.optBoolean("show_color_temp_control") },
+        "color_control".takeIf { config.raw.optBoolean("show_color_control") },
+    )
+    private val row = controlRow()
+    private var activeControl: String? = null
+    private val slider = mushroomSlider(ORANGE) { frac -> commit(frac) }
+    private val switchButtons = LinkedHashMap<String, View>()
+
+    init {
+        addCell(row, slider)
+        start()
+    }
+
+    /** Mushroom's `_controls`: the wanted controls the light supports. */
+    private fun controlsFor(s: EntityState?): List<String> {
+        val modes = (s?.attributes?.get("supported_color_modes") as? List<*>)?.map { it.toString() }.orEmpty()
+        return wanted.filter { c ->
+            when (c) {
+                "brightness_control" -> modes.any { it != "onoff" } || s?.attributes?.containsKey("brightness") == true
+                "color_temp_control" -> "color_temp" in modes
+                else -> modes.any { it in COLOR_MODES }
+            }
+        }
+    }
+
+    private fun commit(frac: Float) {
+        when (activeControl) {
+            "color_temp_control" -> {
+                val s = eid?.let { ctx.store[it] }
+                val min = (s?.attributes?.get("min_color_temp_kelvin") as? Number)?.toDouble() ?: 2700.0
+                val max = (s?.attributes?.get("max_color_temp_kelvin") as? Number)?.toDouble() ?: 6500.0
+                call("light", "turn_on") { it.put("color_temp_kelvin", (min + frac * (max - min)).roundToInt()) }
+            }
+            "color_control" -> call("light", "turn_on") { it.put("hs_color", JSONArray().put((frac * 360f).roundToInt()).put(100)) }
+            else -> {
+                val pct = (frac * 100f).roundToInt()
+                if (pct == 0) call("light", "turn_off") else call("light", "turn_on") { it.put("brightness_pct", pct) }
+            }
+        }
+    }
+
+    override fun render(s: EntityState?) {
+        val on = s?.isActive == true
+        val color = (if (config.raw.optBoolean("use_light_color", false)) s?.lightTintColor() else null) ?: ORANGE
+        val icon = MdiIcons.resolveIconName(null, s)
+        if (on) setShape(icon, color, true) else setShapeDisabled(icon)
+        val brightness = (s?.attributes?.get("brightness") as? Number)?.toDouble()
+        setSecondary(if (on && brightness != null) "${(brightness * 100.0 / 255.0).roundToInt()}%" else s?.formattedState() ?: "…")
+        val available = controlsFor(s)
+        if (activeControl !in available) activeControl = available.firstOrNull()
+        // The other controls as buttons beside the active one.
+        if (switchButtons.keys != available.toSet()) {
+            switchButtons.values.forEach { row.removeView(it) }
+            switchButtons.clear()
+            if (available.size > 1) available.forEach { c ->
+                val b = mushroomButton(CONTROL_ICONS.getValue(c), c) { activeControl = c; eid?.let { render(ctx.store[it]) } }
+                switchButtons[c] = b
+                row.addView(b, LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)).apply { marginStart = ctx.px(12f) })
+            }
+        }
+        switchButtons.forEach { (c, b) -> b.visibility = if (c == activeControl) GONE else VISIBLE }
+        when (activeControl) {
+            "color_temp_control" -> {
+                val min = (s?.attributes?.get("min_color_temp_kelvin") as? Number)?.toInt() ?: 2700
+                val max = (s?.attributes?.get("max_color_temp_kelvin") as? Number)?.toInt() ?: 6500
+                slider.trackGradient = IntArray(5) { i -> dev.glassworks.engine.vitro.data.LightColor.kelvinToArgb(min + (max - min) * i / 4) }
+                val k = (s?.attributes?.get("color_temp_kelvin") as? Number)?.toDouble()
+                slider.setValue(if (k == null) 0f else ((k - min) / (max - min)).toFloat(), active = on && k != null)
+            }
+            "color_control" -> {
+                slider.trackGradient = IntArray(7) { i -> dev.glassworks.engine.vitro.data.LightColor.hsvToArgb(i * 60f, 1f, 1f) }
+                val hue = ((s?.attributes?.get("hs_color") as? List<*>)?.firstOrNull() as? Number)?.toFloat()
+                slider.setValue((hue ?: 0f) / 360f, active = on && hue != null)
+            }
+            else -> {
+                slider.trackGradient = null
+                slider.setAccentColor(color)
+                slider.setValue(if (on && brightness != null) (brightness / 255.0).toFloat() else 0f, active = on)
+            }
+        }
+        controls.visibility = if (available.isEmpty()) GONE else VISIBLE
+        collapseWhen(!on)
+        if (available.isEmpty()) controls.visibility = GONE
+    }
+
+    private companion object {
+        /** `--rgb-state-light`: Mushroom's orange. */
+        val ORANGE = 0xFFFF9800.toInt()
+        val COLOR_MODES = setOf("hs", "rgb", "rgbw", "rgbww", "xy")
+        val CONTROL_ICONS = mapOf("brightness_control" to "mdi:brightness-4", "color_temp_control" to "mdi:thermometer", "color_control" to "mdi:palette")
+    }
+}
+
+/**
+ * `custom:mushroom-fan-card` with controls: the percentage under the name, and the percentage slider (green), the
+ * oscillate and the direction buttons Mushroom shows for `show_percentage_control`, `show_oscillate_control` and
+ * `show_direction_control`.
+ */
+class MushroomFanCardView(ctx: VitroCardContext, config: CardConfig) : MushroomShellCardView(ctx, config) {
+    private val row = controlRow()
+    private val slider = if (config.raw.optBoolean("show_percentage_control")) mushroomSlider(GREEN) { frac ->
+        val pct = (frac * 100f).roundToInt()
+        if (pct == 0) call("fan", "turn_off") else call("fan", "set_percentage") { it.put("percentage", pct) }
+    } else null
+    private val oscillate = if (config.raw.optBoolean("show_oscillate_control")) mushroomButton("mdi:arrow-oscillating", "Oscillate") {
+        val on = eid?.let { ctx.store[it] }?.attributes?.get("oscillating") == true
+        call("fan", "oscillate") { it.put("oscillating", !on) }
+    } else null
+    private val direction = if (config.raw.optBoolean("show_direction_control")) mushroomButton("mdi:rotate-right", "Direction") {
+        val forward = eid?.let { ctx.store[it] }?.attributes?.get("direction") != "reverse"
+        call("fan", "set_direction") { it.put("direction", if (forward) "reverse" else "forward") }
+    } else null
+
+    init {
+        slider?.let { addCell(row, it) }
+        listOfNotNull(oscillate, direction).forEach { b ->
+            row.addView(b, LinearLayout.LayoutParams(if (slider == null) 0 else ctx.px(42f), ctx.px(42f), if (slider == null) 1f else 0f).apply {
+                if (row.childCount > 0) marginStart = ctx.px(12f)
+            })
+        }
+        start()
+    }
+
+    override fun render(s: EntityState?) {
+        val on = s?.isActive == true
+        val icon = MdiIcons.resolveIconName(null, s)
+        if (on) setShape(icon, GREEN, true) else setShapeDisabled(icon)
+        val pct = (s?.attributes?.get("percentage") as? Number)?.toDouble()
+        setSecondary(if (on && pct != null) "${pct.roundToInt()}%" else s?.formattedState() ?: "…")
+        slider?.setValue(if (on && pct != null) (pct / 100.0).toFloat() else 0f, active = on)
+        collapseWhen(!on)
+    }
+
+    private companion object {
+        /** `--rgb-state-fan`: Mushroom's green. */
+        val GREEN = 0xFF4CAF50.toInt()
+    }
+}
+
+/**
+ * `custom:mushroom-cover-card` with controls: the state and position under the name ("Open ⸱ 100%"), and the open /
+ * stop / close buttons (`show_buttons_control`) or the position slider (`show_position_control`).
+ */
+class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : MushroomShellCardView(ctx, config) {
+    private val row = controlRow()
+    private val slider = if (!config.raw.optBoolean("show_buttons_control") && config.raw.optBoolean("show_position_control"))
+        mushroomSlider(BLUE) { frac -> call("cover", "set_cover_position") { it.put("position", (frac * 100f).roundToInt()) } } else null
+
+    init {
+        if (slider != null) {
+            addCell(row, slider)
+        } else {
+            addCell(row, mushroomButton("mdi:arrow-up", "Open") { call("cover", "open_cover") })
+            addCell(row, mushroomButton("mdi:stop", "Stop") { call("cover", "stop_cover") })
+            addCell(row, mushroomButton("mdi:arrow-down", "Close") { call("cover", "close_cover") })
+        }
+        start()
+    }
+
+    override fun render(s: EntityState?) {
+        val open = s != null && s.state != "closed" && !s.isUnavailable
+        val icon = MdiIcons.resolveIconName(null, s)
+        if (open) setShape(icon, BLUE, true) else setShapeDisabled(icon)
+        val pos = (s?.attributes?.get("current_position") as? Number)?.toInt()
+        // Mushroom: HA's state label, then the position ("Open ⸱ 100%").
+        val state = s?.let { dev.glassworks.engine.vitro.data.HaDisplay.stateLabel(it) ?: it.state.replace('_', ' ').replaceFirstChar { c -> c.titlecase(Locale.ROOT) } } ?: "…"
+        setSecondary(if (pos != null && !s.isUnavailable) state + MUSH_SEPARATOR + "$pos%" else state)
+        slider?.setValue((pos ?: 0) / 100f, active = open)
+        collapseWhen(!open)
+    }
+
+    private companion object {
+        /** `--rgb-state-cover`: Mushroom's blue. */
+        val BLUE = 0xFF2196F3.toInt()
+    }
+}
+
+/**
+ * `custom:mushroom-climate-card`: Mushroom's climate card. The shape in the HVAC mode's color with the HVAC action's
+ * badge, the state and the current temperature (and humidity) under the name ("Heat ⸱ 19.5 °C"), and the target
+ * temperature control (− value +) or the `hvac_modes` buttons, with a button to switch between them.
+ */
+class MushroomClimateCardView(ctx: VitroCardContext, config: CardConfig) : MushroomShellCardView(ctx, config) {
+    private val configModes = stringList(config.raw, "hvac_modes")
+    private val row = controlRow()
+    private var activeControl: String? = null
+    private val tempValue = label(ctx, 14f, ctx.theme.primaryTextColor, 700).apply { gravity = Gravity.CENTER }
+    /** mushroom-input-number: − value + on one 42 px pill. */
+    private val tempControl = LinearLayout(ctx.context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        background = GradientDrawable().apply {
+            cornerRadius = ctx.px(12f).toFloat()
+            setColor(CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.05f))
+        }
+        fun stepper(icon: String, description: String, dir: Int) = FrameLayout(ctx.context).apply {
+            isClickable = true
+            contentDescription = description
+            addView(MdiIconView(ctx.context).apply { setIcon(icon, ctx.theme.primaryTextColor) },
+                FrameLayout.LayoutParams(controlIconPx, controlIconPx, Gravity.CENTER))
+            setOnClickListener { step(dir) }
+            applyHaRipple(this, ctx.px(12f).toFloat(), ctx.theme.dark)
+        }
+        addView(stepper("mdi:minus", "Decrease", -1), LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)))
+        addView(tempValue, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        addView(stepper("mdi:plus", "Increase", +1), LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)))
+    }
+    private val modeRow = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
+    private val modeButtons = LinkedHashMap<String, FrameLayout>()
+    private val switchButtons = LinkedHashMap<String, View>()
+
+    init {
+        row.addView(tempControl, LinearLayout.LayoutParams(0, ctx.px(42f), 1f))
+        row.addView(modeRow, LinearLayout.LayoutParams(0, ctx.px(42f), 1f))
+        CONTROL_ICONS.forEach { (c, icon) ->
+            val b = mushroomButton(icon, if (c == "temperature_control") "Temperature" else "HVAC modes") {
+                activeControl = c
+                eid?.let { render(ctx.store[it]) }
+            }
+            switchButtons[c] = b
+            row.addView(b, LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)).apply { marginStart = ctx.px(12f) })
+        }
+        start()
+    }
+
+    private fun step(dir: Int) {
+        val s = eid?.let { ctx.store[it] } ?: return
+        val cur = (s.attributes["temperature"] as? Number)?.toDouble() ?: return
+        val step = stepOf(s)
+        val min = (s.attributes["min_temp"] as? Number)?.toDouble() ?: Double.NEGATIVE_INFINITY
+        val max = (s.attributes["max_temp"] as? Number)?.toDouble() ?: Double.POSITIVE_INFINITY
+        val next = (Math.round((cur + dir * step) / step) * step).coerceIn(min, max)
+        call("climate", "set_temperature") { it.put("temperature", next) }
+    }
+
+    /** `target_temp_step`, else HA's default: 0.5 in °C, 1 in °F. */
+    private fun stepOf(s: EntityState): Double = (s.attributes["target_temp_step"] as? Number)?.toDouble()
+        ?: if ((s.attributes["temperature_unit"] as? String)?.contains("F") == true) 1.0 else 0.5
+
+    /** Mushroom's `_controls`: the temperature with a target to show, the modes the entity has and the card lists. */
+    private fun controlsFor(s: EntityState?): List<String> {
+        if (s == null) return emptyList()
+        val out = ArrayList<String>(2)
+        val target = s.attributes["temperature"] != null ||
+            (s.attributes["target_temp_low"] != null && s.attributes["target_temp_high"] != null)
+        if (target && config.raw.optBoolean("show_temperature_control")) out += "temperature_control"
+        if (modesOf(s).isNotEmpty()) out += "hvac_mode_control"
+        return out
+    }
+
+    private fun modesOf(s: EntityState): List<String> =
+        (s.attributes["hvac_modes"] as? List<*>)?.map { it.toString() }.orEmpty()
+            .filter { it in configModes }.sortedBy { MODE_ORDER.indexOf(it).let { i -> if (i < 0) 99 else i } }
+
+    override fun render(s: EntityState?) {
+        val state = s?.state.orEmpty()
+        val color = MODE_COLORS[state] ?: ctx.theme.disabledTextColor
+        val icon = MdiIcons.resolveIconName(null, s).takeIf { s != null } ?: "mdi:thermostat"
+        if (s != null && !s.isUnavailable) setShape(icon, color, true) else setShapeDisabled(icon)
+        val action = s?.attributes?.get("hvac_action") as? String
+        val badgeIcon = action?.takeIf { it != "off" && s?.isUnavailable == false }?.let { ACTION_ICONS[it] }
+        setBadge(badgeIcon, ACTION_COLORS[action] ?: ctx.theme.disabledTextColor)
+        val unit = (s?.attributes?.get("temperature_unit") as? String) ?: "°C"
+        // HA's label for the mode ("Heat"), not the action.
+        val line = StringBuilder(s?.let { dev.glassworks.engine.vitro.data.HaDisplay.stateLabel(it) ?: it.state.replace('_', ' ').replaceFirstChar { c -> c.titlecase(Locale.ROOT) } } ?: "…")
+        (s?.attributes?.get("current_temperature") as? Number)?.let { line.append(MUSH_SEPARATOR).append("${formatNumber(it.toDouble())} $unit") }
+        (s?.attributes?.get("current_humidity") as? Number)?.let { line.append(MUSH_SEPARATOR).append("${formatNumber(it.toDouble())} %") }
+        setSecondary(line.toString())
+
+        val available = controlsFor(s)
+        if (activeControl !in available) activeControl = available.firstOrNull()
+        tempControl.visibility = if (activeControl == "temperature_control") VISIBLE else GONE
+        modeRow.visibility = if (activeControl == "hvac_mode_control") VISIBLE else GONE
+        switchButtons.forEach { (c, b) -> b.visibility = if (available.size > 1 && c != activeControl && c in available) VISIBLE else GONE }
+        if (s != null) {
+            val target = (s.attributes["temperature"] as? Number)?.toDouble()
+            val decimals = if (stepOf(s) % 1.0 == 0.0) 0 else 1
+            tempValue.text = target?.let { String.format(Locale.US, "%.${decimals}f", it) } ?: "–"
+            val modes = modesOf(s)
+            if (modeButtons.keys.toList() != modes) {
+                modeRow.removeAllViews()
+                modeButtons.clear()
+                modes.forEach { m ->
+                    val b = mushroomButton(MODE_ICONS[m] ?: "mdi:thermostat", m) { call("climate", "set_hvac_mode") { it.put("hvac_mode", m) } }
+                    modeButtons[m] = b
+                    addCell(modeRow, b)
+                }
+            }
+            // The current mode: its icon in the mode's color, the button washed with it at 20% (off: grey).
+            modeButtons.forEach { (m, b) ->
+                val mc = if (m == "off") GREY else MODE_COLORS[m] ?: ctx.theme.disabledTextColor
+                val current = m == state
+                (b.getChildAt(0) as? MdiIconView)?.setIcon(MODE_ICONS[m] ?: "mdi:thermostat", if (current) mc else ctx.theme.primaryTextColor)
+                (b.background as? GradientDrawable)?.setColor(CardSurface.withAlpha(if (current) mc else ctx.theme.primaryTextColor, if (current) 0.2f else 0.05f))
+            }
+        }
+        controls.visibility = if (available.isEmpty()) GONE else VISIBLE
+        if (available.isNotEmpty()) collapseWhen(state == "off")
+    }
+
+    private companion object {
+        val MODE_ORDER = listOf("auto", "heat_cool", "heat", "cool", "dry", "fan_only", "off")
+        val MODE_COLORS = mapOf(
+            "auto" to 0xFF4CAF50.toInt(), "cool" to 0xFF2196F3.toInt(), "dry" to 0xFFFF9800.toInt(),
+            "fan_only" to 0xFF009688.toInt(), "heat" to 0xFFFF6F22.toInt(), "heat_cool" to 0xFF4CAF50.toInt(),
+        )
+        val ACTION_COLORS = mapOf("cooling" to 0xFF2196F3.toInt(), "drying" to 0xFFFF9800.toInt(), "heating" to 0xFFFF6F22.toInt())
+        val MODE_ICONS = mapOf(
+            "auto" to "mdi:thermostat-auto", "cool" to "mdi:snowflake", "dry" to "mdi:water-percent", "fan_only" to "mdi:fan",
+            "heat" to "mdi:fire", "heat_cool" to "mdi:sun-snowflake-variant", "off" to "mdi:power",
+        )
+        val ACTION_ICONS = mapOf("cooling" to "mdi:snowflake", "drying" to "mdi:water-percent", "heating" to "mdi:fire", "idle" to "mdi:clock-outline")
+        val CONTROL_ICONS = mapOf("temperature_control" to "mdi:thermometer", "hvac_mode_control" to "mdi:thermostat")
+        val GREY = 0xFF9E9E9E.toInt()
+
+        fun formatNumber(v: Double): String =
+            if (v % 1.0 == 0.0) v.toLong().toString() else String.format(Locale.US, "%.1f", v).trimEnd('0').trimEnd('.')
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // custom:mushroom-select-card
 // ---------------------------------------------------------------------------------------------------------------
 
@@ -707,23 +1092,28 @@ class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
  * picking another calls `select_option` on the entity's own domain.
  */
 class MushroomSelectCardView(ctx: VitroCardContext, config: CardConfig) : MushroomShellCardView(ctx, config) {
-    private val current = label(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM)
+    // ha-control-select-menu: --control-select-menu-background-color (the disabled color) at 20%, the value 14 px
+    // regular 20 px in, a 20 px arrow 10 px from the end, both in the text color.
+    private val current = label(ctx, 14f, ctx.theme.primaryTextColor)
     private val dropdown = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         isClickable = true
         contentDescription = "Choose option"
-        setPadding(ctx.px(12f), 0, ctx.px(8f), 0)
+        setPadding(ctx.px(20f), 0, ctx.px(10f), 0)
+        val menuColor = dev.glassworks.engine.vitro.theme.ThemeResolver.parseColor(
+            ctx.theme.vars["disabled-color"]?.let { dev.glassworks.engine.vitro.theme.ThemeResolver.resolveValue(it, ctx.theme.vars, 0) },
+        ) ?: if (ctx.theme.dark) 0xFF464646.toInt() else 0xFFBDBDBD.toInt()
         background = GradientDrawable().apply {
             cornerRadius = ctx.px(12f).toFloat()
-            setColor(CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.06f))
+            setColor(CardSurface.withAlpha(menuColor, 0.2f))
         }
     }
 
     init {
-        dropdown.addView(current, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-        dropdown.addView(MdiIconView(ctx.context).apply { setIcon("mdi:menu-down", ctx.theme.secondaryTextColor) },
-            LinearLayout.LayoutParams(ctx.px(22f), ctx.px(22f)))
+        dropdown.addView(current, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ctx.px(10f) })
+        dropdown.addView(MdiIconView(ctx.context).apply { setIcon("mdi:menu-down", ctx.theme.primaryTextColor) },
+            LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)))
         dropdown.setOnClickListener { showMenu() }
         addCell(controlRow(), dropdown)
         start()
@@ -752,13 +1142,15 @@ class MushroomSelectCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
     }
 
     override fun render(s: EntityState?) {
-        setShape(MdiIcons.resolveIconName(null, s).takeIf { s != null } ?: "mdi:format-list-bulleted", ctx.theme.primaryColor,
-            s != null && !s.isUnavailable)
+        // `--rgb-state-entity`: Mushroom's blue. The state shows under the name as well as in the dropdown.
+        setShape(MdiIcons.resolveIconName(null, s).takeIf { s != null } ?: "mdi:format-list-bulleted", BLUE, s != null && !s.isUnavailable)
         setSecondary(if (s == null) "…" else s.state)
-        // The dropdown already shows the option; the state line only says when there is none to show.
-        if (!config.raw.optBoolean("hide_state", false)) secondary.visibility = if (s != null && !s.isUnavailable) GONE else VISIBLE
         current.text = s?.state.orEmpty()
         controls.visibility = if (s == null || s.isUnavailable) GONE else VISIBLE
+    }
+
+    private companion object {
+        val BLUE = 0xFF2196F3.toInt()
     }
 }
 
