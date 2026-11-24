@@ -76,43 +76,59 @@ private fun iconColorFor(ctx: VitroCardContext, s: EntityState?): Int =
 // entity
 // ---------------------------------------------------------------------------------------------
 
-/** Native HA `entity` card (`hui-entity-card`): name and icon on top, the big live value and unit below. */
+/**
+ * Native HA `entity` card (`hui-entity-card`), and the `sensor` card, which is an entity card with a graph footer
+ * (`hui-sensor-card`): the name (16 px, medium, secondary) on a 40 px line under 8 px of padding with the icon on
+ * its right, the value (28 px) and its unit (16 px, secondary) on one baseline 4 px higher, 16 px in from the
+ * sides and above the bottom. A `footer: {type: graph}` (or the sensor card's `graph: line`) draws
+ * [GraphFooterView] along the bottom: pinned to it in a sections grid, where the card fills its slot (2 rows by
+ * default), and below the value elsewhere.
+ */
 class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
     private val nameView = extLabel(ctx, 16f, ctx.theme.secondaryTextColor, Inter.MEDIUM).apply {
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
+        gravity = Gravity.CENTER_VERTICAL
     }
     private val iconView = MdiIconView(ctx.context)
     private val valueView = extLabel(ctx, 28f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
     }
-    private val unitView = extLabel(ctx, 16f, ctx.theme.secondaryTextColor)
+    private val unitView = extLabel(ctx, 16f, ctx.theme.secondaryTextColor).apply { maxLines = 1 }
+    private val footerConfig: JSONObject? =
+        if (config.type == "sensor") GraphFooterView.sensorFooter(config.raw)
+        else config.raw.optJSONObject("footer")?.takeIf { it.optString("type") == "graph" }
+    private val footer: GraphFooterView? = footerConfig?.let { GraphFooterView(ctx, it) }
+
+    /** HA pins the footer to the bottom only in a sections grid (`layout === "grid"`), where the card fills its slot. */
+    private val fixedFooter = footer != null && ctx.cardLayout == "grid"
 
     init {
-        val pad = ctx.px(16f)
-        val col = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
-        }
+        val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
         val header = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(nameView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            addView(iconView, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply { marginStart = ctx.px(8f) })
+            setPadding(ctx.px(16f), ctx.px(8f), ctx.px(16f), 0)
+            addView(nameView, LinearLayout.LayoutParams(0, ctx.px(40f), 1f))
+            addView(iconView, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)))
         }
         col.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        val valueRow = LinearLayout(ctx.context).apply {
+        // `.info`: baseline-aligned value and unit, line-height 1.2, 4 px up into the header's padding.
+        valueView.setLineSpacing(0f, 1f)
+        val info = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.BOTTOM
+            isBaselineAligned = true
+            setPadding(ctx.px(16f), 0, ctx.px(16f), ctx.px(16f))
             addView(valueView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, 0f))
-            addView(unitView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
-                marginStart = ctx.px(4f)
-                bottomMargin = ctx.px(3f)
-            })
+            addView(unitView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(4f) })
         }
-        col.addView(valueRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(12f) })
+        lineBox(valueView, 28f)
+        lineBox(unitView, 16f)
+        col.addView(info, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = -ctx.px(4f) })
+        if (footer != null && !fixedFooter) col.addView(footer, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        if (footer != null && fixedFooter) addView(footer, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
 
         val eid = config.entity
         isClickable = true
@@ -122,13 +138,33 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
         if (eid != null) observe(eid, ::render) else render(null)
     }
 
+    /** A line box of `--ha-line-height-condensed` (1.2) around [tv]'s [sizeCss] px text, as `.info` sets it. */
+    private fun lineBox(tv: TextView, sizeCss: Float) {
+        val fm = tv.paint.fontMetrics
+        val content = fm.descent - fm.ascent
+        val half = ((1.2f * sizeCss * ctx.dp * ctx.theme.fontScale - content) / 2f).coerceAtLeast(0f).toInt()
+        tv.setPadding(0, half, 0, half)
+    }
+
+    /** HA's `_getStateColor`: `color`, `state_color`, or (the entity card's default) a light; never for the sensor card. */
+    private fun colored(s: EntityState?): Boolean {
+        if (s == null) return false
+        val raw = config.raw
+        if (raw.optString("color").isNotEmpty()) return true
+        if (raw.has("state_color")) return raw.optBoolean("state_color")
+        return config.type != "sensor" && s.domain == "light"
+    }
+
     private fun render(s: EntityState?) {
         nameView.text = config.name ?: s?.friendlyName ?: config.entity.orEmpty()
-        iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), iconColorFor(ctx, s))
+        val color = if (colored(s)) iconColorFor(ctx, s) else ctx.theme.stateIconColor
+        iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color)
         val (value, unit) = valueAndUnit(config.raw, s)
         valueView.text = value
         unitView.text = unit
         unitView.visibility = if (unit.isEmpty()) GONE else VISIBLE
+        // The footer takes the state color only when the card sets `color` (HA's `--accent-color` override).
+        if (footer != null && config.raw.optString("color").isNotEmpty() && s?.isActive == true) footer.color = color
     }
 
     companion object {
@@ -142,7 +178,13 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
                 return v to unitCfg
             }
             val unit = unitCfg.ifEmpty { s.unit.orEmpty() }
-            if (unit.isNotEmpty() && !s.isUnavailable) return s.state to unit
+            if (unit.isNotEmpty() && !s.isUnavailable) {
+                // formatEntityStateToParts: the number as HA formats it (display precision, grouping), the unit apart.
+                val number = s.state.trim().toBigDecimalOrNull()?.let {
+                    HaDisplay.formatState(s.state, HaDisplay.displayPrecision(s.entityId), (s.attributes["step"] as? Number)?.toDouble())
+                }
+                return (number ?: s.state) to unit
+            }
             return s.formattedState() to ""
         }
     }
