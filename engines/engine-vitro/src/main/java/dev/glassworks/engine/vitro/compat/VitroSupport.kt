@@ -109,7 +109,7 @@ object VitroSupport {
      */
     val CARD_MOD_NOT_APPLIED: Map<String, String> = mapOf(
         "custom:mushroom-chips-card" to "the chips card doesn't apply its card_mod yet (padding, background, " +
-            "`--chip-*` and color variables); tablet parity, #792",
+            "`--chip-*` and color variables); #792",
     )
 
     /**
@@ -263,7 +263,7 @@ object VitroSupport {
         "white-space: nowrap" to "Vitro may wrap the line; it only shows when the text doesn't fit",
         "position: relative" to "Vitro ignores the small offset (`top`, `left`, ...)",
         "box-shadow: glow" to "drawn as an elevation shadow, not a colored glow",
-        "tile features_position: inline" to "Vitro puts the features under the tile; tablet parity, #792",
+        "tile features_position: inline" to "Vitro puts the features under the tile; #792",
         "card_mod.class" to "Vitro ignores card_mod classes; they only matter with a card-mod theme",
         "card variable" to "Vitro doesn't read this custom property on this card; HA's card may",
         "templated selector" to "a selector built by a template isn't checked",
