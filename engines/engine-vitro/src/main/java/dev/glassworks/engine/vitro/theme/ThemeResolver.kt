@@ -30,6 +30,30 @@ data class CardModStyle(
     val blurRadiusDp: Float? = null,
     /** True when the theme contains deep Shadow-DOM / keyframe selectors Vitro cannot mirror natively. */
     val hasComplexSelectors: Boolean = false,
+    /** `background:` / `background-image:` holding a `linear-gradient(...)`. */
+    val backgroundGradient: ThemeBackground.LinearGradient? = null,
+    /** `padding:` (first value; CSS px are treated as dp). */
+    val paddingDp: Float? = null,
+    /** `font-size:` in sp (`px`/`sp` as-is, `rem`/`em` x16). Cards read it from [CardSurface.activeCardMod]. */
+    val fontSizeSp: Float? = null,
+    /** `font-weight:` as a CSS weight (100..900); keywords map to 300/400/500/600/700. */
+    val fontWeight: Int? = null,
+    /** `letter-spacing:` in em (`2px` is divided by the font size, 16 when none is set). */
+    val letterSpacingEm: Float? = null,
+    /** Duration of a `transition:` on `opacity` (or `all`), in ms, clamped to 0..3000. */
+    val transitionOpacityMs: Long? = null,
+    /** `position: fixed` / `absolute` on the card itself: Vitro pins it to the viewport overlay layer. */
+    val positionFixed: Boolean = false,
+    /** Raw CSS offsets for a pinned card (`24px`, `50%`, ...). */
+    val fixedTop: String? = null,
+    val fixedRight: String? = null,
+    val fixedBottom: String? = null,
+    val fixedLeft: String? = null,
+    val fixedWidth: String? = null,
+    /** `transform: translateY(-50%)` / `translate(x, -50%)`: center vertically. */
+    val fixedCenterY: Boolean = false,
+    /** `transform: translateX(-50%)` / `translate(-50%, y)`: center horizontally. */
+    val fixedCenterX: Boolean = false,
 )
 
 /** Resolved, native-ready Home Assistant theme for one view or card. */
@@ -184,6 +208,9 @@ object ThemeResolver {
     private const val HA_DEFAULT_FONT_SIZE_PX = 14f
     private const val MIN_FONT_SCALE = 0.7f
     private const val MAX_FONT_SCALE = 2.2f
+    private val JINJA_PATTERN = Regex("""\{%.*?%\}|\{\{.*?\}\}|\{#.*?#\}""", RegexOption.DOT_MATCHES_ALL)
+    private val CSS_COMMENT = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
+    private val TIME_PATTERN = Regex("""([\d.]+)(ms|s)""")
     private val DIM_PX = Regex("""([\d.]+)\s*(px|rem|em)?""", RegexOption.IGNORE_CASE)
     private val SHADOW_COLOR = Regex("""(?:rgba?|hsla?)\([^)]*\)""", RegexOption.IGNORE_CASE)
     private val SHADOW_LENGTH = Regex("""(?<![\w#.])(-?[\d.]+)(?:px)?(?=\s|$)""", RegexOption.IGNORE_CASE)
@@ -425,8 +452,13 @@ object ThemeResolver {
             return ThemeBackground.ImageUrl(m.groupValues[1].trim(), fallbackColor)
         }
         LINEAR_GRADIENT_PATTERN.find(spec)?.let { m ->
-            val angle = m.groupValues[1].toFloatOrNull() ?: 180f
-            val stops = splitTopLevelCommas(m.groupValues[2]).mapNotNull { stop ->
+            val parts = splitTopLevelCommas(m.groupValues[2])
+            // CSS side keywords (`to right`, `to bottom left`) become their angle; a plain list defaults to 180deg.
+            val sideAngle = parts.firstOrNull()?.trim()?.lowercase(Locale.ROOT)
+                ?.takeIf { it.startsWith("to ") }?.let(::sideToAngle)
+            val angle = m.groupValues[1].toFloatOrNull() ?: sideAngle ?: 180f
+            val stopParts = if (sideAngle != null) parts.drop(1) else parts
+            val stops = stopParts.mapNotNull { stop ->
                 val cleaned = stop.trim().replace(Regex("""\s+[\d.]+%$"""), "")
                 parseColor(cleaned)
             }
@@ -466,6 +498,210 @@ object ThemeResolver {
         prop("border-color")?.let(::parseColor)?.let { bc = it }
 
         return CardModStyle(bg, radius, bw, bc, opacity, blur, complex)
+    }
+
+    /**
+     * Parses one card's `card_mod.style` CSS (already rendered if it was a template). Takes declarations inside
+     * `ha-card { }` / `:host { }` blocks and bare top-level declarations; rules for other selectors only set
+     * [CardModStyle.hasComplexSelectors]. `var(--x)` resolves against [vars] (theme variables, no `--` prefix).
+     */
+    fun parseCardMod(css: String, vars: Map<String, String> = emptyMap()): CardModStyle {
+        val cleaned = JINJA_PATTERN.replace(CSS_COMMENT.replace(css, " "), " ")
+        if (cleaned.isBlank()) return CardModStyle()
+        val (decls, otherRules) = hostDeclarations(cleaned)
+        fun prop(name: String): String? =
+            Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;!\n]+)""", RegexOption.IGNORE_CASE).findAll(decls)
+                .lastOrNull()?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+                ?.let { resolveValue(it, vars, 0) }
+
+        val bgImage = prop("background-image")
+        val bgShort = prop("background")
+        val gradient = listOfNotNull(bgImage, bgShort).firstOrNull { "linear-gradient" in it.lowercase(Locale.ROOT) }
+            ?.let { parseBackground(it, 0) as? ThemeBackground.LinearGradient }
+        val bg = prop("background-color")?.let(::parseColor)
+            ?: bgShort?.takeIf { gradient == null || "gradient" !in it.lowercase(Locale.ROOT) }?.let(::parseColor)
+        val radius = prop("border-radius")?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }
+        val opacity = prop("opacity")?.let { o ->
+            if (o.endsWith("%")) o.dropLast(1).toFloatOrNull()?.div(100f) else o.toFloatOrNull()
+        }?.coerceIn(0f, 1f)
+        val blur = prop("backdrop-filter")?.let { bf ->
+            Regex("""blur\(\s*([\d.]+)px\s*\)""", RegexOption.IGNORE_CASE).find(bf)?.groupValues?.get(1)?.toFloatOrNull()
+        }
+        var bw: Float? = null
+        var bc: Int? = null
+        val border = prop("border")
+        if (border != null && (border.equals("none", ignoreCase = true) || border == "0")) {
+            bw = 0f
+        } else if (border != null) {
+            Regex("""([\d.]+)px""").find(border)?.groupValues?.get(1)?.toFloatOrNull()?.let { bw = it }
+            splitTopLevelSpaces(border).lastOrNull()?.let(::parseColor)?.let { bc = it }
+        }
+        prop("border-width")?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }?.let { bw = it }
+        prop("border-color")?.let(::parseColor)?.let { bc = it }
+
+        val padding = prop("padding")?.let { splitTopLevelSpaces(it).firstOrNull() }
+            ?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }
+        val fontSize = prop("font-size")?.let { parseDimensionDp(it, -1f) }?.takeIf { it > 0f }
+        val fontWeight = prop("font-weight")?.let(::parseFontWeight)
+        val letterSpacing = prop("letter-spacing")?.let { ls ->
+            val m = Regex("""(-?[\d.]+)\s*(em|px|rem)?""", RegexOption.IGNORE_CASE).find(ls) ?: return@let null
+            val v = m.groupValues[1].toFloatOrNull() ?: return@let null
+            when (m.groupValues[2].lowercase(Locale.ROOT)) {
+                "em" -> v
+                "rem" -> v * 16f / (fontSize ?: 16f)
+                else -> v / (fontSize ?: 16f)
+            }
+        }
+        val transitionMs = prop("transition")?.let(::parseOpacityTransitionMs)
+        val position = prop("position")?.lowercase(Locale.ROOT)
+        val transform = prop("transform")?.lowercase(Locale.ROOT).orEmpty().replace(" ", "")
+        val translate = Regex("""translate\(([^,)]+)(?:,([^)]+))?\)""").find(transform)
+        val centerY = "translatey(-50%)" in transform || translate?.groupValues?.get(2) == "-50%"
+        val centerX = "translatex(-50%)" in transform || translate?.groupValues?.get(1) == "-50%"
+
+        return CardModStyle(
+            backgroundColor = bg,
+            borderRadiusDp = radius,
+            borderWidthDp = bw,
+            borderColor = bc,
+            opacity = opacity,
+            blurRadiusDp = blur,
+            hasComplexSelectors = otherRules,
+            backgroundGradient = gradient,
+            paddingDp = padding,
+            fontSizeSp = fontSize,
+            fontWeight = fontWeight,
+            letterSpacingEm = letterSpacing,
+            transitionOpacityMs = transitionMs,
+            positionFixed = position == "fixed" || position == "absolute",
+            fixedTop = prop("top"),
+            fixedRight = prop("right"),
+            fixedBottom = prop("bottom"),
+            fixedLeft = prop("left"),
+            fixedWidth = prop("width"),
+            fixedCenterY = centerY,
+            fixedCenterX = centerX,
+        )
+    }
+
+    /**
+     * The raw `card_mod.style` of a card: a string, or the `"."` entry of a selector map (the card itself).
+     * Null when the card has none.
+     */
+    fun cardModStyleString(cardMod: JSONObject?): String? {
+        cardMod ?: return null
+        val style = cardMod.opt("style")
+        val raw = when (style) {
+            is String -> style
+            is JSONObject -> style.opt(".") as? String
+            else -> null
+        }
+        return raw?.takeIf { it.isNotBlank() }
+    }
+
+    /** Static parse of a card's `card_mod` (templates stripped), for layout decisions such as pinning. */
+    fun parseCardMod(cardMod: JSONObject?, vars: Map<String, String>): CardModStyle =
+        cardModStyleString(cardMod)?.let { parseCardMod(it, vars) } ?: CardModStyle()
+
+    /** Declarations of `ha-card` / `:host` blocks plus bare top-level ones, and whether any other rule exists. */
+    private fun hostDeclarations(css: String): Pair<String, Boolean> {
+        val top = StringBuilder()
+        val host = StringBuilder()
+        var other = false
+        var depth = 0
+        var segStart = 0
+        var bodyStart = 0
+        var selector = ""
+        for (i in css.indices) {
+            when (css[i]) {
+                '{' -> {
+                    if (depth == 0) {
+                        selector = css.substring(segStart, i).trim()
+                        bodyStart = i + 1
+                    }
+                    depth++
+                }
+                '}' -> if (depth > 0) {
+                    depth--
+                    if (depth == 0) {
+                        if (isHostSelector(selector)) host.append(css, bodyStart, i).append(";\n") else other = true
+                        segStart = i + 1
+                    }
+                }
+                ';' -> if (depth == 0) {
+                    top.append(css, segStart, i + 1).append('\n')
+                    segStart = i + 1
+                }
+            }
+        }
+        if (depth == 0 && segStart < css.length) top.append(css.substring(segStart))
+        return (top.toString() + "\n" + host) to other
+    }
+
+    private fun isHostSelector(selector: String): Boolean = selector.split(',').any { raw ->
+        val s = raw.trim().lowercase(Locale.ROOT)
+        s == "ha-card" || s == ":host" || s == "." ||
+            (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && ":hover" !in s && ":active" !in s)
+    }
+
+    private fun parseFontWeight(raw: String): Int? = when (raw.trim().lowercase(Locale.ROOT)) {
+        "thin" -> 100
+        "light", "lighter" -> 300
+        "normal", "regular" -> 400
+        "medium" -> 500
+        "semibold", "semi-bold" -> 600
+        "bold", "bolder" -> 700
+        else -> raw.trim().toFloatOrNull()?.toInt()?.coerceIn(1, 1000)
+    }
+
+    /** `opacity 0.8s ease`, `all 400ms`, or a bare `0.3s` → ms; null when no item covers opacity. */
+    private fun parseOpacityTransitionMs(raw: String): Long? {
+        for (item in splitTopLevelCommas(raw)) {
+            val tokens = splitTopLevelSpaces(item.trim().lowercase(Locale.ROOT))
+            val first = tokens.firstOrNull() ?: continue
+            val covers = first == "opacity" || first == "all" || TIME_PATTERN.matches(first)
+            if (!covers) continue
+            val time = tokens.firstNotNullOfOrNull { TIME_PATTERN.matchEntire(it) } ?: continue
+            val v = time.groupValues[1].toDoubleOrNull() ?: continue
+            val ms = if (time.groupValues[2] == "ms") v else v * 1000.0
+            return ms.toLong().coerceIn(0L, 3000L)
+        }
+        return null
+    }
+
+    private fun sideToAngle(side: String): Float? {
+        val words = side.removePrefix("to ").trim().split(Regex("""\s+""")).toSet()
+        val top = "top" in words
+        val bottom = "bottom" in words
+        val left = "left" in words
+        val right = "right" in words
+        return when {
+            top && right -> 45f
+            bottom && right -> 135f
+            bottom && left -> 225f
+            top && left -> 315f
+            top -> 0f
+            right -> 90f
+            bottom -> 180f
+            left -> 270f
+            else -> null
+        }
+    }
+
+    private fun splitTopLevelSpaces(s: String): List<String> {
+        val out = ArrayList<String>()
+        var depth = 0
+        val cur = StringBuilder()
+        for (c in s) {
+            when {
+                c == '(' -> { depth++; cur.append(c) }
+                c == ')' -> { if (depth > 0) depth--; cur.append(c) }
+                c.isWhitespace() && depth == 0 -> if (cur.isNotEmpty()) { out += cur.toString(); cur.clear() }
+                else -> cur.append(c)
+            }
+        }
+        if (cur.isNotEmpty()) out += cur.toString()
+        return out
     }
 
     private fun parseAlpha(raw: String?): Int {

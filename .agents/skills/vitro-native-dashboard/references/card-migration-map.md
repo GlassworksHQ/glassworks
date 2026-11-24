@@ -32,7 +32,7 @@ Every card below renders 100% natively in Vitro with **zero GeckoView**.
 - View `badges` (rendered as compact top status pills) and `subview: true` (back-arrow navigation)
 - `visibility:` on sections and cards (`state`, `numeric_state`, `and`, `or`, `not`, `screen`)
 
-## Tier 2: Native HACS Fast-Path Cards (12)
+## Tier 2: Native HACS Fast-Path Cards (14)
 
 - `custom:mushroom-entity-card`
 - `custom:mushroom-light-card`
@@ -46,6 +46,8 @@ Every card below renders 100% natively in Vitro with **zero GeckoView**.
 - `custom:bubble-card`
 - `custom:mini-graph-card`
 - `custom:clock-weather-card`
+- `custom:modern-circular-gauge` (`gauge_type` `standard` / `half` / `full`, `min`, `max`, `segments`, `smooth_segments`, `start_from_zero`, `secondary`)
+- `custom:bar-card` (`entity` or `entities`, `min`, `max`, `height`, `color`, `severity: [{from, to, color}]`, `positions: {icon, name, value}`)
 
 ## Tier 3 → Native Migration Map
 

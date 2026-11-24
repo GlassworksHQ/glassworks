@@ -56,6 +56,8 @@ NATIVE_HACS_TYPES = {
     "custom:bubble-card",
     "custom:mini-graph-card",
     "custom:clock-weather-card",
+    "custom:modern-circular-gauge",
+    "custom:bar-card",
 }
 
 SUPPORTED_TILE_FEATURES = {

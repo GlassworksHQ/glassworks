@@ -45,7 +45,9 @@
     "custom:mushroom-person-card",
     "custom:bubble-card",
     "custom:mini-graph-card",
-    "custom:clock-weather-card"
+    "custom:clock-weather-card",
+    "custom:modern-circular-gauge",
+    "custom:bar-card"
   ],
   "containerTypes": ["grid", "horizontal-stack", "vertical-stack", "conditional"],
   "supportedTileFeatures": [

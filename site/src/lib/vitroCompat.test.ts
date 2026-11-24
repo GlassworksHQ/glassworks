@@ -33,7 +33,7 @@ describe("the published compatibility manifest", () => {
 
   it("lists the HACS cards the Vitro engine draws natively, verbatim", () => {
     expect(published.nativeHacsTypes).toEqual(kotlinSet("NATIVE_HACS_TYPES"));
-    expect(published.nativeHacsTypes).toHaveLength(12);
+    expect(published.nativeHacsTypes).toHaveLength(14);
   });
 
   it("matches the audit script's lists", () => {

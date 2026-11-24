@@ -148,7 +148,7 @@ Accept climate_entity and an optional lights array in the Lovelace card config.`
       "Rewrites an existing custom JS or HACS Lovelace dashboard (including two-way mirror panels) into pure Vitro-native Sections YAML and a matching theme so GeckoView never has to boot.",
     entities: ["light.*", "weather.<home>", "climate.<room>", "media_player.<room>"],
     tips: [
-      "Stick to built-in Lovelace cards plus Vitro's 12 native HACS cards (Mushroom, Bubble Card, mini-graph-card, clock-weather-card) so zero browser processes start.",
+      "Stick to built-in Lovelace cards plus Vitro's 14 native HACS cards (Mushroom, Bubble Card, mini-graph-card, clock-weather-card, modern-circular-gauge, bar-card) so zero browser processes start.",
       "Replace custom JS presence timers with Home Assistant visibility conditions backed by a binary_sensor with delay_off.",
       "Move visual polish (pure #000000 mirror black, translucent glass cards, shadows, accents) into a Home Assistant YAML theme instead of Shadow-DOM card-mod.",
     ],
@@ -156,7 +156,7 @@ Accept climate_entity and an optional lights array in the Lovelace card config.`
 
 Strict card rules (use ONLY these card types):
 - Built-in Lovelace cards: tile (features: light-brightness, light-color-temp, fan-speed, cover-open-close, cover-position, climate-hvac-modes, target-temperature, select-options, media-player-volume-slider, toggle, media-player-playback, light-color-favorites, numeric-input, vacuum-commands), entities, glance, button, heading, clock, sensor, history-graph, statistics-graph, gauge, thermostat, humidifier, weather-forecast, markdown (Jinja2 templates), picture, picture-entity, picture-glance, picture-elements, media-control, alarm-panel, todo-list, calendar, logbook, area, entity, light, grid, horizontal-stack, vertical-stack, conditional, entity-filter.
-- Native HACS cards (zero browser): custom:mushroom-entity-card, custom:mushroom-light-card, custom:mushroom-title-card, custom:mushroom-chips-card, custom:mushroom-template-card, custom:mushroom-climate-card, custom:mushroom-fan-card, custom:mushroom-cover-card, custom:mushroom-person-card, custom:bubble-card, custom:mini-graph-card, custom:clock-weather-card.
+- Native HACS cards (zero browser): custom:mushroom-entity-card, custom:mushroom-light-card, custom:mushroom-title-card, custom:mushroom-chips-card, custom:mushroom-template-card, custom:mushroom-climate-card, custom:mushroom-fan-card, custom:mushroom-cover-card, custom:mushroom-person-card, custom:bubble-card, custom:mini-graph-card, custom:clock-weather-card, custom:modern-circular-gauge, custom:bar-card.
 - Do NOT use any other custom:* card (no custom JS panel cards, button-card, apexcharts-card, layout-card, stack-in-card, auto-entities, or mod-card).
 
 Layout, styling & behavior rules:

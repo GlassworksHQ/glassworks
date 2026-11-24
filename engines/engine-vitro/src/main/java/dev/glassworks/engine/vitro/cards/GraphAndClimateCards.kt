@@ -1161,3 +1161,578 @@ class WeatherIconView(context: Context) : View(context) {
         const val SNOW = 0xFF90CAF9.toInt()
     }
 }
+
+/** A CSS color, or `[r, g, b]` as modern-circular-gauge and bar-card accept, or null. */
+private fun configColor(raw: Any?): Int? = when (raw) {
+    is String -> raw.takeIf { it.isNotBlank() }?.let { MarkdownInline.parseCssColor(it) }
+    is org.json.JSONArray -> if (raw.length() >= 3) {
+        Color.rgb(raw.optInt(0).coerceIn(0, 255), raw.optInt(1).coerceIn(0, 255), raw.optInt(2).coerceIn(0, 255))
+    } else {
+        null
+    }
+    else -> null
+}
+
+/** A number from config, or [fallback] when it's missing or not numeric (a template / entity id). */
+private fun configNumber(raw: JSONObject, key: String, fallback: Double): Double {
+    val v = raw.opt(key) ?: return fallback
+    return when (v) {
+        is Number -> v.toDouble()
+        is String -> v.trim().toDoubleOrNull() ?: fallback
+        else -> fallback
+    }.takeIf { !it.isNaN() && !it.isInfinite() } ?: fallback
+}
+
+/** `12.0` → `12`, `12.345` → `12.3`; [decimals] pins the digits when set. */
+private fun formatNumber(v: Double, decimals: Int? = null): String = when {
+    decimals != null -> String.format(Locale.getDefault(), "%.${decimals.coerceIn(0, 6)}f", v)
+    v == Math.rint(v) && kotlin.math.abs(v) < 1e12 -> v.toLong().toString()
+    kotlin.math.abs(v) >= 100.0 -> String.format(Locale.getDefault(), "%.0f", v)
+    else -> String.format(Locale.getDefault(), "%.1f", v)
+}
+
+/**
+ * Native `custom:modern-circular-gauge` (Tier 2): a round-capped Canvas ring (`gauge_type` `standard` = 270°,
+ * `half` = 180°, `full` = 360°) whose arc eases to the state over 240 ms, colored by `segments`, with the value,
+ * unit, an optional `secondary` line and the name in its middle.
+ */
+class ModernCircularGaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
+    /** One `segments` entry: from [from] up, the arc is [color]. */
+    data class Segment(val from: Double, val color: Int)
+
+    val gaugeType: String = config.raw.optString("gauge_type", "standard").lowercase(Locale.ROOT).let {
+        if (it in setOf("standard", "half", "full")) it else "standard"
+    }
+    val minVal: Double = configNumber(config.raw, "min", 0.0)
+    val maxVal: Double = configNumber(config.raw, "max", 100.0)
+    val segments: List<Segment> = parseSegments(config.raw.optJSONArray("segments"))
+    private val smooth = config.raw.optBoolean("smooth_segments", false)
+    private val startFromZero = config.raw.optBoolean("start_from_zero", false)
+    private val showState = config.raw.optBoolean("show_state", true)
+    private val showName = config.raw.optBoolean("show_name", true)
+    private val showIcon = config.raw.optBoolean("show_icon", true)
+    private val decimals: Int? = config.raw.opt("decimals")?.let { (it as? Number)?.toInt() ?: it.toString().toIntOrNull() }
+
+    /** `secondary` as an entity id plus its own unit and show flag, or null. */
+    private val secondaryEntity: String?
+    private val secondaryUnit: String?
+    private val secondaryShowState: Boolean
+
+    internal val ring = GaugeRingView(
+        ctx.context,
+        trackColor = ctx.theme.dividerColor,
+        textColor = ctx.theme.primaryTextColor,
+        secondaryColor = ctx.theme.secondaryTextColor,
+        sweep = sweepFor(gaugeType),
+        fontScale = ctx.theme.fontScale,
+    )
+    internal val nameView = label(ctx, ctx.scaledSp(14f), ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+        gravity = Gravity.CENTER
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+    }
+
+    init {
+        val sec = config.raw.opt("secondary")
+        when (sec) {
+            is JSONObject -> {
+                secondaryEntity = sec.optString("entity", "").ifEmpty { null }
+                secondaryUnit = sec.optString("unit", "").ifEmpty { null }
+                secondaryShowState = sec.optBoolean("show_state", true)
+            }
+            is String -> {
+                secondaryEntity = sec.takeIf { '.' in it && !isTemplate(it) }
+                secondaryUnit = null
+                secondaryShowState = true
+            }
+            else -> {
+                secondaryEntity = config.raw.optString("secondary_entity", "").ifEmpty { null }
+                secondaryUnit = null
+                secondaryShowState = true
+            }
+        }
+
+        val col = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(ctx.px(12f), ctx.px(14f), ctx.px(12f), ctx.px(12f))
+        }
+        val ringHeight = if (gaugeType == "half") 92f else 136f
+        col.addView(ring, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(ringHeight)))
+        if (showName) col.addView(nameView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(6f) })
+        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+
+        val eid = config.entity
+        if (eid != null) {
+            isClickable = true
+            enablePressFeedback()
+            setOnClickListener { ctx.performAction(ActionConfig.parse(config.raw.optJSONObject("tap_action")), eid) }
+            bindHoldAction(holdFor(config.raw, eid), eid)
+            observe(eid) { s -> bindPrimary(eid, s) }
+        }
+        secondaryEntity?.let { sid ->
+            observe(sid) { s ->
+                if (!secondaryShowState || s == null) {
+                    ring.setSecondary(null)
+                } else {
+                    val num = s.state.toDoubleOrNull()
+                    val unit = secondaryUnit ?: s.unit.orEmpty()
+                    val suffix = if (unit.isEmpty()) "" else " $unit"
+                    ring.setSecondary(if (num != null) formatNumber(num, decimals) + suffix else s.formattedState())
+                }
+            }
+        }
+    }
+
+    private fun bindPrimary(eid: String, s: dev.glassworks.engine.vitro.data.EntityState?) {
+        val v = s?.state?.toDoubleOrNull()
+        val span = (maxVal - minVal).takeIf { kotlin.math.abs(it) > 1e-9 } ?: 1.0
+        fun frac(x: Double) = ((x - minVal) / span).toFloat().coerceIn(0f, 1f)
+        val to = if (v != null) frac(v) else 0f
+        val from = if (startFromZero) frac(0.0) else 0f
+        val color = v?.let { segmentColor(segments, it, smooth) } ?: ctx.theme.primaryColor
+        val unit = config.raw.optString("unit", "").ifEmpty { s?.unit.orEmpty() }
+        val valueText = when {
+            !showState -> ""
+            v != null -> formatNumber(v, decimals)
+            s == null -> "–"
+            else -> s.formattedState()
+        }
+        val icon = if (showIcon && (config.icon != null || s != null)) MdiIcons.resolveIconName(config.icon, s) else null
+        ring.update(from, to, color, valueText, if (v != null && showState) unit else "", icon)
+        nameView.text = config.name ?: s?.friendlyName ?: eid
+    }
+
+    companion object {
+        fun sweepFor(type: String): Float = when (type) {
+            "full" -> 360f
+            "half" -> 180f
+            else -> 270f
+        }
+
+        fun parseSegments(arr: org.json.JSONArray?): List<Segment> {
+            if (arr == null) return emptyList()
+            val out = ArrayList<Segment>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val from = configNumber(o, "from", Double.NaN).takeIf { !it.isNaN() } ?: continue
+                val color = configColor(o.opt("color")) ?: continue
+                out += Segment(from, color)
+            }
+            return out.sortedBy { it.from }
+        }
+
+        /**
+         * The arc color at [value]: the last segment at or below it, or, with [smooth], a blend between the two
+         * segments around it. Below every segment the first one's color holds; no segments gives null.
+         */
+        fun segmentColor(segments: List<Segment>, value: Double, smooth: Boolean = false): Int? {
+            if (segments.isEmpty()) return null
+            val idx = segments.indexOfLast { value >= it.from }
+            if (idx < 0) return segments.first().color
+            val cur = segments[idx]
+            if (!smooth || idx == segments.lastIndex) return cur.color
+            val next = segments[idx + 1]
+            val t = ((value - cur.from) / (next.from - cur.from).coerceAtLeast(1e-9)).toFloat().coerceIn(0f, 1f)
+            return HaMotion.lerpColor(cur.color, next.color, t)
+        }
+    }
+}
+
+/** The ring of [ModernCircularGaugeCardView]: track, round-capped active arc and centered labels. */
+internal class GaugeRingView(
+    context: Context,
+    private val trackColor: Int,
+    textColor: Int,
+    secondaryColor: Int,
+    val sweep: Float,
+    private val fontScale: Float,
+) : View(context) {
+    private val dp = resources.displayMetrics.density
+    private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = textColor
+        typeface = Inter.typeface(context, Inter.MEDIUM, 32f)
+        textAlign = Paint.Align.LEFT
+        fontFeatureSettings = "tnum"
+    }
+    private val unitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = secondaryColor
+        typeface = Inter.typeface(context, Inter.REGULAR, 14f)
+        textAlign = Paint.Align.LEFT
+    }
+    private val secondaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = secondaryColor
+        typeface = Inter.typeface(context, Inter.REGULAR, 12f)
+        textAlign = Paint.Align.CENTER
+        fontFeatureSettings = "tnum"
+    }
+    private val iconColor = secondaryColor
+    private val oval = RectF()
+    private var startFrac = 0f
+    private var fraction = 0f
+    private var animator: ValueAnimator? = null
+    private var icon: String? = null
+    private var iconDrawable: MdiIconDrawable? = null
+
+    /** The arc's end as 0..1 of the sweep, once any animation settles. */
+    var targetFraction = -1f
+        private set
+    var activeColor: Int = 0
+        private set
+    var valueText: String = "–"
+        private set
+    var unitText: String = ""
+        private set
+    var secondaryText: String? = null
+        private set
+
+    fun update(from: Float, to: Float, color: Int, value: String, unit: String, iconName: String?) {
+        startFrac = from.coerceIn(0f, 1f)
+        activeColor = color
+        valueText = value
+        unitText = unit
+        if (iconName != icon) {
+            icon = iconName
+            iconDrawable = null
+        }
+        val target = to.coerceIn(0f, 1f)
+        if (target == targetFraction) {
+            invalidate()
+            return
+        }
+        targetFraction = target
+        animator?.cancel()
+        val start = fraction
+        animator = HaMotion.run(this, SWEEP_MS) { t ->
+            fraction = HaMotion.lerp(start, target, t)
+            invalidate()
+        }
+        invalidate()
+    }
+
+    fun setSecondary(text: String?) {
+        secondaryText = text
+        invalidate()
+    }
+
+    override fun onDetachedFromWindow() {
+        animator?.cancel()
+        animator = null
+        if (targetFraction >= 0f) fraction = targetFraction
+        super.onDetachedFromWindow()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        if (width <= 0 || height <= 0) return
+        val half = sweep <= 180f
+        // A half ring sits on the bottom edge; the others are centered (a 270° arc drops a little for balance).
+        val maxR = if (half) minOf(width / 2f, height.toFloat()) else minOf(width, height) / 2f
+        val stroke = (maxR * 0.13f).coerceIn(6f * dp, 16f * dp)
+        val r = (maxR - stroke / 2f - 2f * dp).coerceAtLeast(12f * dp)
+        val cx = width / 2f
+        val cy = when {
+            half -> height - stroke / 2f - 2f * dp
+            sweep < 360f -> height / 2f + r * 0.08f
+            else -> height / 2f
+        }
+        oval.set(cx - r, cy - r, cx + r, cy + r)
+        val startAngle = when {
+            sweep >= 360f -> 270f
+            half -> 180f
+            else -> 135f
+        }
+        arcPaint.strokeWidth = stroke
+        arcPaint.color = trackColor
+        canvas.drawArc(oval, startAngle, sweep, false, arcPaint)
+        val lo = minOf(startFrac, fraction)
+        val hi = maxOf(startFrac, fraction)
+        if (hi - lo > 0.0005f) {
+            arcPaint.color = activeColor
+            canvas.drawArc(oval, startAngle + sweep * lo, sweep * (hi - lo), false, arcPaint)
+        }
+
+        val inner = (r - stroke) * if (half) 1.6f else 1.5f
+        val baseValue = (r * if (half) 0.5f else 0.42f).coerceAtMost(40f * dp * fontScale)
+        valuePaint.textSize = baseValue
+        unitPaint.textSize = baseValue * 0.42f
+        var vw = valuePaint.measureText(valueText)
+        var uw = if (unitText.isEmpty()) 0f else unitPaint.measureText(unitText) + 3f * dp
+        if (vw + uw > inner && vw + uw > 0f) {
+            val k = inner / (vw + uw)
+            valuePaint.textSize *= k
+            unitPaint.textSize *= k
+            vw *= k
+            uw *= k
+        }
+        val baseline = if (half) cy - 4f * dp else cy + valuePaint.textSize * 0.34f
+        val x0 = cx - (vw + uw) / 2f
+        canvas.drawText(valueText, x0, baseline, valuePaint)
+        if (unitText.isNotEmpty()) {
+            canvas.drawText(unitText, x0 + vw + 3f * dp, baseline - valuePaint.textSize * 0.38f, unitPaint)
+        }
+        secondaryText?.takeIf { it.isNotEmpty() }?.let { sec ->
+            secondaryPaint.textSize = (baseValue * 0.36f).coerceAtLeast(10f * dp)
+            val y = if (half) baseline - valuePaint.textSize - 2f * dp else baseline + secondaryPaint.textSize + 6f * dp
+            canvas.drawText(sec, cx, y, secondaryPaint)
+        }
+        icon?.let { name ->
+            if (half) return@let
+            val size = (r * 0.3f).toInt().coerceIn((14f * dp).toInt(), (28f * dp).toInt())
+            val d = iconDrawable ?: MdiIconDrawable(name, iconColor, size).also { iconDrawable = it }
+            val top = (baseline - valuePaint.textSize - size - 4f * dp).toInt()
+            d.setBounds((cx - size / 2f).toInt(), top, (cx + size / 2f).toInt(), top + size)
+            d.draw(canvas)
+        }
+    }
+
+    private companion object {
+        const val SWEEP_MS = 240L
+    }
+}
+
+/**
+ * Native `custom:bar-card` (Tier 2): one rounded horizontal bar per entity (`entity` or `entities`), its fill easing
+ * to the state, colored by `severity` ranges or `color`, with the icon outside and the name and value inside by
+ * default (`positions: { icon, name, value }` take `inside`, `outside` or `off`).
+ */
+class BarCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
+    /** One `severity` range: values in [from]..[to] draw in [color]. */
+    data class Severity(val from: Double, val to: Double, val color: Int)
+
+    /** One bar's settings, card-level values filled in. */
+    data class BarSpec(
+        val entity: String,
+        val name: String?,
+        val icon: String?,
+        val color: Int?,
+        val min: Double,
+        val max: Double,
+        val unit: String?,
+        val severity: List<Severity>,
+        val tapAction: JSONObject?,
+        val holdAction: JSONObject?,
+    )
+
+    /** One rendered bar, for live updates (and tests). */
+    internal class Row(val spec: BarSpec, val fill: BarFillView, val nameView: TextView, val valueView: TextView, val iconView: MdiIconView)
+
+    val specs: List<BarSpec> = parseSpecs(config.raw)
+    private val heightDp = configNumber(config.raw, "height", 36.0).toFloat().coerceIn(8f, 120f)
+    private val positions = config.raw.optJSONObject("positions")
+    private val iconPos = positions?.optString("icon", "")?.ifEmpty { null } ?: "outside"
+    private val namePos = positions?.optString("name", "")?.ifEmpty { null } ?: "inside"
+    private val valuePos = positions?.optString("value", "")?.ifEmpty { null } ?: "inside"
+    private val decimals: Int? = config.raw.opt("decimal")?.let { (it as? Number)?.toInt() ?: it.toString().toIntOrNull() }
+    internal val rows = ArrayList<Row>()
+
+    init {
+        val col = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ctx.px(14f), ctx.px(12f), ctx.px(14f), ctx.px(12f))
+        }
+        config.title?.let { t ->
+            col.addView(label(ctx, ctx.scaledSp(16f), ctx.theme.primaryTextColor, Inter.MEDIUM).apply { text = t },
+                LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = ctx.px(10f) })
+        }
+        specs.forEachIndexed { i, spec ->
+            col.addView(buildRow(spec), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+                if (i > 0) topMargin = ctx.px(8f)
+            })
+        }
+        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+    }
+
+    private fun buildRow(spec: BarSpec): View {
+        val barColor = spec.color ?: ctx.theme.primaryColor
+        val row = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            setOnClickListener {
+                ctx.performAction(ActionConfig.parse(spec.tapAction ?: config.raw.optJSONObject("tap_action")), spec.entity)
+            }
+            val hold = spec.holdAction ?: config.raw.optJSONObject("hold_action")
+            bindHoldAction(ctx, ActionConfig.parse(hold, "more-info"), spec.entity)
+        }
+        val textSp = ctx.scaledSp(if (heightDp < 26f) 12f else 14f)
+        val iconView = MdiIconView(ctx.context)
+        val nameView = label(ctx, textSp, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        val valueView = label(ctx, textSp, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+            maxLines = 1
+            fontFeatureSettings = "tnum"
+        }
+        val fill = BarFillView(ctx.context, CardSurface.withAlpha(barColor, 0.22f), minOf(ctx.theme.cardBorderRadiusDp, heightDp / 2f) * ctx.dp)
+        val iconSize = ctx.px(minOf(24f, heightDp * 0.66f).coerceAtLeast(14f))
+
+        if (iconPos == "outside") row.addView(iconView, LinearLayout.LayoutParams(iconSize, iconSize).apply { marginEnd = ctx.px(10f) })
+        if (namePos == "outside") row.addView(nameView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = ctx.px(10f) })
+        val bar = FrameLayout(ctx.context)
+        bar.addView(fill, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        val inside = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(ctx.px(10f), 0, ctx.px(10f), 0)
+        }
+        if (iconPos == "inside") inside.addView(iconView, LinearLayout.LayoutParams(iconSize, iconSize).apply { marginEnd = ctx.px(8f) })
+        if (namePos == "inside") inside.addView(nameView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        else inside.addView(View(ctx.context), LinearLayout.LayoutParams(0, 1, 1f))
+        if (valuePos == "inside") inside.addView(valueView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(8f) })
+        bar.addView(inside, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        row.addView(bar, LinearLayout.LayoutParams(0, ctx.px(heightDp), 1f))
+        if (valuePos == "outside") row.addView(valueView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(10f) })
+
+        val r = Row(spec, fill, nameView, valueView, iconView)
+        rows += r
+        observe(spec.entity) { s -> bindRow(r, s) }
+        return row
+    }
+
+    private fun bindRow(row: Row, s: dev.glassworks.engine.vitro.data.EntityState?) {
+        val spec = row.spec
+        val v = s?.state?.toDoubleOrNull()
+        val span = (spec.max - spec.min).takeIf { kotlin.math.abs(it) > 1e-9 } ?: 1.0
+        val frac = if (v != null) ((v - spec.min) / span).toFloat().coerceIn(0f, 1f) else 0f
+        val color = v?.let { severityColor(spec.severity, it) } ?: spec.color ?: ctx.theme.primaryColor
+        row.fill.update(frac, color)
+        row.nameView.text = spec.name ?: s?.friendlyName ?: spec.entity
+        val unit = spec.unit ?: s?.unit.orEmpty()
+        row.valueView.text = when {
+            v != null -> formatNumber(v, decimals) + when {
+                unit.isEmpty() -> ""
+                unit == "%" -> "%"
+                else -> " $unit"
+            }
+            s == null -> "–"
+            else -> s.formattedState()
+        }
+        row.iconView.setIcon(MdiIcons.resolveIconName(spec.icon, s), color)
+    }
+
+    companion object {
+        fun parseSeverity(arr: org.json.JSONArray?): List<Severity> {
+            if (arr == null) return emptyList()
+            val out = ArrayList<Severity>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val color = configColor(o.opt("color")) ?: continue
+                out += Severity(
+                    configNumber(o, "from", Double.NEGATIVE_INFINITY),
+                    configNumber(o, "to", Double.POSITIVE_INFINITY),
+                    color,
+                )
+            }
+            return out
+        }
+
+        /** bar-card's rule: the first range holding [value] (both ends inclusive), or null. */
+        fun severityColor(ranges: List<Severity>, value: Double): Int? = ranges.firstOrNull { value >= it.from && value <= it.to }?.color
+
+        /** Every bar the card draws: `entities` (strings or objects) or the single `entity`, card values as defaults. */
+        fun parseSpecs(raw: JSONObject): List<BarSpec> {
+            val min = configNumber(raw, "min", 0.0)
+            val max = configNumber(raw, "max", 100.0)
+            val color = configColor(raw.opt("color"))
+            val severity = parseSeverity(raw.optJSONArray("severity"))
+            val unit = raw.optString("unit_of_measurement", "").ifEmpty { null }
+            fun base(entity: String) = BarSpec(
+                entity, raw.optString("name", "").ifEmpty { null }, raw.optString("icon", "").ifEmpty { null },
+                color, min, max, unit, severity, null, null,
+            )
+            val arr = raw.optJSONArray("entities")
+            if (arr == null || arr.length() == 0) {
+                val e = raw.optString("entity", "").ifEmpty { return emptyList() }
+                return listOf(base(e))
+            }
+            val out = ArrayList<BarSpec>(arr.length())
+            for (i in 0 until arr.length()) {
+                when (val item = arr.opt(i)) {
+                    is String -> if (item.isNotBlank()) out += base(item).copy(name = null, icon = null)
+                    is JSONObject -> {
+                        val e = item.optString("entity", "").ifEmpty { continue }
+                        out += BarSpec(
+                            entity = e,
+                            name = item.optString("name", "").ifEmpty { null },
+                            icon = item.optString("icon", "").ifEmpty { null },
+                            color = configColor(item.opt("color")) ?: color,
+                            min = configNumber(item, "min", min),
+                            max = configNumber(item, "max", max),
+                            unit = item.optString("unit_of_measurement", "").ifEmpty { null } ?: unit,
+                            severity = item.optJSONArray("severity")?.let(::parseSeverity) ?: severity,
+                            tapAction = item.optJSONObject("tap_action"),
+                            holdAction = item.optJSONObject("hold_action"),
+                        )
+                    }
+                }
+            }
+            return out
+        }
+    }
+}
+
+/** A bar-card bar: a rounded translucent track and a fill that eases to its fraction over 240 ms. */
+internal class BarFillView(context: Context, private val trackColor: Int, private val radiusPx: Float) : View(context) {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val rect = RectF()
+    private val clip = Path()
+    private var fraction = 0f
+    private var animator: ValueAnimator? = null
+
+    var targetFraction = -1f
+        private set
+    var fillColor: Int = 0
+        private set
+
+    fun update(frac: Float, color: Int) {
+        fillColor = color
+        val to = frac.coerceIn(0f, 1f)
+        if (to == targetFraction) {
+            invalidate()
+            return
+        }
+        targetFraction = to
+        animator?.cancel()
+        val from = fraction
+        animator = HaMotion.run(this, FILL_MS) { t ->
+            fraction = HaMotion.lerp(from, to, t)
+            invalidate()
+        }
+        invalidate()
+    }
+
+    override fun onDetachedFromWindow() {
+        animator?.cancel()
+        animator = null
+        if (targetFraction >= 0f) fraction = targetFraction
+        super.onDetachedFromWindow()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        val r = radiusPx.coerceAtMost(h / 2f)
+        rect.set(0f, 0f, w, h)
+        paint.color = trackColor
+        canvas.drawRoundRect(rect, r, r, paint)
+        if (fraction <= 0f) return
+        clip.reset()
+        clip.addRoundRect(rect, r, r, Path.Direction.CW)
+        canvas.save()
+        canvas.clipPath(clip)
+        paint.color = fillColor
+        rect.set(0f, 0f, w * fraction, h)
+        canvas.drawRect(rect, paint)
+        canvas.restore()
+    }
+
+    private companion object {
+        const val FILL_MS = 240L
+    }
+}

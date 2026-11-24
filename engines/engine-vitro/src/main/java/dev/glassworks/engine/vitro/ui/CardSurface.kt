@@ -27,8 +27,11 @@ import dev.glassworks.engine.vitro.data.HaDashboardClient
 import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.island.VitroIslandServer
 import dev.glassworks.engine.vitro.model.ActionConfig
+import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.LovelaceResource
+import dev.glassworks.engine.vitro.theme.CardModStyle
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
+import dev.glassworks.engine.vitro.theme.ThemeResolver
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.net.HttpURLConnection
@@ -276,6 +279,52 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         elevation = theme.cardElevationDp * ctx.dp
     }
 
+    /** The card's own `card_mod` as last applied (re-rendered live for templated styles). Empty when none. */
+    var activeCardMod: CardModStyle = CardModStyle()
+        private set
+
+    /**
+     * Applies the card's `card_mod.style` (a string, or the `"."` entry of a selector map) natively: gradient or solid
+     * fill, border, radius, padding and opacity. A Jinja style (`{{ }}` / `{% %}`) is rendered by HA and re-applied
+     * every time it changes; like Mushroom, `entity` is set to the card's entity first when the template uses it.
+     */
+    fun applyCardMod(config: CardConfig) {
+        val rawStyle = ThemeResolver.cardModStyleString(config.raw.optJSONObject("card_mod")) ?: return
+        if ("{{" in rawStyle || "{%" in rawStyle) {
+            val entity = config.entity
+            val tpl = if (entity != null && ENTITY_WORD.containsMatchIn(rawStyle)) {
+                "{% set entity = '$entity' %}$rawStyle"
+            } else {
+                rawStyle
+            }
+            track(ctx.subscribeTemplate(tpl) { rendered -> ctx.main.post { applyStyleCss(rendered) } })
+        } else {
+            applyStyleCss(rawStyle)
+        }
+    }
+
+    /** Parses one rendered `card_mod` CSS string and restyles the surface from it. */
+    fun applyStyleCss(css: String) {
+        val theme = ctx.theme
+        val mod = ThemeResolver.parseCardMod(css, theme.vars)
+        activeCardMod = mod
+        val radiusPx = (mod.borderRadiusDp ?: theme.cardBorderRadiusDp) * ctx.dp
+        val strokePx = ((mod.borderWidthDp ?: theme.cardBorderWidthDp) * ctx.dp).toInt()
+        val strokeColor = mod.borderColor ?: theme.cardBorderColor
+        val gradient = mod.backgroundGradient
+        val restyle = gradient != null || mod.backgroundColor != null || mod.borderColor != null ||
+            mod.borderWidthDp != null || mod.borderRadiusDp != null
+        if (restyle) {
+            background = (if (gradient != null) GradientDrawable(orientationFor(gradient.angleDeg), gradient.colors) else GradientDrawable()).apply {
+                if (gradient == null) setColor(mod.backgroundColor ?: theme.cardBackgroundColor)
+                cornerRadius = radiusPx
+                if (strokePx > 0) setStroke(strokePx, strokeColor)
+            }
+        }
+        mod.paddingDp?.let { p -> ctx.px(p).let { setPadding(it, it, it, it) } }
+        mod.opacity?.let { alpha = it.coerceIn(0f, 1f) }
+    }
+
     /**
      * Subtle tactile press feedback: scales to 0.975 over 70 ms on touch-down and springs back to 1.0
      * over 120 ms on release/cancel. The touch listener returns false, so clicks still fire normally.
@@ -327,6 +376,22 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
 
     companion object {
         private const val PRESS_SCALE = 0.975f
+        private val ENTITY_WORD = Regex("""\bentity\b""")
+
+        /** CSS gradient angle (0 = to top, clockwise) → the nearest of [GradientDrawable]'s eight orientations. */
+        fun orientationFor(angleDeg: Float): GradientDrawable.Orientation {
+            val norm = ((angleDeg % 360f) + 360f) % 360f
+            return when (Math.round(norm / 45f) % 8) {
+                0 -> GradientDrawable.Orientation.BOTTOM_TOP
+                1 -> GradientDrawable.Orientation.BL_TR
+                2 -> GradientDrawable.Orientation.LEFT_RIGHT
+                3 -> GradientDrawable.Orientation.TL_BR
+                4 -> GradientDrawable.Orientation.TOP_BOTTOM
+                5 -> GradientDrawable.Orientation.TR_BL
+                6 -> GradientDrawable.Orientation.RIGHT_LEFT
+                else -> GradientDrawable.Orientation.BR_TL
+            }
+        }
 
         /** Computes a soft tinted pill/circle color (e.g. 20% alpha of active domain color). */
         fun withAlpha(color: Int, alphaFraction: Float): Int {

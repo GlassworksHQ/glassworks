@@ -1851,6 +1851,8 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
 /**
  * Native HA `clock` card (`hui-clock-card`): a centered 42 sp time (52 sp with `clock_size: large`), with seconds
  * and AM/PM stacked in a 16 sp (20 sp) column beside it. Without `time_format` it follows the device's 12/24 hour setting.
+ * A card-mod `font-size: Npx` sets the digits' size instead (18–220 sp, the side column at 26% of it), and
+ * `font-weight: 300` (or `200`, `light`) draws them in Inter Light, for big wall-clock layouts.
  */
 class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
     private val showSeconds = config.raw.optBoolean("show_seconds", false)
@@ -1869,8 +1871,12 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
     private val secondsView: TextView
     private val ampmView: TextView
     private val dateView: TextView
-    private val baseTimeSp = if (large) 52f else 42f
-    private val baseSideSp = if (large) 20f else 16f
+    /** `card_mod.style` as plain text: a `font-size: Npx` / `font-weight: 300` there sizes the digits. */
+    private val cardModStyle = config.raw.optJSONObject("card_mod")?.opt("style")?.toString().orEmpty()
+    private val fontOverrideSp = cardModFontSizeSp(cardModStyle)
+    private val lightDigits = cardModLightWeight(cardModStyle)
+    private val baseTimeSp = fontOverrideSp ?: if (large) 52f else 42f
+    private val baseSideSp = if (fontOverrideSp != null) (fontOverrideSp * 0.26f).coerceIn(12f, 44f) else if (large) 20f else 16f
     private var appliedScale = 1f
     private var running = false
 
@@ -1896,8 +1902,8 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
         // Sized to fit a half-width sections card; `clock_size: large` grows it.
         val timeSp = baseTimeSp
         val sideSp = baseSideSp
-        timeView = textView(ctx, timeSp, ctx.theme.primaryTextColor, INTER_SEMIBOLD).apply {
-            letterSpacing = -0.03f
+        timeView = textView(ctx, timeSp, ctx.theme.primaryTextColor, if (lightDigits) Inter.LIGHT else INTER_SEMIBOLD).apply {
+            letterSpacing = if (fontOverrideSp != null && fontOverrideSp >= 80f) -0.04f else -0.03f
             fontFeatureSettings = "tnum"
         }
         secondsView = textView(ctx, sideSp, ctx.theme.secondaryTextColor, Inter.MEDIUM).apply { fontFeatureSettings = "tnum" }
@@ -1934,9 +1940,9 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
         appliedScale = scale
         // Resizing text from inside a layout pass; apply it on the next frame.
         post {
-            timeView.textSize = baseTimeSp * scale
-            secondsView.textSize = baseSideSp * scale
-            ampmView.textSize = baseSideSp * scale
+            timeView.textSize = ctx.scaledSp(baseTimeSp) * scale
+            secondsView.textSize = ctx.scaledSp(baseSideSp) * scale
+            ampmView.textSize = ctx.scaledSp(baseSideSp) * scale
         }
     }
 
@@ -1945,10 +1951,10 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
 
     private fun fitScale(widthPx: Int): Float {
         val available = widthPx - ctx.px(32f) - ctx.px(4f)
-        val probe = Paint(timeView.paint).apply { textSize = spToPx(baseTimeSp) }
+        val probe = Paint(timeView.paint).apply { textSize = spToPx(ctx.scaledSp(baseTimeSp)) }
         var needed = probe.measureText(if (format24) "88:88" else "12:88")
         if (showSeconds || !format24) {
-            probe.textSize = spToPx(baseSideSp)
+            probe.textSize = spToPx(ctx.scaledSp(baseSideSp))
             probe.typeface = secondsView.typeface
             val side = maxOf(if (showSeconds) probe.measureText("88") else 0f, if (!format24) probe.measureText("PM") else 0f)
             needed += ctx.px(8f) + side
@@ -1976,9 +1982,23 @@ class ClockCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx
         super.onDetachedFromWindow()
     }
 
-    private companion object {
+    /** The digits' base size in sp (before the theme's text scale) and whether they're light, for tests. */
+    internal val digitsSp: Float get() = baseTimeSp
+    internal val sideSp: Float get() = baseSideSp
+    internal val digitsLight: Boolean get() = lightDigits
+
+    internal companion object {
         /** 42 sp shrinks to no less than 30 sp (16 sp side text to ~11.5 sp). */
-        const val MIN_CLOCK_SCALE = 30f / 42f
+        private const val MIN_CLOCK_SCALE = 30f / 42f
+        private val CARD_MOD_FONT_SIZE = Regex("""font-size\s*:\s*(\d+(?:\.\d+)?)\s*px""", RegexOption.IGNORE_CASE)
+        private val CARD_MOD_LIGHT = Regex("""font-weight\s*:\s*(100|200|300|light|lighter|thin|extralight)\b""", RegexOption.IGNORE_CASE)
+
+        /** The digits' size from a card-mod `font-size: Npx` (clamped to 18..220 sp), or null without one. */
+        fun cardModFontSizeSp(style: String): Float? =
+            CARD_MOD_FONT_SIZE.find(style)?.groupValues?.get(1)?.toFloatOrNull()?.coerceIn(18f, 220f)
+
+        /** True when card-mod asks for light digits (`font-weight: 300`, `200`, `light`…). */
+        fun cardModLightWeight(style: String): Boolean = CARD_MOD_LIGHT.containsMatchIn(style)
     }
 }
 

@@ -398,6 +398,8 @@ object CardRouter {
         "custom:bubble-card",
         "custom:mini-graph-card",
         "custom:clock-weather-card",
+        "custom:modern-circular-gauge",
+        "custom:bar-card",
     )
 
     fun tier(card: CardConfig): CardTier = when {

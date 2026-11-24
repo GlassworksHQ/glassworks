@@ -12,11 +12,18 @@ import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.text.Layout
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.TextPaint
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.AlignmentSpan
 import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.ImageSpan
+import android.text.style.MetricAffectingSpan
+import android.text.style.RelativeSizeSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
@@ -36,6 +43,7 @@ import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.ui.Inter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** One block of an HA markdown card, as [parseMarkdownBlocks] reads it. Inline markup stays in [text] fields. */
 sealed class MdBlock {
@@ -52,6 +60,195 @@ sealed class MdBlock {
     /** A pipe table; [aligns] holds one of `start`, `center`, `end` per column. */
     data class Table(val header: List<String>, val rows: List<List<String>>, val aligns: List<String>) : MdBlock()
     data class Center(val blocks: List<MdBlock>) : MdBlock()
+
+    /**
+     * An HTML flex / progress bar written in a markdown card (`<div style="display:flex;height:10px">` holding
+     * `<div style="width:45%;background:#38bdf8"></div>` segments), drawn natively as weighted segments.
+     * [trackColor] is the outer div's background, null when it has none.
+     */
+    data class StackedBar(
+        val heightDp: Float,
+        val radiusDp: Float,
+        val trackColor: Int?,
+        val gapDp: Float,
+        val segments: List<BarSegment>,
+    ) : MdBlock()
+}
+
+/** One segment of a [MdBlock.StackedBar]: [pct] of the track's width, in [color] (null = the theme's primary). */
+data class BarSegment(val pct: Float, val color: Int?)
+
+/** The small slice of CSS HA dashboards write in markdown `style` attributes. */
+object MdCss {
+    /** `a: b; c: d` → `{a=b, c=d}`, keys lowercased, `!important` dropped. */
+    fun parse(style: String?): Map<String, String> {
+        if (style.isNullOrBlank()) return emptyMap()
+        val out = LinkedHashMap<String, String>()
+        for (decl in style.split(';')) {
+            val colon = decl.indexOf(':')
+            if (colon <= 0) continue
+            val key = decl.substring(0, colon).trim().lowercase(Locale.ROOT)
+            val value = decl.substring(colon + 1).trim().removeSuffix("!important").trim()
+            if (key.isNotEmpty() && value.isNotEmpty()) out[key] = value
+        }
+        return out
+    }
+
+    private val LENGTH = Regex("""^\s*(-?\d*\.?\d+)\s*(px|em|rem|%|pt|dp|sp)?\s*$""", RegexOption.IGNORE_CASE)
+
+    /** A CSS length as `(number, unit)`; a bare number has unit `px`. */
+    fun length(value: String?): Pair<Float, String>? {
+        val m = value?.let { LENGTH.find(it) } ?: return null
+        val n = m.groupValues[1].toFloatOrNull() ?: return null
+        return n to m.groupValues[2].lowercase(Locale.ROOT).ifEmpty { "px" }
+    }
+
+    /** A CSS length in dp (CSS px == dp; em / rem are 16 px). The first value of a shorthand counts. */
+    fun lengthDp(value: String?): Float? {
+        val (n, unit) = length(value?.trim()?.substringBefore(' ')) ?: return null
+        return when (unit) {
+            "px", "dp", "sp" -> n
+            "pt" -> n * 4f / 3f
+            "em", "rem" -> n * 16f
+            else -> null
+        }
+    }
+
+    private val WEIGHTS = mapOf(
+        "thin" to 100, "hairline" to 100, "extralight" to 200, "extra-light" to 200, "ultralight" to 200,
+        "light" to 300, "lighter" to 300, "normal" to 400, "regular" to 400, "medium" to 500,
+        "semibold" to 600, "semi-bold" to 600, "demibold" to 600, "bold" to 700, "bolder" to 700,
+        "extrabold" to 800, "extra-bold" to 800, "black" to 900, "heavy" to 900,
+    )
+
+    /** `font-weight` as 100..900, or null when unreadable. */
+    fun weight(value: String?): Int? {
+        val v = value?.trim()?.lowercase(Locale.ROOT) ?: return null
+        v.toIntOrNull()?.let { return it.coerceIn(100, 900) }
+        return WEIGHTS[v]
+    }
+
+    private val COLOR_TOKEN = Regex("""#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)""")
+
+    /** A `background` / `background-color` value: a plain color, or the first color of a gradient. */
+    fun backgroundColor(css: Map<String, String>): Int? {
+        val raw = css["background-color"] ?: css["background"] ?: return null
+        MarkdownInline.parseCssColor(raw)?.let { return it }
+        return COLOR_TOKEN.find(raw)?.value?.let { MarkdownInline.parseCssColor(it) }
+    }
+}
+
+private const val BAR_STYLE_ATTR = """style\s*=\s*(?:"([^"]*)"|'([^']*)')"""
+private const val BAR_INNER_SRC = """<div\b[^>]*?$BAR_STYLE_ATTR[^>]*>\s*</div>"""
+private val BAR_OUTER = Regex(
+    """<div\b[^>]*?$BAR_STYLE_ATTR[^>]*>((?:\s*$BAR_INNER_SRC)+)\s*</div>""",
+    RegexOption.IGNORE_CASE,
+)
+private val BAR_INNER = Regex(BAR_INNER_SRC, RegexOption.IGNORE_CASE)
+private val ANY_TAG = Regex("""<[^>]*>""")
+
+/** Reads one bar match, or null when it isn't a bar (no `width:%` segment, or several outside a flex row). */
+private fun stackedBarOf(m: MatchResult): MdBlock.StackedBar? {
+    val outer = MdCss.parse(m.groupValues[1].ifEmpty { m.groupValues[2] })
+    val segments = BAR_INNER.findAll(m.groupValues[3]).mapNotNull { inner ->
+        val css = MdCss.parse(inner.groupValues[1].ifEmpty { inner.groupValues[2] })
+        val (n, unit) = MdCss.length(css["width"] ?: css["flex-basis"]) ?: return@mapNotNull null
+        if (unit != "%") return@mapNotNull null
+        BarSegment(n.coerceIn(0f, 100f), MdCss.backgroundColor(css))
+    }.toList()
+    if (segments.isEmpty()) return null
+    val flex = outer["display"]?.trim()?.lowercase(Locale.ROOT) == "flex"
+    if (!flex && segments.size > 1) return null
+    val height = (MdCss.lengthDp(outer["height"]) ?: 8f).coerceIn(1f, 64f)
+    return MdBlock.StackedBar(
+        heightDp = height,
+        radiusDp = (MdCss.lengthDp(outer["border-radius"]) ?: 0f).coerceIn(0f, height / 2f),
+        trackColor = MdCss.backgroundColor(outer),
+        gapDp = (MdCss.lengthDp(outer["gap"] ?: outer["column-gap"]) ?: 0f).coerceIn(0f, 24f),
+        segments = segments,
+    )
+}
+
+/** Splits one paragraph around the HTML bars in it; text around a bar stays a paragraph of its own. */
+private fun splitStackedBars(text: String): List<MdBlock> {
+    if (!text.contains("width", ignoreCase = true) || !text.contains("<div", ignoreCase = true)) {
+        return listOf(MdBlock.Paragraph(text))
+    }
+    val out = ArrayList<MdBlock>()
+    var pos = 0
+    fun addText(chunk: String) {
+        val t = chunk.trim().removePrefix("<br>").removeSuffix("<br>").trim()
+        // Drop fragments that are nothing but tags (the wrapper div a bar sat in).
+        if (t.isNotEmpty() && ANY_TAG.replace(t, "").isNotBlank()) out += MdBlock.Paragraph(t)
+    }
+    var found = false
+    for (m in BAR_OUTER.findAll(text)) {
+        val bar = stackedBarOf(m) ?: continue
+        found = true
+        addText(text.substring(pos, m.range.first))
+        out += bar
+        pos = m.range.last + 1
+    }
+    if (!found) return listOf(MdBlock.Paragraph(text))
+    addText(text.substring(pos))
+    return out
+}
+
+/** The `</name>` closing the tag opened just before [from], honoring nesting of the same tag. */
+internal fun findHtmlClose(s: String, name: String, from: Int, to: Int): IntRange? {
+    val re = Regex("""<(/?)$name\b[^>]*>""", RegexOption.IGNORE_CASE)
+    var depth = 1
+    var pos = from
+    while (true) {
+        val m = re.find(s, pos) ?: return null
+        if (m.range.last >= to) return null
+        if (m.groupValues[1] == "/") {
+            depth--
+            if (depth == 0) return m.range
+        } else if (!m.value.endsWith("/>")) {
+            depth++
+        }
+        pos = m.range.last + 1
+    }
+}
+
+private val BLOCK_OPEN = Regex("""^\s*<(p|div)\b([^>]*)>""", RegexOption.IGNORE_CASE)
+
+/**
+ * The CSS of a `<p style>` / `<div style>` that wraps the whole of [text], or null. Its block-level properties
+ * (`text-align`, `letter-spacing`) go on the paragraph's TextView.
+ */
+fun blockWrapperCss(text: String): Map<String, String>? {
+    val m = BLOCK_OPEN.find(text) ?: return null
+    val close = findHtmlClose(text, m.groupValues[1], m.range.last + 1, text.length) ?: return null
+    if (text.substring(close.last + 1).isNotBlank()) return null
+    return MdCss.parse(MarkdownInline.attr(m.groupValues[2], "style")).takeIf { it.isNotEmpty() }
+}
+
+/** CSS `letter-spacing` as a span: [em] of the text size, or [px] absolute (converted against the text size). */
+class LetterSpacingSpan(val em: Float?, val px: Float?) : MetricAffectingSpan() {
+    private fun applyTo(p: TextPaint) {
+        val size = p.textSize
+        if (em != null) {
+            p.letterSpacing = em
+        } else if (px != null && size > 0f) {
+            p.letterSpacing = px / size
+        }
+    }
+
+    override fun updateDrawState(tp: TextPaint) = applyTo(tp)
+    override fun updateMeasureState(textPaint: TextPaint) = applyTo(textPaint)
+}
+
+/** A real font weight (Inter Light, Medium…) for a run of text, where a [StyleSpan] can only fake bold. */
+class FontWeightSpan(val weight: Int, private val face: Typeface) : MetricAffectingSpan() {
+    override fun updateDrawState(tp: TextPaint) {
+        tp.typeface = face
+    }
+
+    override fun updateMeasureState(textPaint: TextPaint) {
+        textPaint.typeface = face
+    }
 }
 
 private val HEADING = Regex("""^(#{1,6})\s+(.*?)\s*#*\s*$""")
@@ -115,7 +312,7 @@ private fun parseLines(chunk: String): List<MdBlock> {
     fun flush() {
         if (para.isNotEmpty()) {
             val joined = para.joinToString("\n").trim()
-            if (joined.isNotEmpty()) out += MdBlock.Paragraph(joined)
+            if (joined.isNotEmpty()) out += splitStackedBars(joined)
             para.clear()
         }
     }
@@ -261,14 +458,29 @@ class MdiIconDrawable(name: String, color: Int, sizePx: Int) : Drawable() {
 /**
  * Inline markdown + the HTML HA dashboards use, as spans: bold, italic, strikethrough, code, links,
  * `<font color>` / `<span style="color:…">`, `<br>` and `<ha-icon>`. Unknown tags are dropped, their text kept.
+ *
+ * `style` on `<span>`, `<font>`, `<p>` and `<div>` carries the typography HA dashboards use: `font-size` (px, pt,
+ * em, rem, %), `font-weight` (100–900 and keywords), `letter-spacing`, `text-transform`, `opacity` and, on blocks,
+ * `text-align`. [density] and [fontScale] turn CSS px into screen px; [typefaceFor] gives a real font for a weight.
  */
 class MarkdownInline(
     private val linkColor: Int,
     private val codeBackground: Int,
     private val iconSizePx: Int,
+    private val density: Float = 1f,
+    private val fontScale: Float = 1f,
+    private val typefaceFor: ((Int) -> Typeface?)? = null,
 ) {
+    /** The active `text-transform` while rendering a styled element's content. */
+    private var transform: String? = null
+
+    /** The product of every enclosing `opacity`, folded into nested colors. */
+    private var alphaMul = 1f
+
     fun render(text: String, baseColor: Int): SpannableStringBuilder {
         val sb = SpannableStringBuilder()
+        transform = null
+        alphaMul = 1f
         renderInto(sb, text, 0, text.length, baseColor)
         while (sb.isNotEmpty() && sb[sb.length - 1] == '\n') sb.delete(sb.length - 1, sb.length)
         return sb
@@ -283,7 +495,7 @@ class MarkdownInline(
         val literal = StringBuilder()
         fun flushLiteral() {
             if (literal.isNotEmpty()) {
-                sb.append(decodeEntities(literal.toString()))
+                sb.append(applyTransform(decodeEntities(literal.toString()), transform))
                 literal.setLength(0)
             }
         }
@@ -422,14 +634,9 @@ class MarkdownInline(
                 attr(attrs, "href")?.let { span(sb, URLSpanNoStyle(it), start) }
             }
             "font", "span" -> {
-                val c = (if (name == "font") attr(attrs, "color") else null)
-                    ?: attr(attrs, "style")?.let { styleColor(it) }
-                val parsed = c?.let(::parseCssColor)
-                renderInto(sb, s, after, innerEnd, parsed ?: color)
-                if (parsed != null) span(sb, ForegroundColorSpan(parsed), start)
-                if (attr(attrs, "style")?.contains(Regex("""font-weight\s*:\s*(bold|[6-9]00)""")) == true) {
-                    span(sb, StyleSpan(Typeface.BOLD), start)
-                }
+                val css = MdCss.parse(attr(attrs, "style"))
+                val c = (if (name == "font") attr(attrs, "color") else null) ?: css["color"]
+                styled(sb, s, after, innerEnd, color, c, css, block = false)
             }
             "h1", "h2", "h3", "h4", "h5", "h6" -> {
                 renderInto(sb, s, after, innerEnd, color)
@@ -438,12 +645,87 @@ class MarkdownInline(
             }
             "p", "div", "li" -> {
                 if (sb.isNotEmpty() && !sb.endsWith("\n")) sb.append('\n')
-                renderInto(sb, s, after, innerEnd, color)
-                if (!sb.endsWith("\n")) sb.append('\n')
+                val css = MdCss.parse(attr(attrs, "style"))
+                if (css.isEmpty()) {
+                    renderInto(sb, s, after, innerEnd, color)
+                    if (!sb.endsWith("\n")) sb.append('\n')
+                } else {
+                    styled(sb, s, after, innerEnd, color, css["color"], css, block = true)
+                }
             }
             else -> renderInto(sb, s, after, innerEnd, color)
         }
         return close.last + 1
+    }
+
+    /**
+     * Renders a styled element's content with its color, opacity and text-transform in force, then lays the
+     * typography spans over it. [block] elements (`p`, `div`) end their line and may carry `text-align`.
+     */
+    private fun styled(
+        sb: SpannableStringBuilder, s: String, from: Int, to: Int, color: Int,
+        colorValue: String?, css: Map<String, String>, block: Boolean,
+    ) {
+        val start = sb.length
+        val parsed = colorValue?.let(::parseCssColor)?.let { scaleAlpha(it, alphaMul) }
+        val opacity = css["opacity"]?.let(::parseOpacity)
+        var effective = parsed ?: color
+        if (opacity != null) effective = scaleAlpha(effective, opacity)
+        val prevTransform = transform
+        val prevAlpha = alphaMul
+        css["text-transform"]?.trim()?.lowercase(Locale.ROOT)?.let { transform = if (it == "none") null else it }
+        if (opacity != null) alphaMul *= opacity
+        renderInto(sb, s, from, to, effective)
+        transform = prevTransform
+        alphaMul = prevAlpha
+        if (parsed != null || opacity != null) span(sb, ForegroundColorSpan(effective), start)
+        typography(sb, start, css)
+        if (block) {
+            if (!sb.endsWith("\n")) sb.append('\n')
+            alignment(css["text-align"])?.let { span(sb, AlignmentSpan.Standard(it), start) }
+        }
+    }
+
+    /** `font-size`, `font-weight` and `letter-spacing` as spans over `[start, end)`. */
+    private fun typography(sb: SpannableStringBuilder, start: Int, css: Map<String, String>) {
+        val size = css["font-size"]
+        if (size != null) {
+            val keyword = FONT_SIZE_KEYWORDS[size.trim().lowercase(Locale.ROOT)]
+            val len = MdCss.length(size)
+            if (keyword != null) {
+                span(sb, RelativeSizeSpan(keyword), start)
+            } else if (len != null && len.first > 0f) {
+                if (len.second == "em" || len.second == "rem") {
+                    span(sb, RelativeSizeSpan(len.first), start)
+                } else if (len.second == "%") {
+                    span(sb, RelativeSizeSpan(len.first / 100f), start)
+                } else {
+                    val dp = MdCss.lengthDp(size)
+                    if (dp != null && dp > 0f) {
+                        span(sb, AbsoluteSizeSpan((dp * density * fontScale).roundToInt().coerceAtLeast(1), false), start)
+                    }
+                }
+            }
+        }
+        val w = MdCss.weight(css["font-weight"])
+        if (w != null) {
+            if (w >= 600) {
+                span(sb, StyleSpan(Typeface.BOLD), start)
+            } else if (w != 400) {
+                val face = typefaceFor?.invoke(w)
+                if (face != null) span(sb, FontWeightSpan(w, face), start)
+            }
+        }
+        val ls = css["letter-spacing"]
+        val lsLen = MdCss.length(ls)
+        if (ls != null && lsLen != null) {
+            if (lsLen.second == "em" || lsLen.second == "rem") {
+                span(sb, LetterSpacingSpan(lsLen.first, null), start)
+            } else if (lsLen.second != "%") {
+                val dp = MdCss.lengthDp(ls)
+                if (dp != null) span(sb, LetterSpacingSpan(null, dp * density * fontScale), start)
+            }
+        }
     }
 
     private class Link(val labelStart: Int, val labelEnd: Int, val url: String, val end: Int)
@@ -481,23 +763,7 @@ class MarkdownInline(
     private fun boundaryBefore(s: String, i: Int) = i == 0 || !s[i - 1].isLetterOrDigit()
     private fun boundaryAfter(s: String, i: Int) = i >= s.length || !s[i].isLetterOrDigit()
 
-    /** The `</name>` closing the tag opened just before [from], honoring nesting of the same tag. */
-    private fun findClose(s: String, name: String, from: Int, to: Int): IntRange? {
-        val re = Regex("""<(/?)$name\b[^>]*>""", RegexOption.IGNORE_CASE)
-        var depth = 1
-        var pos = from
-        while (true) {
-            val m = re.find(s, pos) ?: return null
-            if (m.range.last >= to) return null
-            if (m.groupValues[1] == "/") {
-                depth--
-                if (depth == 0) return m.range
-            } else if (!m.value.endsWith("/>")) {
-                depth++
-            }
-            pos = m.range.last + 1
-        }
-    }
+    private fun findClose(s: String, name: String, from: Int, to: Int): IntRange? = findHtmlClose(s, name, from, to)
 
     /** A link span that keeps the color and underline set beside it instead of the theme's link style. */
     class URLSpanNoStyle(url: String) : URLSpan(url) {
@@ -515,6 +781,40 @@ class MarkdownInline(
             }
             val m = re.find(attrs) ?: return null
             return m.groupValues.drop(1).firstOrNull { it.isNotEmpty() } ?: ""
+        }
+
+        private val FONT_SIZE_KEYWORDS = mapOf(
+            "xx-small" to 0.6f, "x-small" to 0.75f, "small" to 0.89f, "smaller" to 0.83f, "medium" to 1f,
+            "large" to 1.125f, "larger" to 1.2f, "x-large" to 1.5f, "xx-large" to 2f, "xxx-large" to 3f,
+        )
+
+        /** `text-align` → a [Layout.Alignment] (`center`, `right`/`end`, `left`/`start`/`justify`). */
+        fun alignment(value: String?): Layout.Alignment? = when (value?.trim()?.lowercase(Locale.ROOT)) {
+            "center" -> Layout.Alignment.ALIGN_CENTER
+            "right", "end" -> Layout.Alignment.ALIGN_OPPOSITE
+            "left", "start", "justify" -> Layout.Alignment.ALIGN_NORMAL
+            else -> null
+        }
+
+        /** `0.6` or `60%` → 0.6, clamped to 0..1. */
+        fun parseOpacity(value: String): Float? {
+            val v = value.trim()
+            val n = if (v.endsWith("%")) v.dropLast(1).trim().toFloatOrNull()?.div(100f) else v.toFloatOrNull()
+            return n?.coerceIn(0f, 1f)
+        }
+
+        fun scaleAlpha(color: Int, mul: Float): Int {
+            if (mul >= 1f) return color
+            val a = ((color ushr 24) * mul.coerceIn(0f, 1f)).roundToInt()
+            return (a shl 24) or (color and 0x00FFFFFF)
+        }
+
+        /** CSS `text-transform` on one run of text. `capitalize` uppercases the first letter of each word. */
+        fun applyTransform(text: String, transform: String?): String = when (transform) {
+            "uppercase" -> text.uppercase(Locale.getDefault())
+            "lowercase" -> text.lowercase(Locale.getDefault())
+            "capitalize" -> text.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.titlecase(Locale.getDefault()) } }
+            else -> text
         }
 
         fun styleColor(style: String): String? =
@@ -571,6 +871,9 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         iconSizePx = android.util.TypedValue.applyDimension(
             android.util.TypedValue.COMPLEX_UNIT_SP, BODY_SP * 1.15f, ctx.context.resources.displayMetrics,
         ).toInt(),
+        density = ctx.dp,
+        fontScale = theme.fontScale,
+        typefaceFor = { w -> Inter.typeface(ctx.context, w, ctx.scaledSp(BODY_SP)) },
     )
 
     /** Clears [into] and fills it with [md] rendered as blocks. */
@@ -598,7 +901,10 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                 }, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)).apply {
                     topMargin = ctx.px(8f); bottomMargin = ctx.px(8f)
                 })
-                is MdBlock.Paragraph -> into.addView(text(block.text, BODY_SP, Inter.REGULAR, theme.primaryTextColor, centered), lp(bottom = 8f))
+                is MdBlock.Paragraph -> into.addView(paragraph(block.text, centered), lp(bottom = 8f))
+                is MdBlock.StackedBar -> into.addView(stackedBar(block), LinearLayout.LayoutParams(
+                    MATCH_PARENT, ctx.px(block.heightDp).coerceAtLeast(1),
+                ).apply { topMargin = ctx.px(if (first) 0f else 4f); bottomMargin = ctx.px(8f) })
                 is MdBlock.ListItem -> into.addView(listRow(block, centered), lp(bottom = 3f).apply {
                     leftMargin = ctx.px(LIST_INDENT_DP * block.depth)
                 })
@@ -631,6 +937,60 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         if (centered) {
             gravity = Gravity.CENTER_HORIZONTAL
             textAlignment = View.TEXT_ALIGNMENT_CENTER
+        }
+    }
+
+    /**
+     * A paragraph. When one `<p style>` / `<div style>` wraps all of it, its `text-align` sets the TextView's
+     * gravity and its `letter-spacing` the TextView's letter spacing, as a block box does in HA's markdown card.
+     */
+    private fun paragraph(md: String, centered: Boolean): TextView {
+        val tv = text(md, BODY_SP, Inter.REGULAR, theme.primaryTextColor, centered)
+        val css = blockWrapperCss(md) ?: return tv
+        when (css["text-align"]?.trim()?.lowercase(Locale.ROOT)) {
+            "center" -> {
+                tv.gravity = Gravity.CENTER_HORIZONTAL
+                tv.textAlignment = View.TEXT_ALIGNMENT_CENTER
+            }
+            "right", "end" -> {
+                tv.gravity = Gravity.END
+                tv.textAlignment = View.TEXT_ALIGNMENT_VIEW_END
+            }
+            "left", "start" -> {
+                tv.gravity = Gravity.START
+                tv.textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+            }
+        }
+        val ls = css["letter-spacing"]
+        val len = MdCss.length(ls)
+        if (ls != null && len != null) {
+            if (len.second == "em" || len.second == "rem") {
+                tv.letterSpacing = len.first
+            } else {
+                val dp = MdCss.lengthDp(ls)
+                if (dp != null && tv.textSize > 0f) tv.letterSpacing = dp * ctx.dp * theme.fontScale / tv.textSize
+            }
+        }
+        return tv
+    }
+
+    /** A [MdBlock.StackedBar]: a rounded, clipped track holding one weighted [View] per segment. */
+    private fun stackedBar(bar: MdBlock.StackedBar): LinearLayout = LinearLayout(ctx.context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        tag = STACKED_BAR_TAG
+        weightSum = maxOf(100f, bar.segments.sumOf { it.pct.toDouble() }.toFloat())
+        background = GradientDrawable().apply {
+            cornerRadius = bar.radiusDp * ctx.dp
+            setColor(bar.trackColor ?: android.graphics.Color.TRANSPARENT)
+        }
+        clipToOutline = true
+        bar.segments.forEachIndexed { i, seg ->
+            addView(View(ctx.context).apply {
+                tag = STACKED_SEGMENT_TAG
+                setBackgroundColor(seg.color ?: theme.primaryColor)
+            }, LinearLayout.LayoutParams(0, MATCH_PARENT, seg.pct).apply {
+                if (i > 0 && bar.gapDp > 0f) marginStart = ctx.px(bar.gapDp)
+            })
         }
     }
 
@@ -709,5 +1069,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         private const val LIST_INDENT_DP = 16f
         const val RULE_TAG = "md-rule"
         const val QUOTE_BAR_TAG = "md-quote-bar"
+        const val STACKED_BAR_TAG = "md-stacked-bar"
+        const val STACKED_SEGMENT_TAG = "md-stacked-segment"
     }
 }

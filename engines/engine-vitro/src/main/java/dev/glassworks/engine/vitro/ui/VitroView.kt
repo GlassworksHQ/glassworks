@@ -23,6 +23,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.AlarmPanelCardView
 import dev.glassworks.engine.vitro.cards.AreaCardView
+import dev.glassworks.engine.vitro.cards.BarCardView
 import dev.glassworks.engine.vitro.cards.BubbleCardView
 import dev.glassworks.engine.vitro.cards.ButtonCardView
 import dev.glassworks.engine.vitro.cards.CalendarCardView
@@ -37,6 +38,7 @@ import dev.glassworks.engine.vitro.cards.LightCardView
 import dev.glassworks.engine.vitro.cards.LogbookCardView
 import dev.glassworks.engine.vitro.cards.MarkdownCardView
 import dev.glassworks.engine.vitro.cards.MediaControlCardView
+import dev.glassworks.engine.vitro.cards.ModernCircularGaugeCardView
 import dev.glassworks.engine.vitro.cards.MoreInfoSheet
 import dev.glassworks.engine.vitro.cards.MushroomChipsCardView
 import dev.glassworks.engine.vitro.cards.PictureCardView
@@ -61,6 +63,7 @@ import dev.glassworks.engine.vitro.model.SectionConfig
 import dev.glassworks.engine.vitro.model.ViewConfig
 import dev.glassworks.engine.vitro.model.VisibilityCondition
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
+import dev.glassworks.engine.vitro.theme.CardModStyle
 import dev.glassworks.engine.vitro.theme.ThemeBackground
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
@@ -106,6 +109,19 @@ class VitroView(
         gravity = Gravity.CENTER_VERTICAL
     }
     private val contentHost = FrameLayout(context)
+
+    /**
+     * Viewport-pinned cards (`card_mod` `position: fixed`), above the scrolling content and below the More-Info sheet
+     * and the connection banner. Holds one frame per built view, shown and hidden with it like [contentHost].
+     */
+    val overlayLayer: FrameLayout = FrameLayout(context).apply {
+        clipChildren = false
+        clipToPadding = false
+    }
+    private val overlayFrames = HashMap<Int, FrameLayout>()
+
+    /** Pinned cards collected while [buildViewTree] runs, with their layout params in the overlay. */
+    private var pendingPinned: MutableList<Pair<View, FrameLayout.LayoutParams>>? = null
     private val statusLabel = TextView(context).apply {
         textSize = 14f
         setTextColor(0xFFA1A1AA.toInt())
@@ -190,6 +206,7 @@ class VitroView(
         shell.addView(tabScroll, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         shell.addView(contentHost, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
         addView(shell, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        addView(overlayLayer, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         addView(statusLabel, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         addView(
             connectionBanner,
@@ -234,6 +251,7 @@ class VitroView(
         themeCatalog = catalog
         viewCache.clear()
         contentHost.removeAllViews()
+        clearOverlay()
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
     }
 
@@ -246,6 +264,7 @@ class VitroView(
         darkMode = nextDark
         viewCache.clear()
         contentHost.removeAllViews()
+        clearOverlay()
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
     }
 
@@ -254,6 +273,7 @@ class VitroView(
         viewBackStack.clear()
         viewCache.clear()
         contentHost.removeAllViews()
+        clearOverlay()
         val idx = resolveViewIndex(config, initialViewPath)
         rebuildTabs(config)
         renderView(idx, forceRebuild = true)
@@ -379,18 +399,39 @@ class VitroView(
             cached
         } else {
             val cardCtx = contextFactory?.invoke(theme) ?: return
-            buildViewTree(viewCfg, cardCtx).also { built ->
-                viewCache.remove(index)?.let { contentHost.removeView(it) }
-                viewCache[index] = built
-                contentHost.addView(built, LayoutParams(MATCH_PARENT, MATCH_PARENT))
-                trimViewCache(keep = index)
+            val pinned = ArrayList<Pair<View, FrameLayout.LayoutParams>>()
+            pendingPinned = pinned
+            val built = try {
+                buildViewTree(viewCfg, cardCtx)
+            } finally {
+                pendingPinned = null
             }
+            viewCache.remove(index)?.let { contentHost.removeView(it) }
+            overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
+            viewCache[index] = built
+            contentHost.addView(built, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            if (pinned.isNotEmpty()) {
+                val frame = FrameLayout(context).apply {
+                    clipChildren = false
+                    clipToPadding = false
+                }
+                pinned.forEach { (v, lp) -> frame.addView(v, lp) }
+                overlayFrames[index] = frame
+                overlayLayer.addView(frame, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            }
+            trimViewCache(keep = index)
+            built
         }
 
-        // Keep-alive cache: toggle visibility instead of destroying built native views.
+        // Keep-alive cache: toggle visibility instead of destroying built native views. Pinned cards follow their view.
         for (i in 0 until contentHost.childCount) {
             val child = contentHost.getChildAt(i)
             child.visibility = if (child === viewRoot) VISIBLE else GONE
+        }
+        val activeOverlay = overlayFrames[index]
+        for (i in 0 until overlayLayer.childCount) {
+            val child = overlayLayer.getChildAt(i)
+            child.visibility = if (child === activeOverlay) VISIBLE else GONE
         }
 
         val elapsed = SystemClock.elapsedRealtime() - t0
@@ -421,6 +462,64 @@ class VitroView(
         while (viewCache.size > MAX_CACHED_VIEWS) {
             val oldest = viewCache.keys.firstOrNull { it != keep } ?: return
             viewCache.remove(oldest)?.let { contentHost.removeView(it) }
+            overlayFrames.remove(oldest)?.let { overlayLayer.removeView(it) }
+        }
+    }
+
+    private fun clearOverlay() {
+        overlayFrames.clear()
+        overlayLayer.removeAllViews()
+    }
+
+    /**
+     * Sends a `position: fixed` card to the current view's overlay instead of the scrolling layout. False (and
+     * nothing happens) for every other card, or outside a view build.
+     */
+    private fun pinIfFixed(card: CardConfig, ctx: VitroCardContext): Boolean {
+        val sink = pendingPinned ?: return false
+        val mod = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), ctx.theme.vars)
+        if (!mod.positionFixed) return false
+        sink += wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx) to pinnedLayoutParams(mod)
+        return true
+    }
+
+    /** Overlay [FrameLayout.LayoutParams] for a pinned card: gravity from its offsets/transform, margins in dp. */
+    internal fun pinnedLayoutParams(mod: CardModStyle): FrameLayout.LayoutParams {
+        val viewportW = if (width > 0) width else resources.displayMetrics.widthPixels
+        val viewportH = if (height > 0) height else resources.displayMetrics.heightPixels
+        fun length(raw: String?, extent: Int): Int? {
+            val v = raw?.trim()?.lowercase() ?: return null
+            Regex("""^(-?[\d.]+)%$""").matchEntire(v)?.let { m ->
+                return m.groupValues[1].toFloatOrNull()?.let { (it / 100f * extent).toInt() }
+            }
+            Regex("""^(-?[\d.]+)(px|dp)?$""").matchEntire(v)?.let { m ->
+                return m.groupValues[1].toFloatOrNull()?.let { px(it) }
+            }
+            Regex("""^(-?[\d.]+)r?em$""").matchEntire(v)?.let { m ->
+                return m.groupValues[1].toFloatOrNull()?.let { px(it * 16f) }
+            }
+            return null
+        }
+        val horizontal = when {
+            mod.fixedCenterX -> Gravity.CENTER_HORIZONTAL
+            mod.fixedRight != null -> Gravity.END
+            else -> Gravity.START
+        }
+        val vertical = when {
+            mod.fixedCenterY -> Gravity.CENTER_VERTICAL
+            mod.fixedBottom != null -> Gravity.BOTTOM
+            else -> Gravity.TOP
+        }
+        val w = length(mod.fixedWidth, viewportW)?.takeIf { it > 0 } ?: WRAP_CONTENT
+        return FrameLayout.LayoutParams(w, WRAP_CONTENT, horizontal or vertical).apply {
+            if (!mod.fixedCenterY) {
+                topMargin = length(mod.fixedTop, viewportH) ?: 0
+                bottomMargin = length(mod.fixedBottom, viewportH) ?: 0
+            }
+            if (!mod.fixedCenterX) {
+                marginStart = length(mod.fixedLeft, viewportW) ?: 0
+                marginEnd = length(mod.fixedRight, viewportW) ?: 0
+            }
         }
     }
 
@@ -642,6 +741,7 @@ class VitroView(
             pendingHalfRow = null
         }
         for (card in section.cards) {
+            if (pinIfFixed(card, ctx)) continue
             val isHalf = isHalfWidth(card)
             val cardView = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
             if (isHalf) {
@@ -691,6 +791,7 @@ class VitroView(
         }
         val weights = IntArray(cols)
         for (card in cards) {
+            if (pinIfFixed(card, ctx)) continue
             // Place each card into the lightest column for a balanced masonry flow.
             var best = 0
             for (i in 1 until cols) if (weights[i] < weights[best]) best = i
@@ -721,7 +822,7 @@ class VitroView(
         } else {
             parentCtx
         }
-        return when (card.type) {
+        val built: View = when (card.type) {
             // Layout containers
             "vertical-stack" -> LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
@@ -795,25 +896,42 @@ class VitroView(
             "custom:bubble-card" -> BubbleCardView(ctx, card)
             "custom:mini-graph-card" -> SensorGraphCardView(ctx, card)
             "custom:clock-weather-card" -> WeatherCardView(ctx, card)
+            "custom:modern-circular-gauge" -> ModernCircularGaugeCardView(ctx, card)
+            "custom:bar-card" -> BarCardView(ctx, card)
             // Tier 3: Arbitrary unrecognized custom cards -> stripped Micro-Web Island
             else -> WebIslandCardView(ctx, card, fillViewport = fillViewport)
         }
+        (built as? CardSurface)?.applyCardMod(card)
+        return built
     }
 
-    private fun wrapVisibility(card: CardConfig, view: View, ctx: VitroCardContext): View =
-        wrapConditions(card.visibility + VisibilityCondition.parseList(card.raw.optJSONArray("conditions")), view, ctx)
+    private fun wrapVisibility(card: CardConfig, view: View, ctx: VitroCardContext): View {
+        val conds = card.visibility + VisibilityCondition.parseList(card.raw.optJSONArray("conditions"))
+        if (conds.isEmpty()) return view
+        val transitionMs = ThemeResolver.parseCardMod(card.raw.optJSONObject("card_mod"), ctx.theme.vars).transitionOpacityMs
+        return wrapConditions(conds, view, ctx, transitionMs)
+    }
 
     /**
      * Shows [view] only while every condition holds, re-checking live as the referenced entities change, once a
      * minute for `time` conditions, and until the signed-in user is known for `user` conditions.
      */
-    private fun wrapConditions(conds: List<VisibilityCondition>, view: View, ctx: VitroCardContext): View {
+    private fun wrapConditions(
+        conds: List<VisibilityCondition>,
+        view: View,
+        ctx: VitroCardContext,
+        transitionMs: Long? = null,
+    ): View {
         if (conds.isEmpty()) return view
         val widthDp = (resources.displayMetrics.widthPixels / dp).toInt()
+        var shown: Boolean? = null
         val update = {
             val userId = ctx.haUser().optString("id", "").ifEmpty { null }
             val visible = conds.all { it.evaluate(store::get, widthDp, userId) }
-            view.visibility = if (visible) VISIBLE else GONE
+            if (visible != shown) {
+                shown = visible
+                crossfade(view, visible, transitionMs ?: DEFAULT_FADE_MS)
+            }
         }
         update()
         val refs = LinkedHashSet<String>()
@@ -831,10 +949,49 @@ class VitroView(
             override fun onViewDetachedFromWindow(v: View) {
                 unsubs.forEach { it() }
                 if (ticks) removePeriodicCheck(update)
+                // A cancelled fade never runs its end action: snap to the state it was heading for.
+                v.animate().cancel()
+                shown?.let { snapVisibility(v, it) }
             }
         })
         return view
     }
+
+    /**
+     * Shows or hides a conditional card. Detached (first bind, tests) it flips at once; on screen it fades its
+     * opacity over [durationMs] (`card_mod` `transition: opacity …`, else 300 ms) and only goes GONE at the end.
+     */
+    private fun crossfade(view: View, show: Boolean, durationMs: Long) {
+        view.animate().cancel()
+        if (!view.isAttachedToWindow || durationMs <= 0L) {
+            snapVisibility(view, show)
+            return
+        }
+        val target = restingAlpha(view)
+        if (show) {
+            if (view.visibility != VISIBLE) {
+                view.alpha = 0f
+                view.visibility = VISIBLE
+            }
+            view.animate().alpha(target).setDuration(durationMs).start()
+        } else {
+            if (view.visibility != VISIBLE) {
+                snapVisibility(view, false)
+                return
+            }
+            view.animate().alpha(0f).setDuration(durationMs).withEndAction {
+                if (view.alpha == 0f) view.visibility = GONE
+            }.start()
+        }
+    }
+
+    private fun snapVisibility(view: View, show: Boolean) {
+        view.visibility = if (show) VISIBLE else GONE
+        view.alpha = if (show) restingAlpha(view) else 0f
+    }
+
+    /** A shown card's opacity: its `card_mod` `opacity` when it sets one, else fully opaque. */
+    private fun restingAlpha(view: View): Float = (view as? CardSurface)?.activeCardMod?.opacity?.coerceIn(0f, 1f) ?: 1f
 
     // ---- Periodic visibility re-checks (`time` and `user` conditions) ----
 
@@ -869,6 +1026,7 @@ class VitroView(
     companion object {
         private const val TAG = "Glassworks.Vitro"
         private const val PERIODIC_CHECK_MS = 60_000L
+        private const val DEFAULT_FADE_MS = 300L
 
         /** A badge's text: `name · state` when the name shows, else the formatted state (`21.5 °C`, `Closed`). */
         fun badgeText(badge: CardConfig, s: EntityState?): String {
