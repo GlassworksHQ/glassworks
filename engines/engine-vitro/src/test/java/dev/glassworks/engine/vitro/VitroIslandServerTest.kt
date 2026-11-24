@@ -339,6 +339,7 @@ class VitroIslandServerTest {
             ws.line()
             await(slot.connected, "onConnected")
 
+            val page = get(url).text
             island.stop()
 
             await(slot.disconnected, "onDisconnected after stop")
@@ -347,9 +348,9 @@ class VitroIslandServerTest {
             assertEquals(-1, island.port)
             assertNull(island.origin)
             // The slot's page is gone: the connection is refused, or, if another server has since been given the
-            // same ephemeral port (tests run in parallel on CI), that server doesn't know the slot.
+            // same ephemeral port (tests run in parallel on CI), what it answers isn't this slot's page.
             val reply = try { get(url) } catch (_: IOException) { null }
-            assertTrue("the stopped island still serves its slot", reply == null || reply.code != 200)
+            assertTrue("the stopped island still serves its slot", reply == null || reply.code != 200 || reply.text != page)
         } finally {
             ws.abort()
         }
