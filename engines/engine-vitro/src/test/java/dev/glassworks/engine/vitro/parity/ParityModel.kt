@@ -160,6 +160,9 @@ class ParityReference(val png: File, val json: JSONObject) {
     val stable: Boolean get() = json.optBoolean("stable", true)
     val states: JSONObject get() = json.optJSONObject("states") ?: JSONObject()
 
+    /** Image paths HA's page asked for and didn't get (written by the capture only when there are some). */
+    val imagesHaMissing: Set<String> get() = json.optJSONArray("imagesHaMissing")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }.orEmpty()
+
     /** What HaDisplay held for the case's entities (registry entries, device names, icons, state labels), or null. */
     val display: JSONObject? get() = json.optJSONObject("display")
     val slots: List<CssRect> get() = json.getJSONArray("slots").let { a -> (0 until a.length()).map { CssRect.of(a.getJSONObject(it)) } }
@@ -195,5 +198,18 @@ class ParityShared(val json: JSONObject) {
 
     companion object {
         fun load(root: File): ParityShared? = File(root, "refs/shared.json").takeIf { it.isFile }?.let { ParityShared(JSONObject(it.readText())) }
+    }
+}
+
+/** Whether a render had every input the capture should have given it. */
+object ParityInputs {
+    /**
+     * The image paths Vitro asked the fixture server for and didn't get, split into capture gaps (HA loaded or never
+     * asked for them: the case can't be compared) and ones HA's own page couldn't load either.
+     */
+    fun missingImages(asked: List<String>, ref: ParityReference): Pair<List<String>, List<String>> {
+        val missing = asked.distinct().sorted()
+        val haToo = ref.imagesHaMissing
+        return missing.filter { it !in haToo } to missing.filter { it in haToo }
     }
 }

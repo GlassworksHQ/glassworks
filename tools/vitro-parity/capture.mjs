@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { connect, loadCredentials, redact } from './lib/ha.mjs';
 import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate, hasMacFragment } from './lib/scrub.mjs';
 import { parseArgs, pick } from './lib/args.mjs';
-import { assetDestination, canonicalPath, imagePaths } from './lib/assets.mjs';
+import { assetDestination, canonicalPath, capturableImage } from './lib/assets.mjs';
 import { applyEntityEvent } from './lib/states.mjs';
 import { buildDisplay } from './lib/display.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
@@ -146,17 +146,11 @@ async function prepare() {
     await saveHarness(ha, harnessConfig(all), all.filter((c) => c.card).map((c) => c.id));
     log(`saved ${HARNESS}: ${all.filter((c) => c.card).length} card views (every corpus case)`);
   }
-  for (const c of cases) for (const p of c.card ? imagePaths(c.card) : []) await fetchAsset(p);
   for (const c of cases.filter((c) => c.dashboard)) {
     if (committed) fail(`${c.id}: real dashboards belong in a local corpus (--root), never in the committed one`);
     const cfg = await ha.call({ type: 'lovelace/config', url_path: c.dashboard, force: true });
     mkdirSync(join(corpusRoot, 'dashboards'), { recursive: true });
     writeFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), JSON.stringify(cfg, null, 1) + '\n');
-    // The images the dashboard shows directly (`image: /local/...`), for Vitro's fixture server. A missing one
-    // would make Vitro draw the card without its picture and count that as drift, so it fails the run instead.
-    const missing = [];
-    for (const p of imagePaths(cfg)) await fetchAsset(p).catch((e) => missing.push(scrubText(`${p}: ${e.message}`, creds)));
-    if (missing.length) fail(`${c.id}: ${missing.length} dashboard image(s) couldn't be fetched, so the case can't be compared:\n  ${missing.join('\n  ')}`);
     log(`dashboard ${c.dashboard}`);
   }
   ha.close();
@@ -207,6 +201,31 @@ const SLOTS_JS = () => {
     }
   }
   return { slots, docW: document.documentElement.scrollWidth, docH: document.documentElement.scrollHeight };
+};
+
+/**
+ * Runs in the page: the URLs of the images drawn inside the given slots (document px): <img> sources, SVG <image>
+ * hrefs and CSS background images, read from the rendered DOM (shadow roots included), never from configs. HA's
+ * launch-screen logos and anything else the page loaded but doesn't show in a card are left out.
+ */
+const DRAWN_IMAGES_JS = (slots) => {
+  const out = new Set();
+  const inside = (r) => r.width > 0 && r.height > 0 && slots.some((s) =>
+    r.right > s.x - scrollX && r.left < s.x - scrollX + s.w && r.bottom > s.y - scrollY && r.top < s.y - scrollY + s.h);
+  const walk = (root) => root.querySelectorAll('*').forEach((e) => {
+    if (e.shadowRoot) walk(e.shadowRoot);
+    const r = e.getBoundingClientRect();
+    if (!inside(r)) return;
+    if (e.localName === 'img' && e.currentSrc) out.add(e.currentSrc);
+    if (e.localName === 'image') {
+      const h = e.getAttribute('href') || e.getAttribute('xlink:href');
+      if (h) out.add(new URL(h, location.href).href);
+    }
+    const bg = getComputedStyle(e).backgroundImage;
+    if (bg && bg !== 'none') for (const m of bg.matchAll(/url\(["']?([^"')]+)["']?\)/g)) out.add(new URL(m[1], location.href).href);
+  });
+  walk(document);
+  return [...out];
 };
 
 /** Runs in the page: the text a slot shows, with its box and font, relative to the slot (CSS px). */
@@ -284,6 +303,58 @@ function recordStates(page) {
   return states;
 }
 
+/**
+ * The images HA's page loads (capturableImage: /local/ and /static/ on HA's origin), path -> body, and the image
+ * paths it asked for but didn't get. After each case, the ones drawn in its cards are saved (saveDrawnImages), so
+ * whatever HA drew, Vitro's fixture server serves.
+ */
+function recordImages(page) {
+  const loaded = new Map();
+  const failed = new Set();
+  page.on('response', (res) => {
+    const path = capturableImage(res.url(), creds.origin, res.status(), res.headers()['content-type']);
+    if (path) {
+      if (!loaded.has(path)) loaded.set(path, res.body().catch(() => null));
+      return;
+    }
+    if (res.request().resourceType() !== 'image') return;
+    let u;
+    try { u = new URL(res.url()); } catch { return; }
+    if (u.origin === creds.origin && res.status() >= 400) failed.add(u.pathname);
+  });
+  page.on('requestfailed', (req) => {
+    if (req.resourceType() !== 'image') return;
+    try { const u = new URL(req.url()); if (u.origin === creds.origin) failed.add(u.pathname); } catch {}
+  });
+  return { loaded, failed };
+}
+
+/**
+ * Writes into assets/ the images HA both loaded and drew in the case's cards ([drawn]: URLs from DRAWN_IMAGES_JS),
+ * through assetDestination's checks; new or changed ones are logged. Returns the drawn image paths HA asked for
+ * and didn't get.
+ */
+async function saveDrawnImages(images, drawn) {
+  const paths = new Set();
+  for (const url of drawn) {
+    try {
+      const u = new URL(url);
+      if (u.origin === creds.origin) paths.add(u.pathname);
+    } catch {}
+  }
+  for (const path of [...paths].sort()) {
+    if (!images.loaded.has(path)) continue;
+    const bytes = await images.loaded.get(path);
+    if (!bytes) throw new Error(`image ${path}: HA loaded it but its body couldn't be read`);
+    const out = assetDestination(join(corpusRoot, 'assets'), path, committed);
+    if (existsSync(out) && readFileSync(out).equals(bytes)) continue;
+    mkdirSync(dirname(out), { recursive: true });
+    writeFileSync(out, bytes);
+    log(`asset ${path} (HA drew it)`);
+  }
+  return [...paths].filter((p) => images.failed.has(p)).sort();
+}
+
 async function newPage(browser, frame, dark, now, cardModUrl, tz) {
   const ctx = await browser.newContext({
     viewport: { width: frame.width, height: frame.height }, deviceScaleFactor: frame.density,
@@ -323,7 +394,8 @@ async function newPage(browser, frame, dark, now, cardModUrl, tz) {
   const page = await ctx.newPage();
   page.on('pageerror', (e) => log(`  pageerror: ${scrubText(e.message, creds).slice(0, 200)}`));
   const states = recordStates(page);
-  return { ctx, page, states };
+  const images = recordImages(page);
+  return { ctx, page, states, images };
 }
 
 /** A deep copy of the states of [ids] (sorted), as the page holds them right now. */
@@ -442,10 +514,11 @@ async function capture() {
     for (const dark of [true, false]) {
       const group = mine.filter((c) => (c.dark ?? true) === dark);
       if (!group.length) continue;
-      const { ctx, page, states } = await newPage(browser, frame, dark, now, cardModUrl, haConfig.time_zone);
+      const { ctx, page, states, images } = await newPage(browser, frame, dark, now, cardModUrl, haConfig.time_zone);
       let loaded = false;
       for (const c of group) {
         const t0 = Date.now();
+        images.failed.clear();
         try {
           const path = c.card ? `/${HARNESS}/${c.id}` : `/${c.dashboard}/${c.view}`;
           if (!loaded || c.dashboard) {
@@ -508,11 +581,17 @@ async function capture() {
             const inDisplay = findPrivate(JSON.stringify(display), creds);
             if (inDisplay.length) throw new Error(`the display data holds ${inDisplay.join(', ')}: neither file is written`);
           }
+          // The images HA drew in this case's cards: saved for Vitro's fixture server (after the checks below).
+          const drawnImages = await page.evaluate(DRAWN_IMAGES_JS, slots);
+          const failedDrawn = [...new Set(drawnImages.map((url) => { try { const u = new URL(url); return u.origin === creds.origin ? u.pathname : null; } catch { return null; } }).filter((p) => p && images.failed.has(p)))].sort();
           const ref = {
             case: c.id, frame: frame.id, haVersion: haConfig.version, now, stable,
             viewport: { width: frame.width, height: frame.height, density: frame.density },
             clip, docSize: { width: info.docW, height: info.docH }, slots: slots.map(roundRect), texts,
             states: caseStates, templates, display,
+            // Image paths HA's page asked for and didn't get: Vitro missing them too is no capture gap. Only
+            // written when there are some, so a clean reference doesn't change.
+            ...(failedDrawn.length ? { imagesHaMissing: failedDrawn } : {}),
           };
           if (!committed) {
             // Pictures that templates point at (a plant's image entity inside Markdown, say), unredacted from the raw text.
@@ -528,6 +607,7 @@ async function capture() {
             // (states, texts, templates, display data), not just what the card draws.
             if (hasMacFragment(text)) throw new Error('the reference holds a MAC fragment (a device or entity name?): neither file is written');
           }
+          await saveDrawnImages(images, drawnImages);
           writeFileSync(join(outDir, `${c.id}.png`), png);
           writeFileSync(join(outDir, `${c.id}.json`), text + '\n');
           log(`${frame.id}/${c.id}: ${slots.length} card(s), ${texts.length} texts, ${Object.keys(caseStates).length} states, ${Object.keys(templates).length} templates${stable ? '' : ' (still moving)'} in ${Date.now() - t0} ms`);

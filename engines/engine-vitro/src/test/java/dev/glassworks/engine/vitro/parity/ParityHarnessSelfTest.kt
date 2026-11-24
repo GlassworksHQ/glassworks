@@ -262,6 +262,17 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun anImageTheCaptureDidntSaveIsAnInputGapUnlessHaMissedItToo() {
+        val ref = ParityReference(File("none.png"), JSONObject().put("imagesHaMissing", org.json.JSONArray().put("/None")))
+        val (gaps, haToo) = ParityInputs.missingImages(listOf("/static/x.png", "/None", "/static/x.png"), ref)
+        assertEquals(listOf("/static/x.png"), gaps)
+        assertEquals(listOf("/None"), haToo)
+        assertEquals(emptyList<String>() to emptyList<String>(), ParityInputs.missingImages(emptyList(), ref))
+        // A reference without the field (nothing HA missed): every missing image is a gap.
+        assertEquals(listOf("/None"), ParityInputs.missingImages(listOf("/None"), ParityReference(File("none.png"), JSONObject())).first)
+    }
+
+    @Test
     fun aMacFragmentIsCaughtWhateverSetsItOff() {
         for (bad in listOf("AirDot 4c83f8", "airdot-4c83f8", "AirDot_a1b2c3d4e5f6", "esp_4C83F8.local", "(a1b2c3)")) {
             assertTrue(bad, MAC_FRAGMENT.containsMatchIn(bad))

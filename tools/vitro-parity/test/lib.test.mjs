@@ -200,29 +200,21 @@ test('findPrivate flags a MAC fragment but not a colour or a model id', async ()
   for (const ok of ['#34d399', 'TS0501B', '_TZB210_gumjktrw', 'abcdef', '123456', 'Fog 8.3 °C']) assert.deepEqual(findPrivate(ok, null), [], ok);
 });
 
-test('imagePaths finds image and picture values and Markdown <img> sources', async () => {
-  const { imagePaths } = await import('../lib/assets.mjs');
-  const card = {
-    type: 'vertical-stack',
-    cards: [
-      { type: 'picture-entity', image: '/static/icons/a.png?v=1' },
-      { type: 'custom:mushroom-template-card', picture: '/static/icons/b.png' },
-      { type: 'markdown', content: 'Hi <img src="/static/icons/c.png"> and <IMG alt="x" src="/local/d.png?x=1">, <img src=\'/local/g.png\'>, <img src = "/local/h.png">, not <img data-src="/local/i.png"> or <img src="https://example.test/e.png">' },
-      { type: 'tile', entity: 'light.x', image: 'https://example.test/f.png' },
-    ],
-  };
-  assert.deepEqual(imagePaths(card).sort(), ['/local/d.png', '/local/g.png', '/local/h.png', '/static/icons/a.png', '/static/icons/b.png', '/static/icons/c.png']);
-});
-
-test('imagePaths reads <img src> as HTML does: quotes, bare values, code and protocol-relative URLs', async () => {
-  const { imagePaths } = await import('../lib/assets.mjs');
-  const md = (content) => imagePaths({ type: 'markdown', content }).sort();
-  assert.deepEqual(md(`<img src="/local/kid's.png"> <img src='/local/say "hi".png'>`), ['/local/kid\'s.png', '/local/say "hi".png']);
-  assert.deepEqual(md('<img alt=x src=/local/bare.png width=10>'), ['/local/bare.png']);
-  assert.deepEqual(md('<img data-src="/local/no.png" src="/local/yes.png">'), ['/local/yes.png']);
-  assert.deepEqual(md('<img src="//cdn.example.test/a.png"> <img src="/local/a.png#frag">'), ['/local/a.png']);
-  assert.deepEqual(md('Code `<img src="/local/span.png">` and\n```\n<img src="/local/fence.png">\n```\nthen <img src="/local/real.png">'), ['/local/real.png']);
-  assert.deepEqual(imagePaths({ type: 'picture', image: '//cdn.example.test/x.png' }), []);
-  assert.deepEqual(md('~~~\nexample\n~~~~\n<img src="/local/after.png">'), ['/local/after.png']);
-  assert.deepEqual(md('<img alt="a > b" src="/local/gt.png">'), ['/local/gt.png']);
+test('capturableImage keeps only images HA served from /local or /static on its own origin', async () => {
+  const { capturableImage } = await import('../lib/assets.mjs');
+  const o = 'http://homeassistant.local:8123';
+  assert.equal(capturableImage(`${o}/static/icons/favicon-192x192.png`, o, 200, 'image/png'), '/static/icons/favicon-192x192.png');
+  assert.equal(capturableImage(`${o}/local/plants/fig.jpg?v=3`, o, 200, 'image/jpeg'), '/local/plants/fig.jpg');
+  assert.equal(capturableImage(`${o}/static/x.svg`, o, 200, ' Image/SVG+XML; charset=utf-8'), '/static/x.svg');
+  // Another origin, a failed or non-image response, /api and anything outside /local and /static: never saved.
+  assert.equal(capturableImage('https://cdn.example.test/static/x.png', o, 200, 'image/png'), null);
+  assert.equal(capturableImage(`${o}/static/x.png`, o, 404, 'image/png'), null);
+  assert.equal(capturableImage(`${o}/static/x.png`, o, 304, 'image/png'), null);
+  assert.equal(capturableImage(`${o}/static/app.js`, o, 200, 'application/javascript'), null);
+  assert.equal(capturableImage(`${o}/static/x.png`, o, 200, undefined), null);
+  assert.equal(capturableImage(`${o}/api/image_proxy/image.plant`, o, 200, 'image/jpeg'), null);
+  assert.equal(capturableImage(`${o}/api/camera_proxy/camera.x`, o, 200, 'image/jpeg'), null);
+  assert.equal(capturableImage(`${o}//static/x.png`, o, 200, 'image/png'), null);
+  assert.equal(capturableImage(`${o}/hacsfiles/x.png`, o, 200, 'image/png'), null);
+  assert.equal(capturableImage('not a url', o, 200, 'image/png'), null);
 });
