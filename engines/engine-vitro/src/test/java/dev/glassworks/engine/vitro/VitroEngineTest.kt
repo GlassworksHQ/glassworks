@@ -351,16 +351,14 @@ class VitroEngineTest {
             page.load("$base/auth/authorize?client_id=abc&redirect_uri=def")
             page.load("$base/config")
             page.load("https://example.com/config/blueprint/import")
-            // Through the server's entry route, which hands the browser the proxy's capability and redirects.
-            assertEquals(
-                listOf(
-                    engine.islandServer.entryUrl("/auth/authorize?client_id=abc&redirect_uri=def"),
-                    engine.islandServer.entryUrl("/config"),
-                    "https://example.com/config/blueprint/import",
-                ),
-                legacy.pages.single().loads.toList(),
-            )
-            assertTrue(legacy.pages.single().loads.first().startsWith("$loopback/__vitro/enter?c="))
+            // Through the server's entry route, with a one-time code it trades for the proxy's capability and redirects.
+            val loads = legacy.pages.single().loads.toList()
+            assertEquals(3, loads.size)
+            fun to(path: String) = "&to=" + java.net.URLEncoder.encode(path, "UTF-8")
+            assertTrue(loads[0], loads[0].startsWith("$loopback/__vitro/enter?c=") && loads[0].endsWith(to("/auth/authorize?client_id=abc&redirect_uri=def")))
+            assertTrue(loads[1], loads[1].startsWith("$loopback/__vitro/enter?c=") && loads[1].endsWith(to("/config")))
+            assertEquals("https://example.com/config/blueprint/import", loads[2])
+            assertTrue("each load has its own code", loads[0].substringBefore("&to=") != loads[1].substringBefore("&to="))
         } finally {
             engine.islandServer.stop()
         }
