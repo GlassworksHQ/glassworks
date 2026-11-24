@@ -26,7 +26,7 @@
   "bounds": 2.7,
   "font": 0.3,
   "missingText": 0,
-  "reason": "not triaged yet (#794)"
+  "reason": "harness limit: Robolectric's Skia draws Inter's default instance and ignores its wght/opsz axes, so the 56 px weight-300 h1 renders regular and its line box differs (Humidity 2 px higher, card ~2.5 px off). On the panels Inter's axes apply: the Vitro Glass clock's light digits draw like HA's on the tablet and the S1 (2026-11-24)"
  },
  "mirror/mushroom-chips": {
   "pixel": 0.0461,
@@ -82,7 +82,7 @@
   "bounds": 2.7,
   "font": 0.3,
   "missingText": 0,
-  "reason": "not triaged yet (#794)"
+  "reason": "harness limit: Robolectric's Skia draws Inter's default instance and ignores its wght/opsz axes, so the 56 px weight-300 h1 renders regular and its line box differs (Humidity 2 px higher, card ~2.5 px off). On the panels Inter's axes apply: the Vitro Glass clock's light digits draw like HA's on the tablet and the S1 (2026-11-24)"
  },
  "s1/mushroom-chips": {
   "pixel": 0.0461,
@@ -138,7 +138,7 @@
   "bounds": 2.5,
   "font": 0,
   "missingText": 0,
-  "reason": "not triaged yet (#794)"
+  "reason": "harness limit: Robolectric's Skia draws Inter's default instance and ignores its wght/opsz axes, so the 56 px weight-300 h1 renders regular and its line box differs (Humidity 2 px higher, card ~2.5 px off). On the panels Inter's axes apply: the Vitro Glass clock's light digits draw like HA's on the tablet and the S1 (2026-11-24)"
  },
  "tablet/mushroom-chips": {
   "pixel": 0.0507,
