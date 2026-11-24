@@ -807,7 +807,7 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                 ctx.callService(domain, "set_temperature", JSONObject().put("entity_id", eid).put("temperature", target), null)
             }
             observe(eid) { s ->
-                titleView.text = config.name ?: s?.friendlyName ?: eid
+                titleView.text = config.name ?: s?.displayName ?: eid
                 val attrs = s?.attributes.orEmpty()
                 val mode = s?.state ?: "off"
                 val action = attrs["hvac_action"] as? String
