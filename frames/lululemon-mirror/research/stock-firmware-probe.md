@@ -217,6 +217,61 @@ outside the repository.
    `/proc/<pid>/status`, `/proc/<pid>/stat`, `ls -lZ`, and `/system/etc/dpm/dpm.conf` checks over
    the new USB ADB session (details in Result §7 below).
 
+8. **`dpmd` constructor hook, off-device** (2026-11-24, read from the pulled ELF64 library; constructor
+   control flow **verified** in an arm64 container; **untested** on the panel)
+   `qti_init_shell` cannot load a module, so the next process that can is `dpmd`: uid 0,
+   `CAP_SYS_MODULE`, and it links `libdpmframework.so`. That library is mode `0644` `vendor_file`,
+   so the shell can read it. `/proc/<pid>/maps` is not: `shell` fails `ptrace_may_access` before
+   SELinux is consulted, and this kernel leaves `startstack` at 0, so procfs does not answer
+   bitness. The ELF header does. On the live stock `1.24.0` unit:
+   ```
+   /system/vendor/lib/libdpmframework.so    1
+   /system/vendor/lib64/libdpmframework.so  2
+   ```
+   `e_ident[EI_CLASS]` `1` is ELFCLASS32 (149,256 B) and `2` is ELFCLASS64 (223,232 B). `dpmd` links
+   the lib64 copy. The patcher refuses the other one.
+
+   [`tools/mirror/src/dpmd-hook.ts`](../../../tools/mirror/src/dpmd-hook.ts) keeps the file the same
+   length and changes two regions: the addend of the `R_AARCH64_RELATIVE` relocation for
+   `.init_array[0]`, and a payload written on a CIE/FDE boundary in the tail of `.eh_frame` (file
+   offset `0x2ebe0`, 21,008 bytes, already mapped read+execute). The payload is a raw-syscall
+   constructor (`init_module`, then `fchmodat` mode `0444` on `mmcblk0p22` and `mmcblk0p19`, then a
+   tail jump to the constructor it replaced) followed by the caller's `.ko`. There is no code cave
+   in the executable LOAD segment, and `.eh_frame` is the RX window that is only read by the
+   unwinder. A module that does not fit is refused before a sparse image is built. The `.ko` stays
+   on the caller's disk; nothing GPL or vendor is committed.
+
+   `stock-surgical-adb.ts --backup-module` now builds `patch-dpmd.sparse` and `restore-dpmd.sparse`
+   for that library and does not patch `init.qcom.post_boot.sh`.
+
+   The constructor was executed off-device on 2026-11-24: the patched payload from the pulled
+   lib64 file, with a 256-byte stand-in image in place of a `.ko`, was mapped in
+   `arm64v8/debian:bookworm-slim` and the initialiser it chains to was replaced with `exit(42)`.
+   `strace` showed `init_module` on the embedded image, `fchmodat(AT_FDCWD, "/dev/block/mmcblk0p22",
+   0444)` and the same for `mmcblk0p19`, then `exited with 42`. An earlier encoding subtracted the
+   payload-relative offset instead of `payloadVaddr` and branched to the wrong address; this run is
+   the check that the bias is `load_address - payloadVaddr`. It does not prove a real module loads
+   on the unit's 3.10 kernel. The on-panel boot is still **untested**.
+
+   The module that image embeds is not in this repo. A built `.ko` is a GPL payload (Hard Rule 4),
+   and stock `1.24.0` only loads one whose ABI matches its own `pronto_wlan.ko` (**verified**
+   2026-11-24, pulled file, not committed):
+   ```
+   vermagic=3.10.49-perf-g4869d64961b SMP preempt mod_unload modversions aarch64
+   module_layout=0xa5b7f7dd
+   ```
+   Linux 3.10 `same_magic()` with `CONFIG_MODVERSIONS=y` compares the tail after the first space, so
+   the `-g4869d64961b` prefix is not the check. `shihanqu/lululemon-mirror-root` (`mod/mirror_root.c`,
+   `docs/ABI.md`, **read**) builds that ABI by copying `module_layout` from the vendor driver,
+   taking `kallsyms_lookup_name = 0xe007de41` from `genksyms` (a primitive signature; **not** read
+   out of this unit's kernel), and laying out `struct module` as `0x220` bytes with `init` at
+   `0x120` and `exit` at `0x210` from the DWARF of an unstripped `pronto_wlan.ko`. Their `init`
+   writes `0` to `selinux_enforcing` through `kallsyms_lookup_name`. The symbol is
+   `EXPORT_SYMBOL_GPL`, so the module's license string has to be `GPL`. That project's README
+   reports the same module verified on `g4869d64961b`. For this hook the module only has to clear
+   enforcing: the constructor already runs `fchmodat` on the two block nodes. Their root daemon is
+   not required. Whether `0xe007de41` matches this kernel is **untested**.
+
 ## Result
 
 ### 1. Stock `1.24.0` identity, kernel, and boot configuration (verified)
@@ -404,6 +459,10 @@ stock `1.24.0`). `dt-panel.txt` returned empty (`0` bytes) because `untrusted_ap
     `/system/vendor/lib/` (`libdpmctmgr.so`, `libdpmfdmgr.so`, `libdpmframework.so`, `libdpmnsrm.so`,
     `libdpmtcm.so`). For daily Glassworks operation on stock `1.24.0`, root is **not** needed: the
     `services.jar` USB ADB hook stays SELinux `Enforcing` and is MIT-licensed.
+- **Which `libdpmframework.so` is 64-bit (2026-11-24, verified on the unit):**
+  `od -An -tu1 -j4 -N1` of the two copies returned `1` for `/system/vendor/lib/libdpmframework.so`
+  (ELFCLASS32, 149,256 B) and `2` for `/system/vendor/lib64/libdpmframework.so` (ELFCLASS64,
+  223,232 B). The hook targets the lib64 file. File size is not the check; `EI_CLASS` is.
 
 ## How to reproduce
 
@@ -453,10 +512,15 @@ npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --apply-adb 
 ## Open questions
 
 1. **Full raw `system` / `boot` backup from untouched stock `1.24.0`:** `untrusted_app`, `shell`,
-   and `qti_init_shell` (`init.qcom.post_boot.sh`) are all blocked by stock `1.24.0`'s `/sepolicy`
-   from reading `mmcblk0p22` / `mmcblk0p19` or loading modules. Remaining open question: how to
-   capture a clean local raw `system` + `boot` backup for maintainer testing without shipping any
-   vendor binaries or GPL payloads in Glassworks.
+   and `qti_init_shell` cannot read `mmcblk0p22` / `mmcblk0p19` or load a module. The prepared path
+   is the `dpmd` constructor hook in [`tools/mirror/src/dpmd-hook.ts`](../../../tools/mirror/src/dpmd-hook.ts),
+   driven by `stock-surgical-adb.ts --backup-module <ko>` (the `.ko` stays outside the repo). What
+   is still open is the on-panel run: a `.ko` whose `module_layout` CRC is `0xa5b7f7dd` and whose
+   `kallsyms_lookup_name` CRC matches this kernel (community `genksyms` value `0xe007de41`,
+   **untested** here), then flash `patch-dpmd.sparse`, confirm `getenforce` goes Permissive and both
+   block nodes are readable, stream the two partitions, confirm the saved `system` image hashes as
+   stock after the scrub, and flash `restore-dpmd.sparse`. That boot has not been done. The `.ko`
+   stays outside the repo.
 2. **Does Glass Panes `mirror-android-2` / `mirror-android-3` break Wi-Fi on `1.24.0` units?**
    Even though `__versions` CRCs match (`module_layout=0xa5b7f7dd`, `printk=0x27e1a049`,
    `__kmalloc=0xd2b09ce5`) and Linux 3.10's `same_magic()` ignores the `-perf-g...` prefix under

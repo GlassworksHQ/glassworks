@@ -35,20 +35,26 @@ Steps:
   1. Preflight (read-only over SoftAP HTTP): checks /system/framework for services.odex, lists
      /system/app and /system/priv-app, pulls services.jar + init.qcom.post_boot.sh + their
      FS_IOC_FIEMAP physical blocks, and immediately writes byte-for-byte undo images under <out>/backup/.
-     Hard stop-gate if services.odex is detected.
+     With --backup-module, also pulls /system/vendor/lib64/libdpmframework.so (the ELF64 copy dpmd
+     links) and writes restore-dpmd.sparse before anything is offered for flashing.
+     Hard stop-gate if services.odex is detected, or if that library cannot hold the hook.
   2. Build locally (no writes): patches UsbDebuggingManager.startConfirmation() in services.jar to
      trust ONLY your --adb-key (exact original byte size), builds patch-services.sparse (DONT_CARE
      everywhere except services.jar's blocks) and userdata-adb.sparse (keeps probe APK as safety net).
+     With --backup-module, also builds patch-dpmd.sparse: same file length, one relocation retargeted,
+     the .ko embedded in the .eh_frame tail.
   3. Flash & verify USB ADB: prompts [y/N], flashes patch-services.sparse to system + fresh userdata,
      reboots, and verifies authorized USB \`adb shell\`. Reversible anytime via restore-services.sparse.
-  4. Optional raw backup (--backup-module <path-to-ko>): pushes a user-supplied AArch64 .ko (never
-     shipped by Glassworks), hooks init.qcom.post_boot.sh (20 blocks) for 1 boot to stream raw
-     system (1.2 GiB) + boot (32 MiB) over USB ADB, then automatically restores init.qcom.post_boot.sh.
+  4. Optional raw backup (--backup-module <path-to-ko>): flashes patch-dpmd.sparse so dpmd's constructor
+     loads that module and makes the system and boot block nodes readable for one boot, streams raw
+     system (1.2 GiB) + boot (32 MiB) over USB ADB, scrubs those two files back to stock inside the
+     saved image, then flashes restore-dpmd.sparse. The .ko is never pushed to the device and is never
+     shipped by Glassworks. init.qcom.post_boot.sh is not patched: qti_init_shell cannot load modules.
 
 Modes:
   --preflight-only          Run Step 1 only (read-only over SoftAP; saves backup/ + report.md)
   --build-only              Run Steps 1-2 only (build patch-services.sparse locally; no flash)
-  --undo --backup-dir <d>   Flash restore-post-boot.sparse (if any) + restore-services.sparse back
+  --undo --backup-dir <d>   Flash restore-dpmd.sparse (if any) + restore-post-boot.sparse (if any) + restore-services.sparse
   --apply-adb --backup-dir <d>  Re-flash saved patch-services.sparse to re-enable USB ADB (Enforcing)
   --dry-run                 Run Steps 1-3 on a fake stock Mirror (no device touched)
 
@@ -57,7 +63,7 @@ Options:
   --probe-http-port <port>  Probe HTTP port (default: ${DEFAULT_PROBE_HTTP_PORT})
   --adb-key <file>          Host ADB public key to authorize (default: ~/.android/adbkey.pub)
   --out <dir>               Output folder outside the repo (default: <tmpdir>/mirror-surgical-adb-<ts>)
-  --backup-module <file>    Optional external AArch64 .ko for Step 4 raw system+boot backup
+  --backup-module <file>    Optional external AArch64 .ko embedded in libdpmframework.so for Step 4
   --keep-adb                Keep authorized USB ADB (services.jar) active after Step 4 backup (default)
   --restore-all             With --backup-module, also restore original services.jar after backup
   --erase-userdata          With --undo, also run \`fastboot erase userdata\` for factory-reset stock

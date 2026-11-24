@@ -1,7 +1,12 @@
 // Phase 2 stock Mirror tooling: reversible surgical sparse patching of /system/framework/services.jar
-// (for authorized USB ADB on untouched stock 1.24.0 without replacing system) and optional
-// /system/etc/init.qcom.post_boot.sh hooking (with an external user-supplied .ko) for full raw
-// system/boot backup + automatic byte-for-byte restore.
+// (for authorized USB ADB on untouched stock 1.24.0 without replacing system) and an optional
+// in-place patch of /system/vendor/lib64/libdpmframework.so. That library's constructor runs inside
+// dpmd (uid 0, CAP_SYS_MODULE). The patch embeds a user-supplied .ko, loads it, and makes the system
+// and boot block nodes readable for one boot so the raw partitions can be streamed out, then the
+// original library blocks are flashed back.
+//
+// init.qcom.post_boot.sh is not the hook. qti_init_shell has no sys_module and cannot search
+// /data/local/tmp (verified on stock 1.24.0). patchPostBootForBackup remains for that record.
 //
 // Hard rules enforced here:
 // - Read first, back up first, verify sizes/hashes before any write.
@@ -17,6 +22,7 @@ import { Disk, MemoryStore, parseSparseHeader, SPARSE_MAGIC, writeSparse } from 
 import {
   GLASS_PANES_KEY_FINGERPRINT, replaceDexString, USERDATA_BYTES,
 } from '@glassworks/lululemon-mirror-installer';
+import { buildDpmdHook, planDpmdHook } from './dpmd-hook';
 import {
   buildStockProbeUserdata, DEFAULT_PROBE_HTTP_PORT, validateStockAdbKey,
   type AdbState, type FiemapExtent, type FiemapResult, type ProbeAppPayload,
@@ -40,6 +46,8 @@ export const START_CONFIRMATION_LOG_STRING =
 
 export const STOCK_SERVICES_JAR_PATH = '/system/framework/services.jar';
 export const STOCK_POST_BOOT_PATH = '/system/etc/init.qcom.post_boot.sh';
+/** ELF64 copy. `/system/vendor/lib/libdpmframework.so` is ELF32; dpmd links this one. */
+export const STOCK_DPMD_LIB_PATH = '/system/vendor/lib64/libdpmframework.so';
 export const REMOTE_BACKUP_KO_PATH = '/data/local/tmp/gw_backup.ko';
 
 const sha256Hex = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
@@ -599,6 +607,9 @@ export function buildSurgicalSparseImage(
  * `/system/etc/init.qcom.post_boot.sh` while preserving the EXACT original byte length by
  * shortening an existing `#` comment block (never modifying `#!/system/bin/sh` or any executable
  * statement).
+ *
+ * The runner does not call this. On stock 1.24.0 `qti_init_shell` has no `sys_module` and cannot
+ * search `/data/local/tmp`, so Step 4 patches `libdpmframework.so` instead.
  */
 export function patchPostBootForBackup(orig: Uint8Array, modulePath = REMOTE_BACKUP_KO_PATH): Uint8Array {
   if (!/^\/data\/local\/tmp\/[A-Za-z0-9._-]+\.ko$/.test(modulePath)) {
@@ -730,6 +741,16 @@ export interface BackupManifest {
     origFile: string;
     restoreSparse: string;
   };
+  dpmdLib?: {
+    path: string;
+    size: number;
+    originalSha256: string;
+    patchedSha256?: string;
+    extents: FiemapExtent[];
+    origFile: string;
+    restoreSparse: string;
+    patchSparse?: string;
+  };
 }
 
 export interface SurgicalAdbOptions {
@@ -775,10 +796,15 @@ export interface SurgicalAdbReport {
   privAppListing: string[];
   servicesFiemap?: FiemapResult;
   postBootFiemap?: FiemapResult;
+  dpmdFiemap?: FiemapResult;
   servicesOriginalSha256?: string;
   servicesPatchedSha256?: string;
   servicesPadBytes?: number;
   postBootOriginalSha256?: string;
+  dpmdOriginalSha256?: string;
+  dpmdPatchedSha256?: string;
+  dpmdEntryVaddr?: number;
+  dpmdChainedVaddr?: number;
   systemPartitionBytes?: number;
   userdataPartitionBytes?: number;
   adbAuthorized?: boolean;
@@ -793,6 +819,7 @@ export interface SurgicalAdbReport {
   backupBootBytes?: number;
   backupBootSha256?: string;
   restoredPostBoot?: boolean;
+  restoredDpmd?: boolean;
   restoredServices?: boolean;
   notes: string[];
   stopReason?: string;
@@ -837,8 +864,12 @@ export function renderSurgicalReport(r: SurgicalAdbReport): string {
   if (r.postBootFiemap) {
     out.push(`- \`/system/etc/init.qcom.post_boot.sh\` FIEMAP: ${r.postBootFiemap.error ?? `${r.postBootFiemap.size ?? '?'} B — ${formatExtents(r.postBootFiemap.extents)}`}`);
   }
+  if (r.dpmdFiemap) {
+    out.push(`- \`${STOCK_DPMD_LIB_PATH}\` FIEMAP: ${r.dpmdFiemap.error ?? `${r.dpmdFiemap.size ?? '?'} B — ${formatExtents(r.dpmdFiemap.extents)}`}`);
+  }
   if (r.servicesOriginalSha256) out.push(`- Original \`services.jar\` SHA-256: \`${r.servicesOriginalSha256}\``);
   if (r.postBootOriginalSha256) out.push(`- Original \`init.qcom.post_boot.sh\` SHA-256: \`${r.postBootOriginalSha256}\``);
+  if (r.dpmdOriginalSha256) out.push(`- Original \`libdpmframework.so\` SHA-256: \`${r.dpmdOriginalSha256}\``);
   if (r.oatListing.length > 0) {
     out.push('', '`/system/framework/oat` entries:', '```', ...r.oatListing, '```');
   }
@@ -852,6 +883,11 @@ export function renderSurgicalReport(r: SurgicalAdbReport): string {
   if (r.servicesPatchedSha256) {
     out.push('', '## Step 2 — Surgical Patch Build (exact byte length)', '');
     out.push(`- Patched \`services.jar\` SHA-256: \`${r.servicesPatchedSha256}\` (EOCD pad: ${r.servicesPadBytes ?? 0} B)`);
+    if (r.dpmdPatchedSha256) {
+      const entry = r.dpmdEntryVaddr !== undefined ? `0x${r.dpmdEntryVaddr.toString(16)}` : '?';
+      const chained = r.dpmdChainedVaddr !== undefined ? `0x${r.dpmdChainedVaddr.toString(16)}` : '?';
+      out.push(`- Patched \`libdpmframework.so\` SHA-256: \`${r.dpmdPatchedSha256}\` (.init_array[0] → ${entry}, chains to ${chained})`);
+    }
   }
 
   if (r.adbAuthorized !== undefined) {
@@ -873,6 +909,9 @@ export function renderSurgicalReport(r: SurgicalAdbReport): string {
     }
     if (r.restoredPostBoot !== undefined) {
       out.push(`- Restored original \`init.qcom.post_boot.sh\` blocks: **${r.restoredPostBoot ? 'yes' : 'no'}**`);
+    }
+    if (r.restoredDpmd !== undefined) {
+      out.push(`- Restored original \`libdpmframework.so\` blocks: **${r.restoredDpmd ? 'yes' : 'no'}**`);
     }
     if (r.restoredServices !== undefined) {
       out.push(`- Restored original \`services.jar\` blocks: **${r.restoredServices ? 'yes' : 'no'}**`);
@@ -939,6 +978,11 @@ export async function runStockSurgicalAdb(
       report.stopReason = 'undo cancelled by user';
       await saveReport();
       return { report, ok: false };
+    }
+    if (manifest.dpmdLib) {
+      d.log('  flashing restore-dpmd.sparse to system...');
+      await fb.flashPartition('system', `${o.backupDir}/${manifest.dpmdLib.restoreSparse}`);
+      report.restoredDpmd = true;
     }
     if (manifest.postBoot) {
       d.log('  flashing restore-post-boot.sparse to system...');
@@ -1070,6 +1114,30 @@ export async function runStockSurgicalAdb(
     report.postBootOriginalSha256 = sha256Hex(origPostBoot);
   }
 
+  // The backup module is embedded in libdpmframework.so. Pull that file and refuse a library the
+  // planner cannot hook before any image is offered for flashing.
+  let origDpmd: Uint8Array | undefined;
+  let dpmdReadError: string | undefined;
+  if (backupKoBytes) {
+    report.dpmdFiemap = await http.fiemap(STOCK_DPMD_LIB_PATH);
+    const libRead = await http.readFile(STOCK_DPMD_LIB_PATH);
+    if (libRead.status !== 'ok') {
+      dpmdReadError = `could not read ${STOCK_DPMD_LIB_PATH} (${libRead.status}); dpmd links the ELF64 copy under vendor/lib64`;
+    } else if (report.dpmdFiemap.error || !report.dpmdFiemap.extents?.length) {
+      dpmdReadError = `FIEMAP failed for ${STOCK_DPMD_LIB_PATH}: ${report.dpmdFiemap.error ?? 'no extents'}`;
+    } else if (report.dpmdFiemap.size !== undefined && report.dpmdFiemap.size !== libRead.data.length) {
+      dpmdReadError = `size mismatch for ${STOCK_DPMD_LIB_PATH}: FIEMAP=${report.dpmdFiemap.size} vs read=${libRead.data.length}`;
+    } else {
+      origDpmd = libRead.data;
+      report.dpmdOriginalSha256 = sha256Hex(origDpmd);
+      try {
+        planDpmdHook(origDpmd, backupKoBytes);
+      } catch (err) {
+        dpmdReadError = err instanceof Error ? err.message : String(err);
+      }
+    }
+  }
+
   // Save byte-exact originals + restore sparse images immediately (before any flash is ever offered).
   let targetSystemBytes = STOCK_SYSTEM_PARTITION_BYTES;
   const defaultUserdataBytes = USERDATA_BYTES;
@@ -1090,6 +1158,17 @@ export async function runStockSurgicalAdb(
       origPostBoot,
     );
     restorePostBootPath = await d.writeFile('backup/restore-post-boot.sparse', restorePostBootSparse);
+  }
+
+  let restoreDpmdPath: string | undefined;
+  if (origDpmd && report.dpmdFiemap?.extents?.length) {
+    await d.writeFile('backup/libdpmframework.so.orig', origDpmd);
+    const restoreDpmdSparse = buildSurgicalSparseImage(
+      targetSystemBytes,
+      report.dpmdFiemap.extents,
+      origDpmd,
+    );
+    restoreDpmdPath = await d.writeFile('backup/restore-dpmd.sparse', restoreDpmdSparse);
   }
 
   const manifest: BackupManifest = {
@@ -1117,6 +1196,18 @@ export async function runStockSurgicalAdb(
           },
         }
       : {}),
+    ...(origDpmd && restoreDpmdPath && report.dpmdFiemap?.extents
+      ? {
+          dpmdLib: {
+            path: STOCK_DPMD_LIB_PATH,
+            size: origDpmd.length,
+            originalSha256: report.dpmdOriginalSha256!,
+            extents: report.dpmdFiemap.extents,
+            origFile: 'libdpmframework.so.orig',
+            restoreSparse: 'restore-dpmd.sparse',
+          },
+        }
+      : {}),
   };
   await d.writeFile('backup/manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
   await saveReport();
@@ -1124,6 +1215,11 @@ export async function runStockSurgicalAdb(
   d.log(`  saved byte-exact undo image: ${restoreServicesPath}`);
   if (report.servicesOdexFound) {
     report.stopReason = 'STOPPED: services.odex detected under /system/framework — ART would ignore patched services.jar unless services.odex is handled. Nothing was written.';
+    await saveReport();
+    return { report, ok: false };
+  }
+  if (dpmdReadError) {
+    report.stopReason = dpmdReadError;
     await saveReport();
     return { report, ok: false };
   }
@@ -1150,21 +1246,39 @@ export async function runStockSurgicalAdb(
   const patchServicesPath = await d.writeFile('patch-services.sparse', patchServicesSparse);
   await d.writeFile('backup/patch-services.sparse', patchServicesSparse);
 
-  let patchedPostBoot: Uint8Array | undefined;
-  let patchPostBootPath: string | undefined;
+  let patchedDpmd: Uint8Array | undefined;
+  let patchDpmdPath: string | undefined;
   if (backupKoBytes) {
-    if (!origPostBoot || !report.postBootFiemap?.extents?.length) {
-      report.stopReason = 'cannot build Step 4 backup hook: init.qcom.post_boot.sh or its FIEMAP extents were unavailable';
+    if (!origDpmd || !report.dpmdFiemap?.extents?.length || !manifest.dpmdLib) {
+      report.stopReason = `cannot build the dpmd hook: ${STOCK_DPMD_LIB_PATH} or its FIEMAP extents were unavailable`;
       await saveReport();
       return { report, ok: false };
     }
-    patchedPostBoot = patchPostBootForBackup(origPostBoot, REMOTE_BACKUP_KO_PATH);
-    const patchPostBootSparse = buildSurgicalSparseImage(
+    let built: ReturnType<typeof buildDpmdHook>;
+    try {
+      built = buildDpmdHook(origDpmd, backupKoBytes);
+    } catch (err) {
+      report.stopReason = err instanceof Error ? err.message : String(err);
+      await saveReport();
+      return { report, ok: false };
+    }
+    patchedDpmd = built.bytes;
+    report.dpmdPatchedSha256 = sha256Hex(patchedDpmd);
+    report.dpmdEntryVaddr = built.plan.entryVaddr;
+    report.dpmdChainedVaddr = built.plan.chainedVaddr;
+    manifest.dpmdLib.patchedSha256 = report.dpmdPatchedSha256;
+    manifest.dpmdLib.patchSparse = 'patch-dpmd.sparse';
+    await d.writeFile('backup/manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
+    const patchDpmdSparse = buildSurgicalSparseImage(
       targetSystemBytes,
-      report.postBootFiemap.extents,
-      patchedPostBoot,
+      report.dpmdFiemap.extents,
+      patchedDpmd,
     );
-    patchPostBootPath = await d.writeFile('patch-post-boot.sparse', patchPostBootSparse);
+    patchDpmdPath = await d.writeFile('patch-dpmd.sparse', patchDpmdSparse);
+    await d.writeFile('backup/patch-dpmd.sparse', patchDpmdSparse);
+    report.notes.push(
+      `dpmd hook: .init_array[0] -> 0x${built.plan.entryVaddr.toString(16)}, chains to 0x${built.plan.chainedVaddr.toString(16)}, payload ${built.plan.payloadBytes} B embedding ${built.plan.moduleBytes} B.`,
+    );
   }
 
   // Build fresh userdata (retaining the probe APK as a SoftAP safety net while wiping dalvik-cache)
@@ -1234,11 +1348,16 @@ export async function runStockSurgicalAdb(
         'backup/restore-post-boot.sparse',
         buildSurgicalSparseImage(sysBytes, report.postBootFiemap.extents, origPostBoot),
       );
-      if (patchedPostBoot) {
-        await d.writeFile(
-          'patch-post-boot.sparse',
-          buildSurgicalSparseImage(sysBytes, report.postBootFiemap.extents, patchedPostBoot),
-        );
+    }
+    if (origDpmd && report.dpmdFiemap?.extents?.length) {
+      await d.writeFile(
+        'backup/restore-dpmd.sparse',
+        buildSurgicalSparseImage(sysBytes, report.dpmdFiemap.extents, origDpmd),
+      );
+      if (patchedDpmd) {
+        const rebuilt = buildSurgicalSparseImage(sysBytes, report.dpmdFiemap.extents, patchedDpmd);
+        await d.writeFile('patch-dpmd.sparse', rebuilt);
+        await d.writeFile('backup/patch-dpmd.sparse', rebuilt);
       }
     }
     await d.writeFile('backup/manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
@@ -1292,13 +1411,13 @@ export async function runStockSurgicalAdb(
   await saveReport();
   d.log(`  SUCCESS: authorized USB ADB! id=${report.adbId}, getenforce=${report.adbEnforce}, mirror=${report.adbMirrorVersion}`);
 
-  // --- Step 4 (Optional): Full raw system + boot backup using external --backup-module ---
-  if (!backupKoBytes || !patchPostBootPath || !restorePostBootPath) {
+  // --- Step 4 (Optional): Full raw system + boot backup via the dpmd constructor hook ---
+  if (!backupKoBytes || !patchDpmdPath || !restoreDpmdPath || !origDpmd || !patchedDpmd || !report.dpmdFiemap?.extents) {
     return { report, ok: true };
   }
 
   const okBackup = await d.confirm(
-    `Step 4/4: Push backup module, surgically patch init.qcom.post_boot.sh (20 blocks) for 1 boot to dump raw system + boot images, then automatically restore init.qcom.post_boot.sh?`,
+    `Step 4/4: Surgically patch ${STOCK_DPMD_LIB_PATH} so dpmd loads the backup module and makes mmcblk0p22 and mmcblk0p19 readable for one boot, stream raw system + boot, then restore the library?`,
   );
   if (!okBackup) {
     report.notes.push('Step 4 (raw system/boot backup) skipped by user.');
@@ -1306,7 +1425,6 @@ export async function runStockSurgicalAdb(
     return { report, ok: true };
   }
 
-  await adbSession.push(o.backupModulePath!, REMOTE_BACKUP_KO_PATH);
   await adbSession.rebootBootloader();
   const fb2 = await d.waitForFastboot(120_000);
   if (!fb2) {
@@ -1314,8 +1432,8 @@ export async function runStockSurgicalAdb(
     await saveReport();
     return { report, ok: false };
   }
-  d.log('  flashing surgical patch-post-boot.sparse (20 blocks)...');
-  await fb2.flashPartition('system', patchPostBootPath);
+  d.log('  flashing surgical patch-dpmd.sparse (libdpmframework.so blocks only)...');
+  await fb2.flashPartition('system', patchDpmdPath);
   await fb2.reboot();
 
   const waitUntil2 = mono() + Math.max(60, o.waitSeconds) * 1000;
@@ -1330,13 +1448,14 @@ export async function runStockSurgicalAdb(
     await d.sleep(3000);
   }
   if (!backupAdb) {
-    report.stopReason = `USB ADB did not return after Step 4 hook (restore post_boot with: fastboot flash system ${restorePostBootPath})`;
+    report.stopReason = `USB ADB did not return after Step 4 hook (restore the library with: fastboot flash system ${restoreDpmdPath})`;
     await saveReport();
     return { report, ok: false };
   }
 
-  // qcom-post-boot runs on sys.boot_completed=1, which can lag USB ADB authorization by a few
-  // seconds; wait up to 45 s for boot_completed + Permissive + readable mmcblk0p22 before failing.
+  // dpmd's constructor runs a few seconds after boot, before USB ADB is up. The chmod lives in
+  // devtmpfs until the next reboot, so once adb returns it is enough to see Permissive plus both
+  // block nodes readable. Give that 45 s.
   const hookDeadline = mono() + 45_000;
   let enf = '';
   let blockReadable = false;
@@ -1358,8 +1477,7 @@ export async function runStockSurgicalAdb(
   }
   report.notes.push(`Step 4 boot getenforce=${enf || 'unknown'} blockReadable=${blockReadable}`);
   if (enf.toLowerCase() !== 'permissive' || !blockReadable) {
-    await backupAdb.shell(`rm -f ${REMOTE_BACKUP_KO_PATH}`);
-    report.stopReason = `backup module did not switch SELinux to Permissive + readable block nodes (getenforce=${enf || 'unknown'}, readable=${blockReadable}); restore post_boot via fastboot flash system ${restorePostBootPath}`;
+    report.stopReason = `backup module did not switch SELinux to Permissive + readable block nodes (getenforce=${enf || 'unknown'}, readable=${blockReadable}); restore the library via fastboot flash system ${restoreDpmdPath}`;
     await saveReport();
     return { report, ok: false };
   }
@@ -1373,14 +1491,12 @@ export async function runStockSurgicalAdb(
   report.backupSystemBytes = sysDump.bytes;
   report.backupSystemSha256 = sysDump.sha256;
   if (sysDump.bytes === targetSystemBytes && d.restoreExtentsInRawImage) {
-    d.log('  scrubbing temporary services.jar + post_boot.sh patches out of system-stock.raw.img -> pure untouched stock...');
+    d.log('  scrubbing temporary services.jar + libdpmframework.so patches out of system-stock.raw.img -> pure untouched stock...');
     report.backupSystemSha256 = await d.restoreExtentsInRawImage(report.backupSystemPath, [
       { extents: report.servicesFiemap.extents, origData: origServices },
-      ...(origPostBoot && report.postBootFiemap?.extents
-        ? [{ extents: report.postBootFiemap.extents, origData: origPostBoot }]
-        : []),
+      { extents: report.dpmdFiemap.extents, origData: origDpmd },
     ]);
-    report.notes.push('Restored original services.jar and init.qcom.post_boot.sh blocks inside system-stock.raw.img so the saved image is pure untouched stock.');
+    report.notes.push('Restored original services.jar and libdpmframework.so blocks inside system-stock.raw.img so the saved image is pure untouched stock.');
   }
 
   d.log('  streaming raw boot (/dev/block/mmcblk0p19, 32 MiB) over USB ADB...');
@@ -1392,13 +1508,12 @@ export async function runStockSurgicalAdb(
   report.backupBootBytes = bootDump.bytes;
   report.backupBootSha256 = bootDump.sha256;
 
-  await backupAdb.shell(`rm -f ${REMOTE_BACKUP_KO_PATH}`);
   await backupAdb.rebootBootloader();
   const fb3 = await d.waitForFastboot(120_000);
   if (fb3) {
-    d.log('  restoring original init.qcom.post_boot.sh blocks...');
-    await fb3.flashPartition('system', restorePostBootPath);
-    report.restoredPostBoot = true;
+    d.log('  restoring original libdpmframework.so blocks...');
+    await fb3.flashPartition('system', restoreDpmdPath);
+    report.restoredDpmd = true;
     if (o.restoreAllAfterBackup) {
       d.log('  --restore-all: restoring original services.jar blocks...');
       await fb3.flashPartition('system', restoreServicesPath);
@@ -1406,12 +1521,12 @@ export async function runStockSurgicalAdb(
     } else {
       report.restoredServices = false;
       d.log(`  keeping authorized USB ADB services.jar hook active (SELinux Enforcing). Revert anytime with: --undo --backup-dir ${o.outDir}/backup`);
-      report.notes.push('Kept surgical USB ADB services.jar hook active (SELinux Enforcing); temporary backup hook restored to stock.');
+      report.notes.push('Kept surgical USB ADB services.jar hook active (SELinux Enforcing); libdpmframework.so restored to stock.');
     }
     await fb3.reboot();
   } else {
-    report.restoredPostBoot = false;
-    report.notes.push(`Manual restore needed: fastboot flash system ${restorePostBootPath}`);
+    report.restoredDpmd = false;
+    report.notes.push(`Manual restore needed: fastboot flash system ${restoreDpmdPath}`);
   }
 
   if (sysDump.bytes !== targetSystemBytes) {

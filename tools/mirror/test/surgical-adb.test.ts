@@ -9,7 +9,7 @@ import { fakeAdbKey } from '@glassworks/lululemon-mirror-installer/fakes';
 import {
   buildSurgicalSparseImage, patchPostBootForBackup, patchStockServicesJar,
   renderSurgicalReport, runStockSurgicalAdb, START_CONFIRMATION_LOG_STRING,
-  STOCK_POST_BOOT_PATH, STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES,
+  STOCK_DPMD_LIB_PATH, STOCK_POST_BOOT_PATH, STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES,
   validateKernelModuleElf,
   type FiemapExtent, type SurgicalAdbDeps,
 } from '../src/surgical-adb';
@@ -197,6 +197,96 @@ describe('validateKernelModuleElf', () => {
   });
 });
 
+/**
+ * ELF64/AArch64 shared object shaped like stock `libdpmframework.so`: one RX PT_LOAD holding
+ * .text/.eh_frame/.dynamic/.rela.dyn, one RW PT_LOAD holding .init_array, one R_AARCH64_RELATIVE
+ * for .init_array[0]. Big enough for the dpmd payload plus a 256-byte module.
+ */
+function syntheticDpmdSo(): Uint8Array {
+  const textVaddr = 0x100;
+  const ehVaddr = 0x140;
+  const ehSize = 0x800;
+  const dynamicVaddr = 0x940;
+  const relaVaddr = 0x980;
+  const initVaddr = 0x1000;
+  const shstrtabOff = 0x2000;
+  const shoff = 0x2400;
+  const so = new Uint8Array(shoff + 7 * 64);
+  const u16 = (at: number, v: number): void => { so[at] = v & 0xff; so[at + 1] = (v >>> 8) & 0xff; };
+  const u32 = (at: number, v: number): void => { for (let i = 0; i < 4; i += 1) so[at + i] = (v >>> (8 * i)) & 0xff; };
+  const u64 = (at: number, v: number): void => { for (let i = 0; i < 8; i += 1) so[at + i] = Math.floor(v / 2 ** (8 * i)) & 0xff; };
+
+  so.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0], 0);
+  u16(0x10, 3);
+  u16(0x12, 183);
+  u32(0x14, 1);
+  u64(0x18, textVaddr);
+  u64(0x20, 64);
+  u64(0x28, shoff);
+  u16(0x34, 64);
+  u16(0x36, 56);
+  u16(0x38, 2);
+  u16(0x3a, 64);
+  u16(0x3c, 7);
+  u16(0x3e, 6);
+
+  const phdr = (i: number, flags: number, off: number, vaddr: number, filesz: number): void => {
+    const at = 64 + i * 56;
+    u32(at, 1);
+    u32(at + 4, flags);
+    u64(at + 8, off);
+    u64(at + 16, vaddr);
+    u64(at + 32, filesz);
+    u64(at + 40, filesz);
+    u64(at + 48, 0x1000);
+  };
+  phdr(0, 5, 0, 0, 0xa00);
+  phdr(1, 6, 0x1000, 0x1000, 0x100);
+
+  so[textVaddr] = 0xd6;
+  so[textVaddr + 1] = 0x5f;
+  so[textVaddr + 2] = 0x03;
+  so[textVaddr + 3] = 0xc0;
+
+  u32(ehVaddr, 0x0c);
+  u32(ehVaddr + 0x10, 0x14);
+  u32(ehVaddr + 0x14, 0x18);
+
+  u64(dynamicVaddr, 25);
+  u64(dynamicVaddr + 8, initVaddr);
+  u64(dynamicVaddr + 16, 27);
+  u64(dynamicVaddr + 24, 8);
+
+  u64(relaVaddr, initVaddr);
+  u64(relaVaddr + 8, 1027);
+  u64(relaVaddr + 16, textVaddr);
+
+  const names = '\0.text\0.eh_frame\0.dynamic\0.rela.dyn\0.init_array\0.shstrtab\0';
+  const nameAt: Record<string, number> = {};
+  for (const n of ['.text', '.eh_frame', '.dynamic', '.rela.dyn', '.init_array', '.shstrtab']) {
+    nameAt[n] = names.indexOf(`${n}\0`);
+  }
+  for (let i = 0; i < names.length; i += 1) so[shstrtabOff + i] = names.charCodeAt(i);
+
+  const shdr = (i: number, name: string, type: number, flags: number, addr: number, off: number, size: number): void => {
+    const at = shoff + i * 64;
+    u32(at, name ? nameAt[name]! : 0);
+    u32(at + 4, type);
+    u64(at + 8, flags);
+    u64(at + 16, addr);
+    u64(at + 24, off);
+    u64(at + 32, size);
+    u64(at + 48, 8);
+  };
+  shdr(1, '.text', 1, 6, textVaddr, textVaddr, 0x40);
+  shdr(2, '.eh_frame', 1, 2, ehVaddr, ehVaddr, ehSize);
+  shdr(3, '.dynamic', 6, 3, dynamicVaddr, dynamicVaddr, 0x30);
+  shdr(4, '.rela.dyn', 4, 2, relaVaddr, relaVaddr, 0x18);
+  shdr(5, '.init_array', 1, 3, initVaddr, 0x1000, 8);
+  shdr(6, '.shstrtab', 3, 0, 0, shstrtabOff, names.length);
+  return so;
+}
+
 describe('patchStockServicesJar + runStockSurgicalAdb', () => {
   it('patches UsbDebuggingManager.startConfirmation to exact byte length and passes dexdump -c', async () => {
     const jar = buildSyntheticStockServicesJar();
@@ -275,6 +365,64 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
     expect(renderSurgicalReport(report)).toContain('services.odex');
   });
 
+  it('stops before any flash when the dpmd library is the ELF32 copy', async () => {
+    const writes = new Map<string, Uint8Array | string>();
+    let flashed = false;
+    const fakeJar = new Uint8Array(4096).fill(0x50);
+    const elf32 = new Uint8Array(64);
+    elf32.set([0x7f, 0x45, 0x4c, 0x46, 1, 1, 1, 0], 0);
+    const fakeKo = new Uint8Array(64);
+    fakeKo.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0], 0);
+    const kdv = new DataView(fakeKo.buffer);
+    kdv.setUint16(16, 1, true);
+    kdv.setUint16(18, 183, true);
+    fakeKo.set(new TextEncoder().encode('vermagic=3.10.49-perf aarch64\0'), 32);
+
+    const deps: SurgicalAdbDeps = {
+      now: () => new Date('2026-11-24T22:00:00.000Z'),
+      sleep: async () => {},
+      log: () => {},
+      confirm: async () => true,
+      connectHttp: () => ({
+        async status() { return { ok: true, uid: 10099, pid: 100, sdk: 23, fiemap: true, bootCompleted: '1' }; },
+        async props() { return ''; },
+        async dtPanel() { return ''; },
+        async list() { return []; },
+        async readFile(p: string) {
+          if (p === STOCK_SERVICES_JAR_PATH) return { status: 'ok', data: fakeJar };
+          if (p === STOCK_DPMD_LIB_PATH) return { status: 'ok', data: elf32 };
+          return { status: 'missing' };
+        },
+        async fiemap(p: string) {
+          const data = p === STOCK_DPMD_LIB_PATH ? elf32 : fakeJar;
+          const blocks = Math.ceil(data.length / 4096);
+          return { path: p, size: data.length, ino: 3, extents: [{ logical: 0, physical: 4096, block: 1, length: blocks * 4096, blocks, flags: 1 }] };
+        },
+      }),
+      waitForFastboot: async () => { flashed = true; return null; },
+      checkAdb: async () => ({ usb: 'not-seen' }),
+      loadProbeApp: async () => undefined,
+      writeFile: async (rel, data) => { writes.set(rel, data); return `/tmp/out/${rel}`; },
+      readHostFile: async () => fakeKo,
+    };
+
+    const { report, ok } = await runStockSurgicalAdb({
+      mode: 'full',
+      probeHost: '192.168.43.1',
+      probeHttpPort: 18765,
+      adbKey: fakeAdbKey(9, 'test@host'),
+      backupModulePath: '/tmp/fake.ko',
+      waitSeconds: 30,
+      outDir: '/tmp/out',
+    }, deps);
+
+    expect(ok).toBe(false);
+    expect(flashed).toBe(false);
+    expect(report.stopReason).toMatch(/not ELF64/);
+    expect(writes.has('backup/restore-services.sparse')).toBe(true);
+    expect(writes.has('patch-dpmd.sparse')).toBe(false);
+  });
+
   it('runs full Steps 1-3 + Step 4 backup & auto-restore on a fake stock Mirror', async () => {
     const jar = buildSyntheticStockServicesJar();
     if (!jar) return;
@@ -283,6 +431,7 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
     const postBoot = new TextEncoder().encode(
       `#!/system/bin/sh\n# ${'A'.repeat(200)}\nsetprop persist.sys.usb.config mtp,adb\n`,
     );
+    const dpmdSo = syntheticDpmdSo();
     const fakeKo = new Uint8Array(256);
     fakeKo.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0], 0);
     const kdv = new DataView(fakeKo.buffer);
@@ -310,12 +459,17 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
         async readFile(p: string) {
           if (p === STOCK_SERVICES_JAR_PATH) return { status: 'ok', data: jar };
           if (p === STOCK_POST_BOOT_PATH) return { status: 'ok', data: postBoot };
+          if (p === STOCK_DPMD_LIB_PATH) return { status: 'ok', data: dpmdSo };
           return { status: 'missing' };
         },
         async fiemap(p: string) {
           if (p === STOCK_SERVICES_JAR_PATH) {
             const blocks = Math.ceil(jar.length / 4096);
             return { path: p, size: jar.length, ino: 10, extents: [{ logical: 0, physical: 30000 * 4096, block: 30000, length: blocks * 4096, blocks, flags: 1 }] };
+          }
+          if (p === STOCK_DPMD_LIB_PATH) {
+            const blocks = Math.ceil(dpmdSo.length / 4096);
+            return { path: p, size: dpmdSo.length, ino: 880, extents: [{ logical: 0, physical: 18000 * 4096, block: 18000, length: blocks * 4096, blocks, flags: 1 }] };
           }
           const blocks = Math.ceil(postBoot.length / 4096);
           return { path: p, size: postBoot.length, ino: 496, extents: [{ logical: 0, physical: 22517 * 4096, block: 22517, length: blocks * 4096, blocks, flags: 1 }] };
@@ -332,7 +486,7 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
         },
         async flashPartition(part, path) {
           flashed.push({ part, path });
-          if (path.includes('patch-post-boot')) step4Boot = true;
+          if (path.includes('patch-dpmd')) step4Boot = true;
         },
         async erasePartition() {},
         async reboot() {},
@@ -377,13 +531,17 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
     expect(ok).toBe(true);
     expect(report.adbAuthorized).toBe(true);
     expect(report.backupSystemBytes).toBe(STOCK_SYSTEM_PARTITION_BYTES);
-    expect(report.restoredPostBoot).toBe(true);
+    expect(report.restoredDpmd).toBe(true);
     expect(report.restoredServices).toBe(true);
+    expect(report.dpmdChainedVaddr).toBe(0x100);
+    expect(writes.has('backup/libdpmframework.so.orig')).toBe(true);
+    expect(writes.has('patch-dpmd.sparse')).toBe(true);
+    expect(writes.has('patch-post-boot.sparse')).toBe(false);
     expect(flashed.map((f) => `${f.part}:${f.path.split('/').pop()}`)).toEqual([
       'system:patch-services.sparse',
       'userdata:userdata-adb.sparse',
-      'system:patch-post-boot.sparse',
-      'system:restore-post-boot.sparse',
+      'system:patch-dpmd.sparse',
+      'system:restore-dpmd.sparse',
       'system:restore-services.sparse',
     ]);
 

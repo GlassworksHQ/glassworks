@@ -159,8 +159,9 @@ npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --help
 
 `stock-surgical-adb.ts` builds on a Mirror that already has the Phase 1 HTTP probe app running on
 stock's `mirror-<serial>` SoftAP (`192.168.43.1:18765`). Instead of overwriting `system` with a
-third-party image, it backs up the original `/system/framework/services.jar` (and
-`/system/etc/init.qcom.post_boot.sh`) + their `FS_IOC_FIEMAP` block maps first, writes byte-exact
+third-party image, it backs up the original `/system/framework/services.jar`,
+`/system/etc/init.qcom.post_boot.sh`, and (with `--backup-module`) `/system/vendor/lib64/libdpmframework.so`
+plus their `FS_IOC_FIEMAP` block maps first, writes byte-exact
 `restore-*.sparse` undo images under `<out>/backup/`, and patches **only** `services.jar`'s
 physical 4 KiB blocks (`DONT_CARE` everywhere else) to authorize your own `--adb-key` in
 `UsbDebuggingManager.startConfirmation()`.
@@ -170,15 +171,19 @@ physical 4 KiB blocks (`DONT_CARE` everywhere else) to authorize your own `--adb
   deflate and pads the ZIP EOCD comment so `patched.length === original.length` (zero ext4 metadata
   edits).
 - **Optional Step 4 raw backup (`--backup-module <path-to-ko>`):** accepts a user-supplied external
-  AArch64 `.ko` (never shipped in this repo, Hard Rule 4) to temporarily flip SELinux Permissive
-  for one boot via `init.qcom.post_boot.sh` (20 blocks), stream raw `system` (`mmcblk0p22`) + `boot`
-  (`mmcblk0p19`) over USB ADB to `<out>/backup/`, and automatically flash `restore-post-boot.sparse`
-  back.
+  AArch64 `.ko` (never shipped in this repo, Hard Rule 4) and embeds it in an in-place, same-length
+  patch of `/system/vendor/lib64/libdpmframework.so`. `dpmd` runs as root with `CAP_SYS_MODULE` and
+  links that ELF64 library, so its constructor loads the module and makes `mmcblk0p22` and
+  `mmcblk0p19` world-readable for one boot. The tool then streams raw `system` and `boot` over USB
+  ADB, scrubs those blocks back to the original bytes inside the saved image, and flashes
+  `restore-dpmd.sparse`. `init.qcom.post_boot.sh` is not the hook: on stock 1.24.0 that shell has no
+  `sys_module` and cannot see `/data/local/tmp`. The 32-bit copy under `/system/vendor/lib/` is refused.
 
 ```sh
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --preflight-only                  # Step 1 only (read-only over SoftAP)
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --build-only                      # Steps 1-2 locally (no flash)
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --keep-adb                        # Steps 1-3: reversible authorized USB ADB (Enforcing)
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-module <ko> --keep-adb   # Steps 1-4: dpmd hook, raw system+boot, then restore the library
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --undo --backup-dir <out>/backup  # Restore untouched stock system (add --erase-userdata for factory reset)
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --apply-adb --backup-dir <out>/backup  # Re-apply saved USB ADB hook without Wi-Fi AP
 ```
