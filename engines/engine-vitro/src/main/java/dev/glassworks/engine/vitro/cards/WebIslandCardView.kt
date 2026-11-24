@@ -191,6 +191,10 @@ class WebIslandCardView(
             }.getOrNull()
         }
 
+        /** A double-quoted HTML attribute value. `JSONObject.quote` would escape `/` as `\/` and break `/local/…` URLs. */
+        internal fun htmlAttr(s: String): String =
+            "\"" + s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;") + "\""
+
         /**
          * Builds the ~5 KB self-contained Lovelace card Micro-Host HTML for [config].
          * Runs inside GeckoView over [VitroIslandServer] with zero HA SPA overhead.
@@ -207,9 +211,9 @@ class WebIslandCardView(
                 val inlineJs = decodeInlineModule(r.url)
                 when {
                     inlineJs != null -> "<script type=\"module\">\n${inlineJs.replace("</script", "<\\/script")}\n</script>"
-                    r.type == "css" -> """<link rel="stylesheet" href=${JSONObject.quote(r.url)}>"""
-                    r.type == "module" -> """<script type="module" src=${JSONObject.quote(r.url)}></script>"""
-                    else -> """<script src=${JSONObject.quote(r.url)}></script>"""
+                    r.type == "css" -> """<link rel="stylesheet" href=${htmlAttr(r.url)}>"""
+                    r.type == "module" -> """<script type="module" src=${htmlAttr(r.url)}></script>"""
+                    else -> """<script src=${htmlAttr(r.url)}></script>"""
                 }
             }
             val cfgJson = config.raw.toString()

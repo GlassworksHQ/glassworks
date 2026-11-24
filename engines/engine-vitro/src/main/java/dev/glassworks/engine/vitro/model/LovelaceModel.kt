@@ -66,8 +66,24 @@ data class ActionConfig(
     val serviceData: JSONObject? = null,
     val target: JSONObject? = null,
     val urlPath: String? = null,
+    /** Text of HA's `confirmation:` prompt (`true` gives "Are you sure?"), or null when the action runs straight away. */
+    val confirmation: String? = null,
 ) {
     companion object {
+        private const val DEFAULT_CONFIRMATION = "Are you sure?"
+
+        /** Reads HA's `confirmation`: `true`, `false`, or `{ text: "..." }`. */
+        fun parseConfirmation(raw: JSONObject): String? {
+            val c = raw.opt("confirmation")
+            return when {
+                c is Boolean -> if (c) DEFAULT_CONFIRMATION else null
+                c is JSONObject -> c.optString("text", "").ifEmpty { DEFAULT_CONFIRMATION }
+                c is String && c.lowercase() == "true" -> DEFAULT_CONFIRMATION
+                c is String && c.isNotEmpty() && c.lowercase() != "false" -> c
+                else -> null
+            }
+        }
+
         fun parse(raw: JSONObject?, defaultAction: String = "more-info"): ActionConfig {
             if (raw == null) return ActionConfig(defaultAction)
             val action = raw.optString("action", defaultAction).ifEmpty { defaultAction }
@@ -80,6 +96,7 @@ data class ActionConfig(
                 serviceData = data,
                 target = raw.optJSONObject("target"),
                 urlPath = raw.optString("url_path", "").ifEmpty { null },
+                confirmation = parseConfirmation(raw),
             )
         }
     }
@@ -91,6 +108,7 @@ data class EntityRowConfig(
     val icon: String? = null,
     val secondaryInfo: String? = null,
     val tapAction: ActionConfig? = null,
+    val holdAction: ActionConfig? = null,
 )
 
 sealed class VisibilityCondition {
@@ -200,6 +218,7 @@ data class CardConfig(
                         icon = item.optString("icon", "").ifEmpty { null },
                         secondaryInfo = item.optString("secondary_info", "").ifEmpty { null },
                         tapAction = item.optJSONObject("tap_action")?.let { ActionConfig.parse(it) },
+                        holdAction = item.optJSONObject("hold_action")?.let { ActionConfig.parse(it) },
                     )
                 }
             }
@@ -237,7 +256,16 @@ object CardRouter {
         "vertical-stack",
         "conditional",
         "entity-filter",
+        "entity",
+        "light",
+        "alarm-panel",
+        "todo-list",
+        "statistics-graph",
+        "area",
     )
+
+    /** Keys besides `entity` / `entities` where core cards name an entity id. */
+    private val EXTRA_ENTITY_KEYS = listOf("temperature_entity", "humidity_entity", "camera_image")
 
     val NATIVE_HACS_TYPES = setOf(
         "custom:mushroom-entity-card",
@@ -309,7 +337,16 @@ object CardRouter {
             // Deep-scan custom cards (e.g. room arrays, sleep/outside/camera objects) so view-scoped
             // subscribe_entities automatically captures every entity without knowing each card's schema.
             if (c.type.startsWith("custom:")) scanJson(c.raw)
-            c.raw.optString("camera_image", "").takeIf { it.isNotEmpty() }?.let { out += it }
+            for (key in EXTRA_ENTITY_KEYS) {
+                c.raw.optString(key, "").takeIf { ENTITY_ID_PATTERN.matches(it) }?.let { out += it }
+            }
+            // Heading cards carry entity `badges` (objects or bare ids) on their right side.
+            c.raw.optJSONArray("badges")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val id = arr.optJSONObject(i)?.optString("entity", "") ?: arr.optString(i, "")
+                    if (ENTITY_ID_PATTERN.matches(id)) out += id
+                }
+            }
             c.childCards.forEach(::walkCard)
         }
         view.sections.forEach { s ->

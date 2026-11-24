@@ -47,6 +47,10 @@ data class ResolvedTheme(
     val cardBorderRadiusDp: Float,
     val background: ThemeBackground,
     val cardMod: CardModStyle = CardModStyle(),
+    /** HA's `--state-icon-color`: the steel-blue of icons on plain `sensor` tiles and inactive rows. */
+    val stateIconColor: Int = 0xFF44739E.toInt(),
+    /** HA's `--state-inactive-color`: the grey of an inactive toggleable tile. */
+    val stateInactiveColor: Int = 0xFF9E9E9E.toInt(),
 ) {
     /** Domain active color matching HA's `--state-<domain>-active-color` convention. */
     fun activeColor(domain: String): Int {
@@ -160,7 +164,7 @@ object ThemeResolver {
         "secondary-text-color" to "#9b9b9b",
         "disabled-text-color" to "#6f6f6f",
         "divider-color" to "rgba(225, 225, 225, 0.12)",
-        "ha-card-border-color" to "rgba(225, 225, 225, 0.12)",
+        "ha-card-border-color" to "#2c2c2c",
         "ha-card-border-width" to "1px",
         "ha-card-border-radius" to "12px",
         "rgb-primary-color" to "3, 169, 244",
@@ -176,6 +180,8 @@ object ThemeResolver {
         "state-fan-active-color" to "#009688",
         "state-cover-active-color" to "#9c27b0",
         "state-person-home-color" to "#4caf50",
+        "state-icon-color" to "#44739e",
+        "state-inactive-color" to "#9e9e9e",
     )
 
     private val LIGHT_DEFAULTS = mapOf(
@@ -189,7 +195,7 @@ object ThemeResolver {
         "secondary-text-color" to "#727272",
         "disabled-text-color" to "#bdbdbd",
         "divider-color" to "rgba(0, 0, 0, 0.12)",
-        "ha-card-border-color" to "rgba(0, 0, 0, 0.12)",
+        "ha-card-border-color" to "#e0e0e0",
         "ha-card-border-width" to "1px",
         "ha-card-border-radius" to "12px",
         "rgb-primary-color" to "3, 169, 244",
@@ -205,6 +211,8 @@ object ThemeResolver {
         "state-fan-active-color" to "#009688",
         "state-cover-active-color" to "#9c27b0",
         "state-person-home-color" to "#4caf50",
+        "state-icon-color" to "#44739e",
+        "state-inactive-color" to "#9e9e9e",
     )
 
     fun resolve(
@@ -239,7 +247,7 @@ object ThemeResolver {
         val borderColor = cardMod.borderColor
             ?: parseColor(resolved["ha-card-border-color"])
             ?: parseColor(resolved["divider-color"])
-            ?: if (dark) 0x1FE1E1E1 else 0x1F000000
+            ?: if (dark) 0xFF2C2C2C.toInt() else 0xFFE0E0E0.toInt()
 
         val bgSpec = viewBackground?.takeIf { it.isNotBlank() } ?: resolved["lovelace-background"]
         val background = parseBackground(bgSpec, bg)
@@ -262,6 +270,8 @@ object ThemeResolver {
             cardBorderRadiusDp = borderRadius,
             background = background,
             cardMod = cardMod,
+            stateIconColor = parseColor(resolved["state-icon-color"]) ?: 0xFF44739E.toInt(),
+            stateInactiveColor = parseColor(resolved["state-inactive-color"]) ?: 0xFF9E9E9E.toInt(),
         )
     }
 

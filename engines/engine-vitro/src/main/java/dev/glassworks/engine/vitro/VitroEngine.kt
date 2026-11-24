@@ -172,6 +172,7 @@ class VitroEngine(
                     navigate = { path -> navigateInPlace(path) },
                     openMoreInfo = { entityId -> vitroView.openMoreInfo(entityId) },
                     fetchHistory = { ids, hours, done -> client?.fetchHistory(ids, hours, done) },
+                    fetchForecast = { id, kind, done -> client?.fetchForecast(id, kind, done) },
                     subscribeTemplate = { tpl, onRendered ->
                         client?.subscribeTemplate(tpl, onRendered) ?: {}
                     },

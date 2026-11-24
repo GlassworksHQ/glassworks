@@ -4,6 +4,13 @@
 
 package dev.glassworks.engine.vitro
 
+import dev.glassworks.engine.vitro.cards.AlarmPanelCardView
+import dev.glassworks.engine.vitro.cards.AreaCardView
+import dev.glassworks.engine.vitro.cards.EntityCardView
+import dev.glassworks.engine.vitro.cards.GaugeCardView
+import dev.glassworks.engine.vitro.cards.StatisticsGraphCardView
+import dev.glassworks.engine.vitro.cards.TodoItem
+import dev.glassworks.engine.vitro.cards.TodoListCardView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
@@ -11,6 +18,7 @@ import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.CardTier
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.model.VisibilityCondition
+import dev.glassworks.engine.vitro.ui.VitroView
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -569,5 +577,164 @@ class LovelaceModelTest {
         )) {
             assertFalse("$u is not a dashboard", LovelaceParser.isDashboardUrl(u))
         }
+    }
+    // ---- v0.6: extended core cards, badges, gauge severity ----
+
+    @Test
+    fun extendedCoreCardsRouteNative() {
+        for (t in listOf("entity", "light", "alarm-panel", "todo-list", "statistics-graph", "area")) {
+            assertTrue("$t is native core", t in CardRouter.NATIVE_CORE_TYPES)
+            assertEquals(t, CardTier.NATIVE_CORE, CardRouter.tier(card("""{"type": "$t"}""")))
+        }
+    }
+
+    @Test
+    fun referencedEntitiesScanTheExtendedCoreCards() {
+        val v = view(
+            """{
+              "badges": ["person.alex", {"type": "entity", "entity": "sensor.outside"}],
+              "cards": [
+                {"type": "entity", "entity": "sensor.power"},
+                {"type": "light", "entity": "light.desk"},
+                {"type": "alarm-panel", "entity": "alarm_control_panel.home"},
+                {"type": "todo-list", "entity": "todo.shopping"},
+                {"type": "statistics-graph", "entities": ["sensor.energy", {"entity": "sensor.gas"}]},
+                {"type": "statistics-graph", "entity": "sensor.water"},
+                {"type": "area", "area": "living_room", "temperature_entity": "sensor.living_t",
+                 "humidity_entity": "sensor.living_h", "navigation_path": "/lovelace/living"}
+              ]
+            }""",
+        )
+        assertEquals(
+            setOf(
+                "sensor.power", "light.desk", "alarm_control_panel.home", "todo.shopping",
+                "sensor.energy", "sensor.gas", "sensor.water", "sensor.living_t", "sensor.living_h",
+                "person.alex", "sensor.outside",
+            ),
+            CardRouter.referencedEntities(v),
+        )
+        assertEquals(7, CardRouter.tierCounts(v)[CardTier.NATIVE_CORE])
+    }
+
+    @Test
+    fun gaugeSeverityPicksTheHighestThresholdAtOrBelowTheValue() {
+        val sev = GaugeCardView.parseSeverity(JSONObject("""{"green": 0, "yellow": 50, "red": 80}"""))
+        assertEquals(GaugeCardView.SEVERITY_GREEN, GaugeCardView.severityColor(sev, 10.0))
+        assertEquals(GaugeCardView.SEVERITY_YELLOW, GaugeCardView.severityColor(sev, 50.0))
+        assertEquals(GaugeCardView.SEVERITY_RED, GaugeCardView.severityColor(sev, 95.0))
+        assertNull(GaugeCardView.severityColor(sev, -5.0))
+        // Reversed thresholds (low is bad) follow the same rule.
+        val rev = GaugeCardView.parseSeverity(JSONObject("""{"red": 0, "yellow": 20, "green": 50}"""))
+        assertEquals(GaugeCardView.SEVERITY_RED, GaugeCardView.severityColor(rev, 5.0))
+        assertEquals(GaugeCardView.SEVERITY_GREEN, GaugeCardView.severityColor(rev, 70.0))
+        assertTrue(GaugeCardView.parseSeverity(null).isEmpty())
+    }
+
+    @Test
+    fun entityCardShowsAttributeOrStateWithUnit() {
+        val s = EntityState("sensor.t", "21.5", mapOf("unit_of_measurement" to "°C", "friendly_name" to "Temp", "battery" to 80))
+        assertEquals("21.5" to "°C", EntityCardView.valueAndUnit(JSONObject(), s))
+        assertEquals("80" to "%", EntityCardView.valueAndUnit(JSONObject("""{"attribute": "battery", "unit": "%"}"""), s))
+        assertEquals("–" to "", EntityCardView.valueAndUnit(JSONObject(), null))
+    }
+
+    @Test
+    fun alarmPanelStatesAndServices() {
+        assertEquals(listOf("arm_home", "arm_away"), AlarmPanelCardView.readStates(null))
+        assertEquals(listOf("arm_night"), AlarmPanelCardView.readStates(JSONArray("""["arm_night"]""")))
+        assertEquals("alarm_arm_away", AlarmPanelCardView.serviceFor("arm_away"))
+        assertEquals("alarm_disarm", AlarmPanelCardView.serviceFor("disarm"))
+        assertEquals("Armed home", AlarmPanelCardView.stateLabel("armed_home"))
+        assertEquals(0xFFF44336.toInt(), AlarmPanelCardView.stateColor("triggered"))
+        assertEquals(0xFF4CAF50.toInt(), AlarmPanelCardView.stateColor("disarmed"))
+    }
+
+    @Test
+    fun todoItemsParseFromTheListResult() {
+        val items = TodoListCardView.parseItems(
+            JSONObject(
+                """{"items": [
+                  {"uid": "a1", "summary": "Milk", "status": "needs_action"},
+                  {"uid": "b2", "summary": "Eggs", "status": "completed"},
+                  {"summary": "No uid"}
+                ]}""",
+            ),
+        )
+        assertEquals(
+            listOf(TodoItem("a1", "Milk", false), TodoItem("b2", "Eggs", true), TodoItem("No uid", "No uid", false)),
+            items,
+        )
+        assertTrue(TodoListCardView.parseItems(null).isEmpty())
+    }
+
+    @Test
+    fun statisticsGraphReadsIdsTypesAndPoints() {
+        val c = card("""{"type": "statistics-graph", "entities": ["sensor.a", {"entity": "sensor.b"}]}""")
+        assertEquals(listOf("sensor.a", "sensor.b"), StatisticsGraphCardView.statisticIds(c))
+        assertEquals(listOf("sensor.c"), StatisticsGraphCardView.statisticIds(card("""{"type": "statistics-graph", "entity": "sensor.c"}""")))
+        assertEquals(listOf("mean"), StatisticsGraphCardView.readStatTypes(null))
+        assertEquals(listOf("max", "min"), StatisticsGraphCardView.readStatTypes(JSONArray("""["max", "bogus", "min"]""")))
+        val rows = JSONArray(
+            """[
+              {"start": 1700000000000, "mean": 20.5, "max": 22},
+              {"start": "2023-11-14T23:13:20+00:00", "mean": 21.0},
+              {"start": 1700007200000, "mean": null}
+            ]""",
+        )
+        val pts = StatisticsGraphCardView.parsePoints(rows, "mean")
+        assertEquals(2, pts.size)
+        assertEquals(1700000000000.0 to 20.5, pts[0])
+        assertEquals(1700003600000.0, pts[1].first, 0.5)
+        assertEquals(1, StatisticsGraphCardView.parsePoints(rows, "max").size)
+    }
+
+    @Test
+    fun areaCardNamesAndSummaryEntities() {
+        assertEquals("Living room", AreaCardView.areaName(card("""{"type": "area", "area": "living_room"}""")))
+        assertEquals("Den", AreaCardView.areaName(card("""{"type": "area", "area": "x", "name": "Den"}""")))
+        assertEquals(
+            listOf("sensor.t", "sensor.h", "light.a"),
+            AreaCardView.summaryEntities(JSONObject("""{"temperature_entity": "sensor.t", "humidity_entity": "sensor.h", "entities": ["light.a", "sensor.t"]}""")),
+        )
+    }
+
+    @Test
+    fun badgeTextShowsStateAndOptionallyTheName() {
+        val home = EntityState("person.alex", "home", mapOf("friendly_name" to "Alex"))
+        assertEquals("Home", VitroView.badgeText(card("""{"type": "entity", "entity": "person.alex"}"""), home))
+        assertEquals("Alex · Home", VitroView.badgeText(card("""{"type": "entity", "entity": "person.alex", "show_name": true}"""), home))
+        assertEquals("Al · Home", VitroView.badgeText(card("""{"type": "entity", "entity": "person.alex", "name": "Al"}"""), home))
+        assertEquals("Alex", VitroView.badgeText(card("""{"type": "entity", "entity": "person.alex", "show_name": true, "show_state": false}"""), home))
+    }
+
+    @Test
+    fun badgeLinesStackTheNameAboveTheStateOnlyWhenTheNameShows() {
+        val temp = EntityState("sensor.outdoor", "7.4", mapOf("friendly_name" to "Outdoor temperature", "unit_of_measurement" to "°C"))
+        assertEquals(null to "7.4 °C", VitroView.badgeLines(card("""{"type": "entity", "entity": "sensor.outdoor"}"""), temp))
+        assertEquals(
+            "Outdoor temperature" to "7.4 °C",
+            VitroView.badgeLines(card("""{"type": "entity", "entity": "sensor.outdoor", "show_name": true}"""), temp),
+        )
+        assertEquals("Out" to "7.4 °C", VitroView.badgeLines(card("""{"type": "entity", "entity": "sensor.outdoor", "name": "Out"}"""), temp))
+        assertEquals(
+            "Outdoor temperature" to null,
+            VitroView.badgeLines(card("""{"type": "entity", "entity": "sensor.outdoor", "show_name": true, "show_state": false}"""), temp),
+        )
+    }
+
+    @Test
+    fun headingBadgesAreSubscribedAndAClockDefaultsToHalfWidth() {
+        val v = view(
+            """{"type": "sections", "sections": [{"cards": [
+                {"type": "heading", "heading": "Studio", "badges": [{"type": "entity", "entity": "sensor.studio_power"}, "light.desk"]},
+                {"type": "clock"}
+            ]}]}""",
+        )
+        val refs = CardRouter.referencedEntities(v)
+        assertTrue("sensor.studio_power" in refs)
+        assertTrue("light.desk" in refs)
+        assertTrue(VitroView.isHalfWidth(card("""{"type": "clock"}""")))
+        assertFalse(VitroView.isHalfWidth(card("""{"type": "clock", "grid_options": {"columns": 12}}""")))
+        assertFalse(VitroView.isHalfWidth(card("""{"type": "tile", "entity": "light.a"}""")))
     }
 }

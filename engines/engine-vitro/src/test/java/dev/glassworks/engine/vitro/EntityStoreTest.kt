@@ -363,8 +363,8 @@ class EntityStoreTest {
     fun sensorWithAUnitAppendsIt() {
         assertEquals("21.5 °C", entity("sensor.kitchen_temp", "21.5", "unit_of_measurement" to "°C").formattedState())
         assertEquals("340 W", entity("sensor.power", "340", "unit_of_measurement" to "W").formattedState())
-        // A unit wins over the domain rules.
-        assertEquals("12 %", entity("light.a", "12", "unit_of_measurement" to "%").formattedState())
+        // A unit wins over the domain rules; HA writes `%` without a space.
+        assertEquals("12%", entity("light.a", "12", "unit_of_measurement" to "%").formattedState())
     }
 
     @Test
@@ -373,6 +373,13 @@ class EntityStoreTest {
         assertEquals("Not home", entity("person.alex", "not_home").formattedState())
         assertEquals("Closed", entity("cover.garage", "closed").formattedState())
         assertEquals("", entity("sensor.empty", "").formattedState())
+    }
+
+    @Test
+    fun anOpenCoverShowsItsPosition() {
+        assertEquals("Open · 60%", entity("cover.blind", "open", "current_position" to 60).formattedState())
+        assertEquals("Closed", entity("cover.blind", "closed", "current_position" to 0).formattedState())
+        assertEquals("Open", entity("cover.blind", "open").formattedState())
     }
 
     @Test
@@ -443,6 +450,82 @@ class EntityStoreTest {
         assertTrue(entity("vacuum.hall", "cleaning").isActive)
         assertTrue(entity("vacuum.hall", "returning").isActive)
         assertFalse(entity("vacuum.hall", "docked").isActive)
+    }
+
+    // ---- Relative last-changed text ----
+
+    private fun changedAt(lastChanged: Double) = EntityState("sensor.a", "1", emptyMap(), lastChanged = lastChanged)
+
+    @Test
+    fun relativeLastChangedIsNullWhenTheTimeIsUnknown() {
+        assertNull(changedAt(0.0).relativeLastChanged(1_000_000.0))
+        assertNull(changedAt(-5.0).relativeLastChanged(1_000_000.0))
+    }
+
+    @Test
+    fun relativeLastChangedSpeaksInTheLargestWholeUnit() {
+        val now = 2_000_000_000.0
+        fun text(agoSec: Long) = changedAt(now - agoSec).relativeLastChanged(now)
+        assertEquals("Just now", text(0))
+        assertEquals("Just now", text(59))
+        assertEquals("1 minute ago", text(60))
+        assertEquals("2 minutes ago", text(150))
+        assertEquals("59 minutes ago", text(3_599))
+        assertEquals("1 hour ago", text(3_600))
+        assertEquals("23 hours ago", text(23 * 3_600L + 59))
+        assertEquals("1 day ago", text(86_400))
+        assertEquals("6 days ago", text(6 * 86_400L + 100))
+        assertEquals("1 week ago", text(7 * 86_400L))
+        assertEquals("4 weeks ago", text(29 * 86_400L))
+        assertEquals("1 month ago", text(30 * 86_400L))
+        assertEquals("3 months ago", text(100 * 86_400L))
+    }
+
+    @Test
+    fun relativeLastChangedInTheFutureIsJustNow() {
+        assertEquals("Just now", changedAt(1_000_100.0).relativeLastChanged(1_000_000.0))
+    }
+
+    @Test
+    fun relativeLastChangedDefaultsToTheCurrentClock() {
+        val now = System.currentTimeMillis() / 1000.0
+        assertEquals("5 minutes ago", changedAt(now - 300).relativeLastChanged())
+    }
+
+    // ---- Full get_states arrays ----
+
+    @Test
+    fun statesArrayParsesIsoLastChangedAndLastUpdated() {
+        val store = EntityStore()
+        store.applyStatesArray(
+            JSONArray(
+                """[{"entity_id": "light.a", "state": "on", "attributes": {"friendly_name": "A"},
+                     "last_changed": "2026-11-23T17:00:00+00:00", "last_updated": "2026-11-23T17:00:30.500000Z"},
+                    {"entity_id": "light.b", "state": "off", "attributes": {},
+                     "last_changed": "2026-11-23T19:00:00+02:00", "last_updated": 1700000000.5},
+                    {"entity_id": "light.c", "state": "off", "attributes": {}, "last_changed": "not a date"},
+                    {"entity_id": "light.d", "state": "off"}]""",
+            ),
+        )
+        val noon = 1795453200.0 // 2026-11-23T17:00:00Z
+        val a = store["light.a"]!!
+        assertEquals(noon, a.lastChanged, 0.0)
+        assertEquals(noon + 30.5, a.lastUpdated, 0.0)
+        assertEquals("an offset is applied", noon, store["light.b"]!!.lastChanged, 0.0)
+        assertEquals("numbers pass through", 1700000000.5, store["light.b"]!!.lastUpdated, 0.0)
+        assertEquals(0.0, store["light.c"]!!.lastChanged, 0.0)
+        assertEquals(0.0, store["light.d"]!!.lastChanged, 0.0)
+        assertEquals("5 minutes ago", EntityState("x", "on", emptyMap(), lastChanged = noon).relativeLastChanged(noon + 300))
+    }
+
+    @Test
+    fun isoTimestampParsingHandlesZonesAndRejectsJunk() {
+        assertEquals(0.0, EntityStore.parseIsoEpochSeconds("1970-01-01T00:00:00Z")!!, 0.0)
+        assertEquals(0.0, EntityStore.parseIsoEpochSeconds("1970-01-01T05:30:00+05:30")!!, 0.0)
+        assertEquals(3600.0, EntityStore.parseIsoEpochSeconds("1970-01-01T00:00:00-0100")!!, 0.0)
+        assertEquals(0.25, EntityStore.parseIsoEpochSeconds("1970-01-01T00:00:00.25")!!, 0.0) // no zone = UTC
+        assertNull(EntityStore.parseIsoEpochSeconds("yesterday"))
+        assertNull(EntityStore.parseIsoEpochSeconds("2026-13-45T25:61:61Z"))
     }
 
     // ---- hass.states shape for Tier 3 ----

@@ -96,7 +96,9 @@ class ThemeResolverTest {
         assertEquals(argb(0xFF9B9B9B), t.secondaryTextColor)
         assertEquals(argb(0xFF6F6F6F), t.disabledTextColor)
         assertEquals(argb(0x1FE1E1E1), t.dividerColor) // rgba(225, 225, 225, 0.12)
-        assertEquals(t.dividerColor, t.cardBorderColor)
+        assertEquals(argb(0xFF2C2C2C), t.cardBorderColor) // HA 2026 ha-card-border-color
+        assertEquals(argb(0xFF44739E), t.stateIconColor)
+        assertEquals(argb(0xFF9E9E9E), t.stateInactiveColor)
         assertEquals(1f, t.cardBorderWidthDp, 0.001f)
         assertEquals(12f, t.cardBorderRadiusDp, 0.001f)
         assertEquals(ThemeBackground.Solid(argb(0xFF111111)), t.background)
@@ -114,6 +116,7 @@ class ThemeResolverTest {
         assertEquals(argb(0xFF727272), t.secondaryTextColor)
         assertEquals(argb(0xFFBDBDBD), t.disabledTextColor)
         assertEquals(argb(0x1F000000), t.dividerColor)
+        assertEquals(argb(0xFFE0E0E0), t.cardBorderColor) // HA 2026 ha-card-border-color
         assertEquals(ThemeBackground.Solid(argb(0xFFFAFAFA)), t.background)
     }
 

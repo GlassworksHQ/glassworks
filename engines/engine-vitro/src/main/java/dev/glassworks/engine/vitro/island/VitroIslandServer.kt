@@ -56,7 +56,9 @@ class VitroIslandServer(
         val s = HttpServer(
             port = 0,
             handler = ::handle,
-            bindAddress = InetAddress.getLoopbackAddress(),
+            // Explicit IPv4 127.0.0.1: on Android, InetAddress.getLoopbackAddress() returns IPv6 ::1,
+            // which refuses IPv4 http://127.0.0.1:<port> connections from GeckoView.
+            bindAddress = InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)),
             log = log,
             maxBody = 256 * 1024,
             workers = 8,

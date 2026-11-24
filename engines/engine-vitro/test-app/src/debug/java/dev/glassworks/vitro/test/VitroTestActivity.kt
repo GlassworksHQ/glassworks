@@ -35,11 +35,12 @@ import org.json.JSONObject
  * Vitro's test activity: the native Lovelace engine alone, with no GeckoView linked, and a metrics HUD on top.
  *
  *   adb shell am start -n dev.glassworks.vitro.test/.VitroTestActivity \
- *       --es url http://127.0.0.1:8089/clarity-ref/typical-nocam [--es token <access token>] [--ez hud false]
+ *       --es url http://127.0.0.1:8089/clarity-ref/typical-nocam [--es token <access token>] [--ez hud false] [--ez dark true|false]
  *
  * `url` is the dashboard to open and `token` an optional Home Assistant access token (empty works with Clarity's
  * fakeha.py); both are kept in the `vitro_test` preferences, so a launch without them opens the last ones. `hud`
- * (default true) shows or hides the HUD. Tap the HUD pill to collapse or expand it; expanded, it has a Reload button.
+ * (default true) shows or hides the HUD. `dark` forces Vitro's dark or light mode for visual comparisons (absent: it follows
+ * the device's night mode, kept until a launch passes `--ez dark` again; `--ez dark` is sticky, so use `pm clear` to reset). Tap the HUD pill to collapse or expand it; expanded, it has a Reload button.
  * Debug builds only.
  */
 class VitroTestActivity : Activity() {
@@ -83,6 +84,7 @@ class VitroTestActivity : Activity() {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         saveExtras(intent)
         url = prefs.getString(KEY_URL, null)
+        if (prefs.contains(KEY_DARK)) forceNightMode(prefs.getBoolean(KEY_DARK, true))
 
         engine = VitroEngine(
             fallback = StubFallbackEngine,
@@ -107,6 +109,10 @@ class VitroTestActivity : Activity() {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         val before = url
         saveExtras(intent)
+        if (intent.hasExtra(EXTRA_DARK)) {
+            recreate() // Vitro reads the night mode when its view is built
+            return
+        }
         url = prefs.getString(KEY_URL, null)
         applyHudVisibility(prefs.getBoolean(KEY_HUD, true))
         if (url != before || intent.hasExtra(EXTRA_TOKEN)) load()
@@ -134,6 +140,7 @@ class VitroTestActivity : Activity() {
         i.getStringExtra(EXTRA_URL)?.takeIf { it.isNotBlank() }?.let { edit.putString(KEY_URL, it) }
         if (i.hasExtra(EXTRA_TOKEN)) edit.putString(KEY_TOKEN, i.getStringExtra(EXTRA_TOKEN).orEmpty())
         if (i.hasExtra(EXTRA_HUD)) edit.putBoolean(KEY_HUD, i.getBooleanExtra(EXTRA_HUD, true))
+        if (i.hasExtra(EXTRA_DARK)) edit.putBoolean(KEY_DARK, i.getBooleanExtra(EXTRA_DARK, true))
         edit.apply()
     }
 
@@ -226,6 +233,15 @@ class VitroTestActivity : Activity() {
         return info.totalPss.toLong() / 1024
     }
 
+    /** Overrides this activity's night mode, which is what Vitro reads to pick its light or dark theme. */
+    @Suppress("DEPRECATION")
+    private fun forceNightMode(dark: Boolean) {
+        val cfg = android.content.res.Configuration(resources.configuration)
+        val night = if (dark) android.content.res.Configuration.UI_MODE_NIGHT_YES else android.content.res.Configuration.UI_MODE_NIGHT_NO
+        cfg.uiMode = (cfg.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK.inv()) or night
+        resources.updateConfiguration(cfg, resources.displayMetrics)
+    }
+
     private fun px(dips: Int): Int = (dips * dp).toInt()
 
     /**
@@ -252,9 +268,11 @@ class VitroTestActivity : Activity() {
         const val KEY_URL = "url"
         const val KEY_TOKEN = "token"
         const val KEY_HUD = "hud"
+        const val KEY_DARK = "dark"
         const val EXTRA_URL = "url"
         const val EXTRA_TOKEN = "token"
         const val EXTRA_HUD = "hud"
+        const val EXTRA_DARK = "dark"
         const val HUD_REFRESH_MS = 1000L
     }
 }

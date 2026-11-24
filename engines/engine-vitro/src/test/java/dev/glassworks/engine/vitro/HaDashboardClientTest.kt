@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro
 
+import dev.glassworks.auth.HaSocket
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
 import dev.glassworks.engine.vitro.data.HistoryPoint
@@ -16,9 +17,11 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
 import java.time.Instant
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CopyOnWriteArrayList
@@ -64,8 +67,26 @@ class HaDashboardClientTest {
         server.shutdown()
     }
 
+    /** Wraps a [FakeHaServer] socket to watch (and, with [after], answer or fail) each message the client writes. */
+    private class SpySocket(
+        private val inner: HaSocket,
+        private val before: (JSONObject) -> Unit = {},
+        private val after: (JSONObject) -> Unit = {},
+    ) : HaSocket {
+        override fun send(text: String) {
+            val msg = JSONObject(text)
+            before(msg)
+            inner.send(text)
+            after(msg)
+        }
+
+        override fun receive(): String? = inner.receive()
+        override fun close() = inner.close()
+    }
+
     private fun newClient(
         haBase: String = FakeHaServer.BASE,
+        connect: (String) -> HaSocket = server::connect,
         tokens: (force: Boolean, done: (String?) -> Unit) -> Unit = { force, done ->
             tokenCalls += force
             done(FakeHaServer.TOKEN)
@@ -75,7 +96,7 @@ class HaDashboardClientTest {
             haBase = haBase,
             tokenProvider = tokens,
             store = store,
-            connect = server::connect,
+            connect = connect,
             listener = listener,
         )
         clients += c
@@ -83,8 +104,8 @@ class HaDashboardClientTest {
     }
 
     /** A started client with the whole startup sequence done (the first entity subscription is on the wire). */
-    private fun connected(dashboardPath: String? = null): HaDashboardClient {
-        val c = newClient()
+    private fun connected(dashboardPath: String? = null, connect: (String) -> HaSocket = server::connect): HaDashboardClient {
+        val c = newClient(connect = connect)
         c.start(dashboardPath)
         awaitCondition("startup sequence") {
             server.commands("subscribe_entities").isNotEmpty() && listener.configs.isNotEmpty() &&
@@ -261,6 +282,7 @@ class HaDashboardClientTest {
         val first = server.commands("subscribe_entities").single().getInt("id")
 
         c.subscribeViewEntities(setOf("sensor.kitchen_temp"))
+        awaitCondition("resubscribed") { server.commands("subscribe_entities").size == 2 && server.commands("unsubscribe_events").isNotEmpty() }
         val unsub = server.commands("unsubscribe_events").single()
         assertEquals(first, unsub.getInt("subscription"))
         val subs = server.commands("subscribe_entities")
@@ -269,6 +291,7 @@ class HaDashboardClientTest {
 
         // The same view again is a no-op on the wire.
         c.subscribeViewEntities(setOf("sensor.kitchen_temp"))
+        Thread.sleep(150) // writes are queued: give a wrongly sent one time to land
         assertEquals(2, server.commands("subscribe_entities").size)
         assertEquals(1, server.commands("unsubscribe_events").size)
 
@@ -407,6 +430,97 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun historyAlsoReadsHomeAssistantsFullStateFormat() {
+        server.history = JSONObject(
+            """{"states": {"sensor.kitchen_temp": [
+                 {"state": "20.5", "last_updated": "2026-11-23T17:00:00+00:00"},
+                 {"state": "off", "last_updated": "2026-11-23T17:01:00+00:00"},
+                 {"state": "21.0", "last_changed": "2026-11-23T17:02:00Z"},
+                 {"state": "22.0", "last_updated": 1700000000.0}]}}""",
+        )
+        val c = connected()
+        val done = CompletableFuture<Map<String, List<HistoryPoint>>>()
+        c.fetchHistory(listOf("sensor.kitchen_temp")) { done.complete(it) }
+        val pts = done.get(10, TimeUnit.SECONDS).getValue("sensor.kitchen_temp")
+        assertEquals(listOf(1795453200.0, 1795453320.0, 1700000000.0), pts.map { it.epochSec })
+        assertEquals(listOf(20.5, 21.0, 22.0), pts.map { it.value })
+    }
+
+    @Test
+    fun historyUnsubscribesEvenWhenTheServerAnswersAtOnce() {
+        // The event arrives as the request leaves the wire, before the caller can have recorded the subscription id.
+        server.history = JSONObject("""{"states": {"sensor.kitchen_temp": [{"s": "20.5", "lu": 1700000000.0}]}}""")
+        val c = connected(connect = { url ->
+            SpySocket(server.connect(url), after = { msg ->
+                if (msg.optString("type") == "history/stream") server.pushEvent(msg.getInt("id"), server.history)
+            })
+        })
+        val got = LinkedBlockingQueue<Map<String, List<HistoryPoint>>>()
+        c.fetchHistory(listOf("sensor.kitchen_temp")) { got.put(it) }
+        assertEquals(listOf(HistoryPoint(1700000000.0, 20.5)), got.poll(10, TimeUnit.SECONDS)!!.getValue("sensor.kitchen_temp"))
+        val subId = server.commands("history/stream").single().getInt("id")
+        awaitCondition("history unsubscribe") { server.commands("unsubscribe_events").any { it.getInt("subscription") == subId } }
+        Thread.sleep(150) // the server's own delayed copy of the series must not call back again
+        assertNull(got.poll())
+    }
+
+    @Test
+    fun socketWritesLeaveTheCallingThreadAndKeepTheirOrder() {
+        // On Android the caller is the main thread, where a socket write throws NetworkOnMainThreadException.
+        val writers = CopyOnWriteArrayList<Pair<String, String>>() // message type to writing thread
+        val c = connected(connect = { url ->
+            SpySocket(server.connect(url), before = { msg -> writers += msg.optString("type") to Thread.currentThread().name })
+        })
+        awaitCondition("startup writes") { writers.size >= 9 } // auth + 8 startup requests
+        val caller = Thread.currentThread()
+
+        c.callService("light", "turn_on")
+        c.callService("light", "turn_off")
+        c.fetchHistory(listOf("sensor.kitchen_temp"), 1) {}
+        c.callService("light", "toggle")
+        awaitCondition("queued writes") { server.commands("history/stream").isNotEmpty() && server.commands("call_service").size == 3 }
+
+        val sent = writers.drop(1) // everything after `auth`
+        assertTrue("every post-auth write is on the writer thread: $sent", sent.all { it.second == "vitro-ha-send" })
+        assertNotEquals("vitro-ha-send", caller.name)
+        assertEquals("auth", writers[0].first)
+        assertNotEquals("vitro-ha-send", writers[0].second) // the handshake itself is inline on the reader
+
+        // FIFO: ids go out in the order the calls were made, across the reader's and the caller's requests.
+        val ids = server.received.drop(1).map { it.getInt("id") }
+        assertEquals(ids.sorted(), ids)
+        val after = server.received.drop(1).filter { it.getInt("id") > 8 }.map {
+            if (it.getString("type") == "call_service") it.getString("service") else it.getString("type")
+        }
+        assertEquals(listOf("turn_on", "turn_off", "history/stream", "toggle"), after.take(4))
+    }
+
+    private fun failingCallServiceWrites(): HaDashboardClient = connected(connect = { url ->
+        SpySocket(server.connect(url), before = { msg ->
+            if (msg.optString("type") == "call_service") throw IOException("Broken pipe")
+        })
+    })
+
+    @Test
+    fun aServiceCallWhoseWriteFailsReportsFailure() {
+        val c = failingCallServiceWrites()
+        val done = CompletableFuture<Boolean>()
+        c.callService("light", "turn_on") { done.complete(it) }
+        assertFalse(done.get(10, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun aCallWsWhoseWriteFailsAnswersWithSendFailedInsteadOfHanging() {
+        val c = failingCallServiceWrites()
+        val done = CompletableFuture<Triple<Boolean, Any?, JSONObject?>>()
+        c.callWs(JSONObject().put("type", "call_service").put("domain", "light").put("service", "x")) { ok, r, e -> done.complete(Triple(ok, r, e)) }
+        val (ok, result, err) = done.get(10, TimeUnit.SECONDS)
+        assertFalse(ok)
+        assertNull(result)
+        assertEquals("send_failed", err!!.getString("code"))
+    }
+
+    @Test
     fun historyWithNoEntitiesSendsNothing() {
         val c = connected()
         c.fetchHistory(emptyList()) { throw AssertionError("no callback expected") }
@@ -431,6 +545,7 @@ class HaDashboardClientTest {
         assertEquals("", rendered.poll(10, TimeUnit.SECONDS))
 
         stop()
+        awaitCondition("template unsubscribe") { server.commands("unsubscribe_events").isNotEmpty() }
         val unsub = server.commands("unsubscribe_events").single()
         assertEquals(sub, unsub.getInt("subscription"))
     }

@@ -198,6 +198,7 @@ class VitroEngineTest {
     }
 
     @Test
+    @Config(qualifiers = "night") // Vitro follows Android's night mode; the server's default dark theme applies in it
     fun enabledReportsReadyDashboardsAndTheHaThemeOverThePort() {
         val engine = vitro()
         readyPage(engine)
@@ -333,6 +334,27 @@ class VitroEngineTest {
         assertEquals(2, fp.loads.size)
         assertEquals("view", host.messages("ready").last().getString("why"))
         assertEquals(1, fallback.opens.size)
+    }
+
+    @Test
+    fun aLockedDownFallbackGetsSameOriginHaUrlsOnTheLoopbackIslandServer() {
+        val legacy = RecordingEngine(name = "Legacy Gecko 1.0", lockedDown = true)
+        val engine = vitro(fb = legacy)
+        try {
+            val page = readyPage(engine)
+            val loopback = engine.fallbackDashboardOrigin()
+            assertTrue(loopback, loopback.startsWith("http://127.0.0.1:"))
+
+            page.load("$base/auth/authorize?client_id=abc&redirect_uri=def")
+            page.load("$base/config")
+            page.load("https://example.com/config/blueprint/import")
+            assertEquals(
+                listOf("$loopback/auth/authorize?client_id=abc&redirect_uri=def", "$loopback/config", "https://example.com/config/blueprint/import"),
+                legacy.pages.single().loads.toList(),
+            )
+        } finally {
+            engine.islandServer.stop()
+        }
     }
 
     @Test
@@ -598,6 +620,20 @@ class VitroEngineTest {
         assertTrue(html.contains("acme-card.js"))
         assertTrue(html.contains("<script src="))
         assertTrue(html.contains("legacy.js"))
+    }
+
+    @Test
+    fun islandResourceUrlsAreHtmlAttributesNotJsonStrings() {
+        val resources = listOf(
+            LovelaceResource("/local/custom-card.js", "module"),
+            LovelaceResource("/local/legacy.js", "js"),
+            LovelaceResource("/local/a.css?v=1&b=\"x\"", "css"),
+        )
+        val html = WebIslandCardView.buildIslandHtml(cardContext(resources = resources), islandCard())
+        assertTrue(html.contains("<script type=\"module\" src=\"/local/custom-card.js\"></script>"))
+        assertTrue(html.contains("<script src=\"/local/legacy.js\"></script>"))
+        assertTrue(html.contains("href=\"/local/a.css?v=1&amp;b=&quot;x&quot;\""))
+        assertFalse(html.contains("\\/local\\/"))
     }
 
     @Test

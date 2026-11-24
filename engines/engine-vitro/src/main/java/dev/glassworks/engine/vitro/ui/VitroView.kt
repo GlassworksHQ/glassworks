@@ -5,6 +5,7 @@
 package dev.glassworks.engine.vitro.ui
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
@@ -19,25 +20,33 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import dev.glassworks.engine.vitro.cards.AlarmPanelCardView
+import dev.glassworks.engine.vitro.cards.AreaCardView
 import dev.glassworks.engine.vitro.cards.BubbleCardView
 import dev.glassworks.engine.vitro.cards.ButtonCardView
 import dev.glassworks.engine.vitro.cards.ClockCardView
 import dev.glassworks.engine.vitro.cards.EntitiesCardView
+import dev.glassworks.engine.vitro.cards.EntityCardView
 import dev.glassworks.engine.vitro.cards.GaugeCardView
 import dev.glassworks.engine.vitro.cards.GlanceCardView
 import dev.glassworks.engine.vitro.cards.HeadingCardView
+import dev.glassworks.engine.vitro.cards.LightCardView
 import dev.glassworks.engine.vitro.cards.MarkdownCardView
 import dev.glassworks.engine.vitro.cards.MediaControlCardView
 import dev.glassworks.engine.vitro.cards.MoreInfoSheet
 import dev.glassworks.engine.vitro.cards.MushroomChipsCardView
 import dev.glassworks.engine.vitro.cards.PictureCardView
 import dev.glassworks.engine.vitro.cards.SensorGraphCardView
+import dev.glassworks.engine.vitro.cards.StatisticsGraphCardView
 import dev.glassworks.engine.vitro.cards.ThermostatCardView
 import dev.glassworks.engine.vitro.cards.TileCardView
+import dev.glassworks.engine.vitro.cards.TodoListCardView
 import dev.glassworks.engine.vitro.cards.WeatherCardView
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HistoryPoint
+import dev.glassworks.engine.vitro.data.EntityState
+import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.CardTier
@@ -45,6 +54,7 @@ import dev.glassworks.engine.vitro.model.DashboardConfig
 import dev.glassworks.engine.vitro.model.LovelaceResource
 import dev.glassworks.engine.vitro.model.SectionConfig
 import dev.glassworks.engine.vitro.model.ViewConfig
+import dev.glassworks.engine.vitro.model.VisibilityCondition
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
 import dev.glassworks.engine.vitro.theme.ThemeBackground
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
@@ -97,6 +107,10 @@ class VitroView(
         typeface = Inter.typeface(context, Inter.REGULAR, 14f)
     }
 
+    /** One top-bar tab and the dashboard view it opens. */
+    private class TabEntry(val viewIndex: Int, val label: TextView, val icon: MdiIconView?, val indicator: View)
+
+    private val tabs = ArrayList<TabEntry>()
     private var moreInfo: MoreInfoSheet? = null
     private val viewCache = LinkedHashMap<Int, View>()
 
@@ -106,7 +120,9 @@ class VitroView(
         private set
     var themeCatalog: ThemeCatalog = ThemeCatalog()
         private set
-    var darkMode: Boolean = true
+    /** Follows Android's night mode, like Home Assistant's own auto light/dark; callers can still override it. */
+    var darkMode: Boolean =
+        (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
     var hideHeader: Boolean = true
         set(v) {
             field = v
@@ -195,31 +211,58 @@ class VitroView(
 
     private fun rebuildTabs(config: DashboardConfig) {
         tabBar.removeAllViews()
+        tabs.clear()
         val theme = ThemeResolver.resolve(themeCatalog, darkMode)
         tabScroll.setBackgroundColor(theme.secondaryBackgroundColor)
+        // Like HA, subviews have no tab: they are reached by navigation and come back with their back arrow.
         config.views.forEachIndexed { idx, v ->
-            val tab = TextView(context).apply {
+            if (v.subview) return@forEachIndexed
+            val tab = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                isClickable = true
+                tag = idx
+                setOnClickListener { renderView(idx, forceRebuild = false) }
+            }
+            val row = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(px(16f), px(12f), px(16f), px(9.5f))
+            }
+            val icon = v.icon?.let { name ->
+                MdiIconView(context).apply { setIcon(name, theme.secondaryTextColor) }.also {
+                    row.addView(it, LinearLayout.LayoutParams(px(18f), px(18f)).apply { marginEnd = px(6f) })
+                }
+            }
+            val label = TextView(context).apply {
                 text = v.title
                 textSize = 13f
                 typeface = Inter.typeface(context, Inter.MEDIUM, 13f)
-                setPadding(px(16f), px(12f), px(16f), px(12f))
-                isClickable = true
-                setOnClickListener { renderView(idx, forceRebuild = false) }
+                includeFontPadding = false
             }
+            row.addView(label, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+            tab.addView(row, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+            val indicator = View(context).apply { visibility = INVISIBLE }
+            tab.addView(indicator, LinearLayout.LayoutParams(MATCH_PARENT, (2.5f * dp).toInt().coerceAtLeast(1)))
             tabBar.addView(tab, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+            tabs += TabEntry(idx, label, icon, indicator)
         }
         updateTabVisibility()
     }
 
     private fun updateTabVisibility() {
-        val count = dashboard?.views?.size ?: 0
+        val count = dashboard?.views?.count { !it.subview } ?: 0
         tabScroll.visibility = if (!hideHeader && count > 1) VISIBLE else GONE
     }
 
     private fun highlightTab(selected: Int, theme: ResolvedTheme) {
-        for (i in 0 until tabBar.childCount) {
-            val tv = tabBar.getChildAt(i) as? TextView ?: continue
-            tv.setTextColor(if (i == selected) theme.primaryColor else theme.secondaryTextColor)
+        for (t in tabs) {
+            val active = t.viewIndex == selected
+            val color = if (active) theme.primaryColor else theme.secondaryTextColor
+            t.label.setTextColor(color)
+            t.icon?.tintColor = color
+            t.indicator.setBackgroundColor(theme.primaryColor)
+            t.indicator.visibility = if (active) VISIBLE else INVISIBLE
         }
     }
 
@@ -327,6 +370,18 @@ class VitroView(
         } else {
             buildMasonryLayout(view.cards, ctx, widthDp, outerPad, gap)
         }
+        val withBadges = if (view.badges.isNotEmpty()) {
+            LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(buildBadgeBar(view.badges, ctx), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+                    topMargin = px(8f)
+                    bottomMargin = px(8f)
+                })
+                addView(container, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            }
+        } else {
+            container
+        }
         val body = if (view.subview) {
             LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
@@ -344,13 +399,90 @@ class VitroView(
                     typeface = Inter.typeface(context, Inter.MEDIUM, 18f)
                 })
                 addView(backRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-                addView(container, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                addView(withBadges, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             }
         } else {
-            container
+            withBadges
         }
         scroll.addView(body, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         return scroll
+    }
+
+    /** HA's view `badges`: a centered, scrollable row of live entity pills above the cards. */
+    private fun buildBadgeBar(badges: List<CardConfig>, ctx: VitroCardContext): View {
+        // isFillViewport makes the row at least as wide as the screen, so CENTER gravity centers the pills
+        // while they fit; once they don't, the row grows and scrolls.
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(px(8f), 0, px(8f), 0)
+        }
+        badges.forEachIndexed { idx, badge ->
+            val pill = buildBadge(badge, ctx) ?: return@forEachIndexed
+            row.addView(wrapVisibility(badge, pill, ctx), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
+                if (idx > 0) marginStart = px(8f)
+            })
+        }
+        val scroll = HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            isFillViewport = true
+        }
+        scroll.addView(row, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        return scroll
+    }
+
+    private fun buildBadge(badge: CardConfig, ctx: VitroCardContext): View? {
+        val eid = badge.entity ?: return null
+        val theme = ctx.theme
+        val pill = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = px(38f)
+            setPadding(px(12f), px(6f), px(12f), px(6f))
+            background = GradientDrawable().apply {
+                cornerRadius = 999f * dp
+                setColor(theme.cardBackgroundColor)
+                setStroke(px(1f).coerceAtLeast(1), theme.cardBorderColor)
+            }
+            isClickable = true
+        }
+        val showIcon = badge.raw.optBoolean("show_icon", true)
+        val icon = MdiIconView(context)
+        if (showIcon) pill.addView(icon, LinearLayout.LayoutParams(px(18f), px(18f)).apply { marginEnd = px(8f) })
+        fun line(sp: Float, weight: Int, color: Int) = TextView(context).apply {
+            textSize = sp
+            typeface = Inter.typeface(context, weight, sp)
+            setTextColor(color)
+            includeFontPadding = false
+            maxLines = 1
+        }
+        // HA 2026 stacks the name above the state when the name shows; otherwise the state stands alone.
+        val nameView = line(10f, Inter.REGULAR, theme.secondaryTextColor)
+        val stateView = line(12f, Inter.MEDIUM, theme.primaryTextColor)
+        val texts = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(nameView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+            addView(stateView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = px(1f) })
+        }
+        pill.addView(texts, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+        val render = { s: EntityState? ->
+            val (name, state) = badgeLines(badge, s)
+            nameView.text = name.orEmpty()
+            nameView.visibility = if (name != null && state != null) VISIBLE else GONE
+            stateView.text = state ?: name.orEmpty()
+            if (showIcon) icon.setIcon(MdiIcons.resolveIconName(badge.icon, s), badgeIconColor(theme, s))
+        }
+        render(store[eid])
+        val tap = ActionConfig.parse(badge.raw.optJSONObject("tap_action"), "more-info")
+        pill.setOnClickListener { ctx.performAction(tap, eid) }
+        pill.bindHoldAction(ctx, ActionConfig.parse(badge.raw.optJSONObject("hold_action"), "none"), eid)
+        val unsub = store.subscribe(eid) { s -> ctx.main.post { render(s) } }
+        pill.addOnAttachStateChangeListener(object : OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {}
+            override fun onViewDetachedFromWindow(v: View) { unsub() }
+        })
+        return pill
     }
 
     private fun buildSectionsLayout(
@@ -382,7 +514,8 @@ class VitroView(
 
         view.sections.forEachIndexed { idx, sec ->
             val col = columns[idx % cols]
-            col.addView(buildSection(sec, ctx, gap), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+            val built = wrapConditions(sec.visibility, buildSection(sec, ctx, gap), ctx)
+            col.addView(built, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
                 bottomMargin = px(14f)
             })
         }
@@ -402,26 +535,34 @@ class VitroView(
         }
         // Pack section cards in a 2-column sub-grid (matching HA's 12-column section units: <=6 = half, >6 = full).
         var pendingHalfRow: LinearLayout? = null
+        // A half-width card left alone in its row keeps half the width: switch it to WRAP_CONTENT so the
+        // 1px spacer on the right doesn't collapse a MATCH_PARENT row height to 1px.
+        fun closeHalfRow() {
+            val row = pendingHalfRow ?: return
+            (row.getChildAt(0)?.layoutParams as? LinearLayout.LayoutParams)?.height = WRAP_CONTENT
+            row.addView(View(context), LinearLayout.LayoutParams(0, 1, 1f).apply { marginStart = gap })
+            pendingHalfRow = null
+        }
         for (card in section.cards) {
-            val cols = card.gridOptionsColumns()
-            val isHalf = cols != null && cols <= 6
+            val isHalf = isHalfWidth(card)
             val cardView = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
             if (isHalf) {
                 val row = pendingHalfRow
                 if (row == null) {
                     val newRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-                    newRow.addView(cardView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                    newRow.addView(cardView, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
                     box.addView(newRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = gap })
                     pendingHalfRow = newRow
                 } else {
-                    row.addView(cardView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginStart = gap })
+                    row.addView(cardView, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { marginStart = gap })
                     pendingHalfRow = null
                 }
             } else {
-                pendingHalfRow = null
+                closeHalfRow()
                 box.addView(cardView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = gap })
             }
         }
+        closeHalfRow()
         return box
     }
 
@@ -467,7 +608,9 @@ class VitroView(
     private fun estimateWeight(card: CardConfig): Int = when (card.type) {
         "entities" -> (card.entities().size * 2).coerceAtLeast(3)
         "history-graph", "thermostat", "picture", "picture-entity" -> 6
-        "clock", "sensor", "gauge", "weather-forecast" -> 4
+        "clock", "sensor", "gauge", "weather-forecast", "entity", "area" -> 4
+        "light", "statistics-graph", "todo-list" -> 6
+        "alarm-panel" -> 8
         "grid" -> card.childCards.size * 2
         else -> 2
     }
@@ -530,6 +673,12 @@ class VitroView(
             "markdown" -> MarkdownCardView(ctx, card)
             "picture", "picture-entity", "picture-glance" -> PictureCardView(ctx, card)
             "media-control" -> MediaControlCardView(ctx, card)
+            "entity" -> EntityCardView(ctx, card)
+            "light" -> LightCardView(ctx, card)
+            "alarm-panel" -> AlarmPanelCardView(ctx, card)
+            "todo-list" -> TodoListCardView(ctx, card)
+            "statistics-graph" -> StatisticsGraphCardView(ctx, card)
+            "area" -> AreaCardView(ctx, card)
             // Tier 2: Popular HACS Fast-Paths
             "custom:mushroom-entity-card",
             "custom:mushroom-light-card",
@@ -548,8 +697,11 @@ class VitroView(
         }
     }
 
-    private fun wrapVisibility(card: CardConfig, view: View, ctx: VitroCardContext): View {
-        val conds = card.visibility + dev.glassworks.engine.vitro.model.VisibilityCondition.parseList(card.raw.optJSONArray("conditions"))
+    private fun wrapVisibility(card: CardConfig, view: View, ctx: VitroCardContext): View =
+        wrapConditions(card.visibility + VisibilityCondition.parseList(card.raw.optJSONArray("conditions")), view, ctx)
+
+    /** Shows [view] only while every condition holds, re-checking live as the referenced entities change. */
+    private fun wrapConditions(conds: List<VisibilityCondition>, view: View, ctx: VitroCardContext): View {
         if (conds.isEmpty()) return view
         val widthDp = (resources.displayMetrics.widthPixels / dp).toInt()
         val update = {
@@ -569,6 +721,59 @@ class VitroView(
 
     companion object {
         private const val TAG = "Glassworks.Vitro"
+
+        /** A badge's text: `name · state` when the name shows, else the formatted state (`21.5 °C`, `Closed`). */
+        fun badgeText(badge: CardConfig, s: EntityState?): String {
+            val raw = badge.raw
+            val name = badge.name ?: s?.friendlyName ?: badge.entity.orEmpty()
+            val showName = raw.optBoolean("show_name", badge.name != null)
+            val showState = raw.optBoolean("show_state", true)
+            val state = s?.formattedState() ?: "…"
+            return when {
+                showName && showState -> "$name · $state"
+                showName -> name
+                else -> state
+            }
+        }
+
+        /**
+         * A badge's two lines as HA 2026 draws them: `(name, state)`. The name is null unless `show_name` is on
+         * (or a `name` is set); the state is null when `show_state: false`.
+         */
+        fun badgeLines(badge: CardConfig, s: EntityState?): Pair<String?, String?> {
+            val raw = badge.raw
+            val showName = raw.optBoolean("show_name", badge.name != null)
+            val showState = raw.optBoolean("show_state", true)
+            val name = if (showName) badge.name ?: s?.friendlyName ?: badge.entity.orEmpty() else null
+            val state = if (showState || !showName) s?.formattedState() ?: "…" else null
+            return name to state
+        }
+
+        /** HA's badge icon colors: green for home and locked, red for unlocked, sensor blue, grey when inactive. */
+        fun badgeIconColor(theme: ResolvedTheme, s: EntityState?): Int {
+            if (s == null) return theme.stateIconColor
+            return when (s.domain) {
+                "person", "device_tracker" -> if (s.state == "home") HOME_GREEN else theme.stateInactiveColor
+                "lock" -> when (s.state) {
+                    "locked" -> HOME_GREEN
+                    "unlocked", "open" -> UNLOCKED_RED
+                    else -> theme.stateIconColor
+                }
+                "binary_sensor" -> if (s.state == "on") theme.activeColor("binary_sensor") else theme.stateInactiveColor
+                "sensor" -> SENSOR_BLUE
+                else -> if (s.isActive) theme.activeColor(s.domain) else theme.stateIconColor
+            }
+        }
+
+        /** HA's sections default width: a card is half-width at <= 6 of 12 columns; `clock` defaults to 6. */
+        fun isHalfWidth(card: CardConfig): Boolean {
+            val cols = card.gridOptionsColumns() ?: if (card.type == "clock") 6 else null
+            return cols != null && cols <= 6
+        }
+
+        const val HOME_GREEN = 0xFF4CAF50.toInt()
+        const val UNLOCKED_RED = 0xFFF44336.toInt()
+        const val SENSOR_BLUE = 0xFF03A9F4.toInt()
         private const val MAX_CACHED_VIEWS = 3
     }
 }
