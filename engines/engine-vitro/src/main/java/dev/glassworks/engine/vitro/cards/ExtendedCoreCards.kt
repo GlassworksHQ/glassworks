@@ -152,34 +152,53 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
 // light
 // ---------------------------------------------------------------------------------------------
 
-/** Native HA `light` card (`hui-light-card`): a 270° brightness dial around a bulb toggle. */
+/**
+ * Native HA `light` card (`hui-light-card`): full width; a 200 px `ha-control-circular-slider` (brightness) around a
+ * 120 px light button with the entity's icon (no dial for an on/off light), the ⋮ more-info button top right, and
+ * under them the brightness (kept in place when hidden) and the name, 16.8 px, pulled up 56 px over the controls.
+ */
 class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
-    private val nameView = extLabel(ctx, 15f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+    // Both lines sit on HA's 1.6 line height (26.9 px).
+    private val nameView = extLabel(ctx, 16.8f, ctx.theme.primaryTextColor).apply {
         gravity = Gravity.CENTER
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
+        minHeight = ctx.px(26.9f)
     }
-    private val stateView = extLabel(ctx, 13f, ctx.theme.secondaryTextColor).apply { gravity = Gravity.CENTER }
-    private val dial = BrightnessDialView(ctx.context, ctx.theme.activeColor("light"), ctx.theme.dividerColor, ctx.theme.primaryTextColor)
+    private val brightnessView = extLabel(ctx, 16.8f, ctx.theme.primaryTextColor).apply {
+        gravity = Gravity.CENTER
+        minHeight = ctx.px(26.9f)
+    }
+    private val dial = BrightnessDialView(ctx.context, ctx.theme.activeColor("light"), ctx.theme.disabledTextColor, ctx.theme.stateIconColor, ctx.theme.primaryColor)
 
     init {
-        val pad = ctx.px(16f)
-        val col = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(pad, pad, pad, pad)
-        }
-        col.addView(dial, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(160f)))
+        val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+        // #controls: 16 px around the 200 px slider.
+        col.addView(FrameLayout(ctx.context).apply {
+            setPadding(ctx.px(16f), ctx.px(16f), ctx.px(16f), ctx.px(16f))
+            addView(dial, FrameLayout.LayoutParams(ctx.px(200f), ctx.px(200f), Gravity.CENTER_HORIZONTAL))
+        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        // #info: margin-top -56 px, 16 px padding, the brightness then the name.
         val labels = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(ctx.px(16f), ctx.px(16f), ctx.px(16f), ctx.px(16f))
+            addView(brightnessView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             addView(nameView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-            addView(stateView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(3f) })
         }
-        col.addView(labels, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(8f) })
+        col.addView(labels, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = -ctx.px(56f) })
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-
         val eid = config.entity
+        // The more-info button: a 48 px ⋮ in the secondary text color, top right.
+        addView(FrameLayout(ctx.context).apply {
+            isClickable = true
+            contentDescription = "More info"
+            addView(MdiIconView(ctx.context).apply { setIcon("mdi:dots-vertical", ctx.theme.secondaryTextColor) },
+                FrameLayout.LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
+            setOnClickListener { eid?.let(ctx.openMoreInfo) }
+            applyHaRipple(this, ctx.px(24f).toFloat(), ctx.theme.dark)
+        }, LayoutParams(ctx.px(48f), ctx.px(48f), Gravity.TOP or Gravity.END))
+
         labels.isClickable = true
         labels.setOnClickListener { ctx.performAction(ActionConfig.parse(config.raw.optJSONObject("tap_action"), "more-info"), eid) }
         labels.bindHoldAction(ctx, ActionConfig.parse(config.raw.optJSONObject("hold_action"), "more-info"), eid)
@@ -204,35 +223,42 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         ctx.callService("light", "turn_on", JSONObject().put("entity_id", eid).put("brightness", bri), null)
     }
 
-    private var lastPct: Int? = null
-
     private fun render(s: EntityState?) {
         nameView.text = config.name ?: s?.displayName ?: config.entity.orEmpty()
         val on = s?.state == "on"
-        val reportedPct = s?.brightnessPct
-        if (reportedPct != null && reportedPct > 0) lastPct = reportedPct
-        val pct = reportedPct ?: if (on) (lastPct ?: 100) else 0
-        stateView.text = when {
-            s == null -> "–"
-            s.isUnavailable -> s.formattedState()
-            on -> if (reportedPct != null || lastPct != null) "$pct%" else "On"
-            else -> "Off"
+        val pct = s?.brightnessPct
+        // HA's brightness line: the percentage while on, hidden (its place kept) otherwise.
+        brightnessView.text = if (on && pct != null) "$pct%" else ""
+        brightnessView.visibility = if (on && pct != null) VISIBLE else INVISIBLE
+        val modes = (s?.attributes?.get("supported_color_modes") as? List<*>)?.map { it.toString() }
+        val dims = modes == null || modes.any { it != "onoff" }
+        dial.update(on, if (on && pct != null) pct / 100f else 0f, MdiIcons.resolveIconName(config.icon, s), s?.lightTintColor(), dims)
+        dial.contentDescription = when {
+            s == null || s.isUnavailable -> s?.formattedState() ?: "–"
+            !on -> "Off"
+            dims && pct != null -> "Brightness $pct%"
+            else -> "On"
         }
-        dial.update(on, if (on) pct / 100f else 0f, MdiIcons.resolveIconName(config.icon, s))
     }
 }
 
-/** Canvas brightness dial: a 270° arc (drag to set brightness) around a round toggle button. */
+/**
+ * HA's `ha-control-circular-slider` for a light (320-unit geometry): a 270° track (radius 145, stroke 24) in the
+ * disabled color, the brightness arc in the light's color, a white handle (radius 9) in a 3-unit ring of the
+ * primary color; the light button's icon (118 px of 200) centered, in the light's color when on, else the
+ * state-icon color. Without [dims] (an on/off light) only the icon. Drag the ring to set brightness, tap the icon
+ * to toggle.
+ */
 internal class BrightnessDialView(
     context: Context,
     private val activeColor: Int,
     private val trackColor: Int,
-    private val textColor: Int,
+    private val offIconColor: Int,
+    private val handleRingColor: Int,
 ) : View(context) {
     private val dp = resources.displayMetrics.density
     private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 14f * dp
         strokeCap = Paint.Cap.ROUND
     }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
@@ -242,48 +268,60 @@ internal class BrightnessDialView(
     private var basePath: Path = MdiIcons.pathFor("lightbulb")
     private var on = false
     private var fraction = 0f
+    private var tint: Int? = null
+    private var dims = true
     private var dragFraction: Float? = null
     private var touchMode = TOUCH_NONE
 
     var onToggle: (() -> Unit)? = null
     var onBrightness: ((Int) -> Unit)? = null
 
-    fun update(isOn: Boolean, frac: Float, iconName: String) {
+    fun update(isOn: Boolean, frac: Float, iconName: String, lightColor: Int? = null, dimmable: Boolean = true) {
         on = isOn
         fraction = frac.coerceIn(0f, 1f)
         basePath = MdiIcons.pathFor(iconName)
+        tint = lightColor
+        dims = dimmable
         if (dragFraction == null) invalidate()
     }
 
-    private val radius: Float get() = (minOf(width, height) / 2f - arcPaint.strokeWidth).coerceAtLeast(8f * dp)
+    /** The dial's size in px (the view is square). */
+    private val size: Float get() = minOf(width, height).toFloat()
+    private val radius: Float get() = size * 145f / 320f
 
     override fun onDraw(canvas: Canvas) {
         val cx = width / 2f
         val cy = height / 2f
-        val r = radius
-        oval.set(cx - r, cy - r, cx + r, cy + r)
-        arcPaint.color = trackColor
-        canvas.drawArc(oval, START_ANGLE, SWEEP, false, arcPaint)
-        val shown = dragFraction ?: if (on) fraction else 0f
-        if (shown > 0f) {
-            arcPaint.color = activeColor
-            canvas.drawArc(oval, START_ANGLE, SWEEP * shown, false, arcPaint)
+        val u = size / 320f
+        val color = tint ?: activeColor
+        if (dims) {
+            val r = radius
+            oval.set(cx - r, cy - r, cx + r, cy + r)
+            arcPaint.strokeWidth = 24f * u
+            arcPaint.color = trackColor
+            canvas.drawArc(oval, START_ANGLE, SWEEP, false, arcPaint)
+            val shown = dragFraction ?: if (on) fraction else 0f
+            if (shown > 0f) {
+                arcPaint.color = color
+                canvas.drawArc(oval, START_ANGLE, SWEEP * shown, false, arcPaint)
+            }
             val a = Math.toRadians((START_ANGLE + SWEEP * shown).toDouble())
+            val hx = cx + r * cos(a).toFloat()
+            val hy = cy + r * sin(a).toFloat()
+            fillPaint.color = handleRingColor
+            canvas.drawCircle(hx, hy, 11.6f * u, fillPaint)
             fillPaint.color = 0xFFFFFFFF.toInt()
-            canvas.drawCircle(cx + r * cos(a).toFloat(), cy + r * sin(a).toFloat(), arcPaint.strokeWidth * 0.32f, fillPaint)
+            canvas.drawCircle(hx, hy, 8.8f * u, fillPaint)
         }
-        val inner = r * 0.55f
         val lit = on || (dragFraction ?: 0f) > 0f
-        fillPaint.color = if (lit) CardSurface.withAlpha(activeColor, 0.2f) else CardSurface.withAlpha(textColor, 0.08f)
-        canvas.drawCircle(cx, cy, inner, fillPaint)
-        val iconSize = inner * 0.9f
-        val scale = iconSize / 24f
+        // The light button's icon: 118 px of the 200 px dial.
+        val scale = (118f / 200f) * size / 24f
         iconMatrix.reset()
         iconMatrix.setScale(scale, scale)
-        iconMatrix.postTranslate(cx - iconSize / 2f, cy - iconSize / 2f)
+        iconMatrix.postTranslate(cx - 12f * scale, cy - 12f * scale)
         iconPath.set(basePath)
         iconPath.transform(iconMatrix)
-        fillPaint.color = if (lit) activeColor else CardSurface.withAlpha(textColor, 0.55f)
+        fillPaint.color = if (lit) color else offIconColor
         canvas.drawPath(iconPath, fillPaint)
     }
 
@@ -302,7 +340,7 @@ internal class BrightnessDialView(
             MotionEvent.ACTION_DOWN -> {
                 touchMode = when {
                     d <= r * 0.55f -> TOUCH_TOGGLE
-                    d <= r * 1.35f && d >= r * 0.6f -> TOUCH_DRAG
+                    dims && d <= r * 1.35f && d >= r * 0.6f -> TOUCH_DRAG
                     else -> TOUCH_NONE
                 }
                 if (touchMode == TOUCH_NONE) return false

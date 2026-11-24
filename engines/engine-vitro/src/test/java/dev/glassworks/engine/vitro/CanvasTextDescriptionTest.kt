@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import dev.glassworks.engine.vitro.cards.GaugeCardView
 import dev.glassworks.engine.vitro.cards.HumidityDialView
+import dev.glassworks.engine.vitro.cards.LightCardView
 import dev.glassworks.engine.vitro.cards.ThermostatDialView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -70,5 +71,22 @@ class CanvasTextDescriptionTest {
         val described = all(card).filter { it !is ViewGroup && !it.contentDescription.isNullOrBlank() }.map { it.contentDescription.toString() }
         assertEquals(1, described.size)
         assertEquals(true, described.single().startsWith("42"))
+    }
+
+    @Test
+    fun theLightCardsDialDescribesTheBrightness() {
+        val store = EntityStore()
+        store.putLocal(EntityState("light.desk", "on", mapOf("brightness" to 128, "supported_color_modes" to listOf("brightness"), "friendly_name" to "Desk")))
+        val card = LightCardView(context(store), LovelaceParser.parseCard(JSONObject("""{"type": "light", "entity": "light.desk"}""")))
+        fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+        val described = { all(card).filter { it !is ViewGroup && !it.contentDescription.isNullOrBlank() }.map { it.contentDescription.toString() } }
+        assertEquals(true, "Brightness 50%" in described())
+        // HA's brightness line shows the percentage while on.
+        assertEquals(true, all(card).filterIsInstance<android.widget.TextView>().any { it.text.toString() == "50%" && it.visibility == View.VISIBLE })
+        store.putLocal(EntityState("light.desk", "off", mapOf("supported_color_modes" to listOf("brightness"), "friendly_name" to "Desk")))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertEquals(true, "Off" in described())
+        // HA's light card spans the section.
+        assertEquals(12, dev.glassworks.engine.vitro.ui.HaGridSize.of(LovelaceParser.parseCard(JSONObject("""{"type": "light", "entity": "light.desk"}"""))).columns)
     }
 }

@@ -209,7 +209,9 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                     val inline = features > 0 && !vertical && raw.optString("features_position") == "inline"
                     HaGridSize(if (inline) 12 else 6, 1 + (if (inline) 0 else features) + if (vertical) 1 else 0)
                 }
-                "entity", "sensor", "light", "area" -> HaGridSize(6, null)
+                "entity", "sensor", "area" -> HaGridSize(6, null)
+                // Measured in HA: the light card spans the section's width.
+                "light" -> HaGridSize(12, null)
                 // hui-button-card's getGridOptions: 6 columns, 2 rows.
                 "button" -> HaGridSize(6, 2)
                 // Measured in HA: the picture cards span the section's full width at their image's height.
