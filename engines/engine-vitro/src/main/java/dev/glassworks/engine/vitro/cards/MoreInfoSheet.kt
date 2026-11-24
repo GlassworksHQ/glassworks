@@ -645,16 +645,22 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             onToggle = { locked ->
                 val send = { code: String? ->
                     val before = ctx.store[id]
-                    before?.let { ctx.store.putLocal(it.copy(state = if (locked) "locked" else "unlocked")) }
+                    val optimistic = before?.copy(state = if (locked) "locked" else "unlocked")
+                    optimistic?.let { ctx.store.putLocal(it) }
                     val data = JSONObject().put("entity_id", id)
                     if (!code.isNullOrEmpty()) data.put("code", code)
                     val msg = JSONObject().put("type", "call_service").put("domain", "lock")
                         .put("service", if (locked) "lock" else "unlock").put("service_data", data)
-                    // HA turned it down: put back the state from before the optimistic flip.
-                    ctx.callWs(msg) { ok, _, _ -> if (!ok && before != null) ctx.main.post { ctx.store.putLocal(before) } }
+                    // HA turned it down: put back the state from before the optimistic flip, unless a newer state from
+                    // HA has replaced the flip meanwhile (that one is the truth).
+                    ctx.callWs(msg) { ok, _, _ ->
+                        if (!ok && before != null) ctx.main.post { if (ctx.store[id] === optimistic) ctx.store.putLocal(before) }
+                    }
                 }
-                // A lock with a `code_format` asks for its code first, as HA's more-info does.
-                if (ctx.store[id]?.attributes?.get("code_format") != null) askCode(send) else send(null)
+                // A lock with a `code_format` asks for its code first, as HA's more-info does. Cancelled, the pill
+                // (which already moved) goes back to the lock's state.
+                val reset = { setOn(ctx.store[id]?.state.let { it == "locked" || it == "locking" }) }
+                if (ctx.store[id]?.attributes?.get("code_format") != null) askCode(send, reset) else send(null)
             }
         }
         addPill(pill)
@@ -666,19 +672,21 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     }
 
     /** A masked code prompt; [onCode] runs on OK only, so Cancel sends nothing. The pill re-reads the store either way. */
-    private fun askCode(onCode: (String) -> Unit) {
+    private fun askCode(onCode: (String) -> Unit, onCancel: () -> Unit) {
         val field = android.widget.EditText(ctx.context).apply {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
             hint = "Code"
         }
-        runCatching {
+        val shown = runCatching {
             android.app.AlertDialog.Builder(ctx.context)
                 .setView(field)
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton("Cancel") { _, _ -> onCancel() }
+                .setOnCancelListener { onCancel() }
                 .setPositiveButton("OK") { _, _ -> onCode(field.text?.toString().orEmpty()) }
                 .show()
         }
+        if (shown.isFailure) onCancel()
     }
 
     private fun buildCover(id: String, initial: EntityState?): (EntityState?) -> Unit {
@@ -1651,7 +1659,8 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
                 // Nothing was sent: back to the bound value.
-                bound?.let { targetPct = -1f; setPercent(it) }
+                // ...and the caption with it (onChange), without onRelease: nothing is sent.
+                bound?.let { targetPct = -1f; setPercent(it); onChange?.invoke(it) }
                 invalidate()
             }
         }
@@ -2146,7 +2155,7 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
             MotionEvent.ACTION_CANCEL -> {
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
-                bound?.let { kelvin = Int.MIN_VALUE; setKelvin(it) }
+                bound?.let { kelvin = Int.MIN_VALUE; setKelvin(it); onChange?.invoke(it) }
             }
         }
         return true
@@ -2273,7 +2282,7 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
             MotionEvent.ACTION_CANCEL -> {
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
-                bound?.let { pct = -1; setPercent(it) }
+                bound?.let { pct = -1; setPercent(it); onChange?.invoke(it) }
             }
         }
         return true
