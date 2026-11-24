@@ -5,8 +5,14 @@
 package dev.glassworks.engine.vitro.compat
 
 /**
- * The set Vitro draws natively, in one place. Anything outside it goes to a web island on purpose
- * ([CardCompat]), so it looks the way Home Assistant draws it and only that card pays for a web engine.
+ * The set Vitro draws natively, in one place. A custom card with anything outside it goes to a web island on
+ * purpose ([CardCompat]), so it looks the way Home Assistant draws it and only that card pays for a web engine.
+ *
+ * Built-in cards are the exception: the island runs a custom card's own JavaScript but has no HA frontend, so it
+ * would draw a built-in card (a `tile`, say) as a plain summary. A built-in card Vitro draws stays native even when
+ * its config is outside this set (an unsupported option, card_mod path or selector), and so does a custom container
+ * Vitro draws with a built-in card inside it. [CardCompat.check] records what it would have fallen back for as a
+ * note instead of routing the card to the island.
  *
  * Three lists decide a card's route:
  * - **Supported**: drawn natively and faithfully.
