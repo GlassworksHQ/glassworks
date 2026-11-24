@@ -1044,6 +1044,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                     sb.append('￼')
                     val color = MarkdownInline.scaleAlpha(s.color, if (s.hidden) 0f else alphaMul * s.opacity)
                     sb.setSpan(MdIconSpan(icon, color, px, xh, s.relativeShiftY() * dp), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    if (s.hidden) st.hidden += start until sb.length
                     runs += CssLineBoxSpan.Run(start, sb.length, xh / 2f + px / 2f, px / 2f - xh / 2f)
                     st.lastSpace = false
                 }
@@ -1075,6 +1076,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                     val run = if (top) CssLineBoxSpan.Run(start, sb.length, 0f, 0f, hpx.toFloat())
                     else CssLineBoxSpan.Run(start, sb.length, hpx.toFloat(), 0f)
                     runs += run
+                    if (s.hidden) st.hidden += start until sb.length
                     if (natural) {
                         span.natural = true
                         span.run = run

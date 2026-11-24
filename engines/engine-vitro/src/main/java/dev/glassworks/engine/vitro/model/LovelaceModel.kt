@@ -300,11 +300,36 @@ sealed class VisibilityCondition {
          */
         private fun jsString(v: Any?): String = when (v) {
             null -> ""
-            is Double -> if (v % 1.0 == 0.0 && kotlin.math.abs(v) < 1e15) v.toLong().toString() else v.toString()
-            is Float -> jsString(v.toDouble())
+            is Double -> jsNumber(v)
+            is Float -> jsNumber(v.toDouble())
             is List<*> -> v.joinToString(",") { jsString(it) }
             is Map<*, *> -> "[object Object]"
             else -> v.toString()
+        }
+
+        /**
+         * A number as JavaScript's `Number.prototype.toString` writes it: `150`, `0.0001`, `1e-7`, `1e+21` (Java writes
+         * `150.0`, `1.0E-4`). The digits are Java's shortest round-trip ones; only the layout follows JavaScript.
+         */
+        internal fun jsNumber(d: Double): String {
+            if (d.isNaN()) return "NaN"
+            if (d.isInfinite()) return if (d > 0) "Infinity" else "-Infinity"
+            if (d == 0.0) return "0"
+            val bd = java.math.BigDecimal(d.toString()).stripTrailingZeros()
+            val digits = bd.unscaledValue().abs().toString()
+            val k = digits.length
+            val n = k - bd.scale() // value = 0.digits x 10^n
+            val sign = if (d < 0) "-" else ""
+            val body = when {
+                n in k..21 -> digits + "0".repeat(n - k)
+                n in 1..21 -> digits.substring(0, n) + "." + digits.substring(n)
+                n in -5..0 -> "0." + "0".repeat(-n) + digits
+                else -> {
+                    val e = n - 1
+                    (if (k == 1) digits else digits[0] + "." + digits.substring(1)) + "e" + (if (e >= 0) "+" else "-") + kotlin.math.abs(e)
+                }
+            }
+            return sign + body
         }
 
         private fun secondsOf(c: Calendar): Int =

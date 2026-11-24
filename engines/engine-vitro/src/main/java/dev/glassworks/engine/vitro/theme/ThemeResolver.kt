@@ -374,15 +374,15 @@ object ThemeResolver {
             themeVarNames += if (dark) def.dark.keys else def.light.keys
         }
 
-        // Names in a reference cycle are invalid, as in CSS: left out of the scope, so a `var()` of one takes its
-        // fallback (as the card parser does).
-        val cyclic = cyclicNames(raw)
-        val scope: Map<String, String> = if (cyclic.isEmpty()) raw else raw - cyclic
-        // A cyclic name is left out entirely (invalid, as in CSS), not exported empty: `--a: ;` would be a valid empty
-        // value, and an island's `var(--a, fallback)` would then never take its fallback.
+        // Names in a reference cycle are invalid, as in CSS, and so is a name whose value needs an invalid or missing
+        // one with no fallback (`b: var(--a)` with `a` in a cycle): left out of the scope, so a `var()` of one takes
+        // its fallback (as the card parser does). They're left out of the result entirely, not exported empty:
+        // `--b: ;` would be a valid empty value, and an island's `var(--b, fallback)` would never take its fallback.
+        val invalid = invalidNames(raw)
+        val scope: Map<String, String> = if (invalid.isEmpty()) raw else raw - invalid
         val resolved = LinkedHashMap<String, String>(raw.size)
         for (k in raw.keys) {
-            if (k !in cyclic) resolved[k] = resolveValue(raw[k].orEmpty(), scope, 0)
+            if (k !in invalid) resolved[k] = resolveValue(raw[k].orEmpty(), scope, 0)
         }
 
         val bg = parseColor(resolved["primary-background-color"]) ?: if (dark) 0xFF111111.toInt() else 0xFFFAFAFA.toInt()
@@ -478,8 +478,33 @@ object ThemeResolver {
         // Bounded like the browser's: substitution that grows a value by more than the limit in one pass
         // (`--a: var(--a) var(--a)` doubles every pass) makes it invalid, an empty value, instead of filling the heap
         // on the main thread. The growth is what's capped, not the length: a long card-mod stylesheet stays whole.
-        val replaced = substituteVars(input, MAX_VAR_EXPANSION) { key, fallback -> map[key] ?: fallback } ?: return ""
+        val replaced = substituteVars(input, MAX_VAR_EXPANSION) { key, fallback, _ -> map[key] ?: fallback } ?: return ""
         return if (replaced == input) replaced.trim() else resolveValue(replaced, map, depth + 1)
+    }
+
+    /**
+     * The names of [raw] that are invalid at computed-value time: those in a cycle, and (to a fixed point) those whose
+     * value uses a missing or invalid name through a `var()` with no fallback (a fallback that does the same counts).
+     */
+    internal fun invalidNames(raw: Map<String, String>): Set<String> {
+        val invalid = HashSet(cyclicNames(raw))
+        while (true) {
+            val scope = raw.keys - invalid
+            val more = raw.filter { (k, v) -> k !in invalid && needsMissing(v, scope) }.keys
+            if (more.isEmpty()) return invalid
+            invalid += more
+        }
+    }
+
+    /** True when [value] substitutes a name outside [scope] through a `var()` (or fallback chain) with no fallback. */
+    private fun needsMissing(value: String, scope: Set<String>, depth: Int = 0): Boolean {
+        if ("var(" !in value || depth >= 8) return false
+        var missing = false
+        substituteVars(value, Int.MAX_VALUE) { key, fallback, hasFallback ->
+            if (key !in scope && (!hasFallback || needsMissing(fallback, scope, depth + 1))) missing = true
+            ""
+        }
+        return missing
     }
 
     /** How much a value may grow in one substitution pass. */
@@ -514,7 +539,7 @@ object ThemeResolver {
      * Null as soon as the value has grown by more than [maxGrowth] chars: checked at each append, so the limit
      * bounds the memory used on the way, not only the result.
      */
-    private fun substituteVars(s: String, maxGrowth: Int, value: (key: String, fallback: String) -> String): String? {
+    private fun substituteVars(s: String, maxGrowth: Int, value: (key: String, fallback: String, hasFallback: Boolean) -> String): String? {
         val out = StringBuilder(s.length)
         var i = 0
         while (i < s.length) {
@@ -553,7 +578,7 @@ object ThemeResolver {
                 i = j
                 continue
             }
-            val v = value(name.removePrefix("--"), if (comma < 0) "" else inner.substring(comma + 1).trim())
+            val v = value(name.removePrefix("--"), if (comma < 0) "" else inner.substring(comma + 1).trim(), comma >= 0)
             // The output so far is bounded by the whole input plus the budget at every append (so a later part that
             // shrinks it can still count), and the finished value by its net growth.
             if (out.length.toLong() + v.length > s.length.toLong() + maxGrowth) return null

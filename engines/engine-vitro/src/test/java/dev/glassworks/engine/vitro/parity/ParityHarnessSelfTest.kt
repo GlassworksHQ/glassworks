@@ -385,6 +385,10 @@ class ParityHarnessSelfTest {
         // An IPv6 origin, which the IPv4 check can't see.
         assertTrue(FixtureScan.externalHost("""{"u": "https://[2001:db8::1]/image"}"""))
         assertTrue(FixtureScan.externalHost("""{"u": "http://user@[::1]:8123/x"}"""))
+        // The whole authority, not a prefix of it; schemes in any case.
+        assertTrue(FixtureScan.externalHost("""{"u": "http://homeassistant.local_private.example.test/x"}"""))
+        assertTrue(FixtureScan.externalHost("""{"u": "HTTPS://private.example.test/x"}"""))
+        assertFalse(FixtureScan.externalHost("""{"u": "HTTP://homeassistant.local:8123/x?y=1"}"""))
     }
 
     @Test
@@ -405,14 +409,19 @@ class ParityHarnessSelfTest {
 /** The committed-fixture checks for a token parameter and an absolute URL to another host. */
 internal object FixtureScan {
     private val TOKEN_PARAM = Regex("""[?&](token|access_token|authSig)=([^&"'\s#]*)""")
-    // The whole authority's host: a name, an IPv4 address, or a bracketed IPv6 address (never allowed).
-    private val URL_HOST = Regex("""https?://(?:[^/\s"'@]*@)?(\[[^\]\s"']*\]|[A-Za-z0-9.-]+)""")
+    // The whole authority, up to the path, query, fragment or the end of the string (schemes in any case).
+    private val URL_AUTHORITY = Regex("""(?i)https?://([^/\s"'?#\\]*)""")
     private val ALLOWED_HOSTS = setOf("127.0.0.1", "homeassistant.local")
 
     /** A token parameter with any value but exactly `redacted`. */
     fun tokenParameter(text: String): Boolean = TOKEN_PARAM.findAll(text).any { it.groupValues[2] != "redacted" }
 
     /** An absolute URL whose whole hostname isn't one the fixtures may name. */
-    fun externalHost(text: String): Boolean =
-        URL_HOST.findAll(text).any { it.groupValues[1].lowercase().trimEnd('.') !in ALLOWED_HOSTS }
+    fun externalHost(text: String): Boolean = URL_AUTHORITY.findAll(text).any { m ->
+        // The host is what's left of the authority without its user info and port; a bracketed IPv6 one is never
+        // allowed. Anything that doesn't read as one of the allowed names counts as external.
+        val hostPort = m.groupValues[1].substringAfterLast('@')
+        val host = if (hostPort.startsWith("[")) hostPort else hostPort.substringBefore(':')
+        host.lowercase().trimEnd('.') !in ALLOWED_HOSTS
+    }
 }

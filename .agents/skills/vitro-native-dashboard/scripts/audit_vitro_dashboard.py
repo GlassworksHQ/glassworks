@@ -155,7 +155,10 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
     if rule:
         option, default, native = rule
         raw = card.get(option)
-        value = (raw.strip() if isinstance(raw, str) and raw.strip() else default).removeprefix("custom:")
+        value = raw.strip() if isinstance(raw, str) and raw.strip() else default
+        # The engine reads layout-card's `layout_type` with or without `custom:`; Bubble Card's `card_type` as written.
+        if option == "layout_type":
+            value = value.removeprefix("custom:")
         if value not in native:
             counts["tier3"] += 1
             triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='{ctype}' with {option}: {value} (when its script is installed)")

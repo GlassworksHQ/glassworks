@@ -1077,6 +1077,17 @@ class LovelaceModelTest {
     }
 
     @Test
+    fun numbersCompareAsJavaScriptWritesThem() {
+        for ((v, js) in listOf(150.0 to "150", 0.0001 to "0.0001", 0.000001 to "0.000001", 1e-7 to "1e-7", 1.5 to "1.5",
+            -2.25 to "-2.25", 1e21 to "1e+21", 1e20 to "100000000000000000000", 123456.789 to "123456.789", 1.5e-10 to "1.5e-10")) {
+            assertEquals("$v", js, VisibilityCondition.jsNumber(v))
+        }
+        val sensor = EntityState("sensor.dose", "on", mapOf("level" to 0.0001))
+        val c = VisibilityCondition.parse(JSONObject("""{"condition": "state", "entity": "sensor.dose", "attribute": "level", "state": "0.0001"}"""))
+        assertTrue(c.evaluate({ if (it == "sensor.dose") sensor else null }))
+    }
+
+    @Test
     fun stateOperandsThatNameAnEntityMatchItsState() {
         val c = VisibilityCondition.parse(JSONObject("""{"condition": "state", "entity": "sensor.current", "state": "input_select.expected"}"""))
         assertTrue(c.evaluate(states("sensor.current" to "eco", "input_select.expected" to "eco")))

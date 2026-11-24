@@ -500,7 +500,9 @@ function walkCard(card: unknown, loc: string, view: ViewAudit) {
   const rule = Object.prototype.hasOwnProperty.call(CONFIG_DEPENDENT, type) ? CONFIG_DEPENDENT[type] : undefined;
   if (rule) {
     const raw = card[rule.option];
-    const value = (typeof raw === "string" && raw.trim() ? raw.trim() : rule.default).replace(/^custom:/, "");
+    const given = typeof raw === "string" && raw.trim() ? raw.trim() : rule.default;
+    // The engine reads layout-card's `layout_type` with or without `custom:`; Bubble Card's `card_type` as written.
+    const value = rule.option === "layout_type" ? given.replace(/^custom:/, "") : given;
     if (!rule.native.includes(value)) {
       view.tier3++;
       view.triggers.push({ view: view.name, path: loc, type: `${type} (${rule.option}: ${value})` });

@@ -132,6 +132,18 @@ class CoreParityTest {
         answers.removeAt(0)(false)
         ShadowLooper.idleMainLooper()
         assertEquals("off", store["switch.locked_out"]!!.state)
+        // HA reports a newer state while a write is out; the next write, refused, goes back to HA's report.
+        ctx.toggleEntity("switch.locked_out") // on, pending
+        val reported = dev.glassworks.engine.vitro.data.EntityState("switch.locked_out", "on", mapOf("from" to "ha"))
+        store.putLocal(reported)
+        ctx.toggleEntity("switch.locked_out") // off, pending
+        answers.removeAt(0)(true) // the first was accepted, but HA's report is newer than it
+        ShadowLooper.idleMainLooper()
+        answers.removeAt(0)(false)
+        ShadowLooper.idleMainLooper()
+        assertTrue(store["switch.locked_out"] === reported)
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("switch.locked_out", "off", emptyMap()))
+
         // The first accepted, the second refused: the accepted one stands.
         ctx.toggleEntity("switch.locked_out") // on
         ctx.toggleEntity("switch.locked_out") // off

@@ -671,9 +671,12 @@ class VitroView(
             setPadding(pad, pad, pad, px(4f))
             isClickable = true
             setOnClickListener {
+                val pageBack = pageBack
                 when {
                     view.backPath != null -> ctx.navigate(view.backPath)
-                    pageBack?.invoke() == true -> Unit
+                    // A page's own history is the one back walks: this view's stack mirrors it, and replaying that
+                    // after the page's is exhausted would revisit views already gone back through.
+                    pageBack != null -> if (!pageBack()) ctx.navigate("/")
                     viewBackStack.isNotEmpty() -> goBack()
                     else -> ctx.navigate("/")
                 }

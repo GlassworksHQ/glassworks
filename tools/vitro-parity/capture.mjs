@@ -158,8 +158,8 @@ async function fetchAsset(path, url = path) {
   if ((url !== path && !url.startsWith(path + '?')) || canonicalPath(url) !== path) throw new Error(`asset ${path}: fetch URL is another path`);
   const res = await fetch(creds.origin + url, { headers: { Authorization: `Bearer ${creds.token}` } });
   if (!res.ok) throw new Error(`asset ${path}: HTTP ${res.status}`);
-  mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, Buffer.from(await res.arrayBuffer()));
+  // Staged with the references: a failed refresh writes no picture either.
+  stage(out, Buffer.from(await res.arrayBuffer()));
   keptAssets.add(path);
   log(`asset ${path}`);
 }
@@ -470,17 +470,28 @@ const cardElement = (card) => (card.type.startsWith('custom:') ? card.type.slice
 
 /** Waits until the slots exist and two screenshots 400 ms apart are the same (animations, images, fonts). */
 /**
- * Stops the page's CSS animations, transitions and Web Animations, shadow roots included (document.getAnimations()
- * reaches them): a finite one jumps to its end, an infinite one is cancelled. Run before the card is measured and
+ * Stops the page's CSS animations, transitions and Web Animations, in the document and every shadow root: a finite
+ * one jumps to its end, an infinite one is cancelled. Run before the card is measured and
  * again before each screenshot and text read, so the PNG, the slots and the texts show one still frame (the
  * screenshot's own `animations: 'disabled'` resumes them afterwards).
  */
 const FREEZE_JS = () => {
-  for (const a of document.getAnimations()) {
-    try {
-      const t = a.effect && a.effect.getComputedTiming();
-      if (t && t.iterations === Infinity) a.cancel(); else a.finish();
-    } catch {}
+  // The document's animations and every shadow root's (document.getAnimations() may leave those out), walked down
+  // through each open shadow root.
+  const roots = [document];
+  for (let i = 0; i < roots.length; i++) {
+    for (const el of roots[i].querySelectorAll('*')) if (el.shadowRoot) roots.push(el.shadowRoot);
+  }
+  const seen = new Set();
+  for (const root of roots) {
+    for (const a of root.getAnimations ? root.getAnimations() : []) {
+      if (seen.has(a)) continue;
+      seen.add(a);
+      try {
+        const t = a.effect && a.effect.getComputedTiming();
+        if (t && t.iterations === Infinity) a.cancel(); else a.finish();
+      } catch {}
+    }
   }
 };
 

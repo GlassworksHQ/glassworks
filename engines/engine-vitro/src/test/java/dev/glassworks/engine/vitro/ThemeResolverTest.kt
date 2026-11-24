@@ -400,6 +400,11 @@ class ThemeResolverTest {
         assertEquals(argb(0xFF123456), t.primaryColor)
         // Left out of what islands get, not exported empty (`--a: ;` would be valid and hide the fallback).
         assertFalse(t.toCssRootBlock(), "--a:" in t.toCssRootBlock())
+        // A name that needs the invalid one without a fallback is invalid too; one with a fallback stays.
+        val chained = resolveWith("""{"a": "var(--a)", "b": "var(--a)", "c": "var(--a, #222222)", "primary-color": "var(--b, #123456)"}""")
+        assertEquals(argb(0xFF123456), chained.primaryColor)
+        assertFalse(chained.toCssRootBlock(), "--b:" in chained.toCssRootBlock())
+        assertTrue(chained.toCssRootBlock(), "--c: #222222" in chained.toCssRootBlock())
     }
 
     @Test

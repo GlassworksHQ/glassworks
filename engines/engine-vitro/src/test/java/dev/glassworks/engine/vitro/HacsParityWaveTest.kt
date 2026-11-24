@@ -364,6 +364,10 @@ class HacsParityWaveTest {
         assertTrue(AutoEntitiesFilter.matchValue("/^sensor\\.[ab]_/", "sensor.a_temp"))
         assertTrue(AutoEntitiesFilter.matchValue("!= off", "on"))
         assertTrue(AutoEntitiesFilter.matchValue(true, "on"))
+        // An attribute holding JSON true reads "true": the same boolean pattern matches it.
+        assertTrue(AutoEntitiesFilter.matchValue(true, "true"))
+        assertTrue(AutoEntitiesFilter.matchValue(false, "false"))
+        assertFalse(AutoEntitiesFilter.matchValue(true, "false"))
         assertFalse(AutoEntitiesFilter.matchValue("<= 5", "unavailable"))
         // A key Vitro can't evaluate (here `area`) never widens an include to everything.
         assertTrue(AutoEntitiesFilter.evaluate(JSONObject("""{"filter": {"include": [{"area": "kitchen"}]}}"""), st.all().values, st::get).isEmpty())

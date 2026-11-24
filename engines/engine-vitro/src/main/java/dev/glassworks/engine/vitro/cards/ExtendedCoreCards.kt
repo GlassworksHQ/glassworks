@@ -1299,6 +1299,7 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
     /** The picture on screen, and the one being loaded (cleared when that load fails, so a later update retries it). */
     private var shownUrl: String? = null
     private var loadingUrl: String? = null
+    private var imageRequest = 0
 
     init {
         floorplan.ratio = fixedRatio ?: DEFAULT_RATIO
@@ -1316,15 +1317,16 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
 
     private fun load(url: String) {
         if (url == loadingUrl) return
+        // Every request after this one (or a return to the picture on screen) takes ownership from it: only the newest
+        // call may clear [loadingUrl] or show its picture.
+        val request = ++imageRequest
         if (url == shownUrl) {
-            // Back to the picture on screen: a different load still on its way no longer owns the image.
             loadingUrl = null
             return
         }
         loadingUrl = url
         ctx.loadImage(url, this) { bmp ->
-            // Only the newest request lands: an older one's answer never replaces it.
-            if (url != loadingUrl) return@loadImage
+            if (request != imageRequest) return@loadImage
             loadingUrl = null
             if (bmp == null) return@loadImage
             shownUrl = url

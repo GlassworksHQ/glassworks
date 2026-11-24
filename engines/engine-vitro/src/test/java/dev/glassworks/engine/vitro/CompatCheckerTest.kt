@@ -93,6 +93,8 @@ class CompatCheckerTest {
         assertEquals("a[href=…] b[x]", CardCompat.redactAttributeValues("a[href=\"/x?y=1\"] b[x]"))
         // A `]` inside the quoted value doesn't end the selector early (the token after it stayed in the text).
         assertEquals("img[src^=…]", CardCompat.redactAttributeValues("img[src^=\"/image?part=]&token=demo-token\"]"))
+        // An escaped quote inside the value doesn't end it either.
+        assertEquals("img[src=…]", CardCompat.redactAttributeValues("img[src=\"/image?q=\\\"]&token=example\"]"))
         val quoted = verdict("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("img[src^=\"/image?part=]&token=demo-token\"] { opacity: 0 }")}}}""")
         assertFalse((quoted.reasons + quoted.notes).joinToString(), "demo-token" in (quoted.reasons + quoted.notes).joinToString())
     }

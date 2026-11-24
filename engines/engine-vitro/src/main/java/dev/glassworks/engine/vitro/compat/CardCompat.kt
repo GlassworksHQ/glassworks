@@ -519,8 +519,9 @@ object CardCompat {
 
     // Compiled once: every card's selectors pass through here when a view builds.
     private val SELECTOR_SPACES = Regex("""\s+""")
-    // Quote-aware: a `]` inside a quoted value (`[src^="/x?a=]&token=…"]`) doesn't end the attribute selector.
-    private val ATTRIBUTE_VALUE = Regex("""\[(?:"[^"]*"|'[^']*'|[^\]"'])*\]""")
+    // Quote- and escape-aware: a `]` inside a quoted value (`[src^="/x?a=]&token=…"]`), an escaped quote inside one
+    // (`"/x?q=\"]&token=…"`) or an escaped `]` doesn't end the attribute selector.
+    private val ATTRIBUTE_VALUE = Regex("""\[(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\\.|[^\]"'\\])*\]""")
 
     private val FUNCTIONAL = Regex(""":(not|is|where|matches|-webkit-any|has)\(""")
 

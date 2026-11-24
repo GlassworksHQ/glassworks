@@ -304,6 +304,7 @@ describe("auditDashboard and the cards built from a configuration", () => {
         views: [{ cards: [
           { type: "custom:bubble-card", card_type: "pop-up" },
           { type: "custom:bubble-card", card_type: "separator" },
+          { type: "custom:bubble-card", card_type: "custom:separator" },
           { type: "custom:bubble-card" },
           { type: "custom:layout-card", layout_type: "custom:grid-layout", cards: [{ type: "tile" }] },
           { type: "custom:layout-card", layout_type: "custom:my-layout", cards: [{ type: "tile" }] },
@@ -312,6 +313,7 @@ describe("auditDashboard and the cards built from a configuration", () => {
     );
     expect(r.triggers.map((t) => t.type)).toEqual([
       "custom:bubble-card (card_type: pop-up)",
+      "custom:bubble-card (card_type: custom:separator)",
       "custom:layout-card (layout_type: my-layout)",
     ]);
   });

@@ -1153,8 +1153,9 @@ object AutoEntitiesFilter {
         if (value == null) return false
         val p = when (pattern) {
             null, JSONObject.NULL -> return false
-            true -> "on"
-            false -> "off"
+            // YAML reads `on` as true: a boolean pattern matches a state's on/off and an attribute's true/false.
+            true -> return value == "on" || value == "true"
+            false -> return value == "off" || value == "false"
             is Number -> {
                 val d = value.toDoubleOrNull()
                 return if (d != null) d == pattern.toDouble() else value == pattern.toString()

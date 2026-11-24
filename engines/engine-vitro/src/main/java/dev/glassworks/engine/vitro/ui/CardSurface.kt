@@ -171,15 +171,30 @@ class VitroCardContext(
         }
         val id = next.entityId
         val writes = optimisticWrites.getOrPut(store) { HashMap() }
-        val pending = writes[id] ?: store[id]?.let { PendingWrites(it).also { p -> writes[id] = p } }
-        pending?.let { it.latest = next; it.outstanding++ }
+        val current = store[id]
+        val pending = writes[id] ?: current?.let { PendingWrites(it).also { p -> writes[id] = p } }
+        val seq = pending?.let { p ->
+            // The store holds something other than our last proposal: HA reported it meanwhile, so it is the
+            // confirmed state now, newer than every write issued so far.
+            if (current != null && p.latest != null && current !== p.latest) {
+                p.confirmed = current
+                p.confirmedSeq = p.issued
+            }
+            p.latest = next
+            p.outstanding++
+            ++p.issued
+        } ?: 0
         store.putLocal(next)
         callServiceThen(domain, service, data, target) { ok ->
             main.post {
                 val p = pending ?: return@post
                 if (ok) {
-                    // HA accepted it: this is what the entity becomes, the state a later refusal goes back to.
-                    p.confirmed = next
+                    // HA accepted it: this is what the entity becomes, the state a later refusal goes back to (unless
+                    // HA has already reported something newer than this write).
+                    if (seq > p.confirmedSeq) {
+                        p.confirmed = next
+                        p.confirmedSeq = seq
+                    }
                 } else if (p.latest === next && store[id] === next) {
                     // The newest write was refused and nothing newer replaced it: back to the confirmed state.
                     store.putLocal(p.confirmed)
@@ -403,6 +418,10 @@ class VitroCardContext(
         private class PendingWrites(var confirmed: EntityState) {
             var latest: EntityState? = null
             var outstanding = 0
+
+            /** Writes issued so far (each gets the next number), and the newest one [confirmed] reflects. */
+            var issued = 0
+            var confirmedSeq = 0
         }
 
         private val optimisticWrites = java.util.WeakHashMap<EntityStore, HashMap<String, PendingWrites>>()

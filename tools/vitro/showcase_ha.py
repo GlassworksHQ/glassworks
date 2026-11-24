@@ -1806,11 +1806,13 @@ class Hub:
             # Templates and conditions rendered now, from this commit's state: a later commit before the announce
             # must not make them report its state instead (and skip this one's).
             rendered = {c: c.render_subs() for c in conns}
+            # The touched lists as this commit left them, sent with those results (a later commit can't slip in).
+            todo_lists = {eid: copy.deepcopy(self.todos[eid]) for eid in todo_touched}
             # Taken before the hub lock goes: batches go out in the order they were committed.
             self.publish_lock.acquire()
         try:
             for c in conns:
-                c.changed(changes, todo_touched, rendered[c])
+                c.changed(changes, todo_touched, rendered[c], todo_lists)
         finally:
             self.publish_lock.release()
         return response
@@ -1918,10 +1920,11 @@ class Conn:
                 out[("c", mid)] = e
         return out
 
-    def changed(self, changes, todo_touched, rendered=None):
+    def changed(self, changes, todo_touched, rendered=None, todo_lists=None):
         """What a service call changed: compressed diffs, state_changed events, templates and todo lists. [rendered]:
         the templates' and conditions' results at the commit (render_subs); without it they're rendered now."""
         rendered = rendered or {}
+        todo_lists = todo_lists or {}
         try:
             for mid, wanted in list(self.entity_subs.items()):
                 diff = {c["entity_id"]: c["diff"] for c in changes if wanted is None or c["entity_id"] in wanted}
@@ -1939,7 +1942,7 @@ class Conn:
                 self.push_condition(mid, sub, at=rendered.get(("c", mid), _LIVE))
             for mid, eid in list(self.todo_subs.items()):
                 if eid in todo_touched:
-                    self.event(mid, {"items": self.hub.todos[eid]})
+                    self.event(mid, {"items": todo_lists.get(eid, self.hub.todos[eid])})
         except OSError:
             pass
 
