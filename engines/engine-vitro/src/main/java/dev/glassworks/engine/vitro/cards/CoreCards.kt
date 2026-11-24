@@ -1985,7 +1985,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 val active = s?.isActive == true
                 val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                 iconView.setIcon(MdiIcons.resolveIconName(rowCfg.icon, s), tint)
-                nameView.text = rowCfg.name ?: s?.friendlyName ?: rowCfg.entity
+                nameView.text = rowCfg.name ?: s?.displayName ?: rowCfg.entity
                 secondaryView?.text = if (rowCfg.secondaryInfo == "last-updated") {
                     s?.copy(lastChanged = s.lastUpdated.takeIf { it > 0.0 } ?: s.lastChanged)?.relativeLastChanged()
                 } else {
@@ -2078,7 +2078,7 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                     val active = s?.isActive == true
                     val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                     icon.setIcon(MdiIcons.resolveIconName(e.icon, s), tint)
-                    name.text = e.name ?: s?.friendlyName ?: e.entity
+                    name.text = e.name ?: s?.displayName ?: e.entity
                     state.text = s?.plainState() ?: "…"
                 }
                 row.addView(cell, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { bottomMargin = ctx.px(12f) })
@@ -2143,7 +2143,7 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
             observe(eid) { s ->
                 val active = s?.isActive == true
                 icon.setIcon(MdiIcons.resolveIconName(config.icon, s), if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor)
-                label.text = config.name ?: s?.friendlyName ?: eid
+                label.text = config.name ?: s?.displayName ?: eid
                 state.text = s?.plainState().orEmpty()
             }
         } else {
@@ -2569,11 +2569,11 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             observe(eid) { s ->
                 applyStateFilter(s)
                 if (config.type == "picture-entity" && showName && showState) {
-                    caption.text = label ?: s?.friendlyName ?: eid
+                    caption.text = label ?: s?.displayName ?: eid
                     stateCaption.text = s?.formattedState().orEmpty()
                 } else {
                     val parts = buildList {
-                        if (showName) add(label ?: s?.friendlyName ?: eid)
+                        if (showName) add(label ?: s?.displayName ?: eid)
                         if (showState && s != null && glanceEntities.isEmpty()) add(s.formattedState())
                     }
                     caption.text = parts.joinToString(" · ")

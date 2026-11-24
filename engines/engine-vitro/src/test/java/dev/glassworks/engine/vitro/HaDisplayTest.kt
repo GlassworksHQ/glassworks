@@ -59,7 +59,8 @@ class HaDisplayTest {
             {"id": "d3", "name": "LED Strip"}]"""))
         assertEquals("Sunset Lamp Sunset", HaDisplay.deviceEntityName("light.sunset"))
         assertEquals("Ball Lamp", HaDisplay.deviceEntityName("light.ball"))
-        assertEquals("LED Strip accent", HaDisplay.deviceEntityName("light.strip"))
+        // As hass.formatEntityName: the entity's name isn't trimmed of the device's ("Fridge Fridge temperature").
+        assertEquals("LED Strip LED Strip accent", HaDisplay.deviceEntityName("light.strip"))
         assertNull(HaDisplay.deviceEntityName("light.loose"))
     }
 
