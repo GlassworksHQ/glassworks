@@ -1045,11 +1045,11 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             setColor(Color.TRANSPARENT)
         }
         val icon = MdiIconView(ctx.context)
+        // The shape crops the picture to a circle (`border-radius: 9999px; overflow: hidden`): drawn so, whatever
+        // renders it (an outline clip is the GPU's only).
         val picture = ImageView(ctx.context).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
+            scaleType = ImageView.ScaleType.FIT_XY
             visibility = GONE
-            outlineProvider = OVAL_OUTLINE
-            clipToOutline = true
         }
         val avatar = FrameLayout(ctx.context).apply {
             background = avatarBg
@@ -1123,7 +1123,13 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             // starts 44 px under the icon box's top while the column is centered as if it didn't).
             if (vertical) labels.translationY = -6f * ctx.dp
         }
-        addView(row, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
+        // Mushroom 5's horizontal container (`fixed-height`) is 56 px tall from the card's padding down: card-mod padding
+        // moves it, it doesn't shrink it (HA's DOM: `padding: 8px` puts it 8 px lower and lets it run 8 px past the
+        // bottom). A 56 px card with that padding has 40 px inside, so the height is set, not left to the content.
+        val fixedHeight = !vertical && !multiline
+        // The container runs into the card's bottom padding: drawn there, as HA's overflow shows it.
+        if (fixedHeight) clipToPadding = false
+        addView(row, LayoutParams(MATCH_PARENT, if (fixedHeight) ctx.px(56f) else WRAP_CONTENT, if (fixedHeight) Gravity.TOP else Gravity.CENTER_VERTICAL))
         mushroom = MushroomTemplateViews(row, avatar, icon, picture, badge, badgeIcon, primary, secondary)
         if (interactiveIcon) {
             avatar.isClickable = true
@@ -1184,7 +1190,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         bindTpl("picture", "") { v ->
             pictureUrl = v
             refreshAvatar()
-            if (v.isNotBlank()) ctx.loadImage(v) { bmp -> if (bmp != null && pictureUrl == v) picture.setImageBitmap(bmp) }
+            if (v.isNotBlank()) ctx.loadImage(v) { bmp -> if (bmp != null && pictureUrl == v) picture.setImageDrawable(CircleCropDrawable(bmp)) }
         }
         bindTpl("badge_icon", "") { v -> badgeIconName = v; refreshBadge() }
         bindTpl("badge_color", "") { v -> badgeColorValue = MushroomColors.parse(v, ctx.theme); refreshBadge() }
@@ -1318,11 +1324,6 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     companion object {
         const val MUSHROOM_TEMPLATE = "custom:mushroom-template-card"
-        private val OVAL_OUTLINE = object : android.view.ViewOutlineProvider() {
-            override fun getOutline(view: View, outline: android.graphics.Outline) {
-                outline.setOval(0, 0, view.width, view.height)
-            }
-        }
         private val BARE_ICON_DOMAINS = setOf("sensor", "weather", "text", "select")
         /** HA's `STATE_COLORED_DOMAIN`: the domains whose tiles take a state color. */
         private val STATE_COLORED_DOMAINS = setOf(
@@ -3387,3 +3388,32 @@ internal class ChipStyle(
         }
     }
 }
+
+/** A bitmap center-cropped into the circle that fills its bounds, as CSS `object-fit: cover` in a round box. */
+internal class CircleCropDrawable(private val bitmap: android.graphics.Bitmap) : android.graphics.drawable.Drawable() {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+        shader = android.graphics.BitmapShader(bitmap, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP)
+    }
+    private val matrix = android.graphics.Matrix()
+
+    override fun onBoundsChange(bounds: android.graphics.Rect) {
+        val w = bounds.width().toFloat()
+        val h = bounds.height().toFloat()
+        val scale = maxOf(w / bitmap.width, h / bitmap.height)
+        matrix.setScale(scale, scale)
+        matrix.postTranslate(bounds.left + (w - bitmap.width * scale) / 2f, bounds.top + (h - bitmap.height * scale) / 2f)
+        paint.shader.setLocalMatrix(matrix)
+    }
+
+    override fun draw(canvas: Canvas) {
+        val b = bounds
+        canvas.drawCircle(b.exactCenterX(), b.exactCenterY(), minOf(b.width(), b.height()) / 2f, paint)
+    }
+
+    override fun getIntrinsicWidth() = bitmap.width
+    override fun getIntrinsicHeight() = bitmap.height
+    override fun setAlpha(alpha: Int) { paint.alpha = alpha }
+    override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) { paint.colorFilter = colorFilter }
+    @Deprecated("Drawable API") override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
+}
+
