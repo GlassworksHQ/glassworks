@@ -576,9 +576,9 @@ class HaDashboardClientTest {
     @Test
     fun subscribeWsDeliversEventsAndReportsARejectionOnce() {
         val c = connected()
-        // Delivered: a history stream's events, until cancelled.
+        // Delivered: a subscription's events (the fake server streams render_template), until cancelled.
         val events = CompletableFuture<JSONObject>()
-        val cancel = c.subscribeWs(JSONObject().put("type", "history/stream").put("entity_ids", org.json.JSONArray(listOf("sensor.kitchen_temp"))), { events.complete(it) }, { fail("no error expected: $it") })
+        val cancel = c.subscribeWs(JSONObject().put("type", "render_template").put("template", "{{ 1 }}"), { events.complete(it) }, { events.completeExceptionally(AssertionError("no error expected: $it")) })
         events.get(10, TimeUnit.SECONDS)
         cancel()
         // Rejected: the command's error reaches onError, once.
