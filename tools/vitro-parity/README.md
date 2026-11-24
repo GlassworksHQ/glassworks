@@ -29,7 +29,7 @@ The report is `engines/engine-vitro/build/reports/vitro-parity/index.html`, with
 
 1. `capture.mjs prepare` saves the corpus to one dashboard, `vitro-harness` (admin only, hidden from the sidebar), as one sections view per card. It's the only thing the harness writes to Home Assistant: it never changes an entity or another dashboard. It also saves the `/static` images a case shows into `assets/`.
 2. A collect run of the Robolectric test lists the templates Vitro asks Home Assistant to render for each case (Markdown content, Mushroom fields, card-mod sheets). They differ from the frontend's own, so they're rendered separately.
-3. `capture.mjs capture` opens each case on each panel, waits until two screenshots in a row are identical, then crops the card plus 8 CSS px around it. It records the card's bounds, the text runs and their fonts, and the states of the entities the card reads, taken from the page's own `subscribe_entities` stream, so they're exactly what HA drew. It also records the templates Vitro asked for, rendered right then. The page's clock is frozen at one instant, and Vitro's clock card is drawn at the same one.
+3. `capture.mjs capture` opens each case on each panel, waits until two screenshots in a row are identical, then crops the card plus 8 CSS px around it. It records the card's bounds, the text runs and their fonts, and the states of the entities the card reads, taken from the page's own `subscribe_entities` stream, so they're exactly what HA drew. It also records the templates Vitro asked for, rendered right then. The page's clock is frozen at the most recent 10:08 in HA's time zone, so the clock's digits are the same in every capture, and Vitro's clock card is drawn at that same instant.
 4. The comparison run writes the report.
 
 HA access comes from `~/.t3/glassworks-m1/vitro-parity/ha.json` (`{"origin": …, "token": …}`, or `VITRO_PARITY_HA=<file>`). The token and origin are never printed or written.
@@ -60,6 +60,8 @@ Write `corpus/<case>.json`, then run `tools/vitro-parity/run.sh --refresh --case
 | Font | 1 CSS px | The largest font size difference among the texts found |
 | Texts | 0 missing | HA texts not found in any of Vitro's TextViews. Text Vitro draws straight on a canvas (gauges, the thermostat dial) shows up here as missing |
 
+A refresh takes new references with live states, so the scores of cases that drift move a little with it. After a refresh with no Vitro change, run `run.sh --update-baseline` and commit the references and the baseline together (the reasons stay).
+
 A case over its threshold is a **known drift** if `baseline.json` lists it and it hasn't got worse, with 2% pixels, 1 px bounds and 0.5 px font of slack. Otherwise it's a **regression** and the test fails. A listed case that comes back within its threshold gets a note to drop it from the baseline. The audit (#794) works through the baseline until each case either matches or carries a reason.
 
 ## Privacy
@@ -69,5 +71,6 @@ Committed fixtures hold no tokens, origins, IPs (except RFC 5737), MACs, serials
 ## Limits
 
 - Robolectric draws with the host's Skia, not the panel's GPU, so a device can still differ by a few pixels. The 1 px shift tolerance and the baseline slack absorb most of it. Rendering on macOS and on CI's Linux may also differ slightly.
+- Relative times ("5 minutes ago") can't be compared: HA's page counts from the pinned 10:08, and Vitro counts from the real clock. Keep them out of the corpus or mask them.
 - History graphs get no history, and cameras get no stream. Neither is in the committed corpus.
 - The pixel diff only sees the card's crop in HA's position. A card that renders taller or lower in Vitro shows up in the bounds check.

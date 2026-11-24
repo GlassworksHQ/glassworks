@@ -332,6 +332,19 @@ function clipFor(slot, info) {
   return { x, y, width: r - x, height: b - y };
 }
 
+/**
+ * The instant the page's clock (and Vitro's clock card) shows: the most recent 10:08:00 in HA's time zone. A fixed
+ * time of day keeps the clock's digits, and so its score, the same from one capture to the next.
+ */
+function pinnedNow(timeZone) {
+  const t = Date.now();
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' })
+    .formatToParts(new Date(t)).filter((p) => p.type !== 'literal').map((p) => [p.type, +p.value]));
+  const sinceMidnight = (parts.hour * 60 + parts.minute) * 60 + parts.second;
+  const back = (sinceMidnight - (10 * 60 + 8) * 60 + 86400) % 86400;
+  return t - (t % 1000) - back * 1000;
+}
+
 const round = (v) => Math.round(v * 100) / 100;
 const roundRect = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === 'number' ? round(v) : v]));
 
@@ -360,7 +373,7 @@ async function capture() {
   writeFileSync(join(refs, 'shared.json'), sharedText + '\n');
 
   const browser = await launch();
-  const now = Date.now();
+  const now = pinnedNow(haConfig.time_zone);
   let failures = 0;
   for (const frame of frames) {
     const mine = cases.filter((c) => !c.frames || c.frames.includes(frame.id));

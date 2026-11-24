@@ -2,7 +2,7 @@
  "case": "tile-sensor",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795509858480,
+ "now": 1795457280000,
  "stable": true,
  "viewport": {
   "width": 1280,
@@ -43,7 +43,7 @@
   },
   {
    "slot": 0,
-   "text": "546 ppm",
+   "text": "523 ppm",
    "x": 56,
    "y": 32,
    "w": 49.97,
@@ -56,14 +56,14 @@
  ],
  "states": {
   "sensor.living_room_airdot_living_room_co2": {
-   "s": "546.0",
+   "s": "523.0",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "ppm",
     "device_class": "carbon_dioxide",
     "friendly_name": "AirDot Living Room CO2"
    },
-   "lc": 1795509924.9004838
+   "lc": 1795511764.9697762
   }
  },
  "templates": {}

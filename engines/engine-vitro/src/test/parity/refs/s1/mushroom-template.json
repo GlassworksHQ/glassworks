@@ -2,7 +2,7 @@
  "case": "mushroom-template",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795509858480,
+ "now": 1795457280000,
  "stable": true,
  "viewport": {
   "width": 960,
@@ -43,7 +43,7 @@
   },
   {
    "slot": 0,
-   "text": "542 ppm",
+   "text": "525 ppm",
    "x": 56,
    "y": 32,
    "w": 49.97,
@@ -56,19 +56,19 @@
  ],
  "states": {
   "sensor.living_room_airdot_living_room_co2": {
-   "s": "542.0",
+   "s": "525.0",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "ppm",
     "device_class": "carbon_dioxide",
     "friendly_name": "AirDot Living Room CO2"
    },
-   "lc": 1795509874.9104667
+   "lc": 1795511684.9104936
   }
  },
  "templates": {
   "{{ states('sensor.living_room_airdot_living_room_co2') | int(0) }} ppm": {
-   "result": "542 ppm"
+   "result": "525 ppm"
   },
   "{{ 'green' if states('sensor.living_room_airdot_living_room_co2') | int(0) < 800 else 'orange' }}": {
    "result": "green"

@@ -8,21 +8,21 @@
   "reason": "not triaged yet (#794)"
  },
  "mirror\/clock": {
-  "pixel": 0.0503,
+  "pixel": 0.0783,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "digits are Inter in Vitro and Roboto in HA; same time, size and box"
  },
  "mirror\/entities": {
-  "pixel": 0.039,
+  "pixel": 0.0389,
   "bounds": 28.5,
   "font": 2,
   "missingText": 2,
   "reason": "Vitro shows raw sensor precision (1.1111 °C) where HA uses the entity registry display_precision (1.1 °C); title row shorter, so rows sit higher"
  },
  "mirror\/glance": {
-  "pixel": 0.0334,
+  "pixel": 0.0341,
   "bounds": 40.9,
   "font": 2,
   "missingText": 2,
@@ -36,7 +36,7 @@
   "reason": "not triaged yet (#794)"
  },
  "mirror\/heading": {
-  "pixel": 0.0527,
+  "pixel": 0.0547,
   "bounds": 8.4,
   "font": 1,
   "missingText": 1,
@@ -50,14 +50,14 @@
   "reason": "not triaged yet (#794)"
  },
  "mirror\/mushroom-chips": {
-  "pixel": 0.0279,
+  "pixel": 0.0295,
   "bounds": 0.7,
   "font": 0,
   "missingText": 2,
   "reason": "not triaged yet (#794)"
  },
  "mirror\/mushroom-chips-cardmod": {
-  "pixel": 0.0071,
+  "pixel": 0.0068,
   "bounds": 0.7,
   "font": 1.2,
   "missingText": 0,
@@ -120,7 +120,7 @@
   "reason": "not triaged yet (#794)"
  },
  "mirror\/tile-sensor": {
-  "pixel": 0.0115,
+  "pixel": 0.0118,
   "bounds": 0,
   "font": 0,
   "missingText": 1,
@@ -148,21 +148,21 @@
   "reason": "not triaged yet (#794)"
  },
  "s1\/clock": {
-  "pixel": 0.0503,
+  "pixel": 0.0783,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "digits are Inter in Vitro and Roboto in HA; same time, size and box"
  },
  "s1\/entities": {
-  "pixel": 0.039,
+  "pixel": 0.0389,
   "bounds": 28.5,
   "font": 2,
   "missingText": 2,
   "reason": "Vitro shows raw sensor precision (1.1111 °C) where HA uses the entity registry display_precision (1.1 °C); title row shorter, so rows sit higher"
  },
  "s1\/glance": {
-  "pixel": 0.0338,
+  "pixel": 0.0337,
   "bounds": 40.9,
   "font": 2,
   "missingText": 2,
@@ -176,7 +176,7 @@
   "reason": "not triaged yet (#794)"
  },
  "s1\/heading": {
-  "pixel": 0.0524,
+  "pixel": 0.0528,
   "bounds": 8.4,
   "font": 1,
   "missingText": 1,
@@ -190,14 +190,14 @@
   "reason": "not triaged yet (#794)"
  },
  "s1\/mushroom-chips": {
-  "pixel": 0.0279,
+  "pixel": 0.0295,
   "bounds": 0.7,
   "font": 0,
   "missingText": 2,
   "reason": "not triaged yet (#794)"
  },
  "s1\/mushroom-chips-cardmod": {
-  "pixel": 0.0051,
+  "pixel": 0.005,
   "bounds": 0.7,
   "font": 1.2,
   "missingText": 0,
@@ -288,7 +288,7 @@
   "reason": "not triaged yet (#794)"
  },
  "tablet\/clock": {
-  "pixel": 0.0574,
+  "pixel": 0.0855,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
@@ -302,7 +302,7 @@
   "reason": "Vitro shows raw sensor precision (1.1111 °C) where HA uses the entity registry display_precision (1.1 °C); title row shorter, so rows sit higher"
  },
  "tablet\/glance": {
-  "pixel": 0.0343,
+  "pixel": 0.0342,
   "bounds": 41.6,
   "font": 2,
   "missingText": 2,
@@ -316,7 +316,7 @@
   "reason": "not triaged yet (#794)"
  },
  "tablet\/heading": {
-  "pixel": 0.0571,
+  "pixel": 0.0579,
   "bounds": 8.4,
   "font": 1,
   "missingText": 1,
@@ -330,14 +330,14 @@
   "reason": "not triaged yet (#794)"
  },
  "tablet\/mushroom-chips": {
-  "pixel": 0.0278,
+  "pixel": 0.0284,
   "bounds": 0,
   "font": 0,
   "missingText": 2,
   "reason": "not triaged yet (#794)"
  },
  "tablet\/mushroom-chips-cardmod": {
-  "pixel": 0.0042,
+  "pixel": 0.0043,
   "bounds": 0,
   "font": 1.2,
   "missingText": 0,
@@ -393,7 +393,7 @@
   "reason": "not triaged yet (#794)"
  },
  "tablet\/tile-sensor": {
-  "pixel": 0.0124,
+  "pixel": 0.0125,
   "bounds": 0,
   "font": 0,
   "missingText": 1,

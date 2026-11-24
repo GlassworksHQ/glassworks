@@ -2,7 +2,7 @@
  "case": "vertical-stack",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795509858480,
+ "now": 1795457280000,
  "stable": true,
  "viewport": {
   "width": 960,
@@ -103,7 +103,7 @@
   },
   {
    "slot": 0,
-   "text": "10 W",
+   "text": "61 W",
    "x": 56,
    "y": 129.59,
    "w": 28.7,
@@ -127,14 +127,14 @@
    "lc": 1795505391.0030644
   },
   "sensor.kitchen_fridge_power": {
-   "s": "10.0",
+   "s": "61.0",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "W",
     "device_class": "power",
     "friendly_name": "Fridge Power"
    },
-   "lc": 1795509482.0551987
+   "lc": 1795511218.9105065
   }
  },
  "templates": {}

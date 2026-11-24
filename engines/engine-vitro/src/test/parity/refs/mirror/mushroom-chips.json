@@ -2,7 +2,7 @@
  "case": "mushroom-chips",
  "frame": "mirror",
  "haVersion": "2026.11.0",
- "now": 1795509858480,
+ "now": 1795457280000,
  "stable": true,
  "viewport": {
   "width": 720,
@@ -55,7 +55,7 @@
   },
   {
    "slot": 0,
-   "text": "Fog ⸱ 9.1 °C",
+   "text": "Fog ⸱ 8.7 °C",
    "x": 192.23,
    "y": 11.59,
    "w": 56.17,
@@ -68,38 +68,38 @@
  ],
  "states": {
   "sensor.living_room_airdot_living_room_humidity": {
-   "s": "48.3300018310547",
+   "s": "48.3400001525879",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "%",
     "device_class": "humidity",
     "friendly_name": "AirDot Living Room Humidity"
    },
-   "lc": 1795509914.9216475
+   "lc": 1795511754.9333723
   },
   "sensor.living_room_airdot_living_room_temperature": {
-   "s": "20.7250003814697",
+   "s": "20.6849994659424",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
     "friendly_name": "AirDot Living Room Temperature"
    },
-   "lc": 1795509874.9072208
+   "lc": 1795511724.9347365
   },
   "weather.forecast_home": {
    "s": "fog",
    "a": {
-    "temperature": 9.1,
-    "dew_point": 7.8,
+    "temperature": 8.7,
+    "dew_point": 7.7,
     "temperature_unit": "°C",
-    "humidity": 93,
-    "cloud_coverage": 53.9,
+    "humidity": 94,
+    "cloud_coverage": 77.3,
     "uv_index": 0,
-    "pressure": 1022.3,
+    "pressure": 1022.6,
     "pressure_unit": "hPa",
-    "wind_bearing": 101.9,
-    "wind_speed": 7.9,
+    "wind_bearing": 85.4,
+    "wind_speed": 9.7,
     "wind_speed_unit": "km/h",
     "visibility_unit": "km",
     "precipitation_unit": "mm",
@@ -108,7 +108,7 @@
     "supported_features": 3
    },
    "lc": 1795504913.209642,
-   "lu": 1795508273.4819403
+   "lu": 1795511633.4778297
   }
  },
  "templates": {

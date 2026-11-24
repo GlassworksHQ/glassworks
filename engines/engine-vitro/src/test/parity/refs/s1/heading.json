@@ -2,7 +2,7 @@
  "case": "heading",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795509858480,
+ "now": 1795457280000,
  "stable": true,
  "viewport": {
   "width": 960,
@@ -80,14 +80,14 @@
    "lc": 1795508121.7617655
   },
   "sensor.living_room_airdot_living_room_temperature": {
-   "s": "20.7299995422363",
+   "s": "20.6900005340576",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
     "friendly_name": "AirDot Living Room Temperature"
    },
-   "lc": 1795509864.911154
+   "lc": 1795511664.9385502
   }
  },
  "templates": {}

@@ -2,7 +2,7 @@
  "case": "glance",
  "frame": "mirror",
  "haVersion": "2026.11.0",
- "now": 1795509858480,
+ "now": 1795457280000,
  "stable": true,
  "viewport": {
   "width": 720,
@@ -163,24 +163,24 @@
    "lc": 1795508121.7617655
   },
   "sensor.living_room_airdot_living_room_humidity": {
-   "s": "48.3300018310547",
+   "s": "48.3400001525879",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "%",
     "device_class": "humidity",
     "friendly_name": "AirDot Living Room Humidity"
    },
-   "lc": 1795509914.9216475
+   "lc": 1795511754.9333723
   },
   "sensor.living_room_airdot_living_room_temperature": {
-   "s": "20.7250003814697",
+   "s": "20.6849994659424",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
     "friendly_name": "AirDot Living Room Temperature"
    },
-   "lc": 1795509874.9072208
+   "lc": 1795511724.9347365
   }
  },
  "templates": {}

@@ -2,7 +2,7 @@
  "case": "markdown-table",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795509858480,
+ "now": 1795457280000,
  "stable": true,
  "viewport": {
   "width": 1280,
@@ -103,10 +103,10 @@
   },
   {
    "slot": 0,
-   "text": "10 W",
-   "x": 1183.42,
+   "text": "61 W",
+   "x": 1183.59,
    "y": 87.97,
-   "w": 34.58,
+   "w": 34.41,
    "h": 19,
    "size": 15,
    "weight": 400,
@@ -127,39 +127,39 @@
    "lc": 1795504918.0331674
   },
   "sensor.kitchen_fridge_power": {
-   "s": "10.0",
+   "s": "61.0",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "W",
     "device_class": "power",
     "friendly_name": "Fridge Power"
    },
-   "lc": 1795509482.0551987
+   "lc": 1795511218.9105065
   },
   "sensor.living_room_airdot_living_room_humidity": {
-   "s": "48.3199996948242",
+   "s": "48.3499984741211",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "%",
     "device_class": "humidity",
     "friendly_name": "AirDot Living Room Humidity"
    },
-   "lc": 1795509724.9274118
+   "lc": 1795511714.9144104
   },
   "sensor.living_room_airdot_living_room_temperature": {
-   "s": "20.7250003814697",
+   "s": "20.6849994659424",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
     "friendly_name": "AirDot Living Room Temperature"
    },
-   "lc": 1795509874.9072208
+   "lc": 1795511724.9347365
   }
  },
  "templates": {
   "###### Inside\n<table role=\"presentation\"><tr><td><ha-icon icon=\"mdi:sofa\"></ha-icon></td><td>Living Room</td><td>{{ '%.1f' | format(states('sensor.living_room_airdot_living_room_temperature') | float(0)) }}°</td><td>{{ states('sensor.living_room_airdot_living_room_humidity') | float(0) | round(0) | int }}%</td></tr><tr><td><ha-icon icon=\"mdi:fridge\"></ha-icon></td><td>Fridge</td><td>{{ '%.1f' | format(states('sensor.kitchen_fridge_fridge_temperature') | float(0)) }}°</td><td>{{ states('sensor.kitchen_fridge_power') | float(0) | round(0) | int }} W</td></tr></table>": {
-   "result": "###### Inside\n<table role=\"presentation\"><tr><td><ha-icon icon=\"mdi:sofa\"></ha-icon></td><td>Living Room</td><td>20.7°</td><td>48%</td></tr><tr><td><ha-icon icon=\"mdi:fridge\"></ha-icon></td><td>Fridge</td><td>1.1°</td><td>10 W</td></tr></table>"
+   "result": "###### Inside\n<table role=\"presentation\"><tr><td><ha-icon icon=\"mdi:sofa\"></ha-icon></td><td>Living Room</td><td>20.7°</td><td>48%</td></tr><tr><td><ha-icon icon=\"mdi:fridge\"></ha-icon></td><td>Fridge</td><td>1.1°</td><td>61 W</td></tr></table>"
   }
  }
 }
