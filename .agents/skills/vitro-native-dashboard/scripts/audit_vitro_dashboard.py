@@ -118,12 +118,22 @@ def load_dashboard(path: str):
     return data
 
 
+SUPPORTED_STYLE_KEYS = {".", "ha-markdown$", "hui-clock-card-digital$"}
+
+
 def check_card_mod(card: dict, loc: str, warnings: list[str]):
     cm = card.get("card_mod")
     if not isinstance(cm, dict):
         return
     style = cm.get("style")
-    if isinstance(style, dict) or (isinstance(style, str) and ("$:" in style or "@keyframes" in style or "::" in style)):
+    def complex_css(css) -> bool:
+        return not isinstance(css, str) or "$:" in css or "@keyframes" in css or "::" in css
+    # Selector maps Vitro reads (ThemeResolver.cardModStyleString): "." for the card, and HA's markdown and clock roots.
+    if isinstance(style, dict):
+        unsupported = any(k not in SUPPORTED_STYLE_KEYS or complex_css(v) for k, v in style.items())
+    else:
+        unsupported = isinstance(style, str) and complex_css(style)
+    if unsupported:
         warnings.append(f"  WARN  {loc}: complex Shadow-DOM / pseudo / keyframe card_mod (only ha-card container styles mirror natively)")
 
 
@@ -151,6 +161,21 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
         counts["tier1"] += 1
     elif ctype in NATIVE_HACS_TYPES:
         counts["tier2"] += 1
+        if ctype == "custom:auto-entities":
+            # Its cards are built at runtime: the inner card (entities by default), and with `card_param: cards`
+            # each include rule's `options` card.
+            # As the runtime builds it: a copy, `type: entities` when it names none, and without the list that
+            # `card_param` (default `entities`) is filled in with at runtime.
+            inner = dict(card["card"]) if isinstance(card.get("card"), dict) else {}
+            inner.setdefault("type", "entities")
+            inner.pop(card.get("card_param") or "entities", None)
+            walk_card(inner, f"{loc}.card", counts, triggers, warnings)
+            if card.get("card_param") == "cards":
+                rules = (card.get("filter") or {}).get("include") or []
+                for i, rule in enumerate(rules if isinstance(rules, list) else []):
+                    opts = rule.get("options") if isinstance(rule, dict) else None
+                    if isinstance(opts, dict):
+                        walk_card(dict({"type": "tile"}, **opts), f"{loc}.include[{i}].options", counts, triggers, warnings)
     else:
         counts["tier3"] += 1
         triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='{ctype or '<missing>'}'")

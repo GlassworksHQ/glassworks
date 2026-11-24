@@ -765,8 +765,10 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         val s = node.style!!
         val trs = ArrayList<MdNode>()
         for (c in node.children) {
+            // A row or row group with `display: none` takes no space, as in the browser.
+            if (c.style?.display == "none") continue
             if (c.tag == "tr") trs += c
-            else if (c.tag == "thead" || c.tag == "tbody" || c.tag == "tfoot") c.children.filterTo(trs) { it.tag == "tr" }
+            else if (c.tag == "thead" || c.tag == "tbody" || c.tag == "tfoot") c.children.filterTo(trs) { it.tag == "tr" && it.style?.display != "none" }
         }
         val rows = trs.map { tr ->
             tr.children.filter { (it.tag == "td" || it.tag == "th") && it.style?.display != "none" }.map { td ->

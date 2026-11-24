@@ -11,6 +11,7 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.island.VitroIslandServer
+import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.ViewConfig
@@ -56,11 +57,14 @@ class WebIslandCardView(
         val opener = ctx.openIslandPage
         if (server != null && opener != null) {
             lateinit var idRef: String
+            // Open bridge sockets: a replacement can connect before the old one has finished closing.
+            var connections = 0
             val handler = object : VitroIslandServer.SlotHandler {
                 override val html: String
                     get() = buildIslandHtml(ctx, config, fillViewport, slotId = idRef)
 
                 override fun onConnected(send: (JSONObject) -> Unit) {
+                    synchronized(this) { connections++ }
                     sendToIsland = send
                     seedInitialStates(send)
                 }
@@ -70,7 +74,8 @@ class WebIslandCardView(
                 }
 
                 override fun onDisconnected() {
-                    sendToIsland = null
+                    // Only the last socket going clears the sender: an old one closing must not cut off its replacement.
+                    synchronized(this) { if (--connections <= 0) sendToIsland = null }
                 }
             }
             val (id, url) = server.registerSlot(handler)
@@ -142,8 +147,8 @@ class WebIslandCardView(
         for (eid in changed) {
             if (!followsAllEntities && eid !in watchedEntities) continue
             val state = ctx.store[eid]
-            if (state != null) patch.put(eid, state.toHassJson())
-            else if (followsAllEntities) patch.put(eid, JSONObject.NULL)
+            // A removed entity goes as null, for a watched one too, so the card doesn't keep a stale state.
+            patch.put(eid, state?.toHassJson() ?: JSONObject.NULL)
         }
         if (patch.length() == 0) return null
         return JSONObject().put("type", "patch").put("states", patch)
@@ -220,6 +225,12 @@ class WebIslandCardView(
                 val id = msg.optString("entity_id", "")
                 if (id.isNotBlank()) ctx.main.post { ctx.openMoreInfo(id) }
             }
+            "action" -> {
+                // An action with a `confirmation`: the native dialog asks first, as it does for native cards.
+                val action = msg.optJSONObject("action") ?: return
+                val entity = msg.optString("entity", "").ifEmpty { null }
+                ctx.main.post { ctx.performAction(ActionConfig.parse(action), entity) }
+            }
             "navigate" -> {
                 // A card's `navigate` action / `history.pushState` + `location-changed` inside the island:
                 // the path is a dashboard path (`/lovelace/1`), handed to Vitro's own navigation.
@@ -255,7 +266,8 @@ class WebIslandCardView(
                     if (payload.isBlank() || !VALID_BASE64.matches(payload)) return null
                     String(Base64.decode(payload, Base64.DEFAULT), Charsets.UTF_8)
                 } else {
-                    java.net.URLDecoder.decode(payload, "UTF-8")
+                    // Percent-decoding only: a literal `+` in a data: URI is a plus, not a space.
+                    java.net.URLDecoder.decode(payload.replace("+", "%2B"), "UTF-8")
                 }
             }.getOrNull()
         }
@@ -677,8 +689,9 @@ let sock = null;
 
 function sendBridge(obj) {
   const line = JSON.stringify(obj) + '\n';
-  if (sock && sock.readyState === WebSocket.OPEN) sock.send(line);
-  else outQueue.push(line);
+  if (sock && sock.readyState === WebSocket.OPEN) { sock.send(line); return true; }
+  outQueue.push(line);
+  return false;
 }
 
 const statesProxy = new Proxy(rawStates, {
@@ -728,8 +741,9 @@ function vitroFormatAttribute(stateObj, attr, value) {
 function vitroCallWS(msg) {
   return new Promise((resolve, reject) => {
     const id = wsId++;
-    wsPending.set(id, { resolve, reject });
-    sendBridge({ type: 'callWs', id, msg: msg || {} });
+    const entry = { resolve, reject, sent: false };
+    wsPending.set(id, entry);
+    entry.sent = sendBridge({ type: 'callWs', id, msg: msg || {} });
   });
 }
 
@@ -775,10 +789,12 @@ const hassBase = {
   auth: { data: { access_token: accessToken, hassUrl: location.origin }, accessToken },
   connected: true,
   hassUrl: (path) => path ? new URL(path, location.origin).href : location.origin,
-  callService(domain, service, data, target) {
-    const payload = Object.assign({}, data || {}, target || {});
-    sendBridge({ type: 'callService', domain, service, data: payload });
-    return Promise.resolve();
+  // HA's own call_service over the bridge: the promise settles with Home Assistant's answer.
+  callService(domain, service, data, target, notifyOnError, returnResponse) {
+    const msg = { type: 'call_service', domain, service, service_data: data || {} };
+    if (target) msg.target = target;
+    if (returnResponse) msg.return_response = true;
+    return vitroCallWS(msg);
   },
   callWS(msg) { return vitroCallWS(msg); },
   callApi: vitroCallApi,
@@ -808,6 +824,7 @@ function connectBridge() {
   sock = new WebSocket(proto + '//' + location.host + '/__vitro/ws/' + ${JSONObject.quote(slotId)});
   sock.onopen = () => {
     while (outQueue.length) sock.send(outQueue.shift());
+    for (const entry of wsPending.values()) entry.sent = true;
   };
   sock.onmessage = (ev) => {
     const lines = String(ev.data || '').split('\n').filter(Boolean);
@@ -829,7 +846,13 @@ function connectBridge() {
       }
     }
   };
-  sock.onclose = () => setTimeout(connectBridge, 1500);
+  sock.onclose = () => {
+    // A call that went out on this socket gets no answer now: reject it (never resend, HA may have run it).
+    for (const [id, entry] of wsPending) {
+      if (entry.sent) { wsPending.delete(id); entry.reject(new Error('Connection lost')); }
+    }
+    setTimeout(connectBridge, 1500);
+  };
 }
 
 async function boot() {
@@ -858,6 +881,11 @@ function runAction(config, gesture) {
   const action = config[(gesture || 'tap') + '_action'] || (gesture === 'tap' || !gesture ? { action: 'more-info' } : null);
   if (!action) return;
   const entity = action.entity || config.entity;
+  // A confirmation is asked natively, as for native cards: Cancel sends nothing.
+  if (action.confirmation && action.action !== 'none') {
+    sendBridge({ type: 'action', action, entity: entity || '' });
+    return;
+  }
   switch (action.action) {
     case 'more-info': moreInfo(entity); break;
     case 'navigate': navigateTo(action.navigation_path); break;

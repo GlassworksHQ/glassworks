@@ -16,6 +16,7 @@ import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -68,6 +69,8 @@ class HaDashboardClient(
     private val store: EntityStore,
     private val connect: (url: String) -> HaSocket = ::connectLongLived,
     private val listener: Listener,
+    /** How long the greeting and the auth exchange may take before the connection is dropped and retried. */
+    private val authTimeoutMs: Long = AUTH_TIMEOUT_MS,
 ) {
     interface Listener {
         fun onConnected(haVersion: String) {}
@@ -76,6 +79,12 @@ class HaDashboardClient(
         fun onResources(resources: List<LovelaceResource>) {}
         fun onThemes(catalog: ThemeCatalog) {}
         fun onDashboardConfig(urlPath: String?, config: DashboardConfig) {}
+
+        /**
+         * Home Assistant answered `lovelace/config` for [urlPath] with an error ([code], such as `config_not_found` for
+         * a dashboard with no saved config, which HA's frontend auto-generates). Only for the dashboard still requested.
+         */
+        fun onDashboardConfigFailed(urlPath: String?, code: String) {}
 
         /**
          * The theme this user picked in HA's profile (`core` user data `selectedTheme`), or `null` to follow the
@@ -90,6 +99,18 @@ class HaDashboardClient(
     private val pending = ConcurrentHashMap<Int, (JSONObject) -> Unit>()
     private val subscriptions = ConcurrentHashMap<Int, (JSONObject) -> Unit>()
     private val sendLock = Any()
+
+    /** Held while an id is taken and its message queued, so ids reach the wire in order (HA rejects a lower id later). */
+    private val queueLock = Any()
+
+    /** Held while an entity event is applied to [store] and by [close]: no write lands after close() returns. */
+    private val storeWriteLock = Any()
+
+    /** The entity subscription allowed to write to the store (replaced on every resubscribe). */
+    @Volatile private var entityOwner: Any? = null
+
+    /** Guards the whole replacement of the entity subscription (startup and view changes race otherwise). */
+    private val entitySubLock = Any()
 
     /**
      * Every post-auth write goes through this one daemon thread: cards call [callService], [fetchHistory] and the
@@ -123,7 +144,7 @@ class HaDashboardClient(
                 done(false, null, res.optJSONObject("error"))
             }
         }
-        if (sent <= 0) done(false, null, JSONObject().put("code", "disconnected").put("message", "Not connected"))
+        if (sent <= 0) done(false, null, JSONObject().put("code", DISCONNECTED).put("message", "Not connected"))
     }
 
     fun start(dashboardUrlPath: String?) {
@@ -135,7 +156,8 @@ class HaDashboardClient(
     }
 
     fun close() {
-        closed.set(true)
+        // Under the store lock: an entity event already past its `closed` check finishes before this returns.
+        synchronized(storeWriteLock) { closed.set(true) }
         runCatching { socket?.close() }
         socket = null
         sendExecutor.shutdownNow()
@@ -149,15 +171,58 @@ class HaDashboardClient(
         resubscribeEntities()
     }
 
+    /**
+     * False while the page shows a fallback (non-dashboard) page: no dashboard is fetched on a reconnect or a
+     * `lovelace_updated`, and an answer still on its way is dropped.
+     */
+    @Volatile private var dashboardActive = true
+
+    /** The page shows [urlPath] again without asking: an answer still on its way for another path is dropped. */
+    fun claimDashboard(urlPath: String?) {
+        requestedDashboardPath = urlPath
+        dashboardActive = true
+        // A lovelace_updated or reconnect skipped while the fallback showed: the dashboard may have changed.
+        if (missedRefetch) fetchDashboard(urlPath)
+    }
+
+    /**
+     * A refetch was skipped while the page showed the fallback; the next claim fetches instead of reusing. Cleared
+     * only by [dashboardShown], where the page puts a config on screen: an answer dropped on the way leaves it set.
+     */
+    @Volatile private var missedRefetch = false
+
+    /** The page put the config it got on screen: nothing skipped is owed any more. */
+    fun dashboardShown() {
+        missedRefetch = false
+    }
+
+    /** The page left the dashboards for the fallback; the next [fetchDashboard] or [claimDashboard] takes them back. */
+    fun releaseDashboard() {
+        dashboardActive = false
+    }
+
+    /** Fetches the requested dashboard again (reconnect, `lovelace_updated`), unless the page has left the dashboards. */
+    private fun refetchDashboard() {
+        if (dashboardActive) fetchDashboard(requestedDashboardPath) else missedRefetch = true
+    }
+
     /** Loads a different Lovelace dashboard config over the live socket. */
     fun fetchDashboard(urlPath: String?) {
         requestedDashboardPath = urlPath
+        dashboardActive = true
         val msg = JSONObject().put("type", "lovelace/config")
         if (!urlPath.isNullOrEmpty()) msg.put("url_path", urlPath)
         request(msg) { res ->
+            // An answer for a dashboard the page has since moved away from must not replace the current one.
+            if (closed.get() || !dashboardActive || urlPath != requestedDashboardPath) return@request
+            // The connection, not Home Assistant, failed: the reconnect asks again (onAuthenticated). Reporting it
+            // would send a dashboard that exists to the fallback as "not found".
+            if (isTransportError(res)) return@request
             if (res.optBoolean("success", false)) {
                 val cfgObj = res.optJSONObject("result") ?: JSONObject()
                 listener.onDashboardConfig(urlPath, LovelaceParser.parseDashboard(cfgObj))
+            } else {
+                listener.onDashboardConfigFailed(urlPath, res.optJSONObject("error")?.optString("code", "").orEmpty())
             }
         }
     }
@@ -261,18 +326,26 @@ class HaDashboardClient(
 
     private fun loop() {
         var backoffMs = 1_000L
+        // A token a forced refresh returned after `auth_invalid`: the next handshake uses it, once.
+        var refreshed: String? = null
         while (!closed.get()) {
             val wsUrl = HaThreadClient.websocketUrl(haBase)
             if (wsUrl == null) {
                 listener.onDisconnected("Invalid Home Assistant URL: $haBase")
                 return
             }
-            val token = awaitToken(force = false)
+            val usingRefreshed = refreshed != null
+            val token = refreshed ?: awaitToken(force = false)
+            refreshed = null
             if (closed.get()) return
             var ws: HaSocket? = null
+            var watchdog: Thread? = null
             try {
                 ws = connect(wsUrl)
                 socket = ws
+                // close() may have run while connect() was in flight and found no socket to close: close this one.
+                if (closed.get()) return
+                watchdog = authWatchdog(ws)
                 val hello = ws.receive()?.let(::JSONObject) ?: throw IOException("Closed before greeting")
                 if (hello.optString("type") != "auth_required") throw IOException("Unexpected greeting: ${hello.optString("type")}")
 
@@ -281,19 +354,24 @@ class HaDashboardClient(
                 val auth = ws.receive()?.let(::JSONObject) ?: throw IOException("Closed during auth")
                 when (auth.optString("type")) {
                     "auth_ok" -> {
+                        watchdog.interrupt()
                         backoffMs = 1_000L
                         authenticated = true
                         listener.onConnected(auth.optString("ha_version", ""))
                         onAuthenticated()
                     }
                     "auth_invalid" -> {
-                        // Try once with a forced refresh token before reporting auth required.
-                        val fresh = awaitToken(force = true)
-                        if (fresh != null && fresh != token) {
-                            runCatching { ws.close() }
-                            continue
+                        // Try once with a forced refresh token before reporting auth required. The refreshed token
+                        // itself goes into the next handshake: the plain provider may still hand out the old one.
+                        if (!usingRefreshed) {
+                            val fresh = awaitToken(force = true)
+                            if (fresh != null && fresh != token) {
+                                refreshed = fresh
+                                runCatching { ws.close() }
+                                continue
+                            }
                         }
-                        listener.onAuthRequired()
+                        if (!closed.get()) listener.onAuthRequired()
                         return
                     }
                     else -> throw IOException("Unexpected auth reply: ${auth.optString("type")}")
@@ -306,12 +384,9 @@ class HaDashboardClient(
             } catch (e: Exception) {
                 if (!closed.get()) listener.onDisconnected(e.message ?: e.javaClass.simpleName)
             } finally {
+                watchdog?.interrupt()
                 runCatching { ws?.close() }
-                authenticated = false
-                socket = null
-                entitySubId = null
-                pending.clear()
-                subscriptions.clear()
+                failOutstanding()
             }
             if (closed.get()) break
             try {
@@ -323,15 +398,84 @@ class HaDashboardClient(
         }
     }
 
+    /**
+     * Ends the connection's state. Every request still waiting for its result fails once, with `disconnected`, so a
+     * caller (an island's `callWS` promise) settles. Nothing is replayed: HA may have run it already.
+     */
+    private fun failOutstanding() {
+        val orphaned: List<Int>
+        synchronized(queueLock) {
+            // The display requests of this connection settle no more: their callbacks (below, or a late send_failed)
+            // see an older generation than the next connection's.
+            connectionGen.incrementAndGet()
+            authenticated = false
+            socket = null
+            entitySubId = null
+            orphaned = pending.keys.toList()
+            subscriptions.clear()
+        }
+        for (id in orphaned) {
+            // Claimed with remove: the writer's send_failed path may have taken it already, and only one may call it.
+            val cb = pending.remove(id) ?: continue
+            runCatching {
+                cb(
+                    JSONObject().put("id", id).put("type", "result").put("success", false)
+                        .put("error", JSONObject().put("code", DISCONNECTED).put("message", "Connection to Home Assistant lost")),
+                )
+            }
+        }
+        // After the callbacks (display requests among them decrement the counter): the next connection asks for its
+        // display data afresh.
+        displayRequested.clear()
+        displayPending.set(0)
+        displayChanged.set(false)
+    }
+
+    /** Closes [ws] if Home Assistant hasn't greeted and accepted the token within [authTimeoutMs]. */
+    private fun authWatchdog(ws: HaSocket): Thread = Thread({
+        try {
+            Thread.sleep(authTimeoutMs)
+            if (!authenticated || socket !== ws) runCatching { ws.close() }
+        } catch (_: InterruptedException) {
+        }
+    }, "vitro-ha-auth-timeout").apply {
+        isDaemon = true
+        start()
+    }
+
     /** Domains and platforms whose display data (icons, state labels) has been asked for on this connection. */
     // A set over a ConcurrentHashMap through Collections: the map's own key-set view is API 24, the Mirror runs 23.
     private val displayRequested: MutableSet<String> = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
     private val displayPending = java.util.concurrent.atomic.AtomicInteger(0)
 
+    /** Bumped when a connection ends: display callbacks of an earlier one leave the counters alone. */
+    private val connectionGen = AtomicInteger(0)
+
+    /** Some display data arrived since the last re-render; without it (all refused) there is nothing to redraw. */
+    private val displayChanged = AtomicBoolean(false)
+
     /**
      * Asks HA for the icon and state translations the [entityIds] need (their domains, and the integrations of the
      * ones with a translation key), the way HA's frontend loads them, and re-renders once they've all arrived.
      */
+    /**
+     * Writes display data ([HaDisplay] is shared by every client) only while this client is open, under the lock
+     * close() takes: a client retired mid-callback can't put its server's names into the next one's.
+     */
+    private fun applyDisplay(write: () -> Unit) = synchronized(storeWriteLock) {
+        if (closed.get()) return
+        write()
+        displayChanged.set(true)
+    }
+
+    /**
+     * One display request answered. Re-render once all of them are in, and only when some display data arrived: a
+     * notification for nothing would look like a state change to every listener.
+     */
+    private fun settleDisplay() {
+        if (displayPending.decrementAndGet() == 0 && displayChanged.getAndSet(false) && !closed.get()) store.renotifyAll()
+    }
+
     private fun loadDisplayFor(entityIds: Collection<String>) {
         val (domains, platforms) = HaDisplay.missingFor(entityIds)
         val newDomains = domains.filter { displayRequested.add("d:$it") }
@@ -341,9 +485,11 @@ class HaDashboardClient(
             val msg = JSONObject().put("type", type).put("category", category).put("integration", JSONArray(names))
             if (type == "frontend/get_translations") msg.put("language", "en")
             displayPending.incrementAndGet()
+            val gen = connectionGen.get()
             request(msg) { res ->
-                if (res.optBoolean("success", false)) res.optJSONObject("result")?.let(apply)
-                if (displayPending.decrementAndGet() == 0) store.renotifyAll()
+                if (gen != connectionGen.get()) return@request
+                if (res.optBoolean("success", false)) res.optJSONObject("result")?.let { r -> applyDisplay { apply(r) } }
+                settleDisplay()
             }
         }
         ask("frontend/get_icons", "entity_component", newDomains) { HaDisplay.applyIcons(it, true, newDomains) }
@@ -356,6 +502,9 @@ class HaDashboardClient(
 
     private fun onAuthenticated() {
         displayRequested.clear()
+        displayPending.set(0)
+        // Icons and state labels are this Home Assistant's: a new connection loads them again.
+        HaDisplay.reset()
         // 0. HA config (unit_system, location_name, time_zone — needed by custom cards reading hass.config)
         request(JSONObject().put("type", "get_config")) { res ->
             if (res.optBoolean("success", false)) {
@@ -408,9 +557,9 @@ class HaDashboardClient(
             }
         }
         // 4. Active dashboard config (and live lovelace_updated notifications)
-        fetchDashboard(requestedDashboardPath)
+        refetchDashboard()
         subscribe(JSONObject().put("type", "subscribe_events").put("event_type", "lovelace_updated")) {
-            fetchDashboard(requestedDashboardPath)
+            refetchDashboard()
         }
         // 5. Initial entity subscription (refined to view's entities once config arrives)
         resubscribeEntities()
@@ -430,15 +579,21 @@ class HaDashboardClient(
         }
         // 7. Display data, after everything the first paint needs: the entity registry, then the icons and state
         // translations for the view's entities.
+        // The registry counts as one display request: when it is the only one that succeeds, cards still re-render.
+        val gen = connectionGen.get()
+        displayPending.incrementAndGet()
         request(JSONObject().put("type", "config/entity_registry/list_for_display")) { res ->
-            if (res.optBoolean("success", false)) res.optJSONObject("result")?.let(HaDisplay::applyRegistry)
+            if (gen != connectionGen.get()) return@request
+            if (res.optBoolean("success", false)) res.optJSONObject("result")?.let { r -> applyDisplay { HaDisplay.applyRegistry(r) } }
             loadDisplayFor(displayIds())
+            settleDisplay()
         }
         // Device names, for HA's default tile names ("<device> <entity>").
         displayPending.incrementAndGet()
         request(JSONObject().put("type", "config/device_registry/list")) { res ->
-            if (res.optBoolean("success", false)) res.optJSONArray("result")?.let(HaDisplay::applyDevices)
-            if (displayPending.decrementAndGet() == 0) store.renotifyAll()
+            if (gen != connectionGen.get()) return@request
+            if (res.optBoolean("success", false)) res.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyDevices(r) } }
+            settleDisplay()
         }
     }
 
@@ -456,23 +611,34 @@ class HaDashboardClient(
         listener.onUserTheme(name?.trim()?.takeIf { it.isNotEmpty() }, dark)
     }
 
-    private fun resubscribeEntities() {
+    private fun resubscribeEntities() = synchronized(entitySubLock) {
         entitySubId?.takeIf { it > 0 }?.let { unsubscribe(it) }
         val msg = JSONObject().put("type", "subscribe_entities")
         val filter = activeEntityFilter
         if (filter.isNotEmpty()) {
             msg.put("entity_ids", JSONArray(filter.toList()))
         }
-        store.resetSnapshot()
-        var first = true
-        entitySubId = subscribe(msg) { ev ->
-            store.applyCompressedEvent(ev)
-            if (first) {
-                first = false
+        // This subscription owns the store's entity writes from now on; a retired one's events (one the reader
+        // already picked up when it was replaced) are dropped, even before subscribe() returns. Switched under the
+        // write lock, so an old event mid-commit finishes before the snapshot state is reset.
+        val owner = Any()
+        synchronized(storeWriteLock) {
+            store.resetSnapshot()
+            entityOwner = owner
+        }
+        // The first event is the subscription's snapshot: an entity of [filter] missing from it is gone (deleted while
+        // the panel was offline) and leaves the store. Later events are diffs.
+        val first = AtomicBoolean(true)
+        entitySubId = subscribe(msg) { ev -> synchronized(storeWriteLock) {
+            // Checked under the lock close() takes: a closed client never writes to the (shared) store again.
+            if (closed.get() || entityOwner !== owner) return@subscribe
+            val isFirst = first.getAndSet(false)
+            store.applyCompressedEvent(ev, snapshotScope = if (isFirst) filter else null)
+            if (isFirst) {
                 store.markSnapshot(filter.toSet())
                 loadDisplayFor(displayIds())
             }
-        }.takeIf { it > 0 }
+        } }.takeIf { it > 0 }
     }
 
     private fun handleIncoming(msg: JSONObject) {
@@ -483,7 +649,7 @@ class HaDashboardClient(
         }
     }
 
-    private fun request(msg: JSONObject, onResult: (JSONObject) -> Unit): Int {
+    private fun request(msg: JSONObject, onResult: (JSONObject) -> Unit): Int = synchronized(queueLock) {
         val id = nextId.getAndIncrement()
         msg.put("id", id)
         pending[id] = onResult
@@ -491,14 +657,14 @@ class HaDashboardClient(
             pending.remove(id)
             return -1
         }
-        return id
+        id
     }
 
     private fun subscribe(msg: JSONObject, onEvent: (JSONObject) -> Unit): Int =
         subscribeWithId(msg) { _, ev -> onEvent(ev) }
 
     /** [subscribe] whose callback also gets its own subscription id, valid even for an event that beats the return. */
-    private fun subscribeWithId(msg: JSONObject, onEvent: (id: Int, event: JSONObject) -> Unit): Int {
+    private fun subscribeWithId(msg: JSONObject, onEvent: (id: Int, event: JSONObject) -> Unit): Int = synchronized(queueLock) {
         val id = nextId.getAndIncrement()
         msg.put("id", id)
         subscriptions[id] = { ev -> onEvent(id, ev) }
@@ -510,7 +676,7 @@ class HaDashboardClient(
             pending.remove(id)
             return -1
         }
-        return id
+        id
     }
 
     private fun unsubscribe(subscriptionId: Int) {
@@ -537,7 +703,7 @@ class HaDashboardClient(
                     if (!closed.get()) {
                         pending.remove(id)?.invoke(
                             JSONObject().put("id", id).put("type", "result").put("success", false)
-                                .put("error", JSONObject().put("code", "send_failed").put("message", e.message ?: "Send failed")),
+                                .put("error", JSONObject().put("code", SEND_FAILED).put("message", e.message ?: "Send failed")),
                         )
                         subscriptions.remove(id)
                         runCatching { ws.close() } // a dead write ends the connection; the reader loop reconnects
@@ -562,6 +728,17 @@ class HaDashboardClient(
     }
 
     companion object {
+        /** Error codes this client makes up when the connection fails (HA never sent them). */
+        const val DISCONNECTED = "disconnected"
+        const val SEND_FAILED = "send_failed"
+
+        /** A result the client made up for a failed connection, not an answer from Home Assistant. */
+        fun isTransportError(res: JSONObject): Boolean =
+            !res.optBoolean("success", false) && res.optJSONObject("error")?.optString("code") in setOf(DISCONNECTED, SEND_FAILED)
+
+        /** Default bound on the greeting and auth exchange; after `auth_ok` reads may idle for as long as they like. */
+        const val AUTH_TIMEOUT_MS = 20_000L
+
         /**
          * Long-lived RFC 6455 socket for the dashboard WebSocket (`readTimeoutMs = 0` so an idle
          * dashboard doesn't disconnect every 15 s like one-shot `WsHaSocket.connect`).

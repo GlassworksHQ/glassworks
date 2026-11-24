@@ -642,10 +642,37 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val timeLabel = timeLabel()
         addCentered(stateLabel)
         addCentered(timeLabel, topDp = 4f)
+        // One lock write at a time: a second tap while one is pending would make the rollbacks restore each other's
+        // optimistic states.
+        var writing = false
         val pill = VerticalTogglePillView(ctx.context, theme.activeColor("lock"), theme.dark).apply {
-            onToggle = { locked ->
-                ctx.store[id]?.let { ctx.store.putLocal(it.copy(state = if (locked) "locked" else "unlocked")) }
-                ctx.callService("lock", if (locked) "lock" else "unlock", JSONObject().put("entity_id", id), null)
+            onToggle = toggle@{ locked ->
+                val reset = { setOn(ctx.store[id]?.state.let { it == "locked" || it == "locking" }) }
+                if (writing) {
+                    reset()
+                    return@toggle
+                }
+                val send = { code: String? ->
+                    writing = true
+                    val before = ctx.store[id]
+                    val optimistic = before?.copy(state = if (locked) "locked" else "unlocked")
+                    optimistic?.let { ctx.store.putLocal(it) }
+                    val data = JSONObject().put("entity_id", id)
+                    if (!code.isNullOrEmpty()) data.put("code", code)
+                    val msg = JSONObject().put("type", "call_service").put("domain", "lock")
+                        .put("service", if (locked) "lock" else "unlock").put("service_data", data)
+                    // HA turned it down: put back the state from before the optimistic flip, unless a newer state from
+                    // HA has replaced the flip meanwhile (that one is the truth).
+                    ctx.callWs(msg) { ok, _, _ ->
+                        ctx.main.post {
+                            writing = false
+                            if (!ok && before != null && ctx.store[id] === optimistic) ctx.store.putLocal(before)
+                        }
+                    }
+                }
+                // A lock with a `code_format` asks for its code first, as HA's more-info does. Cancelled, the pill
+                // (which already moved) goes back to the lock's state.
+                if (ctx.store[id]?.attributes?.get("code_format") != null) askCode(send, reset) else send(null)
             }
         }
         addPill(pill)
@@ -654,6 +681,24 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             pill.setOn(s?.state == "locked" || s?.state == "locking")
             timeLabel.text = relativeTime(s)
         }
+    }
+
+    /** A masked code prompt; [onCode] runs on OK only, so Cancel sends nothing. The pill re-reads the store either way. */
+    private fun askCode(onCode: (String) -> Unit, onCancel: () -> Unit) {
+        val field = android.widget.EditText(ctx.context).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            hint = "Code"
+        }
+        val shown = runCatching {
+            android.app.AlertDialog.Builder(ctx.context)
+                .setView(field)
+                .setNegativeButton("Cancel") { _, _ -> onCancel() }
+                .setOnCancelListener { onCancel() }
+                .setPositiveButton("OK") { _, _ -> onCode(field.text?.toString().orEmpty()) }
+                .show()
+        }
+        if (shown.isFailure) onCancel()
     }
 
     private fun buildCover(id: String, initial: EntityState?): (EntityState?) -> Unit {
@@ -680,7 +725,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         COVER_ACTIONS.forEachIndexed { i, (icon, service) ->
             val b = roundedButton(icon) { ctx.callService("cover", service, JSONObject().put("entity_id", id), null) }
             b.contentDescription = service.substringBefore('_').replaceFirstChar { it.titlecase(Locale.ROOT) }
-            buttons.addView(b, LinearLayout.LayoutParams(ctx.px(if (hasPosition) 132f else 96f), ctx.px(if (hasPosition) 80f else 64f)).apply {
+            // Compact: three buttons and two gaps fit the slider's height (3 x 56 + 2 x 12 <= 196).
+            val buttonH = if (!hasPosition) 64f else if (compact) 56f else 80f
+            buttons.addView(b, LinearLayout.LayoutParams(ctx.px(if (hasPosition) 132f else 96f), ctx.px(buttonH)).apply {
                 if (i > 0) topMargin = ctx.px(12f)
             })
         }
@@ -924,6 +971,15 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         addCentered(timeLabel, topDp = 4f)
 
         val needsCode = initial?.attributes?.get("code_format") != null
+        // HA's text codes get a masked field; the keypad is for `number` codes.
+        val textCode = initial?.attributes?.get("code_format")?.toString() == "text"
+        val codeField = android.widget.EditText(ctx.context).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            hint = "Code"
+            setTextColor(theme.primaryTextColor)
+            setHintTextColor(theme.secondaryTextColor)
+        }
         val code = StringBuilder()
         val codeView = text(24f, theme.primaryTextColor, Inter.MEDIUM).apply {
             gravity = Gravity.CENTER
@@ -931,10 +987,12 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         }
         fun call(service: String) {
             val data = JSONObject().put("entity_id", id)
-            if (code.isNotEmpty()) data.put("code", code.toString())
+            val entered = if (textCode) codeField.text?.toString().orEmpty() else code.toString()
+            if (entered.isNotEmpty()) data.put("code", entered)
             ctx.callService("alarm_control_panel", service, data, null)
             code.setLength(0)
             codeView.text = ""
+            codeField.setText("")
         }
 
         val actions = LinearLayout(ctx.context).apply {
@@ -947,7 +1005,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         }
         body.addView(actions, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(20f) })
 
-        if (needsCode) {
+        if (textCode) {
+            body.addView(codeField, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(20f) })
+        } else if (needsCode) {
             addCentered(codeView, topDp = 20f, heightDp = 32f)
             val pad = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
             listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("Clear", "0", "⌫")).forEachIndexed { r, keys ->
@@ -1059,7 +1119,12 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val volume = SeekBar(ctx.context).apply {
             max = 100
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) = Unit
+                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                    // Keys (no touch) change it one step at a time: each goes to HA. A drag sends once, on release.
+                    if (fromUser && !tracking) {
+                        ctx.callService("media_player", "volume_set", JSONObject().put("entity_id", id).put("volume_level", progress / 100.0), null)
+                    }
+                }
                 override fun onStartTrackingTouch(sb: SeekBar?) { tracking = true }
                 override fun onStopTrackingTouch(sb: SeekBar?) {
                     tracking = false
@@ -1540,7 +1605,11 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
     }
 
     /** Moves the fill to [value] %: animated over 180 ms on screen, snapped before attach. Ignored mid-drag. */
+    /** The value bound last, kept during a drag so a cancelled one goes back to it. */
+    private var bound: Int? = null
+
     fun setPercent(value: Int) {
+        bound = value
         if (dragging) return
         val p = value.coerceIn(0, 100).toFloat()
         if (p == targetPct) return
@@ -1607,6 +1676,9 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
             MotionEvent.ACTION_CANCEL -> {
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
+                // Nothing was sent: back to the bound value.
+                // ...and the caption with it (onChange), without onRelease: nothing is sent.
+                bound?.let { targetPct = -1f; setPercent(it); onChange?.invoke(it) }
                 invalidate()
             }
         }
@@ -1937,7 +2009,11 @@ internal class RgbColorWheelView(context: Context) : View(context) {
 
     val color: Int get() = LightColor.hsvToArgb(hue, sat, 1f)
 
+    /** The color bound last, kept during a drag so a cancelled one goes back to it. */
+    private var bound: Int? = null
+
     fun setColor(argb: Int) {
+        bound = argb
         if (dragging) return
         val (h, s) = LightColor.argbToHueSat(argb)
         if (h != hue || s != sat) { hue = h; sat = s; invalidate() }
@@ -1987,6 +2063,7 @@ internal class RgbColorWheelView(context: Context) : View(context) {
             MotionEvent.ACTION_CANCEL -> {
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
+                bound?.let { hue = -1f; setColor(it) }
             }
         }
         return true
@@ -2052,7 +2129,11 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
     var onRelease: ((Int) -> Unit)? = null
 
     /** Moves the bar to [k]: animated over 180 ms on screen, snapped before attach. Ignored mid-drag. */
+    /** The temperature bound last, kept during a drag so a cancelled one goes back to it. */
+    private var bound: Int? = null
+
     fun setKelvin(k: Int) {
+        bound = k
         if (dragging) return
         val c = k.coerceIn(minOf(minK, maxK), maxOf(minK, maxK))
         if (c == kelvin) return
@@ -2114,6 +2195,7 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
             MotionEvent.ACTION_CANCEL -> {
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
+                bound?.let { kelvin = Int.MIN_VALUE; setKelvin(it); onChange?.invoke(it) }
             }
         }
         return true
@@ -2174,7 +2256,11 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
     var onRelease: ((Int) -> Unit)? = null
 
     /** Moves the fill to [value] % open: animated over 180 ms on screen, snapped before attach. Ignored mid-drag. */
+    /** The position bound last, kept during a drag so a cancelled one goes back to it. */
+    private var bound: Int? = null
+
     fun setPercent(value: Int) {
+        bound = value
         if (dragging) return
         val p = value.coerceIn(0, 100)
         if (p == pct) return
@@ -2236,6 +2322,7 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
             MotionEvent.ACTION_CANCEL -> {
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
+                bound?.let { pct = -1; setPercent(it); onChange?.invoke(it) }
             }
         }
         return true

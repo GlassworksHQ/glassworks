@@ -631,4 +631,45 @@ class ThemeResolverTest {
         assertEquals(4f, resolveWith("""{"masonry-view-card-margin": "0px"}""").cardGapDp, 0.001f)
         assertEquals(24f, resolveWith("""{"masonry-view-card-margin": "60px"}""").cardGapDp, 0.001f)
     }
+
+    @Test
+    fun aShorthandWithAValueVitroCantTakeIsDroppedWholeNotShifted() {
+        val all = ThemeResolver.parseCardMod("ha-card { padding: 4px 8px 12px 16px; }").paddingInsets!!
+        assertEquals(listOf(16f, 4f, 8f, 12f), listOf(all.left, all.top, all.right, all.bottom))
+        // `10%` can't become dp: the whole padding stays unapplied rather than read as top 4, right 12, …
+        assertEquals(null, ThemeResolver.parseCardMod("ha-card { padding: 4px 10% 12px 16px; }").paddingInsets)
+    }
+
+    @Test
+    fun cardCustomPropertiesReferToEachOther() {
+        val mod = ThemeResolver.parseCardMod("ha-card { --spacing: 16px; --inset: var(--spacing, 4px); padding: var(--inset); }")
+        assertEquals(16f, mod.paddingInsets!!.top, 0.001f)
+        assertEquals("16px", mod.customProperties["inset"])
+    }
+
+    @Test
+    fun cyclicCardPropertiesAreInvalidAndExpansionIsBounded() {
+        // Doubles on every pass with no theme: invalid, not 134 million references on the main thread.
+        val t0 = System.nanoTime()
+        val doubling = ThemeResolver.parseCardMod("ha-card { --a: var(--a) var(--a); padding: var(--a); }")
+        assertTrue((System.nanoTime() - t0) / 1_000_000 < 2_000)
+        assertEquals(null, doubling.paddingInsets)
+        // A mutual cycle falls back like a missing variable.
+        val mutual = ThemeResolver.parseCardMod("ha-card { --a: var(--b); --b: var(--a); padding: var(--a, 12px); }")
+        assertEquals(12f, mutual.paddingInsets!!.top, 0.001f)
+        // A deep chain that isn't a cycle still resolves.
+        val chain = (1..6).joinToString(" ") { "--v$it: var(--v${it + 1});" } + " --v7: 9px;"
+        val deep = ThemeResolver.parseCardMod("ha-card { $chain padding: var(--v1); }")
+        assertEquals(9f, deep.paddingInsets!!.top, 0.001f)
+        // Growth past the cap in one pass is empty, as an invalid value.
+        assertEquals("", ThemeResolver.resolveValue("var(--x)", mapOf("x" to "y".repeat(20_000)), 0))
+    }
+
+    @Test
+    fun aLongThemeCardModStylesheetKeepsItsStyling() {
+        // A theme's card-mod-card over 16 KiB (a long comment first) with one short variable: it must survive whole.
+        val sheet = "/* " + "x".repeat(17_000) + " */ ha-card { background-color: var(--brand); }"
+        val theme = resolveWith("""{"brand": "#ff0000", "card-mod-card": ${org.json.JSONObject.quote(sheet)}}""")
+        assertEquals(0xFFFF0000.toInt(), theme.cardMod.backgroundColor)
+    }
 }

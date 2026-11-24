@@ -46,6 +46,7 @@ class HaDashboardClientTest {
         val configs = CopyOnWriteArrayList<Pair<String?, DashboardConfig>>()
         val disconnected = CopyOnWriteArrayList<String>()
         val userThemes = CopyOnWriteArrayList<Pair<String?, Boolean?>>()
+        val failedConfigs = CopyOnWriteArrayList<Pair<String?, String>>()
 
         override fun onConnected(haVersion: String) { connected += haVersion }
         override fun onAuthRequired() { authRequired.incrementAndGet() }
@@ -53,6 +54,7 @@ class HaDashboardClientTest {
         override fun onResources(resources: List<LovelaceResource>) { this.resources += resources }
         override fun onThemes(catalog: ThemeCatalog) { themes += catalog }
         override fun onDashboardConfig(urlPath: String?, config: DashboardConfig) { configs += urlPath to config }
+        override fun onDashboardConfigFailed(urlPath: String?, code: String) { failedConfigs += urlPath to code }
         override fun onDisconnected(reason: String) { disconnected += reason }
         override fun onUserTheme(themeName: String?, dark: Boolean?) { userThemes += themeName to dark }
     }
@@ -93,6 +95,7 @@ class HaDashboardClientTest {
             tokenCalls += force
             done(FakeHaServer.TOKEN)
         },
+        authTimeoutMs: Long = HaDashboardClient.AUTH_TIMEOUT_MS,
     ): HaDashboardClient {
         val c = HaDashboardClient(
             haBase = haBase,
@@ -100,6 +103,7 @@ class HaDashboardClientTest {
             store = store,
             connect = connect,
             listener = listener,
+            authTimeoutMs = authTimeoutMs,
         )
         clients += c
         return c
@@ -226,6 +230,8 @@ class HaDashboardClientTest {
     fun currentUserIsStoredFromAuthCurrentUser() {
         val user = JSONObject("""{"id": "u1", "name": "Wall Panel", "is_admin": false, "is_owner": false}""")
         val c = connected(connect = userDataConnect(user, null))
+        // The last user request on the wire: its reply can't be read before the command is recorded.
+        awaitCondition("user data subscribed") { server.commands("frontend/subscribe_user_data").isNotEmpty() }
         awaitCondition("currentUser") { c.currentUser.optString("id") == "u1" }
         assertEquals("Wall Panel", c.currentUser.getString("name"))
         assertFalse(c.currentUser.getBoolean("is_admin"))
@@ -236,6 +242,7 @@ class HaDashboardClientTest {
     @Test
     fun selectedThemeAsAStringReachesTheListener() {
         connected(connect = userDataConnect(JSONObject(), JSONObject("""{"selectedTheme": "glass_dusk"}""")))
+        awaitCondition("user data subscribed") { server.commands("frontend/subscribe_user_data").isNotEmpty() }
         awaitCondition("user theme") { listener.userThemes.isNotEmpty() }
         assertEquals(listOf<Pair<String?, Boolean?>>("glass_dusk" to null), listener.userThemes.toList())
         assertEquals("core", server.commands("frontend/get_user_data").single().getString("key"))
@@ -259,6 +266,7 @@ class HaDashboardClientTest {
     fun userDataSubscriptionReportsLaterThemeChanges() {
         connected(connect = userDataConnect(JSONObject(), null))
         awaitCondition("initial") { listener.userThemes.isNotEmpty() }
+        awaitCondition("user data subscribed") { server.commands("frontend/subscribe_user_data").isNotEmpty() }
         val sub = server.commands("frontend/subscribe_user_data").single()
         assertEquals("core", sub.getString("key"))
         server.pushEvent(sub.getInt("id"), JSONObject("""{"value": {"selectedTheme": {"theme": "night", "dark": false}}}"""))
@@ -389,8 +397,16 @@ class HaDashboardClientTest {
     fun compressedDiffEventsUpdateTheStoreAndWakeItsSubscribers() {
         connected()
         awaitCondition("entities") { store.size() == 4 }
+        // Counted: the notifications that carry the diff. The snapshot's own dispatch can still be running when
+        // `size() == 4` holds (states go in before listeners hear), and it may reach this listener with "on".
         val woken = AtomicInteger(0)
-        store.subscribe("light.lounge_lamp") { woken.incrementAndGet() }
+        val sawRemovalFirst = java.util.concurrent.atomic.AtomicBoolean(true)
+        store.subscribe("light.lounge_lamp") { s ->
+            if (s?.state == "off") {
+                woken.incrementAndGet()
+                if (store["sensor.unreferenced_power"] != null) sawRemovalFirst.set(false)
+            }
+        }
         val sub = server.commands("subscribe_entities").single().getInt("id")
 
         server.pushEvent(
@@ -408,6 +424,7 @@ class HaDashboardClientTest {
         assertEquals(0, (lamp.attributes["brightness"] as Number).toInt())
         assertEquals("Lounge Lamp", lamp.friendlyName)
         assertEquals(1, woken.get())
+        assertTrue("the whole event was applied before the listener heard", sawRemovalFirst.get())
     }
 
     // ---- Commands ----
@@ -608,8 +625,14 @@ class HaDashboardClientTest {
     @Test
     fun historyWithNoEntitiesSendsNothing() {
         val c = connected()
-        c.fetchHistory(emptyList()) { throw AssertionError("no callback expected") }
+        val called = java.util.concurrent.atomic.AtomicBoolean(false)
+        c.fetchHistory(emptyList()) { called.set(true) }
+        // A later command through the same writer: once its reply is back, anything queued before it went out.
+        val done = CompletableFuture<Boolean>()
+        c.callWs(JSONObject().put("type", "config/area_registry/list")) { ok, _, _ -> done.complete(ok) }
+        assertTrue(done.get(10, TimeUnit.SECONDS))
         assertTrue(server.commands("history/stream").isEmpty())
+        assertFalse(called.get())
     }
 
     @Test
@@ -662,8 +685,184 @@ class HaDashboardClientTest {
         assertEquals(listOf("old-token", "new-token"), server.commands("auth").map { it.getString("access_token") })
         assertEquals(2, server.connectUrls.size)
         assertEquals(0, listener.authRequired.get())
-        assertEquals(listOf(false, true, false), tokenCalls.toList())
+        // The refreshed token goes straight into the next handshake: no third call to the provider.
+        assertEquals(listOf(false, true), tokenCalls.toList())
         assertTrue("the rejected socket was closed", server.sockets[0].closed)
+    }
+
+    @Test
+    fun theRefreshedTokenIsUsedEvenWhenThePlainProviderStillHasTheOldOne() {
+        server.acceptedTokens = setOf("new-token")
+        newClient(tokens = { force, done -> done(if (force) "new-token" else "old-token") }).start(null)
+        awaitCondition("connected with the refreshed token") { listener.connected.isNotEmpty() }
+        assertEquals(listOf("old-token", "new-token"), server.commands("auth").map { it.getString("access_token") })
+        assertEquals(0, listener.authRequired.get())
+    }
+
+    @Test
+    fun aRejectedRefreshedTokenReportsAuthRequiredOnce() {
+        server.acceptedTokens = emptySet()
+        newClient(tokens = { force, done -> done(if (force) "new-token" else "old-token") }).start(null)
+        awaitCondition("auth required") { listener.authRequired.get() == 1 }
+        assertEquals(listOf("old-token", "new-token"), server.commands("auth").map { it.getString("access_token") })
+        assertEquals(2, server.connectUrls.size)
+    }
+
+    @Test
+    fun aServerThatNeverGreetsIsDroppedAndRetried() {
+        server.greeting = { null }
+        newClient(authTimeoutMs = 100).start(null)
+        awaitCondition("reconnect after the greeting timed out") { server.connectUrls.size >= 2 }
+        assertTrue(server.sockets[0].closed)
+        assertTrue(listener.disconnected.isNotEmpty())
+    }
+
+    @Test
+    fun aRequestStillWaitingWhenTheConnectionDropsFailsOnce() {
+        // `test/hang` reaches the wire but HA never answers it before the connection ends.
+        val c = connected(connect = { url ->
+            val inner = server.connect(url)
+            object : HaSocket by inner {
+                override fun send(text: String) {
+                    if (JSONObject(text).optString("type") != "test/hang") inner.send(text)
+                }
+            }
+        })
+        val results = CopyOnWriteArrayList<Pair<Boolean, JSONObject?>>()
+        c.callWs(JSONObject().put("type", "test/hang")) { ok, _, err -> results += ok to err }
+        Thread.sleep(50) // let the writer put it on the wire
+        server.dropConnection()
+        awaitCondition("the hanging request failed") { results.isNotEmpty() }
+        Thread.sleep(100)
+        assertEquals(1, results.size)
+        assertFalse(results[0].first)
+        assertEquals("disconnected", results[0].second?.optString("code"))
+    }
+
+    @Test
+    fun aDashboardRequestCutOffByADroppedConnectionIsAskedAgainNotReportedMissing() {
+        // The first connection never answers `lovelace/config` for "slow"; it then drops.
+        val firstSocket = java.util.concurrent.atomic.AtomicBoolean(true)
+        val c = connected(connect = { url ->
+            val inner = server.connect(url)
+            val swallow = firstSocket.getAndSet(false)
+            object : HaSocket by inner {
+                override fun send(text: String) {
+                    val m = JSONObject(text)
+                    if (swallow && m.optString("type") == "lovelace/config" && m.optString("url_path") == "slow") return
+                    inner.send(text)
+                }
+            }
+        })
+        c.fetchDashboard("slow")
+        awaitCondition("asked") { server.commands("lovelace/config").isNotEmpty() }
+        Thread.sleep(50) // the writer is past it
+        server.dropConnection()
+        // The reconnect asks for the same dashboard and gets it; nothing reports it as missing.
+        awaitCondition("config after reconnect") { listener.configs.any { it.first == "slow" } }
+        assertTrue(listener.failedConfigs.toString(), listener.failedConfigs.isEmpty())
+    }
+
+    @Test
+    fun theEntityRegistryAloneSucceedingStillReRendersOnce() {
+        // Subscribed before connecting: the snapshot wakes it once, the display re-render once more.
+        val woken = AtomicInteger(0)
+        store.subscribe("light.lounge_lamp") { woken.incrementAndGet() }
+        // HA answers the entity registry; the device registry, icons and translations are refused (the fake's default).
+        connected(connect = { url ->
+            val inner = server.connect(url) as FakeHaServer.Socket
+            object : HaSocket by inner {
+                override fun send(text: String) {
+                    val m = JSONObject(text)
+                    if (m.optString("type") == "config/entity_registry/list_for_display") {
+                        inner.push(JSONObject().put("id", m.getInt("id")).put("type", "result").put("success", true)
+                            .put("result", JSONObject().put("entities", JSONArray())))
+                    } else {
+                        inner.send(text)
+                    }
+                }
+            }
+        })
+        awaitCondition("snapshot and the one re-render") { woken.get() >= 2 }
+        Thread.sleep(200)
+        assertEquals(2, woken.get())
+    }
+
+    @Test
+    fun aReleasedDashboardIsNotFetchedOnLovelaceUpdatedOrReconnect() {
+        val c = connected()
+        c.releaseDashboard()
+        server.pushEvent(server.eventSubscriptionId("lovelace_updated")!!, JSONObject().put("event_type", "lovelace_updated"))
+        server.dropConnection()
+        awaitCondition("reconnected") { server.connectUrls.size == 2 && server.commands("subscribe_entities").size == 2 }
+        // Only the first connection's startup request: nothing for the fallback page's "dashboard".
+        assertEquals(1, server.commands("lovelace/config").size)
+        // Reclaiming the dashboard shown before fetches it, since refetches were skipped meanwhile.
+        c.claimDashboard(null)
+        awaitCondition("refetched on claim") { server.commands("lovelace/config").size == 2 }
+        // The page puts it on screen (VitroEngine does this in onDashboardConfig).
+        awaitCondition("config delivered") { listener.configs.size == 2 }
+        c.dashboardShown()
+        // A claim with nothing skipped stays instant (no request).
+        c.claimDashboard(null)
+        readerBarrier(c)
+        assertEquals(2, server.commands("lovelace/config").size)
+    }
+
+    /** Returns once the reader has handled everything HA sent before: a request's answer comes after all of it. */
+    private fun readerBarrier(c: HaDashboardClient) {
+        val done = CompletableFuture<Boolean>()
+        c.callWs(JSONObject().put("type", "config/area_registry/list")) { ok, _, _ -> done.complete(ok) }
+        assertTrue(done.get(10, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun aMissedRefetchSurvivesARequestWhoseAnswerIsDiscarded() {
+        // While `swallow` is set, HA never answers lovelace/config.
+        val swallow = java.util.concurrent.atomic.AtomicBoolean(false)
+        val c = connected(connect = { url ->
+            val inner = server.connect(url)
+            object : HaSocket by inner {
+                override fun send(text: String) {
+                    if (swallow.get() && JSONObject(text).optString("type") == "lovelace/config") {
+                        server.received += JSONObject(text)
+                        return
+                    }
+                    inner.send(text)
+                }
+            }
+        })
+        c.releaseDashboard()
+        server.pushEvent(server.eventSubscriptionId("lovelace_updated")!!, JSONObject().put("event_type", "lovelace_updated"))
+        readerBarrier(c) // the update has been handled, while the dashboard is still released
+        assertEquals(1, server.commands("lovelace/config").size) // skipped: the fallback shows
+        swallow.set(true)
+        c.claimDashboard(null) // asks, but the answer never comes
+        awaitCondition("asked on claim") { server.commands("lovelace/config").size == 2 }
+        c.releaseDashboard()
+        swallow.set(false)
+        // The refetch was never made up: the next claim asks again and gets the dashboard.
+        c.claimDashboard(null)
+        awaitCondition("asked again") { server.commands("lovelace/config").size == 3 }
+    }
+
+    @Test
+    fun aDashboardHaRejectsIsReported() {
+        val c = connected()
+        c.fetchDashboard("missing")
+        awaitCondition("failure reported") { listener.failedConfigs.isNotEmpty() }
+        assertEquals(listOf<Pair<String?, String>>("missing" to "config_not_found"), listener.failedConfigs.toList())
+    }
+
+    @Test
+    fun aNewEntitySubscriptionDropsEntitiesThatAreGone() {
+        val c = connected()
+        awaitCondition("snapshot applied") { store["binary_sensor.front_door"] != null }
+        // The door sensor was deleted while the panel was away; the next subscription's snapshot lacks it.
+        server.initialEntities = JSONObject(FakeHaServer.ENTITIES_JSON).apply { remove("binary_sensor.front_door") }
+        c.subscribeViewEntities(setOf("light.lounge_lamp", "binary_sensor.front_door"))
+        awaitCondition("door removed") { store["binary_sensor.front_door"] == null }
+        assertTrue(store["light.lounge_lamp"] != null)
     }
 
     @Test

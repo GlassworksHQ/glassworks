@@ -113,7 +113,9 @@ object MarkedLite {
                 var j = i + 1
                 while (j < n) {
                     val t = lines[j].trim()
-                    if (t.length >= marker.length && t.all { it == marker[0] }) break
+                    // A closing fence is indented three spaces at most; four makes it code.
+                    val indent = lines[j].length - lines[j].trimStart().length
+                    if (indent <= 3 && t.length >= marker.length && t.all { it == marker[0] }) break
                     body.append(lines[j]).append('\n')
                     j++
                 }
@@ -475,7 +477,36 @@ object MarkedLite {
             j++
         }
         if (j >= to || j + 1 >= to || s[j + 1] != '(') return null
-        val close = s.indexOf(')', j + 2).takeIf { it in 0 until to } ?: return null
+        // The destination's own balanced (or escaped) parentheses stay in it: `/local/plan(v2).png`.
+        var close = -1
+        var parens = 0
+        var k = j + 2
+        while (k < to && (s[k] == ' ' || s[k] == '\t')) k++
+        if (k < to && s[k] == '<') {
+            // `<…>` destination: anything up to `>` is the URL (parentheses too), then the `)` that ends the link.
+            val gt = s.indexOf('>', k).takeIf { it in 0 until to } ?: return null
+            k = gt + 1
+            parens = -1 // no balancing after the `<…>`: the next `)` closes
+        }
+        while (k < to) {
+            // A quoted title after the destination (`"Floor (draft"`): its parentheses don't count.
+            if ((s[k] == '"' || s[k] == '\'') && k > 0 && (s[k - 1] == ' ' || s[k - 1] == '\t')) {
+                // The closing quote, past any escaped one (`\"`).
+                var end = k + 1
+                while (end < to && s[end] != s[k]) end += if (s[end] == '\\') 2 else 1
+                if (end in 0 until to) {
+                    k = end + 1
+                    continue
+                }
+            }
+            when (s[k]) {
+                '\\' -> k++
+                '(' -> if (parens >= 0) parens++
+                ')' -> if (parens <= 0) { close = k; break } else parens--
+            }
+            k++
+        }
+        if (close < 0) return null
         val dest = s.substring(j + 2, close).trim()
         val url = if (dest.startsWith("<") && ">" in dest) dest.substring(1, dest.indexOf('>')) else dest.substringBefore(' ')
         return Link(open + 1, j, url, close + 1)
