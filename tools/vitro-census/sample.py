@@ -22,6 +22,7 @@ SEED, REPOS, FILES_PER_REPO = 798, 80, 4
 
 
 def search(out):
+    os.makedirs(out, exist_ok=True)
     hits = {}
     for q in QUERIES:
         for page in (1, 2, 3):
@@ -45,18 +46,37 @@ def draw(out):
     random.seed(SEED)
     repos = sorted(hits)
     random.shuffle(repos)
-    manifest = [{"repo": r, "files": [{"path": p, "url": u} for p, u in hits[r][:FILES_PER_REPO]]} for r in repos[:REPOS]]
+    def distinct(pairs):  # one file can match several queries; keep its first hit only
+        seen = set()
+        return [(p, u) for p, u in pairs if not (p in seen or seen.add(p))]
+    manifest = [{"repo": r, "files": [{"path": p, "url": u} for p, u in distinct(hits[r])[:FILES_PER_REPO]]}
+                for r in repos[:REPOS]]
     json.dump(manifest, open(os.path.join(out, "manifest.json"), "w"), indent=1)
     print(len(manifest), "of", len(repos), "repositories")
 
 
 def fetch(manifest, out):
+    comm = os.path.join(out, "comm")
+    if os.path.exists(comm) and os.listdir(comm):
+        sys.exit(f"{comm} isn't empty; fetch into a new folder, or census.py --per-dir would count old files too")
+    failed = []
     for entry in json.load(open(manifest)):
-        d = os.path.join(out, "comm", entry["repo"].replace("/", "__"))
+        d = os.path.join(comm, entry["repo"].replace("/", "__"))
         os.makedirs(d, exist_ok=True)
         for i, f in enumerate(entry["files"]):
+            if not f["url"].startswith("https://github.com/"):
+                sys.exit(f"not a GitHub file URL: {f['url']}")
             raw = f["url"].replace("https://github.com/", "https://raw.githubusercontent.com/").replace("/blob/", "/", 1)
-            subprocess.run(["curl", "-sfL", "-m", "20", "-o", os.path.join(d, f"{i}.yaml"), raw])
+            dest = os.path.join(d, f"{i}.yaml")
+            # Download beside the file and rename on success, so a failed transfer leaves nothing for the census.
+            if subprocess.run(["curl", "-sfL", "-m", "20", "-o", dest + ".part", raw]).returncode == 0:
+                os.replace(dest + ".part", dest)
+            else:
+                if os.path.exists(dest + ".part"):
+                    os.remove(dest + ".part")
+                failed.append(f"{entry['repo']}: {f['path']}")
+    if failed:
+        sys.exit("download failed, so the sample is incomplete:\n  " + "\n  ".join(failed))
 
 
 if __name__ == "__main__":

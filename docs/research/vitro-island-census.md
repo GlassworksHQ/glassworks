@@ -214,10 +214,11 @@ a stated goal (Vitro already draws `history-graph`, `statistics-graph` and `mini
 Read-only throughout: the HA websocket helper only calls `lovelace/*` reads, and GitHub is read through the public API.
 
 ```
-node ws.mjs get <url_path> > ours/<url_path>.json                                 # one per dashboard
+mkdir -p ours && node ws.mjs get <url_path> > ours/<url_path>.json                 # one per dashboard
 python3 tools/vitro-census/census.py ours/*.json                                  # native vs island, per card type
-python3 tools/vitro-census/sample.py fetch tools/vitro-census/sample-manifest.json /tmp/census   # the pinned sample
-python3 tools/vitro-census/census.py --per-dir --min-cards 5 /tmp/census/comm/*/*.yaml          # the numbers above
+OUT=$(mktemp -d)                                                                   # a new, empty folder
+python3 tools/vitro-census/sample.py fetch tools/vitro-census/sample-manifest.json "$OUT"     # the pinned sample
+python3 tools/vitro-census/census.py --per-dir --min-cards 5 "$OUT"/comm/*/*.yaml            # the numbers above
 ```
 
 `census.py` reads the native set out of `ui/VitroView.kt`, so it follows the code: rerun it after a new fast path to
@@ -233,5 +234,5 @@ see the island share drop. `sample.py search` and `draw` make a fresh sample (co
   CSS, JS templates in Markdown). The census counts routing, not fidelity, so the real island share is higher.
 - **Custom entity rows** inside `entities` cards (`multiple-entity-row`, `slider-entity-row`, `fold-entity-row`) are
   not counted here, and may be a larger gap than any card on this list (untested).
-- **`button-card` subset.** Which options the 17 dashboards use (`styles`, `state:` rules, `[[[ ]]]` templates) decides how
+- **`button-card` subset.** Which options the 18 dashboards use (`styles`, `state:` rules, `[[[ ]]]` templates) decides how
   much of it a native path can cover. Count them from the same files before writing it (untested).
