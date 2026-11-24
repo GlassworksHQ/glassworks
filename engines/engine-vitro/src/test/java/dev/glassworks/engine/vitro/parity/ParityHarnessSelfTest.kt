@@ -56,6 +56,19 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun aRecolouredBackgroundDiffers() {
+        // pixelmatch compares its squared YIQ distance with 0.1²: black against dark grey is a difference.
+        val black = Bitmap.createBitmap(20, 20, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.BLACK) }
+        val grey = Bitmap.createBitmap(20, 20, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.rgb(64, 64, 64)) }
+        val d = ParityDiff.compare(black, grey, 20, 20)
+        assertEquals(1.0, d.strict, 0.0)
+        assertEquals(1.0, d.tolerant, 0.0)
+        // A step pixelmatch calls the same stays the same.
+        val near = Bitmap.createBitmap(20, 20, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.rgb(8, 8, 8)) }
+        assertEquals(0.0, ParityDiff.compare(black, near, 20, 20).strict, 0.0)
+    }
+
+    @Test
     fun masksLeaveTheirRegionOut() {
         val d = ParityDiff.compare(box(40, 40, 2), box(40, 40, 2, color = Color.RED), 40, 40, listOf(android.graphics.Rect(5, 5, 35, 35)))
         assertEquals(0.0, d.tolerant, 0.0)

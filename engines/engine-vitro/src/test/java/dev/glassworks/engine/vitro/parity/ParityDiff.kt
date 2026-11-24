@@ -17,7 +17,7 @@ import kotlin.math.roundToInt
 
 /** How two renders of the same region compare, at one sample per CSS px. */
 data class PixelDiff(
-    /** Share of compared pixels that differ visibly (pixelmatch's YIQ distance over [ParityDiff.THRESHOLD]). */
+    /** Share of compared pixels that differ visibly (pixelmatch's YIQ distance over its 0.1 threshold, [ParityDiff.MAX_DELTA]). */
     val strict: Double,
     /** The same, but a pixel that matches any neighbour within one CSS px counts as a match: what the eye calls "the same". */
     val tolerant: Double,
@@ -33,8 +33,11 @@ data class PixelDiff(
  * sample is compared with pixelmatch's YIQ colour distance (Kotlyar & Mazurkiewicz, the metric pixelmatch uses).
  */
 object ParityDiff {
-    /** pixelmatch's default: 0.1 of the largest YIQ distance. */
+    /** pixelmatch's default threshold, 0.1. */
     const val THRESHOLD = 0.1
+
+    /** [yiq] is a squared distance, so pixelmatch compares it with the threshold squared. */
+    const val MAX_DELTA = THRESHOLD * THRESHOLD
     private const val MAX_YIQ = 35215.0
 
     /** Box-filters [b] to [w] x [h] samples (premultiplied over [bg], so transparent edges compare as the page). */
@@ -61,7 +64,7 @@ object ParityDiff {
         return out
     }
 
-    /** pixelmatch's colour distance between two opaque pixels, 0..1. */
+    /** pixelmatch's colour distance between two opaque pixels, squared and normalized to 0..1. */
     fun yiq(a: Int, b: Int): Double {
         val r1 = Color.red(a).toDouble(); val g1 = Color.green(a).toDouble(); val b1 = Color.blue(a).toDouble()
         val r2 = Color.red(b).toDouble(); val g2 = Color.green(b).toDouble(); val b2 = Color.blue(b).toDouble()
@@ -94,7 +97,7 @@ object ParityDiff {
             n++
             lumaSum += abs(l - luma(b[i]))
             val d = yiq(a[i], b[i])
-            if (d <= THRESHOLD) {
+            if (d <= MAX_DELTA) {
                 px[i] = Color.rgb(grey, grey, grey)
                 continue
             }
@@ -106,8 +109,8 @@ object ParityDiff {
                 val xx = x + dx; val yy = y + dy
                 if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue
                 val j = yy * w + xx
-                if (!nearA && yiq(a[i], b[j]) <= THRESHOLD) nearA = true
-                if (!nearB && yiq(b[i], a[j]) <= THRESHOLD) nearB = true
+                if (!nearA && yiq(a[i], b[j]) <= MAX_DELTA) nearA = true
+                if (!nearB && yiq(b[i], a[j]) <= MAX_DELTA) nearB = true
             }
             val near = nearA && nearB
             if (near) {
