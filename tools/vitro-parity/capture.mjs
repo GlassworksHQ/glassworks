@@ -159,10 +159,12 @@ async function fetchAsset(path, url = path) {
   const res = await fetch(creds.origin + url, { headers: { Authorization: `Bearer ${creds.token}` } });
   if (!res.ok) throw new Error(`asset ${path}: HTTP ${res.status}`);
   const bytes = Buffer.from(await res.arrayBuffer());
-  // One image per path for the whole run: a later fetch with other bytes than a reference was already drawn from
-  // fails (its caller logs it), and the drawn image stays.
-  const conflict = noteSaved(savedDigests, path, createHash('sha256').update(bytes).digest('hex'));
-  if (conflict) throw new Error(conflict);
+  // A reference already drew this path: a fetch with other bytes fails (its caller logs it) and the drawn image
+  // stays. The fetch itself sets nothing a later drawn image is checked against: what a reference draws wins.
+  const drawnDigest = savedDigests.get(path);
+  if (drawnDigest && drawnDigest !== createHash('sha256').update(bytes).digest('hex')) {
+    throw new Error(`asset ${path}: a reference drew another image at this path in this run`);
+  }
   // Staged with the references: a failed refresh writes no picture either.
   stage(out, bytes);
   keptAssets.add(path);

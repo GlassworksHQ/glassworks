@@ -353,6 +353,7 @@ class VitroIslandServer(
         private val HA_PANELS = setOf(
             "config", "history", "logbook", "map", "energy", "developer-tools", "profile", "media-browser", "todo",
             "calendar", "hassio", "lovelace", "home", "light", "climate", "security", "areas", "notifications", "tag",
+            "hacs",
         )
 
         /** True when the proxy forwards [path]; the root (`/`) is HA's default dashboard page. */

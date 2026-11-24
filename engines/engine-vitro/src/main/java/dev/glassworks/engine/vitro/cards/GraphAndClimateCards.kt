@@ -79,6 +79,10 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
 
     /** Bumped per history request and when the card stops showing: only the newest answer is drawn. */
     private var historyGeneration = 0
+
+    /** The number of the last history read started, and of the newest one whose answer is on screen. */
+    private var historyRequest = 0
+    private var historyApplied = 0
     private val historyRefresh = Runnable { loadHistory() }
 
     init {
@@ -156,6 +160,8 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
         // Answers from this showing all count (a later read that fails doesn't discard an earlier one); hiding the
         // card bumps the generation, which drops the ones still on their way.
         val gen = historyGeneration
+        // Reads can overlap (the refresh doesn't wait for a slow one): only an answer newer than the one on screen lands.
+        val seq = ++historyRequest
         // The next read is set now, not when this one answers: a failed request (which answers nothing) mustn't stop
         // the refresh while the card shows.
         if (isAttachedToWindow && isShown) ctx.main.postDelayed(historyRefresh, HISTORY_REFRESH_MS)
@@ -163,7 +169,8 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
             // One slot per entity, empty when it has too little history, so each keeps its legend color.
             val series = ids.map { id -> map[id]?.takeIf { it.size >= 2 } ?: emptyList() }
             ctx.main.post {
-                if (gen != historyGeneration) return@post
+                if (gen != historyGeneration || seq <= historyApplied) return@post
+                historyApplied = seq
                 chart.setSeries(if (series.all { it.isEmpty() }) emptyList() else series)
             }
         }

@@ -404,6 +404,11 @@ class VitroIslandServerTest {
             assertTrue(p, VitroIslandServer.proxied(p))
         }
         for (p in listOf("/x", "/some/thing", "/robots.txt.bak", "/a.b-c")) assertFalse(p, VitroIslandServer.proxied(p))
+        // HACS opens in the fallback: through the entry route, then its page reaches Home Assistant.
+        val entry = get(island.entryUrl("/hacs/dashboard"), capability = false)
+        assertEquals(302, entry.code)
+        get("$base/hacs/dashboard", headers = mapOf("Cookie" to entry.setCookie!!.substringBefore(';')), capability = false)
+        assertEquals(listOf("/hacs/dashboard"), haSeen.map { it.target })
     }
 
     @Test
