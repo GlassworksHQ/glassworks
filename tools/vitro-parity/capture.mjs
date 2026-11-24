@@ -601,6 +601,9 @@ async function capture() {
               clip = { x: 0, y: 0, width: info.docW, height: info.docH };
             }
             ids = referencedEntities(config, states);
+            // The entities a case expects a state of are part of its snapshot even when HA has no state for them yet:
+            // one that appears during the capture then starts it over, like any other change.
+            for (const id of Object.keys(c.expect || {})) ids.add(id);
             drawnStates = snapshotStates(states, ids);
             // The images the screenshot shows, read just before it and checked again after (bracketed like the
             // states): saved for Vitro's fixture server after the checks.
@@ -624,7 +627,7 @@ async function capture() {
             log(`${frame.id}/${c.id}: ${sameStates ? 'a drawn image' : 'an entity'} changed during the capture: again`);
           }
           // A case that covers one state (a light on, an alarm disarmed) keeps its reference when HA isn't in it.
-          const unmet = unmetExpectations(c.expect, { ...states, ...drawnStates });
+          const unmet = unmetExpectations(c.expect, drawnStates);
           if (unmet.length) throw new Error(`not in the state the case expects (${unmet.join('; ')}): neither its PNG nor its JSON is written`);
           // The screenshot shows what the JSON scrubs: check the raw text HA drew and the templates before writing.
           if (committed) {
