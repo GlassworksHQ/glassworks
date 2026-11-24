@@ -230,6 +230,8 @@ class HaDashboardClientTest {
     fun currentUserIsStoredFromAuthCurrentUser() {
         val user = JSONObject("""{"id": "u1", "name": "Wall Panel", "is_admin": false, "is_owner": false}""")
         val c = connected(connect = userDataConnect(user, null))
+        // The last user request on the wire: its reply can't be read before the command is recorded.
+        awaitCondition("user data subscribed") { server.commands("frontend/subscribe_user_data").isNotEmpty() }
         awaitCondition("currentUser") { c.currentUser.optString("id") == "u1" }
         assertEquals("Wall Panel", c.currentUser.getString("name"))
         assertFalse(c.currentUser.getBoolean("is_admin"))
@@ -240,6 +242,7 @@ class HaDashboardClientTest {
     @Test
     fun selectedThemeAsAStringReachesTheListener() {
         connected(connect = userDataConnect(JSONObject(), JSONObject("""{"selectedTheme": "glass_dusk"}""")))
+        awaitCondition("user data subscribed") { server.commands("frontend/subscribe_user_data").isNotEmpty() }
         awaitCondition("user theme") { listener.userThemes.isNotEmpty() }
         assertEquals(listOf<Pair<String?, Boolean?>>("glass_dusk" to null), listener.userThemes.toList())
         assertEquals("core", server.commands("frontend/get_user_data").single().getString("key"))
@@ -263,6 +266,7 @@ class HaDashboardClientTest {
     fun userDataSubscriptionReportsLaterThemeChanges() {
         connected(connect = userDataConnect(JSONObject(), null))
         awaitCondition("initial") { listener.userThemes.isNotEmpty() }
+        awaitCondition("user data subscribed") { server.commands("frontend/subscribe_user_data").isNotEmpty() }
         val sub = server.commands("frontend/subscribe_user_data").single()
         assertEquals("core", sub.getString("key"))
         server.pushEvent(sub.getInt("id"), JSONObject("""{"value": {"selectedTheme": {"theme": "night", "dark": false}}}"""))
@@ -610,8 +614,14 @@ class HaDashboardClientTest {
     @Test
     fun historyWithNoEntitiesSendsNothing() {
         val c = connected()
-        c.fetchHistory(emptyList()) { throw AssertionError("no callback expected") }
+        val called = java.util.concurrent.atomic.AtomicBoolean(false)
+        c.fetchHistory(emptyList()) { called.set(true) }
+        // A later command through the same writer: once its reply is back, anything queued before it went out.
+        val done = CompletableFuture<Boolean>()
+        c.callWs(JSONObject().put("type", "config/area_registry/list")) { ok, _, _ -> done.complete(ok) }
+        assertTrue(done.get(10, TimeUnit.SECONDS))
         assertTrue(server.commands("history/stream").isEmpty())
+        assertFalse(called.get())
     }
 
     @Test

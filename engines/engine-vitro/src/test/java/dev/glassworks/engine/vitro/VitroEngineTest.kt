@@ -12,7 +12,6 @@ import android.graphics.Color
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.WebView
 import android.widget.TextView
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
@@ -71,8 +70,12 @@ class VitroEngineTest {
         activity = Robolectric.buildActivity(Activity::class.java).setup().get()
     }
 
+    /** Every engine a test made: their island servers (real loopback listeners) stop in [tearDown]. */
+    private val engines = ArrayList<VitroEngine>()
+
     @After
     fun tearDown() {
+        engines.forEach { runCatching { it.islandServer.stop() } }
         // Stop the page's reader thread, then hang up on it, so nothing keeps reconnecting after the test.
         opened.forEach { page ->
             runCatching {
@@ -98,7 +101,7 @@ class VitroEngineTest {
         enabled = enabled,
         tokenProvider = { _, done -> done(FakeHaServer.TOKEN) },
         socketFactory = server::connect,
-    )
+    ).also { engines += it }
 
     private fun openPage(engine: VitroEngine): Page =
         engine.open(activity, host, Color.BLACK).also { opened += it; idle() }
@@ -658,10 +661,8 @@ class VitroEngineTest {
         val island = WebIslandCardView(cardContext(), islandCard(), fillViewport = true)
         assertEquals(1, island.childCount)
         val child = island.getChildAt(0)
-        // A WebView where the system has one; a note naming the card where it does not.
-        assertTrue(
-            child is WebView || (child is TextView && child.text.toString().contains("custom:acme-floorplan-card")),
-        )
+        // No island server or page opener in this fixture: the note naming the card.
+        assertTrue(child is TextView && child.text.toString().contains("custom:acme-floorplan-card"))
     }
 
     @Test

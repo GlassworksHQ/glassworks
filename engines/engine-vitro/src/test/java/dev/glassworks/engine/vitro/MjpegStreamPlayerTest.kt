@@ -205,7 +205,10 @@ class MjpegStreamPlayerTest {
 
         (icons[1].parent as View).performClick()
         assertEquals("more-info sensor.porch_temp", calls.last())
+        val before = calls.size
         (icons[1].parent as View).performLongClick()
+        // The hold added its own call (the click's would still be last otherwise).
+        assertEquals(before + 1, calls.size)
         assertEquals("more-info sensor.porch_temp", calls.last())
     }
 

@@ -307,8 +307,9 @@ class VitroIslandServerTest {
         try {
             WsClient.connect(wsUrl("s999"), readTimeoutMs = 5_000).also { it.abort() }
             throw AssertionError("the upgrade should have been refused")
-        } catch (_: IOException) {
-            // 404 instead of 101.
+        } catch (e: IOException) {
+            // 404 instead of 101; a refused or timed-out connection is a different failure.
+            assertTrue("expected a 404, got: ${e.message}", e.message.orEmpty().contains("404"))
         }
     }
 
