@@ -105,7 +105,7 @@ Text draws in the font Home Assistant's page would use. Vitro reads a `font-fami
 | A font a Lovelace resource of type `css` declares with `@font-face` (also through `@import`, such as a Google Fonts stylesheet) | Downloaded from the same address the browser would use, then kept on the panel |
 | Inter | Bundled with the app |
 | Roboto, Noto, `sans-serif`, `system-ui` and the usual system names | Android's own sans-serif, which is Roboto |
-| `serif`, `monospace` | Android's own serif and monospace |
+| `serif`, `monospace`, `cursive` | Android's own serif, monospace and cursive fonts. Other generic names, such as `fantasy`, use its sans-serif |
 | Anything else | Skipped, so the next family in the list is used, just as a browser skips a font it can't load |
 
 The list comes from the theme's `--ha-font-family-body` (or `--primary-font-family`), from a card's own `theme:`, or from a card-mod `font-family` on the card (`ha-card { font-family: Lora, serif; }`), which every text in the card and in the cards stacked inside it inherits. Markdown follows its sheets' `font-family` element by element.
