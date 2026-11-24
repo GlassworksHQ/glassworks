@@ -658,6 +658,31 @@ class CompatCheckerTest {
     }
 
     @Test
+    fun theIslandNeedsTheScriptsOfTheCardsInsideItToo() {
+        val cardMod = "/hacsfiles/lovelace-card-mod/card-mod.js"
+        val stack = "/hacsfiles/vertical-stack-in-card/vertical-stack-in-card.js"
+        val mushroom = "/hacsfiles/lovelace-mushroom/mushroom.js"
+        val c = card(
+            """{"type": "custom:vertical-stack-in-card", "card_mod": {"style": ${style("@media (min-width: 1px) { :host { margin: 0 } }")}},
+                "cards": [{"type": "custom:mushroom-entity-card", "entity": "light.a"}]}""",
+        )
+        assertTrue(c.compat.inIsland(res(cardMod, stack, mushroom)))
+        // Without Mushroom's script, the island would lose the child's control: the stack stays native and says why.
+        assertFalse(c.compat.inIsland(res(cardMod, stack)))
+        val v = c.compat.effective(res(cardMod, stack))
+        assertTrue(v.isNative)
+        assertTrue(v.notes.toString(), v.notes.any { "no script for `custom:mushroom-entity-card`" in it })
+        // A card auto-entities builds counts as well.
+        val auto = card(
+            """{"type": "custom:auto-entities", "card": {"type": "custom:layout-card"}, "card_param": "cards",
+                "filter": {"include": [{"domain": "light", "options": {"type": "custom:mushroom-light-card"}}]},
+                "card_mod": {"style": ${style("@media (min-width: 1px) { :host { margin: 0 } }")}}}""",
+        )
+        assertFalse(auto.compat.inIsland(res(cardMod, "/hacsfiles/auto-entities/auto-entities.js", "/hacsfiles/layout-card/layout-card.js")))
+        assertTrue(auto.compat.inIsland(res(cardMod, "/hacsfiles/auto-entities/auto-entities.js", "/hacsfiles/layout-card/layout-card.js", mushroom)))
+    }
+
+    @Test
     fun islandScriptsMatchFileNames() {
         // Every card Vitro draws natively has a known script.
         assertEquals(VitroSupport.HACS_CARD_TYPES, VitroSupport.CARD_SCRIPTS.keys)

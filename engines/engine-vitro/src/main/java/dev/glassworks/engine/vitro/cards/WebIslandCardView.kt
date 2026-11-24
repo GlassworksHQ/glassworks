@@ -33,7 +33,8 @@ import kotlin.math.abs
  */
 class WebIslandCardView(
     ctx: VitroCardContext,
-    private val config: CardConfig,
+    /** The card the island draws: its config, card_mod included, is what the island page receives. */
+    internal val config: CardConfig,
     private val fillViewport: Boolean = false,
 ) : CardSurface(ctx) {
     private val watchedEntities = CopyOnWriteArraySet<String>()

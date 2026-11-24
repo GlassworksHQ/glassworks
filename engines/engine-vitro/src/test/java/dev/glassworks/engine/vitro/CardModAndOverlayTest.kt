@@ -302,6 +302,25 @@ class CardModAndOverlayTest {
     }
 
     @Test
+    fun aConditionalAroundAnIslandKeepsItsOwnCardMod() {
+        // The island receives only the child's config, so the conditional's own opacity is drawn natively.
+        val vv = vitroView(
+            EntityStore(),
+            """{"views": [{"cards": [{"type": "conditional", "conditions": [], "card_mod": {"style": "ha-card { opacity: 0.5 }"},
+                "card": {"type": "custom:acme-card"}}]}]}""",
+            listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-card-mod/card-mod.js", "module")),
+        )
+        fun find(v: View): dev.glassworks.engine.vitro.cards.WebIslandCardView? = when (v) {
+            is dev.glassworks.engine.vitro.cards.WebIslandCardView -> v
+            is ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { find(v.getChildAt(it)) }
+            else -> null
+        }
+        val island = find(vv)
+        assertNotNull(island)
+        assertEquals(0.5f, island!!.alpha, 0.001f)
+    }
+
+    @Test
     fun anIslandThatLoadsCardModGetsTheMarginOnce() {
         fun islandParent(resources: List<dev.glassworks.engine.vitro.model.LovelaceResource>): ViewGroup? {
             val vv = vitroView(

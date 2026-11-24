@@ -34,7 +34,16 @@ data class CardVerdict(
     val notes: List<String> = emptyList(),
     /** True when every reason is the card's card_mod, which the island only applies when card-mod is a resource. */
     val cardModOnly: Boolean = false,
+    /**
+     * The types of the cards inside it, nested ones and the ones auto-entities builds included. The island draws them
+     * too, so their scripts count ([inIsland]).
+     */
+    val innerTypes: Set<String> = emptySet(),
 ) {
+    /** Cards Vitro draws natively (this one or one inside it) whose script no Lovelace resource provides. */
+    private fun missingScripts(scripts: IslandScripts): List<String> =
+        (listOf(type) + innerTypes).filter { it in VitroSupport.HACS_CARD_TYPES && !scripts.provides(it) }.distinct()
+
     val isNative: Boolean get() = route == CardRoute.NATIVE
 
     /**
@@ -44,7 +53,7 @@ data class CardVerdict(
      * Otherwise it stays native. A custom card with no native renderer goes there regardless: it's its only chance.
      */
     fun inIsland(scripts: IslandScripts = IslandScripts.ANY): Boolean = route == CardRoute.ISLAND &&
-        (type !in VitroSupport.HACS_CARD_TYPES || (scripts.provides(type) && (!cardModOnly || scripts.cardMod)))
+        (type !in VitroSupport.HACS_CARD_TYPES || (missingScripts(scripts).isEmpty() && (!cardModOnly || scripts.cardMod)))
 
     /**
      * This verdict as the view builds it with [scripts]: native, with the reasons as notes, when [inIsland] says the
@@ -59,8 +68,12 @@ data class CardVerdict(
                 this
             }
         else -> {
-            val why = if (!scripts.provides(type)) "the island has no script for `$type` (no Lovelace resource provides it)"
-            else "the island can't load card-mod (it isn't a Lovelace resource)"
+            val missing = missingScripts(scripts)
+            val why = if (missing.isNotEmpty()) {
+                "the island has no script for " + missing.joinToString(", ") { "`$it`" } + " (no Lovelace resource provides it)"
+            } else {
+                "the island can't load card-mod (it isn't a Lovelace resource)"
+            }
             copy(route = CardRoute.NATIVE, reasons = emptyList(), notes = notes + reasons.map { "would fall back for $it, but $why" })
         }
     }
@@ -112,7 +125,25 @@ object CardCompat {
             reasons = reasons.toList(),
             notes = notes.toList(),
             cardModOnly = cardModOnly,
+            innerTypes = innerTypes(card),
         )
+    }
+
+    /** The types of the cards inside [card]: its children, theirs, and what auto-entities builds from its config. */
+    private fun innerTypes(card: CardConfig): Set<String> {
+        val out = LinkedHashSet<String>()
+        fun walk(c: CardConfig) {
+            if (c.type == "custom:auto-entities") {
+                c.raw.optJSONObject("card")?.optString("type", "")?.ifEmpty { null }?.let { out += it }
+                objects(c.raw.optJSONArray("entities")).forEach { e -> e.optString("type", "").ifEmpty { null }?.let { out += it } }
+                objects(c.raw.optJSONObject("filter")?.optJSONArray("include")).forEach { r ->
+                    r.optJSONObject("options")?.optString("type", "")?.ifEmpty { null }?.let { out += it }
+                }
+            }
+            c.childCards.forEach { child -> out += child.type; walk(child) }
+        }
+        walk(card)
+        return out
     }
 
     /** True when [card] or a card inside it is a built-in card, which the island can only draw as a summary. */

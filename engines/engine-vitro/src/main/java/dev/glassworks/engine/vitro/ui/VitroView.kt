@@ -1032,8 +1032,9 @@ class VitroView(
             else -> WebIslandCardView(ctx, card, fillViewport = fillViewport)
         }
         // An island that loads card-mod styles its card itself: styling the native frame too would apply it twice
-        // (a 0.5 opacity would show as 0.25).
-        val islandStyles = built is WebIslandCardView && IslandScripts.of(ctx.resources).cardMod
+        // (a 0.5 opacity would show as 0.25). Only for the island drawing this card: a `conditional` returns its
+        // child's island, which never receives the conditional's own card_mod.
+        val islandStyles = built is WebIslandCardView && built.config === card && IslandScripts.of(ctx.resources).cardMod
         if (!islandStyles) (built as? CardSurface)?.applyCardMod(card)
         // `margin` on the card insets it inside its slot, as an outer margin does in the browser.
         // Not around an island that applies card-mod: its `margin` is drawn there, and twice would double the inset.
