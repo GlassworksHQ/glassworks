@@ -659,15 +659,14 @@ class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
     private fun step(dir: Int) {
         val s = eid?.let { ctx.store[it] } ?: return
         val (min, max, stepSize) = bounds(s)
-        // A new state from HA (accepted or not) ends the pending value.
         // The pending target holds until HA reports it (an earlier press's ack doesn't end it), or for 5 s at most,
-        // so a refused write doesn't keep the buttons ahead of the device.
+        // so a refused write doesn't keep the buttons ahead of the device. The 5 s count from the first unconfirmed press.
         val now = android.os.SystemClock.uptimeMillis()
         if (pendingValue == s.state.toDoubleOrNull() || now - pendingSince > PENDING_MS) pendingValue = null
         val cur = pendingValue ?: s.state.toDoubleOrNull() ?: min
         val next = snap(cur + dir * stepSize, min, max, stepSize)
+        if (pendingValue == null) pendingSince = now
         pendingValue = next
-        pendingSince = now
         setValue(next)
     }
 

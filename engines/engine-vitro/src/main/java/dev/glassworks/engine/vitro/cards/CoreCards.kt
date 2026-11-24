@@ -2494,8 +2494,11 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         val label = if (config.type == "picture-glance") config.title ?: config.name else config.name
         if (label != null) caption.text = label
         val eid = config.entity ?: config.raw.optString("camera_image", "").ifEmpty { null }
+        // Bumped by every picture change: only the newest request lands, even when the URL came back to an older one.
+        var pictureGeneration = 0
         /** Shows [pic] (the source's `entity_picture`): only the newest request may land, and none clears the image. */
         fun showPicture(pic: String?) {
+            val generation = ++pictureGeneration
             latestPicture = pic
             // Live cards are refreshed by the feed; others load once per state change.
             if (isLive) return
@@ -2503,7 +2506,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 img.setImageDrawable(null)
                 return
             }
-            ctx.loadImage(pic) { bmp -> if (bmp != null && latestPicture == pic) showBitmap(bmp) }
+            ctx.loadImage(pic) { bmp -> if (bmp != null && generation == pictureGeneration) showBitmap(bmp) }
         }
         if (staticImage == null && pictureSource != null && pictureSource != eid) {
             observe(pictureSource) { s -> showPicture(s?.entityPicture) }

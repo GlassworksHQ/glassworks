@@ -770,13 +770,21 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         // A row just added has no Home Assistant uid yet: nothing to update until the list comes back with it.
         if (item.pending) return
         val now = !item.completed
-        items = items.map { if (it.uid == item.uid) it.copy(completed = now) else it }
+        val flipped = item.copy(completed = now)
+        items = items.map { if (it.uid == item.uid) flipped else it }
         fetchGeneration++ // a fetch already in flight must not undo the optimistic flip
         renderItems()
         callTodo(
             "update_item",
             JSONObject().put("entity_id", eid).put("item", item.uid).put("status", if (now) "completed" else "needs_action"),
-        ) { fetch(eid) }
+        ) {
+            // Rejected: undo this flip at once (unless the row changed since), then read the list to reconcile.
+            if (items.any { it === flipped }) {
+                items = items.map { if (it === flipped) item else it }
+                renderItems()
+            }
+            fetch(eid)
+        }
     }
 
     /** `todo.<service>` with HA's answer: a rejected write runs [onFailed] on the main thread. */

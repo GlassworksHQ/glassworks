@@ -324,6 +324,9 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     private var cssPadding: IntArray? = null
     private var borderInsetPx = 0
 
+    /** The border inset before card_mod first restyled the surface. */
+    private var baseBorderInset = 0
+
     init {
         applyTheme(ctx.theme)
     }
@@ -449,11 +452,14 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         if (restyle && !seamless && !restyled) {
             baseBackground = background
             baseClip = clipToOutline
+            baseBorderInset = borderInsetPx
             restyled = true
         } else if (!restyle && restyled) {
-            // A template that no longer styles the surface: back to the card's own.
+            // A template that no longer styles the surface: back to the card's own, border inset included (the
+            // content sits inside the theme border again).
             background = baseBackground
             clipToOutline = baseClip
+            setBorderInset(baseBorderInset)
             restyled = false
         }
         if (restyle && !seamless) {
@@ -489,7 +495,8 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         val pad = mod.paddingInsets ?: mod.paddingDp?.let { dev.glassworks.engine.vitro.theme.EdgeInsetsDp(it, it, it, it) }
         if (pad != null) {
             if (basePadding == null) {
-                basePadding = intArrayOf(paddingLeft, paddingTop, paddingRight, paddingBottom)
+                // The CSS padding, not the view's (which adds the border inset; setPadding would add it again).
+                basePadding = cssPadding?.copyOf() ?: intArrayOf(0, 0, 0, 0)
                 // The padding clearDefaultInnerPadding takes from a sole child, to give back with the outer one.
                 baseChildPadding = (getChildAt(0) as? android.view.ViewGroup)?.takeIf { childCount == 1 }
                     ?.let { intArrayOf(it.paddingLeft, it.paddingTop, it.paddingRight, it.paddingBottom) }
