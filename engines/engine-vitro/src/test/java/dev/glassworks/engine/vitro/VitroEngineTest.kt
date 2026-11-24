@@ -16,10 +16,12 @@ import android.widget.TextView
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
+import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.model.LovelaceResource
+import dev.glassworks.engine.vitro.island.VitroIslandServer
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.VitroCardContext
@@ -41,6 +43,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.util.Base64
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Vitro as a Glassworks [dev.glassworks.engine.Engine]: when it is off it is the fallback engine, and when it is
@@ -247,6 +250,23 @@ class VitroEngineTest {
         assertEquals(
             setOf("light.lounge_lamp", "sensor.kitchen_temp", "binary_sensor.front_door"),
             (0 until scoped.length()).map { scoped.getString(it) }.toSet(),
+        )
+    }
+
+    @Test
+    fun anEntityAnIslandLooksUpAtRuntimeJoinsTheViewsSubscription() {
+        val page = readyPage()
+        awaitMain("view-scoped subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
+        val before = server.commands("subscribe_entities").size
+        val watch = page.javaClass.getDeclaredMethod("watchRuntimeEntity", String::class.java).apply { isAccessible = true }
+        watch.invoke(page, "sensor.outdoor_temp")
+        watch.invoke(page, "sensor.indoor_temp") // batched with the first: one resubscription
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300))
+        awaitMain("resubscribed with the runtime entities") { server.commands("subscribe_entities").size == before + 1 }
+        val ids = server.commands("subscribe_entities").last().getJSONArray("entity_ids")
+        assertEquals(
+            setOf("light.lounge_lamp", "sensor.kitchen_temp", "binary_sensor.front_door", "sensor.outdoor_temp", "sensor.indoor_temp"),
+            (0 until ids.length()).map { ids.getString(it) }.toSet(),
         )
     }
 
@@ -639,7 +659,10 @@ class VitroEngineTest {
         assertTrue(html.contains("--rgb-primary-color: 0, 154, 199;"))
         // hass.callWS goes over the loopback WebSocket bridge, and states are watched through a proxy.
         assertTrue(html.contains("callWS(msg)"))
-        assertTrue(html.contains("sendBridge({ type: 'callWs', id, msg: msg || {} })"))
+        assertTrue(html.contains("sendBridge({ type: 'callWs', id, msg: msg || {} }, id)"))
+        // A call that can't go out soon is rejected and leaves the queue, never sent much later.
+        assertTrue(html.contains("reject(new Error('Not connected'));"))
+        assertTrue(html.contains("const QUEUED_CALL_MS = 5000;"))
         assertTrue(html.contains("const statesProxy = new Proxy(rawStates"))
         assertTrue(html.contains("sendBridge({ type: 'watch', entity_id: prop })"))
         // hass.callService is HA's call_service over the same bridge, so its promise carries HA's answer.
@@ -841,6 +864,42 @@ class VitroEngineTest {
 
     private fun islandWith(store: EntityStore, card: String) =
         WebIslandCardView(cardContext(store = store), LovelaceParser.parseCard(JSONObject(card)))
+
+    @Test
+    fun patchesReachEverySocketStillOpenForAnIslandAndRuntimeLookupsJoinTheSubscription() {
+        val store = storeWith("light.lounge_lamp", "light.kitchen")
+        val server = VitroIslandServer(haBase = { base }, accessToken = { null })
+        try {
+            val watched = CopyOnWriteArrayList<String>()
+            val ctx = VitroCardContext(
+                context = activity, haBase = base, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), true),
+                resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {},
+                openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+                islandServer = server, openIslandPage = { RecordingPage(activity) }, watchEntity = { watched += it },
+            )
+            val island = WebIslandCardView(ctx, LovelaceParser.parseCard(JSONObject("""{"type": "custom:button-card", "entity": "light.lounge_lamp"}""")))
+            @Suppress("UNCHECKED_CAST")
+            val handler = (server.javaClass.getDeclaredField("slots").apply { isAccessible = true }.get(server) as Map<String, VitroIslandServer.SlotHandler>).values.single()
+            val older = CopyOnWriteArrayList<JSONObject>()
+            val newer = CopyOnWriteArrayList<JSONObject>()
+            val sendOlder: (JSONObject) -> Unit = { older += it }
+            val sendNewer: (JSONObject) -> Unit = { newer += it }
+            handler.onConnected(sendOlder)
+            handler.onConnected(sendNewer) // a replacement connects before the old socket closes
+            handler.onDisconnected(sendOlder)
+            older.clear(); newer.clear()
+            store.putLocal(EntityState("light.lounge_lamp", "off", emptyMap()))
+            assertEquals("patch", newer.single().getString("type"))
+            assertTrue("the closed socket gets nothing", older.isEmpty())
+
+            // A lookup beyond the config joins the view's subscription; one the config names doesn't need to.
+            island.handleIslandMessage(JSONObject().put("type", "watch").put("entity_id", "light.kitchen")) {}
+            island.handleIslandMessage(JSONObject().put("type", "watch").put("entity_id", "light.kitchen")) {}
+            assertEquals(listOf("light.kitchen"), watched.toList())
+        } finally {
+            server.stop()
+        }
+    }
 
     @Test
     fun aFilterIslandGetsEveryEntityAndFollowsThemAll() {

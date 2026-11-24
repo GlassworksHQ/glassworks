@@ -1190,7 +1190,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         fun bindTpl(key: String, fallback: String, apply: (String) -> Unit) {
             val tpl = raw.optString(key, fallback)
             if (isTemplate(tpl)) {
-                track(ctx.subscribeTemplate(withEntityVariable(tpl, entityId)) { rendered -> ctx.main.post { apply(rendered.trim()) } })
+                renewing { ctx.subscribeTemplate(withEntityVariable(tpl, entityId)) { rendered -> ctx.main.post { apply(rendered.trim()) } } }
             } else {
                 apply(tpl)
             }
@@ -2385,7 +2385,7 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         }
         ThemeResolver.cardModSheet(cardMod, "ha-markdown$")?.let { css ->
             if (isTemplate(css)) {
-                track(ctx.subscribeTemplate(css) { rendered -> ctx.main.post { setMarkdownCss(rendered) } })
+                renewing { ctx.subscribeTemplate(css) { rendered -> ctx.main.post { setMarkdownCss(rendered) } } }
             } else {
                 markdownCss = css
                 markdownSheet = MdSheet.parse(css)
@@ -2394,7 +2394,7 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         val rawContent = config.raw.optString("content", "")
         if (isTemplate(rawContent)) {
             // HA re-sends a template on reconnects and resubscribes: only a changed text is laid out again.
-            track(ctx.subscribeTemplate(rawContent) { rendered -> ctx.main.post { if (rendered != content) { content = rendered; rerender() } } })
+            renewing { ctx.subscribeTemplate(rawContent) { rendered -> ctx.main.post { if (rendered != content) { content = rendered; rerender() } } } }
         } else {
             content = rawContent
             rerender()

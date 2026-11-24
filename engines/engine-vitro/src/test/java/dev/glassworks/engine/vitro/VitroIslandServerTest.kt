@@ -66,7 +66,7 @@ class VitroIslandServerTest {
             gotMessage.countDown()
         }
 
-        override fun onDisconnected() {
+        override fun onDisconnected(send: (JSONObject) -> Unit) {
             disconnected.countDown()
         }
     }

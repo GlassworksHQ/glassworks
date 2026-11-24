@@ -54,7 +54,9 @@ class VitroIslandServer(
         val html: String
         fun onConnected(send: (JSONObject) -> Unit)
         fun onMessage(msg: JSONObject, send: (JSONObject) -> Unit)
-        fun onDisconnected()
+
+        /** The socket [onConnected] handed [send] for has closed. */
+        fun onDisconnected(send: (JSONObject) -> Unit)
     }
 
     private val slots = ConcurrentHashMap<String, SlotHandler>()
@@ -252,7 +254,7 @@ class VitroIslandServer(
         } finally {
             writer.interrupt()
             set -= ws
-            slot.onDisconnected()
+            slot.onDisconnected(send)
         }
     }
 

@@ -144,6 +144,33 @@ class VitroEngine(
         /** True while a native dashboard owns the page; false once the fallback took it over. */
         private var nativeActive = false
 
+        /** The selected view's own entities, and whether it follows every entity (an empty filter). */
+        private var selectedRefs: Set<String> = emptySet()
+        private var selectedFollowsAll = false
+
+        /**
+         * Entities a web island of the shown dashboard looked up at runtime (`hass.states[id]`), beyond what its
+         * config names: subscribed with the selected view, so their changes reach the island. Bounded; cleared with
+         * the dashboard.
+         */
+        private val runtimeEntities = LinkedHashSet<String>()
+        private var runtimeResubscribe = false
+
+        private fun subscribeSelectedView() {
+            client?.subscribeViewEntities(if (selectedFollowsAll) emptySet() else selectedRefs + runtimeEntities)
+        }
+
+        private fun watchRuntimeEntity(id: String) {
+            if (disposed || selectedFollowsAll || id in selectedRefs || runtimeEntities.size >= MAX_RUNTIME_ENTITIES) return
+            if (!runtimeEntities.add(id) || runtimeResubscribe) return
+            // A card reading several at once costs one resubscription.
+            runtimeResubscribe = true
+            main.postDelayed({
+                runtimeResubscribe = false
+                if (!disposed) subscribeSelectedView()
+            }, RUNTIME_RESUBSCRIBE_MS)
+        }
+
         /** The Home Assistant origin the app is set to (the settings' dashboard), the only one its token is for. */
         private fun configuredOrigin(): String? = settings(activity.applicationContext).dashboard?.let(OAuth::origin)
 
@@ -211,8 +238,9 @@ class VitroEngine(
             vitroView.onMetrics = { m -> lastMetrics = m }
             vitroView.onViewSelected = { v ->
                 // An empty filter subscribes to every entity, which auto-entities' runtime filters need.
-                val refs = if (CardRouter.followsAllEntities(v)) emptySet() else CardRouter.referencedEntities(v)
-                client?.subscribeViewEntities(refs)
+                selectedFollowsAll = CardRouter.followsAllEntities(v)
+                selectedRefs = if (selectedFollowsAll) emptySet() else CardRouter.referencedEntities(v)
+                subscribeSelectedView()
                 // Only the dashboard that owns the route reports a location: one still on screen while another loads
                 // (a theme rebuild) would pair its view with the other's path.
                 // Origin and path: before the new dashboard is on screen (displayedDashboard null) nothing is reported,
@@ -246,6 +274,7 @@ class VitroEngine(
                     callService = { domain, service, data, target ->
                         client?.callService(domain, service, data, target)
                     },
+                    watchEntity = { id -> main.post { watchRuntimeEntity(id) } },
                     callServiceThen = { domain, service, data, target, done ->
                         val c = client
                         if (c != null) c.callService(domain, service, data, target, done) else done(false)
@@ -596,6 +625,8 @@ class VitroEngine(
                     // An older request's answer for a dashboard the page has left must not replace the current one.
                     if (urlPath != currentDashboardPath) return@post
                     displayedDashboard = currentOrigin to urlPath
+                    // A new config builds new islands; they ask again for what they read.
+                    runtimeEntities.clear()
                     vitroView.setConnectionBanner(null)
                     vitroView.setDashboard(config, pendingViewPath)
                     client?.dashboardShown()
@@ -634,6 +665,10 @@ class VitroEngine(
 
     companion object {
         const val VERSION_NAME = "Vitro 0.0.1 (experimental)"
+
+        /** Entities islands may add to a view's subscription at runtime, and how long their lookups are batched. */
+        private const val MAX_RUNTIME_ENTITIES = 256
+        private const val RUNTIME_RESUBSCRIBE_MS = 150L
 
         /** The dashboard path while the fallback shows a non-dashboard page: no real path equals it. */
         private const val NO_DASHBOARD = "\u0000fallback"

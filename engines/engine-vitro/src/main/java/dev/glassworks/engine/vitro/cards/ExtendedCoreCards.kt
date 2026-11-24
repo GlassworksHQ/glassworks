@@ -1092,7 +1092,7 @@ class AreaCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         render()
         // The area and its entities arrive with HA's registries: the store renotifies its listeners then.
         observe(EntityStore.DISPLAY_KEY) { render() }
-        track(ctx.store.subscribeAny { changed -> if (changed.any { it in watched }) ctx.main.post { render() } })
+        renewing { ctx.store.subscribeAny { changed -> if (changed.any { it in watched }) ctx.main.post { render() } } }
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {

@@ -606,9 +606,67 @@ class CardModAndOverlayTest {
         // Padding and a borderless, transparent surface, then the template drops both rules: several times over.
         repeat(3) {
             surface.applyStyleCss("ha-card { padding: 30px; background: transparent; border: none; }")
+            // The override takes effect (no border left to add) before the template drops it.
+            val px30 = (30 * activity.resources.displayMetrics.density).toInt()
+            assertEquals(listOf(px30, px30, px30, px30), listOf(surface.paddingLeft, surface.paddingTop, surface.paddingRight, surface.paddingBottom))
             surface.applyStyleCss("")
         }
         // Back exactly where it started: no border inset added twice, and the theme border's inset restored.
         assertEquals(before, listOf(surface.paddingLeft, surface.paddingTop, surface.paddingRight, surface.paddingBottom))
+    }
+
+    /** A tile-like surface: content from the outer edge, and its drawn border readable. */
+    private class OuterEdgeSurface(ctx: dev.glassworks.engine.vitro.ui.VitroCardContext) : dev.glassworks.engine.vitro.ui.CardSurface(ctx) {
+        override val contentInsideBorder: Boolean get() = false
+        val drawn: Int get() = drawnBorderPx
+    }
+
+    @Test
+    fun aTemplateThatDropsItsBorderRuleGivesAnOuterEdgeCardItsOwnBorderBack() {
+        val surface = OuterEdgeSurface(context(EntityStore()))
+        val before = surface.drawn
+        assertTrue("the theme draws a border", before > 0)
+        surface.applyStyleCss("ha-card { border-color: #ff0000; }")
+        surface.applyStyleCss("")
+        assertEquals(before, surface.drawn)
+    }
+
+    /** A card that renders an entity and a template, as cards do in their setup. */
+    private class Following(ctx: dev.glassworks.engine.vitro.ui.VitroCardContext) : dev.glassworks.engine.vitro.ui.CardSurface(ctx) {
+        val states = ArrayList<String?>()
+        val rendered = ArrayList<String>()
+        init {
+            observe("light.lounge_lamp") { states += it?.state }
+            renewing { ctx.subscribeTemplate("{{ states('light.lounge_lamp') }}") { r -> ctx.main.post { rendered += r } } }
+        }
+    }
+
+    @Test
+    fun aCachedCardThatComesBackFollowsItsEntityAndTemplatesAgain() {
+        val store = EntityStore().apply { putLocal(dev.glassworks.engine.vitro.data.EntityState("light.lounge_lamp", "on", emptyMap())) }
+        val templates = Templates()
+        val card = Following(context(store, templates))
+        val root = android.widget.FrameLayout(activity)
+        activity.setContentView(root)
+        root.addView(card)
+        ShadowLooper.idleMainLooper()
+        assertEquals(listOf<String?>("on"), card.states)
+
+        // Off screen (a cached view left the window): nothing reaches it, and its template is closed.
+        root.removeView(card)
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("light.lounge_lamp", "off", emptyMap()))
+        ShadowLooper.idleMainLooper()
+        assertEquals(listOf<String?>("on"), card.states)
+        assertTrue(templates.live.isEmpty())
+
+        // Back: it catches up at once, and later changes and template renders reach it again.
+        root.addView(card)
+        ShadowLooper.idleMainLooper()
+        assertEquals("off", card.states.last())
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("light.lounge_lamp", "on", emptyMap()))
+        ShadowLooper.idleMainLooper()
+        assertEquals("on", card.states.last())
+        templates.push("lounge_lamp", "on")
+        assertEquals(listOf("on"), card.rendered)
     }
 }

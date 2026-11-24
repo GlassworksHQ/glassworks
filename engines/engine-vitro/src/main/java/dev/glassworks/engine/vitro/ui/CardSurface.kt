@@ -84,6 +84,11 @@ class VitroCardContext(
     val subscribeWs: (msg: JSONObject, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit) -> () -> Unit = { _, _, _ -> {} },
     /** The wall clock, ms since the epoch: what HA's frontend reads as `new Date()` for its time windows. */
     val now: () -> Long = System::currentTimeMillis,
+    /**
+     * A web island looked up [entityId] at runtime: the view's subscription takes it in, so its changes reach the
+     * island. Any thread. The default (tests, no engine) does nothing.
+     */
+    val watchEntity: (entityId: String) -> Unit = {},
 ) {
     val dp: Float = context.resources.displayMetrics.density
     val main: Handler = Handler(Looper.getMainLooper())
@@ -130,6 +135,7 @@ class VitroCardContext(
         cameraStream = cameraStream,
         subscribeWs = subscribeWs,
         now = now,
+        watchEntity = watchEntity,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout
@@ -553,7 +559,19 @@ class VitroCardContext(
  * (including `ha-card-background`, border radius/width/color, and container `card-mod` properties).
  */
 open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.context) {
-    private val subscriptions = ArrayList<() -> Unit>()
+    /**
+     * A store or template subscription: [subscribe] makes it again, [catchUp] redraws from what changed meanwhile.
+     * One made before the card is attached (its setup) is [renewable]: a cached view that leaves the window and comes
+     * back takes it up again. One made while attached (in `onAttachedToWindow`) is the card's own to make again.
+     */
+    private class Subscription(val subscribe: () -> (() -> Unit), val renewable: Boolean, val catchUp: (() -> Unit)?) {
+        var handle: (() -> Unit)? = null
+    }
+
+    private val subscriptions = ArrayList<Subscription>()
+
+    /** Detached since its subscriptions were last made: the next attach makes the renewable ones again. */
+    private var subscriptionsDropped = false
 
     /** The shadow the card has without a card_mod `box-shadow`: the theme's, or none once it shares a surface. */
     private var baselineElevationDp = 0f
@@ -567,8 +585,8 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     private var cssPadding: IntArray? = null
     private var borderInsetPx = 0
 
-    /** The border inset before card_mod first restyled the surface. */
-    private var baseBorderInset = 0
+    /** The border the card drew before card_mod first restyled the surface ([setBorderInset] derives the inset). */
+    private var baseBorderWidth = 0
 
     init {
         applyTheme(ctx.theme)
@@ -701,7 +719,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
             } else {
                 rawStyle
             }
-            track(ctx.subscribeTemplate(tpl) { rendered -> ctx.main.post { applyStyleCss(rendered) } })
+            renewing { ctx.subscribeTemplate(tpl) { rendered -> ctx.main.post { applyStyleCss(rendered) } } }
         } else {
             applyStyleCss(rawStyle)
         }
@@ -735,14 +753,15 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         if (restyle && !seamless && !restyled) {
             baseBackground = background
             baseClip = clipToOutline
-            baseBorderInset = borderInsetPx
+            // The drawn width, not the inset: a card laid out from its outer edge has a border but no inset.
+            baseBorderWidth = drawnBorderPx
             restyled = true
         } else if (!restyle && restyled) {
             // A template that no longer styles the surface: back to the card's own, border inset included (the
             // content sits inside the theme border again).
             background = baseBackground
             clipToOutline = baseClip
-            setBorderInset(baseBorderInset)
+            setBorderInset(baseBorderWidth)
             restyled = false
         }
         if (restyle && !seamless) {
@@ -850,15 +869,41 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     protected fun observe(entityId: String, onState: (EntityState?) -> Unit) {
         // Subscribed before the first read, so a change between the two isn't missed; each render reads the store
         // then, not the value a dispatch carried, so dispatches posted out of order never leave an older one on screen.
-        val unsub = ctx.store.subscribe(entityId) { _ ->
-            ctx.main.post { onState(ctx.store[entityId]) }
-        }
-        subscriptions += unsub
+        add(Subscription(
+            subscribe = { ctx.store.subscribe(entityId) { _ -> ctx.main.post { onState(ctx.store[entityId]) } } },
+            renewable = !isAttachedToWindow,
+            catchUp = { onState(ctx.store[entityId]) },
+        ))
         onState(ctx.store[entityId])
     }
 
+    /**
+     * A subscription [subscribe] makes (a template, a store-wide listener) and whose handle ends it. Made now, ended
+     * on detach, and made again when the card comes back (set up before it was attached, like [observe]).
+     */
+    protected fun renewing(subscribe: () -> (() -> Unit)) {
+        add(Subscription(subscribe, renewable = !isAttachedToWindow, catchUp = null))
+    }
+
+    /** A handle ended on detach and never made again (the card renews it itself, if at all). */
     protected fun track(unsub: () -> Unit) {
-        subscriptions += unsub
+        subscriptions += Subscription({ unsub }, renewable = false, catchUp = null).also { it.handle = unsub }
+    }
+
+    private fun add(s: Subscription) {
+        s.handle = s.subscribe()
+        subscriptions += s
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (!subscriptionsDropped) return
+        subscriptionsDropped = false
+        // A cached card back on screen: what it subscribed to in its setup follows again, from the current state.
+        for (s in subscriptions) {
+            s.handle = s.subscribe()
+            s.catchUp?.invoke()
+        }
     }
 
     override fun onDetachedFromWindow() {
@@ -866,8 +911,9 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         animate().cancel()
         scaleX = 1f
         scaleY = 1f
-        subscriptions.forEach { runCatching { it() } }
-        subscriptions.clear()
+        subscriptions.forEach { s -> s.handle?.let { runCatching { it() } }; s.handle = null }
+        subscriptions.removeAll { !it.renewable }
+        subscriptionsDropped = true
     }
 
     companion object {
