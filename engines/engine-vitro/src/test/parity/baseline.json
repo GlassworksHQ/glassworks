@@ -49,20 +49,6 @@
   "missingText": 0,
   "reason": "the 2x2 grid of tiles is laid out, but its column gap and margins differ: Vitro's tiles start ~10 px higher and right of HA's and the card is ~24 px off (coverage #794, 2026-11-24)"
  },
- "mirror/light-off": {
-  "pixel": 0.1018,
-  "bounds": 254,
-  "font": 1.8,
-  "missingText": 0,
-  "reason": "a different card: Vitro draws a half-width, ~160 px tall tile (small dial, icon in a disc, name + \"Off\"); HA's card is full width, ~260 px tall, a large dial around the entity icon, a more-info button and no state line. The name now matches HA's (\"LED Strip Window\"), so the harness measures it: 1.8 px larger and ~120 px off, where the different layout puts it; the longer name adds 0.3% pixels (coverage #794, 2026-11-24)"
- },
- "mirror/light-on": {
-  "pixel": 0.1056,
-  "bounds": 254,
-  "font": 1.8,
-  "missingText": 0,
-  "reason": "a different card: for this on/off-only light HA draws no dial, just a large yellow bulb, a more-info button and the name; Vitro draws a half-width tile with a full brightness ring and \"On\" (coverage #794, 2026-11-24)"
- },
  "mirror/markdown-cardmod": {
   "pixel": 0.0202,
   "bounds": 2.7,
@@ -147,20 +133,6 @@
   "missingText": 0,
   "reason": "the 2x2 grid of tiles is laid out, but its column gap and margins differ: Vitro's tiles start ~10 px higher and right of HA's and the card is ~24 px off (coverage #794, 2026-11-24)"
  },
- "s1/light-off": {
-  "pixel": 0.1018,
-  "bounds": 254,
-  "font": 1.8,
-  "missingText": 0,
-  "reason": "a different card: Vitro draws a half-width, ~160 px tall tile (small dial, icon in a disc, name + \"Off\"); HA's card is full width, ~260 px tall, a large dial around the entity icon, a more-info button and no state line. The name now matches HA's (\"LED Strip Window\"), so the harness measures it: 1.8 px larger and ~120 px off, where the different layout puts it; the longer name adds 0.3% pixels (coverage #794, 2026-11-24)"
- },
- "s1/light-on": {
-  "pixel": 0.1056,
-  "bounds": 254,
-  "font": 1.8,
-  "missingText": 0,
-  "reason": "a different card: for this on/off-only light HA draws no dial, just a large yellow bulb, a more-info button and the name; Vitro draws a half-width tile with a full brightness ring and \"On\" (coverage #794, 2026-11-24)"
- },
  "s1/markdown-cardmod": {
   "pixel": 0.0148,
   "bounds": 2.7,
@@ -244,20 +216,6 @@
   "font": 0,
   "missingText": 0,
   "reason": "the 2x2 grid of tiles is laid out, but its column gap and margins differ: Vitro's tiles start ~10 px higher and right of HA's and the card is ~24 px off (coverage #794, 2026-11-24)"
- },
- "tablet/light-off": {
-  "pixel": 0.0993,
-  "bounds": 254,
-  "font": 1.8,
-  "missingText": 0,
-  "reason": "a different card: Vitro draws a half-width, ~160 px tall tile (small dial, icon in a disc, name + \"Off\"); HA's card is full width, ~260 px tall, a large dial around the entity icon, a more-info button and no state line. The name now matches HA's (\"LED Strip Window\"), so the harness measures it: 1.8 px larger and ~120 px off, where the different layout puts it; the longer name adds 0.3% pixels (coverage #794, 2026-11-24)"
- },
- "tablet/light-on": {
-  "pixel": 0.1043,
-  "bounds": 254,
-  "font": 1.8,
-  "missingText": 0,
-  "reason": "a different card: for this on/off-only light HA draws no dial, just a large yellow bulb, a more-info button and the name; Vitro draws a half-width tile with a full brightness ring and \"On\" (coverage #794, 2026-11-24)"
  },
  "tablet/markdown-cardmod": {
   "pixel": 0.0097,
