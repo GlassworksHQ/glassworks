@@ -21,13 +21,6 @@
   "missingText": 0,
   "reason": "the sheet now applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph); left: the bold run is ~4 px wider (Robolectric's Skia draws Inter's default instance, not its wght axis), the heading 16.4 vs 16.5-16.7 px, the bottom border within 0.5 px (2026-11-24)"
  },
- "mirror/mushroom-chips": {
-  "pixel": 0.0234,
-  "bounds": 0.7,
-  "font": 0,
-  "missingText": 0,
-  "reason": "values now match HA (display precision from the registry); what's left is text rendering and chip edges about 1 px apart, just over 2% at the 1.5x panels' density"
- },
  "mirror/thermostat": {
   "pixel": 0.0015,
   "bounds": 0.7,
@@ -55,13 +48,6 @@
   "font": 0.3,
   "missingText": 0,
   "reason": "the sheet now applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph); left: the bold run is ~4 px wider (Robolectric's Skia draws Inter's default instance, not its wght axis), the heading 16.4 vs 16.5-16.7 px, the bottom border within 0.5 px (2026-11-24)"
- },
- "s1/mushroom-chips": {
-  "pixel": 0.0234,
-  "bounds": 0.7,
-  "font": 0,
-  "missingText": 0,
-  "reason": "values now match HA (display precision from the registry); what's left is text rendering and chip edges about 1 px apart, just over 2% at the 1.5x panels' density"
  },
  "s1/thermostat": {
   "pixel": 0.0015,
