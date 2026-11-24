@@ -89,7 +89,7 @@ class ThemeResolverTest {
         val t = ThemeResolver.resolve(ThemeCatalog(), dark = true)
         assertEquals("default", t.name)
         assertTrue(t.dark)
-        assertEquals(argb(0xFF03A9F4), t.primaryColor)
+        assertEquals(argb(0xFF009AC7), t.primaryColor)
         assertEquals(argb(0xFFFF9800), t.accentColor)
         assertEquals(argb(0xFF111111), t.backgroundColor)
         assertEquals(argb(0xFF202020), t.secondaryBackgroundColor)
@@ -169,7 +169,7 @@ class ThemeResolverTest {
     fun unknownThemeNameKeepsTheModeDefaults() {
         val t = ThemeResolver.resolve(catalog(twoThemes), dark = true, overrideTheme = "does_not_exist")
         assertEquals("does_not_exist", t.name)
-        assertEquals(argb(0xFF03A9F4), t.primaryColor)
+        assertEquals(argb(0xFF009AC7), t.primaryColor)
         assertEquals(argb(0xFF111111), t.backgroundColor)
     }
 
@@ -214,17 +214,17 @@ class ThemeResolverTest {
         val t = resolveWith(
             """{"card-background-color": "rgba(var(--rgb-primary-color), 0.2)", "primary-color": "var(--brand, #00ff00)", "brand": "var(--brand-base)", "brand-base": "#112233"}""",
         )
-        assertEquals(argb(0x3303A9F4), t.cardBackgroundColor)
+        assertEquals(argb(0x33009AC7), t.cardBackgroundColor)
         assertEquals(argb(0xFF112233), t.primaryColor)
         assertEquals("#112233", t.vars["brand"])
-        assertEquals("rgba(3, 169, 244, 0.2)", t.vars["card-background-color"])
+        assertEquals("rgba(0, 154, 199, 0.2)", t.vars["card-background-color"])
     }
 
     @Test(timeout = 5_000)
     fun resolveSurvivesCyclesInATheme() {
         val t = resolveWith("""{"primary-color": "var(--accent-color)", "accent-color": "var(--primary-color)"}""")
-        // Unresolvable, so the color falls back to HA's default blue and orange.
-        assertEquals(argb(0xFF03A9F4), t.primaryColor)
+        // Unresolvable, so the color falls back to HA 2026's default blue (#009ac7) and orange.
+        assertEquals(argb(0xFF009AC7), t.primaryColor)
         assertEquals(argb(0xFFFF9800), t.accentColor)
     }
 
@@ -464,7 +464,7 @@ class ThemeResolverTest {
         assertTrue(css.endsWith("}\n"))
         assertTrue(css.contains("  --primary-color: #ff5722;\n"))
         assertTrue(css.contains("  --primary-background-color: #111111;\n")) // a default is exported too
-        assertTrue(css.contains("  --rgb-primary-color: 3, 169, 244;\n"))
+        assertTrue(css.contains("  --rgb-primary-color: 0, 154, 199;\n"))
         assertTrue("; and newlines in values cannot break out of the declaration", css.contains("  --multi: ab c;\n"))
         assertFalse(css.contains("card-mod"))
     }
@@ -472,7 +472,7 @@ class ThemeResolverTest {
     @Test
     fun hexFormatsAnAndroidColorForTheOverlayTheme() {
         val t = ThemeResolver.resolve(ThemeCatalog())
-        assertEquals("#03a9f4", t.hex(t.primaryColor))
+        assertEquals("#009ac7", t.hex(t.primaryColor))
         assertEquals("#ffffff", t.hex(argb(0x80FFFFFF))) // alpha dropped
         assertEquals("#000000", t.hex(0))
     }

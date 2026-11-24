@@ -560,9 +560,9 @@ class VitroEngineTest {
         assertTrue(html.startsWith("<!DOCTYPE html>"))
         // The resolved theme as CSS variables, so a web card matches the native ones.
         assertTrue(html.contains(":root {"))
-        assertTrue(html.contains("--primary-color: #03a9f4;"))
+        assertTrue(html.contains("--primary-color: #009ac7;"))
         assertTrue(html.contains("--primary-background-color: #111111;"))
-        assertTrue(html.contains("--rgb-primary-color: 3, 169, 244;"))
+        assertTrue(html.contains("--rgb-primary-color: 0, 154, 199;"))
         // hass.callWS goes over the loopback WebSocket bridge, and states are watched through a proxy.
         assertTrue(html.contains("callWS(msg)"))
         assertTrue(html.contains("sendBridge({ type: 'callWs', id, msg: msg || {} })"))

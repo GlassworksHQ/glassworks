@@ -287,8 +287,9 @@ object ThemeResolver {
     private val SHADOW_COLOR = Regex("""(?:rgba?|hsla?)\([^)]*\)""", RegexOption.IGNORE_CASE)
     private val SHADOW_LENGTH = Regex("""(?<![\w#.])(-?[\d.]+)(?:px)?(?=\s|$)""", RegexOption.IGNORE_CASE)
 
+    // HA 2026's `--primary-color` is `--ha-color-primary-40` (#009ac7) in both modes, not the old #03a9f4.
     private val DARK_DEFAULTS = mapOf(
-        "primary-color" to "#03a9f4",
+        "primary-color" to "#009ac7",
         "accent-color" to "#ff9800",
         "primary-background-color" to "#111111",
         "secondary-background-color" to "#202020",
@@ -301,7 +302,7 @@ object ThemeResolver {
         "ha-card-border-color" to "#2c2c2c",
         "ha-card-border-width" to "1px",
         "ha-card-border-radius" to "12px",
-        "rgb-primary-color" to "3, 169, 244",
+        "rgb-primary-color" to "0, 154, 199",
         "rgb-accent-color" to "255, 152, 0",
         "rgb-primary-text-color" to "225, 225, 225",
         "rgb-card-background-color" to "28, 28, 28",
@@ -319,7 +320,7 @@ object ThemeResolver {
     )
 
     private val LIGHT_DEFAULTS = mapOf(
-        "primary-color" to "#03a9f4",
+        "primary-color" to "#009ac7",
         "accent-color" to "#ff9800",
         "primary-background-color" to "#fafafa",
         "secondary-background-color" to "#e5e5e5",
@@ -332,7 +333,7 @@ object ThemeResolver {
         "ha-card-border-color" to "#e0e0e0",
         "ha-card-border-width" to "1px",
         "ha-card-border-radius" to "12px",
-        "rgb-primary-color" to "3, 169, 244",
+        "rgb-primary-color" to "0, 154, 199",
         "rgb-accent-color" to "255, 152, 0",
         "rgb-primary-text-color" to "33, 33, 33",
         "rgb-card-background-color" to "255, 255, 255",
@@ -401,7 +402,7 @@ object ThemeResolver {
             name = pickedName,
             dark = dark,
             vars = resolved,
-            primaryColor = parseColor(resolved["primary-color"]) ?: 0xFF03A9F4.toInt(),
+            primaryColor = parseColor(resolved["primary-color"]) ?: 0xFF009AC7.toInt(),
             accentColor = parseColor(resolved["accent-color"]) ?: 0xFFFF9800.toInt(),
             backgroundColor = bg,
             secondaryBackgroundColor = parseColor(resolved["secondary-background-color"]) ?: bg,
