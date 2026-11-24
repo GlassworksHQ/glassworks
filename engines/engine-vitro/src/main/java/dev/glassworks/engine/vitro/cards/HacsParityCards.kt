@@ -1049,7 +1049,8 @@ object AutoEntitiesFilter {
     /** One matched entity and the `options` its include rule gives its row or card. */
     data class Match(val entityId: String, val options: JSONObject?)
 
-    private val RULE_KEYS = setOf("domain", "entity_id", "state", "name", "attributes", "group", "not", "or", "and", "options", "sort")
+    /** The rule keys Vitro evaluates; the compatibility check reports the others. */
+    internal val RULE_KEYS = setOf("domain", "entity_id", "state", "name", "attributes", "group", "not", "or", "and", "options", "sort")
 
     fun evaluate(raw: JSONObject, states: Collection<EntityState>, lookup: (String) -> EntityState?): List<Match> {
         val out = ArrayList<Match>()

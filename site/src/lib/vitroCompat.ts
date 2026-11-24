@@ -10,6 +10,8 @@ const NATIVE_CORE = new Set<string>(manifest.nativeCoreTypes);
 const NATIVE_HACS = new Set<string>(manifest.nativeHacsTypes);
 const CONTAINERS = new Set<string>(manifest.containerTypes);
 const TILE_FEATURES = new Set<string>(manifest.supportedTileFeatures);
+/** Cards drawn natively only in some configurations: `option` (or its `default`) must be one of `native`. */
+const CONFIG_DEPENDENT: Record<string, { option: string; default: string; native: string[] }> = manifest.configDependentTypes;
 
 // ---------------------------------------------------------------------------------------------
 // A small YAML reader for Lovelace: block maps and lists, flow [..] and {..}, plain and quoted
@@ -492,6 +494,19 @@ function walkCard(card: unknown, loc: string, view: ViewAudit) {
   const type = typeof card.type === "string" ? card.type.trim() : "";
   cardModWarning(card, loc, view.warnings);
 
+  // A native card type in a configuration Vitro doesn't draw (a Bubble Card pop-up) is a web card when its script
+  // is installed, as the engine routes it.
+  const rule = CONFIG_DEPENDENT[type];
+  if (rule) {
+    const raw = card[rule.option];
+    const value = (typeof raw === "string" && raw.trim() ? raw.trim() : rule.default).replace(/^custom:/, "");
+    if (!rule.native.includes(value)) {
+      view.tier3++;
+      view.triggers.push({ view: view.name, path: loc, type: `${type} (${rule.option}: ${value})` });
+      return;
+    }
+  }
+
   if (type === "tile" && Array.isArray(card.features)) {
     for (const f of card.features) {
       const ft = isObj(f) ? (typeof f.type === "string" ? f.type : "") : String(f);
@@ -509,11 +524,40 @@ function walkCard(card: unknown, loc: string, view: ViewAudit) {
   }
 
   if (NATIVE_CORE.has(type)) view.tier1++;
-  else if (NATIVE_HACS.has(type)) view.tier2++;
-  else {
+  else if (NATIVE_HACS.has(type)) {
+    view.tier2++;
+    if (type === "custom:auto-entities") walkAutoEntities(card, loc, view);
+  } else {
     view.tier3++;
     view.triggers.push({ view: view.name, path: loc, type: type || "<missing>" });
   }
+}
+
+/**
+ * The cards auto-entities builds at runtime, as the engine builds them: its inner card (`entities` when it names
+ * none, without the field `card_param` fills in) and, with `card_param: cards`, one card per explicit `entities:`
+ * entry (`tile` unless it names a type, its `entity` taken out) and per include rule's `options`.
+ */
+function walkAutoEntities(card: Obj, loc: string, view: ViewAudit) {
+  const inner: Obj = isObj(card.card) ? { ...card.card } : {};
+  if (typeof inner.type !== "string" || !inner.type) inner.type = "entities";
+  const param = typeof card.card_param === "string" && card.card_param ? card.card_param : "entities";
+  delete inner[param];
+  walkCard(inner, `${loc}.card`, view);
+  if (param !== "cards") return;
+  const entries = Array.isArray(card.entities) ? card.entities : [];
+  entries.forEach((e, i) => {
+    if (typeof e === "string") walkCard({ type: "tile" }, `${loc}.entities[${i}]`, view);
+    else if (isObj(e)) {
+      const built: Obj = { type: "tile", ...e };
+      delete built.entity;
+      walkCard(built, `${loc}.entities[${i}]`, view);
+    }
+  });
+  const rules = isObj(card.filter) && Array.isArray(card.filter.include) ? card.filter.include : [];
+  rules.forEach((r, i) => {
+    if (isObj(r) && isObj(r.options)) walkCard({ type: "tile", ...r.options }, `${loc}.include[${i}].options`, view);
+  });
 }
 
 /** Finds the `{ views: [...] }` object in a pasted Lovelace config or a lovelace/config response. */

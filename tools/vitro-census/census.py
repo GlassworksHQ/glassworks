@@ -64,6 +64,12 @@ def handle(c, out):
 
 def cards(doc):
     out = []
+    # A storage export wraps the dashboard (`{"config": {...}}`, `{"data": {"config": {...}}}`): count it as the
+    # dashboard, not as a fragment, so an unused template card in it is left out as it is unwrapped.
+    if isinstance(doc, dict) and "views" not in doc:
+        inner = doc.get("config") if isinstance(doc.get("config"), dict) else (doc.get("data") or {}).get("config") if isinstance(doc.get("data"), dict) else None
+        if isinstance(inner, dict) and "views" in inner:
+            return cards(inner)
     views = doc.get("views") if isinstance(doc, dict) else None
     if views is not None:
         for v in views or []:

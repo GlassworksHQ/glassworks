@@ -23,7 +23,7 @@ data class CompatReport(val entries: List<CompatEntry>) {
     val natives: List<CompatEntry> get() = entries.filter { it.verdict.isNative }
     val notes: List<Pair<String, String>> get() = entries.flatMap { e -> e.verdict.notes.map { e.path to it } }
 
-    /** A plain-text report: a summary line, then every fallback with its reasons, then the known-gap notes. */
+    /** A plain-text report: a summary line, then every fallback with its reasons, then the notes (gaps and warnings). */
     fun format(includeNotes: Boolean = true): String = buildString {
         append("${entries.size} cards: ${natives.size} native, ${islands.size} island")
         if (islands.isEmpty()) append(" (fully native)")
@@ -34,7 +34,8 @@ data class CompatReport(val entries: List<CompatEntry>) {
         }
         if (includeNotes) {
             val distinct = notes.groupBy({ it.second }, { it.first })
-            if (distinct.isNotEmpty()) appendLine("Known gaps (native, not exact yet):")
+            // Notes come from native cards (known gaps) and islands (a missing script) alike.
+            if (distinct.isNotEmpty()) appendLine("Compatibility notes:")
             for ((note, paths) in distinct) {
                 appendLine("  - $note" + if (paths.size > 1) " (${paths.size} cards)" else "")
             }
@@ -84,7 +85,7 @@ object CompatChecker {
         path: String,
         scripts: IslandScripts,
         out: MutableList<CompatEntry>,
-        holdsGenerated: Boolean = false,
+        holdsGenerated: Int = -1,
         islandsOnly: Boolean = false,
     ) {
         val here = "$path (${card.type})"
@@ -93,12 +94,19 @@ object CompatChecker {
             if (!islandsOnly || !verdict.isNative) out += CompatEntry(here, verdict)
             if (!verdict.isNative) return
         }
-        // auto-entities' inner card is checked with its generated cards, but those aren't listed: they depend on live
-        // states. They only fill its `cards:`, so its other children (a conditional's `card:`) are listed as usual.
-        if (holdsGenerated && card.type in LovelaceParser.CARDS_FIELD_TYPES) return
-        val generates = CardRouter.generatesCards(card)
+        // auto-entities' inner card is checked with its generated cards. The ones a filter matches aren't listed: they
+        // depend on live states. The explicit `entities:` entries come first and are built whatever the states, so
+        // each of those is listed (an island among them included). They only fill its `cards:`, so its other children
+        // (a conditional's `card:`) are listed as usual.
+        if (holdsGenerated >= 0 && card.type in LovelaceParser.CARDS_FIELD_TYPES) {
+            CardRouter.producedCards(card, perEntity = false).take(holdsGenerated).forEach { (i, child) ->
+                walk(child, "$here › entity ${i + 1}", scripts, out, islandsOnly = islandsOnly)
+            }
+            return
+        }
+        val explicit = if (CardRouter.generatesCards(card)) card.raw.optJSONArray("entities")?.length() ?: 0 else -1
         CardRouter.producedCards(card, perEntity = false).forEach { (i, child) ->
-            walk(child, "$here › card ${i + 1}", scripts, out, holdsGenerated = generates, islandsOnly = islandsOnly)
+            walk(child, "$here › card ${i + 1}", scripts, out, holdsGenerated = explicit, islandsOnly = islandsOnly)
         }
     }
 }

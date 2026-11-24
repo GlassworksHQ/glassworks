@@ -22,6 +22,11 @@ class PrTypes(unittest.TestCase):
     def test_a_docs_image_runs_the_site_and_web_which_stages_one(self):
         self.assertEqual(running('docs/img/fel-button.jpg'), {'site', 'web'})
 
+    def test_the_vitro_files_the_site_checks_its_lists_against_run_web(self):
+        # site/src/lib/vitroCompat.test.ts (in web's npm test) reads both.
+        self.assertIn('web', running('engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/compat/VitroSupport.kt'))
+        self.assertIn('web', running('engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/model/LovelaceModel.kt'))
+
     def test_kiln_runs_web_only(self):
         self.assertEqual(running('kiln/apps/kiln/src/wizard/Flow.tsx'), {'web'})
 
