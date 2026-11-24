@@ -128,7 +128,15 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
         if (hideState) secondary.visibility = GONE
         column.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         column.addView(controls, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        addView(column, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        addView(column, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
+
+        // Standard Mushroom `--mush-icon-border-radius`: circular by default, rounded square when a px/dp value is set.
+        val iconRadius = mushIconRadiusPx(ctx)
+        if (iconRadius != null) {
+            shape.outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(v: View, o: android.graphics.Outline) = o.setRoundRect(0, 0, v.width, v.height, iconRadius)
+            }
+        }
 
         isClickable = true
         setOnClickListener { ctx.performAction(ActionConfig.parse(config.raw.optJSONObject("tap_action")), eid) }
@@ -138,6 +146,16 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
             shape.isClickable = true
             shape.setOnClickListener { ctx.performAction(iconTap, eid) }
         }
+    }
+
+    override fun onCardModApplied(mod: dev.glassworks.engine.vitro.theme.CardModStyle) {
+        val sp = mod.fontSizeSp ?: return
+        val scaled = ctx.scaledSp(sp)
+        primary.textSize = scaled
+        primary.typeface = Inter.typeface(ctx.context, Inter.MEDIUM, scaled)
+        val sub = ctx.scaledSp((sp * 0.75f).coerceAtLeast(12f))
+        secondary.textSize = sub
+        secondary.typeface = Inter.typeface(ctx.context, Inter.REGULAR, sub)
     }
 
     /** Subscribes to the card's entity (or renders once without one). Call last in the subclass `init`. */
@@ -158,8 +176,14 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
     protected fun setShape(iconName: String, color: Int, active: Boolean) {
         val tint = if (active) color else ctx.theme.secondaryTextColor
         shapeIcon.setIcon(config.icon ?: iconName, tint)
+        val radius = mushIconRadiusPx(ctx)
         shape.background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
+            if (radius != null) {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = radius
+            } else {
+                shape = GradientDrawable.OVAL
+            }
             setColor(CardSurface.withAlpha(tint, if (active) 0.2f else 0.08f))
         }
     }

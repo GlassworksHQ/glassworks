@@ -131,6 +131,14 @@ private val ENTITY_VARIABLE = Regex("""\bentity\b""")
 internal fun withEntityVariable(template: String, entityId: String?): String =
     if (entityId != null && ENTITY_VARIABLE.containsMatchIn(template)) "{% set entity = '$entityId' %}$template" else template
 
+/** Standard Mushroom `--mush-icon-border-radius` in px when set to a non-circular length (e.g. `12px`); null = oval. */
+internal fun mushIconRadiusPx(ctx: VitroCardContext): Float? {
+    val raw = ctx.theme.vars["mush-icon-border-radius"]?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() } ?: return null
+    if (raw.endsWith("%")) return null
+    val dp = ThemeResolver.parseDimensionDp(raw, -1f)
+    return if (dp >= 0f) dp * ctx.dp else null
+}
+
 /** Mushroom's color names (`--rgb-<name>`), plus `primary` / `accent` from the theme and any CSS color. */
 internal object MushroomColors {
     private val NAMED = mapOf(
@@ -180,6 +188,24 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     init {
         if (config.type == MUSHROOM_TEMPLATE) buildMushroomTemplate() else buildTile()
+    }
+
+    override fun onCardModApplied(mod: dev.glassworks.engine.vitro.theme.CardModStyle) {
+        val sp = mod.fontSizeSp ?: return
+        val scaled = ctx.scaledSp(sp)
+        val sub = ctx.scaledSp((sp * 0.75f).coerceAtLeast(12f))
+        val m = mushroom
+        if (m != null) {
+            m.primary.textSize = scaled
+            m.primary.typeface = Inter.typeface(ctx.context, INTER_SEMIBOLD, scaled)
+            m.secondary.textSize = sub
+            m.secondary.typeface = Inter.typeface(ctx.context, Inter.REGULAR, sub)
+        } else {
+            titleView.textSize = scaled
+            titleView.typeface = Inter.typeface(ctx.context, Inter.MEDIUM, scaled)
+            stateView.textSize = sub
+            stateView.typeface = Inter.typeface(ctx.context, Inter.REGULAR, sub)
+        }
     }
 
     private fun buildTile() {
@@ -836,15 +862,27 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val avatarSize = ctx.px(40f)
         val primaryText = ctx.theme.primaryTextColor
 
+        val iconRadiusPx = mushIconRadiusPx(ctx)
         val avatarBg = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
+            if (iconRadiusPx != null) {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = iconRadiusPx
+            } else {
+                shape = GradientDrawable.OVAL
+            }
             setColor(withAlpha(primaryText, 0.05f))
         }
         val icon = MdiIconView(ctx.context)
         val picture = ImageView(ctx.context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             visibility = GONE
-            outlineProvider = OVAL_OUTLINE
+            outlineProvider = if (iconRadiusPx != null) {
+                object : android.view.ViewOutlineProvider() {
+                    override fun getOutline(v: View, o: android.graphics.Outline) = o.setRoundRect(0, 0, v.width, v.height, iconRadiusPx)
+                }
+            } else {
+                OVAL_OUTLINE
+            }
             clipToOutline = true
         }
         val avatar = FrameLayout(ctx.context).apply {
@@ -906,7 +944,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             })
             addView(labels, LinearLayout.LayoutParams(if (vertical) MATCH_PARENT else 0, WRAP_CONTENT, if (vertical) 0f else 1f))
         }
-        addView(row, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        addView(row, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
         mushroom = MushroomTemplateViews(row, avatar, icon, picture, badge, badgeIcon, primary, secondary)
 
         val entityId = config.entity

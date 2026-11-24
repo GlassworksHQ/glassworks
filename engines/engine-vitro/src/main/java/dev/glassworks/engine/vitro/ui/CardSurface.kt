@@ -361,7 +361,11 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
             clearDefaultInnerPadding()
         }
         mod.opacity?.let { alpha = it.coerceIn(0f, 1f) }
+        onCardModApplied(mod)
     }
+
+    /** Hook for cards that inherit typography or layout cues (such as `font-size`) from `card_mod`. */
+    protected open fun onCardModApplied(mod: CardModStyle) {}
 
     /**
      * Clears the card's default internal padding when `card_mod` supplies an explicit `padding:` so `padding: 0`

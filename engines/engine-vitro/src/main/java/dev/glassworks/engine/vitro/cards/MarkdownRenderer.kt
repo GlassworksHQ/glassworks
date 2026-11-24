@@ -1246,7 +1246,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             setColumnStretchable(0, true)
             setColumnShrinkable(0, true)
         }
-        fun cell(md: String, header: Boolean, align: String, colIdx: Int) = TextView(ctx.context).apply {
+        fun cell(md: String, header: Boolean, align: String, colIdx: Int, isFirstRow: Boolean, isLastRow: Boolean) = TextView(ctx.context).apply {
             val color = theme.primaryTextColor
             val scaled = ctx.scaledSp(BODY_SP)
             textSize = scaled
@@ -1258,9 +1258,11 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                 setPadding(ctx.px(8f), ctx.px(6f), ctx.px(8f), ctx.px(6f))
             } else {
                 val startPad = if (colIdx == 0) 0 else ctx.px(12f)
-                setPadding(startPad, ctx.px(8f), 0, ctx.px(8f))
+                val topPad = if (isFirstRow) 0 else ctx.px(8f)
+                val botPad = if (isLastRow) 0 else ctx.px(8f)
+                setPadding(startPad, topPad, 0, botPad)
             }
-            gravity = when (align) {
+            gravity = Gravity.CENTER_VERTICAL or when (align) {
                 "center" -> Gravity.CENTER_HORIZONTAL
                 "end" -> Gravity.END
                 else -> Gravity.START
@@ -1270,13 +1272,15 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
         val hairlineLp = { TableLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)) }
         if (hasHeader) {
             addView(TableRow(ctx.context).apply {
-                t.header.forEachIndexed { i, h -> addView(cell(h, true, t.aligns[i], i)) }
+                t.header.forEachIndexed { i, h -> addView(cell(h, true, t.aligns[i], i, isFirstRow = true, isLastRow = false)) }
             })
             addView(hairline(), hairlineLp())
         }
         t.rows.forEachIndexed { r, row ->
             addView(TableRow(ctx.context).apply {
-                row.forEachIndexed { i, c -> addView(cell(c, false, t.aligns.getOrElse(i) { "start" }, i)) }
+                row.forEachIndexed { i, c ->
+                    addView(cell(c, false, t.aligns.getOrElse(i) { "start" }, i, isFirstRow = r == 0, isLastRow = r == t.rows.lastIndex))
+                }
             })
             if (hasHeader && r < t.rows.size - 1) addView(hairline(), hairlineLp())
         }
