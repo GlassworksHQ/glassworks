@@ -6,11 +6,17 @@
 # that a file makes again is already known there. A new call, or a known one in a new file, fails.
 # AppManage.kt: DevicePolicyManager.reboot behind Platform.hasDeviceOwnerReboot (#198 Phase B).
 # MarkdownRenderer.kt: TextView.setFallbackLineSpacing behind Platform.hasFallbackLineSpacing (Vitro, #797).
+# WebFonts.kt: Typeface.Builder (a variable web font at a weight) behind Platform.hasTypefaceBuilder (Vitro, #811).
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.Collection#removeIf
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/camera/onvif/RtspServer.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/diagnostics/AndroidProbe.kt|android.os.Process#getStartElapsedRealtime
 dev/glassworks/engine/vitro/cards/MarkdownRenderer.kt|android.widget.TextView#setFallbackLineSpacing
+dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder#build
+dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder#setFontVariationSettings
+dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder#setItalic
+dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder#setWeight
+dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder()
 dev/glassworks/manage/HaSignIn.kt|java.util.Base64#getUrlEncoder
 dev/glassworks/manage/HaSignIn.kt|java.util.Base64.Encoder#encodeToString
 dev/glassworks/manage/HaSignIn.kt|java.util.Base64.Encoder#withoutPadding
