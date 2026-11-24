@@ -2,7 +2,8 @@
 // serves to HA's page at FIXTURE_PREFIX on HA's origin and puts in the page as HA's loadCSS does. Nothing is written
 // to Home Assistant: the Lovelace resources stay as they are.
 //
-// Touches: nothing (pure functions over paths and case objects).
+// Touches: nothing but the fixtures folder, read-only (fixtureFile resolves symbolic links there).
+import { realpathSync } from 'node:fs';
 import { resolve, sep, extname } from 'node:path';
 
 /** The path on HA's origin a case's fixture resources use. HA serves nothing there; the capture answers it. */
@@ -40,7 +41,9 @@ function staysInFixtures(url) {
   if (parsed.origin !== 'http://homeassistant.local' || parsed.search || parsed.hash) return false;
   const path = parsed.pathname;
   // No percent-encoding at all: the Kotlin side reads the path as a file name, as it stands.
-  return path === url && path.startsWith(FIXTURE_PREFIX) && path.length > FIXTURE_PREFIX.length && !path.includes('%');
+  const rest = path.slice(FIXTURE_PREFIX.length);
+  return path === url && path.startsWith(FIXTURE_PREFIX) && rest.length > 0 && !path.includes('%') &&
+    rest.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..');
 }
 
 /**
@@ -60,5 +63,15 @@ export function fixtureFile(fixturesDir, pathname) {
   const file = resolve(root, rel);
   if (!file.startsWith(root + sep)) return null;
   const type = TYPES[extname(file).toLowerCase()];
-  return type ? { file, type } : null;
+  if (!type) return null;
+  // A symbolic link inside fixtures/ must not serve a file from outside it: the real path has to stay inside too.
+  let real;
+  let realRoot;
+  try {
+    real = realpathSync(file);
+    realRoot = realpathSync(root);
+  } catch {
+    return null; // no such file (yet): nothing to serve
+  }
+  return real.startsWith(realRoot + sep) ? { file: real, type } : null;
 }

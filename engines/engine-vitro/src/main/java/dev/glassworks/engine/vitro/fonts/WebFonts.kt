@@ -103,6 +103,9 @@ object WebFonts {
     private var cssUrls: List<String> = emptyList()
     private var cacheDir: File? = null
     private var generation = 0
+
+    /** [generation], readable from the loader thread: a job of an older one fetches and pins nothing more. */
+    @Volatile private var liveGeneration = 0
     private var sheets = Sheets.NONE
     private var sheetsText: String? = null
     private var faces: Map<String, List<FontFace>> = emptyMap()
@@ -139,7 +142,7 @@ object WebFonts {
         val gen = generation
         submit({
             trimDisk(dir)
-            val text = readSheets(urls, dir, network = false)
+            val text = readSheets(urls, dir, network = false, gen = gen)
             val parsed = text?.let { parseAll(it) }.orEmpty()
             // Every face read before has its file here: load them now, so the first view finds them ready.
             val ready = HashMap<String, Face>()
@@ -150,7 +153,7 @@ object WebFonts {
                     val file = fontFile(dir, url)
                     val tf = if (file.isFile) loadTypeface(file) else null
                     if (tf != null) {
-                        pinned += file
+                        pin(file, gen)
                         ready[key] = Face.Ready(file, tf)
                         break
                     }
@@ -192,7 +195,11 @@ object WebFonts {
         loads.clear()
         variants.clear()
         waiting.clear()
-        pinned.clear()
+        // Under the pins' lock: a job of the old generation checks it there before it pins anything.
+        synchronized(pinned) {
+            liveGeneration = generation
+            pinned.clear()
+        }
         // A notice still queued for the old fonts runs anyway; a new one mustn't wait for it.
         notifyQueued = false
     }
@@ -298,7 +305,7 @@ object WebFonts {
         val urls = cssUrls
         val dir = cacheDir
         submit({
-            val text = readSheets(urls, dir, network = true)
+            val text = readSheets(urls, dir, network = true, gen = gen)
             val parsed = text?.let { parseAll(it) }
             ({
                 if (gen == generation) {
@@ -353,7 +360,7 @@ object WebFonts {
             if (loads.values.none { it === Face.Loading }) notifyChanged()
         }
         submit({
-            val ready = loadFace(urls, dir)
+            val ready = loadFace(urls, dir, gen)
             ({ settle(ready ?: Face.Failed) })
         }, onError = { settle(Face.Failed) })
     }
@@ -364,17 +371,22 @@ object WebFonts {
      */
     private val pinned: MutableSet<File> = java.util.Collections.synchronizedSet(HashSet())
 
+    /** Pins [file] for the job of generation [gen], unless the loader was reset since it started. */
+    private fun pin(file: File, gen: Int) = synchronized(pinned) { if (gen == liveGeneration) pinned += file }
+
     /**
      * The first of [urls] that loads, as the browser tries a face's sources in order: from disk, else fetched, made
      * sfnt and kept. A source that fails to download or isn't a font Vitro can draw (WOFF2 behind a URL with no hint)
      * moves on to the next.
      */
-    private fun loadFace(urls: List<String>, dir: File?): Face.Ready? {
+    private fun loadFace(urls: List<String>, dir: File?, gen: Int): Face.Ready? {
         for (url in urls) {
+            // A different server since this job started: nothing more to do for the old one.
+            if (gen != liveGeneration) return null
             val file = dir?.let { fontFile(it, url) } ?: File.createTempFile("vitro-font", ".font").apply { deleteOnExit() }
             if (dir != null && file.isFile) {
                 file.setLastModified(System.currentTimeMillis())
-                pinned += file
+                pin(file, gen)
                 loadTypeface(file)?.let { return Face.Ready(file, it) }
                 pinned -= file
             }
@@ -385,7 +397,7 @@ object WebFonts {
                 continue
             }
             val saved = try {
-                if (dir != null) publish(dir, file, sfnt, pin = true) else file.writeBytes(sfnt).let { true }
+                if (dir != null) publish(dir, file, sfnt, pinFor = gen) else file.writeBytes(sfnt).let { true }
             } catch (e: Exception) {
                 Log.w(TAG, "Web font not saved: ${e.javaClass.simpleName}")
                 false
@@ -399,17 +411,18 @@ object WebFonts {
     /**
      * Writes [bytes] to [file] in the cache folder only if the folder stays under [MAX_DISK_BYTES]: the files used
      * longest ago go first, never a [pinned] one. False when it can't fit: the font then draws in its fallback, like
-     * one past any other cap. [pin] pins [file] once written. Loader thread only (one at a time).
+     * one past any other cap. [pinFor] pins [file] once written, for that generation's job. Loader thread only.
      */
-    private fun publish(dir: File, file: File, bytes: ByteArray, pin: Boolean = false): Boolean {
+    private fun publish(dir: File, file: File, bytes: ByteArray, pinFor: Int? = null): Boolean {
         dir.mkdirs()
         val others = dir.listFiles()?.filter { it.isFile && it != file && !it.name.endsWith(".part") }.orEmpty()
         var total = others.sumOf { it.length() } + bytes.size
         val keep = synchronized(pinned) { pinned.toSet() }
         for (f in others.filter { it !in keep }.sortedBy { it.lastModified() }) {
             if (total <= MAX_DISK_BYTES) break
-            total -= f.length()
-            f.delete()
+            val size = f.length()
+            // Only a file that's really gone makes room.
+            if (f.delete()) total -= size
         }
         if (total > MAX_DISK_BYTES) return false
         val tmp = File(file.path + ".part")
@@ -418,7 +431,7 @@ object WebFonts {
             tmp.delete()
             return false
         }
-        if (pin) pinned += file
+        pinFor?.let { pin(file, it) }
         return true
     }
 
@@ -434,7 +447,7 @@ object WebFonts {
      * where its `@import` stands, before the rules of the sheet that imports it), or null when none could be read.
      * A cached copy that can't be read is a cache miss.
      */
-    private fun readSheets(urls: List<String>, dir: File?, network: Boolean): String? {
+    private fun readSheets(urls: List<String>, dir: File?, network: Boolean, gen: Int): String? {
         val out = StringBuilder()
         val seen = HashSet<String>()
         var any = false
@@ -443,7 +456,7 @@ object WebFonts {
             runCatching { f.readText() }.getOrNull()?.let { it.substringBefore('\n') to it.substringAfter('\n', "") }
         }
         fun visit(url: String) {
-            if (seen.size >= MAX_SHEETS || !seen.add(url)) return
+            if (gen != liveGeneration || seen.size >= MAX_SHEETS || !seen.add(url)) return
             val file = dir?.let { File(it, hash(url) + ".css") }
             val (base, text) = (if (network) {
                 fetch(url, MAX_CSS_BYTES)?.let { f ->
@@ -478,7 +491,8 @@ object WebFonts {
         if (url.startsWith("data:", ignoreCase = true)) return decodeDataUri(url, maxBytes)?.let { Fetched(it, url) }
         val t0 = System.nanoTime()
         return fetcher.fetch(url, maxBytes).also {
-            note("fetch …${url.substringAfterLast('/').take(24)}: ${it?.bytes?.size ?: "failed"} in ${(System.nanoTime() - t0) / 1_000_000} ms")
+            // No part of the URL: a query or a path can hold something private.
+            note("fetch: ${it?.bytes?.size ?: "failed"} in ${(System.nanoTime() - t0) / 1_000_000} ms")
         }
     }
 
@@ -585,6 +599,9 @@ object WebFonts {
             instanceFollowRedirects = true
             setRequestProperty("User-Agent", USER_AGENT)
         }
+        // The timeouts bound each wait; this bounds the whole request, so a slow trickle can't hold the one loader
+        // thread for minutes.
+        val deadline = System.nanoTime() + REQUEST_DEADLINE_MS * 1_000_000L
         try {
             if (conn.responseCode != 200) null
             else if (conn.contentLength > maxBytes) null
@@ -595,7 +612,7 @@ object WebFonts {
                     val n = input.read(buf)
                     if (n < 0) break
                     out.write(buf, 0, n)
-                    if (out.size() > maxBytes) return null
+                    if (out.size() > maxBytes || System.nanoTime() > deadline) return null
                 }
                 // conn.url is where the redirects ended.
                 Fetched(out.toByteArray(), conn.url.toString())
@@ -608,4 +625,7 @@ object WebFonts {
     }
 
     private const val SHEET_MARK = "\u0000sheet:"
+
+    /** The longest a stylesheet or font request may take in all. */
+    private const val REQUEST_DEADLINE_MS = 30_000L
 }

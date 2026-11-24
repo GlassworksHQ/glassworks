@@ -230,6 +230,20 @@ class WebFontsTest {
     }
 
     @Test
+    fun aBareGenericIsThePlatformsAQuotedOneIsAFamily() {
+        // A sheet declares a family named "serif": bare serif is still the platform's serif, "serif" is the sheet's.
+        css("fonts.css", "@font-face { font-family: \"serif\"; src: url(p.ttf) }")
+        font("p.ttf", "pacifico.ttf")
+        configure("fonts.css")
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "\"serif\", sans-serif")
+        drain()
+        val platformSerif = VitroFonts.typeface(activity, 400, 14f, fontFamily = "serif")
+        val declared = VitroFonts.typeface(activity, 400, 14f, fontFamily = "\"serif\", sans-serif")
+        assertNotEquals(platformSerif, declared)
+        assertNotEquals(VitroFonts.system(400), declared)
+    }
+
+    @Test
     fun theDiskCacheStaysUnderItsLimit() {
         val dir = File(cache, "vitro-fonts").apply { mkdirs() }
         // Old files fill the cache to its limit: a new font pushes the oldest out, not past the limit.

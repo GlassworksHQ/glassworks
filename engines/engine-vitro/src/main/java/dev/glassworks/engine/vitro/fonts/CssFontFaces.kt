@@ -72,13 +72,16 @@ object CssFontFaces {
         val (text, atRules) = scan(css)
         val imports = ArrayList<String>()
         val faces = ArrayList<FontFace>()
+        val importAt = IMPORT.toPattern().matcher(text)
+        val faceAt = FONT_FACE.toPattern().matcher(text)
         for (at in atRules) {
-            IMPORT.find(text, at)?.takeIf { it.range.first == at }?.let { m ->
-                resolve(sheetUrl, m.groupValues[2].ifEmpty { m.groupValues[4] }.trim())?.let(imports::add)
-            }
-            FONT_FACE.find(text, at)?.takeIf { it.range.first == at }?.let { m ->
-                val start = m.range.last + 1
-                val end = blockEnd(text, start) ?: return@let
+            // Anchored at the `@`: a rule that doesn't start right there is no match, with no search ahead.
+            if (importAt.region(at, text.length).lookingAt()) {
+                val raw = (importAt.group(2)?.takeIf { it.isNotEmpty() } ?: importAt.group(4)).orEmpty().trim()
+                resolve(sheetUrl, raw)?.let(imports::add)
+            } else if (faceAt.region(at, text.length).lookingAt()) {
+                val start = faceAt.end()
+                val end = blockEnd(text, start) ?: continue
                 parseFace(text.substring(start, end), sheetUrl)?.let(faces::add)
             }
         }
@@ -144,6 +147,8 @@ object CssFontFaces {
         val family = decls["font-family"]?.let(::unquote)?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() } ?: return null
         val src = decls["src"] ?: return null
         val sources = splitTopLevel(src, ',').mapNotNull { entry ->
+            // A local() entry names an installed font (never one on a panel), even if its name holds "url(".
+            if (entry.trimStart().startsWith("local(", ignoreCase = true)) return@mapNotNull null
             val m = SRC_URL.find(entry) ?: return@mapNotNull null
             val abs = resolve(sheetUrl, m.groupValues[2].trim()) ?: return@mapNotNull null
             // The hint follows the url(): "format(" inside the URL itself is part of its path.
@@ -194,8 +199,23 @@ object CssFontFaces {
     }
 
     /** The families of a CSS `font-family` list, unquoted, in order (`"Lora", serif` → `Lora`, `serif`). */
-    fun families(fontFamily: String): List<String> =
-        splitTopLevel(fontFamily, ',').map(::unquote).filter { it.isNotEmpty() }
+    fun families(fontFamily: String): List<String> = familyList(fontFamily).map { it.name }
+
+    /** One family of a `font-family` list: its name, and whether it's a generic keyword (bare `serif`, not `"serif"`). */
+    data class Family(val name: String, val generic: Boolean)
+
+    private val GENERIC = setOf(
+        "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui", "ui-serif", "ui-sans-serif",
+        "ui-monospace", "ui-rounded", "math", "emoji", "fangsong",
+    )
+
+    /** A `font-family` list as CSS reads it: a quoted name is always a family, a bare generic keyword never is. */
+    fun familyList(fontFamily: String): List<Family> = splitTopLevel(fontFamily, ',').mapNotNull { raw ->
+        val t = raw.trim()
+        val quoted = t.startsWith('"') || t.startsWith('\'')
+        val name = unquote(t).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        Family(name, generic = !quoted && name.lowercase(Locale.ROOT) in GENERIC)
+    }
 
     /** A family name as CSS reads it: quotes off, escapes decoded (`"Pilot\" Sans"`, `\26` for `&`). */
     private fun unquote(v: String): String {
@@ -224,6 +244,8 @@ object CssFontFaces {
                     if (c == '\\' && i + 1 < s.length) cur.append(s[++i]) else if (c == quote) quote = 0.toChar()
                 }
                 c == '"' || c == '\'' -> { quote = c; cur.append(c) }
+                // An escaped character (`Foo\, Bar`) is part of the name, a separator included.
+                c == '\\' && i + 1 < s.length -> { cur.append(c).append(s[++i]) }
                 c == '(' -> { depth++; cur.append(c) }
                 c == ')' -> { depth = maxOf(0, depth - 1); cur.append(c) }
                 c == sep && depth == 0 -> { out += cur.toString().trim(); cur.setLength(0) }

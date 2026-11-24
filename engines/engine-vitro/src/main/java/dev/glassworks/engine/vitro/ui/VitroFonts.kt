@@ -58,6 +58,9 @@ object VitroFonts {
         }
     }
 
+    /** Whether [name], unquoted, is a CSS generic keyword. */
+    private fun isGenericName(name: String) = CssFontFaces.familyList(name).firstOrNull()?.generic == true
+
     /** The built-in face a CSS `font-family` list draws in, web fonts aside: the first family Vitro has, else sans-serif. */
     fun faceFor(fontFamily: String?): Face {
         for (name in CssFontFaces.families(fontFamily?.takeIf { it.isNotBlank() } ?: HA_DEFAULT)) builtIn(name)?.let { return it }
@@ -91,13 +94,20 @@ object VitroFonts {
      */
     fun typeface(context: Context, weight: Int, sizeSp: Float, italic: Boolean = false, fontFamily: String? = null): Typeface {
         val list = fontFamily?.takeIf { it.isNotBlank() } ?: familyOf(context)
-        for (name in CssFontFaces.families(list)) {
+        for ((name, generic) in CssFontFaces.familyList(list)) {
             val known = builtIn(name)
+            // A bare generic keyword (serif) is the platform's face, never a web font of that name; a quoted one
+            // ("serif") is a family like any other, and a stylesheet may declare it.
+            if (generic) {
+                if (known != null) return builtIn(context, known, weight, sizeSp, italic) else continue
+            }
+            // A quoted generic name ("serif") is a family name only: Vitro's own face doesn't stand in for it.
+            val own = known?.takeUnless { isGenericName(name) }
             when (val web = WebFonts.lookup(name, weight, italic)) {
                 is WebFonts.Lookup.Ready -> return web.typeface
                 // A family Vitro has draws its own face while the sheets are read, in case one declares it too.
-                WebFonts.Lookup.Loading -> if (known != null) return builtIn(context, known, weight, sizeSp, italic)
-                WebFonts.Lookup.Absent -> if (known != null) return builtIn(context, known, weight, sizeSp, italic)
+                WebFonts.Lookup.Loading -> if (own != null) return builtIn(context, own, weight, sizeSp, italic)
+                WebFonts.Lookup.Absent -> if (own != null) return builtIn(context, own, weight, sizeSp, italic)
             }
         }
         return builtIn(context, Face.SYSTEM, weight, sizeSp, italic)

@@ -93,6 +93,20 @@ class CssFontFacesTest {
     }
 
     @Test
+    fun localNamesEscapedCommasAndGenericKeywords() {
+        // A local() name holding "url(" isn't a source; the url() after it is.
+        val css = """@font-face { font-family: L; src: local("My url(x) Font"), url(l.ttf); }"""
+        assertEquals(listOf("http://homeassistant.local:8123/local/fonts/l.ttf"), CssFontFaces.parse(css, sheet).faces.single().supportedUrls)
+        // An escaped comma is part of the name.
+        assertEquals(listOf("Foo, Bar", "serif"), CssFontFaces.families("Foo\\, Bar, serif"))
+        // A bare generic keyword is generic; the same word quoted is a family name.
+        assertEquals(
+            listOf(CssFontFaces.Family("serif", true), CssFontFaces.Family("serif", false), CssFontFaces.Family("Roboto", false)),
+            CssFontFaces.familyList("serif, \"serif\", Roboto"),
+        )
+    }
+
+    @Test
     fun onlyTrueTypeOpenTypeAndWoffAreDrawable() {
         assertTrue(FontSource("https://x/a.ttf", null).supported)
         assertTrue(FontSource("https://x/a", "truetype").supported)
