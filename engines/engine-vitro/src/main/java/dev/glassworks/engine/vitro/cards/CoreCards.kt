@@ -1948,7 +1948,9 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             }
             when {
                 isSwitchable -> row.addView(switchView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-                isCover -> COVER_BUTTONS.forEach { (iconName, service) ->
+                // ha-cover-controls: 48 px icon buttons (24 px icons), the group 8 px into the row's end padding, so a
+                // cover row is 48 px tall where a plain one is 40.
+                isCover -> COVER_BUTTONS.forEachIndexed { i, (iconName, service) ->
                     val btn = android.widget.FrameLayout(ctx.context).apply {
                         isClickable = true
                         contentDescription = service.substringBefore('_').replaceFirstChar { it.titlecase(Locale.ROOT) }
@@ -1958,12 +1960,14 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                         }
                         applyHaRipple(this, 999f, ctx.theme.dark)
                         addView(MdiIconView(ctx.context).apply { setIcon(iconName, ctx.theme.primaryTextColor) },
-                            android.widget.FrameLayout.LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
+                            android.widget.FrameLayout.LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
                         setOnClickListener {
                             ctx.callService("cover", service, JSONObject().put("entity_id", rowCfg.entity), null)
                         }
                     }
-                    row.addView(btn, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)))
+                    row.addView(btn, LinearLayout.LayoutParams(ctx.px(48f), ctx.px(48f)).apply {
+                        if (i == COVER_BUTTONS.lastIndex) marginEnd = -ctx.px(8f)
+                    })
                 }
                 else -> row.addView(valueView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
             }
