@@ -8,6 +8,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-24
+
+**S1 Kiosk is now Glassworks, in its last release before 1.0: a browser Manage page for every panel, themes and an edge glow for Assist, notifications and Bluetooth proxy panes, and frame updates from Home Assistant.**
+
 ### Added
 - **Frame updates install from Home Assistant.** On a panel with the frame loader, Install on the Frame update card
   (or an automation's `update.install`) downloads the S1's signed frame bundle, checks it, and restarts the panel
