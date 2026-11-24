@@ -11,7 +11,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { SYSTEM_BYTES, USERDATA_BYTES } from '@glassworks/lululemon-mirror-installer';
+import { USERDATA_BYTES } from '@glassworks/lululemon-mirror-installer';
 import { fakeAdbKey } from '@glassworks/lululemon-mirror-installer/fakes';
 import { adbPath, readSerial } from './adb';
 import {
@@ -20,7 +20,7 @@ import {
 } from './stock-probe-cli';
 import {
   DEFAULT_PROBE_HTTP_PORT, patchStockServicesJar, runStockSurgicalAdb,
-  STOCK_POST_BOOT_PATH, STOCK_SERVICES_JAR_PATH,
+  STOCK_POST_BOOT_PATH, STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES,
   type SurgicalAdbDeps, type SurgicalAdbSession, type SurgicalFastboot,
 } from './surgical-adb';
 
@@ -314,7 +314,7 @@ export async function surgicalAdbCli(argv: string[], log: (l: string) => void = 
           async oemDeviceInfo() { return ['Device unlocked: false']; },
           async getvar(name: string) {
             if (name === 'product') return 'MSM8916';
-            if (name === 'partition-size:system') return `0x${SYSTEM_BYTES.toString(16)}`;
+            if (name === 'partition-size:system') return `0x${STOCK_SYSTEM_PARTITION_BYTES.toString(16)}`;
             if (name === 'partition-size:userdata') return `0x${USERDATA_BYTES.toString(16)}`;
             return undefined;
           },

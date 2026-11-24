@@ -15,7 +15,7 @@ import { zipEntry } from '@glassworks/app-adb';
 import { loadCompressor } from '@glassworks/bootpatch';
 import { Disk, MemoryStore, parseSparseHeader, SPARSE_MAGIC, writeSparse } from '@glassworks/ext4';
 import {
-  GLASS_PANES_KEY_FINGERPRINT, replaceDexString, SYSTEM_BYTES, USERDATA_BYTES,
+  GLASS_PANES_KEY_FINGERPRINT, replaceDexString, USERDATA_BYTES,
 } from '@glassworks/lululemon-mirror-installer';
 import {
   buildStockProbeUserdata, DEFAULT_PROBE_HTTP_PORT, validateStockAdbKey,
@@ -25,6 +25,8 @@ import {
 
 export const SPARSE_BLOCK_SIZE = 4096;
 export const MAX_RAW_CHUNK_BLOCKS = 4096; // 16 MiB per RAW chunk
+/** Exact MSM8916 Mirror `system` eMMC partition size (`mmcblk0p22`, 0x4cccd000 = 1,258,292 KiB). */
+export const STOCK_SYSTEM_PARTITION_BYTES = 0x4cccd000;
 const CHUNK_RAW = 0xcac1;
 const CHUNK_DONT_CARE = 0xcac3;
 
@@ -1030,11 +1032,11 @@ export async function runStockSurgicalAdb(
   }
 
   // Save byte-exact originals + restore sparse images immediately (before any flash is ever offered).
-  const defaultSystemBytes = SYSTEM_BYTES;
+  let targetSystemBytes = STOCK_SYSTEM_PARTITION_BYTES;
   const defaultUserdataBytes = USERDATA_BYTES;
   await d.writeFile('backup/services.jar.orig', origServices);
-  const restoreServicesSparse = buildSurgicalSparseImage(
-    defaultSystemBytes,
+  let restoreServicesSparse = buildSurgicalSparseImage(
+    targetSystemBytes,
     report.servicesFiemap.extents,
     origServices,
   );
@@ -1044,7 +1046,7 @@ export async function runStockSurgicalAdb(
   if (origPostBoot && report.postBootFiemap && !report.postBootFiemap.error && report.postBootFiemap.extents?.length) {
     await d.writeFile('backup/init.qcom.post_boot.sh.orig', origPostBoot);
     const restorePostBootSparse = buildSurgicalSparseImage(
-      defaultSystemBytes,
+      targetSystemBytes,
       report.postBootFiemap.extents,
       origPostBoot,
     );
@@ -1054,7 +1056,7 @@ export async function runStockSurgicalAdb(
   const manifest: BackupManifest = {
     version: 1,
     createdAt: nowIso(),
-    systemBytes: defaultSystemBytes,
+    systemBytes: targetSystemBytes,
     userdataBytes: defaultUserdataBytes,
     servicesJar: {
       path: STOCK_SERVICES_JAR_PATH,
@@ -1100,13 +1102,14 @@ export async function runStockSurgicalAdb(
   manifest.servicesJar.fingerprint = patchedJar.fingerprint;
   await d.writeFile('backup/manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
 
-  const patchServicesSparse = buildSurgicalSparseImage(
-    defaultSystemBytes,
+  let patchServicesSparse = buildSurgicalSparseImage(
+    targetSystemBytes,
     report.servicesFiemap.extents,
     patchedJar.patched,
   );
   const patchServicesPath = await d.writeFile('patch-services.sparse', patchServicesSparse);
 
+  let patchedPostBoot: Uint8Array | undefined;
   let patchPostBootPath: string | undefined;
   if (backupKoBytes) {
     if (!origPostBoot || !report.postBootFiemap?.extents?.length) {
@@ -1114,9 +1117,9 @@ export async function runStockSurgicalAdb(
       await saveReport();
       return { report, ok: false };
     }
-    const patchedPostBoot = patchPostBootForBackup(origPostBoot, REMOTE_BACKUP_KO_PATH);
+    patchedPostBoot = patchPostBootForBackup(origPostBoot, REMOTE_BACKUP_KO_PATH);
     const patchPostBootSparse = buildSurgicalSparseImage(
-      defaultSystemBytes,
+      targetSystemBytes,
       report.postBootFiemap.extents,
       patchedPostBoot,
     );
@@ -1164,10 +1167,39 @@ export async function runStockSurgicalAdb(
     await saveReport();
     return { report, ok: false };
   }
-  if (sysBytes !== defaultSystemBytes || udBytes !== defaultUserdataBytes) {
-    report.stopReason = `partition size mismatch (system=${sysBytes ?? 'unknown'} expected ${defaultSystemBytes}, userdata=${udBytes ?? 'unknown'} expected ${defaultUserdataBytes})`;
+  if (!sysBytes || sysBytes % SPARSE_BLOCK_SIZE !== 0 || sysBytes < 512 * 1024 * 1024 || sysBytes > 4 * 1024 * 1024 * 1024) {
+    report.stopReason = `invalid fastboot partition-size:system (${sysBytes ?? 'unknown'})`;
     await saveReport();
     return { report, ok: false };
+  }
+  if (udBytes !== defaultUserdataBytes) {
+    report.stopReason = `partition size mismatch (userdata=${udBytes ?? 'unknown'} expected ${defaultUserdataBytes})`;
+    await saveReport();
+    return { report, ok: false };
+  }
+  // If fastboot reports a different valid system partition size than the default 0x4cccd000,
+  // rebuild every surgical sparse image to exact `sysBytes` before offering to flash.
+  if (sysBytes !== targetSystemBytes) {
+    d.log(`  rebuilding surgical sparse images to match live partition-size:system (${sysBytes} B)...`);
+    targetSystemBytes = sysBytes;
+    manifest.systemBytes = sysBytes;
+    restoreServicesSparse = buildSurgicalSparseImage(sysBytes, report.servicesFiemap.extents, origServices);
+    await d.writeFile('backup/restore-services.sparse', restoreServicesSparse);
+    patchServicesSparse = buildSurgicalSparseImage(sysBytes, report.servicesFiemap.extents, patchedJar.patched);
+    await d.writeFile('patch-services.sparse', patchServicesSparse);
+    if (origPostBoot && report.postBootFiemap?.extents?.length) {
+      await d.writeFile(
+        'backup/restore-post-boot.sparse',
+        buildSurgicalSparseImage(sysBytes, report.postBootFiemap.extents, origPostBoot),
+      );
+      if (patchedPostBoot) {
+        await d.writeFile(
+          'patch-post-boot.sparse',
+          buildSurgicalSparseImage(sysBytes, report.postBootFiemap.extents, patchedPostBoot),
+        );
+      }
+    }
+    await d.writeFile('backup/manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
   }
 
   const okFlash = await d.confirm(
@@ -1261,11 +1293,31 @@ export async function runStockSurgicalAdb(
     return { report, ok: false };
   }
 
-  const enf = (await backupAdb.shell('getenforce')).out.trim();
-  report.notes.push(`Step 4 boot getenforce=${enf}`);
-  if (enf.toLowerCase() !== 'permissive') {
+  // qcom-post-boot runs on sys.boot_completed=1, which can lag USB ADB authorization by a few
+  // seconds; wait up to 45 s for boot_completed + Permissive + readable mmcblk0p22 before failing.
+  const hookDeadline = mono() + 45_000;
+  let enf = '';
+  let blockReadable = false;
+  while (mono() < hookDeadline) {
+    const bc = (await backupAdb.shell('getprop sys.boot_completed')).out.trim();
+    enf = (await backupAdb.shell('getenforce')).out.trim();
+    if (enf.toLowerCase() === 'permissive') {
+      const rchk = await backupAdb.shell('[ -r /dev/block/mmcblk0p22 ] && [ -r /dev/block/mmcblk0p19 ]');
+      if (rchk.code === 0) {
+        blockReadable = true;
+        break;
+      }
+    }
+    if (bc === '1' && enf.toLowerCase() === 'permissive') {
+      await d.sleep(1000);
+    } else {
+      await d.sleep(2000);
+    }
+  }
+  report.notes.push(`Step 4 boot getenforce=${enf || 'unknown'} blockReadable=${blockReadable}`);
+  if (enf.toLowerCase() !== 'permissive' || !blockReadable) {
     await backupAdb.shell(`rm -f ${REMOTE_BACKUP_KO_PATH}`);
-    report.stopReason = `backup module did not switch SELinux to Permissive (got ${enf}); restore post_boot via fastboot flash system ${restorePostBootPath}`;
+    report.stopReason = `backup module did not switch SELinux to Permissive + readable block nodes (getenforce=${enf || 'unknown'}, readable=${blockReadable}); restore post_boot via fastboot flash system ${restorePostBootPath}`;
     await saveReport();
     return { report, ok: false };
   }
@@ -1278,7 +1330,7 @@ export async function runStockSurgicalAdb(
   report.backupSystemPath = `${o.outDir}/backup/system-stock.raw.img`;
   report.backupSystemBytes = sysDump.bytes;
   report.backupSystemSha256 = sysDump.sha256;
-  if (sysDump.bytes === defaultSystemBytes && d.restoreExtentsInRawImage) {
+  if (sysDump.bytes === targetSystemBytes && d.restoreExtentsInRawImage) {
     d.log('  scrubbing temporary services.jar + post_boot.sh patches out of system-stock.raw.img -> pure untouched stock...');
     report.backupSystemSha256 = await d.restoreExtentsInRawImage(report.backupSystemPath, [
       { extents: report.servicesFiemap.extents, origData: origServices },
@@ -1316,8 +1368,8 @@ export async function runStockSurgicalAdb(
     report.notes.push(`Manual restore needed: fastboot flash system ${restorePostBootPath}`);
   }
 
-  if (sysDump.bytes !== defaultSystemBytes) {
-    report.stopReason = `raw system dump size ${sysDump.bytes} !== expected ${defaultSystemBytes}`;
+  if (sysDump.bytes !== targetSystemBytes) {
+    report.stopReason = `raw system dump size ${sysDump.bytes} !== expected ${targetSystemBytes}`;
     await saveReport();
     return { report, ok: false };
   }

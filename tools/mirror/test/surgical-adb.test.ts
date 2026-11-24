@@ -4,12 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Disk, MemoryStore, parseSparseHeader, readSparse } from '@glassworks/ext4';
-import { GLASS_PANES_KEY_FINGERPRINT, SYSTEM_BYTES, USERDATA_BYTES } from '@glassworks/lululemon-mirror-installer';
+import { GLASS_PANES_KEY_FINGERPRINT, USERDATA_BYTES } from '@glassworks/lululemon-mirror-installer';
 import { fakeAdbKey } from '@glassworks/lululemon-mirror-installer/fakes';
 import {
   buildSurgicalSparseImage, patchPostBootForBackup, patchStockServicesJar,
   renderSurgicalReport, runStockSurgicalAdb, START_CONFIRMATION_LOG_STRING,
-  STOCK_POST_BOOT_PATH, STOCK_SERVICES_JAR_PATH, validateKernelModuleElf,
+  STOCK_POST_BOOT_PATH, STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES,
+  validateKernelModuleElf,
   type FiemapExtent, type SurgicalAdbDeps,
 } from '../src/surgical-adb';
 
@@ -325,7 +326,7 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
         async oemDeviceInfo() { return ['Device unlocked: false']; },
         async getvar(name: string) {
           if (name === 'product') return 'MSM8916';
-          if (name === 'partition-size:system') return `0x${SYSTEM_BYTES.toString(16)}`;
+          if (name === 'partition-size:system') return `0x${STOCK_SYSTEM_PARTITION_BYTES.toString(16)}`;
           if (name === 'partition-size:userdata') return `0x${USERDATA_BYTES.toString(16)}`;
           return undefined;
         },
@@ -342,6 +343,8 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
           async shell(cmd: string) {
             if (cmd === 'id') return { out: 'uid=2000(shell)\n', code: 0 };
             if (cmd === 'getenforce') return { out: step4Boot ? 'Permissive\n' : 'Enforcing\n', code: 0 };
+            if (cmd.includes('sys.boot_completed')) return { out: '1\n', code: 0 };
+            if (cmd.includes('[ -r /dev/block/mmcblk0p22 ]')) return { out: '', code: step4Boot ? 0 : 1 };
             if (cmd.includes('ro.build.version.mirror')) return { out: '1.24.0\n', code: 0 };
             if (cmd === 'pm list packages') return { out: 'package:com.mirror.app\n', code: 0 };
             return { out: '', code: 0 };
@@ -350,7 +353,7 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
           async push() {},
           async rebootBootloader() {},
           async streamCommandToFile(cmd: string) {
-            if (cmd.includes('mmcblk0p22')) return { bytes: SYSTEM_BYTES, sha256: 'a'.repeat(64) };
+            if (cmd.includes('mmcblk0p22')) return { bytes: STOCK_SYSTEM_PARTITION_BYTES, sha256: 'a'.repeat(64) };
             return { bytes: 32 * 1024 * 1024, sha256: 'b'.repeat(64) };
           },
         },
@@ -373,7 +376,7 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
 
     expect(ok).toBe(true);
     expect(report.adbAuthorized).toBe(true);
-    expect(report.backupSystemBytes).toBe(SYSTEM_BYTES);
+    expect(report.backupSystemBytes).toBe(STOCK_SYSTEM_PARTITION_BYTES);
     expect(report.restoredPostBoot).toBe(true);
     expect(report.restoredServices).toBe(true);
     expect(flashed.map((f) => `${f.part}:${f.path.split('/').pop()}`)).toEqual([
