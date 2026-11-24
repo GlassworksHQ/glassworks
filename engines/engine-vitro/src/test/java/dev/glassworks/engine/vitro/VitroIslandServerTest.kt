@@ -19,10 +19,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.IOException
-import java.net.ConnectException
 import java.net.HttpURLConnection
 import java.net.InetAddress
-import java.net.Socket
 import java.net.URL
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -335,13 +333,13 @@ class VitroIslandServerTest {
     @Test
     fun stopTearsDownSocketsAndTheListener() {
         val slot = RecordingSlot()
-        val (id, _) = island.registerSlot(slot)
-        val port = island.port
+        val (id, url) = island.registerSlot(slot)
         val ws = WsClient.connect(wsUrl(id), readTimeoutMs = 5_000)
         try {
             ws.line()
             await(slot.connected, "onConnected")
 
+            val page = get(url).text
             island.stop()
 
             await(slot.disconnected, "onDisconnected after stop")
@@ -349,12 +347,10 @@ class VitroIslandServerTest {
             assertNull("the socket is closed", after)
             assertEquals(-1, island.port)
             assertNull(island.origin)
-            try {
-                Socket(loopback, port).close()
-                throw AssertionError("nothing should listen on $port any more")
-            } catch (_: ConnectException) {
-                // Refused: the listener is gone.
-            }
+            // The slot's page is gone: the connection is refused, or, if another server has since been given the
+            // same ephemeral port (tests run in parallel on CI), what it answers isn't this slot's page.
+            val reply = try { get(url) } catch (_: IOException) { null }
+            assertTrue("the stopped island still serves its slot", reply == null || reply.code != 200 || reply.text != page)
         } finally {
             ws.abort()
         }

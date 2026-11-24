@@ -168,7 +168,9 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                 "tile" -> {
                     val features = raw.optJSONArray("features")?.length() ?: 0
                     val vertical = raw.optBoolean("vertical", false)
-                    HaGridSize(if (features > 0 && raw.optString("features_position") == "inline") 12 else 6, 1 + features + if (vertical) 1 else 0)
+                    // Inline features sit beside the info, so they add no rows (HA shows only the first one).
+                    val inline = features > 0 && !vertical && raw.optString("features_position") == "inline"
+                    HaGridSize(if (inline) 12 else 6, 1 + (if (inline) 0 else features) + if (vertical) 1 else 0)
                 }
                 "entity", "sensor", "button", "light", "area", "picture-entity", "picture-glance", "picture" -> HaGridSize(6, null)
                 "heading" -> HaGridSize(null, null)

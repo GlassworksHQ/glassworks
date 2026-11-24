@@ -82,8 +82,10 @@ private fun iconOr(name: String, fallback: String): String = if (MdiIcons.has(na
 // ---------------------------------------------------------------------------------------------------------------
 
 /**
- * The Mushroom card shell every control card shares: a 40 dp tinted shape icon, the primary and secondary lines,
- * and a row of 42 dp rounded control buttons under them. `name`, `icon`, `hide_name`, `hide_state`, `hide_icon`,
+ * The Mushroom card shell every control card shares, at Mushroom's sizes: `--spacing` (10 px) around a 36 px
+ * (`--icon-size`) tinted shape, the primary (14 px / 500 on a 20 px line) and secondary (12 px on 16 px, also in
+ * the primary text color) lines, and a row of 42 px (`--control-height`) rounded buttons under them. With
+ * `layout: horizontal` the buttons sit beside the info instead, at the icon's size and aligned to the end. `name`, `icon`, `hide_name`, `hide_state`, `hide_icon`,
  * `fill_container`, `tap_action`, `hold_action` and `icon_tap_action` read as in Mushroom. Subclasses build their
  * controls in their own `init`, then call [start].
  */
@@ -95,8 +97,16 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
         scaleType = ImageView.ScaleType.CENTER_CROP
         visibility = GONE
     }
-    protected val primary = label(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM)
-    protected val secondary = label(ctx, 12f, ctx.theme.secondaryTextColor)
+    protected val primary = label(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+        gravity = Gravity.CENTER_VERTICAL; letterSpacing = 0.1f / 14f
+    }
+    protected val secondary = label(ctx, 12f, ctx.theme.primaryTextColor).apply {
+        gravity = Gravity.CENTER_VERTICAL; letterSpacing = 0.4f / 12f
+    }
+    /** `layout: horizontal`: the controls share the info's row. */
+    protected val horizontal = config.raw.optString("layout") == "horizontal"
+    /** `--control-height`: 42 px, or the icon's 36 px beside the info. */
+    private val controlHeight = if (horizontal) 36f else 42f
     /** The control rows, stacked under the header. */
     protected val controls = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
     private val hideName = config.raw.optBoolean("hide_name", false)
@@ -106,28 +116,29 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
     init {
         val column = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(ctx.px(12f), ctx.px(12f), ctx.px(12f), ctx.px(12f))
+            setPadding(ctx.px(10f), ctx.px(10f), ctx.px(10f), ctx.px(10f))
         }
         shape.addView(shapeIcon, FrameLayout.LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
         shape.addView(shapePicture, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         shape.clipToOutline = true
         val texts = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            addView(primary)
-            addView(secondary, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(3f) })
+            addView(primary, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(20f)))
+            addView(secondary, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(16f)))
         }
         val header = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             if (!config.raw.optBoolean("hide_icon", false)) {
-                addView(shape, LinearLayout.LayoutParams(ctx.px(40f), ctx.px(40f)).apply { marginEnd = ctx.px(10f) })
+                addView(shape, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)).apply { marginEnd = ctx.px(10f) })
             }
             addView(texts, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            if (horizontal) addView(controls, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginStart = ctx.px(10f) })
         }
         if (hideName) primary.visibility = GONE
         if (hideState) secondary.visibility = GONE
         column.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        column.addView(controls, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        if (!horizontal) column.addView(controls, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         addView(column, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
 
         // Standard Mushroom `--mush-icon-border-radius`: circular by default, rounded square when a px/dp value is set.
@@ -217,9 +228,14 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
     /** A new horizontal control row in [controls]. */
     protected fun controlRow(): LinearLayout = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        controls.addView(this, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(10f) })
+        gravity = Gravity.CENTER_VERTICAL or (if (horizontal) Gravity.END else Gravity.START)
+        controls.addView(this, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+            if (!horizontal || controls.childCount > 0) topMargin = ctx.px(10f)
+        })
     }
+
+    /** `--control-icon-size`: half the control height. */
+    protected val controlIconPx: Int get() = ctx.px(controlHeight / 2f)
 
     /** A Mushroom control button: a 42 dp rounded square with one icon. [description] names it for TalkBack and tests. */
     protected fun mushroomButton(icon: String, description: String, onClick: () -> Unit): FrameLayout =
@@ -228,19 +244,20 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
             contentDescription = description
             background = GradientDrawable().apply {
                 cornerRadius = ctx.px(12f).toFloat()
-                setColor(CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.06f))
+                setColor(CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.05f))
             }
             addView(MdiIconView(ctx.context).apply { setIcon(icon, ctx.theme.primaryTextColor) },
-                FrameLayout.LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
+                FrameLayout.LayoutParams(controlIconPx, controlIconPx, Gravity.CENTER))
             setOnClickListener { onClick() }
             applyHaRipple(this, ctx.px(12f).toFloat(), ctx.theme.dark)
         }
 
     /** Adds [button] to [row] as an equal-width cell. */
+    /** Adds [button] to [row]: an equal-width cell, or a fixed square ([weight] squares wide) beside the info. */
     protected fun addCell(row: LinearLayout, button: View, weight: Float = 1f) {
-        row.addView(button, LinearLayout.LayoutParams(0, ctx.px(42f), weight).apply {
-            if (row.childCount > 0) marginStart = ctx.px(8f)
-        })
+        val lp = if (horizontal) LinearLayout.LayoutParams(ctx.px(controlHeight * weight), ctx.px(controlHeight))
+        else LinearLayout.LayoutParams(0, ctx.px(controlHeight), weight)
+        row.addView(button, lp.apply { if (row.childCount > 0) marginStart = ctx.px(10f) })
     }
 
     protected fun call(domain: String, service: String, extra: (JSONObject) -> Unit = {}) {
@@ -289,7 +306,7 @@ class MushroomMediaPlayerCardView(ctx: VitroCardContext, config: CardConfig) : M
                 "previous" -> addCell(row, mushroomButton("mdi:skip-previous", "Previous track") { call("media_player", "media_previous_track") })
                 "play_pause_stop" -> addCell(row, mushroomButton("mdi:play", "Play") { call("media_player", "media_play_pause") }.also { b ->
                     b.removeAllViews()
-                    b.addView(playIcon, FrameLayout.LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
+                    b.addView(playIcon, FrameLayout.LayoutParams(controlIconPx, controlIconPx, Gravity.CENTER))
                     playButton = b
                 })
                 "next" -> addCell(row, mushroomButton("mdi:skip-next", "Next track") { call("media_player", "media_next_track") })
@@ -306,7 +323,7 @@ class MushroomMediaPlayerCardView(ctx: VitroCardContext, config: CardConfig) : M
                     call("media_player", "volume_mute") { it.put("is_volume_muted", !muted) }
                 }.also { b ->
                     b.removeAllViews()
-                    b.addView(muteIcon, FrameLayout.LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
+                    b.addView(muteIcon, FrameLayout.LayoutParams(controlIconPx, controlIconPx, Gravity.CENTER))
                 })
                 "volume_set" -> {
                     val s = HaHorizontalSliderView(ctx, ctx.theme.activeColor("media_player")) { frac ->
@@ -490,7 +507,7 @@ class MushroomVacuumCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
                     call("vacuum", if (current()?.state == "cleaning") "pause" else "start")
                 }.also { b ->
                     b.removeAllViews()
-                    b.addView(startPauseIcon, FrameLayout.LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
+                    b.addView(startPauseIcon, FrameLayout.LayoutParams(controlIconPx, controlIconPx, Gravity.CENTER))
                     startPause = b
                 })
                 "stop" -> addCell(row, mushroomButton("mdi:stop", "Stop") { call("vacuum", "stop") })

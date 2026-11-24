@@ -140,6 +140,8 @@ object MdiIcons {
     fun resolveIconName(explicitIcon: String?, entity: EntityState?): String {
         if (!explicitIcon.isNullOrBlank()) return explicitIcon.lowercase()
         entity?.icon?.let { return it.lowercase() }
+        // HA's own icon data (registry, integration and domain icons) once it has arrived.
+        entity?.let { dev.glassworks.engine.vitro.data.HaDisplay.icon(it) }?.let { return it }
         val domain = entity?.domain.orEmpty()
         val dc = entity?.deviceClass.orEmpty()
         val on = entity?.isActive == true
