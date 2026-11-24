@@ -31,12 +31,36 @@ object HaDisplay {
         val deviceId: String? = null,
         /** The entity's own name (`en`): null for a device's main entity, which takes the device's name. */
         val name: String? = null,
+        /** The entity's own area (`ai`); null when it follows its device's. */
+        val areaId: String? = null,
+        /** True for a config or diagnostic entity (`ec`), which area summaries leave out. */
+        val categorized: Boolean = false,
+        /** True for an entity hidden in HA (`hb`). */
+        val hidden: Boolean = false,
+    )
+
+    /** One area of `config/area_registry/list`: what HA's area card draws. */
+    data class Area(
+        val name: String,
+        val icon: String?,
+        val picture: String?,
+        val temperatureEntityId: String?,
+        val humidityEntityId: String?,
     )
 
     /** Device id to its name (`name_by_user`, else `name`), from `config/device_registry/list`. */
     @Volatile var devices: Map<String, String> = emptyMap()
         private set
 
+    /** Device id to its area id, from `config/device_registry/list`. */
+    @Volatile var deviceAreas: Map<String, String> = emptyMap()
+        private set
+
+    /** Area id to the area, from `config/area_registry/list`. */
+    @Volatile var areas: Map<String, Area> = emptyMap()
+        private set
+
+    /** The registry in HA's order (an area card's sensors and camera follow it). */
     @Volatile var registry: Map<String, Entry> = emptyMap()
         private set
     private val componentIcons = ConcurrentHashMap<String, JSONObject>()
@@ -52,6 +76,8 @@ object HaDisplay {
     fun reset() {
         registry = emptyMap()
         devices = emptyMap()
+        deviceAreas = emptyMap()
+        areas = emptyMap()
         componentIcons.clear(); platformIcons.clear(); stateLabels.clear()
         translatedDomains.clear(); translatedPlatforms.clear(); iconDomains.clear(); iconPlatforms.clear()
     }
@@ -59,7 +85,7 @@ object HaDisplay {
     /** Reads `list_for_display`'s result (`entities: [{ei, pl, tk, dp, ic}, ...]`). */
     fun applyRegistry(result: JSONObject) {
         val arr = result.optJSONArray("entities") ?: return
-        val out = HashMap<String, Entry>(arr.length() * 2)
+        val out = LinkedHashMap<String, Entry>(arr.length() * 2)
         for (i in 0 until arr.length()) {
             val e = arr.optJSONObject(i) ?: continue
             val id = e.optString("ei")
@@ -71,6 +97,9 @@ object HaDisplay {
                 icon = e.optString("ic").ifEmpty { null },
                 deviceId = e.optString("di").ifEmpty { null },
                 name = if (e.has("en") && !e.isNull("en")) e.optString("en").ifEmpty { null } else null,
+                areaId = if (e.isNull("ai")) null else e.optString("ai").ifEmpty { null },
+                categorized = e.has("ec") && !e.isNull("ec"),
+                hidden = e.optBoolean("hb", false),
             )
         }
         registry = out
@@ -79,14 +108,42 @@ object HaDisplay {
     /** Reads `config/device_registry/list`'s result, keeping each device's display name. */
     fun applyDevices(result: org.json.JSONArray) {
         val out = HashMap<String, String>(result.length() * 2)
+        val inArea = HashMap<String, String>()
         for (i in 0 until result.length()) {
             val d = result.optJSONObject(i) ?: continue
+            if (!d.isNull("area_id")) d.optString("area_id").takeIf { it.isNotEmpty() }?.let { inArea[d.optString("id")] = it }
             val name = d.optString("name_by_user").takeIf { it.isNotEmpty() && !d.isNull("name_by_user") }
                 ?: d.optString("name").takeIf { it.isNotEmpty() && !d.isNull("name") } ?: continue
             out[d.optString("id")] = name
         }
         devices = out
+        deviceAreas = inArea
     }
+
+    /** Reads `config/area_registry/list`'s result. */
+    fun applyAreas(result: org.json.JSONArray) {
+        val out = HashMap<String, Area>(result.length() * 2)
+        fun JSONObject.str(key: String) = if (isNull(key)) null else optString(key).ifEmpty { null }
+        for (i in 0 until result.length()) {
+            val a = result.optJSONObject(i) ?: continue
+            val id = a.str("area_id") ?: continue
+            out[id] = Area(a.str("name") ?: id, a.str("icon"), a.str("picture"), a.str("temperature_entity_id"), a.str("humidity_entity_id"))
+        }
+        areas = out
+    }
+
+    /** The area [entityId] is in: its own, else its device's (HA's `getEntityContext`). */
+    fun areaOf(entityId: String): String? {
+        val e = registry[entityId] ?: return null
+        return e.areaId ?: e.deviceId?.let { deviceAreas[it] }
+    }
+
+    /**
+     * The entities of [areaId] an area card counts, in HA's registry order: not hidden, no entity category
+     * (`generateEntityFilter` with `entity_category: "none"`).
+     */
+    fun areaEntityIds(areaId: String): List<String> =
+        registry.entries.filter { (id, e) -> !e.hidden && !e.categorized && areaOf(id) == areaId }.map { it.key }
 
     /**
      * The name HA's cards give an entity on a device (`hass.formatEntityName`'s default): the device's name, then the

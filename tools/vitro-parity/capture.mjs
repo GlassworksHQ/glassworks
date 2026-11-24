@@ -31,7 +31,7 @@ import { parseArgs, pick } from './lib/args.mjs';
 import { aliasPaths, assetDestination, canonicalPath, capturableImage, staleAssets } from './lib/assets.mjs';
 import { applyEntityEvent, unmetExpectations } from './lib/states.mjs';
 import { imageOutcomes, noteSaved } from './lib/images.mjs';
-import { buildDisplay } from './lib/display.mjs';
+import { buildDisplay, referencedAreas } from './lib/display.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -522,7 +522,7 @@ async function capture() {
   ]);
   const cardModUrl = resources.map((r) => r.url).find((u) => /card-mod\.js/.test(u)) || null;
   // The display data Vitro reads live (HaDisplay): fetched once, cut down per case.
-  const [registry, devices] = await Promise.all([ha.call({ type: 'config/entity_registry/list_for_display' }), ha.call({ type: 'config/device_registry/list' })]);
+  const [registry, devices, areas] = await Promise.all([ha.call({ type: 'config/entity_registry/list_for_display' }), ha.call({ type: 'config/device_registry/list' }), ha.call({ type: 'config/area_registry/list' })]);
   const displayCache = new Map();
   const fetchDisplay = async (type, category, names) => {
     const want = names.filter((n) => !displayCache.has(`${type}|${category}|${n}`));
@@ -536,7 +536,7 @@ async function capture() {
       }
     }
   };
-  const displayFor = async (ids, shown) => {
+  const displayFor = async (ids, shown, areaIds) => {
     const first = buildDisplay(ids, registry, devices, () => undefined, () => undefined);
     const { domains, platforms } = first.requested;
     await fetchDisplay('frontend/get_icons', 'entity_component', domains);
@@ -546,7 +546,7 @@ async function capture() {
     const deviceClasses = Object.fromEntries(Object.entries(shown).map(([id, st]) => [id, st.a?.device_class]).filter(([, dc]) => dc));
     return buildDisplay(ids, registry, devices,
       (category, n) => displayCache.get(`frontend/get_icons|${category}|${n}`),
-      (category, n) => displayCache.get(`frontend/get_translations|${category}|${n}`), deviceClasses);
+      (category, n) => displayCache.get(`frontend/get_translations|${category}|${n}`), deviceClasses, areas, areaIds);
   };
   if (!cardModUrl) log('card-mod is not a Lovelace resource: card_mod styles will not apply in HA');
   const cases = loadCases();
@@ -622,7 +622,7 @@ async function capture() {
               const r = await ha.renderTemplate(tpl);
               templates[tpl] = r.error ? { error: String(r.error) } : { result: typeof r.result === 'string' ? r.result : JSON.stringify(r.result) };
             }
-            display = await displayFor(ids, drawnStates);
+            display = await displayFor(ids, drawnStates, referencedAreas(config));
             // One instant for the PNG, its states and its images: anything that moved meanwhile starts it over.
             const sameStates = JSON.stringify(snapshotStates(states, ids)) === JSON.stringify(drawnStates);
             const sameImages = JSON.stringify(await page.evaluate(DRAWN_IMAGES_JS, slots)) === JSON.stringify(drawn);

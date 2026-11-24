@@ -187,6 +187,20 @@ test('buildDisplay keeps only what Vitro reads, with synthetic device ids', asyn
   assert.ok(!text.includes(realDevice) && !text.includes('SN1') && !text.includes('aa:bb') && !text.includes('4c83f8'));
 });
 
+test('buildDisplay keeps the areas the case names, and referencedAreas finds them in nested cards', async () => {
+  const { buildDisplay, referencedAreas } = await import('../lib/display.mjs');
+  const config = { type: 'vertical-stack', cards: [{ type: 'area', area: 'kitchen' }, { type: 'tile', entity: 'light.x', area: 'not_an_area_card' }] };
+  assert.deepEqual(referencedAreas(config), ['kitchen']);
+  const areas = [
+    { area_id: 'kitchen', name: 'Kitchen', icon: 'mdi:stove', picture: null, floor_id: 'ground', aliases: ['x'], temperature_entity_id: 'sensor.kitchen_t' },
+    { area_id: 'office', name: 'Office', icon: null },
+  ];
+  const d = buildDisplay(new Set(), { entities: [] }, [], () => undefined, () => undefined, {}, areas, referencedAreas(config));
+  assert.deepEqual(d.areas, [{ area_id: 'kitchen', name: 'Kitchen', icon: 'mdi:stove', temperature_entity_id: 'sensor.kitchen_t' }]);
+  // No area card, no `areas` key: every other reference keeps its shape.
+  assert.ok(!('areas' in buildDisplay(new Set(), { entities: [] }, [], () => undefined, () => undefined, {}, areas, [])));
+});
+
 test('findPrivate flags a MAC fragment but not a colour or a model id', async () => {
   const { findPrivate } = await import('../lib/scrub.mjs');
   assert.deepEqual(findPrivate('AirDot 4c83f8', null), ['a MAC fragment']);

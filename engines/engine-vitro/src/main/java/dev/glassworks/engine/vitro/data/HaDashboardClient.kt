@@ -595,6 +595,13 @@ class HaDashboardClient(
             if (res.optBoolean("success", false)) res.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyDevices(r) } }
             settleDisplay()
         }
+        // Areas, for the area card (its name, icon, picture and sensors).
+        displayPending.incrementAndGet()
+        request(JSONObject().put("type", "config/area_registry/list")) { res ->
+            if (gen != connectionGen.get()) return@request
+            if (res.optBoolean("success", false)) res.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyAreas(r) } }
+            settleDisplay()
+        }
     }
 
     /** Reads `selectedTheme` (a theme name, or `{theme, dark}`) out of the `core` user data and tells the listener. */

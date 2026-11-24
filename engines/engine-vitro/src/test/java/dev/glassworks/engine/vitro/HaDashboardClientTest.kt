@@ -495,7 +495,8 @@ class HaDashboardClientTest {
         assertNull(err)
         assertEquals("Lounge", (result as JSONArray).getJSONObject(0).getString("name"))
         assertFalse("the caller's message is copied, not stamped with an id", request.has("id"))
-        assertTrue(server.commands("config/area_registry/list").single().getInt("id") > 0)
+        // The client asks for the areas itself too (the area card): every one carries an id.
+        assertTrue(server.commands("config/area_registry/list").all { it.getInt("id") > 0 })
     }
 
     @Test
@@ -618,7 +619,7 @@ class HaDashboardClientTest {
         val ids = server.received.drop(1).map { it.getInt("id") }
         assertEquals(ids.sorted(), ids)
         // Display data (registry, icons, translations) can interleave: it isn't what this test orders.
-        val display = setOf("config/entity_registry/list_for_display", "config/device_registry/list", "frontend/get_icons", "frontend/get_translations")
+        val display = setOf("config/entity_registry/list_for_display", "config/device_registry/list", "config/area_registry/list", "frontend/get_icons", "frontend/get_translations")
         val after = server.received.drop(1).filter { it.getInt("id") > 11 && it.getString("type") !in display }.map {
             if (it.getString("type") == "call_service") it.getString("service") else it.getString("type")
         }

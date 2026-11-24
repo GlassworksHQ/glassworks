@@ -236,6 +236,7 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
     private fun applyDisplay(d: JSONObject) {
         HaDisplay.applyRegistry(JSONObject().put("entities", d.optJSONArray("entities") ?: org.json.JSONArray()))
         d.optJSONArray("devices")?.let(HaDisplay::applyDevices)
+        d.optJSONArray("areas")?.let(HaDisplay::applyAreas)
         val requested = d.optJSONObject("requested") ?: JSONObject()
         fun names(key: String) = requested.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty()
         val domains = names("domains")

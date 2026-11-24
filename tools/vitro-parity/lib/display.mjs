@@ -11,9 +11,10 @@ const ENTRY_KEYS = ['ei', 'pl', 'tk', 'dp', 'ic', 'di', 'en'];
  * are unique to one HA), and the icons and English state labels HaDisplay reads for them: per domain, the default
  * (`_`) and the entities' device classes ([deviceClasses]: entity id -> device class); per integration, the
  * entries' own translation keys. [icons] and [translations] are lookups: (category, name) -> HA's `resources`
- * for that one name.
+ * for that one name. [areas] is `config/area_registry/list`; of it the block keeps the areas in [areaIds] (the ones
+ * the case's area cards name), with the fields HaDisplay.applyAreas reads, and has no `areas` key without any.
  */
-export function buildDisplay(ids, registry, devices, icons, translations, deviceClasses = {}) {
+export function buildDisplay(ids, registry, devices, icons, translations, deviceClasses = {}, areas = [], areaIds = []) {
   const byId = new Map((registry.entities || []).map((e) => [e.ei, e]));
   const deviceIds = new Map();
   const entities = [];
@@ -63,11 +64,37 @@ export function buildDisplay(ids, registry, devices, icons, translations, device
     const prefix = `component.${e.pl}.entity.${e.ei.split('.')[0]}.${e.tk}.state.`;
     for (const [k, v] of Object.entries(translations('entity', e.pl) || {})) if (k.startsWith(prefix)) entityLabels[k] = v;
   }
+  const areaList = [];
+  for (const id of [...new Set(areaIds)].sort()) {
+    const a = areas.find((x) => x.area_id === id);
+    if (!a) continue;
+    const out = {};
+    for (const k of AREA_KEYS) if (a[k] !== undefined && a[k] !== null) out[k] = a[k];
+    areaList.push(out);
+  }
   return {
     entities,
     devices: deviceList,
+    ...(areaList.length ? { areas: areaList } : {}),
     requested: { domains, platforms },
     icons: { entity_component: componentIcons, entity: entityIcons },
     translations: { entity_component: componentLabels, entity: entityLabels },
   };
+}
+
+/** The area registry fields HaDisplay.applyAreas reads. */
+const AREA_KEYS = ['area_id', 'name', 'icon', 'picture', 'temperature_entity_id', 'humidity_entity_id'];
+
+/** The areas [config]'s area cards name (`type: area`, `area: <id>`), nested cards included. */
+export function referencedAreas(config) {
+  const out = new Set();
+  const walk = (v) => {
+    if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') {
+      if (v.type === 'area' && typeof v.area === 'string' && v.area) out.add(v.area);
+      Object.values(v).forEach(walk);
+    }
+  };
+  walk(config);
+  return [...out];
 }

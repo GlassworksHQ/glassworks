@@ -47,6 +47,13 @@
  "display": {
   "entities": [],
   "devices": [],
+  "areas": [
+   {
+    "area_id": "kitchen",
+    "name": "Kitchen",
+    "icon": "mdi:stove"
+   }
+  ],
   "requested": {
    "domains": [],
    "platforms": []
