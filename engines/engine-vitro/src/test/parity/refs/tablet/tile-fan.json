@@ -70,5 +70,76 @@
    "lc": 1795504930.0582252
   }
  },
- "templates": {}
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "fan.air_purifier",
+    "pl": "zha",
+    "tk": "fan",
+    "di": "device-1"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Air purifier"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "fan"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "fan": {
+     "_": {
+      "default": "mdi:fan",
+      "state": {
+       "off": "mdi:fan-off"
+      },
+      "state_attributes": {
+       "direction": {
+        "default": "mdi:rotate-right",
+        "state": {
+         "reverse": "mdi:rotate-left"
+        }
+       },
+       "preset_mode": {
+        "default": "mdi:circle-medium",
+        "state": {}
+       }
+      }
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "fan": {
+      "fan": {
+       "state_attributes": {
+        "preset_mode": {
+         "state": {
+          "auto": "mdi:fan-auto",
+          "smart": "mdi:fan-auto"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.fan.entity_component._.state.off": "Off",
+    "component.fan.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
 }

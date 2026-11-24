@@ -31,10 +31,10 @@
  "texts": [
   {
    "slot": 0,
-   "text": "CO2 524",
+   "text": "CO2 498",
    "x": 37.8,
    "y": 15.2,
-   "w": 41.34,
+   "w": 41.8,
    "h": 11,
    "size": 9.6,
    "weight": 700,
@@ -44,19 +44,62 @@
  ],
  "states": {
   "sensor.living_room_airdot_living_room_co2": {
-   "s": "524.0",
+   "s": "498.0",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "ppm",
     "device_class": "carbon_dioxide",
     "friendly_name": "AirDot Living Room CO2"
    },
-   "lc": 1795511784.9088404
+   "lc": 1795523064.970764
   }
  },
  "templates": {
   "CO2 {{ states('sensor.living_room_airdot_living_room_co2') | int(0) }}": {
-   "result": "CO2 524"
+   "result": "CO2 498"
+  }
+ },
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.living_room_airdot_living_room_co2",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "device-1",
+    "en": "CO2"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "AirDot Living Room"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "carbon_dioxide": {
+      "default": "mdi:molecule-co2"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
   }
  }
 }

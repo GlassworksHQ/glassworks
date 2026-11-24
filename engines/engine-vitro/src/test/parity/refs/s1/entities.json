@@ -79,7 +79,7 @@
   },
   {
    "slot": 0,
-   "text": "61 W",
+   "text": "50 W",
    "x": 451.39,
    "y": 125.59,
    "w": 31.61,
@@ -187,15 +187,160 @@
    "lc": 1795504918.0331674
   },
   "sensor.kitchen_fridge_power": {
-   "s": "61.0",
+   "s": "50.0",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "W",
     "device_class": "power",
     "friendly_name": "Fridge Power"
    },
-   "lc": 1795511218.9105065
+   "lc": 1795522833.0296257
   }
  },
- "templates": {}
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "binary_sensor.kitchen_fridge_fridge_door_open",
+    "pl": "localthings",
+    "tk": "instance_open",
+    "di": "device-1",
+    "en": "Fridge door open"
+   },
+   {
+    "ei": "input_boolean.guest_mode",
+    "pl": "input_boolean",
+    "en": "Guest mode"
+   },
+   {
+    "ei": "light.window_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:window-open",
+    "di": "device-2",
+    "en": "Window"
+   },
+   {
+    "ei": "sensor.kitchen_fridge_fridge_temperature",
+    "pl": "localthings",
+    "tk": "instance_temperature",
+    "dp": 1,
+    "di": "device-1",
+    "en": "Fridge temperature"
+   },
+   {
+    "ei": "sensor.kitchen_fridge_power",
+    "pl": "localthings",
+    "tk": "power_watts",
+    "dp": 0,
+    "di": "device-1",
+    "en": "Power"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Fridge"
+   },
+   {
+    "id": "device-2",
+    "name": "LED Strip"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "binary_sensor",
+    "input_boolean",
+    "light",
+    "sensor"
+   ],
+   "platforms": [
+    "localthings",
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "binary_sensor": {
+     "_": {
+      "default": "mdi:radiobox-blank",
+      "state": {
+       "on": "mdi:checkbox-marked-circle"
+      }
+     },
+     "door": {
+      "default": "mdi:door-closed",
+      "state": {
+       "on": "mdi:door-open"
+      }
+     }
+    },
+    "input_boolean": {
+     "_": {
+      "default": "mdi:check-circle-outline",
+      "state": {
+       "off": "mdi:close-circle-outline"
+      }
+     }
+    },
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "power": {
+      "default": "mdi:flash"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "light": {
+      "light": {
+       "state_attributes": {
+        "effect": {
+         "state": {
+          "colorloop": "mdi:looks"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.binary_sensor.entity_component._.state.off": "Off",
+    "component.binary_sensor.entity_component._.state.on": "On",
+    "component.binary_sensor.entity_component.door.state.off": "Closed",
+    "component.binary_sensor.entity_component.door.state.on": "Open",
+    "component.input_boolean.entity_component._.state.off": "Off",
+    "component.input_boolean.entity_component._.state.on": "On",
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
 }
