@@ -27,7 +27,12 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
     /** One color stop; [pos] is a fraction of the gradient ray, or null to spread evenly, [px] a CSS px offset. */
     data class Stop(val color: Int, val pos: Float?, val px: Float?)
 
-    data class Linear(val angleDeg: Float, override val stops: List<Stop>) : Layer()
+    /**
+     * [corner]: a `to top right` style direction, as (vertical, horizontal) signs (-1 top/left, 1 bottom/right). Its
+     * angle depends on the box (the line through the two other corners is perpendicular to the gradient), so it is
+     * resolved in [geometry]; [angleDeg] is then its angle for a square box.
+     */
+    data class Linear(val angleDeg: Float, override val stops: List<Stop>, val corner: Pair<Int, Int>? = null) : Layer()
 
     /** [sizeX] / [sizeY]: explicit radii (`px`, or `%` of the box when [sizeXPct]); null uses [extent]. */
     data class Radial(
@@ -53,7 +58,8 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
 
     fun geometry(layer: Layer, w: Float, h: Float, scale: Float): Geometry? = when (layer) {
         is Linear -> {
-            val a = Math.toRadians(layer.angleDeg.toDouble())
+            val a = layer.corner?.let { (v, hz) -> kotlin.math.atan2((hz * h).toDouble(), (-v * w).toDouble()) }
+                ?: Math.toRadians(layer.angleDeg.toDouble())
             val len = (abs(w * sin(a)) + abs(h * cos(a))).toFloat()
             val dx = (sin(a) * len / 2).toFloat()
             val dy = (-cos(a) * len / 2).toFloat()
@@ -106,13 +112,20 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
             val layers = ArrayList<Layer>()
             var color: Int? = null
             for ((i, raw) in parts.withIndex()) {
-                val p = raw.trim()
-                val m = FN.find(p)
-                if (m == null) {
-                    // The final layer may carry the background color (`..., #0a0b0f`).
-                    if (i == parts.lastIndex) color = ThemeResolver.parseColor(p)
-                    continue
+                var p = raw.trim()
+                var m = FN.find(p)
+                if (m == null && i == parts.lastIndex) {
+                    // The final layer may carry the background color, alone (`..., #0a0b0f`) or next to its image
+                    // (`linear-gradient(transparent, #fff) #123456`).
+                    val toks = splitTopLevel(p, ' ').map { it.trim() }
+                    val image = toks.firstOrNull { FN.matches(it) }
+                    toks.filter { it !== image }.firstNotNullOfOrNull { ThemeResolver.parseColor(it) }?.let { color = it }
+                    if (image != null) {
+                        p = image
+                        m = FN.find(p)
+                    }
                 }
+                if (m == null) continue
                 if (m.groupValues[1].isNotEmpty()) return null
                 val layer = if (m.groupValues[2].equals("linear", true)) linear(m.groupValues[3]) else radial(m.groupValues[3])
                 layer?.let(layers::add)
@@ -132,7 +145,15 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
                 else -> null
             }
             val stops = stops(if (angle != null) args.drop(1) else args) ?: return null
-            return Linear(angle ?: 180f, stops)
+            return Linear(angle ?: 180f, stops, if (first.startsWith("to ")) corner(first.removePrefix("to ").trim()) else null)
+        }
+
+        /** A corner direction (`top right`) as (vertical, horizontal) signs; null for a side (`top`) or nothing. */
+        private fun corner(side: String): Pair<Int, Int>? {
+            val words = side.split(WHITESPACE).toSet()
+            val v = when { "top" in words -> -1; "bottom" in words -> 1; else -> 0 }
+            val hz = when { "left" in words -> -1; "right" in words -> 1; else -> 0 }
+            return if (v != 0 && hz != 0) v to hz else null
         }
 
         private fun sideAngle(side: String): Float? {
@@ -216,20 +237,42 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
 
         private fun stops(args: List<String>): List<Stop>? {
             val out = ArrayList<Stop>()
+            // Transition hints (`#000 0%, 20%, #fff`): where between two stops their mix sits, by index into [out].
+            val hints = ArrayList<Pair<Int, Stop>>()
             for (a in args) {
                 val toks = splitTopLevel(a.trim(), ' ').map { it.trim() }.filter { it.isNotEmpty() }
                 if (toks.isEmpty()) continue
                 val color = ThemeResolver.parseColor(toks[0]) ?: run {
-                    // A bare position (a color hint) isn't drawn differently enough to matter; skip it.
-                    if (LEN.matches(toks[0])) null else return null
+                    // A bare position is a transition hint: it needs a stop on each side and no other token.
+                    val m = LEN.matchEntire(toks[0]) ?: return null
+                    if (toks.size != 1 || out.isEmpty()) return null
+                    val v = m.groupValues[1].toFloatOrNull() ?: return null
+                    hints += out.size to (if (m.groupValues[2] == "px") Stop(0, null, v) else Stop(0, v / 100f, null))
+                    null
                 } ?: continue
                 val positions = toks.drop(1).mapNotNull { t ->
                     LEN.find(t)?.let { m -> m.groupValues[1].toFloatOrNull()?.let { v -> if (m.groupValues[2] == "px") Stop(color, null, v) else Stop(color, v / 100f, null) } }
                 }
                 if (positions.isEmpty()) out += Stop(color, null, null) else out += positions
             }
+            // A hint after the last stop (or two in a row) is invalid: the browser drops the declaration.
+            if (hints.any { (at, _) -> at >= out.size } || hints.map { it.first }.toSet().size != hints.size) return null
+            // Each hint becomes a stop of the two colors' mix at its position: the midpoint lands where the hint puts
+            // it, the curve on each side approximated by a straight run.
+            for ((at, h) in hints.asReversed()) out.add(at, h.copy(color = mix(out[at - 1].color, out[at].color)))
             // A gradient needs two stops; with fewer the browser drops the whole declaration.
             return if (out.size >= 2) out else null
+        }
+
+        /** The color halfway from [a] to [b], premultiplied as the browser interpolates (alpha weighs the channels). */
+        private fun mix(a: Int, b: Int): Int {
+            val aa = a ushr 24
+            val ba = b ushr 24
+            val alpha = (aa + ba) / 2
+            if (alpha == 0) return ((((a shr 16 and 0xFF) + (b shr 16 and 0xFF)) / 2) shl 16) or
+                ((((a shr 8 and 0xFF) + (b shr 8 and 0xFF)) / 2) shl 8) or (((a and 0xFF) + (b and 0xFF)) / 2)
+            fun ch(shift: Int) = (((a shr shift and 0xFF) * aa + (b shr shift and 0xFF) * ba) / (aa + ba)).coerceIn(0, 255)
+            return (alpha shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
         }
 
         /**

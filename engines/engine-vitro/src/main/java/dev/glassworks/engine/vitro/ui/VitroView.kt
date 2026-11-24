@@ -116,7 +116,8 @@ data class VitroMetrics(
 class VitroView(
     context: Context,
     private val store: EntityStore,
-    backgroundColor: Int,
+    /** The page's own color: what shows before (and between) Home Assistants' themes. */
+    private val neutralBackground: Int,
 ) : FrameLayout(context) {
     private val dp = resources.displayMetrics.density
     private fun px(v: Float) = (v * dp).toInt()
@@ -243,6 +244,15 @@ class VitroView(
 
     var onMetrics: ((VitroMetrics) -> Unit)? = null
     var onViewSelected: ((ViewConfig) -> Unit)? = null
+
+    /** A tab tap is about to switch views: the page records where it was, in the same history as its loads. */
+    var onTabNavigation: (() -> Unit)? = null
+
+    /**
+     * The owning page's back (its one history of loads and tabs): true when it went back. A subview's back arrow
+     * uses it, so the arrow and the host's back key walk the same history. Null on a view with no page.
+     */
+    var pageBack: (() -> Boolean)? = null
     var onThemeResolved: ((ResolvedTheme) -> Unit)? = null
     var contextFactory: ((ResolvedTheme) -> VitroCardContext)? = null
 
@@ -257,7 +267,7 @@ class VitroView(
 
     init {
         MdiIcons.init(context)
-        setBackgroundColor(backgroundColor)
+        setBackgroundColor(neutralBackground)
         addView(backdrop, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         tabScroll.addView(tabBar, LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
         shell.addView(tabScroll, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -316,6 +326,14 @@ class VitroView(
         contentHost.removeAllViews()
         clearOverlay()
         resourcesList = emptyList()
+        // Nothing of the old server stays on screen while the new one connects: not its tabs, not its backdrop, and
+        // a backdrop image still loading from it doesn't land afterwards.
+        tabBar.removeAllViews()
+        tabs.clear()
+        tabScroll.visibility = GONE
+        backdropGeneration++
+        backdrop.background = null
+        setBackgroundColor(neutralBackground)
     }
 
     fun setThemes(catalog: ThemeCatalog) {
@@ -407,7 +425,10 @@ class VitroView(
                 gravity = Gravity.CENTER_HORIZONTAL
                 isClickable = true
                 tag = idx
-                setOnClickListener { renderView(idx, forceRebuild = false) }
+                setOnClickListener {
+                    if (idx != currentViewIndex) onTabNavigation?.invoke()
+                    renderView(idx, forceRebuild = false)
+                }
             }
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -646,14 +667,49 @@ class VitroView(
         }
     }
 
+    /** A subview's back arrow and title: back to `back_path`, else to the view it was opened from. */
+    private fun subviewBackRow(view: ViewConfig, ctx: VitroCardContext, pad: Int): View {
+        val backRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(pad, pad, pad, px(4f))
+            isClickable = true
+            setOnClickListener {
+                val pageBack = pageBack
+                when {
+                    view.backPath != null -> ctx.navigate(view.backPath)
+                    // A page's own history is the one back walks: this view's stack mirrors it, and replaying that
+                    // after the page's is exhausted would revisit views already gone back through.
+                    pageBack != null -> if (!pageBack()) ctx.navigate("/")
+                    viewBackStack.isNotEmpty() -> goBack()
+                    else -> ctx.navigate("/")
+                }
+            }
+        }
+        backRow.addView(TextView(context).apply {
+            text = "←  ${view.title}"
+            textSize = 18f
+            setTextColor(ctx.theme.primaryTextColor)
+            typeface = VitroFonts.typeface(context, Inter.MEDIUM, 18f)
+        })
+        return backRow
+    }
+
     private fun buildViewTree(view: ViewConfig, ctx: VitroCardContext): View {
         // Panel view: single full-viewport card (e.g. custom:mirror-home-card, custom:tablet-home-card).
         if (view.type == "panel" && view.cards.isNotEmpty()) {
             val card = view.cards.first()
             // In a full-viewport frame: the cached-view switch shows and hides the frame, the card's conditions the
             // card inside it, so returning to the view can't undo a hidden card.
-            return FrameLayout(context).apply {
+            val frame = FrameLayout(context).apply {
                 addView(wrapVisibility(card, buildCard(card, ctx, fillViewport = true), ctx), FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            }
+            // A panel subview keeps its back arrow while the header shows; the card fills the rest.
+            if (!view.subview || hideHeader) return frame
+            return LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(subviewBackRow(view, ctx, px(ctx.theme.viewPaddingDp)), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                addView(frame, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
             }
         }
 
@@ -686,22 +742,7 @@ class VitroView(
         val body = if (view.subview && !hideHeader) {
             LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                val backRow = LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    setPadding(outerPad, outerPad, outerPad, px(4f))
-                    isClickable = true
-                    setOnClickListener {
-                        if (view.backPath == null && viewBackStack.isNotEmpty()) goBack() else ctx.navigate(view.backPath ?: "/")
-                    }
-                }
-                backRow.addView(TextView(context).apply {
-                    text = "←  ${view.title}"
-                    textSize = 18f
-                    setTextColor(ctx.theme.primaryTextColor)
-                    typeface = VitroFonts.typeface(context, Inter.MEDIUM, 18f)
-                })
-                addView(backRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                addView(subviewBackRow(view, ctx, outerPad), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
                 addView(withBadges, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             }
         } else {
@@ -780,10 +821,20 @@ class VitroView(
         val tap = ActionConfig.parse(badge.raw.optJSONObject("tap_action"), "more-info")
         pill.setOnClickListener { ctx.performAction(tap, eid) }
         pill.bindHoldAction(ctx, ActionConfig.parse(badge.raw.optJSONObject("hold_action"), "none"), eid)
-        val unsub = store.subscribe(eid) { s -> ctx.main.post { render(s) } }
+        fun subscribe() = store.subscribe(eid) { _ -> ctx.main.post { render(store[eid]) } }
+        var unsub: (() -> Unit)? = subscribe()
         pill.addOnAttachStateChangeListener(object : OnAttachStateChangeListener {
-            override fun onViewAttachedToWindow(v: View) {}
-            override fun onViewDetachedFromWindow(v: View) { unsub() }
+            override fun onViewAttachedToWindow(v: View) {
+                // Back after a detach: listen again, and show what changed meanwhile.
+                if (unsub == null) {
+                    unsub = subscribe()
+                    render(store[eid])
+                }
+            }
+            override fun onViewDetachedFromWindow(v: View) {
+                unsub?.invoke()
+                unsub = null
+            }
         })
         return pill
     }

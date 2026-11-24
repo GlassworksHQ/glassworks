@@ -372,14 +372,12 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             onChange = { pct -> stateLabel.text = if (pct <= 0) "Off" else "$pct%" }
             onRelease = { pct ->
                 val data = JSONObject().put("entity_id", id)
-                ctx.store[id]?.let { cur ->
-                    ctx.store.putLocal(
-                        if (pct <= 0) cur.copy(state = "off")
-                        else cur.copy(state = "on", attributes = cur.attributes + ("brightness" to (pct * 255 / 100).coerceIn(1, 255))),
-                    )
+                val bri = (pct * 255 / 100).coerceIn(1, 255)
+                val next = ctx.store[id]?.let { cur ->
+                    if (pct <= 0) cur.copy(state = "off") else cur.copy(state = "on", attributes = cur.attributes + ("brightness" to bri))
                 }
-                if (pct <= 0) ctx.callService("light", "turn_off", data, null)
-                else ctx.callService("light", "turn_on", data.put("brightness", (pct * 255 / 100).coerceIn(1, 255)), null)
+                if (pct <= 0) ctx.callOptimistic(next, "light", "turn_off", data)
+                else ctx.callOptimistic(next, "light", "turn_on", data.put("brightness", bri))
             }
         }
         center.addView(slider, LayoutParams(ctx.px(pillW), ctx.px(pillH), Gravity.CENTER))
@@ -426,8 +424,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             contentDescription = "Toggle"
             setOnClickListener {
                 val cur = ctx.store[id]
-                if (cur != null && cur.state in setOf("on", "off")) ctx.store.putLocal(cur.copy(state = if (cur.state == "on") "off" else "on"))
-                ctx.callService("light", "toggle", JSONObject().put("entity_id", id), null)
+                val next = if (cur != null && cur.state in setOf("on", "off")) cur.copy(state = if (cur.state == "on") "off" else "on") else null
+                ctx.callOptimistic(next, "light", "toggle", JSONObject().put("entity_id", id))
             }
         }, LinearLayout.LayoutParams(dockSize))
         val modeButtons = ArrayList<Pair<LightMode, LightModeButton>>()
@@ -535,6 +533,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     /** Sets a light's color (and color temperature, when [kelvin] is given) optimistically, then calls HA. */
     private fun setLightColor(id: String, color: Int, kelvin: Int?) {
         val rgb = listOf(LightColor.red(color), LightColor.green(color), LightColor.blue(color))
+        var next: EntityState? = null
         ctx.store[id]?.let { cur ->
             val attrs = cur.attributes.toMutableMap()
             attrs["rgb_color"] = rgb
@@ -546,12 +545,12 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 attrs.remove("color_temp")
                 attrs["color_mode"] = "rgb"
             }
-            ctx.store.putLocal(cur.copy(state = "on", attributes = attrs))
+            next = cur.copy(state = "on", attributes = attrs)
         }
         val data = JSONObject().put("entity_id", id)
         if (kelvin != null) data.put("color_temp_kelvin", kelvin)
         else data.put("rgb_color", JSONArray().put(rgb[0]).put(rgb[1]).put(rgb[2]))
-        ctx.callService("light", "turn_on", data, null)
+        ctx.callOptimistic(next, "light", "turn_on", data)
     }
 
     /** A light's real brightness as 1..100 %, or null while HA hasn't reported one (off, or an optimistic `on`). */
@@ -643,17 +642,17 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         addCentered(stateLabel)
         addCentered(timeLabel, topDp = 4f)
         // One lock write at a time: a second tap while one is pending would make the rollbacks restore each other's
-        // optimistic states.
-        var writing = false
+        // optimistic states. Kept per entity outside these controls ([PENDING_LOCK_WRITES]): switching to History and
+        // back rebuilds them, and must not release the guard while the write is out.
         val pill = VerticalTogglePillView(ctx.context, theme.activeColor("lock"), theme.dark).apply {
             onToggle = toggle@{ locked ->
                 val reset = { setOn(ctx.store[id]?.state.let { it == "locked" || it == "locking" }) }
-                if (writing) {
+                if (id in PENDING_LOCK_WRITES) {
                     reset()
                     return@toggle
                 }
                 val send = { code: String? ->
-                    writing = true
+                    PENDING_LOCK_WRITES += id
                     val before = ctx.store[id]
                     val optimistic = before?.copy(state = if (locked) "locked" else "unlocked")
                     optimistic?.let { ctx.store.putLocal(it) }
@@ -665,7 +664,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                     // HA has replaced the flip meanwhile (that one is the truth).
                     ctx.callWs(msg) { ok, _, _ ->
                         ctx.main.post {
-                            writing = false
+                            PENDING_LOCK_WRITES -= id
                             if (!ok && before != null && ctx.store[id] === optimistic) ctx.store.putLocal(before)
                         }
                     }
@@ -709,13 +708,10 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val hasPosition = initial?.attributes?.get("current_position") != null
 
         fun setPosition(pos: Int) {
-            ctx.store[id]?.let { cur ->
-                ctx.store.putLocal(cur.copy(
-                    state = if (pos > 0) "open" else "closed",
-                    attributes = cur.attributes + ("current_position" to pos),
-                ))
+            val next = ctx.store[id]?.let { cur ->
+                cur.copy(state = if (pos > 0) "open" else "closed", attributes = cur.attributes + ("current_position" to pos))
             }
-            ctx.callService("cover", "set_cover_position", JSONObject().put("entity_id", id).put("position", pos), null)
+            ctx.callOptimistic(next, "cover", "set_cover_position", JSONObject().put("entity_id", id).put("position", pos))
         }
 
         val buttons = LinearLayout(ctx.context).apply {
@@ -842,8 +838,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
         val dial = ThermostatDialView(ctx, unit, showCurrentInDial = false).apply {
             onCommit = { t ->
-                ctx.store[id]?.let { cur -> ctx.store.putLocal(cur.copy(attributes = cur.attributes + ("temperature" to t))) }
-                ctx.callService("climate", "set_temperature", JSONObject().put("entity_id", id).put("temperature", t), null)
+                val next = ctx.store[id]?.let { cur -> cur.copy(attributes = cur.attributes + ("temperature" to t)) }
+                ctx.callOptimistic(next, "climate", "set_temperature", JSONObject().put("entity_id", id).put("temperature", t))
             }
         }
         val dialFrame = FrameLayout(ctx.context)
@@ -884,16 +880,15 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             val modes = listAttr(ctx.store[id], "hvac_modes")
             showMenu(v, modes.map { humanize(it) }) { i ->
                 val m = modes[i]
-                ctx.store[id]?.let { ctx.store.putLocal(it.copy(state = m)) }
-                ctx.callService("climate", "set_hvac_mode", JSONObject().put("entity_id", id).put("hvac_mode", m), null)
+                ctx.callOptimistic(ctx.store[id]?.copy(state = m), "climate", "set_hvac_mode", JSONObject().put("entity_id", id).put("hvac_mode", m))
             }
         }
         presetBtn.root.setOnClickListener { v ->
             val presets = listAttr(ctx.store[id], "preset_modes")
             showMenu(v, presets.map { humanize(it) }) { i ->
                 val p = presets[i]
-                ctx.store[id]?.let { ctx.store.putLocal(it.copy(attributes = it.attributes + ("preset_mode" to p))) }
-                ctx.callService("climate", "set_preset_mode", JSONObject().put("entity_id", id).put("preset_mode", p), null)
+                val next = ctx.store[id]?.let { it.copy(attributes = it.attributes + ("preset_mode" to p)) }
+                ctx.callOptimistic(next, "climate", "set_preset_mode", JSONObject().put("entity_id", id).put("preset_mode", p))
             }
         }
 
@@ -999,7 +994,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        ALARM_ACTIONS.forEachIndexed { i, (label, service) ->
+        AlarmModes.actions(initial).forEachIndexed { i, (label, service) ->
             actions.addView(pillLabel(label, false) { call(service) },
                 LinearLayout.LayoutParams(0, ctx.px(48f), 1f).apply { if (i > 0) marginStart = ctx.px(8f) })
         }
@@ -1064,8 +1059,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                         isClickable = true
                         ripple(this, 12f * ctx.dp)
                         setOnClickListener {
-                            ctx.store[id]?.let { ctx.store.putLocal(it.copy(state = opt)) }
-                            ctx.callService(domain, "select_option", JSONObject().put("entity_id", id).put("option", opt), null)
+                            ctx.callOptimistic(ctx.store[id]?.copy(state = opt), domain, "select_option", JSONObject().put("entity_id", id).put("option", opt))
                         }
                     }
                     row.addView(text(15f, if (selected) theme.primaryColor else theme.primaryTextColor, if (selected) Inter.MEDIUM else Inter.REGULAR).apply {
@@ -1277,7 +1271,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 chart.setPoints(map[id].orEmpty(), ctx.store[id]?.unit.orEmpty())
             }
         }
-        // history/stream only answers when it has numeric points; don't leave "Loading" up forever.
+        // A failed history request answers nothing: don't leave "Loading" up forever.
         ctx.main.postDelayed(timeout, HISTORY_TIMEOUT_MS)
 
         return { s ->
@@ -1292,8 +1286,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
     private fun optimisticToggle(id: String, domain: String, turnOn: Boolean) {
         val cur = ctx.store[id]
-        if (cur != null && cur.state in setOf("on", "off")) ctx.store.putLocal(cur.copy(state = if (turnOn) "on" else "off"))
-        ctx.callService(domain, if (turnOn) "turn_on" else "turn_off", JSONObject().put("entity_id", id), null)
+        val next = if (cur != null && cur.state in setOf("on", "off")) cur.copy(state = if (turnOn) "on" else "off") else null
+        ctx.callOptimistic(next, domain, if (turnOn) "turn_on" else "turn_off", JSONObject().put("entity_id", id))
     }
 
     private fun text(sp: Float, color: Int, weight: Int = Inter.REGULAR): TextView = TextView(ctx.context).apply {
@@ -1452,6 +1446,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     }
 
     private companion object {
+        /** Locks with a write out, by entity id (main thread only): see buildLock. */
+        val PENDING_LOCK_WRITES = HashSet<String>()
+
         const val WIDE_DP = 600
 
         /** Below this viewport height (dp) the sheet uses its compact landscape sizes. */
@@ -1495,7 +1492,6 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         )
         val COVER_ACTIONS = listOf("mdi:arrow-up" to "open_cover", "mdi:stop" to "stop_cover", "mdi:arrow-down" to "close_cover")
         val COVER_PRESETS = listOf(0, 25, 75, 100)
-        val ALARM_ACTIONS = listOf("Arm home" to "alarm_arm_home", "Arm away" to "alarm_arm_away", "Disarm" to "alarm_disarm")
 
         fun listAttr(s: EntityState?, key: String): List<String> = when (val v = s?.attributes?.get(key)) {
             is List<*> -> v.mapNotNull { it?.toString() }
@@ -2220,9 +2216,12 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
         /** Warm amber → warm white → neutral white → cool sky blue, top to bottom. */
         val GRADIENT = intArrayOf(0xFFFF9329.toInt(), 0xFFFFD6AA.toInt(), 0xFFFFFDF7.toInt(), 0xFFA6C8FF.toInt())
 
-        /** Kelvin at [fraction] (0 = top, warm) of the pill, rounded to 50 K. */
+        /** Kelvin at [fraction] (0 = top, warm) of the pill, rounded to 50 K; the ends are the device's own limits. */
         fun kelvinAt(fraction: Float, minK: Int, maxK: Int): Int {
-            val k = minK + (maxK - minK) * fraction.coerceIn(0f, 1f)
+            val f = fraction.coerceIn(0f, 1f)
+            if (f <= 0f) return minK
+            if (f >= 1f) return maxK
+            val k = minK + (maxK - minK) * f
             return (Math.round(k / 50f) * 50).coerceIn(minOf(minK, maxK), maxOf(minK, maxK))
         }
 
@@ -2356,5 +2355,27 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
         /** The position a finger at [y] asks for: the top is fully open, the bottom closed. */
         fun positionAt(y: Float, height: Float): Int =
             Math.round((1f - y / height.coerceAtLeast(1f)) * 100f).coerceIn(0, 100)
+    }
+}
+
+/** An alarm panel's more-info buttons. */
+internal object AlarmModes {
+    /** The arming modes in HA's order, with their `supported_features` bit. */
+    private val ARM_MODES = listOf(
+        Triple(1, "Arm home", "alarm_arm_home"),
+        Triple(2, "Arm away", "alarm_arm_away"),
+        Triple(4, "Arm night", "alarm_arm_night"),
+        Triple(32, "Arm vacation", "alarm_arm_vacation"),
+        Triple(16, "Arm custom bypass", "alarm_arm_custom_bypass"),
+    )
+
+    /**
+     * The alarm's buttons: the arming modes its `supported_features` offers, then Disarm (always). Without the
+     * attribute, home and away, HA's defaults.
+     */
+    fun actions(s: EntityState?): List<Pair<String, String>> {
+        val features = (s?.attributes?.get("supported_features") as? Number)?.toInt()
+        val arm = if (features == null) ARM_MODES.take(2) else ARM_MODES.filter { features and it.first != 0 }
+        return arm.map { it.second to it.third } + ("Disarm" to "alarm_disarm")
     }
 }

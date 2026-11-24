@@ -43,6 +43,20 @@ class WebIslandCardView(
     private var islandPage: Page? = null
     @Volatile private var sendToIsland: ((JSONObject) -> Unit)? = null
 
+    /**
+     * Orders a connection's snapshot before any patch for it. Declared before `init`: the bridge may connect while
+     * the constructor still runs (init registers the slot and loads the page).
+     */
+    private val seedLock = Any()
+
+    /**
+     * Whether the card picks its entities at runtime (`auto-entities` filters, `button-card` JS templates, a card
+     * that names none up front): such a card follows every entity in the store, not only the ones it read.
+     */
+    internal val followsAllEntities: Boolean by lazy {
+        config.raw.has("filter") || referencedEntities().isEmpty()
+    }
+
     // An inline island sits in Vitro's vertical scroller: a vertical drag belongs to the scroller, while taps and
     // horizontal drags (sliders, carousels, charts) stay inside the island.
     private val touchSlop = ViewConfiguration.get(ctx.context).scaledTouchSlop
@@ -65,8 +79,12 @@ class WebIslandCardView(
 
                 override fun onConnected(send: (JSONObject) -> Unit) {
                     synchronized(this) { connections++ }
-                    sendToIsland = send
-                    seedInitialStates(send)
+                    // The snapshot goes first: no patch for this socket can be queued before it (the observer
+                    // below takes the same lock).
+                    synchronized(seedLock) {
+                        seedInitialStates(send)
+                        sendToIsland = send
+                    }
                 }
 
                 override fun onMessage(msg: JSONObject, send: (JSONObject) -> Unit) {
@@ -89,9 +107,13 @@ class WebIslandCardView(
                 addView(page.view, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, h))
                 page.load(url)
 
+                // `send` only queues (the island server writes on the socket's own thread): this runs on HA's event
+                // thread under the store's write lock, where a write to a browser that stopped reading would block.
                 track(ctx.store.subscribeAny { changed ->
-                    val send = sendToIsland ?: return@subscribeAny
-                    patchFor(changed)?.let(send)
+                    synchronized(seedLock) {
+                        val send = sendToIsland ?: return@subscribeAny
+                        patchFor(changed)?.let(send)
+                    }
                 })
             } else {
                 server.unregisterSlot(id)
@@ -112,13 +134,6 @@ class WebIslandCardView(
         addView(note, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
     }
 
-    /**
-     * Whether the card picks its entities at runtime (`auto-entities` filters, `button-card` JS templates, a card
-     * that names none up front): such a card follows every entity in the store, not only the ones it read.
-     */
-    internal val followsAllEntities: Boolean by lazy {
-        config.raw.has("filter") || referencedEntities().isEmpty()
-    }
 
     private fun referencedEntities(): Set<String> {
         val syntheticView = ViewConfig(0, "", null, null, "panel", null, null, 1, emptyList(), listOf(config), emptyList())
@@ -126,16 +141,15 @@ class WebIslandCardView(
     }
 
     /**
-     * The first `patch` an island gets when its socket connects: every entity in the store, as HA's own frontend
-     * hands every card the whole `hass.states`, so filter and template cards find what they look for.
+     * The `snapshot` an island gets when its socket connects, empty too: every entity in the store, as HA's own
+     * frontend hands every card the whole `hass.states`, so filter and template cards find what they look for. It
+     * replaces the island's states, so an entity removed while the bridge was down doesn't linger.
      */
     internal fun seedInitialStates(send: (JSONObject) -> Unit) {
         watchedEntities.addAll(referencedEntities())
         val seed = JSONObject()
         for ((id, state) in ctx.store.all()) seed.put(id, state.toHassJson())
-        if (seed.length() > 0) {
-            send(JSONObject().put("type", "patch").put("states", seed))
-        }
+        send(JSONObject().put("type", "snapshot").put("states", seed))
     }
 
     /**
@@ -255,6 +269,9 @@ class WebIslandCardView(
         private val VALID_BASE64 = Regex("""^[A-Za-z0-9+/=\s]+$""")
 
         /** Decodes a `data:` URI inline Lovelace JS resource into raw module source, or null for normal URLs. */
+        /** `</script` in any case ends an HTML script element: an inline module escapes it as `<\/script`. */
+        private val SCRIPT_END = Regex("</(script)", RegexOption.IGNORE_CASE)
+
         fun decodeInlineModule(url: String): String? {
             if (!url.startsWith("data:", ignoreCase = true)) return null
             val comma = url.indexOf(',')
@@ -306,7 +323,7 @@ class WebIslandCardView(
             val resourceScripts = ctx.resources.joinToString("\n") { r ->
                 val inlineJs = decodeInlineModule(r.url)
                 when {
-                    inlineJs != null -> "<script type=\"module\">\n${inlineJs.replace("</script", "<\\/script")}\n</script>"
+                    inlineJs != null -> "<script type=\"module\">\n${inlineJs.replace(SCRIPT_END, "<\\\\/$1")}\n</script>"
                     r.type == "css" -> """<link rel="stylesheet" href=${htmlAttr(r.url)}>"""
                     r.type == "module" -> """<script type="module" src=${htmlAttr(r.url)}></script>"""
                     else -> """<script src=${htmlAttr(r.url)}></script>"""
@@ -831,7 +848,12 @@ function connectBridge() {
     for (const line of lines) {
       let m;
       try { m = JSON.parse(line); } catch (e) { continue; }
-      if (m.type === 'patch' && m.states) {
+      if (m.type === 'snapshot' && m.states) {
+        // A (re)connect: the whole store, replacing what the island had.
+        for (const id of Object.keys(rawStates)) delete rawStates[id];
+        Object.assign(rawStates, m.states);
+        if (cardEl) cardEl.hass = makeHass();
+      } else if (m.type === 'patch' && m.states) {
         for (const id of Object.keys(m.states)) {
           if (m.states[id] === null) delete rawStates[id];
           else rawStates[id] = m.states[id];

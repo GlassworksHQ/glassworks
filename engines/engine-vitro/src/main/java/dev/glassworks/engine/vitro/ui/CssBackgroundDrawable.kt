@@ -33,6 +33,9 @@ class CssBackgroundDrawable(
     private val rect = RectF()
     private val clip = Path()
 
+    /** [setAlpha]'s value, applied over each fill's own alpha when drawing (the fills set the paint's color). */
+    private var drawableAlpha = 255
+
     override fun onBoundsChange(bounds: Rect) {
         super.onBoundsChange(bounds)
         val w = bounds.width().toFloat()
@@ -66,9 +69,11 @@ class CssBackgroundDrawable(
         bg.color?.let { c ->
             paint.shader = null
             paint.color = c
+            paint.alpha = (c ushr 24) * drawableAlpha / 255
             canvas.drawRect(rect, paint)
         }
         paint.color = 0xFF000000.toInt()
+        paint.alpha = drawableAlpha
         for (s in shaders) {
             paint.shader = s
             canvas.drawRect(rect, paint)
@@ -82,8 +87,19 @@ class CssBackgroundDrawable(
         outline.setRoundRect(bounds, cornerRadiusPx)
     }
 
-    override fun setAlpha(alpha: Int) { paint.alpha = alpha }
-    override fun setColorFilter(colorFilter: ColorFilter?) { paint.colorFilter = colorFilter }
+    override fun setAlpha(alpha: Int) {
+        val a = alpha.coerceIn(0, 255)
+        if (a == drawableAlpha) return
+        drawableAlpha = a
+        invalidateSelf()
+    }
+
+    override fun getAlpha(): Int = drawableAlpha
+
+    override fun setColorFilter(colorFilter: ColorFilter?) {
+        paint.colorFilter = colorFilter
+        invalidateSelf()
+    }
     @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 }

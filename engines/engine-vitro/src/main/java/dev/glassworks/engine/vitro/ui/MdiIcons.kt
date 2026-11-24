@@ -346,12 +346,17 @@ object MdiIcons {
         cache[key]?.let { return it }
         val reg = registered[key]
         val pendingCatalog = loading
-        val official = if (reg == null) catalog()?.let { it.get(key) ?: it.get("home") } else null
+        // The same order as the island's lookup: registered, the catalog's own glyph, the built-in one, and only then
+        // the catalog's home (a catalog without `thermometer` must not turn a built-in thermometer into a house).
+        val catalog = if (reg == null) catalog() else null
+        val exact = catalog?.get(key)
+        val builtIn = if (reg == null && exact == null) PATHS[key] else null
+        val official = exact ?: if (reg == null && builtIn == null) catalog?.get("home") else null
         // Official MDI glyphs use SVG's default non-zero fill; the hand-drawn built-ins rely on even-odd holes.
         val path = when {
             reg != null -> parseSvgPath(reg)
             official != null -> parseSvgPath(official, Path.FillType.WINDING)
-            else -> parseSvgPath(PATHS[key] ?: PATHS.getValue("home"))
+            else -> parseSvgPath(builtIn ?: PATHS.getValue("home"))
         }
         // A stand-in drawn while the catalog loads isn't cached: the official glyph replaces it.
         if (pendingCatalog && reg == null && official == null) return path
@@ -572,6 +577,14 @@ object MdiIcons {
                         val ch = d[i]
                         if (ch.isDigit()) i++
                         else if (ch == '.' && !dot) { dot = true; i++ }
+                        // An exponent belongs to the number (`1e1`, `2.5E-3`); a sign without one starts the next.
+                        else if ((ch == 'e' || ch == 'E') && i > start && i + 1 < n &&
+                            (d[i + 1].isDigit() || ((d[i + 1] == '-' || d[i + 1] == '+') && i + 2 < n && d[i + 2].isDigit()))
+                        ) {
+                            i += if (d[i + 1].isDigit()) 1 else 2
+                            while (i < n && d[i].isDigit()) i++
+                            break
+                        }
                         else break
                     }
                     if (i > start) out += d.substring(start, i) else i++

@@ -1678,14 +1678,20 @@ internal class HaColorTempBarView(
     private var hasValue = false
     private var dragging = false
 
+    /** What HA last reported (kept during a drag, which ignores it): a cancelled drag goes back to it. */
+    private var reported: (() -> Unit)? = null
+
     fun bind(minKelvin: Int, maxKelvin: Int, kelvin: Int?, on: Boolean) {
-        if (dragging) return
-        minK = minKelvin
-        maxK = maxKelvin.coerceAtLeast(minKelvin + 1)
-        hasValue = on && kelvin != null
-        if (kelvin != null) fraction = ((kelvin - minK).toFloat() / (maxK - minK)).coerceIn(0f, 1f)
-        alpha = if (on) 1f else 0.5f
-        invalidate()
+        val apply = {
+            minK = minKelvin
+            maxK = maxKelvin.coerceAtLeast(minKelvin + 1)
+            hasValue = on && kelvin != null
+            if (kelvin != null) fraction = ((kelvin - minK).toFloat() / (maxK - minK)).coerceIn(0f, 1f)
+            alpha = if (on) 1f else 0.5f
+            invalidate()
+        }
+        reported = apply
+        if (!dragging) apply()
     }
 
     private fun kelvinAt(frac: Float): Int = (minK + frac * (maxK - minK)).roundToInt().coerceIn(minK, maxK)
@@ -1713,7 +1719,8 @@ internal class HaColorTempBarView(
             MotionEvent.ACTION_CANCEL -> {
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
-                invalidate()
+                // Nothing was sent: back to the value (and handle) HA reported, as HaHorizontalSliderView does.
+                reported?.invoke() ?: invalidate()
                 return true
             }
         }
@@ -1738,7 +1745,8 @@ internal class HaColorTempBarView(
         if (!hasValue) return
         val barW = 4f * ctx.dp
         val barH = (h * 0.56f).coerceAtLeast(12f * ctx.dp)
-        val inset = 8f * ctx.dp
+        // At most half the width: on a tile narrower than two insets the range would run backwards (and throw).
+        val inset = minOf(8f * ctx.dp, w / 2f)
         val cx = (inset + fraction * (w - 2f * inset)).coerceIn(inset, w - inset)
         handleRect.set(cx - barW / 2f - 1f * ctx.dp, (h - barH) / 2f - 1f * ctx.dp, cx + barW / 2f + 1f * ctx.dp, (h + barH) / 2f + 1f * ctx.dp)
         canvas.drawRoundRect(handleRect, barW, barW, handleShadow)
@@ -2489,8 +2497,9 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
 
 /**
  * Native HA `picture`, `picture-entity`, and `picture-glance` card.
- * With `camera_view: live` (or a `camera.*` entity) it plays HA's MJPEG stream while attached, falling back to a
- * snapshot every [LiveCameraFeed.POLL_MS] when the stream isn't available (no badge: HA draws none).
+ * With `camera_view: live` it plays HA's MJPEG stream while attached, falling back to a snapshot every
+ * [LiveCameraFeed.POLL_MS] when the stream isn't available (no badge: HA draws none). A `camera.*` source without it
+ * (`auto`, HA's default) shows a snapshot refreshed every [LiveCameraFeed.SNAPSHOT_MS], as HA's `hui-image` does.
  * A `picture-glance` with `entities` gets HA's row of tappable entity icons on the right of its caption bar.
  */
 class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
@@ -2511,7 +2520,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     private val isLive = liveEntityId != null
     private var latestPicture: String? = null
     private val feed: LiveCameraFeed? = liveEntityId?.let { id ->
-        LiveCameraFeed(ctx, id, { latestPicture }) { bmp -> showBitmap(bmp) }
+        LiveCameraFeed(ctx, id, { latestPicture }, stream = config.raw.optString("camera_view") == "live") { bmp -> showBitmap(bmp) }
     }
 
     /** Width / height, from `aspect_ratio` (`16:9`, `4:3`, `50%` = height as % of width, or a decimal). */

@@ -251,7 +251,7 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
         progress.visibility = if (showProgress) VISIBLE else GONE
         progress.indicator = art?.foreground ?: ctx.theme.accentColor
         updateProgress(s)
-        setTicking(showProgress && state == "playing" && isAttachedToWindow)
+        setTicking(showProgress && state == "playing" && isAttachedToWindow && isShown)
 
         // `.player { padding: 16px }`, no bottom padding when there are controls but no progress bar.
         val p = ctx.px(16f)
@@ -316,7 +316,15 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        setTicking(progress.visibility == VISIBLE && last?.state == "playing")
+        setTicking(progress.visibility == VISIBLE && last?.state == "playing" && isShown)
+    }
+
+    /** A cached view another one hides stays attached: the position stops ticking, and is caught up on return. */
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (!isAttachedToWindow) return
+        if (isShown) updateProgress(last)
+        setTicking(progress.visibility == VISIBLE && last?.state == "playing" && isShown)
     }
 
     override fun onDetachedFromWindow() {

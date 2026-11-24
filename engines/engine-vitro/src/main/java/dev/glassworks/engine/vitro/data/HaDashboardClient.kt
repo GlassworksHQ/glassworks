@@ -177,8 +177,15 @@ class HaDashboardClient(
      */
     @Volatile private var dashboardActive = true
 
+    /**
+     * Held while the requested path is read and a request for it is sent, or the path is changed: a refetch that read
+     * path A can't land after a navigation to B and make A the requested one again. Taken before [queueLock], never
+     * inside it (no result callback runs under queueLock).
+     */
+    private val pathLock = Any()
+
     /** The page shows [urlPath] again without asking: an answer still on its way for another path is dropped. */
-    fun claimDashboard(urlPath: String?) {
+    fun claimDashboard(urlPath: String?) = synchronized(pathLock) {
         requestedDashboardPath = urlPath
         dashboardActive = true
         // A lovelace_updated or reconnect skipped while the fallback showed: the dashboard may have changed.
@@ -202,12 +209,12 @@ class HaDashboardClient(
     }
 
     /** Fetches the requested dashboard again (reconnect, `lovelace_updated`), unless the page has left the dashboards. */
-    private fun refetchDashboard() {
+    private fun refetchDashboard() = synchronized(pathLock) {
         if (dashboardActive) fetchDashboard(requestedDashboardPath) else missedRefetch = true
     }
 
     /** Loads a different Lovelace dashboard config over the live socket. */
-    fun fetchDashboard(urlPath: String?) {
+    fun fetchDashboard(urlPath: String?) = synchronized(pathLock) {
         requestedDashboardPath = urlPath
         dashboardActive = true
         val msg = JSONObject().put("type", "lovelace/config")
@@ -244,21 +251,27 @@ class HaDashboardClient(
         request(msg) { res -> done?.invoke(res.optBoolean("success", false)) }
     }
 
-    /** Fetches numeric history points for [entityIds] over the last [hoursToShow] hours via `history/stream`. */
+    /**
+     * Fetches numeric history points for [entityIds] over the last [hoursToShow] hours, once, with
+     * `history/history_during_period`: the whole window in one answer. (`history/stream`'s first event can leave out
+     * a change the recorder hasn't committed yet, which only a later catch-up event carries.) A failed request calls
+     * nothing back.
+     */
     fun fetchHistory(entityIds: List<String>, hoursToShow: Int = 24, onPoints: (Map<String, List<HistoryPoint>>) -> Unit) {
         if (entityIds.isEmpty()) return
-        val startMs = System.currentTimeMillis() - hoursToShow.coerceAtLeast(1) * 3_600_000L
-        val startIso = formatIsoUtc(startMs)
+        val nowMs = System.currentTimeMillis()
+        val startMs = nowMs - hoursToShow.coerceAtLeast(1) * 3_600_000L
         val msg = JSONObject()
-            .put("type", "history/stream")
+            .put("type", "history/history_during_period")
             .put("entity_ids", JSONArray(entityIds))
-            .put("start_time", startIso)
+            .put("start_time", formatIsoUtc(startMs))
+            .put("end_time", formatIsoUtc(nowMs + 60_000L))
             .put("minimal_response", true)
+            .put("no_attributes", true)
             .put("significant_changes_only", false)
-        // The id reaches the callback as an argument: a server that answers before subscribe() returns
-        // would otherwise find it still unset, and the one-shot subscription would never be dropped.
-        subscribeWithId(msg) { subId, ev ->
-            val statesObj = ev.optJSONObject("states") ?: return@subscribeWithId
+        request(msg) { res ->
+            if (!res.optBoolean("success", false)) return@request
+            val statesObj = res.optJSONObject("result") ?: return@request
             val out = LinkedHashMap<String, List<HistoryPoint>>()
             val keys = statesObj.keys()
             while (keys.hasNext()) {
@@ -276,8 +289,6 @@ class HaDashboardClient(
                 if (pts.isNotEmpty()) out[eid] = pts
             }
             onPoints(out)
-            // One-shot history fetch: unsubscribe after receiving the initial series so we don't leak subs.
-            unsubscribe(subId)
         }
     }
 
@@ -652,6 +663,8 @@ class HaDashboardClient(
         val id = msg.optInt("id", -1)
         when (msg.optString("type")) {
             "result" -> pending.remove(id)?.invoke(msg)
+            // The answer to a `ping` (an island's callWS can send one): settle it as a result, or its promise hangs.
+            "pong" -> pending.remove(id)?.invoke(JSONObject().put("id", id).put("type", "result").put("success", true).put("result", JSONObject.NULL))
             "event" -> msg.optJSONObject("event")?.let { ev -> subscriptions[id]?.invoke(ev) }
         }
     }
@@ -746,13 +759,52 @@ class HaDashboardClient(
         /** Default bound on the greeting and auth exchange; after `auth_ok` reads may idle for as long as they like. */
         const val AUTH_TIMEOUT_MS = 20_000L
 
+        /** Bound on the HTTP upgrade (the `101 Switching Protocols` answer), before the auth watchdog runs. */
+        const val UPGRADE_TIMEOUT_MS = 20_000
+
         /**
-         * Long-lived RFC 6455 socket for the dashboard WebSocket (`readTimeoutMs = 0` so an idle
-         * dashboard doesn't disconnect every 15 s like one-shot `WsHaSocket.connect`).
+         * Long-lived RFC 6455 socket for the dashboard WebSocket. The upgrade answer must come within
+         * [upgradeTimeoutMs] (a proxy that accepts TCP and then stalls can't hold the attempt forever): a timer closes
+         * the TCP socket if it doesn't, which ends the blocked read. No read timeout is set at all, so an idle dashboard
+         * stays connected on `ws` and `wss` alike (a TLS socket keeps the timeout set on it, not on the TCP below);
+         * the greeting and auth are bounded by the client's watchdog. [HaSocket.close] aborts: it drops TCP without
+         * waiting on a write that holds the socket's write lock (the page disposes on the main thread).
          */
-        fun connectLongLived(url: String): HaSocket {
+        fun connectLongLived(url: String, upgradeTimeoutMs: Int = UPGRADE_TIMEOUT_MS): HaSocket {
             val connector = HappyEyeballs()
-            val ws = WsClient.connect(url, connectTimeoutMs = 8_000, readTimeoutMs = 0, openSocket = connector::connect)
+            val lock = Any()
+            var tcp: java.net.Socket? = null
+            var expired = false
+            var finished = false
+            val timer = Thread({
+                try {
+                    Thread.sleep(upgradeTimeoutMs.toLong())
+                    synchronized(lock) {
+                        if (!finished) {
+                            expired = true
+                            runCatching { tcp?.close() }
+                        }
+                    }
+                } catch (_: InterruptedException) {
+                }
+            }, "vitro-ha-upgrade-timeout").apply { isDaemon = true; start() }
+            val ws = try {
+                WsClient.connect(url, connectTimeoutMs = 8_000, readTimeoutMs = 0) { host, port, timeoutMs ->
+                    val s = connector.connect(host, port, timeoutMs)
+                    synchronized(lock) {
+                        tcp = s
+                        if (expired) { runCatching { s.close() }; throw java.net.SocketTimeoutException("upgrade took too long") }
+                    }
+                    s
+                }
+            } finally {
+                synchronized(lock) { finished = true }
+                timer.interrupt()
+            }
+            if (synchronized(lock) { expired }) {
+                ws.abort()
+                throw java.net.SocketTimeoutException("upgrade took too long")
+            }
             return object : HaSocket {
                 override fun send(text: String) = ws.sendText(text)
                 override fun receive(): String? {
@@ -761,7 +813,7 @@ class HaDashboardClient(
                         if (m.text) return m.data.toString(Charsets.UTF_8)
                     }
                 }
-                override fun close() = ws.close()
+                override fun close() = ws.abort()
             }
         }
 
