@@ -1811,13 +1811,33 @@ class LayoutCardView(
     private val placed = ArrayList<Triple<View, Int, Int>>()
     private var resolvedAtDp = -1
 
+    /** The grid's card margin (top, right, bottom, left, dp), inside each track; none for the column layouts. */
+    private var cardMargin = floatArrayOf(0f, 0f, 0f, 0f)
+    private val marginX get() = cardMargin[1] + cardMargin[3]
+
+    /** A grid cell's layout params: [fixedDp] of tracks and gutters less the card's side margins, and its margins. */
+    private fun cellParams(fixedDp: Float, weight: Float, height: Int, first: Boolean, gap: Float): LayoutParams =
+        LayoutParams(ctx.px((fixedDp - marginX).coerceAtLeast(0f)), height, weight).apply {
+            setMargins(ctx.px(cardMargin[3]), ctx.px(cardMargin[0]), ctx.px(cardMargin[1]), ctx.px(cardMargin[2]))
+            if (!first) marginStart = ctx.px(cardMargin[3] + gap)
+        }
+
     init {
         orientation = VERTICAL
         val layoutType = config.raw.optString("layout_type", "custom:masonry-layout").removePrefix("custom:")
         val layout = mergedLayout(config.raw.optJSONObject("layout") ?: JSONObject(), widthDp)
         val gap = parseGap(layout) ?: ctx.theme.cardGapDp
         when (layoutType) {
-            "grid-layout", "grid" -> buildGrid(layout, gap, widthDp)
+            // grid-layout: `#root { margin: var(--layout-margin); padding: var(--layout-padding) }` (layout.margin
+            // and layout.padding, default 0 4 and 4 0), only the layout's own `grid-gap`, and every card in
+            // `margin: var(--masonry-view-card-margin, 4px 4px 8px)` inside its track.
+            "grid-layout", "grid" -> {
+                val m = MushroomTitleCardView.paddingDp(layout.optString("margin", "").ifEmpty { null }) ?: floatArrayOf(0f, 4f, 0f, 4f)
+                val p = MushroomTitleCardView.paddingDp(layout.optString("padding", "").ifEmpty { null }) ?: floatArrayOf(4f, 0f, 4f, 0f)
+                setPadding(ctx.px(m[3] + p[3]), ctx.px(m[0] + p[0]), ctx.px(m[1] + p[1]), ctx.px(m[2] + p[2]))
+                cardMargin = MushroomTitleCardView.paddingDp(ctx.theme.vars["masonry-view-card-margin"]) ?: floatArrayOf(4f, 4f, 8f, 4f)
+                buildGrid(layout, parseGap(layout) ?: 0f, widthDp)
+            }
             "vertical-layout", "vertical" -> buildColumns(splitAtBreaks(), gap)
             else -> {
                 // horizontal-layout and masonry-layout: deal the cards into columns, left to right.
@@ -1880,12 +1900,10 @@ class LayoutCardView(
         val template = layout.optString("grid-template-columns", "").ifEmpty { config.raw.optString("grid-template-columns", "") }
         val tracksSpec = parseColumns(template, widthDp).ifEmpty { listOf(Track(1f, 0f)) }
         val cols = tracksSpec.size
-        if ('%' in template) {
-            percentTemplate = template
-            gridGap = gap
-            gridCols = cols
-            resolvedAtDp = widthDp
-        }
+        // Every grid's cells get exact widths at measure time (CSS tracks, not weights shared after margins).
+        percentTemplate = template.ifEmpty { "1fr" }
+        gridGap = gap
+        gridCols = cols
         var row: LinearLayout? = null
         var used = 0
         fun closeRow() {
@@ -1894,9 +1912,7 @@ class LayoutCardView(
                 val rest = tracksSpec.subList(used, cols)
                 // The rest's own gutters too, so the weighted columns keep their widths on a short row.
                 val filler = Space(ctx.context)
-                r.addView(filler, LayoutParams(ctx.px(rest.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (rest.size - 1)), 1, rest.sumOf { it.fr.toDouble() }.toFloat()).apply {
-                    marginStart = ctx.px(gap)
-                })
+                r.addView(filler, cellParams(rest.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (rest.size - 1), rest.sumOf { it.fr.toDouble() }.toFloat(), 1, false, gap))
                 placed += Triple(filler, used, cols - used)
             }
             row = null
@@ -1916,10 +1932,10 @@ class LayoutCardView(
                 val skipped = tracksSpec.subList(used, start)
                 val filler = Space(ctx.context)
                 placed += Triple(filler, used, start - used)
-                row!!.addView(filler, LayoutParams(
-                    ctx.px(skipped.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (skipped.size - 1)), 1,
-                    skipped.sumOf { it.fr.toDouble() }.toFloat(),
-                ).apply { if (used > 0) marginStart = ctx.px(gap) })
+                row!!.addView(filler, cellParams(
+                    skipped.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (skipped.size - 1),
+                    skipped.sumOf { it.fr.toDouble() }.toFloat(), 1, used == 0, gap,
+                ))
                 used = start
             }
             val spanned = tracksSpec.subList(used, used + span)
@@ -1927,7 +1943,7 @@ class LayoutCardView(
             val weight = spanned.sumOf { it.fr.toDouble() }.toFloat()
             val view = build(child)
             placed += Triple(view, used, span)
-            row!!.addView(view, LayoutParams(ctx.px(fixed), WRAP_CONTENT, weight).apply { if (used > 0) marginStart = ctx.px(gap) })
+            row!!.addView(view, cellParams(fixed, weight, WRAP_CONTENT, used == 0, gap))
             used += span
         }
         closeRow()
@@ -1942,10 +1958,17 @@ class LayoutCardView(
                 val spec = parseColumns(template, w)
                 // Only the sizes change here; a track count that depends on the width (auto-fill) keeps its build.
                 if (spec.size == gridCols) {
+                    // CSS grid: fixed tracks first, the `fr` ones share what's left after them and the gutters.
+                    val free = (w - spec.sumOf { it.fixedDp.toDouble() }.toFloat() - gridGap * (gridCols - 1)).coerceAtLeast(0f)
+                    val frs = spec.sumOf { it.fr.toDouble() }.toFloat()
                     for ((v, first, span) in placed) {
                         val tracks = spec.subList(first, first + span)
-                        (v.layoutParams as? LayoutParams)?.width =
-                            ctx.px(tracks.sumOf { it.fixedDp.toDouble() }.toFloat() + gridGap * (span - 1))
+                        val dp = tracks.sumOf { (it.fixedDp + if (frs > 0f) free * it.fr / frs else 0f).toDouble() }.toFloat() +
+                            gridGap * (span - 1) - marginX
+                        (v.layoutParams as? LayoutParams)?.apply {
+                            width = ctx.px(dp.coerceAtLeast(0f))
+                            weight = 0f
+                        }
                     }
                     resolvedAtDp = w
                 }
