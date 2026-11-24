@@ -590,6 +590,7 @@ class ThemeResolverTest {
         assertEquals(argb(0xFFFFC107), t.activeColor("binary_sensor"))
         assertEquals(argb(0xFF03A9F4), t.activeColor("media_player"))
         assertEquals(argb(0xFF00FF00), t.activeColor("automation")) // no base color: the theme-wide key applies
+        assertEquals(argb(0xFF123456), resolveWith("""{"state-climate-heat-color": "#123456"}""").activeColor("climate"))
         assertEquals(argb(0xFF2196F3), t.activeColor("sensor")) // sensors and people keep their own colors
         assertEquals(argb(0xFF4CAF50), t.activeColor("person"))
     }

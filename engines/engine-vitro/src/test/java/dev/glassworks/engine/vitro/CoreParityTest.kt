@@ -258,6 +258,19 @@ class CoreParityTest {
         assertEquals(0xFF00FF00.toInt(), chip.all().filterIsInstance<TextView>().single().currentTextColor)
     }
 
+    @Test
+    fun inlineFeaturesShowTheFirstConfiguredOne() {
+        val store = EntityStore()
+        store.putLocal(EntityState("light.desk", "on", mapOf("brightness" to 128)))
+        val t = TileCardView(context(store), card(
+            """{"type": "tile", "entity": "light.desk", "features_position": "inline",
+               "features": [{"type": "toggle"}, {"type": "light-brightness"}]}""",
+        ))
+        // The toggle comes first in the config, so it's the one beside the info (HA draws no others inline).
+        assertNotNull(t.all().firstOrNull { it.contentDescription == "On" })
+        assertTrue(t.all().none { it is dev.glassworks.engine.vitro.cards.HaHorizontalSliderView })
+    }
+
     // ---- Tile features ----
 
     private fun tile(store: EntityStore, calls: MutableList<Call>, entity: String, feature: String) =

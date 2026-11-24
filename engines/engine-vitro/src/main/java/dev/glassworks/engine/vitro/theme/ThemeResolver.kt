@@ -146,7 +146,12 @@ data class ResolvedTheme(
         val d = domain.lowercase(Locale.ROOT)
         ThemeResolver.parseColor(themeVar("state-$d-active-color"))?.let { return it }
         ThemeResolver.parseColor(themeVar("state-$d-on-color"))?.let { return it }
-        HA_BASE_ACTIVE[d]?.let { base -> return ThemeResolver.parseColor(vars["state-$d-active-color"]) ?: base }
+        HA_BASE_ACTIVE[d]?.let { base ->
+            ThemeResolver.parseColor(vars["state-$d-active-color"])?.let { return it }
+            // A climate's active color is its heat color, which a theme may set on its own.
+            if (d == "climate") ThemeResolver.parseColor(vars["state-climate-heat-color"])?.let { return it }
+            return base
+        }
         if (d != "sensor" && d != "person" && d != "device_tracker") {
             ThemeResolver.parseColor(themeVar("state-active-color"))?.let { return it }
         }

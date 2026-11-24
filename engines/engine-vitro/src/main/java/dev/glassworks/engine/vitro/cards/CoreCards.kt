@@ -344,6 +344,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                     else ctx.callService("light", "turn_on", JSONObject().put("entity_id", entityId).put("brightness", bri), null)
                 },
             )
+            brightnessSlider.tag = FEATURE_TAG + "light-brightness"
             rootCol.addView(brightnessSlider, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(42f)).apply {
                 leftMargin = ctx.px(12f); rightMargin = ctx.px(12f); bottomMargin = ctx.px(12f)
             })
@@ -368,6 +369,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 setOnClickListener { v -> showSelectMenu(v, entityId) }
             }
             selectBox = current
+            box.tag = FEATURE_TAG + "select-options"
             rootCol.addView(box, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(42f)).apply {
                 leftMargin = ctx.px(12f); rightMargin = ctx.px(12f); bottomMargin = ctx.px(12f)
             })
@@ -396,6 +398,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         if (idx > 0) marginStart = ctx.px(8f)
                     })
                 }
+            coverRow.tag = FEATURE_TAG + "cover-open-close"
             rootCol.addView(coverRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
         if (entityId != null) {
@@ -403,7 +406,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         }
         // `features_position: inline`: HA shows the first feature beside the info, 36 px tall and centered.
         if (!vertical && config.raw.optString("features_position") == "inline" && rootCol.childCount > 1) {
-            val first = rootCol.getChildAt(1)
+            // HA shows only the first configured feature inline (the others aren't drawn).
+            val built = (1 until rootCol.childCount).map { rootCol.getChildAt(it) }
+            val first = featureTypes.firstNotNullOfOrNull { t -> built.firstOrNull { it.tag == FEATURE_TAG + t } } ?: built.first()
             while (rootCol.childCount > 1) rootCol.removeViewAt(1)
             if (first.paddingBottom == ctx.px(12f)) first.setPadding(0, 0, 0, 0)
             val slot = FrameLayout(ctx.context).apply {
@@ -526,6 +531,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val domain = entityId.substringBefore('.')
 
         for (type in featureTypes.distinct()) {
+            val before = rootCol.childCount
             when (type) {
                 "climate-hvac-modes" -> {
                     val configured = featureConfig(type)?.optJSONArray("hvac_modes")
@@ -942,6 +948,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                     }
                 }
             }
+            // Tag what this feature added, so `features_position: inline` can pick the first configured one.
+            for (c in before until rootCol.childCount) rootCol.getChildAt(c).tag = FEATURE_TAG + type
         }
     }
 
@@ -1307,6 +1315,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             "lock" -> if (on) "mdi:lock-open-variant" else "mdi:lock"
             else -> if (on) "mdi:power" else "mdi:power-off"
         }
+
+        /** View tag prefix naming the feature type a feature view was built for. */
+        private const val FEATURE_TAG = "tile-feature:"
 
         /** HA's `DOMAINS_TOGGLE`: the domains whose tile icon toggles by default (not covers or locks). */
         private val ICON_TOGGLE_DOMAINS = setOf("fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve")

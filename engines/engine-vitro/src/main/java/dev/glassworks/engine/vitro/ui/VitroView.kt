@@ -193,8 +193,16 @@ class VitroView(
         (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
     var hideHeader: Boolean = true
         set(v) {
+            if (field == v) return
             field = v
             updateTabVisibility()
+            // Subviews draw their back row only while the header shows: drop the cached ones, rebuild the current.
+            val views = dashboard?.views ?: return
+            viewCache.keys.filter { views.getOrNull(it)?.subview == true && it != currentViewIndex }.forEach { idx ->
+                viewCache.remove(idx)?.let { contentHost.removeView(it) }
+                overlayFrames.remove(idx)?.let { overlayLayer.removeView(it) }
+            }
+            if (views.getOrNull(currentViewIndex)?.subview == true) renderView(currentViewIndex, forceRebuild = true)
         }
     var resourcesList: List<LovelaceResource> = emptyList()
     var lastMetrics: VitroMetrics = VitroMetrics()
