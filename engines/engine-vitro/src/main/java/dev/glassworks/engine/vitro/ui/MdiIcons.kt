@@ -799,7 +799,12 @@ class MdiIconView(context: Context) : View(context) {
     var tintColor: Int = 0xFFFFFFFF.toInt()
         set(v) { if (field != v) { field = v; paint.color = v; invalidate() } }
 
+    /** A picture drawn instead of the glyph, filling the box (HA's weather pictures); [setIcon] clears it. */
+    var picture: dev.glassworks.engine.vitro.cards.MdSvg? = null
+        set(v) { if (field !== v) { field = v; invalidate() } }
+
     fun setIcon(name: String, color: Int = tintColor) {
+        picture = null
         iconPath = MdiIcons.pathFor(name)
         tintColor = color
         paint.color = color
@@ -812,6 +817,14 @@ class MdiIconView(context: Context) : View(context) {
         val scale = minOf(availW, availH) / 24f
         val dx = paddingLeft + (availW - 24f * scale) / 2f
         val dy = paddingTop + (availH - 24f * scale) / 2f
+        picture?.let { pic ->
+            val side = minOf(availW, availH)
+            canvas.save()
+            canvas.translate(paddingLeft + (availW - side) / 2f, paddingTop + (availH - side) / 2f)
+            pic.draw(canvas, side, side, context)
+            canvas.restore()
+            return
+        }
         matrix.reset()
         matrix.setScale(scale, scale)
         matrix.postTranslate(dx, dy)

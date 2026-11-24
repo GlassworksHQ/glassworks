@@ -41,6 +41,7 @@ import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
+import dev.glassworks.engine.vitro.ui.HaWeatherSvg
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.bindHoldAction
 import dev.glassworks.ui.Inter
@@ -2736,17 +2737,15 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
                 val render: (EntityState?) -> Unit = { s ->
                     val active = s?.isActive == true
                     if (type == "weather") {
+                        // Mushroom's weather chip: its copy of HA's weather picture (night variant), then the
+                        // conditions and the temperature, each only when asked for, joined by " ⸱ ".
                         icon.setIcon(MdiIcons.weatherIcon(s?.state.orEmpty()), staticColor ?: ctx.theme.stateIconColor)
-                        val temp = s?.attributes?.get("temperature")?.toString()
-                        val unit = s?.attributes?.get("temperature_unit")?.toString().orEmpty()
-                        val parts = buildList {
-                            if (c.optBoolean("show_temperature", true) && temp != null) add("$temp $unit".trim())
-                            if (c.optBoolean("show_conditions", false) && s != null) add(s.state.replace('-', ' '))
-                        }
-                        setLabel(parts.joinToString(" · "))
+                        icon.picture = s?.let { HaWeatherSvg.forCondition(it.state, night = true, vars = ctx.theme.vars, mushroom = true) }
+                        setLabel(weatherChipLabel(c, s))
                     } else {
+                        // An idle entity chip's icon takes the chip's text colour (HA: --primary-text-color).
                         val tint = staticColor ?: when {
-                            !active -> ctx.theme.secondaryTextColor
+                            !active -> ctx.theme.primaryTextColor
                             else -> s.lightTintColor() ?: ctx.theme.activeColor(s.domain)
                         }
                         icon.setIcon(MdiIcons.resolveIconName(c.optString("icon", "").ifEmpty { null }, s), tint)
@@ -2788,6 +2787,26 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         subscriptions.forEach { runCatching { it() } }
         subscriptions.clear()
     }
+}
+
+/**
+ * Mushroom's weather chip label: HA's state display when `show_conditions`, then the temperature attribute as HA's
+ * `formatEntityAttributeValue` writes it when `show_temperature` (both off by default), joined by " ⸱ ".
+ */
+internal fun weatherChipLabel(c: JSONObject, s: EntityState?): String {
+    if (s == null) return ""
+    val parts = ArrayList<String>(2)
+    if (c.optBoolean("show_conditions", false)) parts += s.plainState()
+    if (c.optBoolean("show_temperature", false)) {
+        val raw = s.attributes["temperature"]
+        val v = (raw as? Number)?.toDouble() ?: raw?.toString()?.toDoubleOrNull()
+        val unit = s.attributes["temperature_unit"]?.toString().orEmpty()
+        when {
+            v != null -> parts += HaDisplay.formatValue(v, 3) + when (unit) { "" -> ""; "%", "°" -> unit; else -> " $unit" }
+            raw != null -> parts += raw.toString()
+        }
+    }
+    return parts.joinToString(" \u2E31 ")
 }
 
 /** Native Tier 2 fast-path for `custom:bubble-card` (button & separator). */

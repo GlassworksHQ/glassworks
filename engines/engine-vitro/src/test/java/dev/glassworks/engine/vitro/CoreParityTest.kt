@@ -28,6 +28,7 @@ import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -387,6 +388,21 @@ class CoreParityTest {
         assertEquals("counter.increment counter.cups", calls.last().toString())
         counter.byDescription("Decrease").performClick()
         assertEquals("counter.decrement counter.cups", calls.last().toString())
+    }
+
+    @Test
+    fun weatherChipFollowsMushroom() {
+        val fog = EntityState("weather.home", "fog", mapOf("temperature" to 8.7, "temperature_unit" to "°C"))
+        // Conditions first, then the temperature, each only when asked for, joined by Mushroom's " ⸱ ".
+        assertEquals("Fog \u2E31 8.7 °C", dev.glassworks.engine.vitro.cards.weatherChipLabel(JSONObject("""{"show_conditions": true, "show_temperature": true}"""), fog))
+        assertEquals("8.7 °C", dev.glassworks.engine.vitro.cards.weatherChipLabel(JSONObject("""{"show_temperature": true}"""), fog))
+        assertEquals("", dev.glassworks.engine.vitro.cards.weatherChipLabel(JSONObject("{}"), fog))
+        // HA's weather pictures: every condition HA draws, none for "exceptional" (HA keeps the MDI glyph there).
+        for (c in dev.glassworks.engine.vitro.ui.HaWeatherSvg.CONDITIONS) {
+            val svg = dev.glassworks.engine.vitro.ui.HaWeatherSvg.forCondition(c, mushroom = true)
+            assertTrue(c, svg != null && svg.viewBox.width() == 17f)
+        }
+        assertNull(dev.glassworks.engine.vitro.ui.HaWeatherSvg.forCondition("exceptional"))
     }
 
     @Test

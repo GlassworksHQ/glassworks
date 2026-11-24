@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.cards
 
+import dev.glassworks.engine.vitro.ui.HaWeatherSvg
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
@@ -944,7 +945,7 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val icon = WeatherIconView(ctx.context)
+        val icon = WeatherIconView(ctx.context).apply { themeVars = ctx.theme.vars; fallbackColor = ctx.theme.primaryTextColor }
         val condition = label(ctx, 22f, ctx.theme.primaryTextColor).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         val name = label(ctx, 13f, ctx.theme.secondaryTextColor).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         val temp = label(ctx, 22f, ctx.theme.primaryTextColor).apply { gravity = Gravity.END }
@@ -1022,7 +1023,7 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             }
             cell.addView(label(ctx, 12f, ctx.theme.secondaryTextColor).apply { text = forecastLabel(day.datetime, hourly) },
                 LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-            cell.addView(WeatherIconView(ctx.context).apply { setCondition(day.condition.orEmpty()) },
+            cell.addView(WeatherIconView(ctx.context).apply { themeVars = ctx.theme.vars; fallbackColor = ctx.theme.primaryTextColor; setCondition(day.condition.orEmpty()) },
                 LinearLayout.LayoutParams(ctx.px(32f), ctx.px(32f)).apply { topMargin = ctx.px(6f); bottomMargin = ctx.px(6f) })
             cell.addView(label(ctx, 13f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
                 text = day.temperature?.let { formatDegrees(it) } ?: "–"
@@ -1067,15 +1068,25 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     }
 }
 
-/** HA-style multi-color weather glyph drawn on Canvas: sun, moon, layered clouds, rain, snow, bolt, fog, wind. */
+/**
+ * HA's weather picture for a condition ([HaWeatherSvg], from the frontend's `getWeatherStateSVG`), or for a condition
+ * HA has no picture for ("exceptional"), its MDI glyph in [fallbackColor], as HA's `getWeatherStateIcon` does.
+ */
 class WeatherIconView(context: Context) : View(context) {
     private var condition = ""
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val path = Path()
+    private var night = false
 
-    fun setCondition(value: String) {
-        if (value == condition) return
+    /** Theme variables (no `--`), for HA's `--weather-icon-*-color` overrides. */
+    var themeVars: Map<String, String> = emptyMap()
+    var fallbackColor: Int = 0xFFE1E1E1.toInt()
+    private val glyph = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val glyphPath = Path()
+    private val glyphMatrix = Matrix()
+
+    fun setCondition(value: String, nightTime: Boolean = false) {
+        if (value == condition && nightTime == night) return
         condition = value
+        night = nightTime
         invalidate()
     }
 
@@ -1084,136 +1095,17 @@ class WeatherIconView(context: Context) : View(context) {
         if (size <= 0f) return
         canvas.save()
         canvas.translate((width - size) / 2f, (height - size) / 2f)
-        canvas.scale(size / 24f, size / 24f)
-        when (condition) {
-            "sunny" -> sun(canvas, 12f, 12f, 5f, rays = true)
-            "clear-night" -> moon(canvas)
-            "partlycloudy" -> { sun(canvas, 9f, 9f, 4.2f, rays = true); cloud(canvas, 14f, 15.5f, 1f, CLOUD_LIGHT) }
-            "cloudy" -> { cloud(canvas, 15f, 10.5f, 0.8f, CLOUD_DARK); cloud(canvas, 11f, 14.5f, 1f, CLOUD_LIGHT) }
-            "rainy" -> { cloud(canvas, 12f, 10f, 1f, CLOUD_DARK); drops(canvas, 3) }
-            "pouring" -> { cloud(canvas, 12f, 10f, 1f, CLOUD_DARK); drops(canvas, 5) }
-            "snowy" -> { cloud(canvas, 12f, 10f, 1f, CLOUD_LIGHT); flakes(canvas) }
-            "snowy-rainy", "hail" -> { cloud(canvas, 12f, 10f, 1f, CLOUD_LIGHT); drops(canvas, 2); flakes(canvas, sparse = true) }
-            "lightning" -> { cloud(canvas, 12f, 10f, 1f, CLOUD_DARK); bolt(canvas) }
-            "lightning-rainy" -> { cloud(canvas, 12f, 10f, 1f, CLOUD_DARK); bolt(canvas); drops(canvas, 2) }
-            "fog" -> { cloud(canvas, 12f, 9.5f, 1f, CLOUD_LIGHT); fog(canvas) }
-            "windy", "windy-variant" -> wind(canvas)
-            else -> cloud(canvas, 12f, 12.5f, 1f, CLOUD_LIGHT)
+        val svg = HaWeatherSvg.forCondition(condition, night, themeVars)
+        if (svg != null) {
+            svg.draw(canvas, size, size, context)
+        } else if (condition.isNotEmpty()) {
+            glyphMatrix.setScale(size / 24f, size / 24f)
+            glyphPath.set(MdiIcons.pathFor(MdiIcons.weatherIcon(condition).removePrefix("mdi:")))
+            glyphPath.transform(glyphMatrix)
+            glyph.color = fallbackColor
+            canvas.drawPath(glyphPath, glyph)
         }
         canvas.restore()
-    }
-
-    private fun sun(c: Canvas, x: Float, y: Float, r: Float, rays: Boolean) {
-        paint.style = Paint.Style.FILL
-        paint.color = SUN
-        c.drawCircle(x, y, r, paint)
-        if (!rays) return
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 1.3f
-        paint.strokeCap = Paint.Cap.ROUND
-        for (i in 0 until 8) {
-            val a = Math.toRadians(i * 45.0)
-            val r1 = r + 1.6f
-            val r2 = r + 3.2f
-            c.drawLine(x + r1 * cos(a).toFloat(), y + r1 * sin(a).toFloat(), x + r2 * cos(a).toFloat(), y + r2 * sin(a).toFloat(), paint)
-        }
-        paint.style = Paint.Style.FILL
-    }
-
-    private fun moon(c: Canvas) {
-        path.reset()
-        path.addCircle(12f, 12f, 7f, Path.Direction.CW)
-        val bite = Path().apply { addCircle(15.5f, 9f, 6f, Path.Direction.CW) }
-        path.op(bite, Path.Op.DIFFERENCE)
-        paint.style = Paint.Style.FILL
-        paint.color = MOON
-        c.drawPath(path, paint)
-    }
-
-    /** A cloud about 16 units wide at [scale] 1, centred on ([x], [y]). */
-    private fun cloud(c: Canvas, x: Float, y: Float, scale: Float, color: Int) {
-        paint.style = Paint.Style.FILL
-        paint.color = color
-        c.save()
-        c.translate(x, y)
-        c.scale(scale, scale)
-        c.drawCircle(-3.5f, 0.5f, 3.5f, paint)
-        c.drawCircle(1f, -1.5f, 4.8f, paint)
-        c.drawCircle(5f, 1f, 3.2f, paint)
-        c.drawRoundRect(RectF(-7f, 0.5f, 8.2f, 4.2f), 1.8f, 1.8f, paint)
-        c.restore()
-    }
-
-    private fun drops(c: Canvas, n: Int) {
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 1.4f
-        paint.strokeCap = Paint.Cap.ROUND
-        paint.color = RAIN
-        val xs = when (n) {
-            1 -> listOf(12f)
-            2 -> listOf(9f, 15f)
-            3 -> listOf(8f, 12f, 16f)
-            else -> listOf(6.5f, 9.25f, 12f, 14.75f, 17.5f)
-        }
-        xs.forEachIndexed { i, x ->
-            val y = if (i % 2 == 0) 16.5f else 18f
-            c.drawLine(x, y, x - 1f, y + 3.2f, paint)
-        }
-        paint.style = Paint.Style.FILL
-    }
-
-    private fun flakes(c: Canvas, sparse: Boolean = false) {
-        paint.style = Paint.Style.FILL
-        paint.color = SNOW
-        val pts = if (sparse) listOf(12f to 18.5f, 17f to 19.5f) else listOf(8f to 17.5f, 12f to 19.5f, 16f to 17.5f, 10f to 21.5f, 14f to 21.5f)
-        for ((x, y) in pts) c.drawCircle(x, y, 1.1f, paint)
-    }
-
-    private fun bolt(c: Canvas) {
-        path.reset()
-        path.moveTo(13f, 13f)
-        path.lineTo(9.5f, 18.5f)
-        path.lineTo(12f, 18.5f)
-        path.lineTo(10.5f, 23f)
-        path.lineTo(15.5f, 16.5f)
-        path.lineTo(12.8f, 16.5f)
-        path.lineTo(14.5f, 13f)
-        path.close()
-        paint.style = Paint.Style.FILL
-        paint.color = SUN
-        c.drawPath(path, paint)
-    }
-
-    private fun fog(c: Canvas) {
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 1.4f
-        paint.strokeCap = Paint.Cap.ROUND
-        paint.color = CLOUD_DARK
-        c.drawLine(5f, 17f, 19f, 17f, paint)
-        c.drawLine(7f, 20f, 17f, 20f, paint)
-        paint.style = Paint.Style.FILL
-    }
-
-    private fun wind(c: Canvas) {
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 1.6f
-        paint.strokeCap = Paint.Cap.ROUND
-        paint.color = CLOUD_DARK
-        path.reset()
-        path.moveTo(3f, 9f); path.lineTo(15f, 9f); path.cubicTo(19f, 9f, 19f, 4f, 15.5f, 4.5f)
-        path.moveTo(3f, 13f); path.lineTo(19f, 13f); path.cubicTo(23f, 13f, 23f, 18f, 19.5f, 17.5f)
-        path.moveTo(5f, 17f); path.lineTo(12f, 17f)
-        c.drawPath(path, paint)
-        paint.style = Paint.Style.FILL
-    }
-
-    private companion object {
-        const val SUN = 0xFFFBC02D.toInt()
-        const val MOON = 0xFFFFE082.toInt()
-        const val CLOUD_LIGHT = 0xFFCFD8DC.toInt()
-        const val CLOUD_DARK = 0xFFB0BEC5.toInt()
-        const val RAIN = 0xFF42A5F5.toInt()
-        const val SNOW = 0xFF90CAF9.toInt()
     }
 }
 
