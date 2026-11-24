@@ -288,7 +288,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
 
     /** Drops the card's background, border and shadow so it shares a parent card's surface (stack-in-card). */
     fun makeSeamless(keepBackground: Boolean = false, keepRadius: Boolean = false) {
-        seamless = true
+        seamless = !keepBackground
         elevation = 0f
         if (!keepBackground) {
             background = null
