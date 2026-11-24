@@ -898,3 +898,18 @@ object AreaCardConfig {
         (raw.optJSONArray("sensor_classes")?.length() ?: 0) > 0 || (raw.optJSONArray("alert_classes")?.length() ?: 0) > 0 ||
             displayType(raw) == "camera"
 }
+
+/** HA's `hui-entity-filter-card`: the card it builds around the entities that pass the filter. */
+object EntityFilterConfig {
+    /**
+     * `{type: "entities", ...config.card, entities}`: the inner `card` (an entities card unless it says otherwise),
+     * with the filter's entities, and its `state_filter` for Vitro's entities card to hide rows as states change.
+     */
+    fun innerCard(outer: CardConfig): CardConfig {
+        val inner = outer.raw.optJSONObject("card")?.let { JSONObject(it.toString()) } ?: JSONObject()
+        if (!inner.has("type")) inner.put("type", "entities")
+        outer.raw.optJSONArray("entities")?.let { inner.put("entities", JSONArray(it.toString())) }
+        outer.raw.optJSONArray("state_filter")?.let { inner.put("state_filter", JSONArray(it.toString())) }
+        return LovelaceParser.parseCard(inner)
+    }
+}

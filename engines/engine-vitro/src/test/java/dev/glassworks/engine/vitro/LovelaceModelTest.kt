@@ -21,6 +21,7 @@ import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.AreaCardConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.CardRouter
+import dev.glassworks.engine.vitro.model.EntityFilterConfig
 import dev.glassworks.engine.vitro.model.CardTier
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.model.VisibilityCondition
@@ -652,6 +653,20 @@ class LovelaceModelTest {
         assertEquals(GaugeCardView.SEVERITY_RED, GaugeCardView.severityColor(rev, 5.0))
         assertEquals(GaugeCardView.SEVERITY_GREEN, GaugeCardView.severityColor(rev, 70.0))
         assertTrue(GaugeCardView.parseSeverity(null).isEmpty())
+    }
+
+    @Test
+    fun entityFilterDrawsItsInnerCardWithTheFiltersEntities() {
+        val outer = card("""{"type": "entity-filter", "entities": ["light.a", "light.b"], "state_filter": ["off"],
+            "card": {"title": "Lights off", "show_header_toggle": false}}""")
+        val inner = EntityFilterConfig.innerCard(outer)
+        assertEquals("entities", inner.type)
+        assertEquals("Lights off", inner.title)
+        assertEquals(listOf("light.a", "light.b"), inner.entities().map { it.entity })
+        assertEquals("off", inner.raw.getJSONArray("state_filter").getString(0))
+        assertFalse(inner.raw.optBoolean("show_header_toggle", true))
+        // With no inner card: a plain entities card.
+        assertEquals("entities", EntityFilterConfig.innerCard(card("""{"type": "entity-filter", "entities": ["light.a"]}""")).type)
     }
 
     @Test

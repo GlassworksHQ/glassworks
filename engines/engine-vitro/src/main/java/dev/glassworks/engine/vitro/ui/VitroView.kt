@@ -74,6 +74,7 @@ import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
+import dev.glassworks.engine.vitro.model.EntityFilterConfig
 import dev.glassworks.engine.vitro.fonts.WebFonts
 import dev.glassworks.engine.vitro.compat.CompatChecker
 import dev.glassworks.engine.vitro.compat.IslandScripts
@@ -1193,7 +1194,9 @@ class VitroView(
             }
             // Tier 1: Built-in HA cards
             "tile" -> TileCardView(ctx, card)
-            "entities", "entity-filter" -> EntitiesCardView(ctx, card)
+            "entities" -> EntitiesCardView(ctx, card)
+            // HA wraps the passing entities in its inner card (an entities card by default): its title and toggle.
+            "entity-filter" -> EntitiesCardView(ctx, EntityFilterConfig.innerCard(card))
             "glance" -> GlanceCardView(ctx, card)
             "button" -> ButtonCardView(ctx, card)
             "heading" -> HeadingCardView(ctx, card)
