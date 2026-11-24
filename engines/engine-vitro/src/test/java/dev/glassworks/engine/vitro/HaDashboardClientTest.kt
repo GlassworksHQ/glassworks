@@ -397,8 +397,16 @@ class HaDashboardClientTest {
     fun compressedDiffEventsUpdateTheStoreAndWakeItsSubscribers() {
         connected()
         awaitCondition("entities") { store.size() == 4 }
+        // Counted: the notifications that carry the diff. The snapshot's own dispatch can still be running when
+        // `size() == 4` holds (states go in before listeners hear), and it may reach this listener with "on".
         val woken = AtomicInteger(0)
-        store.subscribe("light.lounge_lamp") { woken.incrementAndGet() }
+        val sawRemovalFirst = java.util.concurrent.atomic.AtomicBoolean(true)
+        store.subscribe("light.lounge_lamp") { s ->
+            if (s?.state == "off") {
+                woken.incrementAndGet()
+                if (store["sensor.unreferenced_power"] != null) sawRemovalFirst.set(false)
+            }
+        }
         val sub = server.commands("subscribe_entities").single().getInt("id")
 
         server.pushEvent(
@@ -416,6 +424,7 @@ class HaDashboardClientTest {
         assertEquals(0, (lamp.attributes["brightness"] as Number).toInt())
         assertEquals("Lounge Lamp", lamp.friendlyName)
         assertEquals(1, woken.get())
+        assertTrue("the whole event was applied before the listener heard", sawRemovalFirst.get())
     }
 
     // ---- Commands ----
