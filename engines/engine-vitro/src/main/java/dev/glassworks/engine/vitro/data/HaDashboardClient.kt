@@ -696,19 +696,27 @@ class HaDashboardClient(
         val id = nextId.getAndIncrement()
         msg.put("id", id)
         subscriptions[id] = { ev -> onEvent(id, ev) }
+        val state = SubscriptionState()
+        subscriptionStates[id] = state
         pending[id] = { res ->
-            if (res.optBoolean("success", false)) {
-                // Acknowledged: a cancel from here on no longer races the result, so its marker can go.
-                cancelledSubs.remove(id)
-            } else {
-                subscriptions.remove(id)
-                // Only an explicit cancel keeps it quiet: a rejection or a lost connection (which clears the
-                // subscriptions before it answers this) is reported once.
-                if (!cancelledSubs.remove(id)) onError?.invoke(res.optJSONObject("error"))
+            // The result and a cancel decide under the subscription's own lock, so neither can slip past the other.
+            val report = synchronized(state) {
+                state.settled = true
+                subscriptionStates.remove(id)
+                if (res.optBoolean("success", false)) {
+                    false
+                } else {
+                    subscriptions.remove(id)
+                    // Only an explicit cancel keeps it quiet: a rejection or a lost connection (which clears the
+                    // subscriptions before it answers this) is reported once.
+                    !state.cancelled
+                }
             }
+            if (report) onError?.invoke(res.optJSONObject("error"))
         }
         if (!send(msg)) {
             subscriptions.remove(id)
+            subscriptionStates.remove(id)
             pending.remove(id)
             return -1
         }
@@ -716,10 +724,17 @@ class HaDashboardClient(
     }
 
     /** Subscriptions cancelled before their result came: their failure is the cancel's, not an error to report. */
-    private val cancelledSubs: MutableSet<Int> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
+    /** One subscription until its result: whether it was cancelled first, and whether the result has settled it. */
+    private class SubscriptionState {
+        var cancelled = false
+        var settled = false
+    }
+
+    /** Subscriptions waiting for their result; each leaves the map when it settles, so nothing outlives a subscription. */
+    private val subscriptionStates = java.util.concurrent.ConcurrentHashMap<Int, SubscriptionState>()
 
     private fun unsubscribe(subscriptionId: Int) {
-        if (pending.containsKey(subscriptionId)) cancelledSubs += subscriptionId
+        subscriptionStates[subscriptionId]?.let { st -> synchronized(st) { if (!st.settled) st.cancelled = true } }
         subscriptions.remove(subscriptionId)
         val msg = JSONObject().put("type", "unsubscribe_events").put("subscription", subscriptionId)
         request(msg) {}

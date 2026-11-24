@@ -576,16 +576,23 @@ class HaDashboardClientTest {
     @Test
     fun subscribeWsDeliversEventsAndReportsARejectionOnce() {
         val c = connected()
+        // Anything a callback wasn't expecting goes here, from the socket thread, and is asserted on this one.
+        val unexpected = java.util.concurrent.ConcurrentLinkedQueue<String>()
         // Delivered: a subscription's events (the fake server streams render_template), until cancelled.
         val events = CompletableFuture<JSONObject>()
-        val cancel = c.subscribeWs(JSONObject().put("type", "render_template").put("template", "{{ 1 }}"), { events.complete(it) }, { events.completeExceptionally(AssertionError("no error expected: $it")) })
+        val cancel = c.subscribeWs(
+            JSONObject().put("type", "render_template").put("template", "{{ 1 }}"),
+            { if (!events.complete(it)) unexpected += "a second event: $it" },
+            { unexpected += "an error on a stream that delivered: $it" },
+        )
         events.get(10, TimeUnit.SECONDS)
         cancel()
-        // Rejected: the command's error reaches onError, once.
+        // Rejected: the command's error reaches onError, once, and no event follows.
         val errors = java.util.concurrent.LinkedBlockingQueue<String>()
-        c.subscribeWs(JSONObject().put("type", "bogus/stream"), { fail("no event expected") }, { errors.put(it?.optString("code") ?: "null") })
+        c.subscribeWs(JSONObject().put("type", "bogus/stream"), { unexpected += "an event after a rejection: $it" }, { errors.put(it?.optString("code") ?: "null") })
         assertEquals("unknown_command", errors.poll(10, TimeUnit.SECONDS))
         assertNull(errors.poll(300, TimeUnit.MILLISECONDS))
+        assertEquals(emptyList<String>(), unexpected.toList())
     }
 
     @Test

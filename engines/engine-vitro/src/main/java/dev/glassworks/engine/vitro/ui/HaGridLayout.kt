@@ -125,29 +125,35 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
         fun of(card: CardConfig, state: dev.glassworks.engine.vitro.data.EntityState? = null): HaGridSize {
             val raw = card.raw
             val default = defaults(card, state)
-            var cols: Any? = default.columns ?: "full"
-            var rows: Any? = default.rows ?: "auto"
-            var minCols: Int? = null
-            var maxCols: Int? = null
-            var minRows: Int? = null
-            var maxRows: Int? = null
+            // hui-card.getGridOptions: the card type's options ({columns, rows, min_columns, min_rows}), overridden key by
+            // key by the config's: `grid_options`, else the old `layout_options` migrated (columns and their bounds x 3).
+            val typeMin = minimums(card)
+            val merged = HashMap<String, Any?>()
+            merged["columns"] = default.columns ?: "full"
+            merged["rows"] = default.rows ?: "auto"
+            typeMin.columns?.let { merged["min_columns"] = it }
+            typeMin.rows?.let { merged["min_rows"] = it }
             val g = raw.optJSONObject("grid_options")
             val legacy = raw.optJSONObject("layout_options")
-            // The minimums the card type reports with its defaults (getGridOptions' min_columns / min_rows).
-            val typeMin = minimums(card)
-            minCols = typeMin.columns
-            minRows = typeMin.rows
             if (g != null) {
-                if (g.has("columns")) cols = g.opt("columns")
-                if (g.has("rows")) rows = g.opt("rows")
-                minCols = g.optInt("min_columns", 0).takeIf { it > 0 } ?: typeMin.columns
-                maxCols = g.optInt("max_columns", 0).takeIf { it > 0 }
-                minRows = g.optInt("min_rows", 0).takeIf { it > 0 } ?: typeMin.rows
-                maxRows = g.optInt("max_rows", 0).takeIf { it > 0 }
+                for (k in listOf("columns", "rows", "min_columns", "max_columns", "min_rows", "max_rows")) if (g.has(k)) merged[k] = g.opt(k)
             } else if (legacy != null) {
-                if (legacy.has("grid_columns")) cols = legacy.opt("grid_columns").let { (it as? Number)?.toInt()?.times(3) ?: it }
-                if (legacy.has("grid_rows")) rows = legacy.opt("grid_rows")
+                fun times3(v: Any?): Any? = (v as? Number)?.let { it.toDouble() * 3 } ?: v
+                if (legacy.has("grid_columns")) merged["columns"] = times3(legacy.opt("grid_columns"))
+                if (legacy.has("grid_max_columns")) merged["max_columns"] = times3(legacy.opt("grid_max_columns"))
+                if (legacy.has("grid_min_columns")) merged["min_columns"] = times3(legacy.opt("grid_min_columns"))
+                if (legacy.has("grid_rows")) merged["rows"] = legacy.opt("grid_rows")
+                if (legacy.has("grid_max_rows")) merged["max_rows"] = legacy.opt("grid_max_rows")
+                if (legacy.has("grid_min_rows")) merged["min_rows"] = legacy.opt("grid_min_rows")
             }
+            fun bound(k: String): Int? = (merged[k] as? Number)?.toInt()
+            val cols: Any? = merged["columns"]
+            val rows: Any? = merged["rows"]
+            // conditionalClamp: each bound only when it's set.
+            val minCols = bound("min_columns")
+            val maxCols = bound("max_columns")
+            val minRows = bound("min_rows")
+            val maxRows = bound("max_rows")
             val c = when (cols) {
                 is Number -> cols.toInt().let { v -> v.coerceAtLeast(minCols ?: 1).let { maxCols?.let { m -> minOf(it, m) } ?: it } }.coerceIn(1, 48)
                 else -> null

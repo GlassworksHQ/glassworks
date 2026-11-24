@@ -250,4 +250,30 @@ class HaGraphTest {
         assertEquals(listOf("°C"), merged.line.map { it.unit })
         assertEquals(listOf("5"), merged.line.single().data.single().statistics!!.map { it.state })
     }
+
+    @Test
+    fun legacyLayoutOptionsCarryTheirBoundsLikeHa() {
+        fun size(json: String) = dev.glassworks.engine.vitro.ui.HaGridSize.of(dev.glassworks.engine.vitro.model.LovelaceParser.parseCard(JSONObject(json)))
+        // migrateLayoutToGridOptions: columns and their bounds x 3, rows as written; they override the type's minimums.
+        assertEquals(dev.glassworks.engine.vitro.ui.HaGridSize(3, 2), size("""{"type": "sensor", "entity": "sensor.a", "layout_options": {"grid_columns": 1, "grid_min_columns": 1}}"""))
+        assertEquals(dev.glassworks.engine.vitro.ui.HaGridSize(6, 2), size("""{"type": "sensor", "entity": "sensor.a", "layout_options": {"grid_columns": 1}}"""))
+        // grid_options wins when both are there.
+        assertEquals(dev.glassworks.engine.vitro.ui.HaGridSize(9, 2), size("""{"type": "sensor", "entity": "sensor.a", "grid_options": {"columns": 9}, "layout_options": {"grid_columns": 1, "grid_min_columns": 1}}"""))
+    }
+
+    @Test
+    fun fitYDataWidensConfiguredBoundsToTheData() {
+        fun spec(fit: Boolean) = dev.glassworks.engine.vitro.cards.LineChartSpec(
+            listOf(dev.glassworks.engine.vitro.cards.ChartLine(doubleArrayOf(0.0, 1000.0), doubleArrayOf(20.0, 25.5), 0)),
+            0L, 1000L, "W", 233f, true, minYAxis = 0.0, maxYAxis = 10.0, fitYData = fit,
+        )
+        // Fixed: the configured 0..10 stands, and the data is clipped.
+        val fixed = dev.glassworks.engine.vitro.cards.HaLineChart.yAxis(spec(false)).first
+        assertEquals(0.0, fixed.min, 0.0)
+        assertEquals(10.0, fixed.max, 0.0)
+        // fit_y_data: the top grows to ceil(25.5) = 26, the bottom keeps 0.
+        val fit = dev.glassworks.engine.vitro.cards.HaLineChart.yAxis(spec(true)).first
+        assertEquals(0.0, fit.min, 0.0)
+        assertEquals(26.0, fit.max, 0.0)
+    }
 }

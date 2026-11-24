@@ -422,13 +422,19 @@ class LineChartSpec(
     val minInterval: Long? = null,
     /** The span the time labels are formatted for (`_minutesDifference`), when it isn't the axis' own. */
     val labelMinutes: Double? = null,
+    /** `fit_y_data`: a configured bound widens to take in the data (rounded out to a whole number past 1). */
+    val fitYData: Boolean = false,
 )
 
 object HaLineChart {
     /** The y labels and the width `_formatYAxisLabel` reports for them (`measureTextWidth + 5`, at least 25). */
     fun yAxis(spec: LineChartSpec): Triple<ECharts.ValueScale, List<String>, Float> {
         val (dMin, dMax) = extentIn(spec.lines, spec.xMin.toDouble(), spec.xMax.toDouble())
-        val bounds = HaYBounds.of(dMin, dMax, spec.unit, false, spec.minYAxis, spec.maxYAxis)
+        // fit_y_data: min(roundYAxis(min, floor), min_y_axis) and max(roundYAxis(max, ceil), max_y_axis), as HA's charts do.
+        fun roundY(v: Double, f: (Double) -> Double) = if (kotlin.math.abs(v) < 1) v else f(v)
+        val cfgMin = spec.minYAxis?.let { m -> if (spec.fitYData && dMin.isFinite()) min(roundY(dMin, ::floor), m) else m }
+        val cfgMax = spec.maxYAxis?.let { m -> if (spec.fitYData && dMax.isFinite()) max(roundY(dMax, ::ceil), m) else m }
+        val bounds = HaYBounds.of(dMin, dMax, spec.unit, false, cfgMin, cfgMax)
         val scale = if (dMin.isFinite()) ECharts.valueScale(dMin, dMax, bounds.fixMin, bounds.fixMax, 0.02)
             else ECharts.ValueScale(0.0, 1.0, listOf(0.0, 1.0))
         val labels = scale.ticks.map { v -> HaChartFormat.number(v, if (v == 0.0) 0 else bounds.fractionDigits, bounds.fractionDigits) }
@@ -873,7 +879,8 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
             charts.addView(entry(chart, timeline = true, first = index++ == 0))
         }
         for ((spec, legend) in lineSpecs) {
-            val withPad = LineChartSpec(spec.lines, spec.xMin, spec.xMax, spec.unit, spec.heightCss, false, config.raw.optDouble("min_y_axis").takeIf { !it.isNaN() }, config.raw.optDouble("max_y_axis").takeIf { !it.isNaN() }, padding)
+            val withPad = LineChartSpec(spec.lines, spec.xMin, spec.xMax, spec.unit, spec.heightCss, false, config.raw.optDouble("min_y_axis").takeIf { !it.isNaN() }, config.raw.optDouble("max_y_axis").takeIf { !it.isNaN() }, padding,
+                fitYData = config.raw.optBoolean("fit_y_data", false))
             val box = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
             val chart = LineChartHost(ctx, withPad)
             box.addView(chart, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -963,7 +970,10 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
             legend += LegendItem(e.entityId, names[e.entityId] ?: e.name, color, state?.formattedState())
         }
         val chartHeight = defaultChartHeight()
-        return LineChartSpec(lines, start, end, u.unit.takeIf { it.isNotBlank() }, chartHeight, false) to legend
+        // The same bounds as the chart drawn, so the shared y-axis width is measured from its labels.
+        return LineChartSpec(lines, start, end, u.unit.takeIf { it.isNotBlank() }, chartHeight, false,
+            config.raw.optDouble("min_y_axis").takeIf { !it.isNaN() }, config.raw.optDouble("max_y_axis").takeIf { !it.isNaN() },
+            fitYData = config.raw.optBoolean("fit_y_data", false)) to legend
     }
 
     /** The charts' width (CSS px): the card's less its border and the content's 16 px sides. */
@@ -1221,7 +1231,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         val minInterval = if (dayDiff >= 89) 28 * ECharts.DAY else if (dayDiff > 2) ECharts.DAY else null
         val spec = LineChartSpec(lines, minX, maxX, unit, 233f, true,
             config.raw.optDouble("min_y_axis").takeIf { !it.isNaN() }, config.raw.optDouble("max_y_axis").takeIf { !it.isNaN() },
-            minInterval = minInterval, labelMinutes = minutes)
+            minInterval = minInterval, labelMinutes = minutes, fitYData = config.raw.optBoolean("fit_y_data", false))
         chart.setScene { w -> HaLineChart.scene(spec, w, ctx) }
         chart.requestLayout()
     }
