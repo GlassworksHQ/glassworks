@@ -741,7 +741,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                             }
                             val cur = pending ?: st?.state?.toDoubleOrNull() ?: return
                             val step = stepOf(st)
-                            val next = clamp(Math.round((cur + sign * step) / step) * step, st)
+                            // The same grid as the slider: steps counted from the minimum (min 0.5, step 1: 1.5 -> 2.5).
+                            val lo = lowOf(st) ?: 0.0
+                            val next = clamp(lo + Math.round((cur + sign * step - lo) / step) * step, st)
                             pending = next
                             value.text = format(next, st)
                             setValue(next)
@@ -1111,7 +1113,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         opts.forEachIndexed { i, opt -> menu.menu.add(0, i, i, opt) }
         menu.setOnMenuItemClickListener { item ->
             val opt = opts.getOrNull(item.itemId) ?: return@setOnMenuItemClickListener false
-            ctx.callService("select", "select_option", JSONObject().put("entity_id", entityId).put("option", opt), null)
+            // `input_select.select_option` for an input_select, `select.select_option` for a select, as HA's feature does.
+            ctx.callService(entityId.substringBefore('.'), "select_option", JSONObject().put("entity_id", entityId).put("option", opt), null)
             true
         }
         menu.show()
@@ -1229,8 +1232,14 @@ internal class HaHorizontalSliderView(
         }
     }
 
-    /** Moves the fill to [value]: animated over 160 ms on screen, snapped before attach. Ignored mid-drag. */
+    /** The latest value bound from Home Assistant, kept during a drag so a cancelled one goes back to it. */
+    private var boundFraction = 0f
+    private var boundActive = false
+
+    /** Moves the fill to [value]: animated over 160 ms on screen, snapped before attach. Held back mid-drag. */
     fun setValue(value: Float, active: Boolean) {
+        boundFraction = value.coerceIn(0f, 1f)
+        boundActive = active
         if (dragging) return
         val clamped = value.coerceIn(0f, 1f)
         if (clamped == targetFraction && active == this.active) return
@@ -1292,6 +1301,8 @@ internal class HaHorizontalSliderView(
             MotionEvent.ACTION_CANCEL -> {
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
+                // Nothing was sent: drop the preview and show the value Home Assistant reported.
+                setValue(boundFraction, boundActive)
                 invalidate()
                 return true
             }
@@ -1824,6 +1835,14 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
 class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : LinearLayout(ctx.context) {
     private val unsubs = ArrayList<() -> Unit>()
 
+    /** Every subscription as a way to make it again: a view that is detached and attached again listens again. */
+    private val binders = ArrayList<() -> (() -> Unit)>()
+
+    private fun bind(binder: () -> (() -> Unit)) {
+        binders += binder
+        unsubs += binder()
+    }
+
     init {
         orientation = VERTICAL
         setPadding(ctx.px(4f), ctx.px(10f), ctx.px(4f), ctx.px(4f))
@@ -1846,7 +1865,7 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
             ellipsize = TextUtils.TruncateAt.END
         }
         if ("{{" in heading) {
-            unsubs += ctx.subscribeTemplate(heading) { rendered -> ctx.main.post { hView.text = rendered } }
+            bind { ctx.subscribeTemplate(heading) { rendered -> ctx.main.post { hView.text = rendered } } }
         } else {
             hView.text = heading
         }
@@ -1857,7 +1876,7 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
         if (subtitle.isNotEmpty()) {
             val subView = textView(ctx, 13f, ctx.theme.secondaryTextColor)
             if ("{{" in subtitle) {
-                unsubs += ctx.subscribeTemplate(subtitle) { rendered -> ctx.main.post { subView.text = rendered } }
+                bind { ctx.subscribeTemplate(subtitle) { rendered -> ctx.main.post { subView.text = rendered } } }
             } else {
                 subView.text = subtitle
             }
@@ -1882,9 +1901,16 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
             icon.setIcon(MdiIcons.resolveIconName(explicitIcon, s), ctx.theme.secondaryTextColor)
             state.text = s?.formattedState() ?: "…"
         }
-        render(ctx.store[eid])
-        unsubs += ctx.store.subscribe(eid) { s -> ctx.main.post { render(s) } }
+        bind {
+            render(ctx.store[eid])
+            ctx.store.subscribe(eid) { s -> ctx.main.post { render(s) } }
+        }
         return item
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (unsubs.isEmpty()) binders.forEach { unsubs += it() }
     }
 
     override fun onDetachedFromWindow() {
@@ -2048,7 +2074,9 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
     }
-    private val liveEntityId: String? = (config.entity ?: config.raw.optString("camera_image", "").ifEmpty { null })
+    /** Where the picture comes from: `camera_image` when set (the entity keeps the caption and actions), else the entity. */
+    private val pictureSource: String? = config.raw.optString("camera_image", "").ifEmpty { null } ?: config.entity
+    private val liveEntityId: String? = pictureSource
         ?.takeIf { config.raw.optString("camera_view") == "live" || it.startsWith("camera.") }
     private val isLive = liveEntityId != null
     private var latestPicture: String? = null
@@ -2090,6 +2118,20 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         val label = if (config.type == "picture-glance") config.title ?: config.name else config.name
         if (label != null) caption.text = label
         val eid = config.entity ?: config.raw.optString("camera_image", "").ifEmpty { null }
+        /** Shows [pic] (the source's `entity_picture`): only the newest request may land, and none clears the image. */
+        fun showPicture(pic: String?) {
+            latestPicture = pic
+            // Live cards are refreshed by the feed; others load once per state change.
+            if (isLive) return
+            if (pic == null) {
+                img.setImageDrawable(null)
+                return
+            }
+            ctx.loadImage(pic) { bmp -> if (bmp != null && latestPicture == pic) img.setImageBitmap(bmp) }
+        }
+        if (staticImage == null && pictureSource != null && pictureSource != eid) {
+            observe(pictureSource) { s -> showPicture(s?.entityPicture) }
+        }
         if (eid != null) {
             isClickable = true
             setOnClickListener { ctx.performAction(ActionConfig.parse(config.raw.optJSONObject("tap_action")), eid) }
@@ -2100,13 +2142,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                     if (showState && s != null && glanceEntities.isEmpty()) add(s.formattedState())
                 }
                 caption.text = parts.joinToString(" · ")
-                if (staticImage == null) {
-                    latestPicture = s?.entityPicture
-                    // Live cards are refreshed by the feed; others load once per state change.
-                    if (!isLive) latestPicture?.let { pic ->
-                        ctx.loadImage(pic) { bmp -> if (bmp != null) img.setImageBitmap(bmp) }
-                    }
-                }
+                if (staticImage == null && pictureSource == eid) showPicture(s?.entityPicture)
             }
         }
     }
@@ -2171,12 +2207,19 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        feed?.start()
+        if (isShown) feed?.start()
     }
 
     override fun onDetachedFromWindow() {
         feed?.stop()
         super.onDetachedFromWindow()
+    }
+
+    /** A cached view that is hidden (another view shown) stays attached: its stream stops until it shows again. */
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (!isAttachedToWindow) return
+        if (isShown) feed?.start() else feed?.stop()
     }
 
     internal companion object {
@@ -2216,6 +2259,24 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
  */
 class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfig) : ViewGroup(ctx.context) {
     private val subscriptions = ArrayList<() -> Unit>()
+
+    /** Every subscription as a way to make it again: a view that is detached and attached again listens again. */
+    private val binders = ArrayList<() -> (() -> Unit)>()
+
+    /** Conditional chips whose rules read the clock or the user: re-checked on a timer while attached. */
+    private val timedRefreshes = ArrayList<() -> Unit>()
+    private val timedTick = object : Runnable {
+        override fun run() {
+            timedRefreshes.forEach { it() }
+            postDelayed(this, TIMED_CHECK_MS)
+        }
+    }
+
+    private fun bind(binder: () -> (() -> Unit)) {
+        binders += binder
+        subscriptions += binder()
+    }
+
     private val style = ChipStyle.resolve(ctx, ThemeResolver.parseCardMod(config.raw.optJSONObject("card_mod"), ctx.theme.vars).customProperties)
     private val alignment = config.raw.optString("alignment")
     private val spacingPx = ctx.px(style.spacing)
@@ -2251,7 +2312,13 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         refresh()
         val ids = LinkedHashSet<String>()
         conditions.forEach { it.referencedEntities(ids) }
-        ids.forEach { id -> subscriptions += ctx.store.subscribe(id) { ctx.main.post { refresh() } } }
+        ids.forEach { id ->
+            bind {
+                refresh()
+                ctx.store.subscribe(id) { ctx.main.post { refresh() } }
+            }
+        }
+        if (conditions.any { it.dependsOnTime() || it.dependsOnUser() }) timedRefreshes += ::refresh
     }
 
     /** The visible children split into flex lines, as `flex-wrap: wrap` breaks them for [innerWidth]. */
@@ -2430,8 +2497,10 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
                         )
                     }
                 }
-                render(ctx.store[eid])
-                subscriptions += ctx.store.subscribe(eid) { s -> ctx.main.post { render(s) } }
+                bind {
+                    render(ctx.store[eid])
+                    ctx.store.subscribe(eid) { s -> ctx.main.post { render(s) } }
+                }
             } else {
                 icon.setIcon(c.optString("icon", "mdi:home"), staticColor ?: ctx.theme.primaryColor)
                 setLabel(c.optString("content", "").takeUnless(::isTemplate).orEmpty())
@@ -2445,18 +2514,36 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         val raw = c.optString(key, "")
         if (isTemplate(raw)) {
             apply("")
-            subscriptions += ctx.subscribeTemplate(withEntityVariable(raw, entityId)) { rendered ->
-                ctx.main.post { apply(rendered.trim()) }
+            bind {
+                ctx.subscribeTemplate(withEntityVariable(raw, entityId)) { rendered ->
+                    ctx.main.post { apply(rendered.trim()) }
+                }
             }
         } else {
             apply(raw)
         }
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (subscriptions.isEmpty()) binders.forEach { subscriptions += it() }
+        if (timedRefreshes.isNotEmpty()) {
+            timedRefreshes.forEach { it() }
+            removeCallbacks(timedTick)
+            postDelayed(timedTick, TIMED_CHECK_MS)
+        }
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        removeCallbacks(timedTick)
         subscriptions.forEach { runCatching { it() } }
         subscriptions.clear()
+    }
+
+    private companion object {
+        /** How often a time- or user-gated chip re-checks; the user arrives after the first render. */
+        const val TIMED_CHECK_MS = 15_000L
     }
 }
 
