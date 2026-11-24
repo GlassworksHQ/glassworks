@@ -52,7 +52,11 @@ class WS:
                            f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n").encode())
         head = b""
         while b"\r\n\r\n" not in head:
-            head += self.sock.recv(1)
+            b = self.sock.recv(1)
+            if not b:       # closed during the upgrade: fail instead of spinning
+                self.sock.close()
+                raise AssertionError(f"websocket upgrade failed, server closed: {head!r}")
+            head += b
         assert b" 101 " in head.split(b"\r\n")[0], head
         self.n = 0
         self.buf = []
@@ -310,8 +314,11 @@ class ShowcaseTest(unittest.TestCase):
         self.assertEqual(g["ha-card-border-radius"], "20px")
         self.assertEqual(set(g["modes"]), {"light", "dark"})
         # four hops: card-background-color -> ha-card-background -> glass-card-tinted -> glass-card -> glass-surface
-        hops, key = 0, "card-background-color"
+        hops, key, seen = 0, "card-background-color", set()
         while g[key].startswith("var(--"):
+            self.assertNotIn(key, seen, f"var() cycle at {key}")
+            self.assertLess(hops, 4, f"more than four hops at {key}")
+            seen.add(key)
             key = g[key][len("var(--"):-1]
             hops += 1
         self.assertEqual((hops, g[key].startswith("rgba(")), (4, True))
@@ -636,8 +643,13 @@ class ShowcaseTest(unittest.TestCase):
         self.assertTrue({"scene.movie_night", "light.desk_lamp", "light.ceiling_strip", "cover.studio_blind"} <= set(diff))
 
     def test_area_target(self):
-        self.ws.call("call_service", domain="light", service="turn_on", target={"area_id": "lounge"})
+        for eid in ("light.floor_lamp", "light.reading_nook"):
+            self.hub.set_state(eid, "off")
+        mid, _ = self.subscribe(entity_ids=["light.floor_lamp", "light.reading_nook"])
+        # The area also holds a climate entity and a sensor: only its lights take light.turn_on.
+        self.assertTrue(self.ws.call("call_service", domain="light", service="turn_on", target={"area_id": "lounge"})["success"])
         self.assertEqual((self.state("light.floor_lamp")["state"], self.state("light.reading_nook")["state"]), ("on", "on"))
+        self.assertEqual(set(self.next_diff(mid)), {"light.floor_lamp", "light.reading_nook"})
 
     def test_subscribe_events_gets_state_changed(self):
         self.ws.n += 1
@@ -822,6 +834,25 @@ class SynthDataTest(unittest.TestCase):
         hub = S.Hub()
         with self.assertRaises(S.TemplateError):
             S.render_template(hub, "{{ states.__class__ }}")
+
+    def test_template_calls_only_its_helpers_and_short_circuits(self):
+        hub = S.Hub()
+        hub.set_state("light.desk_lamp", "off", {"brightness": None})
+        # `and` stops at a false left side: the comparison with None is never evaluated.
+        text, _ = S.render_template(hub, "{{ is_state('light.desk_lamp', 'on') and state_attr('light.desk_lamp', 'brightness') > 10 }}")
+        self.assertEqual(text.strip(), "False")
+        # A Python method is no template helper.
+        with self.assertRaises(Exception):
+            S.render_template(hub, "{{ 'x{0}'.format(1) }}")
+        # Repetition is bounded before it allocates.
+        with self.assertRaises(S.TemplateError):
+            S.render_template(hub, "{{ 'x' * 1000000000 }}")
+        # state_attr hands out a copy: changing what it returns leaves the home alone.
+        hub.states["select.studio_scene"]["attributes"]["options"] = ["a", "b"]
+        got = hub.states["select.studio_scene"]["attributes"]["options"]
+        _ = S.render_template(hub, "{{ state_attr('select.studio_scene', 'options') | length }}")
+        self.assertIsNot(got, None)
+        self.assertEqual(hub.states["select.studio_scene"]["attributes"]["options"], ["a", "b"])
 
 
 if __name__ == "__main__":
