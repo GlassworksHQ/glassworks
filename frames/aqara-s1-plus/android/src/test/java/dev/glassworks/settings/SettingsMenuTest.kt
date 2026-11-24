@@ -128,7 +128,7 @@ class SettingsMenuTest {
     @Test
     fun theSectionsAsDrawn() {
         val m = menu().associate { it.id to titles(it.items) }
-        assertEquals(listOf("Home Assistant", "info", "Full screen", "Zoom", "Secure hosts"), m["dashboard"])
+        assertEquals(listOf("Home Assistant", "info", "Full screen", "Zoom", "Secure hosts", "Vitro renderer"), m["dashboard"])
         // What needs someone at the panel (#33's drawing 07): "Allow setup over the network" (#34), the panel's own way to
         // open pairing for the setup page again, and the factory reset. "Close" shows only while pairing is re-armed.
         assertEquals(listOf("action ${CoreSettings.SETUP_OVER_NETWORK}", "action ${FactoryReset.TITLE}"), m["security"])
@@ -204,10 +204,11 @@ class SettingsMenuTest {
             is SettingsItem.Duration -> i.save(300) { problems += it }
             else -> {}
         }
-        assertEquals(List(8) { null }, problems)
+        assertEquals(List(9) { null }, problems)
         assertEquals(KioskPrefs.AUTO, prefs.urlSetting) // blank = auto
         assertEquals(1.5f, prefs.zoom)
         assertEquals("ha.local", prefs.extraSecureHosts)
+        assertFalse(prefs.vitroEnabled)
         assertFalse(prefs.hideHeader); assertFalse(prefs.hideSidebar) // one switch for both
         assertEquals("presence", prefs.screenMode) // the wake switch said always, then the picked time put presence back (#522)
         assertEquals(300, prefs.idleOffSec)
@@ -301,7 +302,7 @@ class SettingsMenuTest {
                 else -> null
             }
         }
-        assertEquals(listOf("Home Assistant", "Zoom", "Secure hosts"), restarts)
+        assertEquals(listOf("Home Assistant", "Zoom", "Secure hosts", "Vitro renderer"), restarts)
     }
 
     @Test

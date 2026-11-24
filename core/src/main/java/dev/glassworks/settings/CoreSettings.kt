@@ -78,6 +78,15 @@ class CoreSettings(
                 "Secure hosts", "Other addresses the dashboard loads over HTTP, like a camera", TextKind.ADDRESS,
                 value = { prefs.extraSecureHosts }, restartsApp = true,
             ) { prefs.extraSecureHosts = it },
+            SettingsItem.Switch(
+                "Vitro renderer",
+                "Experimental native dashboard engine for faster loads and lower memory",
+                { prefs.vitroEnabled },
+                restartsApp = true,
+            ) { v, done ->
+                prefs.vitroEnabled = v
+                done(null)
+            },
         )),
         SettingsPlace.SCREEN to SettingsSection(SCREEN, "Screen", presence() + listOfNotNull(
             idle(),

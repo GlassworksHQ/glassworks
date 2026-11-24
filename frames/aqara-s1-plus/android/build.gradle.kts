@@ -95,6 +95,7 @@ dependencies {
     implementation(project(":glassworks-pane-api"))
     implementation(project(":glassworks-core"))
     implementation(project(":engine-gecko"))
+    implementation(project(":engine-vitro"))
     implementation(project(":pane-diagnostics"))
     implementation(project(":pane-bluetooth-proxy"))
     implementation(project(":pane-camera"))

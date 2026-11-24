@@ -132,6 +132,11 @@ class KioskPrefs(
     val lanSetupArmed: Boolean
         get() = haSeen && System.currentTimeMillis() < lanSetupUntil
 
+    /** Experimental native Lovelace rendering engine (Vitro): off by default, read once at process start. */
+    var vitroEnabled: Boolean
+        get() = sp.getBoolean(KEY_VITRO_ENABLED, false)
+        set(v) = sp.edit().putBoolean(KEY_VITRO_ENABLED, v).apply()
+
     /** The panel has been online over Wi-Fi at least once (the boot screen's "Connecting to Wi-Fi…" hint). */
     var wifiSeen: Boolean
         get() = sp.getBoolean(KEY_WIFI_SEEN, false)
@@ -505,6 +510,7 @@ class KioskPrefs(
         }
 
         const val KEY_URL = "url"
+        const val KEY_VITRO_ENABLED = "vitro_enabled"
         const val KEY_UPDATE_CHANNEL = "update_channel"
         const val KEY_HA_SEEN = "ha_seen"
         const val KEY_WIFI_SEEN = "wifi_seen"

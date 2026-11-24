@@ -2,9 +2,11 @@ package dev.glassworks.s1
 
 import android.app.Application
 import android.util.Log
+import dev.glassworks.auth.HaAuth
 import dev.glassworks.engine.Engine
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.gecko.GeckoEngine
+import dev.glassworks.engine.vitro.VitroEngine
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.platform.AppBuild
@@ -46,14 +48,24 @@ class KioskApp : Application(), GlassworksApp {
             KioskPrefs(context).run { EngineSettings(secureHosts(), zoom, remoteDebugging(build.debug), dashboard = url.ifEmpty { null }) }
 
         /**
-         * GeckoView, with the kiosk's helper extension (assets/extension). Its settings are read once, when
-         * MainActivity first opens a page.
+         * Vitro wrapping GeckoView (with the kiosk's helper extension): when Vitro is off (the default),
+         * every call goes straight to GeckoView; when turned on, Lovelace dashboards render natively.
          */
-        private fun engine(build: AppBuild): Engine = GeckoEngine(
-            settings = { context -> engineSettings(context, build) },
-            extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "glassworks"),
-            logTag = "Glassworks",
-            generatedBy = build.product,
-        )
+        private fun engine(build: AppBuild): Engine {
+            val gecko = GeckoEngine(
+                settings = { context -> engineSettings(context, build) },
+                extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "glassworks"),
+                logTag = "Glassworks",
+                generatedBy = build.product,
+            )
+            return VitroEngine(
+                fallback = gecko,
+                settings = { context -> engineSettings(context, build) },
+                enabled = { context -> KioskPrefs(context).vitroEnabled },
+                tokenProvider = { force, done ->
+                    HaAuth.accessToken(force) { a -> done((a as? HaAuth.Access.Ok)?.accessToken) }
+                },
+            )
+        }
     }
 }

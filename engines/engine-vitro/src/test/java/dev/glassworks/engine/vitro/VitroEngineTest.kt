@@ -1,0 +1,623 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+package dev.glassworks.engine.vitro
+
+import android.app.Activity
+import android.app.Application
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.os.Looper
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
+import android.widget.TextView
+import dev.glassworks.engine.EngineSettings
+import dev.glassworks.engine.Page
+import dev.glassworks.engine.vitro.cards.WebIslandCardView
+import dev.glassworks.engine.vitro.data.EntityStore
+import dev.glassworks.engine.vitro.data.HaDashboardClient
+import dev.glassworks.engine.vitro.model.LovelaceParser
+import dev.glassworks.engine.vitro.model.LovelaceResource
+import dev.glassworks.engine.vitro.theme.ThemeCatalog
+import dev.glassworks.engine.vitro.theme.ThemeResolver
+import dev.glassworks.engine.vitro.ui.VitroCardContext
+import dev.glassworks.engine.vitro.ui.VitroView
+import org.json.JSONArray
+import org.json.JSONObject
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import java.util.Base64
+
+/**
+ * Vitro as a Glassworks [dev.glassworks.engine.Engine]: when it is off it is the fallback engine, and when it is
+ * on it draws Lovelace itself over a scripted HA ([FakeHaServer]) and opens the fallback only for pages that
+ * are not dashboards. Also the Tier 3 island's HTML.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class)
+class VitroEngineTest {
+
+    private val base = FakeHaServer.BASE
+    private val settings = EngineSettings(
+        secureHosts = listOf("192.0.2.10"),
+        zoom = 1f,
+        remoteDebugging = false,
+        dashboard = "$base/wall-test/living",
+    )
+
+    private lateinit var activity: Activity
+    private val host = RecordingHost()
+    private val fallback = RecordingEngine()
+    private val server = FakeHaServer()
+    private val opened = ArrayList<Page>()
+
+    @Before
+    fun setUp() {
+        activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+    }
+
+    @After
+    fun tearDown() {
+        // Stop the page's reader thread, then hang up on it, so nothing keeps reconnecting after the test.
+        opened.forEach { page ->
+            runCatching {
+                val f = page.javaClass.getDeclaredField("client")
+                f.isAccessible = true
+                (f.get(page) as? HaDashboardClient)?.close()
+            }
+        }
+        server.shutdown()
+    }
+
+    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
+
+    private fun awaitMain(message: String, cond: () -> Boolean) = awaitCondition(message, tick = { idle() }, cond = cond)
+
+    private fun vitro(
+        fb: RecordingEngine = fallback,
+        enabled: (Context) -> Boolean = { true },
+        onSettings: () -> Unit = {},
+    ) = VitroEngine(
+        fallback = fb,
+        settings = { onSettings(); settings },
+        enabled = enabled,
+        tokenProvider = { _, done -> done(FakeHaServer.TOKEN) },
+        socketFactory = server::connect,
+    )
+
+    private fun openPage(engine: VitroEngine): Page =
+        engine.open(activity, host, Color.BLACK).also { opened += it; idle() }
+
+    private fun vitroView(page: Page): VitroView = (page.view as ViewGroup).getChildAt(0) as VitroView
+
+    /** A page showing the test dashboard's first view, ready. */
+    private fun readyPage(engine: VitroEngine = vitro()): Page {
+        val page = openPage(engine)
+        page.load("$base/wall-test/living")
+        awaitMain("first ready") { host.messages("ready").isNotEmpty() }
+        return page
+    }
+
+    // ---- Off: the fallback engine, untouched ----
+
+    @Test
+    fun disabledOpensTheFallbackPageDirectlyWithTheSameHost() {
+        var settingsCalls = 0
+        val engine = vitro(enabled = { false }, onSettings = { settingsCalls++ })
+        val page = engine.open(activity, host, Color.BLACK)
+        idle()
+
+        assertEquals(1, fallback.opens.size)
+        assertSame(fallback.pages.single(), page)
+        assertSame(activity, fallback.opens[0].activity)
+        assertSame(host, fallback.opens[0].host)
+        assertEquals(Color.BLACK, fallback.opens[0].background)
+        assertEquals("Vitro never reads its settings when it is off", 0, settingsCalls)
+        assertTrue("no port was connected: no Vitro page exists", host.ports.isEmpty())
+    }
+
+    @Test
+    fun disabledDelegatesNameStartedLockedDownAndContentProcesses() {
+        val legacy = RecordingEngine(name = "Legacy Gecko 1.0", lockedDown = true)
+        val engine = vitro(fb = legacy, enabled = { false })
+        assertEquals("Legacy Gecko 1.0", engine.name)
+        assertNull(engine.started)
+        assertTrue(engine.lockedDown)
+        assertTrue(engine.isContentProcess("sh.edm.s1kiosk:tab"))
+        assertFalse(engine.isContentProcess("sh.edm.s1kiosk"))
+
+        engine.open(activity, host, Color.BLACK)
+        assertNotNull(legacy.started)
+        assertSame(legacy.started, engine.started)
+        assertEquals("Legacy Gecko 1.0", engine.name)
+    }
+
+    @Test
+    fun theDecisionToUseVitroIsMadeOnceForTheProcess() {
+        var asked = 0
+        val engine = vitro(enabled = { asked++ > 0 }) // false the first time, true after
+        engine.open(activity, host, Color.BLACK)
+        engine.open(activity, host, Color.BLACK)
+        assertEquals("a second open() keeps the first answer", 2, fallback.opens.size)
+        assertEquals(1, asked)
+        assertTrue(host.ports.isEmpty())
+    }
+
+    @Test
+    fun enabledIsAskedWithTheApplicationContext() {
+        var seen: Context? = null
+        vitro(enabled = { seen = it; false }).open(activity, host, Color.BLACK)
+        assertSame(activity.applicationContext, seen)
+    }
+
+    // ---- On: native rendering ----
+
+    @Test
+    fun enabledReportsItsOwnNameAndSettingsAfterOpen() {
+        val engine = vitro()
+        assertEquals("before the first open it is still the fallback's", "FakeGecko 1.0", engine.name)
+        assertNull(engine.started)
+        openPage(engine)
+        assertEquals(VitroEngine.VERSION_NAME, engine.name)
+        assertSame(settings, engine.started)
+        assertEquals("the content-process question is still the fallback's", true, engine.isContentProcess("x:tab"))
+        assertTrue("it never opened the fallback", fallback.opens.isEmpty())
+    }
+
+    @Test
+    fun enabledConnectsAPortAndRendersWithoutEverOpeningTheFallback() {
+        val engine = vitro()
+        val page = readyPage(engine)
+
+        assertEquals(1, host.ports.size)
+        assertTrue(host.ports[0].topLevel)
+        assertEquals("$base/wall-test/living", host.ports[0].url)
+        assertTrue("never calls fallback.open(...)", fallback.opens.isEmpty())
+        assertTrue(fallback.pages.isEmpty())
+        assertEquals(1, (page.view as ViewGroup).childCount) // just Vitro's own view
+
+        val vv = vitroView(page)
+        assertNotNull(vv.dashboard)
+        assertEquals(listOf("Living", "Wall"), vv.dashboard!!.views.map { it.title })
+        assertEquals(0, vv.currentViewIndex)
+    }
+
+    @Test
+    fun enabledReportsReadyDashboardsAndTheHaThemeOverThePort() {
+        val engine = vitro()
+        readyPage(engine)
+        awaitMain("dashboards and theme") { host.messages("dashboards").isNotEmpty() && host.messages("haTheme").isNotEmpty() }
+
+        val url = "$base/wall-test/living"
+        assertEquals(listOf(url), host.pageStarts.toList())
+        assertEquals(url, host.locations.first())
+
+        val ready = host.messages("ready").single()
+        assertEquals("vitro", ready.getString("why"))
+        assertEquals(1, host.firstPaints.get())
+        assertEquals(listOf(true), host.pageStops.toList())
+
+        val dashboards = JSONArray(host.messages("dashboards").single().getString("json"))
+        assertEquals(listOf("wall-test", "admin-only"), (0 until dashboards.length()).map { dashboards.getJSONObject(it).getString("url_path") })
+        assertEquals("Wall Test", dashboards.getJSONObject(0).getString("title"))
+
+        // The theme of the view, from the server's default dark theme, for the Glassworks overlays.
+        val theme = host.messages("haTheme").first()
+        assertTrue(theme.getBoolean("dark"))
+        assertEquals("#ff5722", theme.getString("primary"))
+        assertEquals("#ff9800", theme.getString("accent"))
+        assertEquals("#0a0a14", theme.getString("background"))
+
+        // What the first view cost: two core cards, one mushroom card, no island, three entities.
+        val m = engine.lastMetrics
+        assertEquals("Living", m.viewTitle)
+        assertEquals("sections", m.viewType)
+        assertEquals(2, m.nativeCoreCards)
+        assertEquals(1, m.nativeHacsCards)
+        assertEquals(0, m.webIslandCards)
+        assertEquals(3, m.subscribedEntities)
+    }
+
+    @Test
+    fun theViewsEntitiesAreSubscribedToAlone() {
+        readyPage()
+        awaitMain("view-scoped subscription") {
+            server.commands("subscribe_entities").any { it.has("entity_ids") }
+        }
+        val scoped = server.commands("subscribe_entities").last { it.has("entity_ids") }.getJSONArray("entity_ids")
+        assertEquals(
+            setOf("light.lounge_lamp", "sensor.kitchen_temp", "binary_sensor.front_door"),
+            (0 until scoped.length()).map { scoped.getString(it) }.toSet(),
+        )
+    }
+
+    @Test
+    fun aViewlessUrlAnnouncesTheFirstViewsAddress() {
+        val page = openPage(vitro())
+        page.load("$base/wall-test")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        assertTrue(host.locations.toString(), host.locations.contains("$base/wall-test/living"))
+    }
+
+    @Test
+    fun switchingToAnotherViewOfTheSameDashboardIsInstantAndOffline() {
+        val engine = vitro()
+        val page = readyPage(engine)
+
+        page.load("$base/wall-test/wall")
+        // Synchronous: no request, no waiting on the socket.
+        val ready = host.messages("ready")
+        assertEquals(2, ready.size)
+        assertEquals("view", ready[1].getString("why"))
+        assertEquals("Wall", engine.lastMetrics.viewTitle)
+        assertEquals("panel", engine.lastMetrics.viewType)
+        assertEquals("the unknown custom card is the one island", 1, engine.lastMetrics.webIslandCards)
+        assertEquals(1, vitroView(page).currentViewIndex)
+        assertEquals(1, server.commands("lovelace/config").size)
+        assertEquals(1, server.connectUrls.size)
+        assertEquals(1, host.firstPaints.get())
+        assertTrue(host.pageStarts.contains("$base/wall-test/wall"))
+        // The Tier 3 custom card opens one GeckoView Micro-Island on the loopback server (never HA's SPA).
+        assertEquals(1, fallback.opens.size)
+        val islandLoad = fallback.pages.single().loads.single()
+        assertTrue("expected loopback island URL, got $islandLoad", "/__vitro/island/" in islandLoad)
+    }
+
+    @Test
+    fun anotherDashboardOnTheSameOriginRefetchesOverTheSameSocket() {
+        val page = readyPage()
+        page.load("$base/clarity-ref/typical")
+        awaitMain("second config") { server.commands("lovelace/config").size == 2 }
+        assertEquals("clarity-ref", server.commands("lovelace/config")[1].getString("url_path"))
+        assertEquals(1, server.connectUrls.size)
+        assertTrue(fallback.opens.isEmpty())
+    }
+
+    @Test
+    fun aNewOriginStartsANewConnection() {
+        val page = readyPage()
+        page.load("http://192.0.2.20:8123/wall-test/living")
+        awaitMain("second connection") { server.connectUrls.size == 2 }
+        assertEquals(
+            listOf("ws://192.0.2.10:8123/api/websocket", "ws://192.0.2.20:8123/api/websocket"),
+            server.connectUrls.toList(),
+        )
+        assertTrue(fallback.opens.isEmpty())
+    }
+
+    // ---- On: pages that are not dashboards ----
+
+    @Test
+    fun onlyANonDashboardUrlOpensTheFallbackAndItIsReusedAfterwards() {
+        val page = readyPage()
+        assertTrue("a dashboard alone never opens the fallback", fallback.opens.isEmpty())
+        val vv = vitroView(page)
+
+        val signIn = "$base/auth/authorize?client_id=abc&redirect_uri=def"
+        page.load(signIn)
+        assertEquals(1, fallback.opens.size)
+        assertSame(activity, fallback.opens[0].activity)
+        assertSame(host, fallback.opens[0].host)
+        val fp = fallback.pages.single()
+        assertEquals(listOf(signIn), fp.loads.toList())
+        assertEquals(View.VISIBLE, fp.view.visibility)
+        assertEquals(View.GONE, vv.visibility)
+        assertEquals(2, (page.view as ViewGroup).childCount)
+        assertFalse("the fallback reports its own page starts", host.pageStarts.contains(signIn))
+
+        // A second non-dashboard page reuses the one fallback page.
+        val blueprint = "$base/config/blueprint/import"
+        page.load(blueprint)
+        assertEquals(1, fallback.opens.size)
+        assertEquals(listOf(signIn, blueprint), fp.loads.toList())
+
+        // Back to the native dashboard view: Vitro's view returns without reloading or opening another fallback.
+        page.load("$base/wall-test/living")
+        assertEquals(View.VISIBLE, vv.visibility)
+        assertEquals(View.GONE, fp.view.visibility)
+        assertEquals(2, fp.loads.size)
+        assertEquals("view", host.messages("ready").last().getString("why"))
+        assertEquals(1, fallback.opens.size)
+    }
+
+    @Test
+    fun aNonDashboardFirstLoadNeverStartsTheDataPlane() {
+        val page = openPage(vitro())
+        page.load("$base/auth/authorize?client_id=abc")
+        assertEquals(1, fallback.opens.size)
+        Thread.sleep(150)
+        idle()
+        assertTrue(server.connectUrls.isEmpty())
+        assertTrue(host.messages("ready").isEmpty())
+    }
+
+    @Test
+    fun theFallbackPageGetsBackReloadAndPostsWhileItIsShowing() {
+        val page = readyPage()
+        page.load("$base/config/dashboard")
+        val fp = fallback.pages.single()
+
+        page.reload()
+        page.goBack()
+        val msg = JSONObject().put("type", "config").put("config", JSONObject().put("hideHeader", false))
+        page.post(msg)
+        assertEquals(1, fp.reloads)
+        assertEquals(1, fp.backs)
+        assertEquals(listOf(msg), fp.posted.toList())
+    }
+
+    @Test
+    fun anAddressTheHostRedirectsIsLoadedInsteadAndAboutBlankIsDropped() {
+        val page = openPage(vitro())
+        host.redirectTo = { url ->
+            when {
+                url.endsWith("/old") -> "$base/wall-test/living"
+                url == "$base/blank" -> "about:blank"
+                else -> null
+            }
+        }
+        page.load("$base/blank")
+        assertTrue(host.pageStarts.isEmpty())
+        assertTrue(fallback.opens.isEmpty())
+
+        page.load("$base/old")
+        awaitMain("ready via redirect") { host.messages("ready").isNotEmpty() }
+        assertEquals(listOf("$base/wall-test/living"), host.pageStarts.toList())
+    }
+
+    // ---- On: sign-in and failures ----
+
+    @Test
+    fun aRejectedTokenHandsOverToTheSignInAddress() {
+        server.acceptedTokens = emptySet()
+        val page = openPage(vitro())
+        page.load("$base/wall-test/living")
+        awaitMain("sign-in handoff") { host.locations.contains("$base/auth/authorize") }
+        assertTrue(host.messages("ready").isEmpty())
+        assertTrue("the host decides what shows the sign-in", fallback.opens.isEmpty())
+    }
+
+    @Test
+    fun anUnreachableServerStopsThePageAsFailed() {
+        server.refuseConnections = true
+        val page = openPage(vitro())
+        page.load("$base/wall-test/living")
+        awaitMain("failed stop") { host.pageStops.contains(false) }
+        assertTrue(host.messages("ready").isEmpty())
+        assertEquals(0, host.firstPaints.get())
+    }
+
+    // ---- Messages from the host and Page API ----
+
+    @Test
+    fun hostMessagesConfigureTheHeaderAndNavigate() {
+        val page = readyPage()
+        val vv = vitroView(page)
+
+        page.post(JSONObject().put("type", "config").put("config", JSONObject().put("hideHeader", false)))
+        idle()
+        assertFalse(vv.hideHeader)
+
+        // The port's own post() takes the same messages (the web extension side).
+        host.ports[0].post(JSONObject().put("type", "navigate").put("url", "$base/wall-test/wall"))
+        idle()
+        assertEquals(1, vv.currentViewIndex)
+        assertEquals("view", host.messages("ready").last().getString("why"))
+
+        host.ports[0].post(JSONObject().put("type", "unknown"))
+        host.ports[0].post(JSONObject().put("type", "navigate")) // no url
+        idle()
+        assertEquals(1, vv.currentViewIndex)
+    }
+
+    @Test
+    fun reloadFetchesTheDashboardAgain() {
+        val page = readyPage()
+        page.reload()
+        awaitMain("refetch") { server.commands("lovelace/config").size == 2 }
+        assertEquals(1, server.connectUrls.size)
+    }
+
+    @Test
+    fun goBackReturnsToThePreviousViewAddress() {
+        val page = readyPage()
+        page.load("$base/wall-test/wall")
+        host.pageStarts.clear()
+
+        page.goBack()
+        assertEquals(listOf("$base/wall-test/living"), host.pageStarts.toList())
+        assertEquals(0, vitroView(page).currentViewIndex)
+    }
+
+    @Test
+    fun captureWithoutALayoutGivesNull() {
+        val page = readyPage()
+        var called = false
+        var bitmap: Bitmap? = null
+        page.capture { called = true; bitmap = it }
+        idle()
+        assertTrue(called)
+        assertNull(bitmap) // the view has no size here
+    }
+
+    @Test
+    fun restartReconnectsToTheCurrentAddress() {
+        val page = readyPage()
+        page.restart()
+        awaitMain("second connection") { server.commands("auth").size == 2 }
+        assertEquals(2, server.connectUrls.size)
+    }
+
+    @Test
+    fun viewAddressesJoinOriginDashboardAndView() {
+        assertEquals("$base/wall-test/living", VitroEngine.buildViewUrl("$base/", "wall-test", "living"))
+        assertEquals("$base/lovelace/0", VitroEngine.buildViewUrl(base, null, "0"))
+        assertEquals("$base/lovelace/0", VitroEngine.buildViewUrl(base, "  ", "0"))
+        assertNull(VitroEngine.buildViewUrl(null, "wall-test", "living"))
+        assertNull(VitroEngine.buildViewUrl("", "wall-test", "living"))
+        // And the parser reads it back.
+        assertEquals("wall-test" to "living", LovelaceParser.parseRoute(VitroEngine.buildViewUrl(base, "wall-test", "living")!!))
+    }
+
+    // ---- WebIslandCardView ----
+
+    private fun b64(s: String) = Base64.getEncoder().encodeToString(s.toByteArray(Charsets.UTF_8))
+
+    private fun cardContext(
+        dark: Boolean = true,
+        resources: List<LovelaceResource> = emptyList(),
+        token: String? = FakeHaServer.TOKEN,
+    ) = VitroCardContext(
+        context = activity,
+        haBase = base,
+        store = EntityStore(),
+        theme = ThemeResolver.resolve(ThemeCatalog(), dark),
+        resources = resources,
+        accessToken = { token },
+        haConfig = { JSONObject().put("location_name", "Test Home") },
+        callService = { _, _, _, _ -> },
+        navigate = {},
+        openMoreInfo = {},
+        fetchHistory = { _, _, _ -> },
+        subscribeTemplate = { _, _ -> {} },
+    )
+
+    private fun islandCard() = LovelaceParser.parseCard(
+        JSONObject("""{"type": "custom:acme-floorplan-card", "rooms": [{"name": "Lounge", "lights": ["light.lounge_lamp"]}]}"""),
+    )
+
+    @Test
+    fun decodeInlineModuleReadsABase64DataUri() {
+        val src = "export const hi = () => 'héllo ✓';"
+        assertEquals(src, WebIslandCardView.decodeInlineModule("data:text/javascript;base64," + b64(src)))
+        assertEquals(src, WebIslandCardView.decodeInlineModule("data:text/javascript;charset=utf-8;base64," + b64(src)))
+        // The scheme and the base64 marker are case-insensitive.
+        assertEquals(src, WebIslandCardView.decodeInlineModule("DATA:text/javascript;BASE64," + b64(src)))
+        // A base64 body wrapped over several lines still decodes.
+        assertEquals(src, WebIslandCardView.decodeInlineModule("data:text/javascript;base64," + b64(src).chunked(8).joinToString("\n")))
+    }
+
+    @Test
+    fun decodeInlineModuleReadsAPercentEncodedDataUri() {
+        assertEquals("console.log('hi');", WebIslandCardView.decodeInlineModule("data:text/javascript,console.log(%27hi%27)%3B"))
+    }
+
+    @Test
+    fun decodeInlineModuleIgnoresNormalUrlsAndBrokenOnes() {
+        assertNull(WebIslandCardView.decodeInlineModule("/hacsfiles/acme/acme-card.js"))
+        assertNull(WebIslandCardView.decodeInlineModule("$base/local/card.js"))
+        assertNull(WebIslandCardView.decodeInlineModule(""))
+        assertNull(WebIslandCardView.decodeInlineModule("data:text/javascript;base64")) // no comma
+        assertNull(WebIslandCardView.decodeInlineModule("data:text/javascript;base64,@@@@")) // not base64
+    }
+
+    @Test
+    fun islandHtmlCarriesTheThemeTheBridgeAndTheConfig() {
+        val html = WebIslandCardView.buildIslandHtml(cardContext(), islandCard())
+
+        assertTrue(html.startsWith("<!DOCTYPE html>"))
+        // The resolved theme as CSS variables, so a web card matches the native ones.
+        assertTrue(html.contains(":root {"))
+        assertTrue(html.contains("--primary-color: #03a9f4;"))
+        assertTrue(html.contains("--primary-background-color: #111111;"))
+        assertTrue(html.contains("--rgb-primary-color: 3, 169, 244;"))
+        // hass.callWS goes over the loopback WebSocket bridge, and states are watched through a proxy.
+        assertTrue(html.contains("callWS(msg)"))
+        assertTrue(html.contains("sendBridge({ type: 'callWs', id, msg: msg || {} })"))
+        assertTrue(html.contains("const statesProxy = new Proxy(rawStates"))
+        assertTrue(html.contains("sendBridge({ type: 'watch', entity_id: prop })"))
+        assertTrue(html.contains("callService(domain, service, data)"))
+        assertTrue(html.contains("/__vitro/ws/"))
+        assertTrue(html.contains("m.type === 'patch'"))
+        assertTrue(html.contains("m.type === 'wsReply'"))
+        assertTrue(html.contains("sendBridge({ type: 'moreInfo', entity_id: id })"))
+        assertTrue(html.contains("sendBridge({ type: 'resize', height: h })"))
+        // The card element, its config, hass.config and the token.
+        assertTrue(html.contains("const tag = \"acme-floorplan-card\";"))
+        assertTrue(html.contains("const cfg = {"))
+        assertTrue(html.contains("\"rooms\""))
+        assertTrue(html.contains("const haConfig = {\"location_name\":\"Test Home\"};"))
+        assertTrue(html.contains("const accessToken = \"test-token\";"))
+        assertTrue(html.contains("themes: { darkMode: true }"))
+        // The HA shims, instead of HA's frontend.
+        assertTrue(html.contains("customElements.define('ha-card'"))
+        assertTrue(html.contains("customElements.define('ha-icon'"))
+        assertTrue(html.contains("window.loadCardHelpers"))
+    }
+
+    @Test
+    fun islandHtmlFollowsTheLightTheme() {
+        val html = WebIslandCardView.buildIslandHtml(cardContext(dark = false), islandCard())
+        assertTrue(html.contains("--primary-background-color: #fafafa;"))
+        assertTrue(html.contains("themes: { darkMode: false }"))
+    }
+
+    @Test
+    fun islandHtmlWithoutATokenHasAnEmptyOne() {
+        val html = WebIslandCardView.buildIslandHtml(cardContext(token = null), islandCard())
+        assertTrue(html.contains("const accessToken = \"\";"))
+    }
+
+    @Test
+    fun islandHtmlInlinesDecodedModulesAndEscapesAScriptEnd() {
+        val inline = "console.log(\"</script>\"); export const marker = \"inline-island-test\";"
+        val resources = listOf(
+            LovelaceResource("data:text/javascript;base64," + b64(inline), "module"),
+            LovelaceResource("/local/island.css", "css"),
+            LovelaceResource("/hacsfiles/acme/acme-card.js", "module"),
+            LovelaceResource("/local/legacy.js", "js"),
+        )
+        val html = WebIslandCardView.buildIslandHtml(cardContext(resources = resources), islandCard())
+
+        // The decoded module is in the page, in its own module script.
+        assertTrue(html.contains("<script type=\"module\">\nconsole.log("))
+        assertTrue(html.contains("export const marker = \"inline-island-test\";"))
+        assertFalse("the base64 itself is not left in the page", html.contains(b64(inline)))
+        // A `</script>` inside it cannot end the script early.
+        assertTrue(html.contains("console.log(\"<\\/script>\")"))
+        assertFalse(html.contains("console.log(\"</script>\")"))
+        // Normal resources keep their kind.
+        assertTrue(html.contains("rel=\"stylesheet\" href="))
+        assertTrue(html.contains("island.css"))
+        assertTrue(html.contains("<script type=\"module\" src="))
+        assertTrue(html.contains("acme-card.js"))
+        assertTrue(html.contains("<script src="))
+        assertTrue(html.contains("legacy.js"))
+    }
+
+    @Test
+    fun aFullViewportIslandFillsTheScreen() {
+        val full = WebIslandCardView.buildIslandHtml(cardContext(), islandCard(), fillViewport = true)
+        assertTrue(full.contains("height: 100vh; width: 100vw;"))
+        assertTrue(full.contains("#mount { width: 100%; height: 100vh; }"))
+        val inline = WebIslandCardView.buildIslandHtml(cardContext(), islandCard(), fillViewport = false)
+        assertFalse(inline.contains("100vh"))
+        assertFalse(inline.contains("100vw"))
+    }
+
+    @Test
+    fun anIslandViewHoldsOneChildAndSurvivesWithoutAWebView() {
+        val island = WebIslandCardView(cardContext(), islandCard(), fillViewport = true)
+        assertEquals(1, island.childCount)
+        val child = island.getChildAt(0)
+        // A WebView where the system has one; a note naming the card where it does not.
+        assertTrue(
+            child is WebView || (child is TextView && child.text.toString().contains("custom:acme-floorplan-card")),
+        )
+    }
+}

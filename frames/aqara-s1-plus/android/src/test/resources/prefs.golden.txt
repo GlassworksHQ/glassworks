@@ -70,6 +70,7 @@ kiosk|time_zone_enabled|Boolean|true
 kiosk|time_zone_kept|String|""
 kiosk|update_channel|String|null
 kiosk|url|String|null
+kiosk|vitro_enabled|Boolean|false
 kiosk|voice_enabled|Boolean|true
 kiosk|voice_overlay|Boolean|true
 kiosk|wake_cutoff|Float|0.97

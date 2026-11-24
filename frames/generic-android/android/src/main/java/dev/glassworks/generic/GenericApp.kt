@@ -7,9 +7,11 @@ package dev.glassworks.generic
 import android.app.Application
 import android.content.Context
 import android.util.Log
+import dev.glassworks.auth.HaAuth
 import dev.glassworks.engine.Engine
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.gecko.GeckoEngine
+import dev.glassworks.engine.vitro.VitroEngine
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.generic_android.BuildConfig
@@ -78,12 +80,22 @@ class GenericApp : Application(), GlassworksApp {
                 EngineSettings(secureHosts(), zoom, remoteDebugging(build.debug) && !legacy(applicationId), dashboard = test ?: url.ifEmpty { null })
             }
 
-        /** GeckoView with the kiosk's helper extension: the same engine, extension and page API as the S1 app's. */
-        internal fun engine(build: AppBuild): Engine = GeckoEngine(
-            settings = { context -> engineSettings(context, build) },
-            extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "glassworks"),
-            logTag = TAG,
-            generatedBy = PRODUCT,
-        )
+        /** Vitro wrapping GeckoView (with the kiosk's helper extension): native Lovelace when opt-in enabled, else GeckoView. */
+        internal fun engine(build: AppBuild): Engine {
+            val gecko = GeckoEngine(
+                settings = { context -> engineSettings(context, build) },
+                extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "glassworks"),
+                logTag = TAG,
+                generatedBy = PRODUCT,
+            )
+            return VitroEngine(
+                fallback = gecko,
+                settings = { context -> engineSettings(context, build) },
+                enabled = { context -> KioskPrefs(context).vitroEnabled },
+                tokenProvider = { force, done ->
+                    HaAuth.accessToken(force) { a -> done((a as? HaAuth.Access.Ok)?.accessToken) }
+                },
+            )
+        }
     }
 }

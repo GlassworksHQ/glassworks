@@ -891,6 +891,10 @@ open class MainActivity : Activity() {
             prefs.zoom = intent.getFloatExtra("zoom", 0f)
             needsRestart = true
         }
+        if (intent.hasExtra("vitro")) {
+            prefs.vitroEnabled = intent.getBooleanExtra("vitro", false)
+            needsRestart = true
+        }
         intent.getStringExtra("secure_hosts")?.let {
             prefs.extraSecureHosts = it
             needsRestart = true

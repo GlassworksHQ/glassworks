@@ -42,7 +42,7 @@ class LegacyBuildTest {
 
     @Test fun eachBuildHasOneEngine() {
         assertTrue(""""legacyImplementation"(project(":engine-gecko-legacy"))""" in buildFile)
-        assertEquals("GeckoView 159 only in debug and release", setOf(":engine-gecko-legacy"), legacyDependencies().filter { it.startsWith(":engine-") }.toSet())
+        assertEquals("GeckoView 159 only in debug and release", setOf(":engine-gecko-legacy"), legacyDependencies().filter { it.startsWith(":engine-gecko") }.toSet())
         assertTrue("""debugImplementation(project(":engine-gecko"))""" in buildFile)
         assertTrue("""releaseImplementation(project(":engine-gecko"))""" in buildFile)
     }
