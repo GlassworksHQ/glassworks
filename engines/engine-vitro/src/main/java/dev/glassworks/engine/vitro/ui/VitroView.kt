@@ -845,7 +845,7 @@ class VitroView(
             }
             val size = HaGridSize.of(card)
             val cardView = wrapVisibility(card, buildCard(card, ctx, fillViewport = false, layout = "grid"), ctx)
-            cacheBigCardAsLayer(cardView, ctx)
+            cacheCardAsLayer(cardView, ctx)
             val fixed = size.rows?.let { r -> px(r * (rowHeight + rowGap) - rowGap) }
             grid.addView(cardView, HaGridLayout.LayoutParams(size.columns?.coerceAtMost(columns) ?: columns, fixed))
         }
@@ -905,19 +905,60 @@ class VitroView(
     }
 
     /**
-     * A big card (at least [BIG_CARD_SHARE] of the dashboard's area) on its own hardware layer: a live value redraws only
-     * the card it changed into its layer, and every frame composites the layer instead of replaying the card's text
-     * and shapes. Big cards hold most of what a frame draws; layering every card cost the S1 about 18 MB of GPU
-     * memory, so small ones (tiles, chips) are drawn directly. Decided once the card has a size, again when it changes.
-     * Never for a card that casts a shadow ([cardLayerWanted]), which the layer's bounds would clip.
+     * Which cards get their own hardware layer, read once per process from the device's RAM ([CardLayers.forDevice]).
+     * Tests set it.
      */
-    private fun cacheBigCardAsLayer(cardView: View, ctx: VitroCardContext) {
+    internal var cardLayers: CardLayers = CardLayers.forDevice(context)
+
+    /**
+     * A card on its own hardware layer: a live value redraws only the card it changed into its layer, and every frame
+     * composites the layers instead of replaying every card's text and shapes. With [CardLayers.ALL] every card gets
+     * one (about 11 MB more PSS than no layers on a 2 GB panel, the S1); with [CardLayers.BIG] only a big card (at least
+     * [BIG_CARD_SHARE] of the dashboard's area), which holds most of what a frame draws, decided once the card has a
+     * size and again when it changes. Never for a card that casts a shadow ([cardLayerWanted]), which the layer's
+     * bounds would clip.
+     */
+    private fun cacheCardAsLayer(cardView: View, ctx: VitroCardContext) {
         if (!cardLayerWanted(ctx.theme.cardElevationDp, cardView.elevation)) return
+        if (cardLayers == CardLayers.ALL) {
+            cardView.setLayerType(LAYER_TYPE_HARDWARE, null)
+            return
+        }
         cardView.addOnLayoutChangeListener { v, l, t, r, b, ol, ot, or, ob ->
             if (r - l == or - ol && b - t == ob - ot) return@addOnLayoutChangeListener
             val big = isBigCard(r - l, b - t, width, height)
             val want = if (big) LAYER_TYPE_HARDWARE else LAYER_TYPE_NONE
             if (v.layerType != want) v.setLayerType(want, null)
+        }
+    }
+
+    /** Which cards a view draws through their own hardware layer ([cacheCardAsLayer]). */
+    internal enum class CardLayers {
+        /** Every card (that casts no shadow): devices with RAM to spare, 2 GiB and up. */
+        ALL,
+
+        /** Only big cards: 2 GB and less, such as the S1 and the Mirror. */
+        BIG;
+
+        companion object {
+            /**
+             * Total RAM from which every card gets a layer: 2 GiB. `MemTotal` reads below a device's nominal size, so
+             * a 2 GB panel stays on the big-card rule: on the S1 (2.07 GB) every card's layer cost about 11 MB more
+             * PSS than no layers, 17 MB of it GPU memory (2026-11-24), over the 8 MB it may take. Tablets (the Pixel
+             * Tablet reads 7.8 GB) layer every card.
+             */
+            const val ALL_MIN_TOTAL_MEM = 2_147_483_648L
+
+            fun forTotalMem(bytes: Long): CardLayers = if (bytes >= ALL_MIN_TOTAL_MEM) ALL else BIG
+
+            @Volatile private var deviceMode: CardLayers? = null
+
+            /** [forTotalMem] for this device, read once per process (`ActivityManager.MemoryInfo.totalMem`). */
+            fun forDevice(context: Context): CardLayers = deviceMode ?: run {
+                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+                val total = am?.let { m -> android.app.ActivityManager.MemoryInfo().also { m.getMemoryInfo(it) }.totalMem } ?: 0L
+                forTotalMem(total).also { deviceMode = it }
+            }
         }
     }
 
