@@ -199,7 +199,9 @@ class VitroEngine(
                 client?.subscribeViewEntities(refs)
                 // Only the dashboard that owns the route reports a location: one still on screen while another loads
                 // (a theme rebuild) would pair its view with the other's path.
-                val owns = displayedDashboard?.second == currentDashboardPath
+                // Origin and path: before the new dashboard is on screen (displayedDashboard null) nothing is reported,
+                // not even for the default dashboard, whose path is null too.
+                val owns = displayedDashboard != null && displayedDashboard == (currentOrigin to currentDashboardPath)
                 val path = if (owns) buildViewUrl(currentOrigin, currentDashboardPath, v.path ?: v.index.toString()) else null
                 if (path != null && path != currentUrl) {
                     currentUrl = path
@@ -320,7 +322,7 @@ class VitroEngine(
                 tokenProvider = { force, done ->
                     // The panel's token is for the Home Assistant it is set to: never hand it to another origin.
                     val allowed = configuredOrigin()
-                    if (allowed != null && allowed != origin) {
+                    if (allowed != null && !VitroCardContext.sameOrigin(allowed, origin)) {
                         Log.w(logTag, "Not sending the Home Assistant token to $origin: the panel is set to $allowed")
                         done(null)
                     } else {
@@ -552,7 +554,10 @@ class VitroEngine(
                     // Only an answer from Home Assistant: a dropped connection reconnects and asks again.
                     if (code == HaDashboardClient.DISCONNECTED || code == HaDashboardClient.SEND_FAILED) return@post
                     // HA's own frontend decides what such a dashboard shows (an auto-generated one, or its error page).
-                    currentUrl?.let(::openInFallback)
+                    // The fallback owns the page now: a reconnect or lovelace_updated doesn't fetch this dashboard again.
+                    val url = currentUrl
+                    leaveNativeDashboard()
+                    url?.let(::openInFallback)
                 }
             }
 

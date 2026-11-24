@@ -812,4 +812,15 @@ class VitroEngineTest {
     fun anInlineModuleKeepsItsPlusSigns() {
         assertEquals("a + b", WebIslandCardView.decodeInlineModule("data:text/javascript,a%20+%20b"))
     }
+
+    @Test
+    fun originsCompareByTheirEffectivePort() {
+        val same = dev.glassworks.engine.vitro.ui.VitroCardContext.Companion::sameOrigin
+        assertTrue(same("https://homeassistant.local/api/image/x", "https://homeassistant.local:443"))
+        assertTrue(same("http://homeassistant.local:80/local/a.png", "http://homeassistant.local"))
+        assertTrue(same("http://192.0.2.10:8123/a", "http://192.0.2.10:8123"))
+        assertFalse(same("https://homeassistant.local:8443/a", "https://homeassistant.local"))
+        assertFalse(same("http://homeassistant.local/a", "https://homeassistant.local"))
+        assertFalse(same("https://images.example/a.png", "https://homeassistant.local"))
+    }
 }

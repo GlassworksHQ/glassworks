@@ -179,6 +179,8 @@ class VitroCardContext(
                 return
             }
         }
+        // The cache generation this load started under: a clear while it was in flight keeps its image out.
+        val generation = cacheGeneration
         IMAGE_POOL.execute {
             val bmp = runCatching {
                 val conn = (URL(fullUrl).openConnection() as HttpURLConnection).apply {
@@ -192,7 +194,9 @@ class VitroCardContext(
                     conn.disconnect()
                 }
             }.getOrNull()
-            if (bmp != null && cacheable) IMAGE_CACHE.put(fullUrl, bmp)
+            if (bmp != null && cacheable) {
+                synchronized(IMAGE_CACHE) { if (generation == cacheGeneration) IMAGE_CACHE.put(fullUrl, bmp) }
+            }
             deliver(bmp)
         }
     }
@@ -228,8 +232,7 @@ class VitroCardContext(
 
     /** The panel's token for [url] on Home Assistant's own origin; an image on any other host gets no credentials. */
     private fun haToken(url: String): String? {
-        val ha = OAuth.origin(haBase) ?: return null
-        if (OAuth.origin(url) != ha) return null
+        if (!sameOrigin(url, haBase)) return null
         return accessToken()?.takeIf { it.isNotEmpty() }
     }
 
@@ -266,7 +269,31 @@ class VitroCardContext(
         }
 
         /** Drops every cached image: they were fetched with a sign-in (or a Home Assistant) that no longer holds. */
-        fun clearImageCache() = IMAGE_CACHE.evictAll()
+        fun clearImageCache() = synchronized(IMAGE_CACHE) {
+            // A load already on its way under the old sign-in doesn't put its image back afterwards.
+            cacheGeneration++
+            IMAGE_CACHE.evictAll()
+        }
+
+        @Volatile private var cacheGeneration = 0
+
+        /**
+         * True when [a] and [b] are the same origin: scheme, host and effective port (RFC 6454), so
+         * `https://homeassistant.local` and `https://homeassistant.local:443` match and other ports don't.
+         */
+        fun sameOrigin(a: String?, b: String?): Boolean {
+            val x = canonicalOrigin(a) ?: return false
+            return x == canonicalOrigin(b)
+        }
+
+        private fun canonicalOrigin(url: String?): String? {
+            val origin = url?.let(OAuth::origin) ?: return null
+            return when {
+                origin.startsWith("https://") && origin.endsWith(":443") -> origin.removeSuffix(":443")
+                origin.startsWith("http://") && origin.endsWith(":80") -> origin.removeSuffix(":80")
+                else -> origin
+            }
+        }
 
         private fun decodeDownsampled(bytes: ByteArray): Bitmap? {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
