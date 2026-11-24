@@ -46,6 +46,14 @@ object TestFrames {
         return GenericAndroid(context, presence, light) { "" }
     }
 
+    /** A phone on the generic app (a made-up Pixel 8): no frame of its own, touch, a small screen either way up. */
+    fun phone(context: Context): Frame {
+        ShadowBuild.setManufacturer("Google")
+        ShadowBuild.setModel("Pixel 8")
+        touchscreen(context)
+        return GenericAndroid(context, null, null) { "" }
+    }
+
     /**
      * A touchscreen of the device's own, with an id of its own. Robolectric keeps the input devices a test adds until
      * it resets, so [tablet] after [mirror] in one test would otherwise read only the Mirror's keys and no touchscreen
