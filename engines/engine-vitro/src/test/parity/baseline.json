@@ -77,13 +77,6 @@
   "missingText": 0,
   "reason": "a different card: for this on/off-only light HA draws no dial, just a large yellow bulb, a more-info button and the name; Vitro draws a half-width tile with a full brightness ring and \"On\" (coverage #794, 2026-11-24)"
  },
- "mirror/logbook": {
-  "pixel": 0.0503,
-  "bounds": 298,
-  "font": 0,
-  "missingText": 17,
-  "reason": "harness limit first: the fixture feeds no logbook/get_events, so Vitro shows \"No logbook events found\" where HA lists 7 rows; Vitro also adds a \"Logbook\" title HA doesn't draw (coverage #794, 2026-11-24)"
- },
  "mirror/markdown-cardmod": {
   "pixel": 0.0202,
   "bounds": 2.7,
@@ -210,26 +203,12 @@
   "missingText": 2,
   "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
  },
- "mirror/todo-list": {
-  "pixel": 0.054,
-  "bounds": 338.1,
-  "font": 0,
-  "missingText": 14,
-  "reason": "harness limit first: the fixture feeds no todo/item/list, so Vitro shows \"No items\" where HA lists 2 active and 4 completed items with due dates; Vitro also draws an Add item field HA hides for this list (it can't create items) (coverage #794, 2026-11-24)"
- },
  "mirror/weather-current": {
   "pixel": 0.0797,
   "bounds": 36.7,
   "font": 2,
   "missingText": 0,
   "reason": "icon ~30% smaller, condition and temperature 22 vs 24 px, 76% 12 vs 14 px with no humidity drop icon, card ~37 px shorter (HA pads more) (coverage #794, 2026-11-24)"
- },
- "mirror/weather-forecast": {
-  "pixel": 0.0891,
-  "bounds": 148.7,
-  "font": 6,
-  "missingText": 28,
-  "reason": "harness limit for the forecast: the fixture feeds no weather/subscribe_forecast, so Vitro draws no daily row (HA: 5 days); also missing the 16.5 / 12.2 °C high/low line, condition and temperature 22 vs 28 px; ~149 px shorter (coverage #794, 2026-11-24)"
  },
  "s1/area": {
   "pixel": 0.0553,
@@ -307,13 +286,6 @@
   "font": 1.8,
   "missingText": 0,
   "reason": "a different card: for this on/off-only light HA draws no dial, just a large yellow bulb, a more-info button and the name; Vitro draws a half-width tile with a full brightness ring and \"On\" (coverage #794, 2026-11-24)"
- },
- "s1/logbook": {
-  "pixel": 0.0503,
-  "bounds": 298,
-  "font": 0,
-  "missingText": 17,
-  "reason": "harness limit first: the fixture feeds no logbook/get_events, so Vitro shows \"No logbook events found\" where HA lists 7 rows; Vitro also adds a \"Logbook\" title HA doesn't draw (coverage #794, 2026-11-24)"
  },
  "s1/markdown-cardmod": {
   "pixel": 0.0148,
@@ -441,26 +413,12 @@
   "missingText": 2,
   "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
  },
- "s1/todo-list": {
-  "pixel": 0.054,
-  "bounds": 338.1,
-  "font": 0,
-  "missingText": 14,
-  "reason": "harness limit first: the fixture feeds no todo/item/list, so Vitro shows \"No items\" where HA lists 2 active and 4 completed items with due dates; Vitro also draws an Add item field HA hides for this list (it can't create items) (coverage #794, 2026-11-24)"
- },
  "s1/weather-current": {
   "pixel": 0.0797,
   "bounds": 36.7,
   "font": 2,
   "missingText": 0,
   "reason": "icon ~30% smaller, condition and temperature 22 vs 24 px, 76% 12 vs 14 px with no humidity drop icon, card ~37 px shorter (HA pads more) (coverage #794, 2026-11-24)"
- },
- "s1/weather-forecast": {
-  "pixel": 0.0891,
-  "bounds": 148.7,
-  "font": 6,
-  "missingText": 28,
-  "reason": "harness limit for the forecast: the fixture feeds no weather/subscribe_forecast, so Vitro draws no daily row (HA: 5 days); also missing the 16.5 / 12.2 °C high/low line, condition and temperature 22 vs 28 px; ~149 px shorter (coverage #794, 2026-11-24)"
  },
  "tablet/area": {
   "pixel": 0.0472,
@@ -538,13 +496,6 @@
   "font": 1.8,
   "missingText": 0,
   "reason": "a different card: for this on/off-only light HA draws no dial, just a large yellow bulb, a more-info button and the name; Vitro draws a half-width tile with a full brightness ring and \"On\" (coverage #794, 2026-11-24)"
- },
- "tablet/logbook": {
-  "pixel": 0.0523,
-  "bounds": 296.5,
-  "font": 0,
-  "missingText": 17,
-  "reason": "harness limit first: the fixture feeds no logbook/get_events, so Vitro shows \"No logbook events found\" where HA lists 7 rows; Vitro also adds a \"Logbook\" title HA doesn't draw (coverage #794, 2026-11-24)"
  },
  "tablet/markdown-cardmod": {
   "pixel": 0.0097,
@@ -672,25 +623,11 @@
   "missingText": 2,
   "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
  },
- "tablet/todo-list": {
-  "pixel": 0.048,
-  "bounds": 336.9,
-  "font": 0,
-  "missingText": 14,
-  "reason": "harness limit first: the fixture feeds no todo/item/list, so Vitro shows \"No items\" where HA lists 2 active and 4 completed items with due dates; Vitro also draws an Add item field HA hides for this list (it can't create items) (coverage #794, 2026-11-24)"
- },
  "tablet/weather-current": {
   "pixel": 0.0762,
   "bounds": 36,
   "font": 2,
   "missingText": 0,
   "reason": "icon ~30% smaller, condition and temperature 22 vs 24 px, 76% 12 vs 14 px with no humidity drop icon, card ~37 px shorter (HA pads more) (coverage #794, 2026-11-24)"
- },
- "tablet/weather-forecast": {
-  "pixel": 0.083,
-  "bounds": 148,
-  "font": 6,
-  "missingText": 28,
-  "reason": "harness limit for the forecast: the fixture feeds no weather/subscribe_forecast, so Vitro draws no daily row (HA: 5 days); also missing the 16.5 / 12.2 °C high/low line, condition and temperature 22 vs 28 px; ~149 px shorter (coverage #794, 2026-11-24)"
  }
 }

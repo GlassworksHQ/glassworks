@@ -1,4 +1,5 @@
 {
   "title": "Mushroom light card: a dimmable light, off, with brightness control",
+  "expect": {"light.window_accent": "off"},
   "card": { "type": "custom:mushroom-light-card", "entity": "light.window_accent", "show_brightness_control": true }
 }

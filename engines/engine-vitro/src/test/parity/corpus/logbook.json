@@ -1,4 +1,0 @@
-{
-  "title": "Logbook: one light over the last 24 hours",
-  "card": { "type": "logbook", "entities": ["light.window_accent"], "hours_to_show": 24 }
-}

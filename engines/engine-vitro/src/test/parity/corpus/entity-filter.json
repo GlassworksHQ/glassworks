@@ -1,5 +1,6 @@
 {
   "title": "Entity filter: lights that are off, as an entities card",
+  "expect": {"light.window_accent": "off", "light.sunset_lamp": "off", "light.entryway_ceiling_light": "off", "light.u7_pro_xg_wall_led": "on"},
   "card": {
     "type": "entity-filter",
     "entities": ["light.window_accent", "light.sunset_lamp", "light.entryway_ceiling_light", "light.u7_pro_xg_wall_led"],

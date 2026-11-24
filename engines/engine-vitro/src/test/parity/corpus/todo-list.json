@@ -1,4 +1,0 @@
-{
-  "title": "To-do list: a household maintenance list with open and completed items",
-  "card": { "type": "todo-list", "entity": "todo.maintenance" }
-}

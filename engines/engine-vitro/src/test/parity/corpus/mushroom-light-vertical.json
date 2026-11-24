@@ -1,4 +1,5 @@
 {
   "title": "Mushroom light card: vertical layout, off",
+  "expect": {"light.sunset_lamp": "off"},
   "card": { "type": "custom:mushroom-light-card", "entity": "light.sunset_lamp", "layout": "vertical" }
 }
