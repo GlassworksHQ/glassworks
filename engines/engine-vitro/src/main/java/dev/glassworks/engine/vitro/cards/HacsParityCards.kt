@@ -1800,6 +1800,17 @@ class LayoutCardView(
     /** Each built row (grid) or column (horizontal / vertical layouts), for tests. */
     val tracks = ArrayList<LinearLayout>()
 
+    /**
+     * A grid whose tracks have percentages: its template, gap, each placed view (a card or a filler) with its first
+     * track and span, and the width (dp) the fixed sizes were last resolved at. The build only knows the display's
+     * width; [onMeasure] resolves the percentages again against the grid's own.
+     */
+    private var percentTemplate: String? = null
+    private var gridGap = 0f
+    private var gridCols = 0
+    private val placed = ArrayList<Triple<View, Int, Int>>()
+    private var resolvedAtDp = -1
+
     init {
         orientation = VERTICAL
         val layoutType = config.raw.optString("layout_type", "custom:masonry-layout").removePrefix("custom:")
@@ -1869,6 +1880,12 @@ class LayoutCardView(
         val template = layout.optString("grid-template-columns", "").ifEmpty { config.raw.optString("grid-template-columns", "") }
         val tracksSpec = parseColumns(template, widthDp).ifEmpty { listOf(Track(1f, 0f)) }
         val cols = tracksSpec.size
+        if ('%' in template) {
+            percentTemplate = template
+            gridGap = gap
+            gridCols = cols
+            resolvedAtDp = widthDp
+        }
         var row: LinearLayout? = null
         var used = 0
         fun closeRow() {
@@ -1876,9 +1893,11 @@ class LayoutCardView(
             if (used < cols) {
                 val rest = tracksSpec.subList(used, cols)
                 // The rest's own gutters too, so the weighted columns keep their widths on a short row.
-                r.addView(Space(ctx.context), LayoutParams(ctx.px(rest.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (rest.size - 1)), 1, rest.sumOf { it.fr.toDouble() }.toFloat()).apply {
+                val filler = Space(ctx.context)
+                r.addView(filler, LayoutParams(ctx.px(rest.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (rest.size - 1)), 1, rest.sumOf { it.fr.toDouble() }.toFloat()).apply {
                     marginStart = ctx.px(gap)
                 })
+                placed += Triple(filler, used, cols - used)
             }
             row = null
         }
@@ -1895,7 +1914,9 @@ class LayoutCardView(
             }
             if (start != null && start > used) {
                 val skipped = tracksSpec.subList(used, start)
-                row!!.addView(Space(ctx.context), LayoutParams(
+                val filler = Space(ctx.context)
+                placed += Triple(filler, used, start - used)
+                row!!.addView(filler, LayoutParams(
                     ctx.px(skipped.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (skipped.size - 1)), 1,
                     skipped.sumOf { it.fr.toDouble() }.toFloat(),
                 ).apply { if (used > 0) marginStart = ctx.px(gap) })
@@ -1904,10 +1925,33 @@ class LayoutCardView(
             val spanned = tracksSpec.subList(used, used + span)
             val fixed = spanned.sumOf { it.fixedDp.toDouble() }.toFloat() + gap * (span - 1)
             val weight = spanned.sumOf { it.fr.toDouble() }.toFloat()
-            row!!.addView(build(child), LayoutParams(ctx.px(fixed), WRAP_CONTENT, weight).apply { if (used > 0) marginStart = ctx.px(gap) })
+            val view = build(child)
+            placed += Triple(view, used, span)
+            row!!.addView(view, LayoutParams(ctx.px(fixed), WRAP_CONTENT, weight).apply { if (used > 0) marginStart = ctx.px(gap) })
             used += span
         }
         closeRow()
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val template = percentTemplate
+        if (template != null && MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            // Percentages are of this grid's width (a card in a half-width column), not the display's.
+            val w = ((MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight) / ctx.dp).toInt()
+            if (w > 0 && w != resolvedAtDp) {
+                val spec = parseColumns(template, w)
+                // Only the sizes change here; a track count that depends on the width (auto-fill) keeps its build.
+                if (spec.size == gridCols) {
+                    for ((v, first, span) in placed) {
+                        val tracks = spec.subList(first, first + span)
+                        (v.layoutParams as? LayoutParams)?.width =
+                            ctx.px(tracks.sumOf { it.fixedDp.toDouble() }.toFloat() + gridGap * (span - 1))
+                    }
+                    resolvedAtDp = w
+                }
+            }
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 
     /** The 0-based column of an explicit `grid-column` start line, or null for automatic placement. */

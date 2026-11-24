@@ -527,6 +527,20 @@ class HacsParityWaveTest {
         assertEquals(LayoutCardView.Track(0f, 400f), LayoutCardView.parseColumns("minmax(0px, 50%) 1fr", 800)[0])
         assertEquals(LayoutCardView.Track(1f, 0f, 100f), LayoutCardView.parseColumns("minmax(100px, 1fr)", 800)[0])
 
+        // In a half-width column, a percentage track is of the grid's measured width, not the display's.
+        val half = LayoutCardView(
+            context(st),
+            card("""{"type": "custom:layout-card", "layout_type": "custom:grid-layout", "layout": {"grid-template-columns": "50% 1fr", "grid-gap": "0px"},
+                "cards": [{"type": "tile"}, {"type": "tile"}]}"""),
+            builder(st),
+            widthDp = 1280,
+        )
+        val px = { dp: Int -> (dp * activity.resources.displayMetrics.density).toInt() }
+        half.measure(View.MeasureSpec.makeMeasureSpec(px(640), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        half.layout(0, 0, half.measuredWidth, half.measuredHeight)
+        val first = half.tracks[0].getChildAt(0)
+        assertEquals(px(320).toFloat(), first.width.toFloat(), 2f)
+
         val horizontal = LayoutCardView(
             context(st),
             card("""{"type": "custom:layout-card", "layout_type": "custom:horizontal-layout", "layout": {"max_cols": 2}, "cards": [{"type": "tile"}, {"type": "tile"}, {"type": "tile"}]}"""),
