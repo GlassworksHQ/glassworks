@@ -46,6 +46,7 @@ class HaDashboardClientTest {
         val configs = CopyOnWriteArrayList<Pair<String?, DashboardConfig>>()
         val disconnected = CopyOnWriteArrayList<String>()
         val userThemes = CopyOnWriteArrayList<Pair<String?, Boolean?>>()
+        val failedConfigs = CopyOnWriteArrayList<Pair<String?, String>>()
 
         override fun onConnected(haVersion: String) { connected += haVersion }
         override fun onAuthRequired() { authRequired.incrementAndGet() }
@@ -53,6 +54,7 @@ class HaDashboardClientTest {
         override fun onResources(resources: List<LovelaceResource>) { this.resources += resources }
         override fun onThemes(catalog: ThemeCatalog) { themes += catalog }
         override fun onDashboardConfig(urlPath: String?, config: DashboardConfig) { configs += urlPath to config }
+        override fun onDashboardConfigFailed(urlPath: String?, code: String) { failedConfigs += urlPath to code }
         override fun onDisconnected(reason: String) { disconnected += reason }
         override fun onUserTheme(themeName: String?, dark: Boolean?) { userThemes += themeName to dark }
     }
@@ -93,6 +95,7 @@ class HaDashboardClientTest {
             tokenCalls += force
             done(FakeHaServer.TOKEN)
         },
+        authTimeoutMs: Long = HaDashboardClient.AUTH_TIMEOUT_MS,
     ): HaDashboardClient {
         val c = HaDashboardClient(
             haBase = haBase,
@@ -100,6 +103,7 @@ class HaDashboardClientTest {
             store = store,
             connect = connect,
             listener = listener,
+            authTimeoutMs = authTimeoutMs,
         )
         clients += c
         return c
@@ -660,8 +664,77 @@ class HaDashboardClientTest {
         assertEquals(listOf("old-token", "new-token"), server.commands("auth").map { it.getString("access_token") })
         assertEquals(2, server.connectUrls.size)
         assertEquals(0, listener.authRequired.get())
-        assertEquals(listOf(false, true, false), tokenCalls.toList())
+        // The refreshed token goes straight into the next handshake: no third call to the provider.
+        assertEquals(listOf(false, true), tokenCalls.toList())
         assertTrue("the rejected socket was closed", server.sockets[0].closed)
+    }
+
+    @Test
+    fun theRefreshedTokenIsUsedEvenWhenThePlainProviderStillHasTheOldOne() {
+        server.acceptedTokens = setOf("new-token")
+        newClient(tokens = { force, done -> done(if (force) "new-token" else "old-token") }).start(null)
+        awaitCondition("connected with the refreshed token") { listener.connected.isNotEmpty() }
+        assertEquals(listOf("old-token", "new-token"), server.commands("auth").map { it.getString("access_token") })
+        assertEquals(0, listener.authRequired.get())
+    }
+
+    @Test
+    fun aRejectedRefreshedTokenReportsAuthRequiredOnce() {
+        server.acceptedTokens = emptySet()
+        newClient(tokens = { force, done -> done(if (force) "new-token" else "old-token") }).start(null)
+        awaitCondition("auth required") { listener.authRequired.get() == 1 }
+        assertEquals(listOf("old-token", "new-token"), server.commands("auth").map { it.getString("access_token") })
+        assertEquals(2, server.connectUrls.size)
+    }
+
+    @Test
+    fun aServerThatNeverGreetsIsDroppedAndRetried() {
+        server.greeting = { null }
+        newClient(authTimeoutMs = 100).start(null)
+        awaitCondition("reconnect after the greeting timed out") { server.connectUrls.size >= 2 }
+        assertTrue(server.sockets[0].closed)
+        assertTrue(listener.disconnected.isNotEmpty())
+    }
+
+    @Test
+    fun aRequestStillWaitingWhenTheConnectionDropsFailsOnce() {
+        // `test/hang` reaches the wire but HA never answers it before the connection ends.
+        val c = connected(connect = { url ->
+            val inner = server.connect(url)
+            object : HaSocket by inner {
+                override fun send(text: String) {
+                    if (JSONObject(text).optString("type") != "test/hang") inner.send(text)
+                }
+            }
+        })
+        val results = CopyOnWriteArrayList<Pair<Boolean, JSONObject?>>()
+        c.callWs(JSONObject().put("type", "test/hang")) { ok, _, err -> results += ok to err }
+        Thread.sleep(50) // let the writer put it on the wire
+        server.dropConnection()
+        awaitCondition("the hanging request failed") { results.isNotEmpty() }
+        Thread.sleep(100)
+        assertEquals(1, results.size)
+        assertFalse(results[0].first)
+        assertEquals("disconnected", results[0].second?.optString("code"))
+    }
+
+    @Test
+    fun aDashboardHaRejectsIsReported() {
+        val c = connected()
+        c.fetchDashboard("missing")
+        awaitCondition("failure reported") { listener.failedConfigs.isNotEmpty() }
+        assertEquals(listOf<Pair<String?, String>>("missing" to "config_not_found"), listener.failedConfigs.toList())
+    }
+
+    @Test
+    fun aNewEntitySubscriptionDropsEntitiesThatAreGone() {
+        val c = connected()
+        assertTrue(store["binary_sensor.front_door"] != null)
+        // The door sensor was deleted while the panel was away; the next subscription's snapshot lacks it.
+        server.initialEntities = JSONObject(FakeHaServer.ENTITIES_JSON).apply { remove("binary_sensor.front_door") }
+        c.subscribeViewEntities(setOf("light.lounge_lamp", "binary_sensor.front_door"))
+        awaitCondition("door removed") { store["binary_sensor.front_door"] == null }
+        assertTrue(store["light.lounge_lamp"] != null)
     }
 
     @Test
