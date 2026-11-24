@@ -11,6 +11,12 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-24
+
+**The last release before 1.0. For Android 8 and newer it's the first release since 0.2.0, and brings everything in 0.3.0; the legacy build moves up from 0.3.0.**
+
+What 0.3.0 added (themes and the Assist edge glow, the notifications and Bluetooth proxy panes, setup with no touch on the lululemon Mirror) is in [its notes](https://github.com/GlassworksHQ/glassworks/blob/main/frames/generic-android/CHANGELOG.md#030---2026-11-23).
+
 ### Fixed
 - **Kiln installs Glassworks on the Mirror again.** Since Kiln moved to Glass Panes image 3, building the Mirror's system stopped with "no room for … libxul.so". Kiln now clears out the image's own kiosk app and the apps a Mirror never uses before it adds Glassworks, so the app fits with room to spare.
 
