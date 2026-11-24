@@ -18,6 +18,9 @@ sealed class ThemeBackground {
     /** CSS `radial-gradient(...)`: every parsed color stop, center to edge. Shape and position keywords are ignored. */
     data class RadialGradient(val colors: IntArray) : ThemeBackground()
     data class ImageUrl(val url: String, val fallbackColor: Int) : ThemeBackground()
+
+    /** Several gradient layers, or a radial one with a size or position: painted as the browser stacks them. */
+    data class Layers(val css: CssBackground, val fallbackColor: Int) : ThemeBackground()
 }
 
 /** CSS box insets (in dp), matching 1/2/3/4-value shorthand and per-side properties. */
@@ -483,6 +486,8 @@ object ThemeResolver {
         URL_PATTERN.find(spec)?.let { m ->
             return ThemeBackground.ImageUrl(m.groupValues[1].trim(), fallbackColor)
         }
+        CssBackground.parse(spec)?.takeIf { it.layers.size > 1 || it.color != null || it.layers[0] is CssBackground.Radial }
+            ?.let { return ThemeBackground.Layers(it, fallbackColor) }
         LINEAR_GRADIENT_PATTERN.find(spec)?.let { m ->
             val parts = splitTopLevelCommas(m.groupValues[2])
             // CSS side keywords (`to right`, `to bottom left`) become their angle; a plain list defaults to 180deg.
