@@ -16,6 +16,8 @@ test('a case lists type: css fixtures only', () => {
   assert.throws(() => fixtureResources({ id: 'a', resources: [{ type: 'css', url: `${FIXTURE_PREFIX}fonts/./x.css` }] }));
   assert.throws(() => fixtureResources({ id: 'a', resources: [{ type: 'css', url: `${FIXTURE_PREFIX}%2e%2e/theme.css` }] }));
   assert.throws(() => fixtureResources({ id: 'a', resources: [{ type: 'css', url: FIXTURE_PREFIX }] }));
+  // Encoded names are refused on both sides (ParityModel reads the path as it stands).
+  assert.throws(() => fixtureResources({ id: 'a', resources: [{ type: 'css', url: `${FIXTURE_PREFIX}fonts/My%20Font.css` }] }));
 });
 
 test('a fixture request stays inside fixtures/ and serves fonts and sheets', () => {
@@ -27,4 +29,5 @@ test('a fixture request stays inside fixtures/ and serves fonts and sheets', () 
   assert.equal(fixtureFile(dir, `${FIXTURE_PREFIX}fonts/OFL.txt`), null);
   assert.equal(fixtureFile(dir, '/local/other.css'), null);
   assert.equal(fixtureFile(dir, FIXTURE_PREFIX), null);
+  assert.equal(fixtureFile(dir, `${FIXTURE_PREFIX}fonts/%.css`), null);
 });

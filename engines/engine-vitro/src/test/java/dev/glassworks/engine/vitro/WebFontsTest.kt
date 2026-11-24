@@ -47,6 +47,8 @@ class WebFontsTest {
     private val base = "http://homeassistant.local:8123"
     private val fetched = ArrayList<String>()
     private val served = HashMap<String, ByteArray>()
+    /** A URL the fake server answers from another one (where the redirects end). */
+    private val redirects = HashMap<String, String>()
     private val queued = ArrayList<Runnable>()
     private val posted = ArrayList<Runnable>()
     private var notified = 0
@@ -63,7 +65,7 @@ class WebFontsTest {
         WebFonts.reset()
         WebFonts.fetcher = WebFonts.Fetcher { url, max ->
             fetched += url
-            served[url]?.takeIf { it.size <= max }
+            served[url]?.takeIf { it.size <= max }?.let { WebFonts.Fetched(it, redirects[url] ?: url) }
         }
         WebFonts.executor = Executor { queued += it }
         WebFonts.postToMain = { posted += it }
@@ -184,13 +186,45 @@ class WebFontsTest {
         WebFonts.reset()
         WebFonts.fetcher = WebFonts.Fetcher { url, max ->
             if (url.endsWith(".ttf")) throw IllegalStateException("network")
-            served[url]?.takeIf { it.size <= max }
+            served[url]?.takeIf { it.size <= max }?.let { WebFonts.Fetched(it, redirects[url] ?: url) }
         }
         configure("fonts.css")
         VitroFonts.typeface(activity, 400, 14f, fontFamily = list)
         drain()
         assertEquals(0, WebFonts.pending.get())
         assertSame(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f, fontFamily = list))
+    }
+
+    @Test
+    fun aRedirectedSheetResolvesAgainstWhereItEnded() {
+        // /local/fonts.css redirects to /assets/fonts/main.css: url(p.ttf) is /assets/fonts/p.ttf, as in the browser.
+        css("fonts.css", "@font-face { font-family: Pacifico; src: url(p.ttf) }")
+        redirects["$base/local/fonts.css"] = "$base/assets/fonts/main.css"
+        served["$base/assets/fonts/p.ttf"] = File(fonts, "pacifico.ttf").readBytes()
+        configure("fonts.css")
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "Pacifico, sans-serif")
+        drain()
+        assertNotEquals(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f, fontFamily = "Pacifico, sans-serif"))
+        assertTrue("$base/assets/fonts/p.ttf" in fetched)
+        // After a restart, the cached sheet still resolves against where it came from.
+        WebFonts.reset()
+        fetched.clear()
+        configure("fonts.css")
+        drain()
+        assertNotEquals(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f, fontFamily = "Pacifico, sans-serif"))
+    }
+
+    @Test
+    fun aNameWithMonoInItIsNotTheSystemsMonospace() {
+        // "Acme Mono" isn't installed and no sheet declares it: the list goes on to Pacifico.
+        css("fonts.css", "@font-face { font-family: Pacifico; src: url(p.ttf) }")
+        font("p.ttf", "pacifico.ttf")
+        configure("fonts.css")
+        val list = "\"Acme Mono\", Pacifico, serif"
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = list)
+        drain()
+        assertNotEquals(VitroFonts.typeface(activity, 400, 14f, fontFamily = "monospace"), VitroFonts.typeface(activity, 400, 14f, fontFamily = list))
+        assertNotEquals(VitroFonts.typeface(activity, 400, 14f, fontFamily = "serif"), VitroFonts.typeface(activity, 400, 14f, fontFamily = list))
     }
 
     @Test

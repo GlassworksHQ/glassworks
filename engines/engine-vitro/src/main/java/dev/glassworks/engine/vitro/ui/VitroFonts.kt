@@ -53,7 +53,7 @@ object VitroFonts {
             n in INTER_FAMILIES -> Face.INTER
             n in SYSTEM_FAMILIES -> Face.SYSTEM
             n in SERIF_FAMILIES -> Face.SERIF
-            n in MONO_FAMILIES || "mono" in n -> Face.MONOSPACE
+            n in MONO_FAMILIES -> Face.MONOSPACE
             else -> null
         }
     }

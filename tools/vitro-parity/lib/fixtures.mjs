@@ -39,7 +39,8 @@ function staysInFixtures(url) {
   }
   if (parsed.origin !== 'http://homeassistant.local' || parsed.search || parsed.hash) return false;
   const path = parsed.pathname;
-  return path === url && path.startsWith(FIXTURE_PREFIX) && path.length > FIXTURE_PREFIX.length && !/%2e|%2f|%5c/i.test(path);
+  // No percent-encoding at all: the Kotlin side reads the path as a file name, as it stands.
+  return path === url && path.startsWith(FIXTURE_PREFIX) && path.length > FIXTURE_PREFIX.length && !path.includes('%');
 }
 
 /**
@@ -48,7 +49,12 @@ function staysInFixtures(url) {
  */
 export function fixtureFile(fixturesDir, pathname) {
   if (typeof pathname !== 'string' || !pathname.startsWith(FIXTURE_PREFIX)) return null;
-  const rel = decodeURIComponent(pathname.slice(FIXTURE_PREFIX.length));
+  let rel;
+  try {
+    rel = decodeURIComponent(pathname.slice(FIXTURE_PREFIX.length));
+  } catch {
+    return null; // a malformed escape (`%.css`) is no file
+  }
   if (!rel || rel.includes('\\') || rel.split('/').some((s) => s === '..' || s === '.' || s === '')) return null;
   const root = resolve(fixturesDir);
   const file = resolve(root, rel);

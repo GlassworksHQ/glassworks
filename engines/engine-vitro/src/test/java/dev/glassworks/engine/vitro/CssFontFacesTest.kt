@@ -72,6 +72,27 @@ class CssFontFacesTest {
     }
 
     @Test
+    fun textThatOnlyLooksLikeARuleIsNot() {
+        val css = """
+            .x::before { content: "@font-face { font-family: Fake; src: url(fake.ttf) }"; }
+            .y::after { content: '@import url(evil.css);'; }
+            /* @font-face { font-family: Commented; src: url(c.ttf) } */
+            @font-face { font-family: "Pilot\" Sans"; src: url("/local/format(woff2)/brand.ttf"); }
+            @font-face { font-family: Hex\26 Co; src: url(h.ttf) format("truetype"); }
+        """
+        val parsed = CssFontFaces.parse(css, sheet)
+        assertTrue(parsed.imports.isEmpty())
+        assertEquals(listOf("pilot\" sans", "hex&co"), parsed.faces.map { it.family })
+        // "format(" inside the URL's path is no hint: the TTF stays drawable.
+        val pilot = parsed.faces[0]
+        assertEquals(null, pilot.sources.single().format)
+        assertEquals("http://homeassistant.local:8123/local/format(woff2)/brand.ttf", pilot.source?.url)
+        assertEquals("truetype", parsed.faces[1].sources.single().format)
+        // The usage list decodes the same way, so both spellings name one font.
+        assertEquals(listOf("Pilot\" Sans", "serif"), CssFontFaces.families("\"Pilot\\\" Sans\", serif"))
+    }
+
+    @Test
     fun onlyTrueTypeOpenTypeAndWoffAreDrawable() {
         assertTrue(FontSource("https://x/a.ttf", null).supported)
         assertTrue(FontSource("https://x/a", "truetype").supported)
@@ -136,6 +157,10 @@ class CssFontFacesTest {
         // A variable face holds every weight in its range.
         val variable = face(100, max = 900)
         assertEquals(variable, WebFonts.match(listOf(variable), 650, false))
+        // Two rules for 700 (an imported sheet and the one importing it): the later wins, for 700 and for 600 alike.
+        val bold2 = FontFace("f", 700, 700, false, listOf(FontSource("https://x/700-later.ttf", null)))
+        assertEquals(bold2, WebFonts.match(listOf(regular, bold, bold2), 700, false))
+        assertEquals(bold2, WebFonts.match(listOf(regular, bold, bold2), 600, false))
         // Of two faces split by unicode-range, the Latin one.
         val greek = FontFace("f", 400, 400, false, listOf(FontSource("https://x/greek.ttf", null)), listOf(0x370..0x3FF))
         val latin = FontFace("f", 400, 400, false, listOf(FontSource("https://x/latin.ttf", null)), listOf(0x0..0xFF))

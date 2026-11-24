@@ -60,8 +60,11 @@ object WebFonts {
 
     /** Reads a URL, at most [maxBytes]; null on any failure or past the cap. Tests swap it for fixtures. */
     fun interface Fetcher {
-        fun fetch(url: String, maxBytes: Int): ByteArray?
+        fun fetch(url: String, maxBytes: Int): Fetched?
     }
+
+    /** What a [Fetcher] read: the bytes and the URL they came from in the end (after redirects). */
+    class Fetched(val bytes: ByteArray, val url: String)
 
     const val MAX_SHEETS = 8
     const val MAX_CSS_BYTES = 512 * 1024
@@ -147,6 +150,7 @@ object WebFonts {
                     val file = fontFile(dir, url)
                     val tf = if (file.isFile) loadTypeface(file) else null
                     if (tf != null) {
+                        pinned += file
                         ready[key] = Face.Ready(file, tf)
                         break
                     }
@@ -188,6 +192,7 @@ object WebFonts {
         loads.clear()
         variants.clear()
         waiting.clear()
+        pinned.clear()
     }
 
     /**
@@ -251,8 +256,9 @@ object WebFonts {
         val latin = styled.filter { it.coversLatin }.ifEmpty { styled }
         // Of two rules with the same descriptors, the later one wins, as in the browser.
         latin.lastOrNull { weight in it.weightMin..it.weightMax }?.let { return it }
-        val lighter = latin.filter { it.weightMax < weight }.sortedByDescending { it.weightMax }
-        val heavier = latin.filter { it.weightMin > weight }.sortedBy { it.weightMin }
+        // Sorts are stable: from the reversed list, the later of two faces at the same weight comes first.
+        val lighter = latin.asReversed().filter { it.weightMax < weight }.sortedByDescending { it.weightMax }
+        val heavier = latin.asReversed().filter { it.weightMin > weight }.sortedBy { it.weightMin }
         return when {
             weight in 400..500 -> heavier.firstOrNull { it.weightMin <= 500 } ?: lighter.firstOrNull() ?: heavier.firstOrNull()
             weight < 400 -> lighter.firstOrNull() ?: heavier.firstOrNull()
@@ -267,7 +273,8 @@ object WebFonts {
         // The browser's font-synthesis: bold when 600+ is asked of a lighter face, a slant when no italic face exists.
         val fakeBold = weight >= 600 && effective < 600
         val fakeItalic = italic && !face.italic
-        val key = "$url|$effective|$fakeBold|$fakeItalic"
+        // Everything that builds the Typeface: one file can be a static alias and a variable family at once.
+        val key = "$url|$effective|$varies|${face.italic}|$fakeBold|$fakeItalic"
         variants[key]?.let { return it }
         var tf = ready.base
         if (varies) {
@@ -288,9 +295,8 @@ object WebFonts {
         val gen = generation
         val urls = cssUrls
         val dir = cacheDir
-        val live = liveFiles()
         submit({
-            val text = readSheets(urls, dir, network = true, live = live)
+            val text = readSheets(urls, dir, network = true)
             val parsed = text?.let { parseAll(it) }
             ({
                 if (gen == generation) {
@@ -337,7 +343,6 @@ object WebFonts {
         loads[key] = Face.Loading
         val gen = generation
         val dir = cacheDir
-        val live = liveFiles()
         fun settle(result: Face) {
             // A sheet that changed meanwhile may have dropped this face: it stays dropped.
             if (gen != generation || loads[key] !== Face.Loading) return
@@ -346,34 +351,39 @@ object WebFonts {
             if (loads.values.none { it === Face.Loading }) notifyChanged()
         }
         submit({
-            val ready = loadFace(urls, dir, live)
+            val ready = loadFace(urls, dir)
             ({ settle(ready ?: Face.Failed) })
         }, onError = { settle(Face.Failed) })
     }
 
-    /** The font files the faces drawn now use: never evicted from disk while they're in use. */
-    private fun liveFiles(): Set<File> = loads.values.mapNotNull { (it as? Face.Ready)?.file }.toSet()
+    /**
+     * The font files this server's faces use, added on the loader's thread as soon as one is loaded or written (a
+     * face whose result hasn't reached the main thread yet included): never evicted to make room for another.
+     */
+    private val pinned: MutableSet<File> = java.util.Collections.synchronizedSet(HashSet())
 
     /**
      * The first of [urls] that loads, as the browser tries a face's sources in order: from disk, else fetched, made
      * sfnt and kept. A source that fails to download or isn't a font Vitro can draw (WOFF2 behind a URL with no hint)
      * moves on to the next.
      */
-    private fun loadFace(urls: List<String>, dir: File?, live: Set<File>): Face.Ready? {
+    private fun loadFace(urls: List<String>, dir: File?): Face.Ready? {
         for (url in urls) {
             val file = dir?.let { fontFile(it, url) } ?: File.createTempFile("vitro-font", ".font").apply { deleteOnExit() }
             if (dir != null && file.isFile) {
                 file.setLastModified(System.currentTimeMillis())
+                pinned += file
                 loadTypeface(file)?.let { return Face.Ready(file, it) }
+                pinned -= file
             }
-            val bytes = fetch(url, MAX_FONT_BYTES) ?: continue
+            val bytes = fetch(url, MAX_FONT_BYTES)?.bytes ?: continue
             val sfnt = Sfnt.toSfnt(bytes, MAX_FONT_BYTES)
             if (sfnt == null) {
                 Log.w(TAG, "Web font source isn't TrueType, OpenType or WOFF: trying the next")
                 continue
             }
             val saved = try {
-                if (dir != null) publish(dir, file, sfnt, live) else file.writeBytes(sfnt).let { true }
+                if (dir != null) publish(dir, file, sfnt, pin = true) else file.writeBytes(sfnt).let { true }
             } catch (e: Exception) {
                 Log.w(TAG, "Web font not saved: ${e.javaClass.simpleName}")
                 false
@@ -386,13 +396,14 @@ object WebFonts {
 
     /**
      * Writes [bytes] to [file] in the cache folder only if the folder stays under [MAX_DISK_BYTES]: the files used
-     * longest ago go first, never one of [keep] (fonts drawn now). False when it can't fit: the font then draws in its
-     * fallback, like one past any other cap.
+     * longest ago go first, never a [pinned] one. False when it can't fit: the font then draws in its fallback, like
+     * one past any other cap. [pin] pins [file] once written. Loader thread only (one at a time).
      */
-    private fun publish(dir: File, file: File, bytes: ByteArray, keep: Set<File>): Boolean {
+    private fun publish(dir: File, file: File, bytes: ByteArray, pin: Boolean = false): Boolean {
         dir.mkdirs()
         val others = dir.listFiles()?.filter { it.isFile && it != file && !it.name.endsWith(".part") }.orEmpty()
         var total = others.sumOf { it.length() } + bytes.size
+        val keep = synchronized(pinned) { pinned.toSet() }
         for (f in others.filter { it !in keep }.sortedBy { it.lastModified() }) {
             if (total <= MAX_DISK_BYTES) break
             total -= f.length()
@@ -405,6 +416,7 @@ object WebFonts {
             tmp.delete()
             return false
         }
+        if (pin) pinned += file
         return true
     }
 
@@ -420,25 +432,31 @@ object WebFonts {
      * where its `@import` stands, before the rules of the sheet that imports it), or null when none could be read.
      * A cached copy that can't be read is a cache miss.
      */
-    private fun readSheets(urls: List<String>, dir: File?, network: Boolean, live: Set<File> = emptySet()): String? {
+    private fun readSheets(urls: List<String>, dir: File?, network: Boolean): String? {
         val out = StringBuilder()
         val seen = HashSet<String>()
         var any = false
-        fun cachedText(file: File?): String? = file?.takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }
+        // A cached sheet keeps the URL it came from in the end (its first line): its URLs resolve against that.
+        fun cached(file: File?): Pair<String, String>? = file?.takeIf { it.isFile }?.let { f ->
+            runCatching { f.readText() }.getOrNull()?.let { it.substringBefore('\n') to it.substringAfter('\n', "") }
+        }
         fun visit(url: String) {
             if (seen.size >= MAX_SHEETS || !seen.add(url)) return
-            val cached = dir?.let { File(it, hash(url) + ".css") }
-            val text = if (network) {
-                fetch(url, MAX_CSS_BYTES)?.toString(Charsets.UTF_8)?.also { t ->
-                    if (dir != null && cached != null) runCatching { publish(dir, cached, t.toByteArray(), live) }
-                } ?: cachedText(cached)
+            val file = dir?.let { File(it, hash(url) + ".css") }
+            val (base, text) = (if (network) {
+                fetch(url, MAX_CSS_BYTES)?.let { f ->
+                    val t = f.bytes.toString(Charsets.UTF_8)
+                    if (dir != null && file != null) runCatching { publish(dir, file, (f.url + "\n" + t).toByteArray()) }
+                    f.url to t
+                } ?: cached(file)
             } else {
-                cachedText(cached)
-            } ?: return
+                cached(file)
+            }) ?: return
             any = true
-            CssFontFaces.parse(text, url).imports.forEach(::visit)
+            // After a redirect, the sheet's URLs resolve against where it came from, as in the browser.
+            CssFontFaces.parse(text, base).imports.forEach(::visit)
             // Each sheet's URLs resolve against that sheet: kept as a marker the parser splits on.
-            out.append(SHEET_MARK).append(url).append('\n').append(text).append('\n')
+            out.append(SHEET_MARK).append(base).append('\n').append(text).append('\n')
         }
         urls.forEach(::visit)
         return if (any) out.toString() else null
@@ -454,8 +472,8 @@ object WebFonts {
         return all.groupBy { it.family }
     }
 
-    private fun fetch(url: String, maxBytes: Int): ByteArray? {
-        if (url.startsWith("data:", ignoreCase = true)) return decodeDataUri(url, maxBytes)
+    private fun fetch(url: String, maxBytes: Int): Fetched? {
+        if (url.startsWith("data:", ignoreCase = true)) return decodeDataUri(url, maxBytes)?.let { Fetched(it, url) }
         return fetcher.fetch(url, maxBytes)
     }
 
@@ -536,7 +554,7 @@ object WebFonts {
      * A plain GET, as the browser's `<link>` and `@font-face` requests are: no Home Assistant token (HA serves
      * `/local/` and `/hacsfiles/` without one, and a third-party host must never see it), and no cookies.
      */
-    private fun httpFetch(url: String, maxBytes: Int): ByteArray? = try {
+    private fun httpFetch(url: String, maxBytes: Int): Fetched? = try {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 10_000
             readTimeout = 20_000
@@ -555,7 +573,8 @@ object WebFonts {
                     out.write(buf, 0, n)
                     if (out.size() > maxBytes) return null
                 }
-                out.toByteArray()
+                // conn.url is where the redirects ended.
+                Fetched(out.toByteArray(), conn.url.toString())
             }
         } finally {
             conn.disconnect()

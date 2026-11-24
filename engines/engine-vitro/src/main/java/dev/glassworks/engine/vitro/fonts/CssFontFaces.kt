@@ -62,25 +62,57 @@ data class FontSheet(val faces: List<FontFace>, val imports: List<String>)
  * sheet matters for fonts.
  */
 object CssFontFaces {
-    private val COMMENT = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
     private val IMPORT = Regex("""@import\s+(?:url\(\s*(["']?)(.*?)\1\s*\)|(["'])(.*?)\3)""", RegexOption.IGNORE_CASE)
     private val FONT_FACE = Regex("""@font-face\s*\{""", RegexOption.IGNORE_CASE)
+    private val HEX_ESCAPE = Regex("""\\([0-9a-fA-F]{1,6})\s?|\\(.)""")
     private val SRC_URL = Regex("""url\(\s*(["']?)(.*?)\1\s*\)""", RegexOption.IGNORE_CASE)
     private val SRC_FORMAT = Regex("""format\(\s*(["']?)(.*?)\1\s*\)""", RegexOption.IGNORE_CASE)
 
     fun parse(css: String, sheetUrl: String): FontSheet {
-        val text = COMMENT.replace(css, " ")
-        val imports = IMPORT.findAll(text).mapNotNull { m ->
-            val raw = m.groupValues[2].ifEmpty { m.groupValues[4] }.trim()
-            resolve(sheetUrl, raw)
-        }.toList()
+        val (text, atRules) = scan(css)
+        val imports = ArrayList<String>()
         val faces = ArrayList<FontFace>()
-        for (m in FONT_FACE.findAll(text)) {
-            val start = m.range.last + 1
-            val end = blockEnd(text, start) ?: break
-            parseFace(text.substring(start, end), sheetUrl)?.let(faces::add)
+        for (at in atRules) {
+            IMPORT.find(text, at)?.takeIf { it.range.first == at }?.let { m ->
+                resolve(sheetUrl, m.groupValues[2].ifEmpty { m.groupValues[4] }.trim())?.let(imports::add)
+            }
+            FONT_FACE.find(text, at)?.takeIf { it.range.first == at }?.let { m ->
+                val start = m.range.last + 1
+                val end = blockEnd(text, start) ?: return@let
+                parseFace(text.substring(start, end), sheetUrl)?.let(faces::add)
+            }
         }
         return FontSheet(faces, imports)
+    }
+
+    /**
+     * [css] with its comments blanked, and where an at-rule (`@`) starts outside a string: text that only looks like
+     * a rule inside a string (`content: "@font-face { ... }"`) or a comment is never read as one.
+     */
+    private fun scan(css: String): Pair<String, List<Int>> {
+        val out = StringBuilder(css.length)
+        val atRules = ArrayList<Int>()
+        var quote = 0.toChar()
+        var i = 0
+        while (i < css.length) {
+            val c = css[i]
+            when {
+                quote != 0.toChar() -> {
+                    out.append(c)
+                    if (c == '\\' && i + 1 < css.length) out.append(css[++i]) else if (c == quote) quote = 0.toChar()
+                }
+                c == '/' && i + 1 < css.length && css[i + 1] == '*' -> {
+                    val close = css.indexOf("*/", i + 2).let { if (it < 0) css.length else it + 2 }
+                    repeat(close - i) { out.append(' ') }
+                    i = close - 1
+                }
+                c == '"' || c == '\'' -> { quote = c; out.append(c) }
+                c == '@' -> { atRules += out.length; out.append(c) }
+                else -> out.append(c)
+            }
+            i++
+        }
+        return out.toString() to atRules
     }
 
     /** The index of the `}` that closes the block opened just before [start], skipping strings and parentheses. */
@@ -112,9 +144,11 @@ object CssFontFaces {
         val family = decls["font-family"]?.let(::unquote)?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() } ?: return null
         val src = decls["src"] ?: return null
         val sources = splitTopLevel(src, ',').mapNotNull { entry ->
-            val url = SRC_URL.find(entry)?.groupValues?.get(2)?.trim() ?: return@mapNotNull null
-            val abs = resolve(sheetUrl, url) ?: return@mapNotNull null
-            FontSource(abs, SRC_FORMAT.find(entry)?.groupValues?.get(2)?.trim()?.lowercase(Locale.ROOT))
+            val m = SRC_URL.find(entry) ?: return@mapNotNull null
+            val abs = resolve(sheetUrl, m.groupValues[2].trim()) ?: return@mapNotNull null
+            // The hint follows the url(): "format(" inside the URL itself is part of its path.
+            val format = SRC_FORMAT.find(entry, m.range.last + 1)?.groupValues?.get(2)?.trim()?.lowercase(Locale.ROOT)
+            FontSource(abs, format)
         }
         if (sources.isEmpty()) return null
         val (wMin, wMax) = parseWeightRange(decls["font-weight"])
@@ -163,7 +197,16 @@ object CssFontFaces {
     fun families(fontFamily: String): List<String> =
         splitTopLevel(fontFamily, ',').map(::unquote).filter { it.isNotEmpty() }
 
-    private fun unquote(v: String): String = v.trim().trim('"', '\'').trim()
+    /** A family name as CSS reads it: quotes off, escapes decoded (`"Pilot\" Sans"`, `\26` for `&`). */
+    private fun unquote(v: String): String {
+        val t = v.trim()
+        val inner = if (t.length >= 2 && (t[0] == '"' || t[0] == '\'') && t.last() == t[0]) t.substring(1, t.length - 1) else t
+        return HEX_ESCAPE.replace(inner) { m ->
+            m.groupValues[1].takeIf { it.isNotEmpty() }?.toIntOrNull(16)
+                ?.let { cp -> if (cp in 1..0x10FFFF) String(Character.toChars(cp)) else "\uFFFD" }
+                ?: m.groupValues[2]
+        }.trim()
+    }
 
     /** [s] split on [sep] outside quotes and parentheses (a `data:` URI holds `;` and `,`). */
     fun splitTopLevel(s: String, sep: Char): List<String> {
@@ -176,8 +219,9 @@ object CssFontFaces {
             val c = s[i]
             when {
                 quote != 0.toChar() -> {
-                    if (c == quote) quote = 0.toChar()
                     cur.append(c)
+                    // An escaped character (`\\"`) never ends the string.
+                    if (c == '\\' && i + 1 < s.length) cur.append(s[++i]) else if (c == quote) quote = 0.toChar()
                 }
                 c == '"' || c == '\'' -> { quote = c; cur.append(c) }
                 c == '(' -> { depth++; cur.append(c) }
