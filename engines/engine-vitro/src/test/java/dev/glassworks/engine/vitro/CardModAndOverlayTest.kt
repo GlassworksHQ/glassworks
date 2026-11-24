@@ -189,6 +189,27 @@ class CardModAndOverlayTest {
     // ---- CardSurface.applyCardMod ----
 
     @Test
+    fun aRestyleWithoutBoxShadowBringsTheThemeShadowBack() {
+        val store = EntityStore()
+        store.putLocal(EntityState("light.lounge", "off", mapOf("friendly_name" to "Lounge")))
+        val ctx = context(store)
+        val tile = TileCardView(ctx, card("""{"type": "tile", "entity": "light.lounge"}"""))
+        val baseline = ctx.theme.cardElevationDp * ctx.dp
+        // A templated style re-renders: first with a shadow, then without one.
+        tile.applyStyleCss("ha-card { box-shadow: 0 2px 6px #000 }")
+        assertEquals(5f * ctx.dp, tile.elevation, 0.001f)
+        tile.applyStyleCss("ha-card { padding: 4px }")
+        assertEquals(baseline, tile.elevation, 0.001f)
+        tile.applyStyleCss("ha-card { box-shadow: none }")
+        assertEquals(0f, tile.elevation, 0.001f)
+        // A card that shares its parent's surface keeps no shadow of its own.
+        tile.applyStyleCss("ha-card { box-shadow: 0 2px 6px #000 }")
+        tile.makeSeamless(keepBackground = true)
+        tile.applyStyleCss("ha-card { padding: 4px }")
+        assertEquals(0f, tile.elevation, 0.001f)
+    }
+
+    @Test
     fun staticCardModRestylesTheSurface() {
         val store = EntityStore()
         store.putLocal(EntityState("light.lounge", "off", mapOf("friendly_name" to "Lounge")))

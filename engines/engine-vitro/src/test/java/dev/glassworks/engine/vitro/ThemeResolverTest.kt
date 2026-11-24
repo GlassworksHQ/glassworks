@@ -498,6 +498,11 @@ class ThemeResolverTest {
         assertEquals(1f, resolveWith("""{"ha-card-box-shadow": "0 0 0 1px rgba(0,0,0,0.1)"}""").cardElevationDp, 0.001f)
         assertEquals(5f, resolveWith("""{"ha-card-box-shadow": "0 2px 6px rgba(0,0,0,0.2), 0 20px 60px #000"}""").cardElevationDp, 0.001f)
         assertEquals(0f, resolveWith("""{"ha-card-box-shadow": "inset 0 2px 6px #000"}""").cardElevationDp, 0.001f)
+        // A fully transparent shadow draws nothing.
+        assertEquals(0f, resolveWith("""{"ha-card-box-shadow": "0 4px 8px transparent"}""").cardElevationDp, 0.001f)
+        assertEquals(0f, resolveWith("""{"ha-card-box-shadow": "0 4px 8px rgba(0, 0, 0, 0)"}""").cardElevationDp, 0.001f)
+        assertEquals(0f, ThemeResolver.parseBoxShadowElevationDp("0 4px 8px hsla(0, 0%, 0%, 0)"), 0.001f)
+        assertEquals(8f, ThemeResolver.parseBoxShadowElevationDp("0 4px 8px rgba(0, 0, 0, 0.01)"), 0.001f)
     }
 
     @Test

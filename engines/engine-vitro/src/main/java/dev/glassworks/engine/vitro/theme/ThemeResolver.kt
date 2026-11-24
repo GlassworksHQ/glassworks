@@ -397,13 +397,16 @@ object ThemeResolver {
 
     /**
      * Maps a CSS `box-shadow` (`0px 2px 6px rgba(0,0,0,0.2)`) to an Android elevation of 1..12 dp: half the blur
-     * plus the vertical offset. `none`, blank, inset-only or unparsable values give 0.
+     * plus the vertical offset. `none`, blank, inset-only, fully transparent or unparsable values give 0.
      */
     fun parseBoxShadowElevationDp(raw: String?): Float {
         val value = raw?.trim().orEmpty()
         if (value.isEmpty() || value.equals("none", ignoreCase = true)) return 0f
         val first = splitTopLevelCommas(value).firstOrNull { it.isNotBlank() }?.trim() ?: return 0f
         if (first.startsWith("inset", ignoreCase = true) || first.endsWith("inset", ignoreCase = true)) return 0f
+        // A transparent shadow (`transparent`, `rgba(0,0,0,0)`) draws nothing.
+        val color = splitTopLevelSpaces(first).firstOrNull { !SHADOW_LENGTH.matches(it) && !it.equals("inset", ignoreCase = true) }
+        if (color != null && (color.equals("transparent", ignoreCase = true) || parseColor(color)?.let { it ushr 24 } == 0)) return 0f
         val lengths = SHADOW_LENGTH.findAll(SHADOW_COLOR.replace(first, " ").trim())
             .mapNotNull { it.groupValues[1].toFloatOrNull() }.toList()
         if (lengths.size < 2) return 0f
@@ -750,11 +753,32 @@ object ThemeResolver {
         return host.toString().replace(Regex("""\s*!\s*important""", RegexOption.IGNORE_CASE), "") to other
     }
 
-    /** True when [selector] (a comma list) styles the card itself: `ha-card`, `:host`, `:host ha-card`, `ha-card.x`. */
+    /**
+     * True when [selector] (a comma list) styles the card itself: `ha-card`, `:host`, `:host ha-card`, `ha-card.x`.
+     * A compound that goes on to a descendant or sibling (`ha-card.x .primary`) styles something inside the card,
+     * not the card.
+     */
     internal fun isHostSelector(selector: String): Boolean = selector.split(',').any { raw ->
         val s = raw.trim().lowercase(Locale.ROOT).replace(Regex("""\s+"""), " ")
         s == "ha-card" || s == ":host" || s == "." || s == ":host ha-card" || s == ":host > ha-card" ||
-            (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && ":hover" !in s && ":active" !in s)
+            (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && ":hover" !in s && ":active" !in s &&
+                !hasCombinator(s))
+    }
+
+    /** True when [s] has a combinator (whitespace, `>`, `+`, `~`) outside brackets, parentheses and quotes. */
+    private fun hasCombinator(s: String): Boolean {
+        var depth = 0
+        var quote: Char? = null
+        for (c in s) {
+            when {
+                quote != null -> if (c == quote) quote = null
+                c == '"' || c == '\'' -> quote = c
+                c == '(' || c == '[' -> depth++
+                c == ')' || c == ']' -> if (depth > 0) depth--
+                depth == 0 && (c == ' ' || c == '>' || c == '+' || c == '~') -> return true
+            }
+        }
+        return false
     }
 
     private fun parseEdgeInsets(
