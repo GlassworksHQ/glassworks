@@ -2196,8 +2196,9 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             val switchView = HaSwitchView(ctx)
             val isSwitchable = rowCfg.entity.substringBefore('.') in SWITCH_DOMAINS
             val isCover = rowCfg.entity.startsWith("cover.")
+            // HA's `.secondary` line: 14 px, as HA's page draws it (the locale-* cases measure it).
             val secondaryView = if (rowCfg.secondaryInfo == "last-changed" || rowCfg.secondaryInfo == "last-updated") {
-                textView(ctx, 12f, ctx.theme.secondaryTextColor).apply {
+                textView(ctx, 14f, ctx.theme.secondaryTextColor).apply {
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
                 }
@@ -2212,9 +2213,10 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             if (secondaryView != null) {
                 val labels = LinearLayout(ctx.context).apply {
                     orientation = LinearLayout.VERTICAL
-                    setPadding(0, ctx.px(4f), 0, ctx.px(4f))
+                    // HA's name and `.secondary` lines as its page lays them out (measured by the locale-* cases).
+                    setPadding(0, ctx.px(3f), 0, ctx.px(3f))
                     addView(nameView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-                    addView(secondaryView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(2f) })
+                    addView(secondaryView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(6.4f) })
                 }
                 row.addView(labels, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ctx.px(8f) })
             } else {

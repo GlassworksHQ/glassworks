@@ -441,22 +441,6 @@ def _const(value):
     return lambda c, m: c.result(m["id"], value() if callable(value) else value)
 
 
-def _user_data(m):
-    """A home's frontend user data for the key asked (`user_data(key)`, e.g. the parity harness's `language` profile);
-    None, as a new user's, for a home without it."""
-    f = getattr(D, "user_data", None)
-    return f(m.get("key")) if f else None
-
-
-def _translations(m):
-    """frontend/get_translations: a home that knows languages (`translations_for`) gets the language and the
-    integrations asked for; the others answer their English."""
-    f = getattr(D, "translations_for", None)
-    if f:
-        return f(m.get("category"), m.get("integration"), m.get("language") or "en")
-    return D.translations(m.get("category"))
-
-
 def _home(name):
     """The home's own answer (dashboards.py, or serve()'s home), looked up when asked."""
     return lambda c, m: _const(getattr(D, name))(c, m)
@@ -473,10 +457,10 @@ HANDLERS = {
     "get_states": lambda c, m: c.result(m["id"], list(D.state_objects(c.hub.states))),
     "auth/current_user": _home("USER"),
     "frontend/get_themes": _const({"themes": {}, "default_theme": "default", "default_dark_theme": None}),
-    "frontend/subscribe_user_data": lambda c, m: (c.result(m["id"]), c.event(m["id"], {"value": _user_data(m)})),
+    "frontend/subscribe_user_data": lambda c, m: (c.result(m["id"]), c.event(m["id"], {"value": None})),
     "frontend/subscribe_system_data": lambda c, m: (c.result(m["id"]), c.event(m["id"], {"value": None})),
-    "frontend/get_user_data": lambda c, m: c.result(m["id"], {"value": _user_data(m)}),
-    "frontend/get_translations": lambda c, m: c.result(m["id"], {"resources": _translations(m)}),
+    "frontend/get_user_data": _const({"value": None}),
+    "frontend/get_translations": lambda c, m: c.result(m["id"], {"resources": D.translations(m.get("category"))}),
     "lovelace/config": lambda c, m: c.result(m["id"], D.lovelace(m.get("url_path"))),
     "lovelace/resources": _const([]),
     "lovelace/dashboards/list": _home("dashboards_list"),

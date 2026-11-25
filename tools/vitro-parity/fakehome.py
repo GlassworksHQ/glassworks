@@ -16,7 +16,8 @@ What it answers, all from that fixture and the pinned data next to this file:
   - history/stream, history/history_during_period and REST /api/history/period, recorder statistics and their
     metadata, todo/item/subscribe, logbook/event_stream, weather/subscribe_forecast, calendar/event/subscribe;
   - render_template, with jinja2 and the HA helpers the corpus uses (states, is_state, state_attr, ...);
-  - HA core's entity texts and icons (hacore-<version>.json, from the homeassistant wheel: hacore.py);
+  - HA core's entity texts and icons (hacore-<version>.json, from the homeassistant wheel: hacore.py), in the language
+    the page asks for, and the signed-in user's frontend profile (frontend/get_user_data, subscribe_user_data);
   - the community cards as Lovelace resources at /hacsfiles/ (cards.json, pinned by SHA-256: cards.py).
 
 Times in a fixture are relative to the home's fixed "now" (home.json), so a capture never depends on the day it
@@ -721,7 +722,12 @@ HANDLERS = {
     "config/floor_registry/list": _const(lambda: fixture().get("floors") or []),
     "config/label_registry/list": _const(lambda: []),
     "person/list": _const(lambda: {"storage": fixture().get("persons") or [], "config": []}),
-    "frontend/get_translations": lambda c, m: c.result(m["id"], {"resources": translations(m.get("category"), m.get("integration"))}),
+    # In the language the page asks for (the user's profile, user_data below), English filling the rest.
+    "frontend/get_translations": lambda c, m: c.result(m["id"], {"resources": translations_for(
+        m.get("category"), m.get("integration"), m.get("language") or "en")}),
+    # The user's frontend profile (a case's `user_data`): HA's page reads `language` for its language and formats.
+    "frontend/get_user_data": lambda c, m: c.result(m["id"], {"value": user_data(m.get("key"))}),
+    "frontend/subscribe_user_data": lambda c, m: (c.result(m["id"]), c.event(m["id"], {"value": user_data(m.get("key"))})),
     "frontend/get_icons": lambda c, m: c.result(m["id"], {"resources": icons(m.get("category"), m.get("integration"))}),
     "render_template": _render_template,
     "subscribe_condition": _subscribe_condition,

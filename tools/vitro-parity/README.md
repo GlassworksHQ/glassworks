@@ -60,6 +60,7 @@ A fixture uses HA's own shapes, so a new case is mostly copied from another:
 | `history` | Entity id → `wave` (`min`, `max`, `period`, `step`, `decimals`, `quantum`, `phase`), or `points`/`steps` (`[[time, state]]` or `[[time, state, attributes]]`). Statistics are computed from the same series for entities with a state class |
 | `todo`, `forecast`, `calendar` | Entity id → items; → `{daily: [...]}`; → events (`summary`, `start`, `end`) |
 | `logbook` | Entries as HA's `logbook/event_stream` sends them, with `when` as a time |
+| `user_data` | The signed-in user's frontend profile, by key: `{"language": {"language": "de", "number_format": "decimal_comma", "time_format": "24"}}` (HA's `frontend/get_user_data`, which the page subscribes to). The fake answers translations in that language, with English for every key it lacks, as HA core does (German and French are in `hacore-<version>.json`: `LANGUAGES` in `hacore.py`). The reference records the profile as `locale`, and Vitro draws the case with it. Without it the user has no profile: English and HA's defaults |
 | `templates` | Not needed: the fake renders templates itself |
 
 Times are relative to `home.json`'s "now", so a capture is the same on any day: a number is seconds from now, `"-2h30m"` an offset, and a string `"@-2h"`, `"@D+1"` (a local date) or `"@D+1 14:30"` (a local time) is resolved where HA would send a date. A fixture's own pictures (album art, a person's photo) sit in `fixtures/images/`, drawn by `fixture_images.py`.
@@ -96,6 +97,16 @@ Home Assistant is read-only for the harness, apart from its own dashboard, so a 
 ### Adding a case
 
 Write `corpus/<case>.json` with its card and its fixture (copy one from a case with the same domains), then run `tools/vitro-parity/run.sh --refresh --cases <case>`. Make the names up (rooms, lights, people), never take them from a real home. Commit the case, its `refs/*/<case>.*` files, and any new `assets/` or `fixtures/images/`.
+
+### Languages and formats
+
+Vitro writes text, numbers, dates and times the way HA's frontend does for the user's profile (language, `number_format`, `time_format`, `date_format`, first weekday, time zone). It has no browser, so what HA's frontend asks the browser's `Intl` for comes from a table, and its UI words from the pinned frontend's translation files:
+
+```sh
+node tools/vitro-parity/locale-data.mjs
+```
+
+It asks headless Chromium's `Intl` (the browser the references are captured with) about every language the pinned frontend ships, and copies the frontend strings Vitro's code names (any `"ui.…"` or `"state.…"` key), writing `engines/engine-vitro/src/main/resources/dev/glassworks/engine/vitro/locale/`. Rerun it after a frontend or Chromium update, or after adding a key to Vitro's code: it fails on a key the frontend doesn't have, and `HaLocaleTest` fails on one the table lacks. The `locale-*` cases draw German and French profiles.
 
 ## Thresholds and the baseline
 
