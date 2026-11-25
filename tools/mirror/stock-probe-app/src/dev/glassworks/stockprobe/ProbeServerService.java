@@ -39,7 +39,9 @@ import java.util.concurrent.TimeUnit;
 /**
  * Tiny read-only HTTP probe server for stock Mirrors where 1.2x+ adbd rejects /data/misc/adb/adb_keys.
  * Listens on TCP port 18765 and serves only read-only system/proc/ramdisk files, properties,
- * device-tree panel nodes (skipping /chosen), and optional FS_IOC_FIEMAP physical extent offsets.
+ * device-tree panel nodes (skipping /chosen), optional FS_IOC_FIEMAP physical extent offsets,
+ * and the single-file GWSB stock bundle (/stock-bundle.bin, page at / and /bundle; see README.md).
+ * Also starts {@link BleProbeServer}, which serves the same bundle over BLE GATT.
  */
 public final class ProbeServerService extends Service {
     private static final String TAG = "GlassworksStockProbe";
@@ -69,11 +71,13 @@ public final class ProbeServerService extends Service {
     private static final int MAX_HEADER_LINES = 64;
     private static final long REQUEST_DEADLINE_MS = 15_000L;
     private static final long RESPONSE_DEADLINE_MS = 60_000L;
+    private static final long BUNDLE_DEADLINE_MS = 600_000L;
 
     private volatile boolean running;
     private volatile ServerSocket server;
     private volatile ExecutorService requestPool;
     private volatile ScheduledExecutorService deadlineTimer;
+    private BleProbeServer ble;
     private final Set<Socket> activeSockets = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     private final class RequestTask implements Runnable {
@@ -108,6 +112,14 @@ public final class ProbeServerService extends Service {
     }
 
     @Override
+    public void onCreate() {
+        super.onCreate();
+        // Point the optional per-run HMAC secret at files/stage.secret before the first bundle read.
+        StockBundle.init(this);
+        dataDirs = ownDataDirs();
+    }
+
+    @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (!running) {
             running = true;
@@ -115,6 +127,18 @@ public final class ProbeServerService extends Service {
             Thread t = new Thread(this::serveLoop, "stock-probe-http");
             t.setDaemon(true);
             t.start();
+            Thread warm = new Thread(() -> {
+                try { StockBundle.current(); } catch (Throwable e) { Log.w(TAG, "stock bundle unavailable", e); }
+            }, "stock-probe-bundle");
+            warm.setDaemon(true);
+            warm.start();
+            try {
+                ble = new BleProbeServer(this);
+                ble.start();
+            } catch (Throwable e) {
+                Log.w(TAG, "BLE probe unavailable", e);
+                ble = null;
+            }
         }
         return START_STICKY;
     }
@@ -152,6 +176,10 @@ public final class ProbeServerService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        if (ble != null) {
+            try { ble.stop(); } catch (Throwable ignored) {}
+            ble = null;
+        }
         ServerSocket listener = server;
         try { if (listener != null) listener.close(); } catch (IOException ignored) {}
         shutdownWorkers(requestPool, deadlineTimer);
@@ -221,6 +249,44 @@ public final class ProbeServerService extends Service {
             sb.append('/').append(seg);
         }
         return sb.length() == 0 ? "/" : sb.toString();
+    }
+
+    /**
+     * Whether a request path lands inside this app's own private data directory, so that the stage
+     * secret (or anything else there) can never be read over HTTP. Canonicalizes first so a symlink
+     * resolving into the data dir is caught too.
+     */
+    private boolean isInOwnDataDir(String p) {
+        if (p == null) return false;
+        String canonical;
+        try {
+            canonical = new File(p).getCanonicalPath();
+        } catch (IOException e) {
+            return true; // cannot resolve: refuse rather than risk a leak
+        }
+        for (String dir : dataDirs) {
+            if (dir == null || dir.isEmpty()) continue;
+            if (canonical.equals(dir) || canonical.startsWith(dir + "/")) return true;
+        }
+        return false;
+    }
+
+    /**
+     * This app's private data directories, by every path they are reached through. Populated in
+     * {@link #onCreate()} (a Context is not attached yet when fields initialize).
+     */
+    private volatile String[] dataDirs = new String[0];
+
+    private String[] ownDataDirs() {
+        String appDir = null;
+        try {
+            appDir = getApplicationInfo().dataDir;
+        } catch (Throwable ignored) {}
+        return new String[] {
+                appDir,
+                "/data/data/" + getPackageName(),
+                "/data/user/0/" + getPackageName(),
+        };
     }
 
     private static boolean isAllowedPath(String p) {
@@ -294,7 +360,9 @@ public final class ProbeServerService extends Service {
                 sendText(s.getOutputStream(), 414, "text/plain", "request URI too long\n");
                 return;
             }
-            if (reqLine == null || !reqLine.startsWith("GET ")) {
+            boolean head = reqLine != null && reqLine.startsWith("HEAD ");
+            boolean options = reqLine != null && reqLine.startsWith("OPTIONS ");
+            if (reqLine == null || !(reqLine.startsWith("GET ") || head || options)) {
                 sendText(s.getOutputStream(), 405, "text/plain", "GET only\n");
                 return;
             }
@@ -325,7 +393,45 @@ public final class ProbeServerService extends Service {
             }
 
             OutputStream out = s.getOutputStream();
-            if ("/status".equals(route)) {
+            if (options) {
+                // CORS / Private Network Access preflight for Kiln, on the bundle routes only.
+                if (isCorsRoute(route)) sendPreflight(out);
+                else sendText(out, 405, "text/plain", "GET only\n");
+            } else if (head && !"/stock-bundle.bin".equals(route)) {
+                sendText(out, 405, "text/plain", "HEAD is only for /stock-bundle.bin\n");
+            } else if ("/stock-bundle.bin".equals(route)) {
+                // A multi-MB bundle over a slow SoftAP can outlast the 60 s response deadline.
+                if (killer != null && killer.cancel(false)) {
+                    ScheduledExecutorService t2 = deadlineTimer;
+                    killer = null;
+                    if (t2 != null && !t2.isShutdown()) {
+                        try {
+                            killer = t2.schedule(() -> {
+                                try { s.close(); } catch (IOException ignored) {}
+                            }, BUNDLE_DEADLINE_MS, TimeUnit.MILLISECONDS);
+                        } catch (RejectedExecutionException ignored) {}
+                    }
+                }
+                StockBundle b;
+                try {
+                    b = StockBundle.current();
+                } catch (IOException e) {
+                    sendText(out, 503, "text/plain", "services.jar unreadable: " + e.getMessage() + "\n");
+                    return;
+                }
+                String hdr = "HTTP/1.1 200 OK\r\n"
+                        + "Content-Type: application/octet-stream\r\n"
+                        + "Content-Disposition: attachment; filename=\"mirror-stock-bundle.bin\"\r\n"
+                        + "Content-Length: " + b.size() + "\r\n"
+                        + CORS_HEADERS
+                        + "Cache-Control: no-store\r\n"
+                        + "Connection: close\r\n\r\n";
+                out.write(hdr.getBytes(StandardCharsets.US_ASCII));
+                if (!head) b.writeTo(out);
+                out.flush();
+            } else if ("/".equals(route) || "/bundle".equals(route)) {
+                sendText(out, 200, "text/html", bundlePage());
+            } else if ("/status".equals(route)) {
                 String json = "{\"ok\":true,\"uid\":" + Process.myUid()
                         + ",\"pid\":" + Process.myPid()
                         + ",\"sdk\":" + Build.VERSION.SDK_INT
@@ -369,6 +475,12 @@ public final class ProbeServerService extends Service {
                     sendText(out, 400, "text/plain", "disallowed path\n");
                     return;
                 }
+                if (isInOwnDataDir(path)) {
+                    // Belt and suspenders: the stage secret and anything else in our private data
+                    // dir must never leave over HTTP, even via a symlink that canonicalizes into it.
+                    sendText(out, 403, "text/plain", "forbidden\n");
+                    return;
+                }
                 File f = new File(path);
                 if (!f.exists()) {
                     sendText(out, 404, "text/plain", "not found\n");
@@ -401,6 +513,67 @@ public final class ProbeServerService extends Service {
             activeSockets.remove(sock);
             if (killer != null) killer.cancel(false);
         }
+    }
+
+    private static final String CORS_HEADERS = "Access-Control-Allow-Origin: *\r\n"
+            + "Access-Control-Allow-Private-Network: true\r\n"
+            + "Access-Control-Expose-Headers: Content-Length, Content-Disposition\r\n";
+
+    private static boolean isCorsRoute(String route) {
+        return "/stock-bundle.bin".equals(route);
+    }
+
+    private static void sendPreflight(OutputStream out) throws IOException {
+        String hdr = "HTTP/1.1 204 No Content\r\n"
+                + CORS_HEADERS
+                + "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n"
+                + "Access-Control-Allow-Headers: *\r\n"
+                + "Access-Control-Max-Age: 600\r\n"
+                + "Content-Length: 0\r\n"
+                + "Connection: close\r\n\r\n";
+        out.write(hdr.getBytes(StandardCharsets.US_ASCII));
+        out.flush();
+    }
+
+    /** The / and /bundle page: what the bundle holds and a one-click download link. */
+    private static String bundlePage() {
+        String sha;
+        String odex;
+        String size;
+        String err = null;
+        try {
+            StockBundle b = StockBundle.current();
+            sha = b.sha256();
+            odex = b.odexPath() != null ? "found at " + b.odexPath() : "not found (services.jar "
+                    + (b.hasClassesDex() ? "has" : "has no") + " classes.dex)";
+            size = String.format(Locale.US, "%.1f MB", b.size() / 1048576.0);
+        } catch (Throwable t) {
+            sha = odex = size = "-";
+            err = String.valueOf(t.getMessage());
+        }
+        return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+                + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                + "<title>Mirror stock bundle</title><style>"
+                + "body{font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem;"
+                + "color:#1b1b1f;background:#fafafa}"
+                + "@media(prefers-color-scheme:dark){body{color:#e8e8ec;background:#141417}a.dl{color:#141417}}"
+                + "code{word-break:break-all;font-size:.9em}"
+                + "a.dl{display:block;text-align:center;padding:1rem;margin:1.5rem 0;border-radius:.75rem;"
+                + "background:#4c8dff;color:#fff;font-weight:600;text-decoration:none;font-size:1.15rem}"
+                + "dt{font-weight:600;margin-top:.75rem}dd{margin:0}small{opacity:.7}"
+                + "</style></head><body><h1>Mirror stock bundle</h1>"
+                + (err != null ? "<p><strong>services.jar could not be read:</strong> " + htmlEscape(err) + "</p>" : "")
+                + "<a class=\"dl\" href=\"/stock-bundle.bin\" download=\"mirror-stock-bundle.bin\">"
+                + "Download mirror-stock-bundle.bin</a>"
+                + "<dl><dt>services.jar SHA-256</dt><dd><code>" + htmlEscape(sha) + "</code></dd>"
+                + "<dt>services.odex</dt><dd>" + htmlEscape(odex) + "</dd>"
+                + "<dt>Bundle size</dt><dd>" + htmlEscape(size) + "</dd></dl>"
+                + "<p><small>Save the file, then give it to the Glassworks installer. "
+                + "This page only reads the Mirror's system files.</small></p></body></html>\n";
+    }
+
+    private static String htmlEscape(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
 
     private static String filterGetpropOutput(String raw) {
@@ -439,7 +612,7 @@ public final class ProbeServerService extends Service {
         return sb.toString();
     }
 
-    private static String getSysProp(String key) {
+    static String getSysProp(String key) {
         try {
             Class<?> sp = Class.forName("android.os.SystemProperties");
             Method get = sp.getMethod("get", String.class, String.class);
@@ -496,7 +669,7 @@ public final class ProbeServerService extends Service {
         return null;
     }
 
-    private static byte[] readAll(InputStream in) throws IOException {
+    static byte[] readAll(InputStream in) throws IOException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         byte[] buf = new byte[8192];
         int n;

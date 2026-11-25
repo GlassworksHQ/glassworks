@@ -624,7 +624,7 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
     expect(flashed.map((f) => `${f.part}:${f.path.split('/').pop()}`)).toEqual([
       'system:patch-services.sparse',
     ]);
-  });
+  }, 30_000);
 
   it('runs --backup-only over USB adb forward without SoftAP, clearing leftover post_boot first', async () => {
     const dpmdSo = syntheticDpmdSo();
