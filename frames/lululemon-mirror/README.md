@@ -66,7 +66,16 @@ These same credits are stored in [`design/frame.json`](design/frame.json) and di
 
 - **Supported hardware:** Original Qualcomm (MSM8916) Mirror units running stock software 1.x. Later revisions switched to an NXP i.MX8 board where only JTAG hardware access has been reported; those revisions are not supported. Note that screen size alone does not identify which board is inside ([see board revisions](research/revisions.md)).
 - **Android 6 legacy build:** Because the original Mirror runs Android 6.0.1, Kiln installs the dedicated legacy build of [Glassworks for Generic Android](../generic-android/README.md#the-legacy-build-android-6-and-7). It runs a frozen browser engine locked strictly to your Home Assistant address, starts upright in portrait mode, and guides you through Wi-Fi and Home Assistant sign-in from your phone or computer since the Mirror has no touchscreen.
-- **Performance grade:** A [Clarity performance grade](../../docs/clarity.md) will appear on the device page once benchmark runs are published.
+- **Performance grade:** Clarity v1: **E**. See [Performance](#performance) below.
+
+## Performance
+
+**Clarity v1: E.** The Mirror works best as a panel for light dashboards. On them, views open in about 2 seconds and live updates stay fluid, though a tap takes about half a second to show. Typical dashboards keep the browser busy for several seconds after they appear, and on the heavy test dashboard the Mirror ran out of memory in every run, so Android closed the dashboard page and Glassworks had to load it again. Clarity counts a lost page as failed. See the full report in [clarity/report.md](clarity/report.md) and the summary in [clarity/clarity.json](clarity/clarity.json) ([how Clarity grades](../../docs/clarity.md)).
+
+## Known issues
+
+- **Best with light dashboards.** The Mirror has about 1 GB of memory. On a big dashboard Android may close the page to free memory, and the dashboard then reloads. Keep the Mirror's dashboard small, with few cards and cameras.
+- **The camera's live stream costs memory.** Turning on the camera's video stream for Home Assistant (ONVIF/RTSP) uses memory the dashboard needs, and with it on the dashboard reloads more often. With the stream off, a light dashboard ran for an hour without a reload.
 
 ## Hardware
 
@@ -116,7 +125,7 @@ If your Mirror already runs the Glass Panes image and you only want to install t
 | **Timers** | Alpha | On-screen voice timers paired with Assist. |
 | **Sendspin** | Alpha | Synced Music Assistant playback over the Mirror's stereo speakers. |
 | **Notifications** | Alpha | Because the Mirror has no touchscreen, high/critical alerts without a tag or timeout dismiss automatically after 2 minutes. |
-| **Camera** | Alpha | Uses the 5 MP front camera for local motion presence (no images leave the Mirror in *Presence only* mode). Starts off until enabled in Home Assistant. |
+| **Camera** | Alpha | Uses the 5 MP front camera for local motion presence (no images leave the Mirror in *Presence only* mode). Starts off until enabled in Home Assistant. The live video stream costs memory and can make the dashboard reload ([Known issues](#known-issues)). |
 | **Bluetooth proxy** | Alpha | Uses the built-in Bluetooth LE radio once location permission is granted. |
 | **Diagnostics** | Alpha | Reports uptime and memory (no CPU temperature sensor on this board). |
 | **Zigbee / Thread radio** | Not supported | No 802.15.4 radio hardware. |

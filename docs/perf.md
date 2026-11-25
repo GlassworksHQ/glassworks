@@ -1535,7 +1535,7 @@ had results under the new definition:
 
 Rubric 2's rule for a frame without touch (its scroll is `n/a`) is the same kind of choice: it holds for every frame
 that has no touchscreen, it changes nothing for a frame that has one, and it came before any such frame had a result
-(the Mirror has none published).
+(the Mirror had none published then).
 
 The S1 is just the first frame graded under it. Its result goes in this document whatever letter it
 gets. The thresholds, the pages and the tables must not be moved to change a particular frame's

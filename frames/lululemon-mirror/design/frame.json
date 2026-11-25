@@ -302,7 +302,7 @@
     },
     "camera": {
       "support": "alpha",
-      "note": "It has a camera (5 MP, front). In the legacy build: presence wakes the screen when someone walks up, and no image leaves the Mirror in Presence only. Off until turned on; Kiln grants the camera. Not yet run on a Mirror."
+      "note": "It has a camera (5 MP, front). In the legacy build: presence wakes the screen when someone walks up, and no image leaves the Mirror in Presence only. Off until turned on; Kiln grants the camera. The live stream costs memory the dashboard needs, so with it on the dashboard reloads more often."
     },
     "diagnostics": {
       "support": "alpha",
