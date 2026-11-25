@@ -210,3 +210,69 @@ internal object ClarityStats {
     /** Event Timing's duration rounding (8 ms granularity), and its 16 ms floor: shorter taps aren't reported. */
     fun eventTimingDuration(ms: Double): Double = max(16.0, (ms / 8).roundToLong() * 8.0)
 }
+
+/**
+ * The taps of one view's tap task, as Event Timing groups them in interactions: each tap's down and up, each timed
+ * from its own event to the end of the first frame drawn after its handlers ([downDone], [upDone]). A tap counts only
+ * with both: one whose up, or the up's frame, hasn't come is unfinished, and is never given a time. Counting stops
+ * with [stop], but the up of a tap already down is still taken, as it ends that tap. Main thread (VitroClarity).
+ */
+internal class Taps {
+    class Tap internal constructor(internal val downAt: Double) {
+        var down: Double? = null
+            internal set
+        var up: Double? = null
+            internal set
+        internal var upAt: Double? = null
+        val finished: Boolean get() = down != null && up != null
+    }
+
+    private val all = ArrayList<Tap>()
+    private var current: Tap? = null
+    var counting = false
+        private set
+
+    val count: Int get() = all.size
+
+    fun start() {
+        all.clear()
+        current = null
+        counting = true
+    }
+
+    /** No new taps are counted; a tap already down still takes its up. */
+    fun stop() {
+        counting = false
+    }
+
+    /** A down at [at] (page clock): a new tap while counting, else nothing. */
+    fun down(at: Double): Tap? {
+        if (!counting) return null
+        return Tap(at).also {
+            all += it
+            current = it
+        }
+    }
+
+    /** The up at [at] of the tap that is down, counting or not; null when none is. */
+    fun up(at: Double): Tap? {
+        val t = current ?: return null
+        current = null
+        t.upAt = at
+        return t
+    }
+
+    fun downDone(t: Tap, frameEnd: Double) {
+        t.down = frameEnd - t.downAt
+    }
+
+    fun upDone(t: Tap, frameEnd: Double) {
+        t.up = frameEnd - (t.upAt ?: return)
+    }
+
+    /** Some tap counted hasn't its down and up timed yet. */
+    val unfinished: Boolean get() = all.any { !it.finished }
+
+    /** Each finished tap's time, Event Timing's way (the longer of its down and up, rounded). */
+    fun times(): List<Double> = all.filter { it.finished }.map { ClarityStats.eventTimingDuration(maxOf(it.down!!, it.up!!)) }
+}

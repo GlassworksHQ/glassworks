@@ -14,6 +14,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -187,6 +188,31 @@ class ClarityStatsTest {
         seen.clear()
         store.applyCompressedEvent(JSONObject("""{"c":{"sensor.clarity_1":{"+":{"s":"1.3"}}}}"""))
         assertEquals(listOf("card"), seen)
+    }
+
+    @Test
+    fun aTapCountsOnlyWithItsDownAndItsUp() {
+        // CodeRabbit on #835: a down whose frame came before the up arrived isn't a finished tap.
+        val taps = dev.glassworks.engine.vitro.clarity.Taps()
+        taps.start()
+        val fast = taps.down(1000.0)!!
+        taps.downDone(fast, 1020.0)
+        taps.upDone(taps.up(1100.0)!!, 1130.0)
+        // The slow one: down, its frame, then counting stops before its up arrives.
+        val slow = taps.down(2000.0)!!
+        taps.downDone(slow, 2010.0)
+        taps.stop()
+        assertNull("a down after counting stopped is no tap", taps.down(2050.0))
+        assertTrue("down only: unfinished", taps.unfinished)
+        assertEquals("only the finished tap has a time", listOf(32.0), taps.times())
+        // Its up comes late (after counting stopped), then its frame: now it counts, with the up's time.
+        val up = taps.up(2600.0)
+        assertSame(slow, up)
+        assertTrue("its up's frame hasn't come", taps.unfinished)
+        taps.upDone(up!!, 2900.0)
+        assertFalse(taps.unfinished)
+        assertEquals(2, taps.count)
+        assertEquals(listOf(32.0, 304.0), taps.times())
     }
 
     @Test

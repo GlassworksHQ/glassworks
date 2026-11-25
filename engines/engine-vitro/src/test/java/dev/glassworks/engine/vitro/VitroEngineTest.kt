@@ -358,6 +358,67 @@ class VitroEngineTest {
         assertTrue("only the fakes were asked: $asked", asked.all { it.startsWith("$base/clarity/") || it.startsWith("$moved/clarity/") })
     }
 
+    /** The main looper with its clock moving (the harness checks the hold every 500 ms with postDelayed). */
+    private fun awaitClock(message: String, cond: () -> Boolean) =
+        awaitCondition(message, tick = { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }, cond = cond)
+
+    private fun clarityLines() = org.robolectric.shadows.ShadowLog.getLogsForTag("Glassworks.Clarity").map { it.msg }
+
+    @Test
+    fun aHoldThatEndsStopsTheHarnessWithItsConfigInFlightAndMidRun() {
+        // CodeRabbit on #835: the hold's end must cancel what is under way, not only what comes next, with no page load.
+        var test: String? = "$base/clarity-ref/start"
+        val asked = CopyOnWriteArrayList<String>()
+        val release = java.util.concurrent.CountDownLatch(1)
+        val holdConfig = java.util.concurrent.atomic.AtomicBoolean(true)
+        val engine = vitro(testDashboard = { test }).also {
+            it.clarityHttp = ClarityHttp { url, _ ->
+                asked += url
+                if (url.endsWith("/clarity/config.json")) {
+                    // The first: held until the test lets it go. The second: a moment late, so the test stops idling
+                    // the main thread before the harness's next step is queued there.
+                    if (holdConfig.get()) release.await(10, java.util.concurrent.TimeUnit.SECONDS) else Thread.sleep(300)
+                    200 to """{"VIEWS":["start","light"],"HEAD_CARDS":10}"""
+                } else {
+                    204 to null
+                }
+            }
+        }
+        val page = openPage(engine)
+        org.robolectric.shadows.ShadowLog.clear()
+        page.load("$base/clarity-ref/start")
+        val view = vitroView(page)
+
+        // 1. The config request is in flight when the hold ends; it then answers 200: nothing starts.
+        val first = view.clarity!!
+        awaitClock("the config asked for") { asked.any { it.endsWith("/clarity/config.json") } }
+        test = null
+        awaitClock("the harness stopped with the hold") { view.clarity == null }
+        release.countDown()
+        awaitClock("its worker ended after the config came") { !first.workerAlive }
+
+        // 2. A harness mid-run (its config read, its next step queued for the main thread) when the hold ends: the
+        // watcher's own check, on the main thread, ends it, and the queued step never runs. (Robolectric's paused looper
+        // runs a frame callback that asks for the next one again at once, so a ticking harness can't be idled here.)
+        holdConfig.set(false)
+        test = "$base/clarity-ref/start"
+        page.load("$base/clarity-ref/light")
+        val second = view.clarity!!
+        assertTrue(first !== second)
+        // Idled until the second config is asked (its hold check runs on the main thread), then not again.
+        awaitMain("the second config asked for") { asked.count { it.endsWith("/clarity/config.json") } >= 2 }
+        Thread.sleep(600)
+        assertTrue("mid-run: waiting on the main thread", second.workerAlive)
+        test = null
+        assertFalse("the hold's end is seen", second.checkHold())
+        assertNull("and the page let it go", view.clarity)
+        awaitCondition("its worker ended mid-run") { !second.workerAlive }
+        idle()
+
+        assertEquals("nothing measured or logged after the hold ended", emptyList<String>(), clarityLines())
+        assertFalse("no command asked for", asked.any { "/clarity/next" in it })
+    }
+
     @Test
     fun aNewOriginStartsANewConnection() {
         val page = readyPage()

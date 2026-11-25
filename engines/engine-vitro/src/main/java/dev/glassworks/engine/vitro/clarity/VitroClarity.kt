@@ -104,9 +104,34 @@ class VitroClarity internal constructor(
         override fun delivered(entityId: String, context: String?) = onDelivered(entityId, context)
     }
 
+    /**
+     * The test hold watched on the main thread while the harness runs: once it no longer shows this fake's reference
+     * dashboard, the harness stops (interrupting whatever the worker waits on: a request, a frame, a sheet) and the
+     * page lets it go. A config that arrives after that, or a view half done, does nothing more: every wait and every
+     * main-thread task checks [stopped].
+     */
+    private val holdWatch = object : Runnable {
+        override fun run() {
+            if (checkHold()) main.postDelayed(this, HOLD_CHECK_MS)
+        }
+    }
+
+    /** One look at the hold (main thread): false, with the harness stopped and the page told, once it has ended. */
+    internal fun checkHold(): Boolean {
+        if (stopped) return false
+        if (active()) return true
+        stop()
+        onExit(this)
+        return false
+    }
+
+    /** The worker still runs (tests). */
+    internal val workerAlive: Boolean get() = thread?.isAlive == true
+
     fun start() {
         if (thread != null) return
         store.contextTap = tap
+        main.post(holdWatch)
         thread = Thread({
             try {
                 script()
@@ -133,6 +158,7 @@ class VitroClarity internal constructor(
         stopped = true
         if (store.contextTap === tap) store.contextTap = null
         thread?.interrupt()
+        main.removeCallbacks(holdWatch)
         main.post {
             ticking = false
             steps.clear()
@@ -224,6 +250,9 @@ class VitroClarity internal constructor(
             if (stopped) return
             val ts = fromNanos(frameTimeNanos)
             if (ticking) {
+                // A view's frames, bounded: past MAX_FRAMES (over 8 minutes at 60 Hz, more than any view's deadline)
+                // the oldest go.
+                if (frames.size >= MAX_FRAMES) frames.subList(0, frames.size - MAX_FRAMES + 1).clear()
                 frames += ts
                 markTicks(ts)
             }
@@ -658,17 +687,8 @@ class VitroClarity internal constructor(
     // ---- taps: the toggle tile, Event Timing's way
 
     /** One tap: its down and up, each from the event's timestamp to the end of the next frame after its handlers. */
-    private class Interaction {
-        var down: Double? = null
-        var up: Double? = null
-        var pending = 0
-    }
-
     /** Main thread. */
-    private var counting = false
-    private var taps = 0
-    private val interactions = ArrayList<Interaction>()
-    private var currentTap: Interaction? = null
+    private val taps = Taps()
     private var downAt: Double? = null
 
     /**
@@ -682,26 +702,13 @@ class VitroClarity internal constructor(
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downAt = at
-                if (!counting) return
-                taps++
-                val it = Interaction().also { currentTap = it; interactions += it }
-                it.pending++
-                afterNextFrame { end ->
-                    it.down = end - at
-                    it.pending--
-                }
+                val t = taps.down(at) ?: return
+                afterNextFrame { end -> taps.downDone(t, end) }
             }
             MotionEvent.ACTION_UP -> {
-                val it = currentTap ?: return
-                if (!counting) return
-                currentTap = null
-                it.pending++
-                main.post {
-                    afterNextFrame { end ->
-                        it.up = end - at
-                        it.pending--
-                    }
-                }
+                // The up of a tap already down, even after counting stopped: it ends that tap.
+                val t = taps.up(at) ?: return
+                main.post { afterNextFrame { end -> taps.upDone(t, end) } }
             }
         }
     }
@@ -719,27 +726,20 @@ class VitroClarity internal constructor(
             return
         }
         val r = onMain {
-            interactions.clear()
-            taps = 0
-            counting = true
+            taps.start()
             rectOf(toggle)
         }
         line(JSONObject().put("t", "input-ready").put("taps", v.taps).put("x", r.centerX()).put("y", r.centerY()))
         val ph = c.getJSONObject("PHASES")
         val end = now() + max(ph.getDouble("tapWaitMinMs"), v.taps * ph.getDouble("tapEachMs") + 5000)
-        while (onMain { taps } < v.taps && now() < end) sleep(100.0)
+        while (onMain { taps.count } < v.taps && now() < end) sleep(100.0)
         sleep(500.0)
-        onMain {
-            counting = false
-            currentTap = null
-        }
-        // Each tap counted is timed to the end of a frame after its handlers: wait for those frames, a while.
+        onMain { taps.stop() }
+        // Each tap counted needs its down and its up, each timed to the end of a frame after its handlers: wait for a
+        // late up and those frames, a while.
         val done = now() + TAP_FINISH_MS
-        while (onMain { interactions.any { it.pending > 0 } } && now() < done) sleep(50.0)
-        val (n, values) = onMain {
-            taps to interactions.filter { it.pending == 0 && (it.down != null || it.up != null) }
-                .map { ClarityStats.eventTimingDuration(max(it.down ?: 0.0, it.up ?: 0.0)) }
-        }
+        while (onMain { taps.unfinished } && now() < done) sleep(50.0)
+        val (n, values) = onMain { taps.count to taps.times() }
         val all = values.sorted()
         // A tap still without its frame isn't given a time (the web harness fills only Event Timing's sub-16 ms ones):
         // the run's tap is then not measured (inp_ms null), never faster than it was.
@@ -767,37 +767,41 @@ class VitroClarity internal constructor(
         var last: Double? = null
         var appliedAt = 0
         var down: Double? = null
-        var mine: ViewTreeObserver.OnScrollChangedListener? = null
-        onMain {
-            downAt = null
-            val s = view.currentScroll()
-            var lastY = s?.scrollY ?: 0
-            val w = ViewTreeObserver.OnScrollChangedListener {
-                val y = view.currentScroll()?.scrollY ?: return@OnScrollChangedListener
-                if (y == lastY) return@OnScrollChangedListener
-                lastY = y
-                val t = now()
-                if (first == null) {
-                    first = t
-                    down = downAt
-                    appliedAt = live.applied
-                    line(JSONObject().put("t", "measure").put("stage", "scroll").put("n", i))
-                }
-                last = t
-            }
-            scrollWatch = w
-            mine = w
-            view.viewTreeObserver.addOnScrollChangedListener(w)
-        }
+        // This swipe's listener, set and read on the main thread only: the cleanup below is posted there, after the
+        // registration task (the looper runs them in order), so it finds a listener registered while the worker gave up.
+        val mine = arrayOfNulls<ViewTreeObserver.OnScrollChangedListener>(1)
         try {
+            onMain {
+                downAt = null
+                val s = view.currentScroll()
+                var lastY = s?.scrollY ?: 0
+                val w = ViewTreeObserver.OnScrollChangedListener {
+                    val y = view.currentScroll()?.scrollY ?: return@OnScrollChangedListener
+                    if (y == lastY) return@OnScrollChangedListener
+                    lastY = y
+                    val t = now()
+                    if (first == null) {
+                        first = t
+                        down = downAt
+                        appliedAt = live.applied
+                        line(JSONObject().put("t", "measure").put("stage", "scroll").put("n", i))
+                    }
+                    last = t
+                }
+                scrollWatch = w
+                mine[0] = w
+                view.viewTreeObserver.addOnScrollChangedListener(w)
+            }
             swipeWindow(i, g, ph, { first }, { last }, { appliedAt }, { down })
         } finally {
-            // On every way out (a command that failed or timed out included): this swipe's own listener, never the next.
-            mine?.let { w ->
-                main.post {
+            // On every way out (the registration or the window timing out, a command that failed): this swipe's own
+            // listener, never the next one's.
+            main.post {
+                mine[0]?.let { w ->
                     view.viewTreeObserver.removeOnScrollChangedListener(w)
                     if (scrollWatch === w) scrollWatch = null
                 }
+                mine[0] = null
             }
         }
     }
@@ -1116,6 +1120,12 @@ class VitroClarity internal constructor(
         private const val MAIN_WAIT_S = 60L
         private const val NEXT_TIMEOUT_MS = 30_000
         private const val MAX_ERROR = 600
+
+        /** The most frames a view keeps ([frames]). */
+        private const val MAX_FRAMES = 30_000
+
+        /** How often the main thread checks the test hold still shows this harness's fake ([holdWatch]). */
+        private const val HOLD_CHECK_MS = 500L
 
         /** How long after the taps each one may still take to get its frame (past it, the tap isn't measured). */
         private const val TAP_FINISH_MS = 2_000.0
