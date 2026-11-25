@@ -480,13 +480,14 @@ private fun cssText(ctx: VitroCardContext, sizeCss: Float, color: Int, weight: I
     includeFontPadding = false
 }
 
-/** Pads [tv] so its box is [lineHeight] times its font size, like a CSS line box. */
+/** Makes [tv]'s text (set before) one CSS line box [lineHeight] times its font size, its leading split as Blink does. */
 private fun lineBox(ctx: VitroCardContext, tv: TextView, sizeCss: Float, lineHeight: Float) {
     val fm = tv.paint.fontMetrics
-    val content = fm.descent - fm.ascent
     val total = lineHeight * sizeCss * ctx.dp * ctx.theme.fontScale
-    val top = ((total - content) / 2f).coerceAtLeast(0f)
-    tv.setPadding(tv.paddingLeft, Math.round(top), tv.paddingRight, Math.round(total - content - top).coerceAtLeast(0))
+    val above = CssLineBoxSpan.above(-fm.ascent, fm.descent, total, ctx.dp)
+    val text = android.text.SpannableString(tv.text)
+    text.setSpan(CssLineBoxSpan(emptyList(), CssLineBoxSpan.Run(0, 0, above, total - above)), 0, text.length, android.text.Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+    tv.text = text
 }
 
 /**
@@ -607,14 +608,24 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
 // Chart scenes: the line chart, the timeline and the statistics chart
 // ---------------------------------------------------------------------------------------------
 
-/** The text measurements HA's chart layout depends on (CSS px, measured in HA's render: ECharts 6 text boxes). */
+/**
+ * The boxes ECharts 6 lays a 12 px axis label out in (CSS px, read from its label rects in HA's render). Its outer
+ * bounds (`outerBoundsMode: 'auto'`) keep every box inside the chart, moving the grid in when one would leave it.
+ */
 private object ChartText {
-    /** The box of a 12 px axis label, which ECharts' outer bounds keep inside the chart. */
-    const val LABEL_H = 13.4f
-    /** The box of a 12 px axis name (the unit above the value axis). */
-    const val NAME_H = 12f
-    /** The box of a 12 px time label below the axis. */
-    const val X_LABEL_H = 12f
+    /** A 12 px label's box height: value and time labels and the axis name. */
+    const val LABEL_H = 12.252f
+    /** The axis name's box. */
+    const val NAME_H = LABEL_H
+    /** A time label's box below the axis. */
+    const val X_LABEL_H = LABEL_H
+    /** A label's box is its text plus this much on the left and the right. */
+    const val LABEL_PAD_X = 3f
+    /**
+     * The axis name moves up off the top value label it would overlap, until the two boxes overlap by no more than
+     * ECharts' touch threshold (0.05 px for each box).
+     */
+    const val NAME_OVERLAP = 0.1f
 }
 
 /** One line series of a chart: points (ms, value; NaN breaks the line), its color and how it's drawn. */
@@ -715,17 +726,18 @@ object HaLineChart {
         val bottom: Float
         val right: Float
         val labelMargin: Float
+        // The widest value label's box, which the outer bounds keep inside the chart's left edge.
+        val widest = (labels.maxOfOrNull { ChartView.width(it) } ?: 0f) + ChartText.LABEL_PAD_X
         if (spec.containLabel) {
             labelMargin = 8f
-            val widest = labels.maxOfOrNull { ChartView.measure(it) } ?: 0f
             left = 1f + widest + labelMargin
             top = 15f + ChartText.LABEL_H / 2
             bottom = 8f + ChartText.X_LABEL_H
             right = 1f
         } else {
             labelMargin = 5f
-            left = max(spec.paddingYAxis, yWidth)
-            top = max(15f, ChartText.LABEL_H / 2 + if (hasName) ChartText.NAME_H else 0f)
+            left = max(max(spec.paddingYAxis, yWidth), widest + labelMargin)
+            top = max(15f, ChartText.LABEL_H / 2 + if (hasName) ChartText.NAME_H - ChartText.NAME_OVERLAP else 0f)
             bottom = max(20f, 8f + ChartText.X_LABEL_H)
             right = 1f
         }
@@ -806,7 +818,8 @@ object HaLineChart {
         }
         if (hasName) {
             // The name sits on top of the top label (ECharts moves it off the label it would overlap).
-            s.text(ChartScene.Text(spec.unit!!, grid.left, grid.top - ChartText.LABEL_H / 2 - ChartText.NAME_H / 2, Paint.Align.LEFT, text, false))
+            val nameY = grid.top - ChartText.LABEL_H / 2 + ChartText.NAME_OVERLAP - ChartText.NAME_H / 2
+            s.text(ChartScene.Text(spec.unit!!, grid.left, nameY, Paint.Align.LEFT, text, false))
         }
         val minutes = spec.labelMinutes ?: floor(span / 60000.0)
         for (lbl in timeLabels(ticks, { xOf(it.toDouble()) }, minutes, grid.bottom + 8f + ChartText.X_LABEL_H / 2, text)) s.text(lbl)
@@ -833,7 +846,10 @@ object HaTimelineChart {
         val s = ChartScene()
         val labelW = if (showNames) max(paddingYAxis, labelWidth(rows, names)) else paddingYAxis
         val h = height(rows.size)
-        val grid = RectF(labelW, 10f, widthCss - 1f, h - GRID_BOTTOM)
+        // ECharts' outer bounds: the widest name's box (5 px left of the grid, cut at labelW) stays inside the chart.
+        val widest = if (showNames) rows.maxOfOrNull { r -> min(ChartView.width(names[r.entityId] ?: r.name), labelW) } ?: 0f else 0f
+        val left = if (showNames) max(labelW, widest + ChartText.LABEL_PAD_X + 5f) else labelW
+        val grid = RectF(left, 10f, widthCss - 1f, h - GRID_BOTTOM)
         val span = (end - start).toDouble().coerceAtLeast(1.0)
         fun xOf(ms: Double) = grid.left + (ms - start) / span * grid.width()
         val band = grid.height() / rows.size.coerceAtLeast(1)

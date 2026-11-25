@@ -73,15 +73,13 @@ class MdStyle {
     /** Custom properties in force here (`--name` without the dashes), inherited like the browser does. */
     var custom: Map<String, String> = emptyMap()
 
-    /** The CSS line height in px for this element's own font: `normal` uses the font's ascent + descent. */
-    fun lineHeightPx(): Float = if (lineHeight >= 0f) lineHeight else fontSize * NORMAL_LINE_HEIGHT
+    /**
+     * The CSS line height in device px. `normal` is [normalPx], the font's own ascent + descent + line gap as the
+     * browser takes them (Roboto's 1.17 em, Comic Neue's 1.15, Inter's 1.21), from the font this element draws in.
+     */
+    fun lineHeightPx(dp: Float, normalPx: Float): Float = if (lineHeight >= 0f) lineHeight * dp else normalPx
 
     val isBlockLevel: Boolean get() = display != "inline" && display != "inline-block" && display != "inline-flex"
-
-    companion object {
-        /** Roboto's `normal` line height (hhea ascent + descent over the em), which Android's metrics match. */
-        const val NORMAL_LINE_HEIGHT = 1.171875f
-    }
 }
 
 /** One selector of a selector list, matched right to left against an [MdNode]. */

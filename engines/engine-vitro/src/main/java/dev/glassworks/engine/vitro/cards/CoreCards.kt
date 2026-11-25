@@ -145,13 +145,17 @@ internal fun mushIconRadiusPx(ctx: VitroCardContext): Float? {
 }
 
 /**
- * Mushroom's `--rgb-disabled` (an off entity's icon, its disc at 20%, a slider's track): `--mush-rgb-disabled`, else
- * Mushroom's own default, 111, 111, 111 dark and 189, 189, 189 light. HA's `--state-inactive-color` (#9e9e9e) isn't
- * Mushroom's.
+ * Mushroom's `--rgb-disabled` (an off entity's icon, its disc at 20%, a slider's track): `--mush-rgb-disabled` as the
+ * card inherits it (its own or an enclosing card's card_mod, else the theme), else Mushroom's own default, 111, 111,
+ * 111 dark and 189, 189, 189 light. HA's `--state-inactive-color` (#9e9e9e) isn't Mushroom's. Call it while the card
+ * is built: the card scope ([VitroCardContext.cardVars]) is the build's only.
  */
 internal fun mushroomDisabledColor(ctx: VitroCardContext): Int {
-    val parts = ctx.theme.vars["mush-rgb-disabled"]?.split(',')?.mapNotNull { it.trim().toIntOrNull() }
-    if (parts != null && parts.size == 3 && parts.all { it in 0..255 }) return Color.rgb(parts[0], parts[1], parts[2])
+    for (v in listOf(ctx.cardVars["mush-rgb-disabled"], ctx.theme.vars["mush-rgb-disabled"])) {
+        // Three whole numbers or nothing: one bad channel drops the whole value, as an invalid custom property does.
+        val parts = v?.split(',')?.map { it.trim().toIntOrNull() }
+        if (parts != null && parts.size == 3 && parts.all { it != null && it in 0..255 }) return Color.rgb(parts[0]!!, parts[1]!!, parts[2]!!)
+    }
     return if (ctx.theme.dark) Color.rgb(111, 111, 111) else Color.rgb(189, 189, 189)
 }
 
@@ -187,6 +191,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     override val contentInsideBorder: Boolean get() = false
     /** Live state binders for the inline features added by [addExtraFeatures]. */
     private val featureBinders = ArrayList<(EntityState?) -> Unit>()
+    /** Mushroom's off color, from the card scope in force while the card is built. */
+    private val mushroomDisabled = mushroomDisabledColor(ctx)
     private val iconBadge = MdiIconView(ctx.context)
     private val iconWrap = LinearLayout(ctx.context)
     private val titleView = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM)
@@ -1312,7 +1318,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             s?.state == "unavailable" -> ctx.theme.disabledTextColor
             domain !in STATE_COLORED_DOMAINS -> ctx.theme.stateIconColor
             active -> s?.lightTintColor() ?: ctx.theme.activeColor(domain)
-            config.type.startsWith("custom:mushroom-") -> mushroomDisabledColor(ctx)
+            config.type.startsWith("custom:mushroom-") -> mushroomDisabled
             else -> ctx.theme.stateInactiveColor
         }
         iconBadge.setIcon(iconName, iconBadge.tintColor)

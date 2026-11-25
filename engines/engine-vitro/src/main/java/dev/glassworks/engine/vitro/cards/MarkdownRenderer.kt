@@ -360,6 +360,24 @@ class CssLineBoxSpan(private val runs: List<Run>, private val strut: Run) : Line
         fm.top = fm.ascent
         fm.bottom = fm.descent
     }
+
+    companion object {
+        /**
+         * How far a line box of [lineHeight] device px reaches above its baseline, as Blink lays text out: the font's
+         * [ascent] and [descent] (device px) rounded to whole CSS px, and the half-leading (the line height less both)
+         * floored to one. HA's clock (`line-height: 0.8` on 64 px Roboto) puts its baseline 12 px under the line's
+         * top less the rounded 59 px ascent, not the 11.9 an exact split gives.
+         */
+        fun above(ascent: Float, descent: Float, lineHeight: Float, dp: Float): Float {
+            val a = (ascent / dp).roundToInt()
+            val d = (descent / dp).roundToInt()
+            return (kotlin.math.floor((lineHeight / dp - a - d) / 2f) + a) * dp
+        }
+
+        /** `line-height: normal` in device px: the font's ascent, descent and line gap, each rounded to whole CSS px. */
+        fun normalLineHeight(ascent: Float, descent: Float, gap: Float, dp: Float): Float =
+            ((ascent / dp).roundToInt() + (descent / dp).roundToInt() + (gap / dp).roundToInt()) * dp
+    }
 }
 
 /**
@@ -1209,10 +1227,10 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
 
     /** The CSS inline box of text in style [s]: its line height split evenly around the glyphs. */
     private fun lineBox(s: MdStyle, start: Int, end: Int): CssLineBoxSpan.Run {
-        val (ascent, descent) = fontMetrics(s)
-        val lh = s.lineHeightPx() * dp
-        val half = (lh - (ascent + descent)) / 2f
-        return CssLineBoxSpan.Run(start, end, ascent + half, descent + half)
+        val (ascent, descent, gap) = fontMetrics(s)
+        val lh = s.lineHeightPx(dp, CssLineBoxSpan.normalLineHeight(ascent, descent, gap, dp))
+        val above = CssLineBoxSpan.above(ascent, descent, lh, dp)
+        return CssLineBoxSpan.Run(start, end, above, lh - above)
     }
 
     private fun fontMetrics(s: MdStyle): FloatArray {
@@ -1223,7 +1241,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             metricsPaint.typeface = tf
             metricsPaint.textSize = px
             val fm = metricsPaint.fontMetrics
-            floatArrayOf(-fm.ascent, fm.descent)
+            floatArrayOf(-fm.ascent, fm.descent, fm.leading)
         }
     }
 
@@ -1247,8 +1265,9 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             if (s.letterSpacing != 0f && s.fontSize > 0f) letterSpacing = s.letterSpacing / s.fontSize
             val p = TextPaint().apply { typeface = tf; textSize = s.fontSize * dp }
             val fm = p.fontMetrics
-            val half = (s.lineHeightPx() * dp - (fm.descent - fm.ascent)) / 2f
-            val strut = CssLineBoxSpan.Run(0, 0, -fm.ascent + half, fm.descent + half)
+            val lh = s.lineHeightPx(dp, CssLineBoxSpan.normalLineHeight(-fm.ascent, fm.descent, fm.leading, dp))
+            val above = CssLineBoxSpan.above(-fm.ascent, fm.descent, lh, dp)
+            val strut = CssLineBoxSpan.Run(0, 0, above, lh - above)
             val sb = SpannableStringBuilder(text)
             sb.setSpan(CssLineBoxSpan(emptyList(), strut), 0, sb.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             this.text = sb
