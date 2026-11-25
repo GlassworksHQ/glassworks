@@ -25,7 +25,7 @@ import {
   type FiemapExtent,
 } from './stock';
 import { describeMirrorUpdates, readMirrorUpdates } from './updates';
-import { BOOT_STILL_ASSET, BOOT_STILL_BACKGROUND, ORIGINAL_BOOT, STOCK_BOOT_ANIMATION_PATH, bootStillZip } from './bootstill';
+import { BOOT_ANIMATION_ASSET, ORIGINAL_BOOT, STOCK_BOOT_ANIMATION_PATH, bootInPlaceZip } from './bootstill';
 
 /** The probe app's HTTP server (ProbeServerService.PORT) and bundle path. */
 export const STOCK_PROBE_LAN = {
@@ -284,7 +284,7 @@ export const USB_ALLOW_PERMISSION_SETTING = 'glassworks_usb_allow_permission';
 export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
   return {
     assets: [STOCK_PROBE_ASSETS.apk, STOCK_PROBE_ASSETS.fiemap, STOCK_PROBE_ASSETS.cert],
-    buildAssets: [BOOT_STILL_ASSET],
+    buildAssets: [BOOT_ANIMATION_ASSET],
     stage: (o) => buildStageUserdata(o),
     async readBundle(bytes, { secret, serial, kept, unsigned }) {
       // the jar against its SHA-256, the serial, and the signature with this run's secret (a kept copy's was checked when it
@@ -308,7 +308,7 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
         info.push('services.jar already has Glassworks\' changes from an earlier install: Kiln changes only which computer\'s adb key it trusts');
         info.push('the restore point keeps services.jar as it is now, with those changes; lululemon\'s own is in the first install\'s restore point');
       }
-      // stock's boot animation, overwritten with Glassworks' still at its own size (bootstill.ts): its blocks are part of
+      // stock's boot animation, overwritten with Glassworks' compact animation at its own size (bootstill.ts): its blocks are part of
       // what the write may change, and the restore point keeps lululemon's
       const boot = await bundleBoot(meta);
       if ('skip' in boot) info.push(`boot animation: stays lululemon's (${boot.skip})`);
@@ -324,15 +324,15 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
       const systemBytes = o.partitionBytes.system;
       if (!systemBytes) throw new Error('Kiln doesn\'t know the system partition\'s size from fastboot.');
       const patched = await patchStockServicesJar(jar, o.adbKey, { enableDeviceOwner: true });
-      // the boot animation, when the bundle carries stock's and Kiln has the still: Glassworks' at stock's exact size
+      // the boot animation, when the bundle carries stock's and Kiln has the compact one: Glassworks' at stock's exact size
       const stock = await bundleBoot(meta);
-      const still = o.assets?.[BOOT_STILL_ASSET];
+      const compact = o.assets?.[BOOT_ANIMATION_ASSET];
       let boot: { data: Uint8Array; sha256: string; extents: FiemapExtent[]; ours: Uint8Array } | undefined;
       let bootSkipped: string | undefined;
       if ('skip' in stock) bootSkipped = stock.skip;
-      else if (!still) bootSkipped = 'Kiln doesn\'t have the still to put in its place';
+      else if (!compact) bootSkipped = 'Kiln doesn\'t have the compact boot animation to put in its place';
       else {
-        try { boot = { ...stock, ours: bootStillZip(still, { background: BOOT_STILL_BACKGROUND, size: stock.data.length }) }; } catch (e) { bootSkipped = (e as Error).message; }
+        try { boot = { ...stock, ours: bootInPlaceZip(compact, stock.data.length) }; } catch (e) { bootSkipped = (e as Error).message; }
       }
       const files = [{ extents, data: patched.patched }, ...(boot ? [{ extents: boot.extents, data: boot.ours }] : [])];
       const write = buildSurgicalSparseImageFiles(systemBytes, files);

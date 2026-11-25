@@ -5,7 +5,7 @@ evidence: read
 
 # Stock-in-place parity: can the in-place install give what the Glassworks image gives?
 
-**Status (2026-11-25): untested on a Mirror.** Kiln's in-place install now covers four more things the full image gives:
+**Status (2026-11-25): partly tested on a Mirror.** Kiln's in-place install now covers four more things the full image gives:
 - the computers the Manage page lets in over USB;
 - Glassworks' boot animation, as a still;
 - one Home Assistant device across both ways of installing;
@@ -141,13 +141,20 @@ change to an existing file at the same size, or a change outside `/system`.
    Glassworks animation is turned 90° counter-clockwise into the framebuffer (`rotate` in `design/frame.json`), for the
    community image, whose framebuffer doesn't turn. Attempt 3 kept that turn, so on stock the still was turned twice.
    `still.py --turn-back 90` now turns it back: 262×1858, upright, still centered.
+8. **The breathing compact animation replaces the still** (2026-11-25, verified off-device). A separate branch had
+   already built `branding/lululemon-mirror/bootanimation-compact.zip` for the same slot: 19,321 bytes, 300×400,
+   upright like stock's own, four STORED frames in which the Glassworks tile breathes, then holds. A still that sits
+   through a 4–5 minute first start looks frozen; the compact animation shows the Mirror is working. The in-place
+   build now pads the compact zip to stock's exact size with `padZipToExactLength` (the end record's comment grows,
+   nothing else moves) and writes that, and `still.py` and the still are gone. The write, the restore and the kept
+   bundle work as in attempt 3.
 
 ## Result
 
 | What the image gives | How Stock-in-place gives it now | How sure |
 |---|---|---|
 | The Manage page lets in other computers over USB | `services.jar`: `UsbService.allowUsbDebugging` checks `WRITE_SECURE_SETTINGS` (`patchUsbAllow`, `installer/src/stock.ts`). The install grants it and `READ_LOGS` over adb, and sets `glassworks_usb_allow_permission`, which the app's `UsbDebugging.available` reads | Read and checked off-device against the real jar. Untested on a Mirror |
-| Glassworks' boot animation | The agent sends stock's `bootanimation.zip` (bytes, SHA-256, FIEMAP) in its signed metadata. Kiln writes a one-frame animation of the still (`bootStillZip`, `installer/src/bootstill.ts`), exactly stock's size, in its blocks. The restore point keeps lululemon's | Checked off-device (two zip readers, the build's sparse write and restore). Written on the Mirror on 2026-11-25 and seen sideways (attempt 7); the upright still (262×1858) is untested on the glass |
+| Glassworks' boot animation | The agent sends stock's `bootanimation.zip` (bytes, SHA-256, FIEMAP) in its signed metadata. Kiln writes `bootanimation-compact.zip`, padded to stock's exact size (`bootInPlaceZip`, `installer/src/bootstill.ts`), in its blocks. The restore point keeps lululemon's | Checked off-device (the build's sparse write and restore). The still before it was written on the Mirror and seen sideways (attempt 7); the compact animation is upright by design, as stock's own is, and untested on the glass |
 | One Home Assistant device across reinstalls | Kiln writes `glassworks_device_mac` (the serial's MAC, the image's formula) before the app's first start. The app reads it as it reads `ro.glassworks.device.mac` (`PanelDevice.INSTALLER_MAC_SETTING`) | Off-device tests. Untested on a Mirror |
 | The overlay's display and Wi-Fi defaults | `screen_off_timeout` 2147483647, `stay_on_while_plugged_in` 7, `svc wifi enable` over adb. Rotation already goes through `setPortrait` | Off-device tests. The lock screen is left as stock has it: Android 6 moves that setting into LockSettings on the first boot, out of adb's reach. Stock showed none on the 2026-11-25 run |
 
@@ -164,9 +171,8 @@ change to an existing file at the same size, or a change outside `/system`.
 
 ## Open questions
 
-- Does the upright still (attempt 7) show centered on the glass? Stock's own animation is the model for it.
-- A still that sits for the whole 4–5 minute first start reads as frozen. The 22,901 bytes leave room for a small
-  looping part.
+- Does the compact animation (attempt 8) play upright and centered on the glass? Stock's own animation is the model
+  for it.
 - Does the Manage page's Allow work end to end on stock? The next test: plug in a second computer, Allow it from Manage,
   and run `adb devices` from that computer.
 - The API key isn't carried over an in-place reinstall yet, as the image's flash carries it

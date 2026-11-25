@@ -18,7 +18,6 @@ import {
 } from '../src';
 import { GLASS_PANES_KEY_FINGERPRINT, adbFingerprint } from '../src/services';
 import { patchedKeyFingerprint } from '../src/stock';
-import { zipEntry } from '@glassworks/app-adb';
 import { fakeAdbKey } from './fakes';
 
 import { DEXDUMP, HAS_D8, START_CONFIRMATION_LOG_STRING, buildSyntheticStockServicesJar } from './synthetic-services';

@@ -11,7 +11,6 @@ Android 6, no splash). Kiln's Mirror recipe writes it into the Glass Panes syste
 | `bootanimation-compact.zip` | The boot animation for Glassworks on stock firmware (stock-in-place): 300x400 @ 10 fps, upright, STORED, four frames, within the 22,901 bytes of stock's own `bootanimation.zip` ([below](#on-stock-firmware)) |
 | `splash-landscape.png`, `preview.webp` | Previews only. The Mirror has no splash Kiln can change |
 | `outputs.json` | What the build used and wrote. A test and CI check the files against it |
-| `bootanimation-still.png`, `still.json` | The animation's last frame, cropped to a box centered on the screen, turned back upright for stock's own display (`--turn-back 90`) and quantized (13 KB), by [`branding/boot/still.py`](../boot/still.py) from `bootanimation.zip`. Kiln's in-place install wraps it in a one-frame animation the size of stock's own (22,901 bytes) and writes it over stock's in its blocks ([stock-inplace-parity.md](../../frames/lululemon-mirror/research/stock-inplace-parity.md)). Rebuild it whenever `bootanimation.zip` changes; `still.json` records the source's SHA-256 and a test checks it |
 
 ## The screen
 

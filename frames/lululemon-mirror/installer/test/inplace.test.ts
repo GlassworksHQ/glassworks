@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { BOOT_STILL_BACKGROUND, bootStillZip } from '../src/bootstill';
+import { bootInPlaceZip } from '../src/bootstill';
 import design from '../../design/installer.json';
 import {
   BundleRefused, DEFAULT_PROBE_APP_UID, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildStageUserdata, installInPlace, mirrorInPlace,
@@ -166,7 +166,7 @@ describe('the build', () => {
     const STOCK_BOOT_SIZE = 22_901; // stock 1.24.0's
     const stockBoot = Uint8Array.from({ length: STOCK_BOOT_SIZE }, (_, i) => (i * 7 + 3) & 0xff);
     const bootExtents = [{ logical: 0, physical: 4096 * 6000, block: 6000, length: 4096 * 6, blocks: 6, flags: 1 }];
-    const still = new Uint8Array(readFileSync(join(__dirname, '../../../../branding/lululemon-mirror/bootanimation-still.png')));
+    const compact = new Uint8Array(readFileSync(join(__dirname, '../../../../branding/lululemon-mirror/bootanimation-compact.zip')));
     /** The bundle with stock's boot animation as the agent sends it, signed with the rest. */
     async function withBoot(patch: Record<string, unknown> = {}) {
       const jar = buildSyntheticStockServicesJar();
@@ -186,11 +186,11 @@ describe('the build', () => {
       const read = await code.readBundle(b.bytes, { secret: SECRET, serial: FAKE_SERIAL });
       expect(read.info.join('\n')).toContain(`bootanimation.zip ${STOCK_BOOT_SIZE} bytes`);
       expect(read.extents).toContainEqual({ physical: 4096 * 6000, length: 4096 * 6 });
-      const built = await code.build(b.bytes, { adbKey: fakeAdbKey(4), userdataBytes: 64 * 2 ** 20, partitionBytes: { system: SYSTEM_BYTES }, serial: FAKE_SERIAL, assets: { 'mirror-bootanimation-still': still } });
+      const built = await code.build(b.bytes, { adbKey: fakeAdbKey(4), userdataBytes: 64 * 2 ** 20, partitionBytes: { system: SYSTEM_BYTES }, serial: FAKE_SERIAL, assets: { 'mirror-bootanimation-compact': compact } });
       const write = await bytes(built.writes['system-in-place']!);
       const restore = await bytes(built.restore);
       expect(() => checkInPlace({ write, restore, extents: read.extents, partitionBytes: SYSTEM_BYTES })).not.toThrow();
-      const ours = bootStillZip(still, { background: BOOT_STILL_BACKGROUND, size: STOCK_BOOT_SIZE });
+      const ours = bootInPlaceZip(compact, STOCK_BOOT_SIZE);
       const written = await blocks(built.writes['system-in-place']!, 6000, 6);
       expect(Buffer.from(written.subarray(0, STOCK_BOOT_SIZE)).equals(Buffer.from(ours))).toBe(true);
       expect(written.subarray(STOCK_BOOT_SIZE).every((x) => x === 0)).toBe(true);
@@ -200,7 +200,7 @@ describe('the build', () => {
       expect((built.manifest as { bootAnimation: { size: number; extents: unknown[] } }).bootAnimation).toMatchObject({ size: STOCK_BOOT_SIZE, extents: bootExtents });
     }, 60_000);
 
-    it.skipIf(!HAS_D8)('stays lululemon\'s when Kiln has no still, and the write and restore leave its blocks alone', async () => {
+    it.skipIf(!HAS_D8)('stays lululemon\'s when Kiln has no compact animation, and the write and restore leave its blocks alone', async () => {
       const b = await withBoot();
       const read = await code.readBundle(b.bytes, { secret: SECRET, serial: FAKE_SERIAL });
       const built = await code.build(b.bytes, { adbKey: fakeAdbKey(4), userdataBytes: 64 * 2 ** 20, partitionBytes: { system: SYSTEM_BYTES }, serial: FAKE_SERIAL });
@@ -208,7 +208,7 @@ describe('the build', () => {
       const restore = await bytes(built.restore);
       expect(() => checkInPlace({ write, restore, extents: read.extents, partitionBytes: SYSTEM_BYTES })).not.toThrow();
       expect((await blocks(built.writes['system-in-place']!, 6000, 6)).every((x) => x === 0)).toBe(true); // untouched (DONT_CARE)
-      expect((built.manifest as { bootAnimationLeft?: string }).bootAnimationLeft).toMatch(/still/);
+      expect((built.manifest as { bootAnimationLeft?: string }).bootAnimationLeft).toMatch(/compact boot animation/);
       expect(built.files?.['bootanimation.zip.orig']).toBeUndefined();
     }, 60_000);
 
@@ -219,7 +219,7 @@ describe('the build', () => {
       expect(read.extents).not.toContainEqual({ physical: 4096 * 6000, length: 4096 * 6 });
     }, 60_000);
 
-    it('an agent from before it sent the boot animation still builds: the boot animation stays lululemon\'s', async () => {
+    it('an agent from before it sent the boot animation builds all the same: the boot animation stays lululemon\'s', async () => {
       const b = await buildFakeGwsbBundle({ secret: SECRET });
       const read = await code.readBundle(b.bytes, { secret: SECRET, serial: FAKE_SERIAL });
       expect(read.info.join('\n')).toContain('boot animation: stays lululemon\'s (the setup agent didn\'t send it)');
