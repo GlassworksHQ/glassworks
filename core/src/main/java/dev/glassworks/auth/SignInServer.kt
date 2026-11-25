@@ -1,6 +1,8 @@
 package dev.glassworks.auth
 
 import dev.glassworks.SignInNotStored
+import dev.glassworks.web.LocalName
+import dev.glassworks.web.LocalRoute
 import dev.glassworks.web.PageShell
 import dev.glassworks.web.PageShell.Look
 import java.io.BufferedInputStream
@@ -68,6 +70,15 @@ class SignInServer(
      * another process holds on 127.0.0.1, and that process then answers 127.0.0.1 (#99).
      */
     private val bindAddress: InetAddress? = null,
+    /**
+     * How the panel reaches a pending sign-in's Home Assistant when it trades the code ([exchangeBase]): as started,
+     * or through the address discovery found in place of a `.local` name this Android can't resolve
+     * ([LocalName.route], the dashboard's own routing). The panel's [haBase] is read at `/signin`, and the address may
+     * come only after it: Kiln's sign-in opens right after Home Assistant's `.local` name is set, before discovery.
+     */
+    private val reach: (String) -> LocalRoute = { LocalRoute.AsSet(it) },
+    /** How long a code exchange waits for discovery to find a `.local` Home Assistant's address ([LocalRoute.NoAddressYet]). */
+    private val addressWaitMs: Long = 5_000,
 ) {
     private var serverSocket: ServerSocket? = null
     @Volatile private var running = false
@@ -203,18 +214,19 @@ class SignInServer(
             "This sign-in was started in another browser. Start it again from the setup page, in this browser.", button = back)
         val code = q["code"]?.takeIf { it.isNotEmpty() }
             ?: return page(400, "Bad Request", "Can't sign in", "Home Assistant didn't finish sending the sign-in response. $again", button = back)
-        return when (val r = tokens.exchangeCode(pending.haBase, pending.clientId, code, pending.codeVerifier)) {
+        val base = exchangeBase(pending.haBase)
+        return when (val r = tokens.exchangeCode(base.url, pending.clientId, code, pending.codeVerifier)) {
             is TokenResult.Ok -> {
                 val rt = r.refreshToken
                     ?: return page(502, "Bad Gateway", "Can't sign in", "Home Assistant didn't finish creating the sign-in session.", button = back)
                 try {
-                    onSignedIn(StoredAuth(pending.haBase, pending.clientId, rt), r)
+                    onSignedIn(StoredAuth(base.url, pending.clientId, rt), r)
                 } catch (t: Throwable) {
                     AuthLog.w("storing the token failed", t)
                     val why = (t as? SignInNotStored)?.let { "${it.message}: its key store isn't available. Try again in a minute." }
                     return page(500, "Internal Server Error", "Can't sign in", why ?: "The panel couldn't store the sign-in.", button = back)
                 }
-                AuthLog.i("Signed in to ${pending.haBase} (refresh token stored)")
+                AuthLog.i("Signed in to ${base.url} (refresh token stored)")
                 if (then == Then.SETUP) return backToSetup()
                 if (then == Then.KILN) return kilnDone()
                 page(200, "OK", "Panel signed in", "Your dashboard is loading now. You can close this page.", Look.DONE,
@@ -224,6 +236,8 @@ class SignInServer(
                 AuthLog.w("code exchange failed: ${r.code} (${r.httpStatus})")
                 when {
                     r.isInvalidCode -> expired(then)
+                    r.httpStatus <= 0 && base is LocalRoute.NoAddressYet -> page(502, "Bad Gateway", "Can't reach Home Assistant",
+                        "The panel hasn't found ${esc(base.name)} on the network yet. Wait a moment, then ${retry(pending.then)}.", button = back)
                     r.httpStatus <= 0 -> page(502, "Bad Gateway", "Can't reach Home Assistant",
                         "The panel couldn't reach ${esc(pending.haBase)}. Check the network and ${retry(pending.then)}.", button = back)
                     else -> page(502, "Bad Gateway", "Can't sign in",
@@ -316,11 +330,12 @@ class SignInServer(
             "The panel stopped waiting. Start “Get it from Home Assistant” on the panel again, then scan the new code.")
         val code = q["code"]?.takeIf { it.isNotEmpty() }
             ?: return page(400, "Bad Request", "Can't sign in", "Home Assistant didn't finish sending the sign-in response. Scan the code to try again.")
-        return when (val r = tokens.exchangeCode(pending.haBase, pending.clientId, code, pending.codeVerifier)) {
+        val base = exchangeBase(pending.haBase)
+        return when (val r = tokens.exchangeCode(base.url, pending.clientId, code, pending.codeVerifier)) {
             is TokenResult.Ok -> {
                 val rt = r.refreshToken
                     ?: return page(502, "Bad Gateway", "Can't sign in", "Home Assistant didn't finish creating the sign-in session.")
-                val o = join.onGrant(StoredAuth(pending.haBase, pending.clientId, rt), r)
+                val o = join.onGrant(StoredAuth(base.url, pending.clientId, rt), r)
                 if (o.ok) page(200, "OK", o.title, esc(o.text), Look.DONE, tile = o.network?.let { networkTile(it, o.channel) }.orEmpty(),
                     footHtml = MANAGE_FOOT)
                 else page(502, "Bad Gateway", o.title, esc(o.text))
@@ -331,6 +346,34 @@ class SignInServer(
                 else page(502, "Bad Gateway", "Can't sign in",
                     "Home Assistant refused the sign-in (${esc(r.code)}). Scan the code to try again.")
             }
+        }
+    }
+
+    /**
+     * Where a sign-in started at [started] trades its code, and the base its token is stored for: [started], or the
+     * address discovery found for its `.local` name ([reach]). That is the base the dashboard loads from
+     * (KioskPrefs.haBase), so the stored sign-in is for it ([StoredAuth.isFor]) and its refreshes go the same way.
+     * client_id and redirect_uri stay the panel's own: Home Assistant checks them against the authorize request, not
+     * against the address it is reached at.
+     *
+     * While discovery hasn't found the address yet, this waits for it up to [addressWaitMs]; then the base as started,
+     * which works if Android resolves the name after all ([LocalRoute.NoAddressYet], for the failure page to name).
+     */
+    private fun exchangeBase(started: String): LocalRoute {
+        val until = System.nanoTime() + addressWaitMs * 1_000_000
+        while (true) {
+            when (val r = reach(started)) {
+                is LocalRoute.ByAddress -> {
+                    AuthLog.i("Reaching ${r.name} at ${r.address} for the sign-in")
+                    return LocalRoute.ByAddress(OAuth.trimBase(r.url), r.name, r.address)
+                }
+                is LocalRoute.NoAddressYet -> if (System.nanoTime() >= until) {
+                    AuthLog.w("No address for ${r.name} yet: trading the sign-in at the name")
+                    return LocalRoute.NoAddressYet(started, r.name)
+                }
+                else -> return LocalRoute.AsSet(started)
+            }
+            try { Thread.sleep(ADDRESS_POLL_MS) } catch (_: InterruptedException) { Thread.currentThread().interrupt(); return LocalRoute.AsSet(started) }
         }
     }
 
@@ -370,6 +413,9 @@ class SignInServer(
     }
 
     companion object {
+        /** How often [exchangeBase] looks for a `.local` Home Assistant's address while it waits. */
+        private const val ADDRESS_POLL_MS = 200L
+
         /** The sign-in and Thread pages' "Continue to Home Assistant": the redirect to HA's sign-in. */
         const val CONTINUE = "/signin/continue"
         const val THREAD_CONTINUE = "/thread/continue"

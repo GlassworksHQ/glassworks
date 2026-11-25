@@ -124,7 +124,9 @@ object HaAuth {
         if (server != null) return
         // One store for the process: a bind retry keeps the Manage page, and the sign-in server inside it, built with it.
         val states = signInStates ?: signInStates(prefs).also { signInStates = it }
-        val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, states, thread = threadJoin)
+        // A sign-in started while a .local Home Assistant had no address yet trades its code through the one found since.
+        val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, states, thread = threadJoin,
+            reach = prefs::route)
         // A Manage page that can't load (a class Android 6 refuses, #435) leaves the QR pages up, and the app with them.
         val m = manage ?: orWithout("The Manage page", { AuthLog.w(it) }) {
             val page = context.glassworks.managePage(context, signIn, tokens, prefs)
