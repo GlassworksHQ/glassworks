@@ -379,13 +379,15 @@ class VitroIslandServer(
          */
         internal fun resourcePaths(urls: Collection<String>, haOrigin: String?): Set<String> {
             val out = LinkedHashSet<String>()
-            val home = haOrigin?.trimEnd('/')?.lowercase()
+            val home = haOrigin?.let(::originKey)
             for (raw in urls) {
                 val u = raw.trim()
                 val path = when {
                     u.startsWith("//") -> continue
                     u.startsWith("/") -> u
-                    home != null && u.lowercase().startsWith("$home/") -> u.substring(home.length)
+                    // An absolute URL on Home Assistant's origin, its default port written or not.
+                    home != null -> runCatching { URL(u) }.getOrNull()?.takeIf { originKey(it) == home }
+                        ?.let { it.path.ifEmpty { "/" } } ?: continue
                     else -> continue
                 }.substringBefore('#').substringBefore('?')
                 if (!safePath(path)) continue
@@ -395,6 +397,15 @@ class VitroIslandServer(
                 out += if ('/' in rest) "/$first/" else path
             }
             return out
+        }
+
+        /** [url]'s scheme, host and effective port (`https://ha.example` and `https://ha.example:443` are one), or null. */
+        private fun originKey(url: String): String? = runCatching { originKey(URL(url)) }.getOrNull()
+
+        private fun originKey(url: URL): String? {
+            val scheme = url.protocol?.lowercase()?.takeIf { it == "http" || it == "https" } ?: return null
+            val host = url.host?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+            return "$scheme://$host:${if (url.port < 0) url.defaultPort else url.port}"
         }
 
         /** The first path segment, for a refusal's log line: never the rest (ids) or the query. */

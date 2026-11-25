@@ -523,6 +523,20 @@ class VitroIslandServerTest {
             ) - "/local/",
         )
 
+        // The same origin with its default port written, or left out, on either side (RFC 5737 / example names).
+        assertEquals(setOf("/a_card/", "/b_card/"), VitroIslandServer.resourcePaths(
+            listOf("https://ha.example:443/a_card/x.js", "HTTPS://HA.example/b_card/y.js", "https://ha.example:8443/c_card/z.js",
+                "http://ha.example/d_card/w.js"),
+            "https://ha.example",
+        ))
+        assertEquals(setOf("/a_card/", "/b_card/"), VitroIslandServer.resourcePaths(
+            listOf("http://192.0.2.10/a_card/x.js", "http://192.0.2.10:80/b_card/y.js", "http://192.0.2.10:8123/c_card/z.js"),
+            "http://192.0.2.10:80/",
+        ))
+        assertEquals(setOf("/c_card/"), VitroIslandServer.resourcePaths(
+            listOf("http://192.0.2.10:8123/c_card/z.js", "http://192.0.2.10/a_card/x.js"), "http://192.0.2.10:8123",
+        ))
+
         val resources = listOf("/my_integration_card/card.js?v=3")
         val withResources = VitroIslandServer(session = { haBase to token }, resources = { resources })
         try {
