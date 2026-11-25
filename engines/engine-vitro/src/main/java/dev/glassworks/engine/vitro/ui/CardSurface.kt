@@ -104,6 +104,11 @@ class VitroCardContext(
      */
     val watchRegistries: (onChange: (JSONObject) -> Unit) -> () -> Unit = { { } },
     /**
+     * [onChange] runs (on any thread) each time the page gets a new Home Assistant token, until the returned handle is
+     * called: a web island whose page stays sends it the new one. The default (tests, no engine) never calls it.
+     */
+    val watchToken: (onChange: () -> Unit) -> () -> Unit = { { } },
+    /**
      * Whether the screen takes a tap (the frame's `input`), which is what HA's page reads as `(pointer: coarse)` in
      * the browser on that device. False on a frame without touch (the Mirror): HA there styles for a fine pointer.
      */
@@ -158,6 +163,7 @@ class VitroCardContext(
         watchEntity = watchEntity,
         watchAllEntities = watchAllEntities,
         watchRegistries = watchRegistries,
+        watchToken = watchToken,
         touch = touch,
     ).also {
         it.cardVars = cardVars
