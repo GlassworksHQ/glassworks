@@ -567,6 +567,10 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     private var cssPadding: IntArray? = null
     private var borderInsetPx = 0
 
+    /** The border's exact width in device px (1.5 for a 1 px border at density 1.5), which [setPadding] splits. */
+    private var borderInsetF = 0f
+    private var baseBorderInsetF = 0f
+
     /** The border inset before card_mod first restyled the surface. */
     private var baseBorderInset = 0
 
@@ -583,8 +587,11 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
 
     override fun setPadding(left: Int, top: Int, right: Int, bottom: Int) {
         cssPadding = intArrayOf(left, top, right, bottom)
-        val b = borderInsetPx
-        super.setPadding(left + b, top + b, right + b, bottom + b)
+        // A fractional border puts the content at a fractional offset, whose edges Chrome snaps to device pixels:
+        // the leading ones round out (1.5 -> 2), the trailing ones in (1), together both borders' width.
+        val lead = Math.round(borderInsetF)
+        val trail = Math.round(2 * borderInsetF) - lead
+        super.setPadding(left + lead, top + lead, right + trail, bottom + trail)
     }
 
     /** Fills the card with [color] from a cascade that knows its content, keeping its radius and border. */
@@ -607,18 +614,21 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     protected var drawnBorderPx = 0
         private set
 
-    /** The border width the content sits inside (0 when the card draws no border). */
-    private fun setBorderInset(width: Int) {
+    /** The border width the content sits inside (0 when the card draws no border): [width] drawn, [exact] unrounded. */
+    private fun setBorderInset(width: Int, exact: Float = width.toFloat()) {
         drawnBorderPx = width
         val px = if (contentInsideBorder) width else 0
-        if (px == borderInsetPx) return
+        val f = if (contentInsideBorder) exact else 0f
+        if (px == borderInsetPx && f == borderInsetF) return
         borderInsetPx = px
+        borderInsetF = f
         val p = cssPadding ?: intArrayOf(0, 0, 0, 0)
         setPadding(p[0], p[1], p[2], p[3])
     }
 
     fun applyTheme(theme: ResolvedTheme) {
         val strokePx = (theme.cardBorderWidthDp * ctx.dp).toInt()
+        val strokeF = theme.cardBorderWidthDp * ctx.dp
         val hasSurface = Color.alpha(theme.cardBackgroundColor) > 0 || strokePx > 0
         if (hasSurface) {
             background = GradientDrawable().apply {
@@ -627,7 +637,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
                 if (strokePx > 0) setStroke(strokePx, theme.cardBorderColor)
             }
             clipToOutline = true
-            setBorderInset(strokePx)
+            setBorderInset(strokePx, strokeF)
         } else {
             background = null
             clipToOutline = false
@@ -670,6 +680,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
      */
     private fun applySeamlessSurface(mod: CardModStyle) {
         val strokePx = if (surfaceDropped) 0 else ((mod.borderWidthDp ?: ctx.theme.cardBorderWidthDp) * ctx.dp).toInt()
+        val strokeF = if (surfaceDropped) 0f else (mod.borderWidthDp ?: ctx.theme.cardBorderWidthDp) * ctx.dp
         val strokeColor = mod.borderColor ?: ctx.theme.cardBorderColor
         clipToOutline = false
         background = if (strokePx > 0 && Color.alpha(strokeColor) > 0) {
@@ -680,7 +691,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         } else {
             null
         }
-        setBorderInset(strokePx)
+        setBorderInset(strokePx, strokeF)
     }
 
     /** The card's own `card_mod` as last applied (re-rendered live for templated styles). Empty when none. */
@@ -727,6 +738,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         activeCardCss = css
         val radiusPx = (mod.borderRadiusDp ?: theme.cardBorderRadiusDp) * ctx.dp
         val strokePx = ((mod.borderWidthDp ?: theme.cardBorderWidthDp) * ctx.dp).toInt()
+        val strokeF = (mod.borderWidthDp ?: theme.cardBorderWidthDp) * ctx.dp
         val strokeColor = mod.borderColor ?: theme.cardBorderColor
         val gradient = mod.backgroundGradient
         val layers = mod.backgroundLayers
@@ -736,13 +748,14 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
             baseBackground = background
             baseClip = clipToOutline
             baseBorderInset = borderInsetPx
+            baseBorderInsetF = borderInsetF
             restyled = true
         } else if (!restyle && restyled) {
             // A template that no longer styles the surface: back to the card's own, border inset included (the
             // content sits inside the theme border again).
             background = baseBackground
             clipToOutline = baseClip
-            setBorderInset(baseBorderInset)
+            setBorderInset(baseBorderInset, baseBorderInsetF)
             restyled = false
         }
         if (restyle && !seamless) {
@@ -775,7 +788,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
                 }
                 clipToOutline = true
             }
-            if (!invisibleSurface) setBorderInset(strokePx)
+            if (!invisibleSurface) setBorderInset(strokePx, strokeF)
         }
         val pad = mod.paddingInsets ?: mod.paddingDp?.let { dev.glassworks.engine.vitro.theme.EdgeInsetsDp(it, it, it, it) }
         if (pad != null) {
