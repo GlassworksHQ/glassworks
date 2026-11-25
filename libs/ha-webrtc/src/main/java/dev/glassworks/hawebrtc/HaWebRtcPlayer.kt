@@ -68,6 +68,17 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
     /** Where the report goes. Main thread. */
     public var listener: Listener? = null
 
+    /**
+     * The picture's width in pixels as shown (rotation applied), 0 until the first frame. Main thread; it is up to date
+     * when [Listener.onFirstFrame] and [Listener.onFrameRendered] are called.
+     */
+    public var videoWidth: Int = 0
+        private set
+
+    /** The picture's height in pixels, as [videoWidth]. */
+    public var videoHeight: Int = 0
+        private set
+
     /** The picture. Place it before [start]; it stays usable until [close]. */
     public val view: View get() = video
 
@@ -138,9 +149,19 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
         main.post { if (!closed) listener?.let(call) }
     }
 
+    /** Like [report], with the picture's size updated first. */
+    private fun frame(width: Int, height: Int, call: (Listener) -> Unit) {
+        main.post {
+            if (closed) return@post
+            videoWidth = width
+            videoHeight = height
+            listener?.let(call)
+        }
+    }
+
     private inner class Events : HaWebRtcStream.Listener {
-        override fun onFirstFrame(sinceStartMs: Long, width: Int, height: Int) = report { it.onFirstFrame(sinceStartMs, width, height) }
-        override fun onFrame(width: Int, height: Int) = report { it.onFrameRendered() }
+        override fun onFirstFrame(sinceStartMs: Long, width: Int, height: Int) = frame(width, height) { it.onFirstFrame(sinceStartMs, width, height) }
+        override fun onFrame(width: Int, height: Int) = frame(width, height) { it.onFrameRendered() }
         override fun onReconnecting(attempt: Int, error: HaError) = report { it.onReconnecting(attempt, error) }
         override fun onError(error: HaError) = report { it.onError(error) }
     }

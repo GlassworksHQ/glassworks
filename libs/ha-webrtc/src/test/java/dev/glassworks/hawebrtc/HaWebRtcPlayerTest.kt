@@ -29,6 +29,7 @@ class HaWebRtcPlayerTest {
         assertTrue(view is TextureView)
         assertFalse((view as TextureView).isOpaque)
         assertEquals(VideoScaling.FIT, player.scaling)
+        assertEquals(0 to 0, player.videoWidth to player.videoHeight)
         player.scaling = VideoScaling.FILL
         assertEquals(VideoScaling.FILL, player.scaling)
         player.close()

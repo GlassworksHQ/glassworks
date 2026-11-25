@@ -37,6 +37,8 @@ public final class dev/glassworks/hawebrtc/HaWebRtcPlayer {
 	public final fun getEntityId ()Ljava/lang/String;
 	public final fun getListener ()Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;
 	public final fun getScaling ()Ldev/glassworks/hawebrtc/VideoScaling;
+	public final fun getVideoHeight ()I
+	public final fun getVideoWidth ()I
 	public final fun getView ()Landroid/view/View;
 	public final fun setActive (Z)V
 	public final fun setListener (Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;)V
