@@ -708,9 +708,17 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
 // todo-list
 // ---------------------------------------------------------------------------------------------
 
-/** One item of a `todo.*` list, as `todo/item/list` returns it. */
+/** One item of a `todo.*` list, as `todo/item/subscribe` sends it. */
 /** [pending]: added here and not yet listed by Home Assistant (its [uid] is made up; a real one can look alike). */
-data class TodoItem(val uid: String, val summary: String, val completed: Boolean, val pending: Boolean = false)
+/** [due]: a date (`2026-11-26`) or a date and time; [description] as HA keeps it. */
+data class TodoItem(
+    val uid: String,
+    val summary: String,
+    val completed: Boolean,
+    val pending: Boolean = false,
+    val due: String? = null,
+    val description: String? = null,
+)
 
 /** Native HA `todo-list` card (`hui-todo-list-card`): live items, checkboxes, completed section and add row. */
 class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
@@ -735,6 +743,10 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     private val maxItems = config.raw.optInt("max_items", 0).coerceAtLeast(0)
     private val addRow: LinearLayout
 
+    /** The list's `supported_features` (CREATE 1, DELETE 2, UPDATE 4, MOVE 8): what HA offers on it. */
+    private var features = 0
+    private val sortMode = config.raw.optString("display_order", "none").ifEmpty { "none" }
+
     /**
      * hui-todo-list-card as measured in HA: the add field on top (a 56 px filled input with its + button, 16 px
      * in), then 48 px "Active" / "Completed" headers with their menus over 40 px rows with 20 px square
@@ -750,7 +762,8 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         addRow = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(ctx.px(16f), ctx.px(16f), ctx.px(16f), ctx.px(8f))
-            if (hideCreate) visibility = GONE
+            // Shown once the list says it can create items (HA's CREATE_TODO_ITEM), unless `hide_create`.
+            visibility = GONE
         }
         input.apply {
             hint = "Add item"
@@ -802,19 +815,19 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             orientation = LinearLayout.VERTICAL
             setPadding(0, ctx.px(16f), 0, ctx.px(8f))
         }
-        list.addView(activeHeader, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(48f)))
+        list.addView(activeHeader, LinearLayout.LayoutParams(MATCH_PARENT, HEADER_PX(ctx)))
         list.addView(activeBox, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         list.addView(completedDivider, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)).apply {
             topMargin = ctx.px(10f); bottomMargin = ctx.px(10f)
         })
-        list.addView(completedHeader, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(48f)))
+        list.addView(completedHeader, LinearLayout.LayoutParams(MATCH_PARENT, HEADER_PX(ctx)))
         list.addView(completedBox, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         col.addView(list, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         renderItems()
     }
 
-    /** A 48 px section header: the 14 px / 500 title and, at the end, a 48 px menu button. */
+    /** A section header (44.2 px: the 14 px / 500 title on a 21 px line, 11.6 px above and below) and its menu. */
     private fun sectionHeader(title: String, onMenu: ((View) -> Unit)?): LinearLayout = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -845,26 +858,42 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         super.onAttachedToWindow()
         val eid = config.entity ?: return
         // `observe` delivers the current state at once, so this fetches on attach and again on every change.
-        observe(eid) { _ -> fetch(eid) }
+        observe(eid) { s ->
+            applyFeatures(s)
+            fetch(eid)
+        }
     }
 
+    /**
+     * Reads the list as HA's card does, through `todo/item/subscribe`: its first event is the whole list, and the
+     * subscription is dropped right after (a state change reads it again, as before).
+     */
     private fun fetch(eid: String, retry: Boolean = true) {
         val gen = ++fetchGeneration
-        ctx.callWs(JSONObject().put("type", "todo/item/list").put("entity_id", eid)) { ok, result, _ ->
-            if (!ok) {
-                // A row added here waits for this list to get its uid: ask once more rather than leave it untoggleable.
-                if (retry) ctx.main.postDelayed({
-                    if (gen == fetchGeneration && isAttachedToWindow && items.any { it.pending }) fetch(eid, retry = false)
-                }, RETRY_MS)
-                return@callWs
-            }
-            val parsed = parseItems(result as? JSONObject)
+        var unsub: (() -> Unit)? = null
+        var done = false
+        fun finish() {
+            done = true
+            unsub?.let { u -> ctx.main.post { runCatching { u() } } }
+        }
+        unsub = ctx.subscribeWs(JSONObject().put("type", "todo/item/subscribe").put("entity_id", eid), { ev ->
+            if (done) return@subscribeWs
+            finish()
+            val parsed = parseItems(ev)
             ctx.main.post {
                 if (gen != fetchGeneration) return@post
                 items = parsed
                 renderItems()
             }
-        }
+        }, { _ ->
+            if (done) return@subscribeWs
+            finish()
+            // A row added here waits for this list to get its uid: ask once more rather than leave it untoggleable.
+            if (retry) ctx.main.postDelayed({
+                if (gen == fetchGeneration && isAttachedToWindow && items.any { it.pending }) fetch(eid, retry = false)
+            }, RETRY_MS)
+        })
+        if (done) unsub?.let { u -> ctx.main.post { runCatching { u() } } }
     }
 
     private fun toggle(item: TodoItem) {
@@ -914,13 +943,24 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         }
     }
 
+    /**
+     * HA shows what the list supports: the add row with CREATE (and no `hide_create`), the reorder menu with MOVE
+     * (unsorted), the clear menu with DELETE.
+     */
+    private fun applyFeatures(s: EntityState?) {
+        features = (s?.attributes?.get("supported_features") as? Number)?.toInt() ?: 0
+        addRow.visibility = if (!hideCreate && features and CREATE != 0) VISIBLE else GONE
+        activeHeader.getChildAt(1).visibility = if (features and MOVE != 0 && sortMode == "none") VISIBLE else GONE
+        completedHeader.getChildAt(1).visibility = if (features and DELETE != 0) VISIBLE else GONE
+    }
+
     private fun renderItems() {
         activeBox.removeAllViews()
         completedBox.removeAllViews()
         val active = items.filter { !it.completed }
         val done = items.filter { it.completed }
         val shown = if (maxItems > 0) active.take(maxItems) else active
-        shown.forEach { activeBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f))) }
+        shown.forEach { activeBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, rowHeight(it))) }
         val hidden = active.size - shown.size
         if (hidden > 0) {
             activeBox.addView(extLabel(ctx, 12f, ctx.theme.secondaryTextColor).apply {
@@ -940,7 +980,7 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         completedHeader.visibility = if (showCompleted) VISIBLE else GONE
         completedBox.visibility = if (showCompleted) VISIBLE else GONE
         if (showCompleted) {
-            done.forEach { completedBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f))) }
+            done.forEach { completedBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, rowHeight(it))) }
         }
     }
 
@@ -967,10 +1007,67 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             this.text = item.summary
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER_VERTICAL
             if (item.completed) paintFlags = paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
         }
-        row.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        if (!isMultiline(item)) {
+            row.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            return row
+        }
+        // A multiline row: the summary and each extra line 21 px tall (14 / 12 px text), 8 px above and below.
+        val column = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(text, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(21f)))
+        item.description?.let { d ->
+            column.addView(extLabel(ctx, 12f, ctx.theme.secondaryTextColor).apply {
+                this.text = d
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                gravity = Gravity.CENTER_VERTICAL
+            }, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(21f)))
+        }
+        dueText(item)?.let { (label, overdue) ->
+            // `.due`: a 14 px clock, then the time, in the secondary color (`--warning-color` once overdue).
+            val color = if (overdue) ThemeResolver.parseColor(ctx.theme.vars["warning-color"]) ?: WARNING else ctx.theme.secondaryTextColor
+            column.addView(LinearLayout(ctx.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(MdiIconView(ctx.context).apply { setIcon("mdi:clock", color) }, LinearLayout.LayoutParams(ctx.px(14f), ctx.px(14f)).apply { marginEnd = ctx.px(4f) })
+                addView(extLabel(ctx, 12f, color).apply { this.text = label; maxLines = 1 })
+            }, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(21f)))
+        }
+        row.addView(column, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         return row
+    }
+
+    private fun isMultiline(item: TodoItem) = item.due != null || item.description != null
+
+    private fun rowHeight(item: TodoItem): Int =
+        if (isMultiline(item)) ctx.px(16f + 21f * (1 + (if (item.due != null) 1 else 0) + (if (item.description != null) 1 else 0))) else ctx.px(40f)
+
+    /**
+     * HA's due line: "Today" for a date due today, else the relative time ("In 2 days", "Last week"), and whether
+     * it's past. A date is due at the end of its day; a date and time at that instant.
+     */
+    private fun dueText(item: TodoItem): Pair<String, Boolean>? {
+        val raw = item.due ?: return null
+        val tz = TimeZone.getDefault()
+        val dateOnly = 'T' !in raw
+        val dueMs = if (dateOnly) {
+            val parts = raw.split('-').mapNotNull { it.toIntOrNull() }
+            if (parts.size < 3) return null
+            Calendar.getInstance(tz).apply { clear(); set(parts[0], parts[1] - 1, parts[2], 23, 59, 59); set(Calendar.MILLISECOND, 999) }.timeInMillis
+        } else {
+            (EntityStore.parseTimestamp(raw) * 1000).toLong().takeIf { it > 0 } ?: return null
+        }
+        val now = ctx.now()
+        val today = dateOnly && Calendar.getInstance(tz).run {
+            timeInMillis = now
+            val d = get(Calendar.YEAR) * 400 + get(Calendar.DAY_OF_YEAR)
+            timeInMillis = dueMs
+            d == get(Calendar.YEAR) * 400 + get(Calendar.DAY_OF_YEAR)
+        }
+        val label = if (today) "Today" else HaRelativeTime.format(dueMs, now, tz, capitalize = true)
+        return label to (dueMs < now)
     }
 
     /** Test hooks: whether the add row shows, and the active box's rows (items plus any "+ N more" line). */
@@ -989,15 +1086,21 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         private const val RETRY_MS = 2_000L
         /** HA's checked checkbox: its brand fill (#009ac7, measured). */
         private const val CHECKED = 0xFF009AC7.toInt()
+        private const val WARNING = 0xFFFFA600.toInt()
+        private const val CREATE = 1
+        private const val DELETE = 2
+        private const val MOVE = 8
+        private val HEADER_PX = { ctx: VitroCardContext -> (44.2f * ctx.dp).roundToInt() }
 
-        /** Reads `{ items: [{ uid, summary, status }] }` from `todo/item/list`. */
+        /** Reads `{ items: [{ uid, summary, status }] }`, a `todo/item/subscribe` event. */
         fun parseItems(result: JSONObject?): List<TodoItem> {
             val arr = result?.optJSONArray("items") ?: return emptyList()
             return (0 until arr.length()).mapNotNull { i ->
                 val o = arr.optJSONObject(i) ?: return@mapNotNull null
                 val summary = o.optString("summary", "")
                 val uid = o.optString("uid", "").ifEmpty { summary }
-                if (uid.isEmpty()) null else TodoItem(uid, summary, o.optString("status") == "completed")
+                fun str(k: String) = if (o.isNull(k)) null else o.optString(k).ifEmpty { null }
+                if (uid.isEmpty()) null else TodoItem(uid, summary, o.optString("status") == "completed", due = str("due"), description = str("description"))
             }
         }
     }
