@@ -179,10 +179,32 @@ public final class StockBundle {
         if (fits512(full)) return full;
         String fiemap = "{\"truncated\":true,\"extentCount\":" + countExtents(st.fiemapJson) + "}";
         String trunc = closeMeta(buildMetaBase(st, lanIp, fiemap, extra), hmacHex);
-        if (fits512(trunc) || hmacHex == null) return trunc;
-        // The full 64-hex hmac is what overflows: drop it to a short flag (the real hmac rides the
-        // GWSB header), keeping the truncated FIEMAP metadata readable in one 512-byte attribute.
-        return buildMetaBase(st, lanIp, fiemap, extra) + ",\"hasHmac\":true}";
+        if (fits512(trunc)) return trunc;
+        if (hmacHex != null) {
+            String flagged = buildMetaBase(st, lanIp, fiemap, extra) + ",\"hasHmac\":true}";
+            if (fits512(flagged)) return flagged;
+        }
+        // Final compact fallback guaranteed <= 512 bytes (the complete metadata and HMAC always ride
+        // the streamed GWSB header; never slice JSON mid-byte).
+        String compact = buildCompactMeta(st, lanIp, extra, hmacHex != null, true);
+        if (fits512(compact)) return compact;
+        return buildCompactMeta(st, lanIp, extra, hmacHex != null, false);
+    }
+
+    private static String buildCompactMeta(Static st, String lanIp, String extra, boolean hasHmac, boolean includeSerial) {
+        StringBuilder sb = new StringBuilder(320);
+        sb.append("{\"version\":").append(VERSION)
+          .append(",\"compact\":true");
+        if (includeSerial) sb.append(",\"serialno\":").append(jsonStr(st.serialno));
+        sb.append(",\"servicesSize\":").append(st.jar.length)
+          .append(",\"servicesSha256\":").append(jsonStr(st.sha256))
+          .append(",\"servicesOdexFound\":").append(st.odexPath != null)
+          .append(",\"servicesHasClassesDex\":").append(st.hasClassesDex)
+          .append(",\"lanIp\":").append(jsonStr(lanIp))
+          .append(",\"httpPort\":").append(ProbeServerService.PORT);
+        if (extra != null) sb.append(extra);
+        if (hasHmac) sb.append(",\"hasHmac\":true");
+        return sb.append('}').toString();
     }
 
     private static boolean fits512(String json) {

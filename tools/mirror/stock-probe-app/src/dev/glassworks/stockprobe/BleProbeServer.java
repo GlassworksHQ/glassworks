@@ -87,12 +87,14 @@ public final class BleProbeServer {
     private long totalChunks;
     private final ArrayDeque<long[]> queue = new ArrayDeque<>(); // {from, to} ranges, or {IDX_*, 0}
     private boolean awaitingSent;
+    private String awaitingDevice; // address of the device with an in-flight notification
     private int notifyRetries;
     private long sentInStream;
     private final Runnable sentWatchdog = () -> {
         if (awaitingSent) {
             Log.w(TAG, "BLE: onNotificationSent did not arrive; continuing");
             awaitingSent = false;
+            awaitingDevice = null;
             pump();
         }
     };
@@ -346,9 +348,13 @@ public final class BleProbeServer {
 
         @Override
         public void onNotificationSent(BluetoothDevice device, int status) {
+            final String addr = device != null ? device.getAddress() : null;
             h.post(() -> {
                 if (!awaitingSent) return;
+                // Ignore stale completions from a different/previous device.
+                if (awaitingDevice != null && addr != null && !awaitingDevice.equals(addr)) return;
                 awaitingSent = false;
+                awaitingDevice = null;
                 h.removeCallbacks(sentWatchdog);
                 pump();
             });
@@ -410,7 +416,11 @@ public final class BleProbeServer {
                 long start = v.length >= 5 ? le32(v, 1) : 0;
                 long count = v.length >= 9 ? le32(v, 5) : 0;
                 StockBundle b = StockBundle.current();
-                clearStream();
+                // Keep the in-flight notification gate if this same central already has a
+                // notification outstanding, so its completion triggers INFO instead of releasing
+                // a second concurrent notification.
+                boolean keepInFlight = awaitingSent && awaitingDevice != null && awaitingDevice.equals(device.getAddress());
+                clearStream(keepInFlight);
                 streamDevice = device;
                 streamBundle = b;
                 chunkSize = chunkFor(mtu(device));
@@ -498,14 +508,22 @@ public final class BleProbeServer {
         if (idx >= IDX_END || r[0] + 1 >= r[1]) queue.pollFirst();
         else r[0] = idx + 1;
         awaitingSent = true;
+        awaitingDevice = streamDevice.getAddress();
         h.postDelayed(sentWatchdog, SENT_WATCHDOG_MS);
     }
 
     private void clearStream() {
+        clearStream(false);
+    }
+
+    private void clearStream(boolean keepInFlight) {
         queue.clear();
-        awaitingSent = false;
+        if (!keepInFlight) {
+            awaitingSent = false;
+            awaitingDevice = null;
+            h.removeCallbacks(sentWatchdog);
+        }
         notifyRetries = 0;
-        h.removeCallbacks(sentWatchdog);
         streamDevice = null;
         streamBundle = null;
     }
