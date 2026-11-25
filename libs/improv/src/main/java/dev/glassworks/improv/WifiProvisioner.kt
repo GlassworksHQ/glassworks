@@ -438,6 +438,12 @@ public class WifiProvisioner(
                 !wifiUpAtStart // fresh panel: whatever Wi-Fi comes up was ours
             }
             if (i?.supplicantState == SupplicantState.COMPLETED && onTarget && ip != null && wifiNetworkUp()) {
+                // joined: keep it past a restart. Android 7 and earlier forget a network addNetwork added until the app
+                // saves it (a Mirror on its stock Android 6 asked for Wi-Fi again on every boot, 2026-11-25)
+                if (netId != -1 && Compat.mustSaveNetworks) {
+                    @Suppress("DEPRECATION")
+                    Log.i(TAG, "saveConfiguration -> ${runCatching { wm.saveConfiguration() }.getOrElse { false }}")
+                }
                 return Outcome.Connected(ssid, ip, method)
             }
             if (authErrors >= 2) return failAndRestore("wrong password (authentication failed)")

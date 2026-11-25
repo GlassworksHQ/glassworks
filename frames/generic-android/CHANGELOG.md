@@ -12,6 +12,10 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Fixed
+- **A Wi-Fi network you give Glassworks stays saved after a restart on Android 6 and 7.** The legacy build joined
+  the network from Kiln or your phone, but Android forgot it at the next restart, so a lululemon Mirror on its stock
+  system asked you to send Wi-Fi from a phone every time it started. It now keeps the network, as Android 8 and newer
+  always did.
 - **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
   restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
   you back, so the panel said "This link has expired" until you signed in again. The panel now remembers a sign-in

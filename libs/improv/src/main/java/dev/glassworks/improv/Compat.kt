@@ -13,6 +13,12 @@ internal val Compat = CompatApi(Build.VERSION.SDK_INT)
 
 /** The capabilities for one API [level]; [Compat] is the running device's. Tests pass a level. */
 internal class CompatApi(private val level: Int) {
+    /**
+     * A network `addNetwork` adds lasts past a restart only once the app calls `saveConfiguration` (Android 7 and
+     * earlier). From Android 8 the framework saves it itself, and `saveConfiguration` is deprecated.
+     */
+    val mustSaveNetworks: Boolean get() = level < 26
+
     /** `AdvertisingSet` exists (Android 8). Below it, advertising uses `startAdvertising` only. */
     @get:ChecksSdkIntAtLeast(api = 26)
     val hasAdvertisingSets: Boolean get() = level >= 26
