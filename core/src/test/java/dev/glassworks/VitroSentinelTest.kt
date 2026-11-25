@@ -243,6 +243,22 @@ class VitroSentinelTest {
         assertNotNull(prefs().vitroTurnedOff)
     }
 
+    @Test fun withoutAPreviousHandlerOnlyTheThreadEnds() {
+        // A plain JVM (this test's) has no default handler: the sentinel records the crash and ends nothing else.
+        prefs().vitroEnabled = true
+        Thread.setDefaultUncaughtExceptionHandler(null)
+        val s = VitroSentinel(prefs(), clock = { now }, wallClock = { wall })
+        s.start()
+        s.install(Handler(Looper.getMainLooper()))
+        val worker = Thread { throw IllegalStateException("background boom") }
+        worker.start()
+        worker.join(5_000)
+        assertFalse(worker.isAlive)
+        assertEquals("the crash counted", 1, prefs().vitroCrashStrikes)
+        // Still here: the process (this test) didn't end.
+        assertTrue(prefs().vitroEnabled)
+    }
+
     @Test fun theStableMarkRunsOnceTheWindowHasPassed() {
         prefs().vitroEnabled = true
         prefs().vitroCrashStrikes = 1

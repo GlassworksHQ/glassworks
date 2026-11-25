@@ -102,7 +102,7 @@ class VitroSentinel(
 
     /**
      * Watches this process: [onCrash] runs before [Thread]'s previous default handler (Android's, which ends the
-     * process), and [onStable] once the window has passed on [main].
+     * process; without one, the JVM's own behavior: the trace, and only the thread ends), and [onStable] once the window has passed on [main].
      */
     fun install(main: Handler = Handler(Looper.getMainLooper())) {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
@@ -111,8 +111,11 @@ class VitroSentinel(
             if (previous != null) {
                 previous.uncaughtException(thread, error)
             } else {
-                android.os.Process.killProcess(android.os.Process.myPid())
-                kotlin.system.exitProcess(10)
+                // No handler before this one (never on Android, whose runtime always sets the one that ends the
+                // process; a plain JVM, a test's, has none): what the JVM does then, the thread's trace on stderr
+                // and only that thread ending. Not the thread group's handler: it would call this one again.
+                System.err.print("Exception in thread \"${thread.name}\" ")
+                error.printStackTrace()
             }
         }
         main.postDelayed(::onStable, WINDOW_MS)
