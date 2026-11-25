@@ -534,6 +534,11 @@ class Handler(BaseHTTPRequestHandler):
         path = url.path
         if path == "/api/websocket":
             return self.websocket()
+        # A home may serve routes of its own (the parity harness's fixtures and cards: tools/vitro-parity/fakehome.py).
+        own = getattr(D, "http_get", None)
+        hit = own and own(path, urllib.parse.parse_qs(url.query, keep_blank_values=True))
+        if hit:
+            return self.send_bytes(*hit)
         if path == "/auth/authorize":
             # HA's sign-in, without its login page: straight back to the frontend with a code, and
             # storeToken=true as a ticked "keep me signed in" sends.
@@ -683,7 +688,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         url = urllib.parse.urlsplit(self.path)
         n = int(self.headers.get("Content-Length") or 0)
-        body = urllib.parse.parse_qs(self.rfile.read(n).decode()) if n else {}
+        raw = self.rfile.read(n) if n else b""
+        own = getattr(D, "http_post", None)
+        hit = own and own(url.path, raw)
+        if hit:
+            return self.send_bytes(*hit)
+        body = urllib.parse.parse_qs(raw.decode()) if raw else {}
         if url.path == "/auth/token":
             tok = {"access_token": "clarity-access", "token_type": "Bearer", "expires_in": 86400 * 365}
             if (body.get("grant_type") or [""])[0] == "authorization_code":

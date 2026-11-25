@@ -2,12 +2,13 @@
  "case": "entity-filter",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
@@ -31,6 +32,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Lights off",
    "x": 17,
    "y": 21,
@@ -43,10 +45,11 @@
   },
   {
    "slot": 0,
-   "text": "LED Strip Window",
+   "clipped": false,
+   "text": "Bedroom Strip Accent",
    "x": 73,
    "y": 77.59,
-   "w": 110.42,
+   "w": 136.17,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -55,10 +58,11 @@
   },
   {
    "slot": 0,
-   "text": "Sunset Lamp Sunset",
+   "clipped": false,
+   "text": "Reading Lamp Reading",
    "x": 73,
    "y": 125.59,
-   "w": 128.13,
+   "w": 143.27,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -67,10 +71,11 @@
   },
   {
    "slot": 0,
-   "text": "Entryway Ceiling Light",
+   "clipped": false,
+   "text": "Porch Ceiling Light",
    "x": 73,
    "y": 173.59,
-   "w": 136.7,
+   "w": 116.69,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -79,7 +84,40 @@
   }
  ],
  "states": {
-  "light.entryway_ceiling_light": {
+  "light.bedroom_accent": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "xy"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "hs_color": null,
+    "rgb_color": null,
+    "xy_color": null,
+    "off_with_transition": false,
+    "off_brightness": 254,
+    "icon": "mdi:led-strip-variant",
+    "friendly_name": "Bedroom Strip Accent",
+    "supported_features": 40
+   },
+   "lc": 1794496680,
+   "lu": 1794496680
+  },
+  "light.kitchen_pendant": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": "onoff",
+    "friendly_name": "Kitchen Pendant",
+    "supported_features": 0
+   },
+   "lc": 1794482580,
+   "lu": 1794482580
+  },
+  "light.porch_ceiling_light": {
    "s": "off",
    "a": {
     "min_color_temp_kelvin": 2702,
@@ -95,12 +133,13 @@
     "xy_color": null,
     "off_with_transition": true,
     "off_brightness": 153,
-    "friendly_name": "Entryway Ceiling Light",
+    "friendly_name": "Porch Ceiling Light",
     "supported_features": 40
    },
-   "lc": 1795543475.3965635
+   "lc": 1794490860,
+   "lu": 1794490860
   },
-  "light.sunset_lamp": {
+  "light.reading_lamp": {
    "s": "off",
    "a": {
     "supported_color_modes": [
@@ -109,93 +148,62 @@
     "color_mode": null,
     "off_with_transition": false,
     "off_brightness": null,
-    "icon": "mdi:weather-sunset",
-    "friendly_name": "Sunset",
+    "icon": "mdi:floor-lamp",
+    "friendly_name": "Reading Lamp Reading",
     "supported_features": 8
    },
-   "lc": 1795532578.3925707
-  },
-  "light.u7_pro_xg_wall_led": {
-   "s": "on",
-   "a": {
-    "supported_color_modes": [
-     "onoff"
-    ],
-    "color_mode": "onoff",
-    "friendly_name": "Bedroom AP LED",
-    "supported_features": 0
-   },
-   "lc": 1795532357.020664
-  },
-  "light.window_accent": {
-   "s": "off",
-   "a": {
-    "supported_color_modes": [
-     "xy"
-    ],
-    "color_mode": null,
-    "brightness": null,
-    "hs_color": null,
-    "rgb_color": null,
-    "xy_color": null,
-    "off_with_transition": false,
-    "off_brightness": 254,
-    "icon": "mdi:window-open",
-    "friendly_name": "Window",
-    "supported_features": 40
-   },
-   "lc": 1795507611.0189574
+   "lc": 1794488160,
+   "lu": 1794488160
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "light.entryway_ceiling_light",
+    "ei": "light.bedroom_accent",
     "pl": "zha",
     "tk": "light",
-    "di": "device-1"
+    "ic": "mdi:led-strip-variant",
+    "di": "device-1",
+    "en": "Accent"
    },
    {
-    "ei": "light.sunset_lamp",
-    "pl": "zha",
-    "tk": "light",
-    "ic": "mdi:weather-sunset",
+    "ei": "light.kitchen_pendant",
+    "pl": "demo",
     "di": "device-2",
-    "en": "Sunset"
+    "en": "Pendant"
    },
    {
-    "ei": "light.u7_pro_xg_wall_led",
-    "pl": "unifi",
-    "tk": "led_control",
-    "di": "device-3",
-    "en": "LED"
-   },
-   {
-    "ei": "light.window_accent",
+    "ei": "light.porch_ceiling_light",
     "pl": "zha",
     "tk": "light",
-    "ic": "mdi:window-open",
+    "di": "device-3"
+   },
+   {
+    "ei": "light.reading_lamp",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:floor-lamp",
     "di": "device-4",
-    "en": "Window"
+    "en": "Reading"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "Entryway Ceiling Light"
+    "name": "Bedroom Strip"
    },
    {
     "id": "device-2",
-    "name": "Sunset Lamp"
+    "name": "Kitchen"
    },
    {
     "id": "device-3",
-    "name": "Bedroom AP"
+    "name": "Porch Ceiling Light"
    },
    {
     "id": "device-4",
-    "name": "LED Strip"
+    "name": "Reading Lamp"
    }
   ],
   "requested": {
@@ -203,7 +211,6 @@
     "light"
    ],
    "platforms": [
-    "unifi",
     "zha"
    ]
   },

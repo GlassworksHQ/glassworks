@@ -1,0 +1,114 @@
+{
+ "case": "mushroom-person",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 262,
+  "height": 72
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 246,
+   "h": 56,
+   "type": "mushroom-person-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Sam",
+   "x": 56,
+   "y": 12,
+   "w": 28.52,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Home",
+   "x": 56,
+   "y": 31,
+   "w": 33.88,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "person.sam": {
+   "s": "home",
+   "a": {
+    "editable": true,
+    "id": "sam",
+    "device_trackers": [
+     "device_tracker.sam_phone"
+    ],
+    "source": "device_tracker.sam_phone",
+    "user_id": "parity-user",
+    "entity_picture": "/local/vitro-harness-fixtures/images/person.png",
+    "friendly_name": "Sam"
+   },
+   "lc": 1794488160,
+   "lu": 1794488160
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "person.sam",
+    "pl": "person",
+    "en": "Sam"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "person"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "person": {
+     "_": {
+      "default": "mdi:account",
+      "state": {
+       "not_home": "mdi:account-arrow-right"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.person.entity_component._.state.home": "Home",
+    "component.person.entity_component._.state.not_home": "Away"
+   },
+   "entity": {}
+  }
+ }
+}

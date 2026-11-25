@@ -2,35 +2,37 @@
  "case": "todo-list",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
   "y": 16,
   "width": 516,
-  "height": 500
+  "height": 482
  },
  "docSize": {
   "width": 960,
-  "height": 531
+  "height": 513
  },
  "slots": [
   {
    "x": 230,
    "y": 24,
    "w": 500,
-   "h": 483.44,
+   "h": 465.44,
    "type": "hui-todo-list-card"
   }
  ],
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Active",
    "x": 17,
    "y": 30.61,
@@ -43,10 +45,11 @@
   },
   {
    "slot": 0,
-   "text": "Air Purifier: Pre Filter Clean",
+   "clipped": false,
+   "text": "Replace the hallway bulb",
    "x": 49,
    "y": 71.22,
-   "w": 170.95,
+   "w": 156.52,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -55,6 +58,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "In 2 days",
    "x": 67,
    "y": 93.22,
@@ -67,10 +71,11 @@
   },
   {
    "slot": 0,
-   "text": "Wood Cutting Boards: Oil Boards",
+   "clipped": false,
+   "text": "Descale the kettle",
    "x": 49,
    "y": 129.22,
-   "w": 206.84,
+   "w": 112.92,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -79,21 +84,49 @@
   },
   {
    "slot": 0,
-   "text": "Last week",
+   "clipped": false,
+   "text": "Today",
    "x": 67,
    "y": 151.22,
-   "w": 55.06,
+   "w": 32.97,
    "h": 14,
    "size": 12,
    "weight": 400,
-   "color": "rgb(255, 166, 0)",
+   "color": "rgb(155, 155, 155)",
    "transform": "none"
   },
   {
    "slot": 0,
+   "clipped": false,
+   "text": "Test the smoke alarms",
+   "x": 49,
+   "y": 187.22,
+   "w": 144.45,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "In 2 weeks",
+   "x": 67,
+   "y": 209.22,
+   "w": 57.89,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
    "text": "Completed",
    "x": 17,
-   "y": 211.83,
+   "y": 269.83,
    "w": 69.52,
    "h": 16,
    "size": 14,
@@ -103,34 +136,11 @@
   },
   {
    "slot": 0,
-   "text": "Toothbrush: Head replacement",
-   "x": 49,
-   "y": 252.44,
-   "w": 195.7,
-   "h": 16,
-   "size": 14,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "text": "Next month",
-   "x": 67,
-   "y": 274.44,
-   "w": 63.58,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(155, 155, 155)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "text": "Gaff Tape: Replace Tape",
+   "clipped": false,
+   "text": "Clean the dryer filter",
    "x": 49,
    "y": 310.44,
-   "w": 153.72,
+   "w": 128.09,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -139,10 +149,11 @@
   },
   {
    "slot": 0,
-   "text": "Next month",
+   "clipped": false,
+   "text": "3 days ago",
    "x": 67,
    "y": 332.44,
-   "w": 63.58,
+   "w": 59.17,
    "h": 14,
    "size": 12,
    "weight": 400,
@@ -151,10 +162,11 @@
   },
   {
    "slot": 0,
-   "text": "Sofa: Rotate Matresses",
+   "clipped": false,
+   "text": "Water the plants",
    "x": 49,
    "y": 368.44,
-   "w": 148.28,
+   "w": 103.66,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -163,10 +175,11 @@
   },
   {
    "slot": 0,
-   "text": "Next month",
+   "clipped": false,
+   "text": "10 hours ago",
    "x": 67,
    "y": 390.44,
-   "w": 63.58,
+   "w": 71.42,
    "h": 14,
    "size": 12,
    "weight": 400,
@@ -175,47 +188,36 @@
   },
   {
    "slot": 0,
-   "text": "Air Purifier: AQS Clean",
+   "clipped": false,
+   "text": "Wipe the oven door",
    "x": 49,
-   "y": 426.44,
-   "w": 141.44,
+   "y": 427.94,
+   "w": 121.88,
    "h": 16,
    "size": 14,
    "weight": 400,
    "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "text": "In 3 months",
-   "x": 67,
-   "y": 448.44,
-   "w": 64.72,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(155, 155, 155)",
    "transform": "none"
   }
  ],
  "states": {
-  "todo.maintenance": {
-   "s": "2",
+  "todo.chores": {
+   "s": "3",
    "a": {
-    "friendly_name": "Maintenance",
+    "friendly_name": "Chores",
     "supported_features": 4
    },
-   "lc": 1795507310.9166324
+   "lc": 1794498480,
+   "lu": 1794498480
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "todo.maintenance",
-    "pl": "maintenance_supporter",
-    "tk": "maintenance_todo",
-    "en": "Maintenance"
+    "ei": "todo.chores",
+    "pl": "local_todo",
+    "en": "Chores"
    }
   ],
   "devices": [],
@@ -223,9 +225,7 @@
    "domains": [
     "todo"
    ],
-   "platforms": [
-    "maintenance_supporter"
-   ]
+   "platforms": []
   },
   "icons": {
    "entity_component": {
@@ -246,58 +246,52 @@
   {
    "request": {
     "type": "todo/item/subscribe",
-    "entity_id": "todo.maintenance"
+    "entity_id": "todo.chores"
    },
    "events": [
     {
      "items": [
       {
-       "summary": "Toothbrush: Head replacement",
+       "summary": "Replace the hallway bulb",
        "uid": "item-1",
-       "status": "completed",
-       "due": "2026-12-31",
-       "description": null,
-       "completed": null
+       "status": "needs_action",
+       "due": "2026-11-14",
+       "description": null
       },
       {
-       "summary": "Gaff Tape: Replace Tape",
+       "summary": "Descale the kettle",
        "uid": "item-2",
-       "status": "completed",
-       "due": "2026-12-22",
-       "description": null,
-       "completed": null
+       "status": "needs_action",
+       "due": "2026-11-12",
+       "description": null
       },
       {
-       "summary": "Sofa: Rotate Matresses",
+       "summary": "Clean the dryer filter",
        "uid": "item-3",
        "status": "completed",
-       "due": "2026-12-25",
-       "description": null,
-       "completed": null
+       "due": "2026-11-09",
+       "description": null
       },
       {
-       "summary": "Air Purifier: AQS Clean",
+       "summary": "Water the plants",
        "uid": "item-4",
        "status": "completed",
-       "due": "2027-02-04",
-       "description": null,
-       "completed": null
+       "due": "2026-11-11",
+       "description": null
       },
       {
-       "summary": "Air Purifier: Pre Filter Clean",
+       "summary": "Test the smoke alarms",
        "uid": "item-5",
        "status": "needs_action",
-       "due": "2026-11-26",
-       "description": null,
-       "completed": null
+       "due": "2026-11-24",
+       "description": null
       },
       {
-       "summary": "Wood Cutting Boards: Oil Boards",
+       "summary": "Wipe the oven door",
        "uid": "item-6",
-       "status": "needs_action",
-       "due": "2026-11-19",
-       "description": null,
-       "completed": null
+       "status": "completed",
+       "due": null,
+       "description": null
       }
      ]
     }

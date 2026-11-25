@@ -324,6 +324,43 @@ class ParityWs(recorded: JSONArray?) {
         return { live = false }
     }
 
+    /**
+     * The REST history HA's page read for exactly [ids] (mini-graph-card's `GET /api/history/period`), as Vitro's
+     * `fetchHistory` gets it from HaDashboardClient: numeric points per entity (on/off and the like as 1/0). A read HA
+     * never made is listed in [unmatched]; nothing is answered then, as a failed request answers nothing.
+     */
+    fun restHistory(ids: List<String>, done: (Map<String, List<dev.glassworks.engine.vitro.data.HistoryPoint>>) -> Unit) {
+        val hit = calls.lastOrNull { c ->
+            val r = c.getJSONObject("request")
+            r.optString("type") == "rest/history/period" && r.optJSONArray("entity_ids")?.let { a -> (0 until a.length()).map { a.getString(it) } } == ids
+        }
+        val result = hit?.optJSONArray("result")
+        if (result == null) {
+            unmatched += "rest/history/period ${ids.joinToString(",")}"
+            return
+        }
+        val out = LinkedHashMap<String, List<dev.glassworks.engine.vitro.data.HistoryPoint>>()
+        for (i in 0 until result.length()) {
+            val rows = result.optJSONArray(i) ?: continue
+            val eid = rows.optJSONObject(0)?.optString("entity_id")?.takeIf { it.isNotEmpty() } ?: continue
+            val numericOnly = eid.startsWith("sensor.") || eid.startsWith("number.") || eid.startsWith("input_number.")
+            val pts = ArrayList<dev.glassworks.engine.vitro.data.HistoryPoint>()
+            for (k in 0 until rows.length()) {
+                val p = rows.optJSONObject(k) ?: continue
+                val text = p.opt("state")?.toString()?.trim().orEmpty()
+                val v = text.toDoubleOrNull() ?: if (!numericOnly) when (text.lowercase()) {
+                    "on", "open", "home", "playing", "heating", "cooling", "detected" -> 1.0
+                    "off", "closed", "not_home", "idle", "paused", "clear" -> 0.0
+                    else -> null
+                } else null
+                val t = dev.glassworks.engine.vitro.data.EntityStore.parseTimestamp(p.opt("last_updated") ?: p.opt("last_changed"))
+                if (v != null && t > 0.0) pts += dev.glassworks.engine.vitro.data.HistoryPoint(t, v)
+            }
+            if (pts.isNotEmpty()) out[eid] = pts
+        }
+        done(out)
+    }
+
     companion object {
         /** [o] without its top-level `id`, as JSON text with keys sorted at every level: equal for equal requests. */
         fun canonical(o: JSONObject): String = text(o, top = true)

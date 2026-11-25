@@ -2,12 +2,13 @@
  "case": "markdown-basic",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
@@ -31,6 +32,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Living room",
    "x": 17,
    "y": 17,
@@ -43,6 +45,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Evening",
    "x": 17,
    "y": 68.75,
@@ -55,10 +58,11 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "The lights dim at",
    "x": 17,
    "y": 112.34,
-   "w": 107.25,
+   "w": 103.8,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -67,6 +71,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "sunset",
    "x": 124.25,
    "y": 112.34,
@@ -79,10 +84,11 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "and the blinds close at",
-   "x": 166.63,
+   "x": 170.08,
    "y": 112.34,
-   "w": 146.77,
+   "w": 139.84,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -91,6 +97,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "ten",
    "x": 313.39,
    "y": 112.34,
@@ -103,6 +110,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": ".",
    "x": 332.72,
    "y": 112.34,
@@ -115,6 +123,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Lamp on",
    "x": 57,
    "y": 148.73,
@@ -127,6 +136,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Blinds open",
    "x": 57,
    "y": 171.13,
@@ -139,6 +149,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Fan low",
    "x": 57,
    "y": 193.52,
@@ -151,6 +162,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Open settings",
    "x": 17,
    "y": 229.91,

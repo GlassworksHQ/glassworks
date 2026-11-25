@@ -2,7 +2,7 @@
  "case": "mushroom-title",
  "frame": "mirror",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 720,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Living room",
    "x": 12,
    "y": 26,
@@ -43,6 +44,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Lights and blinds",
    "x": 12,
    "y": 66,
