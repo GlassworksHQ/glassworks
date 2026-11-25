@@ -11,6 +11,12 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Fixed
+- **Kiln asks for Chrome or Edge before it starts.** In a browser that can't talk to USB devices, such as Firefox or
+  Safari, Kiln's Mirror and Android pages now say so on their first screen, as the S1 page does. Before, the Mirror
+  page let you download and build its whole system image first, then stopped at the first USB step. Comes with Kiln,
+  not the app.
+
 ## [0.9.0] - 2026-11-24
 
 **The last release before 1.0. For Android 8 and newer it's the first release since 0.2.0, and brings everything in 0.3.0; the legacy build moves up from 0.3.0.**
