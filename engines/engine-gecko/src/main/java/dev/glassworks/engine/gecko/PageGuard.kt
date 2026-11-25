@@ -20,9 +20,11 @@ internal interface PageGuard {
 
     /**
      * The engine starts with the configured [dashboard] URL ([dev.glassworks.engine.EngineSettings.dashboard]): its
-     * origin is the one pages may use, for the life of the process. Called once, before any load.
+     * origin is the one pages may use, for the life of the process. [local] is the app's own loopback server
+     * ([dev.glassworks.engine.EngineSettings.localOrigin]), whose pages may load too, held to their own origin.
+     * Called once, before any load.
      */
-    fun start(dashboard: String?)
+    fun start(dashboard: String?, local: String? = null)
 
     /**
      * Runs [load] once the guard is in force: at once if it is, else when it is (never, if it can't be). If it
