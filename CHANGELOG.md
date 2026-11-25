@@ -15,6 +15,12 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   view it can't draw, such as one with a map or one Home Assistant generates from a strategy, opens as Home Assistant
   draws it. It's off by default, and with it off the panel works exactly as before.
 
+### Fixed
+- **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the
+  dashboard's page to free memory while another app was in front, the page the panel opened in its place kept
+  running as if it were on screen until you came back to the panel. It now waits in the background, as the page did
+  before Android closed it.
+
 ## [0.9.0] - 2026-11-24
 
 **S1 Kiosk is now Glassworks, in its last release before 1.0: a browser Manage page for every panel, themes and an edge glow for Assist, notifications and Bluetooth proxy panes, and frame updates from Home Assistant.**

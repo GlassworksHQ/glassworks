@@ -25,7 +25,12 @@ export const STOCK_PROBE_LABELS = {
   property: 'u:object_r:property_data_file:s0',
   /** /data/app(/.*)? (AOSP 6.0.1 file_contexts). */
   apk: 'u:object_r:apk_data_file:s0',
+  /** /data/data/<pkg>(/.*)? as installd and seapp_contexts label an untrusted app's data (AOSP 6.0.1, no MLS categories). */
+  appData: 'u:object_r:app_data_file:s0',
 } as const;
+
+/** Length in bytes of the optional per-run HMAC secret planted at the probe app's files/stage.secret. */
+export const STAGE_SECRET_BYTES = 32;
 
 export const DEFAULT_PROBE_APP_PACKAGE = 'dev.glassworks.stockprobe';
 export const DEFAULT_PROBE_APP_UID = 10099;
@@ -147,6 +152,11 @@ export interface StockProbeUserdataOptions {
    * 1-entry /data/system/packages.xml so Android 6 boots it stopped=false and fires BOOT_COMPLETED.
    */
   probeApp?: ProbeAppPayload;
+  /**
+   * Optional 32-byte per-run secret planted at /data/data/<pkg>/files/stage.secret (0600, owned by the
+   * probe app's uid) so the probe app appends an HMAC-SHA256 over its GWSB bundle. Requires probeApp.
+   */
+  stageSecret?: Uint8Array;
   time?: number;
   uuid?: Uint8Array;
 }
@@ -180,6 +190,8 @@ export function buildPackagesXml(o: {
     <item name="android.permission.RECEIVE_BOOT_COMPLETED" package="android" />
     <item name="android.permission.ACCESS_WIFI_STATE" package="android" />
     <item name="android.permission.CHANGE_WIFI_STATE" package="android" />
+    <item name="android.permission.BLUETOOTH" package="android" />
+    <item name="android.permission.BLUETOOTH_ADMIN" package="android" />
   </permissions>
   <package name="${o.packageName}" codePath="${codePath}" nativeLibraryPath="${codePath}/lib"${abiAttr} publicFlags="0" privateFlags="0" ft="19000000000" it="19000000000" ut="19000000000" version="1" userId="${o.userId}">
     <sigs count="1">
@@ -190,6 +202,8 @@ export function buildPackagesXml(o: {
       <item name="android.permission.INTERNET" granted="true" flags="0" />
       <item name="android.permission.ACCESS_WIFI_STATE" granted="true" flags="0" />
       <item name="android.permission.CHANGE_WIFI_STATE" granted="true" flags="0" />
+      <item name="android.permission.BLUETOOTH" granted="true" flags="0" />
+      <item name="android.permission.BLUETOOTH_ADMIN" granted="true" flags="0" />
     </perms>
   </package>
 </packages>
@@ -210,6 +224,8 @@ export function validateStockAdbKey(adbKey: string, forbiddenFingerprint = GLASS
  * /misc/adb/adb_keys (via buildUserdata), /property/persist.sys.usb.config, optional
  * /property/persist.adb.tcp.port, optional /misc/wifi/wpa_supplicant.conf, and optional
  * /app/<pkg>-1/base.apk (+ lib/arm64/libfiemap.so) + /system/packages.xml for the no-ADB fallback.
+ * With probeApp and stageSecret it also plants /data/<pkg>/files/stage.secret (Android's
+ * /data/data/<pkg>/files/stage.secret), the probe app's per-run HMAC key.
  *
  * AOSP 6.0.1 init's load_persistent_properties() reads raw file bytes without trimming newlines,
  * so property files are written with exact UTF-8 bytes and no trailing '\n'.
@@ -223,6 +239,12 @@ export async function buildStockProbeUserdata(disk: Disk, o: StockProbeUserdataO
     throw new Error(`invalid tcpPort ${o.tcpPort}: expected an integer from 1024 to 65535 (or 0 to disable)`);
   }
   validateStockAdbKey(o.adbKey);
+  if (o.stageSecret !== undefined) {
+    if (!(o.stageSecret instanceof Uint8Array) || o.stageSecret.length !== STAGE_SECRET_BYTES) {
+      throw new Error(`invalid stageSecret: expected exactly ${STAGE_SECRET_BYTES} bytes`);
+    }
+    if (!o.probeApp) throw new Error('stageSecret needs probeApp: only the probe app reads files/stage.secret');
+  }
 
   const time = o.time ?? Math.floor(Date.now() / 1000);
   const fs = await buildUserdata(disk, {
@@ -288,6 +310,22 @@ export async function buildStockProbeUserdata(disk: Disk, o: StockProbeUserdataO
       mode: 0o660, uid: 1000, gid: 1000, label: STOCK_PROBE_LABELS.data, time,
     });
     plantedPaths.push('/data/system/packages.xml');
+
+    if (o.stageSecret) {
+      // init.rc: mkdir /data/data 0771 system system (system_data_file). installd's create_pkg_data
+      // makes /data/data/<pkg> 0751 uid:uid and the app's getFilesDir() is 0771 uid:uid, both
+      // app_data_file. PMS keeps an existing data dir whose owner matches packages.xml's userId.
+      const appDir = `/data/${pkg}`;
+      if (!(await fs.exists('/data'))) {
+        await fs.mkdir('/data', { mode: 0o771, uid: 1000, gid: 1000, label: STOCK_PROBE_LABELS.data, time });
+      }
+      await fs.mkdir(appDir, { mode: 0o751, uid, gid: uid, label: STOCK_PROBE_LABELS.appData, time });
+      await fs.mkdir(`${appDir}/files`, { mode: 0o771, uid, gid: uid, label: STOCK_PROBE_LABELS.appData, time });
+      await fs.writeFile(`${appDir}/files/stage.secret`, o.stageSecret, {
+        mode: 0o600, uid, gid: uid, label: STOCK_PROBE_LABELS.appData, time,
+      });
+      plantedPaths.push(`/data${appDir}/files/stage.secret`);
+    }
   }
 
   await fs.flush();
