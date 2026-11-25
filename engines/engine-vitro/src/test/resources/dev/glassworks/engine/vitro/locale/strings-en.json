@@ -21,6 +21,7 @@
  "ui.card.media_player.browse_media": "Browse media",
  "ui.card.media_player.join": "Join",
  "ui.card.media_player.media_next_track": "Next track",
+ "ui.card.media_player.media_pause": "Pause",
  "ui.card.media_player.media_play": "Play",
  "ui.card.media_player.media_previous_track": "Previous track",
  "ui.card.media_player.power": "Power",
