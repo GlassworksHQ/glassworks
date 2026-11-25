@@ -554,7 +554,7 @@ describe('padZipToExactLength', () => {
     const compact = new Uint8Array(readFileSync(join(__dirname, '../../../../branding/lululemon-mirror/bootanimation-compact.zip')));
     const padded = padZipToExactLength(compact, STOCK_BOOTANIMATION_BYTES);
     expect(padded.length).toBe(22901);
-    expect(new TextDecoder().decode(await zipEntry(padded, 'desc.txt')).split('\n')[0]).toBe('300 400 10');
+    expect(new TextDecoder().decode(await zipEntry(padded, 'desc.txt')).split('\n')[0]).toBe('1080 1920 10');
     const t = unzipTest(padded);
     if (t !== undefined) expect(t).toMatch(/No errors detected/);
   });
