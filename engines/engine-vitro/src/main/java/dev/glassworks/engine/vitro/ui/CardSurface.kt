@@ -89,6 +89,11 @@ class VitroCardContext(
      * island. Any thread. The default (tests, no engine) does nothing.
      */
     val watchEntity: (entityId: String) -> Unit = {},
+    /**
+     * Whether the screen takes a tap (the frame's `input`), which is what HA's page reads as `(pointer: coarse)` in
+     * the browser on that device. False on a frame without touch (the Mirror): HA there styles for a fine pointer.
+     */
+    val touch: Boolean = true,
 ) {
     val dp: Float = context.resources.displayMetrics.density
     val main: Handler = Handler(Looper.getMainLooper())
@@ -136,6 +141,7 @@ class VitroCardContext(
         subscribeWs = subscribeWs,
         now = now,
         watchEntity = watchEntity,
+        touch = touch,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout

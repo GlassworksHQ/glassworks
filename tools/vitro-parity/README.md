@@ -2,7 +2,7 @@
 
 The harness checks how closely Vitro draws each card compared with Home Assistant. Home Assistant's own render is the spec, and the harness turns "looks off" into a list. It renders every case in a corpus twice:
 
-- **Home Assistant:** HA's real frontend in headless Chromium, at the panel's CSS size and density, with card-mod loaded before the dashboard (as `frontend: extra_module_url` does) and the kiosk's header hidden.
+- **Home Assistant:** HA's real frontend in headless Chromium, at the panel's CSS size and density, with card-mod loaded before the dashboard (as `frontend: extra_module_url` does) and the kiosk's header hidden. A panel with a touch screen (`"input": "touch"` in `frames.json`: the S1 and the tablet) gets a touch screen in Chromium too, so HA's page has the coarse pointer it has on the panel; the Mirror has none.
 - **Vitro:** `VitroView` under Robolectric's native graphics, at the same size and density, fed the entity states HA's page held when it drew the reference, HA's themes, the templates HA rendered, and the history and statistics HA's graphs got.
 
 It then compares each card: a perceptual pixel diff, the card's bounds, and every text HA drew (found in Vitro's views or not, and at what font size). It writes a report with HA, Vitro and the diff side by side, and fails when a card drifts past its threshold.
@@ -41,7 +41,7 @@ HA access comes from `~/.t3/glassworks-m1/vitro-parity/ha.json` (`{"origin": …
 
 | Path | What |
 |---|---|
-| `engines/engine-vitro/src/test/parity/frames.json` | The panels: S1 960×480 CSS at 1.5, Pixel Tablet 1280×800 at 2, Mirror 720×1280 at 1.5 |
+| `engines/engine-vitro/src/test/parity/frames.json` | The panels: S1 960×480 CSS at 1.5, Pixel Tablet 1280×800 at 2, Mirror 720×1280 at 1.5, and whether each has a touch screen |
 | `…/corpus/<case>.json` | One card per file: `card`, and optionally `title`, `frames`, `dark` (default true), `theme` (a view theme), `span` (section columns), `threshold`, `masks` (CSS px regions relative to the card, each with a `why`), `resources` (Lovelace resources of type `css` from `fixtures/`, see below), and `expect` (`{entity_id: state}`: a refresh writes no reference for the case while an entity is in another state, so a case about a light that is on never quietly becomes one about a light that is off) |
 | `…/refs/<frame>/<case>.png` and `.json` | Home Assistant's render and what came with it |
 | `…/refs/shared.json` | HA's version, the config fields Vitro reads, and the themes |
@@ -91,5 +91,6 @@ Some checks stay manual, because no tool reads pixels or image metadata:
 - Robolectric draws with the host's Skia, not the panel's GPU, so a device can still differ by a few pixels. The 1 px shift tolerance and the baseline slack absorb most of it. Rendering on macOS and on CI's Linux may also differ slightly.
 - Relative times ("5 minutes ago") can't be compared: HA's page counts from the pinned 10:08, and Vitro counts from the real clock. Keep them out of the corpus or mask them.
 - Cameras get no stream, so none is in the committed corpus. History graphs get the history HA's page got, as of the capture: a refresh redraws them with that day's data.
+- A reference records whether its page had a touch screen (`viewport.touch`), and Vitro draws that case with the same pointer, so a reference taken before touch capture still compares like for like until it is refreshed. Only HA's chart legend looks different with a coarse pointer (40 px rows) at rest. Playwright's full-page screenshot turns touch emulation off for a page taller than the window, so on a touch panel the capture makes the window as tall as the page instead, lets the page settle again, and takes the screenshot, the card bounds and the texts in that one layout before it puts the window back. A case whose page has lost its coarse pointer stops. A page with a pinned card (`position: fixed`) that is taller than the window is the exception: growing the window would move the card, so it is captured with a fine pointer and its reference says so.
 - Chart labels (ECharts draws them on a canvas) aren't text runs, so the text check doesn't see them; the pixel diff does.
 - The pixel diff only sees the card's crop in HA's position. A card that renders taller or lower in Vitro shows up in the bounds check.
