@@ -133,6 +133,9 @@ class ClimateRangeTest {
         assertEquals(20.125 to 24.0, ClimateTargets.stepped(ClimateHandle.LOW, 0.125, 20.0, 24.0, 10.0, 30.0))
         assertEquals("20" to ".25", ThermostatDialView.splitTemp(20.25, 0.25))
         assertEquals("21" to "", ThermostatDialView.splitTemp(21.0, 1.0))
+        // A setpoint off the step grid (a 30.25 maximum on a 0.5 step) shows as it is; on-grid ones keep the step's.
+        assertEquals("30" to ".25", ThermostatDialView.splitTemp(30.25, 0.5))
+        assertEquals("30" to ".0", ThermostatDialView.splitTemp(30.0, 0.5))
         assertEquals(20.2, ClimateTargets.roundToStep(20.0 + 0.1 + 0.1, 0.1), 0.0)
         // A release is finished against the entity as the store holds it now: HA's newer other end wins, and an
         // entity that no longer has a range gets nothing.
@@ -140,6 +143,9 @@ class ClimateRangeTest {
         assertEquals(26.0 to 26.0, ClimateTargets.rangeToSend(ClimateHandle.LOW, 27.0, 24.0, heatCool("target_temp_high" to 26.0)))
         assertNull(ClimateTargets.rangeToSend(ClimateHandle.LOW, 21.0, 24.0, heatCool("temperature" to 22.0)))
         assertNull(ClimateTargets.rangeToSend(ClimateHandle.LOW, 21.0, 24.0, null))
+        // An untouched end HA reports outside the device's limits is brought within them, and the pair stays in order.
+        assertEquals(21.0 to 25.0, ClimateTargets.rangeToSend(ClimateHandle.LOW, 21.0, 24.0, heatCool("max_temp" to 25.0, "target_temp_high" to 26.0)))
+        assertEquals(10.0 to 10.0, ClimateTargets.rangeToSend(ClimateHandle.LOW, 12.0, 24.0, heatCool("target_temp_low" to 9.0, "target_temp_high" to 8.0)))
         // °F steps by one when the entity doesn't say.
         assertEquals(1.0, ClimateTargets.stepOf(emptyMap(), "°F"), 0.0)
         assertEquals(0.5, ClimateTargets.stepOf(emptyMap(), "°C"), 0.0)
@@ -385,6 +391,23 @@ class ClimateRangeTest {
         orphan.dial().bind(10.0, 30.0, 0.5, 22.0, 21.0, "heat", "idle")
         orphan.dial().nudge(1)
         assertEquals(1, calls.size)
+    }
+
+    @Test
+    fun aKeyReleaseUsesTheStoresNewerOtherEnd() {
+        // End held on the low end (shown clipped at 24), HA raises the high end to 26 before the key comes up and
+        // before the card rebinds: the card sends 26–26, from the key's own proposal and the store's high end.
+        val st = store(heatCool())
+        val card = ThermostatCardView(context(st), card("""{"type": "thermostat", "entity": "climate.hall"}"""))
+        ShadowLooper.idleMainLooper()
+        val dial = card.dial()
+        assertEquals(ClimateHandle.LOW, dial.selected)
+        dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_END))
+        assertTrue(calls.isEmpty()) // nothing on key-down
+        st.putLocal(heatCool("target_temp_high" to 26.0))
+        dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MOVE_END))
+        assertEquals(1, calls.size)
+        assertRange(calls.single(), 26.0, 26.0)
     }
 
     @Test
