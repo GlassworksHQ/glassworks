@@ -5,8 +5,7 @@ evidence: verified
 
 # Stock 1.24.0 Mirror probe: userdata-only code execution, reversible surgical ADB, and vendor inventory
 
-**Status (2026-11-24): Phase 1 & Phase 2 surgical USB ADB verified on an untouched stock `1.24.0`
-Mirror.**
+**Status (2026-11-25): Phase 1, Phase 2 surgical USB ADB, and Step 4 full raw `system` + `boot` backup via the `dpmd` hook are all verified on an untouched stock `1.24.0` Mirror.**
 - **Phase 1 (2026-11-22, verified):** Writing only `userdata` (leaving `system`, `boot`, `recovery`,
   `modem`, and `persist` untouched) runs our plain `untrusted_app` HTTP probe
   (`dev.glassworks.stockprobe`, `uid=10099`) automatically at `BOOT_COMPLETED` with zero ADB and
@@ -27,6 +26,15 @@ Mirror.**
   An attempted Step 4 raw partition dump via `init.qcom.post_boot.sh` (`qti_init_shell`) hit a dead
   end on stock `1.24.0` (`avc: denied { search }` on `/data/local/tmp`, and stock `1.24.0`'s
   `/sepolicy` does not grant `qti_init_shell` `capability:sys_module`).
+- **Step 4 raw stock backup via `dpmd` hook (2026-11-25, verified):** Using `--backup-only` over USB
+  (`adb forward tcp:18765 tcp:18765`, zero Wi-Fi swap), the tool pulled `/system/vendor/lib64/libdpmframework.so`
+  (`223,232` B, `block 230356 × 55`), embedded a caller-supplied 2,560-byte module (`module_layout=0xa5b7f7dd`,
+  `kallsyms_lookup_name=0xe007de41`), cleared the leftover `init.qcom.post_boot.sh` patch, and booted
+  directly into `getenforce=Permissive` with `mmcblk0p22` and `mmcblk0p19` readable. Both raw
+  partitions streamed cleanly in ~6 min (`system-stock.raw.img` = `1,288,491,008` B, clean ext4,
+  all 3 previously touched files verified byte-for-byte untouched stock after scrub; `boot-stock.raw.img`
+  = `33,554,432` B, valid `ANDROID!` image), and `restore-dpmd.sparse` restored `libdpmframework.so`
+  back to stock automatically.
 
 Device: untouched stock lululemon Studio Mirror (`MSM8916`, `variant: SBC eMMC`, `secure: yes`,
 `Device unlocked: false`, `ro.build.version.mirror=1.24.0`, `ro.build.hwver.mirror=mirror-v1`).
@@ -250,8 +258,11 @@ outside the repository.
    `strace` showed `init_module` on the embedded image, `fchmodat(AT_FDCWD, "/dev/block/mmcblk0p22",
    0444)` and the same for `mmcblk0p19`, then `exited with 42`. An earlier encoding subtracted the
    payload-relative offset instead of `payloadVaddr` and branched to the wrong address; this run is
-   the check that the bias is `load_address - payloadVaddr`. It does not prove a real module loads
-   on the unit's 3.10 kernel. The on-panel boot is still **untested**.
+   the check that the bias is `load_address - payloadVaddr`. Before the live run, a code review
+   caught one more Linux 3.10 detail: `init_module`'s third argument (`uargs`) was initially `NULL`
+   (`xzr`), which fails `strndup_user(uargs, ...)` with `-EFAULT`; changing that word to `adr x2, 0`
+   (pointing at the zeroed `.eh_frame` terminator at payload offset `0`) passed `""` without
+   changing the 35-instruction layout.
 
    The module that image embeds is not in this repo. A built `.ko` is a GPL payload (Hard Rule 4),
    and stock `1.24.0` only loads one whose ABI matches its own `pronto_wlan.ko` (**verified**
@@ -263,14 +274,39 @@ outside the repository.
    Linux 3.10 `same_magic()` with `CONFIG_MODVERSIONS=y` compares the tail after the first space, so
    the `-g4869d64961b` prefix is not the check. `shihanqu/lululemon-mirror-root` (`mod/mirror_root.c`,
    `docs/ABI.md`, **read**) builds that ABI by copying `module_layout` from the vendor driver,
-   taking `kallsyms_lookup_name = 0xe007de41` from `genksyms` (a primitive signature; **not** read
-   out of this unit's kernel), and laying out `struct module` as `0x220` bytes with `init` at
-   `0x120` and `exit` at `0x210` from the DWARF of an unstripped `pronto_wlan.ko`. Their `init`
-   writes `0` to `selinux_enforcing` through `kallsyms_lookup_name`. The symbol is
-   `EXPORT_SYMBOL_GPL`, so the module's license string has to be `GPL`. That project's README
-   reports the same module verified on `g4869d64961b`. For this hook the module only has to clear
-   enforcing: the constructor already runs `fchmodat` on the two block nodes. Their root daemon is
-   not required. Whether `0xe007de41` matches this kernel is **untested**.
+   taking `kallsyms_lookup_name = 0xe007de41` from `genksyms` (a primitive signature), and laying out
+   `struct module` as `0x220` bytes with `init` at `0x120` and `exit` at `0x210` from the DWARF of
+   an unstripped `pronto_wlan.ko`. Their `init` writes `0` to `selinux_enforcing` through
+   `kallsyms_lookup_name`. The symbol is `EXPORT_SYMBOL_GPL`, so the module's license string has to
+   be `GPL`. For this hook the module only has to clear enforcing: the constructor already runs
+   `fchmodat` on the two block nodes. Their root daemon is not required.
+
+9. **Live on-panel `dpmd` hook & full raw `system` + `boot` backup (`--backup-only`)** (2026-11-25, verified)
+   With authorized USB ADB already active from Step 3, ran `--backup-only` over USB (`adb forward
+   tcp:18765 tcp:18765`, no Wi-Fi SoftAP swap) with an external 2,560-byte module on the host:
+   ```sh
+   npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts \
+     --backup-only --backup-dir <prev-out>/backup --backup-module <external>/selinux_permissive.ko
+   ```
+   - Pulled `/system/vendor/lib64/libdpmframework.so` (`223,232` B, `block 230356 × 55`, SHA-256
+     `a488d2ae22f2d448…`), saved `restore-dpmd.sparse`, and built `patch-dpmd.sparse` (`.init_array[0]`
+     → `0x33338`, chaining to `0xfd70`, payload `2,752` B).
+   - Flashed `restore-post-boot.sparse` (clearing the earlier Step 4 dead end) + `patch-dpmd.sparse`,
+     and rebooted. On the first try, the Mirror came back with **`getenforce=Permissive`** and
+     **`blockReadable=true`**, confirming both that `dpmd` runs `libdpmframework.so`'s constructor as
+     `uid=0` with `CAP_SYS_MODULE` and that `kallsyms_lookup_name = 0xe007de41` matches stock
+     `1.24.0`'s kernel.
+   - Streamed raw `system` (`1,288,491,008` B) and raw `boot` (`33,554,432` B) over USB ADB,
+     scrubbed `services.jar` and `libdpmframework.so` back to their original stock bytes inside
+     `system-stock.raw.img`, and automatically flashed `restore-dpmd.sparse` back (total elapsed
+     time: **5 min 58 s**).
+   - Off-device verification of the saved dumps (outside git):
+     - `boot-stock.raw.img` (`33,554,432` B, SHA-256 `054bf05a86309db3de83a9818d2d4cd71d26148a84b0f13e00b2b1d8a52bd20c`):
+       valid `ANDROID!` header (`page_size=2048`, `kernel=15,523,970` B, `ramdisk=1,061,787` B, `dt=0`).
+     - `system-stock.raw.img` (`1,288,491,008` B, SHA-256 `febe653d74cd15329d1b11761fdf7b72fddc8c27202be6f7e5167f2d28acba51`):
+       clean ext4 (`magic=0xef53`, `state=1`, `4096` B × `312,086` blocks, `78,080` inodes, volume
+       `'system'`). Reading back the physical extents for `services.jar`, `init.qcom.post_boot.sh`,
+       and `libdpmframework.so` matched their untouched stock SHA-256s byte-for-byte.
 
 ## Result
 
@@ -324,6 +360,7 @@ CONFIG_SECURITY_SELINUX=y
 | `/system/etc/init.qcom.post_boot.sh` | 80,815 | 496 | `22517` | `20` | `92,229,632` |
 | `/system/build.prop` | 7,101 | 382 | `21093` | `2` | `86,396,928` |
 | `/system/framework/services.jar` | 2,411,806 | — | `40597` | `589` | `166,285,312` |
+| `/system/vendor/lib64/libdpmframework.so` | 223,232 | — | `230356` | `55` | `943,538,176` |
 
 Because `/system` is not dm-verity protected and `fastboot flash system` with Android sparse
 `DONT_CARE` chunks skips untouched blocks, **surgical in-place patching of individual `/system`
@@ -414,6 +451,9 @@ Compared all 462 paths from [option-c-vendor-files.tsv](option-c-vendor-files.ts
 | `/system/etc/init.qcom.post_boot.sh` | 80,815 | `b7f44b33e82bc0df4277f9730fb7ded47a06c03c37bf564b0d7505c23ec3e1ab` |
 | `/system/lib/modules/pronto/pronto_wlan.ko` | 5,778,672 | `1894373d68175b0f54fc7a0a51ede96c18b59b02b5b2935778821c73ef636356` |
 | `/system/framework/services.jar` | 2,411,806 | `fe16a79876b4b7a36fe2865c6009705a06e0e267705dd9c5622bd73db8f63b0c` |
+| `/system/vendor/lib64/libdpmframework.so` | 223,232 | `a488d2ae22f2d44896f7ff3e7d56ae44bebf3f6e85a90c595c27e275a219b8b0` |
+| `boot` (`mmcblk0p19`, raw stock) | 33,554,432 | `054bf05a86309db3de83a9818d2d4cd71d26148a84b0f13e00b2b1d8a52bd20c` |
+| `system` (`mmcblk0p22`, scrubbed raw stock) | 1,288,491,008 | `febe653d74cd15329d1b11761fdf7b72fddc8c27202be6f7e5167f2d28acba51` |
 
 Note: `/system/lib/modules/adsprpc.ko` and `/system/xbin/su` are both `missing` (so the `adsprpc.ko`
 slot from [community-root-and-network-adb.md](community-root-and-network-adb.md) is also free on
@@ -507,20 +547,20 @@ npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --undo --bac
 
 # Re-apply the saved USB ADB hook later from the backup folder without Wi-Fi AP
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --apply-adb --backup-dir <out>/backup
+
+# Step 4 raw system + boot backup over USB only (when authorized USB ADB is already active; uses adb forward)
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-only --backup-dir <out>/backup --backup-module <external-ko>
 ```
 
 ## Open questions
 
-1. **Full raw `system` / `boot` backup from untouched stock `1.24.0`:** `untrusted_app`, `shell`,
-   and `qti_init_shell` cannot read `mmcblk0p22` / `mmcblk0p19` or load a module. The prepared path
-   is the `dpmd` constructor hook in [`tools/mirror/src/dpmd-hook.ts`](../../../tools/mirror/src/dpmd-hook.ts),
-   driven by `stock-surgical-adb.ts --backup-module <ko>` (the `.ko` stays outside the repo). What
-   is still open is the on-panel run: a `.ko` whose `module_layout` CRC is `0xa5b7f7dd` and whose
-   `kallsyms_lookup_name` CRC matches this kernel (community `genksyms` value `0xe007de41`,
-   **untested** here), then flash `patch-dpmd.sparse`, confirm `getenforce` goes Permissive and both
-   block nodes are readable, stream the two partitions, confirm the saved `system` image hashes as
-   stock after the scrub, and flash `restore-dpmd.sparse`. That boot has not been done. The `.ko`
-   stays outside the repo.
+1. **Full raw `system` / `boot` backup from untouched stock `1.24.0` — solved (2026-11-25, verified):**
+   The `dpmd` constructor hook in [`tools/mirror/src/dpmd-hook.ts`](../../../tools/mirror/src/dpmd-hook.ts)
+   (driven by `--backup-module <ko>` or USB-only `--backup-only`) loaded the external module on the
+   first boot (`getenforce=Permissive`, `blockReadable=true`), streamed raw `system` (`1,288,491,008` B)
+   and `boot` (`33,554,432` B) cleanly, scrubbed all patched extents back to verified untouched stock
+   hashes, and restored `libdpmframework.so`. Both raw images and the external `.ko` stay strictly
+   outside the repo.
 2. **Does Glass Panes `mirror-android-2` / `mirror-android-3` break Wi-Fi on `1.24.0` units?**
    Even though `__versions` CRCs match (`module_layout=0xa5b7f7dd`, `printk=0x27e1a049`,
    `__kmalloc=0xd2b09ce5`) and Linux 3.10's `same_magic()` ignores the `-perf-g...` prefix under

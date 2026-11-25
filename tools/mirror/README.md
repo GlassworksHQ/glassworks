@@ -186,6 +186,7 @@ npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --preflight-
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --build-only                      # Steps 1-2 locally (no flash)
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --keep-adb                        # Steps 1-3: reversible authorized USB ADB (Enforcing)
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-module <ko> --keep-adb   # Steps 1-4: dpmd hook, raw system+boot, then restore the library
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-only --backup-dir <out>/backup --backup-module <ko>  # Step 4 only over USB (adb forward, no SoftAP swap)
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --undo --backup-dir <out>/backup  # Restore untouched stock system (add --erase-userdata for factory reset)
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --apply-adb --backup-dir <out>/backup  # Re-apply saved USB ADB hook without Wi-Fi AP
 ```
