@@ -165,6 +165,30 @@ test('no copy leaves the island as it is', () => {
   assert.deepEqual(Object.fromEntries(s.m), { a: '1' });
 });
 
+test('a replacement that does not fit keeps the old value as HA\'s, so a later removal still removes it', () => {
+  const s = new MemStorage();
+  vitroSeedStorage(s, HA, { k: 'a' });
+  const put = s.setItem;
+  s.setItem = function (k, v) { if (k === 'k') throw new Error('QuotaExceededError'); put.call(this, k, v); };
+  vitroSeedStorage(s, HA, { k: 'a much longer value' });
+  assert.equal(s.getItem('k'), 'a');
+  s.setItem = put;
+  vitroSeedStorage(s, HA, {}); // HA dropped it; the island never changed it
+  assert.equal(s.getItem('k'), null);
+});
+
+test('a removal that fails is tried again at the next start', () => {
+  const s = new MemStorage();
+  vitroSeedStorage(s, HA, { k: 'a' });
+  const remove = s.removeItem;
+  s.removeItem = function () { throw new Error('nope'); };
+  vitroSeedStorage(s, HA, {});
+  assert.equal(s.getItem('k'), 'a');
+  s.removeItem = remove;
+  vitroSeedStorage(s, HA, {});
+  assert.equal(s.getItem('k'), null);
+});
+
 test('a full storage drops the keys that do not fit and keeps going', () => {
   const s = new MemStorage();
   s.setItem = function (k, v) { if (k === 'big') throw new Error('QuotaExceededError'); this.m.set(k, String(v)); };

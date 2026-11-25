@@ -609,7 +609,8 @@ function vitroSeedStorage(store, origin, seed) {
     if (b && b.origin === origin && b.items && typeof b.items === 'object') base = b.items;
   } catch (e) {}
   let changed = 0;
-  // A key the island couldn't store (a full storage) stays out of what it took, so the next start tries it again.
+  // A key the island couldn't store or remove keeps what it took before (or stays out of it), so the next start tries
+  // it again and still knows the value the island holds came from HA.
   const failed = new Set();
   const set = (k, v) => { try { store.setItem(k, v); changed++; } catch (e) { failed.add(k); } };
   for (const k of Object.keys(seed)) {
@@ -619,10 +620,15 @@ function vitroSeedStorage(store, origin, seed) {
   }
   for (const k of Object.keys(base)) {
     if (k === BASE || Object.prototype.hasOwnProperty.call(seed, k)) continue;
-    if (store.getItem(k) === base[k]) { try { store.removeItem(k); changed++; } catch (e) {} }
+    if (store.getItem(k) === base[k]) { try { store.removeItem(k); changed++; } catch (e) { failed.add(k); } }
   }
   const took = {};
-  for (const k of Object.keys(seed)) if (!failed.has(k)) took[k] = seed[k];
+  const had = (k) => Object.prototype.hasOwnProperty.call(base, k);
+  for (const k of Object.keys(seed)) {
+    if (!failed.has(k)) took[k] = seed[k];
+    else if (had(k)) took[k] = base[k];
+  }
+  for (const k of failed) if (!Object.prototype.hasOwnProperty.call(seed, k) && had(k)) took[k] = base[k];
   try { store.setItem(BASE, JSON.stringify({ origin: origin, items: took })); } catch (e) {}
   return changed;
 }
