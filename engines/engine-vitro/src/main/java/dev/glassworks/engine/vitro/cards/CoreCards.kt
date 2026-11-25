@@ -47,6 +47,8 @@ import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.bindHoldAction
 import dev.glassworks.ui.Inter
 import dev.glassworks.engine.vitro.ui.VitroFonts
+import dev.glassworks.engine.vitro.ui.A11yRole
+import dev.glassworks.engine.vitro.ui.VitroAccess
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -219,6 +221,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     /** HA draws the tile icon's tinted shape only when the icon has an action. */
     private var iconInteractive = true
+
+    /** The icon's action is HA's toggle (its default for the domains that have one). */
+    private var iconToggles = false
 
     /** The tile's own content, hidden while HA would show "Entity not found" instead. */
     private var tileBody: View? = null
@@ -485,6 +490,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val iconDefault = if (entityId?.substringBefore('.') in ICON_TOGGLE_DOMAINS || entityId?.substringBefore('.') in PRESS_DOMAINS) "toggle" else "none"
         val iconTapAction = ActionConfig.parse(config.raw.optJSONObject("icon_tap_action"), iconDefault)
         iconInteractive = iconTapAction.action != "none"
+        iconToggles = iconTapAction.action == "toggle"
         val holdAction = holdActionFor(config.raw, entityId)
 
         isClickable = true
@@ -534,6 +540,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             }
         } else {
             titleView.text = config.name ?: config.title ?: "Tile"
+            // No entity: the icon's action still needs a name, the tile's own or what it does.
+            if (iconInteractive) iconWrap.contentDescription = config.name ?: config.title
+                ?: ActionConfig.parse(config.raw.optJSONObject("icon_tap_action"), "none").action.replace('-', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
             stateView.visibility = GONE
             updateBadge(null, active = false)
         }
@@ -626,6 +635,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                                     isClickable = true
                                     applyHaRipple(this, 8f * ctx.dp, ctx.theme.dark)
                                     contentDescription = mode.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
+                                    // ha-control-select: a radio per mode, checked on the current one.
+                                    VitroAccess.role(this, A11yRole.RADIO) { ctx.store[entityId]?.state == mode }
                                     addView(icon, LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)))
                                     setOnClickListener {
                                         ctx.callService("climate", "set_hvac_mode", data().put("hvac_mode", mode), null)
@@ -647,47 +658,102 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                     }
                 }
                 "target-temperature" -> {
+                    // hui-target-temperature-card-feature: ha-control-number-buttons for the target, or two side by
+                    // side (12 px apart) for a heat/cool range, each kept on its side of the other. Each is the value
+                    // centered across its whole width with 35 px − and + over its ends; at 100 px or less the unit
+                    // goes (`@container (max-width: 100px)`), so narrow tiles keep both numbers.
                     val unit = ThermostatCardView.temperatureUnit(ctx)
-                    val value = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
-                        gravity = Gravity.CENTER
-                        fontFeatureSettings = "tnum"
-                    }
-                    var pending: Double? = null
-                    fun step(sign: Int) {
-                        val st = ctx.store[entityId]
-                        val stepSize = num(st, "target_temp_step")?.takeIf { it > 0 } ?: 0.5
-                        val cur = pending ?: num(st, "temperature") ?: return
-                        val next = (Math.round((cur + sign * stepSize) / stepSize) * stepSize)
-                            .coerceIn(num(st, "min_temp") ?: 7.0, num(st, "max_temp") ?: 35.0)
-                        pending = next
-                        value.text = formatTemp(next, unit)
-                        ctx.callService("climate", "set_temperature", data().put("temperature", next), null)
-                    }
-                    fun stepButton(iconName: String, sign: Int, label: String) = LinearLayout(ctx.context).apply {
-                        gravity = Gravity.CENTER
-                        isClickable = true
-                        applyHaRipple(this, 10f * ctx.dp, ctx.theme.dark)
-                        contentDescription = label
-                        addView(MdiIconView(ctx.context).apply { setIcon(iconName, ctx.theme.primaryTextColor) },
-                            LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)))
-                        setOnClickListener { step(sign) }
-                    }
-                    val stepper = LinearLayout(ctx.context).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        gravity = Gravity.CENTER_VERTICAL
-                        background = GradientDrawable().apply {
-                            cornerRadius = 10f * ctx.dp
-                            setColor(if (ctx.theme.dark) SEGMENT_DARK else SEGMENT_LIGHT)
+                    fun step(handle: ClimateHandle?, sign: Int) {
+                        val st = ctx.store[entityId] ?: return
+                        val t = ClimateTargets.of(st.attributes)
+                        val stepSize = ClimateTargets.stepOf(st.attributes, unit)
+                        val min = num(st, "min_temp") ?: 7.0
+                        val max = num(st, "max_temp") ?: 35.0
+                        // Written through the shared optimistic path: every view of the entity shows the new value at
+                        // once, the next press steps from it, and a refusal puts HA's value back everywhere.
+                        if (handle == null) {
+                            val cur = t.value ?: return
+                            // Rounded to the step's decimals, then kept within the device's limits.
+                            val next = ClimateTargets.roundToStep(Math.round((cur + sign * stepSize) / stepSize) * stepSize, stepSize).coerceIn(min, max)
+                            if (next == cur) return
+                            ctx.callOptimistic(ClimateTargets.withValue(st, next), "climate", "set_temperature", data().put("temperature", next))
+                        } else {
+                            if (!t.isRange) return
+                            val (lo, hi) = ClimateTargets.stepped(handle, sign * stepSize, t.low ?: return, t.high ?: return, min, max)
+                            if (lo == t.low && hi == t.high) return
+                            ctx.callOptimistic(ClimateTargets.withRange(st, lo, hi), "climate", "set_temperature", ClimateTargets.rangeData(entityId, lo, hi))
                         }
-                        addView(stepButton("mdi:minus", -1, "Lower target temperature"), LinearLayout.LayoutParams(ctx.px(48f), MATCH_PARENT))
-                        addView(value, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-                        addView(stepButton("mdi:plus", 1, "Raise target temperature"), LinearLayout.LayoutParams(ctx.px(48f), MATCH_PARENT))
                     }
-                    rootCol.addView(stepper, lp())
-                    featureBinders += { s ->
-                        pending = null
-                        value.text = num(s, "temperature")?.let { formatTemp(it, unit) } ?: "–"
+                    /** One ha-control-number-buttons: its value view, and whether it's narrow enough to drop the unit. */
+                    class NumberButtons(val root: FrameLayout, val value: TextView) {
+                        var narrow = false
                     }
+                    var show: () -> Unit = {}
+                    fun numberButtons(handle: ClimateHandle?): NumberButtons {
+                        val value = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+                            gravity = Gravity.CENTER
+                            fontFeatureSettings = "tnum"
+                            maxLines = 1
+                        }
+                        fun stepButton(iconName: String, sign: Int) = FrameLayout(ctx.context).apply {
+                            isClickable = true
+                            isFocusable = true
+                            applyHaRipple(this, 10f * ctx.dp, ctx.theme.dark)
+                            contentDescription = ThermostatCardView.stepperLabel(sign, handle)
+                            addView(MdiIconView(ctx.context).apply { setIcon(iconName, ctx.theme.primaryTextColor) },
+                                FrameLayout.LayoutParams(ctx.px(16f), ctx.px(16f), Gravity.CENTER))
+                            setOnClickListener { step(handle, sign) }
+                        }
+                        var group: NumberButtons? = null
+                        val root = object : FrameLayout(ctx.context) {
+                            override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+                                super.onSizeChanged(w, h, oldw, oldh)
+                                val narrow = w <= ctx.px(100f)
+                                group?.let { g -> if (g.narrow != narrow) { g.narrow = narrow; post { show() } } }
+                            }
+                        }.apply {
+                            background = GradientDrawable().apply {
+                                cornerRadius = 10f * ctx.dp
+                                setColor(if (ctx.theme.dark) SEGMENT_DARK else SEGMENT_LIGHT)
+                            }
+                            addView(value, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                            addView(stepButton("mdi:minus", -1), FrameLayout.LayoutParams(ctx.px(35f), MATCH_PARENT, Gravity.START))
+                            addView(stepButton("mdi:plus", 1), FrameLayout.LayoutParams(ctx.px(35f), MATCH_PARENT, Gravity.END))
+                        }
+                        return NumberButtons(root, value).also { group = it }
+                    }
+                    val single = numberButtons(null)
+                    val low = numberButtons(ClimateHandle.LOW)
+                    val high = numberButtons(ClimateHandle.HIGH)
+                    val rangeRow = LinearLayout(ctx.context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        addView(low.root, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+                        addView(high.root, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { marginStart = ctx.px(12f) })
+                    }
+                    val holder = FrameLayout(ctx.context).apply {
+                        addView(single.root, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                        addView(rangeRow, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                    }
+                    rootCol.addView(holder, lp())
+                    show = {
+                        val st = ctx.store[entityId]
+                        val t = st?.let { ClimateTargets.of(it.attributes) }
+                        val digits = ClimateTargets.decimalsOf(st?.let { ClimateTargets.stepOf(it.attributes, unit) } ?: 0.5)
+                        val range = t?.isRange == true
+                        single.root.visibility = if (range) GONE else VISIBLE
+                        rangeRow.visibility = if (range) VISIBLE else GONE
+                        // HA's number: the step's decimals, then the unit unless the buttons are narrow.
+                        fun fill(g: NumberButtons, v: Double?, name: String) {
+                            val number = v?.let { String.format(Locale.US, "%.${digits}f", it) }
+                            g.value.text = number?.let { if (g.narrow) it else "$it $unit" } ?: "–"
+                            // HA's spin button, named after the target, with its unit always.
+                            g.value.contentDescription = "$name, " + (number?.let { "$it $unit" } ?: "–")
+                        }
+                        fill(single, t?.value, ClimateTargets.VALUE_NAME)
+                        fill(low, t?.low, ClimateTargets.LOW_NAME)
+                        fill(high, t?.high, ClimateTargets.HIGH_NAME)
+                    }
+                    featureBinders += { _ -> show() }
                 }
                 "fan-speed" -> {
                     val slider = HaHorizontalSliderView(ctx, ctx.theme.activeColor("fan"), haGeometry = true) { frac ->
@@ -803,6 +869,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                             applyHaRipple(this, 12f * ctx.dp, ctx.theme.dark)
                             contentDescription = label
                         }
+                        // ha-control-switch's two states as TalkBack choices, the one it shows checked.
+                        VitroAccess.role(half, A11yRole.RADIO) { half.isSelected }
                         hits.addView(half, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
                         on to half
                     }
@@ -1191,6 +1259,17 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         if (interactiveIcon) {
             avatar.isClickable = true
             avatar.setOnClickListener { ctx.performAction(iconAction, config.entity) }
+            // Named for TalkBack like the tile's icon: "Toggle AC" for Mushroom's default toggle, else the card's name.
+            VitroAccess.role(avatar, A11yRole.BUTTON, name = {
+                val n = primary.text?.toString()?.takeIf { it.isNotBlank() }
+                    ?: config.entity?.let { ctx.store[it]?.displayName ?: it }
+                when {
+                    iconAction.action == "toggle" && n != null -> "Toggle $n"
+                    n != null -> n
+                    // No name to give it: what it does ("Navigate", "Perform action").
+                    else -> iconAction.action.replace('-', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
+                }
+            })
         }
 
         val entityId = config.entity
@@ -1287,6 +1366,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         stateView.visibility = if (hideState) GONE else VISIBLE
         stateView.text = s?.formattedState() ?: "…"
         updateBadge(s, active = s?.isActive == true)
+        // The icon's own action, named for TalkBack: "Toggle Desk lamp" for HA's default toggle, else the entity.
+        if (iconInteractive) iconWrap.contentDescription = if (iconToggles) "Toggle ${titleView.text}" else titleView.text
     }
 
     /**
@@ -1923,6 +2004,14 @@ internal class HaSwitchView(private val ctx: VitroCardContext) : View(ctx.contex
 
     val isOn: Boolean get() = on
 
+    /** `ha-switch`: a switch for TalkBack, checked while on. */
+    override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        info.className = "android.widget.Switch"
+        info.isCheckable = true
+        info.isChecked = on
+    }
+
     /** Slides to [value] over 180 ms on screen; snaps on the first bind before the row is attached. */
     fun setOn(value: Boolean) {
         if (value == on) return
@@ -2010,6 +2099,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
             if (masterSwitch != null) {
                 masterSwitch.isClickable = true
+                masterSwitch.contentDescription = "Toggle entities"
                 masterSwitch.setOnClickListener {
                     val turnOn = !masterSwitch.isOn
                     masterSwitch.setOn(turnOn)
@@ -2175,6 +2265,8 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                 iconView.setIcon(MdiIcons.resolveIconName(rowCfg.icon, s), tint)
                 nameView.text = rowCfg.name ?: s?.displayName ?: rowCfg.entity
+                // ha-entity-toggle's label: "Toggle Desk lamp".
+                if (isSwitchable) switchView.contentDescription = "Toggle ${nameView.text}"
                 secondaryView?.text = if (rowCfg.secondaryInfo == "last-updated") {
                     s?.copy(lastChanged = s.lastUpdated.takeIf { it > 0.0 } ?: s.lastChanged)?.relativeLastChanged(ctx.now() / 1000.0)
                 } else {
@@ -3056,6 +3148,12 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         }
     }
 
+    /** An icon-only chip's name: its entity's, else its type's ("Back", "Menu"). */
+    private fun chipName(c: JSONObject, type: String): String =
+        c.optString("entity", "").ifEmpty { null }?.let { ctx.store[it]?.displayName ?: it }
+            ?: c.optString("name", "").ifEmpty { null }
+            ?: type.replaceFirstChar { it.titlecase(Locale.ROOT) }
+
     private fun buildChip(c: JSONObject): LinearLayout {
         val type = c.optString("type", "entity")
         val st = style
@@ -3097,6 +3195,8 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         fun setLabel(text: String) {
             label.text = text
             label.visibility = if (text.isEmpty()) GONE else VISIBLE
+            // A chip with an icon alone is named for TalkBack after its entity, or what it does.
+            chip.contentDescription = if (text.isEmpty()) chipName(c, type) else null
             syncGap()
         }
 

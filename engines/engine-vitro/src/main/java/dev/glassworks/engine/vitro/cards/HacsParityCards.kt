@@ -984,31 +984,69 @@ class MushroomClimateCardView(ctx: VitroCardContext, config: CardConfig) : Mushr
     private var activeControl: String? = null
     private val tempValue = label(ctx, 14f, ctx.theme.primaryTextColor, 700).apply { gravity = Gravity.CENTER }
     /** mushroom-input-number: − value + on one 42 px pill. */
-    private val tempControl = LinearLayout(ctx.context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        background = GradientDrawable().apply {
-            cornerRadius = ctx.px(12f).toFloat()
-            setColor(CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.05f))
-        }
-        fun stepper(icon: String, description: String, dir: Int) = FrameLayout(ctx.context).apply {
-            isClickable = true
-            contentDescription = description
-            addView(MdiIconView(ctx.context).apply { setIcon(icon, ctx.theme.primaryTextColor) },
-                FrameLayout.LayoutParams(controlIconPx, controlIconPx, Gravity.CENTER))
-            setOnClickListener { step(dir) }
-            applyHaRipple(this, ctx.px(12f).toFloat(), ctx.theme.dark)
-        }
-        addView(stepper("mdi:minus", "Decrease", -1), LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)))
-        addView(tempValue, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-        addView(stepper("mdi:plus", "Increase", +1), LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)))
+    private val tempControl = inputNumber(tempValue, null, "Decrease", "Increase") { step(it) }
+
+    /**
+     * A heat/cool range: Mushroom's two input numbers side by side, the low end washed in the heat color and the high
+     * end in the cool color (`--rgb-state-climate-heat` / `-cool` at 5 %, the icons and the value in it).
+     */
+    private val lowValue = label(ctx, 14f, HEAT, 700).apply { gravity = Gravity.CENTER }
+    private val highValue = label(ctx, 14f, COOL, 700).apply { gravity = Gravity.CENTER }
+    private val rangeControl = android.widget.HorizontalScrollView(ctx.context).apply {
+        // Mushroom's `.actions` scroll sideways (`overflow-x: auto`) when the inputs can't shrink further: a narrow
+        // horizontal card keeps both values whole and lets the row scroll, as Mushroom does.
+        isHorizontalScrollBarEnabled = false
+        isFillViewport = true
+        addView(LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(inputNumber(lowValue, HEAT, "Decrease lower target temperature", "Increase lower target temperature") {
+                stepRange(ClimateHandle.LOW, it)
+            }, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+            addView(inputNumber(highValue, COOL, "Decrease upper target temperature", "Increase upper target temperature") {
+                stepRange(ClimateHandle.HIGH, it)
+            }, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { marginStart = ctx.px(10f) })
+        }, FrameLayout.LayoutParams(WRAP_CONTENT, MATCH_PARENT))
     }
+
+    /**
+     * One mushroom-input-number around [value]: 6 px in, − and + as their icons with 4 px on the outer side, the value
+     * between them at least 20 px wide (`flex-basis: 20px`, no shrinking), in [tint] (else the text color) on its 5 %
+     * wash. It shrinks to that and no further.
+     */
+    private fun inputNumber(value: TextView, tint: Int?, minusLabel: String, plusLabel: String, onStep: (Int) -> Unit) =
+        LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val pad = ctx.px(6f)
+            setPadding(pad, pad, pad, pad)
+            background = GradientDrawable().apply {
+                cornerRadius = ctx.px(12f).toFloat()
+                setColor(CardSurface.withAlpha(tint ?: ctx.theme.primaryTextColor, 0.05f))
+            }
+            fun stepper(icon: String, description: String, dir: Int) = FrameLayout(ctx.context).apply {
+                isClickable = true
+                contentDescription = description
+                val outer = ctx.px(4f)
+                if (dir < 0) setPadding(outer, 0, 0, 0) else setPadding(0, 0, outer, 0)
+                addView(MdiIconView(ctx.context).apply { setIcon(icon, tint ?: ctx.theme.primaryTextColor) },
+                    FrameLayout.LayoutParams(controlIconPx, controlIconPx, Gravity.CENTER))
+                setOnClickListener { onStep(dir) }
+                applyHaRipple(this, ctx.px(12f).toFloat(), ctx.theme.dark)
+            }
+            addView(stepper("mdi:minus", minusLabel, -1), LinearLayout.LayoutParams(WRAP_CONTENT, MATCH_PARENT))
+            value.minWidth = ctx.px(20f)
+            addView(value, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            addView(stepper("mdi:plus", plusLabel, +1), LinearLayout.LayoutParams(WRAP_CONTENT, MATCH_PARENT))
+            minimumWidth = 2 * pad + 2 * (ctx.px(4f) + controlIconPx) + ctx.px(20f)
+        }
+
     private val modeRow = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
     private val modeButtons = LinkedHashMap<String, FrameLayout>()
     private val switchButtons = LinkedHashMap<String, View>()
 
     init {
         row.addView(tempControl, LinearLayout.LayoutParams(0, ctx.px(42f), 1f))
+        row.addView(rangeControl, LinearLayout.LayoutParams(0, ctx.px(42f), 1f))
         row.addView(modeRow, LinearLayout.LayoutParams(0, ctx.px(42f), 1f))
         CONTROL_ICONS.forEach { (c, icon) ->
             val b = mushroomButton(icon, if (c == "temperature_control") "Temperature" else "HVAC modes") {
@@ -1022,13 +1060,35 @@ class MushroomClimateCardView(ctx: VitroCardContext, config: CardConfig) : Mushr
     }
 
     private fun step(dir: Int) {
-        val s = eid?.let { ctx.store[it] } ?: return
+        val id = eid ?: return
+        val s = ctx.store[id] ?: return
         val cur = (s.attributes["temperature"] as? Number)?.toDouble() ?: return
         val step = stepOf(s)
         val min = (s.attributes["min_temp"] as? Number)?.toDouble() ?: Double.NEGATIVE_INFINITY
         val max = (s.attributes["max_temp"] as? Number)?.toDouble() ?: Double.POSITIVE_INFINITY
         val next = (Math.round((cur + dir * step) / step) * step).coerceIn(min, max)
-        call("climate", "set_temperature") { it.put("temperature", next) }
+        // Optimistic, so a second press steps from the first one's value, as Mushroom's own pending value does.
+        ctx.callOptimistic(ClimateTargets.withValue(s, next), "climate", "set_temperature",
+            JSONObject().put("entity_id", id).put("temperature", next))
+    }
+
+    /**
+     * One end of the range a step up or down: Mushroom sends that end with the other one as it is; the end stays
+     * within the device's min and max and, as HA's climate service requires, the low end never passes the high one.
+     */
+    private fun stepRange(handle: ClimateHandle, dir: Int) {
+        val id = eid ?: return
+        val s = ctx.store[id] ?: return
+        val targets = ClimateTargets.of(s.attributes)
+        // A single target wins: a range button left from before the state changed sends nothing.
+        if (!targets.isRange) return
+        val low = targets.low ?: return
+        val high = targets.high ?: return
+        val min = (s.attributes["min_temp"] as? Number)?.toDouble() ?: Double.NEGATIVE_INFINITY
+        val max = (s.attributes["max_temp"] as? Number)?.toDouble() ?: Double.POSITIVE_INFINITY
+        val (lo, hi) = ClimateTargets.stepped(handle, dir * stepOf(s), low, high, min, max)
+        if (lo == low && hi == high) return
+        ctx.callOptimistic(ClimateTargets.withRange(s, lo, hi), "climate", "set_temperature", ClimateTargets.rangeData(id, lo, hi))
     }
 
     /** `target_temp_step`, else HA's default: 0.5 in °C, 1 in °F. */
@@ -1039,8 +1099,8 @@ class MushroomClimateCardView(ctx: VitroCardContext, config: CardConfig) : Mushr
     private fun controlsFor(s: EntityState?): List<String> {
         if (s == null) return emptyList()
         val out = ArrayList<String>(2)
-        val target = s.attributes["temperature"] != null ||
-            (s.attributes["target_temp_low"] != null && s.attributes["target_temp_high"] != null)
+        // A target to show, read as the control reads it (a range needs its feature bit).
+        val target = ClimateTargets.of(s.attributes).let { it.value != null || it.isRange }
         if (target && config.raw.optBoolean("show_temperature_control")) out += "temperature_control"
         if (modesOf(s).isNotEmpty()) out += "hvac_mode_control"
         return out
@@ -1067,19 +1127,27 @@ class MushroomClimateCardView(ctx: VitroCardContext, config: CardConfig) : Mushr
 
         val available = controlsFor(s)
         if (activeControl !in available) activeControl = available.firstOrNull()
-        tempControl.visibility = if (activeControl == "temperature_control") VISIBLE else GONE
+        // Mushroom: the single target when there is one, else the range.
+        val targets = s?.let { ClimateTargets.of(it.attributes) }
+        val range = targets?.isRange == true
+        tempControl.visibility = if (activeControl == "temperature_control" && !range) VISIBLE else GONE
+        rangeControl.visibility = if (activeControl == "temperature_control" && range) VISIBLE else GONE
         modeRow.visibility = if (activeControl == "hvac_mode_control") VISIBLE else GONE
         switchButtons.forEach { (c, b) -> b.visibility = if (available.size > 1 && c != activeControl && c in available) VISIBLE else GONE }
         if (s != null) {
             val target = (s.attributes["temperature"] as? Number)?.toDouble()
             val decimals = if (stepOf(s) % 1.0 == 0.0) 0 else 1
             tempValue.text = target?.let { String.format(Locale.US, "%.${decimals}f", it) } ?: "–"
+            lowValue.text = targets?.low?.let { String.format(Locale.US, "%.${decimals}f", it) } ?: "–"
+            highValue.text = targets?.high?.let { String.format(Locale.US, "%.${decimals}f", it) } ?: "–"
             val modes = modesOf(s)
             if (modeButtons.keys.toList() != modes) {
                 modeRow.removeAllViews()
                 modeButtons.clear()
                 modes.forEach { m ->
                     val b = mushroomButton(MODE_ICONS[m] ?: "mdi:thermostat", m) { call("climate", "set_hvac_mode") { it.put("hvac_mode", m) } }
+                    // Mushroom's mode buttons pick one mode: radios, checked on the current one.
+                    dev.glassworks.engine.vitro.ui.VitroAccess.role(b, dev.glassworks.engine.vitro.ui.A11yRole.RADIO) { eid?.let { ctx.store[it] }?.state == m }
                     modeButtons[m] = b
                     addCell(modeRow, b)
                 }
@@ -1110,6 +1178,8 @@ class MushroomClimateCardView(ctx: VitroCardContext, config: CardConfig) : Mushr
         val ACTION_ICONS = mapOf("cooling" to "mdi:snowflake", "drying" to "mdi:water-percent", "heating" to "mdi:fire", "idle" to "mdi:clock-outline")
         val CONTROL_ICONS = mapOf("temperature_control" to "mdi:thermometer", "hvac_mode_control" to "mdi:thermostat")
         val GREY = 0xFF9E9E9E.toInt()
+        val HEAT = MODE_COLORS.getValue("heat")
+        val COOL = MODE_COLORS.getValue("cool")
 
         fun formatNumber(v: Double): String =
             if (v % 1.0 == 0.0) v.toLong().toString() else String.format(Locale.US, "%.1f", v).trimEnd('0').trimEnd('.')
