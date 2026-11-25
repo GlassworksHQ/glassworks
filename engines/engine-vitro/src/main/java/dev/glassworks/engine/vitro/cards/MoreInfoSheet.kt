@@ -1296,8 +1296,17 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
             clipToOutline = true
         }
+        // The live players' views, over the still, in its rounded shape.
+        val streamHost = FrameLayout(ctx.context).apply {
+            background = GradientDrawable().apply {
+                cornerRadius = 16f * ctx.dp
+                setColor(Color.TRANSPARENT)
+            }
+            clipToOutline = true
+        }
         val frame = FrameLayout(ctx.context).apply {
             addView(image, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            addView(streamHost, LayoutParams(MATCH_PARENT, MATCH_PARENT))
             addView(liveBadge(), LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
                 topMargin = ctx.px(10f); marginEnd = ctx.px(10f)
             })
@@ -1307,8 +1316,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         body.addView(status, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(12f) })
 
         var picture: String? = ctx.store[id]?.entityPicture
-        // MJPEG first, snapshots every 1.5 s if the stream isn't there; posted so the first state bind lands first.
-        val feed = LiveCameraFeed(ctx, id, { picture }) { bmp -> image.setImageBitmap(bmp) }
+        // HA's ha-camera-stream (WebRTC, HLS, then MJPEG), snapshots every 1.5 s if none plays; posted so the first
+        // state bind lands first.
+        val feed = LiveCameraFeed(ctx, id, { picture }, host = streamHost, cardType = "more-info") { bmp -> image.setImageBitmap(bmp) }
         var open = true
         releasers += {
             open = false
