@@ -1961,6 +1961,16 @@ def path_word(runs):
     return " and ".join(KIND_WORDS.get(p, p) for p in paths) or "its path"
 
 
+def stored_fallbacks(r):
+    """A Vitro camera run's `fallbacks`, one per camera. A run stored before the field (a report.json regrade.py reads
+    again) gets them from its `detail` by the same rule (camera_fallback reads `transport`, `first_frame_ms` and `others`,
+    which detail keeps), so it reads as it did."""
+    if r.get("fallbacks") is not None:
+        return r["fallbacks"]
+    detail = r.get("detail") or []
+    return [camera_fallback(detail[i], r.get("path")) if i < len(detail) else None for i in range(len(r["transports"]))]
+
+
 def per_camera(counts, totals):
     """How many cameras of each run, in words: "3 of 4 cameras in each of 3 runs", or run by run when they differ
     ("3 of 4, 4 of 4 and 3 of 4 cameras in runs 1 to 3")."""
@@ -1984,7 +1994,7 @@ def camera_transports(ref):
             continue
         path = path_word(runs)
         totals = [len(r["transports"]) for r in runs]
-        fbs = [r.get("fallbacks") or [None] * len(r["transports"]) for r in runs]
+        fbs = [stored_fallbacks(r) for r in runs]
         on = [sum(1 for x in r["transports"] if x == r.get("path")) for r in runs]
         fell = [sum(1 for k in f if k) for f in fbs]
         blank = [sum(1 for x, k in zip(r["transports"], f) if x is None and not k) for r, f in zip(runs, fbs)]

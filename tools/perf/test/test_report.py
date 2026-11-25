@@ -1371,6 +1371,31 @@ class VitroCameras(unittest.TestCase):
             "heavy cameras on Vitro: over WebRTC, 3 of 4 cameras in each of 3 runs; **fell back to HLS, 1 of 4 cameras in "
             "each of 3 runs**, graded on WebRTC as on the web engine (mjpeg: the stream failed or dropped)."])
 
+    def test_a_camera_that_played_webrtc_then_fell_back_is_graded_on_its_webrtc_frames(self):
+        # WebRTC from 100 ms, then HLS at the window's end: it fell back, but it played, so it isn't failed outright.
+        line = vitro_camera_line("typical")
+        line["streams"][0].update(first_frame_ms=100.0, shown_pct=60.0, max_gap_ms=12000.0, stall_total_ms=12000.0,
+                                  transport="hls", others=[{"path": "hls", "first_frame_ms": 18100.0, "connected": True}])
+        run = R.camera_run(line, "typical")
+        self.assertEqual(run["fallbacks"], ["hls"])
+        self.assertEqual(run["fell_back"], ["hls"])
+        self.assertEqual(run["first_frame_ms"], 100.0)
+        self.assertEqual(G.camera_level(run), G.camera_level({k: v for k, v in run.items() if k not in ("fallbacks", "fell_back")}))
+        self.assertNotIn("never played", R.task_phrase("camera", {"camera_runs": [run]}))
+        import notes as N
+        self.assertNotIn("fell back", " ".join(w for _, w in N._camera_options(run)))
+
+    def test_a_stored_run_without_fallbacks_reads_as_it_did(self):
+        # regrade.py reads a report.json written before `fallbacks`: they come from its detail by the same rule.
+        line = vitro_camera_line("heavy")
+        line["streams"][3].update(first_frame_ms=None, shown_pct=None, max_gap_ms=None, stall_total_ms=None,
+                                  transport="mjpeg", others=[{"path": "mjpeg", "first_frame_ms": 900.0, "connected": True}])
+        run = R.camera_run(line, "heavy")
+        old = {k: v for k, v in run.items() if k != "fallbacks"}
+        ref = lambda r: {"tiers": {"heavy": {"camera_runs": [r]}}}  # noqa: E731
+        self.assertEqual(R.camera_transports(ref(old)), R.camera_transports(ref(run)))
+        self.assertIn("**fell back to MJPEG, 1 of 4 cameras in 1 run**", R.camera_transports(ref(old))[0])
+
     def test_a_camera_that_showed_nothing_is_said(self):
         line = vitro_camera_line("typical", shown="mjpeg")
         line["streams"][0].update(transport=None, others=[])

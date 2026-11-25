@@ -368,9 +368,13 @@ fallen back to in `fell_back`. A camera fell back when another kind was what it 
 wasn't: the kind showing at the window's end, or, for a camera that never played on its path, another kind that
 showed a picture. The hidden player of HA's side-by-side start (HLS shows until WebRTC has video) isn't a
 fallback once WebRTC played. report.md says it plainly, page by page and camera by camera: "heavy cameras on
-Vitro: over WebRTC, 3 of 4 cameras in each of 3 runs; **fell back to HLS, 1 of 4 cameras in each of 3 runs**". A
-camera that fell back on a graded view never played over WebRTC, so it fails the camera task, as a camera that
-doesn't play over WebRTC does on the web engine, and the page's limit says "a camera fell back to … on Vitro".
+Vitro: over WebRTC, 3 of 4 cameras in each of 3 runs; **fell back to HLS, 1 of 4 cameras in each of 3 runs**".
+What a fallback does to the grade depends on whether the camera played on its view's path first:
+
+| The camera | Its camera task, graded on the view's path (WebRTC) |
+|---|---|
+| Never showed a WebRTC frame, and showed another kind instead | Fails, as a camera that doesn't play over WebRTC does on the web engine. The page's limit says "a camera fell back to … on Vitro (it never played over WebRTC)" |
+| Showed WebRTC frames, then fell back to another kind | Graded on its WebRTC frames, under the same bars: the first frame stands, and the time after WebRTC stopped has no WebRTC frames, so it counts against frames shown and as a stall |
 
 Two differences, and what they mean:
 - **The pictures are timed on the main thread.** A stream reports each picture through its listener on the main
