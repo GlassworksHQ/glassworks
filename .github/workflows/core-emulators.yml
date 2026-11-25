@@ -23,9 +23,10 @@
 #   report   opens, updates or closes the issue for a red main
 #
 # Cost: six jobs in parallel, each about 10 minutes (the androidTest APK build, an emulator boot, under a minute
-# of tests); the engine contract adds about 4 minutes to the API 23 and 34 jobs (its APK build, GeckoView, a minute of tests). On main only when Android code
-# or this file changes; the nightly run and a manual run always. No secrets. The core's conformance test uses a fake
-# engine; the engine contract downloads GeckoView's x86_64 build for the runners' x86_64 emulators.
+# of tests); the engine contract adds about 4 minutes to the API 23 and 34 jobs (its APK build, GeckoView, a minute
+# of tests). On main only when Android code or this file changes; the nightly run and a manual run always. No
+# secrets. The core's conformance test uses a fake engine; the engine contract downloads GeckoView's x86_64 build
+# for the runners' x86_64 emulators.
 name: Emulator tests
 
 on:
