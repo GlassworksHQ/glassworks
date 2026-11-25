@@ -400,6 +400,7 @@ export function ImageError({ f, s }: P) {
       <p className="lede">{s.wifiOnFailed
         ? 'Wi-Fi didn\'t turn on yet. Check the details below and click Connect again when you\'re ready.'
         : s.bundleLost === 'restore' ? `Kiln can't finish this install without the bundle. Restore the original system with the restore point saved before the first write.`
+        : f.inPlace && s.notTaken ? `${cap(d.the)} started, but its system didn't take the change Kiln wrote, so Kiln stopped before installing anything. Restore the original system with the restore point saved before the write.`
         : s.work && !s.bundleLost && !['first-boot', 'hand-back', 'restart', 'wifi-on', 'app-install'].includes(s.work.step)
         ? `${cap(d.the)} is still in fastboot mode, so leave it plugged in. ${s.files.every((x) => x.state === 'ok') ? 'Click Try again to reconnect and pick up from fastboot.' : 'Click Try again to redownload the files and continue.'}`
         : 'Review the details below and click Try again when you\'re ready.'}</p>
@@ -417,11 +418,11 @@ export function ImageError({ f, s }: P) {
           {!s.wifiOnFailed && !f.inPlace && f.tryAgainLands() !== 'image' && <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to download</button>}
           {/* a stop after the restore point was saved: the way back, from fastboot, next to finishing the install */}
           {/* a stop in the app's install after a reload too: the restore point is in this browser, or in the zip */}
-          {f.inPlace && s.round === 2 && (s.restorePoint?.status === 'ready' || s.work?.step === 'app-install') && s.bundleLost !== 'restore' && <button type="button" className="btn ghost" onClick={() => void f.restoreAfterError()}>Restore the original system</button>}
+          {f.inPlace && s.round === 2 && (s.restorePoint?.status === 'ready' || s.work?.step === 'app-install') && s.bundleLost !== 'restore' && !s.notTaken && <button type="button" className="btn ghost" onClick={() => void f.restoreAfterError()}>Restore the original system</button>}
         </span>
         {/* the step that stopped, on its own screen: the first start over adb, a write over fastboot, else the download. A
             bundle lost after a write can't be built from again: the way back, on the restore point saved before it */}
-        {f.inPlace && s.bundleLost === 'restore' ? <button type="button" className="btn ember" onClick={() => void f.restoreAfterError()}>Restore the original system</button>
+        {f.inPlace && (s.bundleLost === 'restore' || s.notTaken) ? <button type="button" className="btn ember" onClick={() => void f.restoreAfterError()}>Restore the original system</button>
           : !s.wifiOnFailed && <button type="button" className="btn ember" onClick={() => f.tryAgain()}>Try again</button>}
       </div>
     </section>

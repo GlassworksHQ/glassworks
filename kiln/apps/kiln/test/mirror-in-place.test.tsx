@@ -50,11 +50,11 @@ function tab(): DeviceProgress & { mark?: ProgressMark } {
 interface Rig { image: ImageSession; dev: InPlaceSimDevice; store: InPlaceStore; progress: ReturnType<typeof tab>; flashed: string[]; adb: () => PanelShell }
 
 /** A session on a simulated stock Mirror; `store` and `progress` carry over to a second browser load or a second run. */
-function rig(o: { lan?: 'ok' | 'drop-midway' | 'offline' | 'lna-denied'; tampered?: boolean; refusedBuild?: boolean; store?: InPlaceStore; progress?: ReturnType<typeof tab>;
+function rig(o: { lan?: 'ok' | 'drop-midway' | 'offline' | 'lna-denied'; tampered?: boolean; refusedBuild?: boolean; systemNotTaken?: boolean; unreadable?: boolean; store?: InPlaceStore; progress?: ReturnType<typeof tab>;
   dev?: InPlaceSimDevice; deps?: Partial<ImageDeps>; code?: Partial<InPlaceCode>;
   /** a write (`flash <partition>`) or a restart (`reboot`) that fails, by what it is and how many such calls came before it */
   fail?: (what: string, n: number) => boolean } = {}): Rig {
-  const dev = o.dev ?? sim.device({ lan: o.lan ?? 'ok', tampered: o.tampered, refusedBuild: o.refusedBuild });
+  const dev = o.dev ?? sim.device({ lan: o.lan ?? 'ok', tampered: o.tampered, refusedBuild: o.refusedBuild, systemNotTaken: o.systemNotTaken, unreadable: o.unreadable });
   const store = o.store ?? memoryInPlaceStore();
   const progress = o.progress ?? tab();
   const flashed: string[] = [];
@@ -138,6 +138,9 @@ describe('Glassworks on the stock software', () => {
     const log = r.image.state.log.join('\n');
     expect(log).not.toContain(FAKE_SERIAL);
     expect(log).toContain('Device Owner: set');
+    // the bootloader can't read the system write back: Kiln reads services.jar back over adb before the app goes on
+    expect(log).toContain('services.jar on the Mirror matches what Kiln wrote');
+    expect(log.indexOf('matches what Kiln wrote')).toBeLessThan(log.indexOf('Installing'));
   });
 
   it('carries on over Bluetooth by itself when the local network drops halfway', async () => {
@@ -700,6 +703,87 @@ describe('a bundle this browser no longer has', () => {
   });
 });
 
+describe('the system write, read back after the restart', () => {
+  async function toAppInstall(o: Parameters<typeof rig>[0] = {}) {
+    const r = rig(o);
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    expect(r.image.state.screen).toBe('adb');
+    return r;
+  }
+  const installed = (r: Rig) => (r.dev.adb() as unknown as { installed?: number }).installed;
+
+  it('keeps what to read back in the tab\'s mark: paths and hashes, from the frame\'s build', async () => {
+    const r = await toAppInstall();
+    expect(r.progress.mark).toMatchObject({ at: 'flashed', readBack: [{ path: '/system/framework/services.jar', sha256: expect.stringMatching(/^[0-9a-f]{64}$/) }] });
+  });
+
+  it('a file that isn\'t what Kiln wrote stops before the app\'s install, with the way back as its one action', async () => {
+    const r = await toAppInstall({ systemNotTaken: true });
+    await r.image.connectAdb();
+    expect(r.image.state).toMatchObject({ screen: 'error', notTaken: true, work: { step: 'app-install' } });
+    expect(r.image.state.error).toMatch(/services\.jar on the Mirror isn't what Kiln wrote \(SHA-256 [0-9a-f]{12}…, expected [0-9a-f]{12}…\)\. Nothing was installed\./);
+    expect(installed(r)).toBeUndefined();
+    expect(r.image.state.log.join('\n')).not.toContain('Installing');
+    render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    const back = screen.getByRole('button', { name: 'Restore the original system' });
+    expect(back.className).toContain('ember');
+    await act(async () => { fireEvent.click(back); });
+    await vi.waitFor(() => expect(r.image.state).toMatchObject({ screen: 'undo', undo: { at: 'start', source: 'browser' } }));
+  });
+
+  it('a file Kiln can\'t read is said plainly in the log, and the install goes on', async () => {
+    const r = await toAppInstall({ unreadable: true });
+    await r.image.connectAdb();
+    expect(r.image.state.firstBoot).toBeTruthy();
+    const log = r.image.state.log.join('\n');
+    expect(log).toContain('Not read back: services.jar');
+    expect(log).toMatch(/couldn't read \/system\/framework\/services\.jar back from the Mirror \(.*Permission denied\), so this write is unchecked/);
+  });
+
+  it('a reload that resumes on the app\'s install still reads back, from the mark', async () => {
+    const r = await toAppInstall();
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress });
+    expect(b.image.state.screen).toBe('adb');
+    await b.image.connectAdb();
+    expect(b.image.state.firstBoot).toBeTruthy();
+    expect(b.image.state.log.join('\n')).toContain('services.jar on the Mirror matches what Kiln wrote');
+  });
+
+  it('a reload after a write that didn\'t take still stops there', async () => {
+    const r = await toAppInstall({ systemNotTaken: true });
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress });
+    await b.image.connectAdb();
+    expect(b.image.state).toMatchObject({ screen: 'error', notTaken: true });
+    expect(installed(r)).toBeUndefined();
+  });
+
+  it('a mark from before the read back says it can\'t check, and goes on', async () => {
+    const r = await toAppInstall();
+    const { readBack: _, ...old } = r.progress.mark!;
+    r.progress.mark = old;
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress });
+    await b.image.connectAdb();
+    expect(b.image.state.firstBoot).toBeTruthy();
+    expect(b.image.state.log.join('\n')).toContain('no record of which files the install changed');
+  });
+
+  it('the simulated Mirror\'s file follows the writes: Kiln\'s, then the way back\'s stock one', async () => {
+    const r = await toAppInstall();
+    const jar = () => r.dev.adb().pull!('/system/framework/services.jar').then(sha256Hex);
+    const stock = await sha256Hex((await buildFakeGwsbBundle()).jarBytes);
+    expect(await jar()).toBe(r.progress.mark?.readBack?.[0]?.sha256);
+    expect(await jar()).not.toBe(stock);
+    await r.image.startUndo();
+    await r.image.undoRestart();
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.at).toBe('done');
+    expect(await jar()).toBe(stock);
+  });
+});
+
 describe('routes and screens', () => {
   it('each screen is on its step\'s route, and undo has its own', () => {
     const routes = installRoutes(mirrorFrame.id);
@@ -718,7 +802,7 @@ describe('routes and screens', () => {
     expect(Object.keys(routesOf(mirrorFrame.id))).toEqual(expect.arrayContaining(['undo', 'undo/connect', 'undo/restore', 'undo/done']));
   });
 
-  it.each(['place-receive-file', 'place-restore-point', 'place-fastboot-again', 'place-undo', 'place-error-bundle', 'place-error-lost'] as const)('%s renders, with one ember button at most', async (d) => {
+  it.each(['place-receive-file', 'place-restore-point', 'place-fastboot-again', 'place-undo', 'place-error-bundle', 'place-error-lost', 'place-error-not-taken'] as const)('%s renders, with one ember button at most', async (d) => {
     const h = handTo();
     const { image, app } = await imageDemo(mirrorEntry, d, true, {}, h.handOver);
     render(<ImageFlow image={image} app={app} />);

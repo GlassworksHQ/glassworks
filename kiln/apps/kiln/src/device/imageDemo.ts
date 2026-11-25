@@ -19,7 +19,7 @@ export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downl
   'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes',
   'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed',
   ...['place-choose', 'place-stage', 'place-receive-lan', 'place-receive-ble', 'place-lna-denied', 'place-receive-file', 'place-restore-point',
-    'place-fastboot-again', 'place-working', 'place-error-bundle', 'place-error-lost', 'place-undo', 'place-run'] as const] as const;
+    'place-fastboot-again', 'place-working', 'place-error-bundle', 'place-error-lost', 'place-error-not-taken', 'place-undo', 'place-run'] as const] as const;
 export type ImageDemo = (typeof IMAGE_DEMOS)[number];
 
 const REFRACT_DOWN = 'the download proxy answered 502: GitHub answered 503';
@@ -215,6 +215,8 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
   const device = ip.device({
     lan: name === 'place-lna-denied' ? 'lna-denied' : name === 'place-receive-ble' ? 'offline' : 'ok',
     tampered: name === 'place-error-bundle',
+    // place-error-not-taken: fastboot takes the system write, but the started system still has the old file
+    systemNotTaken: name === 'place-error-not-taken',
     tick: (ms) => tick(ms),
     ...(fast ? {} : { bleFrameDelayMs: 120 }),
   });
@@ -291,6 +293,8 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
   }
   if (name === 'place-undo') { await image.startUndo(); return done; }
   await image.connectAdb();
+  // the read back after the restart stops it before the app's install: the way back is its one action
+  if (name === 'place-error-not-taken') return done;
   await standardDemo(standard, 'done');
   return done;
 }

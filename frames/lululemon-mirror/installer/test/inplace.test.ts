@@ -141,8 +141,13 @@ describe('the build', () => {
     const write = await bytes(built.writes['system-in-place']!);
     const restore = await bytes(built.restore);
     expect(() => checkInPlace({ write, restore, extents: read.extents, partitionBytes: SYSTEM_BYTES })).not.toThrow();
-    const m = built.manifest as { servicesJar: { restoreSparse: string; originalSha256: string; size: number }; deviceIdHash: string; systemBytes: number };
+    const m = built.manifest as { servicesJar: { restoreSparse: string; originalSha256: string; patchedSha256: string; size: number }; deviceIdHash: string; systemBytes: number };
     expect(m.servicesJar).toMatchObject({ restoreSparse: 'restore-services.sparse', originalSha256: b.sha256, size: jar.length });
+    // what Kiln reads back over adb after the restart (the bootloader can't): the patched jar, the same size as the stock one
+    expect(built.readBack).toEqual([{ path: '/system/framework/services.jar', sha256: m.servicesJar.patchedSha256, size: jar.length }]);
+    // a resume builds again before the app's install: the same bundle and key give the same jar, so its read back still matches
+    const again = await code.build(b.bytes, { adbKey: fakeAdbKey(4), userdataBytes: 64 * 2 ** 20, partitionBytes: { system: SYSTEM_BYTES }, serial: FAKE_SERIAL });
+    expect(again.readBack).toEqual(built.readBack);
     expect(m.systemBytes).toBe(SYSTEM_BYTES);
     expect(JSON.stringify(m)).not.toContain(FAKE_SERIAL);
     expect(built.files?.['services.jar.orig']).toEqual(jar);
