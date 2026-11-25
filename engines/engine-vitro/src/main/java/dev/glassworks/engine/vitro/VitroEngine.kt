@@ -270,7 +270,7 @@ class VitroEngine(
             val (dash, view) = LovelaceParser.parseRoute(url)
             if (displayedDashboard != (OAuth.origin(url) to dash)) return false
             val d = vitroView.dashboard ?: return false
-            return d.views.getOrNull(d.viewIndex(view))?.webFallbackReason != null
+            return d.views.getOrNull(d.viewIndex(view))?.let { vitroView.fallbackReason(it) } != null
         }
 
         /** The dashboard the panel is set to, when it's one Vitro draws. */
@@ -616,6 +616,7 @@ class VitroEngine(
                             ?.also { if (fallbackInFront()) hideIslandSurfaces(it.view) }
                     },
                     touch = touchScreen,
+                    needsFrontend = { card, tags, owners -> vitroView.cardNeedsFrontend(card, tags, owners) },
                 )
             }
             main.post { host.onConnect(port) }

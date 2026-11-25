@@ -117,6 +117,13 @@ class VitroCardContext(
      * the browser on that device. False on a frame without touch (the Mirror): HA there styles for a fine pointer.
      */
     val touch: Boolean = true,
+    /**
+     * A web island found its card drawing with elements of Home Assistant's frontend that an island page doesn't have
+     * ([tags], e.g. `ha-control-circular-slider`), in the custom cards [owners] (`custom:` types; the island's own
+     * card, or one inside it): the card's view goes to HA's frontend
+     * ([dev.glassworks.engine.vitro.compat.IslandFrontend]). Main thread. The default (tests, no engine) does nothing.
+     */
+    val needsFrontend: (card: CardConfig, tags: List<String>, owners: List<String>) -> Unit = { _, _, _ -> },
 ) {
     val dp: Float = context.resources.displayMetrics.density
     /** The main thread, for the card's own updates: one that throws is logged and dropped ([GuardedHandler]). */
@@ -170,6 +177,7 @@ class VitroCardContext(
         watchRegistries = watchRegistries,
         watchToken = watchToken,
         touch = touch,
+        needsFrontend = needsFrontend,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout

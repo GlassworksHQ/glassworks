@@ -15,6 +15,7 @@ import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
 import dev.glassworks.engine.vitro.compat.CompatChecker
+import dev.glassworks.engine.vitro.compat.IslandFrontend
 import dev.glassworks.engine.vitro.compat.VitroSupport
 import dev.glassworks.engine.vitro.compat.WebFallback
 import dev.glassworks.engine.vitro.data.EntityState
@@ -55,9 +56,13 @@ class WebFallbackTest {
     private val engines = ArrayList<VitroEngine>()
     private val opened = ArrayList<Page>()
 
-    @Before fun setUp() { activity = Robolectric.buildActivity(Activity::class.java).setup().get() }
+    @Before fun setUp() {
+        activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        IslandFrontend.clear()
+    }
 
     @After fun tearDown() {
+        IslandFrontend.clear()
         engines.forEach { runCatching { it.islandServer.stop() } }
         opened.forEach { page ->
             runCatching {
@@ -216,18 +221,129 @@ class WebFallbackTest {
         assertNull(reason("""{"type": "grid", "cards": [{"type": "tile"}, {"type": "entities", "entities": ["light.a"]}]}"""))
     }
 
-    @Test fun aCustomCardThatDrawsWithHasOwnElementsShowsInHomeAssistantsFrontend() {
-        // #885: Better Thermostat's climate card draws its dial with HA's ha-control-circular-slider, which an island
-        // page doesn't have. Its view goes to HA's frontend; its mini card (Mushroom pieces it ships) stays an island.
-        fun reason(card: String) = WebFallback.viewReason(LovelaceParser.parseView(0, JSONObject("""{"cards": [$card]}""")))
-        val why = reason("""{"type": "custom:better-thermostat-normal-climate-card", "entity": "climate.study"}""")
-        assertEquals(
-            "a `custom:better-thermostat-normal-climate-card` card (its dial and target are HA's `ha-control-circular-slider` and " +
-                "`ha-big-number`, which only HA's frontend has)",
-            why,
+    // ---- Custom cards that draw with HA's own elements (an island's needsFrontend) ----
+
+    // An entity the fake HA has: the view's first build waits for its states.
+    private val study = """{"type": "custom:better-thermostat-normal-climate-card", "entity": "light.lounge_lamp"}"""
+    private val climateView = """{"title": "Climate", "path": "climate", "cards": [$study]}"""
+    private val dialTags = listOf("ha-big-number", "ha-control-circular-slider")
+
+    @Test fun noCustomCardIsNamedTheIslandsReportIsWhatSendsOne() {
+        // No list of cards: Better Thermostat's climate card is an island like any other until its island reports.
+        fun view(card: String) = LovelaceParser.parseView(0, JSONObject("""{"cards": [$card]}"""))
+        assertNull(WebFallback.viewReason(view(study)))
+        val learned = { c: dev.glassworks.engine.vitro.model.CardConfig ->
+            if (c.type == "custom:better-thermostat-normal-climate-card") "a dial" else null
+        }
+        assertEquals("a dial", WebFallback.viewReason(view(study), learned))
+        assertEquals("nested too", "a dial", WebFallback.viewReason(view("""{"type": "vertical-stack", "cards": [$study]}"""), learned))
+        assertNull(
+            "the mini card stays an island",
+            WebFallback.viewReason(view("""{"type": "custom:better-thermostat-mini-climate-card", "entity": "climate.study"}"""), learned),
         )
-        assertNotNull("nested too", reason("""{"type": "vertical-stack", "cards": [{"type": "custom:better-thermostat-normal-climate-card", "entity": "climate.study"}]}"""))
-        assertNull(reason("""{"type": "custom:better-thermostat-mini-climate-card", "entity": "climate.study"}"""))
+        assertEquals(
+            "the view's own reason comes first",
+            "the built-in `map` card",
+            WebFallback.viewReason(view("""{"type": "map"}, $study"""), learned),
+        )
+    }
+
+    @Test fun theDecisionIsPerCardTypeAndScriptVersion() {
+        val v1 = listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/bt/bt.js?hacstag=340", "module"))
+        val v2 = listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/bt/bt.js?hacstag=350", "module"))
+        val type = "custom:better-thermostat-normal-climate-card"
+        assertTrue(IslandFrontend.record(v1, type, dialTags))
+        assertFalse("once is enough: no flapping", IslandFrontend.record(v1, type, listOf("ha-big-number")))
+        assertEquals(
+            "a `$type` card (it draws with Home Assistant's `ha-big-number`, `ha-control-circular-slider`, which only its frontend has)",
+            IslandFrontend.reason(v1, type),
+        )
+        assertEquals("the same scripts in another order", IslandFrontend.reason(v1, type), IslandFrontend.reason(v1.reversed(), type))
+        assertNull("another card type", IslandFrontend.reason(v1, "custom:better-thermostat-mini-climate-card"))
+        assertNull("a new release of the scripts is looked at again", IslandFrontend.reason(v2, type))
+    }
+
+    /** The island of [vv] that draws [type]. */
+    private fun islandOf(vv: VitroView, type: String): WebIslandCardView {
+        fun find(v: View): WebIslandCardView? {
+            if (v is WebIslandCardView && v.config.type == type) return v
+            if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i))?.let { return it }
+            return null
+        }
+        return find(vv) ?: error("no island of $type")
+    }
+
+    private fun needsFrontend(tags: List<String>, cards: List<String>) = JSONObject()
+        .put("type", "needsFrontend").put("tags", org.json.JSONArray(tags)).put("cards", org.json.JSONArray(cards))
+
+    @Test fun anIslandThatReportsHasElementsSendsItsViewToHomeAssistantsFrontendForTheSession() {
+        server.dashboardConfig = views(living, climateView)
+        val p = page()
+        p.load("$base/wall-test/climate")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        val vv = vitroView(p)
+        assertNull("drawn natively, with an island, until the island reports", pageFallback())
+        assertEquals(1, islandOpens())
+        val islandPage = fallback.pages[fallback.opens.indexOfFirst { it.background == Color.TRANSPARENT }]
+
+        // What frontend-watch.js sends once the dial stayed undefined.
+        islandOf(vv, "custom:better-thermostat-normal-climate-card")
+            .handleIslandMessage(needsFrontend(dialTags, listOf("better-thermostat-normal-climate-card"))) { throw AssertionError("no reply") }
+        idle()
+        val fp = pageFallback()!!
+        assertEquals(listOf("$base/wall-test/climate"), fp.loads)
+        assertEquals(View.GONE, vv.visibility)
+        assertTrue("the view's island closed: its tree never shows again", islandPage.closed)
+
+        // HA's frontend reports the view it draws: not handed back to Vitro, which would only find the same again.
+        pageFallbackHost().onLocationChange("$base/wall-test/climate")
+        idle()
+        assertEquals(View.GONE, vv.visibility)
+        assertEquals(listOf("$base/wall-test/climate"), fp.loads)
+
+        // The other view is native; back on the climate tab, the view goes to HA's frontend straight away, no island.
+        p.load("$base/wall-test/living")
+        awaitMain("living") { vv.visibility == View.VISIBLE && vv.currentViewIndex == 0 }
+        tab(vv, "Climate").performClick()
+        idle()
+        assertEquals(View.GONE, vv.visibility)
+        assertEquals("no new island for a card the session knows", 1, islandOpens())
+        assertEquals("$base/wall-test/climate", pageFallback()!!.loads.last())
+    }
+
+    @Test fun aReportWithNoTagsOrAfterTheFirstChangesNothing() {
+        server.dashboardConfig = views(climateView)
+        val p = page()
+        p.load("$base/wall-test/climate")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        val island = islandOf(vitroView(p), "custom:better-thermostat-normal-climate-card")
+        // Not element names (a page that sends anything): ignored.
+        island.handleIslandMessage(needsFrontend(listOf("<b>", "Ha-X", "nohyphen"), emptyList())) { throw AssertionError("no reply") }
+        idle()
+        assertNull(pageFallback())
+        assertTrue(IslandFrontend.isEmpty)
+    }
+
+    @Test fun aReportingIslandInAViewWithNoPageIsOnlyRemembered() {
+        // A view with no page (no onWebView) can't leave: it stays as it is, and builds no new island to ask again.
+        val store = EntityStore()
+        val vv = VitroView(activity, store, Color.BLACK)
+        vv.contextFactory = { theme ->
+            VitroCardContext(
+                context = activity, haBase = base, store = store, theme = theme, resources = emptyList(),
+                accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+                fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+                needsFrontend = { card, tags, owners -> vv.cardNeedsFrontend(card, tags, owners) },
+            )
+        }
+        vv.setDashboard(LovelaceParser.parseDashboard(views(climateView)), null)
+        activity.setContentView(vv)
+        idle()
+        val island = islandOf(vv, "custom:better-thermostat-normal-climate-card")
+        island.handleIslandMessage(needsFrontend(dialTags, emptyList())) { throw AssertionError("no reply") }
+        idle()
+        assertNotNull(IslandFrontend.reason(emptyList(), "custom:better-thermostat-normal-climate-card"))
+        assertTrue("the same island still draws", islandOf(vv, "custom:better-thermostat-normal-climate-card") === island)
     }
 
     // ---- The way back ----

@@ -134,6 +134,9 @@ class WebIslandCardView(
     /** The card walked `hass.states` (`watchAll`): it follows every entity from then on, as [followsAllEntities]. */
     @Volatile private var walksAllStates = false
 
+    /** The page said once that the card needs HA's frontend (`needsFrontend`): later reports change nothing. */
+    @Volatile private var needsFrontendSent = false
+
     /** The card read `hass.entities`, `devices`, `areas` or `floors`: the shared registry feed, until detached. */
     private val registriesAsked = java.util.concurrent.atomic.AtomicBoolean(false)
     private val registriesRelease = java.util.concurrent.atomic.AtomicReference<(() -> Unit)?>(null)
@@ -339,6 +342,16 @@ class WebIslandCardView(
                 val message = msg.optString("message").take(MAX_ERROR_CHARS).ifBlank { "Configuration error" }
                 ctx.main.post { fail("island", IslandCardError(message)) }
             }
+            // The card draws with elements of HA's frontend this page doesn't have (frontend-watch.js): its view
+            // goes to HA's frontend, as a view with a built-in card Vitro doesn't draw does ([VitroCardContext.needsFrontend]).
+            "needsFrontend" -> {
+                val tags = frontendTags(msg.optJSONArray("tags"))
+                if (tags.isEmpty() || needsFrontendSent) return
+                needsFrontendSent = true
+                // The custom cards that draw them (a stack's inner card, not the stack), as `custom:` types.
+                val owners = frontendTags(msg.optJSONArray("cards")).map { "custom:$it" }
+                ctx.main.post { ctx.needsFrontend(config, tags, owners) }
+            }
             "resize" -> {
                 if (fillViewport) return
                 val cssH = msg.optInt("height", 160).coerceIn(48, 1200)
@@ -527,6 +540,30 @@ class WebIslandCardView(
     companion object {
         /** The most of an island's error message kept (it's logged, never shown). */
         const val MAX_ERROR_CHARS = 300
+
+        /** The most tags a `needsFrontend` report keeps: they only name the reason in the log. */
+        const val MAX_FRONTEND_TAGS = 12
+
+        /** A custom element's name as the island reports it: lower case, with a hyphen, nothing a log can't hold. */
+        private val ELEMENT_TAG = Regex("""^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$""")
+
+        /** The tags of a `needsFrontend` report that are element names, sorted and capped ([MAX_FRONTEND_TAGS]). */
+        internal fun frontendTags(raw: org.json.JSONArray?): List<String> {
+            if (raw == null) return emptyList()
+            return (0 until raw.length()).mapNotNull { raw.opt(it) as? String }
+                .filter { it.length <= 64 && ELEMENT_TAG.matches(it) }
+                .distinct().sorted().take(MAX_FRONTEND_TAGS)
+        }
+
+        /**
+         * The island page's watch for HA frontend elements a card draws with but the page lacks (`frontend-watch.js`,
+         * a resource next to this class's package), read once.
+         */
+        internal val FRONTEND_WATCH_JS: String by lazy {
+            WebIslandCardView::class.java.getResourceAsStream("/dev/glassworks/engine/vitro/island/frontend-watch.js")
+                ?.use { it.readBytes().toString(Charsets.UTF_8) }
+                ?: error("frontend-watch.js is missing from the engine's resources")
+        }
 
         /**
          * What makes two builds of a card the same island: its whole config and whether it fills the view. A
@@ -1099,6 +1136,9 @@ window.loadCardHelpers = () => Promise.resolve({
   importMoreInfoControl: () => Promise.resolve(),
 });
 </script>
+<script>
+${FRONTEND_WATCH_JS.replace(SCRIPT_END, "<\\\\/$1")}
+</script>
 $resourceScripts
 </head>
 <body>
@@ -1431,6 +1471,8 @@ async function boot() {
   document.getElementById('mount').appendChild(cardEl);
   wireEvents();
   wireResize();
+  // HA's own elements the card draws with that this page lacks (frontend-watch.js): its view goes to HA's frontend.
+  vitroWatchFrontend(cardEl, { report: (tags, cards) => sendBridge({ type: 'needsFrontend', tags, cards }) });
 }
 
 function moreInfo(id) {

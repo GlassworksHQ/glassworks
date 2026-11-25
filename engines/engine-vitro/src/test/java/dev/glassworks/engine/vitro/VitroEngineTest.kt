@@ -21,6 +21,7 @@ import dev.glassworks.engine.vitro.clarity.ClarityHttp
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
+import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.model.LovelaceResource
 import dev.glassworks.engine.vitro.island.VitroIslandServer
@@ -887,6 +888,7 @@ class VitroEngineTest {
         token: String? = FakeHaServer.TOKEN,
         navigate: (String) -> Unit = {},
         store: EntityStore = EntityStore(),
+        needsFrontend: (CardConfig, List<String>, List<String>) -> Unit = { _, _, _ -> },
     ) = VitroCardContext(
         context = activity,
         haBase = base,
@@ -900,6 +902,7 @@ class VitroEngineTest {
         openMoreInfo = {},
         fetchHistory = { _, _, _ -> },
         subscribeTemplate = { _, _ -> {} },
+        needsFrontend = needsFrontend,
     )
 
     private fun islandCard() = LovelaceParser.parseCard(
@@ -1158,6 +1161,35 @@ class VitroEngineTest {
         }
         walk(island)
         assertTrue("HA's error card is in place: $texts", dev.glassworks.engine.vitro.ui.ErrorCardView.TITLE in texts)
+    }
+
+    @Test
+    fun anIslandWatchesForHasElementsItLacksAndReportsThemOnce() {
+        // A card that draws with HA's own elements (Better Thermostat's dial) is found by the page itself, never by a
+        // list of cards: frontend-watch.js is inlined, as a classic script, before the card's own scripts.
+        val html = WebIslandCardView.buildIslandHtml(cardContext(), islandCard())
+        assertTrue(html.contains("function vitroWatchFrontend(card, env) {"))
+        assertTrue(html.contains("const VITRO_FRONTEND_TAG = /^(?:ha|hui|state|more-info)-"))
+        assertTrue(html.contains("vitroWatchFrontend(cardEl, { report: (tags, cards) => sendBridge({ type: 'needsFrontend', tags, cards }) });"))
+        assertTrue("the watch is defined before the card's scripts run", html.indexOf("function vitroWatchFrontend") < html.indexOf("<div id=\"mount\">"))
+        assertFalse("nothing in it ends the script element", WebIslandCardView.FRONTEND_WATCH_JS.contains("</script", ignoreCase = true))
+
+        // The native side keeps element names only, sorted and capped, and passes them on once.
+        val reports = ArrayList<Triple<String, List<String>, List<String>>>()
+        val ctx = cardContext(needsFrontend = { card, tags, owners -> reports += Triple(card.type, tags, owners) })
+        val island = WebIslandCardView(ctx, islandCard())
+        activity.setContentView(island)
+        val msg = JSONObject().put("type", "needsFrontend")
+            .put("tags", JSONArray(listOf("ha-control-circular-slider", "ha-big-number", "</script>", 7)))
+            .put("cards", JSONArray(listOf("better-thermostat-normal-climate-card")))
+        island.handleIslandMessage(msg) { throw AssertionError("needsFrontend needs no reply") }
+        island.handleIslandMessage(msg) { throw AssertionError("needsFrontend needs no reply") }
+        idle()
+        assertEquals(
+            listOf(Triple(islandCard().type, listOf("ha-big-number", "ha-control-circular-slider"), listOf("custom:better-thermostat-normal-climate-card"))),
+            reports,
+        )
+        assertEquals(WebIslandCardView.MAX_FRONTEND_TAGS, WebIslandCardView.frontendTags(JSONArray((1..40).map { "ha-x$it" })).size)
     }
 
     @Test
