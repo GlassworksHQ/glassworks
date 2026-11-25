@@ -36,7 +36,7 @@ The committed corpus never depends on anyone's real Home Assistant. `capture.mjs
 - **The shared inputs** come from `home.json`: the fixed instant every page and Vitro's clock show, the config (time zone, units), the themes and the signed-in user.
 - **HA core's words and icons** for states ("Heat/Cool", "Armed away") come from `hacore-2026.11.0.json`, which `hacore.py` cuts from the `homeassistant` wheel of the same release (pinned by SHA-256). Run it again for a newer HA.
 - **Templates** (Markdown, Mushroom, conditions) are rendered by the fake with jinja2 and the HA helpers the corpus uses (`states`, `is_state`, `state_attr`, `now`, …). A template that needs a helper the fake lacks fails the case's capture.
-- **Community cards** are Lovelace resources at `/hacsfiles/`, as HACS serves them: Mushroom, card-mod, stack-in-card, layout-card, auto-entities, mini-graph-card, mini-media-player, Bubble Card, vertical-stack-in-card, bar-card, clock-weather-card and modern-circular-gauge. `cards.json` pins each one's release and the SHA-256 of every file it loads, and `cards.py` downloads them into `~/.cache/glassworks-perf/cards` on first use. They're never committed.
+- **Community cards** are Lovelace resources at `/hacsfiles/`, as HACS serves them: Mushroom, card-mod, stack-in-card, layout-card, auto-entities, mini-graph-card, mini-media-player, Bubble Card, vertical-stack-in-card, bar-card, clock-weather-card and modern-circular-gauge. `cards.json` pins each one's release, its license and the SHA-256 of every file it loads, and `cards.py` downloads them into `~/.cache/glassworks-perf/cards` on first use. They're never committed. A card pinned `on_demand` (Better Thermostat UI, which is AGPL-3.0 and bundles its own Mushroom elements) is served at `/hacsfiles/` too but isn't a Lovelace resource, so no case's page loads it unless a probe adds it.
 
 Templates render in jinja2's sandbox: the fake listens on 127.0.0.1, but anything that reaches its port may send one. The fake logs any WebSocket command it doesn't answer, and the capture lists them at the end: a newer frontend or card that asks for something new can't pass unnoticed.
 
@@ -90,6 +90,21 @@ A local corpus's real HA comes from `~/.t3/glassworks-m1/vitro-parity/ha.json` (
 
 A local corpus (`--local [dir]`, default `~/.t3/glassworks-m1/vitro-parity/harness-local`) has the same layout. Its cases name a real dashboard view instead of a card, `{"dashboard": "s1-home-vitro", "view": "home", "frames": ["s1"]}`, and compare the whole view: every card slot in order, plus the full page.
 
+### Can a custom card draw in an island?
+
+`island-check.mjs` renders one custom card in HA's frontend on the fake HA, with its pinned script from `cards.json`, and lists the custom elements it draws with that an island page lacks: HA's own elements that are neither the card's nor among the island's stand-ins. A card whose main control is one of them goes to HA's frontend (`WebFallback.FRONTEND_CUSTOM_CARDS`). It writes nothing.
+
+```sh
+node tools/vitro-parity/island-check.mjs <case.json> --card better-thermostat-ui-card [--frame tablet] [--shot out.png]
+```
+
+`island-probe.mjs` runs the other side: the island page Vitro would serve for the card (written by `IslandPageDumpTest`), with the card's pinned script and the island's bridge answered by the probe, and reports what the card drew, which elements it found undefined, and what it sent over the bridge. Example cases are in `island-cases/`.
+
+```sh
+./gradlew :engine-vitro:testDebugUnitTest --tests '*IslandPageDumpTest*' -PvitroIslandCase=$PWD/tools/vitro-parity/island-cases/better-thermostat-mini-climate.json
+node tools/vitro-parity/island-probe.mjs tools/vitro-parity/island-cases/better-thermostat-mini-climate.json [--click x,y] [--shot out.png]
+```
+
 ### Cases with their own stylesheets
 
 Home Assistant is read-only for the harness, apart from its own dashboard, so a case that needs a stylesheet (a web font, say) doesn't add a Lovelace resource. It lists the sheet instead: `"resources": [{"type": "css", "url": "/local/vitro-harness-fixtures/fonts/cardmod.css"}]`, with the file in `fixtures/fonts/cardmod.css`. Only `type: css` under that path is accepted. Such a case gets a page of its own in the capture, and the next case a fresh one, because what a sheet declares stays in the page. The font cases (`font-*`) use fonts under the SIL Open Font License; their licenses sit next to them.
@@ -133,12 +148,12 @@ Some checks stay manual, because no tool reads pixels or image metadata:
 
 - **Look at every new or changed PNG** in `refs/` before you commit it: a picture, a camera still or a chart can show what no text check sees.
 - **Inspect every image added to `assets/`**, its pixels and its metadata (`exiftool <file>`), even one from HA's `/static`.
-- Keep the committed corpus to synthetic or harmless entities, and leave cameras and personal media out of it.
+- Keep the committed corpus to synthetic or harmless entities, and leave real cameras and personal media out of it. A camera case uses one of the fake HA's own `clarity_*` cameras, and its still is a picture `fixture_images.py` draws.
 
 ## Limits
 
 - Robolectric draws with the host's Skia, not the panel's GPU, so a device can still differ by a few pixels. The 1 px shift tolerance and the baseline slack absorb most of it. Rendering on macOS and on CI's Linux may also differ slightly.
-- Cameras get no stream, so none is in the committed corpus.
+- A live camera's video isn't compared. In the capture HA shows the camera's still (its poster), because headless Chromium doesn't play the fake HA's H.264, and Vitro under Robolectric shows the same still with no player. The case's still is its `entity_picture` from `fixtures/images/`, which the fake also serves as the camera's `/api/camera_proxy` picture, so both draw one image. The video's area is masked anyway, so a capture that does play video can't fail on its frames. What's compared is the card's frame: its size, its bar, its title and its icons. The page's `camera/capabilities` answer is recorded, so Vitro picks its stream from what HA offered.
 - A reference records whether its page had a touch screen (`viewport.touch`), and Vitro draws that case with the same pointer, so a reference taken before touch capture still compares like for like until it is refreshed. Only HA's chart legend looks different with a coarse pointer (40 px rows) at rest. Playwright's full-page screenshot turns touch emulation off for a page taller than the window, so on a touch panel the capture makes the window as tall as the page instead, lets the page settle again, and takes the screenshot, the card bounds and the texts in that one layout before it puts the window back. A case whose page has lost its coarse pointer stops. A page with a pinned card (`position: fixed`) that is taller than the window is the exception: growing the window would move the card, so it is captured with a fine pointer and its reference says so.
 - Chart labels (ECharts draws them on a canvas) aren't text runs, so the text check doesn't see them; the pixel diff does.
 - The pixel diff only sees the card's crop in HA's position. A card that renders taller or lower in Vitro shows up in the bounds check.

@@ -61,11 +61,12 @@ A card that Vitro can't build shows Home Assistant's own error card in its place
 its icon, and "Configuration error" for an administrator. The other cards keep working, and the log gets one line for
 each kind of failure rather than one per update.
 
-Most cards are drawn on Vitro's card surface, and for those the same goes for a card that throws while it updates,
-measures, lays out, draws or handles a touch. A few card types draw without that surface: a heading, Mushroom's chips
-and title, and the layout-card and auto-entities containers. In a sections view, the grid catches their measure, layout
-and draw failures and shows the error card. In a masonry view or inside a stack, nothing catches those failures card by
-card: the app stops, and that counts toward the fallback below.
+The same goes for a card that throws while it measures, lays out, draws or handles a touch, whatever kind of card it is
+and wherever it sits: in a sections, masonry or sidebar view, inside a stack, a layout-card or a swipe-card, or among
+the cards auto-entities builds. Most cards are drawn on Vitro's card surface, which also catches a card that throws
+while it updates. The few that draw without it (a heading, Mushroom's chips and title, and the stack, layout-card,
+auto-entities and swipe-card containers) each sit inside a small guard that catches those failures and shows the error
+card in their place. When one of those throws while it updates, the update is logged and skipped.
 
 If something still gets past the cards and the app stops twice in a row within a minute of starting, the app turns
 Vitro off for the next start, which runs on the browser engine. The panel says so once when it starts, the Labs page
@@ -82,7 +83,7 @@ Vitro moves the Home Assistant data plane out of the browser into Kotlin (`HaDas
 | **Tier 2: Native HACS fast-paths** | 30 popular HACS cards: button-card (without JavaScript templates), the whole Mushroom suite (entity, light, fan, cover, climate, person, template, title, chips, media player, lock, alarm, vacuum, humidifier, number, select and the empty spacer), Bubble Card with its sub-buttons, mini-graph-card, mini-media-player, clock-weather-card, weather-card, modern-circular-gauge, bar-card, auto-entities, and the swipe-card, stack-in-card, vertical-stack-in-card and layout-card containers | Native Kotlin renderers, with Home Assistant `render_template` subscriptions for Jinja2 templates |
 | **Tier 3: Micro-Islands** | Any other `custom:*` card, and any custom card that uses something Vitro can't draw faithfully (see [What Vitro draws natively](#what-vitro-draws-natively)), including full-screen `type: panel` cards and wrapper cards that build their inner cards with `loadCardHelpers` | A small inline Lovelace shim (`hass.callWS`, `hass.callService`, `hass.callApi`, `hass.localize`, `hass.formatEntityState`, `hass.config`, `<ha-icon>`, HA's entity, device, area and floor registries, and a `hass.states` proxy that tracks which entities a card reads) with the resolved theme variables, in GeckoView only |
 
-An island's `hass` has what HA's frontend gives a card, but it only costs what the card reads. The registries (`hass.entities`, `hass.devices`, `hass.areas`, `hass.floors`) are fetched when a card first reads one. Every island shares that one feed, which follows HA's registry updates and stops when the last island goes. A card that walks `hass.states` (`Object.values`, `for…in`), as a to-do summary or an auto-entities-style filter does, makes its view follow every entity. A card that only looks entities up by id keeps the view's own short list. An island also sees a header height of 0, as HA's kiosk view does with its header hidden, so a panel card sized to `calc(100vh - var(--header-height))` fills the screen.
+An island's `hass` has what HA's frontend gives a card, but it only costs what the card reads. The registries (`hass.entities`, `hass.devices`, `hass.areas`, `hass.floors`) are fetched when a card first reads one. Every island shares that one feed, which follows HA's registry updates and stops when the last island goes. A card that walks `hass.states` (`Object.values`, `for…in`), as a to-do summary or an auto-entities-style filter does, makes its view follow every entity. A card that only looks entities up by id keeps the view's own short list. An island also sees a header height of 0, as HA's kiosk view does with its header hidden, so a panel card sized to `calc(100vh - var(--header-height))` fills the screen. Like HA's, every state change gives the card a new `hass.states` (an entity that didn't change keeps its object), so a card that compares the old and new state of its entity before drawing again sees the change. The island also has HA's `action-handler`, which many cards bind their tap, hold and double tap to, and `ha-svg-icon`. A card whose script doesn't define its element (an old card type a newer release dropped, such as `custom:better-thermostat-ui-card`), or whose `setConfig` throws, shows Home Assistant's error card, as HA does, instead of an empty island.
 
 Tier 3 never uses `android.webkit.WebView`. Each island is served from `VitroIslandServer`, a tiny HTTP server bound to IPv4 loopback (`127.0.0.1`), and loaded into GeckoView, so the Android system WebView, which is missing or too old on some of these panels, is not a dependency. A dashboard that stays in Tier 1 and Tier 2 never starts GeckoView at all.
 
@@ -109,6 +110,7 @@ Some dashboards and views go to that fallback too, so the panel shows them as Ho
 - **Dashboards, views and sections made from a strategy**, such as the Areas or Map dashboards, or a custom strategy. Home Assistant's frontend builds their cards in JavaScript, and Home Assistant has no API that returns what it builds, so Vitro has no cards to draw. A strategy on the dashboard sends the whole dashboard; a strategy on a view or a section sends only that view.
 - **Views with a built-in card Vitro doesn't draw yet**, such as `map` or the energy cards. Islands can't draw Home Assistant's built-in cards, so the view opens in Home Assistant's frontend, which draws all of it with one browser session. So does a view with a `shortcut` card that has no `label` or `icon` of its own and opens a dashboard, a view or a panel, or runs an action: Home Assistant names it after that page or action, which only its frontend knows. A `statistic` card that follows the energy dashboard's date picker goes there too.
 - **Views with an `entities` row Vitro doesn't draw yet**: `attribute` and `cast` rows, a `conditional` row's own included.
+- **Views with a custom card that draws with Home Assistant's own elements.** A few custom cards build their main control from elements of Home Assistant's frontend instead of shipping them: Better Thermostat's climate card (`custom:better-thermostat-normal-climate-card`) draws its dial with Home Assistant's thermostat dial. An island has no Home Assistant frontend, so the card would show without its dial; its view opens in Home Assistant's frontend instead. Better Thermostat's mini card draws in an island.
 - **Views with a layout Vitro doesn't draw**: any view `type` other than the ones in Tier 1, such as another custom layout. Vitro never guesses masonry for one.
 
 The other views of the dashboard stay native. The way back from one of these pages works as from any other Home Assistant page: Back, Reload dashboard and a tap on a dashboard return to the native view.
@@ -136,7 +138,7 @@ The island server only serves islands. Its proxy forwards what a card loads (`/a
 | `sensor`, `history-graph`, `statistics-graph` | Yes | See [Graphs](#rendering-like-home-assistant-does) |
 | `weather-forecast` | Yes | Current conditions and the daily, hourly and twice-daily forecasts |
 | `clock`, `markdown` | Yes | A few Markdown tags draw nothing (see [What Vitro draws natively](#what-vitro-draws-natively)) |
-| `picture`, `picture-entity`, `picture-glance` | Yes | |
+| `picture`, `picture-entity`, `picture-glance` | Yes | With `camera_view: live`, a camera plays the way Home Assistant's player picks its stream: WebRTC, then HLS, then MJPEG, moving down the list when one fails, and showing stills when none plays. WebRTC isn't played yet, so a camera that offers it plays HLS. Up to four cameras play video at once; any others play MJPEG until one stops. The cards' frame is compared with HA, the video itself isn't |
 | `picture-elements` | Yes | State icons, labels and badges, icons and service buttons. `conditional` and `image` elements are left out |
 | `media-control` | Yes | |
 | `todo-list`, `calendar`, `logbook` | Yes | Read live from Home Assistant, as its own cards read them. The calendar has its month grid and its list views |
@@ -173,7 +175,7 @@ Tapping or holding a tile opens a native More-Info dialog styled after Home Assi
 | Climate | A circular thermostat dial with mode buttons, and two thumbs for a heat/cool range |
 | Cover | A top-down position slider |
 | Sensor | A 24-hour stepped history graph |
-| Camera | A live stream |
+| Camera | A live stream, chosen as on the picture cards (HLS or MJPEG for now) |
 | Switch | A toggle pill |
 | Alarm panel | A PIN pad |
 

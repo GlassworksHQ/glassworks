@@ -41,6 +41,12 @@ interface IslandCard {
 }
 
 /**
+ * What an island page reports when it can't make its card ([WebIslandCardView]'s `cardError`): HA's own message, as
+ * its error card holds it ("Custom element doesn't exist: acme-card.", or what the card's `setConfig` threw).
+ */
+class IslandCardError(message: String) : IllegalStateException(message)
+
+/**
  * Tier 3 Custom Card Escape Hatch ("GeckoView Micro-Web Island").
  *
  * Uses zero `android.webkit.WebView`: every Tier 3 island runs through Glassworks' wrapped
@@ -327,6 +333,12 @@ class WebIslandCardView(
                 ctx.watchAllEntities()
             }
             "registries" -> askRegistries()
+            // The page couldn't make the card (HA's createCardElement would show its error card): this card is HA's
+            // error card from now on, natively.
+            "cardError" -> {
+                val message = msg.optString("message").take(MAX_ERROR_CHARS).ifBlank { "Configuration error" }
+                ctx.main.post { fail("island", IslandCardError(message)) }
+            }
             "resize" -> {
                 if (fillViewport) return
                 val cssH = msg.optInt("height", 160).coerceIn(48, 1200)
@@ -513,6 +525,9 @@ class WebIslandCardView(
     }
 
     companion object {
+        /** The most of an island's error message kept (it's logged, never shown). */
+        const val MAX_ERROR_CHARS = 300
+
         /**
          * What makes two builds of a card the same island: its whole config and whether it fills the view. A
          * rebuild that only changed the theme, or other cards, hands the island over ([handOff]) instead of opening
@@ -942,6 +957,113 @@ vitroDefine('ha-relative-time', class extends HTMLElement {
     this.textContent = v === null || v === undefined || v === '' ? '' : vitroRelativeTime(v);
   }
 });
+// HA's ha-svg-icon: an MDI `path` (a property or attribute) in a 24 x 24 viewBox, `--mdc-icon-size` square.
+vitroDefine('ha-svg-icon', class extends HTMLElement {
+  static get observedAttributes() { return ['path']; }
+  connectedCallback() { vitroUpgrade(this, ['path']); this._render(); }
+  attributeChangedCallback() { this._render(); }
+  set path(v) { this._path = v || ''; this._render(); }
+  get path() { return this._path || this.getAttribute('path') || ''; }
+  _render() {
+    if (!this.isConnected) return;
+    this.style.display = 'inline-flex';
+    this.style.width = 'var(--mdc-icon-size, 24px)';
+    this.style.height = 'var(--mdc-icon-size, 24px)';
+    const ns = 'http://www.w3.org/2000/svg';
+    let svg = this.firstElementChild;
+    if (!svg || svg.localName !== 'svg') {
+      this.textContent = '';
+      svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.style.cssText = 'width:100%;height:100%;fill:currentColor';
+      svg.appendChild(document.createElementNS(ns, 'path'));
+      this.appendChild(svg);
+    }
+    svg.firstElementChild.setAttribute('d', this.path);
+  }
+});
+// HA's action-handler (action-handler-directive.ts), which cards bind their gestures to (Mushroom-style cards look it up
+// in document.body and call bind(element, options)): a tap, a hold (500 ms) or a double tap (250 ms) fires `action`
+// on the element, and a move, scroll or wheel cancels a press, as in HA. Without it such a card threw on render.
+vitroDefine('action-handler', class extends HTMLElement {
+  constructor() { super(); this.holdTime = 500; this.cancelled = false; }
+  connectedCallback() {
+    this.style.display = 'none';
+    if (this._wired) return;
+    this._wired = true;
+    ['touchcancel', 'mouseout', 'mouseup', 'touchmove', 'mousewheel', 'wheel', 'scroll'].forEach((type) => {
+      document.addEventListener(type, () => {
+        this.cancelled = true;
+        if (this.timer) { clearTimeout(this.timer); this.timer = undefined; }
+      }, { passive: true });
+    });
+  }
+  bind(element, options) {
+    const opts = options || {};
+    const fire = (target, action) => target.dispatchEvent(new CustomEvent('action', { detail: { action }, bubbles: true, composed: true }));
+    const prev = element.actionHandler;
+    if (prev && JSON.stringify(prev.options) === JSON.stringify(opts)) return;
+    if (prev && prev.start) {
+      element.removeEventListener('touchstart', prev.start);
+      element.removeEventListener('touchend', prev.end);
+      element.removeEventListener('touchcancel', prev.end);
+      element.removeEventListener('mousedown', prev.start);
+      element.removeEventListener('click', prev.end);
+      element.removeEventListener('keydown', prev.key);
+    }
+    const handler = { options: opts };
+    element.actionHandler = handler;
+    if (opts.disabled) return;
+    handler.start = () => {
+      this.cancelled = false;
+      if (opts.hasHold) {
+        this.held = false;
+        this.timer = setTimeout(() => { this.held = true; }, this.holdTime);
+      }
+    };
+    handler.end = (ev) => {
+      if (ev.type === 'touchcancel' || (ev.type === 'touchend' && this.cancelled)) return;
+      const target = ev.target;
+      if (ev.cancelable) ev.preventDefault();
+      if (opts.hasHold) { clearTimeout(this.timer); this.timer = undefined; }
+      if (opts.hasHold && this.held) {
+        fire(target, 'hold');
+      } else if (opts.hasDoubleClick) {
+        if ((ev.type === 'click' && ev.detail < 2) || !this.dblClickTimeout || this.dblClickTarget !== target) {
+          const id = setTimeout(() => {
+            if (this.dblClickTimeout === id) { this.dblClickTimeout = undefined; this.dblClickTarget = undefined; }
+            if (opts.hasTap !== false) fire(target, 'tap');
+          }, 250);
+          this.dblClickTimeout = id;
+          this.dblClickTarget = target;
+        } else {
+          clearTimeout(this.dblClickTimeout);
+          this.dblClickTimeout = undefined;
+          this.dblClickTarget = undefined;
+          fire(target, 'double_tap');
+        }
+      } else if (opts.hasTap !== false) {
+        fire(target, 'tap');
+      }
+    };
+    // Enter or Space is a tap: never the hold an earlier press left behind, and never one a pointer is timing now.
+    handler.key = (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      clearTimeout(this.timer);
+      this.timer = undefined;
+      this.held = false;
+      handler.end(ev);
+    };
+    if (!opts.keyboardOnly) {
+      element.addEventListener('touchstart', handler.start, { passive: true });
+      element.addEventListener('touchend', handler.end);
+      element.addEventListener('touchcancel', handler.end);
+      element.addEventListener('mousedown', handler.start, { passive: true });
+      element.addEventListener('click', handler.end);
+    }
+    element.addEventListener('keydown', handler.key);
+  }
+});
 vitroDefine('ha-ripple', class extends HTMLElement {});
 vitroDefine('ha-spinner', class extends HTMLElement {});
 vitroDefine('ha-formfield', class extends HTMLElement {});
@@ -1064,7 +1186,7 @@ function sendBridge(obj, id) {
 
 // True once the card walked hass.states: the island follows every entity, so no single lookup needs a watch.
 let walksAll = false;
-const statesProxy = new Proxy(rawStates, {
+const statesHandler = {
   get(target, prop) {
     if (!walksAll && typeof prop === 'string' && prop.includes('.')) {
       sendBridge({ type: 'watch', entity_id: prop });
@@ -1080,7 +1202,16 @@ const statesProxy = new Proxy(rawStates, {
     }
     return Reflect.ownKeys(target);
   },
-});
+};
+// HA's frontend hands a card a new `states` object whenever a state changes, an unchanged entity keeping its own
+// object: cards compare oldHass.states[id] with hass.states[id] to skip renders (HA's hasConfigOrEntityChanged).
+// One proxy over the live map made every old hass read the new states, so such a card never saw a change, and one
+// that first rendered before the bridge's snapshot stayed blank (#885). Each change gets a copy of its own.
+let statesView = null;
+function currentStates() {
+  if (!statesView) statesView = new Proxy(Object.assign({}, rawStates), statesHandler);
+  return statesView;
+}
 
 // hass.entities, devices, areas and floors, as HA's frontend has them: asked for (once) when a card first reads one.
 const registries = { entities: {}, devices: {}, areas: {}, floors: {} };
@@ -1233,7 +1364,7 @@ if (haUser) hassBase.user = haUser;
 // A new object on every patch: Lit cards compare hass by reference to decide whether to re-render. Each hass keeps
 // the registries it was made with, as HA's does: a card comparing the old one's with the new one's sees the change.
 function makeHass() {
-  const h = Object.assign({}, hassBase, { states: statesProxy });
+  const h = Object.assign({}, hassBase, { states: currentStates() });
   const snapshot = Object.assign({}, registries);
   for (const key of Object.keys(snapshot)) {
     Object.defineProperty(h, key, {
@@ -1294,12 +1425,14 @@ function connectBridge() {
         // A (re)connect: the whole store, replacing what the island had.
         for (const id of Object.keys(rawStates)) delete rawStates[id];
         Object.assign(rawStates, m.states);
+        statesView = null;
         if (cardEl) cardEl.hass = makeHass();
       } else if (m.type === 'patch' && m.states) {
         for (const id of Object.keys(m.states)) {
           if (m.states[id] === null) delete rawStates[id];
           else rawStates[id] = m.states[id];
         }
+        statesView = null;
         if (cardEl) cardEl.hass = makeHass();
       } else if (m.type === 'registries' && m.registries) {
         // New objects every time: Lit cards compare them by reference.
@@ -1338,8 +1471,20 @@ function retryBridge() {
 async function boot() {
   connectBridge();
   try { await Promise.race([customElements.whenDefined(tag), new Promise(r => setTimeout(r, 4000))]); } catch (e) {}
+  // HA's createCardElement: a custom element that isn't defined in time, or a setConfig that throws, is HA's error
+  // card ("Custom element doesn't exist: <tag>.", or what setConfig threw). The island says so, and its card becomes
+  // that error card natively, instead of an empty page (#885: a card type its script no longer defines).
+  if (!customElements.get(tag)) {
+    sendBridge({ type: 'cardError', message: "Custom element doesn't exist: " + tag + '.' });
+    return;
+  }
   cardEl = document.createElement(tag);
-  if (typeof cardEl.setConfig === 'function') cardEl.setConfig(cfg);
+  try {
+    if (typeof cardEl.setConfig === 'function') cardEl.setConfig(cfg);
+  } catch (e) {
+    sendBridge({ type: 'cardError', message: String((e && e.message) || e) });
+    return;
+  }
   cardEl.hass = makeHass();
   document.getElementById('mount').appendChild(cardEl);
   wireEvents();

@@ -42,7 +42,8 @@ import dev.glassworks.engine.vitro.model.DashboardConfig
 import dev.glassworks.engine.vitro.model.DashboardSummary
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.model.LovelaceResource
-import dev.glassworks.engine.vitro.net.MjpegStreamPlayer
+import dev.glassworks.engine.vitro.camera.CameraPlayers
+import dev.glassworks.engine.vitro.camera.CameraStreamHost
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.ui.MdiIcons
@@ -504,6 +505,29 @@ class VitroEngine(
          */
         fun tokenFor(origin: String?): String? =
             cachedSession?.takeIf { VitroCardContext.sameOrigin(it.first, origin) }?.second
+
+        /**
+         * The camera players for the dashboard on [haBase] (HLS and MJPEG, WebRTC once its player registers), on
+         * the dashboard's own WebSocket: built afresh with each context, so a player registered meanwhile counts.
+         */
+        private fun cameraPlayersFor(haBase: String): CameraPlayers? {
+            if (haBase.isEmpty()) return null
+            val host = CameraStreamHost(
+                context = activity,
+                main = main,
+                haBase = haBase.trimEnd('/'),
+                accessToken = { tokenFor(haBase) },
+                callWs = { msg, done ->
+                    val c = client
+                    if (c != null) c.callWs(msg, done) else done(false, null, null)
+                },
+                subscribeWs = { msg, onEvent, onError ->
+                    val c = client
+                    if (c != null) c.subscribeWs(msg, onEvent, onError) else { onError(null); {} }
+                },
+            )
+            return CameraPlayers.forHost(host) { id -> store[id]?.entityPicture }
+        }
         private val history = ArrayDeque<String>()
 
         /** Records [url] for back; a wall panel runs for months, so only the last [MAX_HISTORY] are kept. */
@@ -618,17 +642,7 @@ class VitroEngine(
                     subscribeTemplate = { tpl, onRendered ->
                         client?.subscribeTemplate(tpl, onRendered) ?: {}
                     },
-                    cameraStream = { entityId, picture, onFrame, onFallback ->
-                        val streamUrl = MjpegStreamPlayer.streamUrl(haBase, entityId, picture)
-                        if (streamUrl == null) {
-                            onFallback()
-                            ({})
-                        } else {
-                            val player = MjpegStreamPlayer(streamUrl, tokenFor(haBase), onFrame = onFrame, onError = onFallback)
-                            player.start()
-                            ({ player.stop() })
-                        }
-                    },
+                    cameraPlayers = cameraPlayersFor(haBase),
                     islandServer = islandServer,
                     openIslandPage = { _ ->
                         // Tier 3 islands always run through the wrapped fallback Engine (GeckoView)
