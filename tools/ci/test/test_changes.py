@@ -182,6 +182,40 @@ class GradleJobsForgetMisses(unittest.TestCase):
             self.assertNotIn('GRADLE_OPTS', text.split('\njobs:\n', 1)[1], f'{path.name}: a job sets its own GRADLE_OPTS')
 
 
+class MavenCentralMirror(unittest.TestCase):
+    """Maven Central's 429s failed CI's downloads: Gradle and Robolectric ask Google's mirror of it first
+    (docs/ci.md, Caches)."""
+    MIRROR = 'https://maven-central.storage-download.googleapis.com/maven2/'
+
+    def test_every_repositories_block_asks_the_mirror_just_before_maven_central(self):
+        files = subprocess.run(['git', 'ls-files', '*.gradle.kts'], cwd=ROOT, capture_output=True, text=True,
+                               check=True).stdout.split()
+        centrals = 0
+        for name in files:
+            lines = [l.strip() for l in (ROOT / name).read_text().splitlines()]
+            for i, line in enumerate(lines):
+                if line == 'mavenCentral()':
+                    centrals += 1
+                    self.assertEqual(lines[i - 1], f'maven("{self.MIRROR}")', f'{name}:{i + 1}')
+                elif 'mavenCentral' in line and not line.startswith('//'):
+                    self.fail(f'{name}:{i + 1}: Maven Central declared another way: {line}')
+        self.assertGreaterEqual(centrals, 4)  # two in the root settings, two in build-logic's
+
+    def test_build_logic_asks_only_the_plugin_portal_for_kotlin_dsl(self):
+        """With Central in its plugin repositories, a 429 from Central for kotlin-dsl's marker lost the plugin on a
+        clean runner (#868). tools/ci/gradle-without-central.sh is the check that runs it."""
+        settings = (ROOT / 'build-logic/settings.gradle.kts').read_text()
+        plugins = settings.split('pluginManagement {', 1)[1].split('\n}\n', 1)[0]
+        self.assertIn('exclusiveContent {\n            forRepository { gradlePluginPortal() }\n            filter {\n'
+                      '                includeGroup("org.gradle.kotlin")\n'
+                      '                includeGroup("org.gradle.kotlin.kotlin-dsl")\n', plugins)
+
+    def test_robolectric_fetches_its_jars_from_the_mirror(self):
+        plugin = (ROOT / 'build-logic/src/main/kotlin/glassworks.android.gradle.kts').read_text()
+        self.assertIn(f'tasks.withType<Test>().configureEach {{\n    systemProperty("robolectric.dependency.repo.url", '
+                      f'"{self.MIRROR}")\n}}\n', plugin)
+
+
 class PrYmlSpeedUps(unittest.TestCase):
     """#536: what made jobs faster must not drop a check."""
     yml = PrYmlFollowsTheTable.yml
