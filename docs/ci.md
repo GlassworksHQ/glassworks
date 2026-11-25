@@ -82,7 +82,7 @@ Android PR in a shared pool (see above).
 
 | Job | What | Runs |
 |---|---|---|
-| `conformance (API 23, 26, 29, 34)` | The core's conformance test (`core/src/androidTest`) | push to `main` when Android code changes, nightly at 03:17 UTC (`pr.yml`'s time), by hand |
+| `conformance (API 23, 26, 29, 34)` | The core's conformance test (`core/src/androidTest`), and on API 23 and 34 the [engine contract](engine-contract.md) (`engines/conformance`) on the same emulator | push to `main` when Android code changes, nightly at 03:17 UTC (`pr.yml`'s time), by hand |
 | `libs-api23` | `esphome-api-android` and `improv` androidTest on Android 6 | the same |
 | `legacy-verify` | The generic app's legacy APK (the Mirror's) installed on Android 6: fails when its verifier rejects a Glassworks class (`tools/legacy/verify-api23.sh`, #435). Before a Mirror flash, run the script on the build you flash | the same |
 | `report` | Opens, updates or closes the red-main issue | after those two, on `main` only |

@@ -103,6 +103,7 @@ function load(): Source[] {
   add({ file: PANE_API, url: "/docs/what-makes-a-pane", section: "developers", cut: "What makes a pane", label: "What makes a pane" });
   add({ file: "frames/README.md", url: "/docs/frames", section: "developers", label: "Writing a frame" });
   add({ file: "docs/frame-agent.md", url: "/docs/frame-agent", section: "developers", label: "The frame agent" });
+  add({ file: "docs/engine-contract.md", url: "/docs/engine-contract", section: "developers", label: "The engine contract" });
   add({ file: PANE_API, url: "/docs/core/pane-api", section: "developers", label: "Pane API" });
 
   for (const id of dirs("panes")) {
