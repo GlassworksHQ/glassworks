@@ -13,7 +13,7 @@
   "states": {
    "binary_sensor.office_occupancy": {
     "state": "off",
-    "last_changed": "-32m",
+    "last_changed": -2400,
     "attributes": {
      "friendly_name": "Office Occupancy"
     }

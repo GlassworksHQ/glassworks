@@ -218,6 +218,27 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun anAvatarInitialIsNotFoundInsideATime() {
+        // The logbook's user avatar "A" next to "9:48:00 AM": only a standalone "A" is the avatar.
+        assertTrue(ParityCompare.standalone("A") && ParityCompare.standalone("12") && !ParityCompare.standalone("On ·"))
+        assertEquals(-1, ParityCompare.indexOfFolded("9:48:00 AM", "A", whole = true))
+        assertEquals(11, ParityCompare.indexOfFolded("9:48:00 AM A", "a", whole = true))
+        assertEquals(8, ParityCompare.indexOfFolded("9:48:00 AM", "A"))
+    }
+
+    @Test
+    fun aPlayingSpeakerAdvancesFromItsLastPositionUpdate() {
+        // The fixture's speaker reported 92 s of 245 a minute before the pinned instant: Vitro shows 152 s, as HA does.
+        val ref = JSONObject(File(ParityFiles.committed, "refs/s1/media-control-playing.json").readText())
+        val st = ref.getJSONObject("states").getJSONObject("media_player.living_room_speaker")
+        val a = st.getJSONObject("a")
+        val attrs = a.keys().asSequence().associateWith { k -> a.get(k).takeIf { it != JSONObject.NULL } }
+        val state = dev.glassworks.engine.vitro.data.EntityState("media_player.living_room_speaker", st.getString("s"), attrs)
+        val f = dev.glassworks.engine.vitro.cards.mediaProgressFraction(state, ref.getLong("now"))
+        assertEquals(152.0 / 245.0, f!!.toDouble(), 1e-4)
+    }
+
+    @Test
     fun aKnownCardCountMismatchIsAcceptedButAChangedOneIsNot() {
         val f = File.createTempFile("baseline", ".json")
         val extra = measure(pixel = 0.5, ha = 3, vitro = 4)
