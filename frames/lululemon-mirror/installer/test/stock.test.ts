@@ -343,7 +343,7 @@ describe('patchStockServicesJar', () => {
     }
   }
 
-  it.skipIf(!HAS_D8)('lets adb and the app set the time zone: setTimeZone checks WRITE_SECURE_SETTINGS, one operand changed', async () => {
+  it.skipIf(!HAS_D8)('lets adb and the app set the time zone and the clock: both check WRITE_SECURE_SETTINGS, one operand each', async () => {
     const jar = buildSyntheticStockServicesJar();
     const res = await patchStockServicesJar(jar, fakeAdbKey(0x61));
     expect(res.patched.length).toBe(jar.length);
@@ -354,20 +354,29 @@ describe('patchStockServicesJar', () => {
       expect(tz).not.toContain('SET_TIME_ZONE');
       expect(tz).toContain('setTimeZoneImpl'); // still sets it
       expect(tz.split('\n').length).toBe(methodBlock(alarmStub(jar), 'setTimeZone').split('\n').length);
+      const clock = methodBlock(alarmStub(res.patched), 'setTime');
+      expect(clock).toContain('"android.permission.WRITE_SECURE_SETTINGS"');
+      expect(clock).not.toContain('"android.permission.SET_TIME"');
     }
-    const off = await patchStockServicesJar(jar, fakeAdbKey(0x62), { adbSetsTimeZone: false });
+    expect(res.time).toBeDefined();
+    const off = await patchStockServicesJar(jar, fakeAdbKey(0x62), { adbSetsClock: false });
     expect(off.timeZone).toBeUndefined();
-    if (DEXDUMP) expect(methodBlock(alarmStub(off.patched), 'setTimeZone')).toContain('"android.permission.SET_TIME_ZONE"');
+    expect(off.time).toBeUndefined();
+    if (DEXDUMP) {
+      expect(methodBlock(alarmStub(off.patched), 'setTimeZone')).toContain('"android.permission.SET_TIME_ZONE"');
+      expect(methodBlock(alarmStub(off.patched), 'setTime')).toContain('"android.permission.SET_TIME"');
+    }
   }, 60_000);
 
-  it.skipIf(!HAS_D8)('reinstalling over an install from before the time zone change adds it, byte for byte as a fresh patch', async () => {
+  it.skipIf(!HAS_D8)('reinstalling over an install from before the clock change adds it, byte for byte as a fresh patch', async () => {
     const jar = buildSyntheticStockServicesJar();
     const b = fakeAdbKey(0x63);
     const fresh = await patchStockServicesJar(jar, b);
     for (const key of [fakeAdbKey(0x64), b]) { // another computer's install, then this computer's own
-      const old = await patchStockServicesJar(jar, key, { adbSetsTimeZone: false });
+      const old = await patchStockServicesJar(jar, key, { adbSetsClock: false });
       const re = await patchStockServicesJar(old.patched, b);
       expect(re.timeZone).toBeDefined();
+      expect(re.time).toBeDefined();
       expect(Buffer.from(re.patched).equals(Buffer.from(fresh.patched))).toBe(true);
     }
   }, 60_000);

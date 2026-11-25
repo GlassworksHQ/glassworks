@@ -147,14 +147,20 @@ public class UsbService {
 `);
     }
     // AOSP 6.0.1's AlarmManagerService: its binder is the class's second anonymous class, and setTimeZone checks
-    // SET_TIME_ZONE first (stock 1.24.0's AlarmManagerService$2, read with jadx 2026-11-25).
+    // SET_TIME_ZONE first and setTime SET_TIME (stock 1.24.0's AlarmManagerService$2, read with jadx 2026-11-25).
     write('com/android/server/AlarmManagerService.java', `package com.android.server;
 import android.content.Context;
 public class AlarmManagerService {
   private final Context mContext;
   private String mZone;
+  private long mNow;
   private final Runnable mTick = new Runnable() { public void run() {} };
   final Object mService = new Object() {
+    public boolean setTime(long millis) {
+      mContext.enforceCallingOrSelfPermission("android.permission.SET_TIME", "setTime");
+      mNow = millis;
+      return true;
+    }
     public void setTimeZone(String tz) {
       mContext.enforceCallingOrSelfPermission("android.permission.SET_TIME_ZONE", "setTimeZone");
       setTimeZoneImpl(tz);

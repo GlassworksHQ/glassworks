@@ -276,7 +276,8 @@ export class StandardSession implements SetupSteps, WifiSteps {
     // each command on a lid (the stall watchdog): a device that stops answering ends in an error with Try again
     const p = this.panel!;
     const bounded: PanelShell = { ...p, run: (cmd, signal) => p.run(cmd, signal ?? this.lid(SETTINGS_MS)) };
-    await applySettings(new Steps(bounded, (step, detail) => this.ui.note(step || `  ${detail}`)), opts, this.standard.appId);
+    // with this computer's time: a device that never reached a time server gets its clock from here (applySettings)
+    await applySettings(new Steps(bounded, (step, detail) => this.ui.note(step || `  ${detail}`)), { ...opts, now: Date.now() }, this.standard.appId);
     at({ step: 'start' });
     return {};
   }

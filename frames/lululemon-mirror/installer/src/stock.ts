@@ -636,15 +636,16 @@ export const USB_ALLOW_PERMISSION = 'android.permission.WRITE_SECURE_SETTINGS';
 /** `AlarmManagerService`'s binder (`IAlarmManager.Stub`, the class's second anonymous class on stock 1.24.0). */
 const ALARM_SERVICE_STUB = 'Lcom/android/server/AlarmManagerService$2;';
 const SET_TIME_ZONE = 'android.permission.SET_TIME_ZONE';
+const SET_TIME = 'android.permission.SET_TIME';
 /**
- * The permission `IAlarmManager.setTimeZone` checks after the patch. On stock, only the system holds SET_TIME_ZONE
- * (Android 6: signature|privileged), so adb's shell can't set the time zone (`service call alarm 3` is refused) and an
- * app adb installs can't either. adb's shell holds this one, and the install grants it to Glassworks. Whoever holds it
- * can already change every global setting, the automatic time zone among them.
+ * The permission `IAlarmManager.setTimeZone` and `setTime` check after the patch. On stock, only the system holds
+ * SET_TIME_ZONE and SET_TIME (Android 6: signature|privileged), so adb's shell can't set the time zone or the clock
+ * (`service call alarm 3` and `2` are refused) and an app adb installs can't either. adb's shell holds this one, and the
+ * install grants it to Glassworks. Whoever holds it can already change every global setting, automatic time among them.
  */
 export const TIME_ZONE_PERMISSION = 'android.permission.WRITE_SECURE_SETTINGS';
 
-/** What the time zone patch changed: the permission `IAlarmManager.setTimeZone` checks. */
+/** What the clock patch changed in one method: the permission `IAlarmManager.setTimeZone` or `setTime` checks. */
 export interface TimeZonePatch {
   /** File offset of `setTimeZone`'s code_item in `classes.dex`. */
   codeOff: number;
@@ -674,8 +675,10 @@ export interface PatchedServicesJar {
   stockAp?: StockApPatch;
   /** Present only when `appApprovesUsbDebugging` was applied (or found in place by a repatch). */
   usbAllow?: UsbAllowPatch;
-  /** Present only when `adbSetsTimeZone` was applied (or found in place by a repatch). */
+  /** Present only when `adbSetsClock` was applied (or found in place by a repatch): `setTimeZone`. */
   timeZone?: TimeZonePatch;
+  /** Present only when `adbSetsClock` was applied (or found in place by a repatch): `setTime`. */
+  time?: TimeZonePatch;
   /**
    * The jar already carried this patch, from an earlier install (Kiln reinstalling over itself): only the key it trusts
    * changed, from `from` (the earlier computer's fingerprint) to `fingerprint`; the rest was checked to be in place.
@@ -723,11 +726,12 @@ export interface PatchStockServicesJarOptions {
    */
   appApprovesUsbDebugging?: boolean;
   /**
-   * Also let a caller holding `TIME_ZONE_PERMISSION` set the time zone (`IAlarmManager.setTimeZone` checks it in place
-   * of SET_TIME_ZONE): adb's shell, for Kiln's App step, and Glassworks. Without it the person's time zone never takes
-   * on stock and the Mirror stays on GMT. Default `true`; the Node surgical-ADB tool passes `false`.
+   * Also let a caller holding `TIME_ZONE_PERMISSION` set the time zone and the clock (`IAlarmManager.setTimeZone` and
+   * `setTime` check it in place of SET_TIME_ZONE and SET_TIME): adb's shell, for Kiln's App step, and Glassworks.
+   * Without it the person's time zone never takes on stock, the Mirror stays on GMT, and a Mirror that can't reach a
+   * time server starts in 1970. Default `true`; the Node surgical-ADB tool passes `false`.
    */
-  adbSetsTimeZone?: boolean;
+  adbSetsClock?: boolean;
   /** MD5 fingerprint to refuse (defaults to `GLASS_PANES_KEY_FINGERPRINT`). */
   forbiddenFingerprint?: string;
 }
@@ -765,7 +769,7 @@ export async function patchStockServicesJar(
   const enableDeviceOwner = options.enableDeviceOwner ?? true;
   const disableStockAp = options.disableStockAp ?? true;
   const appApprovesUsbDebugging = options.appApprovesUsbDebugging ?? true;
-  const adbSetsTimeZone = options.adbSetsTimeZone ?? true;
+  const adbSetsClock = options.adbSetsClock ?? true;
   const fp = stockKeyFingerprint(adbKey, options.forbiddenFingerprint);
 
   const { list } = parseZipEntries(jar);
@@ -793,7 +797,7 @@ export async function patchStockServicesJar(
 
   // An earlier install already changed this jar: trust this key instead of that one, and check the rest is in place.
   const earlier = patchedKeyFingerprint(origDex);
-  if (earlier) return repatch(jar, origDex, earlier, fp, paddedFp, disableStockAp, appApprovesUsbDebugging, adbSetsTimeZone);
+  if (earlier) return repatch(jar, origDex, earlier, fp, paddedFp, disableStockAp, appApprovesUsbDebugging, adbSetsClock);
 
   // Step 1: swap the single-use 71-byte log string inside startConfirmation with our padded MD5.
   // replaceDexString re-sorts string_ids, renumbers every reference, and validates the whole DEX.
@@ -891,8 +895,10 @@ export async function patchStockServicesJar(
 
   // Step 4d (optional): adb and the app may set the time zone.
   let timeZone: TimeZonePatch | undefined;
-  if (adbSetsTimeZone) {
-    timeZone = patchTimeZone(dex, dv, lookup, strings);
+  let time: TimeZonePatch | undefined;
+  if (adbSetsClock) {
+    timeZone = patchPermissionLoad(dex, dv, lookup, strings, TIME_ZONE);
+    time = patchPermissionLoad(dex, dv, lookup, strings, TIME);
   }
 
   // Recompute DEX SHA-1 (over bytes 32..end) and Adler-32 (over bytes 12..end), both pure TS.
@@ -923,6 +929,7 @@ export async function patchStockServicesJar(
     ...(stockAp ? { stockAp } : {}),
     ...(usbAllow ? { usbAllow } : {}),
     ...(timeZone ? { timeZone } : {}),
+    ...(time ? { time } : {}),
   };
 }
 
@@ -933,7 +940,7 @@ export async function patchStockServicesJar(
  * (the code this patch writes), and with `disableStockAp`, `MirrorApService.systemReady()` is one `return-void`.
  * Anything else is a jar Kiln doesn't know, and is refused.
  */
-async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp: string, paddedFp: string, disableStockAp: boolean, appApprovesUsbDebugging: boolean, adbSetsTimeZone: boolean): Promise<PatchedServicesJar> {
+async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp: string, paddedFp: string, disableStockAp: boolean, appApprovesUsbDebugging: boolean, adbSetsClock: boolean): Promise<PatchedServicesJar> {
   const what = 'services.jar already carries Glassworks\' changes, but';
   const prefix = 'unable to start ';
   const oldPadded = prefix + earlier + ' '.repeat(START_CONFIRMATION_LOG_STRING.length - prefix.length - earlier.length);
@@ -965,16 +972,19 @@ async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp
     usbAllow = findUsbAllow(dex, dv, lookup, strings, USB_ALLOW_PERMISSION);
     if (!usbAllow) { usbAllow = patchUsbAllow(dex, dv, lookup, strings); addedUsbAllow = true; }
   }
-  // An install from before the time zone patch: add it now. One that has it: keep it.
+  // An install from before the clock patch (or from before its setTime half): add what's missing. What's there: keep it.
   let timeZone: TimeZonePatch | undefined;
-  let addedTimeZone = false;
-  if (adbSetsTimeZone) {
-    timeZone = findTimeZone(dex, dv, lookup, strings, TIME_ZONE_PERMISSION);
-    if (!timeZone) { timeZone = patchTimeZone(dex, dv, lookup, strings); addedTimeZone = true; }
+  let time: TimeZonePatch | undefined;
+  let addedClock = false;
+  if (adbSetsClock) {
+    timeZone = findPermissionLoad(dex, dv, lookup, strings, TIME_ZONE, TIME_ZONE_PERMISSION);
+    if (!timeZone) { timeZone = patchPermissionLoad(dex, dv, lookup, strings, TIME_ZONE); addedClock = true; }
+    time = findPermissionLoad(dex, dv, lookup, strings, TIME, TIME_ZONE_PERMISSION);
+    if (!time) { time = patchPermissionLoad(dex, dv, lookup, strings, TIME); addedClock = true; }
   }
   let out = jar;
   let padBytes = 0;
-  if (earlier !== fp || addedUsbAllow || addedStockAp || addedTimeZone) {
+  if (earlier !== fp || addedUsbAllow || addedStockAp || addedClock) {
     dex.set(sha1Bytes(dex.subarray(32)), 12);
     dv.setUint32(8, adler32(dex.subarray(12)), true);
     ({ out, padBytes } = await replaceJarDexExactSize(jar, dex));
@@ -993,6 +1003,7 @@ async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp
     ...(stockAp ? { stockAp } : {}),
     ...(usbAllow ? { usbAllow } : {}),
     ...(timeZone ? { timeZone } : {}),
+    ...(time ? { time } : {}),
     repatched: { from: earlier },
   };
 }
@@ -1001,7 +1012,8 @@ async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp
 interface PermissionCheck { what: string; cls: string; name: string; sig: string; stock: string; ours: string }
 
 const USB_ALLOW: PermissionCheck = { what: 'USB debugging patch', cls: USB_SERVICE, name: 'allowUsbDebugging', sig: '(ZLjava/lang/String;)V', stock: MANAGE_USB, ours: USB_ALLOW_PERMISSION };
-const TIME_ZONE: PermissionCheck = { what: 'time zone patch', cls: ALARM_SERVICE_STUB, name: 'setTimeZone', sig: '(Ljava/lang/String;)V', stock: SET_TIME_ZONE, ours: TIME_ZONE_PERMISSION };
+const TIME_ZONE: PermissionCheck = { what: 'clock patch', cls: ALARM_SERVICE_STUB, name: 'setTimeZone', sig: '(Ljava/lang/String;)V', stock: SET_TIME_ZONE, ours: TIME_ZONE_PERMISSION };
+const TIME: PermissionCheck = { what: 'clock patch', cls: ALARM_SERVICE_STUB, name: 'setTime', sig: '(J)Z', stock: SET_TIME, ours: TIME_ZONE_PERMISSION };
 
 /**
  * The `const-string` in `c`'s method that loads `permission`, for its `enforceCallingOrSelfPermission(permission, …)`;
@@ -1054,12 +1066,6 @@ const findUsbAllow = (dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, st
 /** `UsbService.allowUsbDebugging` checks `USB_ALLOW_PERMISSION` in place of MANAGE_USB. */
 const patchUsbAllow = (dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[]): UsbAllowPatch =>
   patchPermissionLoad(dex, dv, lookup, strings, USB_ALLOW);
-/** `IAlarmManager.setTimeZone`'s permission load, when it is `permission`. */
-const findTimeZone = (dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[], permission: string): TimeZonePatch | undefined =>
-  findPermissionLoad(dex, dv, lookup, strings, TIME_ZONE, permission);
-/** `IAlarmManager.setTimeZone` checks `TIME_ZONE_PERMISSION` in place of SET_TIME_ZONE. */
-const patchTimeZone = (dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[]): TimeZonePatch =>
-  patchPermissionLoad(dex, dv, lookup, strings, TIME_ZONE);
 
 /**
  * Empties `MirrorApService.systemReady()V` in place on `dex` (SHA-1/Adler recomputed by the caller):
