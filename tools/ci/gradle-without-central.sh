@@ -18,6 +18,10 @@ if [ -d "${GRADLE_USER_HOME:-$HOME/.gradle}/wrapper/dists" ]; then
   mkdir -p "$home/wrapper"
   cp -R "${GRADLE_USER_HOME:-$HOME/.gradle}/wrapper/dists" "$home/wrapper/"
 fi
+# Gradle itself, before Central is cut off: when no copied distribution matches the wrapper's, this downloads it
+# through services.gradle.org and wherever that redirects (GitHub's release hosts today), which the proxy below would
+# refuse. --version runs no build and resolves no dependency.
+GRADLE_USER_HOME="$home" ./gradlew --version > /dev/null
 
 # The JVM's proxy settings: every https host goes straight out, except Central, which goes to port 9 on this machine
 # (nothing listens there, so the connection is refused).
