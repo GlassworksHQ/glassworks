@@ -39,6 +39,7 @@ import urllib.request
 PKG = "dev.glassworks.vitro.test"
 ACTIVITY = f"{PKG}/.VitroTestActivity"
 TAG = "VitroCamE2E"
+PROBE_TICK_S = 1.0          # how often CameraProbe logs a stream's drawn frames (its `frames` line)
 DASHBOARD = "clarity-ref"
 # The view and camera per transport (home.py VIEWS), and the stream kind the seam names it.
 TRANSPORTS = {
@@ -371,6 +372,9 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
     pause = {"before": fake.cameras()}
     time.sleep(3.0)
     pause["after"] = fake.cameras()
+    # CameraProbe logs drawn frames once a second: one more tick, still hidden, so a frame drawn in the window's
+    # last second is in logcat before it's read.
+    time.sleep(PROBE_TICK_S + 0.2)
     probe.poll()
     # Any of the camera's streams, the paused one or one opened in its place: frame lines name only their stream.
     cam_ids = {e["id"] for e in probe.events if e["event"] == "open" and e.get("entity") == cam}
