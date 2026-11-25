@@ -32,7 +32,10 @@ public interface WebRtcPeer {
         /** The connection's state (`RTCPeerConnection.connectionState`). */
         public fun onConnectionState(state: PeerState)
 
-        /** A video frame of [width] by [height] (as shown, rotation applied) went to the screen. */
+        /**
+         * A video frame of [width] by [height] (as shown, rotation applied) is on screen: drawn, not just decoded. A
+         * frame dropped on the way (no surface to draw on) isn't reported, so a stream showing nothing times out.
+         */
         public fun onFrame(width: Int, height: Int)
     }
 

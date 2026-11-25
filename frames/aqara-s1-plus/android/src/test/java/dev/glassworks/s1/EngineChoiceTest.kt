@@ -3,8 +3,12 @@ package dev.glassworks.s1
 import dev.glassworks.KioskPrefs
 import dev.glassworks.engine.gecko.GeckoEngine
 import dev.glassworks.engine.vitro.VitroEngine
+import dev.glassworks.engine.vitro.camera.CameraStreamFactories
+import dev.glassworks.engine.vitro.camera.CameraStreamKind
 import org.junit.After
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -28,6 +32,7 @@ class EngineChoiceTest {
         val engine = app.glassworks.engine
         assertTrue("GeckoView, not wrapped: $engine", engine is GeckoEngine)
         assertFalse(engine is VitroEngine)
+        assertNull("no WebRTC player without Vitro", CameraStreamFactories.provider(CameraStreamKind.WEB_RTC))
     }
 
     /** A start with Vitro on installs the crash sentinel as the default handler: the next test gets the old one back. */
@@ -35,6 +40,7 @@ class EngineChoiceTest {
 
     @After fun restoreHandler() {
         Thread.setDefaultUncaughtExceptionHandler(handler)
+        CameraStreamFactories.unregister(CameraStreamKind.WEB_RTC)
     }
 
     @Test fun afterTheSentinelTurnedVitroOffTheNextStartIsOnGecko() {
@@ -51,6 +57,7 @@ class EngineChoiceTest {
         assertTrue("Vitro: $engine", engine is VitroEngine)
         assertTrue("with GeckoView for the pages it can't draw", (engine as VitroEngine).fallback is GeckoEngine)
         assertFalse("the crash sentinel watches the process", handler === Thread.getDefaultUncaughtExceptionHandler())
+        assertNotNull("its cameras play over WebRTC (engine-vitro-webrtc)", CameraStreamFactories.provider(CameraStreamKind.WEB_RTC))
     }
 
     @Test fun turningItOnLaterWaitsForARestart() {
