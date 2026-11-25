@@ -1309,6 +1309,20 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     private val forecastRow = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
     private var forecastFromSocket = false
 
+    /**
+     * HA's size classes (`_sizeController`): `tall` from 235 px of height (a 64 px icon, a 28 px state and
+     * temperature, 40 px forecast icons), else `short` (48, 24 and 32 px). A card the grid gives a height is measured
+     * by it; one sized by its content is short, as HA's own resize settles.
+     */
+    private var tall = false
+    private val headerIcon = WeatherIconView(ctx.context).apply { themeVars = ctx.theme.vars; fallbackColor = ctx.theme.primaryTextColor }
+    private val condition = label(ctx, 24f, ctx.theme.primaryTextColor).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+    private val temp = label(ctx, 24f, ctx.theme.primaryTextColor)
+    private val tempUnit = label(ctx, 24f, ctx.theme.primaryTextColor)
+    private var lastDays: List<ForecastDay> = emptyList()
+    private var lastHourly = false
+    private var lastUnit = "°C"
+
     /** The forecast shown (empty without one, or with show_forecast: false), for the line under the temperature. */
     private var forecast: List<ForecastDay> = emptyList()
 
@@ -1325,12 +1339,11 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val icon = WeatherIconView(ctx.context).apply { themeVars = ctx.theme.vars; fallbackColor = ctx.theme.primaryTextColor }
-        // The state 24 px on a 28.8 px line over the name (14 px / 16.8); the temperature 24 px over the attribute
-        // (a 20 px icon and 14 px text); a 48 px icon 16 px before them, 12 px between the two columns.
-        val condition = label(ctx, 24f, ctx.theme.primaryTextColor).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+        val icon = headerIcon
+        // The state (24 px short, 28 px tall, on a 1.2 line) over the name (14 px / 16.8); the temperature the same
+        // size with its unit in 24 px, 1 px down from its top, over the attribute (a 20 px icon and 14 px text); the
+        // icon (48 or 64 px) 16 px before them, 12 px between the two columns.
         val name = label(ctx, 14f, ctx.theme.secondaryTextColor).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
-        val temp = label(ctx, 24f, ctx.theme.primaryTextColor).apply { gravity = Gravity.END }
         val metric = label(ctx, 14f, ctx.theme.secondaryTextColor).apply { gravity = Gravity.END }
         val metricIcon = MdiIconView(ctx.context)
         fun line(view: View, heightDp: Float) = FrameLayout(ctx.context).apply {
@@ -1340,9 +1353,12 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         top.addView(icon, LinearLayout.LayoutParams(ctx.px(48f), ctx.px(48f)).apply { marginEnd = ctx.px(16f) })
         top.addView(LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            addView(line(condition, 28.8f))
+            addView(condition, LinearLayout.LayoutParams(WRAP_CONTENT, (28.8f * ctx.dp).roundToInt()))
             addView(line(name, 16.8f))
         }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        condition.gravity = Gravity.CENTER_VERTICAL
+        temp.gravity = Gravity.CENTER_VERTICAL
+        tempUnit.gravity = Gravity.CENTER_VERTICAL
         val metricRow = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.END
@@ -1353,13 +1369,18 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         top.addView(LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.END
-            addView(line(temp, 28.8f), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { gravity = Gravity.END })
+            // `.temp span { position: absolute; top: 1px }` after the number, in its 24 px `margin-right`.
+            addView(LinearLayout(ctx.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(temp, LinearLayout.LayoutParams(WRAP_CONTENT, (28.8f * ctx.dp).roundToInt()))
+                addView(tempUnit, LinearLayout.LayoutParams(WRAP_CONTENT, (28.8f * ctx.dp).roundToInt()).apply { topMargin = ctx.px(1f) })
+            }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { gravity = Gravity.END })
             addView(metricRow, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { gravity = Gravity.END })
         }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(12f) })
         col.addView(top, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         val showForecast = config.raw.optBoolean("show_forecast", true)
         if (showForecast) {
-            col.addView(forecastRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(16f) })
+            col.addView(forecastRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(12f) })
         }
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
 
@@ -1375,7 +1396,8 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 name.text = config.name ?: s?.friendlyName ?: eid
                 val t = s?.attributes?.get("temperature")
                 val u = (s?.attributes?.get("temperature_unit") as? String) ?: "°C"
-                temp.text = if (t != null) "$t $u" else "–"
+                temp.text = if (t != null) "$t " else "–"
+                tempUnit.text = if (t != null) u else ""
                 updateMetric = { showMetric(s, u, metric, metricIcon, metricRow) }
                 updateMetric()
                 // Older integrations still carry `forecast` as an attribute: show it until the socket answers.
@@ -1440,27 +1462,57 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     /** [hourly] comes from the `forecast_type` asked for, as HA decides; only the legacy attribute has to guess. */
     private fun renderForecast(days: List<ForecastDay>, unit: String, hourly: Boolean = days.size >= 2 && sameDay(days[0].datetime, days[1].datetime)) {
         forecast = days
+        lastDays = days
+        lastHourly = hourly
+        lastUnit = unit
         updateMetric()
         forecastRow.removeAllViews()
+        // `.forecast-item`: a 4 px-gap column of the day (12 px), the icon (40 px with 6 px around when tall, 32 with
+        // 4 short), the high (16 px) and the low (14 px on a 22.4 px line), each as HA formats the number.
+        val iconDp = if (tall) 40f else 32f
+        val iconPad = if (tall) 6f else 4f
         for (day in days.take(5)) {
             val cell = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
             }
-            cell.addView(label(ctx, 12f, ctx.theme.secondaryTextColor).apply { text = forecastLabel(day.datetime, hourly) },
-                LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+            cell.addView(label(ctx, 12f, ctx.theme.secondaryTextColor).apply { text = forecastLabel(day.datetime, hourly); gravity = Gravity.CENTER },
+                LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(12f)))
             cell.addView(WeatherIconView(ctx.context).apply { themeVars = ctx.theme.vars; fallbackColor = ctx.theme.primaryTextColor; setCondition(day.condition.orEmpty()) },
-                LinearLayout.LayoutParams(ctx.px(32f), ctx.px(32f)).apply { topMargin = ctx.px(6f); bottomMargin = ctx.px(6f) })
-            cell.addView(label(ctx, 13f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
-                text = day.temperature?.let { formatDegrees(it) } ?: "–"
-            }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+                LinearLayout.LayoutParams(ctx.px(iconDp), ctx.px(iconDp)).apply { topMargin = ctx.px(4f + iconPad); bottomMargin = ctx.px(iconPad) })
+            cell.addView(label(ctx, 16f, ctx.theme.primaryTextColor).apply {
+                text = day.temperature?.let { forecastNumber(it) + "°" } ?: "–"
+                gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(16f)).apply { topMargin = ctx.px(4f) })
             day.templow?.let { low ->
-                cell.addView(label(ctx, 12f, ctx.theme.secondaryTextColor).apply { text = formatDegrees(low) },
-                    LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(3f) })
+                cell.addView(label(ctx, 14f, ctx.theme.secondaryTextColor).apply { text = forecastNumber(low) + "°"; gravity = Gravity.CENTER },
+                    LinearLayout.LayoutParams(WRAP_CONTENT, (22.4f * ctx.dp).roundToInt()).apply { topMargin = ctx.px(4f) })
             }
             forecastRow.addView(cell, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         }
         forecastRow.contentDescription = "Forecast in $unit"
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val t = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY && MeasureSpec.getSize(heightMeasureSpec) / ctx.dp >= 235f
+        if (t != tall) {
+            tall = t
+            applySize()
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    private fun applySize() {
+        val iconDp = if (tall) 64f else 48f
+        headerIcon.layoutParams = (headerIcon.layoutParams as LinearLayout.LayoutParams).apply { width = ctx.px(iconDp); height = ctx.px(iconDp) }
+        val big = if (tall) 28f else 24f
+        for (v in listOf(condition, temp)) {
+            v.textSize = ctx.scaledSp(big)
+            v.typeface = VitroFonts.typeface(ctx.context, Inter.REGULAR, ctx.scaledSp(big))
+            v.layoutParams = v.layoutParams.apply { height = (big * 1.2f * ctx.dp).roundToInt() }
+        }
+        (forecastRow.layoutParams as? LinearLayout.LayoutParams)?.topMargin = ctx.px(if (tall) 16f else 12f)
+        if (lastDays.isNotEmpty()) renderForecast(lastDays, lastUnit, lastHourly)
     }
 
     companion object {
@@ -1476,7 +1528,9 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             else -> state.replace('-', ' ').replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
         }
 
-        private fun formatDegrees(v: Double): String = String.format(Locale.US, "%.0f°", v)
+        /** HA's `formatNumber` of a forecast value: as given, up to three decimals, grouped ("16.7", "1,012"). */
+        internal fun forecastNumber(v: Double): String =
+            java.text.DecimalFormat("#,##0.###", java.text.DecimalFormatSymbols(Locale.US)).format(v)
 
         /** A number as HA's formatNumber shows it: no trailing ".0", one decimal kept ("76", "12.2"). */
         private fun formatNumber(v: Double): String =

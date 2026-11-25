@@ -243,8 +243,13 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                 // Measured in HA: the picture cards span the section's full width at their image's height.
                 "picture", "picture-entity", "picture-glance" -> HaGridSize(12, null)
                 "heading" -> HaGridSize(null, null)
-                // Measured in HA: with show_forecast: false the weather card is 2 rows (120 px), its conditions centered.
-                "weather-forecast" -> HaGridSize(12, if (raw.optBoolean("show_forecast", true)) null else 2)
+                // hui-weather-forecast-card's getGridOptions: one row, one for the current conditions, one for the
+                // forecast and one more for a daily one.
+                "weather-forecast" -> {
+                    val current = raw.optBoolean("show_current", true)
+                    val forecast = raw.optBoolean("show_forecast", true)
+                    HaGridSize(12, 1 + (if (current) 1 else 0) + (if (forecast) 1 + (if (raw.optString("forecast_type") == "daily") 1 else 0) else 0))
+                }
                 "custom:mushroom-template-card" -> {
                     val hasContent = listOf("icon", "picture", "primary", "secondary").any { raw.optString(it).isNotBlank() }
                     val vertical = raw.optBoolean("vertical", false) || raw.optString("layout") == "vertical"
