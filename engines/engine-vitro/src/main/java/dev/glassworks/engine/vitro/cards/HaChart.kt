@@ -539,10 +539,14 @@ class ChartView(context: Context, private val density: Float) : View(context) {
         private val measurePaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
         /** HA's `measureTextWidth(text, size)`: the width of [text] in its chart font, rounded up (CSS px). */
-        fun measure(text: String, size: Float = 12f, bold: Boolean = false): Float {
+        fun measure(text: String, size: Float = 12f, bold: Boolean = false): Float =
+            ceil(width(text, size, bold).toDouble()).toFloat()
+
+        /** The width of [text] in its chart font as ECharts lays it out, unrounded (CSS px). */
+        fun width(text: String, size: Float = 12f, bold: Boolean = false): Float {
             measurePaint.typeface = VitroFonts.system(if (bold) 700 else 400)
             measurePaint.textSize = size
-            return ceil(measurePaint.measureText(text).toDouble()).toFloat()
+            return measurePaint.measureText(text)
         }
     }
 }
