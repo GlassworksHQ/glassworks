@@ -78,6 +78,8 @@ class VitroTestActivity : Activity() {
             page?.restart()
         }
         override fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit) = answer(false)
+        // The test app grants nothing, Android permissions included, so no page is trusted (#847).
+        override fun trusts(url: String): Boolean = false
         override fun onConnect(port: PagePort) {}
         override fun onPortMessage(port: PagePort, message: JSONObject) {}
     }

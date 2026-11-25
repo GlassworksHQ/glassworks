@@ -187,6 +187,9 @@ class VitroEngine(
             override fun onFirstPaint() {}
             override fun onLocationChange(url: String?) {}
             override fun redirect(url: String): String? = null
+            // The activity's host decides, as for every page (#847). An island's own page is on loopback, not Home
+            // Assistant, so its card gets no microphone or camera without a prompt.
+            override fun trusts(url: String): Boolean = host.trusts(url)
             // The island's page draws nothing again: it never goes to another build of its card, and its card gets a
             // new one. Islands whose content lives on keep theirs.
             override fun onContentGone(killed: Boolean) {
@@ -244,6 +247,8 @@ class VitroEngine(
             }
             override fun redirect(url: String): String? = host.redirect(url)
             override fun onContentGone(killed: Boolean) = host.onContentGone(killed)
+            // Home Assistant's own frontend: the activity's host decides, as without Vitro (#847).
+            override fun trusts(url: String): Boolean = host.trusts(url)
             override fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit) =
                 host.onAndroidPermissions(permissions, answer)
             override fun onConnect(port: PagePort) = host.onConnect(port)
