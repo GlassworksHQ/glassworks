@@ -20,6 +20,8 @@ import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
+import dev.glassworks.engine.vitro.theme.ResolvedTheme
+import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.VitroCardContext
@@ -37,8 +39,11 @@ import kotlin.math.min
 // The data: HA's computeHistory, mergeHistoryResults and the chart data modules
 // ---------------------------------------------------------------------------------------------
 
-/** A state of a line chart (`LineChartState`): its value text, when it took it (ms), and kept attributes. */
-class LineState(val state: String, val lastChanged: Double)
+/**
+ * A state of a line chart (`LineChartState`): its value text, when it took it (ms), and for climate, humidifier and
+ * water-heater entities the attributes their charts draw (`LINE_ATTRIBUTES_TO_KEEP`); null for every other entity.
+ */
+class LineState(val state: String, val lastChanged: Double, val attributes: JSONObject? = null)
 
 /** One entity of a line chart (`LineChartEntity`), with the statistics that come before its first state. */
 class LineEntity(val entityId: String, val name: String, val states: List<LineState>, var statistics: List<LineState>? = null)
@@ -67,7 +72,8 @@ object HaHistory {
         for (id in LinkedHashSet(entityIds + history.keys)) {
             val h = history[id]
             if (h != null) local[id] = h
-            else store(id)?.let { st -> local[id] = listOf(HistoryState(st.state, st.lastUpdated)) }
+            // limitedHistoryFromStateObj: the current state with its attributes, which a climate's chart draws.
+            else store(id)?.let { st -> local[id] = listOf(HistoryState(st.state, st.lastUpdated, attributesJson(st.attributes))) }
         }
         val lineGroups = LinkedHashMap<String, LinkedHashMap<String, MutableList<HistoryState>>>()
         val timeline = ArrayList<TimelineRow>()
@@ -102,16 +108,56 @@ object HaHistory {
         return HistoryResult(lines, timeline)
     }
 
+    /** The attributes a climate, humidifier or water-heater chart draws (`LINE_ATTRIBUTES_TO_KEEP`). */
+    val LINE_ATTRIBUTES_TO_KEEP = listOf(
+        "temperature", "current_temperature", "target_temp_low", "target_temp_high", "hvac_action", "humidity", "mode",
+        "action", "current_humidity",
+    )
+
+    /**
+     * `processLineChartEntities`: a state is dropped only when it repeats the two before it, attributes included
+     * (`equalState`), so a climate whose mode stays the same keeps every recorded temperature.
+     */
+    /** An entity's attributes as the JSON a history state carries (a null stays a JSON null). */
+    private fun attributesJson(attrs: Map<String, Any?>): JSONObject {
+        val o = JSONObject()
+        for ((k, v) in attrs) o.put(k, if (v == null) JSONObject.NULL else JSONObject.wrap(v) ?: JSONObject.NULL)
+        return o
+    }
+
     private fun lineEntity(id: String, states: List<HistoryState>, current: EntityState?): LineEntity {
         val useLu = id.substringBefore('.') in USE_LAST_UPDATED
         val out = ArrayList<LineState>(states.size)
         for (s in states) {
-            val p = LineState(s.s, (if (useLu) s.lu else (s.lc.takeIf { !it.isNaN() && it != 0.0 } ?: s.lu)) * 1000)
+            val p = if (useLu) {
+                val kept = JSONObject()
+                s.a?.let { a -> for (k in LINE_ATTRIBUTES_TO_KEEP) if (a.has(k)) kept.put(k, a.opt(k)) }
+                LineState(s.s, s.lu * 1000, kept)
+            } else {
+                LineState(s.s, (s.lc.takeIf { !it.isNaN() && it != 0.0 } ?: s.lu) * 1000)
+            }
             val n = out.size
-            if (n > 1 && out[n - 1].state == p.state && out[n - 2].state == p.state) continue
+            if (n > 1 && equalState(p, out[n - 1]) && equalState(p, out[n - 2])) continue
             out += p
         }
         return LineEntity(id, chartName(id, current), out)
+    }
+
+    /** `equalState`: the same state and, when both have them, the same kept attributes. */
+    fun equalState(a: LineState, b: LineState): Boolean {
+        if (a.state != b.state) return false
+        val aa = a.attributes ?: return true
+        val ba = b.attributes ?: return true
+        return LINE_ATTRIBUTES_TO_KEEP.all { jsStrictEquals(aa.opt(it), ba.opt(it)) }
+    }
+
+    /** JavaScript's `===` on JSON values: a missing value (null) equals only another missing one, numbers by value. */
+    fun jsStrictEquals(x: Any?, y: Any?): Boolean {
+        if (x == null || y == null) return x === y
+        if (x === JSONObject.NULL || y === JSONObject.NULL) return x === y
+        if (x is Number && y is Number) return x.toDouble() == y.toDouble()
+        if (x is JSONObject || x is JSONArray || y is JSONObject || y is JSONArray) return x === y
+        return x == y
     }
 
     private fun timelineRow(id: String, states: List<HistoryState>, current: EntityState?): TimelineRow {
@@ -203,6 +249,218 @@ object HaHistory {
     }
 
     private val LEADING_FLOAT = Regex("^[+-]?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?")
+}
+
+/** One series of a history line chart: its points (ms, value; NaN for `null`), and whether it's a fill. */
+class HistorySeries(val id: String, val entityId: String, val name: String, val color: Int, val fill: Boolean) {
+    val xs = ArrayList<Double>()
+    val ys = ArrayList<Double>()
+
+    fun add(x: Double, y: Double) { xs += x; ys += y }
+}
+
+/**
+ * `generateStateHistoryChartLineData` (`state-history-chart-line-data.ts`): one entity's series. A climate or water
+ * heater draws its current temperature, a fill under it while it heats, cools, dries or runs its fan, and its target
+ * temperature (or the high and low ends of a target range); a humidifier its target and current humidity and a fill
+ * while it humidifies, dries or is on; anything else its numeric state, with gaps for the states that aren't numbers.
+ */
+object HaHistoryLines {
+    /** `CLIMATE_MODE_CONFIGS`: the HVAC mode, its action, and the theme variable of its fill, with HA's default. */
+    private class ModeConfig(val mode: String, val action: String, val cssVar: String, val fallback: Int, val showName: String, val plainName: String)
+
+    private val CLIMATE_MODES = listOf(
+        ModeConfig("heat", "heating", "state-climate-heat-color", 0xFFFF6F22.toInt(), "heating", "Heating"),
+        ModeConfig("cool", "cooling", "state-climate-cool-color", 0xFF2196F3.toInt(), "cooling", "Cooling"),
+        ModeConfig("dry", "drying", "state-climate-dry-color", 0xFFFF9800.toInt(), "drying", "Drying"),
+        ModeConfig("fan_only", "fan", "state-climate-fan_only-color", 0xFF00BCD4.toInt(), "fan only", "Fan"),
+    )
+
+    /** `CLIMATE_HVAC_ACTION_TO_MODE`. */
+    private val HVAC_ACTION_TO_MODE = mapOf(
+        "cooling" to "cool", "defrosting" to "heat", "drying" to "dry", "fan" to "fan_only", "heating" to "heat",
+        "idle" to "off", "off" to "off", "preheating" to "heat",
+    )
+
+    /** The series' ids that show a temperature attribute in the legend (`state-history-chart-line`), by suffix. */
+    private val LEGEND_ATTRIBUTE = listOf(
+        "-current_temperature" to "current_temperature",
+        "-target_temperature_mode_low" to "target_temp_low",
+        "-target_temperature_mode" to "target_temp_high",
+        "-target_temperature" to "temperature",
+    )
+
+    /** JavaScript's truthiness of a JSON value: missing, null, false, 0, NaN and "" are false. */
+    private fun truthy(v: Any?): Boolean = when (v) {
+        null, JSONObject.NULL -> false
+        is Boolean -> v
+        is Number -> v.toDouble().let { it != 0.0 && !it.isNaN() }
+        is String -> v.isNotEmpty()
+        else -> true
+    }
+
+    /** `safeParseFloat`: `parseFloat` of a JSON value, null unless it's a finite number. */
+    fun safeParseFloat(v: Any?): Double? = when (v) {
+        null, JSONObject.NULL, is Boolean -> null
+        is Number -> v.toDouble().takeIf { it.isFinite() }
+        else -> HaHistory.parseFloatOrNull(v.toString())
+    }
+
+    private fun color(theme: ResolvedTheme, cssVar: String, fallback: Int): Int =
+        ThemeResolver.parseColor(theme.vars[cssVar]) ?: fallback
+
+    /**
+     * The series of [entity] up to [endMs]; [colorIndex] is the chart's next graph color, shared by its entities.
+     * [current] is the entity's state now ([nowMs]), which a sensor's line ends on.
+     */
+    fun series(
+        entity: LineEntity, endMs: Double, nowMs: Double, name: String, color: Int?, showNames: Boolean,
+        theme: ResolvedTheme, colorIndex: IntArray, current: EntityState?,
+    ): List<HistorySeries> {
+        val domain = entity.entityId.substringBefore('.')
+        val data = ArrayList<HistorySeries>()
+        var prevValues: DoubleArray? = null
+        fun pushData(t: Double, values: DoubleArray?) {
+            if (values == null || t > endMs) return
+            val prev = prevValues
+            for (i in data.indices) {
+                // A null after a value ends that value's line here, so the gap starts where the value stopped.
+                if (values[i].isNaN() && prev != null && !prev[i].isNaN()) data[i].add(t, prev[i])
+                data[i].add(t, values[i])
+            }
+            prevValues = values
+        }
+        fun addDataSet(id: String, label: String, clr: Int? = null, fill: Boolean = false) {
+            val c = clr ?: HaGraphColors.byIndex(theme, colorIndex[0]++)
+            data += HistorySeries(id, entity.entityId, label, c, fill)
+        }
+        val id = entity.entityId
+        val states = entity.states
+        if (domain == "climate" || domain == "water_heater") {
+            val hasHvacAction = states.any { truthy(it.attributes?.opt("hvac_action")) }
+            fun isActive(m: ModeConfig, st: LineState): Boolean =
+                if (domain == "climate" && hasHvacAction) HVAC_ACTION_TO_MODE[st.attributes?.opt("hvac_action") as? String] == m.mode
+                else st.state == m.mode
+            val active = CLIMATE_MODES.filter { m -> states.any { isActive(m, it) } }
+            val hasTargetRange = states.any { st ->
+                val a = st.attributes
+                a != null && !HaHistory.jsStrictEquals(a.opt("target_temp_high"), a.opt("target_temp_low"))
+            }
+            addDataSet("$id-current_temperature", if (showNames) "$name current temperature" else "Current temperature")
+            for (m in active) {
+                addDataSet("$id-${m.action}", if (showNames) "$name ${m.showName}" else m.plainName, color(theme, m.cssVar, m.fallback), fill = true)
+            }
+            if (hasTargetRange) {
+                addDataSet("$id-target_temperature_mode", if (showNames) "$name target temperature high" else "Upper target temperature")
+                addDataSet("$id-target_temperature_mode_low", if (showNames) "$name target temperature low" else "Lower target temperature")
+            } else {
+                addDataSet("$id-target_temperature", if (showNames) "$name target temperature" else "Target temperature")
+            }
+            for (st in states) {
+                val a = st.attributes ?: continue
+                val curTemp = safeParseFloat(a.opt("current_temperature")) ?: Double.NaN
+                val values = DoubleArray(data.size)
+                var i = 0
+                values[i++] = curTemp
+                for (m in active) values[i++] = if (isActive(m, st)) curTemp else Double.NaN
+                if (hasTargetRange) {
+                    values[i++] = safeParseFloat(a.opt("target_temp_high")) ?: Double.NaN
+                    values[i] = safeParseFloat(a.opt("target_temp_low")) ?: Double.NaN
+                } else {
+                    values[i] = safeParseFloat(a.opt("temperature")) ?: Double.NaN
+                }
+                pushData(st.lastChanged, values)
+            }
+        } else if (domain == "humidifier") {
+            val hasAction = states.any { truthy(it.attributes?.opt("action")) }
+            val hasCurrent = states.any { truthy(it.attributes?.opt("current_humidity")) }
+            val hasHumidifying = hasAction && states.any { it.attributes?.opt("action") == "humidifying" }
+            val hasDrying = hasAction && states.any { it.attributes?.opt("action") == "drying" }
+            val onColor = color(theme, "state-humidifier-on-color", 0xFF2196F3.toInt())
+            addDataSet("$id-target_humidity", if (showNames) "$name target humidity" else "Target humidity")
+            if (hasCurrent) addDataSet("$id-current_humidity", if (showNames) "$name current humidity" else "Current humidity")
+            when {
+                hasHumidifying -> addDataSet("$id-humidifying", if (showNames) "$name humidifying" else "Humidifying", onColor, fill = true)
+                hasDrying -> addDataSet("$id-drying", if (showNames) "$name drying" else "Drying", onColor, fill = true)
+                else -> addDataSet("$id-on", if (showNames) "$name on" else "On", null, fill = true)
+            }
+            for (st in states) {
+                val a = st.attributes ?: continue
+                val target = safeParseFloat(a.opt("humidity")) ?: Double.NaN
+                // Without a current humidity, the fill goes up to the target.
+                val cur = if (hasCurrent) safeParseFloat(a.opt("current_humidity")) ?: Double.NaN else target
+                val values = ArrayList<Double>(3)
+                values += target
+                if (hasCurrent) values += cur
+                values += when {
+                    hasHumidifying -> if (a.opt("action") == "humidifying") cur else Double.NaN
+                    hasDrying -> if (a.opt("action") == "drying") cur else Double.NaN
+                    else -> if (st.state == "on") cur else Double.NaN
+                }
+                pushData(st.lastChanged, values.toDoubleArray())
+            }
+        } else {
+            addDataSet(id, name, color)
+            var lastValue: Double? = null
+            var lastDate = 0.0
+            var lastNull: Double? = null
+            fun pushValue(t: Double, v: Double) {
+                if (t > endMs) return
+                data[0].add(t, v)
+                prevValues = doubleArrayOf(v)
+            }
+            fun process(st: LineState) {
+                val v = HaHistory.parseFloatOrNull(st.state)
+                val date = st.lastChanged
+                val ln = lastNull
+                if (v != null && ln != null) {
+                    val lv = lastValue ?: v
+                    val tmp = (v - lv) * ((ln - lastDate) / (date - lastDate)) + lv
+                    pushData(ln, doubleArrayOf(tmp))
+                    pushData(ln + 1, doubleArrayOf(Double.NaN))
+                    pushData(date, doubleArrayOf(v))
+                    lastDate = date; lastValue = v; lastNull = null
+                } else if (v != null) {
+                    pushValue(date, v)
+                    lastDate = date; lastValue = v
+                } else if (lastNull == null && lastValue != null) {
+                    lastNull = date
+                }
+            }
+            val stop = states.firstOrNull()?.lastChanged ?: 0.0
+            for (st in entity.statistics.orEmpty()) {
+                if (stop != 0.0 && st.lastChanged >= stop) break
+                process(st)
+            }
+            states.forEach(::process)
+            lastNull?.let { pushData(it, doubleArrayOf(Double.NaN)) }
+        }
+        // The last values held to the end of the window.
+        pushData(endMs, prevValues)
+        // A sensor's line ends on its current state when the chart reaches now (a second's leeway).
+        if (domain == "sensor" && nowMs - endMs <= 1000 && data.size == 1) {
+            current?.state?.let(HaHistory::parseFloatOrNull)?.let { data[0].add(max(nowMs, endMs), it) }
+        }
+        return data
+    }
+
+    /**
+     * The legend's value for a series (`state-history-chart-line`): a climate's temperature series show the attribute
+     * they draw (`computeAttributeValueDisplay`, "Unknown" when it's missing), every other one the entity's state.
+     */
+    fun legendValue(seriesId: String, current: EntityState?, temperatureUnit: String?): String? {
+        current ?: return null
+        val attr = LEGEND_ATTRIBUTE.firstOrNull { seriesId.endsWith(it.first) }?.second ?: return current.formattedState()
+        return when (val v = current.attributes[attr]) {
+            null, JSONObject.NULL -> "Unknown"
+            is Number -> {
+                val number = HaChartFormat.number(v.toDouble(), 0, 2)
+                val unit = temperatureUnit?.takeIf { it.isNotEmpty() }
+                if (unit == null) number else number + (if (unit == "°") "" else "\u00A0") + unit
+            }
+            else -> v.toString()
+        }
+    }
 }
 
 /** The history panel's address for [entityIds] from [startMs], as the cards' header links build it (`createSearchParam`). */
@@ -327,7 +585,9 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
             getChildAt(i).measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(itemH, MeasureSpec.EXACTLY))
         }
         val n = rows(w).size
-        setMeasuredDimension(w, if (n == 0) 0 else topPad + n * itemH + Math.round((n - 1) * gap))
+        val natural = if (n == 0) 0 else topPad + n * itemH + Math.round((n - 1) * gap)
+        // A fixed slot caps the legend (`max-height: 60%`): the rows past it are cut off, as HA's scroll out of view.
+        setMeasuredDimension(w, if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) MeasureSpec.getSize(heightMeasureSpec) else natural)
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
@@ -374,6 +634,8 @@ class ChartLine(
     val width: Float = 1.5f, val step: Boolean = false, val smooth: Double = 0.0,
     /** A band: the area down to this other line, filled with [areaColor]. */
     val bandBottom: ChartLine? = null, val areaColor: Int = 0,
+    /** An area down to the value axis' origin (ECharts' `areaStyle` with `origin: auto`), filled with [areaColor]. */
+    val areaToOrigin: Boolean = false,
 )
 
 private fun theme(ctx: VitroCardContext) = ctx.theme
@@ -439,7 +701,7 @@ class LineChartSpec(
 
 object HaLineChart {
     /** The y labels and the width `_formatYAxisLabel` reports for them (`measureTextWidth + 5`, at least 25). */
-    fun yAxis(spec: LineChartSpec): Triple<ECharts.ValueScale, List<String>, Float> {
+    fun yAxis(spec: LineChartSpec, measure: (String) -> Float = { ChartView.measure(it) }): Triple<ECharts.ValueScale, List<String>, Float> {
         val (dMin, dMax) = extentIn(spec.lines, spec.xMin.toDouble(), spec.xMax.toDouble())
         // fit_y_data: min(roundYAxis(min, floor), min_y_axis) and max(roundYAxis(max, ceil), max_y_axis), as HA's charts do.
         fun roundY(v: Double, f: (Double) -> Double) = if (kotlin.math.abs(v) < 1) v else f(v)
@@ -449,11 +711,12 @@ object HaLineChart {
         val scale = if (dMin.isFinite()) ECharts.valueScale(dMin, dMax, bounds.fixMin, bounds.fixMax, 0.02)
             else ECharts.ValueScale(0.0, 1.0, listOf(0.0, 1.0))
         val labels = scale.ticks.map { v -> HaChartFormat.number(v, if (v == 0.0) 0 else bounds.fractionDigits, bounds.fractionDigits) }
-        val width = labels.maxOfOrNull { max(ChartView.measure(it) + 5f, 25f) } ?: 25f
+        val width = labels.maxOfOrNull { max(measure(it) + 5f, 25f) } ?: 25f
         return Triple(scale, labels, width)
     }
 
-    fun scene(spec: LineChartSpec, widthCss: Float, ctx: VitroCardContext): ChartScene {
+    /** The chart for [widthCss] x [heightCss] (its spec's height unless a fixed slot sizes it). */
+    fun scene(spec: LineChartSpec, widthCss: Float, ctx: VitroCardContext, heightCss: Float = spec.heightCss): ChartScene {
         val t = theme(ctx)
         val s = ChartScene()
         val (scale, labels, yWidth) = yAxis(spec)
@@ -478,7 +741,7 @@ object HaLineChart {
             bottom = max(20f, 8f + ChartText.X_LABEL_H)
             right = 1f
         }
-        val grid = RectF(left, top, widthCss - right, spec.heightCss - bottom)
+        val grid = RectF(left, top, widthCss - right, max(top, heightCss - bottom))
         val span = (spec.xMax - spec.xMin).toDouble().coerceAtLeast(1.0)
         fun xOf(ms: Double) = grid.left + (ms - spec.xMin) / span * grid.width()
         val vSpan = (scale.max - scale.min).takeIf { it != 0.0 } ?: 1.0
@@ -523,9 +786,29 @@ object HaLineChart {
                 }
                 s.fill(ChartScene.Fill(area, l.areaColor, grid))
             }
-            val path = Path()
-            ECharts.polyline(px, py, l.smooth, path, 1f)
-            s.stroke(ChartScene.Stroke(path, l.color, l.width, grid))
+            if (l.areaToOrigin) {
+                // getValueStart: the axis' start when it's all positive, its end when all negative, else zero.
+                val origin = yOf(if (scale.min > 0) scale.min else if (scale.max < 0) scale.max else 0.0).toFloat()
+                // One closed area per run of points: a null ends it.
+                val area = Path()
+                var i = 0
+                while (i < px.size) {
+                    while (i < px.size && (py[i].isNaN() || px[i].isNaN())) i++
+                    val from = i
+                    while (i < px.size && !py[i].isNaN() && !px[i].isNaN()) i++
+                    if (i - from < 1) continue
+                    ECharts.polyline(px.copyOfRange(from, i), py.copyOfRange(from, i), l.smooth, area, 1f)
+                    area.lineTo(px[i - 1].toFloat(), origin)
+                    area.lineTo(px[from].toFloat(), origin)
+                    area.close()
+                }
+                s.fill(ChartScene.Fill(area, l.areaColor, grid))
+            }
+            if (l.width > 0f) {
+                val path = Path()
+                ECharts.polyline(px, py, l.smooth, path, 1f)
+                s.stroke(ChartScene.Stroke(path, l.color, l.width, grid))
+            }
         }
 
         // Labels: values right-aligned [labelMargin] left of the axis, times centered 8 px below it.
@@ -750,6 +1033,18 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
     /** A render skipped while the card was hidden (a cached view): done when it shows again. */
     private var renderPending = false
 
+    /** The line charts and legends a fixed slot sizes ([measureInSlot]). */
+    private val slotCharts = ArrayList<SlotChart>()
+    private val fixedHeight = hasFixedHeight(config)
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (fixedHeight && slotCharts.isNotEmpty() && MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
+            measureInSlot(this, slotCharts, widthMeasureSpec, heightMeasureSpec, ctx.dp) { w, h -> super.onMeasure(w, h) }
+        } else {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        }
+    }
+
     init {
         val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
         config.title?.let {
@@ -854,6 +1149,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         streamError?.let {
             renderPending = false
             charts.removeAllViews()
+            slotCharts.clear()
             info.text = it
             info.visibility = VISIBLE
             return
@@ -867,6 +1163,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         renderPending = false
         val history = HaHistory.merge(h, statsHistory)
         charts.removeAllViews()
+        slotCharts.clear()
         if (history.line.isEmpty() && history.timeline.isEmpty()) {
             info.text = "No state history found."
             info.visibility = VISIBLE
@@ -900,12 +1197,15 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
             val box = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
             val chart = LineChartHost(ctx, withPad)
             box.addView(chart, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            var legendView: View? = null
             if (showNames) {
-                box.addView(ChartLegendView(ctx).apply {
+                legendView = ChartLegendView(ctx).apply {
                     setItems(legend)
                     onLabel = { id -> ctx.openMoreInfo(id) }
-                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                }
+                box.addView(legendView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             }
+            slotCharts += SlotChart(chart.chart, legendView, withPad.heightCss)
             charts.addView(entry(box, timeline = false, first = index++ == 0))
         }
     }
@@ -927,63 +1227,30 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         return box
     }
 
-    /** `generateStateHistoryChartLineData` for plain numeric entities: step lines with gaps, held to the end. */
+    /** `generateStateHistoryChartLineData`: the unit's series, down-sampled, and the legend (fills aren't in it). */
     private fun lineSpec(u: LineUnit, start: Long, end: Long): Pair<LineChartSpec, List<LegendItem>> {
-        var colorIndex = 0
+        val colorIndex = intArrayOf(0)
         val lines = ArrayList<ChartLine>()
         val legend = ArrayList<LegendItem>()
         val endD = end.toDouble()
+        val tempUnit = temperatureUnit()
         for (e in u.data) {
-            val color = colors[e.entityId] ?: HaGraphColors.byIndex(ctx.theme, colorIndex++)
-            val xs = ArrayList<Double>()
-            val ys = ArrayList<Double>()
-            var prev: Double? = null
-            var hasPrev = false
-            fun push(t: Double, v: Double?) {
-                if (t > endD) return
-                if (v == null && hasPrev && prev != null) { xs += t; ys += prev!! }
-                xs += t; ys += v ?: Double.NaN
-                prev = v
-                hasPrev = true
-            }
-            var lastValue: Double? = null
-            var lastDate = 0.0
-            var lastNull: Double? = null
-            fun process(st: LineState) {
-                val v = HaHistory.parseFloatOrNull(st.state)
-                val date = st.lastChanged
-                val ln = lastNull
-                if (v != null && ln != null) {
-                    val lv = lastValue ?: v
-                    val tmp = (v - lv) * ((ln - lastDate) / (date - lastDate)) + lv
-                    push(ln, tmp)
-                    push(ln + 1, null)
-                    push(date, v)
-                    lastDate = date; lastValue = v; lastNull = null
-                } else if (v != null) {
-                    push(date, v)
-                    lastDate = date; lastValue = v
-                } else if (lastNull == null && lastValue != null) {
-                    lastNull = date
-                }
-            }
-            val stop = e.states.firstOrNull()?.lastChanged ?: 0.0
-            for (st in e.statistics.orEmpty()) {
-                if (stop != 0.0 && st.lastChanged >= stop) break
-                process(st)
-            }
-            e.states.forEach(::process)
-            lastNull?.let { push(it, null) }
-            if (hasPrev) push(endD, prev)
             val state = ctx.store[e.entityId]
-            if (e.entityId.startsWith("sensor.")) {
-                // The current state at now, for a chart up to now.
-                state?.state?.let(HaHistory::parseFloatOrNull)?.let { xs += max(ctx.now().toDouble(), endD); ys += it }
+            val series = HaHistoryLines.series(e, endD, ctx.now().toDouble(), names[e.entityId] ?: e.name, colors[e.entityId],
+                showNames, ctx.theme, colorIndex, state)
+            for (sr in series) {
+                // ha-chart-base's minmax down-sampling: one frame per device pixel of the chart's width.
+                val sampled = HaGraph.downSample(sr.xs.indices.map { doubleArrayOf(sr.xs[it], sr.ys[it]) }, chartWidthCss() * ctx.dp, start.toDouble(), endD, false)
+                val xs = DoubleArray(sampled.size) { sampled[it][0] }
+                val ys = DoubleArray(sampled.size) { sampled[it][1] }
+                lines += if (sr.fill) {
+                    // A fill: no line, the area down to the axis at half opacity (`color + "7F"`).
+                    ChartLine(xs, ys, sr.color, 0f, step = true, areaColor = CardSurface.withAlpha(sr.color, 0x7F / 255f), areaToOrigin = true)
+                } else {
+                    ChartLine(xs, ys, sr.color, 1.5f, step = true)
+                }
+                if (!sr.fill) legend += LegendItem(e.entityId, sr.name, sr.color, HaHistoryLines.legendValue(sr.id, state, tempUnit))
             }
-            // ha-chart-base's minmax down-sampling: one frame per device pixel of the chart's width.
-            val sampled = HaGraph.downSample(xs.indices.map { doubleArrayOf(xs[it], ys[it]) }, chartWidthCss() * ctx.dp, start.toDouble(), endD, false)
-            lines += ChartLine(sampled.map { it[0] }.toDoubleArray(), sampled.map { it[1] }.toDoubleArray(), color, 1.5f, step = true)
-            legend += LegendItem(e.entityId, names[e.entityId] ?: e.name, color, state?.formattedState())
         }
         val chartHeight = defaultChartHeight()
         // The same bounds as the chart drawn, so the shared y-axis width is measured from its labels.
@@ -1004,13 +1271,54 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
     }
 }
 
-/** A line chart whose height comes from its spec. */
+/** A line chart, as high as its spec unless a fixed slot sizes it. */
 private class LineChartHost(ctx: VitroCardContext, spec: LineChartSpec) : LinearLayout(ctx.context) {
+    val chart = ChartView(ctx.context, ctx.dp).apply { heightCss = spec.heightCss }
+
     init {
-        val chart = ChartView(ctx.context, ctx.dp).apply { heightCss = spec.heightCss }
-        chart.setScene { w -> HaLineChart.scene(spec, w, ctx) }
+        chart.setSizedScene { w, h -> HaLineChart.scene(spec, w, ctx, h) }
         addView(chart, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
+}
+
+/** A graph card's line chart and its legend, for [measureInSlot]; [naturalCss] is the chart's height outside one. */
+internal class SlotChart(val chart: ChartView, val legend: View?, val naturalCss: Float)
+
+/** Whether a graph card sits in a fixed slot: `grid_options.rows` is a number (HA's `hasFixedHeight`). */
+internal fun hasFixedHeight(config: CardConfig): Boolean = config.raw.optJSONObject("grid_options")?.opt("rows") is Number
+
+/**
+ * HA's graph cards in a fixed `grid_options.rows` slot (`height: 100%`, `--chart-max-height: 100%`): each line chart
+ * takes an equal share of what the rest of the card leaves of the slot (`flex: 1`), and its legend keeps its own
+ * height, at most 60 % of that share (`.chart-legend`), so the chart shrinks until chart and legend fill the slot.
+ * [card] is measured at its natural height first, then at the slot's with the charts sized ([superMeasure] is the
+ * card's own `super.onMeasure`). Each chart builds its paths again for its new height.
+ */
+internal fun measureInSlot(card: ViewGroup, charts: List<SlotChart>, widthSpec: Int, heightSpec: Int, dp: Float, superMeasure: (Int, Int) -> Unit) {
+    // Views between a chart and the card measure again even when their own measure spec stays the same.
+    fun touch(v: View) {
+        var p: View? = v
+        while (p != null && p !== card) { p.forceLayout(); p = p.parent as? View }
+    }
+    for (c in charts) {
+        c.chart.sizeInMeasure(c.naturalCss)
+        c.legend?.let { it.layoutParams?.height = ViewGroup.LayoutParams.WRAP_CONTENT; touch(it) }
+        touch(c.chart)
+    }
+    superMeasure(widthSpec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+    fun legendH(c: SlotChart) = c.legend?.takeIf { it.visibility != View.GONE }?.measuredHeight ?: 0
+    val used = charts.sumOf { it.chart.measuredHeight + legendH(it) }
+    val rest = card.measuredHeight - used
+    val share = max(0, View.MeasureSpec.getSize(heightSpec) - rest).toFloat() / charts.size
+    for (c in charts) {
+        val legend = legendH(c)
+        val shown = min(legend.toFloat(), floor(0.6f * share))
+        if (shown < legend) c.legend?.layoutParams?.height = shown.toInt()
+        c.chart.sizeInMeasure(max(0f, share - shown) / dp)
+        c.legend?.let(::touch)
+        touch(c.chart)
+    }
+    superMeasure(widthSpec, heightSpec)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1047,6 +1355,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
             orientation = LinearLayout.VERTICAL
             setPadding(ctx.px(16f), if (config.title != null) 0 else ctx.px(16f), ctx.px(16f), ctx.px(16f))
         }
+        // Until the width is known: ha-chart-base's default for the S1's card (half its 466 px chart).
         chart.heightCss = 233f
         // statistics-chart's `.info`: centered on a 60 px line.
         info.gravity = Gravity.CENTER
@@ -1144,91 +1453,80 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         ctx.store[id]?.unit ?: meta?.optString("display_unit_of_measurement")?.takeIf { it.isNotEmpty() && it != "null" }
             ?: meta?.optString("statistics_unit_of_measurement")?.takeIf { it.isNotEmpty() && it != "null" }
 
-    private fun render(result: JSONObject, metadata: Map<String, JSONObject>, cardUnit: String?) {
-        val lines = ArrayList<ChartLine>()
-        val legendItems = ArrayList<LegendItem>()
-        var colorIndex = 0
-        var minX = Long.MAX_VALUE
-        var maxX = Long.MIN_VALUE
-        val unit = cardUnit ?: ids.mapNotNull { displayUnit(it, metadata[it]) }.distinct().singleOrNull()
-        // The chart's end (statistics-chart-data): the latest bucket start of any statistic, never after now.
-        val limit = min(ctx.now().toDouble(), ids.mapNotNull { id ->
-            result.optJSONArray(id)?.takeIf { it.length() > 0 }?.let { a -> rowTime(a.optJSONObject(a.length() - 1)?.opt("start")) }
-        }.maxOrNull() ?: ctx.now().toDouble())
-        val statLegend = ArrayList<LegendItem>()
-        for (id in ids) {
-            val rows = result.optJSONArray(id) ?: continue
-            if (rows.length() == 0) continue
-            val stats = (0 until rows.length()).mapNotNull { rows.optJSONObject(it) }
-            val color = HaGraphColors.byIndex(ctx.theme, colorIndex++)
-            val name = config.entities().firstOrNull { it.entity == id }?.name ?: ctx.store[id]?.displayName ?: id
-            fun has(type: String) = stats.any { it.has(type) && !it.isNull(type) }
-            val hasMean = "mean" in statTypes && has("mean")
-            val hasMax = "max" in statTypes && has("max")
-            val hasMin = "min" in statTypes && has("min")
-            val drawBands = listOf(hasMean, hasMax, hasMin).count { it } > 1
-            val bandTop = if (hasMax) "max" else "mean"
-            val bandBottom = if (hasMin) "min" else "mean"
-            val sorted = if (drawBands) sortBandTypes(statTypes) else statTypes
-            val types = sorted.filter { has(it) }
-            // Points per type: each stat at its start, gaps where a stat doesn't start where the last one ended,
-            // then the last one's end.
-            val xs = types.associateWith { ArrayList<Double>() }
-            val ys = types.associateWith { ArrayList<Double>() }
-            var prevStart: Double? = null
-            var prevEnd: Double? = null
-            var prevVals: Map<String, Double>? = null
-            // A cumulative `sum` starts at zero in the window (its first value is the baseline).
-            var firstSum: Double? = null
-            for (st in stats) {
-                val start = rowTime(st.opt("start")) ?: continue
-                if (prevStart == start) continue
-                val rowEnd = rowTime(st.opt("end")) ?: continue
-                prevStart = start
-                // pushData's limit: a bucket ends at its end or at the chart's end, whichever comes first.
-                if (start > limit) continue
-                val end = min(rowEnd, limit)
-                val vals = types.associateWith { t ->
-                    val v = if (st.has(t) && !st.isNull(t)) st.optDouble(t) else Double.NaN
-                    if (t != "sum") v
-                    else if (firstSum == null) { firstSum = v.takeIf { !it.isNaN() }; 0.0 }
-                    else (if (v.isNaN()) 0.0 else v) - firstSum!!
-                }
-                if (prevEnd != null && prevVals != null && prevEnd != start) {
-                    for (t in types) { xs.getValue(t) += prevEnd; ys.getValue(t) += prevVals.getValue(t); xs.getValue(t) += prevEnd; ys.getValue(t) += Double.NaN }
-                }
-                for (t in types) { xs.getValue(t) += start; ys.getValue(t) += vals.getValue(t) }
-                prevEnd = end
-                prevVals = vals
-            }
-            if (prevEnd != null && prevVals != null) for (t in types) { xs.getValue(t) += prevEnd; ys.getValue(t) += prevVals.getValue(t) }
-            // The current state at now when the statistics reach within 10 minutes of it.
-            val now = ctx.now().toDouble()
-            val current = ctx.store[id]?.state?.toDoubleOrNull()?.takeIf { it.isFinite() }
-            // Only in the chart's unit (or when either is unknown): a live value in another unit isn't converted.
-            val statUnit = displayUnit(id, metadata[id])
-            val sameUnit = unit == null || statUnit == null || unit == statUnit
-            if (now - limit <= 600_000 && current != null && sameUnit) {
-                for (t in types) if (t != "sum" && t != "change") { xs.getValue(t) += now; ys.getValue(t) += current }
-            }
-            val built = HashMap<String, ChartLine>()
-            for (t in types) {
-                val band = drawBands && (t == bandTop || t == bandBottom)
-                val dim = (band && hasMin && hasMax && hasMean)
-                // A hidden legend hides the band's edges too (`color + "00"`); shown, they're at half opacity.
-                val lineColor = if (dim) CardSurface.withAlpha(color, if (hideLegend) 0f else 0x7F / 255f) else color
-                val line = ChartLine(xs.getValue(t).toDoubleArray(), ys.getValue(t).toDoubleArray(), lineColor, 1.5f, smooth = 0.4,
-                    bandBottom = if (band && t == bandTop && bandTop != bandBottom) built[bandBottom] else null,
-                    areaColor = CardSurface.withAlpha(color, 0x3F / 255f))
-                built[t] = line
-                lines += line
-                legendItems += LegendItem("$id-$t", "$name (${t})", lineColor, null)
-                // With several statistics, one entry each: its mean, else its first series.
-                if (if (hasMean) t == "mean" else statLegend.none { it.id == id }) statLegend += LegendItem(id, name, lineColor, null)
-                line.xs.forEach { x -> if (!x.isNaN()) { minX = min(minX, x.toLong()); maxX = max(maxX, x.toLong()) } }
-            }
+    /** The last statistics drawn, sampled again for a new width. */
+    private var lastInput: StatisticsChartData.Input? = null
+    private var prepareGeneration = 0
+    private var preparedWidth = Float.NaN
+
+    /**
+     * The chart's width (CSS px): its own once laid out and shown, else the card's less its border and 16 px sides.
+     * A hidden chart ("No statistics found.") keeps the width of its last layout, which a resize since has outdated.
+     */
+    private fun chartWidthCss(): Float? =
+        chart.width.takeIf { it > 0 && chart.visibility != GONE }?.let { it / ctx.dp }
+            ?: width.takeIf { it > 0 }?.let { (it - paddingLeft - paddingRight) / ctx.dp - 32f }
+
+    /** `_getDefaultHeight`: half the chart's width, at least 200, at most `--chart-max-height` (350). */
+    private fun defaultChartHeight(widthCss: Float): Float = min(max(widthCss / 2f, 200f), 350f)
+
+    private val fixedHeight = hasFixedHeight(config)
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (fixedHeight && chart.visibility == VISIBLE && MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
+            val natural = chartWidthCss()?.let(::defaultChartHeight) ?: chart.heightCss
+            measureInSlot(this, listOf(SlotChart(chart, legend, natural)), widthMeasureSpec, heightMeasureSpec, ctx.dp) { w, h -> super.onMeasure(w, h) }
+        } else {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         }
-        if (lines.isEmpty()) {
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (w != oldw && lastInput != null) post { prepare() }
+    }
+
+    /** What the chart needs from the card and the entities now, read on the main thread for [prepare]. */
+    private fun render(result: JSONObject, metadata: Map<String, JSONObject>, cardUnit: String?) {
+        val unit = cardUnit ?: ids.mapNotNull { displayUnit(it, metadata[it]) }.distinct().singleOrNull()
+        lastInput = StatisticsChartData.Input(
+            ids = ids,
+            result = result,
+            statTypes = statTypes,
+            hideLegend = hideLegend,
+            names = ids.associateWith { id -> config.entities().firstOrNull { it.entity == id }?.name ?: ctx.store[id]?.displayName ?: id },
+            current = ids.associateWith { id -> ctx.store[id]?.state?.toDoubleOrNull()?.takeIf { it.isFinite() } },
+            statUnits = ids.associateWith { id -> displayUnit(id, metadata[id]) },
+            unit = unit,
+            colors = ids.indices.map { HaGraphColors.byIndex(ctx.theme, it) },
+            nowMs = ctx.now(),
+            minYAxis = config.raw.optDouble("min_y_axis").takeIf { !it.isNaN() },
+            maxYAxis = config.raw.optDouble("max_y_axis").takeIf { !it.isNaN() },
+            fitYData = config.raw.optBoolean("fit_y_data", false),
+        )
+        preparedWidth = Float.NaN
+        prepare()
+    }
+
+    /**
+     * Builds the chart's series and down-samples them as HA's chart does, on [GraphWork]'s thread: a `period:
+     * 5minute` chart over weeks holds thousands of points per series. The paths are built on the main thread from
+     * what comes back. Without a width yet, [onSizeChanged] starts it.
+     */
+    private fun prepare() {
+        val input = lastInput ?: return
+        val w = chartWidthCss() ?: return
+        if (w == preparedWidth) return
+        preparedWidth = w
+        val gen = ++prepareGeneration
+        val typeface = VitroFonts.system(400)
+        val dp = ctx.dp
+        GraphWork.run(ctx.main, { StatisticsChartData.prepare(input, w, dp, typeface) }) { out ->
+            if (gen == prepareGeneration && input === lastInput) apply(out)
+        }
+    }
+
+    private fun apply(out: StatisticsChartData.Prepared) {
+        if (out.lines.isEmpty()) {
             // A successful answer with nothing in the window: HA's "No statistics found." in place of the chart.
             legend.setItems(emptyList())
             chart.setScene { ChartScene() }
@@ -1239,16 +1537,10 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         }
         chart.visibility = VISIBLE
         info.visibility = GONE
-        // One statistic: the base chart's legend lists every series; several: one entry per statistic.
-        legend.setItems(if (hideLegend) emptyList() else if (ids.size > 1) statLegend else legendItems)
-        // ha-chart-base: differenceInMinutes(axis.max || new Date(), axis.min); the statistics chart sets no max.
-        val minutes = floor((ctx.now() - minX) / 60000.0)
-        val dayDiff = minutes / 60 / 24
-        val minInterval = if (dayDiff >= 89) 28 * ECharts.DAY else if (dayDiff > 2) ECharts.DAY else null
-        val spec = LineChartSpec(lines, minX, maxX, unit, 233f, true,
-            config.raw.optDouble("min_y_axis").takeIf { !it.isNaN() }, config.raw.optDouble("max_y_axis").takeIf { !it.isNaN() },
-            minInterval = minInterval, labelMinutes = minutes, fitYData = config.raw.optBoolean("fit_y_data", false))
-        chart.setScene { w -> HaLineChart.scene(spec, w, ctx) }
+        legend.setItems(out.legend)
+        val spec = out.spec(defaultChartHeight(preparedWidth))
+        chart.heightCss = spec.heightCss
+        chart.setSizedScene { w, h -> HaLineChart.scene(spec, w, ctx, h) }
         chart.requestLayout()
     }
 

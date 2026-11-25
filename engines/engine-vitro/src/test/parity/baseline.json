@@ -7,6 +7,13 @@
   "missingText": 0,
   "reason": "the layout follows HA line by line (Blink's line boxes put the AM exactly on HA's; the tablet matches). Left at 1.5x: whole-pixel text boxes. The digits, the AM and the date are TextViews as wide as their text rounded up, so the AM sits 1.5 device px right and the resting date ~1.8 px right; the date is 1 px low because Vitro boxes it at the font's normal height (28.67 px) where ha-marquee-text's middle-aligned inline-block makes 27.84. Boxing it that way was tried (2026-11-24): the column, 1 px shorter, moved the clock's whole-pixel centering a pixel the wrong way, 3.65 %"
  },
+ "mirror/history-graph-rows": {
+  "pixel": 0.0281,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the chart shrinks to its 5-row slot as HA's does (chart and legend at the same heights, bounds 0). Left: the y-axis width drift of history-graph-two (the capture host's Chrome measures the labels in its fallback font, Vitro in Roboto), so every point sits ~2 px left (2026-11-24)"
+ },
  "mirror/history-graph-timeline": {
   "pixel": 0.0204,
   "bounds": 0,
@@ -35,6 +42,13 @@
   "missingText": 0,
   "reason": "the layout follows HA line by line (Blink's line boxes put the AM exactly on HA's; the tablet matches). Left at 1.5x: whole-pixel text boxes. The digits, the AM and the date are TextViews as wide as their text rounded up, so the AM sits 1.5 device px right and the resting date ~1.8 px right; the date is 1 px low because Vitro boxes it at the font's normal height (28.67 px) where ha-marquee-text's middle-aligned inline-block makes 27.84. Boxing it that way was tried (2026-11-24): the column, 1 px shorter, moved the clock's whole-pixel centering a pixel the wrong way, 3.65 %"
  },
+ "s1/history-graph-rows": {
+  "pixel": 0.0281,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the chart shrinks to its 5-row slot as HA's does (chart and legend at the same heights, bounds 0). Left: the y-axis width drift of history-graph-two (the capture host's Chrome measures the labels in its fallback font, Vitro in Roboto), so every point sits ~2 px left (2026-11-24)"
+ },
  "s1/history-graph-timeline": {
   "pixel": 0.0204,
   "bounds": 0,
@@ -55,5 +69,12 @@
   "font": 0.3,
   "missingText": 0,
   "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph; the tablet matches). Left at 1.5x: whole device px. Each Markdown block is a TextView whose line box rounds on its own (the h3's 28.5 px to 29, the paragraphs' 43.2 to 43 and 33.6 to 34), where Chrome rounds positions, so the card comes out 0.5 CSS px taller and its 2 px bottom border a row lower, and the 16.38 px h3 draws at 16.67 (AbsoluteSizeSpan; fractional sizes tried earlier: no pixel gain). The report's +5.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it (2026-11-24)"
+ },
+ "tablet/history-graph-rows": {
+  "pixel": 0.029,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the chart shrinks to its 5-row slot as HA's does (chart and legend at the same heights, bounds 0). Left: the y-axis width drift of history-graph-two (the capture host's Chrome measures the labels in its fallback font, Vitro in Roboto), so every point sits ~2 px left (2026-11-24)"
  }
 }

@@ -18,6 +18,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import com.sun.net.httpserver.HttpServer
 import dev.glassworks.engine.vitro.cards.ClockCardView
+import dev.glassworks.engine.vitro.cards.GraphWork
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.fonts.WebFonts
@@ -383,11 +384,12 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         // Images load on a pool and reach their card through the main looper: run it until none is in flight, so a
         // late image can't leave a card drawn without its picture.
         val deadline = System.nanoTime() + IMAGE_TIMEOUT_MS * 1_000_000L
-        // Web fonts too: the view draws again in a font once it has arrived, as HA's page swaps it in.
-        while (VitroCardContext.pendingImageLoads.get() > 0 || WebFonts.pending.get() > 0) {
+        // Web fonts too: the view draws again in a font once it has arrived, as HA's page swaps it in. And graph
+        // data, which statistics charts build and down-sample off the main thread.
+        while (VitroCardContext.pendingImageLoads.get() > 0 || WebFonts.pending.get() > 0 || GraphWork.pending.get() > 0) {
             if (System.nanoTime() > deadline) {
                 throw IllegalStateException(
-                    "${VitroCardContext.pendingImageLoads.get()} image and ${WebFonts.pending.get()} font load(s) still pending after $IMAGE_TIMEOUT_MS ms" +
+                    "${VitroCardContext.pendingImageLoads.get()} image, ${WebFonts.pending.get()} font and ${GraphWork.pending.get()} graph job(s) still pending after $IMAGE_TIMEOUT_MS ms" +
                         (if (WebFonts.pending.get() > 0) "; fonts: ${WebFonts.describe()}" else ""),
                 )
             }
