@@ -157,4 +157,54 @@ class ChartLegendTest {
         // The entry, the toggle's 33 px included, still stays within 300 px.
         assertTrue(first.measuredWidth <= px(300) + 1)
     }
+
+    @Test
+    @Config(qualifiers = "170dpi")
+    fun theFitCountsOnTheWidthTheChipMeasures() {
+        // At density 1.0625 the chip's rounded parts add up to more than 42 px times the density: the fit must use
+        // what the chip measures, or a chip it puts in row two wraps to a third.
+        val ctx = ctx()
+        assertEquals(1.0625f, ctx.dp, 0f)
+        val legend = ChartLegendView(ctx)
+        legend.setItems((1..6).map { LegendItem("sensor.room_$it", "Room $it temperature sensor with a long name", 0xFF4269D0.toInt(), "21.$it °C") })
+        legend.measure(View.MeasureSpec.makeMeasureSpec(Math.round(466 * ctx.dp), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        legend.layout(0, 0, legend.measuredWidth, legend.measuredHeight)
+        val chip = legend.getChildAt(legend.childCount - 1) as ViewGroup
+        val label = (chip.getChildAt(0) as ViewGroup).getChildAt(0) as TextView
+        assertEquals(chip.measuredWidth.toFloat(), legend.chipWidth(label.text.toString()), 0f)
+        // Two rows: the chip didn't wrap to a third.
+        assertEquals(Math.round(12 * ctx.dp) + 2 * Math.round(24 * ctx.dp) + Math.round(8 * ctx.dp), legend.height)
+    }
+
+    @Test
+    fun anExpandedLegendScrollsToItsLessChipInAFixedSlot() {
+        // HA's `.chart-legend { max-height: 60%; overflow-y: auto }`: capped by a fixed slot, the legend scrolls, so
+        // its last entries and the chip that collapses it stay reachable.
+        val ctx = ctx()
+        val legend = ChartLegendView(ctx).apply { expanded = true }
+        legend.setItems((1..6).map { LegendItem("sensor.room_$it", "Room $it temperature sensor with a long name", 0xFF4269D0.toInt(), "21.$it °C") })
+        val box = dev.glassworks.engine.vitro.cards.scrollingLegend(legend)
+        val chart = ChartView(ctx.context, ctx.dp).apply { heightCss = 233f; setScene { ChartScene() } }
+        val card = object : android.widget.FrameLayout(ctx.context) {
+            init {
+                val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+                col.addView(chart, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                col.addView(box, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                addView(col, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            }
+
+            override fun onMeasure(w: Int, h: Int) = dev.glassworks.engine.vitro.cards.measureInSlot(this,
+                listOf(dev.glassworks.engine.vitro.cards.SlotChart(chart, box, 233f)), w, h, ctx.dp) { a, b -> super.onMeasure(a, b) }
+        }
+        val slot = Math.round(200 * ctx.dp)
+        card.measure(View.MeasureSpec.makeMeasureSpec(Math.round(466 * ctx.dp), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(slot, View.MeasureSpec.EXACTLY))
+        card.layout(0, 0, card.measuredWidth, card.measuredHeight)
+        // The legend keeps 60 % of the slot and scrolls through the rest of its rows.
+        assertEquals(Math.floor(0.6 * slot).toInt(), box.height)
+        assertTrue(legend.height > box.height)
+        assertTrue(box.canScrollVertically(1))
+        val less = legend.getChildAt(legend.childCount - 1)
+        box.scrollTo(0, legend.height - box.height)
+        assertTrue("the Less chip scrolls into view", less.bottom - box.scrollY <= box.height && less.top - box.scrollY >= 0)
+    }
 }

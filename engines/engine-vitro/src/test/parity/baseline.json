@@ -77,15 +77,8 @@
   "missingText": 0,
   "reason": "the date line and layout match HA (its start cut off at the large size, as HA's marquee rests); what is left is glyph antialiasing on the 64 px digits and 24 px date, just over the 2% line"
  },
- "s1/history-graph-legend-expanded": {
-  "pixel": 0.0394,
-  "bounds": 31.8,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the legend expands as HA's (every entry, the 300 px cap ellipsizing the long name, the Less chip). Left: Vitro's entries come out ~4 px narrower than the capture host's (Android draws the name separator '▸' narrower than Chrome's fallback glyph there), so Apollo and Fridge (469.9 px in HA) sit right at the 466 px row; at density 1.5 they still fit and share row 4, one row (32 px) shorter than HA (2026-11-25)"
- },
  "s1/history-graph-rows": {
-  "pixel": 0.0281,
+  "pixel": 0.0283,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
@@ -99,7 +92,7 @@
   "reason": "as on the tablet (the name measured in the capture host's fallback font, bars ~2 px further left), plus at density 1.5 Vitro's card insets its content by a 1 px border truncated to 1 device px (CardSurface), not 1.5: the 20 px bars sit half a device pixel higher, so HA's blended bar edges are hard edges in Vitro (2026-11-24)"
  },
  "s1/history-graph-two": {
-  "pixel": 0.0334,
+  "pixel": 0.0242,
   "bounds": 0.2,
   "font": 0,
   "missingText": 0,
@@ -134,21 +127,21 @@
   "reason": "the date line and layout match HA (its start cut off at the large size, as HA's marquee rests); what is left is glyph antialiasing on the 64 px digits and 24 px date, just over the 2% line"
  },
  "tablet/history-graph-legend-expanded": {
-  "pixel": 0.0231,
+  "pixel": 0.0218,
   "bounds": 0.7,
   "font": 0,
   "missingText": 0,
   "reason": "legend, More/Less chip and rows as HA's; left: history-graph-two's y-axis width drift (the capture host's Chrome measures the labels in its fallback font), so every point sits ~2 px left (2026-11-25)"
  },
  "tablet/history-graph-legend-more": {
-  "pixel": 0.024,
+  "pixel": 0.023,
   "bounds": 0.7,
   "font": 0,
   "missingText": 0,
   "reason": "legend, More/Less chip and rows as HA's; left: history-graph-two's y-axis width drift (the capture host's Chrome measures the labels in its fallback font), so every point sits ~2 px left (2026-11-25)"
  },
  "tablet/history-graph-rows": {
-  "pixel": 0.029,
+  "pixel": 0.0266,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
@@ -162,7 +155,7 @@
   "reason": "bars, labels and 4 h ticks follow HA; left: the row's name width is measured as in history-graph-two (the capture host's Chrome measures \"Occupancy\" in its sans-serif fallback, 61 px; Vitro in Roboto), so the bars start ~2 px further left (2026-11-24)"
  },
  "tablet/history-graph-two": {
-  "pixel": 0.0404,
+  "pixel": 0.0259,
   "bounds": 0.7,
   "font": 0,
   "missingText": 0,

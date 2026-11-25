@@ -632,8 +632,15 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
         chipIcon.setIcon(if (expanded) "mdi:chevron-up" else "mdi:chevron-down", ctx.theme.primaryTextColor)
     }
 
-    /** The chip's width with [text] as its label: 2 + 8 + label + 4 + 18 + 8 + 2 px. */
-    private fun chipWidth(text: String): Float = chipLabel.paint.measureText(text) + (2f + 8f + 4f + 18f + 8f + 2f) * ctx.dp
+    /**
+     * The chip's width with [text] as its label: 2 + 8 + label + 4 + 18 + 8 + 2 px, each part rounded as the chip's
+     * views round it (the label to its TextView's whole pixels), so the width the fit counts on is the width the
+     * chip measures and a chip the fit puts in row two stays there.
+     */
+    internal fun chipWidth(text: String): Float {
+        val label = ceil(chipLabel.paint.measureText(text).toDouble()).toInt() + chipLabel.paddingLeft + chipLabel.paddingRight
+        return (2 * ctx.px(2f) + 2 * Math.round(8f * ctx.dp) + label + Math.round(4f * ctx.dp) + Math.round(18f * ctx.dp)).toFloat()
+    }
 
     private val itemH get() = Math.round(24f * ctx.dp)
 
@@ -1342,6 +1349,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
                     setItems(legend)
                     onLabel = { id -> ctx.openMoreInfo(id) }
                 }
+                legendView = scrollingLegend(legendView)
                 box.addView(legendView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             }
             slotCharts += SlotChart(chart.chart, legendView, withPad.heightCss)
@@ -1420,6 +1428,17 @@ private class LineChartHost(ctx: VitroCardContext, spec: LineChartSpec) : Linear
     }
 }
 
+/**
+ * [legend] in a vertical scroller, as HA's `.chart-legend` (`max-height: 60%; overflow-y: auto`): as tall as the legend
+ * anywhere but a fixed slot, where [measureInSlot] caps it and its rows past the cap (an expanded legend's "Less"
+ * included) scroll into view.
+ */
+internal fun scrollingLegend(legend: View): View = android.widget.ScrollView(legend.context).apply {
+    isFillViewport = false
+    overScrollMode = View.OVER_SCROLL_NEVER
+    addView(legend, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+}
+
 /** A graph card's line chart and its legend, for [measureInSlot]; [naturalCss] is the chart's height outside one. */
 internal class SlotChart(val chart: ChartView, val legend: View?, val naturalCss: Float)
 
@@ -1478,6 +1497,9 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
     private val statTypes: List<String> = readStatTypes(config.raw.opt("stat_types"))
     private val chart = ChartView(ctx.context, ctx.dp)
     private val legend = ChartLegendView(ctx)
+
+    /** The legend in its scroller ([scrollingLegend]): what the card lays out and a fixed slot caps. */
+    private val legendBox = scrollingLegend(legend)
     private val info = cssText(ctx, 14f, ctx.theme.secondaryTextColor)
     private val hideLegend = config.raw.optBoolean("hide_legend", false)
     private var generation = 0
@@ -1501,7 +1523,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         info.visibility = GONE
         content.addView(info, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(60f * ctx.dp)))
         content.addView(chart, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        content.addView(legend, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        content.addView(legendBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         legend.onLabel = { id -> ctx.openMoreInfo(id.substringBeforeLast('-').takeIf { ctx.store[it] != null } ?: id) }
         legend.expanded = config.raw.optBoolean("expand_legend", false)
         col.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -1614,7 +1636,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         if (fixedHeight && chart.visibility == VISIBLE && MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
             val natural = chartWidthCss()?.let(::defaultChartHeight) ?: chart.heightCss
-            measureInSlot(this, listOf(SlotChart(chart, legend, natural)), widthMeasureSpec, heightMeasureSpec, ctx.dp) { w, h -> super.onMeasure(w, h) }
+            measureInSlot(this, listOf(SlotChart(chart, legendBox, natural)), widthMeasureSpec, heightMeasureSpec, ctx.dp) { w, h -> super.onMeasure(w, h) }
         } else {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         }
