@@ -84,6 +84,15 @@ internal object VitroAccess {
         declared += view
     }
 
+    /**
+     * Tells TalkBack a slider's value changed (an edit, or a new value from HA), as Android's own SeekBar does with
+     * `TYPE_VIEW_SELECTED`, so it reads the new value. Nothing while no accessibility service is on.
+     */
+    fun valueChanged(view: View) {
+        val am = view.context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
+        if (am?.isEnabled == true && view.isAttachedToWindow) view.sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_SELECTED)
+    }
+
     /** Whether controls need [applyDefaults] now: TalkBack (or another service) is on, or there are keys to press. */
     fun wanted(context: Context): Boolean {
         val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager

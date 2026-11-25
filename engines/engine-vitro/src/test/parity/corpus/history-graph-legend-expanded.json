@@ -1,0 +1,16 @@
+{
+  "title": "History graph: the same six sensors with expand_legend, every entry shown and HA's Less chip",
+  "card": {
+    "type": "history-graph",
+    "title": "Temperatures",
+    "entities": [
+      "sensor.living_room_airdot_living_room_temperature",
+      "sensor.secondary_room_airdot_secondary_room_temperature",
+      "sensor.presence_multi_sensor_fp300_temperature",
+      "sensor.balcony_apollo_air_1_sen55_temperature",
+      "sensor.kitchen_fridge_fridge_temperature",
+      "sensor.kitchen_fridge_freezer_temperature"
+    ],
+    "expand_legend": true
+  }
+}

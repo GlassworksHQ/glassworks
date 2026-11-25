@@ -1737,6 +1737,7 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
             targetPct = v.toFloat()
             invalidate()
             onChange?.invoke(v)
+            dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
         },
         commit = { v -> onRelease?.invoke(v) },
         // Back to HA's value, caption included (onChange), as a cancelled drag does: nothing is sent.
@@ -1789,6 +1790,8 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
         val p = value.coerceIn(0, 100).toFloat()
         if (p == targetPct) return
         targetPct = p
+        // A new value from HA: TalkBack reads it, as it would a SeekBar's.
+        dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
         pctAnimator?.cancel()
         val from = pct
         pctAnimator = HaMotion.run(this, MOTION_MS) { t ->
@@ -2341,6 +2344,7 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
             shown = fractionOf(k, minK, maxK)
             invalidate()
             onChange?.invoke(k)
+            dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
         },
         commit = { k -> onRelease?.invoke(k) },
         // Back to HA's value, caption included (onChange), as a cancelled drag does: nothing is sent.
@@ -2381,6 +2385,8 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
         val c = k.coerceIn(minOf(minK, maxK), maxOf(minK, maxK))
         if (c == kelvin) return
         kelvin = c
+        // A new value from HA: TalkBack reads it, as it would a SeekBar's.
+        dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
         animator?.cancel()
         val from = shown
         val to = fractionOf(c, minK, maxK)
@@ -2514,6 +2520,7 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
             shown = v.toFloat()
             invalidate()
             onChange?.invoke(v)
+            dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
         },
         commit = { v -> onRelease?.invoke(v) },
         // Back to HA's value, caption included (onChange), as a cancelled drag does: nothing is sent.
@@ -2554,6 +2561,8 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
         val p = value.coerceIn(0, 100)
         if (p == pct) return
         pct = p
+        // A new value from HA: TalkBack reads it, as it would a SeekBar's.
+        dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
         animator?.cancel()
         val from = shown
         animator = HaMotion.run(this, MOTION_MS) { t ->
