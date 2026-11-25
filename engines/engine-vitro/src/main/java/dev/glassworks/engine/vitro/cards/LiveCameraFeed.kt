@@ -76,7 +76,15 @@ internal class LiveCameraFeed(
 
     /** No video slot was free: MJPEG plays until [CameraVideoBudget] calls back. */
     private var capped = false
-    private var holdsSlot = false
+
+    /**
+     * A second video player (HLS beside WebRTC) had no slot of its own: the card plays the one it has until
+     * [CameraVideoBudget] calls back. Each video player holds a slot: a decoder each.
+     */
+    private var starved = false
+
+    /** The video kinds that hold a [CameraVideoBudget] slot. */
+    private val held = HashSet<CameraStreamKind>()
 
     private class Slot(val stream: CameraStream, val frame: CameraFitFrame) {
         var hasFrame = false
@@ -123,6 +131,7 @@ internal class LiveCameraFeed(
         webRtcVideo = null
         mjpegDown = false
         capped = false
+        starved = false
         snapshot()
         if (!stream) {
             startPolling()
@@ -145,7 +154,7 @@ internal class LiveCameraFeed(
             for (kind in slots.keys.toList()) {
                 if (guard(kind) { slots[kind]?.stream?.setActive(false) } == null) closeSlot(kind)
             }
-            releaseSlot()
+            releaseSlots()
             capped = false
             return
         }
@@ -157,7 +166,20 @@ internal class LiveCameraFeed(
         // A video camera takes its slot again first; without one it goes to MJPEG (recompute closes the rest). A camera
         // that was capped before it hid starts over too: recompute asks for a slot, or waits for one, from its plan now.
         capped = false
-        if (slots.keys.any { it != CameraStreamKind.MJPEG } && !acquireSlot()) capped = true
+        starved = false
+        val video = slots.keys.filter { it != CameraStreamKind.MJPEG }
+        if (video.isNotEmpty()) {
+            val granted = video.filter { acquireSlot(it) }
+            if (granted.isEmpty()) {
+                capped = true
+            } else {
+                // A player whose slot went meanwhile is closed; it comes back when a slot frees (recompute).
+                for (kind in video) if (kind !in granted) {
+                    closeSlot(kind)
+                    starved = true
+                }
+            }
+        }
         for (kind in slots.keys.toList()) {
             if (capped && kind != CameraStreamKind.MJPEG) continue
             val slot = slots[kind] ?: continue
@@ -185,7 +207,7 @@ internal class LiveCameraFeed(
         // A capabilities request still out lands on nothing; the next start asks again.
         if (capabilities == null) capabilitiesAsked = false
         for (kind in slots.keys.toList()) closeSlot(kind)
-        releaseSlot()
+        releaseSlots()
         capped = false
     }
 
@@ -223,13 +245,25 @@ internal class LiveCameraFeed(
         val offered = capabilities ?: return
         val supported = CameraStreamChoice.playable(offered) { ctx.cameraPlayers?.supports(it) == true }
         var plan = CameraStreamChoice.streams(supported, hlsVideo, webRtcVideo)
-        if (plan.any { it.kind != CameraStreamKind.MJPEG }) {
-            if (capped || !acquireSlot()) {
+        val video = plan.filter { it.kind != CameraStreamKind.MJPEG }
+        if (video.isNotEmpty()) {
+            // A slot per video player, in the plan's order: the second protocol runs only with a slot of its own.
+            val granted = if (capped) emptyList() else video.filter { acquireSlot(it.kind) }
+            if (granted.isEmpty()) {
                 capped = true
+                releaseHeld()
                 plan = listOf(PlannedStream(CameraStreamKind.MJPEG, true))
+            } else {
+                starved = granted.size < video.size
+                if (starved) {
+                    val keep = granted.mapTo(HashSet()) { it.kind }
+                    plan = plan.filter { it.kind == CameraStreamKind.MJPEG || it.kind in keep }
+                    if (plan.none { it.visible }) plan = plan.mapIndexed { i, p -> if (i == 0) p.copy(visible = true) else p }
+                }
+                for (kind in held.toList()) if (plan.none { it.kind == kind }) releaseSlot(kind)
             }
         } else {
-            releaseSlot()
+            releaseSlots()
         }
         val wanted = plan.associateBy { it.kind }
         for (kind in slots.keys.toList()) if (kind !in wanted) closeSlot(kind)
@@ -332,23 +366,36 @@ internal class LiveCameraFeed(
         runCatching { (slot.frame.parent as? ViewGroup)?.removeView(slot.frame) }
     }
 
-    private fun acquireSlot(): Boolean {
-        if (holdsSlot) return true
-        holdsSlot = CameraVideoBudget.acquire(this) {
-            // A slot freed: a camera that played MJPEG for want of one takes up video again.
+    /** A [CameraVideoBudget] slot for this camera's [kind] player (one per video player). */
+    private fun acquireSlot(kind: CameraStreamKind): Boolean {
+        if (kind in held) return true
+        val ok = CameraVideoBudget.acquire(this to kind) {
+            // A slot freed: a camera that played MJPEG, or one protocol, for want of one takes up video again.
             ctx.main.post {
-                if (running && active && capped) {
+                if (running && active && (capped || starved)) {
                     capped = false
+                    starved = false
                     recompute()
                 }
             }
         }
-        return holdsSlot
+        if (ok) held += kind
+        return ok
     }
 
-    private fun releaseSlot() {
-        holdsSlot = false
-        CameraVideoBudget.release(this)
+    private fun releaseSlot(kind: CameraStreamKind) {
+        held -= kind
+        CameraVideoBudget.release(this to kind)
+    }
+
+    /** Gives back the slots held, keeping this camera's place among the waiters. */
+    private fun releaseHeld() {
+        for (kind in held.toList()) releaseSlot(kind)
+    }
+
+    /** Gives back every slot and stops waiting for one. */
+    private fun releaseSlots() {
+        for (kind in CameraStreamKind.values()) if (kind != CameraStreamKind.MJPEG) releaseSlot(kind)
     }
 
     /** Runs a player's [block]; a throw is that player failing, logged once, never the card's crash. */

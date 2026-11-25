@@ -18,13 +18,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A [WebRtcPeer] on libwebrtc: one `PeerConnection` with recvonly transceivers, as HA's frontend makes it (audio
- * first when asked, then video), its frames drawn by [sink].
+ * first when asked, then video), its frames drawn by [view]. A frame counts ([WebRtcPeer.Events.onFrame]) when [view]
+ * shows it, not when it is decoded: the renderer drops frames while it has no surface to draw on.
  */
 internal class LibWebRtcPeer(
     factory: PeerConnectionFactory,
     config: WebRtcClientConfig,
     audio: Boolean,
-    private val sink: VideoSink,
+    private val view: VideoTextureView,
     private val events: WebRtcPeer.Events,
 ) : WebRtcPeer {
     private val closed = AtomicBoolean(false)
@@ -36,10 +37,11 @@ internal class LibWebRtcPeer(
     private val frames = object : VideoSink {
         override fun onFrame(frame: VideoFrame) {
             if (closed.get() || !receiving) return
-            sink.onFrame(frame)
-            events.onFrame(frame.rotatedWidth, frame.rotatedHeight)
+            view.onFrame(frame)
         }
     }
+
+    private val drawn: (Int, Int) -> Unit = { w, h -> if (!closed.get() && receiving) events.onFrame(w, h) }
 
     init {
         val servers = config.iceServers.map { s ->
@@ -71,6 +73,7 @@ internal class LibWebRtcPeer(
             throw e
         }
         dataChannel = channel
+        view.onDrawn = drawn
     }
 
     override fun createOffer(onSdp: (sdp: String) -> Unit, onError: (reason: String) -> Unit) {
@@ -111,6 +114,7 @@ internal class LibWebRtcPeer(
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
+        if (view.onDrawn === drawn) view.onDrawn = null
         runCatching { video?.removeSink(frames) }
         dataChannel?.let { runCatching { it.unregisterObserver() }; runCatching { it.dispose() } }
         // Closes the connection and frees its transceivers and tracks.

@@ -296,6 +296,50 @@ class LiveCameraFeedTest {
     }
 
     @Test
+    fun theCapCountsVideoPlayersNotCameras() {
+        // HLS and WebRTC side by side are two decoders: two slots.
+        CameraVideoBudget.max = 2
+        val ctx = context(store())
+        val first = feed(ctx)
+        val second = feed(ctx)
+        first.start()
+        second.start()
+        idle()
+        assertEquals(listOf(HLS, WEB_RTC), first.runningKinds)
+        assertEquals(2, CameraVideoBudget.inUse)
+        assertEquals(listOf(MJPEG), second.runningKinds)
+        // Once both of the first's players have answered it runs one, and its other slot goes to the second.
+        live(WEB_RTC).frame()
+        live(HLS).frame()
+        idle()
+        assertEquals(listOf(WEB_RTC), first.runningKinds)
+        assertEquals(listOf(HLS), second.runningKinds)
+        assertEquals(2, CameraVideoBudget.inUse)
+    }
+
+    @Test
+    fun withOneSlotLeftACameraRunsOneVideoPlayerAndTakesTheOtherWhenASlotFrees() {
+        CameraVideoBudget.max = 2
+        val ctx = context(store(), kinds = setOf(HLS, MJPEG))
+        val holder = feed(ctx)
+        holder.start()
+        idle()
+        assertEquals(1, CameraVideoBudget.inUse)
+        val both = feed(context(store()))
+        both.start()
+        idle()
+        // One slot left: HLS alone (shown), not HLS and WebRTC.
+        assertEquals(listOf(HLS), both.runningKinds)
+        assertEquals(HLS, both.runningKinds.single())
+        assertEquals(2, CameraVideoBudget.inUse)
+        // The other camera goes: WebRTC starts beside HLS.
+        holder.stop()
+        idle()
+        assertEquals(listOf(HLS, WEB_RTC), both.runningKinds)
+        assertEquals(2, CameraVideoBudget.inUse)
+    }
+
+    @Test
     fun aPlayerThatCantResumeHasFailedAndOneThatCantPauseIsClosed() {
         val f = feed(context(store(), kinds = setOf(HLS, MJPEG)))
         f.start()

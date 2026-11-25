@@ -196,6 +196,27 @@ class HaWebRtcStreamTest {
     }
 
     @Test
+    fun `a channel whose unsubscribe throws still leaves the peer closed`() {
+        val throwing = object : HaCommandChannel by channel {
+            override fun subscribe(command: JSONObject, onEvent: (JSONObject) -> Unit, onError: (HaError) -> Unit): HaCommandChannel.Subscription {
+                channel.subscribe(command, onEvent, onError)
+                return HaCommandChannel.Subscription { throw IllegalStateException("socket gone") }
+            }
+        }
+        val s = HaWebRtcStream(throwing, "camera.x", peers, clock, HaWebRtcStream.Options())
+        s.start()
+        clock.runAll()
+        channel.answerConfig()
+        clock.runAll()
+        val peer = peers.last
+        peer.offer()
+        clock.runAll()
+        s.close()
+        assertTrue(peer.closed)
+        assertEquals(0, clock.pendingTimers())
+    }
+
+    @Test
     fun `close before the config answers never makes a peer`() {
         val s = stream()
         s.start()
