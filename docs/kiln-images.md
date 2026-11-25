@@ -109,14 +109,23 @@ On the Mirror this is "Glassworks on the stock software", which keeps lululemon'
 
 `checkInPlace` (`kiln-core` `inplace.ts`) is Kiln's own check of what the frame's code built, run in
 the browser before any byte is written. It reads both sparse images and refuses unless every block
-the write changes lies inside the extents the bundle names, and the restore puts back exactly those
-blocks, from the device's own bytes (no filled blocks). A wrong offset in a frame's code fails there,
-never on the device.
+the write changes lies inside the extents the bundle names, and the restore covers exactly those
+blocks with real data (no filled blocks). It checks where the blocks are, not what's in them: the
+restore's bytes are the frame's to get right, built from the original file the bundle carries
+(whose SHA-256 Kiln has checked). A wrong offset in a frame's code fails there, never on the device.
 
-The secret only signs one run's bundle. It stays in the browser tab until the bundle is in, and is
-never saved in the browser's storage or written to the log. A bundle this browser kept from an
-earlier run was checked with that run's secret when it came, so a later run on the same device uses
-it without sending it again.
+The secret only signs one run's bundle. It is never written to the log, and never to the browser's
+saved data where Kiln keeps bundles and restore points. So a reload can still take the bundle, the
+tab keeps it in its session storage, with the install's progress, until the bundle is in or a new
+run starts. Closing the tab clears it too. A bundle this browser kept from an earlier run was
+checked with that run's secret when it came. A later run on the same device reuses it only when the
+frame's code says it still fits: on the Mirror, when the agent reports `services.jar` in the same
+blocks. The agent's Bluetooth description is too short to carry where the file sits, so in practice
+Kiln takes the bundle from the device again.
+
+The way back writes the restore point over the blocks it covers, then whatever else the frame's code
+says it must write to put the device back (its `wayBack`). On the Mirror that is a fresh userdata,
+so the app, its Device Owner record and the hidden lululemon apps all go, as after a factory reset.
 
 A new kind of step is a change to Kiln's code, with its own review and tests, not part of adding an
 image.
@@ -136,7 +145,8 @@ Kiln puts its own steps around every recipe. A recipe can't list, skip or move t
    with the restore image, its `manifest.json` and a `SHA256SUMS`, which the Mirror's command-line
    tool (`tools/mirror`, `--undo --backup-dir`) can also restore from.
 5. **The way back**, on Done: how to put the other image back, or for an in-place recipe, the restore
-   point written over the blocks it changed (from this browser, or from the downloaded zip).
+   point written over the blocks it changed (from this browser, or from the downloaded zip), on the
+   device it was made on only. After a write in the install fails, the error screen offers it too.
 
 Every file is downloaded and checked before Kiln connects to the device, so a failed download never
 leaves a half-written device.

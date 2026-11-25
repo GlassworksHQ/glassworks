@@ -86,7 +86,7 @@ These same credits are stored in [`design/frame.json`](design/frame.json) and di
 Open **[kiln.glassworks.dev/lululemon-mirror](https://kiln.glassworks.dev/lululemon-mirror)** in Chrome or Edge on a computer connected to the Mirror with a micro-USB data cable.
 
 > [!IMPORTANT]
-> **Installing permanently replaces lululemon's stock software.** The Mirror's bootloader cannot read existing partitions back, so Kiln cannot back up or restore lululemon's original firmware. Kiln asks you to confirm before writing anything. If you ever want to switch away from Glassworks later, Kiln offers a one-click path to install the plain **Glass Panes** Android image instead.
+> **Installing the Glassworks image permanently replaces lululemon's stock software.** The Mirror's bootloader cannot read existing partitions back, so Kiln cannot back up or restore lululemon's original firmware. Kiln asks you to confirm before writing anything. If you ever want to switch away from Glassworks later, Kiln offers a one-click path to install the plain **Glass Panes** Android image instead. To keep lululemon's system, choose [Glassworks on the stock software](#keeping-lululemons-system): it changes one system file, keeps a restore point for it, and resets only the Mirror's app data.
 
 ### How the browser install works
 
@@ -118,7 +118,7 @@ Choose **Glassworks on the stock software** on Kiln's first screen to keep lulul
 5. **Restore point:** Before writing anything to the system, Kiln saves the exact blocks it will change, from your Mirror's own copy, in this browser, reads them back to check them, and offers a copy to download. Continue opens only once that's done. Keep the download somewhere safe.
 6. **Install:** Kiln writes the changed blocks and fresh app storage, restarts the Mirror, installs Glassworks over USB, hides lululemon's apps, and makes Glassworks the Device Owner so its updates install by themselves. Then setup continues as usual.
 
-To go back, choose **Restore the original system** on Done (or open `kiln.glassworks.dev/lululemon-mirror/undo`). Kiln uses the restore point this browser saved, or the copy you downloaded, and writes it over the blocks it changed. The Mirror's command-line tool in [`tools/mirror`](../../tools/mirror) can restore from that download too.
+To go back, choose **Restore the original system** on Done (or open `kiln.glassworks.dev/lululemon-mirror/undo`). Kiln uses the restore point this browser saved, or the copy you downloaded, and writes it over the blocks it changed. Then it resets the Mirror's app data, as a factory reset would, so Glassworks and its settings go and lululemon's apps come back. Kiln writes a restore point only to the Mirror it was made on. If a write fails partway through the install, the error screen offers the same restore. The Mirror's command-line tool in [`tools/mirror`](../../tools/mirror) can restore from that download too (add `--erase-userdata` to reset the app data as well).
 
 ### Returning to plain Glass Panes
 
