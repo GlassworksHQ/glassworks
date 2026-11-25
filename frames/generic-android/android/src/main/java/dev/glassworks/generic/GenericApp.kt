@@ -23,6 +23,7 @@ import dev.glassworks.screen.TestHold
 import dev.glassworks.GlassworksApp
 import dev.glassworks.GlassworksRuntime
 import dev.glassworks.KioskPrefs
+import dev.glassworks.VitroSentinel
 import dev.glassworks.update.ReleaseLine
 
 /** Glassworks for generic Android (#23): the core on any Android 8+ device, as its own app. */
@@ -35,8 +36,9 @@ class GenericApp : Application(), GlassworksApp {
     override val glassworks: GlassworksRuntime by lazy {
         val frame = frame(this)
         Log.i(TAG, "Frame: ${frame.board} (${frame.hardware.manufacturer} ${frame.hardware.model})")
-        // Vitro is read once, here: the engine is chosen for the whole process, so a change waits for a restart.
-        runtime(frame, build, vitro = KioskPrefs(this).vitroEnabled)
+        // Vitro is read once, here: the engine is chosen for the whole process, so a change waits for a restart. While
+        // it's on, VitroSentinel turns it off for the next start if it keeps crashing the app just after it starts.
+        runtime(frame, build, vitro = VitroSentinel.vitroAtStart(this))
     }
 
     companion object {

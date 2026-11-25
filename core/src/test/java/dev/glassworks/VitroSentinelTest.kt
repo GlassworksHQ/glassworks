@@ -1,0 +1,207 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+package dev.glassworks
+
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import dev.glassworks.manage.AppManage
+import dev.glassworks.manage.Tile
+import dev.glassworks.settings.CoreSettings
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import java.time.Duration
+
+/**
+ * The way back from Vitro: crashes right after the start, twice in a row, turn it off for the next start; one crash,
+ * a crash later on, or a plain restart never do. Each "start" here is a new sentinel on the same settings, as each
+ * process start makes one.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+class VitroSentinelTest {
+    private val app = RuntimeEnvironment.getApplication()
+    private var now = 1_000_000L
+    private val wall = 1_700_000_000_000L
+    private val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+
+    @Before fun clean() {
+        app.getSharedPreferences("kiosk", Context.MODE_PRIVATE).edit().clear().commit()
+    }
+
+    @After fun restore() {
+        Thread.setDefaultUncaughtExceptionHandler(previousHandler)
+    }
+
+    private fun prefs() = KioskPrefs(app)
+
+    /** A new process: the sentinel starts on the settings as the last one left them. */
+    private fun start(): Pair<VitroSentinel, Boolean> {
+        now += 10_000L // the restart itself
+        val s = VitroSentinel(prefs(), clock = { now }, wallClock = { wall })
+        return s to s.start()
+    }
+
+    /** What a card in Vitro throws on the main thread (the review's claim 1). */
+    private fun vitroCrash(): Throwable = ClassCastException("java.lang.String cannot be cast to java.lang.Number").apply {
+        stackTrace = arrayOf(
+            StackTraceElement("dev.glassworks.engine.vitro.cards.WeatherCardView", "showMetric", "GraphAndClimateCards.kt", 1106),
+            StackTraceElement("android.os.Looper", "loop", "Looper.java", 1),
+        )
+    }
+
+    @Test fun twoCrashesRightAfterStartTurnVitroOffForTheNextStart() {
+        prefs().vitroEnabled = true
+        val (first, on1) = start()
+        assertTrue(on1)
+        now += 3_000L
+        assertFalse("one crash isn't a loop", first.onCrash(vitroCrash()))
+        assertTrue(prefs().vitroEnabled)
+
+        val (second, on2) = start()
+        assertTrue("still on for the second try", on2)
+        now += 2_000L
+        assertTrue(second.onCrash(vitroCrash()))
+
+        val p = prefs()
+        assertFalse(p.vitroEnabled)
+        assertEquals("ClassCastException in WeatherCardView.showMetric", p.vitroTurnedOff?.reason)
+        assertEquals(wall, p.vitroTurnedOff?.atMs)
+        val (_, on3) = start()
+        assertFalse("the next start runs on the browser engine", on3)
+        // The panel says so once; Labs keeps why.
+        assertTrue(p.takeVitroOffNotice())
+        assertFalse(p.takeVitroOffNotice())
+        assertNotNull(p.vitroTurnedOff)
+    }
+
+    @Test fun oneCrashThenAStartThatStaysUpNeverTurnsVitroOff() {
+        prefs().vitroEnabled = true
+        val (first, _) = start()
+        now += 3_000L
+        first.onCrash(vitroCrash())
+        assertEquals(1, prefs().vitroCrashStrikes)
+
+        // The next start stays up through the window: the strike goes.
+        val (second, _) = start()
+        now += VitroSentinel.WINDOW_MS
+        second.onStable()
+        assertEquals(0, prefs().vitroCrashStrikes)
+
+        // Another single crash much later, just after a start: one strike again, Vitro stays on.
+        val (third, _) = start()
+        now += 1_000L
+        assertFalse(third.onCrash(vitroCrash()))
+        assertTrue(prefs().vitroEnabled)
+        assertNull(prefs().vitroTurnedOff)
+    }
+
+    @Test fun aCrashAfterTheWindowIsntAStartLoop() {
+        prefs().vitroEnabled = true
+        repeat(3) {
+            val (s, _) = start()
+            now += VitroSentinel.WINDOW_MS + 1
+            assertFalse(s.onCrash(vitroCrash()))
+        }
+        assertTrue(prefs().vitroEnabled)
+        assertEquals(0, prefs().vitroCrashStrikes)
+    }
+
+    @Test fun plainRestartsChangeNothing() {
+        prefs().vitroEnabled = true
+        repeat(5) {
+            val (s, on) = start()
+            assertTrue(on)
+            now += 1_000L
+            if (it % 2 == 0) s.onStable() // some stay up, others restart soon (a setting that restarts the app)
+        }
+        assertTrue(prefs().vitroEnabled)
+        assertEquals(0, prefs().vitroCrashStrikes)
+        assertNull(prefs().vitroTurnedOff)
+        assertFalse(prefs().takeVitroOffNotice())
+    }
+
+    @Test fun withVitroOffTheSentinelStaysOut() {
+        val (s, on) = start()
+        assertFalse(on)
+        assertFalse(s.onCrash(vitroCrash()))
+        assertEquals(0, prefs().vitroCrashStrikes)
+        assertFalse(VitroSentinel.vitroAtStart(app, prefs()))
+        assertSame("no handler installed", previousHandler, Thread.getDefaultUncaughtExceptionHandler())
+    }
+
+    @Test fun turningVitroOnAgainStartsClean() {
+        prefs().vitroEnabled = true
+        prefs().vitroCrashStrikes = 1
+        prefs().turnVitroOffAfterCrashes("ClassCastException in WeatherCardView.showMetric", wall)
+        assertNotNull(prefs().vitroTurnedOff)
+        // Settings → Labs (or `--ez vitro true`).
+        prefs().vitroEnabled = true
+        assertNull(prefs().vitroTurnedOff)
+        assertEquals(0, prefs().vitroCrashStrikes)
+        assertFalse(prefs().takeVitroOffNotice())
+    }
+
+    @Test fun theInstalledHandlerCountsTheCrashThenHandsItOn() {
+        prefs().vitroEnabled = true
+        val handed = ArrayList<Throwable>()
+        Thread.setDefaultUncaughtExceptionHandler { _, e -> handed += e }
+        val main = Handler(Looper.getMainLooper())
+        repeat(2) {
+            val s = VitroSentinel(prefs(), clock = { now }, wallClock = { wall })
+            assertTrue(s.start())
+            s.install(main)
+            val crash = vitroCrash()
+            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(), crash)
+            assertSame("Android's handler still ends the process", crash, handed.last())
+        }
+        assertFalse(prefs().vitroEnabled)
+        assertNotNull(prefs().vitroTurnedOff)
+    }
+
+    @Test fun theStableMarkRunsOnceTheWindowHasPassed() {
+        prefs().vitroEnabled = true
+        prefs().vitroCrashStrikes = 1
+        val s = VitroSentinel(prefs(), clock = { now })
+        s.start()
+        s.install(Handler(Looper.getMainLooper()))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(VitroSentinel.WINDOW_MS - 1))
+        assertEquals(1, prefs().vitroCrashStrikes)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
+        assertEquals(0, prefs().vitroCrashStrikes)
+    }
+
+    @Test fun aCrashOutsideVitroCountsToo() {
+        // The app crashing at start while Vitro is on, wherever the throw comes from: Vitro may have caused it.
+        prefs().vitroEnabled = true
+        repeat(2) {
+            val (s, _) = start()
+            now += 1_000L
+            s.onCrash(IllegalStateException("elsewhere"))
+        }
+        assertFalse(prefs().vitroEnabled)
+        assertTrue(prefs().vitroTurnedOff!!.reason.startsWith("IllegalStateException"))
+    }
+
+    @Test fun theManageOverviewsEngineTileSaysSoAndOpensLabs() {
+        val ok = AppManage.engineTile("GeckoView 145.0.1")
+        assertEquals(Tile("Engine", "GeckoView 145", "Version 145.0.1", Tile.Tone.OK), ok)
+        val off = AppManage.engineTile("GeckoView 145.0.1", vitroTurnedOff = true)
+        assertEquals(Tile("Engine", "GeckoView 145", AppManage.VITRO_OFF_TILE, Tile.Tone.PROBLEM, href = "/${CoreSettings.LABS}"), off)
+        assertEquals(Tile("Engine", "Unknown", "", Tile.Tone.OK), AppManage.engineTile(""))
+    }
+}

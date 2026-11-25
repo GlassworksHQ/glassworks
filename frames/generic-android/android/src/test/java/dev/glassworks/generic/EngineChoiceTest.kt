@@ -7,6 +7,7 @@ package dev.glassworks.generic
 import dev.glassworks.KioskPrefs
 import dev.glassworks.engine.gecko.GeckoEngine
 import dev.glassworks.engine.vitro.VitroEngine
+import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -32,11 +33,27 @@ class EngineChoiceTest {
         assertFalse(engine is VitroEngine)
     }
 
+    /** A start with Vitro on installs the crash sentinel as the default handler: the next test gets the old one back. */
+    private val handler = Thread.getDefaultUncaughtExceptionHandler()
+
+    @After fun restoreHandler() {
+        Thread.setDefaultUncaughtExceptionHandler(handler)
+    }
+
+    @Test fun afterTheSentinelTurnedVitroOffTheNextStartIsOnGecko() {
+        // VitroSentinel: the app crashed twice in a row just after starting with Vitro on.
+        KioskPrefs(app).vitroEnabled = true
+        KioskPrefs(app).turnVitroOffAfterCrashes("ClassCastException in WeatherCardView.showMetric", 0L)
+        assertTrue("the way back: the browser engine", app.glassworks.engine is GeckoEngine)
+        assertSame("no sentinel without Vitro", handler, Thread.getDefaultUncaughtExceptionHandler())
+    }
+
     @Test fun vitroOnAtStartWrapsGecko() {
         KioskPrefs(app).vitroEnabled = true
         val engine = app.glassworks.engine
         assertTrue("Vitro: $engine", engine is VitroEngine)
         assertTrue("with GeckoView for the pages it can't draw", (engine as VitroEngine).fallback is GeckoEngine)
+        assertFalse("the crash sentinel watches the process", handler === Thread.getDefaultUncaughtExceptionHandler())
     }
 
     @Test fun turningItOnLaterWaitsForARestart() {

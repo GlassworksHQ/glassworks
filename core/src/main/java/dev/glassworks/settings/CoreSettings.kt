@@ -105,8 +105,9 @@ class CoreSettings(
             live.factoryReset?.let(::factoryReset),
         )),
         // Experimental features, off until someone turns them on, the same on the panel and on the Manage page.
-        SettingsPlace.LABS to SettingsSection(LABS, LABS_TITLE, listOf(
+        SettingsPlace.LABS to SettingsSection(LABS, LABS_TITLE, listOfNotNull(
             SettingsItem.Note { LABS_NOTE },
+            vitroTurnedOff(),
             vitro(),
         )),
         SettingsPlace.ABOUT to SettingsSection("about", "About", listOf(
@@ -222,6 +223,14 @@ class CoreSettings(
     private fun vitro() = SettingsItem.Switch(VITRO_TITLE, VITRO_DETAIL, { prefs.vitroEnabled }, restartsApp = true) { v, done ->
         prefs.vitroEnabled = v
         done(null)
+    }
+
+    /**
+     * Why Vitro is off when the app turned it off itself (VitroSentinel: it crashed the app just after it started,
+     * twice in a row), on the panel and on the Manage page alike. Gone once Vitro is turned on again.
+     */
+    private fun vitroTurnedOff(): SettingsItem? = prefs.vitroTurnedOff?.let {
+        SettingsItem.Info(title = { VITRO_OFF_TITLE }, detail = { VITRO_OFF_DETAIL }, fixable = { true })
     }
 
     /** Where the dashboard loads from when its address is automatic. */
@@ -354,6 +363,11 @@ class CoreSettings(
         const val VITRO_TITLE = "Vitro renderer"
         const val VITRO_DETAIL = "Draws your dashboard with the panel's own views instead of a browser. Cards it can't " +
             "draw yet show in a small browser view."
+        const val VITRO_OFF_TITLE = "Vitro was turned off"
+        const val VITRO_OFF_DETAIL = "The app stopped twice right after starting while Vitro drew the dashboard, so " +
+            "the panel went back to the browser. Turn Vitro on to try it again."
+        /** What the panel says once, at the first start after VitroSentinel turned Vitro off. */
+        const val VITRO_OFF_NOTICE = "Vitro was turned off because the app kept stopping. Settings → Labs has the details."
         const val LICENCES_TITLE = "Open source licenses"
         const val LICENCES_DETAIL = "Third-party software included with Glassworks"
 

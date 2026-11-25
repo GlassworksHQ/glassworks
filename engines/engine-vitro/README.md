@@ -54,6 +54,19 @@ nothing gets installed there.
 >
 > Vitro hasn't been benchmarked against GeckoView yet, so this page makes no speed or memory claims.
 
+## When a card fails
+
+A card that Vitro can't build, or that throws while it updates, measures, lays out, draws or handles a touch, shows
+Home Assistant's own error card in its place: the card tinted with the error color, its icon, and "Configuration error"
+for an administrator. The other cards keep working, and the log gets one line for each kind of failure rather than one
+per update. A sections view also catches the few card types that draw without Vitro's card surface (a heading,
+Mushroom's chips and title).
+
+If something still gets past the cards and the app stops twice in a row within a minute of starting, the app turns
+Vitro off for the next start, which runs on the browser engine. The panel says so once when it starts, the Labs page
+explains why on the panel and on its Manage page, and the Manage overview's Engine tile points there. Turning Vitro on
+again in Labs gives it a fresh start. A single crash, or a restart, never turns it off.
+
 ## How it works
 
 Vitro moves the Home Assistant data plane out of the browser into Kotlin (`HaDashboardClient` over `WsHaSocket`) and splits every card across three automatic tiers:

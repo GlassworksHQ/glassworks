@@ -16,6 +16,7 @@ import dev.glassworks.update.ReleaseLine
 import dev.glassworks.GlassworksApp
 import dev.glassworks.GlassworksRuntime
 import dev.glassworks.KioskPrefs
+import dev.glassworks.VitroSentinel
 import dev.glassworks.glassworks
 
 class KioskApp : Application(), GlassworksApp {
@@ -29,8 +30,9 @@ class KioskApp : Application(), GlassworksApp {
         val frame = AqaraS1Plus.orElse(Platform.hardware) { GenericAndroid(this) }
         // Once per process, so a device that got the wrong frame shows it in logcat.
         Log.i("Glassworks", "Frame: ${frame.board} (${Platform.hardware})")
-        // Vitro is read once, here: the engine is chosen for the whole process, so a change waits for a restart.
-        runtime(frame, build, vitro = KioskPrefs(this).vitroEnabled)
+        // Vitro is read once, here: the engine is chosen for the whole process, so a change waits for a restart. While
+        // it's on, VitroSentinel turns it off for the next start if it keeps crashing the app just after it starts.
+        runtime(frame, build, vitro = VitroSentinel.vitroAtStart(this))
     }
 
     companion object {
