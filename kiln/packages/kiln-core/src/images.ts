@@ -70,7 +70,26 @@ export type ImageStep =
    * image's own published key (`key`, a checked download, used for this one session and never stored).
    * Only after a `wifi` step, and only when a network was saved.
    */
-  | { do: 'wifi-on'; key?: string };
+  | { do: 'wifi-on'; key?: string }
+  /**
+   * An in-place recipe's first stage: the frame's code builds a small userdata image (`makes`) that starts the
+   * frame's agent on the stock software with this browser's key. Only Glassworks, only an in-place recipe. After
+   * fastboot and before restart. Writes nothing to the device by itself: a `flash` writes what it makes.
+   */
+  | { do: 'stage'; makes: string }
+  /**
+   * After the restart into the stage: Kiln receives the bundle (`bundle`) the agent reads off the running device,
+   * over one of `channels`, and checks it (its SHA-256, its serial, its HMAC with the stage's secret). Read-only.
+   */
+  | { do: 'receive'; bundle: string; channels: readonly ('lan' | 'ble' | 'file')[] }
+  /**
+   * The frame's code builds, from the received `bundle`, the surgical write images (`makes`) and the image that
+   * puts every block they change back (`restore`). Kiln checks each against the bundle's extents before any is
+   * written (inplace.ts). After fastboot (a new session after `receive`) and before restart. Writes nothing.
+   */
+  | { do: 'in-place'; bundle: string; makes: readonly string[]; restore: string }
+  /** After the restart into what an in-place recipe wrote: the app over adb with this browser's key. */
+  | { do: 'app-install' };
 
 export type StepKind = ImageStep['do'];
 
@@ -86,26 +105,41 @@ export const STEP_LIBRARY: Readonly<Record<StepKind, { fields: readonly string[]
   'system-key': { fields: ['file', 'makes'], writes: false, device: false },
   wifi: { fields: ['file', 'template', 'makes'], writes: false, device: false },
   'wifi-on': { fields: ['key'], writes: false, device: true },
+  stage: { fields: ['makes'], writes: false, device: false },
+  receive: { fields: ['bundle', 'channels'], writes: false, device: true },
+  'in-place': { fields: ['bundle', 'makes', 'restore'], writes: false, device: false },
+  'app-install': { fields: [], writes: true, device: true },
 };
+
+/** The ways a `receive` step can take the bundle from the device's agent. */
+export const BUNDLE_CHANNELS = ['lan', 'ble', 'file'] as const;
 
 /**
  * Kiln's own steps around every recipe, all three right after the device connects and before any
- * other step. `checks`: read-only, and a failed check stops the install. `backup`: what the device has
+ * other step. `restore-point`: in an in-place recipe, right before the first write of what an
+ * `in-place` step made, the restore image kept in this browser and offered as a download. `checks`: read-only, and a failed check stops the install. `backup`: what the device has
  * (or, when it can't be read back, the SHA-256 of each file about to be written, in the log).
  * `confirm`: the wipe warning, which the person must accept. `way-back`: last, Done says how to put
  * the other image back.
  */
-export const SAFETY_STEPS = ['checks', 'backup', 'confirm', 'way-back'] as const;
+export const SAFETY_STEPS = ['checks', 'backup', 'confirm', 'restore-point', 'way-back'] as const;
 export type SafetyStep = (typeof SAFETY_STEPS)[number];
 
-export type PlannedStep = ImageStep | { do: SafetyStep; safety: true };
+/** The `restore-point` Kiln puts in: the bundle the restore image was built from, and that image. */
+export type RestorePoint = { do: 'restore-point'; safety: true; bundle: string; restore: string };
+export type PlannedStep = ImageStep | { do: Exclude<SafetyStep, 'restore-point'>; safety: true } | RestorePoint;
 
 export interface ImageRecipe {
   /** The `?image=<id>` in Kiln's link. Lower case, digits and dashes. `glassworks` is Glassworks' own. */
   id: string;
   name: string;
-  /** Made by another project. Glassworks is the one image that isn't. */
+  /** Made by another project. Glassworks (`glassworks`, `glassworks-*`) is the one image that isn't. */
   community: boolean;
+  /**
+   * `replace` (the default): whole partitions written from images. `in-place`: the stock software kept, only the
+   * blocks the bundle names written, with a restore image for exactly those (stage, receive, in-place, app-install).
+   */
+  mode?: 'replace' | 'in-place';
   by: ImageLink;
   project: ImageLink;
   licence: string;
@@ -140,8 +174,12 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
   const bad: string[] = [];
   const at = (i: number) => `step ${i + 1}`;
   if (!ID.test(r.id ?? '')) bad.push(`id "${r.id}": lower case letters, digits and dashes only`);
-  if (r.community && r.id === 'glassworks') bad.push('id "glassworks" is Glassworks\' own');
-  if (!r.community && r.id !== 'glassworks') bad.push('only Glassworks is not a community image');
+  const own = r.id === 'glassworks' || (r.id ?? '').startsWith('glassworks-');
+  if (r.community && own) bad.push(`id "${r.id}" is Glassworks' own`);
+  if (!r.community && !own) bad.push('only Glassworks is not a community image');
+  const inPlace = r.mode === 'in-place';
+  if (r.mode !== undefined && r.mode !== 'replace' && !inPlace) bad.push(`mode "${String(r.mode)}": replace or in-place`);
+  if (inPlace && r.community) bad.push('a community image is installed as published: no in-place mode');
   for (const k of ['name', 'licence', 'summary'] as const) if (!r[k]?.trim()) bad.push(`${k} is missing`);
   for (const k of ['by', 'project', 'support'] as const) {
     if (!r[k]?.name?.trim() || !https(r[k]?.href)) bad.push(`${k} needs a name and an https link`);
@@ -166,6 +204,15 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
   let systemKeyed = false;
   const flashed = new Set<string>();
   let device = false, fastboot = false, restarted = false, writes = 0, wifi = false, wifiOn = false;
+  // in-place: stage → restart → receive → fastboot → in-place → flash → restart → app-install
+  let staged = false, stageRestarted = false, received: string | undefined, fastbootAfterReceive = false;
+  let inPlaced = false, appInstalled = false;
+  const restores = new Set<string>();
+  const newName = (n: unknown) => typeof n === 'string' && FILE_NAME.test(n) && !files.has(n) && !made.has(n) && !restores.has(n) && n !== received;
+  const inPlaceOnly = (i: number, kind: string) => {
+    if (r.community) bad.push(`${at(i)}: a community image gets no "${kind}": it is Glassworks' own in-place install`);
+    else if (!inPlace) bad.push(`${at(i)}: "${kind}" is only for an in-place recipe (mode "in-place")`);
+  };
   (r.steps ?? []).forEach((s, i) => {
     const kind = (s as { do?: string }).do ?? '';
     if ((SAFETY_STEPS as readonly string[]).includes(kind)) { bad.push(`${at(i)}: "${kind}" is Kiln's own safety step; a recipe can't list it`); return; }
@@ -196,19 +243,66 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
       case 'fastboot':
         fastboot = true;
         restarted = false;
+        if (received !== undefined) fastbootAfterReceive = true;
         break;
       case 'flash':
         writes++;
         if (!fastboot || restarted) bad.push(`${at(i)}: flash needs the device in fastboot first`);
         if (!frame.partitions.includes(s.partition)) bad.push(`${at(i)}: this frame doesn't let a recipe write "${s.partition}"`);
-        // the last write wins: a second one would replace what the first wrote (a keyed copy with the published file)
+        // the last write wins: a second one in a fastboot session would replace what the first wrote (a keyed copy with
+        // the published file). Each session (between fastboot and restart) starts over: an in-place recipe writes
+        // userdata in its stage, and again after it.
         if (flashed.has(s.partition)) bad.push(`${at(i)}: ${s.partition} is written once`);
         flashed.add(s.partition);
-        if (!checked.has(s.file) && !made.has(s.file)) bad.push(`${at(i)}: ${s.file} isn't a checked download or something Kiln made from one`);
+        if (restores.has(s.file)) bad.push(`${at(i)}: ${s.file} is the way back: the install never writes it`);
+        else if (!checked.has(s.file) && !made.has(s.file)) bad.push(`${at(i)}: ${s.file} isn't a checked download or something Kiln made from one`);
         break;
       case 'restart':
         if (!fastboot) bad.push(`${at(i)}: restart needs a device to restart`);
         restarted = true;
+        flashed.clear();
+        if (staged) stageRestarted = true;
+        break;
+      case 'stage':
+        inPlaceOnly(i, 'stage');
+        if (staged) bad.push(`${at(i)}: the stage is built once`);
+        staged = true;
+        // it is sized from what fastboot reports, and written in that session
+        if (!fastboot || restarted) bad.push(`${at(i)}: stage comes after fastboot and before restart`);
+        if (!newName(s.makes)) bad.push(`${at(i)}: stage must name a new file it makes`);
+        else made.add(s.makes);
+        break;
+      case 'receive':
+        inPlaceOnly(i, 'receive');
+        if (received !== undefined) bad.push(`${at(i)}: the bundle is received once`);
+        if (!stageRestarted || !restarted) bad.push(`${at(i)}: receive comes after a stage step and the restart into it`);
+        if (!Array.isArray(s.channels) || !s.channels.length || s.channels.some((c) => !(BUNDLE_CHANNELS as readonly string[]).includes(c))
+          || new Set(s.channels).size !== s.channels.length) bad.push(`${at(i)}: receive takes channels from ${BUNDLE_CHANNELS.join(', ')}, each once`);
+        if (!newName(s.bundle)) bad.push(`${at(i)}: receive must name a new bundle`);
+        received = typeof s.bundle === 'string' ? s.bundle : '';
+        break;
+      case 'in-place': {
+        inPlaceOnly(i, 'in-place');
+        if (inPlaced) bad.push(`${at(i)}: the in-place images are built once`);
+        inPlaced = true;
+        if (received === undefined) bad.push(`${at(i)}: in-place needs a receive step first`);
+        else if (s.bundle !== received) bad.push(`${at(i)}: in-place builds from ${String(s.bundle)}, but the bundle received is ${received}`);
+        if (!fastbootAfterReceive || restarted) bad.push(`${at(i)}: in-place comes after receive, in a new fastboot session, before restart`);
+        const makes: unknown[] = Array.isArray(s.makes) ? s.makes : [];
+        if (!makes.length) bad.push(`${at(i)}: in-place must say what it makes`);
+        for (const m of makes) {
+          if (!newName(m)) bad.push(`${at(i)}: in-place must name new files it makes`);
+          else made.add(m as string);
+        }
+        if (!newName(s.restore) || makes.includes(s.restore)) bad.push(`${at(i)}: in-place must name a new restore file`);
+        else restores.add(s.restore);
+        break;
+      }
+      case 'app-install':
+        inPlaceOnly(i, 'app-install');
+        if (appInstalled) bad.push(`${at(i)}: the app is installed once`);
+        appInstalled = true;
+        if (!restarted) bad.push(`${at(i)}: app-install comes after restart`);
         break;
       case 'first-start':
         if (r.community) bad.push(`${at(i)}: Kiln's first start needs an image that trusts this browser's key: only Glassworks`);
@@ -266,6 +360,14 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
       bad.push(`${s.do} makes ${s.makes}, but nothing writes it: flash it, or a wifi step's copy of it`);
     }
     if (s.do === 'wifi' && typeof s.makes === 'string' && !written.has(s.makes)) bad.push(`wifi makes ${s.makes}, but nothing writes it: flash it`);
+    if (s.do === 'stage' && typeof s.makes === 'string' && !written.has(s.makes)) bad.push(`stage makes ${s.makes}, but nothing writes it: flash it`);
+    if (s.do === 'in-place' && Array.isArray(s.makes)) {
+      for (const m of s.makes) if (typeof m === 'string' && !written.has(m)) bad.push(`in-place makes ${m}, but nothing writes it: flash it`);
+    }
+  }
+  if (inPlace) {
+    for (const k of ['stage', 'receive', 'in-place'] as const) if (!(r.steps ?? []).some((s) => s.do === k)) bad.push(`an in-place recipe needs a ${k} step`);
+    if ((r.steps ?? []).some((s) => s.do === 'patch')) bad.push('an in-place recipe keeps the stock software: no patch');
   }
   const wifiFrom = wifis[0];
   if (wifiFrom && keyed.size && !keyed.has(wifiFrom.file) && written.has(wifiFrom.makes)) {
@@ -281,22 +383,28 @@ export function assertImages(images: readonly ImageRecipe[], frame: FrameAccess)
   const bad = images.flatMap((r) => validateImage(r, frame).map((b) => `${r.id}: ${b}`));
   const ids = images.map((r) => r.id);
   if (new Set(ids).size !== ids.length) bad.push('two images share an id');
-  if (images[0]?.id !== 'glassworks') bad.push('Glassworks comes first');
+  if (!images[0] || images[0].community) bad.push('Glassworks comes first');
   if (bad.length) throw new Error(`invalid image recipes:\n${bad.join('\n')}`);
 }
 
 /**
  * The steps Kiln runs, in order: the recipe's, with Kiln's safety steps put in. A recipe can't skip
  * them: `checks`, `backup` and `confirm` follow the first step that connects to the device (or, in a
- * recipe that writes without connecting, which validation refuses, come before that write), and
- * `way-back` is last.
+ * recipe that writes without connecting, which validation refuses, come before that write),
+ * `restore-point` comes right before the first write of what an `in-place` step made, and `way-back`
+ * is last.
  */
 export function plan(r: ImageRecipe): PlannedStep[] {
   const out: PlannedStep[] = [];
   const safety: PlannedStep[] = [{ do: 'checks', safety: true }, { do: 'backup', safety: true }, { do: 'confirm', safety: true }];
   let guarded = false;
+  const fromInPlace = new Map<string, Extract<ImageStep, { do: 'in-place' }>>();
+  let restorePoint = false;
   for (const s of r.steps) {
     if (STEP_LIBRARY[s.do].writes && !guarded) { out.push(...safety); guarded = true; }
+    if (s.do === 'in-place') for (const m of s.makes) fromInPlace.set(m, s);
+    const source = s.do === 'flash' ? fromInPlace.get(s.file) : undefined;
+    if (source && !restorePoint) { out.push({ do: 'restore-point', safety: true, bundle: source.bundle, restore: source.restore }); restorePoint = true; }
     out.push(s);
     if (STEP_LIBRARY[s.do].device && !guarded) { out.push(...safety); guarded = true; }
   }
