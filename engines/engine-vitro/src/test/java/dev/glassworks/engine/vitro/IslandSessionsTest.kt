@@ -588,4 +588,45 @@ class IslandSessionsTest {
         assertTrue(html.contains("if (r.status !== 404) connectBridge();"))
         assertTrue(html.contains("<style id=\"vitro-theme\">"))
     }
+
+    // ---- The iframe card's page lives as an island's does ----
+
+    private val iframeViews = """{"views": [
+        {"path": "a", "title": "A", "cards": [{"type": "iframe", "url": "https://example.com/"}, {"type": "tile", "entity": "light.lounge_lamp", "name": "Lounge"}]},
+        {"path": "b", "title": "B", "cards": [{"type": "tile", "entity": "light.lounge_lamp"}]}]}"""
+
+    @Test fun anIframesPageIsKeptAcrossARebuildPausedWhileHiddenAndClosedWithItsCard() {
+        server.dashboardConfig = JSONObject(iframeViews)
+        val p = page()
+        p.load("$base/wall-test/a")
+        awaitMain("ready") { readyCount() == 1 && islandPages().size == 1 }
+        val frame = islandPages().single()
+        assertTrue(frame.loads.single().contains("/__vitro/island/"))
+
+        // Another card changes: the iframe's own build takes its page, with no new load.
+        server.dashboardConfig = JSONObject(iframeViews.replace("\"Lounge\"", "\"Living room\""))
+        lovelaceUpdated()
+        awaitMain("the edit is built") { readyCount() >= 2 }
+        idle()
+        assertEquals(1, islandPages().size)
+        assertFalse(frame.closed)
+        assertEquals(1, frame.loads.size)
+
+        // Its view hidden: the page pauses; shown again: it runs.
+        p.load("$base/wall-test/b")
+        idle()
+        assertFalse(frame.active)
+        p.load("$base/wall-test/a")
+        idle()
+        assertTrue(frame.active)
+
+        // The card goes: its page closes and its slot with it.
+        server.dashboardConfig = JSONObject(iframeViews.replace("""{"type": "iframe", "url": "https://example.com/"}, """, ""))
+        lovelaceUpdated()
+        awaitMain("the removal is built and the iframe's page closed") { frame.closed }
+        idle()
+        assertTrue(openIslandPages().isEmpty())
+        assertTrue(slots(engines.single().islandServer).isEmpty())
+    }
+
 }

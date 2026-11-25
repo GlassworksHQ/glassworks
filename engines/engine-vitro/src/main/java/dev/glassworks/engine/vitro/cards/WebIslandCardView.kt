@@ -22,6 +22,24 @@ import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.math.abs
 
 /**
+ * A card drawn in a browser page of its own (a web island, or the iframe card's frame): what VitroView does with its
+ * page as views are built, shown and dropped ([WebIslandCardView] has the details).
+ */
+interface IslandCard {
+    /** Whether its page is one of [pages]. */
+    fun holds(pages: Set<Page>): Boolean
+
+    /** Shows or hides its page ([Page.setActive]). Main thread. */
+    fun setShown(shown: Boolean)
+
+    /** Gives its page and slot up for the next build of the same card, or null when it has none. */
+    fun handOff(): WebIslandCardView.Island?
+
+    /** Closes its page ([Page.close]) and slot for good. Main thread; once. */
+    fun release()
+}
+
+/**
  * Tier 3 Custom Card Escape Hatch ("GeckoView Micro-Web Island").
  *
  * Uses zero `android.webkit.WebView`: every Tier 3 island runs through Glassworks' wrapped
@@ -42,7 +60,7 @@ class WebIslandCardView(
      * page and slot instead of opening a new page, and restyles it to its own theme. Null opens a new page.
      */
     adopted: Island? = null,
-) : CardSurface(ctx) {
+) : CardSurface(ctx), IslandCard {
 
     /**
      * An island's page and its slot on the island server, between a card that let it go ([handOff]) and the next
@@ -337,13 +355,13 @@ class WebIslandCardView(
     }
 
     /** Whether the island's page is one of [pages]. */
-    fun holds(pages: Set<Page>): Boolean = islandPage?.let { it in pages } == true
+    override fun holds(pages: Set<Page>): Boolean = islandPage?.let { it in pages } == true
 
     /**
      * Shows or hides the island's page ([Page.setActive]): a page on a view that isn't on screen stops painting.
      * Main thread.
      */
-    fun setShown(shown: Boolean) {
+    override fun setShown(shown: Boolean) {
         if (shown == pageActive) return
         pageActive = shown
         islandPage?.setActive(shown)
@@ -354,7 +372,7 @@ class WebIslandCardView(
      * The page leaves this card; its slot stays until that build takes it ([Island]) or [Island.close] ends it. Until
      * then the slot answers to no card: what the page sends meanwhile reaches nothing.
      */
-    fun handOff(): Island? {
+    override fun handOff(): Island? {
         if (islandGone) return null
         val page = islandPage ?: return null
         val id = slotId ?: return null
@@ -392,7 +410,7 @@ class WebIslandCardView(
     }
 
     /** Closes the island for good: its slot goes and its page ([Page.close]) stops. Main thread; once. */
-    fun release() {
+    override fun release() {
         ctx.main.removeCallbacks(releaseIfDetached)
         if (islandGone) return
         islandGone = true
@@ -461,7 +479,7 @@ class WebIslandCardView(
         fun keyOf(config: CardConfig, fillViewport: Boolean): String = (if (fillViewport) "fill:" else "card:") + config.raw
 
         /** A handed-off island's slot until the next build takes it: it serves nothing and drops what the page sends. */
-        private val PARKED = object : VitroIslandServer.SlotHandler {
+        internal val PARKED = object : VitroIslandServer.SlotHandler {
             override val html: String get() = "<!DOCTYPE html>"
             override fun onConnected(send: (JSONObject) -> Unit) {}
             override fun onMessage(msg: JSONObject, send: (JSONObject) -> Unit) {}

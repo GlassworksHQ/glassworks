@@ -81,6 +81,7 @@ import dev.glassworks.engine.vitro.cards.TodoListCardView
 import dev.glassworks.engine.vitro.cards.WeatherCardView
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
+import dev.glassworks.engine.vitro.cards.IslandCard
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.data.EntityState
@@ -923,9 +924,9 @@ class VitroView(
             updateIslandsShown()
         }
 
-    /** The island cards in [root]'s tree. */
-    private fun islandsIn(root: View, into: MutableList<WebIslandCardView> = ArrayList()): MutableList<WebIslandCardView> {
-        if (root is WebIslandCardView) {
+    /** The island cards in [root]'s tree: web islands and iframe cards. */
+    private fun islandsIn(root: View, into: MutableList<IslandCard> = ArrayList()): MutableList<IslandCard> {
+        if (root is IslandCard) {
             into += root
         } else if (root is android.view.ViewGroup) {
             for (i in 0 until root.childCount) islandsIn(root.getChildAt(i), into)
@@ -1658,7 +1659,8 @@ class VitroView(
                 else HaErrorCardView(ctx, "Entities are required")
             "shortcut" -> ShortcutCardView(ctx, card)
             "alert" -> SmallCardConfigs.alertError(card)?.let { HaErrorCardView(ctx, it) } ?: AlertCardView(ctx, card)
-            "iframe" -> SmallCardConfigs.iframeError(card)?.let { HaErrorCardView(ctx, it) } ?: IframeCardView(ctx, card, fillViewport)
+            "iframe" -> SmallCardConfigs.iframeError(card)?.let { HaErrorCardView(ctx, it) }
+                ?: IframeCardView(ctx, card, fillViewport, adopted = adoptIsland(card, fillViewport))
             // Tier 2: Popular HACS Fast-Paths
             // Mushroom's light, fan and cover cards with their controls row; without one, the tile draws them.
             "custom:mushroom-light-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, stateForBuild(card))) MushroomLightCardView(ctx, card) else TileCardView(ctx, card)

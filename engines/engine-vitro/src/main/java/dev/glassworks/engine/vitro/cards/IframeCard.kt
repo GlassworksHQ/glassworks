@@ -73,12 +73,18 @@ object SmallCardConfigs {
  *   `disable_sandbox`; `allow` is the card's, `fullscreen` by default.
  * - `title` is the card's header, `hide_background` drops the card's surface.
  * - When Home Assistant is served over https, a page that isn't shows HA's error instead.
+ *
+ * Its page lives as a web island's does ([IslandCard]): paused while its view isn't on screen, handed to the next build
+ * of the same card (a reconnect, a theme change) instead of loading again, and closed ([Page.close]) when the card goes
+ * for good or its content process dies.
  */
 class IframeCardView(
     ctx: VitroCardContext,
     internal val config: CardConfig,
     private val fillViewport: Boolean = false,
-) : CardSurface(ctx) {
+    /** The page an earlier build of this very card gave up ([handOff]), taken instead of opening a new one. */
+    private val adopted: WebIslandCardView.Island? = null,
+) : CardSurface(ctx), IslandCard {
     private val raw = config.raw
     internal val url: String = absolute(raw.optString("url", ""), ctx.haBase)
 
@@ -88,6 +94,15 @@ class IframeCardView(
     private var slotId: String? = null
     private var page: Page? = null
     private val frame = FrameLayout(ctx.context)
+
+    /** True once the page left this card, for good ([release]) or for its next build ([handOff]). */
+    private var pageGone = false
+
+    /** Whether the page is active ([setShown]); a new page starts active. */
+    private var pageActive = true
+
+    /** A release queued by a detach, which an attach before it runs takes back (a layout that moves its cards). */
+    private val releaseIfDetached = Runnable { if (!isAttachedToWindow) release() }
 
     /** The island page's HTML (tests read it). */
     internal val html: String = islandHtml(url, sandboxOf(raw), raw.optString("allow", "").ifEmpty { "fullscreen" })
@@ -150,15 +165,18 @@ class IframeCardView(
             })
             return
         }
-        val pageHtml = html
-        val (id, slotUrl) = server.registerSlot(object : VitroIslandServer.SlotHandler {
-            override val html: String get() = pageHtml
+        val handler = object : VitroIslandServer.SlotHandler {
+            override val html: String get() = this@IframeCardView.html
             override fun onConnected(send: (JSONObject) -> Unit) = Unit
             override fun onMessage(msg: JSONObject, send: (JSONObject) -> Unit) = Unit
             override fun onDisconnected(send: (JSONObject) -> Unit) = Unit
-        })
+        }
+        // The earlier build's page, if its slot is still there: it already shows this very frame.
+        val kept = adopted?.takeIf { server.replaceSlot(it.slotId, handler) }
+        if (adopted != null && kept == null) adopted.close()
+        val (id, slotUrl) = if (kept != null) kept.slotId to "" else server.registerSlot(handler)
         slotId = id
-        val p = opener(slotUrl)
+        val p = kept?.page ?: opener(slotUrl)
         if (p == null) {
             server.unregisterSlot(id)
             slotId = null
@@ -166,7 +184,38 @@ class IframeCardView(
         }
         page = p
         frame.addView(p.view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        p.load(slotUrl)
+        if (kept == null) p.load(slotUrl)
+    }
+
+    override fun holds(pages: Set<Page>): Boolean = page?.let { it in pages } == true
+
+    override fun setShown(shown: Boolean) {
+        if (shown == pageActive) return
+        pageActive = shown
+        page?.setActive(shown)
+    }
+
+    override fun handOff(): WebIslandCardView.Island? {
+        if (pageGone) return null
+        val p = page ?: return null
+        val id = slotId ?: return null
+        val server = ctx.islandServer ?: return null
+        pageGone = true
+        server.replaceSlot(id, WebIslandCardView.PARKED)
+        frame.removeView(p.view)
+        page = null
+        slotId = null
+        return WebIslandCardView.Island(WebIslandCardView.keyOf(config, fillViewport), p, id, 0, server)
+    }
+
+    override fun release() {
+        ctx.main.removeCallbacks(releaseIfDetached)
+        if (pageGone) return
+        pageGone = true
+        slotId?.let { ctx.islandServer?.unregisterSlot(it) }
+        slotId = null
+        page?.close()
+        page = null
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -181,11 +230,16 @@ class IframeCardView(
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        ctx.main.removeCallbacks(releaseIfDetached)
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        // The page has what it needs; its slot only served the frame's HTML.
-        slotId?.let { ctx.islandServer?.unregisterSlot(it) }
-        slotId = null
+        // A card that left the tree is gone, unless it comes back before the next turn of the main loop (a layout that
+        // moves its cards between columns detaches and attaches them at once): then it keeps its page.
+        if (!pageGone) ctx.main.post(releaseIfDetached)
     }
 
     companion object {
