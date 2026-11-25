@@ -90,6 +90,26 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         setPadding(ctx.px(24f), ctx.px(if (compact) 4f else 8f), ctx.px(24f), ctx.px(if (compact) 12f else 24f))
     }
 
+    /**
+     * What Clarity's native harness times (VitroClarity): the open animation's start and end, the history graph's data,
+     * the close animation's end. Null outside a Clarity run. Main thread.
+     */
+    internal interface Trace {
+        /** The sheet's first frame: its enter animation ([durationMs]) starts. [wide]: the centred dialog. */
+        fun entered(wide: Boolean, durationMs: Long)
+
+        /** The enter animation finished. */
+        fun shown()
+
+        /** The history graph [chart] got its data. */
+        fun graph(chart: View)
+
+        /** The exit animation finished. */
+        fun closed()
+    }
+
+    internal var trace: Trace? = null
+
     private var entityId: String? = null
     private var unsub: (() -> Unit)? = null
     private var updater: ((EntityState?) -> Unit)? = null
@@ -243,6 +263,14 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 if (!wide && panel.height > 0) panel.translationY = panel.height.toFloat()
                 val anim = panel.animate().setDuration(duration).setInterpolator(HaMotion.decelerate())
                 if (wide) anim.alpha(1f).scaleX(1f).scaleY(1f) else anim.translationY(0f)
+                trace?.let { t ->
+                    // As the sheet runs it: Android's "Animator duration scale" (0 with "Remove animations").
+                    val scale = runCatching {
+                        android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+                    }.getOrDefault(1f)
+                    t.entered(wide, (duration * scale).toLong())
+                    anim.withEndAction { t.shown() }
+                }
                 anim.start()
                 fadeScrim(255, duration, HaMotion.decelerate())
                 return true
@@ -279,6 +307,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         release()
         if (!isAttachedToWindow) {
             cancelMotion()
+            trace?.closed()
             onDismiss()
             return
         }
@@ -291,6 +320,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         }
         anim.start()
         fadeScrim(0, EXIT_MS, HaMotion.accelerate()) {
+            trace?.closed()
             // The host may already have removed us (and opened another sheet): only report while still attached.
             if (isAttachedToWindow) onDismiss()
         }
@@ -1355,7 +1385,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             ctx.main.post {
                 if (!alive) return@post
                 ctx.main.removeCallbacks(timeout)
-                chart.setPoints(map[id].orEmpty(), ctx.store[id]?.unit.orEmpty())
+                val points = map[id].orEmpty()
+                chart.setPoints(points, ctx.store[id]?.unit.orEmpty())
+                if (points.isNotEmpty()) trace?.graph(chart)
             }
         }
         // A failed history request answers nothing: don't leave "Loading" up forever.

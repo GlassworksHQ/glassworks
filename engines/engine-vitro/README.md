@@ -52,7 +52,8 @@ nothing gets installed there.
 > it did before Vitro existed. Developers can also use `adb shell am start ... --ez vitro true` (or `false`), which
 > restarts the app.
 >
-> Vitro hasn't been benchmarked against GeckoView yet, so this page makes no speed or memory claims.
+> The one number measured so far: on an Aqara S1 Plus, the Vitro test app builds a view in about 1.6 to 1.8 seconds.
+> Memory and startup haven't been compared with GeckoView yet, so this page makes no other speed or memory claims.
 
 ## How it works
 
@@ -81,6 +82,46 @@ The way back from such a page always leads to the native dashboard:
 Each page Vitro opens this way starts with no history of its own, and Home Assistant's frontend stops once the panel is back on the native view. While a page is open, the dashboard's islands stay hidden behind it.
 
 The island server only serves islands. Its proxy forwards what a card loads (`/api/`, `/local/`, `/hacsfiles/`, Home Assistant's static files and media, and the folders of the dashboard's own Lovelace resources), and only to a page that holds the cookie its island page sets, so other apps on the device can't use it. On the legacy engine, which loads only the dashboard's origin, the island server's loopback address is the one other origin it allows, and each page stays on its own origin: Home Assistant's pages never reach the island server, and islands never reach Home Assistant except through it.
+
+## What works
+
+"Compared with HA" means the [parity harness](#the-parity-harness) draws the card in Home Assistant's own frontend and in Vitro, at the size and density of the S1, a tablet and the Mirror, and checks they match. Cards marked "not yet" draw natively but haven't been checked that way, usually because the reference Home Assistant has no entity or no copy of the card to compare against.
+
+### Built-in cards
+
+| Card | Compared with HA | What to know |
+|---|---|---|
+| `tile` | Yes | 14 tile features draw natively (listed under [What Vitro draws natively](#what-vitro-draws-natively)). Any other feature is left out of the tile. With `features_position: inline`, the features sit under the tile instead of beside it |
+| `entities`, `entity-filter` | Yes | Plain entity rows, `divider` and `section` rows. Other row types (`buttons`, `attribute`, custom rows) and the card's header and footer are left out |
+| `button`, `entity`, `glance`, `heading`, `light`, `area`, `alarm-panel` | Yes | |
+| `thermostat` | Yes | A heat/cool range shows both targets, as Home Assistant does |
+| `humidifier` | Not yet | The reference Home Assistant has no humidifier to compare against |
+| `gauge` | Yes | Severity colors, `segments` and `needle: true` |
+| `sensor`, `history-graph`, `statistics-graph` | Yes | See [Graphs](#rendering-like-home-assistant-does) |
+| `weather-forecast` | Yes | Current conditions and the daily, hourly and twice-daily forecasts |
+| `clock`, `markdown` | Yes | A few Markdown tags draw nothing (see [What Vitro draws natively](#what-vitro-draws-natively)) |
+| `picture`, `picture-entity`, `picture-glance` | Yes | |
+| `picture-elements` | Yes | State icons, labels and badges, icons and service buttons. `conditional` and `image` elements are left out |
+| `media-control` | Yes | |
+| `todo-list`, `calendar`, `logbook` | Yes | Read live from Home Assistant, as its own cards read them. The calendar has its month grid and its list views |
+| `grid`, `horizontal-stack`, `vertical-stack`, `conditional` | Yes | |
+| Any other built-in card, such as `map`, `iframe` or the `energy-*` cards | No | Goes to an island, which can't run Home Assistant's own cards: it shows a plain summary of the card's title and entities |
+
+### HACS cards
+
+| Card | Compared with HA | What to know |
+|---|---|---|
+| Mushroom entity, light, fan, cover, climate, media player, alarm, number, select, vacuum, template and title cards | Yes | |
+| Mushroom chips card | Yes | Entity, template, weather, light, action, menu, back, spacer and conditional chips. Its own card-mod styles aren't applied yet |
+| Mushroom person, lock and humidifier cards | Not yet | The reference Home Assistant has no entity to show |
+| Bubble Card | Not yet | Buttons (with their sub-buttons) and separators. A pop-up or any other card type goes to an island |
+| mini-graph-card, mini-media-player, clock-weather-card, modern-circular-gauge, bar-card | Not yet | Not installed on the reference Home Assistant |
+| auto-entities | Yes | Filters by domain, entity id, state, name, attributes and group, with `not`, `or`, `and` and `sort`. Other filter keys, such as `area` or `template`, match nothing yet |
+| stack-in-card, layout-card | Yes | layout-card's masonry, horizontal, vertical and grid layouts. Any other layout goes to an island, unless a built-in card sits inside it |
+| vertical-stack-in-card | Not yet | Not installed on the reference Home Assistant |
+| Any other custom card | — | Goes to an island, drawn by its own script |
+
+To check a dashboard before you turn Vitro on, paste it into the [compatibility check on glassworks.dev](https://www.glassworks.dev/blueprints#vitro-check). It routes every card with the same rules as the panel.
 
 ## More-Info dialogs
 
@@ -131,6 +172,8 @@ Vitro reads the themes Home Assistant already has, so a dashboard looks the same
 - A view or a single card can set its own `theme:`, and `card_mod` styles apply on the container.
 
 The resolved variables are also exported to Tier 3 islands, so native and custom cards match.
+
+Vitro applies card-mod natively wherever it can draw the result the way Home Assistant does: the card's own surface (backgrounds, borders, corners, shadows, padding, a pinned position, fonts) and the inside of Markdown and clock cards. The details are under [Rendering like Home Assistant does](#rendering-like-home-assistant-does) and [What Vitro draws natively](#what-vitro-draws-natively).
 
 ## Fonts
 
@@ -187,6 +230,8 @@ The supported set lives in one place in the code, [`compat/VitroSupport.kt`](src
 | swipe-card | Its cards as pages with Swiper's bullets or `1 / 3` pagination, `slidesPerView`, `spaceBetween`, `centeredSlides`, `loop`, `autoplay`, `start_card` and `reset_after` | Other Swiper parameters (effects, navigation arrows, a scrollbar, vertical pages) and `card_width` |
 | Markdown | Everything HA's sanitizer keeps, except the tags in the next column | `<ha-alert>`, `<ha-qr-code>`, `<ha-svg-icon>`, `<details>`, `<audio>`, `<video>`, `<picture>`, checkboxes and image maps |
 
+The same rules are published at [glassworks.dev/vitro-compat.json](https://www.glassworks.dev/vitro-compat.json), and the [site's compatibility check](https://www.glassworks.dev/blueprints#vitro-check) routes cards with them. A test keeps both equal to `VitroSupport.kt`.
+
 Some things never send a card to an island:
 
 - **What Home Assistant drops itself.** Declarations outside a rule and tags outside HA's sanitizer are dropped by HA too, so dropping them is what matching HA means.
@@ -221,6 +266,32 @@ The report covers the cards in the dashboard config, auto-entities' own `card:` 
 - **View-scoped entity subscriptions:** Deep-scans the active view's config (including nested custom-card config objects) and passes only those `entity_id`s to `subscribe_entities`.
 - **O(changed) selective reactivity:** `EntityStore` updates only the cards bound to each changed entity instead of cloning `hass.states` across the whole tree.
 - **Keep-alive view cache:** Switching views toggles the visibility of pre-built native trees instead of tearing down and recreating cards.
+- **Startup warm-up:** As soon as the dashboard is parsed, a background thread decides each card's route (`CompatWarmup`), starting with the view that opens first, so the view being built finds the answers ready.
+
+## The legacy build (Android 6)
+
+The legacy build runs on Android 6 panels such as the lululemon Studio Mirror, with an older GeckoView that is locked to the dashboard's Home Assistant. Vitro draws dashboards there the same way, and islands load in that GeckoView.
+
+With Vitro on, that GeckoView allows exactly two origins: your Home Assistant, and the app's own island server on `127.0.0.1`. Each page stays on its own origin. Home Assistant's pages, such as sign-in, history, the logbook and settings, load straight from Home Assistant, as they do with Vitro off, and never reach the island server. Islands reach Home Assistant only through the island server.
+
+## Security: the island server
+
+Islands load from a small web server inside the app, `VitroIslandServer`. It is built so that nothing outside the island can use it:
+
+- **It never listens on the network.** The server is bound to `127.0.0.1`, so only apps on the panel itself can reach it, never another device on your network.
+- **Other apps on the panel can't use it.** Every app on a device can reach `127.0.0.1`, so the server answers only a page that holds a random key, which the island page sets for itself as a cookie. Each island's address is random as well. A request also has to name the server itself as its host, which stops a web page from reaching it through a look-alike address (DNS rebinding).
+- **It only serves islands.** Home Assistant's own pages, such as sign-in and settings, load from Home Assistant itself, so their WebSocket and sign-in never pass through it.
+- **Your token goes only to your Home Assistant.** The server forwards an island's requests to the one Home Assistant the panel is signed in to and adds the panel's token there. It forwards only the paths cards load (the API, `/local`, `/hacsfiles`, Home Assistant's static files and media, and the folders of the dashboard's own Lovelace resources), refuses paths that try to climb out of those folders, and follows redirects only within Home Assistant.
+- **Answers made with the token aren't cached,** so they can't be served again after a sign-in change, and the memory proxied answers can use is capped.
+- **Its logs leave out tokens and queries,** and the compatibility checker's reasons leave out addresses.
+
+## Known limits
+
+- **Vitro is experimental.** Turn it off under **Settings → Labs** whenever something looks wrong; the app goes back to GeckoView alone.
+- **Islands need GeckoView.** The standalone `:vitro-test` app has no GeckoView, so it shows a placeholder for every island.
+- **A built-in card Vitro draws can't fall back to an island.** When it has something Vitro doesn't draw, Vitro draws the rest of the card and leaves that part out, since the island would only show a summary. The compatibility checker lists each one as a note.
+- **Cards not yet compared with Home Assistant** (listed under [What works](#what-works)) may differ from Home Assistant's look.
+- **Small differences remain on 1.5x screens,** such as the S1 and the Mirror: some text and chart labels sit a fraction of a pixel off.
 
 ## The `Engine` seam
 

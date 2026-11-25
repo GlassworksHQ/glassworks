@@ -11,7 +11,9 @@ description: >-
 
 # Rewrite a Home Assistant Dashboard to Be 100% Vitro-Native
 
-Glassworks' **Vitro** engine renders **31 built-in Lovelace cards (Tier 1)** and **26 popular HACS cards (Tier 2)** directly in native Android Views, without a browser. Any unrecognized `custom:*` card triggers a **Tier 3 GeckoView micro-island**, which starts the full browser engine for that card. Vitro's memory use hasn't been measured against GeckoView yet, so don't promise the user a number.
+Glassworks' **Vitro** engine renders **31 built-in Lovelace cards (Tier 1)** and **26 popular HACS cards (Tier 2)** directly in native Android Views, without a browser. Any unrecognized `custom:*` card triggers a **Tier 3 GeckoView micro-island**, which starts the full browser engine for that card. So does a HACS card Vitro draws when its config has something Vitro can't draw (a Bubble Card pop-up, an unsupported chip, card-mod that reaches inside the card). Vitro's memory use hasn't been measured against GeckoView yet, so don't promise the user a number.
+
+A built-in card Vitro draws natively never goes to an island, because the island can't run Home Assistant's own cards. (A built-in card Vitro has no renderer for, such as `map`, does, and shows only a summary there.) When a built-in card Vitro draws has something Vitro doesn't draw (an unsupported tile feature, an entities header, a `buttons` row), Vitro draws the rest and **leaves that part out**. The auditor reports these as `WARN` lines. Treat them as part of the rewrite too: a WARN is a visible difference from Home Assistant, not a pass. Its card-mod check is coarse, so it doesn't list every left-out property (a `filter` on a built-in card, say): read the site checker's notes for those too.
 
 Use this workflow to rewrite an existing dashboard into a **100% Vitro-native** dashboard and theme that keeps the same visual layout, aesthetic, entities, and actions with **zero Tier 3 GeckoView triggers**.
 
@@ -29,7 +31,9 @@ Run the bundled auditor on the dashboard YAML or storage JSON:
 python3 .agents/skills/vitro-native-dashboard/scripts/audit_vitro_dashboard.py path/to/dashboard.yaml
 ```
 
-The auditor prints every view and card with its Vitro tier (`TIER 1`, `TIER 2`, or `TIER 3 [GECKOVIEW]`), flags unsupported Tile features or deep Shadow-DOM `card-mod` rules, and exits `0` only when **zero Tier 3 triggers** remain.
+The auditor routes cards the way the engine does and prints every view with its counts, each `TIER 3 [GECKOVIEW]` card with the reason, and a `WARN` line for each part Vitro leaves out. It exits `0` only when **zero Tier 3 triggers** remain.
+
+Its card-mod check is coarse: it flags selectors that reach inside a card, pseudo-elements, keyframes and unknown sheet paths, but not each CSS property. For the property-level verdict, paste the dashboard into the site's checker at <https://www.glassworks.dev/blueprints#vitro-check> (it runs in the browser and uses the engine's full rules), or read the panel's own report: with Vitro on, logcat's `Glassworks.Vitro` tag logs one `Island <where>: <why>` line per island.
 
 ### 2. Inspect any custom JS cards being replaced
 
@@ -50,7 +54,9 @@ Follow these rules strictly so GeckoView never loads:
 - **Replace JS presence/mode switching with native `visibility:` conditions.** Both sections and individual cards support HA `visibility:` (`condition: state`, `numeric_state`, `and`, `or`, `not`, `screen`).
   - For a **two-way mirror presence hold** (where camera motion clears after 8 seconds): back the visibility condition with a Home Assistant `binary_sensor` / `input_boolean` or template helper with `delay_off: "00:01:00"` (HA stays the brain — no custom JS timer required).
   - Put the full room-empty layout in sections with `visibility: [{ condition: state, entity: binary_sensor.mirror_occupied, state: "off" }]`, and the slim occupied status strip in a section with `state: "on"`.
-- **Replace custom HTML/CSS styling with a native HA YAML theme.** Vitro resolves `modes.light`/`modes.dark`, `var(--...)` chains, hex/`rgb()`/`rgba()`/`hsl()`, `linear-gradient(...)`, `radial-gradient(...)`, `url(...)` backgrounds, `ha-card-border-*`, `ha-card-box-shadow`, `--state-<domain>-active-color`, and container-level `card-mod` (background, border-radius, border, opacity). Avoid Shadow-DOM `card-mod` selectors (`$: |`), `::before`/`::after`, and `@keyframes`.
+- **Replace custom HTML/CSS styling with a native HA YAML theme.** Vitro resolves `modes.light`/`modes.dark`, `var(--...)` chains, hex/`rgb()`/`rgba()`/`hsl()`, `linear-gradient(...)`, `radial-gradient(...)`, `url(...)` backgrounds, `ha-card-border-*`, `ha-card-box-shadow` and `--state-<domain>-active-color` in themes.
+- **Keep card-mod on the card itself.** On any card, Vitro draws a `ha-card { }` / `:host { }` rule with backgrounds (colors and linear gradients), solid borders, `border-radius`, `box-shadow`, `opacity`, `padding`, `margin`, `height: 100%`, `font-family`, and a card pinned with `position: fixed`. Tile and Mushroom cards also take `font-size`. Inside Markdown cards (`ha-markdown$`) and the clock (`hui-clock-card-digital$`), it runs a real CSS cascade. Avoid selectors that reach inside other cards (`ha-card .primary`, `mushroom-shape-icon$`), background images and radial gradients on a card, `transform`, `filter`, `animation`, `@media`, `::before`/`::after`, and `color` on cards other than Markdown and the clock.
+- **Fonts carry over.** A theme's `--ha-font-family-body`, a card-mod `font-family` and fonts from a `type: css` Lovelace resource (`@font-face`, Google Fonts) all draw natively. WOFF2-only faces don't: list a WOFF or TTF too.
 - **Keep entity IDs, names, and actions intact.** Preserve every `tap_action`, `hold_action`, `navigate`, `call-service`, and `more-info` behavior from the original dashboard.
 
 ### 4. Validate zero GeckoView triggers

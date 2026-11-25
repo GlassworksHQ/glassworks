@@ -17,6 +17,7 @@ import android.widget.TextView
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
+import dev.glassworks.engine.vitro.clarity.ClarityHttp
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
@@ -99,12 +100,14 @@ class VitroEngineTest {
         fb: RecordingEngine = fallback,
         enabled: (Context) -> Boolean = { true },
         onSettings: () -> Unit = {},
+        testDashboard: (Context) -> String? = { null },
     ) = VitroEngine(
         fallback = fb,
         settings = { onSettings(); settings },
         enabled = enabled,
         tokenProvider = { _, done -> done(FakeHaServer.TOKEN) },
         socketFactory = server::connect,
+        testDashboard = testDashboard,
     ).also { engines += it }
 
     private fun openPage(engine: VitroEngine): Page =
@@ -363,6 +366,110 @@ class VitroEngineTest {
         assertEquals("clarity-ref", server.commands("lovelace/config")[1].getString("url_path"))
         assertEquals(1, server.connectUrls.size)
         assertTrue(fallback.opens.isEmpty())
+    }
+
+    @Test
+    fun clarityMeasuresOnlyTheReferenceDashboardOnTheTestHoldsOrigin() {
+        // docs/perf.md "Vitro": the native harness runs only while the test hold shows Clarity's reference dashboard.
+        var test: String? = null
+        // The harness's own requests go nowhere: a fake transport that records them and answers 404 (its worker keeps
+        // asking for the config), so the test touches no network.
+        val asked = CopyOnWriteArrayList<String>()
+        val engine = vitro(testDashboard = { test }).also { it.clarityHttp = ClarityHttp { url, _ -> asked += url; 404 to null } }
+        val page = readyPage(engine)
+        val view = vitroView(page)
+        assertNull("no test hold: nothing measures", view.clarity)
+        page.load("$base/clarity-ref/start")
+        assertNull("the reference dashboard alone isn't a Clarity run", view.clarity)
+        test = "$base/clarity-ref/start"
+        page.load("$base/clarity-ref/typical")
+        val harness = view.clarity
+        assertNotNull(harness)
+        assertEquals(base, harness!!.fake)
+        page.load("$base/clarity-ref/light")
+        assertSame("one harness for the run's views", harness, view.clarity)
+        page.load("$base/wall-test/living")
+        assertNull("another dashboard: the harness stops", view.clarity)
+        test = "http://127.0.0.1:8089/clarity-ref/start"
+        page.load("$base/clarity-ref/start")
+        assertNull("the test hold's dashboard is on another origin", view.clarity)
+        // The test hold moved to another fake (another port): a new harness polls that one, never the old.
+        test = "$base/clarity-ref/start"
+        page.load("$base/clarity-ref/start")
+        val first = view.clarity!!
+        val moved = "http://192.0.2.20:8123"
+        test = "$moved/clarity-ref/start"
+        page.load("$moved/clarity-ref/start")
+        val second = view.clarity
+        assertNotNull(second)
+        assertEquals(moved, second!!.fake)
+        assertTrue("the old harness was replaced", first !== second)
+        awaitMain("the harness asks its fake for the config") { asked.any { it.startsWith("$moved/clarity/config.json") } }
+        // The hold ends with no page load after it (a panel with no saved dashboard): the harness stops by itself.
+        test = null
+        awaitMain("the harness stopped when the hold ended") { view.clarity == null }
+        assertTrue("only the fakes were asked: $asked", asked.all { it.startsWith("$base/clarity/") || it.startsWith("$moved/clarity/") })
+    }
+
+    /** The main looper with its clock moving (the harness checks the hold every 500 ms with postDelayed). */
+    private fun awaitClock(message: String, cond: () -> Boolean) =
+        awaitCondition(message, tick = { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }, cond = cond)
+
+    private fun clarityLines() = org.robolectric.shadows.ShadowLog.getLogsForTag("Glassworks.Clarity").map { it.msg }
+
+    @Test
+    fun aHoldThatEndsStopsTheHarnessWithItsConfigInFlightAndMidRun() {
+        // CodeRabbit on #835: the hold's end must cancel what is under way, not only what comes next, with no page load.
+        var test: String? = "$base/clarity-ref/start"
+        val asked = CopyOnWriteArrayList<String>()
+        val release = java.util.concurrent.CountDownLatch(1)
+        val holdConfig = java.util.concurrent.atomic.AtomicBoolean(true)
+        val engine = vitro(testDashboard = { test }).also {
+            it.clarityHttp = ClarityHttp { url, _ ->
+                asked += url
+                if (url.endsWith("/clarity/config.json")) {
+                    // The first: held until the test lets it go. The second: a moment late, so the test stops idling
+                    // the main thread before the harness's next step is queued there.
+                    if (holdConfig.get()) release.await(10, java.util.concurrent.TimeUnit.SECONDS) else Thread.sleep(300)
+                    200 to """{"VIEWS":["start","light"],"HEAD_CARDS":10}"""
+                } else {
+                    204 to null
+                }
+            }
+        }
+        val page = openPage(engine)
+        org.robolectric.shadows.ShadowLog.clear()
+        page.load("$base/clarity-ref/start")
+        val view = vitroView(page)
+
+        // 1. The config request is in flight when the hold ends; it then answers 200: nothing starts.
+        val first = view.clarity!!
+        awaitClock("the config asked for") { asked.any { it.endsWith("/clarity/config.json") } }
+        test = null
+        awaitClock("the harness stopped with the hold") { view.clarity == null }
+        release.countDown()
+        awaitClock("its worker ended after the config came") { !first.workerAlive }
+
+        // 2. A harness mid-run (its config read, its next step queued for the main thread) when the hold ends: the
+        // watcher's own check, on the main thread, ends it, and the queued step never runs. (Robolectric's paused looper
+        // runs a frame callback that asks for the next one again at once, so a ticking harness can't be idled here.)
+        holdConfig.set(false)
+        test = "$base/clarity-ref/start"
+        page.load("$base/clarity-ref/light")
+        val second = view.clarity!!
+        assertTrue(first !== second)
+        // Idled until the second config is asked (its hold check runs on the main thread), then not again.
+        awaitMain("the second config asked for") { asked.count { it.endsWith("/clarity/config.json") } >= 2 }
+        Thread.sleep(600)
+        assertTrue("mid-run: waiting on the main thread", second.workerAlive)
+        test = null
+        assertFalse("the hold's end is seen", second.checkHold())
+        assertNull("and the page let it go", view.clarity)
+        awaitCondition("its worker ended mid-run") { !second.workerAlive }
+        idle()
+
+        assertEquals("nothing measured or logged after the hold ended", emptyList<String>(), clarityLines())
+        assertFalse("no command asked for", asked.any { "/clarity/next" in it })
     }
 
     @Test

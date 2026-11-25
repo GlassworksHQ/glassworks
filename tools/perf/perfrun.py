@@ -6,6 +6,9 @@ What it touches on the device:
   device     read-only (getprop, /proc, dumpsys, wm size).
   Every step on Android 6 (no `logcat -v monotonic`) writes five `ClarityClock` lines to the device's log, twice
   in steps that record the clock's drift (Device.wall_clock).
+  engine     The test hold (as `hold`), whose answer says which engine draws the page and the Vitro setting
+             (Settings → Labs). With --want vitro|web: `am start --ez vitro true|false` first when the setting
+             differs (the kiosk restarts for it), then checks. run.sh puts the setting back with --want on exit.
   testdash   `am start --es test_dashboard <url>` with the hold: the kiosk shows that loopback page instead of its
              saved dashboard while the hold lasts (graded part, --pane-ram); `--off` (`''`) ends it. No setting
              and no sign-in changes. Then reads logcat for the kiosk's answer.
@@ -57,6 +60,9 @@ class Device:
         self.sf_warned = False            # said once that SurfaceFlinger listed no layer of the app's (sf)
         self.sf_name = None               # the layer sf() last read its frames from
         self.sf_period = None             # and its refresh period
+        # The engine that draws the page (run.sh's --engine, from the kiosk's answer: cmd_engine): its frames are on
+        # GeckoView's SurfaceView, or on Vitro's own window (perflib.app_layers).
+        self.engine = os.environ.get("GW_PERF_ENGINE") or "web"
 
     def sh(self, cmd, timeout=60):
         r = subprocess.run(self.adb + ["shell", cmd], capture_output=True, text=True, timeout=timeout)
@@ -155,10 +161,10 @@ class Device:
         return p
 
     def sf(self):
-        """(period_ms, present times ns) of the app's SurfaceView, the layer GeckoView draws into.
-        After a restart an old layer can still be listed; the live one has the newest frame."""
+        """(period_ms, present times ns) of the app's SurfaceView, the layer GeckoView draws into (Vitro: the app's
+        own window). After a restart an old layer can still be listed; the live one has the newest frame."""
         listing = self.sh("dumpsys SurfaceFlinger --list")
-        names = P.surfaceview_layers(listing, self.package)
+        names = P.app_layers(listing, self.package, self.engine)
         if not names and not self.sf_warned and f"{self.package}/" in listing:
             # The app has a window but no SurfaceView this runner can name: every window falls back to
             # rAF and the graded tasks that need frames on screen are n/a. Say it where the run is
@@ -182,7 +188,7 @@ class Device:
         """The poll rhythm's listing read (#643): `--list`, then `--latency` of the app's newest layer that has
         frames (the newest first: after a restart the new layer has the higher #id). Two calls, where sf() reads
         every layer listed. (period_ms, present times ns); sets sf_name."""
-        names = P.surfaceview_layers(self.sh("dumpsys SurfaceFlinger --list"), self.package)
+        names = P.app_layers(self.sh("dumpsys SurfaceFlinger --list"), self.package, self.engine)
         for name in sorted(names, key=P.layer_number, reverse=True):
             period, ts = P.parse_sf_latency(self.sh(f"dumpsys SurfaceFlinger --latency '{name}'"))
             if ts:
@@ -297,6 +303,8 @@ def cmd_device(dev, a):
         # From the frame's data (design/installer.json `touch`): without touch nobody scrolls it, so the runner sends
         # no swipes and the scroll isn't graded (rubric.json no_touch, rubric 2).
         "touch": P.frame_touch(FRAMES, a.frame),
+        # The engine that drew the page (run.sh --engine; cmd_engine): web (GeckoView) or vitro.
+        "engine": dev.engine,
         "measured_on": time.strftime("%Y-%m-%d", time.gmtime()),   # UTC date of the run, from this computer
         "model": props["ro.product.model"], "manufacturer": props["ro.product.manufacturer"],
         "android": props["ro.build.version.release"], "api": int(props["ro.build.version.sdk"] or 0),
@@ -448,6 +456,9 @@ def cmd_sfcheck(dev, a):
         dev.sh(f"am start -n {dev.component}")
         C.sleep(20)
     dev.hold()
+    # The check page is a web page, which Vitro shows in its GeckoView fallback: its frames are on the SurfaceView. A
+    # layer's history is SurfaceFlinger's own, the same length for the app's window on the same Android.
+    dev.engine = "web"
     lc = dev.logcat()
     refused = threading.Event()
 
@@ -577,7 +588,61 @@ def cmd_hold(dev, a):
     said = kiosk_says(dev, f"am start -W -n {dev.component} {HOLD_ON}", TEST_HOLD_RE, a.timeout)
     if not said:
         sys.exit(1)
-    print(json.dumps({"hold_s": TEST_HOLD_S, "said": said}))
+    # The engine the kiosk said it draws with, in the same answer (MainActivity logs it right after the hold): run.sh
+    # measures Vitro with its own steps. None from an app that doesn't say (one before Clarity's Vitro check).
+    # With it, the Vitro setting, which a Vitro run puts back however its switch ends.
+    found = [m for m in (ENGINE_RE.search(l) for l in dev.log_dump(tail=200).splitlines()) if m]
+    engine = None if not found else ("vitro" if found[-1].group(1).startswith("Vitro") else "web")
+    setting = None if not found else found[-1].group(2) == "on"
+    print(json.dumps({"hold_s": TEST_HOLD_S, "said": said, "engine": engine, "vitro_setting": setting}))
+
+
+# The kiosk's answer to a test hold (MainActivity): the engine that draws the page (VitroEngine names itself "Vitro …"
+# once it runs; GeckoView "GeckoView …") and the Vitro setting (Settings → Labs), which a Vitro run puts back.
+ENGINE_RE = re.compile(r"test hold engine: (.*); vitro setting (on|off)")
+VITRO_EXTRA = "vitro"
+
+
+def engine_state(dev, timeout):
+    """{name, engine (web or vitro), vitro_setting} from the kiosk's answer to the test hold, or None."""
+    said = kiosk_says(dev, f"am start -W -n {dev.component} {HOLD_ON}", ENGINE_RE, timeout)
+    m = ENGINE_RE.search(said or "")
+    if not m:
+        return None
+    return {"name": m.group(1), "engine": "vitro" if m.group(1).startswith("Vitro") else "web",
+            "vitro_setting": m.group(2) == "on"}
+
+
+def cmd_engine(dev, a):
+    """The engine the kiosk draws with, and its Vitro setting; with --want, switched to that engine first. Prints
+    {name, engine, vitro_setting, was (the setting before), changed}: exit 0 when the kiosk runs the engine wanted
+    (or, without --want, says which it runs), 1 when it doesn't say (an app from before this check), 2 when it didn't
+    switch. The setting restarts the app (MainActivity: `--ez vitro` restarts it), so the runner waits --settle s."""
+    now = engine_state(dev, a.timeout)
+    if now is None:
+        print(f"{dev.package} doesn't say which engine draws its page (install an app built after Clarity's Vitro check)",
+              file=sys.stderr)
+        sys.exit(1)
+    out = dict(now, was=now["vitro_setting"], changed=False)
+    if a.want:
+        on = a.want == "vitro"
+        if now["vitro_setting"] != on or now["engine"] != a.want:
+            dev.sh(f"am start -n {dev.component} --ez {VITRO_EXTRA} {'true' if on else 'false'}")
+            out["changed"] = True
+            end = C.now() + a.timeout + a.settle
+            C.sleep(a.settle)
+            while True:
+                got = engine_state(dev, a.timeout)
+                if got and got["engine"] == a.want and got["vitro_setting"] == on:
+                    out.update(got)
+                    break
+                if C.now() > end:
+                    out.update(got or {})
+                    print(json.dumps(out))
+                    print(f"the kiosk didn't switch to {a.want} (it says {got and got['name']})", file=sys.stderr)
+                    sys.exit(2)
+                C.sleep(2)
+    print(json.dumps(out))
 
 
 # The kiosk's test dashboard: a loopback page it shows instead of its saved dashboard while the test hold
@@ -694,6 +759,8 @@ def own_page_finished(stop_mono, stop_at, now):
 # ---- cold start to dashboard
 
 PAGE_RE = re.compile(r"GeckoView:(PageStart|PageStop) uri=(\S+)")
+# VitroEngine.open's line: Vitro draws the page (a GeckoView page load after it is a fallback's or a web island's).
+VITRO_START_RE = re.compile(r"Starting Vitro \d")
 # The legacy engine's lockdown (#198) loads pages only from the dashboard's origin, fixed when its process
 # starts: the animation test page, opened one-off on the fake's origin, is refused while the kiosk shows
 # another dashboard. cmd_synthetic exits LOCKDOWN_EXIT then, and run.sh skips that part (detail, not graded).
@@ -1084,6 +1151,10 @@ def cmd_coldstart(dev, a):
         if res["proc_mono"] is None and proc_re.search(msg):
             res["proc_mono"] = rec["mono"]
             res["launch"] = res["launch"] or "relaunched-by-system"
+        if res["engine_mono"] is None and res["proc_mono"] is not None and VITRO_START_RE.search(msg):
+            # Vitro's start: the native renderer's page is open (it loads no about:blank). Engine ready, detail.
+            res["engine_mono"], res["engine_uri"] = rec["mono"], "vitro"
+            st["engine_at"] = C.now()
         if res["ttid_ms"] is None:
             res["ttid_ms"] = P.parse_displayed(msg, dev.package)
             if res["ttid_ms"] is not None:
@@ -1474,7 +1545,8 @@ def cmd_coldstart(dev, a):
     if res["error"]:
         pass
     elif res["engine_mono"] is None:
-        res["error"] = f"GeckoView never started a page within {a.timeout:.0f} s"
+        res["error"] = (f"Vitro never started within {a.timeout:.0f} s" if dev.engine == "vitro"
+                        else f"GeckoView never started a page within {a.timeout:.0f} s")
     elif ref and (st["opened"] < len(slots) or st.get("recovering")):
         res["error"] = f"the reference dashboards did not finish within {a.timeout:.0f} s"
     elif ref and st["current"] and not entry_of(st["current"][0]).get("done") and not entry_of(st["current"][0]).get("error") \
@@ -1628,9 +1700,10 @@ def memory_sample(dev, radio, summaries=True):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["activity", "device", "hold", "testdash", "sfcheck", "synthetic", "refstart", "coldstart", "idle", "panes"])
+    ap.add_argument("cmd", choices=["activity", "device", "hold", "engine", "testdash", "sfcheck", "synthetic", "refstart", "coldstart", "idle", "panes"])
     ap.add_argument("--off", action="store_true", help="hold: end the test hold; testdash: end the test dashboard")
     ap.add_argument("--set", help="panes: the kiosk's pane extras, extra=true|false,...")
+    ap.add_argument("--want", choices=["web", "vitro"], help="engine: switch the kiosk to this engine first")
     ap.add_argument("--tries", type=int, default=3, help="panes: attempts")
     ap.add_argument("--serial", default=os.environ.get("ANDROID_SERIAL"))
     ap.add_argument("--package", default="sh.edm.s1kiosk")
@@ -1661,11 +1734,11 @@ def main():
     a = ap.parse_args()
     if a.timeout is None:
         # refstart: room for views that time out (VIEW_DEADLINE_S each) and the restarts after them.
-        a.timeout = {"hold": 15, "testdash": 15, "sfcheck": 30, "coldstart": 120, "refstart": 1800}.get(a.cmd, 1200)
+        a.timeout = {"hold": 15, "engine": 20, "testdash": 15, "sfcheck": 30, "coldstart": 120, "refstart": 1800}.get(a.cmd, 1200)
     os.makedirs(a.out, exist_ok=True)
     dev = Device(a.serial, a.package, a.activity)
     C.check_device(lambda name: dev.sh(f"getprop {name}"))
-    {"activity": cmd_activity, "device": cmd_device, "hold": cmd_hold, "testdash": cmd_testdash, "sfcheck": cmd_sfcheck,
+    {"activity": cmd_activity, "device": cmd_device, "hold": cmd_hold, "engine": cmd_engine, "testdash": cmd_testdash, "sfcheck": cmd_sfcheck,
      "synthetic": cmd_synthetic, "refstart": cmd_coldstart, "coldstart": cmd_coldstart,
      "idle": cmd_idle, "panes": cmd_panes}[a.cmd](dev, a)
 
