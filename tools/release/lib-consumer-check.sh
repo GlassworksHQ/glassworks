@@ -18,9 +18,12 @@ kotlin_min=2.0.21
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
 
+# Google's mirror of Maven Central before Central itself, as settings.gradle.kts has it: Central answers CI's bursts
+# with 429, and a dependency that no cache holds yet (ha-webrtc's libwebrtc) is fetched here.
 repositories='repositories {
         mavenLocal { content { includeGroup("dev.glassworks") } }
         google()
+        maven("https://maven-central.storage-download.googleapis.com/maven2/")
         mavenCentral()
     }'
 
