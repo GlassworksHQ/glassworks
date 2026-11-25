@@ -164,6 +164,7 @@ Deep engineering notes from bringing up the Mirror (see [all research notes](../
 - [community-root-and-network-adb.md](research/community-root-and-network-adb.md) — Review of community root and network-adb methods
 - [stock-firmware-probe.md](research/stock-firmware-probe.md) — Live probe of untouched stock 1.24.0 firmware via userdata-only HTTP app, `FS_IOC_FIEMAP`, and reversible surgical USB ADB
 - [stock-softap.md](research/stock-softap.md) — Why stock software keeps opening its `mirror-<serial>` hotspot, and the `services.jar` edit that turns it off
+- [stock-inplace-parity.md](research/stock-inplace-parity.md) — USB debugging, the boot animation and one Home Assistant device on Stock-in-place, within its write-in-place limit
 
 ## Files
 

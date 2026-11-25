@@ -347,3 +347,6 @@ details > summary, .disclose { cursor: pointer; }
 .pw .input { padding-right: 60px; }
 .pw .eye { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 13px; }
 @media (max-width: 760px) { .route { grid-template-columns: auto minmax(0, 1fr); } .route .btn { grid-column: 1 / -1; } }
+.startover { margin: 4px 0 0; }
+.well.startover { align-items: center; gap: 14px; }
+.well.startover .links { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
