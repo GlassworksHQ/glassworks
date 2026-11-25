@@ -2,7 +2,7 @@
  "case": "area",
  "frame": "mirror",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 720,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Kitchen",
    "x": 56,
    "y": 147.8,

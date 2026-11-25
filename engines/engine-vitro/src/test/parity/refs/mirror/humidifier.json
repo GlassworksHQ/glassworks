@@ -1,0 +1,188 @@
+{
+ "case": "humidifier",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 328
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 312,
+   "type": "hui-humidifier-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Bedroom Humidifier",
+   "x": 178.63,
+   "y": 15,
+   "w": 142.75,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Humidifying",
+   "x": 206,
+   "y": 117.48,
+   "w": 88,
+   "h": 19,
+   "size": 16,
+   "weight": 500,
+   "color": "rgb(33, 150, 243)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "45",
+   "x": 210.47,
+   "y": 146.08,
+   "w": 63.52,
+   "h": 67,
+   "size": 57,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "%",
+   "x": 275.98,
+   "y": 181.34,
+   "w": 13.53,
+   "h": 22,
+   "size": 18.81,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "41%",
+   "x": 244.92,
+   "y": 222.91,
+   "w": 30.25,
+   "h": 19,
+   "size": 16,
+   "weight": 500,
+   "color": "rgb(33, 150, 243)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "humidifier.bedroom": {
+   "s": "on",
+   "a": {
+    "min_humidity": 30,
+    "max_humidity": 80,
+    "available_modes": [
+     "normal",
+     "eco",
+     "sleep"
+    ],
+    "current_humidity": 41,
+    "humidity": 45,
+    "mode": "normal",
+    "action": "humidifying",
+    "device_class": "humidifier",
+    "friendly_name": "Bedroom Humidifier",
+    "supported_features": 1
+   },
+   "lc": 1794496980,
+   "lu": 1794496980
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "humidifier.bedroom",
+    "pl": "demo",
+    "di": "device-1"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Bedroom Humidifier"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "humidifier"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "humidifier": {
+     "_": {
+      "default": "mdi:air-humidifier",
+      "state": {
+       "off": "mdi:air-humidifier-off"
+      },
+      "state_attributes": {
+       "action": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "drying": "mdi:arrow-down-bold",
+         "humidifying": "mdi:arrow-up-bold",
+         "idle": "mdi:clock-outline",
+         "off": "mdi:power"
+        }
+       },
+       "mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "auto": "mdi:refresh-auto",
+         "away": "mdi:account-arrow-right",
+         "baby": "mdi:baby-carriage",
+         "boost": "mdi:rocket-launch",
+         "comfort": "mdi:sofa",
+         "eco": "mdi:leaf",
+         "home": "mdi:home",
+         "normal": "mdi:water-percent",
+         "sleep": "mdi:power-sleep"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.humidifier.entity_component._.state.off": "Off",
+    "component.humidifier.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

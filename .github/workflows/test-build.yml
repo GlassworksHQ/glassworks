@@ -92,6 +92,20 @@ jobs:
       - name: Android SDK platform
         run: sdkmanager --install "platforms;android-37.2"
 
+      # Robolectric's Android jars, as pr.yml keeps them, so the tests don't fetch them from Maven Central mid-run
+      # (three red test builds on 2026-11-24). Restore only: pr.yml's runs on main save them.
+      - name: Robolectric's version
+        id: robolectric
+        run: |
+          v=$(git grep -h -oE 'org\.robolectric:robolectric:[0-9][0-9A-Za-z.-]*' -- '*.gradle.kts' | cut -d: -f3 | sort -u | paste -sd+ -)
+          echo "version=${v:-none}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        id: robolectric-jars
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ steps.robolectric.outputs.version }}-${{ github.run_id }}
+          restore-keys: robolectric-${{ steps.robolectric.outputs.version }}-
+
       - name: Unit tests
         # Every module's JVM unit tests, whatever modules the branch has (AGP 9: debug variant only).
         run: ./gradlew --no-daemon test

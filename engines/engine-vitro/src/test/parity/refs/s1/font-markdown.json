@@ -2,12 +2,13 @@
  "case": "font-markdown",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
@@ -31,6 +32,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Evening",
    "x": 17,
    "y": 17,
@@ -43,10 +45,11 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "The lights dim at",
    "x": 17,
    "y": 54.38,
-   "w": 104.94,
+   "w": 100.27,
    "h": 17,
    "size": 14,
    "weight": 400,
@@ -55,6 +58,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "sunset",
    "x": 121.94,
    "y": 54.38,
@@ -67,10 +71,11 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "and the blinds close at ten.",
-   "x": 160.17,
+   "x": 164.84,
    "y": 54.38,
-   "w": 165.33,
+   "w": 160.66,
    "h": 17,
    "size": 14,
    "weight": 400,

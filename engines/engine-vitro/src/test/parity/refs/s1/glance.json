@@ -2,12 +2,13 @@
  "case": "glance",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
@@ -31,6 +32,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Living room",
    "x": 17,
    "y": 21,
@@ -43,6 +45,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Temp",
    "x": 57.64,
    "y": 76.8,
@@ -55,7 +58,8 @@
   },
   {
    "slot": 0,
-   "text": "20.4 °C",
+   "clipped": false,
+   "text": "21.4 °C",
    "x": 52.7,
    "y": 155.19,
    "w": 45.08,
@@ -67,6 +71,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Humidity",
    "x": 163.81,
    "y": 76.8,
@@ -79,6 +84,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "47%",
    "x": 178.75,
    "y": 155.19,
@@ -91,10 +97,11 @@
   },
   {
    "slot": 0,
-   "text": "Cactus",
-   "x": 286.45,
+   "clipped": false,
+   "text": "Desk",
+   "x": 292.78,
    "y": 76.8,
-   "w": 43.58,
+   "w": 30.92,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -103,6 +110,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Off",
    "x": 298.56,
    "y": 155.19,
@@ -115,6 +123,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Blind",
    "x": 409.17,
    "y": 76.8,
@@ -127,6 +136,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Open",
    "x": 408.44,
    "y": 155.19,
@@ -139,72 +149,76 @@
   }
  ],
  "states": {
-  "cover.kitchen_blind": {
+  "cover.office_blind": {
    "s": "open",
    "a": {
     "is_closed": false,
     "current_position": 100,
     "assumed_state": true,
-    "friendly_name": "Kitchen Blind",
+    "friendly_name": "Office Blind",
     "supported_features": 11
    },
-   "lc": 1795505391.0030644
+   "lc": 1794491700,
+   "lu": 1794491700
   },
-  "light.living_room_cactus": {
+  "light.desk_lamp": {
    "s": "off",
    "a": {
     "supported_color_modes": [
      "onoff"
     ],
     "color_mode": null,
-    "friendly_name": "Cactus",
+    "friendly_name": "Desk Lamp",
     "supported_features": 0
    },
-   "lc": 1795508121.7617655
+   "lc": 1794483360,
+   "lu": 1794483360
   },
-  "sensor.living_room_airdot_living_room_humidity": {
-   "s": "47.2400016784668",
+  "sensor.living_room_humidity": {
+   "s": "47.3",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "%",
     "device_class": "humidity",
-    "friendly_name": "AirDot Living Room Humidity"
+    "friendly_name": "Living Room Sensor Humidity"
    },
-   "lc": 1795522954.9950962
+   "lc": 1794490800,
+   "lu": 1794490800
   },
-  "sensor.living_room_airdot_living_room_temperature": {
-   "s": "20.3549995422363",
+  "sensor.living_room_temperature": {
+   "s": "21.42",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
-    "friendly_name": "AirDot Living Room Temperature"
+    "friendly_name": "Living Room Sensor Temperature"
    },
-   "lc": 1795522954.970371
+   "lc": 1794491820,
+   "lu": 1794491820
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "cover.kitchen_blind",
+    "ei": "cover.office_blind",
     "pl": "template",
-    "en": "Kitchen Blind"
+    "en": "Office Blind"
    },
    {
-    "ei": "light.living_room_cactus",
+    "ei": "light.desk_lamp",
     "pl": "switch_as_x",
     "di": "device-1"
    },
    {
-    "ei": "sensor.living_room_airdot_living_room_humidity",
+    "ei": "sensor.living_room_humidity",
     "pl": "esphome",
     "dp": 0,
     "di": "device-2",
     "en": "Humidity"
    },
    {
-    "ei": "sensor.living_room_airdot_living_room_temperature",
+    "ei": "sensor.living_room_temperature",
     "pl": "esphome",
     "dp": 1,
     "di": "device-2",
@@ -214,11 +228,11 @@
   "devices": [
    {
     "id": "device-1",
-    "name": "Cactus"
+    "name": "Desk Lamp"
    },
    {
     "id": "device-2",
-    "name": "AirDot Living Room"
+    "name": "Living Room Sensor"
    }
   ],
   "requested": {

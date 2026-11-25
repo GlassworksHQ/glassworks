@@ -56,6 +56,7 @@ class GeckoBehaviourPinTest {
                 "runtime.create",
                 "s1.open",
                 "extension resource://android/assets/extension/ helper@s1kiosk.edm.sh",
+                "s1.active false",
                 "view.setSession s1",
                 "view.cover #ff0a0b0f",
                 "s1.load $dash",
@@ -366,7 +367,7 @@ class GeckoBehaviourPinTest {
     fun `a crashed content process gets a new session that loads the dashboard`() = harness().use { h ->
         val ev = h.eventsDuring { h.content.onCrash(h.session) }
         assertEquals(
-            listOf("view.releaseSession", "s1.close", "s2.open", "view.setSession s2", "view.cover #ff0a0b0f", "s2.load $dash", "messageDelegate glassworks"),
+            listOf("view.releaseSession", "s1.close", "s2.open", "s2.active false", "view.setSession s2", "view.cover #ff0a0b0f", "s2.load $dash", "messageDelegate glassworks"),
             ev,
         )
         assertTrue(h.errors("Glassworks").contains("Content process crashed; restarting session"))
@@ -378,6 +379,17 @@ class GeckoBehaviourPinTest {
         val ev = h.eventsDuring { h.content.onKill(h.session) }
         assertEquals("s2.load $dash", ev.single { ".load " in it })
         assertTrue(h.errors("Glassworks").contains("Content process killed; restarting session"))
+    }
+
+    @Test
+    fun `a session opened behind another app starts hidden, and only the view's surface shows it`() = harness().use { h ->
+        // Android's low-memory killer takes the content process while another app is in front: the new session
+        // must not count as shown (no surface makes GeckoView show it), or the page draws for nobody and Home
+        // Assistant never sees it hidden (the S1, 2026-11-24: the tab grew to 1.4 GB behind another app).
+        h.controller.pause().stop()
+        val ev = h.eventsDuring { h.content.onKill(h.session) }
+        assertTrue(ev.indexOf("s2.active false") in 0 until ev.indexOf("view.setSession s2"))
+        assertTrue("s2.active true" !in ev)
     }
 
     // ---- permissions
