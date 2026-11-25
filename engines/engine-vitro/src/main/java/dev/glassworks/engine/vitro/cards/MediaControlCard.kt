@@ -17,6 +17,7 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.text.TextUtils
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -124,7 +125,8 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
         } else {
             render(null)
         }
-        ctx.loadImage(PLACEHOLDER_URL, this) { bmp ->
+        // HA's own static picture, served to anyone: it never needs the panel's token.
+        ctx.loadImage(PLACEHOLDER_URL, this, public = true) { bmp ->
             if (bmp != null) {
                 placeholder = bmp
                 background.invalidate()
@@ -250,6 +252,8 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
 
         progress.visibility = if (showProgress) VISIBLE else GONE
         progress.indicator = art?.foreground ?: ctx.theme.accentColor
+        // HA's ha-slider seeks only for a player with SEEK; for the rest it just shows the position.
+        progress.duration = if (s != null && featuresOf(s) and SEEK != 0) (s.attributes["media_duration"] as? Number)?.toDouble() ?: 0.0 else 0.0
         updateProgress(s)
         setTicking(showProgress && state == "playing" && isAttachedToWindow && isShown)
 
@@ -304,7 +308,14 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
             val updated = EntityStore.parseTimestamp(s.attributes["media_position_updated_at"])
             if (updated > 0.0) position += (System.currentTimeMillis() / 1000.0 - updated).coerceAtLeast(0.0)
         }
-        progress.fraction = if (duration > 0.0) (position / duration).toFloat().coerceIn(0f, 1f) else 0f
+        // Not under a finger: the drag shows where it will seek to.
+        if (!progress.dragging) progress.fraction = if (duration > 0.0) (position / duration).toFloat().coerceIn(0f, 1f) else 0f
+    }
+
+    /** HA's `_handleSeek`: `media_player.media_seek` to the whole second the slider was let go at. */
+    private fun seek(seconds: Int) {
+        val id = eid ?: return
+        ctx.callService("media_player", "media_seek", JSONObject().put("entity_id", id).put("seek_position", seconds), null)
     }
 
     private fun setTicking(on: Boolean) {
@@ -356,6 +367,12 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
             if (color == this.color && artwork === this.artwork && showPlaceholder == this.showPlaceholder && gray == this.gray) return
             this.color = color
             this.artwork = artwork
+            if (artwork == null) {
+                // The old picture goes with its shader: a cached card mustn't keep it alive after the cache let go.
+                artShader = null
+                shaderBitmap = null
+                artPaint.shader = null
+            }
             this.showPlaceholder = showPlaceholder
             this.gray = gray
             bitmapPaint.colorFilter = if (gray) ColorMatrixColorFilter(GRAYSCALE) else null
@@ -409,12 +426,45 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
 
     private fun borderInsetPx(): Int = (ctx.theme.cardBorderWidthDp * ctx.dp).toInt()
 
-    /** `ha-slider` with its thumb hidden: an 8 px rounded track, filled in the foreground color. */
+    /**
+     * `ha-slider` with its thumb hidden: an 8 px rounded track, filled in the foreground color. With a [duration]
+     * (a player that can seek) a drag or tap seeks where it's let go, in whole seconds (`step="1"`).
+     */
     private inner class MediaProgressBar : View(ctx.context) {
         var fraction = 0f
             set(v) { if (field != v) { field = v; invalidate() } }
         var indicator = 0
             set(v) { if (field != v) { field = v; invalidate() } }
+
+        /** Seconds the track spans when the player can seek; 0: it only shows the position. */
+        var duration = 0.0
+        var dragging = false
+            private set
+
+        @android.annotation.SuppressLint("ClickableViewAccessibility")
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            if (duration <= 0.0) return super.onTouchEvent(event)
+            val w = width.toFloat().coerceAtLeast(1f)
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                    if (event.actionMasked == MotionEvent.ACTION_DOWN) parent?.requestDisallowInterceptTouchEvent(true)
+                    dragging = true
+                    fraction = (event.x / w).coerceIn(0f, 1f)
+                }
+                MotionEvent.ACTION_UP -> {
+                    fraction = (event.x / w).coerceIn(0f, 1f)
+                    dragging = false
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                    seek((fraction * duration).roundToInt())
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    dragging = false
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                    updateProgress(last)
+                }
+            }
+            return true
+        }
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val clip = Path()
         private val rect = RectF()

@@ -277,9 +277,10 @@ class VitroCardContext(
      * Loads an HA-hosted image asynchronously on a shared daemon pool and delivers on the main thread.
      * Images are downsampled to at most [MAX_IMAGE_DIM] px on the long edge and decoded as RGB_565, and kept
      * in a shared 12 MB LRU cache. URLs carrying a `t=` query parameter (live camera polls) are never cached.
+     * A [public] image (one of HA's static assets) goes without the panel's token.
      */
-    fun loadImage(rawUrl: String, owner: View? = null, done: (Bitmap?) -> Unit) {
-        if (owner == null) fetchImage(rawUrl, done) else whenShown(owner) { fetchImage(rawUrl, done) }
+    fun loadImage(rawUrl: String, owner: View? = null, public: Boolean = false, done: (Bitmap?) -> Unit) {
+        if (owner == null) fetchImage(rawUrl, public, done) else whenShown(owner) { fetchImage(rawUrl, public, done) }
     }
 
     /**
@@ -319,7 +320,7 @@ class VitroCardContext(
         view.addOnAttachStateChangeListener(detach)
     }
 
-    private fun fetchImage(rawUrl: String, done: (Bitmap?) -> Unit) {
+    private fun fetchImage(rawUrl: String, public: Boolean, done: (Bitmap?) -> Unit) {
         val fullUrl = absoluteUrl(rawUrl)
         val cacheable = !LIVE_PARAM.containsMatchIn(fullUrl)
         pendingImageLoads.incrementAndGet()
@@ -346,7 +347,7 @@ class VitroCardContext(
                 val conn = (URL(fullUrl).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 5_000
                     readTimeout = 8_000
-                    haToken(fullUrl)?.let { setRequestProperty("Authorization", "Bearer $it") }
+                    if (!public) haToken(fullUrl)?.let { setRequestProperty("Authorization", "Bearer $it") }
                 }
                 try {
                     // Bounded before decoding: a huge asset (with or without a Content-Length) fails, not the heap.

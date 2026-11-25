@@ -35,6 +35,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -270,7 +271,7 @@ class VisualParityWave2Test {
             assertTrue("mdi:$n is known", dev.glassworks.engine.vitro.ui.MdiIcons.has("mdi:$n"))
             val bounds = android.graphics.RectF()
             dev.glassworks.engine.vitro.ui.MdiIcons.pathFor("mdi:$n").computeBounds(bounds, true)
-            assertTrue("mdi:$n draws inside 24x24: $bounds", bounds.width() > 1f && bounds.left >= -0.5f && bounds.right <= 24.5f && bounds.bottom <= 24.5f)
+            assertTrue("mdi:$n draws inside 24x24: $bounds", bounds.width() > 1f && bounds.left >= -0.5f && bounds.top >= -0.5f && bounds.right <= 24.5f && bounds.bottom <= 24.5f)
         }
     }
 
@@ -291,5 +292,29 @@ class VisualParityWave2Test {
         assertTrue(open.addRowVisible)
         open.setItemsForTest(items)
         assertEquals(5, open.activeRowCount)
+    }
+
+    @Test
+    fun aTodoListFollowsItsItemsNotJustTheCount() {
+        // Another client renames an item: the entity's count stays, the item subscription carries the new name.
+        var onItems: ((JSONObject) -> Unit)? = null
+        val subscribed = ArrayList<JSONObject>()
+        val ctx = VitroCardContext(
+            context = activity, haBase = FakeHaServer.BASE, store = EntityStore(), theme = ThemeResolver.resolve(ThemeCatalog(), true),
+            resources = emptyList(), accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {},
+            openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            subscribeWs = { msg, onEvent, _ -> subscribed += msg; onItems = onEvent; { onItems = null } },
+        )
+        val todo = dev.glassworks.engine.vitro.cards.TodoListCardView(ctx, card("""{"type": "todo-list", "entity": "todo.shopping"}"""))
+        val root = android.widget.FrameLayout(activity)
+        activity.setContentView(root)
+        root.addView(todo)
+        assertEquals("todo/item/subscribe", subscribed.single().getString("type"))
+        onItems!!(JSONObject("""{"items": [{"uid": "1", "summary": "Oat milk", "status": "needs_action"}]}"""))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertTrue(todo.all().filterIsInstance<TextView>().any { it.text.toString() == "Oat milk" })
+        // Off screen, the subscription ends.
+        root.removeView(todo)
+        assertNull(onItems)
     }
 }

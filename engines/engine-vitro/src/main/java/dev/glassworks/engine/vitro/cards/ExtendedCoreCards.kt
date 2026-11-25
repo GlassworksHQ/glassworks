@@ -874,6 +874,17 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         val eid = config.entity ?: return
         // `observe` delivers the current state at once, so this fetches on attach and again on every change.
         observe(eid) { _ -> fetch(eid) }
+        // HA's card follows the items themselves (`todo/item/subscribe`): a rename leaves the entity's count alone.
+        track(ctx.subscribeWs(JSONObject().put("type", "todo/item/subscribe").put("entity_id", eid), { ev ->
+            val parsed = parseItems(ev)
+            ctx.main.post {
+                if (!isAttachedToWindow) return@post
+                // Newer than any list still on its way.
+                fetchGeneration++
+                items = parsed
+                renderItems()
+            }
+        }, { _ -> }))
     }
 
     private fun fetch(eid: String, retry: Boolean = true) {
