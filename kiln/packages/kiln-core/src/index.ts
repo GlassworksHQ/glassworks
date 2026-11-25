@@ -10,7 +10,7 @@ export {
 } from './flow';
 export type { BackupPlan, FlashStep, PatchContext, Recipe, SetUpContext, StepCredits } from './recipe';
 export {
-  BUNDLE_CHANNELS, SAFETY_STEPS, STEP_LIBRARY, adbKeyStep, assertImages, imageFromLink, plan, sourceFile, systemKeyStep, validateImage, wifiStep, writtenAsIs,
+  BUNDLE_CHANNELS, SAFETY_STEPS, STEP_LIBRARY, adbKeyStep, assertImages, defaultImage, imageFromLink, plan, sourceFile, systemKeyStep, validateImage, wifiStep, writtenAsIs,
   type FrameAccess, type ImageFile, type ImageLink, type ImageRecipe, type ImageStep, type PlannedStep, type RestorePoint, type SafetyStep, type StepKind,
 } from './images';
 export { checkInPlace, mergeRanges, parseSparseWriteRanges, parseSparseWrites, type ByteRange, type InPlaceCheckInput, type SparseWrites } from './inplace';

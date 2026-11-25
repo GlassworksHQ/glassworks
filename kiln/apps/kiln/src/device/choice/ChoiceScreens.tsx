@@ -42,13 +42,16 @@ function Card({ r, picked, time }: { r: ImageRecipe; picked: boolean; time?: str
   const id = `image-${r.id}`;
   return (
     <div className={c.card} data-state={picked ? 'checked' : 'unchecked'}>
-      <RadioGroup.Item value={r.id} className={c.pick} aria-labelledby={`${id}-name`} aria-describedby={time ? `${id}-sum ${id}-time` : `${id}-sum`} />
+      <RadioGroup.Item value={r.id} className={c.pick} aria-labelledby={`${id}-name`} aria-describedby={[`${id}-sum`, r.advice && `${id}-trade`, time && `${id}-time`].filter(Boolean).join(' ')} />
       <span className={c.head}>
         <span className="rd" aria-hidden="true" />
         <b className={c.name} id={`${id}-name`}>{r.name}</b>
         {r.community && <span className="pill soon">Community image</span>}
+        {/* the frame's advice (recipe `advice`): which way it recommends, and the other one */}
+        {!r.community && r.advice && <span className={`pill ${r.advice.tag === 'recommended' ? c.rec : 'soon'}`}>{r.advice.tag === 'recommended' ? 'Recommended' : 'Alternative'}</span>}
       </span>
       <span className={c.summary} id={`${id}-sum`}>{r.summary}</span>
+      {r.advice && <span className={c.trade} id={`${id}-trade`}>{r.advice.trade}</span>}
       {/* how long it usually takes, from the frame's words (time.total.<recipe id>): only where the frame gives one */}
       {time && <span className={c.time} id={`${id}-time`}><ClockGlyph />{`Usually ${time}`}</span>}
       {/* who makes it, its licence, where questions go, its project: one quiet line (community-images.md keeps all four) */}
@@ -66,7 +69,9 @@ function Card({ r, picked, time }: { r: ImageRecipe; picked: boolean; time?: str
 export function Choose({ f, s }: P) {
   const r = f.recipe;
   const from = s.from ? f.recipeOf(s.from) : undefined;
-  const shown = f.recipes.filter((x) => s.open || !x.community);
+  // the recommended way first, then the alternative, then the rest in the frame's order
+  const rank = (x: ImageRecipe) => (x.advice?.tag === 'recommended' ? 0 : x.advice?.tag === 'alternative' ? 1 : 2);
+  const shown = f.recipes.filter((x) => s.open || !x.community).map((x, i) => ({ x, i })).sort((a, b) => rank(a.x) - rank(b.x) || a.i - b.i).map(({ x }) => x);
   const others = f.recipes.filter((x) => x.community).length;
   return (
     <section className="card" aria-labelledby="h">

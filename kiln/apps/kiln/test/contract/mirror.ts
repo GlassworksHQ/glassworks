@@ -144,6 +144,7 @@ function flashWorld(k: Knobs): World {
   function load(): Page {
     let standard: StandardSession | undefined;
     const f = new ImageSession({ ...deps, handOver: (p) => { standard = standardOn(p, { sleep: fastSleep }); void standard.handOver(p); } });
+    f.pick(mirrorFrame.imageFlow.recipes[0]!.id); // the full image, not the recommended in-place way
     const clicks = new Clicks();
     return {
       look(): Look {
@@ -416,6 +417,7 @@ function inPlaceWorld(k: Knobs): World {
   function load(): Page {
     let standard: StandardSession | undefined;
     const f = new ImageSession({ ...deps, handOver: (p) => { standard = standardOn(p, { sleep: fastSleep }); void standard.handOver(p); } });
+    f.pick(mirrorFrame.imageFlow.recipes[0]!.id); // the full image, not the recommended in-place way
     const clicks = new Clicks();
     return {
       look(): Look {

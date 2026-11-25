@@ -112,7 +112,8 @@ async function ready(o: { before?: () => Promise<PanelShell>; after?: FirstBootM
     flashedHere: { get: () => flashed, set: () => { flashed = true; } },
     holdingKey: (on) => holding.push(on),
   });
-  f.choose(); // Glassworks, first and picked (#579)
+  f.pick(mirrorFrame.imageFlow.recipes[0]!.id); // the full image, not the recommended in-place way
+  f.choose();
   await f.download();
   await mirror.pickApk('kiosk.apk', fakeMirrorApk());
   return { f, built, after, asked, holding, flashedHere: () => flashed };

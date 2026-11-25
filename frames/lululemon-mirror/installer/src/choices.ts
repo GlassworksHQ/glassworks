@@ -27,6 +27,7 @@ export const GLASSWORKS_IMAGE: ImageRecipe = {
   project: { name: 'glassworks.dev', href: 'https://www.glassworks.dev' },
   licence: 'MPL-2.0 and MIT',
   summary: 'Replaces lululemon’s system with the Glass Panes image, then puts your Home Assistant dashboard on the glass.',
+  advice: { tag: 'alternative', trade: 'Faster, but there’s no way back to lululemon’s software afterward.' },
   support: { name: 'Glassworks on GitHub', href: 'https://github.com/GlassworksHQ/glassworks/issues' },
   files: [SYSTEM],
   steps: [
@@ -56,6 +57,7 @@ export const GLASSWORKS_IN_PLACE: ImageRecipe = {
   project: { name: 'glassworks.dev', href: 'https://www.glassworks.dev' },
   licence: 'MPL-2.0 and MIT',
   summary: 'Keeps lululemon’s system, with a restore point to go back to, and puts your Home Assistant dashboard on the glass.',
+  advice: { tag: 'recommended', trade: 'Slower, but it keeps lululemon’s software, so you can always go back.' },
   support: { name: 'Glassworks on GitHub', href: 'https://github.com/GlassworksHQ/glassworks/issues' },
   files: [],
   steps: [

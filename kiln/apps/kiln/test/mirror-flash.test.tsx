@@ -59,7 +59,8 @@ function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; 
   const requestFastboot = vi.fn(async () => fb);
   const f = new ImageSession({ frame: mirrorFrame, simulated: true, images, ...(o.refract === null ? {} : { refract: o.refract ?? 'https://proxy.test' }), requestFastboot, requestAdb: async () => adb, adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
     ...(o.settingsOverlay ? { settings: async () => o.settingsOverlay } : {}) });
-  f.choose(); // Glassworks, first and picked
+  f.pick(mirrorFrame.imageFlow.recipes[0]!.id); // the full image, not the recommended in-place way
+  f.choose();
   return { f, mirror, calls, adb, requestFastboot, built };
 }
 

@@ -57,6 +57,7 @@ function setup(adb: { request: (o?: { authMs?: number; onPicked?: () => void }) 
     adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
     handOver: (p) => { handed.push(p); },
   });
+  f.pick(mirrorFrame.imageFlow.recipes[0]!.id); // the full image, not the recommended in-place way
   f.choose();
   return { f, mirror };
 }

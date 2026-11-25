@@ -126,7 +126,9 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
   if (name === 'image-choose-panes') { image.showCommunity(true); image.pick(community.id); return done; }
   if (name.startsWith('image-')) return withCommunity(name, done, sim, community.id, frame.imageFlow.recipes[0]!.id);
 
-  image.choose(); // Glassworks, picked
+  // the full image (the frame's first), picked: the flash demos are its screens, not the recommended in-place way
+  image.pick(frame.imageFlow.recipes[0]!.id);
+  image.choose();
   if (name === 'flash-image' || name === 'flash-run' || release) return done;
   if (name === 'flash-downloading') { void image.download(); return done; }
   await image.download(); // through Kiln's download route

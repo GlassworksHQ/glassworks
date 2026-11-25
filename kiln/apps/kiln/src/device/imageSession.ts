@@ -11,7 +11,7 @@ import { AdbAuthTimeout, AdbBusy, pemToPkcs8, type PanelShell } from '@glasswork
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
 import { askAdb, nothingPicked } from './adbAsk';
 import {
-  ProxyError, WrongImage, adbKeyStep, cap, checkInPlace, imageFromLink, parseSparseWrites, pickInList, plan, readNamedBackupZip, sha256Hex, sourceFile, systemKeyStep, wifiStep,
+  ProxyError, WrongImage, adbKeyStep, cap, checkInPlace, defaultImage, imageFromLink, parseSparseWrites, pickInList, plan, readNamedBackupZip, sha256Hex, sourceFile, systemKeyStep, wifiStep,
   type DeviceFrame, type FastbootLike, type FastbootReport, type FirstStart, type ImageFile, type ImageMaker, type ImageRecipe, type InPlaceCode, type NamedPart,
   type PlannedStep, type PrepareStep,
 } from '@glassworks/kiln-core';
@@ -346,7 +346,7 @@ export class ImageSession {
   constructor(private readonly d: ImageDeps) {
     this.recipes = d.recipes ?? d.frame.imageFlow.recipes;
     const linked = imageFromLink(this.recipes, d.search ?? '');
-    const first = linked ?? this.recipes[0]!;
+    const first = linked ?? defaultImage(this.recipes);
     this.state = { screen: linked ? 'download' : 'choose', picked: first.id, open: !!linked, link: !!linked, files: waiting(first),
       wifi: { ssid: '', password: '' }, understood: false, log: [] };
     // a reload: an image written and restarted goes straight to its last step over adb, with no download and no fastboot
@@ -375,7 +375,8 @@ export class ImageSession {
     } else if (mark?.at === 'flashed' && wrote) {
       this.state = { ...this.state, screen: 'adb', picked: wrote.id, open: wrote.community, files: waiting(wrote), changed: true, resumed: 'flashed', ...(inPlace ? { round: 2 as const } : {}) };
       if (inPlace) this.cursor = this.indexOf(wrote, 'app-install');
-    } else if (mark) this.state = { ...this.state, changed: true, resumed: 'written' };
+    // the image whose write didn't finish, picked again (not the one the choice starts on)
+    } else if (mark) this.state = { ...this.state, changed: true, resumed: 'written', ...(wrote ? { picked: wrote.id, open: wrote.community, files: waiting(wrote) } : {}) };
   }
 
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
@@ -414,9 +415,9 @@ export class ImageSession {
     this.set({ picked: r.id, files: waiting(r) });
   }
 
-  /** Shows or hides the community images; hiding them while one is picked goes back to Glassworks. */
+  /** Shows or hides the community images; hiding them while one is picked goes back to the image the choice starts on. */
   showCommunity(open: boolean) {
-    if (!open && this.recipe.community) this.pick(this.recipes[0]!.id);
+    if (!open && this.recipe.community) this.pick(defaultImage(this.recipes).id);
     this.set({ open });
   }
 
