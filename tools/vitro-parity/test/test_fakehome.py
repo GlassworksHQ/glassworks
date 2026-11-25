@@ -38,8 +38,14 @@ def load(path):
 
 
 def call(msg):
+    """The answer fakeha gives: the home's own handler for the command, else Clarity's (a camera's capabilities)."""
     c = Conn()
-    H.HANDLERS[msg["type"]](c, dict(msg, id=1))
+    h = H.HANDLERS.get(msg["type"])
+    if h is None:
+        import fakeha  # tools/perf, on the path once fakehome is imported
+        fakeha.D = H
+        h = fakeha.HANDLERS[msg["type"]]
+    h(c, dict(msg, id=1))
     return c.out
 
 

@@ -22,10 +22,16 @@ android {
 dependencies {
     api(project(":glassworks-core"))
     implementation(project(":sendspin")) // WsClient for HA WebSocket data plane
+    // Live cameras: HA's HLS stream on ExoPlayer (the version core already ships).
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
     testImplementation("org.robolectric:robolectric:4.17")
+    // The HLS player's tests run ExoPlayer on fake renderers and a fake MediaSource.
+    testImplementation("androidx.media3:media3-test-utils:1.11.1")
+    testImplementation("androidx.media3:media3-test-utils-robolectric:1.11.1")
 }
 
 // The parity harness (#793, src/test/parity, VitroParityHarnessTest): its corpus and Home Assistant's reference

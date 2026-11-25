@@ -4,19 +4,23 @@
 
 package dev.glassworks.engine.vitro.ui
 
+import android.annotation.TargetApi
 import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Handler
 import android.util.LruCache
 import android.os.Looper
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewParent
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
@@ -24,6 +28,7 @@ import dev.glassworks.auth.OAuth
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.GuardedHandler
 import dev.glassworks.engine.vitro.VitroFailures
+import dev.glassworks.engine.vitro.camera.CameraPlayers
 import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -38,6 +43,7 @@ import dev.glassworks.engine.vitro.theme.CardModStyle
 import dev.glassworks.engine.vitro.theme.CssBackground
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
 import dev.glassworks.engine.vitro.theme.ThemeResolver
+import dev.glassworks.platform.Platform
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.net.HttpURLConnection
@@ -74,10 +80,10 @@ class VitroCardContext(
     /** HA's `auth/current_user` result (`id`, `name`, `is_admin`, `is_owner`), empty until it arrives. */
     val haUser: () -> JSONObject = { JSONObject() },
     /**
-     * Opens HA's live MJPEG feed for a camera and returns its stop handle. Null (tests, no engine) means there's no
-     * stream, so [startCameraStream] reports a fallback straight away and cards poll snapshots instead.
+     * The players a live camera can use ([CameraPlayers]: HLS and MJPEG, and WebRTC once its player registers).
+     * Null (tests, no engine): no player, so live cameras poll snapshots.
      */
-    val cameraStream: ((entityId: String, entityPicture: String?, onFrame: (Bitmap) -> Unit, onFallback: () -> Unit) -> () -> Unit)? = null,
+    val cameraPlayers: CameraPlayers? = null,
     /**
      * A WebSocket subscription (`history/stream`, say): every event of [msg]'s subscription reaches `onEvent`, on any
      * thread, until the returned handle is called; `onError` runs once, on any thread, if Home Assistant rejects it, the
@@ -168,7 +174,7 @@ class VitroCardContext(
         openIslandPage = openIslandPage,
         fetchForecast = fetchForecast,
         haUser = haUser,
-        cameraStream = cameraStream,
+        cameraPlayers = cameraPlayers,
         subscribeWs = subscribeWs,
         now = now,
         pageUrl = pageUrl,
@@ -241,25 +247,6 @@ class VitroCardContext(
             }
             "url" -> action.urlPath?.let(navigate)
         }
-    }
-
-    /**
-     * Streams [entityId]'s live MJPEG feed: decoded frames reach [onFrame] on the main thread, and [onFallback] runs
-     * on the main thread if the stream can't start or drops. Returns the stop handle; call it on detach or close.
-     * Cards never see the stream address or the token.
-     */
-    fun startCameraStream(
-        entityId: String,
-        entityPicture: String?,
-        onFrame: (Bitmap) -> Unit,
-        onFallback: () -> Unit,
-    ): () -> Unit {
-        val impl = cameraStream
-        if (impl == null) {
-            onFallback()
-            return {}
-        }
-        return impl(entityId, entityPicture, onFrame, onFallback)
     }
 
     /**
@@ -832,6 +819,31 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
             canvas.restoreToCount(saved)
             fail("draw", e)
         }
+    }
+
+    /**
+     * A view inside the card changed (Android 8 and later, hardware drawing): the card records itself again when it's
+     * the nearest card guard to the change ([isNearestGuard]), so the changed view's draw runs inside [draw]'s catch.
+     * Without it Android rebuilds only that view's display list, straight from the card's, and a throw there would
+     * reach the app. The card's other views keep their lists: it costs the card's own small list. A failed card
+     * records itself again too, whether or not its error card is in yet: its [draw] then runs no view of the card's
+     * own, so nothing of it is drawn outside a catch, and the guards above can keep leaving it to this one.
+     */
+    @TargetApi(Build.VERSION_CODES.O)
+    override fun onDescendantInvalidated(child: View, target: View) {
+        super.onDescendantInvalidated(child, target)
+        if (isNearestGuard(this, target)) invalidate()
+    }
+
+    /**
+     * As [onDescendantInvalidated], on Android 6 and 7, where hardware drawing finds the changed view this way. It
+     * doesn't say which view changed, so every card guard above it records itself again.
+     */
+    @Deprecated("ViewGroup's, deprecated in API 26, where onDescendantInvalidated takes over")
+    override fun invalidateChildInParent(location: IntArray, dirty: Rect): ViewParent? {
+        if (!Platform.hasDescendantInvalidated && isHardwareAccelerated) invalidate()
+        @Suppress("DEPRECATION")
+        return super.invalidateChildInParent(location, dirty)
     }
 
     /** The error card's draw: the card's surface (its background), then its views, without the card's [onDraw]. */
