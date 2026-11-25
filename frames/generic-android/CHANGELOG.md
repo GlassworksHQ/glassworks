@@ -12,6 +12,10 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Fixed
+- **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the
+  dashboard's page to free memory while another app was in front, the page the panel opened in its place kept
+  running as if it were on screen until you came back to the panel. It now waits in the background, as the page did
+  before Android closed it.
 - **Kiln asks for Chrome or Edge before it starts.** In a browser that can't talk to USB devices, such as Firefox or
   Safari, Kiln's Mirror and Android pages now say so on their first screen, as the S1 page does. Before, the Mirror
   page let you download and build its whole system image first, then stopped at the first USB step. Comes with Kiln,
