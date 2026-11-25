@@ -428,6 +428,7 @@ public final class BleProbeServer {
                 if (streamBundle == null) return; // no locked chunk size yet: send 0x01 first
                 streamDevice = device;
                 int n = v.length >= 3 ? ((v[1] & 0xff) | (v[2] & 0xff) << 8) : 0;
+                Log.i(TAG, "BLE: resend " + n + " chunks");
                 boolean wasIdle = queue.isEmpty() && !awaitingSent;
                 // Drop a pending END so the resent chunks land before it.
                 if (!queue.isEmpty() && queue.peekLast()[0] == IDX_END) queue.pollLast();

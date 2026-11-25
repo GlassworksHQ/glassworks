@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 package dev.glassworks.stockprobe;
 
+import android.content.Context;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -15,6 +17,9 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.Locale;
 import java.util.zip.ZipFile;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * The single-file GWSB stock bundle that Kiln reads over HTTP (/stock-bundle.bin) or BLE GATT.
@@ -31,6 +36,16 @@ import java.util.zip.ZipFile;
  * The jar, its SHA-256, the odex probe and the FIEMAP are read once and cached (they live on the
  * read-only system partition). The header is rebuilt only when the LAN IP changes, and an
  * instance never changes once handed out, so a BLE session can keep chunk indexes stable.
+ *
+ * <p>When a 32-byte per-run secret is planted at {@code files/stage.secret} (see {@link #init}),
+ * the metadata carries {@code "hmacSha256"} as its last field. It is
+ * {@code HMAC-SHA256(secret, metaBaseBytes || jarBytes)}, where {@code metaBaseBytes} is the exact
+ * UTF-8 JSON of the metadata up to but not including the trailing
+ * {@code ,"hmacSha256":"<64 hex>"} and closing {@code }}. A client strips that trailing field,
+ * feeds {@code metaBaseBytes || jarBytes} to the same HMAC, and so authenticates every metadata
+ * field (including {@code serialno}, {@code fiemap}, {@code servicesSha256}) and every byte of
+ * {@code services.jar} with no JSON-canonicalization ambiguity. Without the secret file the field
+ * is omitted.
  */
 public final class StockBundle {
     public static final String SERVICES_PATH = "/system/framework/services.jar";
@@ -42,9 +57,13 @@ public final class StockBundle {
             "/system/framework/arm/services.odex",
     };
 
+    /** Name of the optional per-run secret file under the app's private files dir. */
+    public static final String SECRET_FILE = "stage.secret";
+
     private static final Object LOCK = new Object();
     private static Static cachedStatic;
     private static StockBundle cached;
+    private static volatile File secretFile;
 
     /** Things that never change while the app runs. */
     private static final class Static {
@@ -55,19 +74,23 @@ public final class StockBundle {
         String fiemapJson;
         String mirrorVersion;
         String fingerprint;
+        String serialno;
     }
 
     public final byte[] header;
     public final byte[] jar;
     public final String metaJson;
     public final String lanIp;
+    /** Lowercase hex HMAC-SHA256 over {@code metaBaseBytes || jar}, or null when no secret is planted. */
+    public final String hmacHex;
     private final Static st;
 
     private StockBundle(Static st, String lanIp) {
         this.st = st;
         this.jar = st.jar;
         this.lanIp = lanIp;
-        this.metaJson = buildMeta(st, lanIp, null);
+        this.hmacHex = computeHmacHex(st, lanIp);
+        this.metaJson = closeMeta(buildMetaBase(st, lanIp, st.fiemapJson, null), hmacHex);
         byte[] meta = metaJson.getBytes(StandardCharsets.UTF_8);
         byte[] h = new byte[12 + meta.length];
         h[0] = 'G'; h[1] = 'W'; h[2] = 'S'; h[3] = 'B';
@@ -75,6 +98,15 @@ public final class StockBundle {
         putLe32(h, 8, jar.length);
         System.arraycopy(meta, 0, h, 12, meta.length);
         this.header = h;
+    }
+
+    /**
+     * Points the optional per-run HMAC secret at {@code ctx.getFilesDir()/stage.secret}. Call once
+     * from {@code Service.onCreate()} before the first {@link #current()}. When the file is absent
+     * the metadata simply omits {@code hmacSha256}.
+     */
+    public static void init(Context ctx) {
+        secretFile = new File(ctx.getFilesDir(), SECRET_FILE);
     }
 
     /** Returns the current bundle, rebuilding the header if the LAN IP changed. Throws if services.jar is unreadable. */
@@ -85,6 +117,12 @@ public final class StockBundle {
             if (cached == null || !eq(cached.lanIp, ip)) cached = new StockBundle(cachedStatic, ip);
             return cached;
         }
+    }
+
+    /** Convenience overload: wires the secret file (see {@link #init}) and returns {@link #current()}. */
+    public static StockBundle current(Context ctx) throws IOException {
+        init(ctx);
+        return current();
     }
 
     public long size() {
@@ -126,25 +164,44 @@ public final class StockBundle {
         out.write(jar);
     }
 
-    /** META characteristic JSON: the GWSB meta plus bundleSize and chunkSize, kept within 512 bytes. */
+    /**
+     * META characteristic JSON: the GWSB meta plus bundleSize and chunkSize, kept within the
+     * 512-byte ATT attribute cap when possible. Tiers down until it fits: full FIEMAP, then a
+     * truncated FIEMAP (the full one is always in the streamed GWSB header), then — if the 64-hex
+     * {@code hmacSha256} is what pushes it over — a short {@code "hasHmac":true} flag in its place.
+     * When present, the {@code hmacSha256} is identical to the GWSB header's, which authenticates
+     * the full, untruncated metadata and jar; a central reading only this characteristic verifies
+     * against the streamed header, not this (possibly truncated) readout.
+     */
     public String bleMetaJson(int chunkSize, boolean chunkLocked) {
         String extra = ",\"bundleSize\":" + size() + ",\"chunkSize\":" + chunkSize + ",\"chunkLocked\":" + chunkLocked;
-        String full = buildMeta(st, lanIp, extra);
-        if (full.getBytes(StandardCharsets.UTF_8).length <= 512) return full;
-        // The ATT spec caps an attribute at 512 bytes; the full FIEMAP is always in the GWSB header.
+        String full = closeMeta(buildMetaBase(st, lanIp, st.fiemapJson, extra), hmacHex);
+        if (fits512(full)) return full;
         String fiemap = "{\"truncated\":true,\"extentCount\":" + countExtents(st.fiemapJson) + "}";
-        return buildMetaWithFiemap(st, lanIp, fiemap, extra);
+        String trunc = closeMeta(buildMetaBase(st, lanIp, fiemap, extra), hmacHex);
+        if (fits512(trunc) || hmacHex == null) return trunc;
+        // The full 64-hex hmac is what overflows: drop it to a short flag (the real hmac rides the
+        // GWSB header), keeping the truncated FIEMAP metadata readable in one 512-byte attribute.
+        return buildMetaBase(st, lanIp, fiemap, extra) + ",\"hasHmac\":true}";
     }
 
-    private static String buildMeta(Static st, String lanIp, String extra) {
-        return buildMetaWithFiemap(st, lanIp, st.fiemapJson, extra);
+    private static boolean fits512(String json) {
+        return json.getBytes(StandardCharsets.UTF_8).length <= 512;
     }
 
-    private static String buildMetaWithFiemap(Static st, String lanIp, String fiemap, String extra) {
+    /** Appends the trailing {@code hmacSha256} field (when present) and the closing brace to a meta base. */
+    private static String closeMeta(String base, String hmacHex) {
+        if (hmacHex == null) return base + "}";
+        return base + ",\"hmacSha256\":\"" + hmacHex + "\"}";
+    }
+
+    /** The metadata JSON up to but not including the trailing hmac field and the closing brace. */
+    private static String buildMetaBase(Static st, String lanIp, String fiemap, String extra) {
         StringBuilder sb = new StringBuilder(512);
         sb.append("{\"version\":").append(VERSION)
           .append(",\"mirrorVersion\":").append(jsonStr(st.mirrorVersion))
           .append(",\"fingerprint\":").append(jsonStr(st.fingerprint))
+          .append(",\"serialno\":").append(jsonStr(st.serialno))
           .append(",\"servicesPath\":").append(jsonStr(SERVICES_PATH))
           .append(",\"servicesSize\":").append(st.jar.length)
           .append(",\"servicesSha256\":").append(jsonStr(st.sha256))
@@ -155,7 +212,65 @@ public final class StockBundle {
           .append(",\"lanIp\":").append(jsonStr(lanIp))
           .append(",\"httpPort\":").append(ProbeServerService.PORT);
         if (extra != null) sb.append(extra);
-        return sb.append('}').toString();
+        return sb.toString();
+    }
+
+    /**
+     * {@code HMAC-SHA256(secret, metaBaseBytes || jar)} as lowercase hex, or null when no 32-byte
+     * secret is planted. The base uses the full FIEMAP and no BLE extras, matching the GWSB header.
+     */
+    private static String computeHmacHex(Static st, String lanIp) {
+        byte[] secret = loadSecret();
+        if (secret == null) return null;
+        try {
+            byte[] metaBaseBytes = buildMetaBase(st, lanIp, st.fiemapJson, null).getBytes(StandardCharsets.UTF_8);
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(secret, "HmacSHA256"));
+            mac.update(metaBaseBytes);   // streaming: no 2.4 MB concat buffer
+            mac.update(st.jar);
+            return hex(mac.doFinal());
+        } catch (Throwable t) {
+            return null;
+        } finally {
+            java.util.Arrays.fill(secret, (byte) 0);
+        }
+    }
+
+    /**
+     * Reads the optional per-run secret: 32 raw bytes, or 64 trimmed ASCII hex chars. Returns null
+     * when the file is absent, unreadable or malformed.
+     */
+    private static byte[] loadSecret() {
+        File f = secretFile;
+        if (f == null || !f.isFile()) return null;
+        try {
+            byte[] raw;
+            try (InputStream in = new FileInputStream(f)) {
+                raw = ProbeServerService.readAll(in);
+            }
+            if (raw.length == 32) return raw;
+            String s = new String(raw, StandardCharsets.US_ASCII).trim();
+            if (s.length() == 64) {
+                byte[] out = new byte[32];
+                for (int i = 0; i < 32; i++) {
+                    int hi = hexVal(s.charAt(2 * i));
+                    int lo = hexVal(s.charAt(2 * i + 1));
+                    if (hi < 0 || lo < 0) return null;
+                    out[i] = (byte) ((hi << 4) | lo);
+                }
+                return out;
+            }
+            return null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static int hexVal(char c) {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
     }
 
     private static Static loadStatic() throws IOException {
@@ -187,6 +302,8 @@ public final class StockBundle {
         }
         st.mirrorVersion = ProbeServerService.getSysProp("ro.build.version.mirror");
         st.fingerprint = ProbeServerService.getSysProp("ro.build.fingerprint");
+        String serial = ProbeServerService.getSysProp("ro.serialno");
+        st.serialno = (serial == null || serial.isEmpty()) ? null : serial;
         return st;
     }
 

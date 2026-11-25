@@ -112,6 +112,14 @@ public final class ProbeServerService extends Service {
     }
 
     @Override
+    public void onCreate() {
+        super.onCreate();
+        // Point the optional per-run HMAC secret at files/stage.secret before the first bundle read.
+        StockBundle.init(this);
+        dataDirs = ownDataDirs();
+    }
+
+    @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (!running) {
             running = true;
@@ -241,6 +249,44 @@ public final class ProbeServerService extends Service {
             sb.append('/').append(seg);
         }
         return sb.length() == 0 ? "/" : sb.toString();
+    }
+
+    /**
+     * Whether a request path lands inside this app's own private data directory, so that the stage
+     * secret (or anything else there) can never be read over HTTP. Canonicalizes first so a symlink
+     * resolving into the data dir is caught too.
+     */
+    private boolean isInOwnDataDir(String p) {
+        if (p == null) return false;
+        String canonical;
+        try {
+            canonical = new File(p).getCanonicalPath();
+        } catch (IOException e) {
+            return true; // cannot resolve: refuse rather than risk a leak
+        }
+        for (String dir : dataDirs) {
+            if (dir == null || dir.isEmpty()) continue;
+            if (canonical.equals(dir) || canonical.startsWith(dir + "/")) return true;
+        }
+        return false;
+    }
+
+    /**
+     * This app's private data directories, by every path they are reached through. Populated in
+     * {@link #onCreate()} (a Context is not attached yet when fields initialize).
+     */
+    private volatile String[] dataDirs = new String[0];
+
+    private String[] ownDataDirs() {
+        String appDir = null;
+        try {
+            appDir = getApplicationInfo().dataDir;
+        } catch (Throwable ignored) {}
+        return new String[] {
+                appDir,
+                "/data/data/" + getPackageName(),
+                "/data/user/0/" + getPackageName(),
+        };
     }
 
     private static boolean isAllowedPath(String p) {
@@ -427,6 +473,12 @@ public final class ProbeServerService extends Service {
                 String path = queryParam(query, "path");
                 if (!isAllowedPath(path)) {
                     sendText(out, 400, "text/plain", "disallowed path\n");
+                    return;
+                }
+                if (isInOwnDataDir(path)) {
+                    // Belt and suspenders: the stage secret and anything else in our private data
+                    // dir must never leave over HTTP, even via a symlink that canonicalizes into it.
+                    sendText(out, 403, "text/plain", "forbidden\n");
                     return;
                 }
                 File f = new File(path);
