@@ -105,6 +105,8 @@ node tools/vitro-parity/island-check.mjs <case.json> --card better-thermostat-ui
 node tools/vitro-parity/island-probe.mjs tools/vitro-parity/island-cases/better-thermostat-mini-climate.json [--click x,y] [--shot out.png]
 ```
 
+`island-probe.mjs` also takes `--eval '<function>'` (called in the page with the card's element) and `--snapshot-delay ms` (the card draws once with no states first). `island-before.sh <commit> <case.json> [-- probe options]` runs the probe on the island page as an older commit served it, in a throwaway worktree it removes after, to reproduce what a card drew before a fix.
+
 `test/island-detect.e2e.test.mjs` runs every made-up case and checks that only the ones that draw an HA element the island lacks send `needsFrontend`. It needs their pages and Chromium, so CI's Node step skips it (the watch's logic runs there in `test/island-frontend.test.mjs`, against a fake DOM):
 
 ```sh

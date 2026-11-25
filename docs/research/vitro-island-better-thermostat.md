@@ -128,6 +128,33 @@ case files in `tools/vitro-parity/island-cases/` hold one made-up climate entity
    `better-thermostat-normal-climate.json` gives a 410 px card with `"undefined":["ha-big-number","ha-control-circular-slider"]`.
    The test is skipped without `-PvitroIslandCase`, so CI's runs pass over it. Cleanup: `rm -r engines/engine-vitro/build/vitro-island`.
 
+### Before the fix
+
+`tools/vitro-parity/island-before.sh` builds the island page as an older commit served it, in a throwaway worktree of
+HEAD with that commit's `WebIslandCardView.kt` (the engine's other unit tests are dropped there, since they test
+today's page), and runs the probe on it. `97536aca3` is the exp/vitro the tablet ran. `--snapshot-delay` holds the
+bridge's first snapshot back, so the card draws once with no states; `--eval` reads the card element in the page.
+
+```
+$ tools/vitro-parity/island-before.sh 97536aca3 tools/vitro-parity/island-cases/better-thermostat-ui.json
+== better-thermostat-ui.json as 97536aca3 served it
+island custom:better-thermostat-ui-card: {"instance":true,"defined":false,"height":0,"elements":[],"undefined":[]}
+bridge: []
+$ tools/vitro-parity/island-before.sh 97536aca3 tools/vitro-parity/island-cases/better-thermostat-normal-climate.json \
+    -- --snapshot-delay 3000 --eval 'c => c && ({ shadow: c.shadowRoot.innerHTML.slice(0, 40), stateObj: c._stateObj === undefined ? "unset" : "set" })'
+== better-thermostat-normal-climate.json as 97536aca3 served it
+island custom:better-thermostat-normal-climate-card: {"instance":true,"defined":true,"height":410,…,"undefined":["ha-big-number","ha-control-circular-slider","ha-svg-icon"]}
+bridge: [{"type":"resize","height":410}]
+eval: {"shadow":"<!---->\n      <ha-card style=\"\">\n       ","stateObj":"set"}
+```
+
+The first result is the one the tablet showed: an undefined element mounted at 0 px, nothing on the bridge (**verified**
+2026-11-25). The second did **not** reproduce the empty normal card of step 3: with the snapshot held back 3 s, the
+pre-fix page draws it at 410 px with `_stateObj` set, the same as today's (whose probe differs only in also defining
+`ha-svg-icon`). Step 3's page was a throwaway Robolectric dump whose exact timing wasn't kept, so that observation stands
+as recorded then (**untested** now); the per-change `states` object is what HA's frontend does either way. The script
+removes its worktree and build when it ends.
+
 ## From one card to every card: the island's own check
 
 **The problem with a list.** Naming Better Thermostat's card in `WebFallback` fixed the tablet, but only for that
