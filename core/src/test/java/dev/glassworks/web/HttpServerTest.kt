@@ -245,4 +245,21 @@ class HttpServerTest {
             server.stop()
         }
     }
+
+    /**
+     * The port is free once stop() returns, so the same port can be bound again at once (an island server keeps its
+     * port between starts, #881). Linux used to keep the listening socket until the accept thread left accept().
+     */
+    @Test fun stopReleasesThePortBeforeItReturns() {
+        repeat(50) {
+            val s = HttpServer(0, { HttpResponse.text(200, "ok") }, bindAddress = loopback)
+            s.start()
+            val port = s.localPort
+            s.stop()
+            java.net.ServerSocket().use { again ->
+                again.reuseAddress = true
+                again.bind(java.net.InetSocketAddress(loopback, port))
+            }
+        }
+    }
 }
