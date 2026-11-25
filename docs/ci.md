@@ -45,7 +45,7 @@ A pattern matches a path and everything under it. `*` stays within one folder, `
 | api23 | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `tools/legacy` |
 | libs-publish | `libs`, `build-logic`, `LICENSE`, `LICENSES`, `THIRD-PARTY-NOTICES.md`, `tools/release/check-lib-artifact.sh`, `tools/release/lib-consumer-check.sh` |
 | wake-word | `libs`, `build-logic`, `tools/voice` |
-| web | anything but `**/*.md`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/{*.kt,*.java}`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/{test,androidTest}/**`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/*/res/**`, `!testing/kotlin/dev/glassworks/testing/RepoFiles.kt`, `!core/src/main/res/font/**`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/model/LovelaceModel.kt`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/compat/VitroSupport.kt` |
+| web | anything but `**/*.md`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/{*.kt,*.java}`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/{test,androidTest}/**`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/*/res/**`, `!testing/kotlin/dev/glassworks/testing/RepoFiles.kt`, `!core/src/main/res/font/**`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/model/LovelaceModel.kt`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/compat/VitroSupport.kt`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/cards/HacsParityCards.kt` |
 | refract | `kiln/workers` |
 | scripts: Clarity tests (ffmpeg, fast and slow sets) | `tools/perf`, `frames/*/budgets.json`, `frames/*/clarity`, `docs/perf.md` |
 | perf-webrtc | `tools/perf`, `frames/*/budgets.json`, `frames/*/clarity` |
@@ -82,7 +82,7 @@ Android PR in a shared pool (see above).
 
 | Job | What | Runs |
 |---|---|---|
-| `conformance (API 23, 26, 29, 34)` | The core's conformance test (`core/src/androidTest`) | push to `main` when Android code changes, nightly at 03:17 UTC (`pr.yml`'s time), by hand |
+| `conformance (API 23, 26, 29, 34)` | The core's conformance test (`core/src/androidTest`), and on API 23 and 34 the [engine contract](engine-contract.md) (`engines/conformance`) on the same emulator | push to `main` when Android code changes, nightly at 03:17 UTC (`pr.yml`'s time), by hand |
 | `libs-api23` | `esphome-api-android` and `improv` androidTest on Android 6 | the same |
 | `legacy-verify` | The generic app's legacy APK (the Mirror's) installed on Android 6: fails when its verifier rejects a Glassworks class (`tools/legacy/verify-api23.sh`, #435). Before a Mirror flash, run the script on the build you flash | the same |
 | `report` | Opens, updates or closes the red-main issue | after those two, on `main` only |

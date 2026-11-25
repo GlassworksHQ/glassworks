@@ -325,18 +325,25 @@ class ParityWs(recorded: JSONArray?) {
     }
 
     /**
-     * The REST history HA's page read for exactly [ids] (mini-graph-card's `GET /api/history/period`), as Vitro's
-     * `fetchHistory` gets it from HaDashboardClient: numeric points per entity (on/off and the like as 1/0). A read HA
-     * never made is listed in [unmatched]; nothing is answered then, as a failed request answers nothing.
+     * The REST history HA's page read for exactly [ids] over the last [hours] before [nowMs] (mini-graph-card's
+     * `GET /api/history/period`), as Vitro's `fetchHistory` gets it from HaDashboardClient: numeric points per entity
+     * (on/off and the like as 1/0). Like a WebSocket call, it must match HA's field for field, its window included: a
+     * read HA never made (other entities, or another start or end) is listed in [unmatched], and nothing is answered
+     * then, as a failed request answers nothing.
      */
-    fun restHistory(ids: List<String>, done: (Map<String, List<dev.glassworks.engine.vitro.data.HistoryPoint>>) -> Unit) {
+    fun restHistory(ids: List<String>, hours: Int, nowMs: Long, done: (Map<String, List<dev.glassworks.engine.vitro.data.HistoryPoint>>) -> Unit) {
+        val startMs = nowMs - hours * 3_600_000L
+        fun at(iso: String?): Long? = iso?.takeIf { it.isNotEmpty() }?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
         val hit = calls.lastOrNull { c ->
             val r = c.getJSONObject("request")
-            r.optString("type") == "rest/history/period" && r.optJSONArray("entity_ids")?.let { a -> (0 until a.length()).map { a.getString(it) } } == ids
+            r.optString("type") == "rest/history/period" &&
+                r.optJSONArray("entity_ids")?.let { a -> (0 until a.length()).map { a.getString(it) } } == ids &&
+                at(r.optString("start_time")) == startMs &&
+                (r.isNull("end_time") || at(r.optString("end_time")) == nowMs)
         }
         val result = hit?.optJSONArray("result")
         if (result == null) {
-            unmatched += "rest/history/period ${ids.joinToString(",")}"
+            unmatched += "rest/history/period ${ids.joinToString(",")} from ${java.time.Instant.ofEpochMilli(startMs)} to ${java.time.Instant.ofEpochMilli(nowMs)}"
             return
         }
         val out = LinkedHashMap<String, List<dev.glassworks.engine.vitro.data.HistoryPoint>>()

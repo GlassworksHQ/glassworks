@@ -17,6 +17,7 @@ Guides for setting up and using Glassworks every day on any supported panel.
 | [Blueprints](blueprints.md) | Ready-made Home Assistant automations for night mode, doorbells, interactive questions, and motion-triggered lights |
 | [Updates and restoring stock software](updates.md) | Updating Glassworks from Home Assistant, silent updates, beta channels, and returning to stock firmware |
 | [Clarity performance grades](clarity.md) | What Clarity A+ to E grades mean, what gets tested, and how to read a device's grade |
+| [Try Vitro](vitro.md) | The experimental native dashboard renderer: turning it on in Labs, what works, and reporting a card that looks wrong |
 
 ## Devices
 

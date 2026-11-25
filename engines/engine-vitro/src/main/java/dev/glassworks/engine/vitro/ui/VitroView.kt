@@ -276,6 +276,13 @@ class VitroView(
     private var buildingIndex = -1
     var onViewSelected: ((ViewConfig) -> Unit)? = null
 
+    /**
+     * Shows a view Vitro doesn't draw ([ViewConfig.webFallbackReason]: a strategy, a built-in card or row it has no
+     * renderer for) in Home Assistant's own frontend, with the reason. Such a view is never built: no empty page and
+     * no island for a card the island can't draw. Null builds every view as it is (a view with no page).
+     */
+    var onWebView: ((ViewConfig, String) -> Unit)? = null
+
     /** A tab tap is about to switch views: the page records where it was, in the same history as its loads. */
     var onTabNavigation: (() -> Unit)? = null
 
@@ -752,6 +759,15 @@ class VitroView(
         // Nothing to build: no island a rebuild gave up waits for it.
         val cfg = dashboard ?: return closePooledIslands()
         val viewCfg = cfg.views.getOrNull(index) ?: return closePooledIslands()
+        // Before anything is selected or built: the page leaves for HA's frontend, and this view stays as it was. No
+        // build follows, so no island a rebuild gave up waits for one.
+        onWebView?.let { show ->
+            viewCfg.webFallbackReason?.let { reason ->
+                closePooledIslands()
+                show(viewCfg, reason)
+                return
+            }
+        }
         val t0 = SystemClock.elapsedRealtime()
         val prev = currentViewIndex
         if (pushHistory && !forceRebuild && prev != index && cfg.views.getOrNull(prev) != null) {
@@ -927,6 +943,7 @@ class VitroView(
         viewCache.remove(index)?.let { retireIslands(it, keepIslands); contentHost.removeView(it) }
         overlayFrames.remove(index)?.let { retireIslands(it, keepIslands); overlayLayer.removeView(it) }
         builtScripts.remove(index)
+        clarity?.keepCards(viewCache.keys)
     }
 
     /** Drops every built view and the pinned cards. */
@@ -935,6 +952,7 @@ class VitroView(
         viewCache.values.forEach { retireIslands(it, keepIslands) }
         overlayFrames.values.forEach { retireIslands(it, keepIslands) }
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
