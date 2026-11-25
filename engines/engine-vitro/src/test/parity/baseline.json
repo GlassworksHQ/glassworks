@@ -1,15 +1,15 @@
 {
  "_comment": "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: 2.0% pixels, 1.0 px bounds, 0.5 px font). Regenerate with -PvitroParityUpdateBaseline=true; keep or write each \"reason\". An update records regressions too: read the diff before committing it, and keep the entries of cases with an open regression. #794 empties this file.",
  "mirror/bar-card": {
-  "pixel": 0.4209,
-  "bounds": 44.8,
+  "pixel": 0.4149,
+  "bounds": 44.1,
   "font": 8,
   "missingText": 0,
   "reason": "Vitro's bar-card isn't bar-card 3.2.0's look: HA draws a 20 px title row, square-ended 50 px bars with the name and value inside and a tinted unfilled part, and a white drop icon; Vitro draws rounded 40 px bars, the icon in the severity color, a smaller title, so the card is ~45 px shorter (2026-11-25, fake HA)"
  },
  "mirror/bubble-card-button": {
-  "pixel": 0.4686,
-  "bounds": 3.3,
+  "pixel": 0.4672,
+  "bounds": 4,
   "font": 1,
   "missingText": 0,
   "reason": "Bubble Card 3.4.3's slider button: HA fills the whole pill as the slider (65% grey-beige fill, name inside, no state line); Vitro draws a plain button with the name and '65%' on two lines and no fill (2026-11-25, fake HA)"
@@ -22,126 +22,119 @@
   "reason": "Bubble Card's separator: HA's icon and name are larger (24 px icon, 18 px semi-bold name) and its line sits lower and thicker; Vitro's are 4 px smaller and its card ~9 px shorter (2026-11-25, fake HA)"
  },
  "mirror/calendar-day": {
-  "pixel": 0.1129,
+  "pixel": 0.1138,
   "bounds": 0,
   "font": 0,
   "missingText": 1,
   "reason": "the day view: HA's header is one row 'THURSDAY 12' (FullCalendar dayGridDay) and the all-day event sits right under it; Vitro draws the weekday with a round date badge below (the month grid's today marker), so the event bar is ~28 px lower (2026-11-25, fake HA)"
  },
  "mirror/calendar-list": {
-  "pixel": 0.0417,
+  "pixel": 0.0378,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "timed events in the list view: HA wraps '9:30 AM - 10:15 AM' to two lines in its 150 px time column; Vitro cuts the end ('9:30 AM - 10:15', '7:00 PM - 9:00', 'AM'/'PM' lost), so the rows below sit up to 24 px higher. All-day rows, headers and dates match (2026-11-25, fake HA)"
  },
  "mirror/calendar-month-bars": {
-  "pixel": 0.0425,
+  "pixel": 0.0431,
   "bounds": 0,
   "font": 1,
   "missingText": 2,
   "reason": "the tall month grid: HA puts the toolbar on one row (Today, arrows, title, view buttons) and draws timed events as a dot, time and title, all-day and multi-day ones as bars (School holiday spans 25-27); Vitro keeps the two-row toolbar, draws timed events as bars without their time, and splits the multi-day event per day with '+2 more' on the 26th (2026-11-25, fake HA)"
  },
+ "mirror/clock-date": {
+  "pixel": 0.0207,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "at 1.5x only (the tablet matches): the 112 px digits' and the date line's glyph edges (both cut the weekday at the card's edge, as HA does), 2.1% against the 2.0% slack (2026-11-25, fake HA, after #822)"
+ },
  "mirror/clock-weather-card": {
-  "pixel": 0.1818,
-  "bounds": 107.7,
+  "pixel": 0.1819,
+  "bounds": 107,
   "font": 10,
   "missingText": 13,
   "reason": "clock-weather-card 3.1.0 isn't drawn: Vitro renders it as HA's weather-forecast card (condition, 0.4 mm, five day columns), without the big clock, the date or the per-day temperature bars, so the card is ~107 px shorter (2026-11-25, fake HA)"
  },
  "mirror/gauge-non-numeric": {
-  "pixel": 0.1404,
-  "bounds": 141,
+  "pixel": 0.1389,
+  "bounds": 141.7,
   "font": 0,
   "missingText": 1,
   "reason": "HA replaces the gauge with a one-line warning card ('Entity is non-numeric: sensor.printer_black_ink'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
  },
  "mirror/gauge-unavailable": {
-  "pixel": 0.1521,
-  "bounds": 141,
+  "pixel": 0.1505,
+  "bounds": 141.7,
   "font": 0,
   "missingText": 1,
   "reason": "HA replaces the gauge with a one-line warning card ('Entity is currently unavailable: ...'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
  },
  "mirror/history-graph-rows": {
-  "pixel": 0.035,
+  "pixel": 0.0214,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
-  "reason": "the y-axis is ~2 px wider in HA: the capture's Chrome measures the axis labels (measureTextWidth) in its fallback font before HA's web Roboto loads, Vitro in Roboto, so every point sits ~2 px off and the dense lines of the fixture's series show it; geometry, ticks, legend and colors match. The parity-drift PR's Roboto-in-page fix removes it (2026-11-25, fake HA)"
- },
- "mirror/history-graph-timeline": {
-  "pixel": 0.0537,
-  "bounds": 0.7,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the timeline's label column: HA measures 'Occupancy' in the capture's fallback font (as the history graphs' axis), so the bars start ~2 px later than Vitro's; the fixture's many short state changes make the shift show at every edge. Colors, labels and ticks match (2026-11-25, fake HA)"
+  "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
  },
  "mirror/history-graph-two": {
-  "pixel": 0.0306,
+  "pixel": 0.021,
   "bounds": 0.2,
   "font": 0,
   "missingText": 0,
-  "reason": "the y-axis is ~2 px wider in HA: the capture's Chrome measures the axis labels (measureTextWidth) in its fallback font before HA's web Roboto loads, Vitro in Roboto, so every point sits ~2 px off and the dense lines of the fixture's series show it; geometry, ticks, legend and colors match. The parity-drift PR's Roboto-in-page fix removes it (2026-11-25, fake HA)"
+  "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
  },
  "mirror/humidifier": {
-  "pixel": 0.1142,
-  "bounds": 19.3,
+  "pixel": 0.1146,
+  "bounds": 20,
   "font": 0,
   "missingText": 0,
   "reason": "HA 2026's humidifier card: a 270-degree arc with the target in blue, 'Humidifying' and the current humidity under the number, and +/- buttons; Vitro draws a smaller arc with 'Currently 41%', and adds a power/mode row ('Normal') HA no longer shows, so the card is ~20 px taller (2026-11-25, fake HA)"
  },
  "mirror/logbook-user": {
-  "pixel": 0.0082,
+  "pixel": 0.0071,
   "bounds": 0,
   "font": 3,
   "missingText": 3,
   "reason": "changes made by people: HA shows each user's initial in a round avatar (A, S) from config/auth/list; Vitro shows the light's icon instead, so the three avatars are missing texts. Times, states and the timeline match (2026-11-25, fake HA)"
  },
- "mirror/markdown-cardmod": {
-  "pixel": 0.0172,
-  "bounds": 2.7,
-  "font": 0.3,
-  "missingText": 0,
-  "reason": "Vitro sizes Markdown runs in whole device px (the 56 px h1 and the 12 px letter-spaced h6) and its card is ~2.5 px taller; the sheet applies as HA's (padding, colors, weights) (2026-11-25, fake HA)"
- },
  "mirror/markdown-cardmod-has": {
-  "pixel": 0.0218,
+  "pixel": 0.0204,
   "bounds": 0.5,
   "font": 0.3,
   "missingText": 0,
-  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph); left: Vitro's Markdown runs in whole device px, so the 18 px line sits ~1 px lower, and Android's Roboto against the frontend's web Roboto (2026-11-25, fake HA)"
+  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph); left at 1.5x: Vitro's Markdown runs in whole device px, so the 18 px line sits ~1 px lower (2.0%) (2026-11-25, fake HA, after #822)"
  },
  "mirror/media-control": {
-  "pixel": 0.0236,
-  "bounds": 1,
+  "pixel": 0.0202,
+  "bounds": 0.3,
   "font": 0,
   "missingText": 0,
-  "reason": "the 1 px border and the controls' icon edges at 1.5x; the idle card's layout, colors and artwork placeholder match (the tablet matches) (2026-11-25, fake HA)"
+  "reason": "at 1.5x: the 1 px border and the controls' icon edges (2.0%); the idle card's layout, colors and artwork placeholder match (the tablet matches) (2026-11-25, fake HA, after #822)"
  },
  "mirror/media-control-playing": {
-  "pixel": 0.0524,
-  "bounds": 1.5,
+  "pixel": 0.0395,
+  "bounds": 0.8,
   "font": 0,
   "missingText": 0,
   "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
  },
  "mirror/mini-graph-card": {
   "pixel": 0.2192,
-  "bounds": 48.9,
+  "bounds": 48.2,
   "font": 4.4,
   "missingText": 1,
   "reason": "mini-graph-card 0.13.0: HA draws a 2-hour-smoothed line filled to the bottom, the state at 32 px with its unit, no min/max labels; Vitro draws every point (noisy), a smaller state (21.4 at 26 px), min/max labels and a 48 px shorter graph (2026-11-25, fake HA)"
  },
  "mirror/mini-media-player": {
-  "pixel": 0.2546,
-  "bounds": 71.3,
+  "pixel": 0.2523,
+  "bounds": 72,
   "font": 2,
   "missingText": 0,
   "reason": "mini-media-player 1.16.12 with cover artwork: HA shows a volume slider with a knob and the progress bar along the bottom; Vitro shows a filled seek bar in the middle and no progress line, the cover art is placed ~70 px off (2026-11-25, fake HA)"
  },
  "mirror/modern-circular-gauge": {
-  "pixel": 0.1071,
+  "pixel": 0.1073,
   "bounds": 254,
   "font": 0,
   "missingText": 2,
@@ -175,30 +168,16 @@
   "missingText": 0,
   "reason": "Mushroom's person card with use_entity_picture: HA draws the person's picture in the icon circle with the home badge; Vitro draws the plain account icon (the picture isn't loaded) (2026-11-25, fake HA)"
  },
- "mirror/statistics-graph": {
-  "pixel": 0.0234,
-  "bounds": 0.2,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the y-axis is ~2 px wider in HA: the capture's Chrome measures the axis labels (measureTextWidth) in its fallback font before HA's web Roboto loads, Vitro in Roboto, so every point sits ~2 px off and the dense lines of the fixture's series show it; geometry, ticks, legend and colors match. The parity-drift PR's Roboto-in-page fix removes it (2026-11-25, fake HA)"
- },
- "mirror/statistics-graph-rows": {
-  "pixel": 0.0213,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the y-axis is ~2 px wider in HA: the capture's Chrome measures the axis labels (measureTextWidth) in its fallback font before HA's web Roboto loads, Vitro in Roboto, so every point sits ~2 px off and the dense lines of the fixture's series show it; geometry, ticks, legend and colors match. The parity-drift PR's Roboto-in-page fix removes it (2026-11-25, fake HA)"
- },
  "mirror/thermostat-heat-cool": {
-  "pixel": 0.0982,
-  "bounds": 0.7,
+  "pixel": 0.0983,
+  "bounds": 0,
   "font": 0,
   "missingText": 5,
   "reason": "heat_cool with a range: HA draws two targets (20 and 24 °C, orange and blue arcs, two handles, Idle); Vitro draws one yellow arc labelled 'Heat/Cool' without the low and high targets or their +/- buttons (2026-11-25, fake HA)"
  },
  "mirror/thermostat-water-heater": {
-  "pixel": 0.0483,
-  "bounds": 0.7,
+  "pixel": 0.0485,
+  "bounds": 0,
   "font": 0,
   "missingText": 3,
   "reason": "water heater on the thermostat card: HA labels the target 'Target' and 'Currently 48 °C' in green; Vitro shows the mode 'Eco' and '48.0 °C' in grey, and its handle and arc in grey (2026-11-25, fake HA)"
@@ -218,29 +197,29 @@
   "reason": "the tile's water-heater-operation-modes feature isn't drawn in Vitro (eco, electric, performance, off buttons); name and state match, the card is a feature row shorter (2026-11-25, fake HA)"
  },
  "mirror/vertical-stack-in-card": {
-  "pixel": 0.061,
-  "bounds": 24.8,
+  "pixel": 0.0603,
+  "bounds": 24.1,
   "font": 8,
   "missingText": 0,
   "reason": "vertical-stack-in-card 1.1.4: HA's title is a 24 px card header with padding and the rows sit without dividers; Vitro's title is 16 px and it draws dividers between the tiles, so the card is ~24 px shorter (2026-11-25, fake HA)"
  },
  "mirror/weather-forecast": {
-  "pixel": 0.0135,
+  "pixel": 0.0126,
   "bounds": 0,
   "font": 0,
   "missingText": 3,
   "reason": "HA shows today's high/low ('14.7 °C / 9.1 °C') under the temperature when the forecast holds today; Vitro shows the precipitation ('0.4 mm') there. The rest of the card matches (2026-11-25, fake HA)"
  },
  "s1/bar-card": {
-  "pixel": 0.4209,
-  "bounds": 44.8,
+  "pixel": 0.4149,
+  "bounds": 44.1,
   "font": 8,
   "missingText": 0,
   "reason": "Vitro's bar-card isn't bar-card 3.2.0's look: HA draws a 20 px title row, square-ended 50 px bars with the name and value inside and a tinted unfilled part, and a white drop icon; Vitro draws rounded 40 px bars, the icon in the severity color, a smaller title, so the card is ~45 px shorter (2026-11-25, fake HA)"
  },
  "s1/bubble-card-button": {
-  "pixel": 0.4686,
-  "bounds": 3.3,
+  "pixel": 0.4672,
+  "bounds": 4,
   "font": 1,
   "missingText": 0,
   "reason": "Bubble Card 3.4.3's slider button: HA fills the whole pill as the slider (65% grey-beige fill, name inside, no state line); Vitro draws a plain button with the name and '65%' on two lines and no fill (2026-11-25, fake HA)"
@@ -253,71 +232,71 @@
   "reason": "Bubble Card's separator: HA's icon and name are larger (24 px icon, 18 px semi-bold name) and its line sits lower and thicker; Vitro's are 4 px smaller and its card ~9 px shorter (2026-11-25, fake HA)"
  },
  "s1/calendar-day": {
-  "pixel": 0.1129,
+  "pixel": 0.1138,
   "bounds": 0,
   "font": 0,
   "missingText": 1,
   "reason": "the day view: HA's header is one row 'THURSDAY 12' (FullCalendar dayGridDay) and the all-day event sits right under it; Vitro draws the weekday with a round date badge below (the month grid's today marker), so the event bar is ~28 px lower (2026-11-25, fake HA)"
  },
  "s1/calendar-list": {
-  "pixel": 0.0417,
+  "pixel": 0.0378,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "timed events in the list view: HA wraps '9:30 AM - 10:15 AM' to two lines in its 150 px time column; Vitro cuts the end ('9:30 AM - 10:15', '7:00 PM - 9:00', 'AM'/'PM' lost), so the rows below sit up to 24 px higher. All-day rows, headers and dates match (2026-11-25, fake HA)"
  },
  "s1/calendar-month-bars": {
-  "pixel": 0.0978,
+  "pixel": 0.0987,
   "bounds": 0,
   "font": 1,
   "missingText": 5,
   "reason": "the tall month grid: HA puts the toolbar on one row (Today, arrows, title, view buttons) and draws timed events as a dot, time and title, all-day and multi-day ones as bars (School holiday spans 25-27); Vitro keeps the two-row toolbar, draws timed events as bars without their time, and splits the multi-day event per day with '+2 more' on the 26th (2026-11-25, fake HA)"
  },
+ "s1/clock-date": {
+  "pixel": 0.0207,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "at 1.5x only (the tablet matches): the 112 px digits' and the date line's glyph edges (both cut the weekday at the card's edge, as HA does), 2.1% against the 2.0% slack (2026-11-25, fake HA, after #822)"
+ },
  "s1/clock-weather-card": {
-  "pixel": 0.1817,
-  "bounds": 107.7,
+  "pixel": 0.1818,
+  "bounds": 107,
   "font": 10,
   "missingText": 13,
   "reason": "clock-weather-card 3.1.0 isn't drawn: Vitro renders it as HA's weather-forecast card (condition, 0.4 mm, five day columns), without the big clock, the date or the per-day temperature bars, so the card is ~107 px shorter (2026-11-25, fake HA)"
  },
  "s1/gauge-non-numeric": {
-  "pixel": 0.1404,
-  "bounds": 141,
+  "pixel": 0.1389,
+  "bounds": 141.7,
   "font": 0,
   "missingText": 1,
   "reason": "HA replaces the gauge with a one-line warning card ('Entity is non-numeric: sensor.printer_black_ink'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
  },
  "s1/gauge-unavailable": {
-  "pixel": 0.1521,
-  "bounds": 141,
+  "pixel": 0.1505,
+  "bounds": 141.7,
   "font": 0,
   "missingText": 1,
   "reason": "HA replaces the gauge with a one-line warning card ('Entity is currently unavailable: ...'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
  },
  "s1/history-graph-rows": {
-  "pixel": 0.035,
+  "pixel": 0.0215,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
-  "reason": "the y-axis is ~2 px wider in HA: the capture's Chrome measures the axis labels (measureTextWidth) in its fallback font before HA's web Roboto loads, Vitro in Roboto, so every point sits ~2 px off and the dense lines of the fixture's series show it; geometry, ticks, legend and colors match. The parity-drift PR's Roboto-in-page fix removes it (2026-11-25, fake HA)"
- },
- "s1/history-graph-timeline": {
-  "pixel": 0.0537,
-  "bounds": 0.7,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the timeline's label column: HA measures 'Occupancy' in the capture's fallback font (as the history graphs' axis), so the bars start ~2 px later than Vitro's; the fixture's many short state changes make the shift show at every edge. Colors, labels and ticks match (2026-11-25, fake HA)"
+  "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
  },
  "s1/history-graph-two": {
-  "pixel": 0.0306,
+  "pixel": 0.021,
   "bounds": 0.2,
   "font": 0,
   "missingText": 0,
-  "reason": "the y-axis is ~2 px wider in HA: the capture's Chrome measures the axis labels (measureTextWidth) in its fallback font before HA's web Roboto loads, Vitro in Roboto, so every point sits ~2 px off and the dense lines of the fixture's series show it; geometry, ticks, legend and colors match. The parity-drift PR's Roboto-in-page fix removes it (2026-11-25, fake HA)"
+  "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
  },
  "s1/humidifier": {
-  "pixel": 0.1142,
-  "bounds": 19.3,
+  "pixel": 0.1147,
+  "bounds": 20,
   "font": 0,
   "missingText": 0,
   "reason": "HA 2026's humidifier card: a 270-degree arc with the target in blue, 'Humidifying' and the current humidity under the number, and +/- buttons; Vitro draws a smaller arc with 'Currently 41%', and adds a power/mode row ('Normal') HA no longer shows, so the card is ~20 px taller (2026-11-25, fake HA)"
@@ -330,56 +309,49 @@
   "reason": "s1 only: Vitro ends 'Reading Lamp Reading' with an ellipsis in the 2-column tile where HA's 146 CSS px run just fits; one name, the rest matches (2026-11-25, fake HA)"
  },
  "s1/logbook-user": {
-  "pixel": 0.0082,
+  "pixel": 0.0071,
   "bounds": 0,
   "font": 3,
   "missingText": 3,
   "reason": "changes made by people: HA shows each user's initial in a round avatar (A, S) from config/auth/list; Vitro shows the light's icon instead, so the three avatars are missing texts. Times, states and the timeline match (2026-11-25, fake HA)"
  },
- "s1/markdown-cardmod": {
-  "pixel": 0.0125,
-  "bounds": 2.7,
-  "font": 0.3,
-  "missingText": 0,
-  "reason": "Vitro sizes Markdown runs in whole device px (the 56 px h1 and the 12 px letter-spaced h6) and its card is ~2.5 px taller; the sheet applies as HA's (padding, colors, weights) (2026-11-25, fake HA)"
- },
  "s1/markdown-cardmod-has": {
-  "pixel": 0.0218,
+  "pixel": 0.0204,
   "bounds": 0.5,
   "font": 0.3,
   "missingText": 0,
-  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph); left: Vitro's Markdown runs in whole device px, so the 18 px line sits ~1 px lower, and Android's Roboto against the frontend's web Roboto (2026-11-25, fake HA)"
+  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph); left at 1.5x: Vitro's Markdown runs in whole device px, so the 18 px line sits ~1 px lower (2.0%) (2026-11-25, fake HA, after #822)"
  },
  "s1/media-control": {
-  "pixel": 0.0236,
-  "bounds": 1,
+  "pixel": 0.0202,
+  "bounds": 0.3,
   "font": 0,
   "missingText": 0,
-  "reason": "the 1 px border and the controls' icon edges at 1.5x; the idle card's layout, colors and artwork placeholder match (the tablet matches) (2026-11-25, fake HA)"
+  "reason": "at 1.5x: the 1 px border and the controls' icon edges (2.0%); the idle card's layout, colors and artwork placeholder match (the tablet matches) (2026-11-25, fake HA, after #822)"
  },
  "s1/media-control-playing": {
-  "pixel": 0.0524,
-  "bounds": 1.5,
+  "pixel": 0.0395,
+  "bounds": 0.8,
   "font": 0,
   "missingText": 0,
   "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
  },
  "s1/mini-graph-card": {
   "pixel": 0.2192,
-  "bounds": 48.9,
+  "bounds": 48.2,
   "font": 4.4,
   "missingText": 1,
   "reason": "mini-graph-card 0.13.0: HA draws a 2-hour-smoothed line filled to the bottom, the state at 32 px with its unit, no min/max labels; Vitro draws every point (noisy), a smaller state (21.4 at 26 px), min/max labels and a 48 px shorter graph (2026-11-25, fake HA)"
  },
  "s1/mini-media-player": {
-  "pixel": 0.2546,
-  "bounds": 71.3,
+  "pixel": 0.2523,
+  "bounds": 72,
   "font": 2,
   "missingText": 0,
   "reason": "mini-media-player 1.16.12 with cover artwork: HA shows a volume slider with a knob and the progress bar along the bottom; Vitro shows a filled seek bar in the middle and no progress line, the cover art is placed ~70 px off (2026-11-25, fake HA)"
  },
  "s1/modern-circular-gauge": {
-  "pixel": 0.1071,
+  "pixel": 0.1074,
   "bounds": 254,
   "font": 0,
   "missingText": 2,
@@ -413,30 +385,16 @@
   "missingText": 0,
   "reason": "Mushroom's person card with use_entity_picture: HA draws the person's picture in the icon circle with the home badge; Vitro draws the plain account icon (the picture isn't loaded) (2026-11-25, fake HA)"
  },
- "s1/statistics-graph": {
-  "pixel": 0.0234,
-  "bounds": 0.2,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the y-axis is ~2 px wider in HA: the capture's Chrome measures the axis labels (measureTextWidth) in its fallback font before HA's web Roboto loads, Vitro in Roboto, so every point sits ~2 px off and the dense lines of the fixture's series show it; geometry, ticks, legend and colors match. The parity-drift PR's Roboto-in-page fix removes it (2026-11-25, fake HA)"
- },
- "s1/statistics-graph-rows": {
-  "pixel": 0.0213,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the y-axis is ~2 px wider in HA: the capture's Chrome measures the axis labels (measureTextWidth) in its fallback font before HA's web Roboto loads, Vitro in Roboto, so every point sits ~2 px off and the dense lines of the fixture's series show it; geometry, ticks, legend and colors match. The parity-drift PR's Roboto-in-page fix removes it (2026-11-25, fake HA)"
- },
  "s1/thermostat-heat-cool": {
-  "pixel": 0.0982,
-  "bounds": 0.7,
+  "pixel": 0.0983,
+  "bounds": 0,
   "font": 0,
   "missingText": 5,
   "reason": "heat_cool with a range: HA draws two targets (20 and 24 °C, orange and blue arcs, two handles, Idle); Vitro draws one yellow arc labelled 'Heat/Cool' without the low and high targets or their +/- buttons (2026-11-25, fake HA)"
  },
  "s1/thermostat-water-heater": {
-  "pixel": 0.0483,
-  "bounds": 0.7,
+  "pixel": 0.0485,
+  "bounds": 0,
   "font": 0,
   "missingText": 3,
   "reason": "water heater on the thermostat card: HA labels the target 'Target' and 'Currently 48 °C' in green; Vitro shows the mode 'Eco' and '48.0 °C' in grey, and its handle and arc in grey (2026-11-25, fake HA)"
@@ -456,14 +414,14 @@
   "reason": "the tile's water-heater-operation-modes feature isn't drawn in Vitro (eco, electric, performance, off buttons); name and state match, the card is a feature row shorter (2026-11-25, fake HA)"
  },
  "s1/vertical-stack-in-card": {
-  "pixel": 0.061,
-  "bounds": 24.8,
+  "pixel": 0.0603,
+  "bounds": 24.1,
   "font": 8,
   "missingText": 0,
   "reason": "vertical-stack-in-card 1.1.4: HA's title is a 24 px card header with padding and the rows sit without dividers; Vitro's title is 16 px and it draws dividers between the tiles, so the card is ~24 px shorter (2026-11-25, fake HA)"
  },
  "s1/weather-forecast": {
-  "pixel": 0.0135,
+  "pixel": 0.0126,
   "bounds": 0,
   "font": 0,
   "missingText": 3,
@@ -511,15 +469,8 @@
   "missingText": 5,
   "reason": "the tall month grid: HA puts the toolbar on one row (Today, arrows, title, view buttons) and draws timed events as a dot, time and title, all-day and multi-day ones as bars (School holiday spans 25-27); Vitro keeps the two-row toolbar, draws timed events as bars without their time, and splits the multi-day event per day with '+2 more' on the 26th (2026-11-25, fake HA)"
  },
- "tablet/clock-date": {
-  "pixel": 0.0223,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "tablet only: the date line's text edges at 2x (layout and sizes match; s1 and Mirror match) (2026-11-25, fake HA)"
- },
  "tablet/clock-weather-card": {
-  "pixel": 0.1778,
+  "pixel": 0.1779,
   "bounds": 106.5,
   "font": 10,
   "missingText": 13,
@@ -539,27 +490,6 @@
   "missingText": 1,
   "reason": "HA replaces the gauge with a one-line warning card ('Entity is currently unavailable: ...'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
  },
- "tablet/history-graph-rows": {
-  "pixel": 0.034,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the y-axis is ~2 px wider in HA: the capture's Chrome measures the axis labels (measureTextWidth) in its fallback font before HA's web Roboto loads, Vitro in Roboto, so every point sits ~2 px off and the dense lines of the fixture's series show it; geometry, ticks, legend and colors match. The parity-drift PR's Roboto-in-page fix removes it (2026-11-25, fake HA)"
- },
- "tablet/history-graph-timeline": {
-  "pixel": 0.0241,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the timeline's label column: HA measures 'Occupancy' in the capture's fallback font (as the history graphs' axis), so the bars start ~2 px later than Vitro's; the fixture's many short state changes make the shift show at every edge. Colors, labels and ticks match (2026-11-25, fake HA)"
- },
- "tablet/history-graph-two": {
-  "pixel": 0.0341,
-  "bounds": 0.7,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the y-axis is ~2 px wider in HA: the capture's Chrome measures the axis labels (measureTextWidth) in its fallback font before HA's web Roboto loads, Vitro in Roboto, so every point sits ~2 px off and the dense lines of the fixture's series show it; geometry, ticks, legend and colors match. The parity-drift PR's Roboto-in-page fix removes it (2026-11-25, fake HA)"
- },
  "tablet/humidifier": {
   "pixel": 0.1114,
   "bounds": 20,
@@ -573,20 +503,6 @@
   "font": 3,
   "missingText": 3,
   "reason": "changes made by people: HA shows each user's initial in a round avatar (A, S) from config/auth/list; Vitro shows the light's icon instead, so the three avatars are missing texts. Times, states and the timeline match (2026-11-25, fake HA)"
- },
- "tablet/markdown-cardmod": {
-  "pixel": 0.0085,
-  "bounds": 2.5,
-  "font": 0,
-  "missingText": 0,
-  "reason": "Vitro sizes Markdown runs in whole device px (the 56 px h1 and the 12 px letter-spaced h6) and its card is ~2.5 px taller; the sheet applies as HA's (padding, colors, weights) (2026-11-25, fake HA)"
- },
- "tablet/markdown-cardmod-has": {
-  "pixel": 0.0207,
-  "bounds": 0.3,
-  "font": 0.1,
-  "missingText": 0,
-  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph); left: Vitro's Markdown runs in whole device px, so the 18 px line sits ~1 px lower, and Android's Roboto against the frontend's web Roboto (2026-11-25, fake HA)"
  },
  "tablet/media-control-playing": {
   "pixel": 0.0297,
@@ -643,13 +559,6 @@
   "font": 0,
   "missingText": 0,
   "reason": "Mushroom's person card with use_entity_picture: HA draws the person's picture in the icon circle with the home badge; Vitro draws the plain account icon (the picture isn't loaded) (2026-11-25, fake HA)"
- },
- "tablet/statistics-graph": {
-  "pixel": 0.0225,
-  "bounds": 0.7,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the y-axis is ~2 px wider in HA: the capture's Chrome measures the axis labels (measureTextWidth) in its fallback font before HA's web Roboto loads, Vitro in Roboto, so every point sits ~2 px off and the dense lines of the fixture's series show it; geometry, ticks, legend and colors match. The parity-drift PR's Roboto-in-page fix removes it (2026-11-25, fake HA)"
  },
  "tablet/thermostat-heat-cool": {
   "pixel": 0.0963,
