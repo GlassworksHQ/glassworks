@@ -350,7 +350,7 @@ choice does with it. Each camera task starts and ends where the web harness's do
 
 | | Web engine | Vitro (`ClarityCameras`) |
 |---|---|---|
-| Which cameras | The video elements in the view's cards | The streams playing in the view's cards (a card that holds the stream's picture), opened or still open since the navigation |
+| Which cameras | The video elements in the view's cards | The streams that played in the view's cards (a card that holds the stream's picture), opened or still open since the navigation. A stream belongs to its view, not to its card, so a view that builds its cards again mid-window (a late state) keeps its camera's history. Only what happened by the window's end counts: a stream, a picture or an error after it is not the window's, however late the line is written |
 | Graded path | WebRTC (`CAMERA.path`); HLS on a fallback copy | The same. A camera that never played on the view's path is a stream not found, which fails the task, as on the web engine |
 | First frame | From the navigation to the first presented frame (`requestVideoFrameCallback`) | From the navigation to the stream's first picture on screen (`onFirstFrame`, HA's `hasVideo: true`) |
 | The window | 30 s (`CAMERA.windowMs`) from when every camera showed a frame, or 20 s after the navigation; the swipes come after it | The same |

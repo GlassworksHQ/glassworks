@@ -1335,6 +1335,15 @@ class VitroCameras(unittest.TestCase):
         import notes as N
         self.assertEqual(N._camera_options(run), [(10.0, "has a camera that fell back to MJPEG")])
 
+    def test_a_fallback_that_stopped_before_the_windows_end_is_still_said(self):
+        line = vitro_camera_line("typical", shown="mjpeg")
+        line["streams"][0].update(transport=None, others=[{"path": "mjpeg", "first_frame_ms": 400.0, "connected": False}])
+        run = R.camera_run(line, "typical")
+        self.assertEqual(run["fell_back"], ["mjpeg"])
+        self.assertEqual(R.camera_transports({"tiers": {"typical": {"camera_runs": [run]}}}), [
+            "typical cameras on Vitro: played over WebRTC in 0 of 1 run(s); **fell back to MJPEG in 1 of 1 run(s)**, graded "
+            "on WebRTC as on the web engine (web_rtc: ice failed); a camera showed nothing at the window's end in 1 run(s)."])
+
     def test_web_lines_say_nothing_about_transports(self):
         run = R.camera_run(camera_line("typical"), "typical")
         self.assertNotIn("transports", run)

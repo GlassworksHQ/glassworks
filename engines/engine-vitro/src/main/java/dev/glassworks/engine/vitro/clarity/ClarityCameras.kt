@@ -28,7 +28,7 @@ import kotlin.math.min
 internal class ClarityCameras(private val now: () -> Double) {
 
     /** One stream, of one kind, for one camera entity: when it started, each picture it drew, how it ended. */
-    internal class Rec(val stream: CameraStream, val entityId: String, val kind: CameraStreamKind) {
+    internal class Rec(val stream: CameraStream, val entityId: String, val kind: CameraStreamKind, val openedAt: Double) {
         var startedAt: Double? = null
         /** Each [CameraStream.Listener.onFirstFrame] (once per start or resume): a picture on screen. */
         val firstFrames = ArrayList<Double>()
@@ -36,20 +36,28 @@ internal class ClarityCameras(private val now: () -> Double) {
         var sinceStartMs: Long? = null
         /** Every picture drawn: each first frame and each [CameraStream.Listener.onFrameRendered]. */
         val frames = ArrayList<Double>()
-        val errors = ArrayList<String>()
+        /** Each error it reported, with when (so a window counts only its own). */
+        val errors = ArrayList<Pair<Double, String>>()
         var closedAt: Double? = null
-        /** The view's card it played in (a top-level card of the view, as [VitroClarity] knows them), once found. */
-        var card: View? = null
+        /**
+         * The view it played in (its index in the dashboard), once found from the card that holds its picture. Kept by
+         * index, not by card: Vitro builds a view's cards again (a late state, a theme), and a stream that played in
+         * the card before the rebuild is still that view's camera.
+         */
+        var viewIndex: Int? = null
     }
 
     private val recs = IdentityHashMap<CameraStream, Rec>()
     private val order = ArrayList<Rec>()
 
-    /** The top-level cards of the view on screen ([VitroClarity]'s registry), to tell which card a stream plays in. */
-    var cards: () -> Collection<View> = { emptyList() }
+    /**
+     * The view a top-level card belongs to (its index), of any view built now ([VitroClarity]'s registry); null for any
+     * other view. Main thread.
+     */
+    var viewOfCard: (View) -> Int? = { null }
 
     private fun rec(s: MeasuredCameraStream): Rec = recs.getOrPut(s) {
-        Rec(s, s.entityId, s.kind).also {
+        Rec(s, s.entityId, s.kind, now()).also {
             order += it
             trim()
         }
@@ -65,12 +73,12 @@ internal class ClarityCameras(private val now: () -> Double) {
         }
     }
 
-    private fun cardOf(r: Rec): View? {
-        r.card?.let { return it }
-        val mine = cards().toHashSet()
+    /** The view [r] played in: the first card up from its picture that a built view holds. Kept once found. */
+    private fun viewOf(r: Rec): Int? {
+        r.viewIndex?.let { return it }
         var v: View? = r.stream.view
         while (v != null) {
-            if (v in mine) return v.also { r.card = it }
+            viewOfCard(v)?.let { i -> return i.also { r.viewIndex = it } }
             v = v.parent as? View
         }
         return null
@@ -79,7 +87,7 @@ internal class ClarityCameras(private val now: () -> Double) {
     internal fun started(s: MeasuredCameraStream) {
         val r = rec(s)
         if (r.startedAt == null) r.startedAt = now()
-        cardOf(r)
+        viewOf(r)
     }
 
     internal fun firstFrame(s: MeasuredCameraStream, sinceStartMs: Long) {
@@ -88,7 +96,7 @@ internal class ClarityCameras(private val now: () -> Double) {
         r.firstFrames += t
         r.sinceStartMs = sinceStartMs
         frame(r, t)
-        cardOf(r)
+        viewOf(r)
     }
 
     internal fun frameRendered(s: MeasuredCameraStream) = frame(rec(s), now())
@@ -100,7 +108,7 @@ internal class ClarityCameras(private val now: () -> Double) {
 
     internal fun error(s: MeasuredCameraStream, reason: String) {
         val r = rec(s)
-        if (r.errors.size < MAX_ERRORS) r.errors += reason.take(MAX_REASON)
+        if (r.errors.size < MAX_ERRORS) r.errors += now() to reason.take(MAX_REASON)
     }
 
     internal fun ended(s: MeasuredCameraStream) = error(s, "ended")
@@ -110,35 +118,41 @@ internal class ClarityCameras(private val now: () -> Double) {
         if (r.closedAt == null) r.closedAt = now()
     }
 
-    /** The view's streams: those playing in one of its cards ([viewCards]) and not closed before [nav]. */
-    private fun ofView(viewCards: Set<View>, nav: Double): List<Rec> =
-        order.filter { (it.closedAt == null || it.closedAt!! >= nav) && cardOf(it)?.let { c -> c in viewCards } == true }
+    /**
+     * The streams of view [viewIndex] between [nav] and [end]: those that played in one of its cards (before or after
+     * a rebuild of them), opened by [end] and not closed before [nav].
+     */
+    private fun ofView(viewIndex: Int, nav: Double, end: Double): List<Rec> =
+        order.filter { it.openedAt <= end && (it.closedAt == null || it.closedAt!! >= nav) && viewOf(it) == viewIndex }
 
-    /** A camera's first picture on [kind] since [nav], or null. */
-    private fun firstFrame(rs: List<Rec>, kind: CameraStreamKind, nav: Double): Double? =
-        rs.filter { it.kind == kind }.flatMap { it.firstFrames }.filter { it >= nav }.minOrNull()
+    /** A camera's first picture on [kind] between [nav] and [end], or null. */
+    private fun firstFrame(rs: List<Rec>, kind: CameraStreamKind, nav: Double, end: Double): Double? =
+        rs.filter { it.kind == kind }.flatMap { it.firstFrames }.filter { it in nav..end }.minOrNull()
 
     /**
-     * harness.js trackCameras' test: every one of the view's [cameras] has shown a picture on [path] since [nav].
+     * harness.js trackCameras' test: every one of view [viewIndex]'s [cameras] has shown a picture on [path] since
+     * [nav].
      */
-    fun allPlaying(viewCards: Collection<View>, cameras: List<String>, path: CameraStreamKind, nav: Double): Boolean {
-        val rs = ofView(viewCards.toHashSet(), nav)
-        return cameras.isNotEmpty() && cameras.all { e -> firstFrame(rs.filter { it.entityId == e }, path, nav) != null }
+    fun allPlaying(viewIndex: Int, cameras: List<String>, path: CameraStreamKind, nav: Double): Boolean {
+        val end = now()
+        val rs = ofView(viewIndex, nav, end)
+        return cameras.isNotEmpty() && cameras.all { e -> firstFrame(rs.filter { it.entityId == e }, path, nav, end) != null }
     }
 
     /**
-     * harness.js camerasEnd: the `camera` line's `found` and `streams` over the window [t0, t1], for the view's
-     * [cameras] (its camera entities, in card order) of which [expected] were asked for. Each camera is graded on
+     * harness.js camerasEnd: the `camera` line's `found` and `streams` over the window [t0, t1], for view [viewIndex]'s
+     * [cameras] (its camera entities, in card order) of which [expected] were asked for. Only what happened by [t1]
+     * counts (a stream opened, a picture, an error), so reading it later changes nothing. Each camera is graded on
      * [path], the view's (WebRTC on a graded view, HLS on a fallback copy): its first picture on it since [nav], the
      * pictures it drew in the window against [fps], and its gaps, by the WebRTC receiver's freeze rule on [path]
      * WebRTC and by gaps over 500 ms on HLS, as on the web engine. A camera that never played on [path] is a stream
      * not found, which fails the task, as there; what it played instead is in `others` and `transport`.
      */
     fun window(
-        viewCards: Collection<View>, cameras: List<String>, expected: Int, path: CameraStreamKind,
+        viewIndex: Int, cameras: List<String>, expected: Int, path: CameraStreamKind,
         nav: Double, t0: Double, t1: Double, fps: Double,
     ): JSONObject {
-        val rs = ofView(viewCards.toHashSet(), nav)
+        val rs = ofView(viewIndex, nav, t1)
         val dur = t1 - t0
         val streams = JSONArray()
         var found = 0
@@ -146,7 +160,7 @@ internal class ClarityCameras(private val now: () -> Double) {
             val entity = cameras.getOrNull(i)
             val mine = if (entity == null) emptyList() else rs.filter { it.entityId == entity }
             val graded = mine.filter { it.kind == path }
-            val first = firstFrame(mine, path, nav)
+            val first = firstFrame(mine, path, nav, t1)
             val out = JSONObject().put("path", name(path)).put("entity", entity ?: JSONObject.NULL)
                 .put("w", JSONObject.NULL).put("h", JSONObject.NULL)
             if (graded.isEmpty() || first == null) {
@@ -158,7 +172,7 @@ internal class ClarityCameras(private val now: () -> Double) {
                 found++
                 // Every picture the camera drew on its path, its streams' together (a stream the choice made again
                 // after an error goes on where the last one stopped, and the gap between them counts).
-                val times = graded.flatMap { it.frames }.filter { it >= first }.sorted()
+                val times = graded.flatMap { it.frames }.filter { it >= first && it <= t1 }.sorted()
                 val gaps = if (path == CameraStreamKind.WEB_RTC) ClarityStats.freezeGaps(times, t0, t1)
                 else ClarityStats.videoGaps(times, t0, t1)
                 val frames = times.count { it in t0..t1 }
@@ -182,7 +196,7 @@ internal class ClarityCameras(private val now: () -> Double) {
             // The camera's other kinds (the choice's fallbacks, or the ones it tried first): detail, as harness.js `others`.
             out.put("others", JSONArray(mine.filter { it.kind != path }.groupBy { it.kind }.map { (k, xs) ->
                 JSONObject().put("path", name(k))
-                    .put("first_frame_ms", firstFrame(xs, k, nav)?.let { ClarityStats.round1(it - nav) } ?: JSONObject.NULL)
+                    .put("first_frame_ms", firstFrame(xs, k, nav, t1)?.let { ClarityStats.round1(it - nav) } ?: JSONObject.NULL)
                     .put("connected", xs.any { it.closedAt == null || it.closedAt!! > t1 })
             }))
             // What the camera showed at the window's end: the kind whose stream was still open there, with the latest
@@ -190,7 +204,8 @@ internal class ClarityCameras(private val now: () -> Double) {
             val showing = mine.filter { (it.closedAt == null || it.closedAt!! > t1) && it.firstFrames.any { f -> f in nav..t1 } }
                 .maxByOrNull { it.firstFrames.filter { f -> f <= t1 }.max() }
             out.put("transport", showing?.let { name(it.kind) } ?: JSONObject.NULL)
-            val errors = mine.flatMap { r -> r.errors.map { "${name(r.kind)}: $it" } }.take(MAX_ERRORS)
+            val errors = mine.flatMap { r -> r.errors.filter { (at, _) -> at <= t1 }.map { (_, e) -> "${name(r.kind)}: $e" } }
+                .take(MAX_ERRORS)
             out.put("errors", JSONArray(errors))
             streams.put(out)
         }

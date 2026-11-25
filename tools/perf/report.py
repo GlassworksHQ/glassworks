@@ -348,9 +348,12 @@ def camera_run(line, tier):
     path = line.get("path") or "hls"
     # Vitro (VitroClarity): the kind each camera showed at the window's end (web_rtc, hls or mjpeg; null: nothing). The
     # web harness's lines don't say: its streams are the view's path's by definition. A camera that showed another kind
-    # fell back (an MJPEG fallback): its stream on the view's path is missing or stopped, and the report says so.
+    # fell back (an MJPEG fallback): its stream on the view's path is missing or stopped, and the report says so. So did
+    # one whose other kind showed a picture in the window but stopped before its end (transport null): `others` keeps it.
     shown_on = [s.get("transport") for s in streams] if any("transport" in s for s in streams) else None
-    fell_back = sorted({t for t in shown_on or [] if t and t != path})
+    other_kinds = {o.get("path") for s in streams for o in s.get("others") or [] if o.get("first_frame_ms") is not None} \
+        if shown_on is not None else set()
+    fell_back = sorted({t for t in (shown_on or []) + list(other_kinds) if t and t != path})
     return {
         # The path the frontend played the graded streams on: web_rtc since protocol 6, hls before
         # (protocol 5's lines don't say; HLS was the only path then).

@@ -1078,7 +1078,9 @@ class VitroClarity internal constructor(
 
     // ---- live cameras: each stream's own reports (ClarityCameras), over the web harness's window
 
-    private val cameras = ClarityCameras(::now).also { it.cards = { currentCards().values.map { p -> p.second } } }
+    private val cameras = ClarityCameras(::now).also {
+        it.viewOfCard = { card -> built.entries.firstOrNull { (_, cards) -> cards.values.any { p -> p.second === card } }?.key }
+    }
 
     /** One view's camera window: its cameras (entities, in card order), how many were asked for, its path, its start. */
     private class CamPlan(val cameras: List<String>, val expected: Int, val path: String, val nav: Double, val t0: Double)
@@ -1123,7 +1125,7 @@ class VitroClarity internal constructor(
         val list = cameraEntities()
         val end = nav + CAMERA_FIND_MS
         while (now() < end) {
-            if (list.size >= expected && onMain { cameras.allPlaying(cameras.cards(), list, kind, nav) }) break
+            if (list.size >= expected && onMain { cameras.allPlaying(view.currentViewIndex, list, kind, nav) }) break
             sleep(100.0)
         }
         return CamPlan(list, expected, path, nav, now())
@@ -1135,7 +1137,10 @@ class VitroClarity internal constructor(
         val t1 = p.t0 + cam.getDouble("windowMs")
         sleep(t1 - now())
         val fps = cam.getDouble("fps")
-        val w = onMain { cameras.window(cameras.cards(), p.cameras, p.expected, ClarityCameras.kindOf(p.path)!!, p.nav, p.t0, t1, fps) }
+        // Read after the taps when they ran past the window: only what happened by t1 counts (ClarityCameras.window).
+        val w = onMain {
+            cameras.window(view.currentViewIndex, p.cameras, p.expected, ClarityCameras.kindOf(p.path)!!, p.nav, p.t0, t1, fps)
+        }
         line(JSONObject().put("t", "camera").put("stage", v.tier).put("path", p.path).put("window_ms", (t1 - p.t0).roundToInt())
             .put("t0_ms", ClarityStats.round1(p.t0)).put("nav_ms", ClarityStats.round1(p.nav)).put("fps", fps)
             .put("expected", p.expected).put("found", w.getInt("found")).put("streams", w.getJSONArray("streams"))
