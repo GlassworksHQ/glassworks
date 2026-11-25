@@ -10,7 +10,7 @@ import vm from "node:vm";
 const SOURCE = readFileSync(process.env.CONTENT_JS, "utf8");
 
 /** content.js in a fresh page: [launchScreen] in the body or not, [externalAuth] in the URL or not. */
-function page({ launchScreen = true, externalAuth = true, search = null, hass = null, vars = {} } = {}) {
+function page({ launchScreen = true, externalAuth = true, search = null, hass = null, vars = {}, storage = null, frame = false } = {}) {
   const posted = [];
   const timers = [];
   let frames = [];
@@ -22,13 +22,19 @@ function page({ launchScreen = true, externalAuth = true, search = null, hass = 
   const appended = [];
   const events = [];
   const fromApp = [];
+  const winListeners = {};
+  // The page's localStorage ([storage]: its items, changed by the test as it goes).
+  const items = storage ?? {};
 
   const window = {
     wrappedJSObject: { externalBus: (m) => toPage.push(m) },
     dispatchEvent: (e) => events.push(e),
+    addEventListener: (type, fn) => { (winListeners[type] ||= []).push(fn); },
   };
+  window.top = frame ? {} : window;
   const document = {
     readyState: "loading",
+    hidden: false,
     addEventListener: (type, fn) => { (domListeners[type] ||= []).push(fn); },
     getElementById: (id) => (id === "ha-launch-screen" ? launch : null),
     // <home-assistant> with the frontend's hass object, when the test gives one.
@@ -41,7 +47,12 @@ function page({ launchScreen = true, externalAuth = true, search = null, hass = 
     window, document, console,
     location: { search: search ?? (externalAuth ? "?external_auth=1" : "") },
     URLSearchParams,
-    localStorage: { getItem: () => null, setItem() {} },
+    localStorage: {
+      get length() { return Object.keys(items).length; },
+      key: (i) => Object.keys(items)[i] ?? null,
+      getItem: (k) => (k in items ? items[k] : null),
+      setItem: (k, v) => { items[k] = String(v); },
+    },
     CustomEvent: class { constructor(t, o) { this.type = t; Object.assign(this, o); } },
     browser: { runtime: { connectNative: () => ({
       postMessage: (m) => posted.push(JSON.parse(JSON.stringify(m))),
@@ -66,7 +77,10 @@ function page({ launchScreen = true, externalAuth = true, search = null, hass = 
   vm.runInNewContext(SOURCE, ctx);
 
   return {
-    posted, toPage, window, appended, events,
+    posted, toPage, window, appended, events, items,
+    storage: () => posted.filter((m) => m.type === "pageStorage").map((m) => JSON.parse(m.json)),
+    /** The page goes away (pagehide). */
+    pagehide() { (winListeners.pagehide || []).forEach((f) => f()); },
     /** The app sends [m] over the native port. */
     send(m) { fromApp.forEach((f) => f(m)); },
     ready: () => posted.filter((m) => m.type === "ready"),
@@ -258,3 +272,37 @@ test("colors that aren't plain are left out, and a missing accent takes the prim
   assert.deepEqual(q.posted.filter((m) => m.type === "haTheme"), [{ type: "haTheme", dark: false }]);
 });
 
+
+test("Home Assistant's localStorage is sent without credentials, and again only when it changes", () => {
+  const p = page({ hass: { themes: {} }, storage: { thc_snooze: '{"h_1":99}', hassTokens: '{"access_token":"x"}', selectedTheme: '"dark"' } });
+  p.advance(5_000);
+  // The helper's own dockedSidebar is there too: HA's page holds it, so an island sees it as well.
+  assert.deepEqual(p.storage(), [{ dockedSidebar: '"always_hidden"', selectedTheme: '"dark"', thc_snooze: '{"h_1":99}' }]);
+  p.advance(5_000);
+  assert.equal(p.storage().length, 1, "nothing new: nothing sent");
+  p.items.thc_snooze = '{"h_1":99,"h_2":120}';
+  p.items.my_card_auth = "secret";
+  p.advance(5_000);
+  assert.equal(p.storage().length, 2);
+  assert.equal(p.storage()[1].thc_snooze, '{"h_1":99,"h_2":120}');
+  assert.ok(!("my_card_auth" in p.storage()[1]), "a key that names auth stays in the page");
+  assert.ok(!("hassTokens" in p.storage()[1]));
+});
+
+test("a change is sent as the page goes away, before the next check", () => {
+  const p = page({ hass: { themes: {} }, storage: {} });
+  p.advance(5_000);
+  p.items.thc_kiosk = "1";
+  p.pagehide();
+  assert.equal(p.storage().at(-1).thc_kiosk, "1");
+});
+
+test("storage is never sent from a frame or from a page that isn't Home Assistant", () => {
+  const f = page({ hass: { themes: {} }, storage: { a: "1" }, frame: true });
+  f.advance(20_000);
+  f.pagehide();
+  assert.deepEqual(f.storage(), []);
+  const other = page({ storage: { a: "1" } });
+  other.advance(20_000);
+  assert.deepEqual(other.storage(), []);
+});

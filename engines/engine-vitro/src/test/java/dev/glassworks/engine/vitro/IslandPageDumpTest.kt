@@ -30,7 +30,8 @@ import java.io.File
  *
  *     ./gradlew :engine-vitro:testDebugUnitTest --tests '*IslandPageDumpTest*' -PvitroIslandCase=<case.json>
  *
- * <case.json> holds the `card`, the Lovelace `resources` the page loads (URLs of module scripts) and a `fixture`. The
+ * <case.json> holds the `card`, the Lovelace `resources` the page loads (URLs of module scripts), a `fixture` and,
+ * optionally, `storage`: what HA's web UI keeps in `localStorage` on the panel, which the island starts from. The
  * page goes to engines/engine-vitro/build/vitro-island/<case>.html, with the corpus's home.json config. Writes nothing
  * else; skipped (not failed) without the property, so CI's runs pass over it.
  */
@@ -53,6 +54,8 @@ class IslandPageDumpTest {
             context = activity, haBase = "http://127.0.0.1", store = EntityStore(), theme = ThemeResolver.resolve(ThemeCatalog(), true),
             resources = resources, accessToken = { "island-probe" }, haConfig = { config }, callService = { _, _, _, _ -> },
             navigate = {}, openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            // HA's localStorage on the panel, when the case gives one (#881): the island takes it in before its card.
+            pageStorage = { case.optJSONObject("storage") },
         )
         val out = File(RepoFiles.root, "engines/engine-vitro/build/vitro-island/${caseFile.nameWithoutExtension}.html")
         out.parentFile.mkdirs()
