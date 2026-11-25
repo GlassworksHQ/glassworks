@@ -16,6 +16,7 @@ import { standardOfDevice } from '../standard/frame';
 import { StandardSession } from '../standard/session';
 import { StandardRoutes } from '../standard/StandardWizard';
 import { ROUTES, status, stepOf, type Step } from '../wizard/routes';
+import { Browser } from '../wizard/screens';
 import type { RailMark, RailStep } from '../wizard/state';
 import { Fastboot } from '@glassworks/fastboot';
 import { APP_DEMOS, appDemo, type AppDemo } from './demo';
@@ -635,8 +636,9 @@ export function ImageFlow({ image, app, toApp, base }: { image: ImageSession; ap
   const community = image.recipes.find((x) => x.community);
   return (
     <Shell steps={imageRail(s, f, image.recipe.community, image.inPlace)} level={imageLevel(s, image.recipe.community)} error={s.screen === 'error' || s.undo?.at === 'error'} chip={chip}>
-      <ImageScreens f={image} s={s} m={app} ms={ms} />
-      {toApp && community && s.screen === 'image' && <p className="small">{`Already running the ${community.name} image? `}<button type="button" className="link" onClick={toApp}>Install just the app over USB</button></p>}
+      {/* no WebUSB: stop on the first screen, before a download and a build that only fail at the first USB call */}
+      {chip?.kind === 'bad' ? <Browser /> : <ImageScreens f={image} s={s} m={app} ms={ms} />}
+      {toApp && community && chip?.kind !== 'bad' && s.screen === 'image' && <p className="small">{`Already running the ${community.name} image? `}<button type="button" className="link" onClick={toApp}>Install just the app over USB</button></p>}
     </Shell>
   );
 }
@@ -652,13 +654,14 @@ export function AppFlow({ session, toImage, base }: { session: AppSession; toIma
   const p = { s, session };
   return (
     <Shell steps={appRail(s, f)} level={level(s, f)} error={s.screen === 'error'} chip={chip}>
-      {s.screen === 'off' ? <Off f={f} />
+      {chip?.kind === 'bad' ? <Browser />
+        : s.screen === 'off' ? <Off f={f} />
         : s.screen === 'pick' ? <Pick {...p} />
         : s.screen === 'checks' ? <Checks {...p} />
         : s.screen === 'working' ? <Working s={s} f={f} />
         : s.screen === 'done' ? <Done {...p} />
         : <Failed {...p} />}
-      {toImage && s.screen === 'pick' && <p className="small">{f.words['app.toImage']} <button type="button" className="link" onClick={toImage}>Install Glassworks over fastboot</button></p>}
+      {toImage && chip?.kind !== 'bad' && s.screen === 'pick' && <p className="small">{f.words['app.toImage']} <button type="button" className="link" onClick={toImage}>Install Glassworks over fastboot</button></p>}
     </Shell>
   );
 }

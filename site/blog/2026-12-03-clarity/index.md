@@ -75,6 +75,6 @@ A Clarity run also logs metrics that don't affect the letter grade but are genui
 
 Even though Clarity started as Glassworks' own benchmark, nothing about it is tied to Glassworks. It already runs fine on other Android wall panels, tablets, and kiosk apps today.
 
-If you build or test wall panels, run Clarity on your hardware and share the results. Join us on [Discord](https://discord.gg/BTn9NstFM) or [open a discussion](https://github.com/GlassworksHQ/glassworks/discussions) if you spot a flaw in the rubric—the rules evolve in public for every device at once.
+If you build or test wall panels, run Clarity on your hardware and share the results. Join us on [Discord](https://discord.gg/hHpf77fBMj) or [open a discussion](https://github.com/GlassworksHQ/glassworks/discussions) if you spot a flaw in the rubric—the rules evolve in public for every device at once.
 
 Eduardo
