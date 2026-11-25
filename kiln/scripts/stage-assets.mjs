@@ -7,7 +7,7 @@
 //   node scripts/stage-assets.mjs --out apps/kiln/public/assets   (the Next.js app; relative to kiln/)
 //
 // Env overrides: UBOOT_BUILD (default ~/src/u-boot-s1/build-s1), MAGISK_APK
-// (default ~/src/magisk/Magisk-v31.1.apk), KIOSK_APK (default the app's debug build),
+// (default ~/src/magisk/Magisk-v31.1.apk), KIOSK_APK (default the app's debug build; not with --remote),
 // KEYBOARD_APK (optional; Simple Keyboard, Apache-2.0).
 //
 // Nothing device-specific is staged: no backups, no Aqara binaries, no keys. public/assets/blobs is
@@ -56,37 +56,17 @@ const assets = [
   ...(KEYBOARD || process.argv.includes('--remote') ? [{ name: 'keyboard-apk', file: KEYBOARD ?? '', license: 'Apache-2.0', source: 'https://github.com/rkkr/simple-keyboard' }] : []),
 ];
 
-// --remote (the Vercel build): the binaries come from pinned URLs (assets.lock.json) instead of this
-// computer, and the kiosk APK from the latest Glassworks release, streamed to the browser by Refract
-// (kiln/workers/refract, refract.glassworks.dev: <refract>/glassworks/<tag>/<name>, admitted by its
-// releases.json), never through a Vercel function. NEXT_PUBLIC_KILN_PROXY points it at another Refract,
-// such as a local `wrangler dev`, as it does for the rest of Kiln.
+// --remote (the Vercel build): the binaries come from pinned URLs (assets.lock.json) instead of this computer, and
+// no kiosk APK is staged: Kiln's S1 page takes it from the newest S1 release when someone installs
+// (frames/aqara-s1-plus/design/installer.json `apk`; kiln/apps/kiln/src/wizard/assets.ts), through Refract, so a
+// release reaches Kiln with no deploy. Locally the app's debug build is staged, and the page installs that instead.
 const REMOTE = process.argv.includes('--remote');
-const REFRACT = (process.env.NEXT_PUBLIC_KILN_PROXY || 'https://refract.glassworks.dev').replace(/\/+$/, '');
-if (!/^https?:\/\/[\w.-]+(:\d+)?$/.test(REFRACT)) throw new Error(`NEXT_PUBLIC_KILN_PROXY needs an origin, like https://refract.glassworks.dev (got ${REFRACT})`);
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 
 async function download(url) {
   const r = await fetch(url, { redirect: 'follow', headers: { 'user-agent': 's1-unleashed-installer-build' } });
   if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
   return Buffer.from(await r.arrayBuffer());
-}
-
-/** Latest published Glassworks release (v*, not a pre-release): its APK's tag, name, size and SHA-256. */
-async function latestKiosk() {
-  const gh = { 'user-agent': 's1-unleashed-installer-build', accept: 'application/vnd.github+json',
-    ...(process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}) };
-  const r = await fetch('https://api.github.com/repos/GlassworksHQ/glassworks/releases?per_page=30', { headers: gh });
-  if (!r.ok) throw new Error(`GitHub releases: HTTP ${r.status}`);
-  const rel = (await r.json()).find((x) => !x.draft && !x.prerelease && /^(aqara-s1-plus-)?v\d+\.\d+\.\d+$/.test(x.tag_name));
-  if (!rel) throw new Error('no Glassworks release yet');
-  const v = rel.tag_name.replace(/^aqara-s1-plus-/, '').slice(1);
-  const apk = rel.assets.find((x) => x.name === `s1-kiosk-${v}.apk`);
-  const sum = rel.assets.find((x) => x.name === `s1-kiosk-${v}.apk.sha256`);
-  if (!apk || !sum) throw new Error(`${rel.tag_name} lacks its APK or .sha256`);
-  const sha256 = (await download(sum.browser_download_url)).toString().trim().split(/\s+/)[0];
-  if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error(`${rel.tag_name}: bad .sha256`);
-  return { tag: rel.tag_name, name: apk.name, size: apk.size, sha256 };
 }
 
 rmSync(join(OUT, 'blobs'), { recursive: true, force: true });
@@ -96,13 +76,7 @@ let missing = 0;
 const lock = REMOTE ? JSON.parse(readFileSync(join(WEB, 'assets.lock.json'), 'utf8')).assets : [];
 for (const a of assets) {
   const pinned = lock.find((l) => l.name === a.name);
-  if (REMOTE && a.name === 'kiosk-apk') {
-    const k = await latestKiosk();
-    const path = `${REFRACT}/glassworks/${encodeURIComponent(k.tag)}/${encodeURIComponent(k.name)}`;
-    manifest.push({ name: a.name, path, sha256: k.sha256, size: k.size, license: a.license, source: `${SRC}/releases/tag/${k.tag}` });
-    console.log(`${a.name.padEnd(14)} ${String(k.size).padStart(10)}  ${k.sha256.slice(0, 16)}  ${k.tag} (through Refract)`);
-    continue;
-  }
+  if (REMOTE && a.name === 'kiosk-apk') continue;
   let data;
   if (pinned) {
     data = await download(pinned.url);
