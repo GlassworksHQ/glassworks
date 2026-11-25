@@ -109,8 +109,15 @@ internal data class ClimateTargets(val value: Double?, val low: Double?, val hig
             if (!now.isRange || nl == null || nh == null) return null
             val min = (attrs["min_temp"] as? Number)?.toDouble() ?: Double.NEGATIVE_INFINITY
             val max = (attrs["max_temp"] as? Number)?.toDouble() ?: Double.POSITIVE_INFINITY
-            return if (handle == ClimateHandle.LOW) bound(ClimateHandle.LOW, low, nl, nh, min, max) to nh
-            else nl to bound(ClimateHandle.HIGH, high, nl, nh, min, max)
+            // The untouched end as reported, brought within the device's limits (an integration can report one
+            // outside them); the edited end is then bounded by it, so both ends are in range and in order.
+            return if (handle == ClimateHandle.LOW) {
+                val peer = maxOf(min, minOf(max, nh))
+                bound(ClimateHandle.LOW, low, nl, peer, min, max) to peer
+            } else {
+                val peer = maxOf(min, minOf(max, nl))
+                peer to bound(ClimateHandle.HIGH, high, peer, nh, min, max)
+            }
         }
 
         /** `climate.set_temperature` for a range, as HA sends it: both ends, always. */
@@ -318,6 +325,9 @@ internal class ThermostatDialView(
     /** The key whose release ends the edit, and the end of a range it moves. */
     private var keyCodePending = 0
     private var keyHandle = ClimateHandle.LOW
+
+    /** The value the last key asked for, unclipped by the other end as shown (End on the low end: the maximum). */
+    private var keyProposal = 0.0
 
     /** The virtual node (a range end) TalkBack's focus is on, or [NO_NODE]. */
     private var a11yFocused = NO_NODE
@@ -981,7 +991,8 @@ internal class ThermostatDialView(
             val handle = if (keyPending) keyHandle else selected
             val from = (if (handle == ClimateHandle.LOW) low else high) ?: return super.onKeyDown(keyCode, event)
             val next = keyValue(keyCode, from) ?: return super.onKeyDown(keyCode, event)
-            moveHandle(handle, keyTarget(keyCode, next))
+            val proposal = keyTarget(keyCode, next)
+            moveHandle(handle, proposal)
             // At an end (or against the other thumb) a new press moves focus on, as SeekBar's does; the held key of an
             // edit under way stays with it.
             if ((if (handle == ClimateHandle.LOW) low else high) == from) {
@@ -990,6 +1001,8 @@ internal class ThermostatDialView(
             keyPending = true
             keyHandle = handle
             keyCodePending = keyCode
+            // What the key asked for, before the shown peer clipped it: the release bounds it against the latest one.
+            keyProposal = proposal
             invalidate()
             return true
         }
@@ -1013,9 +1026,8 @@ internal class ThermostatDialView(
         }
         keyPending = false
         keyCodePending = 0
-        val edited = if (keyHandle == ClimateHandle.LOW) low else high
-        if (low != null && high != null && target == null && edited != null) {
-            commitRange(keyHandle, edited)
+        if (low != null && high != null && target == null) {
+            commitRange(keyHandle, keyProposal)
         } else if (boundTarget != null) {
             target?.takeIf { it != boundTarget }?.let(onCommit)
         } else {
@@ -1153,10 +1165,19 @@ internal class ThermostatDialView(
         if (!isRange || !a11yOn()) return super.dispatchHoverEvent(event)
         val lo = low ?: return super.dispatchHoverEvent(event)
         val hi = high ?: return super.dispatchHoverEvent(event)
+        val lowBox = thumbBounds(lo)
+        val highBox = thumbBounds(hi)
+        val x = event.x.toInt()
+        val y = event.y.toInt()
+        val inLow = lowBox.contains(x, y)
+        val inHigh = highBox.contains(x, y)
         val node = when {
             event.actionMasked == MotionEvent.ACTION_HOVER_EXIT -> NO_NODE
-            thumbBounds(lo).contains(event.x.toInt(), event.y.toInt()) || lowRect.contains(event.x, event.y) -> LOW_NODE
-            thumbBounds(hi).contains(event.x.toInt(), event.y.toInt()) || highRect.contains(event.x, event.y) -> HIGH_NODE
+            // Close thumbs' boxes overlap: the finger is on the nearer one.
+            inLow && inHigh -> if (hypot((event.x - lowBox.exactCenterX()).toDouble(), (event.y - lowBox.exactCenterY()).toDouble()) <=
+                hypot((event.x - highBox.exactCenterX()).toDouble(), (event.y - highBox.exactCenterY()).toDouble())) LOW_NODE else HIGH_NODE
+            inLow || lowRect.contains(event.x, event.y) -> LOW_NODE
+            inHigh || highRect.contains(event.x, event.y) -> HIGH_NODE
             else -> NO_NODE
         }
         if (node != hovered) {
@@ -1230,7 +1251,8 @@ internal class ThermostatDialView(
 
         /** `21.5` → `("21", ".5")`, with as many decimals as the step has (HA's `digits`); whole steps drop them. */
         fun splitTemp(v: Double, step: Double): Pair<String, String> {
-            val digits = ClimateTargets.decimalsOf(step)
+            // The step's decimals, or the value's own when it has more (a 30.25 maximum on a 0.5 step), up to 3.
+            val digits = maxOf(ClimateTargets.decimalsOf(step), minOf(ClimateTargets.decimalsOf(v), 3))
             if (digits == 0) return String.format(Locale.US, "%.0f", v) to ""
             val text = String.format(Locale.US, "%.${digits}f", v)
             return text.substringBefore('.') to "." + text.substringAfter('.')

@@ -434,9 +434,11 @@ class HaDashboardClient(
         try {
             timer.schedule({
                 registryDue.remove(kind)
-                // Only for the feed still running: the last watcher may have gone, or the connection, meanwhile.
-                val live = synchronized(registryLock) { registryGen == gen && gen == connectionGen.get() }
-                if (live) fetchRegistry(kind, gen)
+                // Only for the feed still running: the last watcher may have gone, or the connection, meanwhile. Checked
+                // and sent under one lock, which stopRegistries() takes too: a stop can't slip in between.
+                synchronized(registryLock) {
+                    if (registryGen == gen && gen == connectionGen.get()) fetchRegistry(kind, gen)
+                }
             }, REGISTRY_DEBOUNCE_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
         } catch (_: RejectedExecutionException) {
             registryDue.remove(kind)

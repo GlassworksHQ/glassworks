@@ -100,6 +100,11 @@ class VitroCardContext(
      * returned handle is called. Any thread. The default (tests, no engine) never delivers.
      */
     val watchRegistries: (onChange: (JSONObject) -> Unit) -> () -> Unit = { { } },
+    /**
+     * Whether the screen takes a tap (the frame's `input`), which is what HA's page reads as `(pointer: coarse)` in
+     * the browser on that device. False on a frame without touch (the Mirror): HA there styles for a fine pointer.
+     */
+    val touch: Boolean = true,
 ) {
     val dp: Float = context.resources.displayMetrics.density
     val main: Handler = Handler(Looper.getMainLooper())
@@ -149,6 +154,7 @@ class VitroCardContext(
         watchEntity = watchEntity,
         watchAllEntities = watchAllEntities,
         watchRegistries = watchRegistries,
+        touch = touch,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout
