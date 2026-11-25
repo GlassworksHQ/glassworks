@@ -47,7 +47,9 @@ import kotlin.math.roundToInt
  * - a change drawn: the store's message read on the main thread, then the card's own render, then the next frame;
  * - Event Timing (taps): from the touch's own timestamp to the end of the first frame drawn after its handlers,
  *   rounded as Event Timing rounds;
- * - the more-info dialog's events: [MoreInfoSheet.Trace].
+ * - the more-info dialog's events: [MoreInfoSheet.Trace];
+ * - a camera's video element: each [dev.glassworks.engine.vitro.camera.CameraStream]'s own reports, through
+ *   [ClarityCameras] (its first picture, each picture drawn, its errors, its kind).
  *
  * It runs only while the kiosk's test hold shows Clarity's reference dashboard on a loopback fake Home Assistant
  * (`VitroEngine` starts it); otherwise none of this exists and every hook is a null check. The page clock is
@@ -134,6 +136,7 @@ class VitroClarity internal constructor(
     fun start() {
         if (thread != null) return
         store.contextTap = tap
+        ClarityCameras.current = cameras
         main.post(holdWatch)
         thread = Thread({
             try {
@@ -160,6 +163,7 @@ class VitroClarity internal constructor(
         if (stopped) return
         stopped = true
         if (store.contextTap === tap) store.contextTap = null
+        if (ClarityCameras.current === cameras) ClarityCameras.current = null
         thread?.interrupt()
         main.removeCallbacks(holdWatch)
         main.post {
@@ -1054,9 +1058,12 @@ class VitroClarity internal constructor(
         val ids = ArrayList<String>()
         for (k in listOf("sensors", "rows", "switches")) h.optJSONArray(k)?.let { a -> for (i in 0 until a.length()) ids += a.getString(i) }
         val head = watch(ids)
-        // No camera task: Vitro plays a camera over MJPEG, and the reference views' cameras are WebRTC (docs/perf.md).
+        // The cameras' fixed window runs beside the updates and the taps, from when every camera played (or 20 s from
+        // the navigation), and the swipes come after it: harness.js trackCameras, camerasStart and camerasEnd.
+        val cam = cameraPlan(nav)
         updatesWindow(head)
         if (v.taps > 0) input()
+        cam?.let { camerasEnd(it) }
         for (i in 0 until v.swipes) swipe(i)
         val fired = dialogs(v.dialogs, v.tier)
         try {
@@ -1067,6 +1074,72 @@ class VitroClarity internal constructor(
         stopTicks()
         val settle: Any = if (fired > 0) settleDialogs(c.getJSONObject("DIALOG").getDouble("settleMs")) else JSONObject.NULL
         line(JSONObject().put("t", "done").put("stage", v.tier).put("settle", settle))
+    }
+
+    // ---- live cameras: each stream's own reports (ClarityCameras), over the web harness's window
+
+    private val cameras = ClarityCameras(::now).also { it.cards = { currentCards().values.map { p -> p.second } } }
+
+    /** One view's camera window: its cameras (entities, in card order), how many were asked for, its path, its start. */
+    private class CamPlan(val cameras: List<String>, val expected: Int, val path: String, val nav: Double, val t0: Double)
+
+    /**
+     * harness.js camCount and pathOf: the cameras tiers.json gives the view (a list in it is a grid of them), and the
+     * path they are graded on (`CAMERA.path`, WebRTC; HLS on a fallback copy).
+     */
+    private fun cameraCount(tier: String): Int {
+        val fallback = c.optJSONObject("FALLBACK")
+        val list = c.optJSONObject("CAMERAS")?.optJSONArray(fallback?.optString(tier)?.ifEmpty { null } ?: tier) ?: return 0
+        return (0 until list.length()).sumOf { (list.opt(it) as? JSONArray)?.length() ?: 1 }
+    }
+
+    private fun cameraPath(tier: String): String =
+        if (c.optJSONObject("FALLBACK")?.has(tier) == true) "hls" else c.getJSONObject("CAMERA").getString("path")
+
+    /** The live cameras of the view's cards, in card order (a grid's in its order): `camera_view: live` pictures. */
+    private fun cameraEntities(): List<String> = onMain {
+        val out = ArrayList<String>()
+        fun walk(o: JSONObject) {
+            if (o.optString("camera_view") == "live") {
+                (o.optString("camera_image").ifEmpty { null } ?: o.optString("entity").ifEmpty { null })
+                    ?.takeIf { it.startsWith("camera.") && it !in out }?.let { out += it }
+            }
+            o.optJSONArray("cards")?.let { a -> for (i in 0 until a.length()) a.optJSONObject(i)?.let(::walk) }
+        }
+        for ((cfg, _) in currentCards().values) walk(cfg.raw)
+        out
+    }
+
+    /**
+     * harness.js trackCameras, then camerasStart: waits up to [CAMERA_FIND_MS] from [nav] for every camera of the view to
+     * show a picture on its path, then starts the window. Null when the view has no cameras, or this build's streams
+     * don't report ([ClarityCameras.wired]): then no camera line goes out and the task is not measured.
+     */
+    private fun cameraPlan(nav: Double): CamPlan? {
+        val expected = cameraCount(v.tier)
+        if (expected == 0 || !ClarityCameras.wired) return null
+        val path = cameraPath(v.tier)
+        val kind = ClarityCameras.kindOf(path) ?: return null
+        val list = cameraEntities()
+        val end = nav + CAMERA_FIND_MS
+        while (now() < end) {
+            if (list.size >= expected && onMain { cameras.allPlaying(cameras.cards(), list, kind, nav) }) break
+            sleep(100.0)
+        }
+        return CamPlan(list, expected, path, nav, now())
+    }
+
+    /** harness.js camerasEnd: at the window's end (`CAMERA.windowMs` from its start), the view's `camera` line. */
+    private fun camerasEnd(p: CamPlan) {
+        val cam = c.getJSONObject("CAMERA")
+        val t1 = p.t0 + cam.getDouble("windowMs")
+        sleep(t1 - now())
+        val fps = cam.getDouble("fps")
+        val w = onMain { cameras.window(cameras.cards(), p.cameras, p.expected, ClarityCameras.kindOf(p.path)!!, p.nav, p.t0, t1, fps) }
+        line(JSONObject().put("t", "camera").put("stage", v.tier).put("path", p.path).put("window_ms", (t1 - p.t0).roundToInt())
+            .put("t0_ms", ClarityStats.round1(p.t0)).put("nav_ms", ClarityStats.round1(p.nav)).put("fps", fps)
+            .put("expected", p.expected).put("found", w.getInt("found")).put("streams", w.getJSONArray("streams"))
+            .put("fetches", JSONObject.NULL))
     }
 
     /** harness.js roomToFlick: every view leaves `scrollRoomScreens` screens of scrolling below its top. */
@@ -1172,6 +1245,9 @@ class VitroClarity internal constructor(
 
         /** How long after the taps each one may still take to get its frame (past it, the tap isn't measured). */
         private const val TAP_FINISH_MS = 2_000.0
+
+        /** harness.js trackCameras: how long after the navigation the cameras may take to show a picture. */
+        private const val CAMERA_FIND_MS = 20_000.0
 
         /** For the followed entities' states to land (the page batches its resubscription for 150 ms). */
         private const val FOLLOW_MS = 1_000.0

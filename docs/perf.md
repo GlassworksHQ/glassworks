@@ -340,13 +340,51 @@ detail, not graded.
 | Tap | Event Timing: from the event's timestamp to the next paint after its handlers, worst of 10, rounded to 8 ms, at least 16 ms | From the touch's own timestamp to the end of the first frame drawn after its handlers (the click included), worst of 10, rounded the same way (`method: vitro-frame`). A tap counts with both its down and its up timed; one whose up or frame hasn't come 2 s after the taps is given no time, and the run's tap is then not measured (`incomplete`) | Yes, by its definition |
 | Scroll | Six real swipes during the live updates, SurfaceFlinger and rAF | The same swipes, SurfaceFlinger and `Choreographer` frames, with the same room to flick (the view's content at least 4 screens high) | Yes |
 | More-info dialog | HA's dialog, from the tile's event to its show animation finished and the sensor's graph drawn | Vitro's own sheet, opened as a tile's tap opens it, to its enter animation finished and the sensor's graph drawn with its data (the fake answers Vitro's `history/history_during_period` with the same seeded points as HA's `history/stream`) | Yes; the sheet is Vitro's (its animation is 240 ms, HA's is 300 ms) |
-| Cameras | The WebRTC players' receiver counts | Not measured | No: see below |
+| Cameras | From the navigation to each stream's first frame; over a fixed 30 s window from the view going live, beside the updates and the taps, the frames shown and the stalls (the WebRTC receiver's counts) | The same window, from each stream's own reports: its first picture on screen, and every picture it drew | Yes, by its definition: see below |
 
-**Cameras aren't measured on Vitro.** Vitro plays a camera over MJPEG (`camera_proxy_stream`), and the reference
-views' cameras are WebRTC. They can't be measured the same way, so the camera task is missing, under the same
-rules as any missing measurement: it fails whatever needs it, and the grade is provisional when the camera could
-change the letter. The report says why (`typical, heavy: cameras not measured on Vitro …`). No new scale or bar
-is involved.
+**Cameras on Vitro.** Vitro plays a camera the way HA's frontend does: WebRTC first, then HLS, then MJPEG, each
+behind one interface (`CameraStream`). Every stream comes from a factory the engine wraps with
+`ClarityCameras.measured`, so each one tells Clarity what it does, whatever its kind and whatever the stream
+choice does with it. Each camera task starts and ends where the web harness's does (`harness.js` `trackCameras`,
+`camerasStart`, `camerasEnd`), and the `camera` line has the same fields:
+
+| | Web engine | Vitro (`ClarityCameras`) |
+|---|---|---|
+| Which cameras | The video elements in the view's cards | The streams playing in the view's cards (a card that holds the stream's picture), opened or still open since the navigation |
+| Graded path | WebRTC (`CAMERA.path`); HLS on a fallback copy | The same. A camera that never played on the view's path is a stream not found, which fails the task, as on the web engine |
+| First frame | From the navigation to the first presented frame (`requestVideoFrameCallback`) | From the navigation to the stream's first picture on screen (`onFirstFrame`, HA's `hasVideo: true`) |
+| The window | 30 s (`CAMERA.windowMs`) from when every camera showed a frame, or 20 s after the navigation; the swipes come after it | The same |
+| Frames shown | The receiver's `framesDecoded` against 15 fps × the window | The pictures the stream drew (`onFirstFrame` and each `onFrameRendered`) against 15 fps × the window |
+| Stalls and longest gap, WebRTC | The receiver's freezes and pauses, and its intervals with nothing decoded, from `getStats` about once a second | libwebrtc's freeze rule applied to each gap between two pictures (`ClarityStats.freezeGaps`): every gap joins the mean of the last 30 (whole ms, rounded down), and from the 5th on one of at least max(3 × that mean, the mean + 150 ms) is a freeze, counted for its part inside the window. The time from the last picture to the window's end counts when it already meets the rule, as a sample with nothing decoded does; the time from the window's start to the first picture, when none came before, counts past 200 ms. The longest gap is the longest stretch without a picture, which the pictures give outright where the receiver's samples give the rule's bound |
+| Stalls, HLS fallback | Gaps over 500 ms between frame callbacks | Gaps over 500 ms between pictures (`ClarityStats.videoGaps`) |
+| Left out of the window | What the receiver's counts didn't cover (`uncovered_ms`) | Nothing: every picture is counted as it comes (`span_ms` is the window) |
+
+The rubric's bars and levels are the same, and so is the rule for a missing measurement.
+
+What each camera played is recorded: each stream's `transport` (`web_rtc`, `hls` or `mjpeg`, the kind it
+showed at the window's end), its other kinds in `others` (with their first frame), and the errors its streams
+reported (`errors`). The run's file keeps each run's `transports` and, when a camera showed another kind than
+its view's path, `fell_back`. report.md says it plainly, page by page: "typical cameras on Vitro: played over
+WebRTC in 3 of 3 run(s)", or "**fell back to MJPEG in 1 of 3 run(s)**". A camera that fell back to MJPEG on a
+graded view never played over WebRTC, so it fails the camera task, as a camera that doesn't play over WebRTC does
+on the web engine, and the page's limit says "a camera fell back to MJPEG on Vitro".
+
+Two differences, and what they mean:
+- **The pictures are timed on the main thread.** A stream reports each picture through its listener on the main
+  thread, so a picture is timed when the main thread gets to it, not when it reached the screen. A busy main
+  thread would read as gaps the video didn't have, as `requestVideoFrameCallback` does on the web engine. Vitro's
+  main thread is free after a view is drawn (its blocking was 0 ms on every S1 page), so this costs little in
+  practice. The frames shown aren't affected: a late call still counts.
+- **The freeze rule comes from libwebrtc, not from its counts.** On the web engine the receiver counts its own
+  freezes; Vitro applies the same rule to the pictures it drew. That the new gap joins the mean before the check
+  is how `video_quality_observer2.cc` reads to us (**untested** against libwebrtc itself; the bars aren't close
+  to the cases where it matters).
+
+A Vitro build whose cameras don't report (from before `ClarityCameras`, or one whose engine doesn't wrap its
+factories: `ClarityCameras.wired`) logs no `camera` line. Then it played its cameras over MJPEG only, and the
+task is missing, under the same rules as any missing measurement: it fails whatever needs it, and the grade is
+provisional when the camera could change the letter. The report says why (`typical, heavy: cameras not
+measured on Vitro (this build's cameras don't report to Clarity …)`).
 
 **Frames on screen.** Vitro draws into the app's own window, not into a SurfaceView, so on Vitro the runner reads
 that window's layer (`perflib.window_layers`: `<package>/<activity>#0` on Android 10). The SurfaceFlinger check
@@ -2256,8 +2294,12 @@ load) and `t`:
 
 Vitro's lines (`VitroClarity`, see [Vitro](#vitro)) have the same types and fields, plus `engine: "vitro"`,
 `clock: "monotonic"` and `origin_mono_ms` on `drawn` and `refdash` in place of `origin_epoch_ms` and `epoch_ms`.
-Their `frontend` and `video_caps` are `null`, they log no `camera` line, and their `input` line adds `incomplete` (taps
-counted that got no frame in time; then `inp_ms` is `null`). They go to logcat with the tag
+Their `frontend` and `video_caps` are `null`, and their `input` line adds `incomplete` (taps
+counted that got no frame in time; then `inp_ms` is `null`). Their `camera` line's streams add `entity`,
+`transport` (the kind the camera showed at the window's end: `web_rtc`, `hls` or `mjpeg`), `errors`,
+`first_frame_since_start_ms` (the stream's own time from its start), `sessions` (its streams on the path) and, on
+WebRTC, `freezes`; `gaps_source` is `vitro-frames (freeze rule)` or `vitro-frames (gaps over 500 ms)`, and
+`others` lists `mjpeg` too. A build whose cameras don't report logs no `camera` line. They go to logcat with the tag
 `Glassworks.Clarity`.
 
 The restart page logs with an empty nonce (its parts are numbered `restart:<n>`): only `refdash` and

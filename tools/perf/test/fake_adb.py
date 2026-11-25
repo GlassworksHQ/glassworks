@@ -8,7 +8,9 @@ SurfaceFlinger lists layers as Android 17 does (`RequestedLayerState{…}`, the 
 runner can't read; FAKE_SF_HISTORY: how many frames `--latency` keeps (127, the S1's); FAKE_SF_SLOW_LIST: seconds
 `--list` takes. FAKE_VITRO=true: the kiosk's Vitro setting (Settings → Labs) starts on, as the S1 kiosk with Vitro
 draws: Vitro's start line instead of GeckoView's pages, the native harness's lines (VitroClarity: CLOCK_MONOTONIC page
-clock, no camera line), the frames on the app's window layer; `--ez vitro` switches it and restarts the app.
+clock; no camera line, as a build whose cameras don't report to Clarity), the frames on the app's window layer; `--ez
+vitro` switches it and restarts the app. FAKE_VITRO_CAMERAS: Vitro's cameras report (ClarityCameras), and its camera
+lines say they played over `web_rtc` (HLS on the fallback copies), or fell back to `mjpeg`.
 FAKE_NO_ENGINE_LINE: a kiosk that doesn't say its engine with the test hold. FAKE_VITRO_STUCK: one that saves the
 setting but keeps drawing with GeckoView. FAKE_VITRO_NO_RESTORE: one that won't turn Vitro off again.
 
@@ -677,9 +679,25 @@ def refdash(nonce, url):
             C.sleep(0.1)
         gw({"t": "input", "stage": tier, "method": "vitro-frame" if vitro() else "event-timing", "taps": state("taps.json", 0) - before,
             "values": [16, 48], "inp_ms": 48})
-    # Vitro logs no camera line: it plays cameras over MJPEG, not the reference views' WebRTC (VitroClarity).
-    n = 0 if vitro() else {"typical": 1, "heavy": 4}.get(page, 0)
-    if n:
+    # Vitro logs no camera line unless its cameras report to Clarity (FAKE_VITRO_CAMERAS).
+    n = 0 if vitro() and not os.environ.get("FAKE_VITRO_CAMERAS") else {"typical": 1, "heavy": 4}.get(page, 0)
+    if n and vitro():
+        # VitroClarity's line (ClarityCameras.window): each camera's pictures, one listener call each, over the window.
+        fb = os.environ["FAKE_VITRO_CAMERAS"] == "mjpeg"
+        played = {"found": True, "first_frame_ms": 640.0, "first_frame_since_start_ms": 520, "frames": 75, "shown_pct": 100.0,
+                  "max_gap_ms": 66.7, "stall_total_ms": 0.0, "stalls_at": [], "freezes": 0 if path == "web_rtc" else None,
+                  "gaps_source": "vitro-frames (freeze rule)" if path == "web_rtc" else "vitro-frames (gaps over 500 ms)",
+                  "source": "vitro-frames", "span_ms": 5000.0, "sessions": 1, "others": [], "transport": path, "errors": []}
+        # Fell back: WebRTC never showed a picture, and the choice played MJPEG instead.
+        fell = {"found": True, "first_frame_ms": None, "shown_pct": None, "max_gap_ms": None, "stall_total_ms": None,
+                "others": [{"path": "mjpeg", "first_frame_ms": 410.0, "connected": True}], "transport": "mjpeg",
+                "errors": ["web_rtc: no answer to the offer"]}
+        gw({"t": "camera", "stage": tier, "path": path, "window_ms": 5000, "t0_ms": 9000.0, "nav_ms": 5000.0, "fps": 15,
+            "expected": n, "found": n, "fetches": None,
+            "streams": [dict({"path": path, "entity": f"camera.clarity_cam_{i}", "w": None, "h": None,
+                              "stall_presented": None, "callbacks": None, "decoded": None, "dropped": None, "waiting": None},
+                             **(fell if fb and path == "web_rtc" else played)) for i in range(n)]})
+    elif n:
         # #174: the view's live cameras, from going live to the first swipe. FAKE_NO_VIDEO: none plays.
         dead = os.environ.get("FAKE_NO_VIDEO") == tier
         # As the S1 logs them (2026-11-13): over HLS, a hardware decoder per stream from the media

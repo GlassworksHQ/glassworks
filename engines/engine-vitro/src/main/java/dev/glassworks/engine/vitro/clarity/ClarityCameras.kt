@@ -1,0 +1,304 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+package dev.glassworks.engine.vitro.clarity
+
+import android.view.View
+import dev.glassworks.engine.vitro.camera.CameraStream
+import dev.glassworks.engine.vitro.camera.CameraStreamFactory
+import dev.glassworks.engine.vitro.camera.CameraStreamKind
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.IdentityHashMap
+import kotlin.math.min
+
+/**
+ * Clarity's camera task on Vitro (docs/perf.md, "Vitro"): what each camera stream of the view did, as the web harness
+ * reads it from HA's players (`harness.js` trackCameras, camerasStart, camerasEnd).
+ *
+ * Every stream Vitro plays comes from a [CameraStreamFactory] the engine wraps with [measured], so each one reports
+ * here, whatever its kind (WebRTC, HLS or MJPEG) and whatever the stream choice does with it. Outside a Clarity run
+ * there is no [current], and each hook in [MeasuredCameraStream] is one null check.
+ *
+ * Main thread only: [CameraStream]'s calls and its [CameraStream.Listener]'s all come there. A picture is timed when
+ * its listener call runs, on the main thread's clock ([now], the harness's page clock).
+ */
+internal class ClarityCameras(private val now: () -> Double) {
+
+    /** One stream, of one kind, for one camera entity: when it started, each picture it drew, how it ended. */
+    internal class Rec(val stream: CameraStream, val entityId: String, val kind: CameraStreamKind) {
+        var startedAt: Double? = null
+        /** Each [CameraStream.Listener.onFirstFrame] (once per start or resume): a picture on screen. */
+        val firstFrames = ArrayList<Double>()
+        /** The stream's own time from its start to that first picture (its last [CameraStream.Listener.onFirstFrame]). */
+        var sinceStartMs: Long? = null
+        /** Every picture drawn: each first frame and each [CameraStream.Listener.onFrameRendered]. */
+        val frames = ArrayList<Double>()
+        val errors = ArrayList<String>()
+        var closedAt: Double? = null
+        /** The view's card it played in (a top-level card of the view, as [VitroClarity] knows them), once found. */
+        var card: View? = null
+    }
+
+    private val recs = IdentityHashMap<CameraStream, Rec>()
+    private val order = ArrayList<Rec>()
+
+    /** The top-level cards of the view on screen ([VitroClarity]'s registry), to tell which card a stream plays in. */
+    var cards: () -> Collection<View> = { emptyList() }
+
+    private fun rec(s: MeasuredCameraStream): Rec = recs.getOrPut(s) {
+        Rec(s, s.entityId, s.kind).also {
+            order += it
+            trim()
+        }
+    }
+
+    /** Streams that closed long ago go first: a run opens a few dozen at most. */
+    private fun trim() {
+        if (order.size <= MAX_STREAMS) return
+        val old = order.filter { it.closedAt != null }.take(order.size - MAX_STREAMS)
+        for (r in old) {
+            order.remove(r)
+            recs.remove(r.stream)
+        }
+    }
+
+    private fun cardOf(r: Rec): View? {
+        r.card?.let { return it }
+        val mine = cards().toHashSet()
+        var v: View? = r.stream.view
+        while (v != null) {
+            if (v in mine) return v.also { r.card = it }
+            v = v.parent as? View
+        }
+        return null
+    }
+
+    internal fun started(s: MeasuredCameraStream) {
+        val r = rec(s)
+        if (r.startedAt == null) r.startedAt = now()
+        cardOf(r)
+    }
+
+    internal fun firstFrame(s: MeasuredCameraStream, sinceStartMs: Long) {
+        val r = rec(s)
+        val t = now()
+        r.firstFrames += t
+        r.sinceStartMs = sinceStartMs
+        frame(r, t)
+        cardOf(r)
+    }
+
+    internal fun frameRendered(s: MeasuredCameraStream) = frame(rec(s), now())
+
+    private fun frame(r: Rec, t: Double) {
+        if (r.frames.size >= MAX_FRAMES) r.frames.subList(0, MAX_FRAMES / 2).clear()
+        r.frames += t
+    }
+
+    internal fun error(s: MeasuredCameraStream, reason: String) {
+        val r = rec(s)
+        if (r.errors.size < MAX_ERRORS) r.errors += reason.take(MAX_REASON)
+    }
+
+    internal fun ended(s: MeasuredCameraStream) = error(s, "ended")
+
+    internal fun closed(s: MeasuredCameraStream) {
+        val r = rec(s)
+        if (r.closedAt == null) r.closedAt = now()
+    }
+
+    /** The view's streams: those playing in one of its cards ([viewCards]) and not closed before [nav]. */
+    private fun ofView(viewCards: Set<View>, nav: Double): List<Rec> =
+        order.filter { (it.closedAt == null || it.closedAt!! >= nav) && cardOf(it)?.let { c -> c in viewCards } == true }
+
+    /** A camera's first picture on [kind] since [nav], or null. */
+    private fun firstFrame(rs: List<Rec>, kind: CameraStreamKind, nav: Double): Double? =
+        rs.filter { it.kind == kind }.flatMap { it.firstFrames }.filter { it >= nav }.minOrNull()
+
+    /**
+     * harness.js trackCameras' test: every one of the view's [cameras] has shown a picture on [path] since [nav].
+     */
+    fun allPlaying(viewCards: Collection<View>, cameras: List<String>, path: CameraStreamKind, nav: Double): Boolean {
+        val rs = ofView(viewCards.toHashSet(), nav)
+        return cameras.isNotEmpty() && cameras.all { e -> firstFrame(rs.filter { it.entityId == e }, path, nav) != null }
+    }
+
+    /**
+     * harness.js camerasEnd: the `camera` line's `found` and `streams` over the window [t0, t1], for the view's
+     * [cameras] (its camera entities, in card order) of which [expected] were asked for. Each camera is graded on
+     * [path], the view's (WebRTC on a graded view, HLS on a fallback copy): its first picture on it since [nav], the
+     * pictures it drew in the window against [fps], and its gaps, by the WebRTC receiver's freeze rule on [path]
+     * WebRTC and by gaps over 500 ms on HLS, as on the web engine. A camera that never played on [path] is a stream
+     * not found, which fails the task, as there; what it played instead is in `others` and `transport`.
+     */
+    fun window(
+        viewCards: Collection<View>, cameras: List<String>, expected: Int, path: CameraStreamKind,
+        nav: Double, t0: Double, t1: Double, fps: Double,
+    ): JSONObject {
+        val rs = ofView(viewCards.toHashSet(), nav)
+        val dur = t1 - t0
+        val streams = JSONArray()
+        var found = 0
+        for (i in 0 until maxOf(expected, cameras.size)) {
+            val entity = cameras.getOrNull(i)
+            val mine = if (entity == null) emptyList() else rs.filter { it.entityId == entity }
+            val graded = mine.filter { it.kind == path }
+            val first = firstFrame(mine, path, nav)
+            val out = JSONObject().put("path", name(path)).put("entity", entity ?: JSONObject.NULL)
+                .put("w", JSONObject.NULL).put("h", JSONObject.NULL)
+            if (graded.isEmpty() || first == null) {
+                // Never played on the view's path: a stream not found, as harness.js `missing` (it fails the task).
+                out.put("found", graded.isNotEmpty()).put("first_frame_ms", JSONObject.NULL).put("shown_pct", JSONObject.NULL)
+                    .put("max_gap_ms", JSONObject.NULL).put("stall_total_ms", JSONObject.NULL)
+                if (graded.isNotEmpty()) found++
+            } else {
+                found++
+                // Every picture the camera drew on its path, its streams' together (a stream the choice made again
+                // after an error goes on where the last one stopped, and the gap between them counts).
+                val times = graded.flatMap { it.frames }.filter { it >= first }.sorted()
+                val gaps = if (path == CameraStreamKind.WEB_RTC) ClarityStats.freezeGaps(times, t0, t1)
+                else ClarityStats.videoGaps(times, t0, t1)
+                val frames = times.count { it in t0..t1 }
+                out.put("found", true)
+                    .put("first_frame_ms", ClarityStats.round1(first - nav))
+                    .put("first_frame_since_start_ms", graded.mapNotNull { it.sinceStartMs }.lastOrNull() ?: JSONObject.NULL)
+                    .put("frames", frames)
+                    .put("shown_pct", ClarityStats.round1(min(100.0, 100.0 * frames / (fps * dur / 1000))))
+                    .put("max_gap_ms", ClarityStats.round1(gaps.maxGapMs))
+                    .put("stall_total_ms", ClarityStats.round1(gaps.stallTotalMs))
+                    .put("stalls_at", JSONArray(gaps.stallsAt.map { (a, b) -> JSONArray().put(ClarityStats.round2(a)).put(ClarityStats.round2(b)) }))
+                    .put("freezes", gaps.freezes ?: JSONObject.NULL)
+                    .put("gaps_source", if (path == CameraStreamKind.WEB_RTC) GAPS_FREEZE else GAPS_500)
+                    .put("source", SOURCE)
+                    // The pictures cover the whole window: nothing of it is left out (report.py uncovered_ms 0).
+                    .put("span_ms", ClarityStats.round1(dur))
+                    .put("sessions", graded.size)
+                    .put("stall_presented", JSONObject.NULL).put("callbacks", JSONObject.NULL)
+                    .put("decoded", JSONObject.NULL).put("dropped", JSONObject.NULL).put("waiting", JSONObject.NULL)
+            }
+            // The camera's other kinds (the choice's fallbacks, or the ones it tried first): detail, as harness.js `others`.
+            out.put("others", JSONArray(mine.filter { it.kind != path }.groupBy { it.kind }.map { (k, xs) ->
+                JSONObject().put("path", name(k))
+                    .put("first_frame_ms", firstFrame(xs, k, nav)?.let { ClarityStats.round1(it - nav) } ?: JSONObject.NULL)
+                    .put("connected", xs.any { it.closedAt == null || it.closedAt!! > t1 })
+            }))
+            // What the camera showed at the window's end: the kind whose stream was still open there, with the latest
+            // first picture. The report says it plainly when it isn't the view's path (an MJPEG fallback).
+            val showing = mine.filter { (it.closedAt == null || it.closedAt!! > t1) && it.firstFrames.any { f -> f in nav..t1 } }
+                .maxByOrNull { it.firstFrames.filter { f -> f <= t1 }.max() }
+            out.put("transport", showing?.let { name(it.kind) } ?: JSONObject.NULL)
+            val errors = mine.flatMap { r -> r.errors.map { "${name(r.kind)}: $it" } }.take(MAX_ERRORS)
+            out.put("errors", JSONArray(errors))
+            streams.put(out)
+        }
+        return JSONObject().put("found", found).put("streams", streams)
+    }
+
+    companion object {
+        /** The harness measuring now, or null: outside a Clarity run every hook is this one check. Main thread. */
+        @Volatile
+        @JvmStatic
+        internal var current: ClarityCameras? = null
+
+        /**
+         * Whether this build's streams report to Clarity ([measured] wrapped a factory). Without it Vitro logs no
+         * `camera` line, and the task is not measured, never failed for cameras it couldn't see.
+         */
+        @Volatile
+        @JvmStatic
+        var wired: Boolean = false
+            internal set
+
+        /**
+         * [factory]'s streams, each reporting to Clarity while a run measures (a [MeasuredCameraStream]); the same
+         * streams otherwise. The engine wraps each factory it builds, whatever the kind.
+         */
+        @JvmStatic
+        fun measured(factory: CameraStreamFactory): CameraStreamFactory {
+            wired = true
+            if (factory is Measured) return factory
+            return Measured(factory)
+        }
+
+        private class Measured(private val inner: CameraStreamFactory) : CameraStreamFactory {
+            override fun create(entityId: String, kind: CameraStreamKind): CameraStream? =
+                inner.create(entityId, kind)?.let { MeasuredCameraStream(it, entityId, kind) }
+        }
+
+        /** The kind's name in the page lines: the web harness's `path` names, and `mjpeg`. */
+        fun name(kind: CameraStreamKind): String = when (kind) {
+            CameraStreamKind.WEB_RTC -> "web_rtc"
+            CameraStreamKind.HLS -> "hls"
+            CameraStreamKind.MJPEG -> "mjpeg"
+        }
+
+        /** The page line's path name back to its kind (`web_rtc`, `hls`), or null. */
+        fun kindOf(path: String): CameraStreamKind? = CameraStreamKind.entries.firstOrNull { name(it) == path }
+
+        /** Where a Vitro stream's frames shown come from: the pictures its player drew, one call each. */
+        const val SOURCE = "vitro-frames"
+
+        /** The gaps by the WebRTC receiver's freeze rule ([ClarityStats.freezeGaps]). */
+        const val GAPS_FREEZE = "vitro-frames (freeze rule)"
+
+        /** The gaps over 500 ms ([ClarityStats.videoGaps]), the web engine's HLS fallback's. */
+        const val GAPS_500 = "vitro-frames (gaps over 500 ms)"
+
+        private const val MAX_STREAMS = 64
+        private const val MAX_FRAMES = 20_000
+        private const val MAX_ERRORS = 5
+        private const val MAX_REASON = 120
+    }
+}
+
+/**
+ * A [CameraStream] that tells Clarity what it does ([ClarityCameras.current]) and then does what [inner] does. The
+ * stream choice sets [listener] on this one; [inner] reports to this one's own listener, which passes each call on.
+ */
+internal class MeasuredCameraStream(
+    private val inner: CameraStream,
+    val entityId: String,
+    val kind: CameraStreamKind,
+) : CameraStream {
+    override val view: View get() = inner.view
+
+    override var listener: CameraStream.Listener? = null
+
+    init {
+        inner.listener = object : CameraStream.Listener {
+            override fun onFirstFrame(sinceStartMs: Long) {
+                ClarityCameras.current?.firstFrame(this@MeasuredCameraStream, sinceStartMs)
+                listener?.onFirstFrame(sinceStartMs)
+            }
+
+            override fun onFrameRendered() {
+                ClarityCameras.current?.frameRendered(this@MeasuredCameraStream)
+                listener?.onFrameRendered()
+            }
+
+            override fun onError(reason: String) {
+                ClarityCameras.current?.error(this@MeasuredCameraStream, reason)
+                listener?.onError(reason)
+            }
+
+            override fun onEnded() {
+                ClarityCameras.current?.ended(this@MeasuredCameraStream)
+                listener?.onEnded()
+            }
+        }
+    }
+
+    override fun start() {
+        ClarityCameras.current?.started(this)
+        inner.start()
+    }
+
+    override fun setActive(active: Boolean) = inner.setActive(active)
+
+    override fun close() {
+        ClarityCameras.current?.closed(this)
+        inner.close()
+    }
+}

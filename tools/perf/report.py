@@ -345,10 +345,18 @@ def camera_run(line, tier):
     # graders hold the fluid total bar against stalls + that (grade.camera_level).
     left_out = [max(0.0, window - s["span_ms"]) for s in played if s.get("span_ms") is not None and window]
     whole = len(played) == len(streams) and len(streams) >= (line.get("expected") or 0)
+    path = line.get("path") or "hls"
+    # Vitro (VitroClarity): the kind each camera showed at the window's end (web_rtc, hls or mjpeg; null: nothing). The
+    # web harness's lines don't say: its streams are the view's path's by definition. A camera that showed another kind
+    # fell back (an MJPEG fallback): its stream on the view's path is missing or stopped, and the report says so.
+    shown_on = [s.get("transport") for s in streams] if any("transport" in s for s in streams) else None
+    fell_back = sorted({t for t in shown_on or [] if t and t != path})
     return {
         # The path the frontend played the graded streams on: web_rtc since protocol 6, hls before
         # (protocol 5's lines don't say; HLS was the only path then).
-        "path": line.get("path") or "hls",
+        "path": path,
+        **({"transports": shown_on} if shown_on is not None else {}),
+        **({"fell_back": fell_back} if fell_back else {}),
         "first_frame_ms": max(s["first_frame_ms"] for s in played) if whole and played else None,
         "shown_pct": min(s["shown_pct"] for s in played) if whole and played else None,
         # A stream whose stalls or gaps are n/a (above) makes the run's n/a too, not 0, and its camera
@@ -361,7 +369,8 @@ def camera_run(line, tier):
         "streams": len(streams), "expected": line.get("expected"), "window_ms": line.get("window_ms"),
         "detail": [{k: s.get(k) for k in ("w", "h", "first_frame_ms", "shown_pct", "max_gap_ms", "stall_total_ms", "stall_presented",
                                             "frames", "decoded", "dropped", "waiting", "source", "webrtc", "others",
-                                            "gaps_source", "callback_gaps", "span_ms", "stalls_at")}
+                                            "gaps_source", "callback_gaps", "span_ms", "stalls_at",
+                                            "transport", "errors", "freezes")}
                    for s in streams],
         # Detail, not graded: the streams' HLS fetches in the window (stats.js hlsFetches), and the
         # decoders the view got (reference_run adds `media`, from logcat).
@@ -1034,7 +1043,10 @@ def task_phrase(task, s_):
         gone = sum(1 for r in runs if r.get("lost"))
         ff = [r["first_frame_ms"] for r in runs if r.get("first_frame_ms") is not None]
         if not ff:
-            return f"the page was lost in {gone} of {len(runs)} run(s)" if gone == len(runs) else "a camera never showed a frame"
+            if gone == len(runs):
+                return f"the page was lost in {gone} of {len(runs)} run(s)"
+            fb = fell_back_words(runs)
+            return f"a camera fell back to {fb} on Vitro (it never played over {path_word(runs)})" if fb else "a camera never showed a frame"
         shown = statistics.median(r["shown_pct"] for r in runs if r.get("shown_pct") is not None)
         failed = len(runs) - len(ff) - gone
         na = sum(1 for r in runs if r.get("stalls_reported") is False)
@@ -1623,13 +1635,15 @@ def grade_part(device, refs, attempted, fake_log, transport_of, net_of):
     settled = grade["missing"] if "missing_settled_by" in grade else ()
     reasons += coverage_reasons(ref, attempted, touch, settled, unmeasured)
     if device.get("engine") == "vitro" and ref:
-        # Vitro plays a camera over MJPEG (camera_proxy_stream), and the reference views' cameras are WebRTC: their task
-        # can't be measured the same way, so it is missing, under the rules for any missing measurement (docs/perf.md,
-        # "Vitro"). Said here, as a reason when it could change the letter, and as unmeasured when it can't.
-        cams = [t for t in G.CAMERA_PAGES if f"{t}.camera" in grade["missing"]]
+        # A Vitro build whose cameras don't report to Clarity (before ClarityCameras) logs no camera line: it played a
+        # camera over MJPEG only, and the reference views' cameras are WebRTC, so the task is missing, under the rules for
+        # any missing measurement (docs/perf.md, "Vitro"). Said here, as a reason when it could change the letter, and as
+        # unmeasured when it can't. A build whose cameras report is measured as the web engine is: nothing to say here.
+        cams = [t for t in G.CAMERA_PAGES if f"{t}.camera" in grade["missing"]
+                and not any("path" in r for r in (ref["tiers"].get(t) or {}).get("camera_runs") or [])]
         if cams:
-            why = (f"{', '.join(cams)}: cameras not measured on Vitro (it plays a camera over MJPEG; the reference views' "
-                   "cameras are WebRTC)")
+            why = (f"{', '.join(cams)}: cameras not measured on Vitro (this build's cameras don't report to Clarity: it "
+                   "plays them over MJPEG, and the reference views' cameras are WebRTC)")
             (unmeasured if all(f"{t}.camera" in settled for t in cams) else reasons).append(why)
     if unmeasured:
         # Why a measurement is missing that can't change the letter: kept, and said, but not a reason for provisional.
@@ -1913,6 +1927,45 @@ def device_line(dev, app):
              app.get("version_name") and f"app {app['version_name']}", app.get("geckoview") and f"GeckoView {app['geckoview']}",
              dev.get("engine") == "vitro" and "measured on Vitro (Settings → Labs)"]
     return ", ".join(p for p in parts if p) + "."
+
+
+# The camera kinds in report.md's words (the page lines' path names, and Vitro's MJPEG).
+KIND_WORDS = {"web_rtc": "WebRTC", "hls": "HLS", "mjpeg": "MJPEG"}
+
+
+def fell_back_words(runs):
+    """What the cameras of these runs fell back to on Vitro (camera_run `fell_back`), in words ("MJPEG"), or ""."""
+    return " and ".join(KIND_WORDS.get(k, k) for k in sorted({k for r in runs for k in r.get("fell_back") or []}))
+
+
+def path_word(runs):
+    """The path the runs' cameras are graded on, in words."""
+    paths = sorted({r.get("path") for r in runs if r.get("path")})
+    return " and ".join(KIND_WORDS.get(p, p) for p in paths) or "its path"
+
+
+def camera_transports(ref):
+    """report.md (Vitro): what each camera page's cameras played over, and plainly when they fell back to another kind
+    (an MJPEG fallback): a camera graded on WebRTC that played MJPEG instead fails the task, as on the web engine a
+    camera that doesn't play over WebRTC does. Web runs don't say (their streams are the path's): nothing."""
+    out = []
+    for t, s_ in ref["tiers"].items():
+        runs = [r for r in s_.get("camera_runs") or [] if r.get("transports") is not None]
+        if not runs:
+            continue
+        path = path_word(runs)
+        on_path = sum(1 for r in runs if r["transports"] and all(x == r.get("path") for x in r["transports"]))
+        fb = [r for r in runs if r.get("fell_back")]
+        blank = sum(1 for r in runs if any(x is None for x in r["transports"]))
+        errors = sorted({e for r in fb for s in r.get("detail") or [] for e in s.get("errors") or []})
+        line = f"{t} cameras on Vitro: played over {path} in {on_path} of {len(runs)} run(s)"
+        if fb:
+            line += (f"; **fell back to {fell_back_words(fb)} in {len(fb)} of {len(runs)} run(s)**, graded on {path} as on "
+                     f"the web engine" + (f" ({'; '.join(errors[:3])})" if errors else ""))
+        if blank:
+            line += f"; a camera showed nothing at the window's end in {blank} run(s)"
+        out.append(line + ".")
+    return out
 
 
 def camera_detail(ref):
@@ -2224,6 +2277,7 @@ def markdown(rep):
             out.append(f"The fake Home Assistant sent a live change {detail_late:.0f} ms late during a view that isn't "
                        "graded (an HLS copy or a warm-up; detail: this computer was busy then).")
         out += transport_line(rep)
+        out += camera_transports(ref)
         out += network_line(rep)
         out += camera_detail(ref)
         out += dialog_detail(ref)
