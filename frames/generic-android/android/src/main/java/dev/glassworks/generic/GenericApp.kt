@@ -86,16 +86,16 @@ class GenericApp : Application(), GlassworksApp {
 
         /**
          * What GeckoView starts with. As [engineSettings], except on the legacy build under Vitro ([vitro] gives the
-         * engine, null without one): its engine holds pages to one origin (#198), and Vitro's fallback pages (sign-in)
-         * come through the loopback island server, so that origin is the dashboard it is told. Vitro itself keeps the
-         * real Home Assistant settings.
+         * engine, null without one): its engine holds pages to the dashboard's origin (#198), and Vitro's islands come
+         * from the loopback island server, so that origin is the one more it is told ([EngineSettings.localOrigin]).
+         * Home Assistant's own pages (sign-in, settings, history) still load from Home Assistant.
          */
         internal fun geckoSettings(
             context: Context, build: AppBuild, applicationId: String, vitro: () -> VitroEngine?,
         ): EngineSettings {
             val settings = engineSettings(context, build, applicationId)
             val v = if (legacy(applicationId)) vitro() else null
-            return if (v != null) settings.copy(dashboard = v.fallbackDashboardOrigin()) else settings
+            return if (v != null) settings.copy(localOrigin = v.islandOrigin()) else settings
         }
 
         /**
