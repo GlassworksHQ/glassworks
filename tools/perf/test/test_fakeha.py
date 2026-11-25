@@ -177,6 +177,23 @@ class FakeHA(unittest.TestCase):
         self.assertEqual(len(ev[0]["event"]["states"]["sensor.clarity_10"]), 96)
         self.assertNotIn("config/entity_registry/get", fakeha.Handler.hub.unknown)
 
+    def test_get_icons_as_ha_core_answers_it(self):
+        """#780: HA's icons.json for each loaded integration (haicons.py), so the frontend draws HA's
+        default icons; a category HA doesn't take is refused as HA refuses it."""
+        ws = self.connect()
+        res, _ = ws.call({"type": "frontend/get_icons", "category": "entity_component"})
+        icons = res["result"]["resources"]
+        self.assertEqual(icons["light"]["_"]["default"], "mdi:lightbulb")
+        self.assertEqual(icons["sensor"]["temperature"]["default"], "mdi:thermometer")
+        self.assertEqual(icons, D.icons("entity_component"))
+        res, _ = ws.call({"type": "frontend/get_icons", "category": "services", "integration": "light"})
+        self.assertEqual(res["result"]["resources"]["light"]["toggle"], {"service": "mdi:lightbulb"})
+        res, _ = ws.call({"type": "frontend/get_icons", "category": "entity", "integration": ["light"]})
+        self.assertEqual(res["result"], {"resources": {}})
+        res, _ = ws.call({"type": "frontend/get_icons", "category": "lights"})
+        self.assertEqual((res["success"], res["error"]["code"]), (False, "invalid_format"))
+        self.assertNotIn("frontend/get_icons", fakeha.Handler.hub.unknown)
+
     def test_the_toggle_flips_the_light(self):
         ws = self.connect()
         _, ev = ws.call({"type": "subscribe_entities"})

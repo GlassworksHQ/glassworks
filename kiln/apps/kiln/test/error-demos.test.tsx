@@ -29,6 +29,8 @@ const TITLES: [Demo, string][] = [
   ['error-not-this-panel', 'This isn\'t a panel Kiln recognizes'],
   ['error-usb-unreliable', 'The USB connection isn\'t steady'],
   ['error-download', 'A download failed'],
+  ['error-release', 'A download failed'],
+  ['error-no-release', 'There\'s no release to install yet'],
   ['error-not-started', 'The panel took too long to start'],
   ['error-adb-held', 'Another program is using the panel'],
   ['error-backup-refused', 'This backup can\'t undo the install'],

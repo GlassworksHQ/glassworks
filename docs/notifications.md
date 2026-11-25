@@ -22,7 +22,7 @@ The Notifications settings page also lets you toggle **Do not disturb** and clic
 Each panel exposes a single ESPHome action in Home Assistant: `esphome.<node_name>_notify`, where `<node_name>` is the panel's ESPHome node name with hyphens replaced by underscores (see [Names](esphome.md#names)). For example, on an Aqara S1 Plus the action looks like `esphome.aqara_s1_plus_a1b2c3_notify`. You can copy your panel's exact action name from **Settings → Panes → Notifications → Action**, or find it in Home Assistant under **Developer tools → Actions** by searching for `_notify`. The examples below use `a1b2c3` as a placeholder.
 
 > [!IMPORTANT]
-> **Security note:** Always keep ESPHome encryption enabled on your panel. Without an API encryption key, anyone on your local network could call the `notify` action to trigger a critical alert or open a view on your screen. Home Assistant 2026.11 and newer configure encryption automatically when you adopt the panel.
+> **Encryption required:** The panel runs `notify` only for a Home Assistant that holds its ESPHome encryption key. Without the key, anyone on your local network could send a critical alert or open a view on your screen, so the call fails instead. Home Assistant 2026.11 and newer set up encryption automatically when you add the panel. On an older version, notifications wait until you update Home Assistant ([What works without encryption](esphome.md#what-works-without-encryption)).
 
 The action accepts the same three fields as the Home Assistant Companion app—`title`, `message`, and `data`. Because Home Assistant requires all ESPHome action arguments to be present, always include all three (use `""` for an empty title and `"{}"` when you don't need extra `data` fields):
 

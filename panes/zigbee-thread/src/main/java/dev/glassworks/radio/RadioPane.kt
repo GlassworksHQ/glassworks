@@ -37,7 +37,7 @@ class RadioPane(
         SelectEntity(
             "radio_mode", "Radio mode", "mdi:zigbee", disabledByDefault = true, options = RadioMode.LABELS,
             get = { radio.mode.label }, set = { radio.request(it) },
-        ),
+        ).apply { authOnly = true }, // like every control that changes the radio: Home Assistant with the key only (#847)
         TextSensorEntity(
             "radio_status", "Radio status", "mdi:radio-tower", EntityCategory.DIAGNOSTIC,
             get = { radio.statusText() },
@@ -50,7 +50,7 @@ class RadioPane(
                 radio.setAllowedClients(v)?.let { Log.w(RadioController.TAG, "Radio allowed clients: $it") }
                 ctx.publishStates()
             },
-        ),
+        ).apply { authOnly = true },
         // Zigbee stack behind the coordinator mode (helper v4): Aqara's (EZSP 12) or Silicon Labs' (EZSP 18,
         // for Zigbee2MQTT; the panel downloads it from Silicon Labs). frames/aqara-s1-plus/docs/radio.md "Zigbee stack".
         SelectEntity(
@@ -69,8 +69,10 @@ class RadioPane(
         ButtonEntity("radio_firmware_flash", "Flash radio firmware", "mdi:flash-alert", EntityCategory.CONFIG, disabledByDefault = true, press = { radio.firmwareFlash() })
             .apply { authOnly = true },
         // Zigbee router: join/leave the network that has permit-join open (frames/aqara-s1-plus/docs/radio.md "Zigbee router").
-        ButtonEntity("zigbee_router_join", "Join Zigbee network", "mdi:zigbee", EntityCategory.CONFIG, disabledByDefault = true, press = { radio.routerJoin() }),
-        ButtonEntity("zigbee_router_leave", "Leave Zigbee network", "mdi:link-variant-off", EntityCategory.CONFIG, disabledByDefault = true, press = { radio.routerLeave() }),
+        ButtonEntity("zigbee_router_join", "Join Zigbee network", "mdi:zigbee", EntityCategory.CONFIG, disabledByDefault = true, press = { radio.routerJoin() })
+            .apply { authOnly = true },
+        ButtonEntity("zigbee_router_leave", "Leave Zigbee network", "mdi:link-variant-off", EntityCategory.CONFIG, disabledByDefault = true, press = { radio.routerLeave() })
+            .apply { authOnly = true },
         // Forget the Thread network (helper v4, any mode): deletes the dataset (network key) and router settings.
         ButtonEntity("thread_leave", "Leave Thread network", "mdi:link-variant-off", EntityCategory.CONFIG, disabledByDefault = true, press = { radio.threadLeave() })
             .apply { authOnly = true },
@@ -95,7 +97,7 @@ class RadioPane(
                 if (v.isNotEmpty()) radio.setThreadDataset(v)?.let { Log.w(RadioController.TAG, it) }
                 ctx.publishStates()
             },
-        ),
+        ).apply { authOnly = true },
     )
 
     override fun entities(): List<ApiEntity> = entities

@@ -9,6 +9,7 @@ import { fmtSize } from '@glassworks/kiln-core';
 import Link from 'next/link';
 import { BuiltOn, stepCredits } from '../components/Credit';
 import { SilentUpdates } from '../components/SilentUpdates';
+import { StarOnGitHub } from '../components/StarOnGitHub';
 import { LastRun } from '../components/LastRun';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Recovery } from '../recovery/Recovery';
@@ -340,6 +341,7 @@ export function Done({ s, session, frame, children }: SP & { children?: ReactNod
       {children}
       {d.managePage && <ManagePageRow href={d.managePage} the={`the ${frame.short}`} />}
       {s.flow === 'install' && <BuiltOn credits={stepCredits(frame.id, frame.credits)} />}
+      {s.flow === 'install' && <StarOnGitHub />}
       <div className="foot">
         {s.flow === 'install' && session.canUndo ? <button type="button" className="link" onClick={() => void session.undo()}>Undo</button> : <span />}
         <Link className={`btn ${d.backup ? 'ghost' : 'ember'}`} href="/">Back to Kiln</Link>

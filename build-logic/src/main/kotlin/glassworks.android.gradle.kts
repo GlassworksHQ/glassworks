@@ -26,6 +26,15 @@ for (agp in listOf("com.android.library", "com.android.application")) {
     }
 }
 
+// Robolectric fetches its Android jars (android-all-instrumented) itself while the tests run, from Maven Central by
+// default, and Central's 429s (too many requests) failed whole test classes in CI. This sends it to Google's mirror
+// of Central, the repository settings.gradle.kts asks first. Robolectric 4.17 takes one repository only, so there's
+// no fallback to Central here; the jars it already has in ~/.m2 (CI's robolectric cache) need no fetch at all.
+// docs/ci.md, Caches.
+tasks.withType<Test>().configureEach {
+    systemProperty("robolectric.dependency.repo.url", "https://maven-central.storage-download.googleapis.com/maven2/")
+}
+
 if (!library) {
     tasks.withType<Test>().configureEach {
         // -Ps1MockupDir writes the *Mockups PNGs (a module without mockups then runs none, not fails), and

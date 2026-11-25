@@ -71,9 +71,9 @@ Glassworks is built around three core concepts, guided by our [Principles](docs/
 
 | Frame | Status | Overview |
 |---|---|---|
-| [Aqara S1 Plus](frames/aqara-s1-plus/README.md) | Beta | Rooted Allwinner A133 wall panel and Glassworks' reference device. Runs every pane, including Zigbee/Thread radio and wall base relays. |
-| [Generic Android](frames/generic-android/README.md) | Under development | Standard Android app for Android 8+ tablets and phones (plus a legacy build for Android 6–7), with no root required. Includes tested devices like the [Google Pixel Tablet](frames/google-pixel-tablet/README.md) and the [Samsung Galaxy Tab A 10.1 (2016)](frames/samsung-galaxy-tab-a-10-1-2016/README.md). |
-| [lululemon Studio Mirror](frames/lululemon-mirror/README.md) | Under development | 40-inch smart mirror running Android behind the glass. |
+| [Aqara S1 Plus](frames/aqara-s1-plus/README.md) | Stable | Rooted Allwinner A133 wall panel and Glassworks' reference device. Runs every pane, including Zigbee/Thread radio and wall base relays. |
+| [Generic Android](frames/generic-android/README.md) | Beta | Standard Android app for Android 8+ tablets and phones (plus a legacy build for Android 6–7), with no root required. Includes tested devices like the [Google Pixel Tablet](frames/google-pixel-tablet/README.md) and the [Samsung Galaxy Tab A 10.1 (2016)](frames/samsung-galaxy-tab-a-10-1-2016/README.md). |
+| [lululemon Studio Mirror](frames/lululemon-mirror/README.md) | Beta | 40-inch smart mirror running Android behind the glass. |
 
 Each device definition lives in `frames/<id>/design/frame.json` (see [the frame format](frames/README.md)) and is showcased with interactive 3D models at [glassworks.dev/frames](https://www.glassworks.dev/frames).
 
@@ -98,7 +98,7 @@ Each frame's README lists which panes it supports. If you want to build a new pa
 
 ## Kiln installer
 
-Kiln installs Glassworks straight from Chrome or Edge over WebUSB, backing up original partitions first and providing a built-in undo path. Launch it at [kiln.glassworks.dev](https://kiln.glassworks.dev), or browse its code and architecture in [`kiln/`](kiln/apps/kiln/README.md). If you prefer working from a terminal, the Aqara S1 Plus also includes a [command-line installer](frames/aqara-s1-plus/README.md#the-command-line).
+Kiln installs Glassworks straight from Chrome or Edge over WebUSB, backing up original partitions first wherever the device allows it and giving every install a built-in way back. On the lululemon Studio Mirror, whose bootloader can't read lululemon's software back, the way back is the community Glass Panes image ([details](docs/updates.md#lululemon-studio-mirror)). Launch it at [kiln.glassworks.dev](https://kiln.glassworks.dev), or browse its code and architecture in [`kiln/`](kiln/apps/kiln/README.md). If you prefer working from a terminal, the Aqara S1 Plus also includes a [command-line installer](frames/aqara-s1-plus/README.md#the-command-line).
 
 ## Clarity performance grades
 

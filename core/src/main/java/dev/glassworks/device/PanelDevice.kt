@@ -669,10 +669,13 @@ class PanelDevice(
             get = { prefs.presenceRangeM }, set = { prefs.presenceRangeM = it; ui { screen.applyPresenceRange() } },
         ),
         // --- kiosk
+        // authOnly (#847) here and on open_settings, improv_ble and sign_out: on a panel with no ESPHome key yet anyone
+        // on the LAN can talk plaintext to the API. The dashboard's host becomes a secure context that gets the
+        // microphone and the camera, so only Home Assistant with the key may set it. The panel and Manage still can.
         TextEntity(
             "dashboard_url", "Dashboard URL", "mdi:web", disabledByDefault = true, minLength = 1, maxLength = 255,
             get = { prefs.urlSetting }, set = { url -> toActivity { putExtra("url", url) } },
-        ),
+        ).apply { authOnly = true },
         NumberEntity(
             "zoom", "Zoom", "mdi:magnify-plus-outline", disabledByDefault = true, min = 0f, max = 3f, step = 0.05f, mode = 1,
             get = { prefs.zoom },
@@ -680,7 +683,7 @@ class PanelDevice(
         ),
         ButtonEntity("reload_dashboard", "Reload dashboard", "mdi:refresh", press = { toActivity { putExtra("reload", true) } }),
         ButtonEntity("open_settings", "Open device settings", "mdi:cog", EntityCategory.CONFIG,
-            disabledByDefault = true, press = { toActivity { putExtra("open_settings", true) } }),
+            disabledByDefault = true, press = { toActivity { putExtra("open_settings", true) } }).apply { authOnly = true },
         ButtonEntity(
             "restart_app", "Restart app", "mdi:restart", EntityCategory.CONFIG, deviceClass = "restart",
             press = { toActivity { putExtra("restart", true) } },
@@ -688,7 +691,7 @@ class PanelDevice(
         ButtonEntity(
             "improv_ble", "Start Wi-Fi setup (Bluetooth)", "mdi:bluetooth-settings", EntityCategory.CONFIG,
             disabledByDefault = true, press = { ui { dev.glassworks.provisioning.ImprovController.startOnDemand("Home Assistant button") } },
-        ),
+        ).apply { authOnly = true },
         // Pairing over the LAN closes once Home Assistant has added the panel; this opens it for a while (#34).
         ButtonEntity(
             "lan_setup", "Allow setup over the network", "mdi:lan-connect", EntityCategory.CONFIG,
@@ -762,7 +765,7 @@ class PanelDevice(
                 // The activity shows the sign-in screen through its HaAuth listener.
                 HaAuth.signOut("Home Assistant button") { exec.execute { server?.publishStates() } }
             },
-        ),
+        ).apply { authOnly = true },
     )
 
     private fun onMediaCommand(c: MediaPlayerCommandData) {
