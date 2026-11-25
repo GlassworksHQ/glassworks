@@ -104,6 +104,45 @@ class OAuthTest {
     }
 
     @Test
+    fun savedSignInsCarryOverAndRunOutAsBefore() {
+        var now = 1_000L
+        val disk = object : SavedSignIns {
+            var text: String? = null
+            override fun read() = text
+            override fun write(text: String?) { this.text = text }
+        }
+        fun store() = StateStore(ttlMs = 600_000, clock = { now }, saved = disk)
+        val first = store()
+        val a = first.create("cid", "redir", "http://ha", then = Then.SETUP)
+        now += 1_000
+        val b = first.create("cid", "redir", "http://ha", PendingSignIn.PURPOSE_THREAD)
+        val second = store()
+        assertEquals(2, second.size())
+        assertNull("a thread state is still no good for a sign-in", second.consume(b.state))
+        val p = second.consume(a.state)!!
+        assertEquals(Then.SETUP, p.then)
+        assertEquals(a.slot, p.slot)
+        assertEquals(1_000L, p.createdAt)
+        assertEquals("the 10 minutes count from the start, not the restart", 1, store().size())
+        now += 600_000
+        assertEquals(0, store().size())
+        assertNull("nothing left once they ran out", disk.text)
+    }
+
+    @Test
+    fun savedTextThatDoesntReadIsNoSignIn() {
+        for (bad in listOf("", "not json", "{}", "[1, {}, {\"state\":\"x\"}]", "[{\"state\":\"x\",\"client_id\":\"c\",\"redirect_uri\":\"r\"," +
+            "\"ha_base\":\"h\",\"created_at\":1,\"purpose\":\"signin\",\"verifier\":\"v\",\"then\":\"NOPE\",\"slot\":-1}]")) {
+            val s = StateStore(clock = { 2L }, saved = object : SavedSignIns {
+                override fun read() = bad
+                override fun write(text: String?) {}
+            })
+            assertEquals(bad, 0, s.size())
+            assertNull(s.consume("x"))
+        }
+    }
+
+    @Test
     fun tokenResponses() {
         // components/auth/__init__.py TokenView, authorization_code grant
         val ok = TokenResult.parse(200, """{"access_token":"AT","token_type":"Bearer","refresh_token":"RT","expires_in":1800,"ha_auth_provider":"homeassistant"}""")

@@ -625,6 +625,56 @@ class SignInServerTest {
             !text(r).contains("It shows a new one") && !setupWay(r))
     }
 
+    /** What a panel keeps across a restart: the sealed text KioskPrefs holds, here in memory. */
+    private class Disk : SavedSignIns {
+        var text: String? = null
+        override fun read() = text
+        override fun write(text: String?) { this.text = text }
+    }
+
+    @Test
+    fun kilnsFirstSignInSurvivesTheRestartTheAddressCauses() {
+        // Kiln's Home Assistant step: set_ha, then the window opens on the reply, and the old process hands out the state
+        val disk = Disk()
+        val (q, state) = start(serverWith(StateStore(saved = disk)), null, then = "?then=kiln")
+        // 300 ms later the app restarts for the new address; Home Assistant sends the person back to the new process
+        val after = serverWith(StateStore(saved = disk))
+        issueCode("c0de", q)
+        val r = callback(after, state, null)
+        assertEquals(text(r), 200, r.status)
+        assertTrue(text(r), text(r).contains("Kiln has moved on."))
+        assertEquals("RT", signedIn!!.first.refreshToken)
+        assertNull("used up, there too", disk.text)
+        assertEquals("and only once", 400, callback(serverWith(StateStore(saved = disk)), state, null).status)
+    }
+
+    @Test
+    fun theSetupPagesSignInSurvivesARestartWithItsBinding() {
+        val disk = Disk()
+        val jar = Jar()
+        val (q, state) = start(serverWith(StateStore(saved = disk)), jar)
+        issueCode("c0de", q)
+        val r = callback(serverWith(StateStore(saved = disk)), state, jar)
+        assertEquals(text(r), 200, r.status)
+        assertTrue(text(r), text(r).contains(SignInServer.SETUP_RETURN))
+        // and it is still refused in another browser
+        val (q2, other) = start(serverWith(StateStore(saved = disk)), jar)
+        issueCode("c1de", q2)
+        assertEquals(403, callback(serverWith(StateStore(saved = disk)), other, Jar(), code = "c1de").status)
+    }
+
+    @Test
+    fun aSignInThatCantBeSavedStillWorksInTheSameProcess() {
+        val broken = object : SavedSignIns {
+            override fun read(): String? = throw IllegalStateException("key store down")
+            override fun write(text: String?) = throw IllegalStateException("key store down")
+        }
+        val s = serverWith(StateStore(saved = broken))
+        val (q, state) = start(s, null, then = "?then=kiln")
+        issueCode("c0de", q)
+        assertEquals(200, callback(s, state, null).status)
+    }
+
     @Test
     fun theQrSignInStaysAsItWas() {
         val r = call(server, SignInServer.CONTINUE)

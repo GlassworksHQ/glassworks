@@ -209,6 +209,19 @@ class KioskPrefs(
 
     val hasAuth: Boolean get() = authSp.contains("refresh_token")
 
+    /**
+     * The sign-ins the panel's sign-in page started and Home Assistant hasn't sent back yet ([dev.glassworks.auth.StateStore]),
+     * so one survives the app restarting meanwhile. Sealed: each holds its PKCE verifier. Null for none. Throws
+     * [SignInNotStored] when it couldn't be written (a key store outage).
+     */
+    var pendingSignIns: String?
+        get() = authSp.getString("pending_signins", null)
+        set(v) {
+            val e = authSp.edit()
+            if (v == null) e.remove("pending_signins") else e.putString("pending_signins", v)
+            if (!e.commit()) throw SignInNotStored("The pending sign-ins can't be stored right now")
+        }
+
     /** The refresh token as it reads now, for the installer's hand-over ([dev.glassworks.device.SecretHandover], #584). */
     fun refreshTokenSecret(): SecretPrefs.Secret = authSp.secret("refresh_token")
 
