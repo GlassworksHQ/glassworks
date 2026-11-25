@@ -443,6 +443,33 @@ class LiveCameraFeedTest {
     }
 
     @Test
+    fun anHlsExtraThatBecomesTheMainPlayerIsNeverTakenAgain() {
+        CameraVideoBudget.max = 2
+        val ctx = context(store())
+        val first = feed(ctx)
+        first.start()
+        idle()
+        assertEquals(listOf(HLS, WEB_RTC), first.runningKinds)
+        assertEquals(1, CameraVideoBudget.extrasInUse)
+        // WebRTC fails: HLS, held as the extra, is now the camera's only (main) player.
+        live(WEB_RTC).fail()
+        idle()
+        assertEquals(listOf(HLS), first.runningKinds)
+        assertEquals(0, CameraVideoBudget.extrasInUse)
+        // Two more cameras need main players: one takes the free slot, the other waits on MJPEG. Neither takes the
+        // first camera's HLS.
+        val second = feed(ctx)
+        val third = feed(ctx)
+        second.start()
+        third.start()
+        idle()
+        assertEquals(listOf(HLS), first.runningKinds)
+        assertEquals(listOf(WEB_RTC), second.runningKinds)
+        assertEquals(listOf(MJPEG), third.runningKinds)
+        assertTrue(peakVideo <= 2)
+    }
+
+    @Test
     fun aFifthCameraWaitsOnMjpegAndNoMainPlayerIsTakenFromAnother() {
         val ctx = context(store())
         val cams = (0 until 5).map { feed(ctx) }

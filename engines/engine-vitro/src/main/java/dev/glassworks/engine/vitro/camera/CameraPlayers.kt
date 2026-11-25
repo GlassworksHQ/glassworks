@@ -90,9 +90,15 @@ object CameraVideoBudget {
      *   its player), then the slot is [owner]'s. With none to take, it waits.
      * - An extra ([extra] true) takes a free slot only while no camera waits for a main player, and gives it up when
      *   one asks ([onYield], which must close the player and must not call [release]).
+     * - An extra already held and asked for as a main player becomes a main holder.
      */
     fun acquire(owner: Any, extra: Boolean = false, onYield: (() -> Unit)? = null, onFree: () -> Unit): Boolean {
-        holders[owner]?.let { return true }
+        holders[owner]?.let { held ->
+            // An extra that became its camera's main player (HLS once WebRTC failed) is a main holder from now on:
+            // it's never taken for another camera's main player.
+            if (held.extra && !extra) holders[owner] = Holder(false, null)
+            return true
+        }
         if (holders.size < max && (!extra || waiters.isEmpty())) {
             grant(owner, extra, onYield)
             return true

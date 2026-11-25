@@ -413,7 +413,8 @@ internal class LiveCameraFeed(
      * once, and the main player goes on alone.
      */
     private fun acquireSlot(kind: CameraStreamKind, extra: Boolean): Boolean {
-        if (kind in held) return true
+        // A player held as an extra and now the main one (HLS once WebRTC failed) asks the budget to promote it.
+        if (kind in held && extra) return true
         val onYield = if (!extra) null else ({
             held -= kind
             closeSlot(kind)
