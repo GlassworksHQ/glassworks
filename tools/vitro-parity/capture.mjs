@@ -786,11 +786,13 @@ async function fakePost(path, body) {
 }
 
 /**
- * The `language` user data a case's fixture gives its user (`user_data.language`: language, number_format,
- * time_format, …), or null. Only the fake serves it: a real HA's user keeps their own profile.
+ * The `language` user data HA's page draws a case with (language, number_format, time_format, …), or null for a
+ * user with no profile: the case fixture's `user_data.language` on the fake, the signed-in account's own on a real HA
+ * (read once, `realProfile`).
  */
+let realProfile = null;
 function profileLocale(c) {
-  const v = fakeMode ? c.fixture?.user_data?.language : null;
+  const v = fakeMode ? c.fixture?.user_data?.language : realProfile;
   return v && typeof v === 'object' ? v : null;
 }
 
@@ -806,6 +808,8 @@ const roundRect = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k
 async function capture() {
   const fakeNow = fakeMode ? await startFake(loadCasesAll()) : null;
   const ha = await connect(creds);
+  // A real HA's user draws in their own profile's language and formats (read only).
+  if (!fakeMode) realProfile = (await ha.call({ type: 'frontend/get_user_data', key: 'language' }).catch(() => null))?.value ?? null;
   const [haConfig, themes, resources] = await Promise.all([
     ha.call({ type: 'get_config' }), ha.call({ type: 'frontend/get_themes' }), ha.call({ type: 'lovelace/resources' }),
   ]);

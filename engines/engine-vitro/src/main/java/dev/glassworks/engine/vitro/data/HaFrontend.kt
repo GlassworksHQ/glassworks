@@ -41,60 +41,93 @@ object HaFrontend {
     @Volatile private var installed: Pair<String, String>? = null
     @Volatile private var wanted: Pair<String, String>? = null
 
+    /**
+     * The client whose requests may install strings ([claim]): a retired client's download, finishing late, leaves
+     * [HaText] alone.
+     */
+    @Volatile private var owner: Any? = null
+
+    /** [requester] is the client now: only its requests install strings from here on. */
+    fun claim(requester: Any) {
+        owner = requester
+        installed = null
+        wanted = null
+    }
+
+    /** One language's strings as read, with the frontend's metadata, before they are installed. */
+    internal class Loaded(val meta: JSONObject, val strings: Map<String, String>)
+
     private val APP_JS = Regex("""/frontend_latest/app\.([0-9a-f]+)\.js""")
 
     /**
      * The strings for [language] from HA at [origin] (`http(s)://host:port`), fetched off the caller's thread;
      * [done] runs after they are installed. Asking again for what is installed or on its way does nothing.
      */
-    fun ensure(origin: String, language: String, done: () -> Unit) {
+    fun ensure(requester: Any, origin: String, language: String, done: () -> Unit) {
         val key = origin to language
-        if (installed == key || wanted == key) return
+        if (owner !== requester || installed == key || wanted == key) return
         wanted = key
         executor.execute {
-            val ok = runCatching { load(origin, language) }.getOrDefault(false) ||
-                runCatching { loadCached(origin, language) }.getOrDefault(false)
+            val r = runCatching { read(origin, language) }.getOrNull() ?: runCatching { readCached(origin, language) }.getOrNull()
             if (wanted == key) wanted = null
-            if (ok) { installed = key; done() }
+            if (r != null && install(requester, language, r)) { installed = key; done() }
         }
     }
 
     /** The cached strings for [language] from the last frontend [origin] served, without the network. */
-    fun ensureCached(origin: String, language: String, done: () -> Unit) {
-        executor.execute { if (runCatching { loadCached(origin, language) }.getOrDefault(false)) done() }
+    fun ensureCached(requester: Any, origin: String, language: String, done: () -> Unit) {
+        executor.execute {
+            val r = runCatching { readCached(origin, language) }.getOrNull()
+            if (r != null && install(requester, language, r)) done()
+        }
+    }
+
+    /** Installs [r] into [HaText] if [requester] still owns the requests; true when it did. */
+    @Synchronized
+    private fun install(requester: Any, language: String, r: Loaded): Boolean {
+        if (owner !== requester) return false
+        apply(r.meta, language, r.strings)
+        return true
     }
 
     /** Forgets what is installed (a new server, or tests). */
     fun reset() {
         installed = null
         wanted = null
+        owner = null
         languages = emptyList()
     }
 
-    /** Fetches and installs [language]'s strings from HA; false when HA's files can't be read. Blocking. */
-    internal fun load(origin: String, language: String): Boolean {
-        val index = fetch("$origin/")?.toString(Charsets.UTF_8) ?: return false
-        val app = APP_JS.find(index)?.groupValues?.get(1) ?: return false
+    /** Fetches and installs [language]'s strings from HA; false when HA's files can't be read. Blocking (tests). */
+    internal fun load(origin: String, language: String): Boolean =
+        read(origin, language)?.also { apply(it.meta, language, it.strings) } != null
+
+    /** Installs [language]'s strings from the cache of the frontend [origin] served last; false without one (tests). */
+    internal fun loadCached(origin: String, language: String): Boolean =
+        readCached(origin, language)?.also { apply(it.meta, language, it.strings) } != null
+
+    /** Reads [language]'s strings from HA (the cache standing in for files it has); null when HA can't be read. */
+    private fun read(origin: String, language: String): Loaded? {
+        val index = fetch("$origin/")?.toString(Charsets.UTF_8) ?: return null
+        val app = APP_JS.find(index)?.groupValues?.get(1) ?: return null
         val meta = cached("meta-$app.json") ?: run {
-            val js = fetch("$origin/frontend_latest/app.$app.js")?.toString(Charsets.UTF_8) ?: return false
-            val m = metadataOf(js) ?: return false
+            val js = fetch("$origin/frontend_latest/app.$app.js")?.toString(Charsets.UTF_8) ?: return null
+            val m = metadataOf(js) ?: return null
             store("meta-$app.json", m.toString())
             m
         }
-        val strings = stringsFor(origin, meta, language) ?: return false
-        apply(meta, language, strings)
+        val strings = stringsFor(origin, meta, language) ?: return null
         store("current-${key(origin)}.json", JSONObject().put("app", app).toString())
-        return true
+        return Loaded(meta, strings)
     }
 
-    /** Installs [language]'s strings from the cache of the frontend [origin] served last; false when there is none. */
-    internal fun loadCached(origin: String, language: String): Boolean {
-        val app = cached("current-${key(origin)}.json")?.optString("app")?.takeIf { it.isNotEmpty() } ?: return false
-        val meta = cached("meta-$app.json") ?: return false
-        val (lang, hash) = fileOf(meta, language) ?: return false
-        val strings = cached("strings-$lang-$hash.json")?.let(::flatMap) ?: return false
-        apply(meta, language, strings)
-        return true
+    /** The cached strings of the frontend [origin] served last; null when there are none. */
+    private fun readCached(origin: String, language: String): Loaded? {
+        val app = cached("current-${key(origin)}.json")?.optString("app")?.takeIf { it.isNotEmpty() } ?: return null
+        val meta = cached("meta-$app.json") ?: return null
+        val (lang, hash) = fileOf(meta, language) ?: return null
+        val strings = cached("strings-$lang-$hash.json")?.let(::flatMap) ?: return null
+        return Loaded(meta, strings)
     }
 
     private fun apply(meta: JSONObject, language: String, strings: Map<String, String>) {
@@ -119,12 +152,14 @@ object HaFrontend {
         val out = JSONObject()
         flatten("", core, out)
         // The Lovelace fragment (a dashboard's own words: to-do, cards); core keys win, as the page merges them.
-        fetch("$origin/static/translations/lovelace/$lang-$hash.json")?.let { b ->
+        val fragment = fetch("$origin/static/translations/lovelace/$lang-$hash.json")
+        fragment?.let { b ->
             val frag = JSONObject()
             flatten("", JSONObject(b.toString(Charsets.UTF_8)), frag)
             for (k in frag.keys()) if (!out.has(k)) out.put(k, frag.get(k))
         }
-        store("strings-$lang-$hash.json", out.toString())
+        // Kept only whole: without the fragment, the core words serve now and the next load asks for both again.
+        if (fragment != null) store("strings-$lang-$hash.json", out.toString())
         return flatMap(out)
     }
 

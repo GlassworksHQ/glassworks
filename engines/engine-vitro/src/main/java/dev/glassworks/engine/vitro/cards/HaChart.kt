@@ -143,7 +143,8 @@ object ECharts {
             else -> 0
         }
         val target = (max - min) / approx
-        val cal = Calendar.getInstance()
+        // The zone the labels are written in (HaFormat): ticks fall on its hours and days.
+        val cal = Calendar.getInstance(HaLocale.timeZone())
         // Level boundaries, coarse to fine: year (0), month (1), day (2), hour (3), minute (4), second (5).
         var upper: List<Long> = emptyList()
         val levels = ArrayList<List<Long>>()
@@ -324,7 +325,7 @@ object HaChartFormat {
     /** `formatTimeLabel`: the label of a time tick, and whether it's bold (`{bold|…}`), for an axis [minutes] wide. */
     fun timeLabel(t: Long, minutes: Double): Pair<String, Boolean> {
         val days = minutes / 60 / 24
-        val cal = Calendar.getInstance().apply { timeInMillis = t }
+        val cal = Calendar.getInstance(HaLocale.timeZone()).apply { timeInMillis = t }
         return when {
             days > 88 -> if (cal.get(Calendar.MONTH) == 0) monthYear(t) to true else month(t) to false
             days > 35 -> dateVeryShort(t) to (cal.get(Calendar.DAY_OF_MONTH) == 1)

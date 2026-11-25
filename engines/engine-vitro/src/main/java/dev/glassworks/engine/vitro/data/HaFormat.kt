@@ -280,8 +280,9 @@ object HaFormat {
     /** JavaScript's `Math.round`: halves go up. */
     private fun jsRound(v: Double): Long = Math.floor(v + 0.5).roundToLong()
 
-    private fun epochDay(ms: Long, tz: TimeZone): Long = Math.floorDiv(ms + tz.getOffset(ms), 86_400_000L)
+    // Kotlin's floorDiv and mod: java.lang.Math's long overloads need API 24, and Vitro runs on Android 6.
+    private fun epochDay(ms: Long, tz: TimeZone): Long = (ms + tz.getOffset(ms)).floorDiv(86_400_000L)
 
     /** date-fns `startOfWeek` with `weekStartsOn` [first] (0 Sunday); epoch day 0 (1970-01-01) was a Thursday. */
-    private fun weekStart(epochDay: Long, first: Int): Long = epochDay - Math.floorMod(epochDay + 4 - first, 7L)
+    private fun weekStart(epochDay: Long, first: Int): Long = epochDay - (epochDay + 4 - first).mod(7L)
 }

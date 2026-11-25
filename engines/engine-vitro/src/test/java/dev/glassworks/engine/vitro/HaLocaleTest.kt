@@ -115,6 +115,9 @@ class HaLocaleTest {
         assertEquals("de", HaLocale.findAvailableLanguage("de-AT"))
         assertNull(HaLocale.findAvailableLanguage("xx"))
         assertEquals("zh-CN", HaLocale.browserTag(Locale.forLanguageTag("zh-Hans-CN")))
+        // Android before 15 reports Java's old codes: a browser says he and id.
+        assertEquals("he-IL", HaLocale.browserTag(Locale("iw", "IL")))
+        assertEquals("id", HaLocale.browserTag(Locale("in")))
     }
 
     @Test
@@ -204,6 +207,23 @@ class HaLocaleTest {
         assertEquals("5. Januar 2023 um 21:07", HaFormat.formatDateTime(evening, locale("de")))
         assertEquals("Do", HaFormat.formatDateWeekdayShort(evening, locale("de")))
         assertEquals("jeu.", HaFormat.formatDateWeekdayShort(evening, locale("fr")))
+    }
+
+    @Test
+    fun persianAndThaiDatesAreInTheirOwnCalendars() {
+        // fa: the Persian calendar's day, month and year together (2026-03-21 is 1 Farvardin 1405).
+        val nowruz = java.util.GregorianCalendar(utc).apply { clear(); set(2026, 2, 21, 12, 0) }.timeInMillis
+        assertEquals(FA_NOWRUZ, HaFormat.formatDate(nowruz, locale("fa")))
+        assertEquals(FA_EVENING, HaFormat.formatDate(evening, locale("fa")))
+        // th: the Buddhist year with its era, also on a panel whose own calendar is Buddhist.
+        val saved = Locale.getDefault()
+        Locale.setDefault(Locale("th", "TH"))
+        try {
+            assertEquals("พ.ศ. 2566", HaFormat.formatDateYear(evening, locale("th")))
+            assertEquals("5 มกราคม 2566", HaFormat.formatDate(evening, locale("th")))
+        } finally {
+            Locale.setDefault(saved)
+        }
     }
 
     @Test
@@ -299,5 +319,10 @@ class HaLocaleTest {
         assertEquals("decimal_comma", json.getString("number_format"))
         assertEquals("24", json.getString("time_format"))
         assertEquals("local", json.getString("time_zone"))
+    }
+
+    private companion object {
+        const val FA_NOWRUZ = "۱ فروردین ۱۴۰۵"
+        const val FA_EVENING = "۱۵ دی ۱۴۰۱"
     }
 }

@@ -78,10 +78,25 @@ object HaLocale {
 
     /** Back to the browser's defaults: a new connection, or tests. */
     fun reset() {
-        set(FrontendLocale(language = deviceLanguage()), notify = false)
-        serverTimeZone = null
-        languageFromProfile = false
+        synchronized(lock) {
+            write(FrontendLocale(language = deviceLanguage()))
+            serverTimeZone = null
+            languageFromProfile = false
+        }
     }
+
+    /**
+     * Guards every read-then-write of the locale (the client's socket thread, HaFrontend's thread, tests): a profile
+     * language can't be replaced by a browser language computed before it. Listeners run after it is released.
+     */
+    private val lock = Any()
+
+    private fun write(locale: FrontendLocale) {
+        current = locale
+        version++
+    }
+
+    private fun notifyListeners() = listeners.forEach { runCatching { it() } }
 
     /** True once the profile has set the language; until then it is the browser's. */
     @Volatile private var languageFromProfile = false
@@ -91,9 +106,14 @@ object HaLocale {
      * against them again, as `getLocalLanguage` would have on HA's page. Tells the listeners when it changes.
      */
     fun languagesKnown() {
-        if (languageFromProfile) return
-        val lang = deviceLanguage()
-        if (lang != current.language) set(current.copy(language = lang), notify = true)
+        val changed = synchronized(lock) {
+            if (languageFromProfile) return
+            val lang = deviceLanguage()
+            if (lang == current.language) return
+            write(current.copy(language = lang))
+            true
+        }
+        if (changed) notifyListeners()
     }
 
     /**
@@ -103,6 +123,12 @@ object HaLocale {
      */
     fun applyUserData(value: JSONObject?): Boolean {
         if (value == null) return false
+        val changed = synchronized(lock) { applyLocked(value) }
+        if (changed) notifyListeners()
+        return changed
+    }
+
+    private fun applyLocked(value: JSONObject): Boolean {
         fun str(key: String): String? = if (value.isNull(key)) null else value.optString(key).takeIf { it.isNotEmpty() }
         val cur = current
         val next = cur.copy(
@@ -115,24 +141,26 @@ object HaLocale {
         )
         if (str("language")?.let { findAvailableLanguage(it) } != null) languageFromProfile = true
         if (next == cur) return false
-        set(next, notify = true)
+        write(next)
         return true
     }
 
     /** `get_config`'s `time_zone`. */
     fun applyConfig(config: JSONObject?) {
         val tz = config?.optString("time_zone")?.takeIf { it.isNotEmpty() } ?: return
-        if (tz == serverTimeZone) return
-        serverTimeZone = tz
-        version++
-        if (current.timeZone == "server") listeners.forEach { runCatching { it() } }
+        val server = synchronized(lock) {
+            if (tz == serverTimeZone) return
+            serverTimeZone = tz
+            version++
+            current.timeZone == "server"
+        }
+        if (server) notifyListeners()
     }
 
     /** For tests and tools: use [locale] as it is. */
     fun set(locale: FrontendLocale, notify: Boolean = true) {
-        current = locale
-        version++
-        if (notify) listeners.forEach { runCatching { it() } }
+        synchronized(lock) { write(locale) }
+        if (notify) notifyListeners()
     }
 
     /**
@@ -152,8 +180,11 @@ object HaLocale {
      * [locale] as a browser reports it in `navigator.language`: language and region ("zh-CN", "pt-BR"), without the
      * script Android's own tags carry ("zh-Hans-CN").
      */
-    fun browserTag(locale: Locale): String =
-        if (locale.country.isEmpty()) locale.language.ifEmpty { "en" } else "${locale.language}-${locale.country}"
+    fun browserTag(locale: Locale): String {
+        // Android before 15 keeps Java's old codes for Hebrew, Indonesian and Yiddish; a browser says he, id, yi.
+        val language = when (val l = locale.language) { "iw" -> "he"; "in" -> "id"; "ji" -> "yi"; else -> l }.ifEmpty { "en" }
+        return if (locale.country.isEmpty()) language else "$language-${locale.country}"
+    }
 
     private val CHINESE = mapOf(
         "zh-cn" to "zh-Hans", "zh-sg" to "zh-Hans", "zh-my" to "zh-Hans",

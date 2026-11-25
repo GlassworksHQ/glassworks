@@ -97,6 +97,44 @@ class HaFrontendTest {
     }
 
     @Test
+    fun withoutItsLovelaceFragmentTheTableIsUsedButNotKept() {
+        served.remove("$origin/static/translations/lovelace/de-d1.json")
+        assertTrue(HaFrontend.load(origin, "de"))
+        assertEquals("Nicht verfügbar", HaText.ui("state.default.unavailable"))
+        assertFalse(File(cache, "strings-de-d1.json").exists())
+        // The next load asks for both files again, and keeps the whole table.
+        served["$origin/static/translations/lovelace/de-d1.json"] = """{"ui":{"panel":{"lovelace":{"cards":{"todo-list":{"add_item":"Eintrag hinzufügen"}}}}}}"""
+        asked.clear()
+        assertTrue(HaFrontend.load(origin, "de"))
+        assertTrue("$origin/static/translations/lovelace/de-d1.json" in asked)
+        assertTrue(File(cache, "strings-de-d1.json").isFile)
+        assertEquals("Eintrag hinzufügen", HaText.ui("ui.panel.lovelace.cards.todo-list.add_item"))
+    }
+
+    @Test
+    fun aRetiredClientsLateDownloadLeavesTheStringsAlone() {
+        val retired = Any()
+        val current = Any()
+        val release = java.util.concurrent.CountDownLatch(1)
+        val done = java.util.concurrent.CountDownLatch(1)
+        HaFrontend.fetch = { url -> release.await(); asked += url; served[url]?.toByteArray() }
+        HaFrontend.claim(retired)
+        HaFrontend.ensure(retired, origin, "de") { done.countDown() }
+        // A new client takes over while the old one's download is still on its way.
+        HaFrontend.claim(current)
+        release.countDown()
+        HaFrontend.ensure(current, origin, "xx") {}
+        assertFalse("the retired client's strings are never installed", done.await(2, java.util.concurrent.TimeUnit.SECONDS))
+        assertEquals(null, HaText.language.takeIf { it == "de" })
+        // A client that isn't the owner can't start a download at all.
+        val stranger = Any()
+        asked.clear()
+        HaFrontend.ensure(stranger, origin, "de") { done.countDown() }
+        Thread.sleep(200)
+        assertTrue(asked.none { it.endsWith("de-d1.json") })
+    }
+
+    @Test
     fun theMetadataIsReadOutOfTheAppBundle() {
         val m = HaFrontend.metadataOf("""x=JSON.parse('{"fragments":[],"translations":{"fr":{"nativeName":"Français","hash":"f1"},"it":{"nativeName":"L\'italiano","hash":"i1"}}}');""")!!
         assertEquals("f1", m.getJSONObject("translations").getJSONObject("fr").getString("hash"))

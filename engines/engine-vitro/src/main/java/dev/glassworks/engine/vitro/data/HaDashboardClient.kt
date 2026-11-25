@@ -167,7 +167,9 @@ class HaDashboardClient(
         // until this one's profile answers. A reconnect of this client keeps them, as HA's page does.
         HaLocale.reset()
         // HA's frontend strings as this HA served them last time, until it answers (or when it can't be reached).
-        origin?.let { o -> HaFrontend.ensureCached(o, HaLocale.current.language) { if (!closed.get()) listener.onLocaleChanged() } }
+        // This client's requests are the ones that install strings from now on (a retired one's late download doesn't).
+        HaFrontend.claim(this)
+        origin?.let { o -> HaFrontend.ensureCached(this, o, HaLocale.current.language) { if (!closed.get()) listener.onLocaleChanged() } }
         val thread = Thread({ loop() }, "vitro-ha-ws").apply { isDaemon = true }
         readerThread = thread
         thread.start()
@@ -682,7 +684,7 @@ class HaDashboardClient(
     private fun ensureStrings() {
         val o = origin ?: return
         val language = HaLocale.current.language
-        HaFrontend.ensure(o, language) {
+        HaFrontend.ensure(this, o, language) {
             if (closed.get()) return@ensure
             if (HaLocale.current.language != language) languageChanged()
             listener.onLocaleChanged()

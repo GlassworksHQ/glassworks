@@ -2296,7 +2296,7 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
         val y = scroll.scrollY
         val first = rowViews.firstOrNull { (v, _) -> v.bottom > y }?.second ?: rows.firstOrNull()
         floating.visibility = if (first != null) VISIBLE else GONE
-        if (first != null) floating.text = dateHeader((first.whenSec * 1000).toLong(), ctx.now(), HaLocale.deviceTimeZone())
+        if (first != null) floating.text = dateHeader((first.whenSec * 1000).toLong(), ctx.now(), HaLocale.timeZone())
     }
 
     private fun render(entries: List<LogbookEntry>) {
@@ -2310,7 +2310,8 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             return
         }
-        val tz = HaLocale.deviceTimeZone()
+        // One zone for the days, their words and their dates: the one HA's dates are written in.
+        val tz = HaLocale.timeZone()
         val now = ctx.now()
         entries.forEachIndexed { i, e ->
             val firstOfDay = i == 0 || !sameDay(e, entries[i - 1], tz)
@@ -2481,19 +2482,20 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
         fun timeText(ms: Long): String = HaFormat.formatTimeWithSeconds(ms)
 
         /**
-         * `_formatDateHeader`: "Today · November 24, 2026", "Yesterday · …", else `formatDate`. The day counts in the
-         * browser's zone ([tz]); "Today" is `Intl.RelativeTimeFormat`'s, capitalized.
+         * `_formatDateHeader`: "Today · November 24, 2026", "Yesterday · …", else `formatDate`. The day word and the
+         * date both count in [tz] (the zone HA's dates are written in, `HaLocale.timeZone()`), so they name the same
+         * day; "Today" is `Intl.RelativeTimeFormat`'s, capitalized.
          */
         fun dateHeader(ms: Long, nowMs: Long, tz: TimeZone): String {
-            val full = HaFormat.formatDate(ms)
-            val diff = Math.floorDiv(nowMs + tz.getOffset(nowMs), 86_400_000L) - Math.floorDiv(ms + tz.getOffset(ms), 86_400_000L)
+            val full = HaIntl.of(HaLocale.current.language).dateFormat("date")?.format(ms, tz) ?: HaFormat.formatDate(ms)
+            val diff = (nowMs + tz.getOffset(nowMs)).floorDiv(86_400_000L) - (ms + tz.getOffset(ms)).floorDiv(86_400_000L)
             if (diff != 0L && diff != 1L) return full
             val word = HaIntl.of(HaLocale.current.language).relativeTime(if (diff == 0L) 0 else -1, "day")
             return "${HaFormat.capitalize(word)} · $full"
         }
 
         private fun sameDay(a: LogbookEntry, b: LogbookEntry, tz: TimeZone): Boolean {
-            fun day(e: LogbookEntry): Long { val ms = (e.whenSec * 1000).toLong(); return Math.floorDiv(ms + tz.getOffset(ms), 86_400_000L) }
+            fun day(e: LogbookEntry): Long { val ms = (e.whenSec * 1000).toLong(); return (ms + tz.getOffset(ms)).floorDiv(86_400_000L) }
             return day(a) == day(b)
         }
     }

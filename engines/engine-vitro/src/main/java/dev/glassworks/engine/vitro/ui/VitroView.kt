@@ -174,6 +174,9 @@ class VitroView(
 
     private val tabs = ArrayList<TabEntry>()
     private var moreInfo: MoreInfoSheet? = null
+
+    /** The entity the open More Info sheet shows (to open it again in a new language). */
+    private var moreInfoEntityId: String? = null
     private val viewCache = LinkedHashMap<Int, View>()
 
     /** For each cached view, the scripts its islands could load when it was built ([IslandScripts]). */
@@ -460,11 +463,15 @@ class VitroView(
         if (next == drawnLocale) return
         drawnLocale = next
         if (dashboard == null) return
+        // An open More Info sheet built its words once: it opens again in the new language.
+        val reopen = moreInfoEntityId?.takeIf { moreInfo != null }
+        closeMoreInfo()
         viewCache.clear()
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
+        reopen?.let { openMoreInfo(it) }
     }
 
     fun setDashboard(config: DashboardConfig, initialViewPath: String?) {
@@ -543,6 +550,7 @@ class VitroView(
     /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
     internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
         closeMoreInfo()
+        moreInfoEntityId = entityId
         val cfg = dashboard?.views?.getOrNull(currentViewIndex)
         val theme = ThemeResolver.resolve(themeCatalog, darkMode, cfg?.theme ?: userThemeName, cfg?.background)
         val cardCtx = contextFactory?.invoke(theme) ?: return

@@ -198,7 +198,8 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     }
 
     private fun step(dir: Int) {
-        val c = Calendar.getInstance().apply { timeInMillis = anchor }
+        // In the zone the calendar shows its days in, so Next and Previous move by its months and days.
+        val c = Calendar.getInstance(HaLocale.timeZone()).apply { timeInMillis = anchor }
         when (view) {
             MONTH -> c.add(Calendar.MONTH, dir)
             DAY -> c.add(Calendar.DAY_OF_MONTH, dir)

@@ -111,6 +111,8 @@ object HaIntl {
             return text(f, calendar(ms, zone))
         }
 
-        private fun calendar(ms: Long, zone: TimeZone): Calendar = Calendar.getInstance(zone).apply { timeInMillis = ms }
+        // Gregorian whatever the panel's locale (a Thai one's default calendar is Buddhist): the table applies its
+        // own calendar to the Gregorian date.
+        private fun calendar(ms: Long, zone: TimeZone): Calendar = java.util.GregorianCalendar(zone).apply { timeInMillis = ms }
     }
 }

@@ -1256,7 +1256,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             artist.visibility = if (a == null) GONE else VISIBLE
             state.text = listOf(s?.formattedState().orEmpty(), relativeTime(s)).filter { it.isNotEmpty() }.joinToString(" · ")
             playIcon.setIcon(if (playing) "mdi:pause" else "mdi:play", theme.primaryTextColor)
-            play.contentDescription = if (playing) "Pause" else "Play"
+            play.contentDescription = HaText.ui(if (playing) "ui.card.media_player.media_pause" else "ui.card.media_player.media_play")
             val level = (s?.attributes?.get("volume_level") as? Number)?.toDouble()
             volumeRow.visibility = if (level == null) GONE else VISIBLE
             if (level != null && !tracking) volume.progress = (level * 100).roundToInt()

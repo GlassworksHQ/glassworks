@@ -199,10 +199,11 @@ function capture(tag) {
     shortDateTimeSeconds: { month: 'short', day: 'numeric', hour: h12 ? 'numeric' : '2-digit', minute: '2-digit', second: '2-digit' },
     dateTimeSeconds: { year: 'numeric', month: 'long', day: 'numeric', hour: h12 ? 'numeric' : '2-digit', minute: '2-digit', second: '2-digit' },
   });
-  // 2023-01-05 09:07:03 UTC (a Thursday): one-digit day, month, hour, minute and second tell numeric from 2-digit.
-  const probe = Date.UTC(2023, 0, 5, 9, 7, 3);
   const dtf = new Intl.DateTimeFormat(tag);
   out.calendar = dtf.resolvedOptions().calendar;
+  // A date whose day, month, hour, minute and second all have one digit tells numeric from 2-digit: 2023-01-05
+  // 09:07:03 UTC (a Thursday), or in the Persian calendar 2023-03-22 (2 Farvardin 1402).
+  const probe = out.calendar === 'persian' ? Date.UTC(2023, 2, 22, 9, 7, 3) : Date.UTC(2023, 0, 5, 9, 7, 3);
   out.dateZero = new Intl.NumberFormat(tag, { numberingSystem: dtf.resolvedOptions().numberingSystem, useGrouping: false }).format(0);
   const toAscii = (s) => s.replace(/\p{Nd}/gu, (d) => String((d.codePointAt(0) - out.dateZero.codePointAt(0) + 10) % 10));
   const template = (opts) => {
@@ -221,12 +222,19 @@ function capture(tag) {
         case 'minute': tokens.push('{mm}'); break;
         case 'second': tokens.push('{ss}'); break;
         case 'dayPeriod': tokens.push('{a}'); break;
-        default: tokens.push(`{?${p.type}}`);
+        // The era (Thai "พ.ศ."): the same for every date Vitro shows, so its text is part of the template.
+        case 'era': tokens.push(p.value.replace(/\{/g, '{{')); break;
+        default: throw new Error(`${tag}: the ${p.type} field of ${JSON.stringify(opts)} has no template token`);
       }
     }
     const fmt = { t: tokens.join('') };
     const names = (type, dates) => dates.map((d) => f.formatToParts(d).find((p) => p.type === type)?.value ?? '');
-    if (tokens.includes('{Mt}')) fmt.months = names('month', Array.from({ length: 12 }, (_, m) => Date.UTC(2023, m, 15, 12)));
+    // Month names by the locale calendar's own month: Gregorian, or Persian (1402 began on 2023-03-21; its first
+    // six months have 31 days, the next five 30), where Vitro computes the Persian date itself.
+    const monthDates = out.calendar === 'persian'
+      ? Array.from({ length: 12 }, (_, m) => Date.UTC(2023, 2, 21 + (m < 6 ? m * 31 : 186 + (m - 6) * 30) + 10, 12))
+      : Array.from({ length: 12 }, (_, m) => Date.UTC(2023, m, 15, 12));
+    if (tokens.includes('{Mt}')) fmt.months = names('month', monthDates);
     // 2023-01-01 was a Sunday.
     if (tokens.includes('{E}')) fmt.weekdays = names('weekday', Array.from({ length: 7 }, (_, d) => Date.UTC(2023, 0, 1 + d, 12)));
     if (tokens.includes('{a}')) fmt.dayPeriods = names('dayPeriod', [Date.UTC(2023, 0, 5, 9), Date.UTC(2023, 0, 5, 21)]);
@@ -263,7 +271,26 @@ rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 
 const tables = {};
-for (const tag of tags) tables[tag] = await page.evaluate(capture, tag);
+// A table stored under a tag holds that tag's own answers. Chromium's ICU leaves some languages out (it resolves
+// them to en-US, or gives root data such as "M01" months); those come from Node's full ICU instead, the same
+// capture, and the table says so. A language neither has fails the run.
+const wrong = (t, tag) => t.locale.split('-')[0].toLowerCase() !== tag.split('-')[0].toLowerCase()
+  || Object.values(t.date).some((f) => (f.months || []).some((m) => /^M\d\d$/.test(m)));
+const fromNode = [];
+for (const tag of tags) {
+  let t = await page.evaluate(capture, tag);
+  if (wrong(t, tag)) {
+    t = capture(tag);
+    t.source = 'node';
+    fromNode.push(tag);
+    if (wrong(t, tag)) {
+      console.error(`${tag}: neither Chromium nor Node has this language's Intl data (resolved to ${t.locale})`);
+      process.exitCode = 1;
+    }
+  }
+  tables[tag] = t;
+}
+if (fromNode.length) console.log(`from Node's ICU ${process.versions.icu} (Chromium lacks them): ${fromNode.join(', ')}`);
 // One list of month, weekday and day-period names per locale: a format points into it.
 for (const t of Object.values(tables)) {
   const names = [];

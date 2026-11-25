@@ -69,7 +69,7 @@ object TableIntlSource : HaIntl.Source {
         private val names: List<List<String>> = json.optJSONArray("names")?.let { a -> List(a.length()) { a.optJSONArray(it).strings() } }.orEmpty()
         override val amPm: Boolean = json.optBoolean("amPm", false)
         override val firstDay: Int = json.optInt("firstDay", 1)
-        private val buddhist = json.optString("calendar") == "buddhist"
+        private val calendarName = json.optString("calendar")
         private val dateZero: Int = json.optString("dateZero", "0").ifEmpty { "0" }.codePointAt(0)
 
         override fun formatNumber(value: BigDecimal, minDigits: Int, maxDigits: Int, grouping: Boolean, negative: Boolean): String {
@@ -144,7 +144,7 @@ object TableIntlSource : HaIntl.Source {
             val t = templates.getOrPut(name) {
                 date.optJSONObject(name)?.let { o ->
                     fun list(key: String) = if (o.has(key)) names.getOrElse(o.optInt(key, -1)) { emptyList() } else emptyList()
-                    Template(parse(o.optString("t")), list("months"), list("weekdays"), list("dayPeriods"), dateZero, buddhist)
+                    Template(parse(o.optString("t")), list("months"), list("weekdays"), list("dayPeriods"), dateZero, calendarName)
                 } ?: NONE
             }
             return t as? HaIntl.DateTemplate
@@ -158,19 +158,25 @@ object TableIntlSource : HaIntl.Source {
         private val weekdays: List<String>,
         private val dayPeriods: List<String>,
         private val zero: Int,
-        private val buddhist: Boolean,
+        private val calendar: String,
     ) : HaIntl.DateTemplate(tokens) {
         override fun text(field: HaIntl.DateTemplate.Token.Field, c: Calendar): String {
             val hour = c.get(Calendar.HOUR_OF_DAY)
-            val year = c.get(Calendar.YEAR) + if (buddhist) 543 else 0
+            // The locale's calendar: Gregorian, Buddhist (the same months, the year 543 on), or Persian.
+            val ymd = when (calendar) {
+                "persian" -> persian(c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH))
+                "buddhist" -> intArrayOf(c.get(Calendar.YEAR) + 543, c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH))
+                else -> intArrayOf(c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH))
+            }
+            val (year, month, day) = Triple(ymd[0], ymd[1], ymd[2])
             return when (field.name) {
                 "y" -> num(year, 1)
                 "yy" -> num(year % 100, 2)
-                "M" -> num(c.get(Calendar.MONTH) + 1, 1)
-                "MM" -> num(c.get(Calendar.MONTH) + 1, 2)
-                "Mt" -> months.getOrElse(c.get(Calendar.MONTH)) { "" }
-                "d" -> num(c.get(Calendar.DAY_OF_MONTH), 1)
-                "dd" -> num(c.get(Calendar.DAY_OF_MONTH), 2)
+                "M" -> num(month, 1)
+                "MM" -> num(month, 2)
+                "Mt" -> months.getOrElse(month - 1) { "" }
+                "d" -> num(day, 1)
+                "dd" -> num(day, 2)
                 "E" -> weekdays.getOrElse(c.get(Calendar.DAY_OF_WEEK) - 1) { "" }
                 "H" -> num(hour, 1)
                 "HH" -> num(hour, 2)
@@ -190,6 +196,27 @@ object TableIntlSource : HaIntl.Source {
             for (ch in s) sb.appendCodePoint(zero + (ch - '0'))
             return sb.toString()
         }
+    }
+
+    /**
+     * The Persian (Solar Hijri) date of the Gregorian [gy]-[gm]-[gd]: year, month (1-12) and day, by the arithmetic
+     * ICU's Persian calendar uses for the years a panel shows (33-year cycle, as in jdf's gregorian_to_jalali).
+     */
+    internal fun persian(gy: Int, gm: Int, gd: Int): IntArray {
+        val before = intArrayOf(0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334)
+        val gy2 = if (gm > 2) gy + 1 else gy
+        var days = 355666 + 365 * gy + (gy2 + 3) / 4 - (gy2 + 99) / 100 + (gy2 + 399) / 400 + gd + before[gm - 1]
+        var jy = -1595 + 33 * (days / 12053)
+        days %= 12053
+        jy += 4 * (days / 1461)
+        days %= 1461
+        if (days > 365) {
+            jy += (days - 1) / 365
+            days = (days - 1) % 365
+        }
+        val jm = if (days < 186) 1 + days / 31 else 7 + (days - 186) / 30
+        val jd = 1 + if (days < 186) days % 31 else (days - 186) % 30
+        return intArrayOf(jy, jm, jd)
     }
 
     /** `{name}` fields and literals (`{{` is a literal brace). */
