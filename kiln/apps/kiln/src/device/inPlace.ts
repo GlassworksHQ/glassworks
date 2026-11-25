@@ -149,7 +149,7 @@ export function fallbackWords(e: FallbackEvent): string {
     case 'lna-denied': return 'The browser blocked the local network, so Kiln switched to Bluetooth.';
     case 'no-address': return 'The device isn\'t on your network, so Kiln is using Bluetooth.';
     case 'timeout': return 'The local network stopped answering, so Kiln switched to Bluetooth.';
-    case 'invalid-bundle': return 'What came over the local network wasn\'t the whole bundle, so Kiln switched to Bluetooth.';
+    case 'invalid-bundle': return 'What came over the local network wasn\'t complete, so Kiln switched to Bluetooth.';
     default: return 'The local network transfer dropped, so Kiln switched to Bluetooth.';
   }
 }

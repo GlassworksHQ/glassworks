@@ -1785,6 +1785,8 @@ export class ImageSession {
     const s = this.state;
     if (this.inPlace) {
       if (this.started.size || this.wrote.size || s.screen === 'adb' || s.work?.step === 'app-install') return 'system';
+      // the first session's fastboot and warning come before the stage's write: nothing is on the device yet
+      if (s.round === 1 && !s.resumed && (s.screen === 'fastboot' || s.screen === 'confirm')) return 'none';
       return s.round || s.resumed ? 'stage' : 'none';
     }
     if (s.screen === 'working' || s.screen === 'adb' || (s.screen === 'error' && s.work) || s.resumed === 'flashed') return 'system';

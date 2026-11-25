@@ -213,7 +213,7 @@ describe('with a Wi-Fi network', () => {
     await f.connectAdb(); // Connect again: the browser's list is closed with nothing picked
     expect(f.state).toMatchObject({ screen: 'error', wifiOnFailed: true, connectError: 'No device selected.' });
     render(<ImageFlow image={f} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('x'); } }, true)} />);
-    expect(screen.getByText('No device selected.').getAttribute('role')).toBe('alert');
+    expect(screen.getByText('No device selected.').closest('[role=alert]')).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Connect again' })).toBeTruthy();
     cleanup();
     await f.connectAdb(); // and a third try works
@@ -326,14 +326,16 @@ describe('the screens', () => {
 
   it('the install lists this browser\'s key, saving the network and switching Wi-Fi on', async () => {
     await show('image-wifi-writing');
-    expect([...document.querySelectorAll('ol.join li')].map((li) => li.textContent?.replace(/\d+%$/, ''))).toEqual([
-      'Replace the built-in USB key with this browser’s', 'Replace the shared USB key with this browser’s', 'Save your Wi-Fi network for first start', 'Write the operating system', 'Write fresh storage', 'Restart the Mirror', 'Turn Wi-Fi on after first start',
+    // every step in plain words, with the person's one click among them (docs/design/kiln/system.md)
+    expect([...document.querySelectorAll('.plist .plabel')].map((x) => x.textContent)).toEqual([
+      'Let only this browser connect to it', 'Remove the shared key anyone could connect with', 'Save your Wi-Fi for its first start', 'Write the new system', 'Start its app storage fresh', 'Restart the Mirror', 'Connect to the Mirror', 'Turn on its Wi-Fi',
     ]);
   });
 
   it('One last click says what Kiln does there', async () => {
     await show('image-adb');
-    expect(screen.getByText(/Click Connect and pick the Mirror, listed as “Android”, in the browser's list, and Kiln switches its Wi-Fi on\./)).toBeTruthy();
+    expect(screen.getByText(/Click Connect, and Kiln waits for it, then switches its Wi-Fi on\./)).toBeTruthy();
+    expect(document.querySelector('.ask')!.textContent).toContain('Pick Android, which is the Mirror');
   });
 
   it('Done says Wi-Fi is on, or how to switch it on once', async () => {

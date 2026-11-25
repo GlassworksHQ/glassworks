@@ -610,7 +610,8 @@ describe('routes and screens', () => {
     expect(Object.keys(routesOf(mirrorFrame.id))).toEqual(expect.arrayContaining(['undo', 'undo/connect', 'undo/restore', 'undo/done']));
   });
 
-  it.each(['place-receive-file', 'place-restore-point', 'place-fastboot-again', 'place-undo', 'place-error-bundle'] as const)('%s renders, with one ember button at most', async (d) => {
+  it.each(['place-start', 'place-fastboot', 'place-confirm', 'place-receive-file', 'place-restore-point', 'place-fastboot-again', 'place-connect', 'place-first-start', 'place-installing',
+    'place-error-write', 'place-undo', 'place-undo-fastboot', 'place-undo-working', 'place-undo-error', 'place-undo-done', 'place-error-bundle'] as const)('%s renders, with one ember button at most', async (d) => {
     const h = handTo();
     const { image, app } = await imageDemo(mirrorEntry, d, true, {}, h.handOver);
     render(<ImageFlow image={image} app={app} />);
@@ -619,17 +620,57 @@ describe('routes and screens', () => {
     expect(document.body.textContent).not.toContain(FAKE_SERIAL);
   }, 20_000);
 
-  it('the wait for the first start stays on the restart row, not back on the first one', async () => {
+  it('the first screen says the whole road up front: every part, in order, the person\'s marked, with how long', async () => {
+    const { image, app } = await imageDemo(mirrorEntry, 'place-start', true);
+    render(<ImageFlow image={image} app={app} />);
+    const road = [...document.querySelectorAll('.road-list li')].map((li) => `${li.classList.contains('you') ? 'You: ' : ''}${li.querySelector('.road-t')!.textContent}${li.querySelector('.road-m')!.textContent && !li.classList.contains('you') ? ` (${li.querySelector('.road-m')!.textContent})` : ''}`);
+    expect(road).toEqual([
+      'You: Put the Mirror in fastboot mode',
+      'Kiln adds a small setup helper. The original system isn’t touched',
+      'You: Join the Mirror’s own Wi-Fi, so Kiln can copy the parts of its system it will change',
+      'You: Fastboot mode once more',
+      'Kiln prepares the changes and checks them',
+      'You: Kiln saves a restore point, and you download a copy',
+      'Kiln writes the changes',
+      'It starts for the first time, and Kiln installs Glassworks (4–5 minutes)',
+      'You: Set it up: Wi-Fi, Home Assistant and panes',
+    ]);
+    expect(document.querySelector('.road-h')!.textContent).toBe('What happens · 20–30 minutes');
+  });
+
+  it('the in-place screens say no plumbing: no bundle, no agent, no SHA-256, no sparse', async () => {
+    for (const d of ['place-start', 'place-fastboot', 'place-confirm', 'place-join-wifi', 'place-joined', 'place-receive-ble', 'place-receive-lan', 'place-wifi-unreachable', 'place-lna-denied',
+      'place-receive-file', 'place-error-bundle', 'place-fastboot-again', 'place-restore-point', 'place-working', 'place-connect', 'place-first-start', 'place-resume', 'place-resume-staged',
+      'place-undo', 'place-undo-fastboot'] as const) {
+      const { image, app } = await imageDemo(mirrorEntry, d, true);
+      render(<ImageFlow image={image} app={app} />);
+      await act(async () => {});
+      // what a person reads: the page without its technical log, which is for help
+      const main = document.querySelector('main')!.cloneNode(true) as HTMLElement;
+      main.querySelectorAll('.details').forEach((x) => x.remove());
+      const rail = document.querySelector('.rail')!.textContent ?? '';
+      expect(`${main.textContent} ${rail}`, d).not.toMatch(/bundle|agent|SHA-256|sparse|Refract/i);
+      cleanup();
+    }
+  }, 60_000);
+
+  it('the wait for the first start has its own row after the restart, and the list never goes back', async () => {
     const h = handTo();
     const { image, app } = await imageDemo(mirrorEntry, 'place-working', true, {}, h.handOver);
     render(<ImageFlow image={image} app={app} />);
-    const cur = () => document.querySelector('.join li.cur')?.textContent;
+    const cur = () => document.querySelector('.prow.now .plabel')?.textContent;
+    const done = () => [...document.querySelectorAll('.prow.done .plabel')].map((x) => x.textContent);
     await act(async () => { (image as unknown as { set(p: object): void }).set({ screen: 'working', round: 2, work: { step: 'restart', x: 0 } }); });
     expect(cur()).toBe('Restart the Mirror');
     await act(async () => { (image as unknown as { set(p: object): void }).set({ work: { step: 'first-boot', x: 0 } }); });
-    expect(cur()).toBe('Restart the Mirror');
+    expect(cur()).toBe('Let it finish its first start');
+    expect(done()).toEqual(['Prepare the changes and check them', 'Write the new system', 'Start its app storage fresh', 'Restart the Mirror', 'Connect to the Mirror']);
+    expect(screen.getByText('Usually 4–5 minutes')).toBeTruthy();
     await act(async () => { (image as unknown as { set(p: object): void }).set({ work: { step: 'app-install', x: 0 } }); });
-    expect(cur()).toBe('Install Glassworks and hide the stock apps');
+    expect(cur()).toBe('Install Glassworks and hide the original apps');
+    // a step reported late never pulls the list back
+    await act(async () => { (image as unknown as { set(p: object): void }).set({ work: { step: 'in-place', x: 0 } }); });
+    expect(cur()).toBe('Install Glassworks and hide the original apps');
   }, 20_000);
 
   it('the way back has its own rail, not the install\'s', () => {
