@@ -232,4 +232,3 @@ Every state above has a demo at 1280×800 and 390 wide. New in round two, on `/l
 - The picker, the choice cards and set-up's forms keep their layout; they take the new type, color and notes.
 - The S1's recovery drawing keeps its own chips; it has no numbered steps in its frame data to tick.
 - Times for the S1 and Android steps: their frames don't give `time.*` words yet.
-- The Mirror's full image has no `time.total.glassworks` word: its download and system write haven't been timed.

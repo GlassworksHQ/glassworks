@@ -121,9 +121,14 @@ describe('the choice', () => {
       // read with the card's summary
       if (want) expect(screen.getByRole('radio', { name: r.name }).getAttribute('aria-describedby')).toContain(`image-${r.id}-time`);
     }
-    // the in-place install has its total; the full image's isn't measured yet, so its card says no time
+    // every Mirror choice has its total (maintainer, 2026-11-25)
     expect(time('Glassworks on the stock software')).toBe(`Usually ${words['time.total.glassworks-in-place']}`);
-    expect(time('Glassworks')).toBeUndefined();
+    expect(time('Glassworks')).toBe('Usually about 10 minutes');
+  });
+
+  it('a community image says how long it takes too, once the community images are shown', async () => {
+    await show('image-choose-panes');
+    expect(card('Glass Panes').querySelector('[id$="-time"]')?.textContent).toBe('Usually about 10 minutes');
   });
 
   it('hiding the community images again goes back to Glassworks', async () => {
