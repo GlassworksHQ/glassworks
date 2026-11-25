@@ -1,0 +1,84 @@
+{
+ "title": "More Info of a sensor without a state class: the state history of the last 24 hours, a one-line title on a device's main entity (#885)",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "sensor.hallway_display_backlight"
+ },
+ "more_info": "sensor.hallway_display_backlight",
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "sensor.hallway_display_backlight": {
+    "state": "64",
+    "last_changed": -7200,
+    "attributes": {
+     "unit_of_measurement": "%",
+     "icon": "mdi:brightness-auto",
+     "friendly_name": "Hallway Display"
+    },
+    "last_updated": -3600
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.hallway_display_backlight",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "dev-hallway-display",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-hallway-display",
+    "name": "Hallway Display"
+   }
+  ],
+  "history": {
+   "sensor.hallway_display_backlight": {
+    "steps": [
+     [
+      "-26h",
+      "40"
+     ],
+     [
+      "-20h",
+      "55"
+     ],
+     [
+      "-14h",
+      "70"
+     ],
+     [
+      "-9h",
+      "35"
+     ],
+     [
+      "-5h",
+      "80"
+     ],
+     [
+      "-2h",
+      "64"
+     ],
+     [
+      "-1h",
+      "64"
+     ]
+    ]
+   }
+  }
+ }
+}

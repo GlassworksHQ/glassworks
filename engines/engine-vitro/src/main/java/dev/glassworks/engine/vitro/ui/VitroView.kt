@@ -597,14 +597,17 @@ class VitroView(
         return true
     }
 
+    /** The open More Info sheet, if any (the parity harness compares its surface, #885). */
+    internal val openSheet: MoreInfoSheet? get() = moreInfo
+
     fun openMoreInfo(entityId: String) = openMoreInfo(entityId, null)
 
     /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
     internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
         closeMoreInfo()
         moreInfoEntityId = entityId
-        val cfg = dashboard?.views?.getOrNull(currentViewIndex)
-        val theme = ThemeResolver.resolve(themeCatalog, darkMode, cfg?.theme ?: userThemeName, cfg?.background)
+        // HA's dialogs live outside the view: a view's `theme` never reaches them, the user's theme does (#885).
+        val theme = ThemeResolver.resolve(themeCatalog, darkMode, userThemeName)
         val cardCtx = contextFactory?.invoke(theme) ?: return
         var sheetRef: MoreInfoSheet? = null
         val sheet = MoreInfoSheet(cardCtx) {

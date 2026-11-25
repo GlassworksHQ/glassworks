@@ -123,7 +123,8 @@ object ParityCompare {
         val haSlots = ref.slots
         val anchor = haSlots.firstOrNull()
         val masks = if (anchor == null) emptyList() else case.masks.map { (m, _) ->
-            val x = anchor.x + m.x - clip.x
+            // A negative x counts from the slot's right edge (ParityCase.masks).
+            val x = anchor.x + (if (m.x < 0) anchor.w + m.x else m.x) - clip.x
             val y = anchor.y + m.y - clip.y
             Rect(x.toInt(), y.toInt(), (x + m.w).roundToInt(), (y + m.h).roundToInt())
         }

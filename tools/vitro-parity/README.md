@@ -80,7 +80,7 @@ A local corpus's real HA comes from `~/.t3/glassworks-m1/vitro-parity/ha.json` (
 | Path | What |
 |---|---|
 | `engines/engine-vitro/src/test/parity/frames.json` | The panels: S1 960×480 CSS at 1.5, Pixel Tablet 1280×800 at 2, Mirror 720×1280 at 1.5, and whether each has a touch screen |
-| `…/corpus/<case>.json` | One card per file: `card`, and optionally `title`, `frames`, `dark` (default true), `theme` (a view theme), `span` (section columns), `threshold`, `masks` (CSS px regions relative to the card, each with a `why`), `resources` (Lovelace resources of type `css` from `fixtures/`, see below), `expect` (`{entity_id: state}`: a refresh writes no reference for the case while an entity is in another state, so a case about a light that is on never quietly becomes one about a light that is off), and `fixture` (what the fake HA serves for it, above). A view layout's case has `view_config` (a whole view: a sidebar view, a masonry view, a layout-card view) instead of `card`: it's saved as it is, and compared card by card and as a page |
+| `…/corpus/<case>.json` | One card per file: `card`, and optionally `title`, `frames`, `dark` (default true), `theme` (a view theme), `span` (section columns), `threshold`, `masks` (CSS px regions relative to the card, each with a `why`; a negative `x` counts from the card's right edge), `more_info` (an entity whose More Info dialog opens over the card's view: the dialog is what's compared, see below), `resources` (Lovelace resources of type `css` from `fixtures/`, see below), `expect` (`{entity_id: state}`: a refresh writes no reference for the case while an entity is in another state, so a case about a light that is on never quietly becomes one about a light that is off), and `fixture` (what the fake HA serves for it, above). A view layout's case has `view_config` (a whole view: a sidebar view, a masonry view, a layout-card view) instead of `card`: it's saved as it is, and compared card by card and as a page |
 | `…/refs/<frame>/<case>.png` and `.json` | Home Assistant's render and what came with it |
 | `…/refs/shared.json` | HA's version, the config fields Vitro reads, and the themes |
 | `…/home.json` | The fake HA's shared inputs: the fixed instant, the config, the themes and the signed-in user |
@@ -89,6 +89,10 @@ A local corpus's real HA comes from `~/.t3/glassworks-m1/vitro-parity/ha.json` (
 | `…/baseline.json` | Known drift per `frame/case`, with a `reason` |
 
 A local corpus (`--local [dir]`, default `~/.t3/glassworks-m1/vitro-parity/harness-local`) has the same layout. Its cases name a real dashboard view instead of a card, `{"dashboard": "s1-home-vitro", "view": "home", "frames": ["s1"]}`, and compare the whole view: every card slot in order, plus the full page.
+
+### More Info cases
+
+A case with `more_info` opens HA's More Info dialog for that entity over the card's view, as a tap on the card would (`hass-more-info`), and compares the dialog instead of the card: its surface is the one slot (HA's `<dialog>`, a centered dialog or a bottom sheet as `ha-adaptive-dialog` picks for the window), its texts are the dialog's own, and its PNG is the window as it shows the dialog (never grown or shot full page, because the sheet's height follows the window). Vitro opens its sheet over the same view and crops its surface. The history and statistics calls the dialog makes are recorded and answered like a graph card's. HA's Settings and menu buttons are admin-only pages Vitro's sheet doesn't offer, so the `more-info-*` cases mask them.
 
 ### Cases with their own stylesheets
 

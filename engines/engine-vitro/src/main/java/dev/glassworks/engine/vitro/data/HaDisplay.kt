@@ -172,6 +172,21 @@ object HaDisplay {
         return if (own.isNullOrEmpty() || own.equals(device, ignoreCase = true)) device else "$device$separator$own"
     }
 
+    /** An entity's name in parts, as HA's `computeEntityNameParts` gives them: null where it has none. */
+    data class NameParts(val area: String?, val device: String?, val entity: String?)
+
+    /**
+     * HA's `computeEntityNameParts` (#885): the entity's area (its own, else its device's), its device's name and its
+     * own name (null for a device's main entity). Without a registry entry, [friendlyName] alone. Like
+     * [deviceEntityName], the device always takes part (HA's `next_name_part` isn't read).
+     */
+    fun nameParts(entityId: String, friendlyName: String): NameParts {
+        val entry = registry[entityId] ?: return NameParts(null, null, friendlyName)
+        val device = entry.deviceId?.let { devices[it] }
+        val own = entry.name?.trim()?.takeIf { it.isNotEmpty() } ?: if (device == null) friendlyName else null
+        return NameParts(areaOf(entityId)?.let { areas[it]?.name }, device, own)
+    }
+
     /** The domains and platforms among [entityIds] whose icons and translations aren't loaded yet. */
     fun missingFor(entityIds: Collection<String>): Pair<Set<String>, Set<String>> {
         val domains = HashSet<String>()
