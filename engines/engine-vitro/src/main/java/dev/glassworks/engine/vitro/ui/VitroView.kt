@@ -279,6 +279,13 @@ class VitroView(
     private var buildingIndex = -1
     var onViewSelected: ((ViewConfig) -> Unit)? = null
 
+    /**
+     * Shows a view Vitro doesn't draw ([ViewConfig.webFallbackReason]: a strategy, a built-in card or row it has no
+     * renderer for) in Home Assistant's own frontend, with the reason. Such a view is never built: no empty page and
+     * no island for a card the island can't draw. Null builds every view as it is (a view with no page).
+     */
+    var onWebView: ((ViewConfig, String) -> Unit)? = null
+
     /** A tab tap is about to switch views: the page records where it was, in the same history as its loads. */
     var onTabNavigation: (() -> Unit)? = null
 
@@ -731,6 +738,8 @@ class VitroView(
     private fun renderView(index: Int, forceRebuild: Boolean, pushHistory: Boolean = true) {
         val cfg = dashboard ?: return
         val viewCfg = cfg.views.getOrNull(index) ?: return
+        // Before anything is selected or built: the page leaves for HA's frontend, and this view stays as it was.
+        onWebView?.let { show -> viewCfg.webFallbackReason?.let { reason -> show(viewCfg, reason); return } }
         val t0 = SystemClock.elapsedRealtime()
         val prev = currentViewIndex
         if (pushHistory && !forceRebuild && prev != index && cfg.views.getOrNull(prev) != null) {
