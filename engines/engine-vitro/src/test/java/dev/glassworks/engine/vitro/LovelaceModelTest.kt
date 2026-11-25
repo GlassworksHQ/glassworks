@@ -421,6 +421,32 @@ class LovelaceModelTest {
     }
 
     @Test
+    fun aTimeConditionReadsTheInstantItIsGiven() {
+        // A replay's captured 08:30 decides, not the wall clock (the card context's `now`).
+        val c = VisibilityCondition.Time(after = 8 * 3600, before = 9 * 3600, weekdays = null)
+        val at = { h: Int, m: Int -> java.util.Calendar.getInstance().apply { set(2026, 0, 14, h, m, 0) }.timeInMillis }
+        assertTrue(VisibilityCondition.evaluateAt(c, at(8, 30), states(), 1024, null))
+        assertFalse(VisibilityCondition.evaluateAt(c, at(10, 0), states(), 1024, null))
+    }
+
+    @Test
+    fun numericStateCoercesAsHasNumberDoes() {
+        // HA's `Number(value)`: true is 1, an empty string and null are 0; a missing attribute isn't a number.
+        val fan = EntityState("fan.den", "on", mapOf("oscillating" to true, "preset" to "", "speed" to null))
+        val lookup = { id: String -> if (id == "fan.den") fan else null }
+        fun above0(attr: String) = VisibilityCondition.NumericState("fan.den", above = 0.0, below = null, attribute = attr).evaluate(lookup)
+        fun belowHalf(attr: String) = VisibilityCondition.NumericState("fan.den", above = null, below = 0.5, attribute = attr).evaluate(lookup)
+        assertTrue(above0("oscillating"))
+        assertTrue(belowHalf("preset"))
+        assertTrue(belowHalf("speed"))
+        assertFalse(belowHalf("missing"))
+        assertEquals(16.0, VisibilityCondition.jsToNumber("0x10")!!, 0.0)
+        assertNull(VisibilityCondition.jsToNumber("1f"))
+        assertNull(VisibilityCondition.jsToNumber("NaN"))
+        assertEquals(1500.0, VisibilityCondition.jsToNumber(" 1.5e3 ")!!, 0.0)
+    }
+
+    @Test
     fun screenConditionComparesTheWidthToTheMediaQuery() {
         val tablet = VisibilityCondition.Screen("(min-width: 768px)")
         assertTrue(tablet.evaluate(states(), widthDp = 1024))
@@ -763,6 +789,11 @@ class LovelaceModelTest {
         assertEquals(
             "Outdoor temperature" to null,
             VitroView.badgeLines(card("""{"type": "entity", "entity": "sensor.outdoor", "show_name": true, "show_state": false}"""), temp),
+        )
+        // Icon only: neither line.
+        assertEquals(
+            null to null,
+            VitroView.badgeLines(card("""{"type": "entity", "entity": "sensor.outdoor", "show_icon": true, "show_name": false, "show_state": false}"""), temp),
         )
     }
 
@@ -1316,6 +1347,12 @@ class LovelaceModelTest {
         MdiIcons.parseSvgPathInto("M0 0L10-4l2.5E-1 1", endSink)
         assertEquals(10.25f, ends.last().first, 0.001f)
         assertEquals(-3f, ends.last().second, 0.001f)
+
+        // An incomplete trailing group draws nothing more (no zero filled in for the missing y).
+        ends.clear()
+        MdiIcons.parseSvgPathInto("M0 0 L10 10 L20", endSink)
+        assertEquals(listOf(0f to 0f, 10f to 10f), ends.toList())
+        assertEquals("mdi:alert-circle-outline", MdiIcons.weatherIcon("exceptional"))
 
         // S and T reflect the previous control point; lower-case forms are relative.
         val smooth = BoundsSink()

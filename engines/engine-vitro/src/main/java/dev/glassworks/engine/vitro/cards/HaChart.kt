@@ -103,7 +103,9 @@ object ECharts {
         val ticks = ArrayList<Double>()
         var t = roundTo(ceil(lo / interval) * interval, p)
         if (t > lo) ticks += lo
-        while (t <= hi + interval * 1e-9 && ticks.size < 100) {
+        // A pinned top is the end itself: no tolerance past it (a rounded tick above 0.29999… isn't drawn, 0.3 is).
+        val last = if (fixMax != null) hi else hi + interval * 1e-9
+        while (t <= last && ticks.size < 100) {
             ticks += t
             val next = roundTo(t + interval, p)
             // IntervalScale stops when rounding no longer moves the tick (an interval below what 20 places hold).

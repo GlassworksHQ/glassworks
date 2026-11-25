@@ -125,6 +125,13 @@ class HaDashboardClient(
     @Volatile private var authenticated = false
     @Volatile private var entitySubId: Int? = null
     @Volatile private var activeEntityFilter: Set<String> = emptySet()
+
+    /**
+     * True once a view has said which entities it needs. Until then nothing is subscribed: an empty
+     * [activeEntityFilter] means "every entity" (auto-entities), and on a large Home Assistant that first snapshot can
+     * outgrow the socket's message limit before the view's scoped one is asked for. Kept across reconnects.
+     */
+    @Volatile private var scopeSelected = false
     @Volatile private var readerThread: Thread? = null
     @Volatile private var requestedDashboardPath: String? = null
     @Volatile var haConfig: JSONObject = JSONObject()
@@ -165,8 +172,9 @@ class HaDashboardClient(
 
     /** Switches the entity subscription to [entityIds] for the active view. */
     fun subscribeViewEntities(entityIds: Set<String>) {
-        if (entityIds == activeEntityFilter && entitySubId != null) return
+        if (scopeSelected && entityIds == activeEntityFilter && entitySubId != null) return
         activeEntityFilter = entityIds
+        scopeSelected = true
         if (socket == null) return
         resubscribeEntities()
     }
@@ -248,7 +256,8 @@ class HaDashboardClient(
             .put("service", service)
         if (serviceData != null) msg.put("service_data", serviceData)
         if (target != null) msg.put("target", target)
-        request(msg) { res -> done?.invoke(res.optBoolean("success", false)) }
+        // Not queued (no connection): the caller hears it now, so an optimistic write rolls back.
+        if (request(msg) { res -> done?.invoke(res.optBoolean("success", false)) } <= 0) done?.invoke(false)
     }
 
     /**
@@ -400,7 +409,8 @@ class HaDashboardClient(
                 }
 
                 while (!closed.get()) {
-                    val raw = ws.receive() ?: break
+                    // A clean close by HA (or its proxy) is still a lost connection: the panel shows it and retries.
+                    val raw = ws.receive() ?: throw IOException("Closed by Home Assistant")
                     handleIncoming(JSONObject(raw))
                 }
             } catch (e: Exception) {
@@ -583,8 +593,8 @@ class HaDashboardClient(
         subscribe(JSONObject().put("type", "subscribe_events").put("event_type", "lovelace_updated")) {
             refetchDashboard()
         }
-        // 5. Initial entity subscription (refined to view's entities once config arrives)
-        resubscribeEntities()
+        // 5. The entity subscription, once a view has picked its entities (on a reconnect, the last view's).
+        if (scopeSelected) resubscribeEntities()
         // 6. The signed-in user and the theme they picked in their HA profile (kept after the steps above)
         request(JSONObject().put("type", "auth/current_user")) { res ->
             if (res.optBoolean("success", false)) {
@@ -839,6 +849,10 @@ class HaDashboardClient(
                     }
                     s
                 }
+            } catch (e: IOException) {
+                // The timer closing the socket mid-upgrade surfaces as a closed-socket error: report it as the timeout.
+                if (synchronized(lock) { expired }) throw java.net.SocketTimeoutException("upgrade took too long")
+                throw e
             } finally {
                 synchronized(lock) { finished = true }
                 timer.interrupt()

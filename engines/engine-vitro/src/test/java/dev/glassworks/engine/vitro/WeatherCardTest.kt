@@ -35,7 +35,17 @@ class WeatherCardTest {
 
     private fun texts(card: View): List<String> {
         fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
-        return all(card).filterIsInstance<TextView>().filter { it.isShown || it.visibility == View.VISIBLE }.map { it.text.toString() }
+        // Displayed text only: the view and each ancestor up to the card visible (the card isn't attached here).
+        fun shown(v: View): Boolean {
+            var c: View? = v
+            while (c != null) {
+                if (c.visibility != View.VISIBLE) return false
+                if (c === card) return true
+                c = c.parent as? View
+            }
+            return true
+        }
+        return all(card).filterIsInstance<TextView>().filter(::shown).map { it.text.toString() }
     }
 
     private fun card(attributes: Map<String, Any?>, config: String = """{"type": "weather-forecast", "entity": "weather.home"}"""): WeatherCardView {

@@ -35,5 +35,8 @@ class DrawMemoTest {
         assertEquals(1, builds)
         assertEquals("Idle", memo.of(null, "heat") { builds++; "Idle" })
         assertEquals(2, builds)
+        // The second key alone changes: built again.
+        assertEquals("Off", memo.of(null, "off") { builds++; "Off" })
+        assertEquals(3, builds)
     }
 }

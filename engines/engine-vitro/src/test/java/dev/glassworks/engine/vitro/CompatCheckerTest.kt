@@ -85,6 +85,11 @@ class CompatCheckerTest {
 
     @Test
     fun selectorDiagnosticsLeaveAttributeValuesOut() {
+        // A selector-map key is reported redacted too (it goes to logcat with the island's reasons).
+        val keyed = verdict("""{"type": "tile", "entity": "light.a", "card_mod": {"style": {"img[src=\"/api/image?token=key-secret\"]$": ".x { color: red }"}}}""")
+        val keyedAll = (keyed.reasons + keyed.notes).joinToString()
+        assertFalse(keyedAll, "key-secret" in keyedAll)
+        assertTrue(keyedAll, "img[src=…]" in keyedAll)
         val css = "img[src^=\"https://cam.example/signed?token=secret-value\"] { opacity: 0 }"
         val v = verdict("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(css)}}}""")
         val all = (v.reasons + v.notes).joinToString()
@@ -111,11 +116,28 @@ class CompatCheckerTest {
     }
 
     @Test
+    fun aLayoutBreakAmongTheExplicitEntriesLeavesNoRoomForAGeneratedCard() {
+        // The explicit entry is a layout-break (not built in a vertical layout); the filter's button-card isn't listed.
+        val view = LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "custom:auto-entities", "card_param": "cards",
+            "card": {"type": "custom:layout-card", "layout_type": "custom:vertical-layout"},
+            "entities": [{"type": "custom:layout-break"}],
+            "filter": {"include": [{"domain": "light", "options": {"type": "custom:button-card"}}]}}]}"""))
+        val report = CompatChecker.check(view)
+        assertTrue(report.format(), report.entries.none { "custom:button-card" in it.path })
+    }
+
+    @Test
     fun theReportsNotesHeadingFitsIslandWarningsToo() {
         val view = LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "tile", "entity": "light.a", "features_position": "inline", "features": [{"type": "toggle"}]}]}"""))
         val text = CompatChecker.check(view).format()
         assertTrue(text, "Compatibility notes:" in text)
         assertFalse(text, "Known gaps (native" in text)
+        // An island's warning (no resource provides its card) goes under the same heading.
+        val island = LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "custom:acme-card"}]}"""))
+        val islandText = CompatChecker.check(island, IslandScripts.of(emptyList())).format()
+        val heading = islandText.indexOf("Compatibility notes:")
+        assertTrue(islandText, heading >= 0)
+        assertTrue(islandText, islandText.indexOf("no Lovelace resource seems to provide `custom:acme-card`") > heading)
     }
 
     // ---- Real dashboard idioms: must stay native ----
@@ -511,6 +533,35 @@ class CompatCheckerTest {
             "reaches inside the card",
         )
         assertNative("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card:hover .shape { opacity: 0.5 }")}}}""")
+    }
+
+    @Test
+    fun aPinnedCardIsCheckedOnTheWidthThatWinsAndNotAtZero() {
+        // The calc() loses to a later !important width: the card is placed at 300px.
+        assertNative(
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(
+                "ha-card { position: fixed; left: 24px; top: 0; width: calc(100% - 10px); width: 300px !important }",
+            )}}}""",
+        )
+        // A winning calc() still falls back.
+        assertIsland(
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(
+                "ha-card { position: fixed; left: 24px; top: 0; width: 300px; width: calc(100% - 10px) }",
+            )}}}""",
+            "a pinned width is px",
+        )
+        // Zero wide: the overlay would size it to its content.
+        assertIsland(
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card { position: fixed; left: 24px; top: 0; width: 0px }")}}}""",
+            "a pinned width of zero",
+        )
+    }
+
+    @Test
+    fun anUnvisitedLinkRuleIsANoteNotHarmless() {
+        // `a:link` matches at rest: the Markdown card stays native, with a note that the rule isn't applied.
+        val v = assertNative("""{"type": "markdown", "content": "[x](/y)", "card_mod": {"style": {"ha-markdown$": "a:link { display: none }"}}}""")
+        assertTrue(v.notes.toString(), v.notes.any { ":link" in it })
     }
 
     @Test

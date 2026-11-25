@@ -47,13 +47,15 @@ class AreaCardTest {
     fun forgetRegistries() = HaDisplay.reset()
 
     private fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
-    private fun shownTexts(card: View) = all(card).filterIsInstance<TextView>().filter { it.visibility == View.VISIBLE }.map { it.text.toString() }
-    private fun shownIcons(card: View) = all(card).filterIsInstance<MdiIconView>().filter { it.visibility == View.VISIBLE && it.isShownIn(card) }
+    private fun shownTexts(card: View) = all(card).filterIsInstance<TextView>().filter { it.isShownIn(card) }.map { it.text.toString() }
+    private fun shownIcons(card: View) = all(card).filterIsInstance<MdiIconView>().filter { it.isShownIn(card) }
 
+    /** Visible, with every ancestor up to [root] and [root] itself visible too. */
     private fun View.isShownIn(root: View): Boolean {
         var v: View? = this
-        while (v != null && v !== root) {
+        while (v != null) {
             if (v.visibility != View.VISIBLE) return false
+            if (v === root) return true
             v = v.parent as? View
         }
         return true

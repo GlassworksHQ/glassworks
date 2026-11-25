@@ -70,4 +70,4 @@ Confirm:
 
 If a device or emulator is available, open the rewritten dashboard in Glassworks with Vitro enabled (`Settings → Labs → Vitro renderer` or `--ez vitro true`; either takes effect after the app restarts) and check:
 - Visual parity against the original dashboard at the target frame's real aspect ratio (portrait for mirrors, 2:1 `1440×720` for S1 Plus, 16:10 for docked tablets).
-- `adb shell ps -A | grep glassworks` shows **no `:sandboxed_tab` or `:gpu` GeckoView processes** running.
+- `adb shell ps -A | grep -E 'sh\.edm\.s1kiosk|dev\.glassworks\.generic_android'` (the S1 app's id, or the generic app's) shows the app's main process first; then read the rest: **no `:sandboxed_tab` or `:gpu` GeckoView processes** may be running.
