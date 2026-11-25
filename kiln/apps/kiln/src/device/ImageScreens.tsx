@@ -328,7 +328,9 @@ const HAND_BACK = { id: 'hand-back' as WorkStep, text: 'Restore your Home Assist
 export function ImageWorking({ f, s }: P) {
   const ROWS = rowsOf(f.frame);
   const rows = stepsOnScreen(f, s).flatMap((x) => [...(ROWS[x.do === 'flash' ? `flash-${x.partition}` : x.do] ?? []), ...(x.do === 'first-start' && keyHeld(s.key) ? [HAND_BACK] : [])]);
-  const at = Math.max(0, rows.findIndex((r) => r.id === s.work?.step));
+  const row = (id?: string) => rows.findIndex((r) => r.id === id);
+  // an in-place install lists no first start of its own: the wait for it belongs to its restart row, not the first row
+  const at = Math.max(0, row(s.work?.step) >= 0 ? row(s.work?.step) : s.work?.step === 'first-boot' ? row('restart') : -1);
   const x = s.work?.x ?? 0;
   return (
     <section className="card" aria-labelledby="h">
