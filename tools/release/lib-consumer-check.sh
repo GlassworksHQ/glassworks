@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds fresh projects against the libraries in mavenLocal, as someone would use them from Maven
-# Central (dev.glassworks:esphome-api, esphome-api-android, improv, sendspin and voice, at the versions in
+# Central (dev.glassworks:esphome-api, esphome-api-android, improv, sendspin, voice and ha-webrtc, at the versions in
 # libs/<name>/gradle.properties). Run it after `./gradlew publishToMavenLocal` (pr.yml, libs-publish).
 #   - two Android apps at minSdk 23 on the repo's AGP: one at compileSdk 37.2, one at compileSdk 23,
 #     the AARs' minCompileSdk (the root build.gradle.kts)
@@ -51,6 +51,7 @@ dependencies {
     implementation("dev.glassworks:improv:$(version improv)")
     implementation("dev.glassworks:sendspin:$(version sendspin)")
     implementation("dev.glassworks:voice:$(version voice)")
+    implementation("dev.glassworks:ha-webrtc:$(version ha-webrtc)")
 }
 EOF
   echo '<manifest xmlns:android="http://schemas.android.com/apk/res/android" />' > "$m/src/main/AndroidManifest.xml"
@@ -66,6 +67,9 @@ import dev.glassworks.esphome.MemoryKeyStore
 import dev.glassworks.esphome.NoiseKeys
 import dev.glassworks.esphome.SwitchEntity
 import dev.glassworks.esphome.android.EspHomeMdns
+import dev.glassworks.hawebrtc.HaCommandChannel
+import dev.glassworks.hawebrtc.HaError
+import dev.glassworks.hawebrtc.HaWebRtcPlayer
 import dev.glassworks.improv.ImprovBleServer
 import dev.glassworks.improv.SerialPacketReader
 import dev.glassworks.improv.WifiProvisioner
@@ -74,6 +78,7 @@ import dev.glassworks.sendspin.SendspinPlayer
 import dev.glassworks.voice.VoiceConfig
 import dev.glassworks.voice.VoiceEngine
 import dev.glassworks.voice.WakeWords
+import org.json.JSONObject
 
 fun use(context: Context) {
     val identity = DeviceIdentity(
@@ -101,6 +106,12 @@ fun use(context: Context) {
     }
     SendspinPlayer(context, MemoryStore(), SendspinPlayer.Identity("Consumer", "Consumer check", "Example", "Consumer 1.0"), settings).start()
     VoiceEngine(context, VoiceConfig(), WakeWords.DEFAULT) {}.start(muted = true)
+    val channel = object : HaCommandChannel {
+        override fun call(command: JSONObject, onResult: (Any?) -> Unit, onError: (HaError) -> Unit) = onError(HaError(HaError.NOT_CONNECTED, ""))
+        override fun subscribe(command: JSONObject, onEvent: (JSONObject) -> Unit, onError: (HaError) -> Unit) =
+            HaCommandChannel.Subscription { }
+    }
+    HaWebRtcPlayer(context, channel, "camera.front_door").start()
 }
 EOF
 }
@@ -138,5 +149,5 @@ EOF
 "$repo/gradlew" -p "$dir/android" --no-daemon --quiet :latest:assembleDebug :oldest:assembleDebug
 "$repo/gradlew" -p "$dir/jvm" --no-daemon --quiet compileKotlin
 echo "Built against esphome-api $(version esphome-api), esphome-api-android $(version esphome-api-android), improv $(version improv),"
-echo "sendspin $(version sendspin) and voice $(version voice):"
+echo "sendspin $(version sendspin), voice $(version voice) and ha-webrtc $(version ha-webrtc):"
 echo "minSdk 23 apps at compileSdk 37.2 and 23, and a Kotlin $kotlin_min JVM app."
