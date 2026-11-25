@@ -143,6 +143,11 @@ internal object CameraProbe {
                     closed = true
                     live--
                     main.removeCallbacks(tick)
+                    // Frames drawn since the last tick are logged now, or they'd go unreported with the tick.
+                    if (total != lastReported) {
+                        Log.i(TAG, "frames id=$id rendered=${total - lastReported} total=$total")
+                        lastReported = total
+                    }
                 }
                 "equals" -> return self === a[0]
                 "hashCode" -> return System.identityHashCode(self)

@@ -122,5 +122,8 @@ class CameraProbeTest {
         assertTrue(lines.toString(), lines.any { it.endsWith("reason=no video at all") })
         assertTrue(lines.toString(), lines.any { Regex("^active id=\\d+ value=false$").matches(it) })
         assertTrue(lines.toString(), lines.any { Regex("^close id=\\d+ entity=camera.front_door kind=HLS total=2 live=0$").matches(it) })
+        // No tick ran before the close: the frames it drew are logged on close, before the close line.
+        val frames = lines.indexOfFirst { Regex("^frames id=\\d+ rendered=2 total=2$").matches(it) }
+        assertTrue(lines.toString(), frames >= 0 && frames < lines.indexOfFirst { it.startsWith("close ") })
     }
 }
