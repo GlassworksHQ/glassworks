@@ -163,14 +163,18 @@ To check a dashboard before you turn Vitro on, paste it into the [compatibility 
 
 ## More-Info dialogs
 
-Tapping or holding a tile opens a native More-Info dialog styled after Home Assistant 2026, with no web view involved:
+Tapping or holding a tile opens a native More-Info dialog styled after Home Assistant 2026, with no web view involved.
+Like Home Assistant's, it's a centered dialog 580 px wide when the screen is wider than 870 px and taller than 500 px
+(the Pixel Tablet), and a bottom sheet as wide as the screen otherwise (the S1 Plus, the Mirror). It draws on the
+dialog color of your own theme, never on the view's theme, so a view with see-through cards still gets a solid dialog.
+Its title names the entity on two lines, as Home Assistant does: the area and device over the entity's own name.
 
 | Entity | Dialog |
 |---|---|
 | Light | Brightness dimmer, an HSV color wheel, a Kelvin color-temperature picker, and color swatches |
 | Climate | A circular thermostat dial with mode buttons, and two thumbs for a heat/cool range |
 | Cover | A top-down position slider |
-| Sensor | A 24-hour stepped history graph |
+| Sensor | Its icon, name, last change and state, then the last 24 hours: Home Assistant's 5-minute statistics for a sensor with a state class ("5-minute aggregated"), its state history otherwise, and "Show more", which opens the history page in Home Assistant's frontend (Back returns to the dashboard) |
 | Camera | A live stream, chosen as on the picture cards (WebRTC, then HLS and MJPEG) |
 | Switch | A toggle pill |
 | Alarm panel | A PIN pad |
