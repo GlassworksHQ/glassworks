@@ -66,6 +66,15 @@ on:
 permissions:
   contents: read
 
+# Gradle waits and asks again when a repository answers 429 (too many requests) or 5xx: 7 tries, 2 s apart and then
+# twice as long each time (2 minutes in all), where its default gives up after 3 tries in 3 s and then stops asking that
+# repository for the rest of the build. A Gradle home restored without its dependency metadata (the failure step's
+# doing, below) asks Maven Central about every file it has, about 1,200 requests for libs-api23's lint, and Central
+# answers part of such a burst with 429 (docs/ci.md, Caches). The -D options reach the build's own JVM, with or
+# without a daemon.
+env:
+  GRADLE_OPTS: -Dorg.gradle.internal.repository.max.tentatives=7 -Dorg.gradle.internal.repository.initial.backoff=2000
+
 # A new push to a PR cancels the PR's older run. Every other run has a group of its own, so a push to main
 # is never cancelled, nor held behind the next one. So does a rerun (attempt 2 on, by hand or by
 # rerun-download-flakes.yml): rerunning an older commit's jobs must not cancel the newer commit's run.
