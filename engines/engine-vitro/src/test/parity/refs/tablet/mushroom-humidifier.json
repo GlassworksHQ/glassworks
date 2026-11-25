@@ -1,0 +1,150 @@
+{
+ "case": "mushroom-humidifier",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "mushroom-humidifier-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Bedroom Humidifier",
+   "x": 56,
+   "y": 17,
+   "w": 128.27,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "On ⸱ 41%",
+   "x": 56,
+   "y": 36,
+   "w": 49.56,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "humidifier.bedroom": {
+   "s": "on",
+   "a": {
+    "min_humidity": 30,
+    "max_humidity": 80,
+    "available_modes": [
+     "normal",
+     "eco",
+     "sleep"
+    ],
+    "current_humidity": 41,
+    "humidity": 45,
+    "mode": "normal",
+    "action": "humidifying",
+    "device_class": "humidifier",
+    "friendly_name": "Bedroom Humidifier",
+    "supported_features": 1
+   },
+   "lc": 1794496980,
+   "lu": 1794496980
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "humidifier.bedroom",
+    "pl": "demo",
+    "di": "device-1"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Bedroom Humidifier"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "humidifier"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "humidifier": {
+     "_": {
+      "default": "mdi:air-humidifier",
+      "state": {
+       "off": "mdi:air-humidifier-off"
+      },
+      "state_attributes": {
+       "action": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "drying": "mdi:arrow-down-bold",
+         "humidifying": "mdi:arrow-up-bold",
+         "idle": "mdi:clock-outline",
+         "off": "mdi:power"
+        }
+       },
+       "mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "auto": "mdi:refresh-auto",
+         "away": "mdi:account-arrow-right",
+         "baby": "mdi:baby-carriage",
+         "boost": "mdi:rocket-launch",
+         "comfort": "mdi:sofa",
+         "eco": "mdi:leaf",
+         "home": "mdi:home",
+         "normal": "mdi:water-percent",
+         "sleep": "mdi:power-sleep"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.humidifier.entity_component._.state.off": "Off",
+    "component.humidifier.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

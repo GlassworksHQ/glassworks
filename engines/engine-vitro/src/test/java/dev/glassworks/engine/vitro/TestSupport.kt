@@ -107,11 +107,23 @@ class FakeHaServer {
             {"type": "module"}]""",
     )
     @Volatile var dashboardConfig: JSONObject = JSONObject(DASHBOARD_JSON)
+
+    /** Dashboards HA has no saved config for: `lovelace/config` answers `config_not_found`. */
+    @Volatile var missingDashboards: Set<String> = setOf("missing")
     @Volatile var initialEntities: JSONObject = JSONObject(ENTITIES_JSON)
     @Volatile var history: JSONObject = JSONObject("""{"states": {}}""")
     /** `history/history_during_period` answers with an error. */
     @Volatile var failHistory: Boolean = false
     @Volatile var templateResult: Any = "21.5 °C"
+
+    /** `config/entity_registry/list_for_display`'s answer; null refuses it (`unknown_command`). */
+    @Volatile var entityRegistryDisplay: JSONObject? = null
+
+    /** `config/device_registry/list`'s answer; null refuses it. */
+    @Volatile var deviceRegistry: org.json.JSONArray? = null
+
+    /** `config/floor_registry/list`'s answer; null refuses it, as a Home Assistant without floors does. */
+    @Volatile var floorRegistry: org.json.JSONArray? = null
 
     /** Everything the client sent, across every connection, in order. `auth` messages included. */
     val received = CopyOnWriteArrayList<JSONObject>()
@@ -210,7 +222,7 @@ class FakeHaServer {
             "lovelace/dashboards/list" -> ok(sock, id, dashboards)
             "lovelace/resources" -> ok(sock, id, resources)
             "lovelace/config" -> {
-                if (m.optString("url_path") == "missing") fail(sock, id, "config_not_found") else ok(sock, id, dashboardConfig)
+                if (m.optString("url_path") in missingDashboards) fail(sock, id, "config_not_found") else ok(sock, id, dashboardConfig)
             }
             "subscribe_entities" -> {
                 ok(sock, id, JSONObject.NULL)
@@ -233,6 +245,10 @@ class FakeHaServer {
             }
             "config/area_registry/list" ->
                 ok(sock, id, org.json.JSONArray("""[{"area_id": "lounge", "name": "Lounge"}]"""))
+            "config/entity_registry/list_for_display" ->
+                entityRegistryDisplay?.let { ok(sock, id, it) } ?: fail(sock, id, "unknown_command")
+            "config/device_registry/list" -> deviceRegistry?.let { ok(sock, id, it) } ?: fail(sock, id, "unknown_command")
+            "config/floor_registry/list" -> floorRegistry?.let { ok(sock, id, it) } ?: fail(sock, id, "unknown_command")
             else -> fail(sock, id, "unknown_command")
         }
     }
@@ -280,6 +296,8 @@ class RecordingHost : PageHost {
 class RecordingEngine(
     override val name: String = "FakeGecko 1.0",
     override val lockedDown: Boolean = false,
+    /** Each page's view holds a [android.view.SurfaceView], as a GeckoView does. */
+    private val surfaces: Boolean = false,
 ) : Engine {
     class Opened(val activity: Activity, val host: PageHost, val background: Int)
 
@@ -290,7 +308,10 @@ class RecordingEngine(
     override fun open(activity: Activity, host: PageHost, background: Int): Page {
         started = EngineSettings(secureHosts = listOf("192.0.2.10"), zoom = 1f, remoteDebugging = false)
         opens += Opened(activity, host, background)
-        return RecordingPage(activity).also { pages += it }
+        return RecordingPage(activity).also { page ->
+            if (surfaces) (page.view as FrameLayout).addView(android.view.SurfaceView(activity))
+            pages += page
+        }
     }
 
     override fun isContentProcess(processName: String): Boolean = processName.endsWith(":tab")
@@ -303,6 +324,7 @@ class RecordingPage(activity: Activity) : Page {
     var reloads = 0
     var backs = 0
     var restarts = 0
+    override var canGoBack = false
 
     override fun load(url: String) { loads += url }
     override fun reload() { reloads++ }

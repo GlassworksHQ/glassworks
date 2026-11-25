@@ -2,12 +2,13 @@
  "case": "thermostat",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
   "height": 800,
-  "density": 2
+  "density": 2,
+  "touch": true
  },
  "clip": {
   "x": 382,
@@ -31,10 +32,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "AC",
-   "x": 239.61,
+   "clipped": false,
+   "text": "Heat Pump",
+   "x": 210.16,
    "y": 15,
-   "w": 20.77,
+   "w": 79.69,
    "h": 19,
    "size": 16,
    "weight": 400,
@@ -43,6 +45,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Off",
    "x": 224.97,
    "y": 157.41,
@@ -55,6 +58,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "17.5 °C",
    "x": 233.56,
    "y": 219,
@@ -67,7 +71,7 @@
   }
  ],
  "states": {
-  "climate.ac": {
+  "climate.heat_pump": {
    "s": "off",
    "a": {
     "hvac_modes": [
@@ -88,44 +92,38 @@
      "auto"
     ],
     "current_temperature": 17.5,
-    "temperature_unit": "°C",
     "temperature": null,
     "target_temp_high": null,
     "target_temp_low": null,
     "fan_mode": "auto",
     "hvac_action": "off",
-    "unit_state": "normal",
-    "mode_conflict": false,
-    "friendly_name": "AC",
+    "friendly_name": "Heat Pump",
     "supported_features": 395
    },
-   "lc": 1795504922.749542,
-   "lu": 1795505706.0540895
+   "lc": 1794482160,
+   "lu": 1794482160
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "climate.ac",
-    "pl": "mitsubishi_matouch",
-    "tk": "matouch",
+    "ei": "climate.heat_pump",
+    "pl": "demo",
     "di": "device-1"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "AC"
+    "name": "Heat Pump"
    }
   ],
   "requested": {
    "domains": [
     "climate"
    ],
-   "platforms": [
-    "mitsubishi_matouch"
-   ]
+   "platforms": []
   },
   "icons": {
    "entity_component": {
@@ -193,38 +191,7 @@
      }
     }
    },
-   "entity": {
-    "mitsubishi_matouch": {
-     "climate": {
-      "matouch": {
-       "state_attributes": {
-        "swing_mode": {
-         "state": {
-          "auto": "mdi:autorenew",
-          "flat": "mdi:arrow-right",
-          "down_20": "mdi:arrow-bottom-right",
-          "down_60": "mdi:arrow-bottom-right",
-          "down_80": "mdi:arrow-down",
-          "down_100": "mdi:arrow-down-bold",
-          "swing": "mdi:swap-vertical"
-         }
-        },
-        "swing_horizontal_mode": {
-         "state": {
-          "rl_auto": "mdi:autorenew",
-          "rl_left": "mdi:arrow-left",
-          "rl_left_center": "mdi:chevron-left",
-          "rl_center": "mdi:arrow-up",
-          "rl_right_center": "mdi:chevron-right",
-          "rl_right": "mdi:arrow-right",
-          "rl_swing": "mdi:swap-horizontal"
-         }
-        }
-       }
-      }
-     }
-    }
-   }
+   "entity": {}
   },
   "translations": {
    "entity_component": {

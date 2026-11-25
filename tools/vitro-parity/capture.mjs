@@ -3,8 +3,16 @@
 // headless Chromium at each panel's CSS size and density, and writes the reference renders that
 // VitroParityHarnessTest compares Vitro against.
 //
+// Where its Home Assistant comes from:
+//   - The committed corpus: the fake Home Assistant (tools/perf/fakeha.py with tools/vitro-parity/fakehome.py), started
+//     here on 127.0.0.1 with a random token and stopped at the end. It serves HA's pinned frontend and answers from
+//     each case's `fixture` and the corpus's home.json; nobody's real HA is read or written. The community cards it
+//     serves are downloaded once, pinned by SHA-256 (cards.py), into a cache outside the repo.
+//   - A local corpus (--root, real dashboards): the real HA in ha.json, as below. `--fakeha` makes a local corpus of
+//     card cases with fixtures use the fake too; `--real-ha` is refused for the committed corpus.
+//
 // What it touches:
-//   - Home Assistant, through the credentials in ha.json (VITRO_PARITY_HA, default
+//   - Home Assistant (real HA mode only), through the credentials in ha.json (VITRO_PARITY_HA, default
 //     ~/.t3/glassworks-m1/vitro-parity/ha.json). It WRITES ONE DASHBOARD ONLY: `vitro-harness` (admin-only,
 //     not in the sidebar), created if missing and overwritten on every run. It never changes an entity
 //     state or any other dashboard; everything else is read-only (states, themes, config, render_template, and
@@ -29,6 +37,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { dirname, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { connect, loadCredentials, redact } from './lib/ha.mjs';
 import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate, hasMacFragment, scrubGraphCalls } from './lib/scrub.mjs';
 import { parseArgs, pick } from './lib/args.mjs';
@@ -36,7 +46,7 @@ import { aliasPaths, assetDestination, canonicalPath, capturableImage, staleAsse
 import { applyEntityEvent, unmetExpectations } from './lib/states.mjs';
 import { imageOutcomes, noteSaved } from './lib/images.mjs';
 import { buildDisplay, referencedAreas } from './lib/display.mjs';
-import { wsRecorder, snapshotCalls, pendingOneShots, pendingFirstEvents } from './lib/wsdata.mjs';
+import { wsRecorder, snapshotCalls, pendingOneShots, pendingFirstEvents, restHistoryRequest } from './lib/wsdata.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
 import { FIXTURE_PREFIX, fixtureFile, fixtureResources } from './lib/fixtures.mjs';
 import { captureMode, capturedWithTouch } from './lib/pointer.mjs';
@@ -49,8 +59,12 @@ const MARGIN = 8;
 // The kiosk's own CSS (engines/engine-gecko/src/main/assets/extension/content.js, HUI_CSS): no header.
 const HUI_CSS = ':host { --header-height: 0px !important; } .header { display: none !important; } #view { padding-top: 0 !important; min-height: 100vh !important; }';
 
-const creds = loadCredentials();
+// The HA the capture talks to: ha.json's in real HA mode, the fake's (set by startFake) otherwise.
+let creds = null;
 const log = (...a) => console.log(redact(a.join(' '), creds));
+/** The fake HA's process, while it runs: stopped on every exit. */
+let fakeChild = null;
+process.on('exit', () => { try { fakeChild?.kill(); } catch {} });
 
 function fail(msg) {
   console.error(redact(msg, creds));
@@ -61,7 +75,7 @@ function fail(msg) {
 process.on('uncaughtException', (e) => fail(`capture.mjs: ${e?.stack || e}`));
 process.on('unhandledRejection', (e) => fail(`capture.mjs: ${e?.stack || e}`));
 
-const USAGE = 'usage: capture.mjs prepare|capture [--root <dir>] [--frames s1,tablet] [--cases a,b] [--templates <file>]';
+const USAGE = 'usage: capture.mjs prepare|capture [--root <dir>] [--frames s1,tablet] [--cases a,b] [--templates <file>] [--fakeha|--real-ha]';
 let args;
 try {
   args = parseArgs(process.argv.slice(2));
@@ -69,10 +83,16 @@ try {
   fail(`${e.message}\n${USAGE}`);
 }
 if (!['prepare', 'capture'].includes(args.cmd)) fail(USAGE);
-if (!creds) fail('no Home Assistant credentials (set VITRO_PARITY_HA or create ~/.t3/glassworks-m1/vitro-parity/ha.json); the CI-safe part needs none: ./gradlew :engine-vitro:testDebugUnitTest');
 
 const corpusRoot = resolve(args.root || DEFAULT_CORPUS);
 const committed = corpusRoot === DEFAULT_CORPUS;
+// The committed corpus is always drawn from the fake HA: its references must not depend on anyone's real home.
+if (committed && args['real-ha']) fail('--real-ha: the committed corpus is captured from the fake HA only (its fixtures); a real HA is for a local corpus (--root)');
+const fakeMode = committed || Boolean(args.fakeha);
+if (!fakeMode) {
+  creds = loadCredentials();
+  if (!creds) fail('no Home Assistant credentials (set VITRO_PARITY_HA or create ~/.t3/glassworks-m1/vitro-parity/ha.json); the CI-safe part needs none: ./gradlew :engine-vitro:testDebugUnitTest');
+}
 const allFrames = JSON.parse(readFileSync(join(DEFAULT_CORPUS, 'frames.json'), 'utf8')).frames;
 let frameIds;
 try {
@@ -179,6 +199,10 @@ async function fetchAsset(path, url = path) {
 }
 
 async function prepare() {
+  if (fakeMode) {
+    log('fake HA: nothing to prepare (the fake serves the harness dashboard from the corpus itself)');
+    return;
+  }
   const ha = await connect(creds);
   const cases = loadCases();
   const cardCases = cases.filter((c) => c.card);
@@ -434,6 +458,8 @@ async function saveDrawnImages(loaded, drawn) {
   }
   for (const path of [...paths].sort()) {
     if (!loaded.has(path)) continue;
+    // A fixture's own picture is in the corpus already (fixtures/): Vitro's fixture server hands it over from there.
+    if (path.startsWith(FIXTURE_PREFIX)) continue;
     const bytes = await loaded.get(path);
     if (!bytes) throw new Error(`image ${path}: HA loaded it but its body couldn't be read`);
     const out = assetDestination(join(corpusRoot, 'assets'), path, committed);
@@ -524,6 +550,31 @@ async function newPage(browser, frame, dark, now, cardModUrl, tz, roboto) {
   if (frame.input === 'touch') touchPages.add(page);
   page.on('pageerror', (e) => log(`  pageerror: ${scrubText(e.message, creds).slice(0, 200)}`));
   const graphs = wsRecorder();
+  // HA's REST history (mini-graph-card reads it this way): recorded with the WebSocket calls, answered or not.
+  const restCalls = new Map();
+  page.on('request', (req) => {
+    if (!req.url().startsWith(creds.origin + '/api/history/period')) return;
+    const request = restHistoryRequest(req.url());
+    if (request) restCalls.set(req, graphs.push({ request, events: [] }));
+  });
+  page.on('requestfinished', async (req) => {
+    const call = restCalls.get(req);
+    if (!call) return;
+    restCalls.delete(req);
+    try {
+      const res = await req.response();
+      if (res && res.ok()) call.result = await res.json();
+      else call.error = { code: `http_${res ? res.status() : 'none'}` };
+    } catch (e) {
+      call.error = { code: 'unreadable', message: String(e.message || e) };
+    }
+  });
+  page.on('requestfailed', (req) => {
+    const call = restCalls.get(req);
+    if (!call) return;
+    restCalls.delete(req);
+    call.error = { code: 'failed' };
+  });
   const states = recordStates(page, graphs);
   const images = recordImages(page);
   return { ctx, page, states, images, graphs };
@@ -694,17 +745,66 @@ function pinnedNow(timeZone) {
   return t - (t % 1000) - back * 1000;
 }
 
+/**
+ * Starts the fake HA (fakeha.py with fakehome.py) on a free port of 127.0.0.1 and hands it the corpus's shared inputs
+ * (home.json), the harness dashboard and the fixtures folder. Sets [creds] to it (a random token: the fake accepts
+ * any, and a random one never meets a word in a card that the redaction would then hide). Returns its "now" (ms).
+ */
+async function startFake(cases) {
+  const tools = join(ROOT, 'tools');
+  const script = `import sys; sys.path[:0] = ${JSON.stringify([join(tools, 'perf'), join(tools, 'vitro-parity')])}
+import fakeha, fakehome
+srv = fakeha.serve(0, harness=False, home=fakehome)
+print("serving on", srv.server_address[1], flush=True)
+srv.serve_forever()`;
+  const child = spawn(process.env.PYTHON || 'python3', ['-c', script], { stdio: ['ignore', 'pipe', 'pipe'] });
+  fakeChild = child;
+  const port = await new Promise((ok, no) => {
+    let out = '';
+    const t = setTimeout(() => no(new Error(`the fake HA didn't start in 300 s (the first run fetches HA's frontend):\n${out}`)), 300000);
+    const on = (d) => { out += d; const m = out.match(/serving on (\d+)/); if (m) { clearTimeout(t); ok(+m[1]); } };
+    child.stdout.on('data', on);
+    child.stderr.on('data', on);
+    child.on('exit', (code) => { clearTimeout(t); no(new Error(`the fake HA exited (${code}):\n${out}`)); });
+  });
+  creds = { origin: `http://127.0.0.1:${port}`, token: randomBytes(16).toString('hex') };
+  const homeFile = join(corpusRoot, 'home.json');
+  if (!existsSync(homeFile)) fail(`no ${homeFile}: the fake HA's shared inputs (now, config, themes, user)`);
+  const home = JSON.parse(readFileSync(homeFile, 'utf8'));
+  const res = await fakePost('/vitro-parity/home', { ...home, fixtures_dir: join(corpusRoot, 'fixtures'), dashboard: harnessConfig(cases) });
+  log(`fake HA on 127.0.0.1, frontend pinned (tools/perf/hafrontend.py), now ${new Date(res.now * 1000).toISOString()}`);
+  return Math.round(res.now * 1000);
+}
+
+async function fakePost(path, body) {
+  const r = await fetch(creds.origin + path, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+  if (!r.ok) throw new Error(`fake HA ${path}: HTTP ${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+/** Points the fake HA at one case: its states, registries and data come from the case's `fixture` from now on. */
+async function fakeCase(c) {
+  if (!c.fixture || typeof c.fixture !== 'object') throw new Error('no `fixture` in the case: the fake HA has nothing to serve it (see the README, "Fixtures")');
+  await fakePost('/vitro-parity/case', { id: c.id, fixture: c.fixture });
+}
+
 const round = (v) => Math.round(v * 100) / 100;
 const roundRect = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === 'number' ? round(v) : v]));
 
 async function capture() {
+  const fakeNow = fakeMode ? await startFake(loadCasesAll()) : null;
   const ha = await connect(creds);
   const [haConfig, themes, resources] = await Promise.all([
     ha.call({ type: 'get_config' }), ha.call({ type: 'frontend/get_themes' }), ha.call({ type: 'lovelace/resources' }),
   ]);
   const cardModUrl = resources.map((r) => r.url).find((u) => /card-mod\.js/.test(u)) || null;
   // The display data Vitro reads live (HaDisplay): fetched once, cut down per case.
-  const [registry, devices, areas] = await Promise.all([ha.call({ type: 'config/entity_registry/list_for_display' }), ha.call({ type: 'config/device_registry/list' }), ha.call({ type: 'config/area_registry/list' })]);
+  // The fake HA's registries are the current case's: fetched again for each case (loadRegistries).
+  let registry, devices, areas;
+  const loadRegistries = async () => {
+    [registry, devices, areas] = await Promise.all([ha.call({ type: 'config/entity_registry/list_for_display' }), ha.call({ type: 'config/device_registry/list' }), ha.call({ type: 'config/area_registry/list' })]);
+  };
+  await loadRegistries();
   const displayCache = new Map();
   const fetchDisplay = async (type, category, names) => {
     const want = names.filter((n) => !displayCache.has(`${type}|${category}|${n}`));
@@ -756,7 +856,8 @@ async function capture() {
 
   const roboto = await robotoFaces();
   const browser = await launch();
-  const now = pinnedNow(haConfig.time_zone);
+  // The fake HA's fixed now (home.json); a real HA's pinned 10:08.
+  const now = fakeNow ?? pinnedNow(haConfig.time_zone);
   let failures = 0;
   for (const frame of frames) {
     const mine = cases.filter((c) => !c.frames || c.frames.includes(frame.id));
@@ -773,6 +874,12 @@ async function capture() {
         try {
           const path = c.card ? `/${HARNESS}/${c.id}` : `/${c.dashboard}/${c.view}`;
           const resources = fixtureResources(c);
+          // The fake HA serves this case's fixture from now on; its page loads afresh (new states, new registries).
+          if (fakeMode) {
+            await fakeCase(c);
+            await loadRegistries();
+            loaded = false;
+          }
           // A case with its own stylesheets gets a page of its own, and the next case a fresh one: what a sheet
           // declares (a font) stays in the page it was added to.
           if (!loaded || c.dashboard || resources.length) {
@@ -889,7 +996,9 @@ async function capture() {
             if (shown.length) throw new Error(`the card shows ${shown.join(', ')}: neither its PNG nor its JSON is written`);
           }
           const shownStates = drawnStates; // the states the PNG shows
-          const caseStates = scrubStates(shownStates, creds, { keepPictures: !committed });
+          // The fake's states are the case's own made-up fixture: kept whole (artwork, media titles, a person's user),
+          // so Vitro gets what HA drew. A real HA's lose what scrubStates drops.
+          const caseStates = scrubStates(shownStates, creds, { keepPictures: !committed || fakeMode, synthetic: fakeMode });
           // A local corpus also keeps the pictures its entities show (plants, artwork), for Vitro's fixture server.
           if (!committed) {
             for (const id of ids) {
@@ -919,7 +1028,7 @@ async function capture() {
             ...(failedDrawn.length ? { imagesHaMissing: failedDrawn } : {}),
             // The history and statistics calls the card's graphs made and what came back, for Vitro's same calls.
             // Only written when there are some.
-            ...(drawnGraphs.length ? { ws: scrubGraphCalls(drawnGraphs) } : {}),
+            ...(drawnGraphs.length ? { ws: fakeMode ? drawnGraphs : scrubGraphCalls(drawnGraphs) } : {}),
           };
           if (!committed) {
             // Pictures that templates point at (a plant's image entity inside Markdown, say), unredacted from the raw text.
@@ -948,6 +1057,11 @@ async function capture() {
     }
   }
   await browser.close();
+  if (fakeMode) {
+    // Commands the fake didn't know: the frontend or a card asked for something no fixture answers.
+    const st = await (await fetch(creds.origin + '/vitro-parity/state')).json();
+    if (st.unknown.length) log(`fake HA: commands it doesn't answer (the pages got an error for them): ${st.unknown.join(', ')}`);
+  }
   ha.close();
   // One generation: the cases' files, their images and the shared inputs are written together, and only when every
   // selected capture succeeded. A failure leaves the corpus as it was (a retry then compares against the same inputs).

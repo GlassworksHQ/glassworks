@@ -18,6 +18,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.widget.FrameLayout
+import dev.glassworks.GlassworksApp
 import dev.glassworks.auth.HaSocket
 import dev.glassworks.auth.OAuth
 import dev.glassworks.auth.WsHaSocket
@@ -26,6 +27,8 @@ import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.PageHost
 import dev.glassworks.engine.PagePort
+import dev.glassworks.engine.vitro.clarity.ClarityHttp
+import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatWarmup
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
@@ -61,6 +64,13 @@ class VitroEngine(
     private val tokenProvider: (force: Boolean, done: (String?) -> Unit) -> Unit = { _, done -> done(null) },
     private val socketFactory: (String) -> HaSocket = HaDashboardClient::connectLongLived,
     private val logTag: String = "Glassworks.Vitro",
+    /**
+     * The test hold's dashboard (ScreenPolicy.testDashboard: a loopback page, only while a test holds the screen), or
+     * null. Clarity's native harness runs only while it is Clarity's reference dashboard ([VitroClarity]).
+     */
+    private val testDashboard: (Context) -> String? = { c ->
+        (c.applicationContext as? GlassworksApp)?.glassworks?.screen?.testDashboard
+    },
 ) : Engine {
 
     @Volatile private var activeInProcess: Boolean? = null
@@ -72,6 +82,9 @@ class VitroEngine(
      * The legacy engine (a locked-down [fallback]) is held to the dashboard's origin, so [islandOrigin] gives it this
      * one up front as well.
      */
+    /** How Clarity's harness reaches its fake Home Assistant ([VitroClarity]); tests give one that touches no network. */
+    internal var clarityHttp: ClarityHttp = ClarityHttp.Loopback
+
     val islandServer: VitroIslandServer = VitroIslandServer(
         session = { activePage?.islandSession() ?: (null to null) },
         log = { msg -> Log.d(logTag, "island: ${forLog(msg)}") },
@@ -143,6 +156,80 @@ class VitroEngine(
             override fun onConnect(port: PagePort) {}
             override fun onPortMessage(port: PagePort, message: JSONObject) {}
         }
+
+        /**
+         * What the fallback page reports, on its way to [host]. Only while it is in front: a page behind the native
+         * dashboard shows no loading or offline screen and says nothing of where it is. A move of Home Assistant's own
+         * frontend to a dashboard Vitro draws (a sidebar tap, a link) hands the page back to the native view. Loads,
+         * a crashed content process, permissions and ports always go through.
+         */
+        private val fallbackHost = object : PageHost {
+            override fun onPageStart(url: String) { if (fallbackInFront()) host.onPageStart(url) }
+            override fun onPageStop(success: Boolean) { if (fallbackInFront()) host.onPageStop(success) }
+            override fun onFirstPaint() { if (fallbackInFront()) host.onFirstPaint() }
+            override fun onLocationChange(url: String?) {
+                if (!fallbackInFront()) return
+                if (url != null && handsBack(url)) {
+                    Log.i(logTag, "Home Assistant's frontend went to a dashboard Vitro draws: ${forLog(url)}")
+                    pendingHandBack = url
+                    main.post {
+                        // Only if the page is still there: a newer location (edit mode, a sign-in) supersedes it.
+                        if (pendingHandBack != url) return@post
+                        pendingHandBack = null
+                        if (!disposed && fallbackInFront()) load(url)
+                    }
+                    return
+                }
+                pendingHandBack = null
+                host.onLocationChange(url)
+            }
+            override fun redirect(url: String): String? = host.redirect(url)
+            override fun onContentGone(killed: Boolean) = host.onContentGone(killed)
+            override fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit) =
+                host.onAndroidPermissions(permissions, answer)
+            override fun onConnect(port: PagePort) = host.onConnect(port)
+            override fun onPortMessage(port: PagePort, message: JSONObject) {
+                if (fallbackInFront()) host.onPortMessage(port, message)
+            }
+        }
+
+        /**
+         * The last native dashboard view the page showed, set once its config is on screen (a dashboard HA has no
+         * config for never is): where Back and Reload dashboard return from the fallback.
+         */
+        private var lastNativeUrl: String? = null
+
+        /** A dashboard HA's frontend went to, queued to load natively; null once a newer location supersedes it. */
+        private var pendingHandBack: String? = null
+
+        /** Dashboards (origin and path) whose config Home Assistant didn't have: its frontend draws them, not Vitro. */
+        private val webDashboards = HashSet<Pair<String?, String?>>()
+
+        /** False until the fallback page shows a page: then the next one starts it over, without that page's history. */
+        private var fallbackFresh = true
+
+        private fun fallbackInFront(): Boolean = fallbackPage?.view?.visibility == View.VISIBLE
+
+        /**
+         * True when [url], where Home Assistant's frontend went, is a dashboard of the page's Home Assistant that Vitro
+         * draws itself. Not one HA's frontend had to draw (no saved config), and not a sign-in's return or edit mode.
+         */
+        private fun handsBack(url: String): Boolean {
+            val origin = OAuth.origin(url) ?: return false
+            if (!VitroCardContext.sameOrigin(origin, proxyOrigin)) return false
+            if (!LovelaceParser.isDashboardUrl(url)) return false
+            val query = runCatching { java.net.URI(url).rawQuery }.getOrNull().orEmpty()
+            if ("auth_callback" in query || "edit=" in query) return false
+            return !isWebDashboard(url)
+        }
+
+        /** True when [url] is a dashboard HA had no config for: its frontend draws it, so it's no way back to Vitro. */
+        private fun isWebDashboard(url: String): Boolean =
+            (OAuth.origin(url) to LovelaceParser.parseRoute(url).first) in webDashboards
+
+        /** The dashboard the panel is set to, when it's one Vitro draws. */
+        private fun configuredDashboard(): String? =
+            settings(activity.applicationContext).dashboard?.takeIf { LovelaceParser.isDashboardUrl(it) && !isWebDashboard(it) }
         private var currentUrl: String? = null
         @Volatile var currentOrigin: String? = null
         private var currentDashboardPath: String? = null
@@ -157,6 +244,47 @@ class VitroEngine(
         /** True while a native dashboard owns the page; false once the fallback took it over. */
         private var nativeActive = false
 
+        /** Clarity's native harness, while the test hold shows its reference dashboard here; null otherwise. */
+        private var clarity: VitroClarity? = null
+
+        /**
+         * Starts Clarity's harness when the page shows the reference dashboard (`/clarity-ref/…`) on the origin of the
+         * test hold's dashboard, a loopback fake Home Assistant; stops it on anything else. Outside a Clarity run this
+         * is one lookup per load.
+         */
+        private fun followClarity(origin: String, dashPath: String?, viewPath: String?) {
+            val test = runCatching { testDashboard(activity.applicationContext) }.getOrNull()
+            if (test == null || OAuth.origin(test) != origin || dashPath != VitroClarity.DASHBOARD) {
+                stopClarity()
+                return
+            }
+            // One harness per fake: a test hold moved to another loopback port gets a new one, polling that fake.
+            if (clarity?.fake == origin) return
+            stopClarity()
+            Log.i(logTag, "Clarity: measuring Vitro on the test dashboard")
+            clarity = VitroClarity(
+                origin, vitroView, store, viewPath ?: "start", follow = ::watchRuntimeEntity,
+                // A harness that ended by itself goes, unless another has replaced it meanwhile: the next load starts one.
+                onExit = { done -> if (clarity === done) stopClarity() },
+                // The hold ending (or moving) ends it too, whether or not a page load follows.
+                active = {
+                    runCatching { testDashboard(activity.applicationContext) }.getOrNull()
+                        ?.let { OAuth.origin(it) == origin } == true
+                },
+                transport = clarityHttp,
+            ).also {
+                vitroView.attachClarity(it)
+                it.start()
+            }
+        }
+
+        private fun stopClarity() {
+            val c = clarity ?: return
+            clarity = null
+            vitroView.attachClarity(null)
+            c.stop()
+        }
+
         /** The selected view's own entities, and whether it follows every entity (an empty filter). */
         private var selectedRefs: Set<String> = emptySet()
         private var selectedFollowsAll = false
@@ -168,6 +296,72 @@ class VitroEngine(
          */
         private val runtimeEntities = LinkedHashSet<String>()
         private var runtimeResubscribe = false
+
+        /**
+         * Views of the shown dashboard (by index) where a web island walked `hass.states`: they follow every entity,
+         * as HA's frontend hands a card every state, also when shown again from the cache (the island asks only once).
+         * Cleared with the dashboard.
+         */
+        private val walkedViews = HashSet<Int>()
+
+        /** Bumped with every dashboard config: a walk an island of the previous one reported late is dropped. */
+        private var walkGeneration = 0
+
+        /**
+         * A web island on view [viewIndex] of dashboard config [generation] walked `hass.states`: that view follows
+         * every entity. On the main thread.
+         */
+        private fun followAllForIsland(viewIndex: Int, generation: Int = walkGeneration) {
+            if (disposed || generation != walkGeneration || !walkedViews.add(viewIndex)) return
+            if (viewIndex != vitroView.currentViewIndex || selectedFollowsAll) return
+            selectedFollowsAll = true
+            subscribeSelectedView()
+        }
+
+        /**
+         * The islands holding the registry feed ([watchIslandRegistries]); main thread only. One feed for them all,
+         * on the current client, while at least one holds it.
+         */
+        private val registryWatchers = LinkedHashSet<(JSONObject) -> Unit>()
+        private var registriesNow: JSONObject? = null
+        private var registryFeed: (() -> Unit)? = null
+
+        /** [onChange] gets the islands' registries until the returned handle is called. Any thread. */
+        private fun watchIslandRegistries(onChange: (JSONObject) -> Unit): () -> Unit {
+            main.post {
+                if (disposed || !registryWatchers.add(onChange)) return@post
+                if (registryFeed == null) attachRegistries()
+                registriesNow?.let(onChange)
+            }
+            return {
+                main.post {
+                    if (registryWatchers.remove(onChange) && registryWatchers.isEmpty()) detachRegistries()
+                }
+            }
+        }
+
+        /** Moves the registry feed onto the current client (a new one after a reconnect to another server). */
+        private fun attachRegistries() {
+            detachRegistries()
+            val c = client ?: return
+            if (registryWatchers.isEmpty()) return
+            lateinit var feed: () -> Unit
+            feed = c.watchRegistries { set ->
+                main.post {
+                    // Only the feed still attached: one replaced or released since drops its last answer.
+                    if (registryFeed !== feed) return@post
+                    registriesNow = set
+                    registryWatchers.toList().forEach { it(set) }
+                }
+            }
+            registryFeed = feed
+        }
+
+        private fun detachRegistries() {
+            registryFeed?.invoke()
+            registryFeed = null
+            registriesNow = null
+        }
 
         private fun subscribeSelectedView() {
             client?.subscribeViewEntities(if (selectedFollowsAll) emptySet() else selectedRefs + runtimeEntities)
@@ -205,9 +399,12 @@ class VitroEngine(
             if (disposed) return
             disposed = true
             readyOnBuild = null
+            stopClarity()
             vitroView.cancelPendingBuilds()
             activity.application.unregisterActivityLifecycleCallbacks(lifecycle)
             clientGeneration++
+            detachRegistries()
+            registryWatchers.clear()
             client?.close()
             client = null
             if (activePage === this) activePage = null
@@ -267,7 +464,7 @@ class VitroEngine(
             vitroView.holdFirstBuildForStatesMs = FIRST_STATES_WAIT_MS
             vitroView.onViewSelected = { v ->
                 // An empty filter subscribes to every entity, which auto-entities' runtime filters need.
-                selectedFollowsAll = CardRouter.followsAllEntities(v)
+                selectedFollowsAll = CardRouter.followsAllEntities(v) || v.index in walkedViews
                 selectedRefs = if (selectedFollowsAll) emptySet() else CardRouter.referencedEntities(v)
                 subscribeSelectedView()
                 // Only the dashboard that owns the route reports a location: one still on screen while another loads
@@ -280,6 +477,7 @@ class VitroEngine(
                     // A reload or a config refresh comes back to this view, not the one the route was loaded with.
                     pendingViewPath = v.path ?: v.index.toString()
                 }
+                if (path != null) lastNativeUrl = path
                 if (path != null && path != currentUrl) {
                     currentUrl = path
                     host.onLocationChange(path)
@@ -291,6 +489,9 @@ class VitroEngine(
             vitroView.onThemeResolved = { theme -> reportThemeToHost(theme) }
             vitroView.contextFactory = { theme ->
                 val haBase = currentOrigin.orEmpty()
+                // The view being built: the context is made for its cards.
+                val viewIndex = vitroView.currentViewIndex
+                val walkGen = walkGeneration
                 VitroCardContext(
                     context = activity,
                     haBase = haBase,
@@ -304,6 +505,8 @@ class VitroEngine(
                         client?.callService(domain, service, data, target)
                     },
                     watchEntity = { id -> main.post { watchRuntimeEntity(id) } },
+                    watchAllEntities = { main.post { followAllForIsland(viewIndex, walkGen) } },
+                    watchRegistries = { onChange -> watchIslandRegistries(onChange) },
                     callServiceThen = { domain, service, data, target, done ->
                         val c = client
                         if (c != null) c.callService(domain, service, data, target, done) else done(false)
@@ -339,6 +542,8 @@ class VitroEngine(
                         // Tier 3 islands always run through the wrapped fallback Engine (GeckoView)
                         // for consistent modern CSS/ES2020 support across Android 6, 10, and 15+.
                         runCatching { fallback.open(activity, islandHost, android.graphics.Color.TRANSPARENT) }.getOrNull()
+                            // A view rebuilt behind the fallback (a theme change): its islands stay hidden until it shows.
+                            ?.also { if (fallbackInFront()) hideIslandSurfaces(it.view) }
                     },
                     touch = touchScreen,
                 )
@@ -372,6 +577,7 @@ class VitroEngine(
             }
             nativeActive = true
             val (dashPath, viewPath) = LovelaceParser.parseRoute(url)
+            followClarity(origin, dashPath, viewPath)
             pendingViewPath = viewPath
             host.onPageStart(url)
             host.onLocationChange(url)
@@ -381,6 +587,7 @@ class VitroEngine(
             if (origin == currentOrigin && displayedDashboard == (origin to dashPath) && vitroView.dashboard != null && client != null) {
                 // Back to the dashboard on screen: a request for another one still on its way no longer owns the page.
                 currentDashboardPath = dashPath
+                lastNativeUrl = url // its config is on screen already
                 client?.claimDashboard(dashPath)
                 vitroView.navigateToView(viewPath)
                 readyWhenBuilt("view")
@@ -404,6 +611,7 @@ class VitroEngine(
                 cachedSession = null
                 store.clear()
                 VitroCardContext.clearImageCache()
+                webDashboards.clear()
             }
             currentOrigin = origin
             displayedDashboard = null
@@ -444,29 +652,61 @@ class VitroEngine(
                 listener = WsListener(generation),
             )
             client = wsClient
+            // Islands holding the registries keep them, now from this Home Assistant.
+            if (registryWatchers.isNotEmpty()) attachRegistries()
             wsClient.start(dashPath)
         }
 
+        /**
+         * Reload dashboard (the panel menu, Manage, Home Assistant's button). On a fallback page it's the way back to
+         * the native dashboard view the page last showed (else the one the panel is set to), in place of that page in
+         * the history: Back from there doesn't return to it. Only with no native dashboard at all does the fallback
+         * page reload itself.
+         */
         override fun reload() {
             val activeFallback = fallbackPage
-            if (activeFallback != null && activeFallback.view.visibility == View.VISIBLE) {
-                activeFallback.reload()
+            if (activeFallback != null && fallbackInFront()) {
+                val target = returnTarget()
+                if (target == null) {
+                    activeFallback.reload()
+                    return
+                }
+                currentUrl = null
+                // Back from the dashboard goes where the page was before it, not to the dashboard again.
+                if (history.lastOrNull() == target) history.removeLast()
+                load(target)
                 return
             }
             client?.fetchDashboard(currentDashboardPath) ?: currentUrl?.let(::load)
         }
 
+        override val canGoBack: Boolean
+            get() = history.isNotEmpty() || (fallbackInFront() && (fallbackPage?.canGoBack == true || returnTarget() != null))
+
         override fun goBack() {
-            if (vitroView.closeMoreInfo()) return
             val activeFallback = fallbackPage
-            if (activeFallback != null && activeFallback.view.visibility == View.VISIBLE) {
-                activeFallback.goBack()
+            if (activeFallback != null && fallbackInFront()) {
+                // Home Assistant's page first, within its own history (the fallback starts over for each page Vitro
+                // sends it, so that history is this visit's alone). Then where the page came from: Vitro's history,
+                // or the native dashboard when there is none (the panel started on that page).
+                if (activeFallback.canGoBack) {
+                    activeFallback.goBack()
+                    return
+                }
+                if (!backInHistory()) returnTarget()?.let { target ->
+                    currentUrl = null // the page the panel started on isn't a step to come back to
+                    load(target)
+                }
                 return
             }
+            if (vitroView.closeMoreInfo()) return
             // Every view change (load or tab) is in [history], so it alone says where back goes. The view's own back
             // stack mirrors it, and replaying that after the history would revisit views already gone back through.
             backInHistory()
         }
+
+        /** The native dashboard a fallback page returns to with no history to go back through. */
+        private fun returnTarget(): String? = lastNativeUrl?.takeUnless(::isWebDashboard) ?: configuredDashboard()
 
         /** Loads the previous entry of the page's history; false when there is none. */
         private fun backInHistory(): Boolean {
@@ -478,7 +718,10 @@ class VitroEngine(
         }
 
         override fun restart() {
-            fallbackPage?.restart()
+            fallbackPage?.let {
+                it.restart()
+                fallbackFresh = true
+            }
             // The island server stays up: a locked-down fallback allows its port, and only it, for the process.
             clientGeneration++
             client?.close()
@@ -545,6 +788,7 @@ class VitroEngine(
          * the page (it would render, report its location and signal ready behind the fallback).
          */
         private fun leaveNativeDashboard() {
+            stopClarity()
             nativeActive = false
             readyOnBuild = null
             currentDashboardPath = NO_DASHBOARD
@@ -552,9 +796,17 @@ class VitroEngine(
         }
 
         private fun showVitroLayer() {
+            val left = fallbackInFront()
             vitroView.visibility = View.VISIBLE
             showIslandSurfaces()
-            fallbackPage?.view?.visibility = View.GONE
+            fallbackPage?.let { fp ->
+                fp.view.visibility = View.GONE
+                // Home Assistant's frontend doesn't keep running behind the native view: the page starts over, empty.
+                if (left) {
+                    fp.restart()
+                    fallbackFresh = true
+                }
+            }
         }
 
         /** The islands' surfaces [hideIslandSurfaces] hid, to show again with the dashboard. */
@@ -565,7 +817,7 @@ class VitroEngine(
          * a SurfaceView only when it, or its window, goes invisible, not an ancestor (API 24's onVisibilityAggregated
          * does): on the legacy engine an island's card stayed drawn over Home Assistant's pages.
          */
-        private fun hideIslandSurfaces() {
+        private fun hideIslandSurfaces(root: View = vitroView) {
             fun walk(v: View) {
                 if (v is SurfaceView) {
                     if (v.visibility == View.VISIBLE) { v.visibility = View.INVISIBLE; hiddenSurfaces += v }
@@ -573,7 +825,7 @@ class VitroEngine(
                     for (i in 0 until v.childCount) walk(v.getChildAt(i))
                 }
             }
-            walk(vitroView)
+            walk(root)
         }
 
         private fun showIslandSurfaces() {
@@ -588,13 +840,18 @@ class VitroEngine(
          */
         private fun openInFallback(url: String) {
             Log.i(logTag, "Routing non-dashboard URL to fallback engine: ${forLog(url)}")
-            val fp = fallbackPage ?: fallback.open(activity, host, backgroundColor).also { created ->
+            val fp = fallbackPage ?: fallback.open(activity, fallbackHost, backgroundColor).also { created ->
                 fallbackPage = created
                 container.addView(created.view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             }
+            // A More-Info sheet doesn't wait behind Home Assistant's page to show again over the dashboard.
+            vitroView.closeMoreInfo()
             vitroView.visibility = View.GONE
             hideIslandSurfaces()
             fp.view.visibility = View.VISIBLE
+            // Each page Vitro sends the fallback starts with no history: Back goes through this page's own, then Vitro's.
+            if (!fallbackFresh) fp.restart()
+            fallbackFresh = false
             fp.load(url)
         }
 
@@ -653,6 +910,8 @@ class VitroEngine(
                     // Images fetched with the rejected sign-in go too.
                     VitroCardContext.clearImageCache()
                     clientGeneration++
+                    // Nor does the page keep that session's registries for its islands: the next client's feed brings them.
+                    detachRegistries()
                     client?.close()
                     client = null
                     host.onLocationChange("$base/auth/authorize")
@@ -688,8 +947,14 @@ class VitroEngine(
                     // An older request's answer for a dashboard the page has left must not replace the current one.
                     if (urlPath != currentDashboardPath) return@post
                     displayedDashboard = currentOrigin to urlPath
+                    // It has a config now (made in HA since it failed): Vitro's to draw again.
+                    webDashboards -= currentOrigin to urlPath
+                    // Shown natively: a return target now (onViewSelected then narrows it to the view on screen).
+                    currentUrl?.let { lastNativeUrl = it }
                     // A new config builds new islands; they ask again for what they read.
                     runtimeEntities.clear()
+                    walkedViews.clear()
+                    walkGeneration++
                     vitroView.setConnectionBanner(null)
                     vitroView.setDashboard(config, pendingViewPath)
                     client?.dashboardShown()
@@ -706,6 +971,7 @@ class VitroEngine(
                     // HA's own frontend decides what such a dashboard shows (an auto-generated one, or its error page).
                     // The fallback owns the page now: a reconnect or lovelace_updated doesn't fetch this dashboard again.
                     val url = currentUrl
+                    webDashboards += currentOrigin to urlPath
                     leaveNativeDashboard()
                     url?.let(::openInFallback)
                 }

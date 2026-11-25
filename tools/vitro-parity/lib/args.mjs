@@ -4,6 +4,8 @@
 
 /** The options capture.mjs takes. Every one needs a value. */
 export const OPTIONS = { root: 'dir', frames: 'id,id', cases: 'id,id', templates: 'file' };
+/** Its switches, which take none: where the capture's Home Assistant comes from (see capture.mjs). */
+export const FLAGS = { fakeha: 'the fake HA, from each case\'s fixture', 'real-ha': 'the HA in ha.json (a local corpus only)' };
 
 /**
  * Parses `<cmd> [--name value ...]`. Throws on an unknown option, an option given twice, a missing operand (the
@@ -17,13 +19,19 @@ export function parseArgs(argv) {
     const word = rest[i];
     if (!word.startsWith('--')) throw new Error(`unexpected argument ${word}`);
     const name = word.slice(2);
-    if (!(name in OPTIONS)) throw new Error(`unknown option ${word} (known: ${Object.keys(OPTIONS).map((k) => '--' + k).join(', ')})`);
+    if (name in FLAGS) {
+      if (name in o) throw new Error(`${word} given twice`);
+      o[name] = true;
+      continue;
+    }
+    if (!(name in OPTIONS)) throw new Error(`unknown option ${word} (known: ${[...Object.keys(OPTIONS), ...Object.keys(FLAGS)].map((k) => '--' + k).join(', ')})`);
     if (name in o) throw new Error(`${word} given twice`);
     const value = rest[i + 1];
     if (value === undefined || value.startsWith('--') || value === '') throw new Error(`${word} needs a value (<${OPTIONS[name]}>)`);
     o[name] = value;
     i++;
   }
+  if (o.fakeha && o['real-ha']) throw new Error('--fakeha and --real-ha: one or the other');
   return o;
 }
 

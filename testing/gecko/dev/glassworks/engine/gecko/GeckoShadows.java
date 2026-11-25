@@ -139,6 +139,9 @@ public final class GeckoShadows {
 
         @Implementation
         protected void goBack() { events.add(name(real) + ".goBack"); }
+
+        @Implementation
+        protected void setActive(boolean active) { events.add(name(real) + ".active " + active); }
     }
 
     @Implements(GeckoView.class)

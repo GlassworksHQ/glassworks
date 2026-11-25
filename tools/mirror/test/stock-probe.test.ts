@@ -244,10 +244,56 @@ describe('buildStockProbeUserdata', () => {
     expect(xml).toContain('volumeUuid="primary_physical"');
     expect(xml).toContain('<item name="android.permission.RECEIVE_BOOT_COMPLETED" package="android" />');
     expect(xml).toContain('<item name="android.permission.CHANGE_WIFI_STATE" package="android" />');
+    // BLE GATT server (BleProbeServer) needs BLUETOOTH + BLUETOOTH_ADMIN declared and granted.
+    expect(xml).toContain('<item name="android.permission.BLUETOOTH" package="android" />');
+    expect(xml).toContain('<item name="android.permission.BLUETOOTH_ADMIN" package="android" />');
+    expect(xml).toContain('<item name="android.permission.BLUETOOTH" granted="true" flags="0" />');
+    expect(xml).toContain('<item name="android.permission.BLUETOOTH_ADMIN" granted="true" flags="0" />');
+    // No stageSecret: no app data dir planted.
+    expect(plantedPaths.some((p) => p.includes('stage.secret'))).toBe(false);
     expect(xml).toContain('primaryCpuAbi="arm64-v8a"');
     expect(xml).toContain(`key="${FAKE_CERT_HEX}"`);
     expect(debugfs(raw, 'stat /system/packages.xml')).toMatch(/Type:\s+regular\s+Mode:\s+0660/);
     expect(debugfs(raw, 'ea_list /system/packages.xml')).toContain('u:object_r:system_data_file:s0');
+  }, 30_000);
+
+  it('plants a 32-byte stageSecret at /data/<pkg>/files/stage.secret (0600, app uid, app_data_file) and rejects wrong lengths', async () => {
+    const blocks = DRY_USERDATA / 4096;
+    const secret = new Uint8Array(32).map((_, i) => (i * 37 + 5) & 0xff);
+    const base = { adbKey: KEY, probeApp: { apk: FAKE_APK, certHex: FAKE_CERT_HEX }, time: 1_700_000_000 };
+
+    for (const bad of [new Uint8Array(0), new Uint8Array(31), new Uint8Array(33), new Uint8Array(64)]) {
+      const d = new Disk(new MemoryStore(), 4096, blocks, { zeroed: true });
+      await expect(buildStockProbeUserdata(d, { ...base, stageSecret: bad })).rejects.toThrow(/stageSecret/);
+    }
+    const noApp = new Disk(new MemoryStore(), 4096, blocks, { zeroed: true });
+    await expect(buildStockProbeUserdata(noApp, { adbKey: KEY, stageSecret: secret })).rejects.toThrow(/probeApp/);
+
+    const disk = new Disk(new MemoryStore(), 4096, blocks, { zeroed: true });
+    const { plantedPaths } = await buildStockProbeUserdata(disk, { ...base, stageSecret: secret });
+    expect(plantedPaths).toContain('/data/data/dev.glassworks.stockprobe/files/stage.secret');
+    expect(plantedPaths.at(-1)).toBe('/data/data/dev.glassworks.stockprobe/files/stage.secret');
+
+    if (!haveTools) return;
+    const raw = join(work, 'userdata-secret.raw');
+    await dump(disk, raw);
+    const check = fsck(raw);
+    expect(clean(check), check.out).toBe(true);
+
+    const dir = '/data/dev.glassworks.stockprobe';
+    expect(debugfsCat(raw, `${dir}/files/stage.secret`)).toEqual(secret);
+    expect(debugfs(raw, `stat ${dir}/files/stage.secret`)).toMatch(/Type:\s+regular\s+Mode:\s+0600/);
+    expect(debugfs(raw, `stat ${dir}/files/stage.secret`)).toMatch(/User:\s+10099\s+Group:\s+10099/);
+    expect(debugfs(raw, `ea_list ${dir}/files/stage.secret`)).toContain('u:object_r:app_data_file:s0');
+    expect(debugfs(raw, `stat ${dir}/files`)).toMatch(/Type:\s+directory\s+Mode:\s+0771/);
+    expect(debugfs(raw, `stat ${dir}/files`)).toMatch(/User:\s+10099\s+Group:\s+10099/);
+    expect(debugfs(raw, `ea_list ${dir}/files`)).toContain('u:object_r:app_data_file:s0');
+    expect(debugfs(raw, `stat ${dir}`)).toMatch(/Type:\s+directory\s+Mode:\s+0751/);
+    expect(debugfs(raw, `stat ${dir}`)).toMatch(/User:\s+10099\s+Group:\s+10099/);
+    expect(debugfs(raw, `ea_list ${dir}`)).toContain('u:object_r:app_data_file:s0');
+    expect(debugfs(raw, 'stat /data')).toMatch(/Type:\s+directory\s+Mode:\s+0771/);
+    expect(debugfs(raw, 'stat /data')).toMatch(/User:\s+1000\s+Group:\s+1000/);
+    expect(debugfs(raw, 'ea_list /data')).toContain('u:object_r:system_data_file:s0');
   }, 30_000);
 });
 

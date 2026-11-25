@@ -1622,6 +1622,15 @@ def grade_part(device, refs, attempted, fake_log, transport_of, net_of):
     unmeasured = []
     settled = grade["missing"] if "missing_settled_by" in grade else ()
     reasons += coverage_reasons(ref, attempted, touch, settled, unmeasured)
+    if device.get("engine") == "vitro" and ref:
+        # Vitro plays a camera over MJPEG (camera_proxy_stream), and the reference views' cameras are WebRTC: their task
+        # can't be measured the same way, so it is missing, under the rules for any missing measurement (docs/perf.md,
+        # "Vitro"). Said here, as a reason when it could change the letter, and as unmeasured when it can't.
+        cams = [t for t in G.CAMERA_PAGES if f"{t}.camera" in grade["missing"]]
+        if cams:
+            why = (f"{', '.join(cams)}: cameras not measured on Vitro (it plays a camera over MJPEG; the reference views' "
+                   "cameras are WebRTC)")
+            (unmeasured if all(f"{t}.camera" in settled for t in cams) else reasons).append(why)
     if unmeasured:
         # Why a measurement is missing that can't change the letter: kept, and said, but not a reason for provisional.
         grade["unmeasured"] = unmeasured
@@ -1901,7 +1910,8 @@ def device_line(dev, app):
     parts = [" ".join(x for x in (dev.get("manufacturer"), dev.get("model")) if x),
              dev.get("android") and f"Android {dev['android']} (API {dev.get('api')})", dev.get("abi"),
              cpu.get("cores") and f"{cpu['cores']} cores", dev.get("mem_total_kb") and f"{round(dev['mem_total_kb'] / 1024)} MB RAM",
-             app.get("version_name") and f"app {app['version_name']}", app.get("geckoview") and f"GeckoView {app['geckoview']}"]
+             app.get("version_name") and f"app {app['version_name']}", app.get("geckoview") and f"GeckoView {app['geckoview']}",
+             dev.get("engine") == "vitro" and "measured on Vitro (Settings → Labs)"]
     return ", ".join(p for p in parts if p) + "."
 
 

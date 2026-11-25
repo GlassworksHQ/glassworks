@@ -2,12 +2,13 @@
  "case": "tile-toggle",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
   "height": 800,
-  "density": 2
+  "density": 2,
+  "touch": true
  },
  "clip": {
   "x": 382,
@@ -31,10 +32,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "Guest mode",
-   "x": 84.61,
+   "clipped": false,
+   "text": "Vacation mode",
+   "x": 75.22,
    "y": 67.59,
-   "w": 76.77,
+   "w": 95.56,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -43,6 +45,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Off",
    "x": 114.09,
    "y": 93.8,
@@ -55,23 +58,24 @@
   }
  ],
  "states": {
-  "input_boolean.guest_mode": {
+  "input_boolean.vacation_mode": {
    "s": "off",
    "a": {
     "editable": true,
     "icon": "mdi:account-multiple",
-    "friendly_name": "Guest mode"
+    "friendly_name": "Vacation mode"
    },
-   "lc": 1795504897.1536012
+   "lc": 1794489360,
+   "lu": 1794489360
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "input_boolean.guest_mode",
+    "ei": "input_boolean.vacation_mode",
     "pl": "input_boolean",
-    "en": "Guest mode"
+    "en": "Vacation mode"
    }
   ],
   "devices": [],

@@ -2,12 +2,13 @@
  "case": "mushroom-alarm",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
@@ -31,6 +32,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Alarm",
    "x": 56,
    "y": 17,
@@ -43,6 +45,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Disarmed",
    "x": 56,
    "y": 36,
@@ -55,25 +58,26 @@
   }
  ],
  "states": {
-  "alarm_control_panel.home_alarm": {
+  "alarm_control_panel.house_alarm": {
    "s": "disarmed",
    "a": {
     "code_format": "number",
     "changed_by": null,
     "code_arm_required": false,
-    "friendly_name": "Home Alarm",
+    "friendly_name": "House Alarm",
     "supported_features": 6
    },
-   "lc": 1795540049.4191668
+   "lc": 1794485880,
+   "lu": 1794485880
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "alarm_control_panel.home_alarm",
+    "ei": "alarm_control_panel.house_alarm",
     "pl": "template",
-    "en": "Home Alarm"
+    "en": "House Alarm"
    }
   ],
   "devices": [],
