@@ -988,7 +988,14 @@ vitroDefine('action-handler', class extends HTMLElement {
         fire(target, 'tap');
       }
     };
-    handler.key = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') handler.end(ev); };
+    // Enter or Space is a tap: never the hold an earlier press left behind, and never one a pointer is timing now.
+    handler.key = (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      clearTimeout(this.timer);
+      this.timer = undefined;
+      this.held = false;
+      handler.end(ev);
+    };
     if (!opts.keyboardOnly) {
       element.addEventListener('touchstart', handler.start, { passive: true });
       element.addEventListener('touchend', handler.end);

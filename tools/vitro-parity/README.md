@@ -98,6 +98,13 @@ A local corpus (`--local [dir]`, default `~/.t3/glassworks-m1/vitro-parity/harne
 node tools/vitro-parity/island-check.mjs <case.json> --card better-thermostat-ui-card [--frame tablet] [--shot out.png]
 ```
 
+`island-probe.mjs` runs the other side: the island page Vitro would serve for the card (written by `IslandPageDumpTest`), with the card's pinned script and the island's bridge answered by the probe, and reports what the card drew, which elements it found undefined, and what it sent over the bridge. Example cases are in `island-cases/`.
+
+```sh
+./gradlew :engine-vitro:testDebugUnitTest --tests '*IslandPageDumpTest*' -PvitroIslandCase=$PWD/tools/vitro-parity/island-cases/better-thermostat-mini-climate.json
+node tools/vitro-parity/island-probe.mjs tools/vitro-parity/island-cases/better-thermostat-mini-climate.json [--click x,y] [--shot out.png]
+```
+
 ### Cases with their own stylesheets
 
 Home Assistant is read-only for the harness, apart from its own dashboard, so a case that needs a stylesheet (a web font, say) doesn't add a Lovelace resource. It lists the sheet instead: `"resources": [{"type": "css", "url": "/local/vitro-harness-fixtures/fonts/cardmod.css"}]`, with the file in `fixtures/fonts/cardmod.css`. Only `type: css` under that path is accepted. Such a case gets a page of its own in the capture, and the next case a fresh one, because what a sheet declares stays in the page. The font cases (`font-*`) use fonts under the SIL Open Font License; their licenses sit next to them.

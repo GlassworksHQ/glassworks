@@ -14,8 +14,8 @@
 //   node tools/vitro-parity/island-check.mjs <case.json> --card <cards.json name> [--frame tablet] [--shot out.png]
 //
 // <case.json> is a corpus-style case: `{"card": {...}, "fixture": {...}}` (see README.md, "Fixtures").
-import { chromium } from 'playwright-core';
-import { spawn } from 'node:child_process';
+import { launch } from './lib/browser.mjs';
+import { startFake } from './lib/fake.mjs';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,34 +39,11 @@ const frame = JSON.parse(readFileSync(join(CORPUS, 'frames.json'), 'utf8')).fram
 // The island's stand-ins for HA's elements: what an island page defines besides the card's own script.
 const shims = new Set([...readFileSync(ISLAND, 'utf8').matchAll(/(?:vitroDefine|customElements\.define)\('([a-z0-9-]+)'/g)].map((m) => m[1]));
 
-const script = `import sys; sys.path[:0] = ${JSON.stringify([join(ROOT, 'tools', 'perf'), join(ROOT, 'tools', 'vitro-parity')])}
-import fakeha, fakehome
-srv = fakeha.serve(0, harness=False, home=fakehome)
-print("serving on", srv.server_address[1], flush=True)
-srv.serve_forever()`;
-const child = spawn(process.env.PYTHON || 'python3', ['-c', script], { stdio: ['ignore', 'pipe', 'pipe'] });
-process.on('exit', () => { try { child.kill(); } catch {} });
-const port = await new Promise((ok, no) => {
-  let out = '';
-  const t = setTimeout(() => no(new Error(`the fake HA didn't start:\n${out}`)), 300000);
-  const on = (d) => { out += d; const m = out.match(/serving on (\d+)/); if (m) { clearTimeout(t); ok(+m[1]); } };
-  child.stdout.on('data', on);
-  child.stderr.on('data', on);
-});
-const origin = `http://127.0.0.1:${port}`;
-const post = async (p, b) => {
-  const r = await fetch(origin + p, { method: 'POST', body: JSON.stringify(b), headers: { 'Content-Type': 'application/json' } });
-  if (!r.ok) throw new Error(`fake HA ${p}: HTTP ${r.status}`);
-  return r.json();
-};
-const home = JSON.parse(readFileSync(join(CORPUS, 'home.json'), 'utf8'));
-const res = await post('/vitro-parity/home', { ...home, fixtures_dir: join(CORPUS, 'fixtures'), dashboard: { title: 'check', views: [{ title: 'check', path: 'check', type: 'masonry', cards: [c.card] }] } });
-await post('/vitro-parity/case', { id: 'island-check', fixture: c.fixture || {} });
-const now = Math.round(res.now * 1000);
+const { origin, home, now, path } = await startFake(ROOT, CORPUS, { cards: [c.card], fixture: c.fixture, id: 'island-check' });
 const moduleUrl = `/hacsfiles/${pin.name}/${pin.main}?hacstag=${pin.version}`;
 const tag = String(c.card.type || '').replace(/^custom:/, '');
 
-const browser = await chromium.launch({ headless: true });
+const browser = await launch();
 const ctx = await browser.newContext({ viewport: { width: frame.width, height: frame.height }, deviceScaleFactor: frame.density, colorScheme: 'dark', timezoneId: home.config.time_zone, locale: 'en-US' });
 await ctx.addInitScript(([origin, now, url]) => {
   const RealDate = Date;
@@ -81,7 +58,7 @@ await ctx.addInitScript(([origin, now, url]) => {
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message.slice(0, 200)));
-await page.goto(`${origin}/vitro-harness/check`, { waitUntil: 'load' });
+await page.goto(origin + path, { waitUntil: 'load' });
 await page.waitForTimeout(6000);
 const shot = opt('--shot');
 if (shot) writeFileSync(shot, await page.screenshot());
@@ -90,7 +67,8 @@ const found = await page.evaluate((tag) => {
   const walk = (r) => r.querySelectorAll('*').forEach((e) => { all.push(e); if (e.shadowRoot) walk(e.shadowRoot); });
   walk(document);
   const card = all.find((e) => e.localName === tag);
-  if (!card) return { defined: !!customElements.get(tag), elements: [], error: all.some((e) => e.localName === 'hui-error-card') };
+  // No instance on the page: the tag may be registered and still fail to draw (HA shows its error card).
+  if (!card) return { defined: !!customElements.get(tag), instance: false, elements: [], error: all.some((e) => e.localName === 'hui-error-card') };
   // The elements the card's own templates create: inside its shadow root and those of its own elements (its tag's
   // prefix, or Mushroom's, which such cards ship), never inside one of HA's (an ha-icon-button's own ha-button).
   const ownTag = (t) => t === tag || t.startsWith(tag.split('-')[0] + '-') || t.startsWith('mushroom-');
@@ -98,12 +76,18 @@ const found = await page.evaluate((tag) => {
   const w = (r) => r.querySelectorAll('*').forEach((e) => { inside.push(e); if (e.shadowRoot && ownTag(e.localName)) w(e.shadowRoot); });
   w(card.shadowRoot || card);
   const box = card.getBoundingClientRect();
-  return { defined: true, size: [Math.round(box.width), Math.round(box.height)], elements: [...new Set(inside.map((e) => e.localName).filter((t) => t.includes('-')))].sort() };
+  return { defined: true, instance: true, size: [Math.round(box.width), Math.round(box.height)], elements: [...new Set(inside.map((e) => e.localName).filter((t) => t.includes('-')))].sort() };
 }, tag);
 await browser.close();
 
 if (!found.defined) {
   console.log(`HA's frontend: ${c.card.type} isn't defined by ${pin.name} ${pin.version}${found.error ? ' (HA shows its error card)' : ''}`);
+  process.exit(1);
+}
+if (!found.instance) {
+  // Registered, but HA's page holds no instance of it: its render failed (setConfig threw, say).
+  console.log(`HA's frontend didn't draw ${c.card.type} (${pin.name} ${pin.version}): no instance on the page${found.error ? ', HA shows its error card' : ''}`);
+  if (errors.length) console.log(`page errors: ${errors.join(' | ')}`);
   process.exit(1);
 }
 // The card's own elements: the ones its script defines (by its own tag prefix, or Mushroom's, which such cards ship).

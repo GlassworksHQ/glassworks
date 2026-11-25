@@ -96,12 +96,35 @@ HA's frontend and Vitro now both show the error card.
 
 ## How to reproduce
 
-1. `node tools/vitro-parity/island-check.mjs <case.json> --card better-thermostat-ui-card`, with a case file holding a
-   `card` and a `fixture` for a climate entity (see `tools/vitro-parity/README.md`, "Fixtures"). It runs the fake HA on
-   127.0.0.1 and a throwaway Chromium, and writes nothing (add `--shot out.png` for a screenshot). It downloads HA's
-   pinned frontend and the card into `~/.cache/glassworks-perf` on first use.
-2. The island side: `WebIslandCardView.buildIslandHtml` for the card, served on the fake HA's origin with the bridge
-   socket stubbed, as in step 3 above.
+Both sides run against the fake HA on 127.0.0.1 and a throwaway headless Chromium (`CHROME=<path>` picks the browser,
+as for `capture.mjs`). Neither touches a real HA or a device, and neither writes anything but build output (and a PNG
+with `--shot`). The first run downloads HA's pinned frontend and the card into `~/.cache/glassworks-perf`. The three
+case files in `tools/vitro-parity/island-cases/` hold one made-up climate entity under each card type.
+
+1. **HA's side:** which HA elements the card draws with that an island lacks.
+   ```
+   $ node tools/vitro-parity/island-check.mjs tools/vitro-parity/island-cases/better-thermostat-normal-climate.json --card better-thermostat-ui-card
+   HA's frontend draws custom:better-thermostat-normal-climate-card (better-thermostat-ui-card 3.4.0) 492×424 px with: ha-big-number, ha-card, ha-control-circular-slider, ha-icon, ha-icon-button, ha-svg-icon, mushroom-button, mushroom-button-group
+   An island lacks: ha-big-number, ha-control-circular-slider
+   $ node tools/vitro-parity/island-check.mjs tools/vitro-parity/island-cases/better-thermostat-ui.json --card better-thermostat-ui-card
+   HA's frontend: custom:better-thermostat-ui-card isn't defined by better-thermostat-ui-card 3.4.0 (HA shows its error card)
+   ```
+   It exits 1 when HA doesn't draw the card (undefined, or registered with no instance on the page).
+
+2. **The island's side:** the page Vitro would serve, written by an opt-in Robolectric test, then run with the bridge
+   socket answered by the probe (a snapshot of the fixture's states, empty registries, every `callWS` refused).
+   ```
+   $ ./gradlew :engine-vitro:testDebugUnitTest --tests '*IslandPageDumpTest*' --max-workers=2 \
+       -PvitroIslandCase=$PWD/tools/vitro-parity/island-cases/better-thermostat-mini-climate.json
+   $ node tools/vitro-parity/island-probe.mjs tools/vitro-parity/island-cases/better-thermostat-mini-climate.json --click 60,30
+   island custom:better-thermostat-mini-climate-card: {"instance":true,"defined":true,"height":108,…,"undefined":[]}
+   bridge: [{"type":"resize","height":108}]
+   tap at 60,30 sent: [{"type":"callWs","id":1,"msg":{"type":"call_service","domain":"homeassistant","service":"toggle",…}}]
+   ```
+   With the other two cases (dump each first): `better-thermostat-ui.json` gives `"instance":false` and
+   `bridge: [{"type":"cardError","message":"Custom element doesn't exist: better-thermostat-ui-card."}]`;
+   `better-thermostat-normal-climate.json` gives a 410 px card with `"undefined":["ha-big-number","ha-control-circular-slider"]`.
+   The test is skipped without `-PvitroIslandCase`, so CI's runs pass over it. Cleanup: `rm -r engines/engine-vitro/build/vitro-island`.
 
 ## Open questions
 
