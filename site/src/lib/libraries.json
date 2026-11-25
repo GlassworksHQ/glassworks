@@ -5,6 +5,7 @@
   { "name": "bluetooth-proxy", "description": "An ESPHome Bluetooth proxy on Android." },
   { "name": "sendspin", "description": "A Sendspin synced-audio player for Android." },
   { "name": "voice", "description": "Wake words and Home Assistant Assist on Android." },
+  { "name": "ha-webrtc", "description": "Home Assistant camera WebRTC for Android." },
   { "name": "improv-serial", "description": "Improv Wi-Fi Serial for the browser, and over adb." },
   { "name": "ha-auth", "description": "Home Assistant sign-in and tokens." },
   { "name": "sendspin-protocol", "description": "The Sendspin synced-audio protocol." },
