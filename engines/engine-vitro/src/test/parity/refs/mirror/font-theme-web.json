@@ -31,11 +31,11 @@
  "texts": [
   {
    "slot": 0,
-   "clipped": false,
-   "text": "Hallway Ceiling Ring",
+   "clipped": true,
+   "text": "Hallway Ceiling Light Hallway Ceiling Ring",
    "x": 56,
    "y": 16.61,
-   "w": 135.86,
+   "w": 278,
    "h": 17,
    "size": 14,
    "weight": 500,

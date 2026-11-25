@@ -327,7 +327,7 @@
   "devices": [
    {
     "id": "device-1",
-    "name": "Forecast Home"
+    "name": "Home"
    }
   ],
   "requested": {

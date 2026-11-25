@@ -45,10 +45,10 @@
   {
    "slot": 0,
    "clipped": false,
-   "text": "Forecast Home",
+   "text": "Home",
    "x": 97,
    "y": 67.19,
-   "w": 95.47,
+   "w": 37.66,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -483,7 +483,7 @@
   "devices": [
    {
     "id": "device-1",
-    "name": "Forecast Home"
+    "name": "Home"
    }
   ],
   "requested": {
