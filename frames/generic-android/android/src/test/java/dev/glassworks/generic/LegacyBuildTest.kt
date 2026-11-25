@@ -16,6 +16,7 @@ import dev.glassworks.platform.AppBuild
 import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -85,14 +86,17 @@ class LegacyBuildTest {
         assertEquals("add these to tools:overrideLibrary in src/legacy/AndroidManifest.xml", emptyList<String>(), missing)
     }
 
-    /** A browser engine that never opens: only [VitroEngine.fallbackDashboardOrigin] is used. */
+    /** A browser engine that never opens: only [VitroEngine.islandOrigin] is used. */
     private class NoEngine : Engine {
         override val started: EngineSettings? = null
         override fun open(activity: Activity, host: PageHost, background: Int): Page = throw UnsupportedOperationException()
         override fun isContentProcess(processName: String) = false
     }
 
-    /** #198: the legacy GeckoView holds pages to one origin, so under Vitro it is told the loopback island server's. */
+    /**
+     * #198: the legacy GeckoView holds pages to the dashboard's origin. Under Vitro it is told the loopback island
+     * server's too, as its one other origin, and keeps Home Assistant's address: HA's own pages load from HA.
+     */
     @Test fun theLegacyEngineIsToldTheLoopbackOriginOnlyUnderVitro() {
         val app = RuntimeEnvironment.getApplication()
         val build = AppBuild("1.0.0", 10000, debug = false, product = GenericApp.PRODUCT)
@@ -102,8 +106,9 @@ class LegacyBuildTest {
         val vitro = VitroEngine(fallback = NoEngine(), settings = { EngineSettings(emptyList(), 1f, false) })
         try {
             val legacy = GenericApp.geckoSettings(app, build, GenericApp.LEGACY_APPLICATION_ID) { vitro }
-            assertTrue(legacy.dashboard.toString(), legacy.dashboard?.startsWith("http://127.0.0.1:") == true)
-            assertEquals(vitro.fallbackDashboardOrigin(), legacy.dashboard)
+            assertEquals("Home Assistant stays the dashboard", real, legacy.dashboard)
+            assertTrue(legacy.localOrigin.toString(), legacy.localOrigin?.startsWith("http://127.0.0.1:") == true)
+            assertEquals(vitro.islandOrigin(), legacy.localOrigin)
             assertFalse("the rest is as engineSettings has it", legacy.remoteDebugging)
 
             assertEquals("the generic app's GeckoView keeps Home Assistant's address", real,
@@ -111,6 +116,9 @@ class LegacyBuildTest {
 
             assertEquals("no Vitro: the legacy engine keeps the real address", real,
                 GenericApp.geckoSettings(app, build, GenericApp.LEGACY_APPLICATION_ID) { null }.dashboard)
+            assertNull("no Vitro: no loopback origin", GenericApp.geckoSettings(app, build, GenericApp.LEGACY_APPLICATION_ID) { null }.localOrigin)
+            assertNull("the generic app's GeckoView isn't held to origins",
+                GenericApp.geckoSettings(app, build, "dev.glassworks.generic_android") { vitro }.localOrigin)
         } finally {
             vitro.islandServer.stop()
         }
