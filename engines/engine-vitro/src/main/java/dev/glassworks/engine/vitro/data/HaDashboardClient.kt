@@ -193,7 +193,10 @@ class HaDashboardClient(
     /** Bumped for every `get_panels` asked: only the latest answer counts. */
     private val panelsGeneration = AtomicInteger(0)
 
-    /** The dashboard whose config was last handed on ([hasDelivered]): checked again when HA's panels change. */
+    /**
+     * The dashboard whose config was last handed on ([hasDelivered]): checked again when HA's panels change. Both are
+     * written under [pathLock], and [recheckDelivered] reads, checks and clears them under it.
+     */
     @Volatile private var deliveredDashboard: String? = null
     @Volatile private var hasDelivered = false
 
@@ -272,11 +275,16 @@ class HaDashboardClient(
      * routes to for this user (it became admin only, or was removed) is refused ([Listener.onDashboardRefused]).
      */
     private fun recheckDelivered() = afterAccessKnown {
-        if (closed.get() || !dashboardActive || !hasDelivered) return@afterAccessKnown
-        val path = deliveredDashboard
-        if (path != requestedDashboardPath || mayOpen(path)) return@afterAccessKnown
-        hasDelivered = false
-        listener.onDashboardRefused(path)
+        // Read, check and clear as one, under [pathLock] like every write of the claim: a [claimDashboard] on the main
+        // thread can't land between them and have its claim cleared. The listener is called after, outside the lock.
+        val refused = synchronized(pathLock) {
+            if (closed.get() || !dashboardActive || !hasDelivered) return@afterAccessKnown
+            val path = deliveredDashboard
+            if (path != requestedDashboardPath || mayOpen(path)) return@afterAccessKnown
+            hasDelivered = false
+            path
+        }
+        listener.onDashboardRefused(refused)
     }
 
     /** `lovelace/dashboards/list`, for the panel's Dashboard select: the user's dashboards, once their panels are known. */
@@ -389,7 +397,7 @@ class HaDashboardClient(
     }
 
     /** The page left the dashboards for the fallback; the next [fetchDashboard] or [claimDashboard] takes them back. */
-    fun releaseDashboard() {
+    fun releaseDashboard() = synchronized(pathLock) {
         dashboardActive = false
         hasDelivered = false
     }
@@ -413,16 +421,18 @@ class HaDashboardClient(
             afterAccessKnown {
                 // An answer for a dashboard the page has since moved away from must not replace the current one.
                 if (closed.get() || !dashboardActive || urlPath != requestedDashboardPath) return@afterAccessKnown
-                if (!mayOpen(urlPath)) {
-                    hasDelivered = false
-                    listener.onDashboardRefused(urlPath)
-                } else if (res.optBoolean("success", false)) {
-                    val cfgObj = res.optJSONObject("result") ?: JSONObject()
+                val allowed = mayOpen(urlPath)
+                val ok = res.optBoolean("success", false)
+                synchronized(pathLock) {
                     deliveredDashboard = urlPath
-                    hasDelivered = true
+                    hasDelivered = allowed && ok
+                }
+                if (!allowed) {
+                    listener.onDashboardRefused(urlPath)
+                } else if (ok) {
+                    val cfgObj = res.optJSONObject("result") ?: JSONObject()
                     listener.onDashboardConfig(urlPath, LovelaceParser.parseDashboard(cfgObj))
                 } else {
-                    hasDelivered = false
                     listener.onDashboardConfigFailed(urlPath, res.optJSONObject("error")?.optString("code", "").orEmpty())
                 }
             }
@@ -879,8 +889,8 @@ class HaDashboardClient(
             userKnown = false
             panels = null
             panelsAnswered = false
-            hasDelivered = false
         }
+        synchronized(pathLock) { hasDelivered = false }
         displayRequested.clear()
         displayPending.set(0)
         // Icons and state labels are this Home Assistant's: a new connection loads them again.
