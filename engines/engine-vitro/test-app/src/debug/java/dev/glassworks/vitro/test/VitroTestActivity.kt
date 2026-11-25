@@ -67,6 +67,14 @@ class VitroTestActivity : Activity() {
         }
     }
 
+    /** Wraps camera players registered after start (the WebRTC one) for the camera end-to-end test: [CameraProbe]. */
+    private val probeTick = object : Runnable {
+        override fun run() {
+            CameraProbe.install()
+            main.postDelayed(this, PROBE_CHECK_MS)
+        }
+    }
+
     private val host = object : PageHost {
         override fun onPageStart(url: String) { status = "loading" }
         override fun onPageStop(success: Boolean) { status = if (success) "ready" else "failed" }
@@ -95,6 +103,7 @@ class VitroTestActivity : Activity() {
             enabled = { true },
             tokenProvider = { _, done -> done(prefs.getString(KEY_TOKEN, null)?.takeIf { it.isNotBlank() }) },
         )
+        CameraProbe.install()
 
         root = FrameLayout(this)
         setContentView(root)
@@ -133,11 +142,13 @@ class VitroTestActivity : Activity() {
         super.onResume()
         resumed = true
         scheduleHud()
+        main.post(probeTick)
     }
 
     override fun onPause() {
         resumed = false
         main.removeCallbacks(tick)
+        main.removeCallbacks(probeTick)
         super.onPause()
     }
 
@@ -177,6 +188,7 @@ class VitroTestActivity : Activity() {
         }
         loads++
         status = "loading"
+        CameraProbe.install()
         page?.load(u)
     }
 
@@ -314,5 +326,6 @@ class VitroTestActivity : Activity() {
         const val EXTRA_HUD = "hud"
         const val EXTRA_DARK = "dark"
         const val HUD_REFRESH_MS = 1000L
+        const val PROBE_CHECK_MS = 1000L
     }
 }
