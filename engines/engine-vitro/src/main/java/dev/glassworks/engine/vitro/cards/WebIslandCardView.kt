@@ -612,39 +612,49 @@ class WebIslandCardView(
          * keeps its storage across app starts; [seed] is what HA's web UI holds on this panel ([VitroCardContext.pageStorage]).
          * A key HA's copy changed since the island last took it is taken again, and one HA dropped is dropped unless the
          * island changed it since; whatever else the island holds stays. What the island took last is kept under
-         * [STORAGE_BASE_KEY] with HA's origin: for another Home Assistant, HA's copy wins every key it has.
+         * [STORAGE_BASE_KEY] with HA's origin: for another Home Assistant, its copy wins every key it has, and what the
+         * earlier one put in and the island never changed goes.
+         *
+         * The record is written before any value, so a value HA's copy put in is never there without it: when the
+         * record doesn't fit, the island stays as it was and the next start tries again. A value that doesn't fit keeps
+         * what the record said before, so it is tried again too; if even that record can't be written, it goes, and the
+         * next start takes HA's copy as a first one.
          */
         internal const val ISLAND_STORAGE_JS = """
 function vitroSeedStorage(store, origin, seed) {
   if (!seed || typeof seed !== 'object') return 0;
   const BASE = '__vitro_ha_storage';
-  let base = {};
+  const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  // What the island took last, from whichever HA (owned), and from this one only (base).
+  let owned = {};
+  let sameOrigin = false;
   try {
     const b = JSON.parse(store.getItem(BASE) || 'null');
-    if (b && b.origin === origin && b.items && typeof b.items === 'object') base = b.items;
+    if (b && b.items && typeof b.items === 'object') { owned = b.items; sameOrigin = b.origin === origin; }
   } catch (e) {}
-  let changed = 0;
-  // A key the island couldn't store or remove keeps what it took before (or stays out of it), so the next start tries
-  // it again and still knows the value the island holds came from HA.
-  const failed = new Set();
-  const set = (k, v) => { try { store.setItem(k, v); changed++; } catch (e) { failed.add(k); } };
+  const base = sameOrigin ? owned : {};
+  const planned = {};
+  const writes = [];
   for (const k of Object.keys(seed)) {
     const v = seed[k];
     if (k === BASE || typeof v !== 'string') continue;
-    if (base[k] !== v && store.getItem(k) !== v) set(k, v);
+    planned[k] = v;
+    if (base[k] !== v && store.getItem(k) !== v) writes.push(k);
   }
-  for (const k of Object.keys(base)) {
-    if (k === BASE || Object.prototype.hasOwnProperty.call(seed, k)) continue;
-    if (store.getItem(k) === base[k]) { try { store.removeItem(k); changed++; } catch (e) { failed.add(k); } }
+  // Dropped by HA (or put in by another HA) and unchanged by the island since: it goes.
+  const removals = Object.keys(owned).filter((k) => k !== BASE && !own(planned, k) && store.getItem(k) === owned[k]);
+  const record = (items) => JSON.stringify({ origin: origin, items: items });
+  try { store.setItem(BASE, record(planned)); } catch (e) { return 0; }
+  let changed = 0;
+  const failed = [];
+  for (const k of writes) { try { store.setItem(k, planned[k]); changed++; } catch (e) { failed.push(k); } }
+  for (const k of removals) { try { store.removeItem(k); changed++; } catch (e) { failed.push(k); } }
+  if (failed.length) {
+    // The value the island still holds for a key it couldn't change is the one it took before (or none).
+    const took = Object.assign({}, planned);
+    for (const k of failed) { if (own(owned, k)) took[k] = owned[k]; else delete took[k]; }
+    try { store.setItem(BASE, record(took)); } catch (e) { try { store.removeItem(BASE); } catch (e2) {} }
   }
-  const took = {};
-  const had = (k) => Object.prototype.hasOwnProperty.call(base, k);
-  for (const k of Object.keys(seed)) {
-    if (!failed.has(k)) took[k] = seed[k];
-    else if (had(k)) took[k] = base[k];
-  }
-  for (const k of failed) if (!Object.prototype.hasOwnProperty.call(seed, k) && had(k)) took[k] = base[k];
-  try { store.setItem(BASE, JSON.stringify({ origin: origin, items: took })); } catch (e) {}
   return changed;
 }
 """

@@ -159,6 +159,48 @@ test('another Home Assistant: its copy wins every key it has', () => {
   assert.equal(s.getItem('k'), 'same');
 });
 
+test('another Home Assistant: what the earlier one put in and nobody changed goes, the island own values stay', () => {
+  const s = new MemStorage({ mine: 'island' });
+  vitroSeedStorage(s, HA, { snooze: 'on', tab: '1' });
+  s.setItem('tab', '2'); // the card changed it in the island
+  vitroSeedStorage(s, 'http://192.0.2.10:8123', {});
+  assert.equal(s.getItem('snooze'), null);
+  assert.equal(s.getItem('tab'), '2');
+  assert.equal(s.getItem('mine'), 'island');
+});
+
+test('a record that does not fit leaves the island as it was, and the next start seeds it with its record', () => {
+  const s = new MemStorage({ k: 'island' });
+  const put = s.setItem;
+  s.setItem = function (k, v) { if (k === '__vitro_ha_storage') throw new Error('QuotaExceededError'); put.call(this, k, v); };
+  assert.equal(vitroSeedStorage(s, HA, { k: 'ha', n: '1' }), 0);
+  assert.deepEqual(s.own(), { k: 'island' }, 'no HA value without its record');
+  assert.equal(s.getItem('__vitro_ha_storage'), null);
+  s.setItem = put;
+  vitroSeedStorage(s, HA, { k: 'ha', n: '1' });
+  assert.deepEqual(s.own(), { k: 'ha', n: '1' });
+  s.setItem('n', 'card'); // the card changes a value HA's copy put in
+  vitroSeedStorage(s, HA, { k: 'ha', n: '1' });
+  assert.equal(s.getItem('n'), 'card', 'the island change stays: the record says HA put in 1');
+});
+
+test('a value that does not fit, with no room to correct the record, drops the record', () => {
+  const s = new MemStorage();
+  vitroSeedStorage(s, HA, { a: '1' });
+  let records = 0;
+  const put = s.setItem;
+  s.setItem = function (k, v) {
+    if (k === 'b') throw new Error('QuotaExceededError');
+    if (k === '__vitro_ha_storage' && ++records > 1) throw new Error('QuotaExceededError');
+    put.call(this, k, v);
+  };
+  vitroSeedStorage(s, HA, { a: '1', b: '2' });
+  assert.equal(s.getItem('__vitro_ha_storage'), null, 'never a record claiming a value the island lacks');
+  s.setItem = put;
+  vitroSeedStorage(s, HA, { a: '1', b: '2' });
+  assert.deepEqual(s.own(), { a: '1', b: '2' });
+});
+
 test('no copy leaves the island as it is', () => {
   const s = new MemStorage({ a: '1' });
   assert.equal(vitroSeedStorage(s, HA, null), 0);
