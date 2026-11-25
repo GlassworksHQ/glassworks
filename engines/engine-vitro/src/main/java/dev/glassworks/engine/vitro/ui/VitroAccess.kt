@@ -6,7 +6,6 @@ package dev.glassworks.engine.vitro.ui
 
 import android.content.Context
 import android.content.res.Configuration
-import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
@@ -15,6 +14,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.CompoundButton
 import android.widget.EditText
 import android.widget.SeekBar
+import dev.glassworks.platform.Platform
 import java.util.Collections
 import java.util.WeakHashMap
 
@@ -134,7 +134,7 @@ internal object VitroAccess {
 
     /** Focusable for keys on every Android version: Android 8's automatic focus doesn't count before it. */
     fun explicitlyFocusable(v: View): Boolean =
-        if (Build.VERSION.SDK_INT >= 26) v.focusable == View.FOCUSABLE else v.isFocusable
+        if (Platform.hasFocusableAuto) v.focusable == View.FOCUSABLE else v.isFocusable
 
     /** A widget with a role of its own, virtual nodes, or a class that describes itself (a dial, a slider). */
     private fun hasOwnRole(v: View): Boolean =

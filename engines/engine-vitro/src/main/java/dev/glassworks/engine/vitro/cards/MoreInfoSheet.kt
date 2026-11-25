@@ -199,7 +199,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         playEnter()
         // A keyboard lands in the sheet, as in HA's dialog, and TalkBack announces it by the entity's name.
         closeButton?.requestFocus()
-        if (android.os.Build.VERSION.SDK_INT >= 28) panel.accessibilityPaneTitle = titleView.text
+        if (dev.glassworks.platform.Platform.hasAccessibilityPaneTitle) panel.accessibilityPaneTitle = titleView.text
     }
 
     /** Back and Escape close the sheet, as Escape closes HA's dialog. */
