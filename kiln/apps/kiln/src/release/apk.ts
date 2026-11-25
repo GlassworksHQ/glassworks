@@ -110,13 +110,17 @@ export async function releaseApk(of: ReleaseLine & { from?: ListedRelease }, get
   const { tag } = r;
   const { version, name } = apk;
 
-  let sum: Uint8Array;
-  try {
-    sum = await downloadWhole(`${apk.href}.sha256`, dl);
-  } catch (e) {
-    throw new Error(`Couldn't verify the release checksum for ${version} (${e instanceof ProxyError ? e.message : String(e)})`);
+  // GitHub's own SHA-256 of the file, from Kiln's route, so Refract only carries the bytes; else the release's .sha256
+  let want = r.digests?.[name] ?? '';
+  if (!want) {
+    let sum: Uint8Array;
+    try {
+      sum = await downloadWhole(`${apk.href}.sha256`, dl);
+    } catch (e) {
+      throw new Error(`Couldn't verify the release checksum for ${version} (${e instanceof ProxyError ? e.message : String(e)})`);
+    }
+    want = new TextDecoder().decode(sum).trim().split(/\s+/)[0]?.toLowerCase() ?? '';
   }
-  const want = new TextDecoder().decode(sum).trim().split(/\s+/)[0]?.toLowerCase() ?? '';
   if (!/^[0-9a-f]{64}$/.test(want)) throw new Error(`The release checksum for ${version} wasn't valid`);
 
   onState({ state: 'downloading', tag, version, name, got: 0 });

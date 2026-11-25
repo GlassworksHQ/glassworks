@@ -8,6 +8,8 @@ import { NoRelease, releaseApk, type ReleaseFetch } from '../release/apk';
 export interface FrameAssets {
   asset(name: string, onProgress?: (done: number, total: number) => void): Promise<Uint8Array>;
   hasAsset(name: string): Promise<boolean>;
+  /** The app, fetched and checked before the install writes anything (kiln-core FlowDeps `fetchAhead`); none without `apk`. */
+  fetchAhead?: () => Promise<Uint8Array>;
 }
 
 /** `get`: fetch, for the release list and Refract; `o`: how a release download waits (tests make it short). */
@@ -30,13 +32,15 @@ export function frameAssets(frame: Pick<KilnFrame, 'apk' | 'app'>, assets: Asset
     return fromRelease;
   };
 
+  const asset: FrameAssets['asset'] = async (name, onProgress) => {
+    if (app?.asset === name && !(await assets.has(name))) return release(onProgress);
+    return assets.get(name, onProgress);
+  };
   return {
-    async asset(name, onProgress) {
-      if (app?.asset === name && !(await assets.has(name))) return release(onProgress);
-      return assets.get(name, onProgress);
-    },
+    asset,
     async hasAsset(name) {
       return app?.asset === name || assets.has(name);
     },
+    ...(app ? { fetchAhead: () => asset(app.asset) } : {}),
   };
 }

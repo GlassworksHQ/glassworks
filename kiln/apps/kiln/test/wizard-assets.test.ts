@@ -11,7 +11,7 @@ const STAGED = Uint8Array.of(1, 2);
 const sum = async (b: Uint8Array) => toHex(await crypto.subtle.digest('SHA-256', b as Uint8Array<ArrayBuffer>));
 
 /** Kiln's files: a manifest of `staged`, the line's release `v1.0.0` (or none), and its APK and .sha256 on Refract. */
-function site(o: { staged?: Record<string, Uint8Array>; release?: 'out' | 'none' | 'down' | 'bad' } = {}) {
+function site(o: { staged?: Record<string, Uint8Array>; release?: 'out' | 'none' | 'down' | 'bad'; digest?: string } = {}) {
   const staged = o.staged ?? { uboot: STAGED };
   const apk = 's1-kiosk-1.0.0.apk';
   const calls: string[] = [];
@@ -26,7 +26,7 @@ function site(o: { staged?: Record<string, Uint8Array>; release?: 'out' | 'none'
     if (blob) return new Response(staged[blob] as Uint8Array<ArrayBuffer>);
     if (url === `/api/release/${s1.apk!.line}/latest`) {
       if (o.release === 'down') return new Response('GitHub answered 403', { status: 502 });
-      return Response.json({ release: o.release === 'none' ? null : { tag: 'v1.0.0', version: '1.0.0', assets: [apk] } });
+      return Response.json({ release: o.release === 'none' ? null : { tag: 'v1.0.0', version: '1.0.0', assets: [apk], ...(o.digest ? { digests: { [apk]: o.digest } } : {}) } });
     }
     if (url === releaseFileUrl(REFRACT, 'v1.0.0', `${apk}.sha256`)) return new Response(`${o.release === 'bad' ? 'ab'.repeat(32) : await sum(APK)}  ${apk}\n`);
     if (url === releaseFileUrl(REFRACT, 'v1.0.0', apk)) return new Response(APK as Uint8Array<ArrayBuffer>, { headers: { 'content-length': String(APK.length) } });
@@ -60,6 +60,22 @@ describe('the app from its release', () => {
     expect(progress).toHaveBeenLastCalledWith(APK.length, APK.length);
     expect(urls()).toContain(releaseFileUrl(REFRACT, 'v1.0.0', 's1-kiosk-1.0.0.apk'));
     // once is enough for one session: a second ask doesn't download it again
+    const asked = urls().length;
+    expect(await assets.asset('kiosk-apk')).toEqual(APK);
+    expect(urls().length).toBe(asked);
+  });
+
+  it('GitHub\'s SHA-256 from Kiln\'s route wins over the .sha256 Refract serves: Refract only carries the bytes', async () => {
+    const good = site({ release: 'bad', digest: await sum(APK) });
+    expect(await good.assets.asset('kiosk-apk')).toEqual(APK);
+    expect(good.urls().some((u) => u.endsWith('.sha256'))).toBe(false);
+    const swapped = site({ digest: 'cd'.repeat(32) });
+    await expect(swapped.assets.asset('kiosk-apk')).rejects.toThrow(/^The downloaded file didn't match the published release/);
+  });
+
+  it('fetchAhead: the same download the set-up uses, once', async () => {
+    const { assets, urls } = site();
+    expect(await assets.fetchAhead!()).toEqual(APK);
     const asked = urls().length;
     expect(await assets.asset('kiosk-apk')).toEqual(APK);
     expect(urls().length).toBe(asked);

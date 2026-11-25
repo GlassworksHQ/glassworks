@@ -7,12 +7,17 @@
 // before. Either way the CDN keeps each answer 10 minutes.
 import { RELEASES, REPO, type ReleaseLine } from '../../lines';
 
-export interface LatestRelease { tag: string; version: string; assets: string[] }
+/**
+ * `digests`: each listed file's SHA-256 as GitHub's API states it (its `digest`, for files uploaded since GitHub began
+ * computing one). Kiln checks the download against it, so Refract, which serves the bytes, can't also vouch for them;
+ * a file without one falls back to the release's `.sha256` (release/apk.ts).
+ */
+export interface LatestRelease { tag: string; version: string; assets: string[]; digests?: Record<string, string> }
 
 /** 1,000 releases: far more than the repo has, and a bound on the calls one answer costs. Past it the route fails rather than guess. */
 const MAX_PAGES = 10;
 
-interface GitHubRelease { tag_name: string; draft: boolean; prerelease: boolean; assets: { name: string }[] }
+interface GitHubRelease { tag_name: string; draft: boolean; prerelease: boolean; assets: { name: string; digest?: string | null }[] }
 
 const parts = (v: string) => v.split('.').map(Number);
 const newer = (a: string, b: string) => {
@@ -28,8 +33,15 @@ export function latestOf(line: ReleaseLine, releases: GitHubRelease[]): LatestRe
     const version = line.tag.exec(r.tag_name)?.[1];
     if (version === undefined || r.draft || r.prerelease) continue;
     const allowed = line.assets(version);
-    const assets = r.assets.map((a) => a.name).filter((n) => allowed.includes(n));
-    if (assets.length && (!best || newer(version, best.version))) best = { tag: r.tag_name, version, assets };
+    const files = r.assets.filter((a) => allowed.includes(a.name));
+    const assets = files.map((a) => a.name);
+    const digests = Object.fromEntries(files.flatMap((a) => {
+      const hex = /^sha256:([0-9a-f]{64})$/i.exec(a.digest ?? '')?.[1];
+      return hex ? [[a.name, hex.toLowerCase()]] : [];
+    }));
+    if (assets.length && (!best || newer(version, best.version))) {
+      best = { tag: r.tag_name, version, assets, ...(Object.keys(digests).length ? { digests } : {}) };
+    }
   }
   return best;
 }
@@ -37,16 +49,27 @@ export function latestOf(line: ReleaseLine, releases: GitHubRelease[]): LatestRe
 /** The token GitHub refused, so later pages and answers of this instance don't send it again. */
 let refused: string | undefined;
 
-/** One page of the repo's releases: with RELEASE_GITHUB_TOKEN if there is one, and again without it if GitHub refuses it. */
+/** The token's own quota ran out: GitHub's 403 or 429 with no calls left. */
+const outOfCalls = (r: Response) => (r.status === 403 || r.status === 429) && r.headers.get('x-ratelimit-remaining') === '0';
+
+/**
+ * One page of the repo's releases: with RELEASE_GITHUB_TOKEN if there is one, and again without it if GitHub refuses
+ * the token (401, not sent again) or its quota is spent (until the quota resets, the address's own 60 still answer).
+ */
 async function releasesPage(page: number): Promise<Response> {
   const url = `https://api.github.com/repos/${REPO}/releases?per_page=100&page=${page}`;
   const headers = { accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28' };
   const token = process.env.RELEASE_GITHUB_TOKEN?.trim();
   if (token && token !== refused) {
     const r = await fetch(url, { headers: { ...headers, authorization: `Bearer ${token}` } });
-    if (r.status !== 401) return r;
-    refused = token;
-    console.warn('/api/release: GitHub refused RELEASE_GITHUB_TOKEN (401), asking without it');
+    if (r.status !== 401 && !outOfCalls(r)) return r;
+    if (r.status === 401) {
+      refused = token;
+      console.warn('/api/release: GitHub refused RELEASE_GITHUB_TOKEN (401), asking without it');
+    } else {
+      console.warn(`/api/release: RELEASE_GITHUB_TOKEN has no calls left (${r.status}), asking without it`);
+    }
+    void r.body?.cancel().catch(() => {});
   }
   return fetch(url, { headers });
 }

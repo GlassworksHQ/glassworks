@@ -29,6 +29,7 @@ function realSession(frame: KilnFrame): Session {
     requestFel: () => FelDevice.request(),
     asset: (n, p) => assets.asset(n, p),
     hasAsset: (n) => assets.hasAsset(n),
+    fetchAhead: assets.fetchAhead,
     backups: new BackupStore(frame.recipe.backup.db),
     loadKey: loadOrCreateAdbKey,
   });

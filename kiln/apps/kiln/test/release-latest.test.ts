@@ -129,6 +129,34 @@ describe('the latest release of a line', () => {
     expect(fetch.mock.calls.map(auth)).toEqual(['Bearer token-expired', null, null]);
   });
 
+  it('a token with no calls left (403, none remaining): the same page again without it, and still sent next time', async () => {
+    vi.stubEnv('RELEASE_GITHUB_TOKEN', 'token-spent');
+    const fetch = vi.fn(async (_: string, init: RequestInit) =>
+      new Headers(init.headers).has('authorization')
+        ? new Response('API rate limit exceeded', { status: 403, headers: { 'x-ratelimit-remaining': '0' } })
+        : Response.json([r('v1.0.0', ['s1-kiosk-1.0.0.apk'])]));
+    vi.stubGlobal('fetch', fetch);
+    expect((await (await latest('aqara-s1-plus')).json()).release?.tag).toBe('v1.0.0');
+    await latest('aqara-s1-plus');
+    expect(fetch.mock.calls.map(auth)).toEqual(['Bearer token-spent', null, 'Bearer token-spent', null]);
+  });
+
+  it('another 403 with the token (calls left) is GitHub\'s answer, not retried without it', async () => {
+    vi.stubEnv('RELEASE_GITHUB_TOKEN', 'token-b');
+    const fetch = vi.fn(async () => new Response('forbidden', { status: 403, headers: { 'x-ratelimit-remaining': '4000' } }));
+    vi.stubGlobal('fetch', fetch);
+    expect((await latest('aqara-s1-plus')).status).toBe(502);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('GitHub\'s own SHA-256 of each listed file, when it states one', () => {
+    const hex = 'ab'.repeat(32);
+    const withDigest = { ...r('v1.0.0', []), assets: [{ name: 's1-kiosk-1.0.0.apk', digest: `sha256:${hex.toUpperCase()}` }, { name: 'other.txt', digest: `sha256:${hex}` }] };
+    expect(latestOf(RELEASES.get('aqara-s1-plus')!, [withDigest])).toEqual({ tag: 'v1.0.0', version: '1.0.0', assets: ['s1-kiosk-1.0.0.apk'], digests: { 's1-kiosk-1.0.0.apk': hex } });
+    const none = { ...r('v1.0.0', []), assets: [{ name: 's1-kiosk-1.0.0.apk', digest: null }] };
+    expect(latestOf(RELEASES.get('aqara-s1-plus')!, [none])).toEqual({ tag: 'v1.0.0', version: '1.0.0', assets: ['s1-kiosk-1.0.0.apk'] });
+  });
+
   it.each(['lululemon-mirror', '__proto__', ''])('refuses %j with 404 before GitHub is asked', async (frame) => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);

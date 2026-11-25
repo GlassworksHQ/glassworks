@@ -161,6 +161,7 @@ function world(k: Knobs): World {
       requestFel: async () => { mode = 'fel'; return { log: () => {} } as unknown as FelDevice; },
       asset: (n, p) => assets.asset(n, p),
       hasAsset: (n) => assets.hasAsset(n),
+      fetchAhead: assets.fetchAhead,
       backups: {
         save: async (meta, files) => { saved.push({ meta, files }); },
         original: async () => saved[0]?.meta,
