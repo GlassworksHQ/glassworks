@@ -884,6 +884,7 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        if (failure != null) return
         val eid = config.entity ?: return
         // While the item subscription is down, an entity change reads the list again (the old path).
         observe(eid) { s ->
@@ -900,7 +901,13 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     /** True while the item subscription is up: it brings every change, renames included. */
     private var itemsLive = true
 
-    private val resubscribe = Runnable { config.entity?.let { if (isAttachedToWindow && itemsSub == null) subscribeItems(it) } }
+    private val resubscribe = Runnable { config.entity?.let { if (isAttachedToWindow && itemsSub == null && failure == null) subscribeItems(it) } }
+
+    override fun onCardFailed() {
+        itemsSub?.invoke()
+        itemsSub = null
+        ctx.main.removeCallbacks(resubscribe)
+    }
 
     /**
      * HA's card keeps one `todo/item/subscribe` while it shows: every event is the whole list, so a rename (which
@@ -2255,6 +2262,8 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
         unsub = null
     }
 
+    override fun onCardFailed() = stop()
+
     /**
      * A cached view another one hides stays attached: it drops its subscription, and opens it again when it shows.
      */
@@ -2270,7 +2279,7 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
      */
     private fun fetch() {
         stop()
-        if (ids.isEmpty()) return
+        if (ids.isEmpty() || failure != null) return
         val gen = generation
         val now = ctx.now()
         startSec = (now - hours * 3_600_000L) / 1000.0
@@ -2289,7 +2298,7 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
     }
 
     private fun tick() {
-        if (!isAttachedToWindow || !isShown) return
+        if (!isAttachedToWindow || !isShown || failure != null) return
         render(rows)
         ctx.main.postDelayed(refresh, REFRESH_MS)
     }

@@ -26,6 +26,8 @@ class VitroSentinel(
     private val clock: () -> Long = SystemClock::elapsedRealtime,
     /** Wall clock, ms since the epoch: when Vitro was turned off, as the Labs page says it. */
     private val wallClock: () -> Long = System::currentTimeMillis,
+    /** Writes Vitro off with why and when; false when the write didn't reach storage ([KioskPrefs.turnVitroOffAfterCrashes]). */
+    private val turnOff: (reason: String, atMs: Long) -> Boolean = prefs::turnVitroOffAfterCrashes,
 ) {
     private var startedAt = 0L
 
@@ -72,20 +74,29 @@ class VitroSentinel(
                 "strike $strikes of $STRIKES")
             return@runCatching false
         }
-        prefs.turnVitroOffAfterCrashes(reason(error), wallClock())
+        if (!turnOff(reason(error), wallClock())) {
+            // The next start would read Vitro on again: say so, and don't claim the way back worked. Its next crash
+            // tries the write again.
+            Log.e(TAG, "Vitro: the app crashed $strikes times in a row just after it started (${reason(error)}), but " +
+                "turning Vitro off couldn't be saved; the next start may use Vitro again")
+            return@runCatching false
+        }
         Log.e(TAG, "Vitro: the app crashed $strikes times in a row just after it started (${reason(error)}, in Vitro: " +
             "$inVitro); Vitro is off from the next start, which uses the browser engine. Settings → Labs turns it on again")
         true
     }.getOrDefault(false)
 
     /**
-     * This start stayed up through the window: the crashes before it weren't a loop. Under [lock], and not once this
-     * process has counted a crash: a crash just inside the window, recorded on another thread as the mark runs, keeps
-     * its strike.
+     * Clears the strikes once this start has stayed up through the window, measured on [clock], the clock a crash is
+     * measured on: earlier, it does nothing. The process checks it after [WINDOW_MS] of uptime ([install]), and when
+     * the app comes back to the front or restarts itself ([checkStable]): uptime stops in deep sleep, so the timer
+     * alone could miss a start that slept past the window. Under [lock], and not once this process has counted a
+     * crash: a crash just inside the window, recorded on another thread as the mark runs, keeps its strike.
      */
     fun onStable() {
         synchronized(lock) {
-            if (!counted && prefs.vitroEnabled && prefs.vitroCrashStrikes != 0) prefs.vitroCrashStrikes = 0
+            if (counted || clock() - startedAt < WINDOW_MS) return
+            if (prefs.vitroEnabled && prefs.vitroCrashStrikes != 0) prefs.vitroCrashStrikes = 0
         }
     }
 
@@ -129,7 +140,20 @@ class VitroSentinel(
             val sentinel = VitroSentinel(prefs)
             if (!sentinel.start()) return false
             sentinel.install()
+            current = sentinel
             return true
+        }
+
+        /** This process's sentinel, while Vitro is on. */
+        @Volatile
+        private var current: VitroSentinel? = null
+
+        /**
+         * The app came back to the front, or is about to restart itself: a start that has been up through the window
+         * (on the elapsed clock, deep sleep included) clears its strikes now ([onStable]). Nothing without Vitro.
+         */
+        fun checkStable() {
+            runCatching { current?.onStable() }
         }
 
         /** The exception and the first of Glassworks' frames it came from: `ClassCastException in WeatherCardView.showMetric`. */

@@ -984,6 +984,7 @@ open class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        VitroSentinel.checkStable() // a start that slept past Vitro's crash window is a stable one
         hideSystemUi()
         requestRuntimePermissions() // at start, and what was turned on while another screen was in front
         glassworks.updates?.recheckSilent() // back from Android's settings: Home Assistant's Silent updates follows (#666)
@@ -1097,6 +1098,7 @@ open class MainActivity : Activity() {
             return
         }
         restartWaitingSince = 0L
+        VitroSentinel.checkStable() // the app's own restart isn't a crash: a start that stayed up clears its strikes
         val pi = PendingIntent.getActivity(
             this, 0,
             Intent(this, glassworks.components.mainActivity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),

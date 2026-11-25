@@ -690,6 +690,8 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         errorTileShown = true
         for (s in subscriptions) s.handle?.let { runCatching { it() } }
         subscriptions.clear()
+        // What the card runs on its own (a WebSocket stream, a refresh timer) ends too.
+        runCatching { onCardFailed() }
         setOnClickListener(null)
         setOnLongClickListener(null)
         setOnTouchListener(null)
@@ -723,6 +725,13 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
             setMeasuredDimension(resolveSize(suggestedMinimumWidth, widthMeasureSpec), resolveSize(ctx.px(ERROR_CARD_MIN_DP), heightMeasureSpec))
         }
     }
+
+    /**
+     * The card failed and is HA's error card now: end what it runs outside [observe], [renewing] and [track] (its own
+     * WebSocket subscriptions, its timers). Its attach and visibility hooks check [failure] so they don't start them
+     * again.
+     */
+    protected open fun onCardFailed() {}
 
     /** The card's own measure ([onMeasure] runs it, and shows HA's error card if it throws). */
     protected open fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {

@@ -145,14 +145,16 @@ class VitroSentinelTest {
         val secondDone = java.util.concurrent.atomic.AtomicBoolean(false)
         var second: Thread? = null
         try {
-            inFirst.await()
+            assertTrue("the first crash reached its record", inFirst.await(5, java.util.concurrent.TimeUnit.SECONDS))
             second = Thread({ slow.onCrash(vitroCrash()); secondDone.set(true) }, "second").apply { start() }
             second.join(200)
             assertFalse("the second thread waits for the first record", secondDone.get())
         } finally {
             release.countDown() // never leave the first thread blocked, whatever failed above
         }
-        first.join(); second?.join()
+        // Bounded: a deadlock fails the test instead of hanging the suite.
+        first.join(5_000); second?.join(5_000)
+        assertFalse("no deadlock", first.isAlive || second?.isAlive == true)
         assertTrue(secondDone.get())
         assertEquals("one strike for the one process end", 1, prefs().vitroCrashStrikes)
     }
@@ -225,18 +227,19 @@ class VitroSentinelTest {
 
     @Test fun theInstalledHandlerCountsTheCrashThenHandsItOn() {
         prefs().vitroEnabled = true
-        val handed = ArrayList<Throwable>()
-        Thread.setDefaultUncaughtExceptionHandler { _, e -> handed += e }
+        // Android's handler, which ends the process: by the time it runs, the sentinel has written the crash down.
+        val seen = ArrayList<Pair<Int, Boolean>>()
+        val android = Thread.UncaughtExceptionHandler { _, _ -> seen += prefs().vitroCrashStrikes to prefs().vitroEnabled }
         val main = Handler(Looper.getMainLooper())
         repeat(2) {
+            // Each start is a new process: the sentinel chains onto Android's handler, never the last start's sentinel.
+            Thread.setDefaultUncaughtExceptionHandler(android)
             val s = VitroSentinel(prefs(), clock = { now }, wallClock = { wall })
             assertTrue(s.start())
             s.install(main)
-            val crash = vitroCrash()
-            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(), crash)
-            assertSame("Android's handler still ends the process", crash, handed.last())
+            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(), vitroCrash())
         }
-        assertFalse(prefs().vitroEnabled)
+        assertEquals("first: one strike, still on; second: off", listOf(1 to true, 0 to false), seen)
         assertNotNull(prefs().vitroTurnedOff)
     }
 
@@ -248,8 +251,43 @@ class VitroSentinelTest {
         s.install(Handler(Looper.getMainLooper()))
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(VitroSentinel.WINDOW_MS - 1))
         assertEquals(1, prefs().vitroCrashStrikes)
+        now += VitroSentinel.WINDOW_MS // the elapsed clock, which the timer's uptime never runs ahead of
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
         assertEquals(0, prefs().vitroCrashStrikes)
+    }
+
+    @Test fun aStartThatSleptPastTheWindowIsStableWhenTheAppResumes() {
+        // One strike inherited; the start runs 5 s, the panel sleeps 65 s (uptime stops, the timer doesn't fire), and the
+        // app comes back to the front: on the elapsed clock the start stayed up through the window.
+        prefs().vitroEnabled = true
+        prefs().vitroCrashStrikes = 1
+        val (s, _) = start()
+        now += 5_000L
+        s.onStable()
+        assertEquals("before the window: nothing", 1, prefs().vitroCrashStrikes)
+        now += 65_000L
+        s.onStable() // what VitroSentinel.checkStable runs on resume, or before the app restarts itself
+        assertEquals(0, prefs().vitroCrashStrikes)
+        // The next start's early crash is its first strike, not the second.
+        val (next, _) = start()
+        now += 1_000L
+        assertFalse(next.onCrash(vitroCrash()))
+        assertTrue(prefs().vitroEnabled)
+    }
+
+    @Test fun aFailedFallbackWriteIsReportedAsFailed() {
+        prefs().vitroEnabled = true
+        prefs().vitroCrashStrikes = 1
+        org.robolectric.shadows.ShadowLog.clear()
+        // Storage refuses the write: the next start would read Vitro on.
+        val s = VitroSentinel(prefs(), clock = { now }, wallClock = { wall }, turnOff = { _, _ -> false })
+        s.start()
+        now += 1_000L
+        assertFalse("not reported as turned off", s.onCrash(vitroCrash()))
+        assertTrue(prefs().vitroEnabled)
+        val logs = org.robolectric.shadows.ShadowLog.getLogsForTag("Glassworks").map { it.msg }
+        assertTrue(logs.toString(), logs.any { "couldn't be saved" in it })
+        assertFalse(logs.toString(), logs.any { "Vitro is off from the next start" in it })
     }
 
     @Test fun aCrashOutsideVitroCountsToo() {

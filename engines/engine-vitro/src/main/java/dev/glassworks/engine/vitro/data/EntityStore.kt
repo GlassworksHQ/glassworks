@@ -244,7 +244,7 @@ class EntityStore {
         val current = snapshot.get()
         if (current.owner !== owner || !snapshot.compareAndSet(current, Snapshot(owner, filter))) return false
         for ((id, list) in listeners) {
-            if (states[id] == null && (filter.isEmpty() || id in filter)) list.forEach { it(null) }
+            if (states[id] == null && (filter.isEmpty() || id in filter)) list.forEach { notify(it, null) }
         }
         return true
     }
@@ -254,7 +254,7 @@ class EntityStore {
         // Listeners of [DISPLAY_KEY] (no entity has that id) hear only this: a card that reads HA's registries alone.
         for ((id, list) in listeners) {
             val st = states[id]
-            list.forEach { it(st) }
+            list.forEach { notify(it, st) }
         }
     }
 
@@ -389,6 +389,18 @@ class EntityStore {
         dispatch(setOf(entity.entityId))
     }
 
+    /**
+     * Calls one listener: one that throws (a card's) doesn't stop the others, or the socket reader that dispatches.
+     * Every way the store tells its listeners goes through here ([dispatch], [markSnapshot], [renotifyAll]).
+     */
+    private fun notify(fn: (EntityState?) -> Unit, value: EntityState?) {
+        try {
+            fn(value)
+        } catch (e: Exception) {
+            VitroFailures.report("update", null, e)
+        }
+    }
+
     private fun dispatch(changed: Set<String>) {
         updatesReceived.addAndGet(changed.size.toLong())
         for (id in changed) {
@@ -396,12 +408,7 @@ class EntityStore {
             val value = states[id]
             for (fn in subs) {
                 notificationsDispatched.incrementAndGet()
-                // One listener that throws (a card's) doesn't stop the others, or the socket reader that dispatches.
-                try {
-                    fn(value)
-                } catch (e: Exception) {
-                    VitroFailures.report("update", null, e)
-                }
+                notify(fn, value)
             }
         }
         for (fn in anyListeners) {

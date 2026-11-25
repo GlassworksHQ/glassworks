@@ -1228,9 +1228,18 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
     /** `_redrawGraph`: once a minute the window follows the clock, from the history already held. */
     private val redraw: Runnable = object : Runnable {
         override fun run() {
+            if (failure != null) return
             if (stateHistory != null) render()
             ctx.main.postDelayed(this, 60_000L)
         }
+    }
+
+    override fun onCardFailed() {
+        ctx.main.removeCallbacks(redraw)
+        unsubscribe?.invoke()
+        unsubscribe = null
+        stream = null
+        generation++
     }
 
     override fun onAttachedToWindow() {
@@ -1250,7 +1259,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
     }
 
     private fun subscribe() {
-        if (entityIds.isEmpty() || unsubscribe != null) return
+        if (entityIds.isEmpty() || unsubscribe != null || failure != null) return
         val gen = ++generation
         val s = HaGraph.Stream(hours)
         stream = s
@@ -1579,9 +1588,14 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         }
     }
 
+    override fun onCardFailed() {
+        ctx.main.removeCallbacks(refresh)
+        generation++
+    }
+
     private fun fetch() {
         ctx.main.removeCallbacks(refresh)
-        if (ids.isEmpty()) return
+        if (ids.isEmpty() || failure != null) return
         val gen = ++generation
         ctx.callWs(JSONObject().put("type", "recorder/get_statistics_metadata").put("statistic_ids", JSONArray(ids))) { _, meta, _ ->
             ctx.main.post {
