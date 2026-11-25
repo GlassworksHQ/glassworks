@@ -26,6 +26,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -208,6 +209,22 @@ class IslandSessionsTest {
         assertEquals(1, islandPages().size)
         assertFalse(first.closed)
         assertOnePagePerIsland(p)
+    }
+
+    @Test fun anIslandCardThatFailsClosesItsPageAtOnce() {
+        val p = page()
+        p.load("$base/wall-test/wall")
+        awaitMain("ready") { readyCount() == 1 && islandPages().size == 1 }
+        val card = islandCards(p).single()
+        val island = islandPages().single()
+        assertFalse(island.closed)
+        // Contained: the card becomes HA's error card while it stays in the view.
+        card.fail("draw", IllegalStateException("island boom"))
+        idle()
+        assertNotNull(card.failure)
+        assertTrue("still in the view", card.isAttachedToWindow)
+        assertTrue("its page closed at once, not at detach", island.closed)
+        assertEquals("nothing reopened", 1, islandPages().size)
     }
 
     @Test fun aCardRemovedFromTheDashboardClosesItsPage() {

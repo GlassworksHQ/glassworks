@@ -889,6 +889,7 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        if (failure != null) return
         val eid = config.entity ?: return
         // While the item subscription is down, an entity change reads the list again (the old path).
         observe(eid) { s ->
@@ -905,7 +906,15 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     /** True while the item subscription is up: it brings every change, renames included. */
     private var itemsLive = true
 
-    private val resubscribe = Runnable { config.entity?.let { if (isAttachedToWindow && itemsSub == null) subscribeItems(it) } }
+    private val resubscribe = Runnable { config.entity?.let { if (isAttachedToWindow && itemsSub == null && failure == null) subscribeItems(it) } }
+
+    override fun onCardFailed() {
+        itemsSub?.invoke()
+        itemsSub = null
+        ctx.main.removeCallbacks(resubscribe)
+        // A read already on its way lands on nothing.
+        fetchGeneration++
+    }
 
     /**
      * HA's card keeps one `todo/item/subscribe` while it shows: every event is the whole list, so a rename (which
@@ -926,7 +935,7 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         }, { _ ->
             ctx.main.post {
                 itemsSub = null
-                if (!isAttachedToWindow) return@post
+                if (!isAttachedToWindow || failure != null) return@post
                 itemsLive = false
                 fetch(eid)
                 ctx.main.postDelayed(resubscribe, RESUBSCRIBE_MS)
@@ -939,6 +948,8 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
      * subscription is dropped right after (a state change reads it again, as before).
      */
     private fun fetch(eid: String, retry: Boolean = true) {
+        // A failed card reads nothing more; a healthy one whose item subscription was rejected still does.
+        if (failure != null) return
         val gen = ++fetchGeneration
         var unsub: (() -> Unit)? = null
         var done = false
@@ -2253,6 +2264,8 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
         unsub = null
     }
 
+    override fun onCardFailed() = stop()
+
     /**
      * A cached view another one hides stays attached: it drops its subscription, and opens it again when it shows.
      */
@@ -2268,7 +2281,7 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
      */
     private fun fetch() {
         stop()
-        if (ids.isEmpty()) return
+        if (ids.isEmpty() || failure != null) return
         val gen = generation
         val now = ctx.now()
         startSec = (now - hours * 3_600_000L) / 1000.0
@@ -2287,7 +2300,7 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
     }
 
     private fun tick() {
-        if (!isAttachedToWindow || !isShown) return
+        if (!isAttachedToWindow || !isShown || failure != null) return
         render(rows)
         ctx.main.postDelayed(refresh, REFRESH_MS)
     }

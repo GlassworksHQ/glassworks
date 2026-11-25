@@ -172,6 +172,8 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         unsubs.clear()
     }
 
+    override fun onCardFailed() = stop()
+
     private fun refresh() {
         refreshChrome()
         renderBody()
@@ -181,6 +183,7 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     /** `calendar/event/subscribe` per calendar over the shown range, as `subscribeCalendarEvents` asks. */
     private fun subscribe() {
         stop()
+        if (failure != null) return
         val gen = generation
         val (start, end) = range(view, anchor, HaLocale.timeZone())
         for (id in ids) {
