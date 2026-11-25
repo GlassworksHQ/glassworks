@@ -191,6 +191,7 @@ object HaAuth {
      * Forgets every sign-in in progress (a factory reset): the running server's first, so none finishes before the app
      * restarts and nothing it saves later brings them back, then the saved copy. False when that couldn't be removed.
      */
+    @Synchronized // with startServer, which makes the store: a reset never runs between its read of the saved copy and this
     fun forgetPendingSignIns(context: Context): Boolean {
         init(context)
         signInStates?.clear()
