@@ -86,11 +86,11 @@ export function StartOverDialog({ open, onOpenChange, onConfirm, resets, keeps, 
           <div className="dlg-cols">
             <div>
               <span className="dlg-h">Starts again</span>
-              <ul className="dlg-list reset">{resets.map((x) => <li key={x}>{x}</li>)}</ul>
+              <ul className="dlg-list dlg-resets">{resets.map((x) => <li key={x}>{x}</li>)}</ul>
             </div>
             <div>
               <span className="dlg-h">Stays</span>
-              <ul className="dlg-list keep">{keeps.map((x) => <li key={x}>{x}</li>)}</ul>
+              <ul className="dlg-list dlg-stays">{keeps.map((x) => <li key={x}>{x}</li>)}</ul>
             </div>
           </div>
           <div className="dlg-foot">
