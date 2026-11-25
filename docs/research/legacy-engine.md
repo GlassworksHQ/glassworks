@@ -325,6 +325,7 @@ into API 24 at start (step 9); since Phase B (#412) it runs. On the Mirror it st
 | Hiding HA's header and sidebar, the external-auth bridge (`window.externalApp`) | Same `content.js`; needs the app's MainActivity to answer it | The bridge: inferred to work on the Mirror (2026-11-17, #459): after a sign-in from a phone the dashboard loaded signed in, which it can only do through the bridge. No log shows `getExternalAuth`. Hiding the header and sidebar: untested |
 | Camera cards | HLS only: WebRTC is off | Read (HA's frontend falls back when `RTCPeerConnection` is missing); untested |
 | Map cards, iframe and webpage cards, brand icons, anything from another origin | Blocked, with the note | Verified for the kinds of request (steps 4, 12); not with a real map card |
+| Home Assistant's other pages: history, logbook, settings, the profile (`/profile/dashboard`) | Work | Verified on API 23, Vitro off: history, logbook and settings in #823's run, the profile (2026-11-24, [below](#a-blank-profilegeneral-is-home-assistants-not-the-engines-2026-11-24)). `/profile/general` is blank in every browser: HA 2026.11 has no such route |
 | Downloads (backups, logs) | Refused | Verified (step 12) |
 | `window.open` to HA (e.g. "open in a new tab") | Loads in place | Verified (step 12) |
 
@@ -605,6 +606,66 @@ apply:
   (core-emulators.yml, `legacy-verify`).
 - **A part the panel can run without loads through `orWithout`** (the Manage page, the "Allow a new computer"
   card), so a class like this costs that part, not the app.
+
+## A blank `/profile/general` is Home Assistant's, not the engine's (2026-11-24)
+
+**Result: `/profile/general` no longer exists in Home Assistant, so it is blank in every browser. Nothing on the
+legacy engine to fix.** The S1 app's README used it as the example for `--es open`; it now opens `/history`.
+
+**How we got here.** The agent fixing the Vitro legacy fallback (#823) opened `/profile/general` with `--es open` on
+an API 23 emulator (Vitro off) and got a blank page, while history, logbook and settings loaded. A blank page on the
+frozen engine points first at the engine, so the hypotheses were, in order of cost to check:
+
+1. The lockdown refuses something the profile page loads (a second origin, a `blob:` or `data:` worker).
+2. GeckoView 144 lacks a JS feature the page uses (it pulls in push notifications, theme pickers, Assist).
+3. The external bus: HA's frontend sends the app a message that awaits an answer `content.js` never gives.
+4. The route itself.
+
+Number 4 was the cheapest and turned out to be it. HA's profile panel is one small chunk that lists its routes, and
+`general` isn't one of them; the other three were then ruled out by trying the same URL in a desktop browser.
+
+**What we ran (verified 2026-11-24, HA 2026.11.3 in Docker, `ghcr.io/home-assistant/home-assistant:stable`):**
+
+1. The profile panel's routes, read from HA's own frontend in the container (**read**: `hass_frontend/frontend_latest/56217.d21a1b26aa949498.js`,
+   the chunk that defines `ha-panel-profile`):
+   `grep -l profile-section-general frontend_latest/*.js` finds nothing; `ha-panel-profile`'s `routerOptions` are
+   `defaultPage: "dashboard"` and routes `dashboard`, `preferences`, `localization`, `browser` and `security`.
+   HA's router renders nothing for a path that matches no route, and the kiosk hides HA's header and sidebar, so
+   on a panel the whole screen is the page background.
+2. Desktop Chromium 141 (Playwright, headless, signed in as a test user): `/profile/general` shows HA's sidebar and
+   an empty page with no console error; `/profile/dashboard` shows the profile (user card, theme, Appearance,
+   Localization, This browser, Security). So hypotheses 1–3 are out: no lockdown, no GeckoView 144, no app bridge
+   in that run. (Playwright's Firefox didn't start on this Mac; not needed.)
+3. The legacy APK built from main (`./gradlew :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a`,
+   zipaligned and signed with the debug key) on an API 23 arm64 emulator (`system-images;android-23;default;arm64-v8a`,
+   `wm size 1280x800`), the app set to `--es url http://10.0.2.2:8133` and signed in with
+   `tools/legacy/emulator-signin.sh` (the panel's own QR sign-in server through `adb forward tcp:18099 tcp:8099`,
+   then HA's `/auth/login_flow` API with the S256 `code_challenge` from the authorize URL: HA 2026.11 refuses the
+   code exchange with `invalid_request` without it). Then, 45 s apart:
+   `am start -n dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity --es open http://10.0.2.2:8133/profile/<route>`.
+   Each `open` loads a new page behind the app's connecting screen, which lifts on HA's `frontend/loaded` (logcat:
+   `Connecting screen hidden: ready, frontend/loaded`, 4.8 s for `general`, 2.9 s for `dashboard`), so a capture
+   taken sooner shows that screen, not HA.
+   - `general`: one color over the whole page, `#fafafa` (HA's background; counted with PIL), as in Chromium. The
+     kiosk hides HA's header and sidebar, so nothing else is left.
+   - `dashboard`: the full profile (1,763 colors), including **This mobile app**, the section HA shows only to an
+     external app, so the external-auth bridge answered `config/get` on GeckoView 144.
+   - Logcat over both: no `lockdown: blocked`, no `Loading failed for the module`, no `Script terminated by timeout`.
+
+**A dead end worth knowing.** The first emulator run, at the AVD's own 2560×1800 with SwiftShader, while the Mac ran
+other builds (load average 600–850), looked like a real engine bug: 87 `Loading failed for the module` warnings for
+HA's chunks, a `Script terminated by timeout` inside them, and the app's connecting screen that never left, for
+`/profile/dashboard` too. HA served every one of those chunks (200 to `curl`).
+
+The likely cause is the host, not GeckoView, but the runs don't prove it. The later runs changed two things at once,
+the display (1280×800 with `wm size`) and the load. At 1280×800 the load alone made a large difference: the dashboard
+took 59 s to load at load 440–700 (logcat `Connecting screen hidden … (58726 ms …)`), 7.8 s at about 300 after the
+reboot, and 6.4 s at about 50, with no module failure or script timeout in the last two. No run was made at
+2560×1800 with the host idle, so an engine problem at that size is not ruled out (**untested**). Before blaming the
+legacy engine for chunks that don't load on an emulator, check `uptime` on the host and try the display at 1280×800.
+
+Lesson for the next blank HA page on the legacy engine: open the same URL in a desktop browser before suspecting
+GeckoView 144. HA renames and removes frontend routes between releases.
 
 ## How to reproduce
 
