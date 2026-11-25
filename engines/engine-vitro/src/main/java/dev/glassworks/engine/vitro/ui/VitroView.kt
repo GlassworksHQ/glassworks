@@ -786,7 +786,8 @@ class VitroView(
 
         val cached = if (!forceRebuild && index !in staleViews) viewCache[index] else null
         // A first build waits for the view's states, as HA's frontend renders a view's cards once hass has them.
-        if (cached == null && holdForStates(index, viewCfg)) {
+        // Only a first build waits: a stale view (a dead island, [islandPagesGone]) still has its tree, and builds now.
+        if (cached == null && viewCache[index] == null && holdForStates(index, viewCfg)) {
             // The previous view's cards don't stay on screen (and tappable) under this view's tab while it waits.
             for (i in 0 until contentHost.childCount) contentHost.getChildAt(i).visibility = GONE
             for (i in 0 until overlayLayer.childCount) overlayLayer.getChildAt(i).visibility = GONE

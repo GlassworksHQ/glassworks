@@ -409,6 +409,41 @@ class IslandSessionsTest {
         assertOnePagePerIsland(p)
     }
 
+    @Test fun aStaleViewWhoseEntitiesAreGoneStillBuildsWhenShown() {
+        val config = """{"views": [
+            {"path": "a", "cards": [{"type": "custom:acme-a-card", "entity": "light.lounge_lamp"},
+                                    {"type": "custom:acme-c-card", "entity": "sensor.kitchen_temp"}]},
+            {"path": "b", "title": "%s", "cards": [{"type": "custom:acme-b-card", "entity": "sensor.kitchen_temp"}]}]}"""
+        server.dashboardConfig = JSONObject(config.format("B"))
+        val p = page()
+        p.load("$base/wall-test/b")
+        awaitMain("view b built") { readyCount() == 1 && islandPages().size == 1 }
+        // An edit: the dashboard is set again, and view a's first build after it doesn't wait (its states are there).
+        server.dashboardConfig = JSONObject(config.format("Bee"))
+        lovelaceUpdated()
+        awaitMain("the edit is built") { readyCount() >= 2 }
+        idle()
+        p.load("$base/wall-test/a")
+        awaitMain("view a built") { openIslandPages().size == 3 }
+        p.load("$base/wall-test/b")
+        idle()
+        val (a, c) = islandPages().takeLast(2) // view a's, opened last
+        fallback.opens[fallback.pages.indexOf(a)].host.onContentGone(killed = true)
+        idle()
+        assertTrue(a.closed)
+
+        // Every entity view a names is gone from the store: the wait for a first build must not hide its tree.
+        (p.javaClass.getDeclaredField("store").apply { isAccessible = true }.get(p) as EntityStore).clear()
+        val before = islandPages().size
+        p.load("$base/wall-test/a")
+        idle()
+        assertEquals("view a is built again now, a new page for the dead card", before + 1, islandPages().size)
+        assertTrue(islandPages().last().view.isShown)
+        assertFalse(c.closed)
+        assertTrue("its live sibling is shown", c.view.isShown)
+        assertOnePagePerIsland(p)
+    }
+
     @Test fun islandsThatDieTogetherAreHandledOnce() {
         val p = page()
         p.load("$base/wall-test/wall")
@@ -701,9 +736,21 @@ class IslandSessionsTest {
         sent.clear()
         watchers.toList().forEach { it() }
         assertTrue("nothing changed, nothing sent", sent.isEmpty())
+
+        // A sign-in whose user isn't known yet (current_user hasn't answered): the user goes as null, and the page
+        // falls back to the anonymous panel, not the previous account; then the new user when it's known.
+        token = "third-token"
+        user = JSONObject()
+        watchers.toList().forEach { it() }
+        assertTrue(sent.single().isNull("user"))
+        sent.clear()
+        user = JSONObject().put("id", "user-3").put("name", "Kitchen")
+        watchers.toList().forEach { it() }
+        assertEquals("user-3", sent.single().getJSONObject("user").getString("id"))
         // The page applies it to hass.user.
         val html = WebIslandCardView.buildIslandHtml(ctx, LovelaceParser.parseCard(JSONObject(cardJson)))
-        assertTrue(html.contains("hassBase.user = m.user;"))
+        assertTrue(html.contains("const user = (m.user && typeof m.user === 'object') ? m.user : ANON_USER;"))
+        assertTrue(html.contains("hassBase.user = user;"))
     }
 
     @Test fun anIslandPageStopsRetryingItsBridgeOnceItsSlotIsGone() {

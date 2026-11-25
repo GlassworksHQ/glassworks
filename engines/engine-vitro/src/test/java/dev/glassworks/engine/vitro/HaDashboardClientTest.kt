@@ -49,6 +49,7 @@ class HaDashboardClientTest {
         val disconnected = CopyOnWriteArrayList<String>()
         val userThemes = CopyOnWriteArrayList<Pair<String?, Boolean?>>()
         val failedConfigs = CopyOnWriteArrayList<Pair<String?, String>>()
+        val users = CopyOnWriteArrayList<JSONObject>()
 
         override fun onConnected(haVersion: String) { connected += haVersion }
         override fun onAuthRequired() { authRequired.incrementAndGet() }
@@ -59,6 +60,7 @@ class HaDashboardClientTest {
         override fun onDashboardConfigFailed(urlPath: String?, code: String) { failedConfigs += urlPath to code }
         override fun onDisconnected(reason: String) { disconnected += reason }
         override fun onUserTheme(themeName: String?, dark: Boolean?) { userThemes += themeName to dark }
+        override fun onCurrentUser(user: JSONObject) { users += user }
     }
 
     private val server = FakeHaServer()
@@ -243,6 +245,8 @@ class HaDashboardClientTest {
         assertFalse(c.currentUser.getBoolean("is_admin"))
         assertEquals(JSONObject().toString(), newClient().currentUser.toString()) // empty until it arrives
         assertEquals(1, server.commands("auth/current_user").size)
+        // The page hears of it, so islands whose pages stay get the user as it arrives.
+        assertEquals(listOf("u1"), listener.users.map { it.optString("id") })
     }
 
     @Test

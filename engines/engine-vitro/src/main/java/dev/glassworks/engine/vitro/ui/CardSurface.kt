@@ -101,8 +101,9 @@ class VitroCardContext(
      */
     val watchRegistries: (onChange: (JSONObject) -> Unit) -> () -> Unit = { { } },
     /**
-     * [onChange] runs (on any thread) each time the page gets a new Home Assistant token, until the returned handle is
-     * called: a web island whose page stays sends it the new one. The default (tests, no engine) never calls it.
+     * [onChange] runs (on any thread) each time the page gets a new Home Assistant token or learns the signed-in user
+     * ([haUser]), until the returned handle is called: a web island whose page stays sends it the new sign-in. The
+     * default (tests, no engine) never calls it.
      */
     val watchToken: (onChange: () -> Unit) -> () -> Unit = { { } },
     /**

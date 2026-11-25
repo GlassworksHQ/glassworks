@@ -1076,6 +1076,9 @@ async function vitroCallApi(method, path, parameters, headers) {
   return body;
 }
 
+// hass.user until Home Assistant says who signed in, and when it doesn't know.
+const ANON_USER = { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false };
+
 const hassBase = {
   config: haConfig,
   language: 'en',
@@ -1084,7 +1087,7 @@ const hassBase = {
   locale: { language: 'en', number_format: 'language', time_format: 'language' },
   themes: { darkMode: ${ctx.theme.dark}, default_theme: ${JSONObject.quote(ctx.theme.name)}, themes: {} },
   selectedTheme: null,
-  user: { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false },
+  user: ANON_USER,
   services: {},
   panels: {},
   resources: {},
@@ -1157,8 +1160,10 @@ function connectBridge() {
           hassBase.auth = { data: { access_token: accessToken, hassUrl: location.origin }, accessToken };
           changed = true;
         }
-        if (m.user && typeof m.user === 'object' && JSON.stringify(m.user) !== JSON.stringify(hassBase.user)) {
-          hassBase.user = m.user;
+        // A user not known (yet) for this sign-in: the anonymous panel, never the previous account.
+        const user = (m.user && typeof m.user === 'object') ? m.user : ANON_USER;
+        if (JSON.stringify(user) !== JSON.stringify(hassBase.user)) {
+          hassBase.user = user;
           changed = true;
         }
         if (changed && cardEl) cardEl.hass = makeHass();
