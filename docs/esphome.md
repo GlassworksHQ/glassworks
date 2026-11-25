@@ -42,7 +42,9 @@ Until Home Assistant gives the panel its key, anyone on your network can talk to
 | **Reload dashboard**, **Restart app** | **Start Wi-Fi setup (Bluetooth)** (`improv_ble`) and **Open device settings** (`open_settings`) |
 | **Allow setup over the network**: pairing still needs the code shown on the panel's screen | Pane switches, the time zone, the Bluetooth proxy, and the camera's snapshots, **ONVIF stream** and **Camera privacy** |
 | **Radio mode**, **Join Zigbee network** and **Leave Zigbee network** as a router, **Radio allowed clients** | The radio's **Zigbee stack**, **Radio firmware image** and **Flash radio firmware**, **Join Home Assistant's Thread network** and **Leave Thread network** |
-| App and frame updates, voice, **Camera use** and the camera's motion sensitivity (no picture leaves the panel without the key) | |
+| App and frame updates, voice, **Camera use** and the camera's motion sensitivity | |
+
+Snapshots reach Home Assistant only over the encrypted connection, and turning on the **ONVIF stream** needs it too. Once the stream is on, though, it's read with its own sign-in (see [Camera entities](#camera-entities)), not with the ESPHome key.
 
 Without a key, the controls in the right column do nothing when Home Assistant uses them, and the entity snaps back to its old state. You can still change all of them on the panel itself or on the [Manage page](manage.md).
 
