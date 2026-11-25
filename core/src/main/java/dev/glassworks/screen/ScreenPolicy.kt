@@ -518,18 +518,32 @@ class ScreenPolicy(
         }
     }
 
+    private var systemScreenOff = false
+
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
-            // A blackout is off to everyone but Android, whose display stays on.
-            screenOn = i.action == Intent.ACTION_SCREEN_ON && !blackout
-            Log.i(logTag, "screen ${if (i.action == Intent.ACTION_SCREEN_ON) "ON" else "OFF"}")
-            // Turned off by the power key or anything else: don't hold it against that. Not when a wake
-            // already turned it on again (a late broadcast from the sleep before it).
-            if (!screenOn && !pm.isInteractive) letGo()
-            if (i.action == Intent.ACTION_SCREEN_ON) {
-                lastActivity = SystemClock.elapsedRealtime()
-                setKeepOn(true)
+            val on = i.action == Intent.ACTION_SCREEN_ON
+            Log.i(logTag, "screen ${if (on) "ON" else "OFF"}")
+            if (!on) {
+                systemScreenOff = true
+                screenOn = false
+                // Turned off by the power key or anything else: don't hold it against that. Not when a wake
+                // already turned it on again (a late broadcast from the sleep before it).
+                if (!pm.isInteractive) letGo()
+                notifyChanged()
+                return
             }
+            // A real system SCREEN_OFF followed by SCREEN_ON wakes even out of blackout; a stray
+            // SCREEN_ON with no preceding SCREEN_OFF leaves an active blackout intact.
+            val wasSystemOff = systemScreenOff
+            systemScreenOff = false
+            if (blackout && wasSystemOff) {
+                wake("screen on")
+                return
+            }
+            screenOn = !blackout
+            lastActivity = SystemClock.elapsedRealtime()
+            setKeepOn(true)
             notifyChanged()
         }
     }

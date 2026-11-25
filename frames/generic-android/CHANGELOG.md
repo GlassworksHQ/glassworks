@@ -12,7 +12,7 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Fixed
-- **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it sleeps the way lululemon's own software did: the backlight goes off and the screen stays black, and anything that wakes it brings the picture straight back. In the legacy build.
+- **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it avoids Android's display-off path and sleeps the way lululemon's own software did — dropping the backlight to zero under a black screen so waking brings the picture straight back (physical `screen_brightness=0` verified on stock firmware; live check of the app's window-brightness override pending before release). In the legacy build.
 
 ## [0.9.0] - 2026-11-24
 

@@ -1019,10 +1019,19 @@ open class MainActivity : Activity() {
         blackoutView.visibility = if (on) View.VISIBLE else View.GONE
     }
 
-    /** A key wakes a screen that sleeps with its backlight off, and does nothing else (ScreenPolicy.blackout). */
+    private var wakeKeyCode: Int? = null
+
+    /** A key wakes a screen that sleeps with its backlight off, and its repeats/release do nothing else (ScreenPolicy.blackout). */
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
         if (glassworks.screen.blackout) {
-            if (event.action == android.view.KeyEvent.ACTION_DOWN) glassworks.screen.wake("key")
+            if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                wakeKeyCode = event.keyCode
+                glassworks.screen.wake("key")
+            }
+            return true
+        }
+        if (wakeKeyCode == event.keyCode) {
+            if (event.action == android.view.KeyEvent.ACTION_UP || event.isCanceled) wakeKeyCode = null
             return true
         }
         return super.dispatchKeyEvent(event)

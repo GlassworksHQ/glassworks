@@ -897,6 +897,23 @@ class ScreenPolicyTest {
         screen.stop()
     }
 
+    /** If Android genuinely went SCREEN_OFF (e.g. physical power key) during blackout, a subsequent SCREEN_ON wakes cleanly. */
+    @Test fun backlightOffScreenOffThenScreenOnExitsBlackout() {
+        val screen = policy(sleepMode = SleepMode.BACKLIGHT_OFF)
+        screen.start(context)
+        val h = Hooks(screen)
+        screen.sleep("home assistant")
+
+        context.sendBroadcast(Intent(Intent.ACTION_SCREEN_OFF))
+        context.sendBroadcast(Intent(Intent.ACTION_SCREEN_ON))
+        advance(10)
+
+        assertTrue(screen.screenOn)
+        assertFalse(screen.blackout)
+        assertEquals(listOf(true, false), h.blackout)
+        screen.stop()
+    }
+
     /** An activity made during a blackout (a restart) draws it at once. */
     @Test fun backlightOffAHookSetDuringABlackoutGetsIt() {
         val screen = policy(sleepMode = SleepMode.BACKLIGHT_OFF)

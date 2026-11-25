@@ -51,14 +51,18 @@ the same, and a live check that brightness 0 really is dark on this panel (the m
 
 ## What we tried
 
-1. **Read the TC358775 bridge driver in the stock kernel** (read, from the community-published kernel sources
-   that match the signed image's config)
+1. **Read the TC358775 bridge driver in the stock kernel** (read, 2026-11-25, from the stock `1.24.0`
+   `boot` partition kernel extracted with `vmlinux-to-elf` and disassembled locally; no binary bytes in this repo)
    - `mipi_d2l_probe` drives the bridge's four GPIOs high once, at probe: `lvds_panel_power_en`,
-     `tc358775_stby`, `tc358775_reset`, `tc358775_disp_enable`. Nothing later pulses reset low again.
+     `tc358775_stby`, `tc358775_reset`, `tc358775_disp_enable` (20 ms / 10 ms / 20 ms delays). Nothing later
+     pulses reset low again.
    - On display off, `mdss_dsi_panel_power_ctrl(off)` cuts the bridge's supplies, regulators `8916_l17` (3.3 V)
-     and `8916_l2` (1.2 V), while reset and standby stay high.
-   - On unblank, `dsi2lvds_init` writes the bridge's registers over I2C (`SYSRST`, `LVPHY0`), with no hardware
-     reset pulse and no `LV_RST` sequence. The LVDS PHY and PLL come back out of sync: the lines.
+     and `8916_l2` (1.2 V) (verified live: each has 1 consumer), while reset and standby stay `out hi` (verified
+     live in `/sys/kernel/debug/gpio`).
+   - On unblank, `dsi2lvds_init` (`0xffffffc000320a48`) writes the bridge's registers over I2C (`SYSRST`
+     `0x0504=0xFF`, `LVPHY0` `0x04A0=0x00040006`) with no hardware reset pulse and without asserting `LV_RST`
+     first. **Unverified inference:** bringing the bridge back from a rail drop without a hardware reset while
+     the DSI HS clock is running leaves the LVDS PHY/PLL out of sync, producing the observed lines.
 
    Rules out any fix from userspace inside the display-off path: the rails, the GPIOs and the init sequence all
    belong to the signed kernel. (A sysfs or debugfs route to re-pulse `tc358775_reset` wasn't found; see Open
