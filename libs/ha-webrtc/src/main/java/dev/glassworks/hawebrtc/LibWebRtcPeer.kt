@@ -18,13 +18,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A [WebRtcPeer] on libwebrtc: one `PeerConnection` with recvonly transceivers, as HA's frontend makes it (audio
- * first when asked, then video), its frames drawn by [sink].
+ * first when asked, then video), its frames drawn by [view]. A frame counts ([WebRtcPeer.Events.onFrame]) when [view]
+ * shows it, not when it is decoded: the renderer drops frames while it has no surface to draw on.
  */
 internal class LibWebRtcPeer(
     factory: PeerConnectionFactory,
     config: WebRtcClientConfig,
     audio: Boolean,
-    private val sink: VideoSink,
+    private val view: VideoTextureView,
     private val events: WebRtcPeer.Events,
 ) : WebRtcPeer {
     private val closed = AtomicBoolean(false)
@@ -36,10 +37,11 @@ internal class LibWebRtcPeer(
     private val frames = object : VideoSink {
         override fun onFrame(frame: VideoFrame) {
             if (closed.get() || !receiving) return
-            sink.onFrame(frame)
-            events.onFrame(frame.rotatedWidth, frame.rotatedHeight)
+            view.onFrame(frame)
         }
     }
+
+    private val drawn: (Int, Int) -> Unit = { w, h -> if (!closed.get() && receiving) events.onFrame(w, h) }
 
     init {
         val servers = config.iceServers.map { s ->
@@ -55,17 +57,23 @@ internal class LibWebRtcPeer(
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_ONCE
         }
         pc = factory.createPeerConnection(rtc, Observer()) ?: throw IllegalStateException("libwebrtc could not create a peer connection")
+        // Owned here until the peer is made: on a failure part-way, both native references go before the throw.
+        var channel: DataChannel? = null
         try {
-            dataChannel = config.dataChannel?.let { pc.createDataChannel(it, DataChannel.Init()) }
+            channel = config.dataChannel?.let { pc.createDataChannel(it, DataChannel.Init()) }
             val recvonly = RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
             if (audio) pc.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO, recvonly)
             val transceiver = pc.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, recvonly)
             video = transceiver.receiver.track() as? VideoTrack
             video?.addSink(frames)
-        } catch (e: RuntimeException) {
+        } catch (e: Throwable) {
+            closed.set(true)
+            channel?.let { runCatching { it.dispose() } }
             pc.dispose()
             throw e
         }
+        dataChannel = channel
+        view.onDrawn = drawn
     }
 
     override fun createOffer(onSdp: (sdp: String) -> Unit, onError: (reason: String) -> Unit) {
@@ -106,6 +114,7 @@ internal class LibWebRtcPeer(
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
+        if (view.onDrawn === drawn) view.onDrawn = null
         runCatching { video?.removeSink(frames) }
         dataChannel?.let { runCatching { it.unregisterObserver() }; runCatching { it.dispose() } }
         // Closes the connection and frees its transceivers and tracks.
@@ -139,7 +148,11 @@ internal class LibWebRtcPeer(
         override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) {}
         override fun onAddStream(stream: MediaStream) {}
         override fun onRemoveStream(stream: MediaStream) {}
-        override fun onDataChannel(channel: DataChannel) {}
+        // A channel the camera opens isn't used. Its Java wrapper holds a native reference of its own: let it go now
+        // (the connection keeps the channel itself).
+        override fun onDataChannel(channel: DataChannel) {
+            runCatching { channel.dispose() }
+        }
         // The offer is made once the transceivers are in; later renegotiation isn't needed for receiving.
         override fun onRenegotiationNeeded() {}
         override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) {}

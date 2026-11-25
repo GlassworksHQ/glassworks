@@ -37,6 +37,8 @@ internal object ReadmeExamples {
 
     class ClientChannel(private val client: MyHaClient) : HaCommandChannel {
         override fun call(command: JSONObject, onResult: (Any?) -> Unit, onError: (HaError) -> Unit) {
+            // The client must answer every command once, also when the connection drops: a lost connection answers
+            // with success false and no error, which HaError.fromJson reads as HaError.NOT_CONNECTED.
             client.send(command) { answer ->
                 if (answer.optBoolean("success")) onResult(answer.opt("result"))
                 else onError(HaError.fromJson(answer.optJSONObject("error")))
@@ -83,7 +85,8 @@ class ReadmeExamplesTest {
                 sent += command
                 onAnswer(
                     if (sent.size == 1) JSONObject().put("success", true).put("result", JSONObject().put("configuration", JSONObject()))
-                    else JSONObject().put("success", false).put("error", JSONObject().put("code", "not_found").put("message", "Camera not found")),
+                    else if (sent.size == 2) JSONObject().put("success", false).put("error", JSONObject().put("code", "not_found").put("message", "Camera not found"))
+                    else JSONObject().put("success", false), // the connection dropped before HA answered
                 )
             }
 
@@ -108,6 +111,8 @@ class ReadmeExamplesTest {
         signaling.fetchClientConfig({ config = it }, { error = it })
         assertEquals(WebRtcClientConfig(), config)
         assertEquals(HaError("not_found", "Camera not found"), error)
+        signaling.fetchClientConfig({ config = it }, { error = it })
+        assertEquals(HaError.NOT_CONNECTED, error!!.code)
         signaling.offer("v=0")
         assertEquals("01JS", signaling.sessionId)
         signaling.close()

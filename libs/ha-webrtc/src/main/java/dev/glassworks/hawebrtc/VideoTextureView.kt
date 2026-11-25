@@ -14,6 +14,8 @@ import livekit.org.webrtc.VideoFrame
 import livekit.org.webrtc.VideoSink
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /** How a picture fills its view, as a `<video>`'s `object-fit`. */
 public enum class VideoScaling {
@@ -61,18 +63,35 @@ internal class VideoTextureView(context: Context, scaling: VideoScaling) : Textu
 
     /** Stops the render thread. Any thread but the render thread; blocks until it has stopped. */
     fun release() {
-        renderer.release()
+        handoff.beginShutdown()
+        try {
+            renderer.release()
+        } finally {
+            handoff.endShutdown()
+        }
     }
 
+    private val handoff = SurfaceHandoff(renderer::releaseEglSurface)
+
+    /**
+     * Called on the main thread each time a new picture is on screen (the TextureView took a frame the renderer drew),
+     * with the picture's size, rotation applied. A frame the renderer drops, with no surface to draw on, isn't one.
+     */
+    @Volatile
+    var onDrawn: ((width: Int, height: Int) -> Unit)? = null
+
     override fun onFrame(frame: VideoFrame) {
-        val w = frame.rotatedWidth
-        val h = frame.rotatedHeight
+        frameSize(frame.rotatedWidth, frame.rotatedHeight)
+        renderer.onFrame(frame)
+    }
+
+    /** The size of the frames coming in (rotation applied); the layout follows it. */
+    internal fun frameSize(w: Int, h: Int) {
         if (w != frameWidth || h != frameHeight) {
             frameWidth = w
             frameHeight = h
             main.post(::updateLayout)
         }
-        renderer.onFrame(frame)
     }
 
     /** The render thread runs ([init] was called): only then can it take a surface. */
@@ -92,14 +111,16 @@ internal class VideoTextureView(context: Context, scaling: VideoScaling) : Textu
 
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
         attached = false
-        // The render thread lets go of the texture before the view releases it.
-        val done = CountDownLatch(1)
-        renderer.releaseEglSurface(done::countDown)
-        done.await(RELEASE_WAIT_MS, TimeUnit.MILLISECONDS)
-        return true
+        // The render thread lets go of the texture before anyone releases it: the view, if that is done in time,
+        // else the render thread itself once it has.
+        return releaseAfter(handoff::whenReleased, surface::release, RELEASE_WAIT_MS)
     }
 
-    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
+    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+        val w = frameWidth
+        val h = frameHeight
+        if (w > 0 && h > 0) onDrawn?.invoke(w, h)
+    }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
@@ -118,6 +139,86 @@ internal class VideoTextureView(context: Context, scaling: VideoScaling) : Textu
     private companion object {
         const val RELEASE_WAIT_MS = 1_000L
     }
+}
+
+/**
+ * When nothing draws into a view's surface any more, whether the renderer is running (it lets go of that one surface)
+ * or shutting down: the player closing can overlap the view's surface going. libwebrtc's `EglRenderer.release()` forgets
+ * its render thread before that thread has torn EGL down, and from then on `releaseEglSurface` answers at once, while
+ * EGL may still be using the surface. Here a surface given back during a shutdown waits for the shutdown to finish.
+ */
+internal class SurfaceHandoff(private val releaseEglSurface: (Runnable) -> Unit) {
+    private val lock = Any()
+    private var state = RUNNING
+    private val afterShutdown = ArrayList<Runnable>()
+
+    /** Calls [onReleased] once, when nothing draws into the surface any more. Any thread. */
+    fun whenReleased(onReleased: Runnable) {
+        val fired = AtomicBoolean(false)
+        val once = Runnable { if (fired.compareAndSet(false, true)) onReleased.run() }
+        val now = synchronized(lock) {
+            when (state) {
+                SHUT_DOWN -> true
+                SHUTTING_DOWN -> {
+                    afterShutdown += once
+                    false
+                }
+                else -> {
+                    // Also on the shutdown's list: a shutdown that starts before the render thread gets to this release
+                    // tears EGL down instead, and the queued release may never run.
+                    afterShutdown += once
+                    releaseEglSurface(Runnable {
+                        synchronized(lock) { afterShutdown.remove(once) }
+                        once.run()
+                    })
+                    false
+                }
+            }
+        }
+        if (now) once.run()
+    }
+
+    /** The renderer is shutting down (before `EglRenderer.release()`). */
+    fun beginShutdown() {
+        synchronized(lock) { state = SHUTTING_DOWN }
+    }
+
+    /** The renderer has shut down and EGL is gone (after `EglRenderer.release()` returned). */
+    fun endShutdown() {
+        val waiting = synchronized(lock) {
+            state = SHUT_DOWN
+            ArrayList(afterShutdown).also { afterShutdown.clear() }
+        }
+        waiting.forEach { it.run() }
+    }
+
+    private companion object {
+        const val RUNNING = 0
+        const val SHUTTING_DOWN = 1
+        const val SHUT_DOWN = 2
+    }
+}
+
+/**
+ * Asks the render thread to let go of a surface ([releaseSurface], which calls its argument once it has) and decides
+ * who releases the surface itself, as `onSurfaceTextureDestroyed` must: true when the render thread finished within
+ * [waitMs], so the view releases it; false otherwise, and then [releaseTexture] runs on the render thread as soon as
+ * it has finished, never before. The main thread waits at most [waitMs].
+ */
+internal fun releaseAfter(releaseSurface: (Runnable) -> Unit, releaseTexture: () -> Unit, waitMs: Long): Boolean {
+    val pending = 0
+    val done = 1
+    val ours = 2
+    val state = AtomicInteger(pending)
+    val finished = CountDownLatch(1)
+    releaseSurface(Runnable {
+        // Past the wait, the view has handed the texture to us: release it here, now that nothing draws into it.
+        if (!state.compareAndSet(pending, done)) releaseTexture()
+        finished.countDown()
+    })
+    if (finished.await(waitMs, TimeUnit.MILLISECONDS)) return true
+    // Still drawing: the render thread releases it when it's done, unless it finished just now.
+    return !state.compareAndSet(pending, ours)
 }
 
 /**

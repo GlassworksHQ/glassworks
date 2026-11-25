@@ -79,7 +79,12 @@ public class HaWebRtcStream(
         val early = ArrayList<IceCandidateInit>()
         var timeout: StreamScheduler.Cancellable? = null
         var disconnected: StreamScheduler.Cancellable? = null
+
+        /** A frame came on this connection (since it started): it played, so a failure now reconnects. */
         var playing = false
+
+        /** No frame yet in this run (since the connection started, or the last resume): the timeout is armed. */
+        var awaitingFrame = true
     }
 
     private var started = false
@@ -91,6 +96,12 @@ public class HaWebRtcStream(
     private var reconnects = 0
     private var runStartMs = 0L
     private var runReported = false
+
+    /**
+     * The viewing run: bumped by each resume. A frame carries the run it was decoded in from the peer's thread, so one
+     * still queued from before a pause can't count as the first of the next run (and cancel its timeout).
+     */
+    @Volatile private var run = 0
     private var idle: StreamScheduler.Cancellable? = null
     private var reconnect: StreamScheduler.Cancellable? = null
 
@@ -125,13 +136,16 @@ public class HaWebRtcStream(
             idle = null
             runStartMs = scheduler.nowMs()
             runReported = false
+            run++
             val a = attempt
             if (a == null) {
                 reconnects = 0
                 connect()
             } else {
+                // Kept through the pause: it must show a new frame in time too, or it counts as failed (a peer that
+                // stays connected but stopped sending video would otherwise never be noticed).
                 a.peer?.setReceiving(true)
-                if (!a.playing) armTimeout(a)
+                armTimeout(a)
             }
         }
     }
@@ -182,17 +196,21 @@ public class HaWebRtcStream(
 
     private fun armTimeout(a: Attempt) {
         a.timeout?.cancel()
+        a.awaitingFrame = true
         a.timeout = scheduler.postDelayed(options.connectTimeoutMs) {
-            if (attempt === a && !a.playing) failAttempt(a, HaError(TIMEOUT, "No video within ${options.connectTimeoutMs} ms"))
+            if (attempt === a && a.awaitingFrame) failAttempt(a, HaError(TIMEOUT, "No video within ${options.connectTimeoutMs} ms"))
         }
     }
 
-    private fun onFrame(a: Attempt, width: Int, height: Int) {
-        if (attempt !== a || !active) return
-        if (!a.playing) {
-            a.playing = true
+    private fun onFrame(a: Attempt, frameRun: Int, width: Int, height: Int) {
+        if (attempt !== a || !active || frameRun != run) return
+        if (a.awaitingFrame) {
+            a.awaitingFrame = false
             a.timeout?.cancel()
             a.timeout = null
+        }
+        if (!a.playing) {
+            a.playing = true
             played = true
             reconnects = 0
         }
@@ -227,12 +245,13 @@ public class HaWebRtcStream(
         attempt = null
         if (played && reconnects < options.maxReconnects) {
             reconnects++
-            listener?.onReconnecting(reconnects, error)
             val delay = options.reconnectDelayMs shl (reconnects - 1).coerceAtMost(MAX_BACKOFF_SHIFT)
+            // The timer first, so a listener that closes the stream from onReconnecting cancels it.
             reconnect = scheduler.postDelayed(delay) {
                 reconnect = null
                 if (!closed && !failed && active && attempt == null) connect()
             }
+            listener?.onReconnecting(reconnects, error)
         } else {
             failed = true
             idle?.cancel()
@@ -295,7 +314,8 @@ public class HaWebRtcStream(
         }
 
         override fun onFrame(width: Int, height: Int) {
-            scheduler.post { onFrame(a, width, height) }
+            val frameRun = run
+            scheduler.post { onFrame(a, frameRun, width, height) }
         }
     }
 

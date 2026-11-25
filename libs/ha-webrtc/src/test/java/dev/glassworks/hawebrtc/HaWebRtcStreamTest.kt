@@ -320,11 +320,65 @@ class HaWebRtcStreamTest {
         clock.advance(30_000)
         s.setActive(true)
         assertTrue(peer.drawing)
+        clock.advance(1_000)
+        peer.events.onFrame(640, 480)
         clock.advance(60_000)
         assertFalse(peer.closed)
+        assertEquals(2, log.count { it.startsWith("first") })
+        assertEquals("first 1000 640x480", log.last())
+    }
+
+    @Test
+    fun `a kept connection that shows nothing after resume times out and reconnects`() {
+        val s = stream(HaWebRtcStream.Options(idleTeardownMs = 60_000, connectTimeoutMs = 10_000))
+        val (peer, _) = connect(s)
         peer.events.onFrame(640, 480)
         clock.runAll()
-        assertEquals(2, log.count { it.startsWith("first") })
+        s.setActive(false)
+        clock.advance(30_000)
+        // Still connected, but its video stopped while paused.
+        s.setActive(true)
+        clock.advance(9_999)
+        assertFalse(peer.closed)
+        clock.advance(1)
+        assertTrue(peer.closed)
+        assertEquals("reconnecting 1 timeout", log.last())
+    }
+
+    @Test
+    fun `a frame from before the pause doesn't count for the run after it`() {
+        val s = stream(HaWebRtcStream.Options(idleTeardownMs = 60_000, connectTimeoutMs = 10_000))
+        val (peer, _) = connect(s)
+        peer.events.onFrame(640, 480)
+        clock.runAll()
+        // A frame the peer reported just before the pause, still queued when the panel pauses and resumes.
+        peer.events.onFrame(640, 480)
+        s.setActive(false)
+        s.setActive(true)
+        clock.runAll()
+        assertEquals("not a first frame of the new run", 1, log.count { it.startsWith("first") })
+        // The camera sends nothing more: the resumed run times out.
+        clock.advance(10_000)
+        assertTrue(peer.closed)
+        assertEquals("reconnecting 1 timeout", log.last())
+    }
+
+    @Test
+    fun `a listener that closes the stream from onReconnecting leaves no timer behind`() {
+        val s = stream()
+        s.listener = object : HaWebRtcStream.Listener {
+            override fun onFirstFrame(sinceStartMs: Long, width: Int, height: Int) {}
+            override fun onReconnecting(attempt: Int, error: HaError) { log += "reconnecting"; s.close() }
+            override fun onError(error: HaError) { log += "error" }
+        }
+        val (peer, _) = connect(s)
+        peer.events.onFrame(640, 480)
+        peer.events.onConnectionState(PeerState.FAILED)
+        clock.runAll()
+        assertEquals(listOf("reconnecting"), log)
+        assertEquals(0, clock.pendingTimers())
+        clock.advance(600_000)
+        assertEquals(1, channel.callsOf(HaWebRtcSignaling.TYPE_CLIENT_CONFIG).size)
     }
 
     @Test

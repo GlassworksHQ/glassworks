@@ -61,6 +61,54 @@ class HaWebRtcPlayerTest {
     }
 
     @Test
+    fun `a frame counts when the view shows it, not when it is decoded`() {
+        val view = VideoTextureView(context, VideoScaling.FIT)
+        val drawn = ArrayList<Pair<Int, Int>>()
+        view.onDrawn = { w, h -> drawn += w to h }
+        val texture = android.graphics.SurfaceTexture(0)
+        // An update with no frame received yet (nothing of the camera's on it) isn't a frame.
+        view.onSurfaceTextureUpdated(texture)
+        assertEquals(emptyList<Pair<Int, Int>>(), drawn)
+        // Frames are coming in, but none drawn yet (the renderer has no surface): nothing to report.
+        view.frameSize(1280, 720)
+        assertEquals(emptyList<Pair<Int, Int>>(), drawn)
+        // The TextureView took a drawn frame: reported, with its size.
+        view.onSurfaceTextureUpdated(texture)
+        assertEquals(listOf(1280 to 720), drawn)
+        view.onDrawn = null
+        view.onSurfaceTextureUpdated(texture)
+        assertEquals(1, drawn.size)
+        texture.release()
+        view.release()
+    }
+
+    @Test
+    fun `a frame report queued before a pause or resume isn't delivered, one after it is`() {
+        val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door")
+        val got = ArrayList<String>()
+        player.listener = object : HaWebRtcPlayer.Listener {
+            override fun onFirstFrame(sinceStartMs: Long, width: Int, height: Int) { got += "first $sinceStartMs ${width}x$height" }
+            override fun onFrameRendered() { got += "frame" }
+            override fun onError(error: HaError) {}
+        }
+        val events = player.Events()
+        // Posted by the player's thread in the run before; the main thread pauses and resumes before it runs.
+        events.onFirstFrame(500, 640, 480)
+        player.setActive(false)
+        player.setActive(true)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(emptyList<String>(), got)
+        assertEquals("the stale size isn't taken either", 0, player.videoWidth)
+        // The resumed run's own first frame.
+        events.onFirstFrame(120, 1280, 720)
+        events.onFrame(1280, 720)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("first 120 1280x720", "frame"), got)
+        assertEquals(1280 to 720, player.videoWidth to player.videoHeight)
+        player.close()
+    }
+
+    @Test
     fun `close before start, twice, and calls after close do nothing`() {
         val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door")
         player.close()
@@ -87,5 +135,96 @@ class FitScaleTest {
         assertEquals(1f to 1f, fitScale(VideoScaling.FILL, 1920, 1080, 400, 400))
         assertEquals(1f to 1f, fitScale(VideoScaling.STRETCH, 1920, 1080, 400, 400))
         assertEquals(1f to 1f, fitScale(VideoScaling.FIT, 0, 0, 400, 400))
+    }
+}
+
+/** Who releases a TextureView's SurfaceTexture when its renderer is still drawing into it. */
+class ReleaseAfterTest {
+    @Test
+    fun `a render thread that lets go in time leaves the texture to the view`() {
+        var released = 0
+        assertTrue(releaseAfter({ done -> done.run() }, { released++ }, 1_000))
+        assertEquals("the view releases it, not us", 0, released)
+    }
+
+    @Test
+    fun `a slow render thread releases the texture itself, after it let go, and the view keeps its hands off`() {
+        var later: Runnable? = null
+        var released = 0
+        // The render thread hasn't finished when the wait ends.
+        assertFalse(releaseAfter({ done -> later = done }, { released++ }, 10))
+        assertEquals("not while it may still draw", 0, released)
+        later!!.run()
+        assertEquals(1, released)
+    }
+
+    @Test
+    fun `a render thread that finishes on another thread just in time`() {
+        val released = java.util.concurrent.atomic.AtomicInteger()
+        assertTrue(releaseAfter({ done -> Thread { Thread.sleep(5); done.run() }.start() }, { released.incrementAndGet() }, 2_000))
+        assertEquals(0, released.get())
+    }
+}
+
+/** A surface given back while the renderer runs, or while it shuts down (the player closing as the view goes). */
+class SurfaceHandoffTest {
+    @Test
+    fun `while the renderer runs, the render thread's release says when`() {
+        var queued: Runnable? = null
+        val handoff = SurfaceHandoff { done -> queued = done }
+        var released = 0
+        handoff.whenReleased { released++ }
+        assertEquals(0, released)
+        queued!!.run()
+        assertEquals(1, released)
+        handoff.beginShutdown()
+        handoff.endShutdown()
+        assertEquals("once", 1, released)
+    }
+
+    @Test
+    fun `during a shutdown, an answer at once from libwebrtc doesn't count, the shutdown's end does`() {
+        // EglRenderer.release() has forgotten its thread, so releaseEglSurface would answer at once.
+        val handoff = SurfaceHandoff { done -> done.run() }
+        handoff.beginShutdown()
+        var released = 0
+        handoff.whenReleased { released++ }
+        assertEquals("EGL may still be tearing down", 0, released)
+        handoff.endShutdown()
+        assertEquals(1, released)
+    }
+
+    @Test
+    fun `a shutdown that overtakes a queued surface release ends it`() {
+        var queued: Runnable? = null
+        val handoff = SurfaceHandoff { done -> queued = done }
+        var released = 0
+        handoff.whenReleased { released++ }
+        handoff.beginShutdown()
+        handoff.endShutdown()
+        assertEquals(1, released)
+        queued!!.run()
+        assertEquals("not twice", 1, released)
+    }
+
+    @Test
+    fun `after the shutdown, at once`() {
+        val handoff = SurfaceHandoff { throw AssertionError("no renderer to ask") }
+        handoff.beginShutdown()
+        handoff.endShutdown()
+        var released = 0
+        handoff.whenReleased { released++ }
+        assertEquals(1, released)
+    }
+
+    @Test
+    fun `the view's texture during a shutdown is released by the shutdown, never twice`() {
+        val handoff = SurfaceHandoff { done -> done.run() }
+        handoff.beginShutdown()
+        var texture = 0
+        assertFalse("the view mustn't release it", releaseAfter(handoff::whenReleased, { texture++ }, 10))
+        assertEquals(0, texture)
+        handoff.endShutdown()
+        assertEquals(1, texture)
     }
 }
