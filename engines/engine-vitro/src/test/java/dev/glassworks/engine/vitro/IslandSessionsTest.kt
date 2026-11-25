@@ -311,32 +311,61 @@ class IslandSessionsTest {
         assertTrue(a.active)
     }
 
-    @Test fun anIslandsContentGoingAwayReopensEveryIslandOnceAndARebuildNeverAdoptsADeadPage() {
-        server.dashboardConfig = JSONObject(twoViews)
+    @Test fun anIslandWhoseContentDiedGetsANewPageAndTheLiveOnesKeepTheirs() {
+        server.dashboardConfig = JSONObject("""{"views": [
+            {"path": "a", "cards": [{"type": "custom:acme-a-card", "entity": "light.lounge_lamp"},
+                                    {"type": "custom:acme-c-card", "entity": "sensor.kitchen_temp"}]},
+            {"path": "b", "cards": [{"type": "custom:acme-b-card", "entity": "sensor.kitchen_temp"}]}]}""")
         val p = page()
-        p.load("$base/wall-test/a")
-        awaitMain("ready") { readyCount() == 1 && islandPages().size == 1 }
         p.load("$base/wall-test/b")
-        awaitMain("view b built") { islandPages().size == 2 }
-        val (a, b) = islandPages()
+        awaitMain("view b built") { readyCount() == 1 && islandPages().size == 1 }
+        val b = islandPages().single()
+        p.load("$base/wall-test/a")
+        awaitMain("view a built") { islandPages().size == 3 }
+        val (a, c) = islandPages().drop(1)
+        fun hostOf(page: RecordingPage) = fallback.opens[fallback.pages.indexOf(page)].host
 
-        // The content process the islands run in is killed: both report it, in the same turn.
-        fallback.opens.filter { it.host !== host }.forEach { it.host.onContentGone(killed = true) }
+        // One island's content process is killed (each island reports through its own host).
+        hostOf(a).onContentGone(killed = true)
         idle()
-        assertTrue("dead pages close", a.closed && b.closed)
-        assertEquals("the view on screen gets one new page, once", 3, islandPages().size)
+        assertTrue("the dead page closes", a.closed)
+        assertFalse("an island on the same view whose content lives keeps its page", c.closed)
+        assertFalse("so does one on another view", b.closed)
+        assertEquals("the dead island alone gets a new page", 4, islandPages().size)
+        val a2 = islandPages()[3]
+        assertTrue(a2.view.isAttachedToWindow)
         assertOnePagePerIsland(p)
 
-        // The dashboard comes back after the kill (the activity's own page restarts): the same config, and the island
-        // keeps the new page, not a dead one.
-        val fresh = islandPages()[2]
+        // A rebuild after the kill (the theme, or the dashboard coming back) never takes a dead page.
         vitroView(p).setUserTheme("night", true)
         idle()
-        assertFalse(fresh.closed)
-        assertEquals(3, islandPages().size)
-        // The hidden view builds its island anew when it's shown.
-        p.load("$base/wall-test/a")
-        awaitMain("view a rebuilt") { islandPages().size == 4 }
+        assertEquals(4, islandPages().size)
+        assertFalse(a2.closed)
+        assertFalse(c.closed)
+        assertOnePagePerIsland(p)
+
+        // A hidden view's dead island: its view is built again, with a new page, when it's shown.
+        hostOf(b).onContentGone(killed = false)
+        idle()
+        assertTrue(b.closed)
+        assertEquals("nothing opens for a view that isn't shown", 4, islandPages().size)
+        p.load("$base/wall-test/b")
+        awaitMain("view b rebuilt") { islandPages().size == 5 }
+        assertOnePagePerIsland(p)
+    }
+
+    @Test fun islandsThatDieTogetherAreHandledOnce() {
+        val p = page()
+        p.load("$base/wall-test/wall")
+        awaitMain("ready") { readyCount() == 1 && islandPages().size == 1 }
+        val first = islandPages().single()
+        val firstHost = fallback.opens[fallback.pages.indexOf(first)].host
+        // The same report twice in one turn (a crash, then the kill): one new page.
+        firstHost.onContentGone(killed = false)
+        firstHost.onContentGone(killed = true)
+        idle()
+        assertTrue(first.closed)
+        assertEquals(2, islandPages().size)
         assertOnePagePerIsland(p)
     }
 

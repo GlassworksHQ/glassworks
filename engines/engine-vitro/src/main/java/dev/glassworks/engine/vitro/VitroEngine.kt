@@ -131,23 +131,32 @@ class VitroEngine(
         private val vitroView = VitroView(activity, store, backgroundColor)
         private var fallbackPage: Page? = null
         private var client: HaDashboardClient? = null
-        private val islandHost = object : PageHost {
+        /**
+         * What one island's page reports: its own host, so a crashed or killed content process names the island it
+         * took. Only permissions go on to the activity's host.
+         */
+        private inner class IslandHost : PageHost {
+            /** The page this host is for, set once the engine opened it. */
+            var page: Page? = null
             override fun onPageStart(url: String) {}
             override fun onPageStop(success: Boolean) {}
             override fun onFirstPaint() {}
             override fun onLocationChange(url: String?) {}
             override fun redirect(url: String): String? = null
-            // An island's content process crashed or was killed: its page draws nothing again, and the host doesn't
-            // say which island it was. Every island opens a new page (a rebuild would otherwise hand the dead ones
-            // over); once, however many islands report it.
+            // The island's page draws nothing again: it never goes to another build of its card, and its card gets a
+            // new one. Islands whose content lives on keep theirs.
             override fun onContentGone(killed: Boolean) {
-                if (islandsGonePosted) return
-                islandsGonePosted = true
+                val dead = page ?: return
+                deadIslandPages += dead
+                if (deadIslandsPosted) return
+                deadIslandsPosted = true
                 main.post {
-                    islandsGonePosted = false
+                    deadIslandsPosted = false
+                    val pages = deadIslandPages.toSet()
+                    deadIslandPages.clear()
                     if (disposed) return@post
-                    Log.w(logTag, "An island's content process ${if (killed) "was killed" else "crashed"}; reopening the islands")
-                    vitroView.reopenIslands()
+                    Log.w(logTag, "${pages.size} island page(s) lost their content process (${if (killed) "killed" else "crashed"}); reopening them")
+                    vitroView.islandPagesGone(pages)
                 }
             }
             override fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit) =
@@ -155,8 +164,10 @@ class VitroEngine(
             override fun onConnect(port: PagePort) {}
             override fun onPortMessage(port: PagePort, message: JSONObject) {}
         }
-        /** An island's content went away and the islands' reopening is posted. Main thread. */
-        private var islandsGonePosted = false
+
+        /** Island pages whose content went away this turn ([IslandHost]), handled together. Main thread. */
+        private val deadIslandPages = LinkedHashSet<Page>()
+        private var deadIslandsPosted = false
         private var currentUrl: String? = null
         @Volatile var currentOrigin: String? = null
         private var currentDashboardPath: String? = null
@@ -428,7 +439,9 @@ class VitroEngine(
                     openIslandPage = { _ ->
                         // Tier 3 islands always run through the wrapped fallback Engine (GeckoView)
                         // for consistent modern CSS/ES2020 support across Android 6, 10, and 15+.
+                        val islandHost = IslandHost()
                         runCatching { fallback.open(activity, islandHost, android.graphics.Color.TRANSPARENT) }.getOrNull()
+                            ?.also { islandHost.page = it }
                     },
                     touch = touchScreen,
                 )

@@ -334,6 +334,9 @@ class WebIslandCardView(
         }
     }
 
+    /** Whether the island's page is one of [pages]. */
+    fun holds(pages: Set<Page>): Boolean = islandPage?.let { it in pages } == true
+
     /**
      * Shows or hides the island's page ([Page.setActive]): a page on a view that isn't on screen stops painting.
      * Main thread.

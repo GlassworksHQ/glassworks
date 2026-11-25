@@ -68,6 +68,7 @@ import dev.glassworks.engine.vitro.cards.ThermostatCardView
 import dev.glassworks.engine.vitro.cards.TileCardView
 import dev.glassworks.engine.vitro.cards.TodoListCardView
 import dev.glassworks.engine.vitro.cards.WeatherCardView
+import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HistoryPoint
@@ -908,13 +909,29 @@ class VitroView(
     }
 
     /**
-     * The islands' content went away (a crashed or killed content process): every island closes, none is handed
-     * over, and the view on screen is built again with new pages. A cached view builds its own when it's shown.
+     * The content of island [pages] went away (a crashed or killed content process): they draw nothing again. A dead
+     * page waiting in the pool closes, so no build takes it. A card that holds one closes it, and its view is built
+     * again: the view on screen now, with its other islands handed over alive; a hidden view when it's shown.
      */
-    fun reopenIslands() {
-        dropBuiltViews(keepIslands = false)
-        closePooledIslands()
-        if (dashboard != null) renderView(currentViewIndex, forceRebuild = true, pushHistory = false)
+    fun islandPagesGone(pages: Set<Page>) {
+        if (pages.isEmpty()) return
+        val pooled = islandPool.values.flatten().filter { it.page in pages }
+        for (island in pooled) {
+            islandPool[island.key]?.remove(island)
+            if (islandPool[island.key]?.isEmpty() == true) islandPool.remove(island.key)
+            island.close()
+        }
+        val hit = HashSet<Int>()
+        for ((index, root) in viewCache) {
+            val dead = islandsIn(root).filter { it.holds(pages) }
+            val pinned = overlayFrames[index]?.let { islandsIn(it).filter { card -> card.holds(pages) } }.orEmpty()
+            (dead + pinned).forEach { it.release() }
+            if (dead.isNotEmpty() || pinned.isNotEmpty()) hit += index
+        }
+        for (index in hit) {
+            if (index == currentViewIndex) renderView(index, forceRebuild = true, pushHistory = false)
+            else dropView(index, keepIslands = false)
+        }
     }
 
     /** The page is gone: every island closes, and nothing is built again. */
