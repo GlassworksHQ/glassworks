@@ -835,12 +835,14 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
      * A view inside the card changed (Android 8 and later, hardware drawing): the card records itself again when it's
      * the nearest card guard to the change ([isNearestGuard]), so the changed view's draw runs inside [draw]'s catch.
      * Without it Android rebuilds only that view's display list, straight from the card's, and a throw there would
-     * reach the app. The card's other views keep their lists: it costs the card's own small list.
+     * reach the app. The card's other views keep their lists: it costs the card's own small list. A failed card
+     * records itself again too, whether or not its error card is in yet: its [draw] then runs no view of the card's
+     * own, so nothing of it is drawn outside a catch, and the guards above can keep leaving it to this one.
      */
     @TargetApi(Build.VERSION_CODES.O)
     override fun onDescendantInvalidated(child: View, target: View) {
         super.onDescendantInvalidated(child, target)
-        if (failure == null && isNearestGuard(this, target)) invalidate()
+        if (isNearestGuard(this, target)) invalidate()
     }
 
     /**
@@ -849,7 +851,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
      */
     @Deprecated("ViewGroup's, deprecated in API 26, where onDescendantInvalidated takes over")
     override fun invalidateChildInParent(location: IntArray, dirty: Rect): ViewParent? {
-        if (!Platform.hasDescendantInvalidated && isHardwareAccelerated && failure == null) invalidate()
+        if (!Platform.hasDescendantInvalidated && isHardwareAccelerated) invalidate()
         @Suppress("DEPRECATION")
         return super.invalidateChildInParent(location, dirty)
     }

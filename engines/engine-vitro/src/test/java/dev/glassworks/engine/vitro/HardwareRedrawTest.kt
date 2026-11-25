@@ -86,8 +86,9 @@ class HardwareRedrawTest {
 
     private fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
 
-    private fun dashboard(vararg cards: JSONObject): VitroView {
+    private fun dashboard(vararg cards: JSONObject, testCards: ((dev.glassworks.engine.vitro.model.CardConfig, VitroCardContext) -> View?)? = null): VitroView {
         val vv = VitroView(activity, store, 0xFF000000.toInt())
+        vv.testCards = testCards
         vv.contextFactory = { theme ->
             VitroCardContext(
                 context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = emptyList(),
@@ -239,6 +240,78 @@ class HardwareRedrawTest {
         assertEquals(listOf<View>(tileA), update.guards)
     }
 
+    /** A view that throws in its touch handling or its draw once armed. */
+    private class Boom(context: android.content.Context) : View(context) {
+        var touchArmed = false
+        var drawArmed = false
+        override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
+            if (touchArmed) throw IllegalStateException("touch boom")
+            return true
+        }
+        override fun onDraw(canvas: Canvas) {
+            if (drawArmed) throw IllegalStateException("redraw boom")
+        }
+    }
+
+    private fun touch(v: View) {
+        val now = android.os.SystemClock.uptimeMillis()
+        val down = android.view.MotionEvent.obtain(now, now, android.view.MotionEvent.ACTION_DOWN, 2f, 2f, 0)
+        v.dispatchTouchEvent(down)
+        down.recycle()
+    }
+
+    @Test fun aRedrawInsideAGuardWaitingForItsErrorCardStaysInsideItsCatch() {
+        // A card without a surface in a vertical stack: two guards, the card's inside the stack's.
+        var boom: Boom? = null
+        val stack = JSONObject().put("type", "vertical-stack").put("cards", JSONArray().put(JSONObject().put("type", PLAIN)))
+        val vv = dashboard(stack) { card, ctx ->
+            if (card.type != PLAIN) null else android.widget.FrameLayout(ctx.context).apply {
+                addView(Boom(ctx.context).also { boom = it }, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 40))
+            }
+        }
+        val inner = boom!!.parent.parent as ContainedCard
+        assertTrue("nested in the stack's guard", generateSequence(inner.parent as? View) { it.parent as? View }.any { it is ContainedCard })
+        vv.rootView.invalidate()
+        hardwareFrame(vv)
+        // A touch throws: the card's guard waits for its error card, posted for the next message.
+        boom!!.touchArmed = true
+        touch(inner)
+        assertNotNull(inner.failure)
+        // In the same frame, before the swap, a view inside the failed card changes: its redraw would throw.
+        boom!!.drawArmed = true
+        boom!!.invalidate()
+        hardwareFrame(vv, idle = false)
+        assertEquals("the redraw never ran outside a catch", listOf("touch" to PLAIN), contained.toList())
+        hardwareFrame(vv)
+        assertTrue(inner.content is dev.glassworks.engine.vitro.ui.ErrorCardView)
+        assertEquals(1, contained.size)
+    }
+
+    /** A card surface with a [Boom] inside. */
+    private class BoomSurface(ctx: VitroCardContext, val boom: Boom) : CardSurface(ctx) {
+        init {
+            addView(boom, LayoutParams(LayoutParams.MATCH_PARENT, 40))
+        }
+    }
+
+    @Test fun aRedrawInsideACardWaitingForItsErrorCardStaysInsideItsCatch() {
+        var card: BoomSurface? = null
+        val vv = dashboard(JSONObject().put("type", PLAIN)) { c, ctx -> if (c.type == PLAIN) BoomSurface(ctx, Boom(ctx.context)).also { card = it } else null }
+        val boom = card!!.boom
+        vv.rootView.invalidate()
+        hardwareFrame(vv)
+        boom.touchArmed = true
+        touch(card!!)
+        assertNotNull(card!!.failure)
+        boom.drawArmed = true
+        boom.invalidate()
+        hardwareFrame(vv, idle = false)
+        assertEquals("the redraw never ran outside a catch", listOf("touch" to PLAIN), contained.toList())
+        hardwareFrame(vv)
+        assertTrue(all(card!!).filterIsInstance<TextView>().any { it.text.toString() == dev.glassworks.engine.vitro.ui.ErrorCardView.TITLE })
+        assertEquals(1, contained.size)
+    }
+
     @Test fun aThrowWhenHardwareRedrawsOneViewInsideACardIsContained() {
         store.putLocal(EntityState("light.desk", "off", mapOf("friendly_name" to "Desk")))
         val vv = dashboard(JSONObject().put("type", "tile").put("entity", "light.desk"), JSONObject().put("type", "tile").put("entity", "light.desk"))
@@ -261,5 +334,9 @@ class HardwareRedrawTest {
         assertNotNull(card.failure)
         assertTrue(all(card).filterIsInstance<TextView>().any { it.text.toString() == dev.glassworks.engine.vitro.ui.ErrorCardView.TITLE })
         assertEquals("the other card works", null, other.failure)
+    }
+
+    companion object {
+        const val PLAIN = "custom:test-plain"
     }
 }

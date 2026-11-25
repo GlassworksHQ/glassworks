@@ -15,7 +15,8 @@ import android.view.View
  * record itself again ([View.invalidate]): its draw then runs the changed view's inside the guard's catch. The
  * guard's other views keep their lists, so the cost is the guard's own small list (its background and one entry per
  * child). A guard further up leaves it to the nearer one, so a change in a card inside a stack-in-card re-records that
- * card only, never the stack round it.
+ * card only, never the stack round it. The nearest guard records itself again even while it has failed and waits
+ * for its error card: its draw then skips the failed card's views, so they never draw outside a catch.
  */
 internal fun isNearestGuard(guard: View, target: View): Boolean {
     var v: View? = target

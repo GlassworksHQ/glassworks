@@ -40,12 +40,12 @@ fun awaitCondition(
 
 /**
  * One hardware frame of [v]'s window, as Android's renderer draws it (Robolectric's native graphics record real display
- * lists): pending messages run first, then [beforeFrame], then the root records again only if it was invalidated
+ * lists): pending messages run first (unless not [idle]: a frame before a posted swap runs), then [beforeFrame], then the root records again only if it was invalidated
  * itself. Otherwise each parent rebuilds just the display lists of the views that changed below it, straight from its
  * own list, without running its draw or `drawChild`. A throw comes out as it would on a panel.
  */
-fun hardwareFrame(v: View, beforeFrame: () -> Unit = {}) {
-    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+fun hardwareFrame(v: View, idle: Boolean = true, beforeFrame: () -> Unit = {}) {
+    if (idle) org.robolectric.shadows.ShadowLooper.idleMainLooper()
     beforeFrame()
     val root = v.rootView
     val recreate = View::class.java.getDeclaredField("mRecreateDisplayList").apply { isAccessible = true }
