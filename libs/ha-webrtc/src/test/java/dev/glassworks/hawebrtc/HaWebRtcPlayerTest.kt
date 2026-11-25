@@ -61,6 +61,28 @@ class HaWebRtcPlayerTest {
     }
 
     @Test
+    fun `a frame counts when the view shows it, not when it is decoded`() {
+        val view = VideoTextureView(context, VideoScaling.FIT)
+        val drawn = ArrayList<Pair<Int, Int>>()
+        view.onDrawn = { w, h -> drawn += w to h }
+        val texture = android.graphics.SurfaceTexture(0)
+        // An update with no frame received yet (nothing of the camera's on it) isn't a frame.
+        view.onSurfaceTextureUpdated(texture)
+        assertEquals(emptyList<Pair<Int, Int>>(), drawn)
+        // Frames are coming in, but none drawn yet (the renderer has no surface): nothing to report.
+        view.frameSize(1280, 720)
+        assertEquals(emptyList<Pair<Int, Int>>(), drawn)
+        // The TextureView took a drawn frame: reported, with its size.
+        view.onSurfaceTextureUpdated(texture)
+        assertEquals(listOf(1280 to 720), drawn)
+        view.onDrawn = null
+        view.onSurfaceTextureUpdated(texture)
+        assertEquals(1, drawn.size)
+        texture.release()
+        view.release()
+    }
+
+    @Test
     fun `close before start, twice, and calls after close do nothing`() {
         val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door")
         player.close()

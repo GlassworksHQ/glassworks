@@ -73,15 +73,25 @@ internal class VideoTextureView(context: Context, scaling: VideoScaling) : Textu
 
     private val handoff = SurfaceHandoff(renderer::releaseEglSurface)
 
+    /**
+     * Called on the main thread each time a new picture is on screen (the TextureView took a frame the renderer drew),
+     * with the picture's size, rotation applied. A frame the renderer drops, with no surface to draw on, isn't one.
+     */
+    @Volatile
+    var onDrawn: ((width: Int, height: Int) -> Unit)? = null
+
     override fun onFrame(frame: VideoFrame) {
-        val w = frame.rotatedWidth
-        val h = frame.rotatedHeight
+        frameSize(frame.rotatedWidth, frame.rotatedHeight)
+        renderer.onFrame(frame)
+    }
+
+    /** The size of the frames coming in (rotation applied); the layout follows it. */
+    internal fun frameSize(w: Int, h: Int) {
         if (w != frameWidth || h != frameHeight) {
             frameWidth = w
             frameHeight = h
             main.post(::updateLayout)
         }
-        renderer.onFrame(frame)
     }
 
     /** The render thread runs ([init] was called): only then can it take a surface. */
@@ -106,7 +116,11 @@ internal class VideoTextureView(context: Context, scaling: VideoScaling) : Textu
         return releaseAfter(handoff::whenReleased, surface::release, RELEASE_WAIT_MS)
     }
 
-    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
+    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+        val w = frameWidth
+        val h = frameHeight
+        if (w > 0 && h > 0) onDrawn?.invoke(w, h)
+    }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
