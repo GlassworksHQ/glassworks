@@ -14,6 +14,7 @@ import livekit.org.webrtc.VideoFrame
 import livekit.org.webrtc.VideoSink
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /** How a picture fills its view, as a `<video>`'s `object-fit`. */
@@ -62,8 +63,15 @@ internal class VideoTextureView(context: Context, scaling: VideoScaling) : Textu
 
     /** Stops the render thread. Any thread but the render thread; blocks until it has stopped. */
     fun release() {
-        renderer.release()
+        handoff.beginShutdown()
+        try {
+            renderer.release()
+        } finally {
+            handoff.endShutdown()
+        }
     }
+
+    private val handoff = SurfaceHandoff(renderer::releaseEglSurface)
 
     override fun onFrame(frame: VideoFrame) {
         val w = frame.rotatedWidth
@@ -95,7 +103,7 @@ internal class VideoTextureView(context: Context, scaling: VideoScaling) : Textu
         attached = false
         // The render thread lets go of the texture before anyone releases it: the view, if that is done in time,
         // else the render thread itself once it has.
-        return releaseAfter(renderer::releaseEglSurface, surface::release, RELEASE_WAIT_MS)
+        return releaseAfter(handoff::whenReleased, surface::release, RELEASE_WAIT_MS)
     }
 
     override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
@@ -116,6 +124,64 @@ internal class VideoTextureView(context: Context, scaling: VideoScaling) : Textu
 
     private companion object {
         const val RELEASE_WAIT_MS = 1_000L
+    }
+}
+
+/**
+ * When nothing draws into a view's surface any more, whether the renderer is running (it lets go of that one surface)
+ * or shutting down: the player closing can overlap the view's surface going. libwebrtc's `EglRenderer.release()` forgets
+ * its render thread before that thread has torn EGL down, and from then on `releaseEglSurface` answers at once, while
+ * EGL may still be using the surface. Here a surface given back during a shutdown waits for the shutdown to finish.
+ */
+internal class SurfaceHandoff(private val releaseEglSurface: (Runnable) -> Unit) {
+    private val lock = Any()
+    private var state = RUNNING
+    private val afterShutdown = ArrayList<Runnable>()
+
+    /** Calls [onReleased] once, when nothing draws into the surface any more. Any thread. */
+    fun whenReleased(onReleased: Runnable) {
+        val fired = AtomicBoolean(false)
+        val once = Runnable { if (fired.compareAndSet(false, true)) onReleased.run() }
+        val now = synchronized(lock) {
+            when (state) {
+                SHUT_DOWN -> true
+                SHUTTING_DOWN -> {
+                    afterShutdown += once
+                    false
+                }
+                else -> {
+                    // Also on the shutdown's list: a shutdown that starts before the render thread gets to this release
+                    // tears EGL down instead, and the queued release may never run.
+                    afterShutdown += once
+                    releaseEglSurface(Runnable {
+                        synchronized(lock) { afterShutdown.remove(once) }
+                        once.run()
+                    })
+                    false
+                }
+            }
+        }
+        if (now) once.run()
+    }
+
+    /** The renderer is shutting down (before `EglRenderer.release()`). */
+    fun beginShutdown() {
+        synchronized(lock) { state = SHUTTING_DOWN }
+    }
+
+    /** The renderer has shut down and EGL is gone (after `EglRenderer.release()` returned). */
+    fun endShutdown() {
+        val waiting = synchronized(lock) {
+            state = SHUT_DOWN
+            ArrayList(afterShutdown).also { afterShutdown.clear() }
+        }
+        waiting.forEach { it.run() }
+    }
+
+    private companion object {
+        const val RUNNING = 0
+        const val SHUTTING_DOWN = 1
+        const val SHUT_DOWN = 2
     }
 }
 

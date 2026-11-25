@@ -58,6 +58,13 @@ public class HaWebRtcSignaling(
     private var session: String? = null
     private val waiting = ArrayList<IceCandidateInit>()
 
+    /**
+     * Listener calls asked for while one runs on this thread (a channel that answers inline, say a candidate refused
+     * from inside onSession): they run after it returns, one at a time. Only the thread holding [dispatch] uses them.
+     */
+    private val nested = ArrayDeque<() -> Unit>()
+    private var inListener = false
+
     /** True while [HaCommandChannel.subscribe] runs: an error then waits for its handle to be cancelled first. */
     private var subscribing = false
     private var deferredError: HaError? = null
@@ -100,7 +107,7 @@ public class HaWebRtcSignaling(
             if (closed || failed) true else { subscription = sub; false }
         }
         if (cancel) sub.unsubscribe()
-        report?.let { error -> synchronized(dispatch) { if (!synchronized(lock) { closed }) listener.onError(error) } }
+        report?.let { error -> dispatchCall { if (!isClosed()) listener.onError(error) } }
     }
 
     /**
@@ -138,15 +145,12 @@ public class HaWebRtcSignaling(
             "session" -> {
                 val sid = event.optStringOrNull("session_id")
                     ?: return fail(HaError(HaError.BAD_ANSWER, "session event without session_id"))
-                val flush = synchronized(dispatch) {
-                    val held = synchronized(lock) {
-                        if (closed || failed || session != null) return
-                        session = sid
-                        ArrayList(waiting).also { waiting.clear() }
-                    }
-                    listener.onSession(sid)
-                    held
+                val flush = synchronized(lock) {
+                    if (closed || failed || session != null) return
+                    session = sid
+                    ArrayList(waiting).also { waiting.clear() }
                 }
+                deliver { listener.onSession(sid) }
                 // The listener may have closed the negotiation: then the held candidates stay unsent.
                 for (c in flush) {
                     if (!live()) return
@@ -173,14 +177,35 @@ public class HaWebRtcSignaling(
 
     private fun live(): Boolean = synchronized(lock) { !closed && !failed }
 
-    /** Calls the listener unless the negotiation is over, never overlapping [close] or the terminal error. */
-    private inline fun deliver(call: () -> Unit) {
-        synchronized(dispatch) { if (live()) call() }
+    private fun isClosed(): Boolean = synchronized(lock) { closed }
+
+    /** Calls the listener unless the negotiation is over (checked when the call runs). */
+    private inline fun deliver(crossinline call: () -> Unit) = dispatchCall { if (live()) call() }
+
+    /**
+     * Runs [call] (a listener call) holding [dispatch], so it never overlaps [close], the terminal error or another
+     * listener call. One asked for from inside a listener call on this thread waits until that one returns.
+     */
+    private fun dispatchCall(call: () -> Unit) {
+        synchronized(dispatch) {
+            if (inListener) {
+                nested.addLast(call)
+                return
+            }
+            inListener = true
+            try {
+                call()
+                while (true) (nested.removeFirstOrNull() ?: break)()
+            } finally {
+                inListener = false
+                nested.clear()
+            }
+        }
     }
 
     private fun fail(error: HaError) {
-        synchronized(dispatch) {
-            val sub = synchronized(lock) {
+        val sub = synchronized(dispatch) {
+            synchronized(lock) {
                 if (closed || failed) return
                 failed = true
                 waiting.clear()
@@ -191,9 +216,10 @@ public class HaWebRtcSignaling(
                 }
                 subscription.also { subscription = null }
             }
-            sub?.unsubscribe()
-            listener.onError(error)
         }
+        // The subscription goes before the report; a close() in between means no report.
+        sub?.unsubscribe()
+        dispatchCall { if (!isClosed()) listener.onError(error) }
     }
 
     /** HA's WebSocket command types. */

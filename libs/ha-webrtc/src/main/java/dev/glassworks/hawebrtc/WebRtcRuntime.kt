@@ -20,6 +20,14 @@ import livekit.org.webrtc.audio.JavaAudioDeviceModule
 internal object WebRtcRuntime {
     class Handle(val factory: PeerConnectionFactory, val egl: EglBase.Context)
 
+    /**
+     * Why a renderer couldn't start its EGL context in this process, once one couldn't (null until then). libwebrtc
+     * M150's `EglThread.create()` starts its thread before it makes the context and leaves the thread running when that
+     * fails, out of reach. So after one failure the players don't try again, and at most one thread is left behind.
+     */
+    @Volatile
+    var rendererUnavailable: String? = null
+
     private var initialized = false
     private var refs = 0
     private var egl: EglBase? = null

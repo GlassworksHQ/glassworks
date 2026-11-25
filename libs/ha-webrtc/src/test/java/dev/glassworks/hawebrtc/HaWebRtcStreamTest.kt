@@ -346,6 +346,24 @@ class HaWebRtcStreamTest {
     }
 
     @Test
+    fun `a frame from before the pause doesn't count for the run after it`() {
+        val s = stream(HaWebRtcStream.Options(idleTeardownMs = 60_000, connectTimeoutMs = 10_000))
+        val (peer, _) = connect(s)
+        peer.events.onFrame(640, 480)
+        clock.runAll()
+        // A frame the peer reported just before the pause, still queued when the panel pauses and resumes.
+        peer.events.onFrame(640, 480)
+        s.setActive(false)
+        s.setActive(true)
+        clock.runAll()
+        assertEquals("not a first frame of the new run", 1, log.count { it.startsWith("first") })
+        // The camera sends nothing more: the resumed run times out.
+        clock.advance(10_000)
+        assertTrue(peer.closed)
+        assertEquals("reconnecting 1 timeout", log.last())
+    }
+
+    @Test
     fun `a listener that closes the stream from onReconnecting leaves no timer behind`() {
         val s = stream()
         s.listener = object : HaWebRtcStream.Listener {

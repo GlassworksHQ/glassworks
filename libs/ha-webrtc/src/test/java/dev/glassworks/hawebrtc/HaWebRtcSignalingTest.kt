@@ -3,6 +3,7 @@ package dev.glassworks.hawebrtc
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -300,11 +301,7 @@ class HaWebRtcSignalingTest {
         })
         s.offer("v=0")
         val sub = channel.subs.single()
-        val channelThread = Thread {
-            sub.answer("v=0 answer")
-            // Straight to the signaling, as a channel that doesn't drop events after unsubscribe would.
-            sub.onEvent(JSONObject().put("type", "candidate").put("candidate", JSONObject().put("candidate", "candidate:1 1 udp 1 192.0.2.1 1 typ host")))
-        }
+        val channelThread = Thread { sub.answer("v=0 answer") }
         channelThread.start()
         inListener.await(5, java.util.concurrent.TimeUnit.SECONDS)
         val closer = Thread { s.close(); closed.set(true) }
@@ -313,8 +310,53 @@ class HaWebRtcSignalingTest {
         assertTrue("close waits for the listener call in progress", closer.isAlive)
         release.countDown()
         closer.join(5_000)
+        assertFalse(closer.isAlive)
+        assertTrue(closed.get())
+        // close() has returned: an event that comes now, straight to the signaling, reaches no listener.
+        sub.onEvent(JSONObject().put("type", "candidate").put("candidate", JSONObject().put("candidate", "candidate:2 1 udp 1 192.0.2.2 2 typ host")))
         channelThread.join(5_000)
         assertEquals(0, after.get())
+    }
+
+    @Test
+    fun `a channel that answers inline doesn't nest listener calls`() {
+        // HA refuses a candidate inline, from inside onSession (the listener sends one there).
+        val inline = object : HaCommandChannel by channel {
+            override fun call(command: JSONObject, onResult: (Any?) -> Unit, onError: (HaError) -> Unit) {
+                onError(HaError("webrtc_candidate_failed", "no"))
+            }
+        }
+        val s = HaWebRtcSignaling(inline, "camera.x", object : HaWebRtcSignaling.Listener by listener {
+            override fun onSession(sessionId: String) {
+                events += "session start"
+                closeRef[0]!!.addLocalCandidate(local(1))
+                events += "session end"
+            }
+        })
+        closeRef[0] = s
+        s.offer("v=0")
+        channel.subs.single().session("01JS")
+        assertEquals(listOf("session start", "session end", "candidate-error webrtc_candidate_failed"), events)
+    }
+
+    @Test
+    fun `a nested call that comes after the listener closed is dropped`() {
+        val inline = object : HaCommandChannel by channel {
+            override fun call(command: JSONObject, onResult: (Any?) -> Unit, onError: (HaError) -> Unit) {
+                onError(HaError("webrtc_candidate_failed", "no"))
+            }
+        }
+        val s = HaWebRtcSignaling(inline, "camera.x", object : HaWebRtcSignaling.Listener by listener {
+            override fun onSession(sessionId: String) {
+                events += "session"
+                closeRef[0]!!.addLocalCandidate(local(1))
+                closeRef[0]!!.close()
+            }
+        })
+        closeRef[0] = s
+        s.offer("v=0")
+        channel.subs.single().session("01JS")
+        assertEquals(listOf("session"), events)
     }
 
     private val closeRef = arrayOfNulls<HaWebRtcSignaling>(1)
