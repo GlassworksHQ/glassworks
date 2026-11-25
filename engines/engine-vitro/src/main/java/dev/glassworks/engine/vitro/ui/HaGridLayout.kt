@@ -230,6 +230,8 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                 }
                 // hui-entity-card's (and so hui-sensor-card's) getGridOptions: 6 columns, 2 rows.
                 "entity", "sensor" -> HaGridSize(6, 2)
+                // hui-logbook-card's getGridOptions: 12 columns, 6 rows.
+                "logbook" -> HaGridSize(12, 6)
                 // hui-area-card's getGridOptions: 6 columns; one row for the tile, two more for the picture (not
                 // compact), one more for a vertical compact tile. Its features aren't drawn yet, so they add none.
                 "area" -> {

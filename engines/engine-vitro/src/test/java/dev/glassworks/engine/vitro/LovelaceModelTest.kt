@@ -913,28 +913,33 @@ class LovelaceModelTest {
     }
 
     @Test
-    fun logbookEntriesNewestFirstWithMessages() {
+    fun logbookEntriesNewestFirstWithTheirCauseAndHasHeadersAndTimes() {
         val rows = LogbookCardView.parseEntries(
             JSONArray(
                 """[
-                  {"when": 1000.5, "entity_id": "light.desk", "state": "on"},
+                  {"when": 1000.5, "entity_id": "light.desk", "state": "on", "context_domain": "script", "context_event_type": "call_service"},
                   {"when": "1970-01-01T00:33:20+00:00", "entity_id": "light.desk", "state": "off", "name": "Desk"},
-                  {"when": 1500, "entity_id": "automation.wake", "message": "triggered by time"},
+                  {"when": 1500, "entity_id": "automation.wake", "message": "triggered by time", "domain": "automation"},
                   {"when": 1600, "message": "no entity"}
                 ]""",
             ),
         )
-        assertEquals(listOf(2000.0, 1500.0, 1000.5), rows.map { it.whenSec })
-        assertEquals(listOf("turned off", "triggered by time", "turned on"), rows.map { it.message })
+        assertEquals(listOf(2000.0, 1600.0, 1500.0, 1000.5), rows.map { it.whenSec })
         assertEquals("Desk", rows[0].name)
-        assertNull(rows[1].name)
-        val many = JSONArray((0 until 20).map { JSONObject().put("when", it).put("entity_id", "switch.s").put("state", "on") })
-        assertEquals(12, LogbookCardView.parseEntries(many).size)
-        assertEquals(19.0, LogbookCardView.parseEntries(many).first().whenSec, 0.0)
-        assertEquals("changed to heat cool", LogbookCardView.stateMessage("heat_cool"))
-        assertEquals("became unavailable", LogbookCardView.stateMessage("unavailable"))
-        assertEquals("5 minutes ago", LogbookCardView.relativeTime(1_000.0, 1_300.0))
-        assertEquals("Just now", LogbookCardView.relativeTime(1_000.0, 1_010.0))
+        assertNull(rows[1].entityId)
+        assertEquals("triggered by time", rows[2].message)
+        assertEquals("script", rows[3].contextDomain)
+        assertEquals("call_service", rows[3].contextEventType)
+        // HA's stream request: from hours_to_show ago to a year ahead, times as toISOString writes them.
+        val req = LogbookCardView.streamRequest(listOf("light.desk"), 24, 86_400_000L * 2)
+        assertEquals("1970-01-02T00:00:00.000Z", req.getString("start_time"))
+        assertEquals("1971-01-03T00:00:00.000Z", req.getString("end_time"))
+        // formatTimeWithSeconds and the day headers, in English.
+        val utc = java.util.TimeZone.getTimeZone("UTC")
+        val now = 1_795_543_680_000L // 2026-11-24 14:08 UTC
+        assertEquals("Today · November 24, 2026", LogbookCardView.dateHeader(now - 3_600_000L, now, utc))
+        assertEquals("Yesterday · November 23, 2026", LogbookCardView.dateHeader(now - 86_400_000L, now, utc))
+        assertEquals("November 22, 2026", LogbookCardView.dateHeader(now - 2 * 86_400_000L, now, utc))
     }
 
     @Test
