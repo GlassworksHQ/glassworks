@@ -222,13 +222,14 @@ private fun cssText(ctx: VitroCardContext, sizeCss: Float, color: Int, weight: I
     includeFontPadding = false
 }
 
-/** Pads [tv] so its box is [lineHeight] times its font size, like a CSS line box. */
+/** Makes [tv]'s text (set before) one CSS line box [lineHeight] times its font size, its leading split as Blink does. */
 private fun lineBox(ctx: VitroCardContext, tv: TextView, sizeCss: Float, lineHeight: Float) {
     val fm = tv.paint.fontMetrics
-    val content = fm.descent - fm.ascent
     val total = lineHeight * sizeCss * ctx.dp * ctx.theme.fontScale
-    val top = ((total - content) / 2f).coerceAtLeast(0f)
-    tv.setPadding(tv.paddingLeft, Math.round(top), tv.paddingRight, Math.round(total - content - top).coerceAtLeast(0))
+    val above = CssLineBoxSpan.above(-fm.ascent, fm.descent, total, ctx.dp)
+    val text = android.text.SpannableString(tv.text)
+    text.setSpan(CssLineBoxSpan(emptyList(), CssLineBoxSpan.Run(0, 0, above, total - above)), 0, text.length, android.text.Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+    tv.text = text
 }
 
 /**

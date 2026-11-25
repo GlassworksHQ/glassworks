@@ -482,6 +482,20 @@ class MarkdownEngineTest {
     }
 
     @Test
+    fun lineBoxesSplitTheirLeadingAsBlinkDoes() {
+        // HA's large clock in Chrome, Roboto (ascent 0.928 em, descent 0.244), at density 1.5 and 2: the 64 px digits'
+        // 51.2 px line puts its text 12 px above the line (half of -23.8, floored) with the ascent rounded to 59; the
+        // 24 px AM's 21.6 px line 4 px above (-3.2 floored), ascent 22.
+        val span = dev.glassworks.engine.vitro.cards.CssLineBoxSpan
+        for (dp in listOf(1.5f, 2f)) {
+            assertEquals(47f * dp, span.above(59.375f * dp, 15.625f * dp, 51.2f * dp, dp), 1e-3f)
+            assertEquals(18f * dp, span.above(22.27f * dp, 5.86f * dp, 21.6f * dp, dp), 1e-3f)
+            // `normal` is the rounded ascent and descent: 28 px for 24 px Roboto, so no leading at all.
+            assertEquals(28f * dp, span.normalLineHeight(22.27f * dp, 5.86f * dp, 0f, dp), 1e-3f)
+        }
+    }
+
+    @Test
     @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE) // real font metrics
     fun normalLineHeightIsTheFontsOwn() {
         // `line-height: normal` (HA's headings) is the drawn font's ascent + descent: Inter's 1.21 em, not Roboto's 1.17.
@@ -504,7 +518,9 @@ class MarkdownEngineTest {
         val fm = paint.fontMetrics
         val own = fm.descent - fm.ascent + fm.leading
         assertTrue("Inter's normal line is taller than Roboto's: $own", own > 40f * ctx.dp * 1.19f)
-        assertEquals(Math.round(own), h1.height)
+        // Its ascent and descent each rounded to whole CSS px, as Blink takes them.
+        val dp = ctx.dp
+        assertEquals(Math.round((Math.round(-fm.ascent / dp) + Math.round(fm.descent / dp) + Math.round(fm.leading / dp)) * dp), h1.height)
     }
 
     @Test
