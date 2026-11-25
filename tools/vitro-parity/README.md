@@ -36,7 +36,7 @@ The committed corpus never depends on anyone's real Home Assistant. `capture.mjs
 - **The shared inputs** come from `home.json`: the fixed instant every page and Vitro's clock show, the config (time zone, units), the themes and the signed-in user.
 - **HA core's words and icons** for states ("Heat/Cool", "Armed away") come from `hacore-2026.11.0.json`, which `hacore.py` cuts from the `homeassistant` wheel of the same release (pinned by SHA-256). Run it again for a newer HA.
 - **Templates** (Markdown, Mushroom, conditions) are rendered by the fake with jinja2 and the HA helpers the corpus uses (`states`, `is_state`, `state_attr`, `now`, …). A template that needs a helper the fake lacks fails the case's capture.
-- **Community cards** are Lovelace resources at `/hacsfiles/`, as HACS serves them: Mushroom, card-mod, stack-in-card, layout-card, auto-entities, mini-graph-card, mini-media-player, Bubble Card, vertical-stack-in-card, bar-card, clock-weather-card and modern-circular-gauge. `cards.json` pins each one's release, its license and the SHA-256 of every file it loads, and `cards.py` downloads them into `~/.cache/glassworks-perf/cards` on first use. They're never committed. A card pinned `on_demand` (Better Thermostat UI, which is AGPL-3.0 and bundles its own Mushroom elements) is served at `/hacsfiles/` too but isn't a Lovelace resource, so no case's page loads it unless a probe adds it.
+- **Community cards** are Lovelace resources at `/hacsfiles/`, as HACS serves them: Mushroom, card-mod, stack-in-card, layout-card, auto-entities, mini-graph-card, mini-media-player, Bubble Card, vertical-stack-in-card, bar-card, clock-weather-card and modern-circular-gauge. `cards.json` pins each one's release, its license and the SHA-256 of every file it loads, and `cards.py` downloads them into `~/.cache/glassworks-perf/cards` on first use. They're never committed. A card pinned `on_demand` (Better Thermostat UI, which is AGPL-3.0 and bundles its own Mushroom elements, and battery-state-card, scheduler-card and calendar-card-pro, for the island checks) is served at `/hacsfiles/` too but isn't a Lovelace resource, so no case's page loads it unless a probe adds it.
 
 Templates render in jinja2's sandbox: the fake listens on 127.0.0.1, but anything that reaches its port may send one. The fake logs any WebSocket command it doesn't answer, and the capture lists them at the end: a newer frontend or card that asks for something new can't pass unnoticed.
 
@@ -96,17 +96,26 @@ A case with `more_info` opens HA's More Info dialog for that entity over the car
 
 ### Can a custom card draw in an island?
 
-`island-check.mjs` renders one custom card in HA's frontend on the fake HA, with its pinned script from `cards.json`, and lists the custom elements it draws with that an island page lacks: HA's own elements that are neither the card's nor among the island's stand-ins. A card whose main control is one of them goes to HA's frontend (`WebFallback.FRONTEND_CUSTOM_CARDS`). It writes nothing.
+`island-check.mjs` renders one custom card in HA's frontend on the fake HA, with its pinned script from `cards.json`, and lists the custom elements it draws with that an island page lacks: HA's own elements that are neither the card's nor among the island's stand-ins. The island page finds such elements itself when the card draws (`frontend-watch.js` in the engine's resources) and sends `needsFrontend` over its bridge, and Vitro sends the card's view to HA's frontend. This tool shows what HA's side draws with. It writes nothing.
 
 ```sh
 node tools/vitro-parity/island-check.mjs <case.json> --card better-thermostat-ui-card [--frame tablet] [--shot out.png]
 ```
 
-`island-probe.mjs` runs the other side: the island page Vitro would serve for the card (written by `IslandPageDumpTest`), with the card's pinned script and the island's bridge answered by the probe, and reports what the card drew, which elements it found undefined, and what it sent over the bridge. Example cases are in `island-cases/`.
+`island-probe.mjs` runs the other side: the island page Vitro would serve for the card (written by `IslandPageDumpTest`), with the card's pinned script and the island's bridge answered by the probe, and reports what the card drew, which elements it found undefined, and what it sent over the bridge (a `needsFrontend` when the card draws with HA elements the island lacks). Example cases are in `island-cases/`: Better Thermostat's cards, battery-state-card, scheduler-card and calendar-card-pro (pinned `on_demand`), and made-up cards (`test-*.json`, with their script in `island-cases/cards/`) that need no fake HA.
 
 ```sh
 ./gradlew :engine-vitro:testDebugUnitTest --tests '*IslandPageDumpTest*' -PvitroIslandCase=$PWD/tools/vitro-parity/island-cases/better-thermostat-mini-climate.json
 node tools/vitro-parity/island-probe.mjs tools/vitro-parity/island-cases/better-thermostat-mini-climate.json [--click x,y] [--shot out.png]
+```
+
+`island-probe.mjs` also takes `--eval '<function>'` (called in the page with the card's element) and `--snapshot-delay ms` (the card draws once with no states first). `island-before.sh <commit> <case.json> [-- probe options]` runs the probe on the island page as an older commit served it, in a throwaway worktree it removes after, to reproduce what a card drew before a fix.
+
+`test/island-detect.e2e.test.mjs` runs every made-up case and checks that only the ones that draw an HA element the island lacks send `needsFrontend`. It needs their pages and Chromium, so CI's Node step skips it (the watch's logic runs there in `test/island-frontend.test.mjs`, against a fake DOM):
+
+```sh
+./gradlew :engine-vitro:testDebugUnitTest --tests '*IslandPageDumpTest*' -PvitroIslandCase=$(ls $PWD/tools/vitro-parity/island-cases/test-*.json | paste -sd, -)
+GW_VITRO_ISLAND_E2E=1 node --test tools/vitro-parity/test/island-detect.e2e.test.mjs
 ```
 
 ### Cases with their own stylesheets

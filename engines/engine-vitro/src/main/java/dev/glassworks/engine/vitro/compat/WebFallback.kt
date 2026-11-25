@@ -30,8 +30,8 @@ import dev.glassworks.engine.vitro.model.ViewConfig
  *
  * A custom card's island runs its own script, so it draws as in HA, with two exceptions that come here: a custom card
  * that wraps a built-in card Vitro doesn't draw (the reason walks every card a card builds, [CardRouter.producedCards]),
- * and one whose script draws with elements of HA's own frontend that an island page doesn't have
- * ([FRONTEND_CUSTOM_CARDS]).
+ * and one whose island found it drawing with elements of HA's own frontend that an island page doesn't have
+ * ([IslandFrontend], the `learned` reasons of [viewReason]). No card is named here: the island finds them itself.
  */
 object WebFallback {
     /**
@@ -41,36 +41,31 @@ object WebFallback {
      */
     val UNDRAWN_ROW_TYPES: Set<String> = setOf("attribute", "cast")
 
-    /**
-     * Custom cards whose own script draws its main control with elements of HA's frontend (which HA's page defines
-     * once its own cards load them), not shipped in the card: an island page has no HA frontend, so the card would
-     * draw without them. Each with what it misses. Found by rendering the card in HA's frontend and in an island page
-     * against the parity harness's fake HA (#885).
-     */
-    val FRONTEND_CUSTOM_CARDS: Map<String, String> = mapOf(
-        "custom:better-thermostat-normal-climate-card" to
-            "its dial and target are HA's `ha-control-circular-slider` and `ha-big-number`, which only HA's frontend has",
-    )
-
     /** Why the whole [dashboard] goes to HA's page, or null when Vitro draws it. */
     fun dashboardReason(dashboard: DashboardConfig): String? =
         if (dashboard.strategy) "a strategy dashboard (HA's frontend generates its views)" else null
 
-    /** Why [view] goes to HA's page, or null when Vitro draws it. */
-    fun viewReason(view: ViewConfig): String? {
+    /**
+     * Why [view] goes to HA's page, or null when Vitro draws it. [learned]: what this session found about a card
+     * ([IslandFrontend]): a reason for a card an island found drawing with HA's own elements, or null.
+     */
+    fun viewReason(view: ViewConfig, learned: ((CardConfig) -> String?)? = null): String? {
         if (view.strategy) return "a strategy view (HA's frontend generates its cards)"
         if (view.type !in NATIVE_VIEW_TYPES) return "a `${view.type}` view (a layout Vitro doesn't draw)"
         if (view.sections.any { it.strategy }) return "a strategy section (HA's frontend generates its cards)"
-        for (card in view.cards) cardReason(card)?.let { return it }
-        for (section in view.sections) for (card in section.cards) cardReason(card)?.let { return it }
+        for (card in view.cards) cardReason(card, learned)?.let { return it }
+        for (section in view.sections) for (card in section.cards) cardReason(card, learned)?.let { return it }
         return null
     }
 
-    /** Why [card], or a card it builds, needs HA's frontend, or null when Vitro or an island draws all of it. */
-    fun cardReason(card: CardConfig): String? {
+    /**
+     * Why [card], or a card it builds, needs HA's frontend, or null when Vitro or an island draws all of it.
+     * [learned]: as for [viewReason].
+     */
+    fun cardReason(card: CardConfig, learned: ((CardConfig) -> String?)? = null): String? {
         val type = card.type
         if (!type.startsWith("custom:") && type !in VitroSupport.CORE_CARD_TYPES) return "the built-in `$type` card"
-        FRONTEND_CUSTOM_CARDS[type]?.let { return "a `$type` card ($it)" }
+        learned?.invoke(card)?.let { return it }
         if (type == "entities") undrawnRow(card)?.let { return it }
         if (type == "shortcut") shortcutReason(card)?.let { return it }
         // Vitro has no double tap yet: a card it newly draws whose double-tap action does something stays HA's.
@@ -90,7 +85,7 @@ object WebFallback {
         }
         val children = CardRouter.producedCards(card).map { it.value } +
             (if (type == "entity-filter") listOf(EntityFilterConfig.innerCard(card)) else emptyList())
-        for (child in children) cardReason(child)?.let { return it }
+        for (child in children) cardReason(child, learned)?.let { return it }
         return null
     }
 

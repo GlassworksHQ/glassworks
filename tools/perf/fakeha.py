@@ -573,6 +573,7 @@ HANDLERS = {
     "call_service": _call_service,
     "history/stream": _history_stream,
     "history/history_during_period": _history_during_period,
+    "recorder/get_statistics_metadata": lambda c, m: c.result(m["id"], D.statistics_metadata(m.get("statistic_ids"))),
     "recorder/statistics_during_period": lambda c, m: c.result(m["id"], D.statistics(
         m.get("statistic_ids"), m.get("start_time"), m.get("end_time"), m.get("period"))),
     "ping": lambda c, m: c.send({"id": m["id"], "type": "pong"}),

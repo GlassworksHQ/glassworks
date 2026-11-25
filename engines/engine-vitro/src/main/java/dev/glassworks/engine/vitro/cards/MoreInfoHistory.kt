@@ -25,8 +25,8 @@ import kotlin.math.max
  *
  * - The header: "History", "5-minute aggregated" under it while statistics are drawn, and "Show more" on the right,
  *   a link to `/history` for the entity from the start of yesterday ([showMoreHref]), which [onShowMore] opens.
- * - A sensor with a `state_class` whose statistics the recorder has (`recorder/get_statistics_metadata` answers
- *   something): the last 24 hours of 5-minute statistics (`state`, `min`, `mean`, `max`), as `statistics-chart`
+ * - A sensor with a `state_class` whose statistics the recorder has (HA's config lists `recorder`, and
+ *   `recorder/get_statistics_metadata` answers something): the last 24 hours of 5-minute statistics (`state`, `min`, `mean`, `max`), as `statistics-chart`
  *   draws them without a legend, fetched again every minute.
  * - Anything else: `state-history-charts up-to-now`, the last 24 hours of the entity's states from a `history/stream`
  *   subscription, without names, its time axis following the clock once a minute.
@@ -149,7 +149,11 @@ internal class MoreInfoHistoryView(
         val gen = ++generation
         val state = ctx.store[entityId]
         val stateClass = state?.attributes?.get("state_class")
-        if (entityId.substringBefore('.') == "sensor" && stateClass != null && stateClass != JSONObject.NULL && stateClass.toString().isNotEmpty()) {
+        // _getStateHistory: statistics only with the recorder loaded (isComponentLoaded(hass.config, "recorder")), for a
+        // sensor with a state class; else the state history.
+        if (recorderLoaded() && entityId.substringBefore('.') == "sensor" && stateClass != null && stateClass != JSONObject.NULL &&
+            stateClass.toString().isNotEmpty()
+        ) {
             fetchStatistics(gen, first = true)
         } else {
             subscribeHistory(gen)
@@ -237,6 +241,15 @@ internal class MoreInfoHistoryView(
                 info.visibility = VISIBLE
             }
         })
+    }
+
+    /**
+     * HA's `isComponentLoaded(hass.config, "recorder")`, from HA's config's `components`. A config that doesn't list them
+     * (a test's) counts as one with the recorder, as MoreInfoSheet counts history.
+     */
+    private fun recorderLoaded(): Boolean {
+        val components = ctx.haConfig().optJSONArray("components") ?: return true
+        return (0 until components.length()).any { components.optString(it) == "recorder" }
     }
 
     private fun temperatureUnit(): String? = ctx.haConfig().optJSONObject("unit_system")?.optString("temperature")?.takeIf { it.isNotEmpty() }

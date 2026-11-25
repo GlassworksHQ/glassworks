@@ -663,7 +663,8 @@ renders above:
   bar-card 3.2.0 (MIT, Copyright Custom cards for Home Assistant), mini-graph-card v0.13.0 and mini-media-player v1.16.12 (MIT, Copyright
   Karl Kihlström), Bubble Card v3.4.3 (MIT, Copyright Cloos), vertical-stack-in-card v1.1.4 (MIT, Copyright
   Ofek Ashery), clock-weather-card v3.1.0 (MIT, Copyright Patrick Kissling; its weather icons are Meteocons,
-  MIT, Copyright Bas Milius) and modern-circular-gauge v0.15.0 (MIT, Copyright Stanisław Krzeptowski).
+  MIT, Copyright Bas Milius) modern-circular-gauge v0.15.0 (MIT, Copyright Stanisław Krzeptowski), and, for the island checks only, battery-state-card v4.3.0
+  (MIT, Copyright Max Chodorowski), scheduler-card v4.0.20 (Apache-2.0, Niels Faber) and calendar-card-pro v6.0.0 (MIT, Copyright Alex Pfau), read 2026-11-25.
 - **Jinja2** (BSD-3-Clause, Copyright Pallets, host only): the parity harness's fake HA renders templates with
   the jinja2 already installed on the computer that captures the references. Nothing of it is in the repo.
 - **Home Assistant core's icon data** (the `icons.json` of the integrations Clarity's fake Home

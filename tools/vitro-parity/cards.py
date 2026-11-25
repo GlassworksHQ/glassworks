@@ -59,6 +59,15 @@ CARDS = [
     # pages don't load it (it bundles its own Mushroom elements and wraps customElements.define).
     {"name": "better-thermostat-ui-card", "repo": "KartoffelToby/better-thermostat-ui-card", "tag": "3.4.0", "license": "AGPL-3.0",
      "main": "better-thermostat-ui-card.js", "assets": ["better-thermostat-ui-card.js"], "on_demand": True},
+    # Popular island cards (docs/research/vitro-island-census.md), for island-check.mjs and island-probe.mjs: which of
+    # HA's own elements each draws with. On demand, so no parity case's page loads them.
+    {"name": "battery-state-card", "repo": "maxwroc/battery-state-card", "tag": "v4.3.0", "license": "MIT",
+     "main": "battery-state-card.js", "assets": ["battery-state-card.js"], "on_demand": True},
+    {"name": "scheduler-card", "repo": "nielsfaber/scheduler-card", "tag": "v4.0.20", "license": "Apache-2.0",
+     "main": "scheduler-card.js", "assets": ["scheduler-card.js"], "on_demand": True},
+    # Its editor chunks load only in HA's card editor, which neither probe opens.
+    {"name": "calendar-card-pro", "repo": "alexpfau/calendar-card-pro", "tag": "v6.0.0", "license": "MIT",
+     "main": "calendar-card-pro.js", "assets": ["calendar-card-pro.js"], "on_demand": True},
 ]
 
 

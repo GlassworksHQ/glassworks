@@ -1,0 +1,53 @@
+{
+ "_comment": "A made-up schedule switch and climate entity for island-check.mjs and island-probe.mjs: which of HA's elements scheduler-card draws with. The fake HA doesn't answer the scheduler integration's own WebSocket commands.",
+ "card": {
+  "type": "custom:scheduler-card",
+  "include": [
+   "climate"
+  ]
+ },
+ "resources": [
+  "/hacsfiles/scheduler-card/scheduler-card.js?hacstag=v4.0.20"
+ ],
+ "fixture": {
+  "states": {
+   "switch.schedule_heating_morning": {
+    "state": "on",
+    "last_changed": -86400,
+    "attributes": {
+     "friendly_name": "Heating morning",
+     "next_trigger": "2026-11-26T06:30:00+00:00",
+     "actions": [
+      "climate.set_temperature"
+     ],
+     "next_slot": 0,
+     "weekdays": [
+      "workday"
+     ],
+     "timeslots": [
+      "06:30:00 - 08:00:00"
+     ],
+     "entities": [
+      "climate.study"
+     ],
+     "tags": []
+    }
+   },
+   "climate.study": {
+    "state": "heat",
+    "last_changed": -1800,
+    "attributes": {
+     "friendly_name": "Study",
+     "hvac_modes": [
+      "off",
+      "heat"
+     ],
+     "min_temp": 7,
+     "max_temp": 35,
+     "temperature": 21,
+     "current_temperature": 20.5
+    }
+   }
+  }
+ }
+}
