@@ -362,7 +362,7 @@ class CoreParityTest {
         val plain = dev.glassworks.engine.vitro.cards.ThermostatCardView(context(store), card("""{"type": "thermostat", "entity": "climate.ac"}"""))
         // HA's card has no mode bar unless the climate-hvac-modes feature is configured, and no − / + without a target.
         assertTrue(plain.all().none { it.contentDescription == "heat" })
-        val raise = plain.all().single { it.contentDescription == "Raise target temperature" }
+        val raise = plain.all().single { it.contentDescription == "Increase temperature" }
         assertEquals(View.GONE, (raise.parent as View).visibility)
         val withModes = dev.glassworks.engine.vitro.cards.ThermostatCardView(context(store), card(
             """{"type": "thermostat", "entity": "climate.ac", "features": [{"type": "climate-hvac-modes"}]}""",

@@ -78,7 +78,13 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         ellipsize = TextUtils.TruncateAt.END
     }
     private val historyIcon = MdiIconView(ctx.context)
-    private val historyButton = iconButton(historyIcon, "mdi:chart-box-outline")
+    private val historyButton = iconButton(historyIcon, "mdi:chart-box-outline").apply {
+        // HA's header button between the controls and the history: pressed while the history shows.
+        dev.glassworks.engine.vitro.ui.VitroAccess.role(this, dev.glassworks.engine.vitro.ui.A11yRole.TOGGLE_BUTTON, "History") { showingHistory }
+    }
+
+    /** The header's Close: where keyboard focus starts when the sheet opens. */
+    private var closeButton: View? = null
     private val body = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(ctx.px(24f), ctx.px(if (compact) 4f else 8f), ctx.px(24f), ctx.px(if (compact) 12f else 24f))
@@ -111,6 +117,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     private var showingHistory = false
     private var dismissed = false
 
+    /** Closed, or closing: its exit may still be running (VitroView tidies one a detach cut short). */
+    val isDismissed: Boolean get() = dismissed
+
     /** The dimmed backdrop; its alpha fades with the sheet. */
     private val scrim = ColorDrawable(SCRIM)
     private var scrimAnimator: ValueAnimator? = null
@@ -130,11 +139,15 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         background = scrim
         isClickable = true
         setOnClickListener { dismiss() }
+        // The scrim and the panel take taps only to close the sheet or keep it open: not controls for TalkBack or
+        // keys, which close it with Close, Back or Escape as HA's dialog does.
+        dev.glassworks.engine.vitro.ui.VitroAccess.notAControl(this)
 
         val radius = 28f * ctx.dp
         panel.apply {
             orientation = LinearLayout.VERTICAL
             isClickable = true // swallows taps so only the scrim dismisses
+            dev.glassworks.engine.vitro.ui.VitroAccess.notAControl(this)
             background = GradientDrawable().apply {
                 setColor(theme.cardBackgroundColor)
                 cornerRadii = if (wide) FloatArray(8) { radius }
@@ -161,7 +174,11 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             setPadding(ctx.px(12f), ctx.px(if (wide) 12f else 6f), ctx.px(12f), ctx.px(4f))
         }
         val closeIcon = MdiIconView(ctx.context)
-        val closeButton = iconButton(closeIcon, "mdi:close").apply { setOnClickListener { dismiss() } }
+        val closeButton = iconButton(closeIcon, "mdi:close").apply {
+            contentDescription = "Close"
+            setOnClickListener { dismiss() }
+        }
+        this.closeButton = closeButton
         header.addView(closeButton, LinearLayout.LayoutParams(ctx.px(40f), ctx.px(40f)))
         header.addView(titleView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
             marginStart = ctx.px(12f)
@@ -204,6 +221,18 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         ctx.main.postDelayed(clockTick, TIME_REFRESH_MS)
 
         playEnter()
+        // A keyboard lands in the sheet, as in HA's dialog, and TalkBack announces it by the entity's name.
+        closeButton?.requestFocus()
+        if (dev.glassworks.platform.Platform.hasAccessibilityPaneTitle) panel.accessibilityPaneTitle = titleView.text
+    }
+
+    /** Back and Escape close the sheet, as Escape closes HA's dialog. */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.keyCode == android.view.KeyEvent.KEYCODE_BACK || event.keyCode == android.view.KeyEvent.KEYCODE_ESCAPE) {
+            if (event.action == android.view.KeyEvent.ACTION_UP && !dismissed) dismiss()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     /**
@@ -385,7 +414,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 onToggle = { on -> optimisticToggle(id, "light", on) }
             }
             addPill(toggle)
-            val power = circleButton("mdi:power", 52f, 24f) { optimisticToggle(id, "light", ctx.store[id]?.state != "on") }
+            val power = circleButton("mdi:power", "Toggle", 52f, 24f) { optimisticToggle(id, "light", ctx.store[id]?.state != "on") }
             addCentered(power, topDp = dockGap, widthDp = 52f, heightDp = 52f)
             return { s ->
                 stateLabel.text = lightStateText(s)
@@ -400,6 +429,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         // The three center controls share one frame; the dock below switches between them.
         val center = FrameLayout(ctx.context)
         val slider = VerticalSliderPillView(ctx.context, initial?.lightTintColor() ?: fallback).apply {
+            // Named for TalkBack, as HA names the slider (the attribute it sets).
+            contentDescription = "Brightness"
             onChange = { pct -> stateLabel.text = if (pct <= 0) "Off" else "$pct%" }
             onRelease = { pct ->
                 val data = JSONObject().put("entity_id", id)
@@ -424,6 +455,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val maxK = (initial?.attributes?.get("max_color_temp_kelvin") as? Number)?.toInt() ?: ColorTempSliderView.DEFAULT_MAX_K
         val temp = if (caps.colorTemp) {
             ColorTempSliderView(ctx.context, minK, maxK).apply {
+                // Named for TalkBack, as HA names the slider (the attribute it sets).
+                contentDescription = "Color temperature"
                 onChange = { k -> stateLabel.text = "$k K" }
                 onRelease = { k -> setLightColor(id, LightColor.kelvinToArgb(k), k) }
                 center.addView(this, LayoutParams(ctx.px(pillW), ctx.px(pillH), Gravity.CENTER))
@@ -537,7 +570,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             val on = s?.state == "on"
             val pct = if (on) brightnessOf(s) else null
             val kelvin = (s?.attributes?.get("color_temp_kelvin") as? Number)?.toInt()
-            val busy = slider.dragging || wheel?.dragging == true || temp?.dragging == true
+            val busy = slider.adjusting || wheel?.dragging == true || temp?.adjusting == true
             if (!busy) {
                 stateLabel.text = if (mode == LightMode.TEMP && on && kelvin != null) "$kelvin K" else lightStateText(s)
             }
@@ -632,19 +665,21 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         addCentered(stateLabel)
         addCentered(timeLabel, topDp = 4f)
         val slider = VerticalSliderPillView(ctx.context, theme.activeColor("fan")).apply {
+            // Named for TalkBack, as HA names the slider (the attribute it sets).
+            contentDescription = "Speed"
             onChange = { pct -> stateLabel.text = if (pct <= 0) "Off" else "$pct%" }
             onRelease = { pct ->
                 ctx.callService("fan", "set_percentage", JSONObject().put("entity_id", id).put("percentage", pct), null)
             }
         }
         addPill(slider)
-        val power = circleButton("mdi:power", 52f, 24f) { optimisticToggle(id, "fan", ctx.store[id]?.state != "on") }
+        val power = circleButton("mdi:power", "Toggle", 52f, 24f) { optimisticToggle(id, "fan", ctx.store[id]?.state != "on") }
         addCentered(power, topDp = dockGap, widthDp = 52f, heightDp = 52f)
         var lastPct: Int? = initial.takeIf { it.state == "on" }?.let { (it.attributes["percentage"] as? Number)?.toInt() }?.takeIf { it > 0 }
         return { s ->
             val on = s?.state == "on"
             val pct = (s?.attributes?.get("percentage") as? Number)?.toInt()?.takeIf { it > 0 }
-            if (!slider.dragging) {
+            if (!slider.adjusting) {
                 stateLabel.text = when {
                     s == null -> "Unknown"
                     s.isUnavailable -> s.formattedState()
@@ -794,6 +829,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
         val center = FrameLayout(ctx.context)
         val slider = VerticalCoverSliderView(ctx.context).apply {
+            // Named for TalkBack, as HA names the slider (the attribute it sets).
+            contentDescription = "Position"
             onChange = { pct -> stateLabel.text = VerticalCoverSliderView.stateText(pct) }
             onRelease = { pct -> setPosition(pct) }
         }
@@ -860,7 +897,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
         return { s ->
             val pos = (s?.attributes?.get("current_position") as? Number)?.toInt()
-            if (!slider.dragging) {
+            if (!slider.adjusting) {
                 stateLabel.text = when {
                     s == null -> "Unknown"
                     s.isUnavailable -> s.formattedState()
@@ -887,9 +924,19 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         addCentered(current, topDp = 4f)
 
         val dial = ThermostatDialView(ctx, unit, showCurrentInDial = false).apply {
-            onCommit = { t ->
-                val next = ctx.store[id]?.let { cur -> cur.copy(attributes = cur.attributes + ("temperature" to t)) }
-                ctx.callOptimistic(next, "climate", "set_temperature", JSONObject().put("entity_id", id).put("temperature", t))
+            onCommit = commit@{ t ->
+                val s = ctx.store[id]
+                // Only while the store still holds a single target: not after HA moved to a range (its state, not the
+                // dial's last bind), and not for an entity the store no longer has.
+                if (s == null || ClimateTargets.of(s.attributes).value == null) return@commit
+                ctx.callOptimistic(ClimateTargets.withValue(s, t), "climate", "set_temperature", JSONObject().put("entity_id", id).put("temperature", t))
+            }
+            onRangeCommit = { handle, low, high ->
+                // Finished against the entity as the store holds it now: HA's newer other end wins.
+                val s = ctx.store[id]
+                ClimateTargets.rangeToSend(handle, low, high, s)?.let { (lo, hi) ->
+                    ctx.callOptimistic(ClimateTargets.withRange(s, lo, hi), "climate", "set_temperature", ClimateTargets.rangeData(id, lo, hi))
+                }
             }
         }
         val dialFrame = FrameLayout(ctx.context)
@@ -901,7 +948,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         fun stepBtn(icon: String, sign: Int) = FrameLayout(ctx.context).apply {
             addView(MdiIconView(ctx.context).apply { setIcon(icon, theme.primaryTextColor) },
                 LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
-            contentDescription = if (sign > 0) "Raise target temperature" else "Lower target temperature"
+            contentDescription = ThermostatCardView.stepperLabel(sign, null)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(Color.TRANSPARENT)
@@ -911,8 +958,21 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             ripple(this)
             setOnClickListener { dial.nudge(sign) }
         }
-        steppers.addView(stepBtn("mdi:minus", -1), LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)).apply { marginEnd = ctx.px(20f) })
-        steppers.addView(stepBtn("mdi:plus", 1), LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)))
+        val minus = stepBtn("mdi:minus", -1)
+        val plus = stepBtn("mdi:plus", 1)
+        // A range: the − and + move the selected end, named after it and outlined in its color while it runs.
+        fun styleSteppers() {
+            val handle = dial.selected.takeIf { dial.isRange }
+            val outline = handle?.let { dial.handleColor(it) }?.takeIf { it != theme.secondaryTextColor }
+                ?: CardSurface.withAlpha(theme.secondaryTextColor, 0.5f)
+            for ((view, sign) in listOf(minus to -1, plus to 1)) {
+                view.contentDescription = ThermostatCardView.stepperLabel(sign, handle)
+                (view.background as? GradientDrawable)?.setStroke(ctx.px(1f).coerceAtLeast(1), outline)
+            }
+        }
+        dial.onSelect = { styleSteppers() }
+        steppers.addView(minus, LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)).apply { marginEnd = ctx.px(20f) })
+        steppers.addView(plus, LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)))
         dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
         body.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(dialDp)).apply { topMargin = ctx.px(dialGap) })
 
@@ -945,15 +1005,20 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         return { s ->
             val attrs = s?.attributes.orEmpty()
             val mode = s?.state ?: "off"
+            val targets = ClimateTargets.of(attrs)
             dial.bind(
                 min = (attrs["min_temp"] as? Number)?.toDouble() ?: 7.0,
                 max = (attrs["max_temp"] as? Number)?.toDouble() ?: 35.0,
-                step = (attrs["target_temp_step"] as? Number)?.toDouble()?.takeIf { it > 0 } ?: 0.5,
+                step = ClimateTargets.stepOf(attrs, unit),
                 current = (attrs["current_temperature"] as? Number)?.toDouble(),
-                target = (attrs["temperature"] as? Number)?.toDouble(),
+                target = targets.value,
                 mode = mode,
                 action = attrs["hvac_action"] as? String,
+                stateLabel = s?.let { dev.glassworks.engine.vitro.data.HaDisplay.stateLabel(it) }.orEmpty(),
+                low = targets.low,
+                high = targets.high,
             )
+            styleSteppers()
             current.text = (attrs["current_temperature"] as? Number)?.toDouble()
                 ?.let { String.format(Locale.US, "%.1f %s", it, unit) } ?: "–"
             modeBtn.icon.setIcon(ThermostatCardView.modeIcon(mode), theme.primaryTextColor)
@@ -1066,6 +1131,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                         }
                         codeView.text = "•".repeat(code.length)
                     }
+                    if (key == "⌫") b.contentDescription = "Backspace"
                     row.addView(b, LinearLayout.LayoutParams(ctx.px(72f), ctx.px(52f)).apply { if (i > 0) marginStart = ctx.px(12f) })
                 }
                 pad.addView(row, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { if (r > 0) topMargin = ctx.px(10f) })
@@ -1145,13 +1211,13 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             gravity = Gravity.CENTER
         }
         val playIcon = MdiIconView(ctx.context)
-        val play = circleButton(playIcon, "mdi:play", 64f, 30f) { media("media_play_pause") }
-        transport.addView(circleButton("mdi:skip-previous", 52f, 24f) { media("media_previous_track") },
+        val play = circleButton(playIcon, "mdi:play", "Play", 64f, 30f) { media("media_play_pause") }
+        transport.addView(circleButton("mdi:skip-previous", "Previous track", 52f, 24f) { media("media_previous_track") },
             LinearLayout.LayoutParams(ctx.px(52f), ctx.px(52f)))
         transport.addView(play, LinearLayout.LayoutParams(ctx.px(64f), ctx.px(64f)).apply {
             marginStart = ctx.px(20f); marginEnd = ctx.px(20f)
         })
-        transport.addView(circleButton("mdi:skip-next", 52f, 24f) { media("media_next_track") },
+        transport.addView(circleButton("mdi:skip-next", "Next track", 52f, 24f) { media("media_next_track") },
             LinearLayout.LayoutParams(ctx.px(52f), ctx.px(52f)))
         addCentered(transport, topDp = 20f)
 
@@ -1190,6 +1256,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             artist.visibility = if (a == null) GONE else VISIBLE
             state.text = listOf(s?.formattedState().orEmpty(), relativeTime(s)).filter { it.isNotEmpty() }.joinToString(" · ")
             playIcon.setIcon(if (playing) "mdi:pause" else "mdi:play", theme.primaryTextColor)
+            play.contentDescription = if (playing) "Pause" else "Play"
             val level = (s?.attributes?.get("volume_level") as? Number)?.toDouble()
             volumeRow.visibility = if (level == null) GONE else VISIBLE
             if (level != null && !tracking) volume.progress = (level * 100).roundToInt()
@@ -1381,11 +1448,13 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     /** HA's ripple on a sheet control, clipped to [radiusPx] (a pill or circle by default). */
     private fun ripple(v: View, radiusPx: Float = 999f) = applyHaRipple(v, radiusPx, theme.dark)
 
-    private fun circleButton(name: String, sizeDp: Float, iconDp: Float, onClick: () -> Unit): FrameLayout =
-        circleButton(MdiIconView(ctx.context), name, sizeDp, iconDp, onClick)
+    private fun circleButton(name: String, label: String, sizeDp: Float, iconDp: Float, onClick: () -> Unit): FrameLayout =
+        circleButton(MdiIconView(ctx.context), name, label, sizeDp, iconDp, onClick)
 
-    private fun circleButton(icon: MdiIconView, name: String, sizeDp: Float, iconDp: Float, onClick: () -> Unit): FrameLayout =
+    /** A round icon button, named [label] for TalkBack (HA's `.label`). */
+    private fun circleButton(icon: MdiIconView, name: String, label: String, sizeDp: Float, iconDp: Float, onClick: () -> Unit): FrameLayout =
         FrameLayout(ctx.context).apply {
+            contentDescription = label
             icon.setIcon(name, theme.primaryTextColor)
             addView(icon, LayoutParams(ctx.px(iconDp), ctx.px(iconDp), Gravity.CENTER))
             background = GradientDrawable().apply {
@@ -1443,6 +1512,14 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
         var chosen = false
             set(v) { if (field != v) { field = v; invalidate() } }
+
+        /** HA's mode buttons stay pressed (`aria-pressed`) on the mode that shows. */
+        override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+            super.onInitializeAccessibilityNodeInfo(info)
+            info.className = "android.widget.ToggleButton"
+            info.isCheckable = true
+            info.isChecked = chosen
+        }
 
         init {
             isClickable = true
@@ -1644,8 +1721,50 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
         set(v) { if (field != v) { field = v; invalidate() } }
     var dragging = false
         private set
+
+    /** A drag or a key edit is under way: what the slider and its caption show is the user's, not HA's. */
+    val adjusting: Boolean get() = dragging || access.editing
     var onChange: ((Int) -> Unit)? = null
     var onRelease: ((Int) -> Unit)? = null
+
+    /** TalkBack and keys: a 0–100 % slider, as HA's `ha-control-slider` is. */
+    private val access = dev.glassworks.engine.vitro.ui.AdjustableAccess(
+        min = { 0 }, max = { 100 }, step = 1,
+        value = { Math.round(targetPct) },
+        preview = { v ->
+            pctAnimator?.cancel()
+            pct = v.toFloat()
+            targetPct = v.toFloat()
+            invalidate()
+            onChange?.invoke(v)
+        },
+        commit = { v -> onRelease?.invoke(v) },
+        // Back to HA's value, caption included (onChange), as a cancelled drag does: nothing is sent.
+        restore = { bound?.let { targetPct = -1f; setPercent(it); onChange?.invoke(it) } },
+    )
+
+    init {
+        isFocusable = true
+    }
+
+    override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        access.onInitialize(info)
+    }
+
+    override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean =
+        access.perform(action) ?: super.performAccessibilityAction(action, arguments)
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyDown(keyCode) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyUp(event) || super.onKeyUp(keyCode, event)
+
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        if (!gainFocus) access.cancel()
+    }
 
     /** Re-tints the fill, e.g. when a light's RGB color or color temperature changes; cross-fades over 180 ms. */
     fun setActiveColor(color: Int) {
@@ -1665,7 +1784,8 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
 
     fun setPercent(value: Int) {
         bound = value
-        if (dragging) return
+        // A drag or a key edit keeps what it shows until it ends.
+        if (dragging || access.editing) return
         val p = value.coerceIn(0, 100).toFloat()
         if (p == targetPct) return
         targetPct = p
@@ -2205,8 +2325,50 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
 
     var dragging = false
         private set
+
+    /** A drag or a key edit is under way: what the slider and its caption show is the user's, not HA's. */
+    val adjusting: Boolean get() = dragging || access.editing
     var onChange: ((Int) -> Unit)? = null
     var onRelease: ((Int) -> Unit)? = null
+
+    /** TalkBack and keys: a Kelvin slider; an arrow moves it a hundredth of the range. */
+    private val access = dev.glassworks.engine.vitro.ui.AdjustableAccess(
+        min = { minOf(minK, maxK) }, max = { maxOf(minK, maxK) }, step = maxOf(1, kotlin.math.abs(maxK - minK) / 100),
+        value = { kelvin },
+        preview = { k ->
+            animator?.cancel()
+            kelvin = k
+            shown = fractionOf(k, minK, maxK)
+            invalidate()
+            onChange?.invoke(k)
+        },
+        commit = { k -> onRelease?.invoke(k) },
+        // Back to HA's value, caption included (onChange), as a cancelled drag does: nothing is sent.
+        restore = { bound?.let { kelvin = Int.MIN_VALUE; setKelvin(it); onChange?.invoke(it) } },
+    )
+
+    init {
+        isFocusable = true
+    }
+
+    override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        access.onInitialize(info)
+    }
+
+    override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean =
+        access.perform(action) ?: super.performAccessibilityAction(action, arguments)
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyDown(keyCode) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyUp(event) || super.onKeyUp(keyCode, event)
+
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        if (!gainFocus) access.cancel()
+    }
 
     /** Moves the bar to [k]: animated over 180 ms on screen, snapped before attach. Ignored mid-drag. */
     /** The temperature bound last, kept during a drag so a cancelled one goes back to it. */
@@ -2214,7 +2376,8 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
 
     fun setKelvin(k: Int) {
         bound = k
-        if (dragging) return
+        // A drag or a key edit keeps what it shows until it ends.
+        if (dragging || access.editing) return
         val c = k.coerceIn(minOf(minK, maxK), maxOf(minK, maxK))
         if (c == kelvin) return
         kelvin = c
@@ -2335,8 +2498,50 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
 
     var dragging = false
         private set
+
+    /** A drag or a key edit is under way: what the slider and its caption show is the user's, not HA's. */
+    val adjusting: Boolean get() = dragging || access.editing
     var onChange: ((Int) -> Unit)? = null
     var onRelease: ((Int) -> Unit)? = null
+
+    /** TalkBack and keys: the cover's position, 0–100 % open. */
+    private val access = dev.glassworks.engine.vitro.ui.AdjustableAccess(
+        min = { 0 }, max = { 100 }, step = 1,
+        value = { pct },
+        preview = { v ->
+            animator?.cancel()
+            pct = v
+            shown = v.toFloat()
+            invalidate()
+            onChange?.invoke(v)
+        },
+        commit = { v -> onRelease?.invoke(v) },
+        // Back to HA's value, caption included (onChange), as a cancelled drag does: nothing is sent.
+        restore = { bound?.let { pct = -1; setPercent(it); onChange?.invoke(it) } },
+    )
+
+    init {
+        isFocusable = true
+    }
+
+    override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        access.onInitialize(info)
+    }
+
+    override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean =
+        access.perform(action) ?: super.performAccessibilityAction(action, arguments)
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyDown(keyCode) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyUp(event) || super.onKeyUp(keyCode, event)
+
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        if (!gainFocus) access.cancel()
+    }
 
     /** Moves the fill to [value] % open: animated over 180 ms on screen, snapped before attach. Ignored mid-drag. */
     /** The position bound last, kept during a drag so a cancelled one goes back to it. */
@@ -2344,7 +2549,8 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
 
     fun setPercent(value: Int) {
         bound = value
-        if (dragging) return
+        // A drag or a key edit keeps what it shows until it ends.
+        if (dragging || access.editing) return
         val p = value.coerceIn(0, 100)
         if (p == pct) return
         pct = p

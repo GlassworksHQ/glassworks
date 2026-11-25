@@ -42,6 +42,8 @@ tasks.withType<Test>().configureEach {
         "vitroParityUpdateBaseline" to "vitro.parity.updateBaseline",
         "vitroParityCases" to "vitro.parity.cases",
         "vitroParityFrames" to "vitro.parity.frames",
+        // The *Mockups renders for a PR's screenshots (ClimateRangeMockups): PNGs into this directory.
+        "vitroMockupDir" to "vitro.mockupDir",
     )
     for ((prop, sys) in options) {
         (project.findProperty(prop) as String?)?.let {
