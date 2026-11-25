@@ -33,17 +33,20 @@ See [onboarding.md](onboarding.md#2-adoption--encryption-esphome-dynamic-keys-) 
 
 ### What works without encryption
 
-Until Home Assistant gives the panel its key, anyone on your network can talk to the panel's ESPHome API, not only Home Assistant. That covers a panel you haven't added yet, and one that a Home Assistant older than 2026.11 added without a key. The panel keeps the everyday controls working in that case, but anything that changes which page the panel shows, who it's signed in as, or what it does with its radio, panes or camera waits for an encrypted connection.
+Until Home Assistant gives the panel its key, anyone on your network can talk to the panel's ESPHome API, not only Home Assistant. That covers a panel you haven't added yet, and one that a Home Assistant older than 2026.11 added without a key. The panel keeps the everyday controls working in that case. Anything that changes which page the panel shows or who it's signed in as waits for an encrypted connection, and so do the pane switches, the camera and the radio's firmware, Zigbee stack and Thread controls.
 
 | Works without encryption | Needs an encrypted connection with the panel's key |
 |---|---|
 | Sensors and diagnostics, the screen light, screen mode, idle timeout, brightness, zoom, **Hide HA header**, the **Dashboard** select (Home Assistant's own dashboards only) | **Dashboard URL** (`dashboard_url`) |
 | **Speaker**: playback, volume, TTS and announcements | **Sign out** (`sign_out`) |
 | **Reload dashboard**, **Restart app** | **Start Wi-Fi setup (Bluetooth)** (`improv_ble`) and **Open device settings** (`open_settings`) |
-| **Allow setup over the network**: pairing still needs the code shown on the panel's screen | Pane switches, the radio (mode, Zigbee stack, firmware flash, Thread join and leave), the time zone, the Bluetooth proxy and the camera |
+| **Allow setup over the network**: pairing still needs the code shown on the panel's screen | Pane switches, the time zone, the Bluetooth proxy and the camera |
+| **Radio mode**, **Join Zigbee network** and **Leave Zigbee network** as a router, **Radio allowed clients** | The radio's **Zigbee stack**, **Radio firmware image** and **Flash radio firmware**, **Join Home Assistant's Thread network** and **Leave Thread network** |
 | App and frame updates, voice | |
 
 Without a key, the controls in the right column do nothing when Home Assistant uses them, and the entity snaps back to its old state. You can still change all of them on the panel itself or on the [Manage page](manage.md).
+
+The key protects the panel from the moment Home Assistant sets it. Until then, any device on your network could set a key of its own first, so add a new panel to Home Assistant from a network you trust.
 
 The dashboard's address matters because the panel gives the microphone and the camera, with no prompt, only to pages on your Home Assistant and on the secure hosts set in the panel's settings. Any other page gets neither, so a link that leads off your dashboard can't listen in.
 

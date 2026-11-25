@@ -39,6 +39,7 @@ import dev.glassworks.s1.BuildConfig
     shadows = [
         GeckoShadows.ShadowRuntime::class, GeckoShadows.ShadowExtensionController::class,
         GeckoShadows.ShadowSessionController::class, GeckoShadows.ShadowSession::class, GeckoShadows.ShadowView::class,
+        GeckoShadows.ShadowStorageController::class,
     ],
 )
 class GeckoBehaviourPinTest {
@@ -423,6 +424,36 @@ class GeckoBehaviourPinTest {
         h.at(dash)
         h.eventsDuring { h.content.onCrash(h.session) }
         assertEquals(ContentPermission.VALUE_DENY, h.content(dash))
+    }
+
+    @Test
+    fun `at startup, permissions saved for a page off Home Assistant are forgotten`() {
+        fun saved(uri: String, permission: Int, value: Int) = GeckoShadows.allocate(ContentPermission::class.java).also {
+            GeckoShadows.setField(it, ContentPermission::class.java, "uri", uri)
+            GeckoShadows.setField(it, ContentPermission::class.java, "permission", permission)
+            GeckoShadows.setField(it, ContentPermission::class.java, "value", value)
+        }
+        val away = "http://192.0.2.66/"
+        harness(prefs = { p ->
+            configured(p)
+            GeckoShadows.savedPermissions += listOf(
+                saved(dash, PermissionDelegate.PERMISSION_PERSISTENT_STORAGE, ContentPermission.VALUE_ALLOW), // kept
+                saved(away, PermissionDelegate.PERMISSION_GEOLOCATION, ContentPermission.VALUE_ALLOW), // an earlier build's grant
+                saved(away, PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION, ContentPermission.VALUE_DENY), // already no
+            )
+        }).use { h ->
+            assertEquals(
+                listOf("$away ${PermissionDelegate.PERMISSION_GEOLOCATION} ${ContentPermission.VALUE_PROMPT}"),
+                GeckoShadows.permissionsSet,
+            )
+            assertTrue(h.logs("Glassworks").contains(
+                "Forgetting content permission ${PermissionDelegate.PERMISSION_GEOLOCATION} for $away: not Home Assistant or a secure host",
+            ))
+            // Once per process: a new session after a crash doesn't read them again.
+            GeckoShadows.permissionsSet.clear()
+            h.eventsDuring { h.content.onCrash(h.session) }
+            assertEquals(emptyList<String>(), GeckoShadows.permissionsSet)
+        }
     }
 
     private class Media : PermissionDelegate.MediaCallback {

@@ -81,6 +81,25 @@ class GeckoEngine(
         }
     }
 
+    private var grantsChecked = false
+
+    /**
+     * Once per process, at the first page: content permissions Gecko saved for a page the app doesn't trust go back to
+     * asking (#847). Gecko keeps a page's answer and doesn't call the delegate again, and builds before #847 allowed
+     * every page. A later request from such a page then reaches the delegate, which refuses it.
+     */
+    private fun forgetUntrustedGrants(rt: GeckoRuntime, host: PageHost) {
+        if (grantsChecked) return
+        grantsChecked = true
+        val storage = try { rt.storageController } catch (e: Exception) { Log.w(logTag, "No saved content permissions to check", e); return }
+        storage.allPermissions.accept({ saved ->
+            saved.orEmpty().filter { it.value == ContentPermission.VALUE_ALLOW && !host.trusts(it.uri) }.forEach {
+                Log.i(logTag, "Forgetting content permission ${it.permission} for ${it.uri}: not Home Assistant or a secure host")
+                storage.setPermission(it, ContentPermission.VALUE_PROMPT)
+            }
+        }, { e -> Log.w(logTag, "Couldn't read saved content permissions", e) })
+    }
+
     private fun helper(context: Context): GeckoResult<WebExtension> {
         helper?.let { return it }
         return runtime(context).webExtensionController
@@ -168,6 +187,7 @@ class GeckoEngine(
             s.navigationDelegate = navigationDelegate
             s.progressDelegate = progressDelegate
             s.open(runtime(activity))
+            forgetUntrustedGrants(runtime(activity), host)
             helper(activity).accept({ ext ->
                 if (ext != null) s.webExtensionController.setMessageDelegate(ext, messageDelegate, extension.nativeApp)
             }, { e -> Log.e(logTag, "helper extension failed", e) })

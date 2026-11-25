@@ -7,6 +7,7 @@ import org.mozilla.geckoview.GeckoRuntime;
 import org.mozilla.geckoview.GeckoRuntimeSettings;
 import org.mozilla.geckoview.GeckoSession;
 import org.mozilla.geckoview.GeckoView;
+import org.mozilla.geckoview.StorageController;
 import org.mozilla.geckoview.WebExtension;
 import org.mozilla.geckoview.WebExtensionController;
 import org.robolectric.annotation.Implementation;
@@ -29,6 +30,10 @@ public final class GeckoShadows {
     public static final List<GeckoSession> sessions = new ArrayList<>();
     public static GeckoRuntimeSettings runtimeSettings;
     public static WebExtension.MessageDelegate messageDelegate;
+    /** The content permissions Gecko has saved, for {@link ShadowStorageController}. */
+    public static final List<GeckoSession.PermissionDelegate.ContentPermission> savedPermissions = new ArrayList<>();
+    /** What the app set them to: "uri permission value". */
+    public static final List<String> permissionsSet = new ArrayList<>();
 
     private static GeckoRuntime runtime;
 
@@ -37,6 +42,8 @@ public final class GeckoShadows {
         sessions.clear();
         runtimeSettings = null;
         messageDelegate = null;
+        savedPermissions.clear();
+        permissionsSet.clear();
         runtime = null;
         setStatic(GeckoRuntime.class, "sRuntime", null);
     }
@@ -89,6 +96,20 @@ public final class GeckoShadows {
             runtimeSettings = settings;
             runtime = org.robolectric.util.ReflectionHelpers.callConstructor(GeckoRuntime.class);
             return runtime;
+        }
+    }
+
+    /** Gecko's saved content permissions: {@link #savedPermissions}, and what the app sets in {@link #permissionsSet}. */
+    @Implements(StorageController.class)
+    public static class ShadowStorageController {
+        @Implementation
+        protected GeckoResult<List<GeckoSession.PermissionDelegate.ContentPermission>> getAllPermissions() {
+            return GeckoResult.fromValue(new ArrayList<>(savedPermissions));
+        }
+
+        @Implementation
+        protected void setPermission(GeckoSession.PermissionDelegate.ContentPermission perm, int value) {
+            permissionsSet.add(perm.uri + " " + perm.permission + " " + value);
         }
     }
 
