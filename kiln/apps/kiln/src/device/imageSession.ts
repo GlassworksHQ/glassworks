@@ -897,23 +897,24 @@ export class ImageSession {
       // a bundle this browser no longer has can't be built from again: Try again starts the install over while nothing of
       // the second session is written yet, and once something is, the way back opens on the restore point kept before it
       const lost = e instanceof BundleLost ? (this.wrote.size ? 'restore' as const : 'restart' as const) : undefined;
-      this.set({ screen: 'error', error: (e as Error).message, bundleLost: lost, ...(this.state.work ? {} : { work: { step: steps[i]?.do === 'in-place' ? 'in-place' : 'stage', x: 0 } }) });
+      const why = lost === 'restart' ? `${(e as Error).message} Try again starts the install over from its first screen.` : (e as Error).message;
+      this.set({ screen: 'error', error: why, bundleLost: lost, ...(this.state.work ? {} : { work: { step: steps[i]?.do === 'in-place' ? 'in-place' : 'stage', x: 0 } }) });
     }
   }
 
   /** The bundle, from memory or this browser's storage (a reload after it came). */
   private async bundleBytes(): Promise<{ bytes: Uint8Array; extents: readonly { physical: number; length: number }[] }> {
     const b = this.bundle;
-    if (!b || !this.serial) throw new BundleLost('Kiln has no bundle for this device. Start the install again from its first screen.');
+    if (!b || !this.serial) throw new BundleLost('Kiln has no bundle for this device.');
     if (b.bytes && b.extents) return { bytes: b.bytes, extents: b.extents };
     const bytes = await this.store().getBundle(this.serial, b.digest);
-    if (!bytes) throw new BundleLost('This browser no longer has the bundle it received. Start the install again from its first screen.');
+    if (!bytes) throw new BundleLost('This browser no longer has the bundle it received.');
     // the whole bundle, not only its file's digest: a later copy of the same file at other blocks (kept under the same
     // name) must not build the rest of a run whose first writes went to these
-    if (b.sha256 && await sha256Hex(bytes) !== b.sha256) throw new BundleLost('The bundle this browser kept isn\'t the one this install wrote from. Start the install again from its first screen.');
+    if (b.sha256 && await sha256Hex(bytes) !== b.sha256) throw new BundleLost('The bundle this browser kept isn\'t the one this install wrote from.');
     // checked again as it comes out of storage: the secret is gone, so as a kept copy
     const r = await this.code().readBundle(bytes, { secret: new Uint8Array(32), serial: this.serial, kept: true });
-    if (r.digest !== b.digest) throw new BundleLost('The bundle this browser kept doesn\'t match the one it received. Start the install again from its first screen.');
+    if (r.digest !== b.digest) throw new BundleLost('The bundle this browser kept doesn\'t match the one it received.');
     this.bundle = { bytes, digest: r.digest, sha256: b.sha256, extents: r.extents };
     return { bytes, extents: r.extents };
   }

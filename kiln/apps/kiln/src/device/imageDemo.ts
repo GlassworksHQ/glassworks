@@ -3,7 +3,7 @@
 // built or downloaded (a stand-in reports progress); the fastboot and first-start answers are the frame's fakes.
 // `flash-…`: Glassworks; `image-…`: the choice and the frame's community image (issue 579).
 import { ProxyError, WrongImage, type DeviceEntry, type ImageMaker } from '@glassworks/kiln-core';
-import { ImageSession, type ImageDeps } from './imageSession';
+import { ImageSession, type DeviceProgress, type ImageDeps, type ProgressMark } from './imageSession';
 import { fakeReleaseRoute, type FakeRelease } from '../release/demo';
 import { AppSession, releaseLine } from './appSession';
 import type { PanelShell } from '@glassworks/adb';
@@ -19,7 +19,7 @@ export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downl
   'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes',
   'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed',
   ...['place-choose', 'place-stage', 'place-receive-lan', 'place-receive-ble', 'place-lna-denied', 'place-receive-file', 'place-restore-point',
-    'place-fastboot-again', 'place-working', 'place-error-bundle', 'place-undo', 'place-run'] as const] as const;
+    'place-fastboot-again', 'place-working', 'place-error-bundle', 'place-error-lost', 'place-undo', 'place-run'] as const] as const;
 export type ImageDemo = (typeof IMAGE_DEMOS)[number];
 
 const REFRACT_DOWN = 'the download proxy answered 502: GitHub answered 503';
@@ -219,14 +219,21 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
     ...(fast ? {} : { bleFrameDelayMs: 120 }),
   });
   const held = <T>() => new Promise<T>(() => {});
+  let userdataWrites = 0;
   const fastboot = () => {
     const fb = device.fastboot();
     // place-working: the second session's system write, held at half way
-    return name === 'place-working' ? { ...fb, flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { if (p === 'system') { on?.(0.5); return held<void>(); } return fb.flashBlob(p, b, on); } } : fb;
+    if (name === 'place-working') return { ...fb, flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { if (p === 'system') { on?.(0.5); return held<void>(); } return fb.flashBlob(p, b, on); } };
+    // place-error-lost: the second session's userdata write (after the stage's) stops, once the system is written
+    if (name === 'place-error-lost') return { ...fb, flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { if (p === 'userdata' && userdataWrites++ === 1) throw new Error('the bootloader stopped answering'); return fb.flashBlob(p, b, on); } };
+    return fb;
   };
+  // the tab's progress mark, for place-error-lost's reload
+  let mark: ProgressMark | undefined;
+  const progress: DeviceProgress = { get: () => mark, set: (m) => { mark = m; } };
   const frameWithStandIn = { ...frame, imageFlow: { ...frame.imageFlow, inPlace: name === 'place-stage' ? { ...ip.code, stage: () => held<Blob>() } : ip.code } };
   const app = new AppSession({ frame, connect: async () => { throw new Error('not in this demo'); } }, true);
-  const image = new ImageSession({
+  const sessionDeps: ImageDeps = {
     frame: frameWithStandIn,
     images: { fetch: async () => {}, download: async () => {}, file: async () => new Blob([]), check: async () => {}, build: async () => { throw new Error('not in this demo'); },
       wifi: async () => new Blob([]), adbKey: async () => new Blob([]), systemKey: async () => new Blob([]), discard: async () => {} },
@@ -245,8 +252,10 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
     agentFetch: name === 'place-receive-lan' ? heldFetch(device.fetch) : device.fetch,
     localNetworkPermission: async () => (name === 'place-lna-denied' ? 'denied' : 'granted'),
     handOver: (p) => { standard = handOver?.(p); },
+    progress,
     ...deps,
-  });
+  };
+  const image = new ImageSession(sessionDeps);
   const done = { image, app, standard: () => standard };
   image.pick(recipe.id);
   if (name === 'place-choose') return done;
@@ -273,6 +282,13 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
     return done;
   }
   await image.continueInstall();
+  if (name === 'place-error-lost') {
+    // the page reloads in a browser that has lost the bundle, after the system write: the way back, not a new stage
+    const again = new ImageSession({ ...sessionDeps, inPlaceStore: memoryInPlaceStore() });
+    await again.connectFastboot();
+    await waitFor(() => again.state.screen === 'error');
+    return { ...done, image: again };
+  }
   if (name === 'place-undo') { await image.startUndo(); return done; }
   await image.connectAdb();
   await standardDemo(standard, 'done');

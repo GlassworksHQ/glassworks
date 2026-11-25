@@ -603,13 +603,21 @@ describe('routes and screens', () => {
     expect(Object.keys(routesOf(mirrorFrame.id))).toEqual(expect.arrayContaining(['undo', 'undo/connect', 'undo/restore', 'undo/done']));
   });
 
-  it.each(['place-receive-file', 'place-restore-point', 'place-fastboot-again', 'place-undo', 'place-error-bundle'] as const)('%s renders, with one ember button at most', async (d) => {
+  it.each(['place-receive-file', 'place-restore-point', 'place-fastboot-again', 'place-undo', 'place-error-bundle', 'place-error-lost'] as const)('%s renders, with one ember button at most', async (d) => {
     const h = handTo();
     const { image, app } = await imageDemo(mirrorEntry, d, true, {}, h.handOver);
     render(<ImageFlow image={image} app={app} />);
     await act(async () => {});
     expect(document.querySelectorAll('.btn.ember').length).toBeLessThanOrEqual(1);
     expect(document.body.textContent).not.toContain(FAKE_SERIAL);
+  }, 20_000);
+
+  it('place-error-lost stops on the lost bundle after a write, with the way back as its one action', async () => {
+    const { image, app } = await imageDemo(mirrorEntry, 'place-error-lost', true, {}, handTo().handOver);
+    expect(image.state).toMatchObject({ screen: 'error', bundleLost: 'restore' });
+    render(<ImageFlow image={image} app={app} />);
+    expect(screen.getByRole('button', { name: 'Restore the original system' }).className).toContain('ember');
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   }, 20_000);
 
   it('the restore point\'s Continue opens only once it is saved and checked', async () => {
