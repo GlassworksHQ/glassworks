@@ -9,7 +9,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Looper
 import android.os.PowerManager
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.provider.Settings as AndroidSettings
+import dev.glassworks.frame.SleepMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -63,9 +66,10 @@ class ScreenPolicyTest {
         presence: PresenceSource? = null,
         light: LightSource? = null,
         settings: Settings = Settings(),
+        sleepMode: SleepMode = SleepMode.LOCK,
     ) = ScreenPolicy(
         presence, light, admin = Application::class.java, settings = { settings },
-        logTag = "Test.Screen", wakeLockTag = "test:wake",
+        logTag = "Test.Screen", wakeLockTag = "test:wake", sleepMode = sleepMode,
     )
 
     private fun advance(ms: Long) = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms))
@@ -735,6 +739,191 @@ class ScreenPolicyTest {
         assertEquals("Someone near: no · Brightness: set by Android", line)
         val raw = ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.single { it.startsWith("status: ") }
         assertTrue(raw, "raw 7.716E-4" in raw && "lux=NaN" in raw && "admin=" in raw)
+        screen.stop()
+    }
+
+    // ------------------------------------------------------------ backlight-only sleep (the lululemon Mirror's display)
+
+    /** What a [SleepMode.BACKLIGHT_OFF] policy told the activity, in order. */
+    private class Hooks(screen: ScreenPolicy) {
+        val keepOn = mutableListOf<Boolean>()
+        val brightness = mutableListOf<Float>()
+        val blackout = mutableListOf<Boolean>()
+        var changes = 0
+        init {
+            screen.onKeepScreenOn = { keepOn += it }
+            screen.onBrightness = { brightness += it }
+            screen.onBlackout = { blackout += it }
+            screen.addListener { changes++ }
+            keepOn.clear(); brightness.clear(); blackout.clear()
+        }
+    }
+
+    /** An active device admin, so a [SleepMode.LOCK] policy would lockNow(). */
+    private fun activeAdmin() {
+        shadowOf(context.getSystemService(DevicePolicyManager::class.java)).setActiveAdmin(ComponentName(context, Application::class.java))
+    }
+
+    /** Robolectric's lockNow() locks the keyguard; nothing else here does. */
+    private fun lockedNow() = context.getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked
+
+    @Test fun backlightOffIdleSleepNeverLocksAndKeepsTheDisplayOn() {
+        activeAdmin()
+        val settings = Settings(autoBrightness = false, manualBrightness = 0.6f).apply { idleOffSec = 30 }
+        val screen = policy(settings = settings, sleepMode = SleepMode.BACKLIGHT_OFF)
+        screen.start(context)
+        val h = Hooks(screen)
+
+        advance(31_000)
+
+        assertFalse("no lockNow", lockedNow())
+        assertEquals("keep-screen-on never let go", emptyList<Boolean>(), h.keepOn.filter { !it })
+        assertEquals("the backlight goes to 0", listOf(ScreenPolicy.BLACKOUT_BRIGHTNESS), h.brightness)
+        assertEquals("black over the page", listOf(true), h.blackout)
+        assertTrue(screen.blackout)
+        assertFalse("off to Home Assistant", screen.screenOn)
+        assertTrue("the Screen entity heard of it", h.changes > 0)
+        assertEquals("the policy's own brightness is kept for the wake", 0.6f, screen.brightness, 0.001f)
+        advance(600_000)
+        assertEquals("one sleep, not one a tick", listOf(true), h.blackout)
+        screen.stop()
+    }
+
+    @Test fun backlightOffHomeAssistantSleepAndWakeKeepTheScreenEntityInStep() {
+        activeAdmin()
+        val screen = policy(settings = Settings(autoBrightness = false, manualBrightness = 0.6f), sleepMode = SleepMode.BACKLIGHT_OFF)
+        screen.start(context)
+        val h = Hooks(screen)
+
+        screen.sleep("home assistant")
+        assertFalse(lockedNow())
+        assertFalse(screen.screenOn)
+        assertEquals(listOf(true), h.blackout)
+        assertEquals(listOf(0f), h.brightness)
+
+        val before = h.changes
+        screen.wake("home assistant")
+        assertTrue(screen.screenOn)
+        assertFalse(screen.blackout)
+        assertEquals(listOf(true, false), h.blackout)
+        assertEquals("the saved brightness comes back", listOf(0f, 0.6f), h.brightness)
+        assertTrue("the Screen entity heard of the wake", h.changes > before)
+        assertEquals(emptyList<Boolean>(), h.keepOn.filter { !it })
+        screen.stop()
+    }
+
+    @Test fun backlightOffWakeRestoresAutoBrightnessAtTheRoomsLevelAndRestartsTheIdleTimeout() {
+        val light = FakeSource()
+        val settings = Settings().apply { idleOffSec = 30 }
+        val screen = policy(light = light, settings = settings, sleepMode = SleepMode.BACKLIGHT_OFF)
+        screen.start(context)
+        light.lux!!(1000f)
+        val h = Hooks(screen)
+
+        screen.sleep("home assistant")
+        light.lux!!(0f) // the room went dark while the screen slept
+        assertEquals("still black: a reading doesn't light it", listOf(0f, 0f), h.brightness)
+        screen.wake("touch")
+        assertEquals("straight to the dark room's level", settings.minBrightness, h.brightness.last(), 0.001f)
+
+        advance(29_000)
+        assertEquals("the countdown started again at the wake", listOf(true, false), h.blackout)
+        advance(2_000)
+        assertEquals(listOf(true, false, true), h.blackout)
+        screen.stop()
+    }
+
+    @Test fun backlightOffAVoiceRunStillDelaysTheIdleSleep() {
+        val screen = policy(settings = Settings().apply { idleOffSec = 30 }, sleepMode = SleepMode.BACKLIGHT_OFF)
+        screen.start(context)
+        val h = Hooks(screen)
+
+        screen.wake("voice")
+        screen.voiceRunning(true)
+        advance(90_000)
+        assertEquals("on through the run", emptyList<Boolean>(), h.blackout)
+        screen.voiceRunning(false)
+        advance(29_000)
+        assertEquals(emptyList<Boolean>(), h.blackout)
+        advance(2_000)
+        assertEquals("then dark", listOf(true), h.blackout)
+        screen.stop()
+    }
+
+    @Test fun backlightOffAHoldWakesTheScreenAndKeepsIt() {
+        val screen = policy(settings = Settings().apply { idleOffSec = 30 }, sleepMode = SleepMode.BACKLIGHT_OFF)
+        screen.start(context)
+        val h = Hooks(screen)
+        screen.sleep("home assistant")
+
+        screen.hold("notification")
+        assertTrue(screen.screenOn)
+        assertEquals(listOf(true, false), h.blackout)
+        advance(120_000)
+        assertEquals("held past the timeout", listOf(true, false), h.blackout)
+        screen.release("notification")
+        advance(31_000)
+        assertEquals(listOf(true, false, true), h.blackout)
+        screen.stop()
+    }
+
+    @Test fun backlightOffApproachWakesFromTheBlackout() {
+        val presence = FakeSource()
+        val screen = policy(presence = presence, sleepMode = SleepMode.BACKLIGHT_OFF)
+        screen.start(context)
+        val h = Hooks(screen)
+        screen.sleep("home assistant")
+
+        presence.presence!!(true, 1f)
+
+        assertTrue(screen.screenOn)
+        assertEquals(listOf(true, false), h.blackout)
+        screen.stop()
+    }
+
+    /** Android's display never went off, so its screen-on broadcast can't end the blackout behind the policy's back. */
+    @Test fun backlightOffAScreenOnBroadcastLeavesTheBlackout() {
+        val screen = policy(sleepMode = SleepMode.BACKLIGHT_OFF)
+        screen.start(context)
+        val h = Hooks(screen)
+        screen.sleep("home assistant")
+
+        context.sendBroadcast(Intent(Intent.ACTION_SCREEN_ON))
+        advance(10)
+
+        assertFalse(screen.screenOn)
+        assertTrue(screen.blackout)
+        assertEquals(listOf(true), h.blackout)
+        screen.stop()
+    }
+
+    /** An activity made during a blackout (a restart) draws it at once. */
+    @Test fun backlightOffAHookSetDuringABlackoutGetsIt() {
+        val screen = policy(sleepMode = SleepMode.BACKLIGHT_OFF)
+        screen.start(context)
+        screen.sleep("home assistant")
+        val blackout = mutableListOf<Boolean>()
+        val brightness = mutableListOf<Float>()
+        screen.onBlackout = { blackout += it }
+        screen.onBrightness = { brightness += it }
+        assertEquals(listOf(true), blackout)
+        assertEquals(listOf(0f), brightness)
+        screen.stop()
+    }
+
+    /** The default: every frame but the Mirror turns Android's display off, as before. */
+    @Test fun lockSleepStillLocksAndNeverBlacksOut() {
+        activeAdmin()
+        val screen = policy(settings = Settings().apply { idleOffSec = 30 })
+        screen.start(context)
+        val h = Hooks(screen)
+
+        advance(31_000)
+
+        assertTrue("lockNow", lockedNow())
+        assertEquals(emptyList<Boolean>(), h.blackout)
+        assertFalse(screen.blackout)
+        assertFalse("no brightness 0", 0f in h.brightness)
         screen.stop()
     }
 }
