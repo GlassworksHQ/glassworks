@@ -7,7 +7,8 @@
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
@@ -44,8 +45,8 @@
   {
    "slot": 0,
    "text": "Living room (min)",
-   "x": 79.73,
-   "y": 211.8,
+   "x": 78.23,
+   "y": 203.8,
    "w": 93.88,
    "h": 14,
    "size": 12,
@@ -56,8 +57,8 @@
   {
    "slot": 0,
    "text": "Living room (mean)",
-   "x": 207.61,
-   "y": 211.8,
+   "x": 213.11,
+   "y": 203.8,
    "w": 103.84,
    "h": 14,
    "size": 12,
@@ -68,8 +69,8 @@
   {
    "slot": 0,
    "text": "Living room (max)",
-   "x": 345.45,
-   "y": 211.8,
+   "x": 357.95,
+   "y": 203.8,
    "w": 96.81,
    "h": 14,
    "size": 12,
@@ -80,14 +81,14 @@
  ],
  "states": {
   "sensor.living_room_airdot_living_room_temperature": {
-   "s": "22.2250003814697",
+   "s": "22.2150001525879",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
     "friendly_name": "AirDot Living Room Temperature"
    },
-   "lc": 1795572246.729332
+   "lc": 1795577408.3916247
   }
  },
  "templates": {},
@@ -1411,6 +1412,13 @@
       "max": 22.3850002288818,
       "mean": 22.289622922534317,
       "min": 22.2199993133545
+     },
+     {
+      "start": 1795572000000,
+      "end": 1795575600000,
+      "max": 22.2350006103516,
+      "mean": 22.098676558558548,
+      "min": 21.9899997711182
      }
     ]
    }
