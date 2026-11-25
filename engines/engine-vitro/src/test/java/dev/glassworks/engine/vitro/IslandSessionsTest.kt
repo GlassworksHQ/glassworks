@@ -53,7 +53,7 @@ class IslandSessionsTest {
     private lateinit var controller: ActivityController<Activity>
     private lateinit var activity: Activity
     private val host = RecordingHost()
-    private val fallback = RecordingEngine()
+    private var fallback = RecordingEngine()
     private val server = FakeHaServer()
     private val engines = ArrayList<VitroEngine>()
     private val opened = ArrayList<Page>()
@@ -369,6 +369,56 @@ class IslandSessionsTest {
         assertOnePagePerIsland(p)
     }
 
+    @Test fun aReconnectWithANewTokenAndTheSameConfigSendsTheTokenToTheKeptIsland() {
+        var token = FakeHaServer.TOKEN
+        server.acceptedTokens = setOf(FakeHaServer.TOKEN, "refreshed-token")
+        val e = VitroEngine(
+            fallback = fallback, settings = { settings }, enabled = { true },
+            tokenProvider = { _, done -> done(token) }, socketFactory = server::connect,
+        ).also { engines += it }
+        val p = page(e)
+        p.load("$base/wall-test/wall")
+        awaitMain("ready") { readyCount() == 1 && islandPages().size == 1 }
+        val sent = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
+        slots(e.islandServer).values.single().onConnected { sent += it }
+        sent.clear()
+
+        token = "refreshed-token"
+        server.dropConnection()
+        awaitMain("the token reaches the island") { sent.any { it.optString("type") == "auth" } }
+        awaitMain("refetched after reconnect") { readyCount() >= 2 }
+        assertEquals("refreshed-token", sent.first { it.optString("type") == "auth" }.getString("token"))
+        assertEquals("the same page", 1, islandPages().size)
+    }
+
+    @Test fun islandsReopenedBehindTheFallbackPageStayHiddenUntilTheDashboardIsBack() {
+        fallback = RecordingEngine(surfaces = true)
+        server.dashboardConfig = JSONObject(twoViews)
+        val p = page()
+        p.load("$base/wall-test/a")
+        awaitMain("ready") { readyCount() == 1 && islandPages().size == 1 }
+        val a = islandPages().single()
+        p.load("$base/energy")
+        idle()
+
+        // The island's content process dies while Home Assistant's page is in front: its view is built again behind it.
+        fallback.opens[fallback.pages.indexOf(a)].host.onContentGone(killed = true)
+        idle()
+        assertEquals(2, islandPages().size)
+        val a2 = islandPages()[1]
+        fun surface(page: RecordingPage) = (page.view as ViewGroup).getChildAt(0) as android.view.SurfaceView
+        assertEquals("the new island's surface stays hidden under the fallback page (Android 6 would show it)",
+            View.INVISIBLE, surface(a2).visibility)
+        assertFalse("and it doesn't run", a2.active)
+
+        // Back to the dashboard: the island shows and runs.
+        p.load("$base/wall-test/a")
+        idle()
+        assertEquals(View.VISIBLE, surface(a2).visibility)
+        assertTrue(a2.active)
+        assertOnePagePerIsland(p)
+    }
+
     @Test fun theActivityGoingClosesEveryIslandAndTheFallbackPage() {
         server.dashboardConfig = JSONObject(twoViews)
         val p = page()
@@ -397,6 +447,7 @@ class IslandSessionsTest {
         pages: MutableList<RecordingPage>,
         token: () -> String? = { null },
         calls: MutableList<String> = ArrayList(),
+        tokenWatchers: MutableSet<() -> Unit> = HashSet(),
     ) = VitroCardContext(
         context = activity, haBase = base, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), dark),
         resources = emptyList(), accessToken = token, callService = { d, s, _, _ -> calls += "$d.$s" }, navigate = {},
@@ -404,6 +455,7 @@ class IslandSessionsTest {
         islandServer = server, openIslandPage = { RecordingPage(activity).also { pages += it } },
         watchAllEntities = { calls += "watchAll" },
         watchRegistries = { _ -> calls += "registries"; { calls += "registries released" } },
+        watchToken = { onChange -> tokenWatchers += onChange; { tokenWatchers -= onChange } },
     )
 
     private fun lamp(state: String) = dev.glassworks.engine.vitro.data.EntityState("light.lounge_lamp", state, emptyMap())
@@ -498,7 +550,8 @@ class IslandSessionsTest {
         val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
         val store = EntityStore().apply { putLocal(lamp("on")) }
         var token = "first-token"
-        WebIslandCardView(context(store, islands, dark = true, ArrayList(), token = { token }), LovelaceParser.parseCard(JSONObject(cardJson)))
+        val watchers = HashSet<() -> Unit>()
+        WebIslandCardView(context(store, islands, dark = true, ArrayList(), token = { token }, tokenWatchers = watchers), LovelaceParser.parseCard(JSONObject(cardJson)))
         val sent = ArrayList<JSONObject>()
         slots(islands).values.single().onConnected { sent += it }
         assertEquals(listOf("theme", "auth", "snapshot"), sent.map { it.getString("type") })
@@ -513,6 +566,16 @@ class IslandSessionsTest {
         sent.clear()
         store.putLocal(lamp("on"))
         assertEquals("sent once", listOf("patch"), sent.map { it.getString("type") })
+        sent.clear()
+
+        // A reconnect that refreshed the token but changed no state (an empty snapshot): no patch carries it, and the
+        // token watcher sends it as it arrives.
+        token = "third-token"
+        watchers.toList().forEach { it() }
+        assertEquals(listOf("auth"), sent.map { it.getString("type") })
+        assertEquals("third-token", sent.single().getString("token"))
+        watchers.toList().forEach { it() }
+        assertEquals("the same token isn't sent again", 1, sent.size)
     }
 
     @Test fun anIslandPageStopsRetryingItsBridgeOnceItsSlotIsGone() {

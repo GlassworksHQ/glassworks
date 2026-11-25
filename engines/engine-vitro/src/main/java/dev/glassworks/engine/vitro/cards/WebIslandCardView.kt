@@ -174,14 +174,16 @@ class WebIslandCardView(
                     ctx.store.subscribeAny { changed ->
                         synchronized(seedLock) {
                             if (senders.isEmpty()) return@subscribeAny
-                            // A new sign-in since the page loaded (a reconnect refreshed the token): the page's own
-                            // requests to Home Assistant use the new one.
-                            val token = currentToken()
-                            if (token != sentToken) senders.forEach { it(authMessage(token)) }
+                            // A token that changed and wasn't sent yet goes before the patch (belt and braces: the
+                            // token watcher below sends it as it arrives).
+                            sendTokenIfChanged()
                             patchFor(changed)?.let { patch -> senders.forEach { it(patch) } }
                         }
                     }
                 }
+                // A new token (a reconnect refreshed it) goes to the page as it arrives, with no state change needed: a
+                // reconnect that changed no state sends no patch.
+                renewing { ctx.watchToken { synchronized(seedLock) { sendTokenIfChanged() } } }
             } else {
                 server.unregisterSlot(id)
                 slotId = null
@@ -433,6 +435,16 @@ class WebIslandCardView(
     private var sentToken: String? = null
 
     private fun currentToken(): String = ctx.accessToken().orEmpty()
+
+    /** Sends the current token to the open bridges if it isn't the one sent last. Under [seedLock]. */
+    private fun sendTokenIfChanged() {
+        if (senders.isEmpty()) return
+        val token = currentToken()
+        if (token != sentToken) {
+            val msg = authMessage(token)
+            senders.forEach { it(msg) }
+        }
+    }
 
     /** The bridge message with the sign-in the page's own requests use. Under [seedLock]. */
     private fun authMessage(token: String): JSONObject {
