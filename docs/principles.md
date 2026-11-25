@@ -147,7 +147,7 @@ Protocol implementations are extracted into standalone MIT-licensed libraries (`
 Kiln is the browser-based WebUSB installer that provisions supported panels with nothing to install on your computer.
 
 - **RAM first:** Boot temporary recovery tools in memory (FEL, `fastboot boot`) before touching persistent storage.
-- **Back up, hash, and verify:** Every modified partition is backed up beforehand wherever the device can read it back, and read back afterward to confirm integrity.
+- **Back up, hash, and verify:** Every modified partition is backed up beforehand and read back afterward to confirm integrity, wherever the device can read its partitions back. Where it can't, as on the lululemon Studio Mirror, Kiln checks what it writes before flashing and says before anything is written that there's no backup.
 - **Reversible by design:** Every install recipe includes a tested way back. That's the original software wherever the device lets Kiln back it up; the lululemon Studio Mirror's is the community Glass Panes image, because its bootloader can't read lululemon's software back.
 - **Data-driven recipes:** Kiln's engine stays device-agnostic; each frame declares its own steps and hardware checks.
 
