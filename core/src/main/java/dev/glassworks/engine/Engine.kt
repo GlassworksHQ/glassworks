@@ -93,6 +93,21 @@ interface Page {
      * dashboard behind it this way, with one page and no second engine.
      */
     fun capture(done: (android.graphics.Bitmap?) -> Unit) = done(null)
+
+    /**
+     * Whether the page is shown. A page that isn't shown stops painting and runs as a background tab does, its
+     * timers slowed; [active] true shows it again. Only a page in a view that is on screen should be active: an
+     * engine may also follow the view's own surface (GeckoView does), so call it when the page is hidden or shown
+     * inside an activity that stays in front, not to show a page behind another app. Does nothing after [close].
+     */
+    fun setActive(active: Boolean) {}
+
+    /**
+     * Ends the page for good: its content (scripts, timers, sockets) stops and the engine frees what it held. The
+     * [view] stays where it is, empty. Every call after it does nothing, a second [close] included. The kiosk's own
+     * page lives as long as its activity; a page that leaves before that (a Vitro island whose card is gone) closes.
+     */
+    fun close() {}
 }
 
 /** A page script's connection to the app (the web extension's native port). */

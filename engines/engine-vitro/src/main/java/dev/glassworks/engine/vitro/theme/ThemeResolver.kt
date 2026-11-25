@@ -368,6 +368,12 @@ object ThemeResolver {
         "state-inactive-color" to "#9e9e9e",
     )
 
+    /** The theme [resolve] draws [overrideTheme] with: that one, or else the catalog's default for the mode. */
+    fun pickedName(catalog: ThemeCatalog, dark: Boolean, overrideTheme: String?): String =
+        overrideTheme?.takeIf { it.isNotBlank() && it != "Backend-selected" }
+            ?: (if (dark) catalog.defaultDarkTheme else null)
+            ?: catalog.defaultTheme
+
     fun resolve(
         catalog: ThemeCatalog,
         dark: Boolean = true,
@@ -375,9 +381,7 @@ object ThemeResolver {
         viewBackground: String? = null,
     ): ResolvedTheme {
         val raw = LinkedHashMap<String, String>(if (dark) DARK_DEFAULTS else LIGHT_DEFAULTS)
-        val pickedName = overrideTheme?.takeIf { it.isNotBlank() && it != "Backend-selected" }
-            ?: (if (dark) catalog.defaultDarkTheme else null)
-            ?: catalog.defaultTheme
+        val pickedName = pickedName(catalog, dark, overrideTheme)
 
         catalog.themes[pickedName]?.let { def ->
             raw.putAll(def.base)

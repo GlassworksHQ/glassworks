@@ -41,6 +41,11 @@ data class LovelaceResource(
 data class DashboardConfig(
     val title: String?,
     val views: List<ViewConfig>,
+    /**
+     * The config as Home Assistant sent it (its JSON text), or null when it wasn't parsed from one. Two configs with
+     * the same source draw the same dashboard: a reconnect or `lovelace_updated` that brings it again rebuilds nothing.
+     */
+    val source: String? = null,
     /** Saved as a `strategy:`: HA's frontend generates the views, so the config has none ([WebFallback]). */
     val strategy: Boolean = false,
 ) {
@@ -964,7 +969,7 @@ object LovelaceParser {
             val v = viewsArr.optJSONObject(i) ?: continue
             views += parseView(i, v)
         }
-        return DashboardConfig(title, views, strategy = hasStrategy(raw))
+        return DashboardConfig(title, views, source = raw.toString(), strategy = hasStrategy(raw))
     }
 
     fun parseView(index: Int, raw: JSONObject): ViewConfig {
