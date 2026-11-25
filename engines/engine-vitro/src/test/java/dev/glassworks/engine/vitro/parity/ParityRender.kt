@@ -304,6 +304,8 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
                     },
                     // HA's page drew at the pinned instant (refs/*.json "now"): the graphs' time windows end there too.
                     now = { ref?.now ?: System.currentTimeMillis() },
+                    // The pointer HA's page had: coarse when the capture emulated the frame's touch screen.
+                    touch = ref?.json?.optJSONObject("viewport")?.optBoolean("touch", false) ?: false,
                     subscribeTemplate = { tpl, onRendered ->
                         if (tpl !in asked) asked += tpl
                         val r = templates[tpl]

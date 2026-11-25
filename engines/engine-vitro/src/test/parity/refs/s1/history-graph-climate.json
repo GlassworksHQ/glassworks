@@ -7,13 +7,14 @@
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
   "y": 16,
   "width": 516,
-  "height": 352
+  "height": 368
  },
  "docSize": {
   "width": 960,
@@ -24,7 +25,7 @@
    "x": 230,
    "y": 24,
    "w": 500,
-   "h": 335.8,
+   "h": 351.8,
    "type": "hui-history-graph-card"
   }
  ],
@@ -44,8 +45,8 @@
   {
    "slot": 0,
    "text": "AC current temperature",
-   "x": 79.61,
-   "y": 307.59,
+   "x": 76.67,
+   "y": 315.59,
    "w": 124.41,
    "h": 14,
    "size": 12,
@@ -55,10 +56,10 @@
   },
   {
    "slot": 0,
-   "text": "18 °C",
-   "x": 208.02,
-   "y": 307.8,
-   "w": 28.75,
+   "text": "17.5 °C",
+   "x": 205.08,
+   "y": 315.8,
+   "w": 38.64,
    "h": 14,
    "size": 12,
    "weight": 400,
@@ -68,8 +69,8 @@
   {
    "slot": 0,
    "text": "AC target temperature",
-   "x": 270.77,
-   "y": 307.59,
+   "x": 284.72,
+   "y": 315.59,
    "w": 118.02,
    "h": 14,
    "size": 12,
@@ -80,8 +81,8 @@
   {
    "slot": 0,
    "text": "Unknown",
-   "x": 392.78,
-   "y": 307.8,
+   "x": 406.73,
+   "y": 315.8,
    "w": 49.59,
    "h": 14,
    "size": 12,
@@ -111,7 +112,7 @@
      "high",
      "auto"
     ],
-    "current_temperature": 18,
+    "current_temperature": 17.5,
     "temperature_unit": "°C",
     "temperature": null,
     "target_temp_high": null,
@@ -124,7 +125,7 @@
     "supported_features": 395
    },
    "lc": 1795545178.049307,
-   "lu": 1795570914.0908906
+   "lu": 1795574916.1819386
   }
  },
  "templates": {},
@@ -7827,11 +7828,315 @@
          "friendly_name": "AC"
         },
         "lu": 1795570914.0908906
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 17.5,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573047.084368
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 18,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573117.133113
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 17.5,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573187.2710629
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 18,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573207.1314938
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 17.5,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573227.1117244
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 18,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573247.1847107
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 17.5,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573297.205219
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 18,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573317.1108696
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 17.5,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573407.0970452
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 18,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573427.1699655
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 17.5,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573457.1517043
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 18,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573477.1206408
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 17.5,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573517.158888
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 18,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573747.1956842
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 17.5,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795573767.1157236
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 18,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795574376.2128303
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 17.5,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795574396.1578774
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 18,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795574896.2212422
+       },
+       {
+        "s": "off",
+        "a": {
+         "current_temperature": 17.5,
+         "temperature_unit": "°C",
+         "temperature": null,
+         "target_temp_high": null,
+         "target_temp_low": null,
+         "fan_mode": "auto",
+         "hvac_action": "off",
+         "unit_state": "normal",
+         "mode_conflict": false,
+         "friendly_name": "AC"
+        },
+        "lu": 1795574916.1819386
        }
       ]
      },
      "start_time": 1795457280,
-     "end_time": 1795570914.090891
+     "end_time": 1795574916.181939
     }
    ],
    "result": null

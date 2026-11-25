@@ -445,6 +445,8 @@ async function saveDrawnImages(images, drawn) {
 async function newPage(browser, frame, dark, now, cardModUrl, tz) {
   const ctx = await browser.newContext({
     viewport: { width: frame.width, height: frame.height }, deviceScaleFactor: frame.density,
+    // A touch frame's browser has a coarse pointer, which HA's chart legend styles for (40 px rows).
+    hasTouch: frame.input === 'touch',
     colorScheme: dark ? 'dark' : 'light', timezoneId: tz, locale: 'en-US', reducedMotion: 'reduce',
   });
   await ctx.addInitScript(([origin, token, dark, now, cardModUrl, css]) => {
@@ -486,6 +488,7 @@ async function newPage(browser, frame, dark, now, cardModUrl, tz) {
     return route.fulfill({ status: 200, contentType: hit.type, body: readFileSync(hit.file) });
   });
   const page = await ctx.newPage();
+  if (frame.input === 'touch') touchPages.add(page);
   page.on('pageerror', (e) => log(`  pageerror: ${scrubText(e.message, creds).slice(0, 200)}`));
   const graphs = wsRecorder();
   const states = recordStates(page, graphs);
@@ -500,6 +503,31 @@ function snapshotStates(states, ids) {
 
 /** The element HA renders a card type as: hui-tile-card, or the custom element's own name. */
 const cardElement = (card) => (card.type.startsWith('custom:') ? card.type.slice(7) : `hui-${card.type}-card`);
+
+/** The pages of touch frames (`hasTouch`), whose screenshots must keep HA's coarse-pointer styling. */
+const touchPages = new WeakSet();
+
+/**
+ * A screenshot of the whole page. Playwright's `fullPage` overrides the device metrics for a page taller than the
+ * viewport, and that drops touch emulation: HA's page would be drawn for a fine pointer (the chart legend's 24 px
+ * rows). On a touch frame the viewport grows to the page instead, for a plain screenshot, then goes back; resizing
+ * keeps the touch emulation. A page that has lost its coarse pointer anyway fails the case rather than be captured.
+ */
+async function fullShot(page, opts) {
+  if (!touchPages.has(page)) return page.screenshot({ ...opts, fullPage: true });
+  const vp = page.viewportSize();
+  const h = await page.evaluate(() => Math.ceil(document.documentElement.scrollHeight));
+  const grow = h > vp.height;
+  if (grow) await page.setViewportSize({ width: vp.width, height: h });
+  try {
+    if (!(await page.evaluate(() => matchMedia('(pointer: coarse)').matches))) {
+      throw new Error('a touch frame\'s page lost its coarse pointer: HA would draw it for a mouse');
+    }
+    return await page.screenshot(opts);
+  } finally {
+    if (grow) await page.setViewportSize(vp);
+  }
+}
 
 /** Waits until the slots exist and two screenshots 400 ms apart are the same (animations, images, fonts). */
 /**
@@ -547,7 +575,7 @@ async function settle(page, expectType, timeoutMs) {
     await page.evaluate(FREEZE_JS);
     // CSS animations, transitions and Web Animations stopped at their end state, so a card that animates despite
     // reduced motion doesn't leave an arbitrary frame (timers and requestAnimationFrame still run).
-    const shot = await page.screenshot({ fullPage: true, animations: 'disabled' });
+    const shot = await fullShot(page, { animations: 'disabled' });
     if (prev && shot.equals(prev)) {
       await page.evaluate(FREEZE_JS);
       return { info: await page.evaluate(SLOTS_JS), stable: true };
@@ -722,7 +750,7 @@ async function capture() {
             drawn = await page.evaluate(DRAWN_IMAGES_JS, slots);
             // Kept in memory until every check passes: a failed case leaves no PNG behind.
             await page.evaluate(FREEZE_JS);
-            png = await page.screenshot({ clip, fullPage: true, animations: 'disabled' });
+            png = await fullShot(page, { clip, animations: 'disabled' });
             await page.evaluate(FREEZE_JS);
             texts = [];
             for (const [i, s] of slots.entries()) for (const t of await page.evaluate(TEXTS_JS, s)) texts.push({ slot: i, ...roundRect(t) });
@@ -772,7 +800,7 @@ async function capture() {
           ])].sort();
           const ref = {
             case: c.id, frame: frame.id, haVersion: haConfig.version, now, stable,
-            viewport: { width: frame.width, height: frame.height, density: frame.density },
+            viewport: { width: frame.width, height: frame.height, density: frame.density, ...(frame.input === 'touch' ? { touch: true } : {}) },
             clip, docSize: { width: info.docW, height: info.docH }, slots: slots.map(roundRect), texts,
             states: caseStates, templates, display,
             // Image paths HA's page asked for and didn't get: Vitro missing them too is no capture gap. Only

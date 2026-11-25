@@ -107,6 +107,14 @@ class VitroEngine(
         return VitroPage(activity, host, background).also { activePage = it }
     }
 
+    /**
+     * Whether the frame's screen takes a tap ([dev.glassworks.frame.Frame.input]): HA's browser on that device styles
+     * for a coarse pointer (the chart legend's 40 px rows). Without a Glassworks app around it (a test app), a touch
+     * screen, as on most Android devices.
+     */
+    private fun Activity.touchScreen(): Boolean =
+        (applicationContext as? dev.glassworks.GlassworksApp)?.glassworks?.frame?.input != dev.glassworks.frame.Input.NONE
+
     private inner class VitroPage(
         private val activity: Activity,
         private val host: PageHost,
@@ -114,6 +122,7 @@ class VitroEngine(
     ) : Page {
         private val main = Handler(Looper.getMainLooper())
         private val container = FrameLayout(activity).apply { setBackgroundColor(backgroundColor) }
+        private val touchScreen = activity.touchScreen()
         private val store = EntityStore()
         private val vitroView = VitroView(activity, store, backgroundColor)
         private var fallbackPage: Page? = null
@@ -279,6 +288,7 @@ class VitroEngine(
                         // for consistent modern CSS/ES2020 support across Android 6, 10, and 15+.
                         runCatching { fallback.open(activity, islandHost, android.graphics.Color.TRANSPARENT) }.getOrNull()
                     },
+                    touch = touchScreen,
                 )
             }
             main.post { host.onConnect(port) }

@@ -84,6 +84,11 @@ class VitroCardContext(
     val subscribeWs: (msg: JSONObject, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit) -> () -> Unit = { _, _, _ -> {} },
     /** The wall clock, ms since the epoch: what HA's frontend reads as `new Date()` for its time windows. */
     val now: () -> Long = System::currentTimeMillis,
+    /**
+     * Whether the screen takes a tap (the frame's `input`), which is what HA's page reads as `(pointer: coarse)` in
+     * the browser on that device. False on a frame without touch (the Mirror): HA there styles for a fine pointer.
+     */
+    val touch: Boolean = true,
 ) {
     val dp: Float = context.resources.displayMetrics.density
     val main: Handler = Handler(Looper.getMainLooper())
@@ -130,6 +135,7 @@ class VitroCardContext(
         cameraStream = cameraStream,
         subscribeWs = subscribeWs,
         now = now,
+        touch = touch,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout

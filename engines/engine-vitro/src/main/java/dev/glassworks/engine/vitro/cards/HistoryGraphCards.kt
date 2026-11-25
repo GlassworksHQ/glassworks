@@ -522,13 +522,19 @@ class LegendItem(val id: String, val name: String, val color: Int, val value: St
 
 /**
  * `ha-chart-base`'s HTML legend: centered rows (8 px apart) of 24 px items, each a check-circle in the series color
- * (18 px), the name (12 px) and its value in the secondary color; 12 px above it. Collapsed, it shows only the
+ * (18 px), the name (12 px) and its value in the secondary color; 12 px above it. On a touch screen
+ * ([VitroCardContext.touch], HA's `@media (pointer: coarse)`) the entries are 40 px high with no row gap and their
+ * toggle gets 11 px before it, so a finger can hit it; the chip keeps its 24 px. Collapsed, it shows only the
  * entries that fit in two rows and a "More (N)" chip after them (`LegendFitController`); the chip expands it to every
  * entry and a "Less" chip. [expanded] starts from the card's `expand_legend`. Expanding or collapsing only lays the
  * legend out again: the chart keeps its paths, unless a fixed slot gives it a new height.
  */
 class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context) {
     private val gap = 8f * ctx.dp
+    private val touch = ctx.touch
+
+    /** `row-gap`: none on a touch screen, else the 8 px gap. */
+    private val rowGap = if (touch) 0f else gap
     var onLabel: ((String) -> Unit)? = null
 
     /** Whether every entry shows (`expandLegend`). */
@@ -579,10 +585,14 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
             val li = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(ctx.px(2f), 0, ctx.px(2f), 0)
+                // Touch: `li { padding: 0 }` and the toggle's own 11 px before the icon.
+                if (!touch) setPadding(ctx.px(2f), 0, ctx.px(2f), 0)
             }
             li.addView(MdiIconView(ctx.context).apply { setIcon("mdi:check-circle", it.color) },
-                LinearLayout.LayoutParams(Math.round(18f * ctx.dp), Math.round(18f * ctx.dp)).apply { marginEnd = Math.round(4f * ctx.dp) })
+                LinearLayout.LayoutParams(Math.round(18f * ctx.dp), Math.round(18f * ctx.dp)).apply {
+                    if (touch) marginStart = Math.round(11f * ctx.dp)
+                    marginEnd = Math.round(4f * ctx.dp)
+                })
             val label = cssText(ctx, 12f, ctx.theme.primaryTextColor).apply {
                 text = it.name
                 maxLines = 1
@@ -594,9 +604,11 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
             val value = it.value?.takeIf { v -> v.isNotEmpty() }?.let { v -> cssText(ctx, 12f, ctx.theme.secondaryTextColor).apply { text = v; maxLines = 1 } }
             if (multiple) {
                 // `li { max-width }` (300 px with a value, else 220) holds the whole entry: its 2 px sides, the 18 px
-                // toggle and 4 px, and the value (`flex-shrink: 0`), so the name shrinks to what they leave.
+                // toggle and 4 px (on touch, no sides and an 11 + 18 + 4 px toggle), and the value
+                // (`flex-shrink: 0`), so the name shrinks to what they leave.
                 val valuePx = value?.let { v -> Math.round(4f * ctx.dp) + ceil(v.paint.measureText(v.text.toString()).toDouble()).toInt() } ?: 0
-                label.maxWidth = max(0, Math.round(((if (it.value != null) 300f else 220f) - 26f) * ctx.dp) - valuePx)
+                val around = if (touch) 33f else 26f
+                label.maxWidth = max(0, Math.round(((if (it.value != null) 300f else 220f) - around) * ctx.dp) - valuePx)
             }
             li.addView(label, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             if (value != null) {
@@ -624,6 +636,9 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
     private fun chipWidth(text: String): Float = chipLabel.paint.measureText(text) + (2f + 8f + 4f + 18f + 8f + 2f) * ctx.dp
 
     private val itemH get() = Math.round(24f * ctx.dp)
+
+    /** An entry's height: 24 px, or 40 on a touch screen (`li:has(.legend-toggle)`). */
+    private val entryH get() = Math.round((if (touch) 40f else 24f) * ctx.dp)
     private val topPad get() = Math.round(12f * ctx.dp)
 
     /** The views in the flow: collapsed, the entries that fit and the chip; expanded, all of them and the chip. */
@@ -652,7 +667,8 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
         val itemSpec = MeasureSpec.makeMeasureSpec(itemH, MeasureSpec.EXACTLY)
-        for (e in entries) e.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.AT_MOST), itemSpec)
+        val entrySpec = MeasureSpec.makeMeasureSpec(entryH, MeasureSpec.EXACTLY)
+        for (e in entries) e.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.AT_MOST), entrySpec)
         if (entries.isNotEmpty()) {
             // LegendFitController: the chip's width depends on how many entries it hides, which depends on its width;
             // the frontend settles that over its resize observer, here in a few rounds.
@@ -667,8 +683,9 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
             updateChip()
             chip.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.AT_MOST), itemSpec)
         }
-        val n = rows(w).size
-        val natural = if (n == 0) 0 else topPad + n * itemH + Math.round((n - 1) * gap)
+        val rowList = rows(w)
+        // Each row is as high as its tallest item (`align-items: center`): a row of only the chip is 24 px.
+        val natural = if (rowList.isEmpty()) 0 else topPad + rowList.sumOf { r -> r.maxOf { it.measuredHeight } } + Math.round((rowList.size - 1) * rowGap)
         // A fixed slot caps the legend (`max-height: 60%`): the rows past it are cut off, as HA's scroll out of view.
         setMeasuredDimension(w, if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) MeasureSpec.getSize(heightMeasureSpec) else natural)
     }
@@ -689,12 +706,14 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
         var y = topPad.toFloat()
         for (row in rows(r - l)) {
             val total = row.sumOf { it.measuredWidth } + gap * (row.size - 1)
+            val rowH = row.maxOf { it.measuredHeight }
             var x = ((r - l) - total) / 2f
             for (c in row) {
-                c.layout(Math.round(x), Math.round(y), Math.round(x) + c.measuredWidth, Math.round(y) + c.measuredHeight)
+                val top = Math.round(y + (rowH - c.measuredHeight) / 2f)
+                c.layout(Math.round(x), top, Math.round(x) + c.measuredWidth, top + c.measuredHeight)
                 x += c.measuredWidth + gap
             }
-            y += itemH + gap
+            y += rowH + rowGap
         }
     }
 

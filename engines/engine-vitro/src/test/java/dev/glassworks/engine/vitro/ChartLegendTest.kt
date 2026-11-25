@@ -32,13 +32,13 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], application = android.app.Application::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ChartLegendTest {
-    private fun ctx(): VitroCardContext {
+    private fun ctx(touch: Boolean = false): VitroCardContext {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         return VitroCardContext(
             context = activity, haBase = "http://192.0.2.1", store = EntityStore(),
             theme = ThemeResolver.resolve(ThemeCatalog(), true),
             resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
-            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} }, touch = touch,
         )
     }
 
@@ -131,5 +131,30 @@ class ChartLegendTest {
         val entry = legend.getChildAt(0)
         // The whole entry (sides, toggle, name, value) stays within `li { max-width: 300px }`.
         assertTrue("entry ${entry.measuredWidth / ctx.dp} px", entry.measuredWidth <= Math.round(300 * ctx.dp) + 1)
+    }
+
+    @Test
+    fun onATouchScreenEntriesAreFortyPixelsHighWithNoRowGap() {
+        // HA's `@media (pointer: coarse)`: entries 40 px high, no row gap, no li padding and 11 px before the toggle;
+        // the chip's li stays 24 px, centered in its row.
+        val ctx = ctx(touch = true)
+        val legend = ChartLegendView(ctx)
+        legend.setItems((1..6).map { LegendItem("sensor.room_$it", "Room $it temperature sensor with a long name", 0xFF4269D0.toInt(), "21.$it °C") })
+        legend.measure(View.MeasureSpec.makeMeasureSpec(Math.round(466 * ctx.dp), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        legend.layout(0, 0, legend.measuredWidth, legend.measuredHeight)
+        val px = { v: Int -> Math.round(v * ctx.dp) }
+        assertEquals(px(12) + 2 * px(40), legend.height)
+        val first = legend.getChildAt(0) as ViewGroup
+        assertEquals(px(40), first.height)
+        assertEquals(px(12), first.top)
+        assertEquals(px(11), first.getChildAt(0).left)
+        // The second row: an entry and the chip, the chip 24 px high in the middle of the 40 px row.
+        val second = legend.getChildAt(1)
+        assertEquals(px(12) + px(40), second.top)
+        val chip = legend.getChildAt(legend.childCount - 1)
+        assertEquals(px(24), chip.height)
+        assertEquals(second.top + (px(40) - px(24)) / 2, chip.top)
+        // The entry, the toggle's 33 px included, still stays within 300 px.
+        assertTrue(first.measuredWidth <= px(300) + 1)
     }
 }
