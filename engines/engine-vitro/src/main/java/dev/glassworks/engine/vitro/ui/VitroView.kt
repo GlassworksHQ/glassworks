@@ -33,7 +33,6 @@ import dev.glassworks.engine.vitro.cards.CardBuilder
 import dev.glassworks.engine.vitro.cards.LayoutCardView
 import dev.glassworks.engine.vitro.cards.AlertCardView
 import dev.glassworks.engine.vitro.cards.DateCardView
-import dev.glassworks.engine.vitro.cards.HaErrorCardView
 import dev.glassworks.engine.vitro.cards.IframeCardView
 import dev.glassworks.engine.vitro.cards.PlantStatusCardView
 import dev.glassworks.engine.vitro.cards.ShoppingListCardView
