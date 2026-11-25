@@ -27,6 +27,13 @@ import kotlin.math.roundToInt
 
 /** The config checks of HA's small cards' `setConfig`: the error HA's card shows instead, or null when it builds. */
 object SmallCardConfigs {
+    /**
+     * What HA 2026.11 shows for a `section` card: the type is always loaded, but no `hui-section-card` element
+     * exists, so the card fails to build and HA's error card shows its generic title (captured against the pinned
+     * frontend: the `section-card` parity case).
+     */
+    const val SECTION_CARD_ERROR = "Configuration error"
+
     private val VALID_ENTITY_ID = Regex("""^\w+\.\w+$""")
 
     /** `hui-statistic-card`: an entity (or external statistic), a `stat_type` and a `period`. */

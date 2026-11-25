@@ -373,8 +373,9 @@ class MdSvg private constructor(
                                 viewBox = RectF(it[0], it[1], it[0] + it[2], it[1] + it[3])
                             }
                             own["preserveAspectRatio"]?.let { preserve = it.trim() }
-                            iw = own["width"]?.let { MdCascade.length(it, 16f, 0f) }
-                            ih = own["height"]?.let { MdCascade.length(it, 16f, 0f) }
+                            // SVG's `width="64"` is in px: a bare number counts, as it does in the browser.
+                            iw = own["width"]?.let { it.trim().toFloatOrNull() ?: MdCascade.length(it, 16f, 0f) }
+                            ih = own["height"]?.let { it.trim().toFloatOrNull() ?: MdCascade.length(it, 16f, 0f) }
                         }
                         if (!selfClose) {
                             inherited += own to matrix

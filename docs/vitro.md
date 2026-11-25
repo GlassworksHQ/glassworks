@@ -15,7 +15,7 @@ To go back, turn **Vitro renderer** off the same way.
 
 ## What works
 
-Vitro draws 31 of Home Assistant's built-in cards and 26 popular HACS cards natively, including the whole Mushroom set, Bubble Card buttons, mini-graph-card, auto-entities, stack-in-card and layout-card. It reads your themes, your fonts and the card-mod styles it can draw the way Home Assistant does.
+Vitro draws 32 of Home Assistant's built-in cards and 30 popular HACS cards natively, including the whole Mushroom set, Bubble Card buttons, button-card (when it doesn't use JavaScript templates), mini-graph-card, auto-entities, swipe-card, stack-in-card and layout-card. It reads your themes, your fonts and the card-mod styles it can draw the way Home Assistant does.
 
 A card Vitro can't draw yet still shows. A custom card opens in a small browser view of its own, so it looks the way it does in Home Assistant. A built-in card Vitro doesn't have, such as the map, shows a plain summary instead.
 

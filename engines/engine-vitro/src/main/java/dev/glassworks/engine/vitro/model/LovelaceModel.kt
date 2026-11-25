@@ -756,7 +756,7 @@ object CardRouter {
      */
     val CONTAINER_TYPES = setOf(
         "grid", "horizontal-stack", "vertical-stack", "conditional",
-        "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card",
+        "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card", "custom:swipe-card",
     )
 
     /** Cards that pick their entities at runtime from the whole state machine (`auto-entities` filters). */
@@ -935,6 +935,8 @@ object CardRouter {
             // Deep-scan custom cards (e.g. room arrays, sleep/outside/camera objects) so view-scoped
             // subscribe_entities automatically captures every entity without knowing each card's schema.
             if (c.type.startsWith("custom:")) scanJson(c.raw)
+            // weather-card reads `sun.sun` for its night icons and the sunrise and sunset, whatever its config says.
+            if (c.type == "custom:weather-card") out += "sun.sun"
             for (key in EXTRA_ENTITY_KEYS) {
                 c.raw.optString(key, "").takeIf { isEntityId(it) }?.let { out += it }
             }
@@ -961,7 +963,9 @@ object CardRouter {
 
 /** Parses Home Assistant's `lovelace/config` JSON payload into [DashboardConfig]. */
 object LovelaceParser {
-    fun parseDashboard(raw: JSONObject): DashboardConfig {
+    fun parseDashboard(dashboard: JSONObject): DashboardConfig {
+        // button-card's dashboard templates are plain merges: done once here, for the native card and the island alike.
+        val raw = dev.glassworks.engine.vitro.cards.ButtonCardTemplates.expandDashboard(dashboard)
         val title = raw.optString("title", "").ifEmpty { null }
         val viewsArr = raw.optJSONArray("views") ?: JSONArray()
         val views = ArrayList<ViewConfig>(viewsArr.length())
@@ -1033,6 +1037,7 @@ object LovelaceParser {
     /** Card types whose children are their `cards:` list (a conditional's is its `card:`). */
     val CARDS_FIELD_TYPES: Set<String> = setOf(
         "grid", "horizontal-stack", "vertical-stack", "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card",
+        "custom:swipe-card",
     )
 
     fun parseCard(raw: JSONObject): CardConfig {
@@ -1172,6 +1177,8 @@ object HaCardSize {
                 (if (titled()) 2 else 0) + lines * rows
             }
             "button", "entity-button" -> (if (raw.optBoolean("show_icon", true)) 4 else 0) + (if (raw.optBoolean("show_name", true)) 1 else 0)
+            // button-card's getCardSize: its `card_size`, 3 by default.
+            "custom:button-card" -> (raw.opt("card_size") as? Number)?.toInt()?.takeIf { it > 0 } ?: 3
             "markdown" -> if (raw.has("card_size")) raw.optInt("card_size", 1)
                 else Math.round(raw.optString("content", "").split("\n").size / 2.0).toInt() + (if (titled()) 1 else 0)
             "entity", "statistic" -> 2 + (if (has("footer")) 3 else 0)
