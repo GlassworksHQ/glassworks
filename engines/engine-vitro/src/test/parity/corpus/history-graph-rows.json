@@ -1,0 +1,12 @@
+{
+  "title": "History graph in a fixed 5-row slot: the chart shrinks so chart and legend fill it",
+  "card": {
+    "type": "history-graph",
+    "title": "Pressure",
+    "grid_options": { "columns": 12, "rows": 5 },
+    "entities": [
+      { "entity": "sensor.living_room_airdot_living_room_pressure", "name": "Living room" },
+      { "entity": "sensor.secondary_room_airdot_secondary_room_pressure", "name": "Secondary room" }
+    ]
+  }
+}
