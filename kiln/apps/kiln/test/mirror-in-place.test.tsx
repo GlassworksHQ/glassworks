@@ -17,6 +17,7 @@ import type { PanelShell } from '@glassworks/adb';
 import { AppSession } from '../src/device/appSession';
 import type { BluetoothLike } from '../src/device/channels';
 import { ImageFlow, inPlaceStep, installRoutes } from '../src/device/DevicePage';
+import { imageRail } from '../src/device/ImageScreens';
 import { imageDemo } from '../src/device/imageDemo';
 import { ImageSession, type DeviceProgress, type ImageDeps, type ProgressMark } from '../src/device/imageSession';
 import { memoryInPlaceStore, restorePointZip, type InPlaceStore } from '../src/device/inPlace';
@@ -610,6 +611,15 @@ describe('routes and screens', () => {
     expect(document.querySelectorAll('.btn.ember').length).toBeLessThanOrEqual(1);
     expect(document.body.textContent).not.toContain(FAKE_SERIAL);
   }, 20_000);
+
+  it('the way back has its own rail, not the install\'s', () => {
+    const at = (undo: { at: 'start' | 'fastboot' | 'working' | 'error' | 'done' }) =>
+      imageRail({ screen: 'undo', undo, picked: RECIPE.id, files: [], wifi: { ssid: '', password: '' }, understood: false, log: [] } as never, mirrorFrame, false, true);
+    expect(at({ at: 'start' }).map((x) => x.name)).toEqual(['Restore point', 'Fastboot', 'Restore', 'Done']);
+    expect(at({ at: 'working' }).map((x) => x.mark)).toEqual(['done', 'done', 'now', 'todo']);
+    expect(at({ at: 'error' })[2]!.mark).toBe('bad');
+    expect(at({ at: 'done' }).every((x) => x.mark === 'done')).toBe(true);
+  });
 
   it('the restore point\'s Continue opens only once it is saved and checked', async () => {
     const h = handTo();

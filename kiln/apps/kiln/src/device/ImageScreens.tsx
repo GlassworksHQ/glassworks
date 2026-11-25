@@ -41,6 +41,12 @@ function inPlaceAt(s: ImageState, done: number): number {
 
 /** Set up is Glassworks' (the standard flow, after the first start): a community image's install ends at Install. */
 export function imageRail(s: ImageState, f: Pick<DeviceFrame, 'short' | 'id'>, community = false, inPlace = false): RailStep[] {
+  // the way back has its own short rail: a restore isn't an install's step
+  if (s.screen === 'undo') {
+    const undo = ['Restore point', 'Fastboot', 'Restore', 'Done'];
+    const at = ({ start: 0, fastboot: 1, working: 2, error: 2, done: 3 } as const)[s.undo?.at ?? 'start'];
+    return undo.map((name, i): RailStep => ({ name, mark: i < at || s.undo?.at === 'done' ? 'done' : i > at ? 'todo' : s.undo?.at === 'error' ? 'bad' : 'now' }));
+  }
   const names = [...imageSteps(f, false, inPlace), ...(community ? [] : ['Set up']), 'Done'];
   const at = inPlace ? inPlaceAt(s, names.length)
     : ({ choose: 1, image: 2, download: 2, keep: 3, fastboot: 3, confirm: 3, working: 4, adb: 4, error: 4, done: names.length, receive: 4, 'restore-point': 4, undo: 4 } as const)[s.screen];
