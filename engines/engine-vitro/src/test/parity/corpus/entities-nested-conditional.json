@@ -1,0 +1,105 @@
+{
+ "title": "Entities: nested conditional rows, the inner one hidden and shown",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "entities",
+  "title": "Nested",
+  "entities": [
+   "light.hall_lamp",
+   {
+    "type": "conditional",
+    "conditions": [
+     {
+      "condition": "state",
+      "entity": "light.hall_lamp",
+      "state": "on"
+     }
+    ],
+    "row": {
+     "type": "conditional",
+     "conditions": [
+      {
+       "condition": "state",
+       "entity": "light.hall_lamp",
+       "state": "off"
+      }
+     ],
+     "row": {
+      "entity": "light.porch_lamp"
+     }
+    }
+   },
+   "light.stair_lamp",
+   {
+    "type": "conditional",
+    "conditions": [
+     {
+      "condition": "state",
+      "entity": "light.hall_lamp",
+      "state": "on"
+     }
+    ],
+    "row": {
+     "type": "conditional",
+     "conditions": [
+      {
+       "condition": "state",
+       "entity": "light.stair_lamp",
+       "state": "on"
+      }
+     ],
+     "row": {
+      "entity": "light.porch_lamp"
+     }
+    }
+   },
+   "light.hall_lamp"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.hall_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "friendly_name": "Hall Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.porch_lamp": {
+    "state": "off",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "friendly_name": "Porch Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.stair_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "friendly_name": "Stair Lamp",
+     "supported_features": 40
+    }
+   }
+  }
+ }
+}
