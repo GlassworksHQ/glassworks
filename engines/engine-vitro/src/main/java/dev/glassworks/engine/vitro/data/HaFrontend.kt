@@ -72,7 +72,7 @@ object HaFrontend {
     }
 
     /** One language's strings as read, with the frontend's metadata, before they are installed. */
-    internal class Loaded(val meta: JSONObject, val strings: Map<String, String>)
+    internal class Loaded(val meta: JSONObject, val strings: Map<String, String>, val complete: Boolean = true)
 
     private val APP_JS = Regex("""/frontend_latest/app\.([0-9a-f]+)\.js""")
 
@@ -118,7 +118,8 @@ object HaFrontend {
         if (owner !== requester || latest != key) return false
         beforeInstall?.invoke()
         apply(r.meta, key.second, r.strings)
-        installed = key
+        // Only a whole table counts as installed: without its Lovelace fragment, the next ensure asks again.
+        installed = if (r.complete) key else null
         true
     }
 
@@ -151,9 +152,9 @@ object HaFrontend {
             store("meta-$app.json", m.toString())
             m
         }
-        val strings = stringsFor(origin, meta, language) ?: return null
+        val (strings, complete) = stringsFor(origin, meta, language) ?: return null
         store("current-${key(origin)}.json", JSONObject().put("app", app).toString())
-        return Loaded(meta, strings)
+        return Loaded(meta, strings, complete)
     }
 
     /** The cached strings of the frontend [origin] served last; null when there are none. */
@@ -180,9 +181,10 @@ object HaFrontend {
         return lang to hash
     }
 
-    private fun stringsFor(origin: String, meta: JSONObject, language: String): Map<String, String>? {
+    /** [language]'s strings, and whether they are whole (the Lovelace fragment came too). */
+    private fun stringsFor(origin: String, meta: JSONObject, language: String): Pair<Map<String, String>, Boolean>? {
         val (lang, hash) = fileOf(meta, language) ?: return null
-        cached("strings-$lang-$hash.json")?.let { return flatMap(it) }
+        cached("strings-$lang-$hash.json")?.let { return flatMap(it) to true }
         val core = fetch("$origin/static/translations/$lang-$hash.json")?.let { JSONObject(it.toString(Charsets.UTF_8)) } ?: return null
         val out = JSONObject()
         flatten("", core, out)
@@ -195,7 +197,7 @@ object HaFrontend {
         }
         // Kept only whole: without the fragment, the core words serve now and the next load asks for both again.
         if (fragment != null) store("strings-$lang-$hash.json", out.toString())
-        return flatMap(out)
+        return flatMap(out) to (fragment != null)
     }
 
     /** `translationMetadata` out of the frontend's app bundle: `JSON.parse('{"fragments":[…],"translations":{…}}')`. */

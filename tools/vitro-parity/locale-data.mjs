@@ -289,15 +289,13 @@ for (const tag of tags) {
     t = capture(tag);
     t.source = 'node';
     fromNode.push(tag);
-    if (wrong(t, tag)) rejected.push(`${tag} (resolved to ${t.locale})`);
+    if (wrong(t, tag)) { rejected.push(`${tag} (resolved to ${t.locale})`); continue; }
   }
   tables[tag] = t;
 }
-// Nothing is written when a table would hold another locale's data.
-if (rejected.length) {
-  console.error(`neither Chromium nor Node has these locales' Intl data; no table written:\n  ${rejected.join('\n  ')}`);
-  process.exit(1);
-}
+// A tag neither runtime has gets no table and isn't in languages.json's tags: Vitro falls back to English for it
+// openly (TableIntlSource.resolve), never through a table holding another locale's data.
+if (rejected.length) console.error(`no Intl data in Chromium or Node, so no table (English serves them):\n  ${rejected.join('\n  ')}`);
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 if (fromNode.length) console.log(`from Node's ICU ${process.versions.icu} (Chromium lacks them): ${fromNode.join(', ')}`);
@@ -328,7 +326,7 @@ for (const lang of TEST_LANGUAGES) {
   for (const k of keys) if (typeof flat[k] === 'string') { strings[k] = flat[k]; if (lang === 'en') missing.delete(k); }
   writeFileSync(join(TEST_OUT, `strings-${lang}.json`), JSON.stringify(strings, Object.keys(strings).sort(), 1) + '\n');
 }
-for (const tag of tags) writeFileSync(join(OUT, `${tag}.json`), JSON.stringify(tables[tag]) + '\n');
+for (const tag of Object.keys(tables)) writeFileSync(join(OUT, `${tag}.json`), JSON.stringify(tables[tag]) + '\n');
 if (missing.size) {
   console.error(`keys Vitro uses that HA's frontend ${FRONTEND_VERSION} doesn't have:\n  ${[...missing].join('\n  ')}`);
   process.exitCode = 1;
@@ -339,7 +337,7 @@ writeFileSync(join(OUT, 'languages.json'), JSON.stringify({
   browser: browserVersion,
   // findAvailableLanguage's list: the languages the frontend has translations for.
   languages,
-  tags,
+  tags: Object.keys(tables).sort(),
 }, null, 1) + '\n');
 await browser.close();
 console.log(`${tags.length} locales, ${keys.length} strings, from frontend ${FRONTEND_VERSION} and Chromium ${browserVersion}: ${OUT}`);

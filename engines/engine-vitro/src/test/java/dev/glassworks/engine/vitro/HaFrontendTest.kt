@@ -112,6 +112,28 @@ class HaFrontendTest {
     }
 
     @Test
+    fun ensureAsksAgainForALanguageWhoseLovelaceFragmentDidntCome() {
+        val client = Any()
+        HaFrontend.claim(client, origin)
+        served.remove("$origin/static/translations/lovelace/de-d1.json")
+        val first = java.util.concurrent.CountDownLatch(1)
+        HaFrontend.ensure(client, origin, "de") { first.countDown() }
+        assertTrue(first.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        assertEquals("Nicht verfügbar", HaText.ui("state.default.unavailable"))
+        // The fragment is back: the same ensure (no reconnect) asks again and gets the whole table.
+        served["$origin/static/translations/lovelace/de-d1.json"] = """{"ui":{"panel":{"lovelace":{"cards":{"todo-list":{"add_item":"Eintrag hinzufügen"}}}}}}"""
+        val second = java.util.concurrent.CountDownLatch(1)
+        HaFrontend.ensure(client, origin, "de") { second.countDown() }
+        assertTrue(second.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        assertEquals("Eintrag hinzufügen", HaText.ui("ui.panel.lovelace.cards.todo-list.add_item"))
+        // Whole now: asking once more fetches nothing.
+        asked.clear()
+        HaFrontend.ensure(client, origin, "de") {}
+        Thread.sleep(200)
+        assertTrue(asked.isEmpty())
+    }
+
+    @Test
     fun aRetiredClientsLateDownloadLeavesTheStringsAlone() {
         val retired = Any()
         val current = Any()
