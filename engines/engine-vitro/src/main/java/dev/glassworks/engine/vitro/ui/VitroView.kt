@@ -1421,7 +1421,7 @@ class VitroView(
         val islandStyles = built is WebIslandCardView && built.config === card && IslandScripts.of(ctx.resources).cardMod
         if (!islandStyles) (built as? CardSurface)?.applyCardMod(card)
         // swipe-card has no card of its own (no background to restyle): its `:host` opacity still applies to the pager.
-        if (built is SwipeCardView) stackMod.opacity?.let { built.alpha = it.coerceIn(0f, 1f) }
+        if (built is SwipeCardView) stackMod.opacity?.let { built.restingAlpha = it.coerceIn(0f, 1f); built.alpha = built.restingAlpha }
         // `margin` on the card insets it inside its slot, as an outer margin does in the browser.
         // Not around an island that applies card-mod: its `margin` is drawn there, and twice would double the inset.
         val margin = stackMod.marginInsets?.takeUnless { islandStyles } ?: return built
@@ -1530,7 +1530,10 @@ class VitroView(
     }
 
     /** A shown card's opacity: its `card_mod` `opacity` when it sets one, else fully opaque. */
-    private fun restingAlpha(view: View): Float = (view as? CardSurface)?.activeCardMod?.opacity?.coerceIn(0f, 1f) ?: 1f
+    private fun restingAlpha(view: View): Float = when (view) {
+        is SwipeCardView -> view.restingAlpha
+        else -> (view as? CardSurface)?.activeCardMod?.opacity?.coerceIn(0f, 1f) ?: 1f
+    }
 
     // ---- Periodic visibility re-checks (`time` and `user` conditions) ----
 

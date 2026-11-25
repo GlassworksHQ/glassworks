@@ -399,6 +399,10 @@ describe("auditDashboard and custom:button-card", () => {
     expect(swipe({ effect: "cube" }, [{ type: "custom:button-card" }]).tier3).toBe(1);
     // A built-in card inside keeps it native: the island can't draw built-in cards.
     expect(swipe({ effect: "cube" }, [{ type: "tile" }])).toEqual({ tier1: 1, tier2: 0, tier3: 0 });
+    // Anywhere inside, as the engine looks; and the values it reads, not only the names.
+    expect(swipe({ effect: "cube" }, [{ type: "custom:swipe-card", cards: [{ type: "tile" }] }]).tier3).toBe(0);
+    expect(swipe({ pagination: { type: "progressbar" } }, [{ type: "custom:button-card" }]).tier3).toBe(1);
+    expect(swipe({ slidesPerView: 0 }, [{ type: "custom:button-card" }]).tier3).toBe(1);
   });
 });
 

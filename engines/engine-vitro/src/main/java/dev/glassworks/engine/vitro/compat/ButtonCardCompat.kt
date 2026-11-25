@@ -59,7 +59,7 @@ internal object ButtonCardCompat {
                     val s = states.optJSONObject(i) ?: continue
                     val op = s.optString("operator", "")
                     if (op == "template") continue // JavaScript, reported above
-                    if (op.isNotEmpty() && op !in STATE_OPERATORS) reasons += "button-card state operator `$op` isn't one it knows"
+                    if (op.isNotEmpty() && op !in STATE_OPERATORS) reasons += "button-card state operator `${CardCompat.loggable(op)}` isn't one it knows"
                     checkTexts(s, "state[$i].", reasons)
                     checkCustomFields(s, "state[$i].custom_fields", reasons)
                     checkStyles(s.opt("styles"), "state[$i].styles", reasons, notes)
@@ -73,13 +73,13 @@ internal object ButtonCardCompat {
 
     private fun checkLayout(raw: JSONObject, reasons: MutableSet<String>) {
         raw.opt("layout")?.takeIf { it != JSONObject.NULL }?.let { l ->
-            if (l !is String || l !in VitroSupport.BUTTON_CARD_LAYOUTS) reasons += "button-card `layout: $l` isn't drawn natively"
+            if (l !is String || l !in VitroSupport.BUTTON_CARD_LAYOUTS) reasons += "button-card `layout: ${CardCompat.loggable(l.toString())}` isn't drawn natively"
         }
         raw.opt("aspect_ratio")?.takeIf { it != JSONObject.NULL && it != "" }?.let { a ->
-            if (aspectRatio(a) == null) reasons += "button-card `aspect_ratio: $a` isn't one Vitro reads"
+            if (aspectRatio(a) == null) reasons += "button-card `aspect_ratio: ${CardCompat.loggable(a.toString())}` isn't one Vitro reads"
         }
         raw.opt("size")?.takeIf { it != JSONObject.NULL }?.let { s ->
-            if (s !is String || ButtonCardCss.length(s, auto = true) == null) reasons += "button-card `size: $s` isn't a length Vitro reads"
+            if (s !is String || ButtonCardCss.length(s, auto = true) == null) reasons += "button-card `size: ${CardCompat.loggable(s.toString())}` isn't a length Vitro reads"
         }
         if (raw.has("entity_picture")) checkPicture(raw.opt("entity_picture"), "entity_picture", reasons)
     }
@@ -146,7 +146,7 @@ internal object ButtonCardCompat {
             val a = raw.opt(key) as? JSONObject ?: continue
             val type = a.optString("action", "")
             if (type.isEmpty() || type == "none") continue
-            if (type !in VitroSupport.BUTTON_CARD_ACTIONS) reasons += "button-card `$key: $type` isn't run natively"
+            if (type !in VitroSupport.BUTTON_CARD_ACTIONS) reasons += "button-card `$key: ${CardCompat.loggable(type)}` isn't run natively"
             for ((f, what) in VitroSupport.BUTTON_CARD_UNSUPPORTED_ACTION_FIELDS) {
                 if (a.has(f) && truthy(a.opt(f))) reasons += "button-card `$key.$f` ($what) isn't run natively"
             }
@@ -162,7 +162,7 @@ internal object ButtonCardCompat {
     private fun checkLock(raw: JSONObject, reasons: MutableSet<String>) {
         val lock = raw.optJSONObject("lock") ?: return
         val unlock = lock.optString("unlock", "tap")
-        if (unlock !in setOf("tap", "hold", "double_tap")) reasons += "button-card `lock.unlock: $unlock` isn't run natively"
+        if (unlock !in setOf("tap", "hold", "double_tap")) reasons += "button-card `lock.unlock: ${CardCompat.loggable(unlock)}` isn't run natively"
     }
 
     /** Every style part and declaration: one Vitro doesn't draw is a reason, with where it is. */

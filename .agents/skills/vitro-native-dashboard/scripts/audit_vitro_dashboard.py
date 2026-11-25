@@ -133,6 +133,22 @@ def _merge(prev, obj):
     return out
 
 
+def _merge_states(into, frm):
+    """button-card's mergeStatesById: entries with the same truthy id merge, the others follow."""
+    out = []
+    for s in into or []:
+        local = s
+        for f in frm or []:
+            if isinstance(f, dict) and isinstance(s, dict) and f.get("id") and s.get("id") and f["id"] == s["id"] and isinstance(local, dict):
+                local = _merge(local, f)
+        out.append(local)
+    for f in frm or []:
+        fid = f.get("id") if isinstance(f, dict) else None
+        if not into or not fid or not any(isinstance(s, dict) and s.get("id") and s["id"] == fid for s in into):
+            out.append(f)
+    return out
+
+
 def expand_button_card(card: dict, templates: dict, depth: int = 0):
     """The card with its `template:` merged in from button_card_templates, or None when one is missing or they loop."""
     tpl = card.get("template")
@@ -140,14 +156,20 @@ def expand_button_card(card: dict, templates: dict, depth: int = 0):
         return card
     if depth > 32:
         return None
-    result = {}
+    result, states = {}, None
     for name in tpl if isinstance(tpl, list) else [tpl]:
         t = templates.get(name) if isinstance(name, str) else None
         res = expand_button_card(t, templates, depth + 1) if isinstance(t, dict) else None
         if res is None:
             return None
         result = _merge(result, res)
-    return _merge(result, {k: v for k, v in card.items() if k != "template"})
+        if isinstance(res.get("state"), list):
+            states = _merge_states(states, res["state"])
+    result = _merge(result, {k: v for k, v in card.items() if k != "template"})
+    # `state` entries merge by id, not by concatenation (non-list states are left for the caller to report).
+    if states is not None or isinstance(card.get("state"), list):
+        result["state"] = _merge_states(states, card.get("state") if isinstance(card.get("state"), list) else None)
+    return result
 
 
 def button_card_reason(card: dict, templates: dict) -> str | None:
@@ -173,6 +195,8 @@ def button_card_reason(card: dict, templates: dict) -> str | None:
     fields = cfg.get("custom_fields") if isinstance(cfg.get("custom_fields"), dict) else {}
     if any(isinstance(v, dict) and "card" in v for v in fields.values()):
         return "a card in custom_fields"
+    if cfg.get("state") is not None and not isinstance(cfg.get("state"), list):
+        return "a state: that isn't a list"
     texts = [cfg] + [st for st in (cfg.get("state") or []) if isinstance(st, dict)]
     if any(isinstance(t.get(k), str) and re.search(r"<[a-zA-Z/!]", t[k]) for t in texts for k in ("name", "label", "state_display")):
         return "HTML in its texts"
@@ -187,6 +211,44 @@ SWIPE_CARD_PARAMETERS = {
     "pagination", "loop", "slidesPerView", "spaceBetween", "centeredSlides", "initialSlide", "autoplay",
     "speed", "grabCursor", "keyboard", "mousewheel", "simulateTouch", "observer", "observeParents", "roundLengths",
 }
+
+
+def swipe_card_reason(card: dict) -> str | None:
+    """What the engine's CardCompat doesn't run natively on a swipe-card: unknown parameters and the values it reads."""
+    params = card.get("parameters") if isinstance(card.get("parameters"), dict) else {}
+    for k in params:
+        if k not in SWIPE_CARD_PARAMETERS:
+            return f"parameter {k}"
+    if "pagination" in params:
+        p = params["pagination"]
+        ptype = (p.get("type") or "bullets") if isinstance(p, dict) else "bullets"
+        if ptype not in ("bullets", "fraction"):
+            return f"pagination type {ptype}"
+        if isinstance(p, dict) and p.get("dynamicBullets") is True:
+            return "dynamicBullets"
+    if "slidesPerView" in params:
+        v = params["slidesPerView"]
+        if v != "auto" and not (isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0):
+            return f"slidesPerView {v}"
+    if "card_width" in card:
+        return "card_width"
+    return None
+
+
+def _children(card: dict) -> list:
+    out = [c for c in card.get("cards") or [] if isinstance(c, dict)] if isinstance(card.get("cards"), list) else []
+    if isinstance(card.get("card"), dict):
+        out.append(card["card"])
+    return out
+
+
+def needs_ha_frontend_inside(card: dict) -> bool:
+    """The engine's needsHaFrontend: a built-in card (or stack-in-card) anywhere inside keeps a custom container native."""
+    for c in _children(card):
+        t = c.get("type") if isinstance(c.get("type"), str) else ""
+        if not t.startswith("custom:") or t == "custom:stack-in-card" or needs_ha_frontend_inside(c):
+            return True
+    return False
 
 
 def load_dashboard(path: str):
@@ -313,13 +375,11 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
         return
 
     # swipe-card with Swiper parameters Vitro doesn't run is a web card, unless a built-in card inside keeps it native.
-    if ctype == "custom:swipe-card" and isinstance(card.get("parameters"), dict):
-        unknown = [k for k in card["parameters"] if k not in SWIPE_CARD_PARAMETERS]
-        children = card.get("cards") if isinstance(card.get("cards"), list) else []
-        built_in = any(isinstance(c, dict) and isinstance(c.get("type"), str) and not c["type"].startswith("custom:") for c in children)
-        if unknown and not built_in:
+    if ctype == "custom:swipe-card":
+        reason = swipe_card_reason(card)
+        if reason and not needs_ha_frontend_inside(card):
             counts["tier3"] += 1
-            triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='{ctype}' with parameter {unknown[0]}")
+            triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='{ctype}' with {reason}")
             return
 
     if ctype == "tile":

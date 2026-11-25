@@ -188,7 +188,8 @@ class ButtonCardViewTest {
         surface.dispatchTouchEvent(down)
         surface.dispatchTouchEvent(up)
         shadowOf(Looper.getMainLooper()).idle()
-        assertTrue(calls.toString(), calls.any { it.startsWith("light.turn_on") && "sensor.none" in it })
+        assertEquals(calls.toString(), 1, calls.size)
+        assertTrue(calls.toString(), calls.single().startsWith("light.turn_on") && "sensor.none" in calls.single())
     }
 
     @Test
@@ -197,7 +198,8 @@ class ButtonCardViewTest {
         val card = button("""{"type": "custom:button-card", "entity": "light.desk_lamp", "tap_action": {"action": "call-service", "service": "light.turn_off", "data": {"entity_id": "entity"}}}""")
         assertTrue(card.getChildAt(0).performClick())
         shadowOf(Looper.getMainLooper()).idle()
-        assertTrue(calls.toString(), calls.any { it.startsWith("light.turn_off") })
+        assertEquals(calls.toString(), 1, calls.size)
+        assertTrue(calls.toString(), calls.single().startsWith("light.turn_off") && "light.desk_lamp" in calls.single())
         calls.clear()
         // Natively (no script resource for the island), a PIN-protected action never runs unprotected.
         val guarded = button("""{"type": "custom:button-card", "entity": "light.desk_lamp", "tap_action": {"action": "call-service", "service": "light.turn_off", "protect": {"pin": "1234"}}}""")
@@ -220,6 +222,16 @@ class ButtonCardViewTest {
         locked.getChildAt(0).performClick()
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(calls.toString(), calls.isEmpty())
+        // Without touch, the lock is a "Locked" button; activating it unlocks the card and runs nothing.
+        val overlay = locked.getChildAt(1)
+        assertEquals("Locked", overlay.contentDescription)
+        assertTrue(overlay.performClick())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(calls.toString(), calls.isEmpty())
+        assertEquals(null, overlay.contentDescription)
+        locked.getChildAt(0).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(calls.toString(), 1, calls.size)
     }
 
     @Test

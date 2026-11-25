@@ -110,7 +110,7 @@ object ButtonCardCss {
          * In CSS px: % of [percentOf], em of [fontPx], rem of HA's root font (14 px: button-card's `1.2rem` is 16.8 px),
          * vw and vh of the viewport ([vwPx], [vhPx]).
          */
-        fun px(percentOf: Float, fontPx: Float = 16f, vwPx: Float = 0f, vhPx: Float = 0f): Float = when (unit) {
+        fun px(percentOf: Float, fontPx: Float = 16f, vwPx: Float = viewportWidth, vhPx: Float = viewportHeight): Float = when (unit) {
             "%" -> value * percentOf / 100f
             "em" -> value * fontPx
             "rem" -> value * ROOT_FONT_PX
@@ -120,6 +120,21 @@ object ButtonCardCss {
             "auto" -> Float.NaN
             else -> value
         }
+    }
+
+    /** The viewport `vw` and `vh` are a hundredth of, in CSS px: the panel's screen ([viewport]). */
+    @Volatile
+    var viewportWidth = 0f
+        private set
+
+    @Volatile
+    var viewportHeight = 0f
+        private set
+
+    /** Sets the viewport (the kiosk shows the dashboard full screen): the panel's screen in CSS px. */
+    fun viewport(widthCss: Float, heightCss: Float) {
+        viewportWidth = widthCss
+        viewportHeight = heightCss
     }
 
     /** HA's root font size: `html { font-size }` in its frontend (`1.2rem` measures 16.8 px, 2026-11-24). */
@@ -282,7 +297,8 @@ object ButtonCardCss {
         return if (ok) null else "`$name: ${shown(v)}`"
     }
 
-    private fun shown(v: String): String = if (v.length <= 40) v else v.take(40) + "…"
+    /** A value as the checker may log it: addresses (a signed `url(…)`, a query) redacted, long values cut. */
+    private fun shown(v: String): String = dev.glassworks.engine.vitro.compat.CardCompat.loggable(v)
 
     private val GLOBAL_KEYWORDS = setOf("initial", "unset", "inherit", "revert")
     /** Properties whose keyword values change what's drawn in a way Vitro doesn't follow. */

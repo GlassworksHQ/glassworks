@@ -87,6 +87,8 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
     private var rendered = false
 
     init {
+        // `vw` and `vh` are the panel's screen, the kiosk's full-screen viewport, in CSS px.
+        context.resources.displayMetrics.let { m -> ButtonCardCss.viewport(m.widthPixels / m.density, m.heightPixels / m.density) }
         clipChildren = false
         addView(surface, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         if (!blank) {
@@ -627,6 +629,8 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
         @Suppress("ClickableViewAccessibility")
         surface.setOnTouchListener { v, ev ->
             detector.onTouchEvent(ev)
+            // A cancelled touch posts no click: its suppression must not swallow the next keyboard or accessibility one.
+            if (ev.actionMasked == MotionEvent.ACTION_CANCEL) touchHandled = false
             // The ripple, and the click on release.
             v.onTouchEvent(ev)
             true
@@ -974,6 +978,28 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
             })
             @Suppress("ClickableViewAccessibility")
             setOnTouchListener { _, ev -> if (locked) detector.onTouchEvent(ev) || true else false }
+            // Without touch (a keyboard, TalkBack), activating the locked card unlocks it: the overlay is a button
+            // that says it's locked and offers "Unlock". Touch keeps the configured gesture.
+            setOnClickListener { if (locked) tryUnlock() }
+            accessibilityDelegate = object : View.AccessibilityDelegate() {
+                override fun onInitializeAccessibilityNodeInfo(host: View, info: android.view.accessibility.AccessibilityNodeInfo) {
+                    super.onInitializeAccessibilityNodeInfo(host, info)
+                    info.className = android.widget.Button::class.java.name
+                    if (locked) {
+                        info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction(
+                            android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK, UNLOCK_LABEL))
+                    }
+                }
+            }
+            accessibilityState()
+        }
+
+        /** Locked: a focusable, clickable "Locked" button over the card. Unlocked: out of the way of the card. */
+        private fun accessibilityState() {
+            contentDescription = if (locked) LOCKED_LABEL else null
+            isClickable = locked
+            isFocusable = locked
+            importantForAccessibility = if (locked) IMPORTANT_FOR_ACCESSIBILITY_YES else IMPORTANT_FOR_ACCESSIBILITY_NO
         }
 
         fun style(decls: Map<String, ButtonCardCss.Decl>, fontColor: Int?, vars: Map<String, String>) {
@@ -1016,7 +1042,10 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
         }
 
         private fun setLocked(on: Boolean) {
+            val changed = locked != on
             locked = on
+            accessibilityState()
+            if (changed) announceForAccessibility(if (on) LOCKED_LABEL else UNLOCKED_LABEL)
             iconView.setIcon(if (on) lockIcon else unlockIcon, iconView.tintColor)
             iconView.animate().cancel()
             if (on) iconView.alpha = 1f
@@ -1094,6 +1123,10 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
             ButtonCardCss.Length(4f, "%"), ButtonCardCss.Length(0f, "px"), ButtonCardCss.Length(4f, "%"), ButtonCardCss.Length(0f, "px"),
         )
         private val ZERO_BOX = List(4) { ButtonCardCss.Length(0f, "px") }
+        private const val LOCKED_LABEL = "Locked"
+        private const val UNLOCKED_LABEL = "Unlocked"
+        private const val UNLOCK_LABEL = "Unlock"
+
         /** How often a picture that failed to load is asked for again (at the next renders). */
         private const val MAX_PICTURE_RETRIES = 3
         private val LOCK_PADDING = listOf(

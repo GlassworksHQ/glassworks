@@ -554,6 +554,35 @@ function cardModWarning(card: Obj, loc: string, out: string[]) {
   }
 }
 
+/** What the engine's CardCompat doesn't run natively on a swipe-card: unknown Swiper parameters and the values it reads. */
+function swipeCardReason(card: Obj): string | null {
+  const params = isObj(card.parameters) ? card.parameters : {};
+  const unknown = Object.keys(params).find((k) => !SWIPE_PARAMETERS.has(k));
+  if (unknown) return `parameter ${unknown}`;
+  if ("pagination" in params) {
+    const p = params.pagination;
+    const t = isObj(p) && typeof p.type === "string" && p.type ? p.type : "bullets";
+    if (t !== "bullets" && t !== "fraction") return `pagination type ${t}`;
+    if (isObj(p) && p.dynamicBullets === true) return "dynamicBullets";
+  }
+  if ("slidesPerView" in params) {
+    const v = params.slidesPerView;
+    if (v !== "auto" && !(typeof v === "number" && v > 0)) return `slidesPerView ${String(v)}`;
+  }
+  if ("card_width" in card) return "card_width";
+  return null;
+}
+
+/** The engine's needsHaFrontend: a built-in card (or stack-in-card) anywhere inside keeps a custom container native. */
+function needsHaFrontendInside(card: Obj): boolean {
+  const children: unknown[] = [...(Array.isArray(card.cards) ? card.cards : []), ...(isObj(card.card) ? [card.card] : [])];
+  return children.some((c) => {
+    if (!isObj(c)) return false;
+    const t = typeof c.type === "string" ? c.type : "";
+    return !t.startsWith("custom:") || t === "custom:stack-in-card" || needsHaFrontendInside(c);
+  });
+}
+
 function walkCard(card: unknown, loc: string, view: ViewAudit) {
   if (!isObj(card)) {
     view.warnings.push(`${loc}: not a card (expected a map with a type), skipped`);
@@ -594,12 +623,11 @@ function walkCard(card: unknown, loc: string, view: ViewAudit) {
     return;
   }
   // swipe-card with Swiper parameters Vitro doesn't run is a web card, unless a built-in card inside keeps it native.
-  if (type === "custom:swipe-card" && isObj(card.parameters)) {
-    const unknown = Object.keys(card.parameters).filter((k) => !SWIPE_PARAMETERS.has(k));
-    const builtIn = Array.isArray(card.cards) && card.cards.some((c) => isObj(c) && typeof c.type === "string" && !c.type.startsWith("custom:"));
-    if (unknown.length && !builtIn) {
+  if (type === "custom:swipe-card") {
+    const reason = swipeCardReason(card);
+    if (reason && !needsHaFrontendInside(card)) {
       view.tier3++;
-      view.triggers.push({ view: view.name, path: loc, type: `${type} (parameter ${unknown[0]})` });
+      view.triggers.push({ view: view.name, path: loc, type: `${type} (${reason})` });
       return;
     }
   }
