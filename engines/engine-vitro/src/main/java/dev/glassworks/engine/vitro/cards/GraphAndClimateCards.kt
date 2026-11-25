@@ -182,17 +182,29 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
     /** Whether the card showed the last time its visibility was looked at: only a hidden → shown change reloads. */
     private var historyShown = false
 
+    /** Attached before: the constructor's read is long gone, and a return reads the history again at once. */
+    private var attachedBefore = false
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         historyShown = isShown
+        val again = attachedBefore
+        attachedBefore = true
         if (historyIds.isNotEmpty() && isShown) {
-            ctx.main.removeCallbacks(historyRefresh)
-            ctx.main.postDelayed(historyRefresh, HISTORY_REFRESH_MS)
+            if (again) {
+                // Back on screen: fresh history now (loadHistory sets the next refresh), not five minutes on.
+                loadHistory()
+            } else {
+                ctx.main.removeCallbacks(historyRefresh)
+                ctx.main.postDelayed(historyRefresh, HISTORY_REFRESH_MS)
+            }
         }
     }
 
     override fun onDetachedFromWindow() {
         ctx.main.removeCallbacks(historyRefresh)
+        // A read still on its way belongs to the showing that ended: it doesn't land.
+        historyGeneration++
         super.onDetachedFromWindow()
     }
 
@@ -1278,6 +1290,8 @@ internal class ThermostatDialView(
                 if (dragging) {
                     // Nothing was sent: drop the preview and show the target Home Assistant has.
                     setTarget(boundTarget)
+                    // TalkBack reads the restored target, not the preview.
+                    describe()
                     invalidate()
                 }
                 dragging = false

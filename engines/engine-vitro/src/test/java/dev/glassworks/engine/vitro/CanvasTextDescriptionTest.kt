@@ -32,10 +32,12 @@ import org.robolectric.annotation.Config
 class CanvasTextDescriptionTest {
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
 
+    private val calls = ArrayList<String>()
+
     private fun context(store: EntityStore = EntityStore()) = VitroCardContext(
         context = activity, haBase = FakeHaServer.BASE, store = store,
         theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
-        accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+        accessToken = { FakeHaServer.TOKEN }, callService = { d, sv, _, _ -> calls += "$d.$sv" }, navigate = {}, openMoreInfo = {},
         fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
     )
 
@@ -88,5 +90,92 @@ class CanvasTextDescriptionTest {
         assertEquals(true, "Off" in described())
         // HA's light card spans the section.
         assertEquals(12, dev.glassworks.engine.vitro.ui.HaGridSize.of(LovelaceParser.parseCard(JSONObject("""{"type": "light", "entity": "light.desk"}"""))).columns)
+    }
+
+    @Test
+    fun theLightDialTogglesFromAClickToo() {
+        // TalkBack and a keyboard click the dial: it toggles the light, as a tap on its icon does.
+        val store = EntityStore()
+        store.putLocal(EntityState("light.desk", "on", mapOf("brightness" to 128, "supported_color_modes" to listOf("brightness"))))
+        val card = LightCardView(context(store), LovelaceParser.parseCard(JSONObject("""{"type": "light", "entity": "light.desk"}""")))
+        fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+        val dial = all(card).single { it.contentDescription?.toString() == "Brightness 50%" }
+        assertEquals(true, dial.isClickable)
+        dial.performClick()
+        assertEquals(1, calls.size)
+        assertEquals(true, calls.single().startsWith("light."))
+    }
+
+    @Test
+    fun anUnsubmittedAlarmCodeIsForgottenWhenTheCardIsHidden() {
+        val store = EntityStore()
+        store.putLocal(EntityState("alarm_control_panel.home", "disarmed", mapOf("code_format" to "number", "supported_features" to 3)))
+        val card = dev.glassworks.engine.vitro.cards.AlarmPanelCardView(
+            context(store), LovelaceParser.parseCard(JSONObject("""{"type": "alarm-panel", "entity": "alarm_control_panel.home"}""")),
+        )
+        val holder = android.widget.FrameLayout(activity).apply { addView(card) }
+        activity.setContentView(holder)
+        val onKey = card.javaClass.getDeclaredMethod("onKey", String::class.java).apply { isAccessible = true }
+        val code = card.javaClass.getDeclaredField("code").apply { isAccessible = true }.get(card) as StringBuilder
+        onKey.invoke(card, "1"); onKey.invoke(card, "2")
+        assertEquals("12", code.toString())
+        // A cached view hidden behind another hides the card through its ancestor.
+        holder.visibility = View.GONE
+        assertEquals("", code.toString())
+        holder.visibility = View.VISIBLE
+        onKey.invoke(card, "3")
+        (holder.parent as ViewGroup).removeView(holder)
+        assertEquals("", code.toString())
+    }
+
+    @Test
+    fun aCancelledDialDragRestoresTheDescribedTarget() {
+        val dial = ThermostatDialView(context(), "°C")
+        dial.bind(16.0, 31.0, 0.5, current = 19.0, target = 21.5, mode = "heat", action = "heating")
+        // Mid-drag at 24 (the preview), then the gesture is cancelled: nothing is sent, and TalkBack hears 21.5 again.
+        dial.javaClass.getDeclaredField("dragging").apply { isAccessible = true }.setBoolean(dial, true)
+        dial.javaClass.getDeclaredMethod("setTarget", java.lang.Double::class.java).apply { isAccessible = true }.invoke(dial, 24.0)
+        dial.javaClass.getDeclaredMethod("describe").apply { isAccessible = true }.invoke(dial)
+        assertEquals("Heating, 24.0 °C, 19.0 °C", dial.contentDescription.toString())
+        dial.onTouchEvent(android.view.MotionEvent.obtain(0L, 0L, android.view.MotionEvent.ACTION_CANCEL, 0f, 0f, 0))
+        assertEquals("Heating, 21.5 °C, 19.0 °C", dial.contentDescription.toString())
+    }
+
+    @Test
+    fun canvasSlidersAreSeekBarsForTalkBackAndKeyboards() {
+        val committed = ArrayList<Float>()
+        val slider = dev.glassworks.engine.vitro.cards.HaHorizontalSliderView(context(), 0xFFFFAA00.toInt()) { committed += it }
+        slider.setValue(0.5f, true)
+        val info = android.view.accessibility.AccessibilityNodeInfo.obtain()
+        slider.onInitializeAccessibilityNodeInfo(info)
+        assertEquals(android.widget.SeekBar::class.java.name, info.className)
+        assertEquals(50f, info.rangeInfo.current, 0.01f)
+        assertEquals(true, slider.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null))
+        assertEquals(0.6f, committed.last(), 0.001f)
+        slider.onKeyDown(android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_LEFT))
+        assertEquals(0.59f, committed.last(), 0.001f)
+
+        val kelvins = ArrayList<Int>()
+        val bar = dev.glassworks.engine.vitro.cards.HaColorTempBarView(context()) { kelvins += it }
+        bar.bind(2000, 6500, 4250, on = true)
+        val barInfo = android.view.accessibility.AccessibilityNodeInfo.obtain()
+        bar.onInitializeAccessibilityNodeInfo(barInfo)
+        assertEquals(4250f, barInfo.rangeInfo.current, 1f)
+        bar.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD, null)
+        assertEquals(3800, kelvins.last())
+    }
+
+    @Test
+    fun theMoreInfoTogglePillIsACheckableSwitch() {
+        val toggled = ArrayList<Boolean>()
+        val pill = dev.glassworks.engine.vitro.cards.VerticalTogglePillView(activity, 0xFFFFAA00.toInt(), true).apply { onToggle = { toggled += it } }
+        pill.setOn(false)
+        assertEquals(true, pill.isClickable)
+        pill.performClick()
+        assertEquals(listOf(true), toggled)
+        val info = android.view.accessibility.AccessibilityNodeInfo.obtain()
+        pill.onInitializeAccessibilityNodeInfo(info)
+        assertEquals(true, info.isCheckable)
+        assertEquals(true, info.isChecked)
     }
 }

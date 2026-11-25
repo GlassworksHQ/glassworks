@@ -99,7 +99,9 @@ object CompatChecker {
         // each of those is listed (an island among them included). They only fill its `cards:`, so its other children
         // (a conditional's `card:`) are listed as usual.
         if (holdsGenerated >= 0 && card.type in LovelaceParser.CARDS_FIELD_TYPES) {
-            CardRouter.producedCards(card, perEntity = false).take(holdsGenerated).forEach { (i, child) ->
+            // By the child's index in the config, not its place among the built ones: a layout-break among the
+            // explicit entries isn't built, and the first generated card mustn't take its place.
+            CardRouter.producedCards(card, perEntity = false).filter { (i, _) -> i < holdsGenerated }.forEach { (i, child) ->
                 walk(child, "$here › entity ${i + 1}", scripts, out, islandsOnly = islandsOnly)
             }
             return

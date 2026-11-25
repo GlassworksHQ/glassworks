@@ -64,7 +64,9 @@ class VitroIslandServer(
         val html: String
         fun onConnected(send: (JSONObject) -> Unit)
         fun onMessage(msg: JSONObject, send: (JSONObject) -> Unit)
-        fun onDisconnected()
+
+        /** The socket [onConnected] handed [send] for has closed. */
+        fun onDisconnected(send: (JSONObject) -> Unit)
     }
 
     private val slots = ConcurrentHashMap<String, SlotHandler>()
@@ -76,6 +78,12 @@ class VitroIslandServer(
 
     private val capabilityCookie: Map<String, String>
         get() = mapOf("Set-Cookie" to "$CAPABILITY_COOKIE=$capability; Path=/; HttpOnly; SameSite=Strict")
+
+    /**
+     * Memory every proxied response being read shares, in KiB: the server answers with whole bodies, and sixteen
+     * workers each holding [MAX_PROXY_BODY] would be hundreds of MiB on a 2 GB panel.
+     */
+    private val proxyBudget = java.util.concurrent.Semaphore(PROXY_BUDGET_KIB, true)
 
     /** Guards a slot's removal against a socket of that slot registering at the same time. */
     private val slotLock = Any()
@@ -219,7 +227,7 @@ class VitroIslandServer(
         } finally {
             writer.interrupt()
             set -= ws
-            slot.onDisconnected()
+            slot.onDisconnected(send)
         }
     }
 
@@ -253,7 +261,10 @@ class VitroIslandServer(
         val base = origin?.trimEnd('/') ?: return HttpResponse.text(503, "Home Assistant not configured")
         if (!req.path.startsWith("/")) return HttpResponse.text(400, "Invalid path")
         var targetUrl = base + req.target
-        return runCatching {
+        val held = IntArray(1)
+        // Set once a response carries the permits: the server releases them after writing it (its onDone).
+        var handedOff = false
+        return try { runCatching {
             var hops = 0
             while (true) {
                 val conn = URL(targetUrl).openConnection() as HttpURLConnection
@@ -279,19 +290,34 @@ class VitroIslandServer(
                     if (code in REDIRECTS && location != null && (req.method == "GET" || req.method == "HEAD")) {
                         val next = sameOriginRedirect(base, targetUrl, location)
                             ?: return@runCatching HttpResponse.text(502, "Proxy error: redirect away from Home Assistant")
+                        // Each hop meets the same path rule as a direct request.
+                        val nextPath = URL(next).path.ifEmpty { "/" }
+                        if (!proxied(nextPath) && !underResource(nextPath, origin)) {
+                            log("refused: a redirect to a path that isn't proxied (${firstSegment(nextPath)})")
+                            return@runCatching HttpResponse.text(502, "Proxy error: redirect to a path that isn't proxied")
+                        }
                         if (++hops > MAX_REDIRECTS) return@runCatching HttpResponse.text(502, "Proxy error: too many redirects")
                         targetUrl = next
                         continue
                     }
                     val headers = LinkedHashMap<String, String>()
-                    headers["Cache-Control"] = conn.getHeaderField("Cache-Control") ?: "no-cache"
+                    // An answer made with the panel's token isn't kept by the browser: after a sign-in change it would
+                    // be served from the cache at the same loopback URL. Only HA's public files keep their caching.
+                    headers["Cache-Control"] =
+                        // The path the answer came from (after any redirect): a public file redirecting to a token-bearing
+                        // one is token-bearing.
+                        if (publicAsset(URL(targetUrl).path)) conn.getHeaderField("Cache-Control") ?: "no-cache" else "no-store"
                     // `hass.callApi('DELETE', …)` and friends: 204/205 carry no body, and asking for one can throw.
                     if (code == 204 || code == 205) return@runCatching HttpResponse(code, headers, ByteArray(0))
                     val stream = if (code in 200..399) conn.inputStream else conn.errorStream
-                    val bytes = stream?.use { readCapped(it, MAX_PROXY_BODY) }
+                    val bytes = stream?.use { readCapped(it, MAX_PROXY_BODY, proxyBudget, held) }
                         ?: ByteArray(0)
                     headers["Content-Type"] = conn.contentType ?: guessMime(req.path)
-                    return@runCatching HttpResponse(code, headers, bytes)
+                    // The body stays in memory until it's written: its share of the budget goes with it, released by
+                    // the server once the write ends (or fails), not when this returns.
+                    val permits = held[0]
+                    handedOff = true
+                    return@runCatching HttpResponse(code, headers, bytes, onDone = { if (permits > 0) proxyBudget.release(permits) })
                 } finally {
                     conn.disconnect()
                 }
@@ -300,6 +326,8 @@ class VitroIslandServer(
             HttpResponse.text(502, "Proxy error")
         }.getOrElse { e ->
             HttpResponse.text(502, "Proxy error: ${e.message}")
+        } } finally {
+            if (!handedOff && held[0] > 0) proxyBudget.release(held[0])
         }
     }
 
@@ -334,6 +362,11 @@ class VitroIslandServer(
             if ("%2f" in lower || "%5c" in lower) return false
             return path.split('/').none { seg -> seg.replace("%2e", ".", ignoreCase = true).let { it == "." || it == ".." } }
         }
+
+        /** Paths whose answer is the same for everyone (HA serves them without a token): their caching is kept. */
+        private val PUBLIC_PREFIXES = listOf("/static/", "/frontend_latest/", "/frontend_es5/", "/hacsfiles/", "/local/")
+
+        internal fun publicAsset(path: String): Boolean = PUBLIC_PREFIXES.any { path.startsWith(it) }
 
         /** First path segments a resource never opens: HA's sign-in and this server's own routes. */
         private val NEVER_RESOURCE = setOf("", "auth", "__vitro")
@@ -385,6 +418,12 @@ class VitroIslandServer(
         /** The largest proxied response held in memory (the server answers with whole bodies only). */
         internal const val MAX_PROXY_BODY = 16 shl 20
 
+        /** What all proxied responses being read at once may hold, in KiB: two of the largest. */
+        internal const val PROXY_BUDGET_KIB = 32 * 1024
+
+        /** How long a read waits for [PROXY_BUDGET_KIB] room before the request fails as busy. */
+        private const val PROXY_BUDGET_WAIT_MS = 5_000L
+
         private const val MAX_REDIRECTS = 5
         private val REDIRECTS = setOf(301, 302, 303, 307, 308)
 
@@ -396,14 +435,34 @@ class VitroIslandServer(
             if (next.protocol.equals(home.protocol, true) && next.host.equals(home.host, true) && samePort) next.toString() else null
         }.getOrNull()
 
-        /** All of [input], or an [IOException] once it passes [max] bytes (a stream that never ends frees the worker). */
-        internal fun readCapped(input: InputStream, max: Int): ByteArray {
+        /**
+         * All of [input], or an [IOException] once it passes [max] bytes (a stream that never ends frees the worker).
+         * With a [budget] (permits are KiB), each 16 KiB read takes its share first and adds it to [held], which the
+         * caller releases; a read that finds no room within [waitMs] fails, so concurrent bodies share one bound.
+         */
+        internal fun readCapped(
+            input: InputStream,
+            max: Int,
+            budget: java.util.concurrent.Semaphore? = null,
+            held: IntArray? = null,
+            waitMs: Long = PROXY_BUDGET_WAIT_MS,
+        ): ByteArray {
             val out = ByteArrayOutputStream()
             val buf = ByteArray(16 * 1024)
+            // KiB taken from the budget so far: what the bytes buffered need, however the reads come in.
+            var charged = 0
             while (true) {
                 val n = input.read(buf)
                 if (n < 0) return out.toByteArray()
                 if (out.size() + n > max) throw IOException("response over ${max shr 20} MiB")
+                if (budget != null) {
+                    val need = ((out.size().toLong() + n + 1023) / 1024).toInt() - charged
+                    if (need > 0) {
+                        if (!budget.tryAcquire(need, waitMs, java.util.concurrent.TimeUnit.MILLISECONDS)) throw IOException("proxy busy")
+                        charged += need
+                        held?.let { it[0] += need }
+                    }
+                }
                 out.write(buf, 0, n)
             }
         }

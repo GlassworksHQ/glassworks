@@ -18,6 +18,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import com.sun.net.httpserver.HttpServer
 import dev.glassworks.engine.vitro.cards.ClockCardView
+import dev.glassworks.engine.vitro.cards.GraphWork
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.fonts.WebFonts
@@ -161,8 +162,13 @@ object ParityViews {
         val pins = pinned.iterator()
         for (i in 0 until sectionsGrid.childCount) {
             val section = sectionsGrid.getChildAt(i)
-            if (section.visibility != View.VISIBLE) continue
             val grid = all(section).filterIsInstance<HaGridLayout>().firstOrNull() ?: continue
+            if (section.visibility != View.VISIBLE) {
+                // Hidden: nothing of it is reported, but its pinned cards still take their overlay entries, so a
+                // later section's placeholder pairs with its own pin.
+                for (j in 0 until grid.childCount) if (grid.getChildAt(j).javaClass == View::class.java && pins.hasNext()) pins.next()
+                continue
+            }
             for (j in 0 until grid.childCount) {
                 val c = grid.getChildAt(j)
                 // A pinned card (card-mod `position: fixed`) leaves a bare placeholder here and draws in the overlay,
@@ -195,7 +201,8 @@ class FixtureHttp(
     val missing = CopyOnWriteArrayList<String>()
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { ex ->
-            val path = ex.requestURI.path
+            // As the capture saved it: `%20` stays in the file name (and in imagesHaMissing).
+            val path = ex.requestURI.rawPath
             val fixture = fixtures != null && path.startsWith(ParityCase.FIXTURE_PREFIX)
             val dir = if (fixture) fixtures!! else assets
             val rel = if (fixture) path.removePrefix(ParityCase.FIXTURE_PREFIX) else path.removePrefix("/")
@@ -383,11 +390,12 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         // Images load on a pool and reach their card through the main looper: run it until none is in flight, so a
         // late image can't leave a card drawn without its picture.
         val deadline = System.nanoTime() + IMAGE_TIMEOUT_MS * 1_000_000L
-        // Web fonts too: the view draws again in a font once it has arrived, as HA's page swaps it in.
-        while (VitroCardContext.pendingImageLoads.get() > 0 || WebFonts.pending.get() > 0) {
+        // Web fonts too: the view draws again in a font once it has arrived, as HA's page swaps it in. And graph
+        // data, which statistics charts build and down-sample off the main thread.
+        while (VitroCardContext.pendingImageLoads.get() > 0 || WebFonts.pending.get() > 0 || GraphWork.pending.get() > 0) {
             if (System.nanoTime() > deadline) {
                 throw IllegalStateException(
-                    "${VitroCardContext.pendingImageLoads.get()} image and ${WebFonts.pending.get()} font load(s) still pending after $IMAGE_TIMEOUT_MS ms" +
+                    "${VitroCardContext.pendingImageLoads.get()} image, ${WebFonts.pending.get()} font and ${GraphWork.pending.get()} graph job(s) still pending after $IMAGE_TIMEOUT_MS ms" +
                         (if (WebFonts.pending.get() > 0) "; fonts: ${WebFonts.describe()}" else ""),
                 )
             }

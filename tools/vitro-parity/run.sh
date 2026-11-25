@@ -56,6 +56,8 @@ if [ -n "$out" ]; then
   gradle_props+=("-PvitroParityOut=$out")
 fi
 if [ -n "$local_dir" ]; then
+  # Gradle runs the test in engines/engine-vitro: a relative --local is the caller's, made absolute here.
+  case "$local_dir" in /*) ;; *) local_dir="$PWD/$local_dir" ;; esac
   [ -d "$local_dir/corpus" ] || { echo "no corpus at $local_dir/corpus (see tools/vitro-parity/README.md)" >&2; exit 2; }
   gradle_props+=("-PvitroParityLocal=$local_dir")
   # A local run selects the local corpus's case ids. A committed case with the same id as a local one runs too: the

@@ -43,7 +43,7 @@ Every card below renders 100% natively in Vitro with **zero GeckoView**.
 - `custom:mushroom-fan-card`
 - `custom:mushroom-cover-card`
 - `custom:mushroom-person-card`
-- `custom:bubble-card` (`sub_button:` icon/state buttons with their own `entity`, `show_state`, `show_background`, `tap_action`, `hold_action`)
+- `custom:bubble-card` with `card_type: button` or `separator` only (`sub_button:` icon/state buttons with their own `entity`, `show_state`, `show_background`, `tap_action`, `hold_action`). A `pop-up` and the other card types stay GeckoView: don't keep one expecting it native
 - `custom:mini-graph-card`
 - `custom:clock-weather-card`
 - `custom:modern-circular-gauge` (`gauge_type` `standard` / `half` / `full`, `min`, `max`, `segments`, `smooth_segments`, `start_from_zero`, `secondary`)

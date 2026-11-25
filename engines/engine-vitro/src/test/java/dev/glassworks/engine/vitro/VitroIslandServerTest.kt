@@ -66,7 +66,7 @@ class VitroIslandServerTest {
             gotMessage.countDown()
         }
 
-        override fun onDisconnected() {
+        override fun onDisconnected(send: (JSONObject) -> Unit) {
             disconnected.countDown()
         }
     }
@@ -96,6 +96,17 @@ class VitroIslandServerTest {
                 token = "other-origin-token"
                 HttpResponse(302, mapOf("Location" to "/local/custom-card.js"), ByteArray(0))
             }
+            req.path == "/local/cached.js" ->
+                HttpResponse(200, mapOf("Content-Type" to "application/javascript", "Cache-Control" to "max-age=3600"), "1".toByteArray())
+            req.path == "/api/private" ->
+                HttpResponse(200, mapOf("Content-Type" to "application/json", "Cache-Control" to "private, max-age=60"), "{}".toByteArray())
+            // A redirect to a path the proxy would refuse on a direct request.
+            req.path == "/local/away" -> HttpResponse(302, mapOf("Location" to "/some/other/thing"), ByteArray(0))
+            req.path == "/local/to-resource" -> HttpResponse(302, mapOf("Location" to "/my_integration_card/chunk.js"), ByteArray(0))
+            req.path == "/my_integration_card/chunk.js" ->
+                HttpResponse(200, mapOf("Content-Type" to "application/javascript"), "export {};".toByteArray())
+            // A public path that redirects to a token-bearing one.
+            req.path == "/local/to-api" -> HttpResponse(302, mapOf("Location" to "/api/private"), ByteArray(0))
             req.path == "/api/camera_proxy/cam" ->
                 HttpResponse(200, mapOf("Content-Type" to "image/jpeg"), byteArrayOf(1, 2, 3, 4))
             req.path == "/api/services/light/turn_on" && req.method == "POST" ->
@@ -112,6 +123,7 @@ class VitroIslandServerTest {
         val body: ByteArray,
         val setCookie: String? = null,
         val location: String? = null,
+        val cacheControl: String? = null,
     ) {
         val text get() = String(body, Charsets.UTF_8)
     }
@@ -147,7 +159,7 @@ class VitroIslandServerTest {
             val stream = if (code in 200..399) conn.inputStream else conn.errorStream
             return Reply(
                 code, conn.contentType, stream?.use { it.readBytes() } ?: ByteArray(0),
-                conn.getHeaderField("Set-Cookie"), conn.getHeaderField("Location"),
+                conn.getHeaderField("Set-Cookie"), conn.getHeaderField("Location"), conn.getHeaderField("Cache-Control"),
             )
         } finally {
             conn.disconnect()
@@ -220,6 +232,18 @@ class VitroIslandServerTest {
         }
 
         fun abort() = runCatching { sock.close() }
+    }
+
+    /** [ws] was closed by the server: EOF, a close frame or a reset. A read that times out means it is still open. */
+    private fun assertClosed(ws: Bridge) {
+        val after = try {
+            ws.receive()
+        } catch (e: java.net.SocketTimeoutException) {
+            throw AssertionError("the socket is still open (the read timed out)", e)
+        } catch (_: java.net.SocketException) {
+            null // reset by the server
+        }
+        assertNull("the socket is closed", after)
     }
 
     // ---- Lifecycle ----
@@ -407,6 +431,72 @@ class VitroIslandServerTest {
     }
 
     @Test
+    fun aRedirectIntoTheDashboardsResourceFolderIsFollowed() {
+        val withResources = VitroIslandServer(session = { haBase to token }, resources = { listOf("/my_integration_card/card.js") })
+        try {
+            val b = withResources.ensureStarted()
+            val cookie = get(withResources.registerSlot(RecordingSlot()).second, capability = false).setCookie!!.substringBefore(';')
+            // The same hop the plain proxy refuses (aRedirectToAPathTheProxyRefusesIsNotFollowed) is followed into a
+            // resource folder, and only there.
+            val reply = get("$b/local/to-resource", headers = mapOf("Cookie" to cookie), capability = false)
+            assertEquals(200, reply.code)
+            assertEquals(listOf("/local/to-resource", "/my_integration_card/chunk.js"), haSeen.map { it.target })
+        } finally {
+            withResources.stop()
+        }
+    }
+
+    @Test
+    fun aTokenAnswerIsNeverCachedWhilePublicFilesKeepTheirCaching() {
+        val base = island.ensureStarted()
+        assertEquals("no-store", get("$base/api/private").cacheControl)
+        assertEquals("no-store", get("$base/api/camera_proxy/cam").cacheControl)
+        assertEquals("max-age=3600", get("$base/local/cached.js").cacheControl)
+        // The path the answer came from decides: a public file that redirects to the API answers no-store.
+        assertEquals("no-store", get("$base/local/to-api").cacheControl)
+    }
+
+    @Test
+    fun aRedirectToAPathTheProxyRefusesIsNotFollowed() {
+        val reply = get(island.ensureStarted() + "/local/away")
+        assertEquals(502, reply.code)
+        assertEquals(listOf("/local/away"), haSeen.map { it.target })
+    }
+
+    @Test
+    fun proxiedBodiesShareOneMemoryBudget() {
+        // 32 KiB of room: a 64 KiB body can't be read while it's taken, and what was taken is reported to release.
+        val budget = java.util.concurrent.Semaphore(32)
+        val held = IntArray(1)
+        try {
+            VitroIslandServer.readCapped(java.io.ByteArrayInputStream(ByteArray(64 * 1024)), 1 shl 20, budget, held, waitMs = 50)
+            org.junit.Assert.fail("the budget should run out")
+        } catch (e: IOException) {
+            assertEquals("proxy busy", e.message)
+        }
+        assertEquals(32, held[0])
+        assertEquals(0, budget.availablePermits())
+        // Within the budget it reads whole.
+        val roomy = java.util.concurrent.Semaphore(128)
+        val held2 = IntArray(1)
+        assertEquals(64 * 1024, VitroIslandServer.readCapped(java.io.ByteArrayInputStream(ByteArray(64 * 1024)), 1 shl 20, roomy, held2).size)
+        assertEquals(64, held2[0])
+        // Short reads are charged for the bytes they bring, not a whole buffer each: 6 KiB in 1 KiB reads fit in 8.
+        val trickle = object : java.io.InputStream() {
+            var left = 6 * 1024
+            override fun read(): Int = if (left-- > 0) 0 else -1
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (left <= 0) return -1
+                val n = minOf(1024, len, left); left -= n; return n
+            }
+        }
+        val small = java.util.concurrent.Semaphore(8)
+        val held3 = IntArray(1)
+        assertEquals(6 * 1024, VitroIslandServer.readCapped(trickle, 1 shl 20, small, held3, waitMs = 50).size)
+        assertEquals(6, held3[0])
+    }
+
+    @Test
     fun aPathThatLeavesItsPrefixIsNeverForwarded() {
         val base = island.ensureStarted()
         for (p in listOf("/local/../auth/token", "/local/%2e%2e/auth/token", "/local/%2E./auth/token", "/api/./states",
@@ -558,8 +648,7 @@ class VitroIslandServerTest {
             island.unregisterSlot(id)
 
             await(slot.disconnected, "onDisconnected after unregisterSlot")
-            val after = try { ws.receive() } catch (_: IOException) { null }
-            assertNull("the socket is closed", after)
+            assertClosed(ws)
             assertEquals(404, get(url).code)
         } finally {
             ws.abort()
@@ -578,8 +667,7 @@ class VitroIslandServerTest {
             island.stop()
 
             await(slot.disconnected, "onDisconnected after stop")
-            val after = try { ws.receive() } catch (_: IOException) { null }
-            assertNull("the socket is closed", after)
+            assertClosed(ws)
             assertEquals(-1, island.port)
             assertNull(island.origin)
             // No request to the old port: another island server in a parallel test can be given the same ephemeral

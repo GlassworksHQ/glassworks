@@ -96,6 +96,29 @@ class MarkdownEngineTest {
     // ---- marked ----
 
     @Test
+    fun markedReadsIndentedCodeEscapedDestinationsAndWholeBacktickRuns() {
+        // Four spaces at a block's start: literal code, its indentation off; not inside a paragraph.
+        assertEquals("<pre><code>**literal**\n</code></pre>\n", MarkedLite.toHtml("    **literal**"))
+        assertTrue(MarkedLite.toHtml("text\n    **bold**").contains("<strong>bold</strong>"))
+        // Backslash-escaped parentheses in a destination reach the loader as plain ones.
+        assertTrue(MarkedLite.toHtml("![Plan](/local/plan\\(v2\\).png)").contains("src=\"/local/plan(v2).png\""))
+        // `` x ````` y `` : the run of five isn't a closer (nor part of one); the last two ticks are.
+        assertTrue(MarkedLite.toHtml("``a`````b``").contains("<code>a`````b</code>"))
+    }
+
+    @Test
+    fun aDoubleCombinatorIsInvalidAndAnInvalidVariableTakesItsFallback() {
+        assertNull(dev.glassworks.engine.vitro.cards.CssSelector.parse("div > > p"))
+        assertNotNull(dev.glassworks.engine.vitro.cards.CssSelector.parse("div  >  p"))
+        // `--size` needs `--missing`: var(--size, 24px) takes 24px; an empty but valid value stays empty.
+        assertEquals("24px", MdCascade.resolveVars("var(--size, 24px)", mapOf("size" to "var(--missing)"), emptyMap()))
+        assertEquals("", MdCascade.resolveVars("var(--empty, 24px)", mapOf("empty" to ""), emptyMap()))
+        // A cycle makes the property invalid: the fallback outside it wins, not one inside the cycle.
+        assertEquals("24px", MdCascade.resolveVars("var(--size, 24px)", emptyMap(), mapOf("size" to "var(--size, 12px)")))
+        assertEquals("24px", MdCascade.resolveVars("var(--a, 24px)", mapOf("a" to "var(--b, 1px)", "b" to "var(--a, 2px)"), emptyMap()))
+    }
+
+    @Test
     fun markedTurnsNewlinesIntoBreaksAndPassesHtmlBlocksThrough() {
         assertEquals("<p>one<br>two</p>\n", MarkedLite.toHtml("one\ntwo"))
         assertEquals("<h2>Title</h2>\n<h6>Small</h6>\n", MarkedLite.toHtml("## Title\n###### Small"))
@@ -302,6 +325,37 @@ class MarkdownEngineTest {
         assertEquals(107, cells[1].left)
         assertEquals(297, cells[1].width)
         assertNotNull(cells[0].background)
+    }
+
+    @Test
+    fun aSpanningCellGetsItsWidthAcrossItsColumns() {
+        // One cell over two empty-width columns: its text needs room, which the two columns now give it.
+        val into = LinearLayout(activity)
+        MarkdownRenderer(context()).render(
+            "<table><tr><td colspan=\"2\">A fairly long label</td></tr><tr><td></td><td></td></tr></table>",
+            into,
+            MarkdownRenderer(context()).defaultRootStyle(),
+            MdSheet.parse(""),
+        )
+        measure(into, 1000)
+        val table = into.getChildAt(0) as MdTableView
+        val spanning = table.getChildAt(0)
+        spanning.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        assertTrue("${spanning.width} < ${spanning.measuredWidth}", spanning.width >= spanning.measuredWidth - 2)
+    }
+
+    @Test
+    fun anInlineImageTakesTheOpacityAroundIt() {
+        val into = LinearLayout(activity)
+        MarkdownRenderer(context()).render(
+            "<span>x <img src=\"/local/a.png\" width=\"10\" height=\"10\"></span>",
+            into,
+            MarkdownRenderer(context()).defaultRootStyle(),
+            MdSheet.parse("ha-markdown-element span { opacity: 0.5 }"),
+        )
+        fun all(v: View): List<View> = listOf(v) + ((v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+        val span = all(into).filterIsInstance<TextView>().mapNotNull { tv -> (tv.text as? android.text.Spanned)?.let { it.getSpans(0, it.length, dev.glassworks.engine.vitro.cards.MdImageSpan::class.java).singleOrNull() } }.single()
+        assertEquals(0.5f, span.opacity, 0.01f)
     }
 
     @Test
@@ -525,7 +579,34 @@ class MarkdownEngineTest {
         assertEquals(0, gone.width)
     }
 
+    @Test
+    fun haGridGapsShrinkWhenTheyOutgrowTheContent() {
+        // 12 columns with 8 px gaps in 72 px: the gaps alone would need 88. Two halves still end inside 72.
+        val grid = HaGridLayout(activity, 12, 8, 8, stretch = false)
+        val left = View(activity).also { grid.addView(it, HaGridLayout.LayoutParams(6)) }
+        val right = View(activity).also { grid.addView(it, HaGridLayout.LayoutParams(6)) }
+        measure(grid, 72)
+        assertTrue("${right.right}", right.right <= 72)
+        assertTrue(left.right <= right.left)
+    }
+
     // ---- clock ----
+
+    @Test
+    fun aHiddenClockStopsTicking() {
+        val clock = ClockCardView(context(), card("""{"type": "clock", "show_seconds": true}"""))
+        val holder = android.widget.FrameLayout(activity).apply { addView(clock) }
+        activity.setContentView(holder)
+        val looper = org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+        assertTrue("ticking while shown", looper.nextScheduledTaskTime.toMillis() > 0)
+        // A cached tab behind another: nothing left scheduled.
+        holder.visibility = View.GONE
+        looper.idleFor(java.time.Duration.ofSeconds(3))
+        assertEquals(java.time.Duration.ZERO, looper.nextScheduledTaskTime)
+        // Shown again: ticking resumes.
+        holder.visibility = View.VISIBLE
+        assertTrue(looper.nextScheduledTaskTime.toMillis() > 0)
+    }
 
     @Test
     fun clockReadsHaVariablesAndCardModSheets() {

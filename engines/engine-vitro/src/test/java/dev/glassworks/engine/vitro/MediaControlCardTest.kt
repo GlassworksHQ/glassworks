@@ -22,6 +22,7 @@ import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -118,12 +119,18 @@ class MediaControlCardTest {
         assertEquals(Color.rgb(10, 20, 30), px.toSet().single())
     }
 
+    private val calls = ArrayList<String>()
+
+    /** The progress bar (HA's ha-slider) and the share of it filled. */
+    private fun progressOf(card: View): View = all(card).single { it.javaClass.simpleName == "MediaProgressBar" }
+    private fun fractionOf(bar: View): Float = bar.javaClass.getDeclaredMethod("getFraction").apply { isAccessible = true }.invoke(bar) as Float
+
     private fun card(s: EntityState?): MediaControlCardView {
         s?.let(store::putLocal)
         val ctx = VitroCardContext(
             context = activity, haBase = FakeHaServer.BASE, store = store,
             theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
-            accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            accessToken = { FakeHaServer.TOKEN }, callService = { d, sv, data, _ -> calls += "$d.$sv ${data ?: ""}" }, navigate = {}, openMoreInfo = {},
             fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
         )
         return MediaControlCardView(ctx, LovelaceParser.parseCard(JSONObject("""{"type": "media-control", "entity": "media_player.lounge"}""")))
@@ -155,6 +162,33 @@ class MediaControlCardTest {
         c.measure(View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
         assertEquals(listOf("Lounge", "Song", "Band"), texts(c))
         assertEquals(listOf("More info", "Previous track", "Play", "Next track", "Browse media", "Join"), buttons(c))
+        // 50 s of 200: a quarter of the bar.
+        val bar = progressOf(c)
+        assertEquals(View.VISIBLE, bar.visibility)
+        assertEquals(0.25f, fractionOf(bar), 0.001f)
+    }
+
+    @Test
+    fun theProgressBarSeeksOnAPlayerThatCan() {
+        val c = card(player("paused", 8321599, mapOf("media_title" to "Song", "media_duration" to 120, "media_position" to 10)))
+        c.measure(View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        c.layout(0, 0, c.measuredWidth, c.measuredHeight)
+        val bar = progressOf(c)
+        val mid = bar.width / 2f
+        bar.dispatchTouchEvent(android.view.MotionEvent.obtain(0L, 0L, android.view.MotionEvent.ACTION_DOWN, mid, 1f, 0))
+        bar.dispatchTouchEvent(android.view.MotionEvent.obtain(0L, 10L, android.view.MotionEvent.ACTION_UP, mid, 1f, 0))
+        assertEquals(1, calls.size)
+        assertTrue(calls.single(), calls.single().startsWith("media_player.media_seek"))
+        assertTrue(calls.single(), calls.single().contains("\"seek_position\":60"))
+        // Without SEEK the bar only shows the position.
+        calls.clear()
+        val noSeek = card(player("paused", 8321599 and 2.inv(), mapOf("media_title" to "Song", "media_duration" to 120, "media_position" to 10)))
+        noSeek.measure(View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        noSeek.layout(0, 0, noSeek.measuredWidth, noSeek.measuredHeight)
+        val still = progressOf(noSeek)
+        still.dispatchTouchEvent(android.view.MotionEvent.obtain(0L, 0L, android.view.MotionEvent.ACTION_DOWN, still.width / 2f, 1f, 0))
+        still.dispatchTouchEvent(android.view.MotionEvent.obtain(0L, 10L, android.view.MotionEvent.ACTION_UP, still.width / 2f, 1f, 0))
+        assertTrue(calls.isEmpty())
     }
 
     @Test

@@ -53,8 +53,13 @@ class HttpResponse(
     val body: ByteArray,
     /** `101 Switching Protocols`: the connection is handed to this once the answer is written ([upgrade]). */
     val upgrade: Upgrade? = null,
+    /**
+     * Runs once the server is done with this answer: written, failed to write, or replaced before writing. What the
+     * body holds on to (a memory budget, say) is released here, not when the handler returns.
+     */
+    val onDone: (() -> Unit)? = null,
 ) {
-    fun with(extra: Map<String, String>) = HttpResponse(status, headers + extra, body, upgrade)
+    fun with(extra: Map<String, String>) = HttpResponse(status, headers + extra, body, upgrade, onDone)
 
     /**
      * What runs on an upgraded connection until it returns; then the connection closes. It runs on the request's
@@ -192,10 +197,17 @@ class HttpServer(
             val slots = upgradeSlots
             if (res.upgrade != null && slots != null) {
                 slot = slots.tryAcquire()
-                if (!slot) res = HttpResponse.text(503, "Too many open connections. Try again in a moment.")
+                if (!slot) {
+                    res.onDone?.invoke()
+                    res = HttpResponse.text(503, "Too many open connections. Try again in a moment.")
+                }
             }
             log("[$id] ${req.method} ${req.path} -> ${res.status}")
-            write(sock.getOutputStream(), res, head = req.method == "HEAD")
+            try {
+                write(sock.getOutputStream(), res, head = req.method == "HEAD")
+            } finally {
+                res.onDone?.invoke()
+            }
             val up = res.upgrade ?: return false
             deadline.idleMs = up.idleMs
             if (slots == null) {
