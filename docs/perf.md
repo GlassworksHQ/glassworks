@@ -361,7 +361,8 @@ exactly, where a web page's lines are tied through `Date.now()` to within a few 
 "measured on Vitro". A Vitro report's summary carries `engine: "vitro"`, so a Vitro result is never shown as the
 frame's web result. A web summary has no `engine` and stays as it was. `summary.py` and `regrade.py` refuse to write a summary of
 another engine as a frame's published `clarity.json`, which the site shows as the frame's grade; written under any
-other name, it keeps its `engine`. Vitro's restart reports engine ready at
+other name, it keeps its `engine`. The site shows no grade for a frame whose summary is another engine's
+(`frameGradeSummary`): publishing a Vitro grade is the maintainer's call. Vitro's restart reports engine ready at
 Vitro's start (`Starting Vitro` in logcat; `engine_uri` `vitro`), as detail.
 
 ## The reference dashboards
