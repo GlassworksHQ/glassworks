@@ -18,7 +18,8 @@
 //
 // <case.json>: `{"card": {...}, "resources": ["/hacsfiles/<card>/<file>.js?hacstag=<version>"], "fixture": {...}}`.
 // The resource names a file cards.json pins (or one in island-cases/cards/ under /__island-test/); the fixture is a
-// corpus fixture (README.md, "Fixtures").
+// corpus fixture (README.md, "Fixtures"). An optional `"storage": {key: value}` is HA's localStorage on the panel: the
+// island takes it in before its card, and the probe reports what the island's localStorage holds after it ran.
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +39,7 @@ if (!existsSync(islandPagePath(ROOT, caseFile))) {
 }
 const click = opt('--click');
 const r = await probeIsland(ROOT, caseFile, { frame: opt('--frame'), click: click && click.split(',').map(Number), shot: opt('--shot'), evaluate: opt('--eval'), snapshotDelayMs: Number(opt('--snapshot-delay') || 0) });
+if (r.storage) console.log(`localStorage: ${JSON.stringify(r.storage)}`);
 console.log(`island ${r.card}: ${JSON.stringify(r.before)}`);
 console.log(`bridge: ${JSON.stringify(r.bridge)}`);
 if (opt('--eval')) console.log(`eval: ${JSON.stringify(r.evaluated)}`);

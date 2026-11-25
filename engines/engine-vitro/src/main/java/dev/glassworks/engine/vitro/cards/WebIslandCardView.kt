@@ -662,6 +662,73 @@ class WebIslandCardView(
                 .put("is_owner", user.optBoolean("is_owner", false))
         }
 
+        /**
+         * Starts an island's `localStorage` from Home Assistant's (#881). Islands share one loopback origin, which
+         * keeps its storage across app starts; [seed] is what HA's web UI holds on this panel ([VitroCardContext.pageStorage]).
+         * A key HA's copy changed since the island last took it is taken again, and one HA dropped is dropped unless the
+         * island changed it since; whatever else the island holds stays. What the island took last is kept under
+         * [STORAGE_BASE_KEY] with HA's origin: for another Home Assistant, its copy wins every key it has, and what the
+         * earlier one put in and the island never changed goes.
+         *
+         * The record is written before any value, so a value HA's copy put in is never there without it: when the
+         * record doesn't fit, the island stays as it was and the next start tries again. A value that doesn't fit keeps
+         * what the record said before, so it is tried again too; if even that record can't be written, it goes, and the
+         * next start takes HA's copy as a first one.
+         */
+        internal const val ISLAND_STORAGE_JS = """
+function vitroSeedStorage(store, origin, seed) {
+  if (!seed || typeof seed !== 'object') return 0;
+  const BASE = '__vitro_ha_storage';
+  const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  // What the island took last, from whichever HA (owned), and from this one only (base).
+  let owned = {};
+  let sameOrigin = false;
+  try {
+    const b = JSON.parse(store.getItem(BASE) || 'null');
+    if (b && b.items && typeof b.items === 'object') { owned = b.items; sameOrigin = b.origin === origin; }
+  } catch (e) {}
+  const base = sameOrigin ? owned : {};
+  const planned = {};
+  const writes = [];
+  for (const k of Object.keys(seed)) {
+    const v = seed[k];
+    if (k === BASE || typeof v !== 'string') continue;
+    planned[k] = v;
+    if (base[k] !== v && store.getItem(k) !== v) writes.push(k);
+  }
+  // Dropped by HA (or put in by another HA) and unchanged by the island since: it goes.
+  const removals = Object.keys(owned).filter((k) => k !== BASE && !own(planned, k) && store.getItem(k) === owned[k]);
+  const record = (items) => JSON.stringify({ origin: origin, items: items });
+  try { store.setItem(BASE, record(planned)); } catch (e) { return 0; }
+  let changed = 0;
+  const failed = [];
+  for (const k of writes) { try { store.setItem(k, planned[k]); changed++; } catch (e) { failed.push(k); } }
+  for (const k of removals) { try { store.removeItem(k); changed++; } catch (e) { failed.push(k); } }
+  if (failed.length) {
+    // The value the island still holds for a key it couldn't change is the one it took before (or none).
+    const took = Object.assign({}, planned);
+    for (const k of failed) { if (own(owned, k)) took[k] = owned[k]; else delete took[k]; }
+    try { store.setItem(BASE, record(took)); } catch (e) { try { store.removeItem(BASE); } catch (e2) {} }
+  }
+  return changed;
+}
+"""
+
+        /** The `localStorage` key under which an island keeps what it last took from HA's copy ([ISLAND_STORAGE_JS]). */
+        internal const val STORAGE_BASE_KEY = "__vitro_ha_storage"
+
+        /**
+         * The island's first script: [ISLAND_STORAGE_JS] with HA's copy, before any card script runs. Nothing when the
+         * panel has no copy for this Home Assistant (the island's own storage stays as it is).
+         */
+        internal fun storageSeedScript(ctx: VitroCardContext): String {
+            val seed = runCatching { ctx.pageStorage() }.getOrNull() ?: return ""
+            // `<` escaped: a value can't end the script element or open an HTML comment in it.
+            val seedJson = seed.toString().replace("<", "\\u003c")
+            val originJson = JSONObject.quote(ctx.haBase).replace("<", "\\u003c")
+            return "<script>\n$ISLAND_STORAGE_JS\ntry { vitroSeedStorage(window.localStorage, $originJson, $seedJson); } catch (e) {}\n</script>"
+        }
+
         fun buildIslandHtml(
             ctx: VitroCardContext,
             config: CardConfig,
@@ -692,6 +759,7 @@ class WebIslandCardView(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+${storageSeedScript(ctx)}
 <style id="vitro-theme">
 $themeCss</style>
 <style>

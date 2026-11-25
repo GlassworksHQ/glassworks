@@ -43,6 +43,14 @@ import java.util.concurrent.CopyOnWriteArraySet
  * 127.0.0.1, DNS rebinding, is refused); the proxy forwards only the paths the islands use, never a `.`/`..` segment
  * or an escaped slash; a bridge needs the cookie or this server's own `Origin`. Refusals are logged without queries
  * or tokens.
+ *
+ * The origin stays the same across app starts ([portMemory]): what a card keeps in `localStorage` or IndexedDB is per
+ * origin, so a new port on every start would hand every card empty storage (#881). The server takes the port it had
+ * last time, and only when another app holds it a new one, which it remembers from then on.
+ *
+ * A bridge stays open for as long as its island does (#882): the server pings it every [keepAliveMs], and the browser's
+ * pong (answered by its network code, without waking the page) is the read that keeps it under [bridgeIdleMs]. Only a
+ * page that stopped answering at all is dropped.
  */
 class VitroIslandServer(
     /**
@@ -56,9 +64,28 @@ class VitroIslandServer(
      * their cards at paths of their own, so the proxy also forwards what is under each one's folder ([resourcePaths]).
      */
     private val resources: () -> Collection<String> = { emptyList() },
+    /**
+     * Where the port is kept between app starts, so the islands' origin, and the storage a card keeps there, stays the
+     * same. Null (tests) takes a new ephemeral port on every start.
+     */
+    private val portMemory: PortMemory? = null,
+    /** A bridge whose page sends nothing for this long, not even a pong, is dropped (a page that went away). */
+    private val bridgeIdleMs: Int = BRIDGE_IDLE_MS,
+    /** How often a bridge is pinged: well inside [bridgeIdleMs], so a quiet page's pongs keep its bridge open. */
+    private val keepAliveMs: Long = KEEPALIVE_MS,
+    /** A monotonic clock in ms, for the pings. */
+    private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
     constructor(haBase: () -> String?, accessToken: () -> String?, log: (String) -> Unit = {}) :
         this({ haBase() to accessToken() }, log)
+
+    /** The island server's port between app starts ([portMemory]). */
+    interface PortMemory {
+        /** The port the server had last time, or 0 when none is known. */
+        fun load(): Int
+
+        fun save(port: Int)
+    }
 
     interface SlotHandler {
         val html: String
@@ -92,11 +119,43 @@ class VitroIslandServer(
     val port: Int get() = server?.localPort ?: -1
     val origin: String? get() = port.takeIf { it > 0 }?.let { "http://127.0.0.1:$it" }
 
+    /**
+     * Starts the server once and gives its origin. With a [portMemory], on the port it had last time; when another app
+     * holds that one, on a new one (the islands' storage starts over there), which is remembered from then on.
+     */
     @Synchronized
     fun ensureStarted(): String {
         origin?.let { return it }
-        val s = HttpServer(
-            port = 0,
+        val memory = portMemory
+        val remembered = memory?.let { m -> runCatching { m.load() }.getOrNull() }?.takeIf { it in VALID_PORTS }
+        val candidates = if (memory == null) listOf(0) else buildList {
+            remembered?.let(::add)
+            repeat(NEW_PORT_TRIES) { add(NEW_PORTS.first + random.nextInt(NEW_PORTS.last - NEW_PORTS.first + 1)) }
+            add(0)
+        }
+        var failure: IOException? = null
+        for (candidate in candidates) {
+            val s = newServer(candidate)
+            try {
+                s.start()
+            } catch (e: IOException) {
+                failure = e
+                s.stop()
+                continue
+            }
+            server = s
+            if (memory != null && s.localPort != remembered) {
+                if (remembered != null) log("port $remembered is taken: the islands move to ${s.localPort}, where their storage starts over")
+                runCatching { memory.save(s.localPort) }
+            }
+            return "http://127.0.0.1:${s.localPort}"
+        }
+        throw failure ?: IOException("no port to listen on")
+    }
+
+    private fun newServer(port: Int): HttpServer =
+        HttpServer(
+            port = port,
             handler = ::handle,
             // Explicit IPv4 127.0.0.1: on Android, InetAddress.getLoopbackAddress() returns IPv6 ::1,
             // which refuses IPv4 http://127.0.0.1:<port> connections from GeckoView.
@@ -111,10 +170,6 @@ class VitroIslandServer(
             // bridge is refused with 503 and the island retries.
             upgradeThreads = MAX_BRIDGES,
         )
-        s.start()
-        server = s
-        return "http://127.0.0.1:${s.localPort}"
-    }
 
     @Synchronized
     fun stop() {
@@ -185,7 +240,7 @@ class VitroIslandServer(
                 return HttpResponse.text(403, "Not allowed")
             }
             val wsKey = req.headers["sec-websocket-key"] ?: return HttpResponse.text(400, "Missing Sec-WebSocket-Key")
-            return HttpResponse.webSocket(wsKey, idleMs = 120_000) { ws ->
+            return HttpResponse.webSocket(wsKey, idleMs = bridgeIdleMs) { ws ->
                 runSlotSocket(id, slot, ws)
             }
         }
@@ -213,12 +268,21 @@ class VitroIslandServer(
                 runCatching { ws.abort() }
             }
         }
+        // The writer pings too, on a clock of its own: a page that only listens (a dashboard card mostly receives
+        // patches) still sends its pongs, so its bridge outlives the read deadline (#882).
+        val keepAlive = KeepAlive(keepAliveMs, clock)
         val writer = Thread({
             try {
                 while (true) {
-                    val bytes = outbox.take()
-                    ws.output.write(bytes)
-                    ws.output.flush()
+                    val bytes = outbox.poll(keepAlive.waitMs(), java.util.concurrent.TimeUnit.MILLISECONDS)
+                    if (bytes != null) {
+                        ws.output.write(bytes)
+                        ws.output.flush()
+                    }
+                    if (keepAlive.due()) {
+                        ws.ping()
+                        keepAlive.pinged()
+                    }
                 }
             } catch (_: InterruptedException) {
             } catch (_: Exception) {
@@ -352,7 +416,42 @@ class VitroIslandServer(
         return resourcePaths(urls, haOrigin).any { if (it.endsWith("/")) path.startsWith(it) else path == it }
     }
 
+    /**
+     * When a bridge is pinged: every [intervalMs] by [clock], however much else goes out (only a read, the pong, keeps
+     * the bridge under its deadline, and what the server sends isn't one).
+     */
+    internal class KeepAlive(private val intervalMs: Long, private val clock: () -> Long) {
+        private var next = clock() + intervalMs
+
+        /** How long the writer may wait for a message before the next ping is due. */
+        fun waitMs(): Long = (next - clock()).coerceAtLeast(0)
+
+        fun due(): Boolean = clock() >= next
+
+        fun pinged() {
+            next = clock() + intervalMs
+        }
+    }
+
     companion object {
+        /** A bridge's read deadline: a page that sends nothing for this long, not even a pong, has gone. */
+        internal const val BRIDGE_IDLE_MS = 120_000
+
+        /** How often a bridge is pinged: four pings fit in [BRIDGE_IDLE_MS]. */
+        internal const val KEEPALIVE_MS = 30_000L
+
+        /** Ports a remembered one may be. */
+        private val VALID_PORTS = 1024..65535
+
+        /**
+         * Where a new port is picked: below Android's ephemeral range (32768–60999), so an outgoing connection never
+         * holds it when the app starts again.
+         */
+        internal val NEW_PORTS = 20000..29999
+
+        /** New ports tried before an ephemeral one. */
+        private const val NEW_PORT_TRIES = 8
+
         /**
          * Path prefixes the proxy forwards, what the islands use: HA's API (`callApi`, entity pictures, camera
          * proxies), the card resources (`/local`, `/hacsfiles`), HA's frontend bundles and static files (a card that

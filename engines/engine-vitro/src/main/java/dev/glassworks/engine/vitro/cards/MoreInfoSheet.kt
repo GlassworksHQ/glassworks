@@ -36,7 +36,6 @@ import dev.glassworks.engine.vitro.data.HaFormat
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HaDashboardClient
-import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.data.LightColor
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
 import dev.glassworks.engine.vitro.ui.CardSurface
@@ -45,23 +44,28 @@ import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.ui.Inter
 import dev.glassworks.engine.vitro.ui.VitroFonts
+import dev.glassworks.engine.vitro.theme.ThemeResolver
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Native More-Info dialog matching Home Assistant 2026: a bottom sheet on narrow screens (under 600 dp) and a
- * centered 420 dp card on wide ones, over a dimmed scrim. Each domain gets HA's own controls (the big vertical
- * brightness and toggle pills, cover buttons, climate stepper, option lists, media transport); sensors and the
- * History tab show a 24 h stepped chart. Raw attributes are never printed.
+ * Native More-Info dialog matching Home Assistant's `ha-more-info-dialog` (frontend 20261028): `ha-adaptive-dialog`'s
+ * centred dialog when the window is wider than 870 and taller than 500 CSS px (580 px wide, 40 px from the top), else
+ * its bottom sheet (the window's width, as tall as the window less 48 px), over a 25 % black scrim, on the dialog
+ * surface of the user's theme (the view's theme never reaches HA's dialogs). Its header names the entity on two lines,
+ * area and device over the entity's own name (#885). Each domain gets HA's own controls (the big vertical brightness
+ * and toggle pills, cover buttons, climate stepper, option lists, media transport); a sensor gets HA's state row and
+ * history ([MoreInfoHistoryView]: statistics or the state history, and "Show more"), the History tab of the others
+ * the same history. Raw attributes are never printed.
  */
 class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: () -> Unit) : FrameLayout(ctx.context) {
     private val theme: ResolvedTheme = ctx.theme
-    private val wide = ctx.context.resources.configuration.screenWidthDp >= WIDE_DP
+
+    /** HA's dialog mode: not `(max-width: 870px), (max-height: 500px)`, else its bottom sheet. */
+    private val wide = ctx.context.resources.configuration.let { it.screenWidthDp > SHEET_MAX_WIDTH_DP && it.screenHeightDp > SHEET_MAX_HEIGHT_DP }
 
     /**
      * Compact landscape wall panels (the S1 Plus at 1440×720 is 480 dp tall): the pills, wheel and dial shrink
@@ -75,16 +79,27 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     private val controlGap = if (compact) 10f else 24f
     private val dockGap = if (compact) 10f else 20f
     private val dialGap = if (compact) 6f else 12f
-    private val panel = MaxHeightLinearLayout(ctx.context, if (wide) 0.9f else 0.85f)
-    private val titleView = text(20f, theme.primaryTextColor, Inter.MEDIUM).apply {
+    private val panel = DialogSurface(ctx.context, wide, ctx.dp)
+
+    /** The header's two lines: `.breadcrumb` (area ▸ device) over `.main` (the entity's own name). */
+    private val breadcrumbView = cssText(ctx, 14f, theme.secondaryTextColor).apply {
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    private val titleView = cssText(ctx, 20f, theme.primaryTextColor, Inter.MEDIUM).apply {
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        gravity = Gravity.CENTER_VERTICAL
     }
     private val historyIcon = MdiIconView(ctx.context)
     private val historyButton = iconButton(historyIcon, "mdi:chart-box-outline").apply {
         // HA's header button between the controls and the history: pressed while the history shows.
         dev.glassworks.engine.vitro.ui.VitroAccess.role(this, dev.glassworks.engine.vitro.ui.A11yRole.TOGGLE_BUTTON, "History") { showingHistory }
     }
+
+    /** The sheet's surface: what a screenshot compares with HA's dialog (the parity harness, #885). */
+    internal val surface: View get() = panel
 
     /** The header's Close: where keyboard focus starts when the sheet opens. */
     private var closeButton: View? = null
@@ -123,8 +138,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     /** Closed, or closing: its exit may still be running (VitroView tidies one a detach cut short). */
     val isDismissed: Boolean get() = dismissed
 
-    /** The dimmed backdrop; its alpha fades with the sheet. */
-    private val scrim = ColorDrawable(SCRIM)
+    /** The dimmed backdrop (`--mdc-dialog-scrim-color`, 25 % black); its alpha fades with the sheet. */
+    private val scrim = ColorDrawable(ThemeResolver.parseColor(theme.vars["mdc-dialog-scrim-color"]) ?: SCRIM)
     private var scrimAnimator: ValueAnimator? = null
     private var enterListener: ViewTreeObserver.OnPreDrawListener? = null
 
@@ -146,35 +161,31 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         // keys, which close it with Close, Back or Escape as HA's dialog does.
         dev.glassworks.engine.vitro.ui.VitroAccess.notAControl(this)
 
-        val radius = 28f * ctx.dp
+        // The dialog's corners (`--ha-border-radius-3xl`) or the sheet's top ones (`--ha-border-radius-2xl`).
+        val radius = (if (wide) DIALOG_RADIUS else SHEET_RADIUS) * ctx.dp
         panel.apply {
             orientation = LinearLayout.VERTICAL
             isClickable = true // swallows taps so only the scrim dismisses
             dev.glassworks.engine.vitro.ui.VitroAccess.notAControl(this)
             background = GradientDrawable().apply {
-                setColor(theme.cardBackgroundColor)
+                setColor(dialogSurface(theme))
                 cornerRadii = if (wide) FloatArray(8) { radius }
                 else floatArrayOf(radius, radius, radius, radius, 0f, 0f, 0f, 0f)
             }
             clipToOutline = true
-        }
-        if (!wide) {
-            val handle = View(ctx.context).apply {
-                background = GradientDrawable().apply {
-                    cornerRadius = 2f * ctx.dp
-                    setColor(theme.dividerColor)
-                }
+            // ha-bottom-sheet's handle: 40 × 4 px in the divider color, centred on the sheet's top 16 px, over the header.
+            if (!wide) handle = GradientDrawable().apply {
+                cornerRadius = 8f * ctx.dp
+                setColor(theme.dividerColor)
             }
-            panel.addView(handle, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(4f)).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-                topMargin = ctx.px(10f)
-            })
         }
 
+        // ha-dialog-header: 68 px, 8 px sides (4 in the sheet), 48 px icon buttons, the title between them.
         val header = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(ctx.px(12f), ctx.px(if (wide) 12f else 6f), ctx.px(12f), ctx.px(4f))
+            val side = ctx.px(if (wide) 8f else 4f)
+            setPadding(side, 0, side, 0)
         }
         val closeIcon = MdiIconView(ctx.context)
         val closeButton = iconButton(closeIcon, "mdi:close").apply {
@@ -182,18 +193,22 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             setOnClickListener { dismiss() }
         }
         this.closeButton = closeButton
-        header.addView(closeButton, LinearLayout.LayoutParams(ctx.px(40f), ctx.px(40f)))
-        header.addView(titleView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
-            marginStart = ctx.px(12f)
-            marginEnd = ctx.px(8f)
+        header.addView(closeButton, LinearLayout.LayoutParams(ctx.px(48f), ctx.px(48f)))
+        // .title: the breadcrumb's 16 px line 18 px down, the name's 24 px line under it (22 px down without one).
+        val titles = FrameLayout(ctx.context)
+        titles.addView(breadcrumbView, LayoutParams(MATCH_PARENT, ctx.px(16f)).apply { topMargin = ctx.px(18f) })
+        titles.addView(titleView, LayoutParams(MATCH_PARENT, ctx.px(24f)).apply { topMargin = ctx.px(34f) })
+        header.addView(titles, LinearLayout.LayoutParams(0, ctx.px(HEADER_HEIGHT), 1f).apply {
+            marginStart = ctx.px(4f)
+            marginEnd = ctx.px(4f)
         })
         historyButton.setOnClickListener {
             showingHistory = !showingHistory
             buildBody()
             fadeIn(body)
         }
-        header.addView(historyButton, LinearLayout.LayoutParams(ctx.px(40f), ctx.px(40f)))
-        panel.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        header.addView(historyButton, LinearLayout.LayoutParams(ctx.px(48f), ctx.px(48f)))
+        panel.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(HEADER_HEIGHT)))
 
         val scroll = ScrollView(ctx.context).apply {
             isVerticalScrollBarEnabled = false
@@ -203,9 +218,10 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         panel.addView(scroll, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, 1f))
 
         if (wide) {
+            // `min(var(--ha-dialog-width-md, 580px), 95vw)`, its top 40 px down (half the 80 px its height leaves).
             val screenW = ctx.context.resources.displayMetrics.widthPixels
-            val w = minOf(ctx.px(420f), (screenW - ctx.px(32f)).coerceAtLeast(ctx.px(280f)))
-            addView(panel, LayoutParams(w, WRAP_CONTENT, Gravity.CENTER))
+            val w = minOf(ctx.px(DIALOG_WIDTH), (screenW * 0.95f).toInt())
+            addView(panel, LayoutParams(w, WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = ctx.px(DIALOG_MARGIN / 2f) })
         } else {
             addView(panel, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
         }
@@ -217,7 +233,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         showingHistory = false
         dismissed = false
         val domain = entityId.substringBefore('.')
-        historyButton.visibility = if (domain in HISTORY_TOGGLE_DOMAINS) VISIBLE else GONE
+        historyButton.visibility = if (domain in HISTORY_TOGGLE_DOMAINS && historyLoaded()) VISIBLE else GONE
         buildBody()
         unsub = ctx.store.subscribe(entityId) { s -> ctx.main.post { if (!dismissed) updater?.invoke(s) } }
         ctx.main.removeCallbacks(clockTick)
@@ -226,7 +242,6 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         playEnter()
         // A keyboard lands in the sheet, as in HA's dialog, and TalkBack announces it by the entity's name.
         closeButton?.requestFocus()
-        if (dev.glassworks.platform.Platform.hasAccessibilityPaneTitle) panel.accessibilityPaneTitle = titleView.text
     }
 
     /** Back and Escape close the sheet, as Escape closes HA's dialog. */
@@ -377,11 +392,16 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         releaseBody()
         body.removeAllViews()
         val s = ctx.store[id]
-        titleView.text = s?.friendlyName ?: id
+        setTitle(id, s)
         historyIcon.setIcon("mdi:chart-box-outline", if (showingHistory) theme.primaryColor else theme.primaryTextColor)
         val domain = id.substringBefore('.')
+        // The sensor's content (`.content`, 24 px all round) and the history tab's (8 px over, 24 under) have their
+        // own sides; every other domain keeps its control layout's.
+        val custom = showingHistory || domain !in CONTROL_DOMAINS
+        if (custom) body.setPadding(0, ctx.px(if (showingHistory) 8f else 24f), 0, ctx.px(24f))
+        else body.setPadding(ctx.px(24f), ctx.px(if (compact) 4f else 8f), ctx.px(24f), ctx.px(if (compact) 12f else 24f))
         val update: (EntityState?) -> Unit = if (showingHistory) {
-            buildSensor(id)
+            buildSensor(id, stateRow = false)
         } else when (domain) {
             "light" -> buildLight(id, s)
             "switch", "input_boolean", "automation", "siren", "humidifier" -> buildToggle(id, domain)
@@ -394,13 +414,42 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             "media_player" -> buildMedia(id)
             "alarm_control_panel" -> buildAlarm(id, s)
             "button", "input_button", "script", "scene" -> buildAction(id, domain)
-            else -> buildSensor(id)
+            else -> buildSensor(id, stateRow = true)
         }
         updater = { st ->
-            titleView.text = st?.friendlyName ?: id
+            setTitle(id, st)
             update(st)
         }
         updater?.invoke(s)
+    }
+
+    /**
+     * The header's title as HA's dialog names an entity (`computeEntityNameParts`): its area, device and own name, the
+     * last one present on the `.main` line and the rest over it, joined by " ▸ ". Without a registry entry, the
+     * friendly name alone.
+     */
+    private fun setTitle(id: String, s: EntityState?) {
+        val parts = HaDisplay.nameParts(id, s?.friendlyName ?: id)
+        val crumbs = listOfNotNull(parts.area, parts.device, parts.entity)
+        val main = crumbs.lastOrNull() ?: id
+        val crumb = crumbs.dropLast(1).joinToString(" ▸ ")
+        if (titleView.text?.toString() != main) titleView.text = main
+        if (breadcrumbView.text?.toString() != crumb) breadcrumbView.text = crumb
+        breadcrumbView.visibility = if (crumb.isEmpty()) GONE else VISIBLE
+        (titleView.layoutParams as? LayoutParams)?.let { lp ->
+            val top = ctx.px(if (crumb.isEmpty()) 22f else 34f)
+            if (lp.topMargin != top) {
+                lp.topMargin = top
+                titleView.layoutParams = lp
+            }
+        }
+        // TalkBack names the sheet by the whole name, as HA's dialog is labelled by its title.
+        val full = crumbs.joinToString(" ")
+        // The title last set is kept here: View's getter is API 28, and the setter runs only where it exists.
+        if (full != paneTitle) {
+            paneTitle = full
+            if (dev.glassworks.platform.Platform.hasAccessibilityPaneTitle) panel.accessibilityPaneTitle = full
+        }
     }
 
     // ---- Domain views ----
@@ -1296,15 +1345,43 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
             clipToOutline = true
         }
-        // The live players' views, over the still, in its rounded shape. The players pause while the window is hidden
-        // (the screen off, the app in the background) and go on when it shows, as on the picture cards.
+        // The live players' views, over the still, in its rounded shape. The feed starts once the sheet is in a window
+        // that shows, pauses while the window is hidden (the screen off, the app in the background) and goes on when it
+        // shows again, as on the picture cards.
         var feedRef: LiveCameraFeed? = null
-        var windowHidden = false
+        // Posted, so the first state bind lands first; until then the feed waits.
+        var bound = false
+        var open = true
+        var started = false
+        var windowVisible = false
+        fun follow() {
+            val f = feedRef ?: return
+            if (!open || !bound) return
+            runCatching {
+                if (windowVisible) {
+                    if (!started) {
+                        started = true
+                        f.start()
+                    } else {
+                        f.setActive(true)
+                    }
+                } else if (started) {
+                    f.setActive(false)
+                }
+            }
+        }
         val streamHost = object : FrameLayout(ctx.context) {
+            override fun onAttachedToWindow() {
+                super.onAttachedToWindow()
+                // Android calls back on attach only when the window isn't GONE: read it here.
+                windowVisible = windowVisibility == VISIBLE
+                follow()
+            }
+
             override fun onWindowVisibilityChanged(visibility: Int) {
                 super.onWindowVisibilityChanged(visibility)
-                windowHidden = visibility != VISIBLE
-                runCatching { feedRef?.setActive(!windowHidden) }
+                windowVisible = visibility == VISIBLE
+                follow()
             }
         }.apply {
             background = GradientDrawable().apply {
@@ -1325,19 +1402,16 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         body.addView(status, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(12f) })
 
         var picture: String? = ctx.store[id]?.entityPicture
-        // HA's ha-camera-stream (WebRTC, HLS, then MJPEG), snapshots every 1.5 s if none plays; posted so the first
-        // state bind lands first.
+        // HA's ha-camera-stream (WebRTC, HLS, then MJPEG), snapshots every 1.5 s if none plays.
         val feed = LiveCameraFeed(ctx, id, { picture }, host = streamHost, cardType = "more-info") { bmp -> image.setImageBitmap(bmp) }
         feedRef = feed
-        var open = true
         releasers += {
             open = false
             feed.stop()
         }
         ctx.main.post {
-            if (!open) return@post
-            feed.start()
-            if (windowHidden) feed.setActive(false)
+            bound = true
+            follow()
         }
         return { s ->
             picture = s?.entityPicture
@@ -1373,59 +1447,97 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         })
     }
 
-    /** HA's sensor More-Info: a summary row, then the 24 h history chart. Also the History tab of every control. */
-    private fun buildSensor(id: String): (EntityState?) -> Unit {
-        val row = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val icon = MdiIconView(ctx.context)
-        val name = text(15f, theme.primaryTextColor, Inter.MEDIUM).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
-        val time = text(13f, theme.secondaryTextColor)
-        val value = text(15f, theme.primaryTextColor).apply { maxLines = 1 }
-        val labels = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(name)
-            addView(time, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(2f) })
-        }
-        row.addView(icon, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply { marginEnd = ctx.px(16f) })
-        row.addView(labels, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ctx.px(12f) })
-        row.addView(value)
-        body.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(8f) })
-
-        body.addView(text(20f, theme.primaryTextColor, Inter.MEDIUM).apply { this.text = HaText.ui("ui.dialogs.more_info_control.history") },
-            LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(20f) })
-        val chart = MoreInfoHistoryChartView(ctx.context, theme)
-        body.addView(chart, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(200f)).apply { topMargin = ctx.px(12f) })
-
-        var alive = true
-        val timeout = Runnable { if (alive) chart.setPoints(emptyList(), chart.unit) }
-        releasers += {
-            alive = false
-            ctx.main.removeCallbacks(timeout)
-        }
-        chart.unit = ctx.store[id]?.unit.orEmpty()
-        ctx.fetchHistory(listOf(id), 24) { map ->
-            ctx.main.post {
-                if (!alive) return@post
-                ctx.main.removeCallbacks(timeout)
-                val points = map[id].orEmpty()
-                chart.setPoints(points, ctx.store[id]?.unit.orEmpty())
-                if (points.isNotEmpty()) trace?.graph(chart)
+    /**
+     * HA's More Info for a sensor (and any domain without controls of its own): `state-card-content`'s row (the state
+     * badge, the entity's name over how long ago it changed, the state on the right), then `ha-more-info-history`
+     * ([MoreInfoHistoryView]). Without [stateRow], the History tab of a domain with controls.
+     */
+    private fun buildSensor(id: String, stateRow: Boolean): (EntityState?) -> Unit {
+        val side = ctx.px(24f)
+        var update: (EntityState?) -> Unit = {}
+        if (stateRow) {
+            // state-info: a 40 px badge with its 24 px icon, the name (16.8 px line) over the time (22.4 px line).
+            val row = LinearLayout(ctx.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val badge = FrameLayout(ctx.context)
+            val icon = MdiIconView(ctx.context)
+            badge.addView(icon, LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
+            row.addView(badge, LinearLayout.LayoutParams(ctx.px(40f), ctx.px(40f)))
+            val labels = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+            val name = cssText(ctx, 14f, theme.primaryTextColor).apply {
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val time = cssText(ctx, 14f, theme.secondaryTextColor).apply {
+                maxLines = 1
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            labels.addView(name, LinearLayout.LayoutParams(MATCH_PARENT, Math.round(16.8f * ctx.dp)))
+            labels.addView(time, LinearLayout.LayoutParams(MATCH_PARENT, Math.round(22.4f * ctx.dp)))
+            row.addView(labels, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginStart = ctx.px(8f) })
+            val value = cssText(ctx, 14f, theme.primaryTextColor).apply {
+                maxLines = 1
+                gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            }
+            row.addView(value, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(40f)).apply { marginStart = ctx.px(8f) })
+            body.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f)).apply {
+                marginStart = side
+                marginEnd = side
+                if (historyLoaded()) bottomMargin = ctx.px(16f)
+            })
+            update = { s ->
+                icon.setIcon(MdiIcons.resolveIconName(null, s), theme.stateIconColor)
+                // formatEntityName(stateObj, { type: "entity" }): the entity's own name, else its device's.
+                val parts = HaDisplay.nameParts(id, s?.friendlyName ?: id)
+                name.text = parts.entity ?: parts.device ?: s?.friendlyName ?: id
+                // No age without a last change (0: HA never sent one), as ha-relative-time shows nothing then.
+                time.text = s?.takeIf { it.lastChanged > 0.0 }?.let { HaFormat.relativeTime((it.lastChanged * 1000).toLong(), ctx.now()) }.orEmpty()
+                value.text = s?.formattedState() ?: HaText.ui("state.default.unknown")
             }
         }
-        // A failed history request answers nothing: don't leave "Loading" up forever.
-        ctx.main.postDelayed(timeout, HISTORY_TIMEOUT_MS)
-
-        return { s ->
-            icon.setIcon(MdiIcons.resolveIconName(null, s), theme.stateIconColor)
-            name.text = s?.friendlyName ?: id
-            time.text = relativeTime(s)
-            value.text = s?.formattedState() ?: HaText.ui("state.default.unknown")
+        // computeShowHistoryComponent: no history section when HA runs without its `history` integration.
+        if (!historyLoaded()) return update
+        val history = MoreInfoHistoryView(ctx, id, onShowMore = { href ->
+            // HA's link: the dialog closes as the page moves to /history (HA's frontend, with the way back of #863).
+            dismiss()
+            ctx.navigate(href)
+        }, onGraph = { trace?.graph(it) })
+        historyView = history
+        releasers += {
+            history.stop()
+            if (historyView === history) historyView = null
         }
+        body.addView(history, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (stateRow) bottomMargin = ctx.px(16f) })
+        return update
     }
 
     // ---- Shared pieces ----
+
+    /** The pane title TalkBack names the sheet by, as last set. */
+    private var paneTitle: String? = null
+
+    /** The history section showing, for [reconnected]. */
+    private var historyView: MoreInfoHistoryView? = null
+
+    /** The connection to HA came back: a state history's subscription starts again (MoreInfoHistoryView). */
+    fun reconnected() {
+        historyView?.reconnected()
+    }
+
+    /**
+     * HA's `isComponentLoaded(hass.config, "history")`, from HA's config's `components`. A config that doesn't list
+     * them (a test's) counts as one with history.
+     */
+    private fun historyLoaded(): Boolean {
+        val components = ctx.haConfig().optJSONArray("components") ?: return true
+        return (0 until components.length()).any { components.optString(it) == "history" }
+    }
+
+    /** "5 minutes ago" at the card context's clock. */
+    private fun relativeTime(s: EntityState?): String = relativeTime(s?.lastChanged ?: 0.0, ctx.now())
 
     private fun optimisticToggle(id: String, domain: String, turnOn: Boolean) {
         val cur = ctx.store[id]
@@ -1460,7 +1572,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
     private fun iconButton(icon: MdiIconView, name: String): FrameLayout = FrameLayout(ctx.context).apply {
         icon.setIcon(name, theme.primaryTextColor)
-        addView(icon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
+        // ha-icon-button: a 24 px icon in its 48 px circle.
+        addView(icon, LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
         background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(Color.TRANSPARENT)
@@ -1605,11 +1718,31 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         /** How long a lock write may go unanswered before its guard is released and its flip given up. */
         const val LOCK_WRITE_TIMEOUT_MS = 30_000L
 
-        const val WIDE_DP = 600
+        /** `ha-adaptive-dialog`'s bottom sheet: a window at most this wide or this tall (CSS px). */
+        const val SHEET_MAX_WIDTH_DP = 870
+        const val SHEET_MAX_HEIGHT_DP = 500
+
+        /** The dialog's width (`--ha-dialog-width-md`) and the height it leaves the window (`--ha-space-20`). */
+        const val DIALOG_WIDTH = 580f
+        const val DIALOG_MARGIN = 80f
+        const val DIALOG_RADIUS = 24f
+        const val SHEET_RADIUS = 20f
+
+        /** The bottom sheet's top gap: `100vh - max(var(--safe-area-inset-top), 48px)`. */
+        const val SHEET_TOP = 48f
+
+        /** ha-dialog-header's height. */
+        const val HEADER_HEIGHT = 68f
+
+        /** The domains with a control view of their own (buildBody); the rest show HA's state row and history. */
+        val CONTROL_DOMAINS = setOf(
+            "light", "switch", "input_boolean", "automation", "siren", "humidifier", "fan", "camera", "climate", "cover",
+            "select", "input_select", "lock", "media_player", "alarm_control_panel", "button", "input_button", "script", "scene",
+        )
 
         /** Below this viewport height (dp) the sheet uses its compact landscape sizes. */
         const val COMPACT_HEIGHT_DP = 580
-        const val SCRIM = 0x66000000
+        const val SCRIM = 0x40000000
         const val BUTTON_SURFACE = 0x14888888
         const val ENTER_SHEET_MS = 240L
         const val ENTER_WIDE_MS = 200L
@@ -1621,7 +1754,6 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         const val SHEET_FALLBACK_DP = 220f
         const val EXIT_MIN_DP = 180f
         const val TIME_REFRESH_MS = 30_000L
-        const val HISTORY_TIMEOUT_MS = 8_000L
 
         /** Domains whose More-Info has a control view and a History tab. */
         val HISTORY_TOGGLE_DOMAINS = setOf(
@@ -1675,7 +1807,6 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
         fun humanize(raw: String): String = raw.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
 
-        fun relativeTime(s: EntityState?): String = relativeTime(s?.lastChanged ?: 0.0, System.currentTimeMillis())
 
         /** `<ha-relative-time capitalize>` of the last change ("Now", "5 minutes ago"); empty without a timestamp. */
         fun relativeTime(lastChangedSec: Double, nowMs: Long): String {
@@ -1685,16 +1816,43 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     }
 }
 
-/** A vertical LinearLayout capped at [maxFraction] of the height its parent offers. */
-private class MaxHeightLinearLayout(context: Context, private val maxFraction: Float) : LinearLayout(context) {
+/**
+ * HA's dialog surface: `--ha-dialog-surface-background`, else `--card-background-color` (never `--ha-card-background`).
+ */
+internal fun dialogSurface(theme: ResolvedTheme): Int =
+    ThemeResolver.parseColor(theme.vars["ha-dialog-surface-background"])
+        ?: ThemeResolver.parseColor(theme.vars["card-background-color"])
+        ?: theme.cardBackgroundColor
+
+/**
+ * HA's dialog surface: in dialog mode ([wide]) as tall as its content, at most the window's height less 80 px; as a
+ * bottom sheet as tall as the window less 48 px (`--ha-bottom-sheet-height`), whatever its content. [handle] is the
+ * sheet's handle, drawn over the header at the top centre.
+ */
+internal class DialogSurface(context: Context, private val wide: Boolean, private val dp: Float) : LinearLayout(context) {
+    var handle: android.graphics.drawable.Drawable? = null
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val avail = MeasureSpec.getSize(heightMeasureSpec)
-        val spec = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED || avail <= 0) {
-            heightMeasureSpec
-        } else {
-            MeasureSpec.makeMeasureSpec((avail * maxFraction).toInt(), MeasureSpec.AT_MOST)
+        val offered = MeasureSpec.getSize(heightMeasureSpec)
+        if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED || offered <= 0) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            return
         }
+        // Dialog: the window less 80 px; its 40 px top margin is already out of what the parent offers.
+        val spec = if (wide) MeasureSpec.makeMeasureSpec((offered - Math.round(40f * dp)).coerceAtLeast(0), MeasureSpec.AT_MOST)
+        else MeasureSpec.makeMeasureSpec((offered - Math.round(48f * dp)).coerceAtLeast(0), MeasureSpec.EXACTLY)
         super.onMeasure(widthMeasureSpec, spec)
+    }
+
+    override fun dispatchDraw(canvas: Canvas) {
+        super.dispatchDraw(canvas)
+        handle?.let { h ->
+            val w = Math.round(40f * dp)
+            val left = (width - w) / 2
+            val top = Math.round(6f * dp)
+            h.setBounds(left, top, left + w, top + Math.round(4f * dp))
+            h.draw(canvas)
+        }
     }
 }
 
@@ -2043,140 +2201,6 @@ internal class VerticalTogglePillView(context: Context, private val onColor: Int
         const val OFF_THUMB = 0xFF9E9E9E.toInt()
         const val DRAG_DP = 24f
         const val TOGGLE_MS = 200L
-    }
-}
-
-/**
- * HA's sensor history chart: 5 horizontal and 4 vertical grid lines, min/mid/max labels on the left with the
- * unit above, times along the bottom, and a 2 dp blue stepped line (across, then up or down) over 24 hours.
- */
-internal class MoreInfoHistoryChartView(context: Context, private val theme: ResolvedTheme) : View(context) {
-    private val dp = resources.displayMetrics.density
-    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1f * dp
-        color = theme.dividerColor
-    }
-    private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 2f * dp
-        color = HA_BLUE
-        strokeJoin = Paint.Join.ROUND
-    }
-    private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = theme.secondaryTextColor
-        textSize = 11f * dp
-    }
-    private val messagePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = theme.secondaryTextColor
-        textSize = 13f * dp
-        textAlign = Paint.Align.CENTER
-    }
-    private val path = Path()
-    /** HA's `formatTime`, in the user's 12/24-hour choice and zone. */
-    private val timeFormat = object { fun format(d: Date): String = HaFormat.formatTime(d.time) }
-    private var points: List<HistoryPoint>? = null
-    private val spanSec = 24 * 3_600.0
-
-    var unit: String = ""
-
-    fun setPoints(data: List<HistoryPoint>, unit: String) {
-        points = data.sortedBy { it.epochSec }
-        this.unit = unit
-        invalidate()
-    }
-
-    // Built once per data, size or minute (the time axis ends at "now"), never per draw: the step path and the labels.
-    private val timeLabels = arrayOfNulls<String>(4)
-    private val valueLabels = arrayOfNulls<String>(3)
-    private var builtPoints: List<HistoryPoint>? = null
-    private var builtW = -1
-    private var builtH = -1
-    private var builtMinute = Long.MIN_VALUE
-
-    private fun rebuild(pts: List<HistoryPoint>, w: Float, h: Float, minute: Long) {
-        builtPoints = pts
-        builtW = width
-        builtH = height
-        builtMinute = minute
-        var minV = pts.minOf { it.value }
-        var maxV = pts.maxOf { it.value }
-        if (maxV - minV < 1e-6) { minV -= 1.0; maxV += 1.0 }
-        val left = 40f * dp
-        val top = 18f * dp
-        val bottom = h - 20f * dp
-        val right = w - 4f * dp
-        val chartH = (bottom - top).coerceAtLeast(1f)
-        val chartW = (right - left).coerceAtLeast(1f)
-        val startSec = minute * 60.0 - spanSec
-        for (i in 0..3) timeLabels[i] = timeFormat.format(Date(((startSec + spanSec * i / 3.0) * 1000).toLong()))
-        valueLabels[0] = format(maxV, maxV - minV)
-        valueLabels[1] = format((maxV + minV) / 2, maxV - minV)
-        valueLabels[2] = format(minV, maxV - minV)
-        fun xOf(sec: Double) = left + (((sec - startSec) / spanSec).toFloat().coerceIn(0f, 1f)) * chartW
-        fun yOf(v: Double) = bottom - ((v - minV) / (maxV - minV)).toFloat() * chartH
-        path.reset()
-        var prevY = yOf(pts[0].value)
-        path.moveTo(xOf(pts[0].epochSec), prevY)
-        for (i in 1 until pts.size) {
-            val x = xOf(pts[i].epochSec)
-            val y = yOf(pts[i].value)
-            path.lineTo(x, prevY)
-            path.lineTo(x, y)
-            prevY = y
-        }
-        path.lineTo(right, prevY) // the last state holds until now
-    }
-
-    override fun onDraw(canvas: Canvas) {
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val pts = points
-        if (pts == null || pts.isEmpty()) {
-            canvas.drawText(HaText.ui(if (pts == null) "ui.components.history_charts.loading_history" else "ui.components.history_charts.no_history_found"), w / 2f, h / 2f, messagePaint)
-            return
-        }
-        // The axis ends at the current minute, as the labels show minutes.
-        val minute = System.currentTimeMillis() / 60_000L
-        if (pts !== builtPoints || width != builtW || height != builtH || minute != builtMinute) rebuild(pts, w, h, minute)
-        val left = 40f * dp
-        val top = 18f * dp
-        val bottom = h - 20f * dp
-        val right = w - 4f * dp
-        val chartH = (bottom - top).coerceAtLeast(1f)
-        val chartW = (right - left).coerceAtLeast(1f)
-        for (i in 0..4) {
-            val y = top + chartH * i / 4f
-            canvas.drawLine(left, y, right, y, gridPaint)
-        }
-        for (i in 0..3) {
-            val x = left + chartW * i / 3f
-            canvas.drawLine(x, top, x, bottom, gridPaint)
-            labelPaint.textAlign = when (i) {
-                0 -> Paint.Align.LEFT
-                3 -> Paint.Align.RIGHT
-                else -> Paint.Align.CENTER
-            }
-            canvas.drawText(timeLabels[i].orEmpty(), x, h - 4f * dp, labelPaint)
-        }
-        labelPaint.textAlign = Paint.Align.RIGHT
-        val labelX = left - 6f * dp
-        val half = labelPaint.textSize / 3f
-        canvas.drawText(valueLabels[0].orEmpty(), labelX, top + half, labelPaint)
-        canvas.drawText(valueLabels[1].orEmpty(), labelX, top + chartH / 2f + half, labelPaint)
-        canvas.drawText(valueLabels[2].orEmpty(), labelX, bottom + half, labelPaint)
-        if (unit.isNotEmpty()) {
-            labelPaint.textAlign = Paint.Align.LEFT
-            canvas.drawText(unit, 0f, labelPaint.textSize, labelPaint)
-        }
-        canvas.drawPath(path, linePaint)
-    }
-
-    private fun format(v: Double, range: Double): String =
-        HaDisplay.formatFixed(v, if (range >= 10.0 || v == Math.rint(v)) 0 else 1)
-
-    private companion object {
-        const val HA_BLUE = 0xFF4269D0.toInt()
     }
 }
 

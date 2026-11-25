@@ -140,7 +140,13 @@ class HttpServer(
     fun start() {
         val ss = ServerSocket()
         ss.reuseAddress = true
-        ss.bind(InetSocketAddress(bindAddress, port))
+        try {
+            ss.bind(InetSocketAddress(bindAddress, port))
+        } catch (e: IOException) {
+            // A port another socket holds: the caller may try another, so this one isn't left open.
+            try { ss.close() } catch (_: IOException) {}
+            throw e
+        }
         serverSocket = ss
         running = true
         Thread({

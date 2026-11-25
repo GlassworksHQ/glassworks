@@ -28,7 +28,7 @@ const TEST_PREFIX = '/__island-test/';
  * the bridge's first snapshot back that long, so the card draws once with no states, as when its script loads before
  * the bridge connects).
  * Returns { card, before, bridge, tap, errors, evaluated }: `before` is what the card drew, `bridge` what the page
- * sent, `evaluated` what `evaluate` returned.
+ * sent, `evaluated` what `evaluate` returned, `storage` the island's localStorage for a case with `storage`.
  */
 export async function probeIsland(root, caseFile, opts = {}) {
   const corpus = join(root, 'engines', 'engine-vitro', 'src', 'test', 'parity');
@@ -99,7 +99,11 @@ export async function probeIsland(root, caseFile, opts = {}) {
       return { instance: true, defined: !!customElements.get(tag), height: Math.round(card.getBoundingClientRect().height), elements: tags, undefined: tags.filter((t) => !customElements.get(t)) };
     }, tag);
     const bridge = (list) => list.filter((m) => !['watch', 'watchAll', 'registries'].includes(m.type));
-    const out = { card: c.card.type, before, bridge: bridge(sent), tap: null, errors };
+    // A case with HA's localStorage (`storage`): what the island's localStorage holds after it ran.
+    const storage = c.storage
+      ? await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).filter((k) => !k.startsWith('__vitro')).map((k) => [k, localStorage.getItem(k)])))
+      : undefined;
+    const out = { card: c.card.type, before, bridge: bridge(sent), tap: null, errors, storage };
     if (opts.evaluate) {
       out.evaluated = await page.evaluate(([src, tag]) => {
         const mount = document.getElementById('mount');

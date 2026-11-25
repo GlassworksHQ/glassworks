@@ -130,6 +130,11 @@ class VitroCardContext(
      * ([dev.glassworks.engine.vitro.compat.IslandFrontend]). Main thread. The default (tests, no engine) does nothing.
      */
     val needsFrontend: (card: CardConfig, tags: List<String>, owners: List<String>) -> Unit = { _, _, _ -> },
+    /**
+     * What Home Assistant's web UI keeps in `localStorage` on this panel ([dev.glassworks.web.HaPageStorage]), or null
+     * when the panel has no copy for this Home Assistant: a web island starts its card's storage from it (#881).
+     */
+    val pageStorage: () -> JSONObject? = { null },
 ) {
     val dp: Float = context.resources.displayMetrics.density
     /** The main thread, for the card's own updates: one that throws is logged and dropped ([GuardedHandler]). */
@@ -184,6 +189,7 @@ class VitroCardContext(
         watchToken = watchToken,
         touch = touch,
         needsFrontend = needsFrontend,
+        pageStorage = pageStorage,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout

@@ -89,6 +89,10 @@ Tier 3 never uses `android.webkit.WebView`. Each island is served from `VitroIsl
 
 Each island card gets one GeckoView page, which stays open only while the card is on the dashboard. A reconnect, a dashboard edit to other cards and a theme change all keep the page, and a new theme restyles it in place. When the card's own config changes or the card is removed, its page closes. Islands on a view that isn't on screen, or under one of Home Assistant's own pages, stop drawing until their view comes back.
 
+An island stays connected to the app for as long as its card is on the dashboard, also while its view is hidden. The app pings it every 30 seconds, and the browser answers on its own, so a quiet card keeps its one connection and isn't sent the whole state again.
+
+Many cards keep small things in the browser's `localStorage`, such as a snoozed row, a collapsed section or the selected tab. Every island shares one address on the panel, which stays the same from one app start to the next, so what a card stores there is still there after a restart. An island also starts from what Home Assistant's own web page keeps on this panel: whenever that page runs, the app keeps a copy of its storage (never sign-in tokens or anything else named like a credential), and each island takes it in before its card loads. A value Home Assistant's page changed since wins, and a value only the card changed in the island stays. It goes one way: what a card changes in an island doesn't reach Home Assistant's web page. Another app holding that address at start moves the islands to a new one, where their storage starts again from Home Assistant's copy.
+
 Non-dashboard pages, such as `/auth/authorize` for panel sign-in, history, settings or the Blueprint import dialog, are handed to the wrapped fallback `Engine`, which loads them from Home Assistant itself. Their WebSocket and sign-in work as they do with Vitro off.
 
 The way back from such a page always leads to the native dashboard:
@@ -163,14 +167,18 @@ To check a dashboard before you turn Vitro on, paste it into the [compatibility 
 
 ## More-Info dialogs
 
-Tapping or holding a tile opens a native More-Info dialog styled after Home Assistant 2026, with no web view involved:
+Tapping or holding a tile opens a native More-Info dialog styled after Home Assistant 2026, with no web view involved.
+Like Home Assistant's, it's a centered dialog 580 px wide when the screen is wider than 870 px and taller than 500 px
+(the Pixel Tablet), and a bottom sheet as wide as the screen otherwise (the S1 Plus, the Mirror). It draws on the
+dialog color of your own theme, never on the view's theme, so a view with see-through cards still gets a solid dialog.
+Its title names the entity on two lines, as Home Assistant does: the area and device over the entity's own name.
 
 | Entity | Dialog |
 |---|---|
 | Light | Brightness dimmer, an HSV color wheel, a Kelvin color-temperature picker, and color swatches |
 | Climate | A circular thermostat dial with mode buttons, and two thumbs for a heat/cool range |
 | Cover | A top-down position slider |
-| Sensor | A 24-hour stepped history graph |
+| Sensor | Its icon, name, last change and state, then the last 24 hours: Home Assistant's 5-minute statistics for a sensor with a state class ("5-minute aggregated"), its state history otherwise, and "Show more", which opens the history page in Home Assistant's frontend (Back returns to the dashboard) |
 | Camera | A live stream, chosen as on the picture cards (WebRTC, then HLS and MJPEG) |
 | Switch | A toggle pill |
 | Alarm panel | A PIN pad |

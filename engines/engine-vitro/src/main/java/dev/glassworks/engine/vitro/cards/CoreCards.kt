@@ -3069,6 +3069,9 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        // Android calls onWindowVisibilityChanged on attach only when the window isn't GONE: read it here, so a card
+        // attached to a hidden window starts nothing, and one attached to a visible window starts now.
+        windowVisible = windowVisibility == VISIBLE
         followShown()
     }
 
@@ -3087,19 +3090,20 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         if (isAttachedToWindow) followShown()
     }
 
-    /** The window went away (the panel's screen off, the app in the background) or came back. */
-    private var windowHidden = false
+    /** Whether the window shows: false while it's gone (the panel's screen off, the app in the background). */
+    private var windowVisible = false
 
     override fun onWindowVisibilityChanged(visibility: Int) {
         super.onWindowVisibilityChanged(visibility)
-        windowHidden = visibility != VISIBLE
+        windowVisible = visibility == VISIBLE
         if (isAttachedToWindow) followShown()
     }
 
+    /** Plays (starting if it hasn't) while the card and its window show, and pauses otherwise. */
     private fun followShown() {
         val f = feed ?: return
         guarded("camera") {
-            if (isShown && !windowHidden) {
+            if (isShown && windowVisible) {
                 f.start()
                 f.setActive(true)
             } else {

@@ -77,6 +77,8 @@ class MjpegCameraStream internal constructor(
         disconnect()
         connectedAt = SystemClock.elapsedRealtime()
         gotFrame = false
+        // Nothing until this start's (or resume's) first frame: the picture from before the pause isn't live.
+        image.setImageDrawable(null)
         lateinit var current: Player
         current = newPlayer(url, accessToken(), onFrame@{ bmp ->
             if (closed || player !== current) return@onFrame
