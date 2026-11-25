@@ -2518,7 +2518,8 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
         if (eid != null) {
             observe(eid) { s ->
                 val active = s?.isActive == true
-                icon.setIcon(MdiIcons.resolveIconName(config.icon, s), if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor)
+                val color = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
+                icon.setIcon(MdiIcons.resolveIconName(config.icon, s), stateColorBrightness(s, color))
                 label.text = config.name ?: s?.displayName ?: eid
                 state.text = s?.plainState().orEmpty()
             }
@@ -2543,6 +2544,18 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
+}
+
+/**
+ * HA's `stateColorBrightness` on the button card's icon: `filter: brightness((brightness + 245) / 5 %)` for an entity
+ * with a `brightness` attribute (not a plant), which scales the icon's color channels.
+ */
+internal fun stateColorBrightness(s: EntityState?, color: Int): Int {
+    val b = (s?.attributes?.get("brightness") as? Number)?.toDouble()?.takeIf { it != 0.0 } ?: return color
+    if (s.domain == "plant") return color
+    val f = ((b + 245) / 500).toFloat()
+    fun ch(c: Int) = (c * f).roundToInt().coerceIn(0, 255)
+    return Color.argb(Color.alpha(color), ch(Color.red(color)), ch(Color.green(color)), ch(Color.blue(color)))
 }
 
 /** Native HA `heading` card (`custom:mushroom-title-card` is [MushroomTitleCardView]). */

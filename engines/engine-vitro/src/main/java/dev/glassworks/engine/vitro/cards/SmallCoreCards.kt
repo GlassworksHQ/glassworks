@@ -251,9 +251,12 @@ class ToggleGroupCardView(ctx: VitroCardContext, private val config: CardConfig)
     }.orEmpty()
 
     init {
-        // `background: none; border: none; box-shadow: none`.
+        // `background: none; border: none; box-shadow: none`. The tile container still sits a `--ha-card-border-width`
+        // out from the card's edges (`margin: calc(-1 * var(--ha-card-border-width, 1px))`), the border gone or not.
         dropSurface()
         elevation = 0f
+        val out = -(ctx.theme.cardBorderWidthDp * ctx.dp).roundToInt()
+        (row.layoutParams as LayoutParams).setMargins(out, out, out, out)
         iconFrame.isClickable = true
         applyHaRipple(iconFrame, 999f, ctx.theme.dark)
         VitroAccess.role(iconFrame, A11yRole.BUTTON)
@@ -367,7 +370,10 @@ class AlertCardView(ctx: VitroCardContext, private val config: CardConfig) :
     private var pulsing = false
 
     init {
-        addView(washView, 0, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        // `ha-card::before { inset: 0 }`: the padding box, inside the card's border.
+        val border = (ctx.theme.cardBorderWidthDp * ctx.dp).roundToInt()
+        wash.cornerRadius = (ctx.theme.cardBorderRadiusDp * ctx.dp - border).coerceAtLeast(0f)
+        addView(washView, 0, LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { setMargins(border, border, border, border) })
         val tap = ActionConfig.parse(raw.optJSONObject("tap_action"), "more-info")
         val hold = ActionConfig.parse(raw.optJSONObject("hold_action"), "none")
         if (tap.action != "none" || hold.action != "none") {
@@ -519,7 +525,8 @@ class DateCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             ellipsize = null
             setLineSpacing(0f, 1f)
         }
-        col.addView(dateView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+        // `max-width: 100%; text-align: center`: centered within the card's width.
+        col.addView(dateView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         addView(col, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         render(Date(ctx.now()))
     }
@@ -966,9 +973,9 @@ class HaErrorCardView(ctx: VitroCardContext, message: String) : CardSurface(ctx)
     companion object {
         /**
          * What HA 2026.11 shows for a `section` card: the type is always loaded, but no `hui-section-card` element
-         * exists, so `createCardElement`'s `element.setConfig(config)` throws, and the error card shows the browser's
-         * message for it (the frontend bundle names the element `n`).
+         * exists, so the card fails to build and HA's error card shows its generic title (captured against the pinned
+         * frontend: the `section-card` parity case).
          */
-        const val SECTION_CARD_ERROR = "n.setConfig is not a function"
+        const val SECTION_CARD_ERROR = "Configuration error"
     }
 }

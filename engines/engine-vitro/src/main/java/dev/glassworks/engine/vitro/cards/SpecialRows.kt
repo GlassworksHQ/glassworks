@@ -162,7 +162,7 @@ internal object SpecialRows {
 
     /**
      * `hui-buttons-row` (`hui-buttons-base`): one filled assist chip per entity (32 px, 16 px radius, 15% of the text
-     * color), its 18 px state badge in the state color (else `--secondary-text-color`) and its name, 8 px apart in a
+     * color), its 18 px state badge in the state color (else `--secondary-text-color`) and its 12.25 px name, 8 px apart in a
      * box 12 px in and 8 px from the row's edges. They wrap, except on a panel at most 450 px wide or 500 px tall,
      * where they scroll sideways in one line. Each chip runs its own actions: a tap toggles HA's toggle domains (else
      * more-info), a hold opens more-info.
@@ -208,7 +208,8 @@ internal object SpecialRows {
         }
         val icon = MdiIconView(ctx.context)
         if (showIcon) chip.addView(icon, LinearLayout.LayoutParams(ctx.px(18f), ctx.px(18f)))
-        val label = text(ctx, 14f, ctx.theme.primaryTextColor).apply { setLineSpacing(0f, 1f) }
+        // `.label`: 0.875rem (HA's root font is 14 px: 12.25 px) on a 1.25rem line.
+        val label = text(ctx, 12.25f, ctx.theme.primaryTextColor).apply { setLineSpacing(0f, 1f) }
         chip.addView(label, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { if (showIcon) marginStart = ctx.px(8f) })
         val defaultTap = if (entity != null && entity.substringBefore('.') in EntityRowConfig.HA_DOMAINS_TOGGLE) "toggle" else "more-info"
         val tap = ActionConfig.parse(conf.optJSONObject("tap_action"), defaultTap)

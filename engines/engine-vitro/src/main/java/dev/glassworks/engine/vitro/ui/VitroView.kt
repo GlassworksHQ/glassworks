@@ -1152,7 +1152,8 @@ class VitroView(
         columns.forEach { row.addView(it, LinearLayout.LayoutParams(0, WRAP_CONTENT)) }
         cards.forEachIndexed { i, card ->
             if (pinIfFixed(card, ctx)) return@forEachIndexed
-            columns[placement[i]].addView(wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx), cardMarginParams(ctx, widthDp))
+            val column = columns[placement[i]]
+            column.addView(wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx), cardMarginParams(ctx, widthDp, first = column.childCount == 0))
         }
         return row
     }
@@ -1169,7 +1170,8 @@ class VitroView(
         for (card in cards) {
             if (pinIfFixed(card, ctx)) continue
             val inSidebar = card.raw.optJSONObject("view_layout")?.optString("position") == "sidebar"
-            (if (inSidebar) side else main).addView(wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx), cardMarginParams(ctx, widthDp))
+            val column = if (inSidebar) side else main
+            column.addView(wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx), cardMarginParams(ctx, widthDp, first = column.childCount == 0))
         }
         if (!split) {
             return LinearLayout(context).apply {
@@ -1187,12 +1189,16 @@ class VitroView(
         if (own != null) v.setPadding(own, own, own, own) else v.setPadding(px(4f), px(4f), px(4f), 0)
     }
 
-    /** `margin: var(--masonry-view-card-margin, 4px 4px 8px)`, the side margins dropped at 500 px and narrower. */
-    private fun cardMarginParams(ctx: VitroCardContext, widthDp: Int): LinearLayout.LayoutParams {
+    /**
+     * `margin: var(--masonry-view-card-margin, 4px 4px 8px)`, the side margins dropped at 500 px and narrower. Block
+     * margins collapse: after the column's [first] card, the larger of the bottom and top margins is the gap.
+     */
+    private fun cardMarginParams(ctx: VitroCardContext, widthDp: Int, first: Boolean): LinearLayout.LayoutParams {
         val m = MushroomTitleCardView.paddingDp(ctx.theme.vars["masonry-view-card-margin"]) ?: floatArrayOf(4f, 4f, 8f, 4f)
         val narrow = widthDp <= 500
+        val top = if (first) m[0] else maxOf(0f, m[0] - m[2])
         return LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-            setMargins(if (narrow) 0 else px(m[3]), px(m[0]), if (narrow) 0 else px(m[1]), px(m[2]))
+            setMargins(if (narrow) 0 else px(m[3]), px(top), if (narrow) 0 else px(m[1]), px(m[2]))
         }
     }
 
