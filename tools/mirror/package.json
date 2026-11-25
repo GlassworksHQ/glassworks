@@ -12,6 +12,7 @@
   "dependencies": {
     "@glassworks/adb": "0.0.0",
     "@glassworks/app-adb": "0.0.0",
+    "@glassworks/bootpatch": "0.0.0",
     "@glassworks/ext4": "0.1.1",
     "@glassworks/fastboot": "0.1.1",
     "@glassworks/lululemon-mirror-installer": "0.0.0",
