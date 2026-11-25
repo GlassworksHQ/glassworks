@@ -75,12 +75,13 @@ again in Labs gives it a fresh start. A single crash, or a restart, never turns 
 
 ## Administrators and everyone else
 
-Vitro shows each Home Assistant user what Home Assistant's own frontend shows them. It asks Home Assistant who the
-panel's user is before it draws anything.
+Vitro shows each Home Assistant user what Home Assistant's own frontend shows them. Before it draws anything, it asks
+Home Assistant who the panel's user is and which dashboards that user may open. It asks again whenever an
+administrator changes the dashboards, so a dashboard made admin only leaves a non-admin's panel right away.
 
 | | An administrator | Anyone else |
 |---|---|---|
-| A dashboard marked **Admin only** | Drawn | Not drawn. Home Assistant's frontend takes the link and opens the user's default dashboard instead, which Vitro draws again if it can |
+| A dashboard marked **Admin only**, in its settings or in the sidebar's | Drawn | Not drawn. Home Assistant's frontend takes the link and opens the user's default dashboard instead, which Vitro draws again if it can |
 | The panel's list of dashboards | Every dashboard | The ones the user may open |
 | A card that can't be built, or a card whose config Home Assistant rejects | The error card, titled "Configuration error" | The error card's icon alone |
 | A tile or plant card whose entity Home Assistant doesn't have | The warning card, titled "Entity not found" | The warning card's icon alone |

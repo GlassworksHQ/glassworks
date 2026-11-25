@@ -169,8 +169,11 @@ class HaDashboardClientTest {
         )
         assertEquals("language", sent[0].getString("key"))
         assertEquals((1..9).toList(), sent.take(9).map { it.getInt("id") })
+        // After the user's: their panels (what HA's frontend opens for them), and HA's changes to them.
+        assertEquals(listOf("get_panels", "subscribe_events"), sent.drop(12).take(2).map { it.getString("type") })
+        assertEquals("panels_updated", sent[13].getString("event_type"))
         assertEquals(
-            listOf("themes_updated", "lovelace_updated"),
+            listOf("themes_updated", "lovelace_updated", "panels_updated"),
             server.commands("subscribe_events").map { it.getString("event_type") },
         )
     }
@@ -349,7 +352,8 @@ class HaDashboardClientTest {
         assertFalse(c.mayOpen("admin-only"))
         assertTrue(c.mayOpen("wall-test"))
         assertTrue("the default dashboard is never admin only", c.mayOpen(null))
-        assertTrue("a path the list doesn't name is HA's to answer", c.mayOpen("not-listed"))
+        // A path that is none of the user's panels: HA's frontend routes it to the user's default panel.
+        assertFalse(c.mayOpen("not-listed"))
         // The user's list leaves the admin-only dashboard out, as HA's frontend does.
         awaitCondition("dashboards") { listener.dashboards.isNotEmpty() }
         assertEquals(listOf("wall-test"), listener.dashboards.single().map { it.urlPath })
@@ -428,13 +432,13 @@ class HaDashboardClientTest {
     }
 
     @Test
-    fun withNoDashboardListOnlyAnAdministratorIsDrawnANamedDashboard() {
-        // HA refused lovelace/dashboards/list: which dashboards are admin only is unknown.
-        server.failDashboardList = true
+    fun withNoPanelsOnlyTheDefaultDashboardIsDrawnForANonAdmin() {
+        // HA refused get_panels: which panels the user has is unknown.
+        server.failPanels = true
         server.currentUser = wallUser
         val c = started("wall-test")
         awaitCondition("refused") { listener.refused.isNotEmpty() }
-        // HA's frontend decides for a user who isn't an administrator; the default dashboard is never admin only.
+        // HA's frontend decides any named dashboard for a user who isn't an administrator.
         assertTrue(listener.configs.isEmpty())
         assertFalse(c.mayOpen("wall-test"))
         assertTrue(c.mayOpen(null))
@@ -443,12 +447,90 @@ class HaDashboardClientTest {
     }
 
     @Test
-    fun withNoDashboardListAnAdministratorOpensAnyDashboard() {
-        server.failDashboardList = true
+    fun withNoPanelsAnAdministratorOpensAnyDashboard() {
+        server.failPanels = true
         val c = started("admin-only")
         awaitCondition("config") { listener.configs.isNotEmpty() }
         assertTrue(listener.refused.isEmpty())
         assertTrue(c.mayOpen("admin-only"))
+    }
+
+    @Test
+    fun aPanelOverrideMakesADashboardAdminOnlyThoughItsOwnConfigSaysNot() {
+        // frontend/update_panel stored require_admin over wall-test, whose dashboard config says false: get_panels
+        // leaves it out for a non-admin, and so does Vitro, its list included.
+        server.panelRequireAdmin["wall-test"] = true
+        server.currentUser = wallUser
+        val c = started("wall-test")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertTrue(listener.configs.isEmpty())
+        assertFalse(c.mayOpen("wall-test"))
+        awaitCondition("dashboards") { listener.dashboards.isNotEmpty() }
+        assertEquals(emptyList<String>(), listener.dashboards.single().map { it.urlPath })
+        // The other way round: an admin-only dashboard opened to everyone.
+        listener.refused.clear()
+        server.panelRequireAdmin["admin-only"] = false
+        server.pushPanelsUpdated()
+        c.fetchDashboard("admin-only")
+        awaitCondition("admin-only, overridden open") { listener.configs.isNotEmpty() }
+        assertEquals("admin-only", listener.configs.single().first)
+    }
+
+    @Test
+    fun aDashboardMadeAdminOnlyWhileOnScreenIsRefusedWithoutAReconnect() {
+        server.currentUser = wallUser
+        val c = started("wall-test")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        assertTrue(listener.refused.isEmpty())
+        awaitCondition("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
+        // An administrator makes it admin only in HA: HA fires panels_updated, and the dashboard on screen goes.
+        server.panelRequireAdmin["wall-test"] = true
+        server.pushPanelsUpdated()
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertEquals(listOf<String?>("wall-test"), listener.refused.toList())
+        assertEquals("the same connection", 1, server.connectUrls.size)
+        assertEquals(2, server.commands("get_panels").size)
+        assertFalse(c.mayOpen("wall-test"))
+        // The Dashboard select is told too.
+        awaitCondition("dashboards again") { listener.dashboards.size == 2 }
+        assertEquals(emptyList<String>(), listener.dashboards.last().map { it.urlPath })
+    }
+
+    @Test
+    fun aConfigWaitsForThePanelsAHaChangeAsksForAgain() {
+        server.currentUser = wallUser
+        val c = started("wall-test")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        awaitCondition("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
+        // HA's panels change; the panels and the config are asked again, and HA now refuses the user wall-test.
+        server.panelRequireAdmin["wall-test"] = true
+        server.pushPanelsUpdated()
+        c.fetchDashboard("wall-test")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertEquals("the second config isn't handed on with the old panels", 1, listener.configs.size)
+    }
+
+    @Test
+    fun aRefusedDashboardListLeavesAccessToThePanels() {
+        // lovelace/dashboards/list only feeds the Dashboard select: its error changes nothing of who opens what.
+        server.failDashboardList = true
+        server.currentUser = wallUser
+        val c = started("wall-test")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        assertTrue(c.mayOpen("wall-test"))
+        assertFalse(c.mayOpen("admin-only"))
+        assertTrue("no list to report", listener.dashboards.isEmpty())
+    }
+
+    @Test
+    fun theDefaultDashboardIsTheLovelacePanel() {
+        // get_panels is the rule for the default dashboard too: an override can make it admin only.
+        server.panelRequireAdmin["lovelace"] = true
+        server.currentUser = wallUser
+        val c = started(null)
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertEquals(listOf<String?>(null), listener.refused.toList())
+        assertFalse(c.mayOpen(null))
     }
 
     @Test
@@ -813,7 +895,8 @@ class HaDashboardClientTest {
         val c = connected(connect = { url ->
             SpySocket(server.connect(url), before = { msg -> writers += msg.optString("type") to Thread.currentThread().name })
         })
-        awaitCondition("startup writes") { writers.size >= 13 } // auth + 9 startup requests + 3 user-data requests
+        // auth + 9 startup requests + 3 user-data requests + the panels and their subscription
+        awaitCondition("startup writes") { writers.size >= 15 }
         val caller = Thread.currentThread()
 
         c.callService("light", "turn_on")
@@ -833,7 +916,7 @@ class HaDashboardClientTest {
         assertEquals(ids.sorted(), ids)
         // Display data (registry, icons, translations) can interleave: it isn't what this test orders.
         val display = setOf("config/entity_registry/list_for_display", "config/device_registry/list", "config/area_registry/list", "frontend/get_icons", "frontend/get_translations")
-        val after = server.received.drop(1).filter { it.getInt("id") > 12 && it.getString("type") !in display }.map {
+        val after = server.received.drop(1).filter { it.getInt("id") > 14 && it.getString("type") !in display }.map {
             if (it.getString("type") == "call_service") it.getString("service") else it.getString("type")
         }
         assertEquals(listOf("turn_on", "turn_off", "history/history_during_period", "toggle"), after.take(4))

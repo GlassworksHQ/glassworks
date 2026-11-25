@@ -148,6 +148,18 @@ class AdminDetailTest {
         assertEquals(View.GONE, tile.missingWarning!!.visibility)
     }
 
+    @Test fun theWashIsCompositedOnceOverATranslucentCard() {
+        val orange = 0xFFFFA600.toInt()
+        // Opaque: the background with 12% of the color, opaque.
+        assertEquals(android.graphics.Color.argb(255, 255, 187, 30), dev.glassworks.engine.vitro.ui.washOver(0xFFFFBE22.toInt(), orange))
+        // Transparent (a theme's `ha-card-background: transparent`): the color itself at 12%, as HA's ::after draws it.
+        assertEquals(android.graphics.Color.argb(31, 255, 166, 0), dev.glassworks.engine.vitro.ui.washOver(android.graphics.Color.TRANSPARENT, orange))
+        // Half transparent black: alpha 0.12 + 0.5 * 0.88 = 0.56, color (0.12 * c) / 0.56.
+        val half = dev.glassworks.engine.vitro.ui.washOver(android.graphics.Color.argb(128, 0, 0, 0), orange)
+        assertEquals(143, android.graphics.Color.alpha(half))
+        assertEquals((255 * 0.12f / (0.12f + 128 / 255f * 0.88f)).roundToInt(), android.graphics.Color.red(half))
+    }
+
     // ---- hui-warning: a plant card whose entity HA doesn't have ----
 
     @Test fun thePlantCardsMissingEntityIsHasWarningTitledForAnAdministratorOnly() {

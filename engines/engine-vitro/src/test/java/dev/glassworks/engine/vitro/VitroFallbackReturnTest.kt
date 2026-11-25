@@ -434,6 +434,21 @@ class VitroFallbackReturnTest {
         assertEquals(living, host.locations.last())
     }
 
+    /** HA makes the dashboard on screen admin only (`frontend/update_panel`): it goes, on the same connection. */
+    @Test fun aDashboardMadeAdminOnlyWhileOnScreenGoesToHomeAssistantsFrontend() {
+        server.currentUser = wallUser
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        awaitMain("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
+        server.panelRequireAdmin["wall-test"] = true
+        server.pushPanelsUpdated()
+        awaitMain("fallback") { fb.opens.any { it.background == Color.BLACK } }
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+        assertEquals(listOf(living), fp.loads.toList())
+        assertEquals("no reconnect", 1, server.connectUrls.size)
+    }
+
     @Test fun startedOnAnAdminOnlyDashboardAUserWhoIsntAnAdministratorGetsHomeAssistantsPage() {
         server.currentUser = wallUser
         val fb = RecordingEngine()

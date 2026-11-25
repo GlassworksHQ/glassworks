@@ -121,12 +121,18 @@ internal fun errorCardContent(
     }
 }
 
-/** [color] at 12% over [under] (`ha-card::after`, `opacity: 0.12`), at least as opaque as the wash itself. */
-private fun washOver(under: Int, color: Int): Int {
+/**
+ * [color] at 12% over [under] (`ha-card::after`, `opacity: 0.12`), composited once ("over"): an opaque [under] stays
+ * opaque, and a transparent one leaves the wash as HA draws it, the color at 12%.
+ */
+internal fun washOver(under: Int, color: Int): Int {
     val a = 0.12f
-    fun mix(u: Int, o: Int) = (u * (1 - a) + o * a).roundToInt()
+    val ua = Color.alpha(under) / 255f
+    val outA = a + ua * (1 - a)
+    if (outA <= 0f) return Color.TRANSPARENT
+    fun mix(u: Int, o: Int) = ((o * a + u * ua * (1 - a)) / outA).roundToInt().coerceIn(0, 255)
     return Color.argb(
-        maxOf(Color.alpha(under), (a * 255).roundToInt()),
+        (outA * 255).roundToInt(),
         mix(Color.red(under), Color.red(color)), mix(Color.green(under), Color.green(color)), mix(Color.blue(under), Color.blue(color)),
     )
 }
