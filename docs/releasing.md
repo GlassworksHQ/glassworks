@@ -551,8 +551,10 @@ release lines and `stage-assets.mjs` all skip it, and `FrameUpdateTest` checks t
 - **The notes are the update card.** Home Assistant shows how to install it first, then the notes' first
   paragraph, headings and bullets, up to 255 characters (`Releases.summary`). Start them with a one-line summary.
 - **The Mirror's notice** comes from `frames/lululemon-mirror/FRAME-CHANGELOG.md`, released with
-  `what: lululemon-mirror:frame` or `all`. Before the Mirror frame 1.0.0 goes out, Kiln's `MIRROR_FRAME.version` must
-  be `1.0.0` too, so freshly flashed Mirrors say the version the release names.
+  `what: lululemon-mirror:frame` or `all`. Kiln's `MIRROR_FRAME.version` must be the release's version, so freshly
+  flashed Mirrors say the version the release names: bump it in the change that cuts the section. The plan fails a
+  Mirror frame release at any other version (`versionFile` in its frame's data); a dry run on the Unreleased notes
+  only warns.
 
 Panels see it within 24 hours, or at once through `homeassistant.update_entity` on the Frame update entity. No
 frame release exists before 1.0.0, so until then every device shows its frame version and no update.

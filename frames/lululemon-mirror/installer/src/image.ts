@@ -40,8 +40,10 @@ export const IMAGE_KIOSK = { package: 'com.nimrod.mirrorkiosk', dir: '/priv-app/
 /**
  * The Mirror frame's version (#139): Kiln writes it into build.prop with the frame's id, and the app shows it and
  * compares it with the newest `frames/lululemon-mirror/v<version>` release (docs/releasing.md, "Frame releases").
- * Bump it with every change to what lands on a Mirror, and release that version. 1.0.0 comes out with Glassworks
- * 1.0.0; until then Kiln writes a pre-release of it, which counts as older than 1.0.0.
+ * Bump it with every change to what lands on a Mirror, and release that version: tools/release/plan.py fails a Mirror
+ * frame release at any other version (`versionFile` in frames/lululemon-mirror/design/frame.json), so keep this
+ * declaration's shape. 1.0.0 comes out with Glassworks 1.0.0; until then Kiln writes a pre-release of it, which counts
+ * as older than 1.0.0.
  */
 export const MIRROR_FRAME = { id: 'lululemon-mirror', version: '1.0.0-dev' } as const;
 

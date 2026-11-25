@@ -204,7 +204,7 @@ it, and the plan comes out of it alone: adding a frame needs data here, not a ne
 |---|---|
 | `app` | The app lines its devices run, by name. Several frames can name one line; it is built once |
 | `lines` | Only in the frame whose app module builds the line: `{ "<line>": { title, tag, changelog, build, assets, … } }`. `tag` and `assets` use `{version}` and `{abi}`, and are the names panels and Kiln read, so they never change. `build` is `s1-kiosk` (the S1 app, with its radio bundle) or `gradle` (`task`, `apk`, `package`, `minSdk`, `writeSettings`). `abis: "every-frame"` builds every frame's ABIs; else the frame's own. `latest: true` on the one line whose stable release is `releases/latest` (the S1 app's) |
-| `frame` | Its own frame release, tagged `frames/<id>/v<version>`: `bundle` is `notice` (notes only, no files) or `signed` (a bundle signed with the frame bundle key: `script`, `pubkey`, `assets`), with `title`, `changelog` and an optional `note` for the run's summary |
+| `frame` | Its own frame release, tagged `frames/<id>/v<version>`: `bundle` is `notice` (notes only, no files) or `signed` (a bundle signed with the frame bundle key: `script`, `pubkey`, `assets`), with `title`, `changelog` and an optional `note` for the run's summary. `versionFile`, when the frame's installer writes the frame version into the device: the file that declares it as `{ id: '<frame id>', version: '<version>' }` (the Mirror's `MIRROR_FRAME`). A frame release at another version fails the plan |
 
 | Frame | `app` | `frame` |
 |---|---|---|
