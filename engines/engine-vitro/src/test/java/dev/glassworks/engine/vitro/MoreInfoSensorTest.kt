@@ -192,6 +192,28 @@ class MoreInfoSensorTest {
     }
 
     @Test
+    fun aStateHistoryRefusedWhileOfflineStartsAgainOnReconnect() {
+        // The socket is down when the sheet opens: the client refuses the subscription at once.
+        var refuse = true
+        val store = sensor(emptyMap())
+        val ctx = VitroCardContext(
+            context = activity, haBase = FakeHaServer.BASE, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
+            accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            subscribeWs = { msg, _, onError -> subscriptions += msg; if (refuse) onError(null); {} }, now = { now },
+        )
+        val sheet = MoreInfoSheet(ctx) {}
+        activity.setContentView(sheet)
+        sheet.show(SENSOR)
+        idle()
+        assertEquals(1, subscriptions.size)
+        refuse = false
+        sheet.reconnected()
+        idle()
+        assertEquals("the history subscribes again", 2, subscriptions.size)
+    }
+
+    @Test
     fun aReconnectRenewsTheStateHistoryStream() {
         val sheet = open(sensor(emptyMap()))
         assertEquals(1, subscriptions.size)

@@ -53,6 +53,9 @@ internal class MoreInfoHistoryView(
     private var prepareGeneration = 0
     private var started = false
 
+    /** This shows the state history (not statistics), whether or not its subscription is up now: [reconnected]. */
+    private var historyMode = false
+
     /** The first statistics attempt's deadline ([fetchStatistics]), until it settles. */
     private var pendingDeadline: Runnable? = null
 
@@ -61,7 +64,8 @@ internal class MoreInfoHistoryView(
      * client drops it without an error), so it starts again. Statistics are plain requests: the next tick fetches them.
      */
     fun reconnected() {
-        if (!started || stream == null) return
+        // By the mode, not the stream: a subscription HA (or a down socket) refused has no stream left to renew.
+        if (!started || !historyMode) return
         unsubscribe?.invoke()
         unsubscribe = null
         stream = null
@@ -128,6 +132,7 @@ internal class MoreInfoHistoryView(
     /** Stops every request and timer: the dialog closed, or showed something else. */
     fun stop() {
         started = false
+        historyMode = false
         generation++
         prepareGeneration++
         ctx.main.removeCallbacks(tick)
@@ -207,6 +212,7 @@ internal class MoreInfoHistoryView(
     /** `subscribeHistoryStatesTimeWindow(hass, …, 24, [id])`, computed as `computeHistory` does. */
     private fun subscribeHistory(gen: Int) {
         if (gen != generation || unsubscribe != null) return
+        historyMode = true
         val s = HaGraph.Stream(HOURS)
         stream = s
         val msg = HaGraph.historyStreamMessage(listOf(entityId), HOURS, ctx.now()) { ctx.store[it] != null }
