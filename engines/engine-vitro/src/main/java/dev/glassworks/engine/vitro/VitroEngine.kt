@@ -27,6 +27,7 @@ import dev.glassworks.engine.Page
 import dev.glassworks.engine.PageHost
 import dev.glassworks.engine.PagePort
 import dev.glassworks.engine.vitro.compat.CompatWarmup
+import dev.glassworks.engine.vitro.compat.WebFallback
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
 import dev.glassworks.engine.vitro.island.VitroIslandServer
@@ -285,6 +286,19 @@ class VitroEngine(
                     host.onLocationChange(path)
                 }
             }
+            vitroView.onWebView = { v, reason ->
+                // Only for the dashboard that owns the route, as onViewSelected: one still on screen while another
+                // loads isn't the page's to leave.
+                if (nativeActive && displayedDashboard != null && displayedDashboard == (currentOrigin to currentDashboardPath)) {
+                    val url = buildViewUrl(currentOrigin, currentDashboardPath, v.path ?: v.index.toString())
+                    if (url != null) {
+                        Log.i(logTag, "Vitro doesn't draw $reason; Home Assistant's frontend shows ${forLog(url)}")
+                        leaveNativeDashboard()
+                        currentUrl = url
+                        openInFallback(url)
+                    }
+                }
+            }
             // One chronological history for back: a tab tap goes in it like a load does.
             vitroView.onTabNavigation = { currentUrl?.let(::remember) }
             vitroView.pageBack = { backInHistory() }
@@ -383,7 +397,8 @@ class VitroEngine(
                 currentDashboardPath = dashPath
                 client?.claimDashboard(dashPath)
                 vitroView.navigateToView(viewPath)
-                readyWhenBuilt("view")
+                // A view Vitro doesn't draw left for the fallback, which signals ready itself.
+                if (nativeActive) readyWhenBuilt("view")
                 return
             }
 
@@ -687,13 +702,23 @@ class VitroEngine(
                 post {
                     // An older request's answer for a dashboard the page has left must not replace the current one.
                     if (urlPath != currentDashboardPath) return@post
+                    // A strategy dashboard has no views to draw: HA's frontend generates them, as it does for a
+                    // dashboard with no saved config.
+                    WebFallback.dashboardReason(config)?.let { reason ->
+                        Log.i(logTag, "Vitro doesn't draw $reason; Home Assistant's frontend shows it")
+                        val url = currentUrl
+                        leaveNativeDashboard()
+                        url?.let(::openInFallback)
+                        return@post
+                    }
                     displayedDashboard = currentOrigin to urlPath
                     // A new config builds new islands; they ask again for what they read.
                     runtimeEntities.clear()
                     vitroView.setConnectionBanner(null)
                     vitroView.setDashboard(config, pendingViewPath)
                     client?.dashboardShown()
-                    readyWhenBuilt("vitro")
+                    // The view it opens may have gone to the fallback ([VitroView.onWebView]), which signals ready.
+                    if (nativeActive) readyWhenBuilt("vitro")
                 }
             }
 
