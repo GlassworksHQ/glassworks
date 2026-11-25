@@ -23,7 +23,7 @@
 #   report   opens, updates or closes the issue for a red main
 #
 # Cost: six jobs in parallel, each about 10 minutes (the androidTest APK build, an emulator boot, under a minute
-# of tests); the engine contract adds ENGINE_MINUTES minutes to the API 23 and 34 jobs. On main only when Android code
+# of tests); the engine contract adds about 4 minutes to the API 23 and 34 jobs (its APK build, GeckoView, a minute of tests). On main only when Android code
 # or this file changes; the nightly run and a manual run always. No secrets. The core's conformance test uses a fake
 # engine; the engine contract downloads GeckoView's x86_64 build for the runners' x86_64 emulators.
 name: Emulator tests
@@ -77,6 +77,9 @@ jobs:
             init: --init-script tools/legacy/api23-emulator.gradle
             # The engine contract's Gecko engine (engines/conformance): the legacy one runs from Android 6.
             gecko: legacy
+            # Its test APK (about 195 MB, GeckoView's native libraries) doesn't fit this image's default data
+            # partition: INSTALL_FAILED_INSUFFICIENT_STORAGE (run 45547890720).
+            disk: 4096M
           - api: 26
             target: default
           - api: 29
@@ -124,6 +127,7 @@ jobs:
           arch: x86_64
           target: ${{ matrix.target }}
           disable-animations: true
+          disk-size: ${{ matrix.disk || '' }}
           emulator-options: -no-window -gpu ${{ matrix.gpu || 'swiftshader_indirect' }} -no-snapshot -noaudio -no-boot-anim
           # One line: the action runs each line of a script on its own.
           script: ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:connectedDebugAndroidTest ${{ matrix.gecko && format(':engine-conformance:connectedDebugAndroidTest -PengineConformanceGecko={0}', matrix.gecko) || '' }}
