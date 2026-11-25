@@ -1,0 +1,625 @@
+{
+ "schema": "glassworks.perf-summary/3",
+ "test": "Clarity",
+ "clarity": 1,
+ "protocol_version": 1,
+ "report_schema": "glassworks.perf/4",
+ "measured_on": "2026-11-23",
+ "frame": {
+  "id": "lululemon-mirror",
+  "name": "lululemon Studio Mirror"
+ },
+ "touch": false,
+ "app_version": "0.3.0-1d900da",
+ "viewport": {
+  "css": [
+   720,
+   1280
+  ],
+  "dpr": 1.5,
+  "default_dpr": 1.5
+ },
+ "runs": {
+  "attempted": 3,
+  "graded": 3
+ },
+ "pages": {
+  "light": {
+   "inp_ms": 480.0,
+   "open_ms": 2167.0,
+   "blocking_ms": 398.9,
+   "usable_ms": 2628,
+   "scroll": {
+    "fps": null,
+    "p95_ms": null,
+    "scrolled_px": null,
+    "sf_valid": [
+     null,
+     null,
+     null
+    ],
+    "during_updates": [],
+    "swipes_moved": 0,
+    "swipes_at_edge": 0,
+    "runs": []
+   },
+   "updates": {
+    "latency_p95_ms": 173.6,
+    "latency_median_ms": 147.7,
+    "pacing_p95_ms": 116.67,
+    "runs": [
+     {
+      "latency_n": 21,
+      "latency_median_ms": 153.9,
+      "latency_p95_ms": 171.7,
+      "frames": {
+       "p95_ms": 116.67,
+       "jank_pct": 90.91,
+       "frozen_pct": 0.0,
+       "fps": 15.71,
+       "n": 11
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 21,
+      "latency_median_ms": 140.3,
+      "latency_p95_ms": 173.6,
+      "frames": {
+       "p95_ms": 116.67,
+       "jank_pct": 71.43,
+       "frozen_pct": 0.0,
+       "fps": 21.0,
+       "n": 14
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 21,
+      "latency_median_ms": 147.7,
+      "latency_p95_ms": 196.8,
+      "frames": {
+       "p95_ms": 133.33,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 15.0,
+       "n": 11
+      },
+      "sent": 22,
+      "arrived": 22
+     }
+    ]
+   },
+   "camera": {
+    "runs": [],
+    "path": null,
+    "fallback": null
+   },
+   "timed_out_runs": 0,
+   "runs": {
+    "tap": 3,
+    "scroll": 0,
+    "updates": 3,
+    "open": 3,
+    "blocking": 3,
+    "camera": 0,
+    "dialog": 3
+   },
+   "dialog": {
+    "settled_ms": 1846,
+    "runs": [
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 1846.5,
+      "frames": {
+       "p95_ms": 1233.33,
+       "jank_pct": 100.0,
+       "frozen_pct": 50.0,
+       "fps": 1.33,
+       "n": 2
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 1379.2799999999988,
+      "frames": {
+       "p95_ms": 683.33,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 2.79,
+       "n": 4
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 1893.0599999999977,
+      "frames": {
+       "p95_ms": 783.33,
+       "jank_pct": 100.0,
+       "frozen_pct": 20.0,
+       "fps": 2.29,
+       "n": 5
+      }
+     }
+    ]
+   }
+  },
+  "typical-nocam": {
+   "inp_ms": 280.0,
+   "open_ms": 3897.0,
+   "blocking_ms": 4516.66,
+   "usable_ms": 9646,
+   "scroll": {
+    "fps": null,
+    "p95_ms": null,
+    "scrolled_px": null,
+    "sf_valid": [
+     null,
+     null,
+     null
+    ],
+    "during_updates": [],
+    "swipes_moved": 0,
+    "swipes_at_edge": 0,
+    "runs": []
+   },
+   "updates": {
+    "latency_p95_ms": 237.5,
+    "latency_median_ms": 195.4,
+    "pacing_p95_ms": 166.67,
+    "runs": [
+     {
+      "latency_n": 21,
+      "latency_median_ms": 195.4,
+      "latency_p95_ms": 237.5,
+      "frames": {
+       "p95_ms": 150.0,
+       "jank_pct": 83.33,
+       "frozen_pct": 0.0,
+       "fps": 13.59,
+       "n": 12
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 21,
+      "latency_median_ms": 197.7,
+      "latency_p95_ms": 249.7,
+      "frames": {
+       "p95_ms": 183.33,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 9.48,
+       "n": 9
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 21,
+      "latency_median_ms": 185.3,
+      "latency_p95_ms": 224.6,
+      "frames": {
+       "p95_ms": 166.67,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 10.19,
+       "n": 9
+      },
+      "sent": 22,
+      "arrived": 22
+     }
+    ]
+   },
+   "camera": {
+    "runs": [],
+    "path": null,
+    "fallback": null
+   },
+   "timed_out_runs": 0,
+   "runs": {
+    "tap": 3,
+    "scroll": 0,
+    "updates": 3,
+    "open": 3,
+    "blocking": 3,
+    "camera": 0,
+    "dialog": 3
+   },
+   "dialog": {
+    "settled_ms": 2303,
+    "runs": [
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 2295.9800000000105,
+      "frames": {
+       "p95_ms": 683.33,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 1.89,
+       "n": 4
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 2303.1399999999994,
+      "frames": {
+       "p95_ms": 816.67,
+       "jank_pct": 100.0,
+       "frozen_pct": 50.0,
+       "fps": 2.14,
+       "n": 2
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 2312.959999999992,
+      "frames": {
+       "p95_ms": 533.33,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 1.88,
+       "n": 1
+      }
+     }
+    ]
+   }
+  },
+  "typical": {
+   "inp_ms": 536.0,
+   "open_ms": 2091.0,
+   "blocking_ms": 12400.5,
+   "usable_ms": 20123,
+   "scroll": {
+    "fps": null,
+    "p95_ms": null,
+    "scrolled_px": null,
+    "sf_valid": [
+     null,
+     null,
+     null
+    ],
+    "during_updates": [],
+    "swipes_moved": 0,
+    "swipes_at_edge": 0,
+    "runs": []
+   },
+   "updates": {
+    "latency_p95_ms": 294.9,
+    "latency_median_ms": 201.6,
+    "pacing_p95_ms": 183.33,
+    "runs": [
+     {
+      "latency_n": 21,
+      "latency_median_ms": 199.3,
+      "latency_p95_ms": 282.6,
+      "frames": {
+       "p95_ms": 216.67,
+       "jank_pct": 83.33,
+       "frozen_pct": 0.0,
+       "fps": 11.08,
+       "n": 12
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 21,
+      "latency_median_ms": 207.8,
+      "latency_p95_ms": 440.1,
+      "frames": {
+       "p95_ms": 166.67,
+       "jank_pct": 71.43,
+       "frozen_pct": 0.0,
+       "fps": 14.24,
+       "n": 14
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 21,
+      "latency_median_ms": 201.6,
+      "latency_p95_ms": 294.9,
+      "frames": {
+       "p95_ms": 183.33,
+       "jank_pct": 81.82,
+       "frozen_pct": 0.0,
+       "fps": 10.31,
+       "n": 11
+      },
+      "sent": 22,
+      "arrived": 22
+     }
+    ]
+   },
+   "camera": {
+    "runs": [
+     {
+      "first_frame_ms": null,
+      "shown_pct": null,
+      "max_gap_ms": null,
+      "stall_total_ms": null
+     },
+     {
+      "first_frame_ms": null,
+      "shown_pct": null,
+      "max_gap_ms": null,
+      "stall_total_ms": null
+     },
+     {
+      "first_frame_ms": null,
+      "shown_pct": null,
+      "max_gap_ms": null,
+      "stall_total_ms": null
+     }
+    ],
+    "path": "web_rtc",
+    "fallback": {
+     "path": "hls",
+     "runs": [
+      {
+       "first_frame_ms": 10513.8,
+       "shown_pct": 27.7,
+       "max_gap_ms": 10983.6,
+       "stall_total_ms": 28194.3
+      },
+      {
+       "first_frame_ms": 10111.1,
+       "shown_pct": 27.8,
+       "max_gap_ms": 4983.5,
+       "stall_total_ms": 28426.7
+      },
+      {
+       "first_frame_ms": 11262.7,
+       "shown_pct": 23.4,
+       "max_gap_ms": 10050.5,
+       "stall_total_ms": 27542.8
+      }
+     ]
+    }
+   },
+   "timed_out_runs": 0,
+   "runs": {
+    "tap": 3,
+    "scroll": 0,
+    "updates": 3,
+    "open": 3,
+    "blocking": 3,
+    "camera": 3,
+    "dialog": 3
+   },
+   "dialog": {
+    "settled_ms": 2464,
+    "runs": [
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 2629.179999999993,
+      "frames": {
+       "p95_ms": 716.67,
+       "jank_pct": 100.0,
+       "frozen_pct": 33.33,
+       "fps": 1.98,
+       "n": 3
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 2260.579999999987,
+      "frames": {
+       "p95_ms": 616.67,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 1.62,
+       "n": 1
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 2463.9600000000064,
+      "frames": {
+       "p95_ms": 716.67,
+       "jank_pct": 100.0,
+       "frozen_pct": 50.0,
+       "fps": 1.6,
+       "n": 2
+      }
+     }
+    ]
+   }
+  },
+  "heavy": {
+   "inp_ms": 300000.0,
+   "open_ms": 300000.0,
+   "blocking_ms": 300000.0,
+   "usable_ms": null,
+   "scroll": {
+    "fps": null,
+    "p95_ms": null,
+    "scrolled_px": null,
+    "sf_valid": [
+     null,
+     null,
+     null
+    ],
+    "during_updates": [
+     null,
+     null,
+     null
+    ],
+    "swipes_moved": 0,
+    "swipes_at_edge": 0,
+    "runs": [
+     {
+      "p95_ms": null,
+      "jank_pct": null,
+      "frozen_pct": null,
+      "fps": null,
+      "n": 0,
+      "lost": true
+     },
+     {
+      "p95_ms": null,
+      "jank_pct": null,
+      "frozen_pct": null,
+      "fps": null,
+      "n": 0,
+      "lost": true
+     },
+     {
+      "p95_ms": null,
+      "jank_pct": null,
+      "frozen_pct": null,
+      "fps": null,
+      "n": 0,
+      "lost": true
+     }
+    ]
+   },
+   "updates": {
+    "latency_p95_ms": null,
+    "latency_median_ms": null,
+    "pacing_p95_ms": null,
+    "runs": [
+     {
+      "lost": true
+     },
+     {
+      "lost": true
+     },
+     {
+      "lost": true
+     }
+    ]
+   },
+   "camera": {
+    "runs": [
+     {
+      "first_frame_ms": null,
+      "shown_pct": null,
+      "max_gap_ms": null,
+      "stall_total_ms": null,
+      "lost": true
+     },
+     {
+      "first_frame_ms": null,
+      "shown_pct": null,
+      "max_gap_ms": null,
+      "stall_total_ms": null,
+      "lost": true
+     },
+     {
+      "first_frame_ms": null,
+      "shown_pct": null,
+      "max_gap_ms": null,
+      "stall_total_ms": null,
+      "lost": true
+     }
+    ],
+    "path": null,
+    "fallback": {
+     "path": "hls",
+     "runs": [
+      {
+       "first_frame_ms": null,
+       "shown_pct": null,
+       "max_gap_ms": null,
+       "stall_total_ms": null
+      },
+      {
+       "first_frame_ms": null,
+       "shown_pct": null,
+       "max_gap_ms": null,
+       "stall_total_ms": null
+      },
+      {
+       "first_frame_ms": null,
+       "shown_pct": null,
+       "max_gap_ms": null,
+       "stall_total_ms": null
+      }
+     ]
+    }
+   },
+   "timed_out_runs": 0,
+   "runs": {
+    "tap": 3,
+    "scroll": 3,
+    "updates": 3,
+    "open": 3,
+    "blocking": 3,
+    "camera": 3,
+    "dialog": 3
+   },
+   "lost_runs": 3,
+   "lost_why": [
+    "the panel ran out of memory and its browser page was closed (low-memory killer)"
+   ],
+   "dialog": {
+    "settled_ms": null,
+    "runs": [
+     {
+      "lost": true
+     },
+     {
+      "lost": true
+     },
+     {
+      "lost": true
+     }
+    ]
+   }
+  }
+ },
+ "restart_ms": 23548.0,
+ "gaps": [],
+ "not_comparable": null,
+ "report": "https://github.com/GlassworksHQ/glassworks/blob/main/frames/lululemon-mirror/clarity/report.md",
+ "ram": {
+  "idle_app_pss_kb": 399307,
+  "idle_by_process_pss_kb": {
+   "main": 196961,
+   "tab": 198363,
+   "utility": 3734
+  },
+  "peak_app_pss_kb": 354753,
+  "peak_by_process_pss_kb": {
+   "main": 200029,
+   "tab": 169784,
+   "utility": 0
+  },
+  "panes": [],
+  "panes_waiting": [],
+  "panes_not_switched": [],
+  "budget_ok": null
+ },
+ "apk": null,
+ "notes": {
+  "good": "Light dashboards come closest: opening a view is quick, and live updates and more-info dialogs are fluid.",
+  "limits": "It slows down: light takes 480 ms to answer a tap, typical without a camera blocks for 4.5 s after it is drawn, and typical with a camera has a camera stream that shows no frame.",
+  "causes": [
+   "On heavy, the page was lost in 3 of 3 runs: the panel ran out of memory and its browser page was closed (low-memory killer)."
+  ],
+  "text": "Light dashboards come closest: opening a view is quick, and live updates and more-info dialogs are fluid. It slows down: light takes 480 ms to answer a tap, typical without a camera blocks for 4.5 s after it is drawn, and typical with a camera has a camera stream that shows no frame. On heavy, the page was lost in 3 of 3 runs: the panel ran out of memory and its browser page was closed (low-memory killer).",
+  "rubric": 2
+ },
+ "webrtc_transport": {
+  "transport": "lan-turn",
+  "chosen_by": "auto",
+  "reason": "UDP from the panel didn't arrive, a TCP connection did: the relay over the LAN",
+  "possibly_limited": false
+ },
+ "complete": true
+}

@@ -1,6 +1,7 @@
 # file|key|type|default (see PrefsPinTest)
 auth|client_id|String|null
 auth|ha_base|String|null
+auth|pending_signins|String|null
 auth|refresh_token|String|null
 kiosk|api_encryption|Boolean|false
 kiosk|api_key|String|""

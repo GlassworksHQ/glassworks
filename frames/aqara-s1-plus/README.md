@@ -103,11 +103,11 @@ Glassworks replaces the software layer while leaving your hardware untouched. Th
 
 ## Status
 
-**Status: stable.** It passes every case of Kiln's install contract, with none marked as failing (2026-11-20).
+**Status: stable.** It passes every case of Kiln's install contract, with none marked as failing, and installs from [kiln.glassworks.dev](https://kiln.glassworks.dev/aqara-s1-plus) on real panels.
 
 **Clarity v1: D** — performs well as a wall panel for light Home Assistant dashboards. Typical dashboards hold it back from a C grade: without a live camera, the view draws in 0.9 seconds, but the main thread remains blocked for 2.7 seconds afterward. Home Assistant more-info dialogs settle in about 1 second on light dashboards and 1.2 to 1.4 seconds on typical dashboards, while heavy dashboards struggle with thermostat dialogs and sensor history graphs. See the full benchmark report in [clarity/report.md](clarity/report.md) and summary in [clarity/clarity.json](clarity/clarity.json) ([how Clarity grades](../../docs/perf.md)).
 
-Here is the current feature maturity on `main` (rows marked **New** ship in the upcoming release following v0.4.3):
+Here is where each feature stands today. ✅ means it has been checked on real panels, and 🧪 means it works but is still being tested or tuned.
 
 | Feature | Status |
 |---|---|
@@ -115,19 +115,19 @@ Here is the current feature maturity on `main` (rows marked **New** ship in the 
 | ESPHome device with automatic encryption | ✅ Works |
 | Voice assistant (on-device wake word, timers, announcements) | ✅ Works · far-field tuning ongoing |
 | Music Assistant synchronized player (Sendspin) | ✅ Works |
-| Notifications (cards, snapshots, buttons, sounds, full/half views) | 🧪 New · core cards, buttons, Do not disturb, and full/half views tested on hardware; final edge-case runs ongoing |
+| Notifications (cards, snapshots, buttons, sounds, full/half views) | ✅ Works · cards, buttons, Do not disturb, and full/half views checked on hardware; edge-case testing continues |
 | Presence wake, idle screen-off, auto-brightness | ✅ Works |
-| Night mode via Home Assistant ([Panel night mode](../../docs/blueprints.md)) | 🧪 New · validated in Home Assistant, awaiting panel run |
+| Night mode via Home Assistant ([Panel night mode](../../docs/blueprints.md)) | 🧪 Validated in Home Assistant; not yet run on a panel |
 | Reversible Aqara cloud and bloat disabling | ✅ Works |
-| Boot splash and animation | 🧪 Previous Glass Tile animation verified; updated Glassworks redraw awaiting hardware run |
-| Web installer, CLI installer, and undo | ✅ End-to-end install verified with the original S1 installer (firmware 4.5.80) and boot patch tested on two firmware versions; full Kiln UI run on hardware pending |
-| Browser Manage page (`:8099`, HA sign-in, logs, diagnostics, multi-panel) | 🧪 New · HA sign-in and core pages checked on hardware; ongoing polish |
-| Network setup page (`:8099/setup`, 6-digit pairing code) | 🧪 New · core setup flow verified on hardware |
-| Phone setup via temporary setup Wi-Fi | 🧪 New · unit-tested, awaiting hardware run |
-| Panel health diagnostics (CPU, temperature, RAM, storage, Wi-Fi, uptime) | 🧪 New · awaiting hardware check |
-| Bluetooth proxy (listen and active GATT connections) | 🧪 New · scanning and single-device GATT verified on hardware; concurrent multi-device links untested |
+| Boot splash and animation | ✅ Works |
+| Web installer (Kiln), CLI installer, and undo | ✅ Works · installs from [kiln.glassworks.dev](https://kiln.glassworks.dev/aqara-s1-plus) on real panels; boot patch tested on two stock firmware versions |
+| Browser Manage page (`:8099`, HA sign-in, logs, diagnostics, multi-panel) | ✅ Works · ongoing polish |
+| Network setup page (`:8099/setup`, 6-digit pairing code) | ✅ Works |
+| Phone setup via temporary setup Wi-Fi | ✅ Works |
+| Panel health diagnostics (CPU, temperature, RAM, storage, Wi-Fi, uptime) | ✅ Works |
+| Bluetooth proxy (listen and active GATT connections) | 🧪 Scanning and single-device GATT checked on hardware; several devices connected at once is untested |
 | Hands-free app updates from Home Assistant | ✅ Works from v0.4.1 onward ([one manual update](#updates) needed on older versions) |
-| Frame version display and *Frame update* entity | 🧪 New · unit-tested; with the frame loader, Install downloads the signed frame bundle and restarts the panel (awaiting hardware run) |
+| Frame version display and *Frame update* entity | ✅ Works · Install downloads the signed frame bundle, checks it, and restarts the panel once (checked on a panel with a test release). The first frame release comes with Glassworks 1.0 |
 | Persistent time zone across reboots | ✅ Works (requires boot software from v0.4.0+) |
 | Radio: Zigbee coordinator for **ZHA** | ✅ Verified (choose *keep the radio's network settings*; see [Known issues](#known-issues)) |
 | Radio: Zigbee coordinator for **Zigbee2MQTT** | 🧪 Experimental · `ember` adapter forms networks and pairs devices; long-term soak testing ongoing |
@@ -135,9 +135,9 @@ Here is the current feature maturity on `main` (rows marked **New** ship in the 
 | Radio: **Zigbee router** and **Thread router** repeaters | 🧪 Experimental · verified joining existing home networks |
 | Radio firewall (Home Assistant only by default) | ✅ Verified |
 | Radio firmware flashing | 🧪 Experimental · verified re-flashing Aqara's stock image; no third-party firmware offered yet |
-| Wall base relays | 🧪 Driver verified against emulator matching Aqara's `bracket_cli`; not yet tested on a physical wall base |
+| Wall base relays | 🧪 Driver verified against an emulator matching Aqara's `bracket_cli`; not yet tested on a physical wall base |
 | Wi-Fi setup over Bluetooth (Improv) | 🧪 Implemented; lightly tested |
-| Streamlined default HA entity list | 🧪 New · upgrade verification on existing HA installs ongoing |
+| Streamlined default HA entity list | 🧪 Checking upgrades on existing Home Assistant installs |
 
 ## Hardware
 
@@ -202,7 +202,7 @@ Kiln runs entirely inside your browser and uploads nothing to any server. It gui
 See **[docs/install.md](docs/install.md)** for per-OS driver setup, every screen walkthrough, undo instructions, and troubleshooting.
 
 > [!NOTE]
-> The installation recipe has been verified end to end on real S1 Plus hardware (firmware 4.5.80) using the original S1 installer, and the boot patch has been verified across two stock firmware versions. Because this is still a beta tested on a relatively small number of panels, stop and [open an issue](https://github.com/GlassworksHQ/glassworks/issues) if anything looks unexpected—your backup remains safe.
+> The installation has been verified end to end on real S1 Plus hardware (firmware 4.5.80) through Kiln, and the boot patch has been verified across two stock firmware versions. Glassworks has still run on a relatively small number of panels, so stop and [open an issue](https://github.com/GlassworksHQ/glassworks/issues) if anything looks unexpected—your backup remains safe.
 
 ### The command line
 
@@ -316,14 +316,14 @@ Everything from FEL recovery and mainline U-Boot DRAM fixes to byte-exact browse
 
 | Pane | Support | Notes |
 |---|---|---|
-| Assist | Beta | On-device wake word and Home Assistant Assist satellite |
-| Timers | Beta | On-screen voice timers and chimes |
-| Sendspin | Beta | Synchronized Music Assistant player |
-| Zigbee and Thread radio | Beta | Zigbee coordinator/repeater and Thread border router/repeater |
-| Time zone | Beta | Automatically supported; persists time zone across reboots |
-| Diagnostics | Alpha | System and app health sensors; awaiting final panel check |
-| Bluetooth proxy | Alpha | Passive BLE scanning and active GATT connections (single-device GATT verified; concurrent links untested) |
-| Notifications | Alpha | Rich alerts, snapshots, buttons, and dashboard views |
+| Assist | Stable | On-device wake word and Home Assistant Assist satellite |
+| Timers | Stable | On-screen voice timers and chimes |
+| Sendspin | Stable | Synchronized Music Assistant player |
+| Zigbee / Thread radio | Beta | Zigbee coordinator/repeater and Thread border router/repeater |
+| Time zone | Stable | Automatically supported; persists time zone across reboots |
+| Diagnostics | Stable | System and app health sensors |
+| Bluetooth proxy | Beta | Passive BLE scanning and active GATT connections (single-device GATT verified; concurrent links untested) |
+| Notifications | Beta | Rich alerts, snapshots, buttons, and dashboard views |
 | Camera | Not supported | The S1 Plus does not have a built-in camera |
 | Wall base | Alpha | Verified against emulator matching Aqara's `bracket_cli`; awaiting physical base test ([base-protocol.md](research/base-protocol.md), [bases.md](research/bases.md)) |
 

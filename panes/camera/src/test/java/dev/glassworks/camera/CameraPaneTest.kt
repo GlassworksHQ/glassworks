@@ -222,6 +222,7 @@ class CameraPaneTest {
         assertEquals(listOf("camera", "camera_presence", "camera_privacy", "camera_use", "onvif_stream", "camera_sensitivity"), e.keys.toList())
         assertEquals(EntityCategory.NONE, e.getValue("camera_privacy").category)
         assertFalse(e.getValue("camera_privacy").disabledByDefault)
+        assertTrue("only an encrypted connection may turn privacy off (#847)", e.getValue("camera_privacy").authOnly)
         assertTrue(e.getValue("camera_use").disabledByDefault)
         assertEquals(EntityCategory.CONFIG, e.getValue("onvif_stream").category)
         assertTrue(e.getValue("camera").authOnly)

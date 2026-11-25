@@ -93,7 +93,9 @@ class CameraPane(
     override fun entities(): List<ApiEntity> = listOf(
         snapshotCamera(stills, ::stillPolicy, egress),
         BinarySensorEntity("camera_presence", "Camera presence", "mdi:motion-sensor", deviceClass = "occupancy") { near },
-        SwitchEntity("camera_privacy", "Camera privacy", "mdi:camera-off", get = { prefs.privacy }, set = { prefs.privacy = it }),
+        // authOnly (#847): a LAN client on a panel with no ESPHome key yet mustn't turn the camera's privacy off.
+        SwitchEntity("camera_privacy", "Camera privacy", "mdi:camera-off", get = { prefs.privacy }, set = { prefs.privacy = it })
+            .apply { authOnly = true },
         SelectEntity(
             "camera_use", "Camera use", "mdi:cctv", disabledByDefault = true,
             options = listOf(CameraPrefs.USE_PRESENCE, CameraPrefs.USE_CAMERA),

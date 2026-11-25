@@ -24,7 +24,8 @@ make byte-identical images with it (attempt 14). Of its panel tests ([Panel test
 passed. L5 was inconclusive that day: the loader logged with `log -t` before logd runs, and the kernel log had
 already wrapped when it was read. It now writes its lines to the kernel log too, and the rerun of 2026-11-20 read
 `dmesg` at the first adb answer: L5 passed without a bundle, the boot step costs about 0.5 s. L5 with a bundle
-(the full check of its files) is still pending: it needs a frame release (#550).
+(the full check of its files) passed on 2026-11-21, in #744's Frame update run on the dev S1 with a temporary
+signed 0.5.0 release (#744 issuecomment-7059817374): `done: frame 0.5.0, bundle ok` after 2.7 s (verified).
 
 **Bad bundles on the dev S1, 2026-11-23 (verified; #139 issuecomment-7094237228).** With #744's signed 0.5.0
 bundle tampered with, a corrupted `current` falls back to the boot image's copies, and a staged bundle below the
@@ -548,8 +549,8 @@ end
 - **Where it comes from.** A frame release of its own: the tag `frames/aqara-s1-plus/v<version>`
   (the scheme of #544), which the Release workflow (`release.yml`, since 2026-11-21; `frame-release.yml` before) makes: it builds the bundle with `frame-bundle.sh`, signs it
   and publishes `frame-bundle-aqara-s1-plus-<version>.zip`. The app's Frame update entity downloads it,
-  stages it, starts `glassworks_bundle`, and restarts the panel (built, `update/FrameInstaller.kt`; untested on a
-  panel as of 2026-11-20). The restart is `setprop sys.powerctl reboot,glassworks-frame-update` from the app, the
+  stages it, starts `glassworks_bundle`, and restarts the panel (`update/FrameInstaller.kt`; verified on the dev
+  S1 on 2026-11-21 with a temporary 0.5.0 release, #744 issuecomment-7059817374). The restart is `setprop sys.powerctl reboot,glassworks-frame-update` from the app, the
   transport it uses for `ctl.start` (permissive SELinux), and the boot writer's own restart. Not an APK asset: the frame version counts separately from the app's, so a frame update shouldn't wait
   for an app release. During the #528 transition the APK still carries the old radio bundle, for 0.4.3 boot
   images only; frame bundles never ship in the APK. What runs today: the shell tests build the release's zip,
@@ -760,7 +761,7 @@ Results, 2026-11-19 (dev S1, the loader image written by #651's boot writer; #65
 | L2 | **Pass:** `glassworks_agent` and `glassworks_netwatch` running, `glassworks_firstboot` stopped; of the old services only `s1kiosk_devsu` (the dev image's, carried over on purpose) |
 | L3 | **Pass:** `persist.glassworks.radio_mode` = `thread_router`; otbr-agent up within 4 min, `sys.glassworks.radio.status` = `ok thread_router: joined as router` |
 | L4 | **Pass:** the boot animation plays as before (watched), `bootanimation.zip` mounted |
-| L5 | 2026-11-19 **inconclusive:** no `glassworks_loader` line in `logcat -b all` or `dmesg` (`log -t` before logd, and the kernel log had wrapped). 2026-11-20 (#651 issuecomment-7028522330), **without a bundle: pass**, `dmesg` read at the first adb answer after a restart: `boot: checking the frame bundle` at 3.743 s, `boot: done: frame 1.0.0, bundle none, boot animation …` at 4.211 s; init says the `exec` took 0.516 s. **With a bundle: pending** (it needs a frame release, #550). 2026-11-23, three bad bundles (L6–L8): the boot step took 3.6 s for three checks over about 45 MB; not the cost of an `ok` bundle |
+| L5 | 2026-11-19 **inconclusive:** no `glassworks_loader` line in `logcat -b all` or `dmesg` (`log -t` before logd, and the kernel log had wrapped). 2026-11-20 (#651 issuecomment-7028522330), **without a bundle: pass**, `dmesg` read at the first adb answer after a restart: `boot: checking the frame bundle` at 3.743 s, `boot: done: frame 1.0.0, bundle none, boot animation …` at 4.211 s; init says the `exec` took 0.516 s. 2026-11-21 (#744 issuecomment-7059817374), **with a bundle: pass**: a temporary signed 0.5.0 frame release installed from Home Assistant's Frame update card, and after the restart `glassworks_loader: frame bundle 0.5.0 loaded`, `done: frame 0.5.0, bundle ok, boot animation …/bundle/current/bootanimation.zip` after 2.7 s, agent source `bundle 0.5.0`; the bundle was removed after. 2026-11-23, three bad bundles (L6–L8): the boot step took 3.6 s for three checks over about 45 MB; not the cost of an `ok` bundle |
 
 ### Bad bundles on the panel (L6–L9)
 
@@ -793,7 +794,8 @@ What it doesn't prove:
   key, which wasn't used. L9's `check` goes through the same `check_dir` the boot step calls, so the frame-id
   refusal is covered there with a throwaway key.
 - **The install service refusing these:** covered by the off-device shell tests only.
-- **An `ok` bundle's boot cost** (L5 with a bundle): still pending.
+- ~~**An `ok` bundle's boot cost** (L5 with a bundle).~~ 2.7 s for the 0.5.0 bundle (23 files), verified on the dev
+  S1 on 2026-11-21 (#744 issuecomment-7059817374).
 
 **Gap (verified 2026-11-23): a rejected bundle looks like no bundle to a person.** During L6, HA's Frame update
 entity showed `1.0.0 (boot image)`, as with no bundle, and the `Radio helper` sensor said

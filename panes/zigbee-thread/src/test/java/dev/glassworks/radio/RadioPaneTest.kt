@@ -87,6 +87,17 @@ class RadioPaneTest {
         assertEquals("192.0.2.11", props.get(RadioHelper.PROP_ALLOW))
     }
 
+    @Test fun everyControlThatChangesTheRadioNeedsTheKey() {
+        // A panel with no key yet talks plaintext to anyone on the LAN (#847): only the sensors stay open.
+        val controls = listOf(
+            "radio_mode", "radio_allowed_clients", "zigbee_stack", "radio_firmware_image", "radio_firmware_flash",
+            "zigbee_router_join", "zigbee_router_leave", "thread_leave", "thread_join_ha", "thread_dataset",
+        )
+        assertEquals(controls.map { it to true }, controls.map { it to entity(it).authOnly })
+        val open = pane.entities().filter { !it.authOnly }.map { it.objectId }
+        assertEquals(listOf("radio_status", "radio_connected", "radio_helper", "radio_firmware", "thread_join"), open)
+    }
+
     @Test fun theRadioModeSelectGoesToTheController() {
         assertEquals(RadioMode.THREAD_ROUTER, pane.radio.mode)
 

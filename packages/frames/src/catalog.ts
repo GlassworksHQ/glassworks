@@ -41,7 +41,7 @@ export const RENDERS: Record<string, string> = {
 };
 
 /** Frames with a published Clarity result (`frames/<id>/clarity/clarity.json`); kiln/apps/kiln/test/frame-designs.test.ts keeps it true. */
-export const MEASURED: ReadonlySet<string> = new Set([s1Plus.id, pixelTablet.id]);
+export const MEASURED: ReadonlySet<string> = new Set([s1Plus.id, pixelTablet.id, mirror.id]);
 
 /** A frame's release line: its tags (`{version}` is the version) and the files a tag may serve (`{abi}`: one per frame.json `abis`). */
 export interface Release { line: string; tag: string; assets: string[] }
