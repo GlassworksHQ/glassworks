@@ -134,6 +134,9 @@ class WebIslandCardView(
     /** The card walked `hass.states` (`watchAll`): it follows every entity from then on, as [followsAllEntities]. */
     @Volatile private var walksAllStates = false
 
+    /** The page said once that the card needs HA's frontend (`needsFrontend`): later reports change nothing. */
+    @Volatile private var needsFrontendSent = false
+
     /** The card read `hass.entities`, `devices`, `areas` or `floors`: the shared registry feed, until detached. */
     private val registriesAsked = java.util.concurrent.atomic.AtomicBoolean(false)
     private val registriesRelease = java.util.concurrent.atomic.AtomicReference<(() -> Unit)?>(null)
@@ -339,6 +342,18 @@ class WebIslandCardView(
                 val message = msg.optString("message").take(MAX_ERROR_CHARS).ifBlank { "Configuration error" }
                 ctx.main.post { fail("island", IslandCardError(message)) }
             }
+            // The card draws with elements of HA's frontend this page doesn't have (frontend-watch.js): its view
+            // goes to HA's frontend, as a view with a built-in card Vitro doesn't draw does ([VitroCardContext.needsFrontend]).
+            "needsFrontend" -> {
+                val tags = frontendTags(msg.optJSONArray("tags"))
+                if (tags.isEmpty() || needsFrontendSent) return
+                needsFrontendSent = true
+                // The custom cards that draw them (a stack's inner card, not the stack), as `custom:` types: only
+                // ones this island's config holds, so a page can't name a card it doesn't draw.
+                val mine = customTypes(config.raw)
+                val owners = frontendTags(msg.optJSONArray("cards")).map { "custom:$it" }.filter { it in mine }
+                ctx.main.post { ctx.needsFrontend(config, tags, owners) }
+            }
             "resize" -> {
                 if (fillViewport) return
                 val cssH = msg.optInt("height", 160).coerceIn(48, 1200)
@@ -527,6 +542,46 @@ class WebIslandCardView(
     companion object {
         /** The most of an island's error message kept (it's logged, never shown). */
         const val MAX_ERROR_CHARS = 300
+
+        /** The most tags a `needsFrontend` report keeps: they only name the reason in the log. */
+        const val MAX_FRONTEND_TAGS = 12
+
+        /** A custom element's name as the island reports it: lower case, with a hyphen, nothing a log can't hold. */
+        private val ELEMENT_TAG = Regex("""^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$""")
+
+        /** The tags of a `needsFrontend` report that are element names, sorted and capped ([MAX_FRONTEND_TAGS]). */
+        internal fun frontendTags(raw: org.json.JSONArray?): List<String> {
+            if (raw == null) return emptyList()
+            return (0 until raw.length()).mapNotNull { raw.opt(it) as? String }
+                .filter { it.length <= 64 && ELEMENT_TAG.matches(it) }
+                .distinct().sorted().take(MAX_FRONTEND_TAGS)
+        }
+
+        /** Every `custom:` card type in [raw], its nested cards' included (a stack's `cards`, a wrapper's `card`). */
+        internal fun customTypes(raw: Any?): Set<String> {
+            val out = HashSet<String>()
+            fun walk(v: Any?) {
+                when (v) {
+                    is JSONObject -> {
+                        v.optString("type").takeIf { it.startsWith("custom:") }?.let { out += it }
+                        v.keys().forEach { walk(v.opt(it)) }
+                    }
+                    is org.json.JSONArray -> for (i in 0 until v.length()) walk(v.opt(i))
+                }
+            }
+            walk(raw)
+            return out
+        }
+
+        /**
+         * The island page's watch for HA frontend elements a card draws with but the page lacks (`frontend-watch.js`,
+         * a resource next to this class's package), read once.
+         */
+        internal val FRONTEND_WATCH_JS: String by lazy {
+            WebIslandCardView::class.java.getResourceAsStream("/dev/glassworks/engine/vitro/island/frontend-watch.js")
+                ?.use { it.readBytes().toString(Charsets.UTF_8) }
+                ?: error("frontend-watch.js is missing from the engine's resources")
+        }
 
         /**
          * What makes two builds of a card the same island: its whole config and whether it fills the view. A
@@ -996,7 +1051,7 @@ vitroDefine('ha-svg-icon', class extends HTMLElement {
 // in document.body and call bind(element, options)): a tap, a hold (500 ms) or a double tap (250 ms) fires `action`
 // on the element, and a move, scroll or wheel cancels a press, as in HA. Without it such a card threw on render.
 vitroDefine('action-handler', class extends HTMLElement {
-  constructor() { super(); this.holdTime = 500; this.cancelled = false; }
+  constructor() { super(); this.holdTime = 500; this.cancelled = false; this.scrolled = false; }
   connectedCallback() {
     this.style.display = 'none';
     if (this._wired) return;
@@ -1004,6 +1059,8 @@ vitroDefine('action-handler', class extends HTMLElement {
     ['touchcancel', 'mouseout', 'mouseup', 'touchmove', 'mousewheel', 'wheel', 'scroll'].forEach((type) => {
       document.addEventListener(type, () => {
         this.cancelled = true;
+        // A scroll or a move, unlike the mouseup every click has: the press was a scroll, never a tap or a hold.
+        if (type !== 'mouseup' && type !== 'mouseout' && type !== 'touchcancel') this.scrolled = true;
         if (this.timer) { clearTimeout(this.timer); this.timer = undefined; }
       }, { passive: true });
     });
@@ -1013,6 +1070,15 @@ vitroDefine('action-handler', class extends HTMLElement {
     const fire = (target, action) => target.dispatchEvent(new CustomEvent('action', { detail: { action }, bubbles: true, composed: true }));
     const prev = element.actionHandler;
     if (prev && JSON.stringify(prev.options) === JSON.stringify(opts)) return;
+    // The taps the old binding still holds back for a double tap (one per click, on any of its descendants) never fire
+    // under the new one (disabled, say). Only this element's: another element's pending taps stay.
+    if (prev && prev.pendingTaps) {
+      for (const id of prev.pendingTaps) {
+        clearTimeout(id);
+        if (this.dblClickTimeout === id) { this.dblClickTimeout = undefined; this.dblClickTarget = undefined; }
+      }
+      prev.pendingTaps.clear();
+    }
     if (prev && prev.start) {
       element.removeEventListener('touchstart', prev.start);
       element.removeEventListener('touchend', prev.end);
@@ -1021,11 +1087,12 @@ vitroDefine('action-handler', class extends HTMLElement {
       element.removeEventListener('click', prev.end);
       element.removeEventListener('keydown', prev.key);
     }
-    const handler = { options: opts };
+    const handler = { options: opts, pendingTaps: new Set() };
     element.actionHandler = handler;
     if (opts.disabled) return;
     handler.start = () => {
       this.cancelled = false;
+      this.scrolled = false;
       if (opts.hasHold) {
         this.held = false;
         this.timer = setTimeout(() => { this.held = true; }, this.holdTime);
@@ -1033,6 +1100,8 @@ vitroDefine('action-handler', class extends HTMLElement {
     };
     handler.end = (ev) => {
       if (ev.type === 'touchcancel' || (ev.type === 'touchend' && this.cancelled)) return;
+      // A mouse press a wheel or scroll cancelled: its click is no hold (or tap) either.
+      if (ev.type === 'click' && this.scrolled) { this.scrolled = false; return; }
       const target = ev.target;
       if (ev.cancelable) ev.preventDefault();
       if (opts.hasHold) { clearTimeout(this.timer); this.timer = undefined; }
@@ -1041,13 +1110,16 @@ vitroDefine('action-handler', class extends HTMLElement {
       } else if (opts.hasDoubleClick) {
         if ((ev.type === 'click' && ev.detail < 2) || !this.dblClickTimeout || this.dblClickTarget !== target) {
           const id = setTimeout(() => {
+            handler.pendingTaps.delete(id);
             if (this.dblClickTimeout === id) { this.dblClickTimeout = undefined; this.dblClickTarget = undefined; }
             if (opts.hasTap !== false) fire(target, 'tap');
           }, 250);
+          handler.pendingTaps.add(id);
           this.dblClickTimeout = id;
           this.dblClickTarget = target;
         } else {
           clearTimeout(this.dblClickTimeout);
+          handler.pendingTaps.delete(this.dblClickTimeout);
           this.dblClickTimeout = undefined;
           this.dblClickTarget = undefined;
           fire(target, 'double_tap');
@@ -1166,6 +1238,9 @@ window.loadCardHelpers = () => Promise.resolve({
   createHuiElement: (c) => vitroCreateCardElement(c),
   importMoreInfoControl: () => Promise.resolve(),
 });
+</script>
+<script>
+${FRONTEND_WATCH_JS.replace(SCRIPT_END, "<\\\\/$1")}
 </script>
 $resourceScripts
 </head>
@@ -1499,6 +1574,8 @@ async function boot() {
   document.getElementById('mount').appendChild(cardEl);
   wireEvents();
   wireResize();
+  // HA's own elements the card draws with that this page lacks (frontend-watch.js): its view goes to HA's frontend.
+  vitroWatchFrontend(cardEl, { report: (tags, cards) => sendBridge({ type: 'needsFrontend', tags, cards }) });
 }
 
 function moreInfo(id) {

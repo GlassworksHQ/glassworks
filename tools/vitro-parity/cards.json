@@ -846,6 +846,48 @@
     }
    },
    "on_demand": true
+  },
+  {
+   "name": "battery-state-card",
+   "repo": "maxwroc/battery-state-card",
+   "version": "v4.3.0",
+   "license": "MIT",
+   "main": "battery-state-card.js",
+   "files": {
+    "battery-state-card.js": {
+     "url": "https://github.com/maxwroc/battery-state-card/releases/download/v4.3.0/battery-state-card.js",
+     "sha256": "2cb38119fcdc13f614288f72ff77d523d7c3ed340630d8b467c4a46a79ded60f"
+    }
+   },
+   "on_demand": true
+  },
+  {
+   "name": "scheduler-card",
+   "repo": "nielsfaber/scheduler-card",
+   "version": "v4.0.20",
+   "license": "Apache-2.0",
+   "main": "scheduler-card.js",
+   "files": {
+    "scheduler-card.js": {
+     "url": "https://github.com/nielsfaber/scheduler-card/releases/download/v4.0.20/scheduler-card.js",
+     "sha256": "4a9edae94dce8627bfa30c7e085db54809b966a39d32bcd01f18915af6f9da40"
+    }
+   },
+   "on_demand": true
+  },
+  {
+   "name": "calendar-card-pro",
+   "repo": "alexpfau/calendar-card-pro",
+   "version": "v6.0.0",
+   "license": "MIT",
+   "main": "calendar-card-pro.js",
+   "files": {
+    "calendar-card-pro.js": {
+     "url": "https://github.com/alexpfau/calendar-card-pro/releases/download/v6.0.0/calendar-card-pro.js",
+     "sha256": "2acb155e9a1298e915392168c9c9e263054fc91c7b862839e7ce7fc875eed90f"
+    }
+   },
+   "on_demand": true
   }
  ]
 }

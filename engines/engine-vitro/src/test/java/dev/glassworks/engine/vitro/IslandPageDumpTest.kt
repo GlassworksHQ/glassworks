@@ -32,17 +32,25 @@ import java.io.File
  *
  * <case.json> holds the `card`, the Lovelace `resources` the page loads (URLs of module scripts), a `fixture` and,
  * optionally, `storage`: what HA's web UI keeps in `localStorage` on the panel, which the island starts from. The
- * page goes to engines/engine-vitro/build/vitro-island/<case>.html, with the corpus's home.json config. Writes nothing
- * else; skipped (not failed) without the property, so CI's runs pass over it.
+ * page goes to engines/engine-vitro/build/vitro-island/<case>.html, with the corpus's home.json config. Several cases
+ * at once: their paths separated by commas. Writes nothing else; skipped (not failed) without the property, so CI's
+ * runs pass over it.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class IslandPageDumpTest {
     @Test
     fun writesTheIslandPageOfACase() {
-        val path = System.getProperty("vitro.islandCase")
-        assumeTrue("only with -PvitroIslandCase=<case.json> (tools/vitro-parity/island-probe.mjs)", !path.isNullOrBlank())
-        val caseFile = File(path!!)
+        val paths = System.getProperty("vitro.islandCase")
+        assumeTrue("only with -PvitroIslandCase=<case.json> (tools/vitro-parity/island-probe.mjs)", !paths.isNullOrBlank())
+        val files = paths!!.split(',').map { it.trim() }.filter { it.isNotEmpty() }.map(::File)
+        // Each page is named after its case file: two cases of one name would write (and probe) one page.
+        val clash = files.groupBy { it.nameWithoutExtension }.filterValues { it.size > 1 }
+        require(clash.isEmpty()) { "cases with the same file name write the same page: ${clash.values.flatten().joinToString()}" }
+        files.forEach(::writePage)
+    }
+
+    private fun writePage(caseFile: File) {
         val case = JSONObject(caseFile.readText())
         val home = JSONObject(File(RepoFiles.root, "engines/engine-vitro/src/test/parity/home.json").readText())
         // HA's config as get_config gives it, with the components the fixture's entities come from.

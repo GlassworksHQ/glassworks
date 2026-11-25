@@ -30,6 +30,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -82,6 +83,9 @@ class LiveCameraFeedTest {
 
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
     private val made = ArrayList<FakeStream>()
+
+    /** The most video players (decoders) open at once, read each time one is made. */
+    private var peakVideo = 0
     private val wsCalls = ArrayList<JSONObject>()
     private var capabilities: Any? = JSONObject().put("frontend_stream_types", JSONArray().put("hls").put("web_rtc"))
     private var capabilitiesOk = true
@@ -102,6 +106,7 @@ class LiveCameraFeedTest {
                     return FakeStream(kind, activity).also {
                         it.throwOnStart = kind in throwFor
                         made += it
+                        peakVideo = maxOf(peakVideo, made.count { m -> !m.closed && m.kind != MJPEG })
                     }
                 }
             }
@@ -363,6 +368,124 @@ class LiveCameraFeedTest {
     }
 
     @Test
+    fun fourCamerasAllReachWebRtcWithNoMjpegDetourAndNeverMoreDecodersThanTheCap() {
+        // Clarity's heavy view: four cameras that offer HLS and WebRTC, on a panel with four video slots.
+        val ctx = context(store())
+        val cams = (0 until 4).map { feed(ctx) }
+        cams.forEach { it.start() }
+        idle()
+        idle()
+        // Each camera's main player (WebRTC) has a slot at once; the side-by-side HLS loads gave theirs up.
+        for (c in cams) assertEquals(listOf(WEB_RTC), c.runningKinds)
+        assertTrue(made.none { it.kind == MJPEG })
+        assertEquals(4, CameraVideoBudget.inUse)
+        assertEquals(0, CameraVideoBudget.extrasInUse)
+        assertTrue("peak $peakVideo", peakVideo <= CameraVideoBudget.MAX_VIDEO_CAMERAS)
+        // Every WebRTC draws: all four show WebRTC, and still four players.
+        made.filter { it.kind == WEB_RTC && !it.closed }.forEach { it.frame() }
+        idle()
+        for (c in cams) assertEquals(WEB_RTC, c.shownKind)
+        assertEquals(4, made.count { !it.closed })
+        assertTrue(peakVideo <= CameraVideoBudget.MAX_VIDEO_CAMERAS)
+    }
+
+    @Test
+    fun fourCamerasStartedOneByOneEndOnWebRtcToo() {
+        // Cards that attach a frame apart: the first ones load side by side, the later ones take those extras.
+        val ctx = context(store())
+        val cams = (0 until 4).map { feed(ctx) }
+        for (c in cams) {
+            c.start()
+            idle()
+        }
+        for (c in cams) assertEquals(listOf(WEB_RTC), c.runningKinds)
+        assertTrue(made.none { it.kind == MJPEG })
+        assertTrue("peak $peakVideo", peakVideo <= CameraVideoBudget.MAX_VIDEO_CAMERAS)
+    }
+
+    @Test
+    fun anExtraThatAlreadyDrewGivesWayAndItsCameraWaitsForWebRtc() {
+        CameraVideoBudget.max = 2
+        val ctx = context(store())
+        val first = feed(ctx)
+        first.start()
+        idle()
+        // HLS drew first: it shows while WebRTC loads, as HA's side-by-side does.
+        live(HLS).frame()
+        idle()
+        assertEquals(HLS, first.shownKind)
+        // A second camera needs its main player: the first's HLS goes, its WebRTC is now the one shown (clear until
+        // its first frame, over the still).
+        val second = feed(ctx)
+        second.start()
+        idle()
+        assertEquals(listOf(WEB_RTC), first.runningKinds)
+        assertNull(first.shownKind)
+        made.filter { it.kind == WEB_RTC && !it.closed }.forEach { it.frame() }
+        idle()
+        assertEquals(WEB_RTC, first.shownKind)
+        assertEquals(WEB_RTC, second.shownKind)
+    }
+
+    @Test
+    fun withTheBudgetFullAFailedWebRtcFallsToHlsInItsOwnSlotNotMjpeg() {
+        val ctx = context(store())
+        val cams = (0 until 4).map { feed(ctx) }
+        cams.forEach { it.start() }
+        idle()
+        idle()
+        made.first { it.kind == WEB_RTC && !it.closed }.fail()
+        idle()
+        assertEquals(1, cams.count { it.runningKinds == listOf(HLS) })
+        assertTrue(made.none { it.kind == MJPEG })
+        assertEquals(4, CameraVideoBudget.inUse)
+        assertTrue(peakVideo <= CameraVideoBudget.MAX_VIDEO_CAMERAS)
+    }
+
+    @Test
+    fun anHlsExtraThatBecomesTheMainPlayerIsNeverTakenAgain() {
+        CameraVideoBudget.max = 2
+        val ctx = context(store())
+        val first = feed(ctx)
+        first.start()
+        idle()
+        assertEquals(listOf(HLS, WEB_RTC), first.runningKinds)
+        assertEquals(1, CameraVideoBudget.extrasInUse)
+        // WebRTC fails: HLS, held as the extra, is now the camera's only (main) player.
+        live(WEB_RTC).fail()
+        idle()
+        assertEquals(listOf(HLS), first.runningKinds)
+        assertEquals(0, CameraVideoBudget.extrasInUse)
+        // Two more cameras need main players: one takes the free slot, the other waits on MJPEG. Neither takes the
+        // first camera's HLS.
+        val second = feed(ctx)
+        val third = feed(ctx)
+        second.start()
+        third.start()
+        idle()
+        assertEquals(listOf(HLS), first.runningKinds)
+        assertEquals(listOf(WEB_RTC), second.runningKinds)
+        assertEquals(listOf(MJPEG), third.runningKinds)
+        assertTrue(peakVideo <= 2)
+    }
+
+    @Test
+    fun aFifthCameraWaitsOnMjpegAndNoMainPlayerIsTakenFromAnother() {
+        val ctx = context(store())
+        val cams = (0 until 5).map { feed(ctx) }
+        cams.forEach { it.start() }
+        idle()
+        idle()
+        assertEquals(4, cams.count { it.runningKinds == listOf(WEB_RTC) })
+        assertEquals(listOf(MJPEG), cams.last().runningKinds)
+        assertTrue(peakVideo <= CameraVideoBudget.MAX_VIDEO_CAMERAS)
+        // One goes: the fifth takes up WebRTC.
+        cams.first().stop()
+        idle()
+        assertEquals(listOf(WEB_RTC), cams.last().runningKinds)
+    }
+
+    @Test
     fun theVideoCapPlaysMjpegUntilASlotFrees() {
         CameraVideoBudget.max = 1
         val ctx = context(store(), kinds = setOf(HLS, MJPEG))
@@ -391,24 +514,24 @@ class LiveCameraFeedTest {
 
     @Test
     fun theCapCountsVideoPlayersNotCameras() {
-        // HLS and WebRTC side by side are two decoders: two slots.
+        // HLS and WebRTC side by side are two decoders: two slots. The second camera's main player (WebRTC) takes the
+        // first's extra (its HLS), so both play WebRTC and neither detours through MJPEG.
         CameraVideoBudget.max = 2
         val ctx = context(store())
         val first = feed(ctx)
-        val second = feed(ctx)
         first.start()
-        second.start()
         idle()
         assertEquals(listOf(HLS, WEB_RTC), first.runningKinds)
         assertEquals(2, CameraVideoBudget.inUse)
-        assertEquals(listOf(MJPEG), second.runningKinds)
-        // Once both of the first's players have answered it runs one, and its other slot goes to the second.
-        live(WEB_RTC).frame()
-        live(HLS).frame()
+        val second = feed(ctx)
+        second.start()
         idle()
         assertEquals(listOf(WEB_RTC), first.runningKinds)
-        assertEquals(listOf(HLS), second.runningKinds)
+        assertEquals(listOf(WEB_RTC), second.runningKinds)
         assertEquals(2, CameraVideoBudget.inUse)
+        assertEquals(0, CameraVideoBudget.extrasInUse)
+        assertTrue(made.none { it.kind == MJPEG })
+        assertTrue(peakVideo <= 2)
     }
 
     @Test
@@ -422,14 +545,13 @@ class LiveCameraFeedTest {
         val both = feed(context(store()))
         both.start()
         idle()
-        // One slot left: HLS alone (shown), not HLS and WebRTC.
-        assertEquals(listOf(HLS), both.runningKinds)
-        assertEquals(HLS, both.runningKinds.single())
+        // One slot left: the main player (WebRTC, the kind HA settles on) alone and shown, not HLS first.
+        assertEquals(listOf(WEB_RTC), both.runningKinds)
         assertEquals(2, CameraVideoBudget.inUse)
-        // The other camera goes: WebRTC starts beside HLS.
+        // The other camera goes: HLS starts beside WebRTC, as HA loads them.
         holder.stop()
         idle()
-        assertEquals(listOf(HLS, WEB_RTC), both.runningKinds)
+        assertEquals(listOf(WEB_RTC, HLS), both.runningKinds)
         assertEquals(2, CameraVideoBudget.inUse)
     }
 

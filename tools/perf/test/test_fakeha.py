@@ -184,6 +184,25 @@ class FakeHA(unittest.TestCase):
         self.assertTrue(all(float(p["s"]) and p["lu"] > 0 for p in pts))
         self.assertNotIn("history/history_during_period", fakeha.Handler.hub.unknown)
 
+    def test_statistics_metadata_as_the_recorder_answers_it(self):
+        """A sensor's More Info that asks the recorder (Vitro's, HA's with `recorder` loaded) gets its metadata: one
+        entry per reference sensor with a state class, mean for a measurement, sum for a total; none for the rest. Never
+        an unknown command (the graded S1 Vitro run 2's only provisional reason)."""
+        ws = self.connect()
+        res, _ = ws.call({"type": "recorder/get_statistics_metadata",
+                          "statistic_ids": ["sensor.clarity_10", "sensor.clarity_1", "light.living_room", "sensor.nope"]})
+        self.assertTrue(res["success"])
+        by = {m["statistic_id"]: m for m in res["result"]}
+        self.assertEqual(sorted(by), ["sensor.clarity_1", "sensor.clarity_10"])
+        st = D.states()
+        for sid, m in by.items():
+            mean = st[sid]["attributes"]["state_class"] == "measurement"
+            self.assertEqual((m["has_mean"], m["has_sum"], m["source"]), (mean, not mean, "recorder"), sid)
+            self.assertEqual(m["statistics_unit_of_measurement"], st[sid]["attributes"]["unit_of_measurement"])
+        self.assertNotIn("recorder/get_statistics_metadata", fakeha.Handler.hub.unknown)
+        # HA's own dialog checks the recorder first; the fake doesn't list it, so on the web engine it never asks.
+        self.assertNotIn("recorder", ws.call({"type": "get_config"})[0]["result"]["components"])
+
     def test_get_icons_as_ha_core_answers_it(self):
         """#780: HA's icons.json for each loaded integration (haicons.py), so the frontend draws HA's
         default icons; a category HA doesn't take is refused as HA refuses it."""

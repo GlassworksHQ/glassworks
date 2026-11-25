@@ -4,8 +4,8 @@
 // `fixture`, with the card's pinned script from cards.json loaded as a module. Then it lists every custom element in
 // the card's shadow tree and which of them the island page would lack: elements HA's frontend defines (`ha-*`,
 // `hui-*`, `state-*`, …) that are neither the card's own nor among the island's stand-ins (the `vitroDefine` names in
-// WebIslandCardView.kt). A card whose main control is one of those can't draw in an island; route its view to HA's
-// frontend (WebFallback.FRONTEND_CUSTOM_CARDS).
+// WebIslandCardView.kt). A card that draws with one of those can't draw whole in an island: the island page finds that
+// itself (frontend-watch.js) and sends the card's view to HA's frontend; this shows what HA's side draws.
 //
 // Touches: a fake HA on 127.0.0.1 (stopped at the end) and a throwaway headless Chromium. Reads the pinned cards from
 // ~/.cache/glassworks-perf (downloads them on first use). Writes nothing but an optional --shot PNG. No real HA, no

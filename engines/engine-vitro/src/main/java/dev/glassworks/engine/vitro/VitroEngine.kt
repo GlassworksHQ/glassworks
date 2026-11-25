@@ -295,7 +295,7 @@ class VitroEngine(
             val (dash, view) = LovelaceParser.parseRoute(url)
             if (displayedDashboard != (OAuth.origin(url) to dash)) return false
             val d = vitroView.dashboard ?: return false
-            return d.views.getOrNull(d.viewIndex(view))?.webFallbackReason != null
+            return d.views.getOrNull(d.viewIndex(view))?.let { vitroView.fallbackReason(it) } != null
         }
 
         /** The dashboard the panel is set to, when it's one Vitro draws. */
@@ -584,7 +584,8 @@ class VitroEngine(
             vitroView.onWebView = { v, reason ->
                 // Only for the dashboard that owns the route, as onViewSelected: one still on screen while another
                 // loads isn't the page's to leave.
-                if (nativeActive && displayedDashboard != null && displayedDashboard == (currentOrigin to currentDashboardPath)) {
+                // A disposed page opens nothing: an island's report posted before dispose can still land here.
+                if (!disposed && nativeActive && displayedDashboard != null && displayedDashboard == (currentOrigin to currentDashboardPath)) {
                     val url = buildViewUrl(currentOrigin, currentDashboardPath, v.path ?: v.index.toString())
                     if (url != null) {
                         Log.i(logTag, "Vitro doesn't draw $reason; Home Assistant's frontend shows ${forLog(url)}")
@@ -603,12 +604,13 @@ class VitroEngine(
                 // The view being built: the context is made for its cards.
                 val viewIndex = vitroView.currentViewIndex
                 val walkGen = walkGeneration
+                val resources = vitroView.resourcesList
                 VitroCardContext(
                     context = activity,
                     haBase = haBase,
                     store = store,
                     theme = theme,
-                    resources = vitroView.resourcesList,
+                    resources = resources,
                     accessToken = { tokenFor(haBase) },
                     haConfig = { client?.haConfig ?: JSONObject() },
                     pageUrl = { lastNativeUrl ?: currentUrl },
@@ -654,6 +656,7 @@ class VitroEngine(
                             ?.also { if (fallbackInFront()) hideIslandSurfaces(it.view) }
                     },
                     touch = touchScreen,
+                    needsFrontend = { card, tags, owners -> vitroView.cardNeedsFrontend(card, tags, owners, resources) },
                     pageStorage = { HaPageStorage.of(activity).items(haBase.ifEmpty { null }) },
                 )
             }
