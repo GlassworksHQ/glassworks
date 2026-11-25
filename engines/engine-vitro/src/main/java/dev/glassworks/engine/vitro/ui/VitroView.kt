@@ -69,6 +69,7 @@ import dev.glassworks.engine.vitro.cards.ThermostatCardView
 import dev.glassworks.engine.vitro.cards.TileCardView
 import dev.glassworks.engine.vitro.cards.TodoListCardView
 import dev.glassworks.engine.vitro.cards.WeatherCardView
+import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HistoryPoint
@@ -225,10 +226,7 @@ class VitroView(
             // Subviews draw their back row only while the header shows: drop the cached ones, rebuild the current.
             val views = dashboard?.views ?: return
             viewCache.keys.filter { views.getOrNull(it)?.subview == true && it != currentViewIndex }.forEach { idx ->
-                viewCache.remove(idx)?.let { contentHost.removeView(it) }
-                clarity?.keepCards(viewCache.keys)
-                overlayFrames.remove(idx)?.let { overlayLayer.removeView(it) }
-                builtScripts.remove(idx)
+                dropView(idx, keepIslands = false)
             }
             if (views.getOrNull(currentViewIndex)?.subview == true) renderView(currentViewIndex, forceRebuild = true)
         }
@@ -241,11 +239,9 @@ class VitroView(
         set(v) {
             if (field == v) return
             field = v
-            viewCache.clear()
-            clarity?.keepCards(viewCache.keys)
-            builtScripts.clear()
-            contentHost.removeAllViews()
-            clearOverlay()
+            // The islands load the resources into their page: new resources need new pages, pooled ones too.
+            dropBuiltViews(keepIslands = false)
+            closePooledIslands()
             dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
         }
     var lastMetrics: VitroMetrics = VitroMetrics()
@@ -269,10 +265,8 @@ class VitroView(
     internal fun attachClarity(c: VitroClarity?) {
         clarity = c
         if (c == null || viewCache.isEmpty()) return
-        viewCache.clear()
-        builtScripts.clear()
-        contentHost.removeAllViews()
-        clearOverlay()
+        // The render that follows takes the islands back (the same cards), or closes them.
+        dropBuiltViews(keepIslands = true)
     }
 
     /** The view whose cards [buildViewTree] is building (Clarity's card registry). */
@@ -344,11 +338,7 @@ class VitroView(
         fontsStale = false
         val cfg = dashboard ?: return
         if (cfg.views.getOrNull(currentViewIndex) == null) return
-        viewCache.clear()
-        clarity?.keepCards(viewCache.keys)
-        builtScripts.clear()
-        contentHost.removeAllViews()
-        clearOverlay()
+        dropBuiltViews(keepIslands = true)
         renderView(currentViewIndex, forceRebuild = true)
     }
 
@@ -416,11 +406,9 @@ class VitroView(
         closeMoreInfo()
         dashboard = null
         viewBackStack.clear()
-        viewCache.clear()
-        clarity?.keepCards(viewCache.keys)
-        builtScripts.clear()
-        contentHost.removeAllViews()
-        clearOverlay()
+        // Another Home Assistant: no island of this one's carries over.
+        dropBuiltViews(keepIslands = false)
+        closePooledIslands()
         resourcesList = emptyList()
         // Nothing of the old server stays on screen while the new one connects: not its tabs, not its backdrop, and
         // a backdrop image still loading from it doesn't land afterwards.
@@ -434,13 +422,11 @@ class VitroView(
 
     fun setThemes(catalog: ThemeCatalog) {
         if (catalog == themeCatalog) return
+        val before = themeInputs(themeCatalog, darkMode, userThemeName)
         themeCatalog = catalog
-        viewCache.clear()
-        clarity?.keepCards(viewCache.keys)
-        builtScripts.clear()
-        contentHost.removeAllViews()
-        clearOverlay()
-        dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
+        // A theme the dashboard doesn't use changed (or was added): nothing on it looks different.
+        if (before != null && before == themeInputs(catalog, darkMode, userThemeName)) return
+        rebuildForTheme()
     }
 
     /** Applies the user's selected Home Assistant theme (`frontend/get_user_data` `core.selectedTheme`). */
@@ -448,14 +434,50 @@ class VitroView(
         val nextTheme = themeName?.takeIf { it.isNotBlank() && it != "Backend-selected" }
         val nextDark = dark ?: darkMode
         if (nextTheme == userThemeName && nextDark == darkMode) return
+        val before = themeInputs(themeCatalog, darkMode, userThemeName)
         userThemeName = nextTheme
         darkMode = nextDark
-        viewCache.clear()
-        clarity?.keepCards(viewCache.keys)
-        builtScripts.clear()
-        contentHost.removeAllViews()
-        clearOverlay()
+        // Another name for the theme already in force (a theme Home Assistant doesn't have, and the default): no change.
+        if (before != null && before == themeInputs(themeCatalog, darkMode, userThemeName)) return
+        rebuildForTheme()
+    }
+
+    /**
+     * The theme changed: the native cards are built again in it, and each island keeps its page, restyled to the
+     * new theme over its bridge ([WebIslandCardView.handOff]).
+     */
+    private fun rebuildForTheme() {
+        dropBuiltViews(keepIslands = true)
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
+    }
+
+    /**
+     * What the dashboard's look is made of in [catalog]: for each theme its views and cards ask for, the theme Home
+     * Assistant picks for it in [dark] mode and that theme's definition. Equal inputs draw the same dashboard. Null
+     * without a dashboard.
+     */
+    private fun themeInputs(catalog: ThemeCatalog, dark: Boolean, userTheme: String?): List<Any?>? {
+        val cfg = dashboard ?: return null
+        val asked = LinkedHashSet<String?>()
+        fun cardThemes(json: Any?) {
+            when (json) {
+                is org.json.JSONObject -> json.keys().forEach { k ->
+                    val v = json.opt(k)
+                    if (k == "theme" && v is String) asked += v else cardThemes(v)
+                }
+                is org.json.JSONArray -> for (i in 0 until json.length()) cardThemes(json.opt(i))
+            }
+        }
+        for (v in cfg.views) {
+            asked += v.theme ?: userTheme
+            v.cards.forEach { cardThemes(it.raw) }
+            v.badges.forEach { cardThemes(it.raw) }
+            v.sections.forEach { section -> section.cards.forEach { cardThemes(it.raw) } }
+        }
+        return listOf<Any?>(dark) + asked.map { name ->
+            val picked = ThemeResolver.pickedName(catalog, dark, name)
+            picked to catalog.themes[picked]
+        }
     }
 
     fun setDashboard(config: DashboardConfig, initialViewPath: String?) {
@@ -466,11 +488,8 @@ class VitroView(
         stateRebuilds.clear()
         dashboard = config
         viewBackStack.clear()
-        viewCache.clear()
-        clarity?.keepCards(viewCache.keys)
-        builtScripts.clear()
-        contentHost.removeAllViews()
-        clearOverlay()
+        // An island whose card is in the new config the same as before keeps its page.
+        dropBuiltViews(keepIslands = true)
         val idx = resolveViewIndex(config, initialViewPath)
         rebuildTabs(config)
         renderView(idx, forceRebuild = true)
@@ -720,9 +739,7 @@ class VitroView(
             if (currentViewIndex == index) {
                 renderView(index, forceRebuild = true, pushHistory = false)
             } else {
-                viewCache.remove(index)?.let { contentHost.removeView(it) }
-                clarity?.keepCards(viewCache.keys)
-                overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
+                dropView(index, keepIslands = false)
             }
         }
         unsub = store.subscribeAny { changed ->
@@ -736,10 +753,18 @@ class VitroView(
     }
 
     private fun renderView(index: Int, forceRebuild: Boolean, pushHistory: Boolean = true) {
-        val cfg = dashboard ?: return
-        val viewCfg = cfg.views.getOrNull(index) ?: return
-        // Before anything is selected or built: the page leaves for HA's frontend, and this view stays as it was.
-        onWebView?.let { show -> viewCfg.webFallbackReason?.let { reason -> show(viewCfg, reason); return } }
+        // Nothing to build: no island a rebuild gave up waits for it.
+        val cfg = dashboard ?: return closePooledIslands()
+        val viewCfg = cfg.views.getOrNull(index) ?: return closePooledIslands()
+        // Before anything is selected or built: the page leaves for HA's frontend, and this view stays as it was. No
+        // build follows, so no island a rebuild gave up waits for one.
+        onWebView?.let { show ->
+            viewCfg.webFallbackReason?.let { reason ->
+                closePooledIslands()
+                show(viewCfg, reason)
+                return
+            }
+        }
         val t0 = SystemClock.elapsedRealtime()
         val prev = currentViewIndex
         if (pushHistory && !forceRebuild && prev != index && cfg.views.getOrNull(prev) != null) {
@@ -762,6 +787,7 @@ class VitroView(
             // The previous view's cards don't stay on screen (and tappable) under this view's tab while it waits.
             for (i in 0 until contentHost.childCount) contentHost.getChildAt(i).visibility = GONE
             for (i in 0 until overlayLayer.childCount) overlayLayer.getChildAt(i).visibility = GONE
+            updateIslandsShown()
             return
         }
         val viewRoot = if (cached != null) {
@@ -769,13 +795,15 @@ class VitroView(
         } else {
             // The view's body font rides on the cards' context, not only on VitroFonts.family: a card that builds a
             // child later (auto-entities' refresh) while another view is shown still gets this view's font.
-            val cardCtx = contextFactory?.invoke(theme)?.withFontFamily(VitroFonts.familyFor(theme)) ?: return
+            val cardCtx = contextFactory?.invoke(theme)?.withFontFamily(VitroFonts.familyFor(theme)) ?: return closePooledIslands()
             // The fonts the dashboard's stylesheets declare: read only once a card draws a family Vitro doesn't have.
             WebFonts.configure(cardCtx.haBase, cardCtx.resources, context.cacheDir)
             fontsFor = cardCtx.haBase to cardCtx.resources
             val pinned = ArrayList<Pair<View, FrameLayout.LayoutParams>>()
             pendingPinned = pinned
             guessedStates.clear()
+            // The view's old tree, if it has one, goes first: its islands wait for this build to take them back.
+            dropView(index, keepIslands = true)
             buildingIndex = index
             clarity?.buildStarted(index)
             val built = try {
@@ -785,8 +813,6 @@ class VitroView(
                 buildingIndex = -1
             }
             rebuildWhenStatesLand(index, guessedStates.toSet())
-            viewCache.remove(index)?.let { contentHost.removeView(it) }
-            overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
             viewCache[index] = built
             builtScripts[index] = IslandScripts.of(cardCtx.resources)
             contentHost.addView(built, LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -813,6 +839,9 @@ class VitroView(
             val child = overlayLayer.getChildAt(i)
             child.visibility = if (child === activeOverlay) VISIBLE else GONE
         }
+        // Islands the build didn't take back (their card is gone or changed) close; only this view's islands run.
+        closePooledIslands()
+        updateIslandsShown()
 
         val elapsed = SystemClock.elapsedRealtime() - t0
         // The report follows the tree on screen: a cached tree keeps the card-mod state it was built with.
@@ -847,16 +876,145 @@ class VitroView(
     private fun trimViewCache(keep: Int) {
         while (viewCache.size > MAX_CACHED_VIEWS) {
             val oldest = viewCache.keys.firstOrNull { it != keep } ?: return
-            viewCache.remove(oldest)?.let { contentHost.removeView(it) }
-            clarity?.keepCards(viewCache.keys)
-            overlayFrames.remove(oldest)?.let { overlayLayer.removeView(it) }
-            builtScripts.remove(oldest)
+            dropView(oldest, keepIslands = false)
         }
     }
 
     private fun clearOverlay() {
         overlayFrames.clear()
         overlayLayer.removeAllViews()
+    }
+
+    // ---- Islands: one browser page per island card, open only while the card is built
+
+    /** Islands a rebuild gave up ([WebIslandCardView.handOff]), by card key, until the build takes them back. */
+    private val islandPool = HashMap<String, ArrayDeque<WebIslandCardView.Island>>()
+
+    /**
+     * Whether the page shows the dashboard, not the fallback's page in its place: islands run only while it does.
+     * The engine's page sets it.
+     */
+    var dashboardShown: Boolean = true
+        set(v) {
+            if (field == v) return
+            field = v
+            updateIslandsShown()
+        }
+
+    /**
+     * Whether the activity is in front (started): behind another app no island runs, and none is made active there.
+     * The engine's page sets it from the activity's lifecycle.
+     */
+    var activityShown: Boolean = true
+        set(v) {
+            if (field == v) return
+            field = v
+            updateIslandsShown()
+        }
+
+    /** The island cards in [root]'s tree. */
+    private fun islandsIn(root: View, into: MutableList<WebIslandCardView> = ArrayList()): MutableList<WebIslandCardView> {
+        if (root is WebIslandCardView) {
+            into += root
+        } else if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) islandsIn(root.getChildAt(i), into)
+        }
+        return into
+    }
+
+    /** The islands of [root], a tree leaving the view: kept for the rebuild under way ([keepIslands]), or closed. */
+    private fun retireIslands(root: View, keepIslands: Boolean) {
+        for (island in islandsIn(root)) {
+            if (!keepIslands) {
+                island.release()
+                continue
+            }
+            island.handOff()?.let { islandPool.getOrPut(it.key) { ArrayDeque() }.addLast(it) }
+        }
+    }
+
+    /** Drops built view [index] and its pinned cards. */
+    private fun dropView(index: Int, keepIslands: Boolean) {
+        viewCache.remove(index)?.let { retireIslands(it, keepIslands); contentHost.removeView(it) }
+        overlayFrames.remove(index)?.let { retireIslands(it, keepIslands); overlayLayer.removeView(it) }
+        builtScripts.remove(index)
+        clarity?.keepCards(viewCache.keys)
+    }
+
+    /** Drops every built view and the pinned cards. */
+    private fun dropBuiltViews(keepIslands: Boolean) {
+        viewCache.values.forEach { retireIslands(it, keepIslands) }
+        overlayFrames.values.forEach { retireIslands(it, keepIslands) }
+        viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
+        builtScripts.clear()
+        contentHost.removeAllViews()
+        clearOverlay()
+    }
+
+    /** The island an earlier build of [card] gave up, for its new build to take, or null. */
+    private fun adoptIsland(card: CardConfig, fillViewport: Boolean): WebIslandCardView.Island? {
+        val key = WebIslandCardView.keyOf(card, fillViewport)
+        val queue = islandPool[key] ?: return null
+        val island = queue.removeFirstOrNull()
+        if (queue.isEmpty()) islandPool.remove(key)
+        return island
+    }
+
+    private fun closePooledIslands() {
+        if (islandPool.isEmpty()) return
+        val left = islandPool.values.flatten()
+        islandPool.clear()
+        left.forEach { it.close() }
+    }
+
+    /**
+     * Each island runs only while its view is on screen ([WebIslandCardView.setShown]): the current view's, while the
+     * dashboard shows and the activity is in front. A hidden view's islands keep their page but stop painting.
+     */
+    private fun updateIslandsShown() {
+        val onScreen = dashboardShown && activityShown
+        for ((index, root) in viewCache) {
+            val shown = onScreen && index == currentViewIndex && root.visibility == VISIBLE
+            islandsIn(root).forEach { it.setShown(shown) }
+        }
+        for ((index, frame) in overlayFrames) {
+            val shown = onScreen && index == currentViewIndex && frame.visibility == VISIBLE
+            islandsIn(frame).forEach { it.setShown(shown) }
+        }
+    }
+
+    /**
+     * The content of island [pages] went away (a crashed or killed content process): they draw nothing again. A dead
+     * page waiting in the pool closes, so no build takes it. A card that holds one closes it, and its view is built
+     * again: the view on screen now, with its other islands handed over alive; a hidden view when it's shown.
+     */
+    fun islandPagesGone(pages: Set<Page>) {
+        if (pages.isEmpty()) return
+        val pooled = islandPool.values.flatten().filter { it.page in pages }
+        for (island in pooled) {
+            islandPool[island.key]?.remove(island)
+            if (islandPool[island.key]?.isEmpty() == true) islandPool.remove(island.key)
+            island.close()
+        }
+        val hit = HashSet<Int>()
+        for ((index, root) in viewCache) {
+            val dead = islandsIn(root).filter { it.holds(pages) }
+            val pinned = overlayFrames[index]?.let { islandsIn(it).filter { card -> card.holds(pages) } }.orEmpty()
+            (dead + pinned).forEach { it.release() }
+            if (dead.isNotEmpty() || pinned.isNotEmpty()) hit += index
+        }
+        for (index in hit) {
+            if (index == currentViewIndex) renderView(index, forceRebuild = true, pushHistory = false)
+            else dropView(index, keepIslands = false)
+        }
+    }
+
+    /** The page is gone: every island closes, and nothing is built again. */
+    fun closeIslands() {
+        cancelPendingBuilds()
+        dropBuiltViews(keepIslands = false)
+        closePooledIslands()
     }
 
     /**
@@ -1381,7 +1539,7 @@ class VitroView(
         }
         // Anything outside Vitro's supported set goes to an island on purpose (CardCompat), decided once per card.
         val built: View = if (card.inIsland(IslandScripts.of(ctx.resources))) {
-            WebIslandCardView(ctx, card, fillViewport = fillViewport)
+            WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(card, fillViewport))
         } else when (card.type) {
             // Layout containers
             "vertical-stack" -> LinearLayout(context).apply {
@@ -1481,7 +1639,7 @@ class VitroView(
             "custom:vertical-stack-in-card" -> VerticalStackInCardView(ctx, card, childBuilder)
             "custom:layout-card" -> LayoutCardView(ctx, card, childBuilder)
             // Tier 3: Arbitrary unrecognized custom cards -> stripped Micro-Web Island
-            else -> WebIslandCardView(ctx, card, fillViewport = fillViewport)
+            else -> WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(card, fillViewport))
         }
         // An island that loads card-mod styles its card itself: styling the native frame too would apply it twice
         // (a 0.5 opacity would show as 0.25). Only for the island drawing this card: a `conditional` returns its

@@ -326,6 +326,17 @@ class RecordingPage(activity: Activity) : Page {
     var restarts = 0
     override var canGoBack = false
 
+    /** [close] ran; nothing after it is recorded. */
+    @Volatile var closed = false
+
+    /** Every [setActive], in order. */
+    val actives = CopyOnWriteArrayList<Boolean>()
+
+    /** The last [setActive], or true (a new page is active). */
+    val active: Boolean get() = actives.lastOrNull() ?: true
+
+    override fun setActive(active: Boolean) { if (!closed) actives += active }
+    override fun close() { closed = true }
     override fun load(url: String) { loads += url }
     override fun reload() { reloads++ }
     override fun goBack() { backs++ }

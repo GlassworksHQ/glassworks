@@ -183,6 +183,7 @@ class GeckoEngine(
         }
 
         override fun restart() {
+            if (closed) return
             session?.let {
                 view.releaseSession()
                 it.close()
@@ -194,6 +195,7 @@ class GeckoEngine(
         }
 
         override fun load(url: String) {
+            if (closed) return
             val g = guard ?: return run { session?.loadUri(url) }
             // The app's own load is a page like any other: off the dashboard's origin, it's refused (and noted). With
             // nothing on screen yet, the note has no page to show in, so the guard's words go over the page instead.
@@ -204,7 +206,7 @@ class GeckoEngine(
                 }
                 return
             }
-            g.whenReady({ showStuck(null); session?.loadUri(url) }, ::showStuck)
+            g.whenReady({ if (!closed) { showStuck(null); session?.loadUri(url) } }, { if (!closed) showStuck(it) })
         }
 
         /** Where the page is (onLocationChange), for a guard's refusal of the app's own load. */
@@ -242,6 +244,24 @@ class GeckoEngine(
 
         override fun post(message: JSONObject) {
             ports.toList().forEach { runCatching { it.post(message) } }
+        }
+
+        /** True once [close] ran: the page has no session, and nothing makes one again. */
+        private var closed = false
+
+        override fun setActive(active: Boolean) { session?.setActive(active) }
+
+        override fun close() {
+            if (closed) return
+            closed = true
+            showStuck(null)
+            ports.clear()
+            session?.let {
+                view.releaseSession()
+                it.close()
+            }
+            session = null
+            shown = null
         }
 
         override fun capture(done: (android.graphics.Bitmap?) -> Unit) {
