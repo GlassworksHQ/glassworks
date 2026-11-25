@@ -113,6 +113,15 @@ class FakeHaServer {
     @Volatile var failHistory: Boolean = false
     @Volatile var templateResult: Any = "21.5 °C"
 
+    /** `config/entity_registry/list_for_display`'s answer; null refuses it (`unknown_command`). */
+    @Volatile var entityRegistryDisplay: JSONObject? = null
+
+    /** `config/device_registry/list`'s answer; null refuses it. */
+    @Volatile var deviceRegistry: org.json.JSONArray? = null
+
+    /** `config/floor_registry/list`'s answer; null refuses it, as a Home Assistant without floors does. */
+    @Volatile var floorRegistry: org.json.JSONArray? = null
+
     /** Everything the client sent, across every connection, in order. `auth` messages included. */
     val received = CopyOnWriteArrayList<JSONObject>()
     val sockets = CopyOnWriteArrayList<Socket>()
@@ -233,6 +242,10 @@ class FakeHaServer {
             }
             "config/area_registry/list" ->
                 ok(sock, id, org.json.JSONArray("""[{"area_id": "lounge", "name": "Lounge"}]"""))
+            "config/entity_registry/list_for_display" ->
+                entityRegistryDisplay?.let { ok(sock, id, it) } ?: fail(sock, id, "unknown_command")
+            "config/device_registry/list" -> deviceRegistry?.let { ok(sock, id, it) } ?: fail(sock, id, "unknown_command")
+            "config/floor_registry/list" -> floorRegistry?.let { ok(sock, id, it) } ?: fail(sock, id, "unknown_command")
             else -> fail(sock, id, "unknown_command")
         }
     }

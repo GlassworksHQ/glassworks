@@ -236,8 +236,9 @@ class VitroView(
         set(v) {
             if (field == v) return
             field = v
-            // The islands load the resources into their page: new resources need new pages.
+            // The islands load the resources into their page: new resources need new pages, pooled ones too.
             dropBuiltViews(keepIslands = false)
+            closePooledIslands()
             dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
         }
     var lastMetrics: VitroMetrics = VitroMetrics()
@@ -689,8 +690,9 @@ class VitroView(
     }
 
     private fun renderView(index: Int, forceRebuild: Boolean, pushHistory: Boolean = true) {
-        val cfg = dashboard ?: return
-        val viewCfg = cfg.views.getOrNull(index) ?: return
+        // Nothing to build: no island a rebuild gave up waits for it.
+        val cfg = dashboard ?: return closePooledIslands()
+        val viewCfg = cfg.views.getOrNull(index) ?: return closePooledIslands()
         val t0 = SystemClock.elapsedRealtime()
         val prev = currentViewIndex
         if (pushHistory && !forceRebuild && prev != index && cfg.views.getOrNull(prev) != null) {
@@ -721,7 +723,7 @@ class VitroView(
         } else {
             // The view's body font rides on the cards' context, not only on VitroFonts.family: a card that builds a
             // child later (auto-entities' refresh) while another view is shown still gets this view's font.
-            val cardCtx = contextFactory?.invoke(theme)?.withFontFamily(VitroFonts.familyFor(theme)) ?: return
+            val cardCtx = contextFactory?.invoke(theme)?.withFontFamily(VitroFonts.familyFor(theme)) ?: return closePooledIslands()
             // The fonts the dashboard's stylesheets declare: read only once a card draws a family Vitro doesn't have.
             WebFonts.configure(cardCtx.haBase, cardCtx.resources, context.cacheDir)
             fontsFor = cardCtx.haBase to cardCtx.resources

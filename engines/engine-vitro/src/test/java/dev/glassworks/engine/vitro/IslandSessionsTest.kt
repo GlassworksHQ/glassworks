@@ -167,7 +167,7 @@ class IslandSessionsTest {
         assertEquals("theme", sent.first().getString("type"))
         assertTrue(sent.first().getBoolean("dark"))
         assertTrue("night's primary color", sent.first().getString("css").contains("#123456"))
-        assertEquals("snapshot", sent[1].getString("type"))
+        assertEquals(listOf("theme", "auth", "snapshot"), sent.take(3).map { it.getString("type") })
         assertOnePagePerIsland(p)
     }
 
@@ -332,13 +332,23 @@ class IslandSessionsTest {
 
     // ---- The card on its own
 
-    private fun context(store: EntityStore, server: VitroIslandServer, dark: Boolean, pages: MutableList<RecordingPage>) =
-        VitroCardContext(
-            context = activity, haBase = base, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), dark),
-            resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {},
-            openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
-            islandServer = server, openIslandPage = { RecordingPage(activity).also { pages += it } },
-        )
+    private fun context(
+        store: EntityStore,
+        server: VitroIslandServer,
+        dark: Boolean,
+        pages: MutableList<RecordingPage>,
+        token: () -> String? = { null },
+        calls: MutableList<String> = ArrayList(),
+    ) = VitroCardContext(
+        context = activity, haBase = base, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), dark),
+        resources = emptyList(), accessToken = token, callService = { d, s, _, _ -> calls += "$d.$s" }, navigate = {},
+        openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+        islandServer = server, openIslandPage = { RecordingPage(activity).also { pages += it } },
+        watchAllEntities = { calls += "watchAll" },
+        watchRegistries = { _ -> calls += "registries"; { calls += "registries released" } },
+    )
+
+    private fun lamp(state: String) = dev.glassworks.engine.vitro.data.EntityState("light.lounge_lamp", state, emptyMap())
 
     private val cardJson = """{"type": "custom:acme-card", "entity": "light.lounge_lamp"}"""
 
@@ -352,12 +362,18 @@ class IslandSessionsTest {
         left.addView(island)
         idle()
 
+        val sent = ArrayList<JSONObject>()
+        slots(islands).values.single().onConnected { sent += it }
+        sent.clear()
+
         // A layout that moves its cards between columns detaches and attaches them at once.
         left.removeView(island)
         right.addView(island)
         idle()
         assertFalse(pages.single().closed)
         assertEquals(1, slots(islands).size)
+        // The page catches up on what changed while the card was off the tree.
+        assertEquals(listOf("snapshot"), sent.map { it.getString("type") })
 
         right.removeView(island)
         idle()
@@ -368,19 +384,31 @@ class IslandSessionsTest {
     @Test fun aHandedOffIslandMovesToTheNextBuildOfTheCardInItsTheme() {
         val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
         val pages = ArrayList<RecordingPage>()
+        val calls = ArrayList<String>()
         val store = EntityStore()
         val config = LovelaceParser.parseCard(JSONObject(cardJson))
-        val old = WebIslandCardView(context(store, islands, dark = true, pages), config)
+        val old = WebIslandCardView(context(store, islands, dark = true, pages, calls = calls), config)
         val page = pages.single()
+        // The page walks hass.states and reads the registries: it asks for both once.
+        old.handleIslandMessage(JSONObject().put("type", "watchAll")) {}
+        old.handleIslandMessage(JSONObject().put("type", "registries")) {}
+        assertEquals(listOf("watchAll", "registries"), calls)
+        calls.clear()
 
         val handed = old.handOff()!!
+        assertEquals("the old card gives the registry feed back", listOf("registries released"), calls)
+        calls.clear()
+        // Until the next build takes it, what the page sends reaches no card.
+        slots(islands).values.single().onMessage(JSONObject().put("type", "callService").put("domain", "light").put("service", "turn_off")) {}
+        assertTrue(calls.isEmpty())
         assertEquals(WebIslandCardView.keyOf(config, false), handed.key)
         assertTrue("the page left the old card", page.view.parent == null)
         old.release() // the old card going does nothing to the page it handed off
         assertFalse(page.closed)
 
-        val next = WebIslandCardView(context(store, islands, dark = false, pages), LovelaceParser.parseCard(JSONObject(cardJson)), adopted = handed)
+        val next = WebIslandCardView(context(store, islands, dark = false, pages, calls = calls), LovelaceParser.parseCard(JSONObject(cardJson)), adopted = handed)
         assertEquals("no new page", 1, pages.size)
+        assertEquals("the new card keeps up what the page asked for", listOf("watchAll", "registries"), calls)
         assertSame(next, page.view.parent)
         assertEquals("loaded once, by the first card", 1, page.loads.size)
         val sent = ArrayList<JSONObject>()
@@ -406,6 +434,27 @@ class IslandSessionsTest {
         assertTrue(pages[0].closed)
         assertFalse(pages[1].closed)
         assertEquals(1, slots(islands).size)
+    }
+
+    @Test fun aRefreshedSignInReachesAPageThatStays() {
+        val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
+        val store = EntityStore().apply { putLocal(lamp("on")) }
+        var token = "first-token"
+        WebIslandCardView(context(store, islands, dark = true, ArrayList(), token = { token }), LovelaceParser.parseCard(JSONObject(cardJson)))
+        val sent = ArrayList<JSONObject>()
+        slots(islands).values.single().onConnected { sent += it }
+        assertEquals(listOf("theme", "auth", "snapshot"), sent.map { it.getString("type") })
+        assertEquals("first-token", sent[1].getString("token"))
+        sent.clear()
+
+        // A reconnect refreshed the token, and the dashboard (and this page) stayed.
+        token = "second-token"
+        store.putLocal(lamp("off"))
+        assertEquals(listOf("auth", "patch"), sent.map { it.getString("type") })
+        assertEquals("second-token", sent[0].getString("token"))
+        sent.clear()
+        store.putLocal(lamp("on"))
+        assertEquals("sent once", listOf("patch"), sent.map { it.getString("type") })
     }
 
     @Test fun anIslandPageStopsRetryingItsBridgeOnceItsSlotIsGone() {
