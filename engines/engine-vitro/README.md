@@ -66,7 +66,9 @@ Vitro moves the Home Assistant data plane out of the browser into Kotlin (`HaDas
 
 Tier 3 never uses `android.webkit.WebView`. Each island is served from `VitroIslandServer`, a tiny HTTP server bound to IPv4 loopback (`127.0.0.1`), and loaded into GeckoView, so the Android system WebView, which is missing or too old on some of these panels, is not a dependency. A dashboard that stays in Tier 1 and Tier 2 never starts GeckoView at all.
 
-Non-dashboard pages, such as `/auth/authorize` for panel sign-in or the Blueprint import dialog, are handed to the wrapped fallback `Engine`.
+Non-dashboard pages, such as `/auth/authorize` for panel sign-in, history, settings or the Blueprint import dialog, are handed to the wrapped fallback `Engine`, which loads them from Home Assistant itself. Their WebSocket and sign-in work as they do with Vitro off.
+
+The island server only serves islands. Its proxy forwards what a card loads (`/api/`, `/local/`, `/hacsfiles/`, Home Assistant's static files and media, and the folders of the dashboard's own Lovelace resources), and only to a page that holds the cookie its island page sets, so other apps on the device can't use it. On the legacy engine, which loads only the dashboard's origin, the island server's loopback address is the one other origin it allows, and each page stays on its own origin: Home Assistant's pages never reach the island server, and islands never reach Home Assistant except through it.
 
 ## More-Info dialogs
 
@@ -75,7 +77,7 @@ Tapping or holding a tile opens a native More-Info dialog styled after Home Assi
 | Entity | Dialog |
 |---|---|
 | Light | Brightness dimmer, an HSV color wheel, a Kelvin color-temperature picker, and color swatches |
-| Climate | A circular thermostat dial with mode buttons |
+| Climate | A circular thermostat dial with mode buttons, and two thumbs for a heat/cool range |
 | Cover | A top-down position slider |
 | Sensor | A 24-hour stepped history graph |
 | Camera | A live stream |
@@ -83,6 +85,28 @@ Tapping or holding a tile opens a native More-Info dialog styled after Home Assi
 | Alarm panel | A PIN pad |
 
 Tiles can also carry the inline features Home Assistant adds under the card: `climate-hvac-modes`, `target-temperature`, `fan-speed`, `cover-position`, `light-color-temp`, `media-player-volume-slider`, `toggle`, `media-player-playback`, `light-color-favorites`, `numeric-input` and `vacuum-commands`, next to the brightness, select and open/close controls.
+
+A thermostat in `heat_cool` or `auto` with a low and a high target shows both, as Home Assistant does: on the
+thermostat card and in More-Info, the dial gets two thumbs, and the − and + move whichever target you pick in the
+middle of the dial. As in Home Assistant, that takes an entity that supports a target range (its
+`TARGET_TEMPERATURE_RANGE` feature) and reports no single `temperature`; one that reports a single target too gets the
+single control. The tile's `target-temperature` feature and Mushroom's climate card show a pair of steppers
+instead. The low target can't go above the high one.
+
+## Accessibility
+
+Vitro's controls work with TalkBack and with a keyboard or D-pad, the way Home Assistant's page works with a screen
+reader:
+
+- Controls are named after what they act on, and have the role Home Assistant gives them: a button, a switch (entity
+  toggles), a check box (to-do items), a choice (HVAC modes, the tile's toggle), or a pressed button (the light's
+  modes, the calendar's views).
+- The thermostat dial and More-Info's brightness, speed, color temperature and position sliders read their value, and
+  TalkBack's swipe up and down change it.
+- With a keyboard or D-pad, Tab and the arrows move between controls and Enter presses them. On those dials and
+  sliders, the left and right arrows change the value instead (page keys by a tenth, Home and End to the ends), and
+  Enter switches between the two ends of a heat/cool range. Back or Escape closes More-Info, and focus stays in it
+  while it's open.
 
 ## Themes
 
