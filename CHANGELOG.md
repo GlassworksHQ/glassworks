@@ -8,6 +8,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 
 ## [Unreleased]
 
+### Fixed
+- **Kiln installs the newest S1 release.** A fresh install from Kiln's S1 page now downloads the app from the newest
+  release at the moment you install, so a panel no longer starts out one version behind and offers an update right
+  away.
+
 ## [0.9.0] - 2026-11-24
 
 **S1 Kiosk is now Glassworks, in its last release before 1.0: a browser Manage page for every panel, themes and an edge glow for Assist, notifications and Bluetooth proxy panes, and frame updates from Home Assistant.**

@@ -9,7 +9,7 @@ const r = (tag: string, assets: string[], o: { draft?: boolean; prerelease?: boo
 const apks = (stem: string, v: string) => [`glassworks-${stem}-arm64-v8a-${v}.apk`, `glassworks-${stem}-armeabi-v7a-${v}.apk`];
 const GENERIC = RELEASES.get('generic-android')!;
 const LEGACY = RELEASES.get('generic-android-legacy')!;
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe('the latest release of a line', () => {
   it('the newest by version, not by list order, published only', () => {
@@ -88,6 +88,45 @@ describe('the latest release of a line', () => {
   it('says so when GitHub fails', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('rate limited', { status: 403 })));
     expect((await latest('generic-android')).status).toBe(502);
+  });
+
+  it('the S1\'s line: the newest by version, so a later 0.4.x patch for old panels never wins over 1.0.0', () => {
+    expect(latestOf(RELEASES.get('aqara-s1-plus')!, [
+      r('v0.4.5', ['s1-kiosk-0.4.5.apk']),
+      r('aqara-s1-plus-v1.0.0', ['s1-kiosk-1.0.0.apk', 's1-kiosk-1.0.0.apk.sha256']),
+      r('v0.9.0', ['s1-kiosk-0.9.0.apk']),
+      r('generic-android-v2.0.0', apks('generic-android', '2.0.0')),
+    ])).toEqual({ tag: 'aqara-s1-plus-v1.0.0', version: '1.0.0', assets: ['s1-kiosk-1.0.0.apk'] });
+  });
+
+  const auth = (call: unknown[]) => new Headers((call[1] as RequestInit).headers).get('authorization');
+
+  it('asks unauthenticated when the deploy sets no token', async () => {
+    vi.stubEnv('RELEASE_GITHUB_TOKEN', '');
+    const fetch = vi.fn(async () => Response.json([]));
+    vi.stubGlobal('fetch', fetch);
+    expect((await latest('aqara-s1-plus')).status).toBe(200);
+    expect(auth(fetch.mock.calls[0]!)).toBeNull();
+  });
+
+  it('sends RELEASE_GITHUB_TOKEN when the deploy sets one', async () => {
+    vi.stubEnv('RELEASE_GITHUB_TOKEN', 'token-a\n');
+    const fetch = vi.fn(async () => Response.json([]));
+    vi.stubGlobal('fetch', fetch);
+    expect((await latest('aqara-s1-plus')).status).toBe(200);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(auth(fetch.mock.calls[0]!)).toBe('Bearer token-a');
+  });
+
+  it('a token GitHub refuses (401): the same page again without it, and not sent again', async () => {
+    vi.stubEnv('RELEASE_GITHUB_TOKEN', 'token-expired');
+    const fetch = vi.fn(async (_: string, init: RequestInit) =>
+      new Headers(init.headers).has('authorization') ? new Response('Bad credentials', { status: 401 }) : Response.json([r('v1.0.0', ['s1-kiosk-1.0.0.apk'])]));
+    vi.stubGlobal('fetch', fetch);
+    expect((await (await latest('aqara-s1-plus')).json()).release?.tag).toBe('v1.0.0');
+    expect(fetch.mock.calls.map(auth)).toEqual(['Bearer token-expired', null]);
+    await latest('aqara-s1-plus');
+    expect(fetch.mock.calls.map(auth)).toEqual(['Bearer token-expired', null, null]);
   });
 
   it.each(['lululemon-mirror', '__proto__', ''])('refuses %j with 404 before GitHub is asked', async (frame) => {

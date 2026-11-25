@@ -5,6 +5,7 @@ import { FelDevice } from '@glassworks/fel';
 import { Assets, BackupStore, webUsbDevices } from '@glassworks/kiln-core';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { frameAssets } from './assets';
 import { DEMOS, demoSession, enterDemo, type Demo } from './demo';
 import type { DemoFrame, KilnFrame } from '@glassworks/kiln-core';
 import { registry, type Entry } from './registry';
@@ -19,14 +20,15 @@ import { Wizard } from './Wizard';
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
 
 function realSession(frame: KilnFrame): Session {
-  const assets = new Assets<string>('/assets/');
+  // the staged blobs, and the app from its newest release (installer.json `apk`)
+  const assets = frameAssets(frame, new Assets<string>('/assets/'));
   return new Session({
     recipe: frame.recipe,
     frame,
     devices: webUsbDevices,
     requestFel: () => FelDevice.request(),
-    asset: (n, p) => assets.get(n, p),
-    hasAsset: (n) => assets.has(n),
+    asset: (n, p) => assets.asset(n, p),
+    hasAsset: (n) => assets.hasAsset(n),
     backups: new BackupStore(frame.recipe.backup.db),
     loadKey: loadOrCreateAdbKey,
   });

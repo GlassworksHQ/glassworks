@@ -234,9 +234,10 @@ section, else the run fails: a line you name must be due), or `aqara-s1-plus:app
 warns in the summary.
 
 Panels see a release within 24 hours. To check right away, call `homeassistant.update_entity` on the update
-entity (`update.s1_panel_app_update` on an old S1): HA sends the entity's "check" command. Kiln
-(kiln.glassworks.dev) reads the releases at run time (`/api/release/<line>/latest`) and downloads the APKs through Refract
-(refract.glassworks.dev), so a release needs no Kiln or Refract deploy. A new release line does: see below.
+entity (`update.s1_panel_app_update` on an old S1): HA sends the entity's "check" command. Every Kiln page
+(kiln.glassworks.dev), the S1's included, reads the releases when someone installs (`/api/release/<line>/latest`) and
+downloads the APK through Refract (refract.glassworks.dev), so a release needs no Kiln or Refract deploy. A new release
+line does: see below.
 s1.edm.sh, the first installer's address, redirects to Kiln's S1 page (`kiln/s1-redirect`).
 
 ### The plan
