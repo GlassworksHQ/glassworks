@@ -11,6 +11,7 @@ import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.net.DatagramPacket
@@ -83,18 +84,27 @@ class CaptivePortalTest {
         assertEquals("a name over 255 bytes: format error", 1, u16(CaptivePortal.answer(long, long.size, ap)!!, 2) and 0xF)
     }
 
-    /** A free port on loopback, for a portal the test runs. */
+    /** A free TCP port on loopback, for the portal's web redirect. */
     private fun freePort() = ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
+
+    /**
+     * A free UDP port on loopback, for the portal's DNS. Not [freePort]: a port no TCP socket holds can still be another
+     * UDP socket's (other modules' tests run beside these, the camera pane's with RTP and discovery sockets). The
+     * portal's DNS then didn't come up, and the query timed out instead. The query's own socket is on loopback too: one
+     * on every address could get a port another socket holds on 127.0.0.1 (macOS gives it out), and that socket, the
+     * more specific one, took the answer.
+     */
+    private fun freeUdpPort() = DatagramSocket(InetSocketAddress(InetAddress.getLoopbackAddress(), 0)).use { it.localPort }
 
     @Test
     fun `on loopback, the portal answers DNS and sends the phone's check to the setup page, and stops`() {
         val lo = InetAddress.getByName("127.0.0.1") as Inet4Address
-        val dns = freePort()
+        val dns = freeUdpPort()
         val web = freePort()
         val portal = CaptivePortal({ "http://$it:8099/setup" }, dnsPort = dns, httpPort = web)
-        portal.start(PortalAddresses(lo))
+        assertTrue("DNS and the web redirect up", portal.start(PortalAddresses(lo)))
         try {
-            DatagramSocket().use { s ->
+            DatagramSocket(InetSocketAddress(lo, 0)).use { s -> // on loopback: see freeUdpPort
                 s.soTimeout = 5_000
                 val q = query("captive.apple.com")
                 s.send(DatagramPacket(q, q.size, InetSocketAddress(lo, dns)))
@@ -127,13 +137,15 @@ class CaptivePortalTest {
     @Test
     fun `a new start on the same IPv4 address rebinds DNS on the same port and keeps the redirect`() {
         val lo = InetAddress.getByName("127.0.0.1") as Inet4Address
-        val dns = freePort()
+        val dns = freeUdpPort()
         val web = freePort()
         val portal = CaptivePortal({ "http://$it:8099/setup" }, dnsPort = dns, httpPort = web)
-        portal.start(PortalAddresses(lo))
+        assertTrue("DNS and the web redirect up", portal.start(PortalAddresses(lo)))
         try {
-            repeat(3) { portal.start(PortalAddresses(lo)) } // what PortalHotspot does when the IPv6 address comes
-            DatagramSocket().use { s ->
+            repeat(3) { // what PortalHotspot does when the IPv6 address comes
+                assertTrue("DNS bound again on its port", portal.start(PortalAddresses(lo)))
+            }
+            DatagramSocket(InetSocketAddress(lo, 0)).use { s -> // on loopback: see freeUdpPort
                 s.soTimeout = 5_000
                 val q = query("captive.apple.com")
                 s.send(DatagramPacket(q, q.size, InetSocketAddress(lo, dns)))
