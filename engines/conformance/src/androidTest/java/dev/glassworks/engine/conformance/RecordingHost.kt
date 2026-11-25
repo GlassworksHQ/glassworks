@@ -54,6 +54,9 @@ class RecordingHost : PageHost {
     override fun onLocationChange(url: String?) = note(Event(LOCATION, url))
     override fun redirect(url: String): String? = null.also { note(Event(REDIRECT, url)) }
     override fun onContentGone(killed: Boolean) = note(Event(GONE, killed.toString()))
+    /** Which pages may have the microphone and camera without a prompt (#847). None, unless a test says so. */
+    @Volatile var trust: (String) -> Boolean = { false }
+    override fun trusts(url: String): Boolean = trust(url)
     override fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit) {
         note(Event(PERMISSIONS, permissions.joinToString()))
         answer(true)

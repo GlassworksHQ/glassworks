@@ -18,6 +18,8 @@ plan_mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(plan_mod)
 PlanError = plan_mod.PlanError
 
+MIRROR_VERSION_FILE = 'frames/lululemon-mirror/installer/src/image.ts'
+
 CHANGELOGS = {
     'app': 'CHANGELOG.md',
     'generic': 'frames/generic-android/CHANGELOG.md',
@@ -53,6 +55,16 @@ class Fixture(unittest.TestCase):
         (self.root / 'tools/release').mkdir(parents=True)
         shutil.copy(ROOT / 'tools/release/changelog-section.sh', self.root / 'tools/release/')
         self.sections()
+        self.mirror_version('1.0.0')
+
+    def mirror_version(self, version):
+        """Kiln's Mirror recipe, as committed, with MIRROR_FRAME at `version`: what freshly flashed Mirrors report."""
+        text = (ROOT / MIRROR_VERSION_FILE).read_text()
+        text, n = re.subn(r"(MIRROR_FRAME = \{ id: 'lululemon-mirror', version: ')[^']*(')", rf'\g<1>{version}\g<2>', text)
+        self.assertEqual(1, n, 'MIRROR_FRAME is no longer declared as the plan reads it')
+        p = self.root / MIRROR_VERSION_FILE
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text)
 
     def sections(self, **versions):
         """Each changelog with an Unreleased section and a [<version>] section for the versions given (by key)."""
@@ -101,6 +113,15 @@ class TheRepoFrames(unittest.TestCase):
         for k in ('script', 'pubkey', 'changelog'):
             self.assertTrue((ROOT / s1[k]).is_file(), s1[k])
         self.assertIn('Frame update', s1['note'])  # how panels install the zip: the summary says so
+
+    def test_the_mirror_names_where_kiln_sets_its_frame_version(self):
+        mirror = self.frame_rel['lululemon-mirror']
+        self.assertEqual(MIRROR_VERSION_FILE, mirror['versionFile'])
+        # The declaration the plan reads is the one Kiln writes into build.prop (image.test.ts checks that part).
+        v = plan_mod.device_version(ROOT, 'lululemon-mirror', mirror['versionFile'])
+        self.assertRegex(v, r'^\d+\.\d+\.\d+(-dev)?$')
+        # The S1 sets its frame version from the signed bundle at boot: nothing in the repo to compare.
+        self.assertNotIn('versionFile', self.frame_rel['aqara-s1-plus'])
 
     def test_tags_and_assets_are_the_ones_panels_and_kiln_read(self):
         p = plan_mod.plan(ROOT, '1.2.3', dry_run=True)
@@ -260,6 +281,68 @@ class What(Fixture):
         self.sections(app=['1.0.0'], generic=['1.0.0'])
         p = self.plan(what='generic-android-legacy', released=['generic-android-legacy-v1.0.0'])
         self.assertTrue(any('released already' in e for e in p['errors']))
+
+
+class MirrorFrameVersion(Fixture):
+    """A Mirror frame release must be the version Kiln writes into the Mirrors it flashes (MIRROR_FRAME, #850)."""
+
+    def setUp(self):
+        super().setUp()
+        self.sections(generic=['1.0.0'], mirror_frame=['1.0.0', '1.0.1'])
+
+    def test_the_version_kiln_installs_passes(self):
+        p = self.plan(what='lululemon-mirror:frame')
+        self.assertEqual([], p['errors'])
+        self.assertEqual({('frame', 'lululemon-mirror')}, due(p))
+
+    def test_another_version_fails_named_or_with_all(self):
+        self.mirror_version('1.0.0-dev')
+        for what in ('lululemon-mirror:frame', 'lululemon-mirror', 'all'):
+            p = self.plan(what=what)
+            self.assertEqual([f"frames/lululemon-mirror/v1.0.0: {MIRROR_VERSION_FILE} installs frame version 1.0.0-dev, "
+                              'not 1.0.0: bump it to 1.0.0 with the [1.0.0] section'], p['errors'], what)
+        self.assertIn('**The plan fails**', plan_mod.summary(p))
+        self.mirror_version('1.0.0')
+        self.assertTrue(self.plan('1.0.1', what='lululemon-mirror:frame')['errors'])   # an older one fails too
+
+    def test_a_dry_run_with_the_section_fails_too(self):
+        self.mirror_version('1.0.0-dev')
+        self.assertTrue(self.plan(dry_run=True)['errors'])
+
+    def test_a_dry_run_on_the_unreleased_notes_only_warns(self):
+        self.mirror_version('1.0.0-dev')
+        p = self.plan('1.1.0', dry_run=True)
+        self.assertEqual([], p['errors'])
+        self.assertTrue(any(w.startswith(f'frames/lululemon-mirror/v1.1.0: {MIRROR_VERSION_FILE} installs frame version '
+                                         '1.0.0-dev') and w.endswith('a real run would fail') for w in p['warnings']),
+                        p['warnings'])
+
+    def test_a_skipped_mirror_frame_is_not_checked(self):
+        self.mirror_version('1.0.0-dev')
+        self.sections(app=['1.0.0'], mirror_frame=['1.0.0'])
+        p = self.plan(what='aqara-s1-plus:app')
+        self.assertEqual([], p['errors'])
+        self.assertEqual([], self.plan(what='lululemon-mirror:frame', released=['frames/lululemon-mirror/v1.0.0'])['warnings'])
+
+    def test_the_declaration_is_read_once(self):
+        p = self.root / MIRROR_VERSION_FILE
+        p.write_text(p.read_text() + "\nexport const OTHER = { id: 'lululemon-mirror', version: '1.0.0' };\n")
+        with self.assertRaises(PlanError) as e:
+            self.plan(what='lululemon-mirror:frame')
+        self.assertIn('not 2 times', str(e.exception))
+        p.write_text('export const NOTHING = 1;\n')
+        with self.assertRaises(PlanError) as e:
+            self.plan(what='lululemon-mirror:frame')
+        self.assertIn('not 0 times', str(e.exception))
+        p.unlink()
+        with self.assertRaises(PlanError) as e:
+            self.plan(what='lululemon-mirror:frame')
+        self.assertIn('does not exist', str(e.exception))
+
+    def test_a_bad_version_file_entry(self):
+        self.edit('lululemon-mirror', lambda d: d['release']['frame'].update(versionFile=''))
+        with self.assertRaises(PlanError):
+            self.plan()
 
 
 class Channel(Fixture):

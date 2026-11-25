@@ -460,7 +460,8 @@
     "frame": {
       "bundle": "notice",
       "title": "lululemon Mirror frame",
-      "changelog": "frames/lululemon-mirror/FRAME-CHANGELOG.md"
+      "changelog": "frames/lululemon-mirror/FRAME-CHANGELOG.md",
+      "versionFile": "frames/lululemon-mirror/installer/src/image.ts"
     }
   }
 }
