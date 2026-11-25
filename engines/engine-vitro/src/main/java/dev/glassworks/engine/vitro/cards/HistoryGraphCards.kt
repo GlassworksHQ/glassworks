@@ -522,14 +522,58 @@ class LegendItem(val id: String, val name: String, val color: Int, val value: St
 
 /**
  * `ha-chart-base`'s HTML legend: centered rows (8 px apart) of 24 px items, each a check-circle in the series color
- * (18 px), the name (12 px) and its value in the secondary color; 12 px above it.
+ * (18 px), the name (12 px) and its value in the secondary color; 12 px above it. Collapsed, it shows only the
+ * entries that fit in two rows and a "More (N)" chip after them (`LegendFitController`); the chip expands it to every
+ * entry and a "Less" chip. [expanded] starts from the card's `expand_legend`. Expanding or collapsing only lays the
+ * legend out again: the chart keeps its paths, unless a fixed slot gives it a new height.
  */
 class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context) {
     private val gap = 8f * ctx.dp
     var onLabel: ((String) -> Unit)? = null
 
+    /** Whether every entry shows (`expandLegend`). */
+    var expanded: Boolean = false
+        set(v) { if (field != v) { field = v; updateChip(); requestLayout() } }
+
+    /** Called when the chip expands or collapses the legend, for a card that keeps the state across redraws. */
+    var onExpandedChange: ((Boolean) -> Unit)? = null
+
+    private val entries = ArrayList<View>()
+
+    /** The entries that fit in two rows with the chip after them, as the last measure found. */
+    private var fit = 0
+
+    private val chipLabel = cssText(ctx, CHIP_TEXT, ctx.theme.primaryTextColor, 500).apply { maxLines = 1 }
+    private val chipIcon = MdiIconView(ctx.context)
+
+    /**
+     * The `legend-more` item: an `li` (24 px high, 2 px sides) holding HA's filled assist chip: 8 px, the label in
+     * 12.25 px medium, 4 px, an 18 px chevron, 8 px, on the primary text color at 15 % (a pill).
+     */
+    private val chip: View = android.widget.FrameLayout(ctx.context).apply {
+        setPadding(ctx.px(2f), 0, ctx.px(2f), 0)
+        val pill = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(Math.round(8f * ctx.dp), 0, Math.round(8f * ctx.dp), 0)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 12f * ctx.dp
+                setColor(CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.15f))
+            }
+            isClickable = true
+            setOnClickListener {
+                expanded = !expanded
+                onExpandedChange?.invoke(expanded)
+            }
+        }
+        pill.addView(chipLabel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        pill.addView(chipIcon, LinearLayout.LayoutParams(Math.round(18f * ctx.dp), Math.round(18f * ctx.dp)).apply { marginStart = Math.round(4f * ctx.dp) })
+        addView(pill, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
+    }
+
     fun setItems(items: List<LegendItem>) {
         removeAllViews()
+        entries.clear()
         val multiple = items.size > 1
         for (it in items) {
             val li = LinearLayout(ctx.context).apply {
@@ -547,25 +591,52 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
                 setOnClickListener { _ -> onLabel?.invoke(it.id) }
             }
             lineBox(ctx, label, 12f, 1.2f)
-            if (multiple) label.maxWidth = Math.round(((if (it.value != null) 300f else 220f) - 26f) * ctx.dp)
-            li.addView(label, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            if (!it.value.isNullOrEmpty()) {
-                li.addView(cssText(ctx, 12f, ctx.theme.secondaryTextColor).apply { text = it.value; maxLines = 1 },
-                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = Math.round(4f * ctx.dp) })
+            val value = it.value?.takeIf { v -> v.isNotEmpty() }?.let { v -> cssText(ctx, 12f, ctx.theme.secondaryTextColor).apply { text = v; maxLines = 1 } }
+            if (multiple) {
+                // `li { max-width }` (300 px with a value, else 220) holds the whole entry: its 2 px sides, the 18 px
+                // toggle and 4 px, and the value (`flex-shrink: 0`), so the name shrinks to what they leave.
+                val valuePx = value?.let { v -> Math.round(4f * ctx.dp) + ceil(v.paint.measureText(v.text.toString()).toDouble()).toInt() } ?: 0
+                label.maxWidth = max(0, Math.round(((if (it.value != null) 300f else 220f) - 26f) * ctx.dp) - valuePx)
             }
+            li.addView(label, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            if (value != null) {
+                li.addView(value, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = Math.round(4f * ctx.dp) })
+            }
+            entries += li
             addView(li)
         }
+        if (items.isNotEmpty()) addView(chip)
+        fit = items.size
+        updateChip()
         requestLayout()
     }
+
+    /** The chip's label (`expand_legend` / `collapse_legend`) and chevron for the current state and [fit]. */
+    private fun chipText(fitNow: Int): String = if (expanded) "Less" else "More (${entries.size - fitNow})"
+
+    private fun updateChip() {
+        val text = chipText(fit)
+        if (chipLabel.text.toString() != text) chipLabel.text = text
+        chipIcon.setIcon(if (expanded) "mdi:chevron-up" else "mdi:chevron-down", ctx.theme.primaryTextColor)
+    }
+
+    /** The chip's width with [text] as its label: 2 + 8 + label + 4 + 18 + 8 + 2 px. */
+    private fun chipWidth(text: String): Float = chipLabel.paint.measureText(text) + (2f + 8f + 4f + 18f + 8f + 2f) * ctx.dp
 
     private val itemH get() = Math.round(24f * ctx.dp)
     private val topPad get() = Math.round(12f * ctx.dp)
 
+    /** The views in the flow: collapsed, the entries that fit and the chip; expanded, all of them and the chip. */
+    private fun shown(): List<View> {
+        if (entries.isEmpty()) return emptyList()
+        val visible = if (expanded) entries else entries.subList(0, fit)
+        return if (fit < entries.size) visible + chip else visible
+    }
+
     private fun rows(width: Int): List<List<View>> {
         val rows = ArrayList<MutableList<View>>()
         var used = 0f
-        for (i in 0 until childCount) {
-            val c = getChildAt(i)
+        for (c in shown()) {
             val w = c.measuredWidth
             if (rows.isEmpty() || used + gap + w > width) {
                 rows += mutableListOf(c)
@@ -580,8 +651,21 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
-        for (i in 0 until childCount) {
-            getChildAt(i).measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(itemH, MeasureSpec.EXACTLY))
+        val itemSpec = MeasureSpec.makeMeasureSpec(itemH, MeasureSpec.EXACTLY)
+        for (e in entries) e.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.AT_MOST), itemSpec)
+        if (entries.isNotEmpty()) {
+            // LegendFitController: the chip's width depends on how many entries it hides, which depends on its width;
+            // the frontend settles that over its resize observer, here in a few rounds.
+            val widths = FloatArray(entries.size) { entries[it].measuredWidth.toFloat() }
+            var f = entries.size
+            repeat(4) {
+                val next = fitInRows(widths, chipWidth(chipText(f)), w.toFloat(), gap, MAX_ROWS)
+                if (next == f) return@repeat
+                f = next
+            }
+            fit = f
+            updateChip()
+            chip.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.AT_MOST), itemSpec)
         }
         val n = rows(w).size
         val natural = if (n == 0) 0 else topPad + n * itemH + Math.round((n - 1) * gap)
@@ -590,6 +674,18 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        val shown = shown().toSet()
+        // Entries past the fit stay children (they're measured for it), out of the flow and hidden, as HA's
+        // `li.overflow` (`position: absolute; visibility: hidden`).
+        for (i in 0 until childCount) {
+            val c = getChildAt(i)
+            if (c in shown) {
+                if (c.visibility != VISIBLE) c.visibility = VISIBLE
+            } else {
+                if (c.visibility != INVISIBLE) c.visibility = INVISIBLE
+                c.layout(0, 0, 0, 0)
+            }
+        }
         var y = topPad.toFloat()
         for (row in rows(r - l)) {
             val total = row.sumOf { it.measuredWidth } + gap * (row.size - 1)
@@ -599,6 +695,36 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
                 x += c.measuredWidth + gap
             }
             y += itemH + gap
+        }
+    }
+
+    companion object {
+        /** `MAX_ROWS` of `legend-fit-controller.ts`. */
+        const val MAX_ROWS = 2
+
+        /** The chip label's size: HA's small button text. */
+        const val CHIP_TEXT = 12.25f
+
+        /**
+         * `fitInRows`: how many items of [widths] fit in [maxRows] wrapping rows of [rowWidth], [gap] apart, leaving
+         * room for the "more" item ([moreWidth]) after them when not all of them fit.
+         */
+        fun fitInRows(widths: FloatArray, moreWidth: Float, rowWidth: Float, gap: Float, maxRows: Int): Int {
+            fun fits(end: Float, width: Float) = end == 0f || end + gap + width <= rowWidth
+            var rows = 1
+            var end = 0f
+            var fit = 0
+            for ((index, width) in widths.withIndex()) {
+                if (rows < maxRows || fits(end, moreWidth)) fit = index
+                if (fits(end, width)) {
+                    end += (if (end == 0f) 0f else gap) + width
+                } else {
+                    rows++
+                    end = width
+                }
+                if (rows > maxRows) return fit
+            }
+            return widths.size
         }
     }
 }
@@ -1017,6 +1143,12 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
     /** A render skipped while the card was hidden (a cached view): done when it shows again. */
     private var renderPending = false
 
+    /** `expand_legend`: the legends start expanded. */
+    private val expandLegend = config.raw.optBoolean("expand_legend", false)
+
+    /** Each line chart's legend expanded or collapsed by its chip, by unit. */
+    private val legendExpanded = HashMap<String, Boolean>()
+
     /** The line charts and legends a fixed slot sizes ([measureInSlot]). */
     private val slotCharts = ArrayList<SlotChart>()
     private val fixedHeight = hasFixedHeight(config)
@@ -1183,7 +1315,11 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
             box.addView(chart, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             var legendView: View? = null
             if (showNames) {
+                val unit = spec.unit.orEmpty()
                 legendView = ChartLegendView(ctx).apply {
+                    // The chip's state outlives the redraw each minute, as the frontend's chart element does.
+                    expanded = legendExpanded[unit] ?: expandLegend
+                    onExpandedChange = { legendExpanded[unit] = it }
                     setItems(legend)
                     onLabel = { id -> ctx.openMoreInfo(id) }
                 }
@@ -1348,6 +1484,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
         content.addView(chart, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         content.addView(legend, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         legend.onLabel = { id -> ctx.openMoreInfo(id.substringBeforeLast('-').takeIf { ctx.store[it] != null } ?: id) }
+        legend.expanded = config.raw.optBoolean("expand_legend", false)
         col.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         addView(col, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }

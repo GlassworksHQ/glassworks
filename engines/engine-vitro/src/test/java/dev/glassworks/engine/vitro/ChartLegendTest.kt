@@ -1,0 +1,135 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+package dev.glassworks.engine.vitro
+
+import android.app.Activity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.TextView
+import dev.glassworks.engine.vitro.cards.ChartLegendView
+import dev.glassworks.engine.vitro.cards.ChartScene
+import dev.glassworks.engine.vitro.cards.ChartView
+import dev.glassworks.engine.vitro.cards.LegendItem
+import dev.glassworks.engine.vitro.data.EntityStore
+import dev.glassworks.engine.vitro.theme.ThemeCatalog
+import dev.glassworks.engine.vitro.theme.ThemeResolver
+import dev.glassworks.engine.vitro.ui.VitroCardContext
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/** `ha-chart-base`'s legend: two rows and a "More (N)" chip (`LegendFitController`), which expands it. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = android.app.Application::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class ChartLegendTest {
+    private fun ctx(): VitroCardContext {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        return VitroCardContext(
+            context = activity, haBase = "http://192.0.2.1", store = EntityStore(),
+            theme = ThemeResolver.resolve(ThemeCatalog(), true),
+            resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+        )
+    }
+
+    @Test
+    fun fitInRowsIsTheFrontendsOwn() {
+        // legend-fit-controller.test.ts
+        assertEquals(4, ChartLegendView.fitInRows(floatArrayOf(100f, 100f, 100f, 100f), 60f, 300f, 12f, 2))
+        assertEquals(4, ChartLegendView.fitInRows(floatArrayOf(100f, 100f, 100f, 100f, 100f), 60f, 300f, 12f, 2))
+        assertEquals(3, ChartLegendView.fitInRows(floatArrayOf(100f, 100f, 100f, 100f, 100f), 100f, 300f, 12f, 2))
+        // An item wider than the row still takes a row of its own.
+        assertEquals(1, ChartLegendView.fitInRows(floatArrayOf(400f, 400f, 400f), 80f, 300f, 8f, 2))
+    }
+
+    /** The texts the legend shows (laid out and visible), in order. */
+    private fun shownTexts(v: ViewGroup): List<String> {
+        val out = ArrayList<String>()
+        fun walk(x: View) {
+            if (x.visibility != View.VISIBLE || x.width == 0) return
+            if (x is TextView) out += x.text.toString()
+            if (x is ViewGroup) for (i in 0 until x.childCount) walk(x.getChildAt(i))
+        }
+        walk(v)
+        return out
+    }
+
+    @Test
+    fun aLongLegendShowsTwoRowsAndAMoreChipThatExpandsIt() {
+        val ctx = ctx()
+        // A card holding a chart and its legend, as the history graph stacks them.
+        val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+        var scenes = 0
+        val chart = ChartView(ctx.context, ctx.dp).apply { heightCss = 200f; setScene { scenes++; ChartScene() } }
+        val legend = ChartLegendView(ctx)
+        col.addView(chart, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        col.addView(legend, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        legend.setItems((1..6).map { LegendItem("sensor.room_$it", "Room $it temperature sensor with a long name", 0xFF4269D0.toInt(), "21.$it °C") })
+        var reported: Boolean? = null
+        legend.onExpandedChange = { reported = it }
+        fun layout() {
+            col.measure(View.MeasureSpec.makeMeasureSpec(Math.round(466 * ctx.dp), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            col.layout(0, 0, col.measuredWidth, col.measuredHeight)
+        }
+        layout()
+        val collapsed = shownTexts(legend)
+        val shownEntries = collapsed.count { it.startsWith("Room ") }
+        assertTrue("two rows hold fewer than six entries: $collapsed", shownEntries in 1..5)
+        assertEquals("More (${6 - shownEntries})", collapsed.last())
+        val collapsedHeight = legend.height
+        // Two rows: 12 px above, 24 px rows 8 px apart.
+        assertEquals(Math.round(12 * ctx.dp) + 2 * Math.round(24 * ctx.dp) + Math.round(8 * ctx.dp), collapsedHeight)
+        val scenesBefore = scenes
+
+        // The chip expands the legend: every entry and "Less", taller, and the chart keeps its paths.
+        val chip = (0 until legend.childCount).map { legend.getChildAt(it) }.last() as ViewGroup
+        assertTrue(chip.getChildAt(0).performClick())
+        layout()
+        val expanded = shownTexts(legend)
+        assertEquals(6, expanded.count { it.startsWith("Room ") })
+        assertEquals("Less", expanded.last())
+        assertTrue(legend.height > collapsedHeight)
+        assertEquals(true, reported)
+        assertEquals(scenesBefore, scenes)
+
+        // And collapses it again.
+        assertTrue(chip.getChildAt(0).performClick())
+        layout()
+        assertEquals(collapsed, shownTexts(legend))
+        assertEquals(false, reported)
+    }
+
+    @Test
+    fun aLegendThatFitsHasNoChip() {
+        val ctx = ctx()
+        val legend = ChartLegendView(ctx)
+        legend.setItems(listOf(LegendItem("a", "A", 0, "1"), LegendItem("b", "B", 0, "2")))
+        legend.measure(View.MeasureSpec.makeMeasureSpec(Math.round(466 * ctx.dp), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        legend.layout(0, 0, legend.measuredWidth, legend.measuredHeight)
+        val texts = shownTexts(legend)
+        assertEquals(listOf("A", "1", "B", "2"), texts)
+        assertFalse(texts.any { it.startsWith("More") || it == "Less" })
+    }
+
+    @Test
+    fun aNameShrinksToWhatItsValueLeavesInThreeHundredPixels() {
+        val ctx = ctx()
+        val legend = ChartLegendView(ctx)
+        val long = "Presence Multi-Sensor FP300 ▸ Temperature, with a name longer than any entry"
+        legend.setItems(listOf(LegendItem("a", long, 0, "22.0 °C"), LegendItem("b", "B", 0, "2")))
+        legend.measure(View.MeasureSpec.makeMeasureSpec(Math.round(466 * ctx.dp), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val entry = legend.getChildAt(0)
+        // The whole entry (sides, toggle, name, value) stays within `li { max-width: 300px }`.
+        assertTrue("entry ${entry.measuredWidth / ctx.dp} px", entry.measuredWidth <= Math.round(300 * ctx.dp) + 1)
+    }
+}
