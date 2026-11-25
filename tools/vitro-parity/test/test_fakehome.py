@@ -126,6 +126,22 @@ class Home(unittest.TestCase):
         weighted = H.statistic_during_period({"statistic_id": "sensor.m", "fixed_period": {
             "start_time": H.iso(H.NOW - 2 * 3600 - 8 * 60), "end_time": H.iso(H.NOW - 3600 - 8 * 60)}})
         self.assertEqual(weighted["mean"], 0.0)
+        # Between steps: 0 until 10:01, then 100, over 10:00-10:08 is 87.5 (the series' own change, not a 5-minute grid).
+        self.case({"states": {"sensor.m": {"state": "100", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}}},
+                   "history": {"sensor.m": {"points": [["-3h", "0"], ["-7m", "100"]]}}})
+        between = H.statistic_during_period({"statistic_id": "sensor.m", "fixed_period": {
+            "start_time": H.iso(H.NOW - 8 * 60), "end_time": H.iso(H.NOW)}})
+        self.assertEqual(between["mean"], 87.5)
+        # Unavailable is a boundary held for no mean: 0 for 5 min, unavailable 10 min, 100 for 5 min is 50.
+        self.case({"states": {"sensor.m": {"state": "100", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}}},
+                   "history": {"sensor.m": {"points": [["-28m", "0"], ["-23m", "unavailable"], ["-13m", "100"], ["-8m", "100"]]}}})
+        gap = H.statistic_during_period({"statistic_id": "sensor.m", "fixed_period": {
+            "start_time": H.iso(H.NOW - 28 * 60), "end_time": H.iso(H.NOW - 8 * 60)}})
+        self.assertEqual(gap["mean"], 50.0)
+        self.case({"states": {"sensor.r": {"state": "10", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}},
+                              "sensor.c": {"state": "20", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}}},
+                   "history": {"sensor.r": {"points": [["-3h", "100"], ["-2h", "110"], ["-1h", "0"], ["-30m", "10"]]},
+                               "sensor.c": {"points": [["-2h08m", "0"], ["-1h08m", "10"], ["-4m", "20"]]}}})
         # A meter that resets keeps what it counted: 100 -> 110, reset, -> 10 is 20.
         reset = H.statistic_during_period({"statistic_id": "sensor.r", "rolling_window": {"duration": {"hours": 3}}})
         self.assertEqual(reset, {"change": 20.0})

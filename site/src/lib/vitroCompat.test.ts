@@ -167,6 +167,13 @@ describe("auditDashboard with JSON", () => {
     expect(r.views[0]).toMatchObject({ name: "Home", type: "masonry", native: true });
   });
 
+  it("counts an iframe card as a GeckoView page: its view stays native, but the frame is a browser page", () => {
+    const r = auditDashboard(JSON.stringify({ views: [{ path: "a", cards: [{ type: "iframe", url: "https://example.com/" }] }] }));
+    expect(r.isFullyNative).toBe(false);
+    expect(r.totals.tier3).toBe(1);
+    expect(r.triggers[0].reasons).toEqual(["its page runs in a GeckoView island (the view stays native)"]);
+  });
+
   it("flags unknown cards with their path and reason, and reads a card with no type as entities, as the engine does", () => {
     const r = auditDashboard(
       JSON.stringify({ views: [{ path: "a", sections: [{ cards: [{ type: "tile" }, { type: "custom:apexcharts-card" }, { type: "map" }, {}] }] }] }),

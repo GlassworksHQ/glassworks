@@ -157,3 +157,27 @@ internal class SidebarStackLayout(context: Context) : LinearLayout(context) {
         orientation = VERTICAL
     }
 }
+
+/**
+ * A masonry or sidebar column: the cards in order, their block margins collapsing as CSS collapses them. The first card
+ * it shows gets [firstTopPx] above it, every later shown one [restTopPx] (the bottom margin above already spaces it);
+ * a hidden card (GONE) takes no margin, so the card after it can be the first.
+ */
+internal class CardColumn(context: Context, private val firstTopPx: Int, private val restTopPx: Int) : LinearLayout(context) {
+    init {
+        orientation = VERTICAL
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        var first = true
+        for (i in 0 until childCount) {
+            val c = getChildAt(i)
+            if (c.visibility == GONE) continue
+            val lp = c.layoutParams as? MarginLayoutParams ?: continue
+            val want = if (first) firstTopPx else restTopPx
+            if (lp.topMargin != want) lp.topMargin = want
+            first = false
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+}

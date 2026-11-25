@@ -555,35 +555,42 @@ def statistic_during_period(m):
         start = None
     meta, series = _meta(eid) or {}, _series(eid)
     t0, t1 = (start if start is not None else NOW - 365 * 86400), min(end, NOW)
-    points = []  # (t, value): the series at the window's start, each 5-minute step, and its end
+    # (t, value or None): the window's start, every change of the series inside it (a step series' own points, a
+    # wave's steps), and its end. A value that isn't a number (unavailable) is None: a boundary, held for no mean.
+    points = []
     if series and t1 > t0:
-        t = t0
-        while True:
+        if series.changes is not None:
+            times = [t0] + [t for t, _ in series.changes if t0 < t < t1] + [t1]
+        else:
+            times = [t0]
+            t = (math.floor(t0 / series.step) + 1) * series.step
+            while t < t1:
+                times.append(t)
+                t += series.step
+            times.append(t1)
+        for t in times:
             v = series.value(t)
-            if v is not None and _num(v):
-                points.append((t, float(v)))
-            if t >= t1:
-                break
-            t = min(t1, (math.floor(t / 300) + 1) * 300)
+            points.append((t, float(v) if v is not None and _num(v) else None))
     out = {}
     if meta.get("has_mean"):
         # HA's mean is time-weighted: each value counts for as long as it's held; the end point holds for no time.
-        held = [(v, points[i + 1][0] - t) for i, (t, v) in enumerate(points[:-1]) if points[i + 1][0] > t]
+        held = [(v, points[i + 1][0] - t) for i, (t, v) in enumerate(points[:-1]) if points[i + 1][0] > t and v is not None]
         span = sum(d for _, d in held)
         out["max"] = round(max(v for v, _ in held), 6) if held else None
         out["mean"] = round(sum(v * d for v, d in held) / span, 6) if held else None
         out["min"] = round(min(v for v, _ in held), 6) if held else None
     elif meta:
-        if not points:
+        readings = [v for _, v in points if v is not None]
+        if not readings:
             out["change"] = None
         elif (states().get(eid) or {}).get("attributes", {}).get("state_class") == "total_increasing":
             # A meter: a drop is a reset, after which the new reading is what it counted since (HA's reset-aware sum).
             total = 0.0
-            for (_, a), (_, b) in zip(points, points[1:]):
+            for a, b in zip(readings, readings[1:]):
                 total += b - a if b >= a else b
             out["change"] = round(total, 6)
         else:
-            out["change"] = round(points[-1][1] - points[0][1], 6)
+            out["change"] = round(readings[-1] - readings[0], 6)
     types = m.get("types")
     return {k: v for k, v in out.items() if not types or k in types}
 

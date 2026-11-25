@@ -693,12 +693,17 @@ class StatisticCardView(ctx: VitroCardContext, private val config: CardConfig) :
         period.optJSONObject("rolling_window")?.let { msg.put("rolling_window", it) }
     }
 
+    /** Bumped by each fetch: a reply to an older one (still in flight across a detach) is dropped. */
+    private var fetchGeneration = 0
+
     private fun fetch() {
         if (statisticId.isEmpty()) return
         val msg = JSONObject().put("type", "recorder/statistic_during_period").put("statistic_id", statisticId)
         periodFields(msg)
+        val generation = ++fetchGeneration
         ctx.callWs(msg) { ok, result, err ->
             ctx.main.post {
+                if (generation != fetchGeneration) return@post
                 if (!ok) {
                     showError(err?.optString("message", "").orEmpty().ifEmpty { "Unknown error" })
                     return@post
@@ -793,8 +798,10 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
     private val entityId = config.entity.orEmpty()
     private val root = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
     private var builtFor: String? = null
-    private val observedSensors = HashSet<String>()
     private val values = ArrayList<Triple<String, MdiIconView, TextView>>()
+
+    /** The sensors followed now, with their handles: dropped on detach, made again for the current ones on attach. */
+    private val sensorHandles = HashMap<String, () -> Unit>()
 
     init {
         addView(root, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -807,11 +814,29 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
         s.attributes["problem"]?.toString().orEmpty(), s.attributes["unit_of_measurement_dict"]?.toString().orEmpty(),
     ).joinToString("|")
 
-    /** Follows every sensor the plant names now (a sensor it swaps in included); the ones followed already stay. */
+    /**
+     * Follows every sensor the plant names now (one it swaps in included), keeping the handles it has; a sensor it
+     * no longer names is dropped.
+     */
     private fun followSensors(s: EntityState) {
-        (s.attributes["sensors"] as? Map<*, *>)?.values?.mapNotNull { it as? String }?.distinct()?.forEach { id ->
-            if (observedSensors.add(id)) observe(id) { ctx.store[entityId]?.let(::fillValues) }
+        val ids = (s.attributes["sensors"] as? Map<*, *>)?.values?.mapNotNull { it as? String }?.toSet().orEmpty()
+        (sensorHandles.keys - ids).forEach { sensorHandles.remove(it)?.invoke() }
+        for (id in ids) {
+            if (id in sensorHandles) continue
+            sensorHandles[id] = ctx.store.subscribe(id) { _ -> ctx.main.post { ctx.store[entityId]?.let(::fillValues) } }
         }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        // Back from a move: follow the plant's sensors again, and show what they read meanwhile.
+        ctx.store[entityId]?.let { followSensors(it); fillValues(it) }
+    }
+
+    override fun onDetachedFromWindow() {
+        sensorHandles.values.forEach { it() }
+        sensorHandles.clear()
+        super.onDetachedFromWindow()
     }
 
     private fun render(s: EntityState?) {
@@ -857,7 +882,8 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
             band.addView(picture, LayoutParams(MATCH_PARENT, MATCH_PARENT))
             band.addView(header, LayoutParams(MATCH_PARENT, (16f * ctx.dp).roundToInt() + ctx.px(32f), Gravity.BOTTOM))
             banner.addView(band, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-            ctx.loadImage(s.entityPicture!!, owner = picture) { bmp -> if (bmp != null) picture.setImageBitmap(bmp) }
+            // A CSS background in HA's card: fetched with no bearer, as the browser fetches it.
+            ctx.loadImage(s.entityPicture!!, owner = picture, public = true) { bmp -> if (bmp != null) picture.setImageBitmap(bmp) }
         } else {
             banner.setPadding(0, ctx.px(12f), 0, 0)
             banner.addView(header, LayoutParams(MATCH_PARENT, lineBoxHeight(ctx, 24f, 1.6f) + ctx.px(16f)))

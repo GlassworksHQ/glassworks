@@ -927,6 +927,16 @@ class VitroView(
             updateIslandsShown()
         }
 
+    /** Whether [v] and every view above it up to [root] are VISIBLE. */
+    private fun visibleWithin(v: View, root: View): Boolean {
+        var cur: View? = v
+        while (cur != null && cur !== root) {
+            if (cur.visibility != VISIBLE) return false
+            cur = cur.parent as? View
+        }
+        return true
+    }
+
     /** The island cards in [root]'s tree: web islands and iframe cards. */
     private fun islandsIn(root: View, into: MutableList<IslandCard> = ArrayList()): MutableList<IslandCard> {
         if (root is IslandCard) {
@@ -990,7 +1000,8 @@ class VitroView(
         val onScreen = dashboardShown && activityShown
         for ((index, root) in viewCache) {
             val shown = onScreen && index == currentViewIndex && root.visibility == VISIBLE
-            islandsIn(root).forEach { it.setShown(shown) }
+            // A card its visibility conditions hide (GONE inside the view) pauses too.
+            islandsIn(root).forEach { it.setShown(shown && visibleWithin(it as View, root)) }
         }
         for ((index, frame) in overlayFrames) {
             val shown = onScreen && index == currentViewIndex && frame.visibility == VISIBLE
@@ -1180,7 +1191,12 @@ class VitroView(
             view.type == "sections" && view.sections.isNotEmpty() -> buildSectionsLayout(view, ctx, widthDp)
             view.type == "sidebar" -> buildSidebarLayout(view.cards, ctx, widthDp)
             // layout-card as the view's own layout: the same layouts as the card, with the view's `layout:`.
-            layoutCard != null -> LayoutCardView(ctx, layoutViewCard(view), { child -> wrapVisibility(child, buildCard(child, ctx, false), ctx) }, widthDp)
+            layoutCard != null -> LayoutCardView(ctx, layoutViewCard(view), { child ->
+                wrapVisibility(child, buildCard(child, ctx, false), ctx).also { v ->
+                    // Clarity sees each card by its index in the view's config (a layout-break builds nothing).
+                    clarity?.cardBuilt(buildingIndex, view.cards.indexOfFirst { it === child }, child, v)
+                }
+            }, widthDp)
             else -> buildMasonryLayout(view.cards, ctx, widthDp)
         }
         // layout-card's views draw no badges.
@@ -1380,13 +1396,13 @@ class VitroView(
         val placed = cards.withIndex().filter { (_, card) -> !pinIfFixed(card, ctx) }
         val (placement, count) = HaMasonry.place(placed.map { it.value }, widthDp)
         val row = MasonryColumnsLayout(context, px(if (widthDp < 600) 600f else 500f)).apply { applyViewPadding(this, ctx) }
-        val columns = (0 until count).map { LinearLayout(context).apply { orientation = LinearLayout.VERTICAL } }
+        val columns = (0 until count).map { cardColumn(ctx) }
         columns.forEach { row.addView(it, LinearLayout.LayoutParams(0, WRAP_CONTENT)) }
         placed.forEachIndexed { k, (configIndex, card) ->
             val column = columns[placement[k]]
             val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
             clarity?.cardBuilt(buildingIndex, configIndex, card, v)
-            column.addView(v, cardMarginParams(ctx, widthDp, first = column.childCount == 0))
+            column.addView(v, cardMarginParams(ctx, widthDp))
         }
         return row
     }
@@ -1397,16 +1413,16 @@ class VitroView(
      * the masonry view.
      */
     private fun buildSidebarLayout(cards: List<CardConfig>, ctx: VitroCardContext, widthDp: Int): View {
-        val main = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        val main = cardColumn(ctx)
         val split = widthDp >= 760
-        val side = if (split) LinearLayout(context).apply { orientation = LinearLayout.VERTICAL } else main
+        val side = if (split) cardColumn(ctx) else main
         for ((cardIndex, card) in cards.withIndex()) {
             if (pinIfFixed(card, ctx)) continue
             val inSidebar = card.raw.optJSONObject("view_layout")?.optString("position") == "sidebar"
             val column = if (inSidebar) side else main
             val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
             clarity?.cardBuilt(buildingIndex, cardIndex, card, v)
-            column.addView(v, cardMarginParams(ctx, widthDp, first = column.childCount == 0))
+            column.addView(v, cardMarginParams(ctx, widthDp))
         }
         if (!split) {
             return SidebarStackLayout(context).apply {
@@ -1423,16 +1439,25 @@ class VitroView(
         if (own != null) v.setPadding(own, own, own, own) else v.setPadding(px(4f), px(4f), px(4f), 0)
     }
 
+    /** The view's `--masonry-view-card-margin` (4px 4px 8px), top, right, bottom, left in dp. */
+    private fun cardMargin(ctx: VitroCardContext): FloatArray =
+        MushroomTitleCardView.paddingDp(ctx.theme.vars["masonry-view-card-margin"]) ?: floatArrayOf(4f, 4f, 8f, 4f)
+
     /**
-     * `margin: var(--masonry-view-card-margin, 4px 4px 8px)`, the side margins dropped at 500 px and narrower. Block
-     * margins collapse: after the column's [first] card, the larger of the bottom and top margins is the gap.
+     * A masonry or sidebar column ([CardColumn]): the first card it shows has the top margin, the ones after it the
+     * collapsed gap (the larger of the bottom and top margins).
      */
-    private fun cardMarginParams(ctx: VitroCardContext, widthDp: Int, first: Boolean): LinearLayout.LayoutParams {
-        val m = MushroomTitleCardView.paddingDp(ctx.theme.vars["masonry-view-card-margin"]) ?: floatArrayOf(4f, 4f, 8f, 4f)
+    private fun cardColumn(ctx: VitroCardContext): CardColumn {
+        val m = cardMargin(ctx)
+        return CardColumn(context, px(m[0]), px(maxOf(0f, m[0] - m[2])))
+    }
+
+    /** `margin: var(--masonry-view-card-margin, 4px 4px 8px)`, the side margins dropped at 500 px and narrower. */
+    private fun cardMarginParams(ctx: VitroCardContext, widthDp: Int): LinearLayout.LayoutParams {
+        val m = cardMargin(ctx)
         val narrow = widthDp <= 500
-        val top = if (first) m[0] else maxOf(0f, m[0] - m[2])
         return LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-            setMargins(if (narrow) 0 else px(m[3]), px(top), if (narrow) 0 else px(m[1]), px(m[2]))
+            setMargins(if (narrow) 0 else px(m[3]), px(m[0]), if (narrow) 0 else px(m[1]), px(m[2]))
         }
     }
 
@@ -1746,7 +1771,12 @@ class VitroView(
             val visible = conds.all { VisibilityCondition.evaluateAt(it, nowMs, store::get, widthDp, userId) }
             if (visible != shown) {
                 shown = visible
-                crossfade(view, visible, transitionMs ?: DEFAULT_FADE_MS)
+                val fadeMs = transitionMs ?: DEFAULT_FADE_MS
+                crossfade(view, visible, fadeMs)
+                // An island inside pauses once the card is hidden (the fade's end), and runs again when it's shown.
+                if (islandsIn(view).isNotEmpty()) {
+                    if (visible) updateIslandsShown() else view.postDelayed({ updateIslandsShown() }, fadeMs + 16)
+                }
             }
         }
         update()

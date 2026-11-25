@@ -42,6 +42,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -413,25 +414,27 @@ class NativeCardsAndRowsTest {
         assertEquals("https://example.com/", IframeCardView(ctx(), card("""{"type": "iframe", "url": "https://example.com/"}""")).url)
     }
 
-    @Test fun aShoppingListPickedBeforeTheRegistryMovesToTheShoppingListIntegrationsOnceItLoads() {
+    @Test fun aShoppingListWaitsForTheRegistryBeforeShowingAnEditableList() {
         put("todo.zeta", "2", "friendly_name" to "Zeta")
         put("todo.alpha", "1", "friendly_name" to "Alpha")
         val v = ShoppingListCardView(ctx(), card("""{"type": "shopping-list"}"""))
-        fun shownEntity() = (all(v).filterIsInstance<dev.glassworks.engine.vitro.cards.TodoListCardView>().single())
-        assertEquals("before the registry: the first list by name", "todo.alpha", v.shown)
-        val first = shownEntity()
+        // Before the registry the pick could still move: no editable list yet, so nothing is added to a provisional one.
+        assertNull(v.shown)
+        assertEquals(0, v.childCount)
         HaDisplay.applyRegistry(JSONObject().put("entities", JSONArray()
             .put(JSONObject().put("ei", "todo.zeta").put("pl", "shopping_list"))
             .put(JSONObject().put("ei", "todo.alpha").put("pl", "local_todo"))))
         store.renotifyAll()
         idle()
-        val second = shownEntity()
         assertEquals("the Shopping list integration's list", "todo.zeta", v.shown)
-        assertTrue("the card was built again for it", first !== second)
+        val built = all(v).filterIsInstance<dev.glassworks.engine.vitro.cards.TodoListCardView>().single()
         // Settled: a later change doesn't build it again.
         put("todo.alpha", "3", "friendly_name" to "Alpha")
         idle()
-        assertTrue(second === shownEntity())
+        assertTrue(built === all(v).filterIsInstance<dev.glassworks.engine.vitro.cards.TodoListCardView>().single())
+        // An explicit entity is editable at once.
+        HaDisplay.reset()
+        assertEquals("todo.alpha", ShoppingListCardView(ctx(), card("""{"type": "shopping-list", "entity": "todo.alpha"}""")).shown)
     }
 
     // The picture is on a refused address, so no image load outlives the test (the parity harness waits for none).

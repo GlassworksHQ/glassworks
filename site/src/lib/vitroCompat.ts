@@ -1267,6 +1267,12 @@ function walkCard(card: Obj, loc: string, view: ViewAudit, holdsGenerated = -1) 
     view.triggers.push({ view: view.name, path: loc, type, reasons: v.reasons });
     return;
   }
+  if (type === "iframe") {
+    // The view stays native, but the frame's own page runs in a GeckoView island: it isn't browser-free.
+    view.tier3++;
+    view.triggers.push({ view: view.name, path: loc, type, reasons: ["its page runs in a GeckoView island (the view stays native)"] });
+    return;
+  }
   if (holdsGenerated >= 0 && CARDS_FIELD.has(type)) {
     for (const [i, child] of producedCards(card, false)) if (i < holdsGenerated) walkCard(child, `${loc}.entities[${i}]`, view);
     return;

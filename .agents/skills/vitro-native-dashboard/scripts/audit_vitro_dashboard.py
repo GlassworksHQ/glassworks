@@ -538,6 +538,12 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
     else:
         reasons = ["not a card type Vitro draws"]
 
+    if ctype == "iframe" and not reasons:
+        # The view stays native, but the frame's own page runs in a GeckoView island.
+        counts["tier3"] += 1
+        triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='iframe': its page runs in a GeckoView island (the view stays native)")
+        return
+
     if reasons and (ctype in NATIVE_CORE_TYPES or (ctype in NATIVE_HACS_TYPES and needs_ha_frontend(card))):
         # A built-in card stays native (the island can't draw built-in cards), and so does a custom card Vitro
         # draws with a built-in card inside it.

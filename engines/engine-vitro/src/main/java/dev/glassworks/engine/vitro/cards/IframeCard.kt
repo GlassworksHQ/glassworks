@@ -342,7 +342,7 @@ class ShoppingListCardView(private val ctx: VitroCardContext, private val config
     internal var shown: String? = null
         private set
 
-    /** True once the pick can't change: the config names the list, or the registry has every list. */
+    /** True once the pick can't change: the config names the list, or the entity registry is in. */
     private var settled = false
 
     init {
@@ -381,8 +381,11 @@ class ShoppingListCardView(private val ctx: VitroCardContext, private val config
         val explicit = config.entity
         val lists = ctx.store.all().values.filter { it.domain == "todo" && it.state != "unavailable" }
         val entity = explicit ?: pick(lists) ?: return false
-        // A single list settles only with the registry too: a second one may yet turn out to be the Shopping list's.
-        settled = explicit != null || lists.all { HaDisplay.registry.containsKey(it.entityId) }
+        // Settled once the config names the list or the entity registry is in: a list it has no entry for gets none.
+        settled = explicit != null || HaDisplay.registry.isNotEmpty()
+        // Before that the pick may still move, and an item added to a provisional list would seem to vanish: the
+        // editable card shows only once the pick is settled.
+        if (!settled) return false
         if (entity == shown) return true
         shown = entity
         removeAllViews()

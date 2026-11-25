@@ -345,6 +345,9 @@ class WebFallbackTest {
             reason("""{"type": "button", "name": "Go", "double_tap_action": {"action": "toggle"}}"""))
         assertEquals("a `buttons` row with a double-tap action",
             reason("""{"type": "buttons", "entities": [{"entity": "light.a", "double_tap_action": {"action": "more-info"}}]}"""))
+        assertEquals("a `button` row that opens Assist", reason("""{"type": "button", "name": "Ask", "tap_action": {"action": "assist"}}"""))
+        assertEquals("a `buttons` row that opens Assist",
+            reason("""{"type": "buttons", "entities": [{"entity": "light.a", "hold_action": {"action": "assist"}}]}"""))
         // In the cards an entity-filter builds too.
         assertNotNull(WebFallback.viewReason(LovelaceParser.parseView(0, JSONObject(
             """{"cards": [{"type": "entity-filter", "entities": ["light.a"], "card": {"type": "map"}}]}""",
@@ -393,6 +396,10 @@ class WebFallbackTest {
         assertEquals("a `shortcut` card that opens Assist", reason("""{"type": "shortcut", "label": "Ask", "icon": "mdi:microphone", "tap_action": {"action": "assist"}}"""))
         assertEquals("a `shortcut` card with a double-tap action",
             reason("""{"type": "shortcut", "label": "Go", "icon": "mdi:home", "double_tap_action": {"action": "navigate", "navigation_path": "/x"}}"""))
+        // HA's own pages can't be framed from a loopback page (HA sends X-Frame-Options: SAMEORIGIN).
+        assertEquals("an `iframe` card of a Home Assistant page", reason("""{"type": "iframe", "url": "/local/plan.html"}"""))
+        assertEquals("an `iframe` card of a Home Assistant page", reason("""{"type": "iframe", "url": "plan.html"}"""))
+        assertNull(reason("""{"type": "iframe", "url": "https://example.com/"}"""))
         assertEquals("an `alert` card that opens Assist", reason("""{"type": "alert", "entity": "binary_sensor.d", "tap_action": {"action": "assist"}}"""))
         assertEquals("a `statistic` card with a footer", reason(
             """{"type": "statistic", "entity": "sensor.e", "stat_type": "change", "period": {}, "footer": {"type": "graph", "entity": "sensor.e"}}""",

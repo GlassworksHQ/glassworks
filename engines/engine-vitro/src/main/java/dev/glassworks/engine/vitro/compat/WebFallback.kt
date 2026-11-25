@@ -61,6 +61,9 @@ object WebFallback {
         if (type == "shortcut") shortcutReason(card)?.let { return it }
         // Vitro has no double tap yet: a card it newly draws whose double-tap action does something stays HA's.
         if ((type == "shortcut" || type == "alert") && hasDoubleTap(card.raw)) return "a `$type` card with a double-tap action"
+        // An iframe of HA's own pages (a relative or root-relative `url`) needs HA's origin: HA sends
+        // `X-Frame-Options: SAMEORIGIN`, so a frame in a loopback island page is refused. HA's frontend draws it.
+        if (type == "iframe" && sameOriginIframe(card.raw.optString("url", ""))) return "an `iframe` card of a Home Assistant page"
         // Vitro's actions don't open Assist.
         if (type == "alert" && listOf("tap_action", "hold_action").any { card.raw.optJSONObject(it)?.optString("action") == "assist" }) {
             return "an `alert` card that opens Assist"
@@ -76,6 +79,16 @@ object WebFallback {
         for (child in children) cardReason(child)?.let { return it }
         return null
     }
+
+    /** An iframe `url` HA resolves on its own origin: anything but an absolute address with a scheme. */
+    internal fun sameOriginIframe(url: String): Boolean {
+        val u = url.trim()
+        return !Regex("""^[A-Za-z][A-Za-z0-9+.\-]*://""").containsMatchIn(u)
+    }
+
+    /** A tap or hold action that opens Assist, which Vitro's actions can't. */
+    private fun opensAssist(o: org.json.JSONObject): Boolean =
+        listOf("tap_action", "hold_action").any { o.optJSONObject(it)?.optString("action") == "assist" }
 
     /** A `double_tap_action` that does something (Vitro binds tap and hold, not double tap). */
     private fun hasDoubleTap(o: org.json.JSONObject): Boolean =
@@ -93,10 +106,14 @@ object WebFallback {
             val t = o.optString("type", "")
             if (t in UNDRAWN_ROW_TYPES) return "an `$t` row in an entities card"
             if (t in setOf("button", "call-service", "perform-action") && hasDoubleTap(o)) return "a `$t` row with a double-tap action"
+            if (t in setOf("button", "call-service", "perform-action") && opensAssist(o)) return "a `$t` row that opens Assist"
             if (t == "buttons") {
                 val chips = o.optJSONArray("entities")
                 if (chips != null && (0 until chips.length()).any { chips.optJSONObject(it)?.let(::hasDoubleTap) == true }) {
                     return "a `buttons` row with a double-tap action"
+                }
+                if (chips != null && (0 until chips.length()).any { chips.optJSONObject(it)?.let(::opensAssist) == true }) {
+                    return "a `buttons` row that opens Assist"
                 }
             }
             return if (t == "conditional") walk(o.opt("row")) else null
