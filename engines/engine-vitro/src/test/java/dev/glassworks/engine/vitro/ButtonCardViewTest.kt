@@ -259,9 +259,11 @@ class ButtonCardViewTest {
         layout(err, 300)
         near("height", 56f, err.measuredHeight)
         assertTrue(all(err).filterIsInstance<TextView>().isEmpty())
+        // HA titles the card "Configuration error" for an administrator: the message shows only in the editor's preview.
         val admin = HaErrorCardView(ctx(admin = true), "Entity must be specified")
         layout(admin, 300)
-        assertEquals("Entity must be specified", all(admin).filterIsInstance<TextView>().single().text.toString())
+        assertEquals("Configuration error", all(admin).filterIsInstance<TextView>().single().text.toString())
+        assertEquals("Entity must be specified", admin.message)
     }
 
     @Test

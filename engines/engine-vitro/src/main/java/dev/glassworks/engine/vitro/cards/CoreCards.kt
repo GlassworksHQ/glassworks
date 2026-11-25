@@ -41,6 +41,8 @@ import dev.glassworks.engine.vitro.model.EntityRowConfig
 import dev.glassworks.engine.vitro.model.VisibilityCondition
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
+import dev.glassworks.engine.vitro.ui.HaErrorSeverity
+import dev.glassworks.engine.vitro.ui.errorCardContent
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.HaWeatherSvg
@@ -254,30 +256,16 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         super.measureCard(widthMeasureSpec, heightMeasureSpec)
     }
 
-    /** Shows HA's "Entity not found" warning in place of the tile while [missing]. */
+    /**
+     * Shows HA's `hui-warning` in place of the tile while [missing]: hui-error-card as a warning, titled "Entity not
+     * found" for an administrator and the icon alone for anyone else ([errorCardContent]).
+     */
     private fun showMissing(missing: Boolean) {
         if (!missing && missingWarning == null) return
-        val warning = missingWarning ?: LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            val pad = ctx.px(16f)
-            setPadding(pad, pad, pad, pad)
-            minimumHeight = ctx.px(56f)
-            val color = ThemeResolver.parseColor(ctx.theme.vars["warning-color"]) ?: WARNING_ORANGE
-            // hui-error-card's warning: the card's surface washed with --warning-color at 12%.
-            background = GradientDrawable().apply {
-                cornerRadius = ctx.theme.cardBorderRadiusDp * ctx.dp
-                setColor(withAlpha(color, 0.12f))
-            }
-            addView(MdiIconView(ctx.context).apply { setIcon("mdi:alert-outline", color) },
-                LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply { marginEnd = ctx.px(8f) })
-            addView(textView(ctx, 14f, ctx.theme.primaryTextColor, 700).apply {
-                text = HaText.ui("ui.card.common.entity_not_found")
-                maxLines = 1
-                ellipsize = TextUtils.TruncateAt.END
-            }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            this@TileCardView.addView(this, LayoutParams(MATCH_PARENT, MATCH_PARENT))
-            missingWarning = this
+        val warning = missingWarning ?: errorCardContent(ctx, HaErrorSeverity.WARNING, HaText.ui("ui.card.common.entity_not_found"),
+            over = ctx.theme.cardBackgroundColor).also {
+            addView(it, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            missingWarning = it
         }
         warning.visibility = if (missing) VISIBLE else GONE
         tileBody?.visibility = if (missing) INVISIBLE else VISIBLE

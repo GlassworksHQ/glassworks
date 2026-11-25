@@ -61,6 +61,7 @@ A fixture uses HA's own shapes, so a new case is mostly copied from another:
 | `todo`, `forecast`, `calendar` | Entity id → items; → `{daily: [...]}`; → events (`summary`, `start`, `end`) |
 | `logbook` | Entries as HA's `logbook/event_stream` sends them, with `when` as a time |
 | `user_data` | The signed-in user's frontend profile, by key: `{"language": {"language": "de", "number_format": "decimal_comma", "time_format": "24"}}` (HA's `frontend/get_user_data`, which the page subscribes to). The fake answers translations in that language, with English for every key it lacks, as HA core does (German and French are in `hacore-<version>.json`: `LANGUAGES` in `hacore.py`). The reference records the profile as `locale`, and Vitro draws the case with it. Without it the user has no profile: English and HA's defaults |
+| `admin` | `false` signs the page in as a user who isn't an administrator (the same user, `is_admin` off), for what HA shows such a user: its error and warning cards' icon alone. The reference records it as `user`, and Vitro draws the case for the same user. Without it the user is the home's owner and an administrator |
 | `templates` | Not needed: the fake renders templates itself |
 
 Times are relative to `home.json`'s "now", so a capture is the same on any day: a number is seconds from now, `"-2h30m"` an offset, and a string `"@-2h"`, `"@D+1"` (a local date) or `"@D+1 14:30"` (a local time) is resolved where HA would send a date. A fixture's own pictures (album art, a person's photo) sit in `fixtures/images/`, drawn by `fixture_images.py`.

@@ -116,6 +116,15 @@ class FakeHaServer {
     @Volatile var failHistory: Boolean = false
     @Volatile var templateResult: Any = "21.5 °C"
 
+    /**
+     * `auth/current_user`'s answer, the signed-in user: an administrator unless a test says otherwise; null refuses it
+     * (`unknown_command`).
+     */
+    @Volatile var currentUser: JSONObject? = JSONObject("""{"id": "wall-user", "name": "Wall Panel", "is_owner": false, "is_admin": true}""")
+
+    /** `auth/current_user` goes unanswered, for a test to answer it later (on [sockets]). */
+    @Volatile var holdCurrentUser: Boolean = false
+
     /** `config/entity_registry/list_for_display`'s answer; null refuses it (`unknown_command`). */
     @Volatile var entityRegistryDisplay: JSONObject? = null
 
@@ -220,6 +229,7 @@ class FakeHaServer {
             "frontend/get_themes" -> ok(sock, id, themes)
             "subscribe_events", "unsubscribe_events" -> ok(sock, id, JSONObject.NULL)
             "lovelace/dashboards/list" -> ok(sock, id, dashboards)
+            "auth/current_user" -> if (!holdCurrentUser) currentUser?.let { ok(sock, id, it) } ?: fail(sock, id, "unknown_command")
             "lovelace/resources" -> ok(sock, id, resources)
             "lovelace/config" -> {
                 if (m.optString("url_path") in missingDashboards) fail(sock, id, "config_not_found") else ok(sock, id, dashboardConfig)

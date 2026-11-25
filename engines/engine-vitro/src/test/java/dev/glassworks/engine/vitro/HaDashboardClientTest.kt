@@ -50,6 +50,7 @@ class HaDashboardClientTest {
         val userThemes = CopyOnWriteArrayList<Pair<String?, Boolean?>>()
         val failedConfigs = CopyOnWriteArrayList<Pair<String?, String>>()
         val users = CopyOnWriteArrayList<JSONObject>()
+        val refused = CopyOnWriteArrayList<String?>()
 
         override fun onConnected(haVersion: String) { connected += haVersion }
         override fun onAuthRequired() { authRequired.incrementAndGet() }
@@ -63,6 +64,7 @@ class HaDashboardClientTest {
         val localeChanges = AtomicInteger(0)
         override fun onLocaleChanged() { localeChanges.incrementAndGet() }
         override fun onCurrentUser(user: JSONObject) { users += user }
+        override fun onDashboardRefused(urlPath: String?) { refused += urlPath }
     }
 
     private val server = FakeHaServer()
@@ -323,6 +325,85 @@ class HaDashboardClientTest {
             listOf("auth/current_user", "frontend/get_user_data", "frontend/subscribe_user_data"),
             types.drop(9).take(3),
         )
+    }
+
+    // ---- Admin-only dashboards (#887) ----
+
+    private val wallUser = JSONObject("""{"id": "wall-user", "name": "Wall Panel", "is_owner": false, "is_admin": false}""")
+
+    private fun started(path: String?): HaDashboardClient = newClient().also {
+        it.subscribeViewEntities(emptySet())
+        it.start(path)
+    }
+
+    @Test
+    fun anAdminOnlyDashboardIsRefusedForAUserWhoIsntAnAdministrator() {
+        server.currentUser = wallUser
+        val c = started("admin-only")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        // HA answered its config (it does for anyone): its frontend is what refuses it, and so does Vitro.
+        assertEquals("admin-only", server.commands("lovelace/config").single().getString("url_path"))
+        assertEquals(listOf<String?>("admin-only"), listener.refused.toList())
+        assertTrue(listener.configs.isEmpty())
+        assertTrue(listener.failedConfigs.isEmpty())
+        assertFalse(c.mayOpen("admin-only"))
+        assertTrue(c.mayOpen("wall-test"))
+        assertTrue("the default dashboard is never admin only", c.mayOpen(null))
+        assertTrue("a path the list doesn't name is HA's to answer", c.mayOpen("not-listed"))
+        // The list still names every dashboard, with its require_admin.
+        awaitCondition("dashboards") { listener.dashboards.isNotEmpty() }
+        assertEquals(listOf(false, true), listener.dashboards.single().map { it.requireAdmin })
+        // Another dashboard on the same connection is drawn.
+        c.fetchDashboard("wall-test")
+        awaitCondition("wall-test") { listener.configs.isNotEmpty() }
+        assertEquals("wall-test", listener.configs.single().first)
+        assertEquals(1, listener.refused.size)
+    }
+
+    @Test
+    fun anAdministratorOpensAnAdminOnlyDashboard() {
+        val c = started("admin-only")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        assertEquals("admin-only", listener.configs.single().first)
+        assertTrue(listener.refused.isEmpty())
+        assertTrue(c.mayOpen("admin-only"))
+    }
+
+    @Test
+    fun aUserHomeAssistantWontNameIsNoAdministrator() {
+        // auth/current_user refused: HA's frontend has no hass.user, so no administrator.
+        server.currentUser = null
+        val c = started("admin-only")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertTrue(listener.configs.isEmpty())
+        assertFalse(c.mayOpen("admin-only"))
+    }
+
+    @Test
+    fun noConfigOrDashboardListIsHandedOnBeforeTheUserIsKnown() {
+        server.holdCurrentUser = true
+        val c = started("wall-test")
+        // The entity snapshot comes after the config's answer on the wire: by then the config has been read and held.
+        awaitCondition("config answered, user not") {
+            server.commands("auth/current_user").isNotEmpty() && store["sensor.kitchen_temp"] != null
+        }
+        assertTrue("no config before the user", listener.configs.isEmpty())
+        assertTrue("no dashboard list before the user", listener.dashboards.isEmpty())
+        val id = server.commands("auth/current_user").single().getInt("id")
+        server.sockets.last().push(JSONObject().put("id", id).put("type", "result").put("success", true).put("result", wallUser))
+        awaitCondition("config") { listener.configs.isNotEmpty() && listener.dashboards.isNotEmpty() }
+        assertEquals("wall-test", listener.configs.single().first)
+        assertEquals("wall-user", c.currentUser.getString("id"))
+    }
+
+    @Test
+    fun aRefusedDashboardThatHaHasNoConfigForIsStillRefused() {
+        // HA's frontend never asks for it: no panel. Its missing config doesn't make it HA's frontend's to auto-generate.
+        server.currentUser = wallUser
+        server.missingDashboards = setOf("admin-only")
+        started("admin-only")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertTrue(listener.failedConfigs.isEmpty())
     }
 
     // ---- Lovelace config ----

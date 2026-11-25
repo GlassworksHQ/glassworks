@@ -11,8 +11,6 @@ import android.animation.ValueAnimator
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.drawable.GradientDrawable
-import android.text.TextUtils
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
@@ -25,6 +23,7 @@ import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
+import dev.glassworks.engine.vitro.ui.ErrorCardView
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.VitroFonts
@@ -43,53 +42,10 @@ import kotlin.math.roundToInt
 // mushroom-empty-card draws nothing and is a plain view in VitroView.
 
 /**
- * HA's `hui-error-card` (2026.11): the card washed with `--error-color` at 12%, the error icon, and the message as its
- * title for an admin (HA shows other users the icon alone).
+ * HA's `hui-error-card` for a card config HA's own card rejects in `setConfig`: [ErrorCardView], keeping the message
+ * HA logs (it shows it only in the editor's preview). An administrator sees "Configuration error", anyone else the icon.
  */
-class HaErrorCardView(ctx: VitroCardContext, message: String) : CardSurface(ctx) {
-    init {
-        val error = ThemeResolver.parseColor(ctx.theme.vars["error-color"]) ?: 0xFFDB4437.toInt()
-        val row = android.widget.LinearLayout(ctx.context).apply {
-            orientation = android.widget.LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-            val pad = ctx.px(16f)
-            setPadding(pad, pad, pad, pad)
-        }
-        row.addView(MdiIconView(ctx.context).apply { setIcon("mdi:alert-circle-outline", error) },
-            android.widget.LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)))
-        if (ctx.haUser().optBoolean("is_admin", false)) {
-            row.addView(TextView(ctx.context).apply {
-                text = message
-                includeFontPadding = false
-                setTextColor(ctx.theme.primaryTextColor)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, ctx.scaledSp(14f))
-                typeface = VitroFonts.typeface(ctx.context, 700, ctx.scaledSp(14f))
-                maxLines = 1
-                ellipsize = TextUtils.TruncateAt.END
-            }, android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = ctx.px(8f) })
-        } else {
-            row.gravity = android.view.Gravity.CENTER
-        }
-        addView(row, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
-        // `border-width: 0`, and the ::after wash over the card's own background.
-        val bg = ctx.theme.cardBackgroundColor
-        dropSurface()
-        clipToOutline = true
-        background = GradientDrawable().apply {
-            cornerRadius = ctx.theme.cardBorderRadiusDp * ctx.dp
-            setColor(blend(bg, error, 0.12f))
-        }
-        // TalkBack reads what HA shows: the message to an admin, HA's generic title to anyone else.
-        contentDescription = if (ctx.haUser().optBoolean("is_admin", false)) message else "Configuration error"
-    }
-
-    private fun blend(under: Int, over: Int, a: Float): Int = Color.argb(
-        max(Color.alpha(under), (a * 255).roundToInt()),
-        (Color.red(under) * (1 - a) + Color.red(over) * a).roundToInt(),
-        (Color.green(under) * (1 - a) + Color.green(over) * a).roundToInt(),
-        (Color.blue(under) * (1 - a) + Color.blue(over) * a).roundToInt(),
-    )
-}
+class HaErrorCardView(ctx: VitroCardContext, message: String) : ErrorCardView(ctx, null, message)
 
 /**
  * `custom:swipe-card`: its cards side by side in a Swiper pager, one page (or `slidesPerView`) at a time. The pager is as

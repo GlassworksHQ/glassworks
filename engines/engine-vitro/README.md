@@ -72,6 +72,18 @@ Vitro off for the next start, which runs on the browser engine. The panel says s
 explains why on the panel and on its Manage page, and the Manage overview's Engine tile points there. Turning Vitro on
 again in Labs gives it a fresh start. A single crash, or a restart, never turns it off.
 
+## Administrators and everyone else
+
+Vitro shows each Home Assistant user what Home Assistant's own frontend shows them. It asks Home Assistant who the
+panel's user is before it draws anything.
+
+| | An administrator | Anyone else |
+|---|---|---|
+| A dashboard marked **Admin only** | Drawn | Not drawn. Home Assistant's frontend takes the link and opens the user's default dashboard instead, which Vitro draws again if it can |
+| The panel's list of dashboards | Every dashboard | The ones the user may open |
+| A card that can't be built, or a card whose config Home Assistant rejects | The error card, titled "Configuration error" | The error card's icon alone |
+| A tile or plant card whose entity Home Assistant doesn't have | The warning card, titled "Entity not found" | The warning card's icon alone |
+
 ## How it works
 
 Vitro moves the Home Assistant data plane out of the browser into Kotlin (`HaDashboardClient` over `WsHaSocket`) and splits every card across three automatic tiers:

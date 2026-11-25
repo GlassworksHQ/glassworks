@@ -1077,6 +1077,9 @@ async function capture() {
             ...drawn.drawn.map(onHa).filter((p) => p && images.failed.has(p)),
             ...drawn.broken.map(onHa).filter(Boolean),
           ])].sort();
+          // Whether HA's page drew for an administrator (`hass.user.is_admin`): HA's error and warning cards title
+          // themselves for one only. Written only for a user who isn't, so every other reference stays as it is.
+          const pageAdmin = await page.evaluate(() => document.querySelector('home-assistant')?.hass?.user?.is_admin === true);
           const ref = {
             case: c.id, frame: frame.id, haVersion: haConfig.version, now, stable,
             viewport: { width: frame.width, height: frame.height, density: frame.density, ...(capturedWithTouch(mode) ? { touch: true } : {}) },
@@ -1085,6 +1088,7 @@ async function capture() {
             // The user's language and formats HA's page drew with (its `language` user data), for Vitro's same
             // settings. Only written when the case sets some, so an English reference doesn't change.
             ...(userLocale ? { locale: userLocale } : {}),
+            ...(pageAdmin ? {} : { user: { is_admin: false } }),
             // Image paths HA's page asked for and didn't get: Vitro missing them too is no capture gap. Only
             // written when there are some, so a clean reference doesn't change.
             ...(failedDrawn.length ? { imagesHaMissing: failedDrawn } : {}),
