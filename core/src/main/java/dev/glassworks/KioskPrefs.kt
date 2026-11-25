@@ -57,7 +57,10 @@ class KioskPrefs(
         set(v) { urlSetting = v }
 
     /** How [url] reaches a set dashboard URL: as set, or through [haUrl] in place of its `.local` name. */
-    val dashboardRoute: LocalRoute get() = LocalName.route(urlSetting, haUrl, platform.resolvesLocalNames)
+    val dashboardRoute: LocalRoute get() = route(urlSetting)
+
+    /** How the panel reaches [url] now: as set, or through [haUrl] in place of a `.local` name Android can't resolve (#449). */
+    fun route(url: String): LocalRoute = LocalName.route(url, haUrl, platform.resolvesLocalNames)
 
     /**
      * The host the connecting screen names for a page at [url]: the `.local` name the person entered where the panel
