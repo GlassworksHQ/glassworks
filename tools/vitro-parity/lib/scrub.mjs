@@ -138,7 +138,14 @@ export function scrubGraphCalls(calls) {
         : st))
       : list]));
   };
+  // The logbook's rows: who and what caused them (`context_user_id`, `context_id` and the rest) stay out.
+  const scrubLogbook = (ev) => (ev && Array.isArray(ev.events)
+    ? { ...ev, events: ev.events.map((row) => (row && typeof row === 'object'
+      ? Object.fromEntries(Object.entries(row).filter(([k]) => !k.startsWith('context_')))
+      : row)) }
+    : ev);
   return calls.map((c) => {
+    if (c.request?.type === 'logbook/event_stream') return { ...c, events: c.events.map(scrubLogbook) };
     if (!String(c.request?.type).startsWith('history/')) return c;
     return {
       ...c,
