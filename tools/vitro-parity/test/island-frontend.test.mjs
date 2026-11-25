@@ -161,6 +161,24 @@ test("an element in the card's light DOM, with no shadow root, that appears late
   assert.deepEqual(reports, [{ tags: ['ha-big-number'], cards: ['acme-light-card'] }]);
 });
 
+test('a shadow root attached after the first scan is found, though no observer reports it', () => {
+  const part = el('acme-part');
+  const card = el('acme-late-card', { card: true }).shadow(part);
+  const { c, reports } = watch(card, { defined: new Set([...ISLAND, 'acme-part']) });
+  c.advance(1000);
+  part.shadow(el('ha-big-number'));
+  c.advance(30000);
+  assert.deepEqual(reports, [{ tags: ['ha-big-number'], cards: ['acme-late-card'] }]);
+});
+
+test('with nothing to find, the discovery scans end and the watch goes quiet', () => {
+  const card = el('acme-quiet-card', { card: true }).shadow(el('ha-card'));
+  const { c, reports } = watch(card);
+  c.advance(60000);
+  assert.equal(reports.length, 0);
+  assert.equal(c.pending(), 0);
+});
+
 test('only tags past their grace are reported, with their own cards', () => {
   // Card A's dial has waited long enough; card B's element appeared later and is still in its grace.
   const late = el('acme-b-card', { card: true }).shadow();

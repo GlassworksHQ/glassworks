@@ -20,8 +20,8 @@
 // element shows anyway.
 //
 // Cheap and capped: a scan is a querySelectorAll per shadow root, at most MAX_NODES elements; scans run on a
-// MutationObserver's debounce (elements that only appear later: an option, a state, a lazy render) and stop after
-// MAX_SCANS, or once reported. A card that defines its own `ha-`-named element (it is defined) never counts, nor one
+// MutationObserver's debounce (elements that only appear later: an option, a state, a lazy render) and at a few fixed
+// times (shadow roots attached later, which no observer reports), and stop after MAX_SCANS, or once reported. A card that defines its own `ha-`-named element (it is defined) never counts, nor one
 // it defines lazily within GRACE_MS.
 //
 // A plain script: the island page inlines it (WebIslandCardView.buildIslandHtml), and
@@ -34,7 +34,10 @@ const VITRO_FRONTEND_TAG = /^(?:ha|hui|state|more-info)-[a-z0-9]+(?:-[a-z0-9]+)*
 // missing entity is a moment's state, not a reason to leave Vitro for the session.
 const VITRO_FRONTEND_HARMLESS = new Set(['ha-ripple', 'hui-warning']);
 
-const VITRO_FRONTEND_LIMITS = { graceMs: 2500, debounceMs: 400, maxScans: 30, maxNodes: 5000 };
+// discoveryMs: scans at these times after the watch starts, whatever the observer saw. Attaching a shadow root (a
+// card, or an element in it, upgraded late) notifies no MutationObserver, so a root that appears after a scan is found
+// by the next of these.
+const VITRO_FRONTEND_LIMITS = { graceMs: 2500, debounceMs: 400, maxScans: 30, maxNodes: 5000, discoveryMs: [1500, 4000, 8000, 15000, 30000] };
 
 // The element above [n]: its parent, or a shadow root's host.
 function vitroFrontendUp(n) {
@@ -104,6 +107,7 @@ function vitroWatchFrontend(card, env) {
   let timerAt = Infinity;
   let done = false;
   let observer = null;
+  const started = now();
 
   const stop = () => {
     done = true;
@@ -151,6 +155,10 @@ function vitroWatchFrontend(card, env) {
       schedule(Math.max(0, oldest + e.graceMs - t));
     } else if (scans >= e.maxScans) {
       stop();
+    } else {
+      // The next discovery scan, if any is left.
+      const next = e.discoveryMs.find((ms) => started + ms > t);
+      if (next !== undefined) schedule(started + next - t);
     }
   };
   if (MO) observer = new MO(() => { if (scans < e.maxScans || firstSeen.size) schedule(e.debounceMs); });

@@ -187,7 +187,7 @@ shows, and an entity that is missing for a moment shouldn't move a view to HA fo
 **Not too early, not forever.** HA defines many elements lazily, and a card may define one of its own a moment after it
 draws it, so a tag counts only when it's still in the tree and still undefined 2.5 s after it was first seen. A tag
 that appears later (a config option, a state, a lazy render) is caught by a `MutationObserver` on every shadow root
-the scan walked, on a 400 ms debounce. Each scan is one `querySelectorAll('*')` per shadow root, at most 5,000
+the scan walked (and the card itself), on a 400 ms debounce, and by scans 1.5, 4, 8, 15 and 30 s in, because attaching a shadow root late (an element upgraded after its definition loads) notifies no observer. Each scan is one `querySelectorAll('*')` per shadow root, at most 5,000
 elements, and the watch stops after 30 scans or once it reported. A card that defines its own `ha-`-named element
 never counts, because that element is defined.
 

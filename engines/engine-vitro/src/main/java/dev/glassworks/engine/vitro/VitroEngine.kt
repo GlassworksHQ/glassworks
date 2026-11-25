@@ -560,7 +560,8 @@ class VitroEngine(
             vitroView.onWebView = { v, reason ->
                 // Only for the dashboard that owns the route, as onViewSelected: one still on screen while another
                 // loads isn't the page's to leave.
-                if (nativeActive && displayedDashboard != null && displayedDashboard == (currentOrigin to currentDashboardPath)) {
+                // A disposed page opens nothing: an island's report posted before dispose can still land here.
+                if (!disposed && nativeActive && displayedDashboard != null && displayedDashboard == (currentOrigin to currentDashboardPath)) {
                     val url = buildViewUrl(currentOrigin, currentDashboardPath, v.path ?: v.index.toString())
                     if (url != null) {
                         Log.i(logTag, "Vitro doesn't draw $reason; Home Assistant's frontend shows ${forLog(url)}")
