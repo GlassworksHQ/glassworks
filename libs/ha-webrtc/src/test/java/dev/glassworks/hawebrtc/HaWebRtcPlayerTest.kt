@@ -109,6 +109,26 @@ class HaWebRtcPlayerTest {
     }
 
     @Test
+    fun `a destroyed surface is released off the main thread, after the renderer let go of it`() {
+        val jobs = ArrayList<Runnable>()
+        val view = VideoTextureView(context, VideoScaling.FIT) { jobs += it }
+        var released = 0
+        val texture = object : android.graphics.SurfaceTexture(0) {
+            override fun release() {
+                released++
+                super.release()
+            }
+        }
+        // The view keeps its hands off (false) and asks nothing of the renderer on the main thread.
+        assertFalse(view.onSurfaceTextureDestroyed(texture))
+        assertEquals(0, released)
+        // On the releasing thread: the renderer (not started here) has nothing to let go of, then the texture goes.
+        jobs.single().run()
+        assertEquals(1, released)
+        view.release()
+    }
+
+    @Test
     fun `close before start, twice, and calls after close do nothing`() {
         val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door")
         player.close()
@@ -135,34 +155,6 @@ class FitScaleTest {
         assertEquals(1f to 1f, fitScale(VideoScaling.FILL, 1920, 1080, 400, 400))
         assertEquals(1f to 1f, fitScale(VideoScaling.STRETCH, 1920, 1080, 400, 400))
         assertEquals(1f to 1f, fitScale(VideoScaling.FIT, 0, 0, 400, 400))
-    }
-}
-
-/** Who releases a TextureView's SurfaceTexture when its renderer is still drawing into it. */
-class ReleaseAfterTest {
-    @Test
-    fun `a render thread that lets go in time leaves the texture to the view`() {
-        var released = 0
-        assertTrue(releaseAfter({ done -> done.run() }, { released++ }, 1_000))
-        assertEquals("the view releases it, not us", 0, released)
-    }
-
-    @Test
-    fun `a slow render thread releases the texture itself, after it let go, and the view keeps its hands off`() {
-        var later: Runnable? = null
-        var released = 0
-        // The render thread hasn't finished when the wait ends.
-        assertFalse(releaseAfter({ done -> later = done }, { released++ }, 10))
-        assertEquals("not while it may still draw", 0, released)
-        later!!.run()
-        assertEquals(1, released)
-    }
-
-    @Test
-    fun `a render thread that finishes on another thread just in time`() {
-        val released = java.util.concurrent.atomic.AtomicInteger()
-        assertTrue(releaseAfter({ done -> Thread { Thread.sleep(5); done.run() }.start() }, { released.incrementAndGet() }, 2_000))
-        assertEquals(0, released.get())
     }
 }
 
@@ -215,16 +207,5 @@ class SurfaceHandoffTest {
         var released = 0
         handoff.whenReleased { released++ }
         assertEquals(1, released)
-    }
-
-    @Test
-    fun `the view's texture during a shutdown is released by the shutdown, never twice`() {
-        val handoff = SurfaceHandoff { done -> done.run() }
-        handoff.beginShutdown()
-        var texture = 0
-        assertFalse("the view mustn't release it", releaseAfter(handoff::whenReleased, { texture++ }, 10))
-        assertEquals(0, texture)
-        handoff.endShutdown()
-        assertEquals(1, texture)
     }
 }

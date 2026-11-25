@@ -141,9 +141,14 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
     public fun setActive(active: Boolean) {
         if (closed || this.active == active) return
         this.active = active
-        // A frame report the player's thread posted before this belongs to the run that just ended.
-        viewRun++
-        worker?.post { stream?.setActive(active) }
+        // A frame report the player's thread posts before it applies this belongs to the run that just ended: the
+        // new run reaches that thread with the change itself.
+        val run = ++viewRun
+        val w = worker
+        if (w == null) workerRun = run else w.post {
+            workerRun = run
+            stream?.setActive(active)
+        }
     }
 
     /** Ends playback and frees everything. Idempotent. Main thread. */
@@ -155,12 +160,19 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
         val w = worker ?: return
         val t = thread
         w.post {
-            stream?.close()
-            stream = null
-            video.release()
-            if (runtime != null) WebRtcRuntime.release()
-            runtime = null
-            t?.quitSafely()
+            // Every step runs, whatever an earlier one throws (a channel's unsubscribe, say).
+            try {
+                stream?.close()
+            } finally {
+                stream = null
+                try {
+                    video.release()
+                } finally {
+                    if (runtime != null) WebRtcRuntime.release()
+                    runtime = null
+                    t?.quitSafely()
+                }
+            }
         }
     }
 
@@ -170,7 +182,7 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
 
     /** Like [report], with the picture's size updated first. */
     private fun frame(width: Int, height: Int, call: (Listener) -> Unit) {
-        val run = viewRun
+        val run = workerRun
         main.post {
             // A report from before a pause or resume (still queued here when it happened) is dropped, size and all.
             if (closed || run != viewRun) return@post
@@ -186,6 +198,9 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
      */
     @Volatile
     private var viewRun = 0
+
+    /** [viewRun] as the player's thread has applied it: frame reports are stamped with this. Its thread only. */
+    private var workerRun = 0
 
     internal inner class Events : HaWebRtcStream.Listener {
         override fun onFirstFrame(sinceStartMs: Long, width: Int, height: Int) = frame(width, height) { it.onFirstFrame(sinceStartMs, width, height) }

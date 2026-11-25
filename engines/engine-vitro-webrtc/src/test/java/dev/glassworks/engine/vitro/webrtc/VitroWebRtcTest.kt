@@ -71,6 +71,13 @@ class VitroWebRtcTest {
     }
 
     @Test
+    fun `the card's frame does the fitting, so the picture fills the view it gets (fit_mode fill stretches)`() {
+        assertEquals(dev.glassworks.hawebrtc.VideoScaling.STRETCH, VitroWebRtc.OPTIONS.scaling)
+        assertEquals("muted", false, VitroWebRtc.OPTIONS.stream.audio)
+        assertEquals("paused means closed, as HLS", 0L, VitroWebRtc.OPTIONS.stream.idleTeardownMs)
+    }
+
+    @Test
     fun `the host channel carries HA's signaling both ways`() {
         val channel = HostChannel(host)
         val events = ArrayList<String>()
