@@ -75,9 +75,6 @@ class SwipeCardView(private val ctx: VitroCardContext, private val config: CardC
     }
     private val resetAfterMs: Long? = (config.raw.opt("reset_after") as? Number)?.toDouble()?.let { (it * 1000).toLong() }
 
-    /** The pager's opacity at rest (card_mod `:host { opacity }`), which showing it after a visibility change restores. */
-    var restingAlpha: Float = 1f
-
     private var index = 0
     /** Drag offset in px while a finger moves the pager. */
     private var drag = 0f

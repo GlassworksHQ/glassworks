@@ -2345,8 +2345,8 @@ class Vitro(unittest.TestCase):
         self.assertEqual(sorted(g["missing"]), ["heavy.camera", "typical.camera"])
         # Every other task premium: the cameras alone decide between A+ and C (typical without a camera is premium).
         self.assertTrue(g["provisional"])
-        self.assertIn("typical, heavy: cameras not measured on Vitro (it plays a camera over MJPEG; the reference "
-                      "views' cameras are WebRTC)", g["provisional_reasons"])
+        self.assertIn("typical, heavy: cameras not measured on Vitro (this build's cameras don't report to Clarity: it "
+                      "plays them over MJPEG, and the reference views' cameras are WebRTC)", g["provisional_reasons"])
 
     def test_no_web_page_parts(self):
         outs = os.listdir(self.out)
@@ -2361,6 +2361,73 @@ class Vitro(unittest.TestCase):
         summary.check_publishable(s_, os.path.join(self.tmp, "vitro-summary.json"))        # elsewhere: written
         summary.check_publishable(dict(s_, engine="web"), "clarity.json")
         summary.check_publishable({k: v for k, v in s_.items() if k != "engine"}, "clarity.json")
+
+
+class VitroCameras(unittest.TestCase):
+    """docs/perf.md, "Vitro": a build whose cameras report to Clarity (ClarityCameras) logs the camera line the web
+    harness logs, from each stream's own pictures, and the camera task is graded as on the web engine: with every task
+    measured the letter is firm, not provisional. Which kind each camera played is recorded and said."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp()
+        cls.proc, cls.state, cls.out, cls.commands, cls.rep = vitro_run(
+            cls.tmp, "--engine", "vitro", "--skip-synthetic", "--skip-real-use", FAKE_VITRO="false",
+            FAKE_VITRO_CAMERAS="web_rtc")
+
+    def test_run_succeeds(self):
+        self.assertEqual(self.proc.returncode, 0, self.proc.stderr[-3000:])
+
+    def test_the_cameras_are_graded_and_the_grade_is_firm(self):
+        g = self.rep["grade"]
+        self.assertEqual(g["missing"], [])
+        self.assertFalse(g["provisional"], g.get("provisional_reasons"))
+        for t in ("typical", "heavy"):
+            s_ = self.rep["graded"]["reference"]["tiers"][t]
+            self.assertEqual(s_["camera_level"], "good", t)
+            (run,) = s_["camera_runs"]
+            self.assertEqual(run["path"], "web_rtc")
+            self.assertEqual(run["first_frame_ms"], 640.0)
+            self.assertEqual(run["uncovered_ms"], 0.0)
+            self.assertNotIn("stalls_reported", run)
+
+    def test_the_transport_is_recorded_and_said(self):
+        tiers = self.rep["graded"]["reference"]["tiers"]
+        self.assertEqual(tiers["typical"]["camera_runs"][0]["transports"], ["web_rtc"])
+        self.assertEqual(tiers["heavy"]["camera_runs"][0]["transports"], ["web_rtc"] * 4)
+        self.assertEqual(tiers["heavy"]["camera_runs"][0]["detail"][0]["gaps_source"], "vitro-frames (freeze rule)")
+        # The HLS copies play HLS, detail as on the web engine.
+        self.assertEqual(tiers["typical"]["camera_fallback"]["runs"][0]["transports"], ["hls"])
+        with open(os.path.join(self.out, "report.md")) as f:
+            md = f.read()
+        self.assertIn("typical cameras on Vitro: played over WebRTC in 1 of 1 run(s).", md)
+        self.assertIn("heavy cameras on Vitro: played over WebRTC in 1 of 1 run(s).", md)
+        self.assertNotIn("fell back", md)
+
+
+class VitroCamerasFellBack(unittest.TestCase):
+    """A Vitro run whose cameras fell back to MJPEG (WebRTC never played): measured, as on the web engine a camera that
+    doesn't play over WebRTC is, so the camera task fails, and the report says plainly that they fell back."""
+
+    def test_the_fallback_fails_the_cameras_and_says_so(self):
+        tmp = tempfile.mkdtemp()
+        proc, state, out, commands, rep = vitro_run(tmp, "--engine", "vitro", "--skip-synthetic", "--skip-real-use",
+                                                    FAKE_VITRO="false", FAKE_VITRO_CAMERAS="mjpeg")
+        self.assertEqual(proc.returncode, 0, proc.stderr[-3000:])
+        g = rep["grade"]
+        self.assertEqual(g["missing"], [])
+        self.assertFalse(g["provisional"], g.get("provisional_reasons"))
+        tiers = rep["graded"]["reference"]["tiers"]
+        for t in ("typical", "heavy"):
+            self.assertEqual(tiers[t]["camera_level"], "slow", t)
+            self.assertEqual(tiers[t]["camera_runs"][0]["fell_back"], ["mjpeg"])
+        # Typical without a camera is premium; with one, the fallback holds it at C.
+        self.assertEqual(g["grade"], "C")
+        with open(os.path.join(out, "report.md")) as f:
+            md = f.read()
+        self.assertIn("typical cameras on Vitro: played over WebRTC in 0 of 1 run(s); **fell back to MJPEG in 1 of 1 "
+                      "run(s)**, graded on WebRTC as on the web engine (web_rtc: no answer to the offer).", md)
+        self.assertIn("a camera fell back to MJPEG on Vitro (it never played over WebRTC)", md)
 
 
 class VitroAlreadyOn(unittest.TestCase):
