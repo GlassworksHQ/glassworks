@@ -51,11 +51,14 @@ interface CameraStream {
 }
 
 /**
- * A stream that knows its video's size, in pixels (0: not known yet). Optional: a card reads it with
- * `stream as? CameraStreamVideoSize` to fit the video and to size a card without an `aspect_ratio`.
+ * Optional on a [CameraStream]: the picture's size in pixels (0 × 0 until known), read after
+ * [CameraStream.Listener.onFirstFrame] and each [CameraStream.Listener.onFrameRendered]. With it the card fits the
+ * picture the way HA's `<video>` does (`object-fit`) and sizes itself to it when it has no `aspect_ratio`; without
+ * it the stream's view fills the card.
  */
 interface CameraStreamVideoSize {
     val videoWidth: Int
+
     val videoHeight: Int
 }
 

@@ -18,7 +18,7 @@
   "bouncycastle": {"dex": ["org.bouncycastle."], "files": ["org/bouncycastle/"], "used_by": ["core", "sendspin"],
                    "_why": "libs/esphome-api (Noise) brings it; Sendspin's encryption uses it too"},
   "media3": {"dex": ["androidx.media3."], "used_by": ["core", "engine"],
-             "_why": "the core's voice and announcement player (ExoAudioPlayer, since R3 #343); GeckoView ships the same version (build.gradle.kts)"},
+             "_why": "the core's voice and announcement player (ExoAudioPlayer, since R3 #343); GeckoView ships the same version (build.gradle.kts); Vitro plays live cameras' HLS on it (media3-exoplayer-hls)"},
   "tensorflow-lite": {"dex": ["org.tensorflow."], "native": ["libtensorflowlite_jni.so"], "used_by": ["assist"],
                       "_why": "wake word inference, only in libs/voice"},
   "xz": {"dex": ["org.tukaani."], "used_by": ["radio"], "_why": "zigbeed's .deb, only in radio/"},

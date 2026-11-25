@@ -926,6 +926,13 @@ def http_get(path, query):
             body = f.read()
         ctype = "application/javascript" if p.endswith(".js") else (mimetypes.guess_type(p)[0] or "application/octet-stream")
         return 200, body, ctype
+    if path.startswith("/api/camera_proxy/"):
+        # A camera's still (HA's poster for a live camera) is the case's own picture for it, its entity_picture under
+        # fixtures/: HA's poster and Vitro's still are then one drawn picture. Without one, Clarity's still.
+        st = (CASE["fixture"].get("states") or {}).get(path[len("/api/camera_proxy/"):]) or {}
+        pic = str((st.get("attributes") or {}).get("entity_picture") or "").split("?")[0]
+        if pic.startswith(FIXTURE_PREFIX):
+            path = pic
     if path.startswith(FIXTURE_PREFIX) and HOME.get("fixtures_dir"):
         base = os.path.realpath(HOME["fixtures_dir"])
         full = os.path.realpath(os.path.join(base, path[len(FIXTURE_PREFIX):]))

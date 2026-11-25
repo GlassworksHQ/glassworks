@@ -50,9 +50,27 @@ def person(u, v):
     return (236, 240, 241) if head or body else bg
 
 
+def camera(u, v):
+    """A camera's still, 16:9: a driveway at dusk, a garage door and a lamp, seen from above the door."""
+    if v < 0.42:
+        px = mix((52, 64, 110), (150, 120, 140), v / 0.42)
+    else:
+        px = mix((70, 74, 80), (40, 42, 48), (v - 0.42) / 0.58)
+        # The driveway narrows towards the house.
+        half = 0.12 + (v - 0.42) * 0.55
+        if abs(u - 0.5) < half:
+            px = mix((112, 110, 104), (86, 84, 80), (v - 0.42) / 0.58)
+    if 0.30 < u < 0.70 and 0.18 < v < 0.42:
+        px = (196, 188, 172) if int((v - 0.18) / 0.04) % 2 == 0 else (178, 170, 156)
+    d = math.hypot(u - 0.80, (v - 0.22) * 1.78)
+    if d < 0.05:
+        px = mix((255, 226, 150), px, (d / 0.05) ** 3)
+    return px
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
-    for name, (w, h, fn) in {"album.png": (300, 300, album), "person.png": (160, 160, person)}.items():
+    for name, (w, h, fn) in {"album.png": (300, 300, album), "person.png": (160, 160, person), "camera.png": (480, 270, camera)}.items():
         with open(os.path.join(OUT, name), "wb") as f:
             f.write(png(w, h, fn))
         print(os.path.relpath(os.path.join(OUT, name)))

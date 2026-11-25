@@ -24,6 +24,7 @@ import dev.glassworks.auth.OAuth
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.GuardedHandler
 import dev.glassworks.engine.vitro.VitroFailures
+import dev.glassworks.engine.vitro.camera.CameraPlayers
 import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -74,10 +75,10 @@ class VitroCardContext(
     /** HA's `auth/current_user` result (`id`, `name`, `is_admin`, `is_owner`), empty until it arrives. */
     val haUser: () -> JSONObject = { JSONObject() },
     /**
-     * Opens HA's live MJPEG feed for a camera and returns its stop handle. Null (tests, no engine) means there's no
-     * stream, so [startCameraStream] reports a fallback straight away and cards poll snapshots instead.
+     * The players a live camera can use ([CameraPlayers]: HLS and MJPEG, and WebRTC once its player registers).
+     * Null (tests, no engine): no player, so live cameras poll snapshots.
      */
-    val cameraStream: ((entityId: String, entityPicture: String?, onFrame: (Bitmap) -> Unit, onFallback: () -> Unit) -> () -> Unit)? = null,
+    val cameraPlayers: CameraPlayers? = null,
     /**
      * A WebSocket subscription (`history/stream`, say): every event of [msg]'s subscription reaches `onEvent`, on any
      * thread, until the returned handle is called; `onError` runs once, on any thread, if Home Assistant rejects it, the
@@ -161,7 +162,7 @@ class VitroCardContext(
         openIslandPage = openIslandPage,
         fetchForecast = fetchForecast,
         haUser = haUser,
-        cameraStream = cameraStream,
+        cameraPlayers = cameraPlayers,
         subscribeWs = subscribeWs,
         now = now,
         pageUrl = pageUrl,
@@ -233,25 +234,6 @@ class VitroCardContext(
             }
             "url" -> action.urlPath?.let(navigate)
         }
-    }
-
-    /**
-     * Streams [entityId]'s live MJPEG feed: decoded frames reach [onFrame] on the main thread, and [onFallback] runs
-     * on the main thread if the stream can't start or drops. Returns the stop handle; call it on detach or close.
-     * Cards never see the stream address or the token.
-     */
-    fun startCameraStream(
-        entityId: String,
-        entityPicture: String?,
-        onFrame: (Bitmap) -> Unit,
-        onFallback: () -> Unit,
-    ): () -> Unit {
-        val impl = cameraStream
-        if (impl == null) {
-            onFallback()
-            return {}
-        }
-        return impl(entityId, entityPicture, onFrame, onFallback)
     }
 
     /**
