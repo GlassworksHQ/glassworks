@@ -113,6 +113,7 @@ class PrefsPinTest {
         kiosk.setHaUrl("http://192.0.2.10:8123", "manual")
         kiosk.updateChannel = dev.glassworks.update.UpdateChannel.BETA // #605
         kiosk.shownHost("http://192.0.2.10:8123/")
+        kiosk.route("http://homeassistant.local:8123/") // a sign-in's exchange, routed as the dashboard is
         kiosk.auth = StoredAuth("http://192.0.2.10:8123", "http://192.0.2.20/", "pin-token")
         kiosk.auth
         kiosk.carryOverRefreshToken("pin-token") // a switch's hand-over (#584): the same file and keys as the sign-in
@@ -254,7 +255,7 @@ class PrefsPinTest {
 
         /** Methods with arguments that [exerciseComposite] calls by hand, by class suffix and name. */
         val COMPOSITE = setOf(
-            "KioskPrefs.setHaUrl", "KioskPrefs.setUpdateChannel", "KioskPrefs.shownHost", "KioskPrefs.setAuth", "KioskPrefs.remoteDebugging", "PanePrefs.paneFile", "KioskPrefs.registerListener", "KioskPrefs.unregisterListener",
+            "KioskPrefs.setHaUrl", "KioskPrefs.setUpdateChannel", "KioskPrefs.shownHost", "KioskPrefs.route", "KioskPrefs.setAuth", "KioskPrefs.remoteDebugging", "PanePrefs.paneFile", "KioskPrefs.registerListener", "KioskPrefs.unregisterListener",
             ".save", "PrefsSsStore.putRecord", "PrefsSsStore.touchRecord", "PrefsSsStore.removeRecord",
             "CameraPrefs.setUse", "CameraPrefs.setSignIn", "KioskPrefs.carryOverRefreshToken", "KioskPrefs.carryOverApiKey", "KioskPrefs.markSetupUpAtRestart",
             "KioskPrefs.setCustomTheme",
