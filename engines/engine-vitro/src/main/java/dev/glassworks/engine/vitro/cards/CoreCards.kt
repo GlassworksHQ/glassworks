@@ -2920,7 +2920,8 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
         val widthDp = ctx.context.resources.configuration.screenWidthDp.takeIf { it > 0 } ?: 1024
         fun refresh() {
             val uid = ctx.haUser().optString("id", "").ifEmpty { null }
-            val show = conditions.all { it.evaluate({ id -> ctx.store[id] }, widthDp, userId = uid) }
+            val nowMs = ctx.now()
+            val show = conditions.all { VisibilityCondition.evaluateAt(it, nowMs, { id -> ctx.store[id] }, widthDp, uid) }
             view.visibility = if (show) VISIBLE else GONE
         }
         refresh()

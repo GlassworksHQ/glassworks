@@ -209,21 +209,18 @@ sealed class VisibilityCondition {
             }
             is NumericState -> {
                 val obj = lookup(entity)
-                val v = if (attribute != null) {
-                    when (val a = obj?.attributes?.get(attribute)) {
-                        is Number -> a.toDouble()
-                        null -> null
-                        else -> a.toString().trim().toDoubleOrNull()
-                    }
-                } else {
-                    obj?.state?.toDoubleOrNull()
+                // HA's `Number(state)`: true is 1, null and "" are 0, a missing entity or attribute isn't a number.
+                val v = when {
+                    obj == null -> null
+                    attribute != null -> if (obj.attributes.containsKey(attribute)) jsToNumber(obj.attributes[attribute]) else null
+                    else -> jsToNumber(obj.state)
                 }
                 if (v == null) {
                     false
                 } else {
                     // An entity bound reads that entity's state; a bound that isn't a number (yet) is ignored, as in HA.
-                    val lo = above ?: aboveEntity?.let { lookup(it)?.state?.toDoubleOrNull() }
-                    val hi = below ?: belowEntity?.let { lookup(it)?.state?.toDoubleOrNull() }
+                    val lo = above ?: aboveEntity?.let { lookup(it)?.state?.let(::jsToNumber) }
+                    val hi = below ?: belowEntity?.let { lookup(it)?.state?.let(::jsToNumber) }
                     (lo == null || v > lo) && (hi == null || v < hi)
                 }
             }
@@ -307,6 +304,33 @@ sealed class VisibilityCondition {
             else -> v.toString()
         }
 
+        /** JavaScript's `Number(v)` for a JSON value, or null for NaN: what HA's numeric_state condition compares. */
+        internal fun jsToNumber(v: Any?): Double? = when (v) {
+            null -> 0.0
+            is Boolean -> if (v) 1.0 else 0.0
+            is Number -> v.toDouble().takeIf { !it.isNaN() }
+            is List<*> -> when (v.size) {
+                0 -> 0.0
+                1 -> jsToNumber(jsString(v[0]))
+                else -> null
+            }
+            is Map<*, *> -> null
+            else -> {
+                val t = v.toString().trim()
+                when {
+                    t.isEmpty() -> 0.0
+                    t == "Infinity" || t == "+Infinity" -> Double.POSITIVE_INFINITY
+                    t == "-Infinity" -> Double.NEGATIVE_INFINITY
+                    t.startsWith("0x", ignoreCase = true) -> t.drop(2).toLongOrNull(16)?.toDouble()
+                    // Only JavaScript's decimal syntax: Kotlin also reads "NaN", "1f" and "1d".
+                    JS_DECIMAL.matches(t) -> t.toDoubleOrNull()
+                    else -> null
+                }
+            }
+        }
+
+        private val JS_DECIMAL = Regex("""[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?""")
+
         /**
          * A number as JavaScript's `Number.prototype.toString` writes it: `150`, `0.0001`, `1e-7`, `1e+21` (Java writes
          * `150.0`, `1.0E-4`). The digits are Java's shortest round-trip ones; only the layout follows JavaScript.
@@ -330,6 +354,21 @@ sealed class VisibilityCondition {
                 }
             }
             return sign + body
+        }
+
+        /**
+         * [evaluate] at the instant [nowMs] (a card context's clock): its time of day and weekday from one sample, so
+         * a parity replay reads the captured instant and the live renderer the wall clock.
+         */
+        fun evaluateAt(
+            condition: VisibilityCondition,
+            nowMs: Long,
+            lookup: (String) -> EntityState?,
+            widthDp: Int,
+            userId: String?,
+        ): Boolean {
+            val c = Calendar.getInstance().apply { timeInMillis = nowMs }
+            return condition.evaluate(lookup, widthDp, userId, secondsOf(c), c.get(Calendar.DAY_OF_WEEK))
         }
 
         private fun secondsOf(c: Calendar): Int =

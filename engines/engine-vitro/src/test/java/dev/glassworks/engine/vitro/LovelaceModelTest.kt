@@ -420,6 +420,32 @@ class LovelaceModelTest {
     }
 
     @Test
+    fun aTimeConditionReadsTheInstantItIsGiven() {
+        // A replay's captured 08:30 decides, not the wall clock (the card context's `now`).
+        val c = VisibilityCondition.Time(after = 8 * 3600, before = 9 * 3600, weekdays = null)
+        val at = { h: Int, m: Int -> java.util.Calendar.getInstance().apply { set(2026, 0, 14, h, m, 0) }.timeInMillis }
+        assertTrue(VisibilityCondition.evaluateAt(c, at(8, 30), states(), 1024, null))
+        assertFalse(VisibilityCondition.evaluateAt(c, at(10, 0), states(), 1024, null))
+    }
+
+    @Test
+    fun numericStateCoercesAsHasNumberDoes() {
+        // HA's `Number(value)`: true is 1, an empty string and null are 0; a missing attribute isn't a number.
+        val fan = EntityState("fan.den", "on", mapOf("oscillating" to true, "preset" to "", "speed" to null))
+        val lookup = { id: String -> if (id == "fan.den") fan else null }
+        fun above0(attr: String) = VisibilityCondition.NumericState("fan.den", above = 0.0, below = null, attribute = attr).evaluate(lookup)
+        fun belowHalf(attr: String) = VisibilityCondition.NumericState("fan.den", above = null, below = 0.5, attribute = attr).evaluate(lookup)
+        assertTrue(above0("oscillating"))
+        assertTrue(belowHalf("preset"))
+        assertTrue(belowHalf("speed"))
+        assertFalse(belowHalf("missing"))
+        assertEquals(16.0, VisibilityCondition.jsToNumber("0x10")!!, 0.0)
+        assertNull(VisibilityCondition.jsToNumber("1f"))
+        assertNull(VisibilityCondition.jsToNumber("NaN"))
+        assertEquals(1500.0, VisibilityCondition.jsToNumber(" 1.5e3 ")!!, 0.0)
+    }
+
+    @Test
     fun screenConditionComparesTheWidthToTheMediaQuery() {
         val tablet = VisibilityCondition.Screen("(min-width: 768px)")
         assertTrue(tablet.evaluate(states(), widthDp = 1024))

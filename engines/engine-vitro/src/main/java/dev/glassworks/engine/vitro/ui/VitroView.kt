@@ -1287,7 +1287,8 @@ class VitroView(
         var shown: Boolean? = null
         val update = {
             val userId = ctx.haUser().optString("id", "").ifEmpty { null }
-            val visible = conds.all { it.evaluate(store::get, widthDp, userId) }
+            val nowMs = ctx.now()
+            val visible = conds.all { VisibilityCondition.evaluateAt(it, nowMs, store::get, widthDp, userId) }
             if (visible != shown) {
                 shown = visible
                 crossfade(view, visible, transitionMs ?: DEFAULT_FADE_MS)
