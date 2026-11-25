@@ -43,7 +43,10 @@ object HaAuth {
     private val cache = AccessTokenCache()
     private val listeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
     private var server: HttpServer? = null
-    /** The running sign-in server's pending sign-ins ([signInStates]), so a factory reset can drop them ([forgetPendingSignIns]). */
+    /**
+     * The sign-in server's pending sign-ins ([signInStates]), made once per process and kept across server restarts, so
+     * a factory reset drops the ones the live server holds ([forgetPendingSignIns]).
+     */
     @Volatile private var signInStates: StateStore? = null
     /** The Manage page while the server runs: the settings menu's Overview shows and does what its Overview does. */
     var manage: ManagePage? = null
@@ -119,7 +122,8 @@ object HaAuth {
     fun startServer(context: Context) {
         init(context)
         if (server != null) return
-        val states = signInStates(prefs).also { signInStates = it }
+        // One store for the process: a bind retry keeps the Manage page, and the sign-in server inside it, built with it.
+        val states = signInStates ?: signInStates(prefs).also { signInStates = it }
         val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, states, thread = threadJoin)
         // A Manage page that can't load (a class Android 6 refuses, #435) leaves the QR pages up, and the app with them.
         val m = manage ?: orWithout("The Manage page", { AuthLog.w(it) }) {
