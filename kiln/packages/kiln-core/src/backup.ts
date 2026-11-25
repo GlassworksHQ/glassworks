@@ -51,15 +51,17 @@ const PART_NAME = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/;
  * SHA256SUMS of them all: a restore point's download, which a person can check with `shasum -a 256 -c`.
  */
 export async function namedBackupZip(parts: readonly NamedPart[], o: { dir?: string } = {}): Promise<Blob> {
-  const names = parts.map((p) => p.filename);
+  // Snapshot filenames and bytes before the first await so caller buffer reuse cannot skew SHA256SUMS vs entries.
+  const items = parts.map((p) => ({ filename: p.filename, data: Uint8Array.from(p.data) }));
+  const names = items.map((p) => p.filename);
   for (const n of names) if (!PART_NAME.test(n) || n === 'SHA256SUMS') throw new Error(`zip: "${n}" isn't a plain file name`);
   if (new Set(names).size !== names.length) throw new Error('zip: two files share a name');
   if (o.dir !== undefined && !PART_NAME.test(o.dir)) throw new Error(`zip: "${o.dir}" isn't a plain folder name`);
   const at = (n: string) => (o.dir ? `${o.dir}/${n}` : n);
-  const sums = new TextEncoder().encode((await Promise.all([...parts].sort((a, b) => (a.filename < b.filename ? -1 : 1))
+  const sums = new TextEncoder().encode((await Promise.all([...items].sort((a, b) => (a.filename < b.filename ? -1 : 1))
     .map(async (p) => `${toHex(await crypto.subtle.digest('SHA-256', p.data as Uint8Array<ArrayBuffer>))}  ${p.filename}\n`))).join(''));
   return zipBlob([
-    ...parts.map((p) => ({ name: at(p.filename), data: p.data, crc: crc32(p.data) })),
+    ...items.map((p) => ({ name: at(p.filename), data: p.data, crc: crc32(p.data) })),
     { name: at('SHA256SUMS'), data: sums, crc: crc32(sums) },
   ]);
 }

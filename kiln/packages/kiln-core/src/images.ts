@@ -204,9 +204,11 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
   let systemKeyed = false;
   const flashed = new Set<string>();
   let device = false, fastboot = false, restarted = false, writes = 0, wifi = false, wifiOn = false;
-  // in-place: stage → restart → receive → fastboot → in-place → flash → restart → app-install
-  let staged = false, stageRestarted = false, received: string | undefined, fastbootAfterReceive = false;
-  let inPlaced = false, appInstalled = false;
+  // in-place: stage → flash(stage) → restart → receive → fastboot → in-place → flash(in-place) → restart → app-install
+  let staged = false, stageFile: string | undefined, stageFlashed = false, stageRestarted = false;
+  let received: string | undefined, fastbootAfterReceive = false;
+  let inPlaced = false, inPlaceFlashed = false, inPlaceRestarted = false, appInstalled = false;
+  const inPlaceFiles = new Set<string>();
   const restores = new Set<string>();
   const newName = (n: unknown) => typeof n === 'string' && FILE_NAME.test(n) && !files.has(n) && !made.has(n) && !restores.has(n) && n !== received;
   const inPlaceOnly = (i: number, kind: string) => {
@@ -255,13 +257,25 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
         if (flashed.has(s.partition)) bad.push(`${at(i)}: ${s.partition} is written once`);
         flashed.add(s.partition);
         if (restores.has(s.file)) bad.push(`${at(i)}: ${s.file} is the way back: the install never writes it`);
-        else if (!checked.has(s.file) && !made.has(s.file)) bad.push(`${at(i)}: ${s.file} isn't a checked download or something Kiln made from one`);
+        else if (inPlace) {
+          if (s.file !== stageFile && !inPlaceFiles.has(s.file)) {
+            bad.push(`${at(i)}: ${s.file} isn't the stage output or something in-place made`);
+          } else {
+            if (s.file === stageFile) stageFlashed = true;
+            if (inPlaceFiles.has(s.file)) inPlaceFlashed = true;
+          }
+        } else if (!checked.has(s.file) && !made.has(s.file)) {
+          bad.push(`${at(i)}: ${s.file} isn't a checked download or something Kiln made from one`);
+        }
         break;
       case 'restart':
         if (!fastboot) bad.push(`${at(i)}: restart needs a device to restart`);
         restarted = true;
-        flashed.clear();
-        if (staged) stageRestarted = true;
+        if (inPlace) {
+          flashed.clear();
+          if (stageFlashed) stageRestarted = true;
+          if (inPlaceFlashed) inPlaceRestarted = true;
+        }
         break;
       case 'stage':
         inPlaceOnly(i, 'stage');
@@ -270,7 +284,7 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
         // it is sized from what fastboot reports, and written in that session
         if (!fastboot || restarted) bad.push(`${at(i)}: stage comes after fastboot and before restart`);
         if (!newName(s.makes)) bad.push(`${at(i)}: stage must name a new file it makes`);
-        else made.add(s.makes);
+        else { made.add(s.makes); stageFile = s.makes; }
         break;
       case 'receive':
         inPlaceOnly(i, 'receive');
@@ -292,7 +306,7 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
         if (!makes.length) bad.push(`${at(i)}: in-place must say what it makes`);
         for (const m of makes) {
           if (!newName(m)) bad.push(`${at(i)}: in-place must name new files it makes`);
-          else made.add(m as string);
+          else { made.add(m as string); inPlaceFiles.add(m as string); }
         }
         if (!newName(s.restore) || makes.includes(s.restore)) bad.push(`${at(i)}: in-place must name a new restore file`);
         else restores.add(s.restore);
@@ -302,7 +316,7 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
         inPlaceOnly(i, 'app-install');
         if (appInstalled) bad.push(`${at(i)}: the app is installed once`);
         appInstalled = true;
-        if (!restarted) bad.push(`${at(i)}: app-install comes after restart`);
+        if (!inPlaceRestarted || !restarted) bad.push(`${at(i)}: app-install comes after restarting into the in-place writes`);
         break;
       case 'first-start':
         if (r.community) bad.push(`${at(i)}: Kiln's first start needs an image that trusts this browser's key: only Glassworks`);

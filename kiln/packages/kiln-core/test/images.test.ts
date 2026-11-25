@@ -394,9 +394,35 @@ describe('an in-place recipe', () => {
     expect(validateImage(at(1, { do: 'stage', makes: '../x' }), IN_PLACE)).toContain('step 2: stage must name a new file it makes');
     expect(validateImage(at(1, { do: 'stage', makes: 'stage-userdata', size: 1 }), IN_PLACE)).toContain('step 2: "stage" takes no size');
     expect(validateImage(at(2, { do: 'flash', partition: 'system', file: 'system-blocks' }), IN_PLACE)).toEqual(expect.arrayContaining([
-      'step 3: system-blocks isn\'t a checked download or something Kiln made from one',
+      'step 3: system-blocks isn\'t the stage output or something in-place made',
       'stage makes stage-userdata, but nothing writes it: flash it',
     ]));
+    // in-place mode rejects flashing a checked download directly
+    const flashedDownload = inPlace({
+      files: [file('system.img')],
+      steps: [{ do: 'download', file: 'system.img' }, ...inPlace().steps.slice(0, 7), { do: 'flash', partition: 'system', file: 'system.img' }, ...inPlace().steps.slice(8)],
+    });
+    expect(validateImage(flashedDownload, IN_PLACE)).toContain('step 9: system.img isn\'t the stage output or something in-place made');
+    // stage must be flashed before the restart that leads into receive (a later flash doesn't count)
+    const deferredStageFlash = inPlace({
+      steps: [
+        { do: 'fastboot' }, { do: 'stage', makes: 'stage-userdata' }, { do: 'restart' },
+        { do: 'receive', bundle: 'bundle', channels: ['lan'] },
+        { do: 'fastboot' }, { do: 'in-place', bundle: 'bundle', makes: ['system-blocks'], restore: 'restore-blocks' },
+        { do: 'flash', partition: 'system', file: 'system-blocks' }, { do: 'flash', partition: 'userdata', file: 'stage-userdata' }, { do: 'restart' },
+        { do: 'app-install' },
+      ],
+    });
+    expect(validateImage(deferredStageFlash, IN_PLACE)).toContain('step 4: receive comes after a stage step and the restart into it');
+    // replace recipes still enforce written-once across restarts
+    const replaceTwice = community({
+      steps: [
+        { do: 'download', file: 'system.img' }, { do: 'download', file: 'userdata.img' },
+        { do: 'fastboot' }, { do: 'flash', partition: 'system', file: 'system.img' }, { do: 'restart' },
+        { do: 'fastboot' }, { do: 'flash', partition: 'system', file: 'system.img' }, { do: 'flash', partition: 'userdata', file: 'userdata.img' }, { do: 'restart' },
+      ],
+    });
+    expect(validateImage(replaceTwice, FRAME)).toContain('step 7: system is written once');
     const twice = inPlace({ steps: [...inPlace().steps.slice(0, 2), { do: 'stage', makes: 'stage-2' }, ...inPlace().steps.slice(2)] });
     expect(validateImage(twice, IN_PLACE)).toContain('step 3: the stage is built once');
   });
@@ -435,9 +461,13 @@ describe('an in-place recipe', () => {
     expect(validateImage(at(8, { do: 'flash', partition: 'userdata', file: 'restore-blocks' }), IN_PLACE)).toContain('step 9: restore-blocks is the way back: the install never writes it');
   });
 
-  it('app-install: after restart, once, takes nothing', () => {
+  it('app-install: after restarting into the in-place writes, once, takes nothing', () => {
     const early = inPlace({ steps: [...inPlace().steps.slice(0, 9), { do: 'app-install' }, { do: 'restart' }] });
-    expect(validateImage(early, IN_PLACE)).toContain('step 10: app-install comes after restart');
+    expect(validateImage(early, IN_PLACE)).toContain('step 10: app-install comes after restarting into the in-place writes');
+    const rightAfterReceive = inPlace({
+      steps: [...inPlace().steps.slice(0, 5), { do: 'app-install' }, ...inPlace().steps.slice(5, 10)],
+    });
+    expect(validateImage(rightAfterReceive, IN_PLACE)).toContain('step 6: app-install comes after restarting into the in-place writes');
     expect(validateImage(inPlace({ steps: [...inPlace().steps, { do: 'app-install' }] }), IN_PLACE)).toContain('step 12: the app is installed once');
     expect(validateImage(at(10, { do: 'app-install', apk: 'x' }), IN_PLACE)).toContain('step 11: "app-install" takes no apk');
   });
