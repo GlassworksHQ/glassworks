@@ -29,6 +29,10 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.TextView
+import dev.glassworks.engine.vitro.data.HaIntl
+import dev.glassworks.engine.vitro.data.HaText
+import dev.glassworks.engine.vitro.data.HaLocale
+import dev.glassworks.engine.vitro.data.HaFormat
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDisplay
@@ -297,9 +301,9 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         dial.update(on, if (on && pct != null) pct / 100f else 0f, MdiIcons.resolveIconName(config.icon, s), s?.lightTintColor(), dims)
         dial.contentDescription = when {
             s == null || s.isUnavailable -> s?.formattedState() ?: "–"
-            !on -> "Off"
-            dims && pct != null -> "Brightness $pct%"
-            else -> "On"
+            !on -> s.formattedState()
+            dims && pct != null -> "${HaText.ui("ui.card.light.brightness")} ${HaFormat.formatNumber(pct)}${HaFormat.blankBeforePercent(HaLocale.current)}%"
+            else -> s.formattedState()
         }
     }
 }
@@ -484,7 +488,7 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_HORIZONTAL
     }
-    private val codeLabel = extLabel(ctx, 14f, ctx.theme.secondaryTextColor).apply { text = "Code" }
+    private val codeLabel = extLabel(ctx, 14f, ctx.theme.secondaryTextColor).apply { text = HaText.ui("ui.card.alarm_control_panel.code") }
     private val codeView = extLabel(ctx, 14f, ctx.theme.primaryTextColor).apply { maxLines = 1 }
     private val codeField = FrameLayout(ctx.context).apply {
         // ha-input: a filled field, 4 px top corners, a 1 px indicator line along the bottom.
@@ -508,7 +512,7 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
     private val textCode = EditText(ctx.context).apply {
         inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         setSingleLine(true)
-        hint = "Code"
+        hint = HaText.ui("ui.card.alarm_control_panel.code")
         setTextColor(ctx.theme.primaryTextColor)
         setHintTextColor(ctx.theme.secondaryTextColor)
         visibility = GONE
@@ -564,7 +568,7 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
                 if (key.isNotEmpty()) {
                     b.background = TileCardView.featureFill(ctx).apply { cornerRadius = 28f * ctx.dp }
                     b.isClickable = true
-                    b.contentDescription = if (key == KEY_CLEAR) "Clear" else key
+                    b.contentDescription = if (key == KEY_CLEAR) HaText.ui("ui.card.alarm_control_panel.clear_code") else key
                     b.setOnClickListener { onKey(key) }
                     applyHaRipple(b, 28f * ctx.dp, ctx.theme.dark)
                 }
@@ -684,13 +688,14 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
         /** `arm_home` → `alarm_arm_home`, `disarm` → `alarm_disarm`. */
         fun serviceFor(action: String): String = "alarm_$action"
 
+        /** HA's button label: `ui.card.alarm_control_panel.<action>`. */
         fun actionLabel(action: String): String = when (action) {
-            "disarm" -> "Disarm"
-            "arm_home" -> "Arm home"
-            "arm_away" -> "Arm away"
-            "arm_night" -> "Arm night"
-            "arm_vacation" -> "Arm vacation"
-            "arm_custom_bypass" -> "Custom bypass"
+            "disarm" -> HaText.ui("ui.card.alarm_control_panel.disarm")
+            "arm_home" -> HaText.ui("ui.card.alarm_control_panel.arm_home")
+            "arm_away" -> HaText.ui("ui.card.alarm_control_panel.arm_away")
+            "arm_night" -> HaText.ui("ui.card.alarm_control_panel.arm_night")
+            "arm_vacation" -> HaText.ui("ui.card.alarm_control_panel.arm_vacation")
+            "arm_custom_bypass" -> HaText.ui("ui.card.alarm_control_panel.arm_custom_bypass")
             else -> action.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
         }
 
@@ -751,12 +756,12 @@ data class TodoItem(
 /** Native HA `todo-list` card (`hui-todo-list-card`): live items, checkboxes, completed section and add row. */
 class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
     private val titleView = extLabel(ctx, 24f, ctx.theme.primaryTextColor)
-    private val activeHeader = sectionHeader("Active", null)
+    private val activeHeader = sectionHeader(HaText.ui("ui.panel.lovelace.cards.todo-list.unchecked_items"), null)
     private val activeBox = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
     private val completedDivider = View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) }
-    private val completedHeader = sectionHeader("Completed") { anchor ->
+    private val completedHeader = sectionHeader(HaText.ui("ui.panel.lovelace.cards.todo-list.checked_items")) { anchor ->
         android.widget.PopupMenu(ctx.context, anchor).apply {
-            menu.add("Clear checked items").setOnMenuItemClickListener { clearCompleted(); true }
+            menu.add(HaText.ui("ui.panel.lovelace.cards.todo-list.clear_items")).setOnMenuItemClickListener { clearCompleted(); true }
             show()
         }
     }
@@ -794,7 +799,7 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             visibility = GONE
         }
         input.apply {
-            hint = "Add item"
+            hint = HaText.ui("ui.panel.lovelace.cards.todo-list.add_item")
             textSize = 14f
             typeface = VitroFonts.typeface(ctx.context, Inter.REGULAR, 14f)
             setTextColor(ctx.theme.primaryTextColor)
@@ -815,7 +820,7 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         }
         val plus = FrameLayout(ctx.context).apply {
             isClickable = true
-            contentDescription = "Add item"
+            contentDescription = HaText.ui("ui.panel.lovelace.cards.todo-list.add_item")
             addView(MdiIconView(ctx.context).apply { setIcon("mdi:plus", 0xFFCCCCCC.toInt()) },
                 FrameLayout.LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
             setOnClickListener { addItem() }
@@ -1036,7 +1041,7 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         activeHeader.visibility = if (active.isNotEmpty()) VISIBLE else GONE
         if (active.isEmpty()) {
             activeBox.addView(extLabel(ctx, 14f, ctx.theme.primaryTextColor).apply {
-                text = "No items"
+                text = HaText.ui("ui.panel.lovelace.cards.todo-list.no_unchecked_items")
                 setPadding(ctx.px(16f), ctx.px(12f), ctx.px(16f), ctx.px(12f))
             })
         }
@@ -1117,7 +1122,7 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
      */
     private fun dueText(item: TodoItem): Pair<String, Boolean>? {
         val raw = item.due ?: return null
-        val tz = TimeZone.getDefault()
+        val tz = HaLocale.deviceTimeZone()
         val dateOnly = 'T' !in raw
         val dueMs = if (dateOnly) {
             val parts = raw.split('-').mapNotNull { it.toIntOrNull() }
@@ -1133,7 +1138,8 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             timeInMillis = dueMs
             d == get(Calendar.YEAR) * 400 + get(Calendar.DAY_OF_YEAR)
         }
-        val label = if (today) "Today" else HaRelativeTime.format(dueMs, now, tz, capitalize = true)
+        val label = if (today) HaText.ui("ui.panel.lovelace.cards.todo-list.today")
+        else HaFormat.capitalize(HaFormat.relativeTime(dueMs, now, zone = tz))
         return label to (dueMs < now)
     }
 
@@ -1470,16 +1476,11 @@ class AreaCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             return if (s.size % 2 == 0) (s[s.size / 2] + s[s.size / 2 - 1]) / 2 else s[s.size / 2]
         }
 
-        /** HA's `formatNumberWithUnit` (en, at most one decimal): no space before `%` or `°`. */
+        /** HA's `formatNumberWithUnit` (at most one decimal), with `blankBeforeUnit`. */
         internal fun formatWithUnit(value: Double, unit: String?): String {
             // Intl's halfExpand on the number's exact value: 0.25 → 0.3, 21.45 (21.4499…) → 21.4.
-            val n = java.text.DecimalFormat("#,##0.#", java.text.DecimalFormatSymbols(Locale.US))
-                .apply { roundingMode = java.math.RoundingMode.HALF_UP }.format(value)
-            return when {
-                unit.isNullOrEmpty() -> n
-                unit == "%" || unit == "°" -> n + unit
-                else -> "$n $unit"
-            }
+            val n = HaDisplay.formatValue(value, 1)
+            return if (unit.isNullOrEmpty()) n else n + HaFormat.blankBeforeUnit(unit) + unit
         }
 
         private fun strings(arr: JSONArray?): List<String> =
@@ -1691,7 +1692,7 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
 
     private fun serviceButton(el: PictureElement): View {
         val button = extLabel(ctx, 13f, ctx.theme.primaryColor, Inter.MEDIUM).apply {
-            text = el.title ?: "Run"
+            text = el.title ?: HaText.ui("ui.card.script.run")
             gravity = Gravity.CENTER
             maxLines = 1
             setPadding(ctx.px(12f), ctx.px(6f), ctx.px(12f), ctx.px(6f))
@@ -1895,7 +1896,7 @@ class HumidifierCardView(ctx: VitroCardContext, private val config: CardConfig) 
         }
         powerCell.apply {
             isClickable = true
-            contentDescription = "Power"
+            contentDescription = HaText.ui("ui.card.media_player.power")
             addView(powerIcon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
         }
         bar.addView(powerCell, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
@@ -1933,7 +1934,7 @@ class HumidifierCardView(ctx: VitroCardContext, private val config: CardConfig) 
         powerIcon.setIcon("mdi:power", if (on) Color.WHITE else ctx.theme.primaryTextColor)
         val modes = availableModes(s)
         modePill.visibility = if (modes.isEmpty()) GONE else VISIBLE
-        modePill.text = (attrs["mode"] as? String)?.let(::modeLabel) ?: "Mode"
+        modePill.text = (attrs["mode"] as? String)?.let(::modeLabel) ?: HaText.ui("ui.card.climate.mode")
     }
 
     private fun showModes(anchor: View, eid: String) {
@@ -1958,14 +1959,11 @@ class HumidifierCardView(ctx: VitroCardContext, private val config: CardConfig) 
         fun statusLabel(s: EntityState?): String = when {
             s == null -> "–"
             s.isUnavailable -> s.formattedState()
-            s.state == "off" -> "Off"
-            else -> when (s.attributes["action"] as? String) {
-                "humidifying" -> "Humidifying"
-                "drying" -> "Drying"
-                "idle" -> "Idle"
-                "off" -> "Off"
-                else -> "On"
-            }
+            // HA's humidity control: the action as HA names it while it runs, else the state.
+            s.state == "off" -> s.formattedState()
+            else -> (s.attributes["action"] as? String)?.takeIf { it != "off" }
+                ?.let { HaDisplay.attributeLabel(s, "action", it) ?: it.replaceFirstChar { c -> c.titlecase(Locale.ROOT) } }
+                ?: s.formattedState()
         }
 
         fun availableModes(s: EntityState?): List<String> =
@@ -2298,7 +2296,7 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
         val y = scroll.scrollY
         val first = rowViews.firstOrNull { (v, _) -> v.bottom > y }?.second ?: rows.firstOrNull()
         floating.visibility = if (first != null) VISIBLE else GONE
-        if (first != null) floating.text = dateHeader((first.whenSec * 1000).toLong(), ctx.now(), TimeZone.getDefault())
+        if (first != null) floating.text = dateHeader((first.whenSec * 1000).toLong(), ctx.now(), HaLocale.deviceTimeZone())
     }
 
     private fun render(entries: List<LogbookEntry>) {
@@ -2307,12 +2305,12 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
         updateFloating()
         if (entries.isEmpty()) {
             list.addView(extLabel(ctx, 14f, ctx.theme.secondaryTextColor).apply {
-                text = "No logbook events found"
+                text = HaText.ui("ui.components.logbook.entries_not_found")
                 gravity = Gravity.CENTER
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             return
         }
-        val tz = TimeZone.getDefault()
+        val tz = HaLocale.deviceTimeZone()
         val now = ctx.now()
         entries.forEachIndexed { i, e ->
             val firstOfDay = i == 0 || !sameDay(e, entries[i - 1], tz)
@@ -2479,18 +2477,19 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
             return out.sortedByDescending { it.whenSec }
         }
 
-        /** `formatTimeWithSeconds` in English: "12:06:51 AM". */
-        fun timeText(ms: Long): String = java.text.SimpleDateFormat("h:mm:ss a", Locale.US).format(Date(ms))
+        /** `formatTimeWithSeconds`: "12:06:51 AM". */
+        fun timeText(ms: Long): String = HaFormat.formatTimeWithSeconds(ms)
 
-        /** `_formatDateHeader`: "Today · November 24, 2026", "Yesterday · …", else the date. */
+        /**
+         * `_formatDateHeader`: "Today · November 24, 2026", "Yesterday · …", else `formatDate`. The day counts in the
+         * browser's zone ([tz]); "Today" is `Intl.RelativeTimeFormat`'s, capitalized.
+         */
         fun dateHeader(ms: Long, nowMs: Long, tz: TimeZone): String {
-            val full = java.text.SimpleDateFormat("MMMM d, yyyy", Locale.US).apply { timeZone = tz }.format(Date(ms))
+            val full = HaFormat.formatDate(ms)
             val diff = Math.floorDiv(nowMs + tz.getOffset(nowMs), 86_400_000L) - Math.floorDiv(ms + tz.getOffset(ms), 86_400_000L)
-            return when (diff) {
-                0L -> "Today · $full"
-                1L -> "Yesterday · $full"
-                else -> full
-            }
+            if (diff != 0L && diff != 1L) return full
+            val word = HaIntl.of(HaLocale.current.language).relativeTime(if (diff == 0L) 0 else -1, "day")
+            return "${HaFormat.capitalize(word)} · $full"
         }
 
         private fun sameDay(a: LogbookEntry, b: LogbookEntry, tz: TimeZone): Boolean {

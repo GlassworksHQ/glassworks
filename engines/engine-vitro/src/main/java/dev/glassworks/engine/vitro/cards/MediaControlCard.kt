@@ -24,6 +24,7 @@ import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.model.CardConfig
@@ -231,14 +232,14 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
             val endSize = if (narrow && !veryNarrow) 40f else 44f
             if (features and BROWSE_MEDIA != 0) {
                 end.addView(button(MdiIconView(ctx.context).apply { setIcon("mdi:play-box-multiple", fg) }, endSize, 24f).apply {
-                    contentDescription = "Browse media"
+                    contentDescription = HaText.ui("ui.card.media_player.browse_media")
                     // Vitro has no media browser: More info is the nearest place to pick media.
                     setOnClickListener { eid?.let(ctx.openMoreInfo) }
                 }, LinearLayout.LayoutParams(ctx.px(endSize), ctx.px(endSize)))
             }
             if (features and GROUPING != 0) {
                 val join = button(MdiIconView(ctx.context).apply { setIcon("mdi:speaker-multiple", fg) }, endSize, 24f).apply {
-                    contentDescription = "Join"
+                    contentDescription = HaText.ui("ui.card.media_player.join")
                     setOnClickListener { eid?.let(ctx.openMoreInfo) }
                 }
                 val members = (s.attributes["group_members"] as? List<*>)?.size ?: 0

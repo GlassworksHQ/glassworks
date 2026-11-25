@@ -32,6 +32,7 @@ import android.widget.Space
 import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.model.ActionConfig
@@ -271,7 +272,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             addView(MdiIconView(ctx.context).apply { setIcon("mdi:alert-outline", color) },
                 LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply { marginEnd = ctx.px(8f) })
             addView(textView(ctx, 14f, ctx.theme.primaryTextColor, 700).apply {
-                text = "Entity not found"
+                text = HaText.ui("ui.card.common.entity_not_found")
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
@@ -744,7 +745,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         rangeRow.visibility = if (range) VISIBLE else GONE
                         // HA's number: the step's decimals, then the unit unless the buttons are narrow.
                         fun fill(g: NumberButtons, v: Double?, name: String) {
-                            val number = v?.let { String.format(Locale.US, "%.${digits}f", it) }
+                            val number = v?.let { HaDisplay.formatFixed(it, digits) }
                             g.value.text = number?.let { if (g.narrow) it else "$it $unit" } ?: "–"
                             // HA's spin button, named after the target, with its unit always.
                             g.value.contentDescription = "$name, " + (number?.let { "$it $unit" } ?: "–")
@@ -810,7 +811,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         background = featureFill(ctx)
                         applyHaRipple(this, 12f * ctx.dp, ctx.theme.dark)
                         isClickable = true
-                        contentDescription = "Mute"
+                        contentDescription = HaText.ui("ui.card.media_player.volume_mute")
                         addView(muteIcon, LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
                         setOnClickListener {
                             val muted = ctx.store[entityId]?.attributes?.get("is_volume_muted") == true
@@ -834,7 +835,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 "toggle" -> {
                     // HA's `ha-control-switch` as two halves; the half matching the state fills with its color.
                     val (offLabel, onLabel) = when (domain) {
-                        "lock" -> "Lock" to "Unlock"
+                        "lock" -> HaText.ui("ui.card.lock.lock") to HaText.ui("ui.card.lock.unlock")
                         "cover", "valve" -> "Close" to "Open"
                         else -> "Off" to "On"
                     }
@@ -1128,7 +1129,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     }
 
     private fun formatTemp(t: Double, unit: String): String =
-        if (t % 1.0 == 0.0) String.format(Locale.US, "%.0f %s", t, unit) else String.format(Locale.US, "%.1f %s", t, unit)
+        "${HaDisplay.formatFixed(t, if (t % 1.0 == 0.0) 0 else 1)} $unit"
 
     /**
      * `custom:mushroom-template-card`: a 40 dp shape avatar (icon tinted by `icon_color`, or a round `picture`)

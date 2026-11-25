@@ -29,6 +29,7 @@ import dev.glassworks.engine.PagePort
 import dev.glassworks.engine.vitro.compat.CompatWarmup
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
+import dev.glassworks.engine.vitro.data.HaLocale
 import dev.glassworks.engine.vitro.island.VitroIslandServer
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.DashboardConfig
@@ -756,6 +757,10 @@ class VitroEngine(
 
             override fun onUserTheme(themeName: String?, dark: Boolean?) {
                 post { vitroView.setUserTheme(themeName, dark) }
+            }
+
+            override fun onLocaleChanged() {
+                post { vitroView.setLocale(HaLocale.current, HaLocale.serverTimeZone) }
             }
 
             override fun onDashboardConfig(urlPath: String?, config: DashboardConfig) {

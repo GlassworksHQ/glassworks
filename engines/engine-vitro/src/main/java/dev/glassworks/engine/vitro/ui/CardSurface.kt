@@ -21,6 +21,7 @@ import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
 import dev.glassworks.auth.OAuth
 import dev.glassworks.engine.Page
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.ForecastDay
@@ -180,7 +181,7 @@ class VitroCardContext(
         runCatching {
             AlertDialog.Builder(context)
                 .setMessage(message)
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(HaText.ui("ui.common.cancel"), null)
                 .setPositiveButton("Confirm") { _, _ -> onConfirm() }
                 .show()
         }

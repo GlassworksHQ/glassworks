@@ -4,10 +4,13 @@
 
 package dev.glassworks.engine.vitro.cards
 
+import dev.glassworks.engine.vitro.data.FrontendLocale
+import dev.glassworks.engine.vitro.data.HaIntl
+import dev.glassworks.engine.vitro.data.HaLocale
+import dev.glassworks.engine.vitro.data.HaFormat
 import android.content.Context
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.format.DateFormat
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -36,15 +39,15 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     private val size = raw.optString("clock_size", "").takeIf { it == "medium" || it == "large" }
     private val noBackground = raw.optBoolean("no_background", false)
     private val showSeconds = raw.optBoolean("show_seconds", false)
-    private val use12h = when (raw.optString("time_format", "")) {
-        "12" -> true
-        "24" -> false
-        else -> !DateFormat.is24HourFormat(ctx.context)
+    /** The user's locale with the card's `time_format` over it (`clock-date-format.ts`'s first step). */
+    private val locale: FrontendLocale = HaLocale.current.let { l ->
+        raw.optString("time_format", "").takeIf { it.isNotEmpty() }?.let { l.copy(timeFormat = it) } ?: l
     }
-    private val hourFormat = SimpleDateFormat(if (use12h) "h" else "HH", Locale.getDefault())
-    private val minuteFormat = SimpleDateFormat("mm", Locale.getDefault())
-    private val secondFormat = SimpleDateFormat("ss", Locale.getDefault())
-    private val ampmFormat = SimpleDateFormat("a", Locale.getDefault())
+    private val use12h = HaFormat.useAmPm(locale)
+    /** HA's digits: `Intl.DateTimeFormat(language, {hour, minute, second, hourCycle})`'s parts. */
+    private val timeParts = HaIntl.of(locale.language).dateFormat(if (use12h) "timeSeconds.h12" else "timeSeconds.h23")
+        ?: HaIntl.of("en").dateFormat(if (use12h) "timeSeconds.h12" else "timeSeconds.h23")!!
+    private val hourField = timeParts.tokens.filterIsInstance<HaIntl.DateTemplate.Token.Field>().firstOrNull { it.name.lowercase() in setOf("h", "hh") }?.name ?: "H"
     private val wrapper = FlexColumn(ctx.context)
     private lateinit var hourView: TextView
     private lateinit var minuteView: TextView
@@ -59,7 +62,7 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
      * The zone the date line is written in. Declared before `init`, which renders and sets it: a property initialized
      * after `init` would overwrite it with the device's zone, and later ticks (same [appliedZone]) never fix it.
      */
-    private var dateZone: TimeZone = TimeZone.getDefault()
+    private var dateZone: TimeZone = HaLocale.timeZone(locale)
     private var running = false
     private var cardCss: String? = null
 
@@ -217,21 +220,25 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         else -> if (horizontal) Gravity.START else Gravity.TOP
     }
 
-    /** HA's clock `time_zone`: a zone name, `local` (the panel's), or the server's (default). */
+    /**
+     * HA's clock `time_zone`: a zone name, `local` (the panel's), `server` (HA's); with none, the user's own choice of
+     * the panel's or HA's zone (`resolveTimeZone`).
+     */
     private fun applyZone() {
         val configured = raw.optString("time_zone", "").trim()
+        val server = runCatching { ctx.haConfig().optString("time_zone", "") }.getOrDefault("").trim()
         val tzId = when (configured) {
-            "", "server" -> runCatching { ctx.haConfig().optString("time_zone", "") }.getOrDefault("").trim()
+            "" -> if (locale.timeZone == "server") server else ""
+            "server" -> server
             "local" -> ""
             else -> configured
         }
         // `local` follows the panel's zone, which may change while the card stays up: key it by that zone's id.
-        val local = if (tzId.isEmpty()) TimeZone.getDefault() else null
+        val local = if (tzId.isEmpty()) HaLocale.deviceTimeZone() else null
         val key = local?.let { "local:" + it.id } ?: tzId
         if (key == appliedZone) return
         appliedZone = key
         val zone = local ?: TimeZone.getTimeZone(tzId)
-        listOf(hourFormat, minuteFormat, secondFormat, ampmFormat).forEach { it.timeZone = zone }
         dateZone = zone
     }
 
@@ -245,12 +252,12 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
 
     private fun render(now: Date) {
         applyZone()
-        hourView.setLine(hourFormat.format(now))
-        minuteView.setLine(minuteFormat.format(now))
-        secondView?.setLine(secondFormat.format(now))
-        ampmView?.setLine(ampmFormat.format(now).uppercase(Locale.getDefault()))
+        hourView.setLine(timeParts.field(hourField, now.time, dateZone))
+        minuteView.setLine(timeParts.field("mm", now.time, dateZone))
+        secondView?.setLine(timeParts.field("ss", now.time, dateZone))
+        ampmView?.setLine(timeParts.field("a", now.time, dateZone))
         dateFormat?.let { f ->
-            val lines = f.format(now, Locale.getDefault(), dateZone).split('\n')
+            val lines = f.format(now, locale.language, dateZone).split('\n')
             dateLines.forEachIndexed { i, line -> line.text.setLine(lines.getOrElse(i) { "" }) }
         }
     }
@@ -485,21 +492,27 @@ internal class ClockDate private constructor(private val preset: String?, privat
 
     // Formatters for the last locale and zone, and the last minute's text: the clock ticks every few seconds and the
     // date only changes with the minute (HA formats it once per minute too).
-    private var formatsFor: Pair<Locale, TimeZone>? = null
-    private var formats: List<java.text.DateFormat?> = emptyList()
+    private var formatsFor: Pair<String, TimeZone>? = null
+    private var formats: List<((Date) -> String)?> = emptyList()
     private var lastMinute = Long.MIN_VALUE
     private var last = ""
 
-    fun format(date: Date, locale: Locale, zone: TimeZone): String {
+    /** The date line for [date] in [language]'s forms, in [zone]. */
+    fun format(date: Date, language: String, zone: TimeZone): String {
+        val locale = language
         val minute = date.time / 60_000L
         if (formatsFor == locale to zone && minute == lastMinute) return last
         if (formatsFor != locale to zone) {
             formatsFor = locale to zone
-            formats = if (preset != null) listOf(presetFormat(preset, locale)) else parts.map { p -> PATTERNS[p]?.let { SimpleDateFormat(it, locale) } }
-            formats.forEach { it?.timeZone = zone }
+            formats = if (preset != null) listOf(presetFormat(preset, locale, zone)) else parts.map { p ->
+                PATTERNS[p]?.let { name ->
+                    val t = HaIntl.of(locale).dateFormat(name) ?: HaIntl.of("en").dateFormat(name)
+                    t?.let { f -> { d: Date -> f.format(d.time, zone) } }
+                }
+            }
         }
         lastMinute = minute
-        last = if (preset != null) formats[0]!!.format(date) else buildString {
+        last = if (preset != null) formats[0]!!(date) else buildString {
             var lastWasValue = false
             parts.forEachIndexed { i, part ->
                 val separator = SEPARATORS[part]
@@ -507,7 +520,7 @@ internal class ClockDate private constructor(private val preset: String?, privat
                     append(separator)
                     lastWasValue = false
                 } else {
-                    val value = formats[i]?.format(date).orEmpty()
+                    val value = formats[i]?.invoke(date).orEmpty()
                     if (value.isNotEmpty()) {
                         if (lastWasValue) append(' ')
                         append(value)
@@ -519,21 +532,25 @@ internal class ClockDate private constructor(private val preset: String?, privat
         return last
     }
 
-    private fun presetFormat(preset: String, locale: Locale): java.text.DateFormat = when (preset) {
-        "iso" -> SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
-        "short" -> java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT, locale)
-        "medium" -> java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM, locale)
-        "long" -> java.text.DateFormat.getDateInstance(java.text.DateFormat.LONG, locale)
-        else -> java.text.DateFormat.getDateInstance(java.text.DateFormat.FULL, locale)
+    /**
+     * A preset (an older card's `date_format` string; HA 2026.11 reads only a list of parts) in HA's nearest format:
+     * ISO, `formatDateNumeric`'s, `formatDateShort`'s, `formatDate`'s, `formatDateWeekdayShortDateYear`'s.
+     */
+    private fun presetFormat(preset: String, language: String, zone: TimeZone): (Date) -> String {
+        if (preset == "iso") return { d -> SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply { timeZone = zone }.format(d) }
+        val name = when (preset) { "short" -> "dateNumeric"; "medium" -> "dateShort"; "long" -> "date"; else -> "weekdayShortDateYear" }
+        val t = HaIntl.of(language).dateFormat(name) ?: HaIntl.of("en").dateFormat(name)!!
+        return { d -> t.format(d.time, zone) }
     }
 
     companion object {
         private val PRESETS = setOf("short", "medium", "long", "full", "iso")
+        /** Each part's own `Intl.DateTimeFormat` options, by the name of their captured template ([HaIntl]). */
         private val PATTERNS = mapOf(
-            "weekday-short" to "EEE", "weekday-long" to "EEEE",
-            "day-numeric" to "d", "day-2-digit" to "dd",
-            "month-short" to "MMM", "month-long" to "MMMM", "month-numeric" to "M", "month-2-digit" to "MM",
-            "year-2-digit" to "yy", "year-numeric" to "yyyy",
+            "weekday-short" to "weekdayShort", "weekday-long" to "weekday",
+            "day-numeric" to "dayNumeric", "day-2-digit" to "day2",
+            "month-short" to "monthShort", "month-long" to "month", "month-numeric" to "monthNumeric", "month-2-digit" to "month2",
+            "year-2-digit" to "year2", "year-numeric" to "year",
         )
         private val SEPARATORS = mapOf(
             "separator-dash" to "-", "separator-slash" to "/", "separator-dot" to ".",

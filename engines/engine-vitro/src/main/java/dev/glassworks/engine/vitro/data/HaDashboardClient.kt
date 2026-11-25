@@ -91,6 +91,12 @@ class HaDashboardClient(
          * server default. [dark] is the explicit light/dark choice, `null` for auto.
          */
         fun onUserTheme(themeName: String?, dark: Boolean?) {}
+
+        /**
+         * The user's language or formats changed ([HaLocale], from `language` user data or HA's time zone), live as
+         * HA's frontend applies them: what was drawn with the old ones is drawn again.
+         */
+        fun onLocaleChanged() {}
         fun onDisconnected(reason: String) {}
     }
 
@@ -157,6 +163,9 @@ class HaDashboardClient(
     fun start(dashboardUrlPath: String?) {
         requestedDashboardPath = dashboardUrlPath
         if (closed.get()) return
+        // A new client may be another Home Assistant, or another user: back to the browser's language and formats
+        // until this one's profile answers. A reconnect of this client keeps them, as HA's page does.
+        HaLocale.reset()
         val thread = Thread({ loop() }, "vitro-ha-ws").apply { isDaemon = true }
         readerThread = thread
         thread.start()
@@ -617,7 +626,7 @@ class HaDashboardClient(
         fun ask(type: String, category: String, names: List<String>, apply: (JSONObject) -> Unit) {
             if (names.isEmpty()) return
             val msg = JSONObject().put("type", type).put("category", category).put("integration", JSONArray(names))
-            if (type == "frontend/get_translations") msg.put("language", "en")
+            if (type == "frontend/get_translations") msg.put("language", HaLocale.current.language)
             displayPending.incrementAndGet()
             val gen = connectionGen.get()
             request(msg) { res ->
@@ -632,6 +641,27 @@ class HaDashboardClient(
         ask("frontend/get_translations", "entity", newPlatforms) { HaDisplay.applyTranslations(it, false, newPlatforms) }
     }
 
+    /**
+     * Applies a locale update and, when the language changed, asks again for every translation in the new one (the
+     * frontend's `_refetchCachedHassTranslations`); the listener draws the view again either way.
+     */
+    private fun applyLocale(update: () -> Any?) {
+        if (closed.get()) return
+        val before = HaLocale.current
+        val version = HaLocale.version
+        update()
+        if (HaLocale.version == version) return
+        if (HaLocale.current.language != before.language) {
+            synchronized(storeWriteLock) {
+                if (closed.get()) return
+                HaDisplay.forgetTranslations()
+                displayRequested.removeAll { it.startsWith("d:") || it.startsWith("p:") }
+            }
+            loadDisplayFor(displayIds())
+        }
+        listener.onLocaleChanged()
+    }
+
     private fun displayIds(): Collection<String> = activeEntityFilter.ifEmpty { store.all().keys }
 
     private fun onAuthenticated() {
@@ -639,10 +669,16 @@ class HaDashboardClient(
         displayPending.set(0)
         // Icons and state labels are this Home Assistant's: a new connection loads them again.
         HaDisplay.reset()
-        // 0. HA config (unit_system, location_name, time_zone — needed by custom cards reading hass.config)
+        // 0. The user's language and formats (HA's translations-mixin subscribes to them on connect), first: the
+        // translations asked for below are in that language. Its first event is the current value.
+        subscribe(JSONObject().put("type", "frontend/subscribe_user_data").put("key", "language")) { ev ->
+            applyLocale { HaLocale.applyUserData(ev.optJSONObject("value")) }
+        }
+        // HA config (unit_system, location_name, time_zone — needed by custom cards reading hass.config, and by
+        // `time_zone: server`)
         request(JSONObject().put("type", "get_config")) { res ->
             if (res.optBoolean("success", false)) {
-                res.optJSONObject("result")?.let { haConfig = it }
+                res.optJSONObject("result")?.let { haConfig = it; applyLocale { HaLocale.applyConfig(it) } }
             }
         }
         // 1. Themes

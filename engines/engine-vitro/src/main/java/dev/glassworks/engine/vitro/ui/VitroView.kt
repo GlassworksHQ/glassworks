@@ -72,6 +72,8 @@ import dev.glassworks.engine.vitro.cards.WebIslandCardView
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.data.EntityState
+import dev.glassworks.engine.vitro.data.FrontendLocale
+import dev.glassworks.engine.vitro.data.HaLocale
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.EntityFilterConfig
@@ -418,7 +420,27 @@ class VitroView(
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
     }
 
+    /** The language, formats and HA time zone the built views were drawn with. */
+    private var drawnLocale: Pair<FrontendLocale, String?>? = null
+
+    /**
+     * The user's language or formats changed ([HaLocale]): every text, number, date and time was written with the
+     * old ones, so the view is built again, as a theme change does.
+     */
+    fun setLocale(locale: FrontendLocale, serverTimeZone: String?) {
+        val next = locale to serverTimeZone
+        if (next == drawnLocale) return
+        drawnLocale = next
+        if (dashboard == null) return
+        viewCache.clear()
+        builtScripts.clear()
+        contentHost.removeAllViews()
+        clearOverlay()
+        dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
+    }
+
     fun setDashboard(config: DashboardConfig, initialViewPath: String?) {
+        drawnLocale = HaLocale.current to HaLocale.serverTimeZone
         holding?.cancel?.invoke()
         holding = null
         waited.clear()

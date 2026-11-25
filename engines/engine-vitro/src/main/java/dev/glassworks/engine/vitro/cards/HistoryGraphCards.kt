@@ -16,6 +16,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.model.ActionConfig
@@ -93,7 +94,7 @@ object HaHistory {
                 "climate", "water_heater" -> temperatureUnit
                 "humidifier" -> "%"
                 // A zone's state is how many people are in it (`ui.dialogs.more_info_control.zone.graph_unit`).
-                "zone" -> "People in zone"
+                "zone" -> HaText.ui("ui.dialogs.more_info_control.zone.graph_unit")
                 else -> null
             }
             if (unit == null) {
@@ -452,7 +453,7 @@ object HaHistoryLines {
         current ?: return null
         val attr = LEGEND_ATTRIBUTE.firstOrNull { seriesId.endsWith(it.first) }?.second ?: return current.formattedState()
         return when (val v = current.attributes[attr]) {
-            null, JSONObject.NULL -> "Unknown"
+            null, JSONObject.NULL -> HaText.ui("state.default.unknown")
             is Number -> {
                 val number = HaChartFormat.number(v.toDouble(), 0, 2)
                 val unit = temperatureUnit?.takeIf { it.isNotEmpty() }
@@ -510,7 +511,7 @@ private fun cardHeader(ctx: VitroCardContext, title: String, onLink: () -> Unit)
     val chevron = MdiIconView(ctx.context).apply {
         setIcon("mdi:chevron-right", ctx.theme.primaryTextColor)
         // HA's aria-label and tooltip for the link: the panel's name.
-        contentDescription = "History"
+        contentDescription = HaText.ui("ui.dialogs.more_info_control.history")
         isClickable = true
         setOnClickListener { onLink() }
     }
