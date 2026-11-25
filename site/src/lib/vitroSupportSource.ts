@@ -37,6 +37,8 @@ function body(name: string, open: "setOf(" | "mapOf("): string {
     else if (c === ")" && --depth === 0) break;
     out += kotlin[i];
   }
+  // The literal must be the whole initializer: `setOf(…) + other` would leave part of the set unread.
+  if (!/^[ \t]*(\/\/[^\n]*)?(\n|$)/.test(kotlin.slice(i + 1))) throw new Error(`${name}: ${open}…) isn't its whole initializer`);
   return out;
 }
 

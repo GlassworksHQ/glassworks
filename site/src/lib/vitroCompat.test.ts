@@ -577,6 +577,21 @@ describe("auditDashboard routes cards as the engine's CompatCheckerTest does", (
     expect(r.warnings).toEqual(["p: a panel view shows only its first card, so the other 1 aren't checked"]);
   });
 
+  it("reads `panel` as the engine's optBoolean does, the text \"true\" included", () => {
+    const view = (panel: unknown) => auditDashboard(JSON.stringify({ views: [{ panel, cards: [{ type: "tile" }, { type: "tile" }] }] })).views[0].type;
+    expect(view(true)).toBe("panel");
+    expect(view("True")).toBe("panel");
+    expect(view("false")).toBe("masonry");
+  });
+
+  it("leaves addresses out of the values it shows, as the engine's report does", () => {
+    const r = one({ type: "custom:mushroom-entity-card", card_mod: { style: "ha-card { background: image-set('/api/image/a?token=abc' 1x) }" } });
+    expect(r.triggers[0].reasons.join(" ")).toContain('image-set("…" 1x)');
+    expect(r.triggers[0].reasons.join(" ")).not.toContain("token");
+    const u = one({ type: "custom:mushroom-entity-card", card_mod: { style: "ha-card { background: url('https://example.invalid/a.png?sig=x') }" } });
+    expect(u.triggers[0].reasons.join(" ")).toContain("url(…)");
+  });
+
   it("walks only the cards a view builds: a sections view's sections, else its cards", () => {
     const r = auditDashboard(
       JSON.stringify({ views: [{ path: "s", type: "sections", sections: [{ cards: [{ type: "tile" }] }], cards: [{ type: "custom:button-card" }] }] }),

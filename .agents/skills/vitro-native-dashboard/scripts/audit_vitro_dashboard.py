@@ -216,8 +216,12 @@ def card_mod_reason(card: dict, card_type: str):
         return None
     style = cm.get("style")
     def complex_css(css) -> bool:
-        return (not isinstance(css, str) or "$:" in css or "@keyframes" in css or "::" in css
-                or LEGACY_PSEUDO.search(css) is not None or UNSUPPORTED_AT_RULE.search(QUOTED.sub('""', mask_css(css))) is not None)
+        if not isinstance(css, str):
+            return True
+        # Read without comments and Jinja, as the engine reads the sheet.
+        text = mask_css(css)
+        return ("$:" in text or "@keyframes" in text or "::" in text
+                or LEGACY_PSEUDO.search(text) is not None or UNSUPPORTED_AT_RULE.search(QUOTED.sub('""', text)) is not None)
     def own(css) -> bool:
         return complex_css(css) or (isinstance(css, str) and reaches_inside(card_type, css))
     if isinstance(style, dict):
@@ -282,16 +286,22 @@ def option_reasons(card: dict, ctype: str) -> list[str]:
     return out
 
 
-def produced_cards(card: dict, ctype: str, per_entity: bool) -> list[tuple[str, dict]]:
-    """The cards a card builds one level down (CardRouter.producedCards), with a label for the report."""
+def as_list(value) -> list:
+    """A list as the engine reads one (optJSONArray): anything else is no list."""
+    return value if isinstance(value, list) else []
+
+
+def produced_cards(card: dict, ctype: str, per_entity: bool) -> list[tuple[str, int, dict]]:
+    """The cards a card builds one level down (CardRouter.producedCards): a report label, the index, the card."""
     out = []
     if ctype in CONTAINER_TYPES and ctype != "conditional":
-        kids = [c for c in card.get("cards") or [] if isinstance(c, dict)]
+        # Each child keeps its index among the parsed cards, also when a layout-break before it isn't built.
+        kids = list(enumerate(c for c in as_list(card.get("cards")) if isinstance(c, dict)))
         if ctype == "custom:layout-card" and str(card.get("layout_type") or "").removeprefix("custom:") in ("vertical-layout", "vertical"):
-            kids = [c for c in kids if card_type_of(c) != "custom:layout-break"]
-        out = [(f"{ctype}[{i}]", c) for i, c in enumerate(kids)]
+            kids = [(i, c) for i, c in kids if card_type_of(c) != "custom:layout-break"]
+        out = [(f"{ctype}[{i}]", i, c) for i, c in kids]
     elif ctype == "conditional" and isinstance(card.get("card"), dict):
-        out = [("conditional[0]", card["card"])]
+        out = [("conditional[0]", 0, card["card"])]
     if ctype != "custom:auto-entities":
         return out
     # As the runtime builds it: a copy, `type: entities` when it names none, without the field `card_param` fills.
@@ -305,7 +315,7 @@ def produced_cards(card: dict, ctype: str, per_entity: bool) -> list[tuple[str, 
     inner.pop(param, None)
     generated = []
     if param == "cards":
-        for entry in card.get("entities") or []:
+        for entry in as_list(card.get("entities")):
             if isinstance(entry, str):
                 generated.append({"type": "tile"})
             elif isinstance(entry, dict):
@@ -317,9 +327,9 @@ def produced_cards(card: dict, ctype: str, per_entity: bool) -> list[tuple[str, 
             opts = rule.get("options") if isinstance(rule, dict) else None
             generated.append(dict({"type": "tile"}, **opts) if isinstance(opts, dict) else {"type": "tile"})
         inner["cards"] = generated
-    out.append(("card", inner))
+    out.append(("card", len(out), inner))
     if per_entity:
-        out += [(f"entities[{i}]", g) for i, g in enumerate(generated)]
+        out += [(f"entities[{i}]", len(out) + i, g) for i, g in enumerate(generated)]
     return out
 
 
@@ -327,7 +337,7 @@ def needs_ha_frontend(card: dict) -> bool:
     """A built-in card, or a card that builds one at any depth: the island would draw those as plain summaries."""
     ctype = card_type_of(card)
     return (not ctype.startswith("custom:") or ctype == "custom:stack-in-card"
-            or any(needs_ha_frontend(c) for _, c in produced_cards(card, ctype, True)))
+            or any(needs_ha_frontend(c) for _, _, c in produced_cards(card, ctype, True)))
 
 
 def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str], warnings: list[str], explicit: int = -1):
@@ -360,21 +370,24 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
     children = produced_cards(card, ctype, False)
     if explicit >= 0 and ctype in CONTAINER_TYPES and ctype != "conditional":
         # auto-entities' inner card: only its explicit `entities:` entries are known before it runs.
-        for i, (_, child) in enumerate(children[:explicit]):
-            walk_card(child, f"{loc}.entities[{i}]", counts, triggers, warnings)
+        for _, i, child in children:
+            if i < explicit:
+                walk_card(child, f"{loc}.entities[{i}]", counts, triggers, warnings)
         return
     if not (ctype in CONTAINER_TYPES and children):
         counts["tier1" if ctype in NATIVE_CORE_TYPES else "tier2"] += 1
-    entities = card.get("entities")
-    holds = len(entities) if ctype == "custom:auto-entities" and card.get("card_param") == "cards" and isinstance(entities, list) else -1
-    for label, child in children:
+    # Under `card_param: cards`, the inner card's first cards are the explicit `entities:` entries (none without a list).
+    holds = len(as_list(card.get("entities"))) if ctype == "custom:auto-entities" and card.get("card_param") == "cards" else -1
+    for label, _, child in children:
         walk_card(child, f"{loc}.{label}", counts, triggers, warnings, holds)
 
 
 def view_type(view: dict) -> str:
     """The view's type as the engine infers it."""
     sections = [s for s in view.get("sections") or [] if isinstance(s, dict)]
-    return view.get("type") or ("panel" if view.get("panel") is True else "sections" if sections else "masonry")
+    # `panel` as org.json's optBoolean reads it: true, or the text "true" in any case.
+    panel = view.get("panel") is True or (isinstance(view.get("panel"), str) and view["panel"].lower() == "true")
+    return view.get("type") or ("panel" if panel else "sections" if sections else "masonry")
 
 
 def view_roots(view: dict, vname: str) -> list[tuple[str, dict]]:

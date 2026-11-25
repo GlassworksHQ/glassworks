@@ -1042,9 +1042,18 @@ const CENTER_OR_ZERO = new Set(["-50%", "0", "0px", "0%"]);
 const BORDER_STYLE_WORDS = new Set(["dashed", "dotted", "double", "groove", "ridge", "inset", "outset"]);
 const GLOW = /^0(px)?\s+0(px)?\s/;
 
-/** A value as the report shows it: addresses left out, cut at 80 characters. */
+/**
+ * A value as the report shows it, as the engine's `CardCompat.loggable` writes it: `url(…)`, a quoted string that
+ * looks like an address (in `image-set()` or anywhere) as `"…"`, and cut at 80 characters.
+ */
 function shownValue(value: string): string {
-  const safe = value.trim().replace(/url\([^)]*\)/gi, "url(…)");
+  const safe = value
+    .trim()
+    .replace(/url\(\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|(?:\\.|[^)\\])*)\s*\)/gi, "url(…)")
+    .replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, (q) => {
+      const inner = q.slice(1, -1).trim();
+      return inner.includes("://") || inner.startsWith("/") || inner.includes("?") || inner.includes("=") || /image-set\(/i.test(value) ? '"…"' : q;
+    });
   return safe.length <= 80 ? safe : `${safe.slice(0, 80)}…`;
 }
 
@@ -1262,7 +1271,8 @@ function unwrap(data: unknown): unknown {
 function viewType(v: Obj, sections: Obj[]): string {
   const explicit = optString(v, "type", "");
   if (explicit) return explicit;
-  if (v.panel === true) return "panel";
+  // `panel` as org.json's optBoolean reads it: true, or the text "true" in any case.
+  if (v.panel === true || (typeof v.panel === "string" && v.panel.toLowerCase() === "true")) return "panel";
   return sections.length > 0 ? "sections" : "masonry";
 }
 
