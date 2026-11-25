@@ -152,8 +152,9 @@ internal fun mushIconRadiusPx(ctx: VitroCardContext): Float? {
  */
 internal fun mushroomDisabledColor(ctx: VitroCardContext): Int {
     for (v in listOf(ctx.cardVars["mush-rgb-disabled"], ctx.theme.vars["mush-rgb-disabled"])) {
-        val parts = v?.split(',')?.mapNotNull { it.trim().toIntOrNull() }
-        if (parts != null && parts.size == 3 && parts.all { it in 0..255 }) return Color.rgb(parts[0], parts[1], parts[2])
+        // Three whole numbers or nothing: one bad channel drops the whole value, as an invalid custom property does.
+        val parts = v?.split(',')?.map { it.trim().toIntOrNull() }
+        if (parts != null && parts.size == 3 && parts.all { it != null && it in 0..255 }) return Color.rgb(parts[0]!!, parts[1]!!, parts[2]!!)
     }
     return if (ctx.theme.dark) Color.rgb(111, 111, 111) else Color.rgb(189, 189, 189)
 }

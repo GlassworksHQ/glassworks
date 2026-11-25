@@ -481,6 +481,11 @@ class HacsParityWaveTest {
         // A card's own card_mod (or an enclosing card's) outranks the theme while the card is built.
         themed.cardVars = mapOf("mush-rgb-disabled" to "40, 50, 60")
         assertEquals(android.graphics.Color.rgb(40, 50, 60), dev.glassworks.engine.vitro.cards.mushroomDisabledColor(themed))
+        // A value with a bad channel is dropped whole (the theme's applies), not read from its other three numbers.
+        themed.cardVars = mapOf("mush-rgb-disabled" to "10, invalid, 20, 30")
+        assertEquals(android.graphics.Color.rgb(10, 20, 30), dev.glassworks.engine.vitro.cards.mushroomDisabledColor(themed))
+        themed.cardVars = mapOf("mush-rgb-disabled" to "1, x, 2")
+        assertEquals(android.graphics.Color.rgb(10, 20, 30), dev.glassworks.engine.vitro.cards.mushroomDisabledColor(themed))
     }
 
     // ---- stack-in-card / vertical-stack-in-card / layout-card ----
