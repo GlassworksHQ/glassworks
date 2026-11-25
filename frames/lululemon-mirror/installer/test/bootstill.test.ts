@@ -41,10 +41,15 @@ describe('the boot still', () => {
     expect(createHash('sha256').update(full).digest('hex')).toBe(MANIFEST.source.sha256);
     expect(pngSize(STILL)).toEqual({ width: MANIFEST.size[0], height: MANIFEST.size[1] });
     // centered on the screen: Android 6 centers desc.txt's rectangle, so the still lands where the animation ends
-    const [w, h] = MANIFEST.screen;
+    const [w, h] = MANIFEST.framebuffer;
     const [x0, y0, x1, y1] = MANIFEST.box;
     expect(x0 + x1).toBe(w);
     expect(y0 + y1).toBe(h);
+    // upright for stock's own display, which turns what it draws (persist.panel.orientation=270): portrait, as
+    // stock's 1080x1920 animation is, where the full animation is turned for the community image's framebuffer
+    expect(MANIFEST.turnedBack).toBe(90);
+    expect(MANIFEST.screen).toEqual([1080, 1920]);
+    expect(MANIFEST.size).toEqual([y1 - y0, x1 - x0]);
   });
 
   it('becomes a bootanimation.zip of exactly the stock size, every entry stored, that two readers accept', () => {

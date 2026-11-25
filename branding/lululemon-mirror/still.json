@@ -5,7 +5,7 @@
     "sha256": "0ccf10d5f149bfaad78a2f9600fb8830fbb55f5ec1ec1dbf1d0844219db967cc",
     "frame": "part2/frame_0000.png"
   },
-  "screen": [
+  "framebuffer": [
     1920,
     1080
   ],
@@ -15,14 +15,19 @@
     1889,
     671
   ],
+  "turnedBack": 90,
+  "screen": [
+    1080,
+    1920
+  ],
   "size": [
-    1858,
-    262
+    262,
+    1858
   ],
   "background": "#0a0b0f",
   "output": {
-    "bootanimation-still.png": "62665e806e663ad36cd4ee786e44cd4cfc00fb0d3e1dc2475177b6f7b2318490",
-    "bytes": 14067
+    "bootanimation-still.png": "4cad51ba31ebaa3a76dd7cd903d95ba2bbd33d03c086632feb044f563ce1a5f5",
+    "bytes": 12698
   },
   "tools": {
     "pillow": "9.5.0",
