@@ -273,6 +273,13 @@
   "missingText": 13,
   "reason": "clock-weather-card 3.1.0 isn't drawn: Vitro renders it as HA's weather-forecast card (condition, 0.4 mm, five day columns), without the big clock, the date or the per-day temperature bars, so the card is ~107 px shorter (2026-11-25, fake HA)"
  },
+ "s1/date": {
+  "pixel": 0.0375,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the 20 px date text's antialiasing at density 1.5: same text, size and box, 0.6 px off horizontally; the tablet matches (2026-11-25, fake HA)"
+ },
  "s1/gauge-non-numeric": {
   "pixel": 0.1389,
   "bounds": 141.7,

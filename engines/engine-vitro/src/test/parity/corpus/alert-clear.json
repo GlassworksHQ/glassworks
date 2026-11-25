@@ -1,0 +1,24 @@
+{
+ "title": "Alert: a closed lock, clear",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "alert",
+  "entity": "lock.front_door",
+  "clear_color": "green"
+ },
+ "fixture": {
+  "states": {
+   "lock.front_door": {
+    "state": "locked",
+    "last_changed": "-3h",
+    "attributes": {
+     "friendly_name": "Front Door",
+     "supported_features": 0
+    }
+   }
+  }
+ }
+}

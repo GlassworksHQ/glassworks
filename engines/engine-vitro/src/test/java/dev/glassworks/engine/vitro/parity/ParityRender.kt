@@ -156,6 +156,7 @@ object ParityViews {
      * (in [pinned], VitroView's overlay, in order) takes its placeholder's place.
      */
     fun cardSlots(viewRoot: View, pinned: List<View> = emptyList()): List<View> {
+        otherViewSlots(viewRoot)?.let { return it }
         val grids = all(viewRoot).filterIsInstance<HaGridLayout>().toList()
         val sectionsGrid = grids.firstOrNull() ?: return emptyList()
         val out = ArrayList<View>()
@@ -186,6 +187,26 @@ object ParityViews {
         }
         return out
     }
+}
+
+/**
+ * The top-level cards of a masonry, sidebar or layout-card view, in HA's document order (each column's cards, the
+ * columns in order; a layout-card grid's rows), or null for a sections view.
+ */
+private fun otherViewSlots(viewRoot: View): List<View>? {
+    fun kids(g: android.view.ViewGroup) = (0 until g.childCount).map { g.getChildAt(it) }
+    fun shown(v: View) = v.visibility == View.VISIBLE && v.width > 0 && v.height > 0 && v !is android.widget.Space
+    val views = ParityViews.all(viewRoot)
+    views.filterIsInstance<dev.glassworks.engine.vitro.ui.MasonryColumnsLayout>().firstOrNull()?.let { row ->
+        return kids(row).flatMap { col -> kids(col as android.view.ViewGroup) }.filter(::shown)
+    }
+    views.filterIsInstance<dev.glassworks.engine.vitro.ui.SidebarColumnsLayout>().firstOrNull()?.let { row ->
+        return kids(row).flatMap { col -> kids(col as android.view.ViewGroup) }.filter(::shown)
+    }
+    views.filterIsInstance<dev.glassworks.engine.vitro.cards.LayoutCardView>().firstOrNull()
+        ?.takeIf { it.parent is android.widget.ScrollView }
+        ?.let { grid -> return grid.tracks.flatMap { kids(it) }.filter(::shown) }
+    return null
 }
 
 /**

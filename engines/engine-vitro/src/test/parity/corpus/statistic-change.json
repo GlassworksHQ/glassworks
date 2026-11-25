@@ -1,0 +1,43 @@
+{
+ "title": "Statistic: this month's energy change",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "statistic",
+  "entity": "sensor.kitchen_energy",
+  "stat_type": "change",
+  "period": {
+   "calendar": {
+    "period": "month"
+   }
+  }
+ },
+ "fixture": {
+  "states": {
+   "sensor.kitchen_energy": {
+    "state": "412.6",
+    "last_changed": "-3m",
+    "attributes": {
+     "state_class": "total_increasing",
+     "unit_of_measurement": "kWh",
+     "device_class": "energy",
+     "friendly_name": "Kitchen Energy"
+    }
+   }
+  },
+  "history": {
+   "sensor.kitchen_energy": {
+    "wave": {
+     "min": 300,
+     "max": 420,
+     "period": "72h",
+     "step": "10m",
+     "decimals": 2,
+     "phase": 1.1
+    }
+   }
+  }
+ }
+}

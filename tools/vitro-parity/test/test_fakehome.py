@@ -211,7 +211,7 @@ class Corpus(unittest.TestCase):
             if not isinstance(fx, dict):
                 missing.append(f"{cid}: no fixture")
                 continue
-            named = {m for m in ID.findall(json.dumps(doc["card"])) if m.split(".")[0] in DOMAINS and not m.startswith(("sun.", "sensor.missing"))}
+            named = {m for m in ID.findall(json.dumps(doc.get("card") or doc.get("view_config"))) if m.split(".")[0] in DOMAINS and not m.startswith(("sun.", "sensor.missing"))}
             named = {m for m in named if not re.match(r"^(todo|calendar|person)\.(item|event)", m)}
             for e in sorted(named - set(fx.get("states") or {})):
                 missing.append(f"{cid}: {e} has no state")

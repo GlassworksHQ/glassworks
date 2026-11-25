@@ -1,0 +1,104 @@
+{
+ "title": "layout-card grid view: two columns and a full-width card",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "view_config": {
+  "type": "custom:grid-layout",
+  "layout": {
+   "grid-template-columns": "1fr 1fr",
+   "grid-gap": "8px"
+  },
+  "cards": [
+   {
+    "type": "tile",
+    "entity": "light.hall_lamp"
+   },
+   {
+    "type": "tile",
+    "entity": "light.porch_lamp"
+   },
+   {
+    "type": "entities",
+    "title": "Lamps",
+    "entities": [
+     "light.stair_lamp",
+     "light.desk_lamp"
+    ],
+    "view_layout": {
+     "grid-column": "span 2"
+    }
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.hall_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "friendly_name": "Hall Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.porch_lamp": {
+    "state": "off",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "friendly_name": "Porch Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.stair_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "friendly_name": "Stair Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.desk_lamp": {
+    "state": "off",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "friendly_name": "Desk Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.reading_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "friendly_name": "Reading Lamp",
+     "supported_features": 40
+    }
+   }
+  }
+ }
+}

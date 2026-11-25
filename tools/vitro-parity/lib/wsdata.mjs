@@ -12,6 +12,7 @@ export const RECORDED_TYPES = new Set([
   'history/stream',
   'history/history_during_period',
   'recorder/statistics_during_period',
+  'recorder/statistic_during_period',
   'recorder/get_statistics_metadata',
   'todo/item/subscribe',
   'logbook/event_stream',
@@ -80,7 +81,7 @@ export function wsRecorder() {
 }
 
 /** The commands answered by one result (everything recorded but `history/stream`, a subscription). */
-const ONE_SHOT = new Set(['history/history_during_period', 'recorder/statistics_during_period', 'recorder/get_statistics_metadata', 'rest/history/period']);
+const ONE_SHOT = new Set(['history/history_during_period', 'recorder/statistics_during_period', 'recorder/statistic_during_period', 'recorder/get_statistics_metadata', 'rest/history/period']);
 
 /**
  * The request a REST history URL stands for (`/api/history/period/<start>?filter_entity_id=a,b&end_time=..`), as a

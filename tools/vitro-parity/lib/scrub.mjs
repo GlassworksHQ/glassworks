@@ -87,6 +87,11 @@ export function referencedEntities(config, states) {
     else if (typeof o === 'string') for (const m of o.matchAll(ID)) if (states[m[1]]) ids.add(m[1]);
   };
   walk(config);
+  // A plant names its sensors in its `sensors` attribute: the plant-status card shows their states.
+  for (const id of [...ids]) {
+    const sensors = states[id]?.attributes?.sensors ?? states[id]?.a?.sensors;
+    if (sensors && typeof sensors === 'object') Object.values(sensors).forEach(walk);
+  }
   return ids;
 }
 

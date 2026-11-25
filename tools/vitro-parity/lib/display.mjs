@@ -2,8 +2,8 @@
 //
 // Touches: nothing (pure functions); capture.mjs fetches the inputs and writes the result through the scrubber.
 
-/** The list_for_display fields HaDisplay.applyRegistry reads. Everything else (labels, areas, ...) stays out. */
-const ENTRY_KEYS = ['ei', 'pl', 'tk', 'dp', 'ic', 'di', 'en'];
+/** The list_for_display fields HaDisplay.applyRegistry reads (`ai`: an alert card names the area). Labels etc. stay out. */
+const ENTRY_KEYS = ['ei', 'pl', 'tk', 'dp', 'ic', 'di', 'en', 'ai'];
 
 /**
  * The fixture's `display` block for [ids]: their registry entries, their devices' names (the one HA shows,
@@ -65,7 +65,8 @@ export function buildDisplay(ids, registry, devices, icons, translations, device
     for (const [k, v] of Object.entries(translations('entity', e.pl) || {})) if (k.startsWith(prefix)) entityLabels[k] = v;
   }
   const areaList = [];
-  for (const id of [...new Set(areaIds)].sort()) {
+  // The areas the case's area cards name, and the ones its entities are in (an alert card shows that area's name).
+  for (const id of [...new Set([...areaIds, ...entities.map((e) => e.ai).filter(Boolean)])].sort()) {
     const a = areas.find((x) => x.area_id === id);
     if (!a) continue;
     const out = {};
@@ -92,6 +93,9 @@ export function referencedAreas(config) {
     if (Array.isArray(v)) v.forEach(walk);
     else if (v && typeof v === 'object') {
       if (v.type === 'area' && typeof v.area === 'string' && v.area) out.add(v.area);
+      // A shortcut to an area's page is named after the area.
+      const m = typeof v.navigation_path === 'string' && v.navigation_path.match(/^\/config\/areas\/area\/([^/?]+)/);
+      if (m) out.add(m[1]);
       Object.values(v).forEach(walk);
     }
   };
