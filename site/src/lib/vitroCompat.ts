@@ -498,12 +498,20 @@ const LEGACY_PSEUDO = /:(before|after|first-line|first-letter)\b/i;
 
 /**
  * A selector for the card itself (`ha-card`, `:host`, `:host > ha-card`), compounded with classes, ids, attributes
- * and pseudo-classes at most (`ha-card.compact`), as the renderer's host check reads it.
+ * (`ha-card.compact`) and interaction states at most, as the renderer's host check reads it. A structural
+ * pseudo-class (`:nth-child(1)`) isn't one it applies.
  */
-const OWN_CARD_SELECTOR = /^(?::host(?:\s*>?\s*ha-card)?|ha-card)(?:\.[\w-]+|#[\w-]+|\[[^\]]*\]|:[a-z-]+(?:\([^)]*\))?)*$/i;
+const OWN_CARD_SELECTOR =
+  /^(?::host(?:\s*>?\s*ha-card)?|ha-card)(?:\.[\w-]+|#[\w-]+|\[[^\]]*\]|:(?:hover|active|focus|focus-visible|focus-within)(?![\w-]))*$/i;
+
+/** An at-rule the renderer doesn't evaluate (`@media`, `@supports`): only keyframes and `@charset` are harmless. */
+const UNSUPPORTED_AT_RULE = /@(?!(?:-webkit-)?keyframes(?![\w-])|charset(?![\w-]))[a-z-]+/i;
 
 /** Jinja (`{{ … }}`, `{% … %}`, `{# … #}`): masked before reading selectors, as the renderer replaces it first. */
 const JINJA = /\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|\{#[\s\S]*?#\}/g;
+
+/** [css] without comments and Jinja: what the renderer reads rules from. */
+const maskCss = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, " ").replace(JINJA, " ");
 
 /**
  * True when a card's own sheet has a rule for something inside the card (`ha-card .card-header`): the renderer
@@ -512,7 +520,7 @@ const JINJA = /\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|\{#[\s\S]*?#\}/g;
  */
 function reachesInside(type: string, css: string): boolean {
   if (type === "markdown" || type === "clock") return false;
-  const text = css.replace(/\/\*[\s\S]*?\*\//g, " ").replace(JINJA, " ");
+  const text = maskCss(css);
   for (const m of text.matchAll(/([^{}]+)\{/g)) {
     for (const sel of m[1].split(",")) {
       const t = sel.trim();
@@ -528,7 +536,8 @@ function cardModWarning(card: Obj, loc: string, out: string[]) {
   const style = cm.style;
   const type = typeof card.type === "string" ? card.type.trim() : "";
   const complex = (css: unknown) =>
-    typeof css !== "string" || css.includes("$:") || css.includes("@keyframes") || css.includes("::") || LEGACY_PSEUDO.test(css);
+    typeof css !== "string" || css.includes("$:") || css.includes("@keyframes") || css.includes("::") || LEGACY_PSEUDO.test(css) ||
+    UNSUPPORTED_AT_RULE.test(maskCss(css));
   const own = (css: unknown) => complex(css) || (typeof css === "string" && reachesInside(type, css));
   const unsupported = isObj(style)
     ? Object.entries(style).some(([k, v]) => !supportedStyleKey(type, k) || (k === "." ? own(v) : complex(v)))

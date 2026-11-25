@@ -225,6 +225,13 @@ views:
     expect(style("ha-card.compact .card-header { color: red; }").warnings).toHaveLength(1);
     // Jinja inside a declaration isn't read as a selector.
     expect(style("ha-card { opacity: {{ 0.5 }}; }").warnings).toHaveLength(0);
+    // A structural pseudo-class isn't applied natively; an interaction state is fine.
+    const map = (css: string) => auditDashboard(`views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            .: |\n              ${css}\n`);
+    expect(map("ha-card:nth-child(1) { opacity: .5; }").warnings).toHaveLength(1);
+    expect(map("ha-card.compact:focus-visible { opacity: .5; }").warnings).toHaveLength(0);
+    // A conditional at-rule isn't evaluated natively, even around the card's own rule.
+    expect(map("@media (min-width: 1px) { ha-card { opacity: .5; } }").warnings).toHaveLength(1);
+    expect(style("@supports (display: grid) { ha-card { opacity: .5; } }").warnings).toHaveLength(1);
   });
 
   it("refuses a key: value pair inside a flow list instead of reading it as text", () => {

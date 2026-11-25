@@ -794,7 +794,8 @@ object ThemeResolver {
     private val CSS_WIDE_KEYWORDS = setOf("inherit", "initial", "unset", "revert", "revert-layer")
     private val BORDER_WIDTH_KEYWORDS = setOf("thin", "medium", "thick")
     private val BORDER_STYLES = setOf("none", "hidden", "dotted", "dashed", "solid", "double", "groove", "ridge", "inset", "outset")
-    private val BORDER_LENGTH = Regex("""0|\d*\.?\d+(?:px|r?em|pt|pc|cm|mm|in|q|vh|vw|vmin|vmax|ch|ex)""")
+    /** A length: a zero may drop its unit (`0`, `0.0`, `.0`), any other needs one. */
+    private val BORDER_LENGTH = Regex("""0*\.?0+|\d*\.?\d+(?:px|r?em|pt|pc|cm|mm|in|q|vh|vw|vmin|vmax|ch|ex)""")
     private val COLOR_FUNCTION = Regex("""^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix)\(""")
     private val IDENT = Regex("""-?[a-z_][a-z0-9_-]*""")
 

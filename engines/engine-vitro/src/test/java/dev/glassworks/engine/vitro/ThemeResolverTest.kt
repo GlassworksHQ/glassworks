@@ -397,6 +397,11 @@ class ThemeResolverTest {
         assertEquals(2f, ThemeResolver.parseCardMod(unknownColor).borderWidthDp!!, 0f)
         // An invalid width longhand doesn't beat the shorthand before it.
         assertEquals(3f, ThemeResolver.parseCardMod("ha-card { border: 3px solid #123456; border-width: wide; }").borderWidthDp!!, 0f)
+        // A zero may drop its unit, decimals too; any other length may not.
+        val zero = "ha-card { border-width: 0.0; }"
+        assertEquals(0f, ThemeResolver.parseCardMod(mapOf("card-mod-card" to zero)).borderWidthDp!!, 0f)
+        assertEquals(0f, ThemeResolver.parseCardMod(zero).borderWidthDp!!, 0f)
+        assertEquals(3f, ThemeResolver.parseCardMod("ha-card { border: 3px solid #123456; border-width: 2; }").borderWidthDp!!, 0f)
     }
 
     @Test
