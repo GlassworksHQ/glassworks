@@ -66,6 +66,8 @@ Vitro moves the Home Assistant data plane out of the browser into Kotlin (`HaDas
 
 Tier 3 never uses `android.webkit.WebView`. Each island is served from `VitroIslandServer`, a tiny HTTP server bound to IPv4 loopback (`127.0.0.1`), and loaded into GeckoView, so the Android system WebView, which is missing or too old on some of these panels, is not a dependency. A dashboard that stays in Tier 1 and Tier 2 never starts GeckoView at all.
 
+Each island card gets one GeckoView page, which stays open only while the card is on the dashboard. A reconnect, a dashboard edit to other cards and a theme change all keep the page, and a new theme restyles it in place. When the card's own config changes or the card is removed, its page closes. Islands on a view that isn't on screen, or under one of Home Assistant's own pages, stop drawing until their view comes back.
+
 Non-dashboard pages, such as `/auth/authorize` for panel sign-in, history, settings or the Blueprint import dialog, are handed to the wrapped fallback `Engine`, which loads them from Home Assistant itself. Their WebSocket and sign-in work as they do with Vitro off.
 
 The island server only serves islands. Its proxy forwards what a card loads (`/api/`, `/local/`, `/hacsfiles/`, Home Assistant's static files and media, and the folders of the dashboard's own Lovelace resources), and only to a page that holds the cookie its island page sets, so other apps on the device can't use it. On the legacy engine, which loads only the dashboard's origin, the island server's loopback address is the one other origin it allows, and each page stays on its own origin: Home Assistant's pages never reach the island server, and islands never reach Home Assistant except through it.

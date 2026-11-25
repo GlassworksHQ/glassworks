@@ -193,10 +193,10 @@ class VitroEngine(
         private val lifecycle = object : Application.ActivityLifecycleCallbacks {
             override fun onActivityDestroyed(a: Activity) { if (a === activity) dispose() }
             override fun onActivityCreated(a: Activity, savedInstanceState: Bundle?) {}
-            override fun onActivityStarted(a: Activity) {}
+            override fun onActivityStarted(a: Activity) { if (a === activity) vitroView.activityShown = true }
             override fun onActivityResumed(a: Activity) {}
             override fun onActivityPaused(a: Activity) {}
-            override fun onActivityStopped(a: Activity) {}
+            override fun onActivityStopped(a: Activity) { if (a === activity) vitroView.activityShown = false }
             override fun onActivitySaveInstanceState(a: Activity, outState: Bundle) {}
         }
 
@@ -205,7 +205,10 @@ class VitroEngine(
             if (disposed) return
             disposed = true
             readyOnBuild = null
-            vitroView.cancelPendingBuilds()
+            // The islands' pages and the fallback's go with the activity: nothing of this page keeps running.
+            vitroView.closeIslands()
+            fallbackPage?.close()
+            fallbackPage = null
             activity.application.unregisterActivityLifecycleCallbacks(lifecycle)
             clientGeneration++
             client?.close()
@@ -453,8 +456,13 @@ class VitroEngine(
                 activeFallback.reload()
                 return
             }
+            // Asked for: the dashboard is built again even if its config is the same.
+            rebuildNextConfig = true
             client?.fetchDashboard(currentDashboardPath) ?: currentUrl?.let(::load)
         }
+
+        /** The next config is built even when it's the one on screen (a reload the user asked for). */
+        private var rebuildNextConfig = false
 
         override fun goBack() {
             if (vitroView.closeMoreInfo()) return
@@ -554,6 +562,7 @@ class VitroEngine(
         private fun showVitroLayer() {
             vitroView.visibility = View.VISIBLE
             showIslandSurfaces()
+            vitroView.dashboardShown = true
             fallbackPage?.view?.visibility = View.GONE
         }
 
@@ -593,6 +602,8 @@ class VitroEngine(
                 container.addView(created.view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             }
             vitroView.visibility = View.GONE
+            // The islands stop painting under the fallback's page, and Android 6 stops showing their surfaces.
+            vitroView.dashboardShown = false
             hideIslandSurfaces()
             fp.view.visibility = View.VISIBLE
             fp.load(url)
@@ -687,6 +698,19 @@ class VitroEngine(
                 post {
                     // An older request's answer for a dashboard the page has left must not replace the current one.
                     if (urlPath != currentDashboardPath) return@post
+                    val forced = rebuildNextConfig
+                    rebuildNextConfig = false
+                    // The config on screen again (a reconnect, a lovelace_updated for another dashboard or an edit
+                    // undone): the views, their islands and where the user was stay as they are.
+                    val shown = vitroView.dashboard
+                    if (!forced && displayedDashboard == (currentOrigin to urlPath) && shown != null &&
+                        config.source != null && config.source == shown.source
+                    ) {
+                        vitroView.setConnectionBanner(null)
+                        client?.dashboardShown()
+                        readyWhenBuilt("vitro")
+                        return@post
+                    }
                     displayedDashboard = currentOrigin to urlPath
                     // A new config builds new islands; they ask again for what they read.
                     runtimeEntities.clear()
