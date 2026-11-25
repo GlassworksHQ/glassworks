@@ -14,7 +14,9 @@
 //   node tools/vitro-parity/island-probe.mjs <case.json> [--frame tablet] [--click x,y] [--shot out.png]
 //
 // <case.json>: `{"card": {...}, "resources": ["/hacsfiles/<card>/<file>.js?hacstag=<version>"], "fixture": {...}}`.
-// The resource names a file cards.json pins; the fixture is a corpus fixture (README.md, "Fixtures").
+// The resource names a file cards.json pins; the fixture is a corpus fixture (README.md, "Fixtures"). An optional
+// `"storage": {key: value}` is HA's localStorage on the panel: the island takes it in before its card, and the probe
+// reports what the island's localStorage holds after it ran.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -88,6 +90,10 @@ const inspect = () => page.evaluate((tag) => {
 }, tag);
 
 const bridge = (list) => list.filter((m) => !['watch', 'watchAll', 'registries'].includes(m.type));
+if (c.storage) {
+  const held = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).filter((k) => !k.startsWith('__vitro')).map((k) => [k, localStorage.getItem(k)])));
+  console.log(`localStorage: ${JSON.stringify(held)}`);
+}
 const before = await inspect();
 console.log(`island ${c.card.type}: ${JSON.stringify(before)}`);
 console.log(`bridge: ${JSON.stringify(bridge(sent))}`);
