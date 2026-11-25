@@ -143,6 +143,13 @@ class VitroFallbackReturnTest {
         awaitMain("the dashboard the panel is set to") { host.messages("ready").isNotEmpty() }
         assertNative(page, fp)
         assertEquals(living, host.locations.last())
+
+        // The page it started on isn't a step back: Back again stays on the dashboard.
+        assertFalse(page.canGoBack)
+        page.goBack()
+        idle()
+        assertNative(page, fp)
+        assertEquals(listOf("$base/history"), fp.loads.toList())
     }
 
     @Test fun eachPageVitroSendsTheFallbackStartsWithNoHistory() {
@@ -177,13 +184,15 @@ class VitroFallbackReturnTest {
         assertNative(page, fp)
     }
 
-    @Test fun aMoreInfoOpenBeforeTheFallbackDoesNotTakeTheFirstBack() {
+    @Test fun aMoreInfoOpenBeforeTheFallbackClosesAndDoesNotTakeTheFirstBack() {
         val fb = RecordingEngine()
         val page = readyPage(fb)
-        vitroView(page).openMoreInfo("light.lounge_lamp")
+        val vv = vitroView(page)
+        vv.openMoreInfo("light.lounge_lamp")
         idle()
         page.load("$base/history")
         val fp = fb.fallbackPage()
+        assertFalse("closed, not waiting to show over the dashboard again", vv.closeMoreInfo())
 
         page.goBack()
         idle()

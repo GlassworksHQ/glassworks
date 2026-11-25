@@ -637,7 +637,10 @@ class VitroEngine(
                     activeFallback.goBack()
                     return
                 }
-                if (!backInHistory()) returnTarget()?.let(::load)
+                if (!backInHistory()) returnTarget()?.let { target ->
+                    currentUrl = null // the page the panel started on isn't a step to come back to
+                    load(target)
+                }
                 return
             }
             if (vitroView.closeMoreInfo()) return
@@ -784,6 +787,8 @@ class VitroEngine(
                 fallbackPage = created
                 container.addView(created.view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             }
+            // A More-Info sheet doesn't wait behind Home Assistant's page to show again over the dashboard.
+            vitroView.closeMoreInfo()
             vitroView.visibility = View.GONE
             hideIslandSurfaces()
             fp.view.visibility = View.VISIBLE
