@@ -377,6 +377,16 @@ class ThemeResolverTest {
     }
 
     @Test
+    fun aThemesCardModBorderCascadesTheSameWay() {
+        val later = ThemeResolver.parseCardMod(mapOf("card-mod-card" to "ha-card { border-width: 8px; border: 0px solid #123456; }"))
+        assertEquals(0f, later.borderWidthDp!!, 0f)
+        val longhand = ThemeResolver.parseCardMod(mapOf("card-mod-card" to "ha-card { border: 0px solid #123456; border-width: 8px; }"))
+        assertEquals(8f, longhand.borderWidthDp!!, 0f)
+        val important = ThemeResolver.parseCardMod(mapOf("card-mod-card" to "ha-card { border-width: 4px !important; border: 1px solid #00ff00; }"))
+        assertEquals(4f, important.borderWidthDp!!, 0f)
+    }
+
+    @Test
     fun aCardVariableThatNeedsAMissingOneTakesTheFallback() {
         // `--fill` needs `--missing`, defined nowhere: it's invalid, so `var(--fill, …)` takes its fallback.
         val s = ThemeResolver.parseCardMod("ha-card { --fill: var(--missing); background-color: var(--fill, #123456); }")

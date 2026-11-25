@@ -213,6 +213,11 @@ views:
     expect(wrongRoot.warnings).toHaveLength(1);
     const rightRoot = auditDashboard("views:\n  - cards:\n      - type: markdown\n        content: x\n        card_mod:\n          style:\n            ha-markdown$: |\n              p { color: red; }\n");
     expect(rightRoot.warnings).toHaveLength(0);
+    // The card's own entry reaching inside the card (its header) isn't applied natively: still a warning.
+    const inside = auditDashboard("views:\n  - cards:\n      - type: entities\n        entities: [light.a]\n        card_mod:\n          style:\n            .: |\n              ha-card .card-header { color: red; }\n");
+    expect(inside.warnings).toHaveLength(1);
+    const hover = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            .: |\n              ha-card:hover { opacity: .5; }\n");
+    expect(hover.warnings).toHaveLength(0);
   });
 
   it("refuses a key: value pair inside a flow list instead of reading it as text", () => {

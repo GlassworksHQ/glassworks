@@ -605,23 +605,27 @@ class VitroView(
         if (ids.isEmpty()) return
         val config = dashboard
         var unsub: (() -> Unit)? = null
-        unsub = store.subscribeAny { changed ->
-            if (changed.none { it in ids }) return@subscribeAny
-            mainHandler.post {
-                val mine = unsub ?: return@post
-                if (stateRebuilds[index] !== mine) return@post
-                stateRebuilds.remove(index)
-                mine()
-                if (dashboard !== config) return@post
-                if (currentViewIndex == index) {
-                    renderView(index, forceRebuild = true, pushHistory = false)
-                } else {
-                    viewCache.remove(index)?.let { contentHost.removeView(it) }
-                    overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
-                }
+        fun rebuild() {
+            val mine = unsub ?: return
+            if (stateRebuilds[index] !== mine) return
+            stateRebuilds.remove(index)
+            mine()
+            if (dashboard !== config) return
+            if (currentViewIndex == index) {
+                renderView(index, forceRebuild = true, pushHistory = false)
+            } else {
+                viewCache.remove(index)?.let { contentHost.removeView(it) }
+                overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
             }
         }
+        unsub = store.subscribeAny { changed ->
+            if (changed.none { it in ids }) return@subscribeAny
+            mainHandler.post { rebuild() }
+        }
         stateRebuilds[index] = unsub
+        // A state that landed while the view was being built (the store is written on the reader thread) reached
+        // no listener: it counts as landing now.
+        if (ids.any { store[it] != null }) mainHandler.post { rebuild() }
     }
 
     private fun renderView(index: Int, forceRebuild: Boolean, pushHistory: Boolean = true) {

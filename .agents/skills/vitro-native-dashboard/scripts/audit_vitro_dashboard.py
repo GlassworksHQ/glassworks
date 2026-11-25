@@ -142,6 +142,23 @@ def supported_style_key(card_type: str, key: str) -> bool:
 LEGACY_PSEUDO = re.compile(r":(before|after|first-line|first-letter)\b", re.I)
 
 
+# A selector for the card itself (ha-card, :host, :host > ha-card), with interaction states at most.
+OWN_CARD_SELECTOR = re.compile(r"^(?::host(?:\s*>?\s*ha-card)?|ha-card)(?::[a-z-]+(?:\([^)]*\))?)*$", re.I)
+
+
+def reaches_inside(card_type: str, css: str) -> bool:
+    """A rule in the card's own sheet for something inside it (ha-card .card-header): not applied natively."""
+    if card_type in ("markdown", "clock"):
+        return False
+    text = re.sub(r"/\*[\s\S]*?\*/", " ", css)
+    for m in re.finditer(r"([^{}]+)\{", text):
+        for sel in m.group(1).split(","):
+            t = sel.strip()
+            if t and not t.startswith("@") and not OWN_CARD_SELECTOR.match(t):
+                return True
+    return False
+
+
 def check_card_mod(card: dict, loc: str, warnings: list[str]):
     cm = card.get("card_mod")
     if not isinstance(cm, dict):
@@ -151,10 +168,13 @@ def check_card_mod(card: dict, loc: str, warnings: list[str]):
     def complex_css(css) -> bool:
         return (not isinstance(css, str) or "$:" in css or "@keyframes" in css or "::" in css
                 or LEGACY_PSEUDO.search(css) is not None)
+    def own(css) -> bool:
+        return complex_css(css) or (isinstance(css, str) and reaches_inside(card_type, css))
     if isinstance(style, dict):
-        unsupported = any(not supported_style_key(card_type, k) or complex_css(v) for k, v in style.items())
+        unsupported = any(not supported_style_key(card_type, k) or (own(v) if k == "." else complex_css(v))
+                          for k, v in style.items())
     else:
-        unsupported = isinstance(style, str) and complex_css(style)
+        unsupported = isinstance(style, str) and own(style)
     if unsupported:
         warnings.append(f"  WARN  {loc}: complex Shadow-DOM / pseudo / keyframe card_mod (only ha-card container styles mirror natively)")
 

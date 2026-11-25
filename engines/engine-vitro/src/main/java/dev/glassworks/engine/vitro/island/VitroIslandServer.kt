@@ -331,7 +331,9 @@ class VitroIslandServer(
                     // An answer made with the panel's token isn't kept by the browser: after a sign-in change it would
                     // be served from the cache at the same loopback URL. Only HA's public files keep their caching.
                     headers["Cache-Control"] =
-                        if (publicAsset(req.path)) conn.getHeaderField("Cache-Control") ?: "no-cache" else "no-store"
+                        // The path the answer came from (after any redirect): a public file redirecting to a token-bearing
+                        // one is token-bearing.
+                        if (publicAsset(URL(targetUrl).path)) conn.getHeaderField("Cache-Control") ?: "no-cache" else "no-store"
                     // `hass.callApi('DELETE', …)` and friends: 204/205 carry no body, and asking for one can throw.
                     if (code == 204 || code == 205) return@runCatching HttpResponse(code, headers, ByteArray(0))
                     val stream = if (code in 200..399) conn.inputStream else conn.errorStream

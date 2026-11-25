@@ -102,6 +102,8 @@ class VitroIslandServerTest {
                 HttpResponse(200, mapOf("Content-Type" to "application/json", "Cache-Control" to "private, max-age=60"), "{}".toByteArray())
             // A redirect to a path the proxy would refuse on a direct request.
             req.path == "/local/away" -> HttpResponse(302, mapOf("Location" to "/some/other/thing"), ByteArray(0))
+            // A public path that redirects to a token-bearing one.
+            req.path == "/local/to-api" -> HttpResponse(302, mapOf("Location" to "/api/private"), ByteArray(0))
             req.path == "/api/camera_proxy/cam" ->
                 HttpResponse(200, mapOf("Content-Type" to "image/jpeg"), byteArrayOf(1, 2, 3, 4))
             req.path == "/api/services/light/turn_on" && req.method == "POST" ->
@@ -447,6 +449,8 @@ class VitroIslandServerTest {
         assertEquals("no-store", get("$base/api/private").cacheControl)
         assertEquals("no-store", get("$base/api/camera_proxy/cam").cacheControl)
         assertEquals("max-age=3600", get("$base/local/cached.js").cacheControl)
+        // The path the answer came from decides: a public file that redirects to the API answers no-store.
+        assertEquals("no-store", get("$base/local/to-api").cacheControl)
     }
 
     @Test

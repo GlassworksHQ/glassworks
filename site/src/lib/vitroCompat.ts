@@ -496,6 +496,26 @@ function supportedStyleKey(type: string, key: string): boolean {
 /** Legacy single-colon pseudo-elements (`ha-card:before`): generated content, which isn't drawn natively either. */
 const LEGACY_PSEUDO = /:(before|after|first-line|first-letter)\b/i;
 
+/** A selector for the card itself (`ha-card`, `:host`, `:host > ha-card`), with interaction states at most. */
+const OWN_CARD_SELECTOR = /^(?::host(?:\s*>?\s*ha-card)?|ha-card)(?::[a-z-]+(?:\([^)]*\))?)*$/i;
+
+/**
+ * True when a card's own sheet has a rule for something inside the card (`ha-card .card-header`): the renderer
+ * models no card's inner DOM, so it doesn't apply it. A Markdown or clock card's own sheet reaches into the parts the
+ * renderer draws, so they're left to the native check.
+ */
+function reachesInside(type: string, css: string): boolean {
+  if (type === "markdown" || type === "clock") return false;
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, " ");
+  for (const m of text.matchAll(/([^{}]+)\{/g)) {
+    for (const sel of m[1].split(",")) {
+      const t = sel.trim();
+      if (t && !t.startsWith("@") && !OWN_CARD_SELECTOR.test(t)) return true;
+    }
+  }
+  return false;
+}
+
 function cardModWarning(card: Obj, loc: string, out: string[]) {
   const cm = card.card_mod;
   if (!isObj(cm)) return;
@@ -503,9 +523,10 @@ function cardModWarning(card: Obj, loc: string, out: string[]) {
   const type = typeof card.type === "string" ? card.type.trim() : "";
   const complex = (css: unknown) =>
     typeof css !== "string" || css.includes("$:") || css.includes("@keyframes") || css.includes("::") || LEGACY_PSEUDO.test(css);
+  const own = (css: unknown) => complex(css) || (typeof css === "string" && reachesInside(type, css));
   const unsupported = isObj(style)
-    ? Object.entries(style).some(([k, v]) => !supportedStyleKey(type, k) || complex(v))
-    : typeof style === "string" && complex(style);
+    ? Object.entries(style).some(([k, v]) => !supportedStyleKey(type, k) || (k === "." ? own(v) : complex(v)))
+    : typeof style === "string" && own(style);
   if (unsupported) {
     out.push(`${loc}: complex Shadow-DOM, pseudo-element, or keyframe card_mod (only ha-card container styles carry over natively)`);
   }

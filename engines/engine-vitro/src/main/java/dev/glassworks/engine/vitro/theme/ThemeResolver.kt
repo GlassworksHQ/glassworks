@@ -723,17 +723,48 @@ object ThemeResolver {
         val blur = prop("backdrop-filter")?.let { bf ->
             BLUR.find(bf)?.groupValues?.get(1)?.toFloatOrNull()
         }
-        var bw: Float? = null
-        var bc: Int? = null
-        prop("border")?.let { border ->
-            PX_NUMBER.find(border)?.groupValues?.get(1)?.toFloatOrNull()?.let { bw = it }
-            border.split(WHITESPACE).lastOrNull()?.let(::parseColor)?.let { bc = it }
+        // The border shorthand and each longhand compete per component as in the card's own style: `!important`
+        // first, then the later declaration (`border-width: 8px; border: 0px solid` draws none).
+        fun winner(vararg names: String): Pair<String, String>? {
+            var best: Triple<String, String, Pair<Boolean, Int>>? = null
+            for (name in names) {
+                if (name !in lowerCss) continue
+                for (m in themeDecl(name).findAll(css)) {
+                    val key = IMPORTANT.containsMatchIn(m.groupValues[1]) to m.range.first
+                    val b = best
+                    if (b == null || key.first && !b.third.first || key.first == b.third.first && key.second > b.third.second) {
+                        best = Triple(name, m.groupValues[1], key)
+                    }
+                }
+            }
+            val (name, raw) = best ?: return null
+            return raw.replace(IMPORTANT, "").trim().takeIf { it.isNotEmpty() }?.let { name to it }
         }
-        prop("border-width")?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }?.let { bw = it }
-        prop("border-color")?.let(::parseColor)?.let { bc = it }
+        fun noBorder(v: String) = v.equals("none", ignoreCase = true) || v == "0"
+        val widthWin = winner("border-width", "border")
+        val bw: Float? = when {
+            widthWin == null -> null
+            widthWin.first == "border-width" -> parseDimensionDp(widthWin.second, -1f).takeIf { it >= 0f }
+            noBorder(widthWin.second) -> 0f
+            else -> PX_NUMBER.find(widthWin.second)?.groupValues?.get(1)?.toFloatOrNull()
+        }
+        val colorWin = winner("border-color", "border")
+        val bc: Int? = when {
+            colorWin == null -> null
+            colorWin.first == "border-color" -> parseColor(colorWin.second)
+            noBorder(colorWin.second) -> null
+            else -> colorWin.second.split(WHITESPACE).lastOrNull()?.let(::parseColor)
+        }
 
         return CardModStyle(bg, radius, bw, bc, opacity, blur, complex)
     }
+
+    /** One declaration of [name] in a theme's card-mod CSS, its value with any `!important` kept. */
+    private fun themeDecl(name: String): Regex = themeDecls.getOrPut(name) {
+        Regex("""(?:^|[;\n{])\s*$name\s*:\s*([^;\n}]+)""", RegexOption.IGNORE_CASE)
+    }
+
+    private val themeDecls = java.util.concurrent.ConcurrentHashMap<String, Regex>()
 
     /**
      * Parses one card's `card_mod.style` CSS (already rendered if it was a template). Takes declarations inside
