@@ -38,7 +38,7 @@ PANE_ALIASES = {'base': 'wall-base'}
 BADGE = re.compile(r'alt="Status: ([a-z ]+)"')
 LEAD = re.compile(r'^\*\*Status: ([a-z ]+)\.\*\*')
 LINK = re.compile(r'\]\(\s*<?([^)\s>#]+)')
-FENCE = re.compile(r'^\s*(```|~~~)')
+FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})(.*)$')
 
 
 def walk(top, name):
@@ -96,12 +96,18 @@ def pane_support(frame, pane):
 
 
 def lines(path):
-    fenced = False
+    """Each line outside fenced code. A fence closes only on the same character, at least as long, with nothing
+    after it but spaces (CommonMark), so a ``` line inside a ```` block doesn't end it."""
+    fence = None
     for n, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
-        if FENCE.match(line):
-            fenced = not fenced
-        elif not fenced:
-            yield n, line
+        m = FENCE.match(line)
+        if fence is None:
+            if m and not (m.group(1)[0] == '`' and '`' in m.group(2)):
+                fence = m.group(1)
+            else:
+                yield n, line
+        elif m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip():
+            fence = None
 
 
 def cells(line):
@@ -217,11 +223,12 @@ def check(root=ROOT):
                 continue
             for n, c in rows:
                 fid = frame_of(md, c[0], root, frames)
-                if fid is None or col >= len(c):
+                if fid is None:
                     continue
                 want = word(frames[fid]['status'])
-                if plain(c[col]) != want:
-                    bad(md, n, f"{fid}: says {plain(c[col])}, frames/{fid}/design/frame.json says {want}")
+                got = plain(c[col]) if col < len(c) else 'nothing'
+                if got != want:
+                    bad(md, n, f"{fid}: says {got}, frames/{fid}/design/frame.json says {want}")
     return problems
 
 

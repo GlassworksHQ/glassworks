@@ -114,8 +114,10 @@ own `s1kiosk_verify` (the pinned build), and otbr-agent and ot-ctl come from the
 
 ## Open questions
 
-- ~~Whether `/acct/cgroup.procs` takes the writer out of reach of init's process-group kill on this firmware.~~
-  It does: `cpuacct:/` before and after the write to `/acct/cgroup.procs` (verified on the dev S1, 2026-11-19).
+- Whether `/acct/cgroup.procs` takes the writer out of reach of init's process-group kill on this firmware. Partly
+  answered: the writer's cgroup is `cpuacct:/` before and after the write to `/acct/cgroup.procs` (verified on the
+  dev S1, 2026-11-19). A helper restart during `dd` hasn't been tried, so the kill path itself stays open (step 4
+  above).
 - ~~How long the patch takes on the A133 under busybox.~~ 31 s, and 70 s for the whole forced-mismatch round
   (verified on the dev S1, 2026-11-19).
 - A power cut during the roughly 2 s of `dd` leaves a torn `boot`: recovery is FEL, as for any boot change. Nothing

@@ -55,6 +55,18 @@ class CheckStatusTest(unittest.TestCase):
         self.write('README.md', '| Frame | Status |\n|---|---|\n| [Panel](frames/panel/README.md) | Beta |\n')
         self.assertEqual(['README.md:3: panel: says Beta, frames/panel/design/frame.json says Stable'], cs.check(self.root))
 
+    def test_a_frame_row_without_a_status_cell_fails(self):
+        self.write('README.md', '| Frame | Status |\n|---|---|\n| [Panel](frames/panel/README.md) |\n')
+        self.assertEqual(['README.md:3: panel: says nothing, frames/panel/design/frame.json says Stable'], cs.check(self.root))
+
+    def test_tables_in_fenced_code_are_examples(self):
+        example = '| Frame | Status |\n|---|---|\n| [Panel](../frames/panel/README.md) | Planned |\n'
+        self.write('docs/example.md', '````md\n```\n' + example + '```\n````\n\n~~~\n' + example + '~~~\n')
+        self.assertEqual([], cs.check(self.root))
+        self.write('docs/example.md', '```\nx\n```\n\n' + example)
+        self.assertEqual(['docs/example.md:7: panel: says Planned, frames/panel/design/frame.json says Stable'],
+                         cs.check(self.root))
+
     def test_badges_and_the_lead_line_follow_the_frame(self):
         self.write('frames/panel/android/README.md', BADGE.format('beta'))
         self.frame('tablet', 'alpha')

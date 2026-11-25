@@ -559,7 +559,7 @@ frame release exists before 1.0.0, so until then every device shows its frame ve
 A local clone may still have a `frames/aqara-s1-plus/v0.5.0` tag. It belongs to a temporary 0.5.0 release made to
 test Frame update on the dev S1 (2026-11-21); that release and its tag on GitHub were deleted after the run, so
 GitHub has neither. The Release workflow reads GitHub's tags and releases, so a stale local tag changes nothing.
-To drop it from a clone: `git fetch --prune --prune-tags origin`, or `git tag -d frames/aqara-s1-plus/v0.5.0`.
+To drop it from a clone: `git tag -d frames/aqara-s1-plus/v0.5.0`.
 
 ## Settings for the button (admin, once)
 
