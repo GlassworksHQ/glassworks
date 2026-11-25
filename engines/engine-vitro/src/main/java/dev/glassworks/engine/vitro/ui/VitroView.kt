@@ -231,9 +231,10 @@ class VitroView(
         }
     /**
      * The dashboard's Lovelace resources. Islands load them into their page, and a card-mod-only fallback routes on
-     * whether card-mod is among them, so a change rebuilds the cached views and the current one.
+     * whether card-mod is among them, so a change rebuilds the cached views and the current one. The island server
+     * reads it on its own threads (the folders its proxy forwards).
      */
-    var resourcesList: List<LovelaceResource> = emptyList()
+    @Volatile var resourcesList: List<LovelaceResource> = emptyList()
         set(v) {
             if (field == v) return
             field = v
@@ -317,6 +318,8 @@ class VitroView(
     init {
         WebFonts.addListener(fontListener)
         MdiIcons.init(context)
+        // Keyboard focus and HA's roles for every control, while TalkBack or a keyboard is there to use them.
+        VitroAccess.install(this)
         setBackgroundColor(neutralBackground)
         addView(backdrop, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         tabScroll.addView(tabBar, LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
@@ -439,6 +442,19 @@ class VitroView(
         return true
     }
 
+    /**
+     * Makes More Info modal, as HA's dialog is: while it's open, the dashboard (tabs, cards, pinned cards) takes no
+     * keyboard focus and is hidden from TalkBack, and both come back when it closes.
+     */
+    private fun blockDashboardFocus(block: Boolean) {
+        val mode = if (block) FOCUS_BLOCK_DESCENDANTS else FOCUS_AFTER_DESCENDANTS
+        val a11y = if (block) IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        for (v in listOf(shell, overlayLayer)) {
+            v.descendantFocusability = mode
+            v.importantForAccessibility = a11y
+        }
+    }
+
     fun closeMoreInfo(): Boolean {
         val sheet = moreInfo ?: return false
         moreInfo = null
@@ -457,8 +473,12 @@ class VitroView(
                 removeView(it)
                 if (moreInfo === it) moreInfo = null
             }
+            // The dashboard takes keyboard focus again once no sheet is over it.
+            if (moreInfo == null) blockDashboardFocus(false)
         }
         sheetRef = sheet
+        // Keys stay in the sheet, as in HA's modal dialog: nothing behind it takes focus while it's open.
+        blockDashboardFocus(true)
         sheet.show(entityId)
         moreInfo = sheet
         addView(sheet, LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -1002,6 +1022,8 @@ class VitroView(
             stateView.text = state ?: name.orEmpty()
             // Neither line asked for: no text slot at all.
             texts.visibility = if (name == null && state == null) GONE else VISIBLE
+            // An icon-only badge is still a button: named after its entity for TalkBack.
+            pill.contentDescription = if (name == null && state == null) s?.displayName ?: eid else null
             if (showIcon) icon.setIcon(MdiIcons.resolveIconName(badge.icon, s), badgeIconColor(theme, s))
         }
         render(store[eid])
@@ -1556,6 +1578,7 @@ class VitroView(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        tidyMoreInfo()
         scheduleTick()
         // Back on screen after fonts changed elsewhere, or after another dashboard took the font loader (which drops
         // the loads this view was waiting for, with no notice): build again, taking the loader back.
@@ -1566,6 +1589,21 @@ class VitroView(
     override fun onDetachedFromWindow() {
         removeCallbacks(periodicTick)
         super.onDetachedFromWindow()
+        // A detach can cut a sheet's exit short (its animation is cancelled, so it never calls back): finish it here.
+        tidyMoreInfo()
+    }
+
+    /**
+     * Removes every More Info sheet that's closed or closing and sets the dashboard's focus and TalkBack state from
+     * whether a live sheet is still open. Safe to run any number of times.
+     */
+    private fun tidyMoreInfo() {
+        if (moreInfo?.isDismissed == true) moreInfo = null
+        for (i in childCount - 1 downTo 0) {
+            val child = getChildAt(i)
+            if (child is MoreInfoSheet && child !== moreInfo && child.isDismissed) removeViewAt(i)
+        }
+        blockDashboardFocus(moreInfo != null)
     }
 
     companion object {

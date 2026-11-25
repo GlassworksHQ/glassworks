@@ -53,6 +53,13 @@ data class EngineSettings(
      * settings it can't change in this process, so a new dashboard address needs a process restart.
      */
     val dashboard: String? = null,
+    /**
+     * The app's own loopback server (`http://127.0.0.1:<port>`, Vitro's island server), or null. An engine that holds
+     * pages to the dashboard's origin also lets pages of exactly this origin load, each page held to its own origin:
+     * Home Assistant's pages fetch only from Home Assistant, the server's only from the server. Set once, like
+     * [dashboard].
+     */
+    val localOrigin: String? = null,
 )
 
 /** A page in one activity. Call it on the main thread. */
