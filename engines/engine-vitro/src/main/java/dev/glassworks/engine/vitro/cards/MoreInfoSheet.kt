@@ -16,7 +16,6 @@ import android.graphics.RectF
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
-import android.text.format.DateFormat
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -31,6 +30,10 @@ import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
+import dev.glassworks.engine.vitro.data.HaText
+import dev.glassworks.engine.vitro.data.HaLocale
+import dev.glassworks.engine.vitro.data.HaFormat
+import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HaDashboardClient
 import dev.glassworks.engine.vitro.data.HistoryPoint
@@ -175,7 +178,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         }
         val closeIcon = MdiIconView(ctx.context)
         val closeButton = iconButton(closeIcon, "mdi:close").apply {
-            contentDescription = "Close"
+            contentDescription = HaText.ui("ui.common.close")
             setOnClickListener { dismiss() }
         }
         this.closeButton = closeButton
@@ -414,7 +417,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 onToggle = { on -> optimisticToggle(id, "light", on) }
             }
             addPill(toggle)
-            val power = circleButton("mdi:power", "Toggle", 52f, 24f) { optimisticToggle(id, "light", ctx.store[id]?.state != "on") }
+            val power = circleButton("mdi:power", HaText.ui("ui.card.common.toggle"), 52f, 24f) { optimisticToggle(id, "light", ctx.store[id]?.state != "on") }
             addCentered(power, topDp = dockGap, widthDp = 52f, heightDp = 52f)
             return { s ->
                 stateLabel.text = lightStateText(s)
@@ -430,7 +433,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val center = FrameLayout(ctx.context)
         val slider = VerticalSliderPillView(ctx.context, initial?.lightTintColor() ?: fallback).apply {
             // Named for TalkBack, as HA names the slider (the attribute it sets).
-            contentDescription = "Brightness"
+            contentDescription = HaText.ui("ui.card.light.brightness")
             onChange = { pct -> stateLabel.text = if (pct <= 0) "Off" else "$pct%" }
             onRelease = { pct ->
                 val data = JSONObject().put("entity_id", id)
@@ -456,7 +459,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val temp = if (caps.colorTemp) {
             ColorTempSliderView(ctx.context, minK, maxK).apply {
                 // Named for TalkBack, as HA names the slider (the attribute it sets).
-                contentDescription = "Color temperature"
+                contentDescription = HaText.ui("ui.card.light.color_temperature")
                 onChange = { k -> stateLabel.text = "$k K" }
                 onRelease = { k -> setLightColor(id, LightColor.kelvinToArgb(k), k) }
                 center.addView(this, LayoutParams(ctx.px(pillW), ctx.px(pillH), Gravity.CENTER))
@@ -485,7 +488,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             addView(powerIcon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
             isClickable = true
             ripple(this)
-            contentDescription = "Toggle"
+            contentDescription = HaText.ui("ui.card.common.toggle")
             setOnClickListener {
                 val cur = ctx.store[id]
                 val next = if (cur != null && cur.state in setOf("on", "off")) cur.copy(state = if (cur.state == "on") "off" else "on") else null
@@ -628,11 +631,10 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val on = s?.state == "on"
         val pct = if (on) brightnessOf(s) else null
         return when {
-            s == null -> "Unknown"
+            s == null -> HaText.ui("state.default.unknown")
             s.isUnavailable -> s.formattedState()
-            on && pct != null -> "$pct%"
-            on -> "On"
-            else -> "Off"
+            on && pct != null -> HaFormat.formatNumber(pct) + HaFormat.blankBeforePercent(HaLocale.current) + "%"
+            else -> s.plainState()
         }
     }
 
@@ -648,10 +650,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         return { s ->
             val on = s?.state == "on"
             stateLabel.text = when {
-                s == null -> "Unknown"
-                s.isUnavailable -> s.formattedState()
-                on -> "On"
-                else -> "Off"
+                s == null -> HaText.ui("state.default.unknown")
+                else -> s.plainState()
             }
             pill.setOn(on)
             timeLabel.text = relativeTime(s)
@@ -673,7 +673,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
         }
         addPill(slider)
-        val power = circleButton("mdi:power", "Toggle", 52f, 24f) { optimisticToggle(id, "fan", ctx.store[id]?.state != "on") }
+        val power = circleButton("mdi:power", HaText.ui("ui.card.common.toggle"), 52f, 24f) { optimisticToggle(id, "fan", ctx.store[id]?.state != "on") }
         addCentered(power, topDp = dockGap, widthDp = 52f, heightDp = 52f)
         var lastPct: Int? = initial.takeIf { it.state == "on" }?.let { (it.attributes["percentage"] as? Number)?.toInt() }?.takeIf { it > 0 }
         return { s ->
@@ -681,7 +681,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             val pct = (s?.attributes?.get("percentage") as? Number)?.toInt()?.takeIf { it > 0 }
             if (!slider.adjusting) {
                 stateLabel.text = when {
-                    s == null -> "Unknown"
+                    s == null -> HaText.ui("state.default.unknown")
                     s.isUnavailable -> s.formattedState()
                     on && pct != null -> "$pct%"
                     on -> "On"
@@ -754,7 +754,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         }
         addPill(pill)
         return { s ->
-            stateLabel.text = s?.formattedState() ?: "Unknown"
+            stateLabel.text = s?.formattedState() ?: HaText.ui("state.default.unknown")
             pill.setOn(s?.state == "locked" || s?.state == "locking")
             timeLabel.text = relativeTime(s)
         }
@@ -765,12 +765,12 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val field = android.widget.EditText(ctx.context).apply {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
-            hint = "Code"
+            hint = HaText.ui("ui.card.alarm_control_panel.code")
         }
         val shown = runCatching {
             android.app.AlertDialog.Builder(ctx.context)
                 .setView(field)
-                .setNegativeButton("Cancel") { _, _ -> onCancel() }
+                .setNegativeButton(HaText.ui("ui.common.cancel")) { _, _ -> onCancel() }
                 .setOnCancelListener { onCancel() }
                 .setPositiveButton("OK") { _, _ -> onCode(field.text?.toString().orEmpty()) }
                 .show()
@@ -822,7 +822,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
             addCentered(buttons, topDp = 24f)
             return { s ->
-                stateLabel.text = s?.formattedState() ?: "Unknown"
+                stateLabel.text = s?.formattedState() ?: HaText.ui("state.default.unknown")
                 timeLabel.text = relativeTime(s)
             }
         }
@@ -830,7 +830,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val center = FrameLayout(ctx.context)
         val slider = VerticalCoverSliderView(ctx.context).apply {
             // Named for TalkBack, as HA names the slider (the attribute it sets).
-            contentDescription = "Position"
+            contentDescription = HaText.ui("ui.card.cover.position")
             onChange = { pct -> stateLabel.text = VerticalCoverSliderView.stateText(pct) }
             onRelease = { pct -> setPosition(pct) }
         }
@@ -855,7 +855,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             addView(sliderIcon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
             isClickable = true
             ripple(this)
-            contentDescription = "Position"
+            contentDescription = HaText.ui("ui.card.cover.position")
         }
         val buttonsBtn = FrameLayout(ctx.context).apply {
             addView(buttonsIcon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
@@ -899,7 +899,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             val pos = (s?.attributes?.get("current_position") as? Number)?.toInt()
             if (!slider.adjusting) {
                 stateLabel.text = when {
-                    s == null -> "Unknown"
+                    s == null -> HaText.ui("state.default.unknown")
                     s.isUnavailable -> s.formattedState()
                     pos != null && s.state in setOf("open", "closed") -> VerticalCoverSliderView.stateText(pos)
                     else -> s.formattedState()
@@ -1020,13 +1020,13 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             )
             styleSteppers()
             current.text = (attrs["current_temperature"] as? Number)?.toDouble()
-                ?.let { String.format(Locale.US, "%.1f %s", it, unit) } ?: "–"
+                ?.let { HaDisplay.formatFixed(it, 1) + " " + unit } ?: "–"
             modeBtn.icon.setIcon(ThermostatCardView.modeIcon(mode), theme.primaryTextColor)
             modeBtn.value.text = if (s == null) "Unknown" else humanize(mode).replace("Heat cool", "Heat/Cool")
             val presets = listAttr(s, "preset_modes")
             presetBtn.root.visibility = if (presets.isEmpty()) GONE else VISIBLE
             presetBtn.icon.setIcon("mdi:tune", theme.primaryTextColor)
-            presetBtn.value.text = (attrs["preset_mode"] as? String)?.let { humanize(it) } ?: "None"
+            presetBtn.value.text = (attrs["preset_mode"] as? String)?.let { humanize(it) } ?: HaText.ui("ui.common.none")
         }
     }
 
@@ -1086,7 +1086,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val codeField = android.widget.EditText(ctx.context).apply {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
-            hint = "Code"
+            hint = HaText.ui("ui.card.alarm_control_panel.code")
             setTextColor(theme.primaryTextColor)
             setHintTextColor(theme.secondaryTextColor)
         }
@@ -1211,13 +1211,13 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             gravity = Gravity.CENTER
         }
         val playIcon = MdiIconView(ctx.context)
-        val play = circleButton(playIcon, "mdi:play", "Play", 64f, 30f) { media("media_play_pause") }
-        transport.addView(circleButton("mdi:skip-previous", "Previous track", 52f, 24f) { media("media_previous_track") },
+        val play = circleButton(playIcon, "mdi:play", HaText.ui("ui.card.media_player.media_play"), 64f, 30f) { media("media_play_pause") }
+        transport.addView(circleButton("mdi:skip-previous", HaText.ui("ui.card.media_player.media_previous_track"), 52f, 24f) { media("media_previous_track") },
             LinearLayout.LayoutParams(ctx.px(52f), ctx.px(52f)))
         transport.addView(play, LinearLayout.LayoutParams(ctx.px(64f), ctx.px(64f)).apply {
             marginStart = ctx.px(20f); marginEnd = ctx.px(20f)
         })
-        transport.addView(circleButton("mdi:skip-next", "Next track", 52f, 24f) { media("media_next_track") },
+        transport.addView(circleButton("mdi:skip-next", HaText.ui("ui.card.media_player.media_next_track"), 52f, 24f) { media("media_next_track") },
             LinearLayout.LayoutParams(ctx.px(52f), ctx.px(52f)))
         addCentered(transport, topDp = 20f)
 
@@ -1256,7 +1256,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             artist.visibility = if (a == null) GONE else VISIBLE
             state.text = listOf(s?.formattedState().orEmpty(), relativeTime(s)).filter { it.isNotEmpty() }.joinToString(" · ")
             playIcon.setIcon(if (playing) "mdi:pause" else "mdi:play", theme.primaryTextColor)
-            play.contentDescription = if (playing) "Pause" else "Play"
+            play.contentDescription = HaText.ui(if (playing) "ui.card.media_player.media_pause" else "ui.card.media_player.media_play")
             val level = (s?.attributes?.get("volume_level") as? Number)?.toDouble()
             volumeRow.visibility = if (level == null) GONE else VISIBLE
             if (level != null && !tracking) volume.progress = (level * 100).roundToInt()
@@ -1266,9 +1266,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     private fun buildAction(id: String, domain: String): (EntityState?) -> Unit {
         val timeLabel = timeLabel()
         val (caption, service) = when (domain) {
-            "script" -> "Run" to "turn_on"
-            "scene" -> "Activate" to "turn_on"
-            else -> "Press" to "press"
+            "script" -> HaText.ui("ui.card.script.run") to "turn_on"
+            "scene" -> HaText.ui("ui.card.scene.activate") to "turn_on"
+            else -> HaText.ui("ui.card.button.press") to "press"
         }
         val button = text(16f, Color.WHITE, Inter.MEDIUM).apply {
             this.text = caption
@@ -1318,7 +1318,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         return { s ->
             picture = s?.entityPicture
             val label = when (s?.state) {
-                null -> "Unknown"
+                null -> HaText.ui("state.default.unknown")
                 "idle" -> "Idle"
                 "streaming" -> "Streaming"
                 "recording" -> "Recording"
@@ -1369,7 +1369,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         row.addView(value)
         body.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(8f) })
 
-        body.addView(text(20f, theme.primaryTextColor, Inter.MEDIUM).apply { this.text = "History" },
+        body.addView(text(20f, theme.primaryTextColor, Inter.MEDIUM).apply { this.text = HaText.ui("ui.dialogs.more_info_control.history") },
             LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(20f) })
         val chart = MoreInfoHistoryChartView(ctx.context, theme)
         body.addView(chart, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(200f)).apply { topMargin = ctx.px(12f) })
@@ -1397,7 +1397,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             icon.setIcon(MdiIcons.resolveIconName(null, s), theme.stateIconColor)
             name.text = s?.friendlyName ?: id
             time.text = relativeTime(s)
-            value.text = s?.formattedState() ?: "Unknown"
+            value.text = s?.formattedState() ?: HaText.ui("state.default.unknown")
         }
     }
 
@@ -1524,9 +1524,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         init {
             isClickable = true
             contentDescription = when (kind) {
-                LightMode.BRIGHTNESS -> "Brightness"
-                LightMode.COLOR -> "Color"
-                LightMode.TEMP -> "Color temperature"
+                LightMode.BRIGHTNESS -> HaText.ui("ui.card.light.brightness")
+                LightMode.COLOR -> HaText.ui("ui.dialogs.more_info_control.light.color")
+                LightMode.TEMP -> HaText.ui("ui.card.light.color_temperature")
             }
         }
 
@@ -1653,18 +1653,10 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
         fun relativeTime(s: EntityState?): String = relativeTime(s?.lastChanged ?: 0.0, System.currentTimeMillis())
 
-        /** "Just now", "5 minutes ago", "3 hours ago", "2 days ago", "4 weeks ago"; empty without a timestamp. */
+        /** `<ha-relative-time capitalize>` of the last change ("Now", "5 minutes ago"); empty without a timestamp. */
         fun relativeTime(lastChangedSec: Double, nowMs: Long): String {
             if (lastChangedSec <= 0.0) return ""
-            val secs = (nowMs / 1000.0 - lastChangedSec).toLong().coerceAtLeast(0L)
-            fun plural(n: Long, unit: String) = if (n == 1L) "1 $unit ago" else "$n ${unit}s ago"
-            return when {
-                secs < 60 -> "Just now"
-                secs < 3_600 -> plural(secs / 60, "minute")
-                secs < 86_400 -> plural(secs / 3_600, "hour")
-                secs < 7 * 86_400 -> plural(secs / 86_400, "day")
-                else -> plural(secs / (7 * 86_400), "week")
-            }
+            return HaFormat.capitalize(HaFormat.relativeTime((lastChangedSec * 1000).toLong(), nowMs))
         }
     }
 }
@@ -1909,7 +1901,7 @@ internal class VerticalTogglePillView(context: Context, private val onColor: Int
         // A switch for TalkBack and a keyboard: a click flips it, as a tap does.
         isClickable = true
         isFocusable = true
-        if (contentDescription == null) contentDescription = "Toggle"
+        if (contentDescription == null) contentDescription = HaText.ui("ui.card.common.toggle")
     }
 
     override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
@@ -2057,7 +2049,8 @@ internal class MoreInfoHistoryChartView(context: Context, private val theme: Res
         textAlign = Paint.Align.CENTER
     }
     private val path = Path()
-    private val timeFormat = SimpleDateFormat(if (DateFormat.is24HourFormat(context)) "HH:mm" else "h:mm a", Locale.getDefault())
+    /** HA's `formatTime`, in the user's 12/24-hour choice and zone. */
+    private val timeFormat = object { fun format(d: Date): String = HaFormat.formatTime(d.time) }
     private var points: List<HistoryPoint>? = null
     private val spanSec = 24 * 3_600.0
 
@@ -2116,7 +2109,7 @@ internal class MoreInfoHistoryChartView(context: Context, private val theme: Res
         val h = height.toFloat()
         val pts = points
         if (pts == null || pts.isEmpty()) {
-            canvas.drawText(if (pts == null) "Loading history…" else "No recent history", w / 2f, h / 2f, messagePaint)
+            canvas.drawText(HaText.ui(if (pts == null) "ui.components.history_charts.loading_history" else "ui.components.history_charts.no_history_found"), w / 2f, h / 2f, messagePaint)
             return
         }
         // The axis ends at the current minute, as the labels show minutes.
@@ -2156,7 +2149,7 @@ internal class MoreInfoHistoryChartView(context: Context, private val theme: Res
     }
 
     private fun format(v: Double, range: Double): String =
-        if (range >= 10.0 || v == Math.rint(v)) String.format(Locale.US, "%.0f", v) else String.format(Locale.US, "%.1f", v)
+        HaDisplay.formatFixed(v, if (range >= 10.0 || v == Math.rint(v)) 0 else 1)
 
     private companion object {
         const val HA_BLUE = 0xFF4269D0.toInt()
@@ -2642,10 +2635,13 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
         const val PURPLE = 0xFF8E63C9.toInt()
 
         /** The cover header for a position: "Closed", "Open · 70%", "Open". */
-        fun stateText(pct: Int): String = when {
-            pct <= 0 -> "Closed"
-            pct >= 100 -> "Open"
-            else -> "Open · $pct%"
+        fun stateText(pct: Int): String {
+            fun word(state: String) = HaDisplay.domainStateLabel("cover", state) ?: state.replaceFirstChar { it.titlecase(java.util.Locale.ROOT) }
+            return when {
+                pct <= 0 -> word("closed")
+                pct >= 100 -> word("open")
+                else -> "${word("open")} · ${HaFormat.formatNumber(pct)}${HaFormat.blankBeforePercent(HaLocale.current)}%"
+            }
         }
 
         /** The bottom edge of the purple fill for a cover [pct] open on a pill [height] tall. */
@@ -2661,11 +2657,11 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
 internal object AlarmModes {
     /** The arming modes in HA's order, with their `supported_features` bit. */
     private val ARM_MODES = listOf(
-        Triple(1, "Arm home", "alarm_arm_home"),
-        Triple(2, "Arm away", "alarm_arm_away"),
-        Triple(4, "Arm night", "alarm_arm_night"),
-        Triple(32, "Arm vacation", "alarm_arm_vacation"),
-        Triple(16, "Arm custom bypass", "alarm_arm_custom_bypass"),
+        Triple(1, "ui.card.alarm_control_panel.arm_home", "alarm_arm_home"),
+        Triple(2, "ui.card.alarm_control_panel.arm_away", "alarm_arm_away"),
+        Triple(4, "ui.card.alarm_control_panel.arm_night", "alarm_arm_night"),
+        Triple(32, "ui.card.alarm_control_panel.arm_vacation", "alarm_arm_vacation"),
+        Triple(16, "ui.card.alarm_control_panel.arm_custom_bypass", "alarm_arm_custom_bypass"),
     )
 
     /**
@@ -2675,6 +2671,6 @@ internal object AlarmModes {
     fun actions(s: EntityState?): List<Pair<String, String>> {
         val features = (s?.attributes?.get("supported_features") as? Number)?.toInt()
         val arm = if (features == null) ARM_MODES.take(2) else ARM_MODES.filter { features and it.first != 0 }
-        return arm.map { it.second to it.third } + ("Disarm" to "alarm_disarm")
+        return arm.map { HaText.ui(it.second) to it.third } + (HaText.ui("ui.card.alarm_control_panel.disarm") to "alarm_disarm")
     }
 }

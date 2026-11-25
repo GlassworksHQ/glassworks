@@ -76,9 +76,12 @@ import dev.glassworks.engine.vitro.cards.TodoListCardView
 import dev.glassworks.engine.vitro.cards.WeatherCardView
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.data.EntityState
+import dev.glassworks.engine.vitro.data.FrontendLocale
+import dev.glassworks.engine.vitro.data.HaLocale
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.EntityFilterConfig
@@ -177,6 +180,9 @@ class VitroView(
 
     private val tabs = ArrayList<TabEntry>()
     private var moreInfo: MoreInfoSheet? = null
+
+    /** The entity the open More Info sheet shows (to open it again in a new language). */
+    private var moreInfoEntityId: String? = null
     private val viewCache = LinkedHashMap<Int, View>()
 
     /** Cached views that hold a dead island ([islandPagesGone]): built again, not shown from the cache, next time. */
@@ -189,7 +195,7 @@ class VitroView(
     private val viewBackStack = ArrayDeque<Int>()
 
     private val bannerText = TextView(context).apply {
-        text = "Connection lost. Reconnecting…"
+        text = HaText.ui("ui.notification_toast.connection_lost")
         textSize = 13f
         setTextColor(0xFFFFFFFF.toInt())
         typeface = VitroFonts.typeface(context, Inter.MEDIUM, 13f)
@@ -459,6 +465,29 @@ class VitroView(
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
     }
 
+    /** The language, formats and time zone the built views were drawn with. */
+    private var drawnLocale: Triple<FrontendLocale, String, Long>? = null
+
+    /**
+     * The user's language or formats changed ([HaLocale]): every text, number, date and time was written with the
+     * old ones, so the view is built again, as a theme change does.
+     */
+    fun setLocale(locale: FrontendLocale, timeZone: String, strings: Long) {
+        val next = Triple(locale, timeZone, strings)
+        if (next == drawnLocale) return
+        drawnLocale = next
+        if (dashboard == null) return
+        // An open More Info sheet built its words once: it opens again in the new language.
+        val reopen = moreInfoEntityId?.takeIf { moreInfo != null }
+        closeMoreInfo()
+        viewCache.clear()
+        builtScripts.clear()
+        contentHost.removeAllViews()
+        clearOverlay()
+        dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
+        reopen?.let { openMoreInfo(it) }
+    }
+
     /**
      * What the dashboard's look is made of in [catalog]: for each theme its views and cards ask for, the theme Home
      * Assistant picks for it in [dark] mode and that theme's definition. Equal inputs draw the same dashboard. Null
@@ -489,6 +518,7 @@ class VitroView(
     }
 
     fun setDashboard(config: DashboardConfig, initialViewPath: String?) {
+        drawnLocale = Triple(HaLocale.current, HaLocale.timeZone().id, HaText.version)
         holding?.cancel?.invoke()
         holding = null
         waited.clear()
@@ -561,6 +591,7 @@ class VitroView(
     /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
     internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
         closeMoreInfo()
+        moreInfoEntityId = entityId
         val cfg = dashboard?.views?.getOrNull(currentViewIndex)
         val theme = ThemeResolver.resolve(themeCatalog, darkMode, cfg?.theme ?: userThemeName, cfg?.background)
         val cardCtx = contextFactory?.invoke(theme) ?: return

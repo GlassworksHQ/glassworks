@@ -92,6 +92,11 @@ class HaDashboardClient(
          */
         fun onUserTheme(themeName: String?, dark: Boolean?) {}
 
+        /**
+         * The user's language or formats changed ([HaLocale], from `language` user data or HA's time zone), live as
+         * HA's frontend applies them: what was drawn with the old ones is drawn again.
+         */
+        fun onLocaleChanged() {}
         /** `auth/current_user` answered: [user] is now [currentUser]. */
         fun onCurrentUser(user: JSONObject) {}
         fun onDisconnected(reason: String) {}
@@ -160,6 +165,13 @@ class HaDashboardClient(
     fun start(dashboardUrlPath: String?) {
         requestedDashboardPath = dashboardUrlPath
         if (closed.get()) return
+        // A new client may be another Home Assistant, or another user: back to the browser's language and formats
+        // until this one's profile answers. A reconnect of this client keeps them, as HA's page does.
+        HaLocale.reset()
+        // HA's frontend strings as this HA served them last time, until it answers (or when it can't be reached).
+        // This client's requests are the ones that install strings from now on (a retired one's late download doesn't).
+        origin?.let { HaFrontend.claim(this, it) }
+        origin?.let { o -> HaFrontend.ensureCached(this, o, HaLocale.current.language) { if (!closed.get()) listener.onLocaleChanged() } }
         val thread = Thread({ loop() }, "vitro-ha-ws").apply { isDaemon = true }
         readerThread = thread
         thread.start()
@@ -620,11 +632,14 @@ class HaDashboardClient(
         fun ask(type: String, category: String, names: List<String>, apply: (JSONObject) -> Unit) {
             if (names.isEmpty()) return
             val msg = JSONObject().put("type", type).put("category", category).put("integration", JSONArray(names))
-            if (type == "frontend/get_translations") msg.put("language", "en")
+            val language = HaLocale.current.language
+            if (type == "frontend/get_translations") msg.put("language", language)
             displayPending.incrementAndGet()
             val gen = connectionGen.get()
             request(msg) { res ->
                 if (gen != connectionGen.get()) return@request
+                // Words in a language the user has left since: the request in the new one is on its way.
+                if (type == "frontend/get_translations" && language != HaLocale.current.language) { settleDisplay(); return@request }
                 if (res.optBoolean("success", false)) res.optJSONObject("result")?.let { r -> applyDisplay { apply(r) } }
                 settleDisplay()
             }
@@ -635,6 +650,54 @@ class HaDashboardClient(
         ask("frontend/get_translations", "entity", newPlatforms) { HaDisplay.applyTranslations(it, false, newPlatforms) }
     }
 
+    /**
+     * Applies a locale update and, when the language changed, asks again for every translation in the new one (the
+     * frontend's `_refetchCachedHassTranslations`); the listener draws the view again either way.
+     */
+    private fun applyLocale(update: () -> Any?) {
+        // Under the lock close() takes: an update that passed the check finishes before close() returns, so a
+        // retired client can't write its user's locale over the next client's.
+        val languageChanged = synchronized(storeWriteLock) {
+            if (closed.get()) return
+            val before = HaLocale.current
+            val zone = HaLocale.timeZone().id
+            update()
+            // Only what changes a text: HA's own zone arriving while the user keeps the panel's changes nothing.
+            if (HaLocale.current == before && HaLocale.timeZone().id == zone) return
+            HaLocale.current.language != before.language
+        }
+        if (languageChanged) languageChanged()
+        listener.onLocaleChanged()
+    }
+
+    /** The words of a language the user just picked: HA's backend translations again, and its frontend strings. */
+    private fun languageChanged() {
+        synchronized(storeWriteLock) {
+            if (closed.get()) return
+            HaDisplay.forgetTranslations()
+            displayRequested.removeAll { it.startsWith("d:") || it.startsWith("p:") }
+        }
+        loadDisplayFor(displayIds())
+        ensureStrings()
+    }
+
+    /** HA's own origin, where its frontend files are (`http(s)://host:port`). */
+    private val origin: String? = runCatching { java.net.URL(haBase).let { "${it.protocol}://${it.authority}" } }.getOrNull()
+
+    /**
+     * HA's frontend strings for the user's language, fetched from HA ([HaFrontend]); the view draws again once they
+     * are in. A browser language matched again against HA's own list may change the language: its words follow.
+     */
+    private fun ensureStrings(revalidate: Boolean = false) {
+        val o = origin ?: return
+        val language = HaLocale.current.language
+        HaFrontend.ensure(this, o, language, revalidate) {
+            if (closed.get()) return@ensure
+            if (HaLocale.current.language != language) languageChanged()
+            listener.onLocaleChanged()
+        }
+    }
+
     private fun displayIds(): Collection<String> = activeEntityFilter.ifEmpty { store.all().keys }
 
     private fun onAuthenticated() {
@@ -642,10 +705,19 @@ class HaDashboardClient(
         displayPending.set(0)
         // Icons and state labels are this Home Assistant's: a new connection loads them again.
         HaDisplay.reset()
-        // 0. HA config (unit_system, location_name, time_zone — needed by custom cards reading hass.config)
+        // 0. The user's language and formats (HA's translations-mixin subscribes to them on connect), first: the
+        // translations asked for below are in that language. Its first event is the current value.
+        subscribe(JSONObject().put("type", "frontend/subscribe_user_data").put("key", "language")) { ev ->
+            applyLocale { HaLocale.applyUserData(ev.optJSONObject("value")) }
+        }
+        // HA's frontend strings in the language in use now; a profile language arriving asks again. Every connection
+        // reads HA's index again (it may have been upgraded since); an unchanged frontend reuses its cached files.
+        ensureStrings(revalidate = true)
+        // HA config (unit_system, location_name, time_zone — needed by custom cards reading hass.config, and by
+        // `time_zone: server`)
         request(JSONObject().put("type", "get_config")) { res ->
             if (res.optBoolean("success", false)) {
-                res.optJSONObject("result")?.let { haConfig = it }
+                res.optJSONObject("result")?.let { haConfig = it; applyLocale { HaLocale.applyConfig(it) } }
             }
         }
         // 1. Themes

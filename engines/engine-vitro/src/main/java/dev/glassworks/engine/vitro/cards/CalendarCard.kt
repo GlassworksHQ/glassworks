@@ -4,6 +4,10 @@
 
 package dev.glassworks.engine.vitro.cards
 
+import dev.glassworks.engine.vitro.data.HaIntl
+import dev.glassworks.engine.vitro.data.HaText
+import dev.glassworks.engine.vitro.data.HaLocale
+import dev.glassworks.engine.vitro.data.HaFormat
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -100,7 +104,7 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         // Today and the view toggle, 37 px (32 px buttons at its top).
         val second = FrameLayout(ctx.context)
         second.addView(label(14f, accentText, Inter.MEDIUM).apply {
-            text = "Today"
+            text = HaText.ui("ui.components.calendar.today")
             gravity = Gravity.CENTER
             setPadding(ctx.px(12f), 0, ctx.px(12f), 0)
             isClickable = true
@@ -108,7 +112,11 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             setOnClickListener { anchor = ctx.now(); refresh() }
         }, FrameLayout.LayoutParams(WRAP_CONTENT, ctx.px(32f), Gravity.TOP or Gravity.START))
         val group = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf(MONTH to ("mdi:view-module" to "Month View"), DAY to ("mdi:view-day" to "Day View"), LIST to ("mdi:view-agenda" to "List View"))
+        listOf(
+            MONTH to ("mdi:view-module" to HaText.ui("ui.components.calendar.views.dayGridMonth")),
+            DAY to ("mdi:view-day" to HaText.ui("ui.components.calendar.views.dayGridDay")),
+            LIST to ("mdi:view-agenda" to HaText.ui("ui.components.calendar.views.listWeek")),
+        )
             .forEachIndexed { i, (v, iconLabel) ->
                 val b = FrameLayout(ctx.context).apply {
                     isClickable = true
@@ -174,7 +182,7 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     private fun subscribe() {
         stop()
         val gen = generation
-        val (start, end) = range(view, anchor, TimeZone.getDefault())
+        val (start, end) = range(view, anchor, HaLocale.timeZone())
         for (id in ids) {
             val msg = JSONObject().put("type", "calendar/event/subscribe").put("entity_id", id)
                 .put("start", LogbookCardView.isoMillis(start)).put("end", LogbookCardView.isoMillis(end))
@@ -190,7 +198,8 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     }
 
     private fun step(dir: Int) {
-        val c = Calendar.getInstance().apply { timeInMillis = anchor }
+        // In the zone the calendar shows its days in, so Next and Previous move by its months and days.
+        val c = Calendar.getInstance(HaLocale.timeZone()).apply { timeInMillis = anchor }
         when (view) {
             MONTH -> c.add(Calendar.MONTH, dir)
             DAY -> c.add(Calendar.DAY_OF_MONTH, dir)
@@ -201,7 +210,7 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     }
 
     private fun refreshChrome() {
-        titleView.text = title(view, anchor, TimeZone.getDefault())
+        titleView.text = title(view, anchor, HaLocale.timeZone())
         toggles.forEachIndexed { i, (v, b) ->
             val on = v == view
             val r = ctx.px(16f).toFloat()
@@ -228,7 +237,7 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
 
     private fun renderBody() {
         body.removeAllViews()
-        val tz = TimeZone.getDefault()
+        val tz = HaLocale.timeZone()
         when (view) {
             LIST -> body.addView(listView(tz), FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             else -> body.addView(MonthGrid(if (view == DAY) 1 else 7, if (view == DAY) 1 else 6, tz), FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -273,11 +282,11 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         setBackgroundColor(ctx.theme.cardBackgroundColor)
         addView(View(ctx.context).apply { setBackgroundColor(divider) }, FrameLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1), Gravity.TOP))
         addView(label(16f, ctx.theme.primaryTextColor).apply {
-            text = fmt("EEEE", tz).format(Date(day))
+            text = HaFormat.formatDateWeekday(day)
             gravity = Gravity.CENTER_VERTICAL
         }, FrameLayout.LayoutParams(WRAP_CONTENT, MATCH_PARENT, Gravity.START).apply { leftMargin = ctx.px(12f); topMargin = ctx.px(1f) })
         addView(label(16f, ctx.theme.primaryTextColor).apply {
-            text = fmt("MMMM d, yyyy", tz).format(Date(day))
+            text = HaFormat.formatDate(day)
             gravity = Gravity.CENTER_VERTICAL
         }, FrameLayout.LayoutParams(WRAP_CONTENT, MATCH_PARENT, Gravity.END).apply { rightMargin = ctx.px(12f); topMargin = ctx.px(1f) })
     }
@@ -329,7 +338,7 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             for (c in 0 until cols) {
                 val day = addDays(start, c, tz)
                 names += label(10f, ctx.theme.primaryTextColor, 700).apply {
-                    text = fmt(if (cols == 1) "EEEE" else "EEE", tz).format(Date(day))
+                    text = if (cols == 1) HaFormat.formatDateWeekday(day) else HaFormat.formatDateWeekdayShort(day)
                     isAllCaps = true
                     gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP
                 }.also { addView(it) }
@@ -496,7 +505,7 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
          * A subscription event's (or the REST answer's) events: `start` / `end` as strings, or `{dateTime}` /
          * `{date}`. A date is all day, from that day's local midnight.
          */
-        fun parseEvents(arr: JSONArray?, calendarId: String, tz: TimeZone = TimeZone.getDefault()): List<CalendarEvent> {
+        fun parseEvents(arr: JSONArray?, calendarId: String, tz: TimeZone = HaLocale.timeZone()): List<CalendarEvent> {
             if (arr == null) return emptyList()
             val out = ArrayList<CalendarEvent>(arr.length())
             for (i in 0 until arr.length()) {
@@ -524,15 +533,16 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         }
 
         /**
-         * The range a view shows (and asks HA for): the month grid's 6 weeks from the Sunday on or before the 1st, a
-         * day, or the list's 7 days from the shown day; local midnights.
+         * The range a view shows (and asks HA for): the month grid's 6 weeks from the user's first weekday (HA's
+         * `firstDay: firstWeekdayIndex`) on or before the 1st, a day, or the list's 7 days from the shown day; midnights
+         * in the zone HA's calendar uses.
          */
-        fun range(view: String, anchorMs: Long, tz: TimeZone): Pair<Long, Long> {
+        fun range(view: String, anchorMs: Long, tz: TimeZone, firstWeekday: Int = HaFormat.firstWeekdayIndex()): Pair<Long, Long> {
             val day = startOfDay(anchorMs, tz)
             return when (view) {
                 MONTH -> {
                     val c = Calendar.getInstance(tz).apply { timeInMillis = day; set(Calendar.DAY_OF_MONTH, 1) }
-                    val back = (c.get(Calendar.DAY_OF_WEEK) - Calendar.SUNDAY + 7) % 7
+                    val back = (c.get(Calendar.DAY_OF_WEEK) - Calendar.SUNDAY - firstWeekday + 14) % 7
                     val start = addDays(c.timeInMillis, -back, tz)
                     start to addDays(start, 42, tz)
                 }
@@ -541,25 +551,51 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             }
         }
 
-        /** FullCalendar's title: "November 2026", "November 24, 2026", or the list's "Nov 24 – 30, 2026". */
+        /**
+         * FullCalendar's title in the user's language: "November 2026" (`{month: "long", year: "numeric"}`), "November
+         * 24, 2026", or the list's range of `{year, month: "short", day}` dates, which drops what both ends share ("Nov 24 – 30,
+         * 2026"). Close to `Intl`'s ranges, not exact: a language that writes the day first loses its day's own mark on
+         * the start ("24 – 30. Nov. 2026" where Intl writes "24.–30. Nov. 2026"). FullCalendar's own words
+         * ("All-day", "No events to display") stay English: HA's build ships no FullCalendar locale for them.
+         */
         fun title(view: String, anchorMs: Long, tz: TimeZone): String {
             val (start, end) = range(view, anchorMs, tz)
+            val locale = HaLocale.current
             return when (view) {
-                MONTH -> fmt("MMMM yyyy", tz).format(Date(anchorMs))
-                DAY -> fmt("MMMM d, yyyy", tz).format(Date(start))
+                MONTH -> zoned(HaIntl.of(locale.language).dateFormat("monthYear"), anchorMs, tz)
+                DAY -> zoned(HaIntl.of(locale.language).dateFormat("date"), start, tz)
                 else -> {
+                    val t = HaIntl.of(locale.language).dateFormat("dateShort") ?: HaIntl.of("en").dateFormat("dateShort")!!
                     val last = addDays(end, -1, tz)
                     val a = Calendar.getInstance(tz).apply { timeInMillis = start }
                     val b = Calendar.getInstance(tz).apply { timeInMillis = last }
+                    val names = t.tokens.filterIsInstance<HaIntl.DateTemplate.Token.Field>().map { it.name }
+                    val monthFirst = names.indexOfFirst { it.startsWith("M") } < names.indexOfFirst { it.startsWith("d") }
                     when {
-                        a.get(Calendar.YEAR) != b.get(Calendar.YEAR) ->
-                            "${fmt("MMM d, yyyy", tz).format(Date(start))} – ${fmt("MMM d, yyyy", tz).format(Date(last))}"
-                        a.get(Calendar.MONTH) != b.get(Calendar.MONTH) ->
-                            "${fmt("MMM d", tz).format(Date(start))} – ${fmt("MMM d, yyyy", tz).format(Date(last))}"
-                        else -> "${fmt("MMM d", tz).format(Date(start))} – ${fmt("d, yyyy", tz).format(Date(last))}"
+                        a.get(Calendar.YEAR) != b.get(Calendar.YEAR) -> "${t.format(start, tz)} – ${t.format(last, tz)}"
+                        a.get(Calendar.MONTH) != b.get(Calendar.MONTH) -> "${without(t, start, tz, setOf("y"))} – ${t.format(last, tz)}"
+                        monthFirst -> "${without(t, start, tz, setOf("y"))} – ${without(t, last, tz, setOf("Mt", "M", "MM"))}"
+                        else -> "${without(t, start, tz, setOf("y", "Mt", "M", "MM"))} – ${t.format(last, tz)}"
                     }
                 }
             }
+        }
+
+        private fun zoned(t: HaIntl.DateTemplate?, ms: Long, tz: TimeZone): String = t?.format(ms, tz).orEmpty()
+
+        /** [t] at [ms] without the [drop] fields and the literal that joins each to the rest. */
+        private fun without(t: HaIntl.DateTemplate, ms: Long, tz: TimeZone, drop: Set<String>): String {
+            val parts = t.parts(ms, tz).toMutableList()
+            var i = 0
+            while (i < parts.size) {
+                if (parts[i].first in drop) {
+                    parts.removeAt(i)
+                    // The literal after it (", " after "Nov 24" in English), else the one before it ("24. Nov").
+                    if (i < parts.size && parts[i].first == "literal") parts.removeAt(i)
+                    else if (i > 0 && parts[i - 1].first == "literal") { parts.removeAt(i - 1); i-- }
+                } else i++
+            }
+            return parts.joinToString("") { it.second }.trim()
         }
 
         /** FullCalendar's event order: start, longer first, all-day first, title. */
@@ -570,9 +606,12 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         private fun overlaps(e: CalendarEvent, dayStart: Long, dayEnd: Long): Boolean =
             e.startMs < dayEnd && (e.endMs > dayStart || (e.endMs == e.startMs && e.startMs >= dayStart))
 
-        private fun fmt(pattern: String, tz: TimeZone) = SimpleDateFormat(pattern, Locale.US).apply { timeZone = tz }
-
-        private fun timeText(ms: Long, tz: TimeZone): String = fmt("h:mm a", tz).format(Date(ms))
+        /** FullCalendar's event time, as HA sets it: `formatTime`'s hour and minutes in the calendar's zone. */
+        private fun timeText(ms: Long, tz: TimeZone): String {
+            val name = if (HaFormat.useAmPm()) "time.h12" else "time.h23"
+            val t = HaIntl.of(HaLocale.current.language).dateFormat(name) ?: HaIntl.of("en").dateFormat(name)!!
+            return t.format(ms, tz)
+        }
 
         private fun startOfDay(ms: Long, tz: TimeZone): Long =
             Calendar.getInstance(tz).apply { timeInMillis = ms; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis

@@ -730,7 +730,7 @@ class MarkdownEngineTest {
             clear(); set(2026, java.util.Calendar.NOVEMBER, 23, 10, 8)
         }.time
         val utc = java.util.TimeZone.getTimeZone("UTC")
-        fun fmt(v: Any?) = dev.glassworks.engine.vitro.cards.ClockDate.of(v)?.format(monday, java.util.Locale.US, utc)
+        fun fmt(v: Any?) = dev.glassworks.engine.vitro.cards.ClockDate.of(v)?.format(monday, "en", utc)
         // Values get one space between them; separators are written as they are; a new line starts another line.
         assertEquals("Monday November 23", fmt(org.json.JSONArray(listOf("weekday-long", "month-long", "day-numeric"))))
         assertEquals("23/11/2026", fmt(org.json.JSONArray(listOf("day-2-digit", "separator-slash", "month-2-digit", "separator-slash", "year-numeric"))))

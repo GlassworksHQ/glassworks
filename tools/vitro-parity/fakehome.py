@@ -16,7 +16,8 @@ What it answers, all from that fixture and the pinned data next to this file:
   - history/stream, history/history_during_period and REST /api/history/period, recorder statistics and their
     metadata, todo/item/subscribe, logbook/event_stream, weather/subscribe_forecast, calendar/event/subscribe;
   - render_template, with jinja2 and the HA helpers the corpus uses (states, is_state, state_attr, ...);
-  - HA core's entity texts and icons (hacore-<version>.json, from the homeassistant wheel: hacore.py);
+  - HA core's entity texts and icons (hacore-<version>.json, from the homeassistant wheel: hacore.py), in the language
+    the page asks for, and the signed-in user's frontend profile (frontend/get_user_data, subscribe_user_data);
   - the community cards as Lovelace resources at /hacsfiles/ (cards.json, pinned by SHA-256: cards.py).
 
 Times in a fixture are relative to the home's fixed "now" (home.json), so a capture never depends on the day it
@@ -311,6 +312,34 @@ def translations(category, integrations=None):
         elif category in data:
             _flatten(f"component.{comp}.{category}", data[category], out)
     return out
+
+
+def translations_for(category, integrations=None, language="en"):
+    """frontend/get_translations in [language], as HA core's helpers/translation.py answers: the language's texts over
+    English's, key by key (English fills every key the language lacks). The languages are hacore.py's LANGUAGES."""
+    out = translations(category, integrations)
+    if language == "en":
+        return out
+    comps = integrations if integrations else config()["components"]
+    own = {}
+    for comp in comps:
+        data = HACORE.get("localized", {}).get(language, {}).get(comp, {})
+        if category == "title":
+            if "title" in data:
+                own[f"component.{comp}.title"] = data["title"]
+        elif category in data:
+            _flatten(f"component.{comp}.{category}", data[category], own)
+    out.update({k: v for k, v in own.items() if k in out or category == "title"})
+    return out
+
+
+def user_data(key):
+    """frontend/get_user_data and subscribe_user_data: the case's `user_data` (`{"language": {"language": "de",
+    "number_format": "decimal_comma", ...}}`), else the home's, else none (a user who never set a profile)."""
+    for src in (fixture().get("user_data"), HOME.get("user_data")):
+        if isinstance(src, dict) and key in src:
+            return src[key]
+    return None
 
 
 def icons(category, integrations=None):
@@ -738,7 +767,12 @@ HANDLERS = {
     "config/floor_registry/list": _const(lambda: fixture().get("floors") or []),
     "config/label_registry/list": _const(lambda: []),
     "person/list": _const(lambda: {"storage": fixture().get("persons") or [], "config": []}),
-    "frontend/get_translations": lambda c, m: c.result(m["id"], {"resources": translations(m.get("category"), m.get("integration"))}),
+    # In the language the page asks for (the user's profile, user_data below), English filling the rest.
+    "frontend/get_translations": lambda c, m: c.result(m["id"], {"resources": translations_for(
+        m.get("category"), m.get("integration"), m.get("language") or "en")}),
+    # The user's frontend profile (a case's `user_data`): HA's page reads `language` for its language and formats.
+    "frontend/get_user_data": lambda c, m: c.result(m["id"], {"value": user_data(m.get("key"))}),
+    "frontend/subscribe_user_data": lambda c, m: (c.result(m["id"]), c.event(m["id"], {"value": user_data(m.get("key"))})),
     "frontend/get_icons": lambda c, m: c.result(m["id"], {"resources": icons(m.get("category"), m.get("integration"))}),
     "render_template": _render_template,
     "subscribe_condition": _subscribe_condition,

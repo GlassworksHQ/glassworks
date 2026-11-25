@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.cards
 
+import dev.glassworks.engine.vitro.data.HaText
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
@@ -156,7 +157,7 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
                 history = null
                 builtFor = -1
                 val why = err?.optString("message")?.takeIf { it.isNotEmpty() } ?: err?.optString("code").orEmpty()
-                error = if (why.isEmpty()) "Unable to load history" else "Unable to load history: $why"
+                error = HaText.ui("ui.components.history_charts.error").let { if (why.isEmpty()) it else "$it: $why" }
                 contentDescription = error
                 invalidate()
             }
@@ -212,7 +213,8 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
 
     companion object {
         /** `ui.components.history_charts.no_history_found`. */
-        const val NO_HISTORY = "No state history found."
+        /** HA's "No state history found.", in the user's language. */
+        val NO_HISTORY: String get() = HaText.ui("ui.components.history_charts.no_history_found")
 
         /** States from [cutoff] (seconds) on, the last earlier one moved to [cutoff] so the line starts at the window. */
         fun purge(states: List<HistoryState>, cutoff: Double): List<HistoryState> {

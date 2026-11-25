@@ -78,28 +78,29 @@ data class EntityState(
     }
 
     fun formattedState(): String {
-        if (isUnavailable) return state.replaceFirstChar { it.titlecase(Locale.ROOT) }
+        // HA's computeStateDisplay: "Unavailable" and "Unknown" are the frontend's own words.
+        if (isUnavailable) return HaText.ui(if (state == "unknown") "state.default.unknown" else "state.default.unavailable")
         val u = unit
-        // HA's computeStateDisplay: numeric states (a unit, a state class, or a number domain) go through
-        // formatNumber with the registry's display precision; "%" takes no space.
+        // Numeric states (a unit, a state class, or a number domain) go through formatNumber with the registry's
+        // display precision, in the user's number format; the unit follows with HA's blankBeforeUnit.
         val numeric = u != null || attributes["state_class"] != null || domain in NUMBER_DOMAINS
-        if (numeric && state.trim().toBigDecimalOrNull() != null) {
+        if (numeric && state.isNotBlank() && HaFormat.jsNumber(state)?.isNaN() == false) {
             val n = HaDisplay.formatState(state, HaDisplay.displayPrecision(entityId), (attributes["step"] as? Number)?.toDouble())
-            return when (u) { null -> n; "%" -> "$n%"; else -> "$n $u" }
+            return if (u == null) n else "$n${HaFormat.blankBeforeUnit(u)}$u"
         }
-        if (u != null) return if (u == "%") "$state$u" else "$state $u"
+        if (u != null) return "$state${HaFormat.blankBeforeUnit(u)}$u"
         if (domain != "light" && domain != "cover" && domain != "climate" && domain != "fan") HaDisplay.stateLabel(this)?.let { return it }
         // Options and text are the user's own strings: HA shows them as they are, never capitalized.
         if (domain in VERBATIM_DOMAINS) return state
         return when (domain) {
             "light" -> {
                 val pct = brightnessPct
-                if (state == "on" && pct != null) "$pct%" else state.replaceFirstChar { it.titlecase(Locale.ROOT) }
+                if (state == "on" && pct != null) percent(pct) else HaDisplay.stateLabel(this) ?: state.replaceFirstChar { it.titlecase(Locale.ROOT) }
             }
             // HA's tile shows a running fan's speed instead of "On".
-            "fan" -> (attributes["percentage"] as? Number)?.toInt()?.takeIf { state == "on" }?.let { "$it%" }
+            "fan" -> (attributes["percentage"] as? Number)?.toInt()?.takeIf { state == "on" }?.let { percent(it) }
                 ?: HaDisplay.stateLabel(this) ?: state.replaceFirstChar { it.titlecase(Locale.ROOT) }
-            "binary_sensor" -> when (deviceClass) {
+            "binary_sensor" -> HaDisplay.stateLabel(this) ?: when (deviceClass) {
                 "door", "window", "garage_door", "opening" -> if (state == "on") "Open" else "Closed"
                 "motion", "occupancy", "presence" -> if (state == "on") "Detected" else "Clear"
                 "lock" -> if (state == "on") "Unlocked" else "Locked"
@@ -109,16 +110,18 @@ data class EntityState(
             }
             "cover" -> {
                 val pos = (attributes["current_position"] as? Number)?.toInt()
-                if (state == "open" && pos != null) "Open · $pos%" else state.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
+                val label = HaDisplay.stateLabel(this) ?: state.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
+                if (state == "open" && pos != null) "$label · ${percent(pos)}" else label
             }
             "climate" -> {
                 val cur = attributes["current_temperature"]
                 val target = attributes["temperature"]
                 val action = attributes["hvac_action"] as? String
                 buildString {
-                    append((action ?: state).replaceFirstChar { it.titlecase(Locale.ROOT) })
-                    if (target != null) append(" · $target°")
-                    else if (cur != null) append(" · $cur°")
+                    append(action?.let { HaDisplay.attributeLabel(this@EntityState, "hvac_action", it) }
+                        ?: (if (action == null) HaDisplay.stateLabel(this@EntityState) else null)
+                        ?: (action ?: state).replaceFirstChar { it.titlecase(Locale.ROOT) })
+                    (target ?: cur)?.let { append(" · ").append(HaFormat.formatNumber(it)).append("°") }
                 }
             }
             else -> state.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
@@ -135,22 +138,17 @@ data class EntityState(
     }
 
     /**
-     * "Just now", "5 minutes ago", "2 days ago" … for how long ago [lastChanged] was, or null when it is unknown (<= 0).
-     * [nowEpochSec] is a parameter so tests (and a ticking card) control the clock.
+     * How long ago [lastChanged] was, as `<ha-relative-time capitalize>` writes it in the user's language ("Now", "5
+     * minutes ago", "Yesterday"), or null when it is unknown (<= 0). [nowEpochSec] is a parameter so tests (and a
+     * ticking card) control the clock.
      */
     fun relativeLastChanged(nowEpochSec: Double = System.currentTimeMillis() / 1000.0): String? {
         if (lastChanged <= 0.0) return null
-        val delta = (nowEpochSec - lastChanged).toLong().coerceAtLeast(0L)
-        fun unit(n: Long, name: String) = if (n == 1L) "1 $name ago" else "$n ${name}s ago"
-        return when {
-            delta < 60L -> "Just now"
-            delta < 3_600L -> unit(delta / 60L, "minute")
-            delta < 86_400L -> unit(delta / 3_600L, "hour")
-            delta < 7L * 86_400L -> unit(delta / 86_400L, "day")
-            delta < 30L * 86_400L -> unit(delta / (7L * 86_400L), "week")
-            else -> unit(delta / (30L * 86_400L), "month")
-        }
+        return HaFormat.capitalize(HaFormat.relativeTime((lastChanged * 1000).toLong(), (nowEpochSec * 1000).toLong()))
     }
+
+    /** A percentage as HA's tile writes it: the number in the user's format and the language's space before "%". */
+    private fun percent(n: Int): String = "${HaFormat.formatNumber(n)}${HaFormat.blankBeforePercent(HaLocale.current)}%"
 
     /** JSON object matching HA's `hass.states[entity_id]` shape for Tier 3 Micro-Web Islands. */
     fun toHassJson(): JSONObject {

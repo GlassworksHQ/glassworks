@@ -139,7 +139,7 @@ class HaGraphTest {
         val midnight = nice.single { it.value % 86_400_000L == 0L }
         assertTrue(nice.all { it === midnight || it.level < midnight.level })
         assertEquals("Nov 24" to true, HaChartFormat.timeLabel(midnight.value, 1440.0))
-        assertEquals("8:00 PM" to false, HaChartFormat.timeLabel(nice.first().value, 1440.0))
+        assertEquals("8:00\u202fPM" to false, HaChartFormat.timeLabel(nice.first().value, 1440.0))
         // A week, a day at least: one tick a day, labelled with the date past seven days.
         val week = ECharts.timeTicks(start, start + 7 * 86_400_000L + 3_600_000L, minInterval = 86_400_000L).filter { !it.notNice }
         assertEquals(7, week.size)

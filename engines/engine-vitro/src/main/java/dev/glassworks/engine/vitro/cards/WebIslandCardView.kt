@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.cards
 
+import dev.glassworks.engine.vitro.data.HaLocale
 import android.util.Base64
 import android.view.MotionEvent
 import android.view.ViewConfiguration
@@ -587,11 +588,13 @@ class WebIslandCardView(
             val cfgJson = config.raw.toString()
             val haCfgJson = ctx.haConfig().toString()
             val haUserJson = islandUser(ctx.haUser())?.toString() ?: "null"
+            // The user's language and formats, as HA's page holds them in `hass.locale` (HaLocale).
+            val haLocaleJson = HaLocale.current.toJson().toString()
             val tokenJson = JSONObject.quote(ctx.accessToken().orEmpty())
             val heightRule = if (fillViewport) "height: 100vh; width: 100vw;" else ""
             return """
 <!DOCTYPE html>
-<html>
+<html lang=${htmlAttr(HaLocale.current.language)}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -958,6 +961,7 @@ $resourceScripts
 const rawStates = {};
 const haConfig = $haCfgJson;
 const haUser = $haUserJson;
+const haLocale = $haLocaleJson;
 let accessToken = $tokenJson;
 const wsPending = new Map();
 // Lines waiting for the bridge: { line, id } (id: the call's, when it is one).
@@ -1018,11 +1022,42 @@ function vitroLocalize(key, ...args) {
   return out.replace(/\{([^}]+)\}/g, (all, name) => (name in values ? String(values[name]) : all));
 }
 
+// HA's numberFormatToLocale, formatNumber and blankBeforeUnit (common/number/format_number.ts), on this page's Intl.
+function vitroNumberLocale(l) {
+  switch (l.number_format) {
+    case 'comma_decimal': return ['en-US', 'en'];
+    case 'decimal_comma': return ['de', 'es', 'it'];
+    case 'space_comma': return ['fr', 'sv', 'cs'];
+    case 'quote_decimal': return ['de-CH'];
+    case 'system': return undefined;
+    default: return l.language;
+  }
+}
+function vitroFormatNumber(num, l, options) {
+  l = l || haLocale;
+  const o = Object.assign({ maximumFractionDigits: 2 }, options || {});
+  if (typeof num === 'string' && (!options || (options.minimumFractionDigits === undefined && options.maximumFractionDigits === undefined))) {
+    const digits = num.indexOf('.') > -1 ? num.split('.')[1].length : 0;
+    o.minimumFractionDigits = digits;
+    o.maximumFractionDigits = digits;
+  }
+  if (l.number_format !== 'none' && !Number.isNaN(Number(num))) return new Intl.NumberFormat(vitroNumberLocale(l), o).format(Number(num));
+  if (!Number.isNaN(Number(num)) && num !== '' && l.number_format === 'none') {
+    return new Intl.NumberFormat('en-US', Object.assign(o, { useGrouping: false })).format(Number(num));
+  }
+  return typeof num === 'string' ? num : String(num);
+}
+function vitroBlankBeforeUnit(unit, l) {
+  if (unit === '°') return '';
+  if (unit === '%') return ['cs', 'de', 'fi', 'fr', 'sk', 'sv'].includes((l || haLocale).language) ? ' ' : '';
+  return ' ';
+}
+
 function vitroFormatState(stateObj, state) {
   const s = state !== undefined && state !== null ? state : (stateObj ? stateObj.state : '');
   const str = String(s == null ? '' : s);
   const unit = stateObj && stateObj.attributes ? stateObj.attributes.unit_of_measurement : undefined;
-  if (unit && str !== 'unavailable' && str !== 'unknown') return str + (unit === '%' ? '%' : ' ' + unit);
+  if (unit && str !== 'unavailable' && str !== 'unknown') return vitroFormatNumber(str) + vitroBlankBeforeUnit(unit) + unit;
   return vitroTitle(str);
 }
 
@@ -1081,10 +1116,10 @@ const ANON_USER = { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false
 
 const hassBase = {
   config: haConfig,
-  language: 'en',
-  selectedLanguage: null,
-  translationMetadata: { fragments: [], translations: { en: { nativeName: 'English', isRTL: false } } },
-  locale: { language: 'en', number_format: 'language', time_format: 'language' },
+  language: haLocale.language,
+  selectedLanguage: haLocale.language,
+  translationMetadata: { fragments: [], translations: { [haLocale.language]: { nativeName: haLocale.language, isRTL: false } } },
+  locale: haLocale,
   themes: { darkMode: ${ctx.theme.dark}, default_theme: ${JSONObject.quote(ctx.theme.name)}, themes: {} },
   selectedTheme: null,
   user: ANON_USER,

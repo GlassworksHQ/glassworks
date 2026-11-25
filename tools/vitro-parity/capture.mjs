@@ -500,6 +500,9 @@ async function newPage(browser, frame, dark, now, cardModUrl, tz, roboto) {
     hasTouch: frame.input === 'touch',
     colorScheme: dark ? 'dark' : 'light', timezoneId: tz, locale: 'en-US', reducedMotion: 'reduce',
   });
+  // Every page starts as a fresh browser's: HA's frontend keeps the last language it applied in localStorage
+  // (`selectedLanguage`), and a case with no language of its own must not inherit the one before it.
+  await ctx.addInitScript(() => { try { localStorage.removeItem('selectedLanguage'); } catch {} });
   // Before anything else in the page (see robotoFaces). A face added from bytes is ready without a request.
   await ctx.addInitScript((faces) => {
     for (const f of faces) {
@@ -771,6 +774,7 @@ srv.serve_forever()`;
   const homeFile = join(corpusRoot, 'home.json');
   if (!existsSync(homeFile)) fail(`no ${homeFile}: the fake HA's shared inputs (now, config, themes, user)`);
   const home = JSON.parse(readFileSync(homeFile, 'utf8'));
+  fakeHomeProfile = home.user_data?.language ?? null;
   const res = await fakePost('/vitro-parity/home', { ...home, fixtures_dir: join(corpusRoot, 'fixtures'), dashboard: harnessConfig(cases) });
   log(`fake HA on 127.0.0.1, frontend pinned (tools/perf/hafrontend.py), now ${new Date(res.now * 1000).toISOString()}`);
   return Math.round(res.now * 1000);
@@ -780,6 +784,20 @@ async function fakePost(path, body) {
   const r = await fetch(creds.origin + path, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
   if (!r.ok) throw new Error(`fake HA ${path}: HTTP ${r.status} ${await r.text()}`);
   return r.json();
+}
+
+/**
+ * The `language` user data HA's page draws a case with (language, number_format, time_format, …), or null for a
+ * user with no profile. On the fake, as fakehome.user_data answers it: the case fixture's `user_data.language` when
+ * the case sets that key (null included), else home.json's. On a real HA, the signed-in account's own (read once).
+ */
+let realProfile = null;
+let fakeHomeProfile = null;
+function profileLocale(c) {
+  const own = c.fixture?.user_data;
+  const v = !fakeMode ? realProfile
+    : (own && typeof own === 'object' && Object.prototype.hasOwnProperty.call(own, 'language') ? own.language : fakeHomeProfile);
+  return v && typeof v === 'object' ? v : null;
 }
 
 /** Points the fake HA at one case: its states, registries and data come from the case's `fixture` from now on. */
@@ -794,6 +812,8 @@ const roundRect = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k
 async function capture() {
   const fakeNow = fakeMode ? await startFake(loadCasesAll()) : null;
   const ha = await connect(creds);
+  // A real HA's user draws in their own profile's language and formats (read only).
+  if (!fakeMode) realProfile = (await ha.call({ type: 'frontend/get_user_data', key: 'language' }).catch(() => null))?.value ?? null;
   const [haConfig, themes, resources] = await Promise.all([
     ha.call({ type: 'get_config' }), ha.call({ type: 'frontend/get_themes' }), ha.call({ type: 'lovelace/resources' }),
   ]);
@@ -806,15 +826,19 @@ async function capture() {
   };
   await loadRegistries();
   const displayCache = new Map();
+  // Translations are in the case's language: the one its user's profile sets (fixture `user_data.language`), as
+  // HA's page asks for them, else English.
+  let language = 'en';
   const fetchDisplay = async (type, category, names) => {
-    const want = names.filter((n) => !displayCache.has(`${type}|${category}|${n}`));
+    const lang = type === 'frontend/get_translations' ? language : '';
+    const want = names.filter((n) => !displayCache.has(`${type}|${category}|${n}|${lang}`));
     if (want.length) {
-      const res = await ha.call({ type, category, integration: want, ...(type === 'frontend/get_translations' ? { language: 'en' } : {}) });
+      const res = await ha.call({ type, category, integration: want, ...(lang ? { language: lang } : {}) });
       for (const n of want) {
         let mine;
         if (type === 'frontend/get_icons') mine = res.resources?.[n];
         else mine = Object.fromEntries(Object.entries(res.resources || {}).filter(([k]) => k.startsWith(`component.${n}.`)));
-        displayCache.set(`${type}|${category}|${n}`, mine);
+        displayCache.set(`${type}|${category}|${n}|${lang}`, mine);
       }
     }
   };
@@ -827,8 +851,8 @@ async function capture() {
     await fetchDisplay('frontend/get_translations', 'entity', platforms);
     const deviceClasses = Object.fromEntries(Object.entries(shown).map(([id, st]) => [id, st.a?.device_class]).filter(([, dc]) => dc));
     return buildDisplay(ids, registry, devices,
-      (category, n) => displayCache.get(`frontend/get_icons|${category}|${n}`),
-      (category, n) => displayCache.get(`frontend/get_translations|${category}|${n}`), deviceClasses, areas, areaIds);
+      (category, n) => displayCache.get(`frontend/get_icons|${category}|${n}|`),
+      (category, n) => displayCache.get(`frontend/get_translations|${category}|${n}|${language}`), deviceClasses, areas, areaIds);
   };
   if (!cardModUrl) log('card-mod is not a Lovelace resource: card_mod styles will not apply in HA');
   const cases = loadCases();
@@ -880,6 +904,8 @@ async function capture() {
             await loadRegistries();
             loaded = false;
           }
+          const userLocale = profileLocale(c);
+          language = userLocale?.language || 'en';
           // A case with its own stylesheets gets a page of its own, and the next case a fresh one: what a sheet
           // declares (a font) stays in the page it was added to.
           if (!loaded || c.dashboard || resources.length) {
@@ -1023,6 +1049,9 @@ async function capture() {
             viewport: { width: frame.width, height: frame.height, density: frame.density, ...(capturedWithTouch(mode) ? { touch: true } : {}) },
             clip, docSize: { width: info.docW, height: info.docH }, slots: slots.map(roundRect), texts,
             states: caseStates, templates, display,
+            // The user's language and formats HA's page drew with (its `language` user data), for Vitro's same
+            // settings. Only written when the case sets some, so an English reference doesn't change.
+            ...(userLocale ? { locale: userLocale } : {}),
             // Image paths HA's page asked for and didn't get: Vitro missing them too is no capture gap. Only
             // written when there are some, so a clean reference doesn't change.
             ...(failedDrawn.length ? { imagesHaMissing: failedDrawn } : {}),

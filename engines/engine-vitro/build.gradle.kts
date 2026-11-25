@@ -31,6 +31,10 @@ dependencies {
 // The parity harness (#793, src/test/parity, VitroParityHarnessTest): its corpus and Home Assistant's reference
 // renders are test inputs, and -PvitroParity* options reach the test (tools/vitro-parity/README.md).
 tasks.withType<Test>().configureEach {
+    // The browser locale HA's frontend would see (HaLocale's "system" and its language before the profile answers):
+    // the same on every machine, so a test's English is English.
+    systemProperty("user.language", "en")
+    systemProperty("user.country", "US")
     inputs.dir("src/test/parity").withPropertyName("vitroParity").withPathSensitivity(PathSensitivity.RELATIVE)
     // ClarityStatsTest holds Vitro's Clarity harness to the web harness's cases.
     inputs.file(rootProject.file("tools/perf/test/stats-cases.json")).withPropertyName("clarityStatsCases")
