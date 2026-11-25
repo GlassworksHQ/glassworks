@@ -1066,9 +1066,14 @@ class VitroEngineTest {
         assertTrue(html.contains("localize: vitroLocalize"))
         assertTrue(html.contains("formatEntityState: vitroFormatState"))
         assertTrue(html.contains("formatEntityAttributeValue: vitroFormatAttribute"))
-        assertTrue(html.contains("locale: { language: 'en', number_format: 'language', time_format: 'language' }"))
+        // hass.locale and hass.language are the user's (HaLocale): English and HA's defaults here.
+        assertTrue(html.contains("""const haLocale = {"language":"en","number_format":"language","time_format":"language","date_format":"language","first_weekday":"language","time_zone":"local"};"""))
+        assertTrue(html.contains("locale: haLocale,"))
+        assertTrue(html.contains("language: haLocale.language,"))
+        assertTrue(html.contains("<html lang=\"en\">"))
         assertTrue(html.contains("themes: {} }"))
-        assertTrue(html.contains("user: { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false }"))
+        assertTrue(html.contains("const ANON_USER = { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false };"))
+        assertTrue(html.contains("user: ANON_USER,"))
         // HA's registries, asked for on a card's first read of one; and every state once a card walks them.
         assertTrue(html.contains("const registries = { entities: {}, devices: {}, areas: {}, floors: {} };"))
         // Each hass keeps the registries it was made with: a card comparing old and new sees a change.

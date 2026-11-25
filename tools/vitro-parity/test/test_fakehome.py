@@ -178,6 +178,27 @@ class Home(unittest.TestCase):
         self.assertTrue(all(k.startswith("component.") for k in H.translations("entity_component")))
         self.assertEqual(H.HACORE["version"], H.HA_VERSION)
 
+    def test_translations_in_the_users_language_fall_back_to_english_per_key(self):
+        de = H.translations_for("entity_component", ["weather", "light"], "de")
+        en = H.translations("entity_component", ["weather", "light"])
+        self.assertEqual(de["component.weather.entity_component._.state.partlycloudy"], "Teilweise bewölkt")
+        self.assertEqual(de["component.light.entity_component._.state.off"], "Aus")
+        # Every English key is there, in German where HA has it (HA core's helpers/translation.py).
+        self.assertEqual(set(de), set(en))
+        self.assertEqual(H.translations_for("entity_component", ["weather"], "en"), H.translations("entity_component", ["weather"]))
+        self.assertEqual(H.translations_for("entity_component", ["weather"], "xx"), H.translations("entity_component", ["weather"]))
+
+    def test_the_users_profile_is_the_cases(self):
+        self.assertIsNone(H.user_data("language"))
+        self.case({"user_data": {"language": {"language": "fr", "number_format": "space_comma"}}})
+        self.assertEqual(H.user_data("language"), {"language": "fr", "number_format": "space_comma"})
+        self.assertIsNone(H.user_data("core"))
+        # What the page gets over the socket.
+        out = call({"type": "frontend/subscribe_user_data", "key": "language"})
+        self.assertEqual(out[1]["event"], {"value": {"language": "fr", "number_format": "space_comma"}})
+        out = call({"type": "frontend/get_translations", "category": "entity_component", "integration": ["weather"], "language": "fr"})
+        self.assertEqual(out[0]["result"]["resources"]["component.weather.entity_component._.state.cloudy"], "Nuageux")
+
     def test_the_cards_subscriptions(self):
         self.case({"todo": {"todo.c": [{"summary": "x", "uid": "item-1", "status": "needs_action", "due": "@D+1"}]},
                    "forecast": {"weather.h": {"daily": [{"datetime": "@D+1 12:00", "condition": "sunny"}]}},

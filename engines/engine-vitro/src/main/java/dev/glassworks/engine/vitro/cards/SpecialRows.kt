@@ -93,7 +93,7 @@ internal object SpecialRows {
         val icon = addIcon(ctx, layout)
         val name = text(ctx, 14f, ctx.theme.primaryTextColor)
         layout.addView(name, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ctx.px(8f) })
-        val label = row.raw?.optString("action_name", "")?.ifEmpty { null } ?: "Run"
+        val label = row.raw?.optString("action_name", "")?.ifEmpty { null } ?: haUi("ui.card.service.run", "Run")
         val button = text(ctx, 14f, onPrimary(ctx), Inter.MEDIUM).apply {
             text = label
             gravity = Gravity.CENTER

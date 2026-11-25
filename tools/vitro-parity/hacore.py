@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HA core's English entity texts and icons for the parity harness's fake Home Assistant (MIT; the data itself is
+"""HA core's entity texts (English, and the LANGUAGES below) and icons for the parity harness's fake Home Assistant (MIT; the data itself is
 HA core's, Apache-2.0).
 
 The frontend doesn't carry the words a card shows for a state ("Heat/Cool", "Armed away") or the icon of a state:
@@ -34,6 +34,9 @@ CACHE = os.environ.get("GW_PERF_CACHE") or os.path.join(os.path.expanduser("~"),
 # Translation categories the frontend asks for while it draws a dashboard (entity_component: the domains' state
 # words; entity: an integration's own names for its entities, by translation key), and `title` (integration names).
 CATEGORIES = ("entity_component", "entity", "title")
+# The languages the corpus's cases may set as the user's (a fixture's `user_data.language.language`), besides
+# English: their texts come from each integration's translations/<language>.json, in the same categories.
+LANGUAGES = ("de", "fr")
 # Integrations whose own entity texts (category `entity`) and icons the fixtures may use as a platform. The entity
 # domains' texts (entity_component) are always all in.
 PLATFORMS = ("demo", "template", "sun", "met", "person", "local_calendar", "local_todo", "shopping_list",
@@ -67,6 +70,7 @@ def extract(z):
     """{"translations": {component: {category: tree}}, "icons": {component: {category: tree}}}: every entity domain's
     entity_component texts and icons, and the PLATFORMS' own entity texts and icons."""
     translations, icons = {}, {}
+    localized = {lang: {} for lang in LANGUAGES}
     for name in sorted(z.namelist()):
         parts = name.split("/")
         if len(parts) < 4 or parts[0] != "homeassistant" or parts[1] != "components":
@@ -77,6 +81,11 @@ def extract(z):
             keep = {c: d[c] for c in CATEGORIES if c in d and (c != "entity" or comp in PLATFORMS)}
             if "entity_component" in d or comp in PLATFORMS:
                 translations[comp] = keep
+        elif len(parts) == 5 and parts[3] == "translations" and parts[4][:-5] in LANGUAGES and parts[4].endswith(".json"):
+            d = json.loads(z.read(name))
+            keep = {c: d[c] for c in CATEGORIES if c in d and (c != "entity" or comp in PLATFORMS)}
+            if keep:
+                localized[parts[4][:-5]][comp] = keep
         elif parts[3:] == ["icons.json"]:
             d = json.loads(z.read(name))
             keep = {c: d[c] for c in ("entity_component", "entity") if c in d and (c != "entity" or comp in PLATFORMS)}
@@ -84,14 +93,15 @@ def extract(z):
                 icons[comp] = keep
     # Icons only for components that have texts here too (an entity domain or a listed platform).
     icons = {k: v for k, v in icons.items() if k in translations}
-    return {"translations": translations, "icons": icons}
+    localized = {lang: {k: v for k, v in comps.items() if k in translations} for lang, comps in localized.items()}
+    return {"translations": translations, "icons": icons, "localized": localized}
 
 
 def main():
     with zipfile.ZipFile(wheel_path()) as z:
         data = extract(z)
-    doc = {"_comment": f"HA core {VERSION}'s English entity texts and icons (homeassistant/components/*/translations/en.json "
-                       f"and icons.json, {LICENSE}), cut to what the parity harness's fake HA answers with. Written by "
+    doc = {"_comment": f"HA core {VERSION}'s entity texts and icons (homeassistant/components/*/translations/en.json, "
+                       f"the LANGUAGES' <language>.json under 'localized', and icons.json, {LICENSE}), cut to what the parity harness's fake HA answers with. Written by "
                        "tools/vitro-parity/hacore.py from the PyPI wheel (SHA-256 pinned there); don't edit by hand.",
            "version": VERSION, "wheel_sha256": SHA256, **data}
     with open(OUT, "w") as f:

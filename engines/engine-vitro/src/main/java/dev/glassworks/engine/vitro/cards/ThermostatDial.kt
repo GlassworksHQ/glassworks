@@ -23,6 +23,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeProvider
+import dev.glassworks.engine.vitro.data.HaFormat
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.ui.CardSurface
@@ -232,8 +233,8 @@ internal class ThermostatDialView(
 
     // The texts the dial draws, built once per value (onDraw and the description share them).
     private fun offCurText(cur: Double) =
-        offCurMemo.of(cur) { v -> HaDisplay.formatValue(v, 1).let { if ('.' in it) it else String.format(Locale.US, "%.1f", v) } + " " + unit }
-    private fun curText(cur: Double) = curMemo.of(cur) { v -> String.format(Locale.US, "%.1f %s", v, unit) }
+        offCurMemo.of(cur) { v -> HaDisplay.formatFixed(v, 1) + " " + unit }
+    private fun curText(cur: Double) = curMemo.of(cur) { v -> HaDisplay.formatFixed(v, 1) + " " + unit }
 
     /**
      * HA's label over the target: the HVAC action while it runs (anything but `off`), else the state as HA names it
@@ -1253,9 +1254,12 @@ internal class ThermostatDialView(
         fun splitTemp(v: Double, step: Double): Pair<String, String> {
             // The step's decimals, or the value's own when it has more (a 30.25 maximum on a 0.5 step), up to 3.
             val digits = maxOf(ClimateTargets.decimalsOf(step), minOf(ClimateTargets.decimalsOf(v), 3))
-            if (digits == 0) return String.format(Locale.US, "%.0f", v) to ""
-            val text = String.format(Locale.US, "%.${digits}f", v)
-            return text.substringBefore('.') to "." + text.substringAfter('.')
+            if (digits == 0) return HaDisplay.formatFixed(v, 0) to ""
+            // ha-big-number splits formatNumber's parts at the language's decimal mark.
+            val text = HaDisplay.formatFixed(v, digits)
+            val mark = HaFormat.decimalMark()
+            val at = text.lastIndexOf(mark)
+            return if (at < 0) text to "" else text.substring(0, at) to text.substring(at)
         }
     }
 }

@@ -215,6 +215,11 @@ open class MainActivity : Activity() {
         HaAuth.init(this)
         intent?.let { screenExtras(it, runtime.app::trustsExtras) }
         applyIntent(intent, fromNewIntent = false)
+        // VitroSentinel turned Vitro off after it crashed the app at start: the panel says so once (Labs keeps why).
+        if (prefs.takeVitroOffNotice()) {
+            Log.w(TAG, "Vitro: turned off after the app crashed at start; this start uses the browser engine")
+            Toast.makeText(this, dev.glassworks.settings.CoreSettings.VITRO_OFF_NOTICE, Toast.LENGTH_LONG).show()
+        }
         // The frame's orientation. The S1's manifest already asks for landscape: no change there.
         val orientation = glassworks.frame.orientation
         screenOrientation(orientation).let { if (requestedOrientation != it) requestedOrientation = it }

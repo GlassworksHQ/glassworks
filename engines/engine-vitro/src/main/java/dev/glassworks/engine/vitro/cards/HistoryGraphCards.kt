@@ -16,6 +16,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.model.ActionConfig
@@ -93,7 +94,7 @@ object HaHistory {
                 "climate", "water_heater" -> temperatureUnit
                 "humidifier" -> "%"
                 // A zone's state is how many people are in it (`ui.dialogs.more_info_control.zone.graph_unit`).
-                "zone" -> "People in zone"
+                "zone" -> HaText.ui("ui.dialogs.more_info_control.zone.graph_unit")
                 else -> null
             }
             if (unit == null) {
@@ -452,7 +453,7 @@ object HaHistoryLines {
         current ?: return null
         val attr = LEGEND_ATTRIBUTE.firstOrNull { seriesId.endsWith(it.first) }?.second ?: return current.formattedState()
         return when (val v = current.attributes[attr]) {
-            null, JSONObject.NULL -> "Unknown"
+            null, JSONObject.NULL -> HaText.ui("state.default.unknown")
             is Number -> {
                 val number = HaChartFormat.number(v.toDouble(), 0, 2)
                 val unit = temperatureUnit?.takeIf { it.isNotEmpty() }
@@ -510,7 +511,7 @@ private fun cardHeader(ctx: VitroCardContext, title: String, onLink: () -> Unit)
     val chevron = MdiIconView(ctx.context).apply {
         setIcon("mdi:chevron-right", ctx.theme.primaryTextColor)
         // HA's aria-label and tooltip for the link: the panel's name.
-        contentDescription = "History"
+        contentDescription = HaText.ui("ui.dialogs.more_info_control.history")
         isClickable = true
         setOnClickListener { onLink() }
     }
@@ -1195,11 +1196,11 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
     private val slotCharts = ArrayList<SlotChart>()
     private val fixedHeight = hasFixedHeight(config)
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         if (fixedHeight && slotCharts.isNotEmpty() && MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
-            measureInSlot(this, slotCharts, widthMeasureSpec, heightMeasureSpec, ctx.dp) { w, h -> super.onMeasure(w, h) }
+            measureInSlot(this, slotCharts, widthMeasureSpec, heightMeasureSpec, ctx.dp) { w, h -> super.measureCard(w, h) }
         } else {
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            super.measureCard(widthMeasureSpec, heightMeasureSpec)
         }
     }
 
@@ -1217,7 +1218,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
             orientation = LinearLayout.VERTICAL
             setPadding(ctx.px(16f), 0, ctx.px(16f), ctx.px(8f))
         }
-        info.text = "Loading state history…"
+        info.text = HaText.ui("ui.components.history_charts.loading_history")
         info.minHeight = Math.round(60f * ctx.dp)
         content.addView(info, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(60f * ctx.dp)))
         content.addView(charts, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -1271,7 +1272,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
                 stream = null
                 unsubscribe = null
                 val why = error?.optString("message")?.takeIf { it.isNotEmpty() } ?: error?.optString("code").orEmpty()
-                streamError = if (why.isEmpty()) "Unable to load history" else "Unable to load history: $why"
+                streamError = HaText.ui("ui.components.history_charts.error").let { if (why.isEmpty()) it else "$it: $why" }
                 render()
             }
         })
@@ -1323,7 +1324,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         charts.removeAllViews()
         slotCharts.clear()
         if (history.line.isEmpty() && history.timeline.isEmpty()) {
-            info.text = "No state history found."
+            info.text = HaText.ui("ui.components.history_charts.no_history_found")
             info.visibility = VISIBLE
             return
         }
@@ -1649,12 +1650,12 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
 
     private val fixedHeight = hasFixedHeight(config)
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         if (fixedHeight && chart.visibility == VISIBLE && MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
             val natural = chartWidthCss()?.let(::defaultChartHeight) ?: chart.heightCss
-            measureInSlot(this, listOf(SlotChart(chart, legendBox, natural)), widthMeasureSpec, heightMeasureSpec, ctx.dp) { w, h -> super.onMeasure(w, h) }
+            measureInSlot(this, listOf(SlotChart(chart, legendBox, natural)), widthMeasureSpec, heightMeasureSpec, ctx.dp) { w, h -> super.measureCard(w, h) }
         } else {
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            super.measureCard(widthMeasureSpec, heightMeasureSpec)
         }
     }
 
@@ -1709,7 +1710,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
             legend.setItems(emptyList())
             chart.setScene { ChartScene() }
             chart.visibility = GONE
-            info.text = "No statistics found."
+            info.text = HaText.ui("ui.components.statistics_charts.no_statistics_found")
             info.visibility = VISIBLE
             return
         }

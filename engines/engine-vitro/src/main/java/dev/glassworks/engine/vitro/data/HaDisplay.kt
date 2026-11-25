@@ -5,18 +5,13 @@
 package dev.glassworks.engine.vitro.data
 
 import org.json.JSONObject
-import java.math.BigDecimal
-import java.math.RoundingMode
-import java.text.DecimalFormat
-import java.text.DecimalFormatSymbols
 import java.util.Collections
-import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * What HA's frontend knows about showing an entity, read from HA itself: the entity registry's display entries
  * (`config/entity_registry/list_for_display`: platform, translation key, display precision, custom icon), the
- * icon translations (`frontend/get_icons`) and the state translations (`frontend/get_translations`, English).
+ * icon translations (`frontend/get_icons`) and the state translations (`frontend/get_translations`, in the user's language).
  * [icon] and [stateLabel] follow HA's `entityIcon` and `computeStateDisplay`; until the data arrives they return
  * null and callers keep their own defaults. One HA per process, so this is a process-wide holder; the client
  * fills it off the main thread and the store re-renders once it lands.
@@ -80,6 +75,15 @@ object HaDisplay {
         areas = emptyMap()
         componentIcons.clear(); platformIcons.clear(); stateLabels.clear()
         translatedDomains.clear(); translatedPlatforms.clear(); iconDomains.clear(); iconPlatforms.clear()
+    }
+
+    /**
+     * The user's language changed: the next [missingFor] asks for every domain's and integration's translations
+     * again. The labels in hand stay until the new ones replace them (HA's backend fills a missing key with English,
+     * so every label is replaced).
+     */
+    fun forgetTranslations() {
+        translatedDomains.clear(); translatedPlatforms.clear()
     }
 
     /** Reads `list_for_display`'s result (`entities: [{ei, pl, tk, dp, ic}, ...]`). */
@@ -261,34 +265,38 @@ object HaDisplay {
         return if (domain in translatedDomains) s.state else null
     }
 
-    fun displayPrecision(entityId: String): Int? = registry[entityId]?.displayPrecision
+    /**
+     * HA's `formatEntityAttributeValue` lookup for a string attribute ([attribute] `hvac_action` = `heating`): the
+     * integration's label, the device class's, the domain's. Null when none is loaded.
+     */
+    fun attributeLabel(s: EntityState, attribute: String, value: String): String? {
+        val entry = registry[s.entityId]
+        val domain = s.domain
+        if (entry?.translationKey != null && entry.platform != null) {
+            stateLabels["component.${entry.platform}.entity.$domain.${entry.translationKey}.state_attributes.$attribute.state.$value"]?.let { return it }
+        }
+        s.deviceClass?.let { dc -> stateLabels["component.$domain.entity_component.$dc.state_attributes.$attribute.state.$value"]?.let { return it } }
+        return stateLabels["component.$domain.entity_component._.state_attributes.$attribute.state.$value"]
+    }
 
-    private val US = DecimalFormatSymbols(Locale.US)
+    /** The domain's own word for [state] (`component.<domain>.entity_component._.state.<state>`), when loaded. */
+    fun domainStateLabel(domain: String, state: String): String? = stateLabels["component.$domain.entity_component._.state.$state"]
+
+    fun displayPrecision(entityId: String): Int? = registry[entityId]?.displayPrecision
 
     /**
      * HA's `formatNumber` for a state string with `getNumberFormatOptions`: the display precision when the registry
-     * has one, no decimals when the step and the value are whole, else the decimals the string carries. English
-     * grouping, rounding half away from zero like `Intl`.
+     * has one, no decimals when the step and the value are whole, else the decimals the string carries; in the
+     * user's number format ([HaFormat]).
      */
-    fun formatState(raw: String, displayPrecision: Int?, step: Double?): String {
-        val bd = raw.trim().toBigDecimalOrNull() ?: return raw
-        val digits = when {
-            displayPrecision != null -> displayPrecision.coerceIn(0, 10)
-            step != null && step % 1.0 == 0.0 && bd.stripTrailingZeros().scale() <= 0 -> 0
-            else -> raw.substringAfter('.', "").takeIf { '.' in raw }?.length ?: 0
-        }
-        return fixed(bd, digits, digits)
-    }
+    fun formatState(raw: String, displayPrecision: Int?, step: Double?): String =
+        HaFormat.formatNumber(raw, HaLocale.current, HaFormat.numberOptions(raw, step, displayPrecision))
 
     /** HA's `formatNumber` for a number value: up to 2 decimals (or [maxDigits]), trailing zeros dropped. */
-    fun formatValue(v: Double, maxDigits: Int = 2): String = fixed(BigDecimal.valueOf(v), 0, maxDigits)
+    fun formatValue(v: Double, maxDigits: Int = 2): String =
+        HaFormat.formatNumber(v, HaLocale.current, HaFormat.NumberOptions(maximumFractionDigits = maxDigits))
 
-    private fun fixed(bd: BigDecimal, minDigits: Int, maxDigits: Int): String {
-        val f = DecimalFormat("#,##0", US).apply {
-            minimumFractionDigits = minDigits
-            maximumFractionDigits = maxDigits
-            roundingMode = RoundingMode.HALF_UP
-        }
-        return f.format(bd)
-    }
+    /** HA's `formatNumber` with fixed decimals ([digits] minimum and maximum), as cards pass `display_precision`. */
+    fun formatFixed(v: Double, digits: Int): String =
+        HaFormat.formatNumber(v, HaLocale.current, HaFormat.NumberOptions(digits, digits))
 }

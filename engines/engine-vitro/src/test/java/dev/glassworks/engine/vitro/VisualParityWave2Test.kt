@@ -132,7 +132,7 @@ class VisualParityWave2Test {
         ShadowLooper.idleMainLooper()
         assertEquals(0.75f, view.ring.targetFraction, 1e-4f)
         assertEquals(0xFFFF0000.toInt(), view.ring.activeColor)
-        assertEquals("1150", view.ring.valueText)
+        assertEquals("1,150", view.ring.valueText)
         assertEquals("21.5 °C", view.ring.secondaryText)
         assertEquals("co2", view.nameView.text.toString())
     }
@@ -213,9 +213,11 @@ class VisualParityWave2Test {
     // ---- Mirror polish: clock zone and alignment, icons, markdown images, chip card-mod, to-do limits ----
 
     @Test
-    fun clockFormatsInHomeAssistantsTimeZoneNotTheDevices() {
+    fun clockFormatsInHomeAssistantsTimeZoneWhenTheUserPicksIt() {
         val prev = java.util.TimeZone.getDefault()
         java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))
+        // HA 2026.11's clock with no `time_zone` of its own uses the user's choice (resolveTimeZone): here HA's.
+        dev.glassworks.engine.vitro.data.HaLocale.set(dev.glassworks.engine.vitro.data.FrontendLocale(timeZone = "server"), notify = false)
         try {
             // Any instant: Los Angeles is 7-8 hours behind UTC, so the two clocks must differ.
             val instant = java.util.Date(1_795_496_000_000L - (1_795_496_000_000L % 60_000L))
@@ -237,6 +239,7 @@ class VisualParityWave2Test {
             assertEquals(utcFmt.format(instant), none.renderedTime)
         } finally {
             java.util.TimeZone.setDefault(prev)
+            dev.glassworks.engine.vitro.data.HaLocale.reset()
         }
     }
 
@@ -244,6 +247,7 @@ class VisualParityWave2Test {
     fun theClockDateUsesTheSameZoneAsItsTime() {
         val prev = java.util.TimeZone.getDefault()
         java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))
+        dev.glassworks.engine.vitro.data.HaLocale.set(dev.glassworks.engine.vitro.data.FrontendLocale(timeZone = "server"), notify = false)
         try {
             // 20:00 UTC on a Monday is already Tuesday in Tokyo: the date must say so, from the very first render.
             val instant = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
@@ -258,6 +262,7 @@ class VisualParityWave2Test {
             assertTrue("${tokyo.renderedDate} is $weekday", tokyo.renderedDate.contains(weekday))
         } finally {
             java.util.TimeZone.setDefault(prev)
+            dev.glassworks.engine.vitro.data.HaLocale.reset()
         }
     }
 

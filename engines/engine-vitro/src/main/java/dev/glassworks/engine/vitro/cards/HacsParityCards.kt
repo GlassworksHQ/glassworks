@@ -18,6 +18,8 @@ import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.Space
 import android.widget.TextView
+import dev.glassworks.engine.vitro.data.HaText
+import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
@@ -620,7 +622,7 @@ class MushroomHumidifierCardView(ctx: VitroCardContext, config: CardConfig) : Mu
 
     init {
         shape.isClickable = true
-        shape.contentDescription = "Toggle"
+        shape.contentDescription = HaText.ui("ui.card.common.toggle")
         if (!config.raw.has("icon_tap_action")) shape.setOnClickListener { call("humidifier", "toggle") }
         if (config.raw.optBoolean("show_target_humidity_control", false)) {
             val row = controlRow()
@@ -1137,9 +1139,9 @@ class MushroomClimateCardView(ctx: VitroCardContext, config: CardConfig) : Mushr
         if (s != null) {
             val target = (s.attributes["temperature"] as? Number)?.toDouble()
             val decimals = if (stepOf(s) % 1.0 == 0.0) 0 else 1
-            tempValue.text = target?.let { String.format(Locale.US, "%.${decimals}f", it) } ?: "–"
-            lowValue.text = targets?.low?.let { String.format(Locale.US, "%.${decimals}f", it) } ?: "–"
-            highValue.text = targets?.high?.let { String.format(Locale.US, "%.${decimals}f", it) } ?: "–"
+            tempValue.text = target?.let { HaDisplay.formatFixed(it, decimals) } ?: "–"
+            lowValue.text = targets?.low?.let { HaDisplay.formatFixed(it, decimals) } ?: "–"
+            highValue.text = targets?.high?.let { HaDisplay.formatFixed(it, decimals) } ?: "–"
             val modes = modesOf(s)
             if (modeButtons.keys.toList() != modes) {
                 modeRow.removeAllViews()
@@ -1182,7 +1184,7 @@ class MushroomClimateCardView(ctx: VitroCardContext, config: CardConfig) : Mushr
         val COOL = MODE_COLORS.getValue("cool")
 
         fun formatNumber(v: Double): String =
-            if (v % 1.0 == 0.0) v.toLong().toString() else String.format(Locale.US, "%.1f", v).trimEnd('0').trimEnd('.')
+            dev.glassworks.engine.vitro.data.HaDisplay.formatValue(v, 1)
     }
 }
 

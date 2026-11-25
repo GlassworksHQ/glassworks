@@ -1,0 +1,502 @@
+{
+ "case": "locale-fr-entities",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 489
+ },
+ "docSize": {
+  "width": 960,
+  "height": 521
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 472.58,
+   "type": "hui-entities-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Cuisine",
+   "x": 17,
+   "y": 21,
+   "w": 76.83,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Fridge Temperature",
+   "x": 73,
+   "y": 77.59,
+   "w": 121.09,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "3,4 °C",
+   "x": 446.72,
+   "y": 77.59,
+   "w": 36.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Fridge Power",
+   "x": 73,
+   "y": 125.59,
+   "w": 81.73,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "1 249 W",
+   "x": 433.92,
+   "y": 125.59,
+   "w": 49.08,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Kitchen Humidity",
+   "x": 73,
+   "y": 164.8,
+   "w": 106.27,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Il y a 5 heures",
+   "x": 73,
+   "y": 187.19,
+   "w": 85.27,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "45 %",
+   "x": 453.55,
+   "y": 175.98,
+   "w": 29.45,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Outdoor Pressure",
+   "x": 73,
+   "y": 226.38,
+   "w": 109.03,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "1 019,3 hPa",
+   "x": 411.66,
+   "y": 226.38,
+   "w": 71.34,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Fridge Door",
+   "x": 73,
+   "y": 274.38,
+   "w": 72.22,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Fermé",
+   "x": 443.56,
+   "y": 274.38,
+   "w": 39.44,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Vacation mode",
+   "x": 73,
+   "y": 331.38,
+   "w": 93.88,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Accent",
+   "x": 73,
+   "y": 379.38,
+   "w": 43.52,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Offline Meter",
+   "x": 73,
+   "y": 427.38,
+   "w": 79.95,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Indisponible",
+   "x": 407.31,
+   "y": 427.38,
+   "w": 75.69,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "binary_sensor.fridge_door": {
+   "s": "off",
+   "a": {
+    "device_class": "door",
+    "friendly_name": "Fridge Door"
+   },
+   "lc": 1794483060,
+   "lu": 1794483060
+  },
+  "input_boolean.vacation_mode": {
+   "s": "off",
+   "a": {
+    "editable": true,
+    "icon": "mdi:account-multiple",
+    "friendly_name": "Vacation mode"
+   },
+   "lc": 1794489360,
+   "lu": 1794489360
+  },
+  "light.bedroom_accent": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "xy"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "hs_color": null,
+    "rgb_color": null,
+    "xy_color": null,
+    "off_with_transition": false,
+    "off_brightness": 254,
+    "icon": "mdi:led-strip-variant",
+    "friendly_name": "Bedroom Strip Accent",
+    "supported_features": 40
+   },
+   "lc": 1794496680,
+   "lu": 1794496680
+  },
+  "sensor.fridge_power": {
+   "s": "1248.6",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "W",
+    "device_class": "power",
+    "friendly_name": "Fridge Power"
+   },
+   "lc": 1794487740,
+   "lu": 1794487740
+  },
+  "sensor.fridge_temperature": {
+   "s": "3.4",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "icon": "mdi:thermometer",
+    "friendly_name": "Fridge Temperature"
+   },
+   "lc": 1794494100,
+   "lu": 1794494100
+  },
+  "sensor.kitchen_humidity": {
+   "s": "45",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "%",
+    "device_class": "humidity",
+    "friendly_name": "Kitchen Humidity"
+   },
+   "lc": 1794483060,
+   "lu": 1794483060
+  },
+  "sensor.offline_meter": {
+   "s": "unavailable",
+   "a": {
+    "friendly_name": "Offline Meter"
+   },
+   "lc": 1794498480,
+   "lu": 1794498480
+  },
+  "sensor.outdoor_pressure": {
+   "s": "1019.3",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "hPa",
+    "device_class": "pressure",
+    "friendly_name": "Outdoor Pressure"
+   },
+   "lc": 1794497580,
+   "lu": 1794497580
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "binary_sensor.fridge_door",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Door"
+   },
+   {
+    "ei": "input_boolean.vacation_mode",
+    "pl": "input_boolean",
+    "en": "Vacation mode"
+   },
+   {
+    "ei": "light.bedroom_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:led-strip-variant",
+    "di": "device-2",
+    "en": "Accent"
+   },
+   {
+    "ei": "sensor.fridge_power",
+    "pl": "demo",
+    "dp": 0,
+    "di": "device-1",
+    "en": "Power"
+   },
+   {
+    "ei": "sensor.fridge_temperature",
+    "pl": "demo",
+    "dp": 1,
+    "di": "device-1",
+    "en": "Temperature"
+   },
+   {
+    "ei": "sensor.kitchen_humidity",
+    "pl": "demo"
+   },
+   {
+    "ei": "sensor.offline_meter",
+    "pl": "demo"
+   },
+   {
+    "ei": "sensor.outdoor_pressure",
+    "pl": "demo",
+    "dp": 1
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Fridge"
+   },
+   {
+    "id": "device-2",
+    "name": "Bedroom Strip"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "binary_sensor",
+    "input_boolean",
+    "light",
+    "sensor"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "binary_sensor": {
+     "_": {
+      "default": "mdi:radiobox-blank",
+      "state": {
+       "on": "mdi:checkbox-marked-circle"
+      }
+     },
+     "door": {
+      "default": "mdi:door-closed",
+      "state": {
+       "on": "mdi:door-open"
+      }
+     }
+    },
+    "input_boolean": {
+     "_": {
+      "default": "mdi:check-circle-outline",
+      "state": {
+       "off": "mdi:close-circle-outline"
+      }
+     }
+    },
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "humidity": {
+      "default": "mdi:water-percent"
+     },
+     "power": {
+      "default": "mdi:flash"
+     },
+     "pressure": {
+      "default": "mdi:gauge"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "light": {
+      "light": {
+       "state_attributes": {
+        "effect": {
+         "state": {
+          "colorloop": "mdi:looks"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.binary_sensor.entity_component._.state.off": "Désactivé",
+    "component.binary_sensor.entity_component._.state.on": "Activé",
+    "component.binary_sensor.entity_component.door.state.off": "Fermé",
+    "component.binary_sensor.entity_component.door.state.on": "Ouvert",
+    "component.input_boolean.entity_component._.state.off": "Désactivé",
+    "component.input_boolean.entity_component._.state.on": "Activé",
+    "component.light.entity_component._.state.off": "Éteint",
+    "component.light.entity_component._.state.on": "Allumé",
+    "component.sensor.entity_component._.state.off": "Désactivé",
+    "component.sensor.entity_component._.state.on": "Activé"
+   },
+   "entity": {}
+  }
+ },
+ "locale": {
+  "language": "fr",
+  "number_format": "space_comma",
+  "time_format": "24"
+ }
+}

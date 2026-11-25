@@ -43,6 +43,12 @@ import kotlin.math.roundToInt
 // The small built-in cards of Home Assistant 2026.11 (frontend 20261028.8), each drawn as its `hui-*-card.ts` draws
 // it: statistic, date, plant-status, toggle-group, shortcut and alert, and HA's error card for a config HA can't build.
 
+/** HA's string for [key] in the user's language, with [english] (same `{arg}` syntax) until HA's strings are in. */
+internal fun haUi(key: String, english: String, vararg args: Pair<String, Any?>): String =
+    dev.glassworks.engine.vitro.data.HaText.ui(key, *args).ifEmpty {
+        if (args.isEmpty()) english else dev.glassworks.engine.vitro.data.HaText.format(english, args.toMap())
+    }
+
 private fun smallText(ctx: VitroCardContext, cssPx: Float, color: Int, weight: Int = Inter.REGULAR): TextView =
     TextView(ctx.context).apply {
         val sp = ctx.scaledSp(cssPx)
@@ -271,9 +277,9 @@ class ToggleGroupCardView(ctx: VitroCardContext, private val config: CardConfig)
         val on = onEntities()
         val total = entities.size
         val label = when (on.size) {
-            0 -> "All off"
-            total -> "All on"
-            else -> "${on.size} of $total on"
+            0 -> haUi("ui.card.toggle-group.all_off", "All off")
+            total -> haUi("ui.card.toggle-group.all_on", "All on")
+            else -> haUi("ui.card.toggle-group.some_on", "{on_count} of {total_count} on", "on_count" to on.size, "total_count" to total)
         }
         val title = config.raw.optString("title", "").ifEmpty { null }
         setLines(title ?: label, if (title != null) label else null)
@@ -282,8 +288,9 @@ class ToggleGroupCardView(ctx: VitroCardContext, private val config: CardConfig)
         paintIcon("mdi:power", color ?: ctx.theme.stateInactiveColor, withDisc = true)
         val turnOn = on.isEmpty()
         iconFrame.contentDescription = when {
-            title != null -> if (turnOn) "Turn on $title" else "Turn off $title"
-            else -> if (turnOn) "Turn all on" else "Turn all off"
+            title != null -> if (turnOn) haUi("ui.components.entity.entity-toggle.turn_on", "Turn {name} on", "name" to title)
+                else haUi("ui.components.entity.entity-toggle.turn_off", "Turn {name} off", "name" to title)
+            else -> if (turnOn) haUi("ui.card.toggle-group.turn_all_on", "Turn all on") else haUi("ui.card.toggle-group.turn_all_off", "Turn all off")
         }
     }
 
@@ -472,9 +479,18 @@ class AlertCardView(ctx: VitroCardContext, private val config: CardConfig) :
             else -> setOf("on")
         }
 
-        /** `ha-relative-time format="short"`: English `Intl.RelativeTimeFormat` with `numeric: auto, style: short`. */
-        fun shortRelative(fromMs: Long, nowMs: Long, tz: TimeZone = TimeZone.getDefault()): String {
-            val (value, unit) = HaRelativeTime.selectUnit(fromMs, nowMs, tz)
+        /**
+         * `ha-relative-time format="short"`: `Intl.RelativeTimeFormat` with `numeric: auto, style: short`. Vitro's locale
+         * tables hold the long style only, so English is written here ("5 min. ago"), and other languages take
+         * HA's long form from the tables until the short one is captured.
+         */
+        fun shortRelative(fromMs: Long, nowMs: Long): String {
+            val locale = dev.glassworks.engine.vitro.data.HaLocale.current
+            val zone = dev.glassworks.engine.vitro.data.HaLocale.timeZone()
+            if (!locale.language.startsWith("en")) {
+                return dev.glassworks.engine.vitro.data.HaFormat.relativeTime(fromMs, nowMs, locale, style = "short", zone = zone)
+            }
+            val (value, unit) = dev.glassworks.engine.vitro.data.HaFormat.selectUnit(fromMs, nowMs, locale, zone)
             val abbr = mapOf("second" to "sec.", "minute" to "min.", "hour" to "hr.", "week" to "wk.", "month" to "mo.", "year" to "yr.")
             when (unit) {
                 "second" -> if (value == 0L) return "now"
@@ -546,22 +562,30 @@ class DateCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         render(Date(ctx.now()))
     }
 
-    /** The zone the card writes the date in: its `time_zone`, else the server's (`local` is the panel's). */
+    /**
+     * The zone the card writes the date in: its `time_zone`, else the user's profile choice, the panel's or HA's
+     * (`resolveTimeZone`, [dev.glassworks.engine.vitro.data.HaLocale.timeZone]).
+     */
     internal fun zone(): TimeZone {
         val configured = raw.optString("time_zone", "").trim()
-        val id = when (configured) {
-            "", "server" -> runCatching { ctx.haConfig().optString("time_zone", "") }.getOrDefault("").trim()
-            "local" -> ""
-            else -> configured
-        }
-        return if (id.isEmpty()) TimeZone.getDefault() else TimeZone.getTimeZone(id)
+        return if (configured.isNotEmpty()) TimeZone.getTimeZone(configured) else dev.glassworks.engine.vitro.data.HaLocale.timeZone()
     }
 
-    /** The text for [now] (tests). */
+    /** The text for [now] (tests): HA's weekday, day and month in the user's language, or the `date_format` parts. */
     internal fun textAt(now: Date): String {
         val tz = zone()
-        val locale = Locale.getDefault()
-        parts?.let { return it.format(now, locale, tz) }
+        parts?.let { return it.format(now, dev.glassworks.engine.vitro.data.HaLocale.current.language, tz) }
+        // HA's own `weekday: long, day: numeric, month: long` in the user's language (HaIntl's data); a card with its
+        // own `time_zone` formats the same fields in that zone.
+        if (raw.optString("time_zone", "").isEmpty()) {
+            dev.glassworks.engine.vitro.data.HaFormat.formatDateWeekdayDay(now.time).takeIf { it.isNotEmpty() }?.let { return it }
+        }
+        return weekdayMonthDay(now, tz)
+    }
+
+    /** `Intl.DateTimeFormat(language, {weekday: long, day: numeric, month: long, timeZone})`. */
+    private fun weekdayMonthDay(now: Date, tz: TimeZone): String {
+        val locale = Locale.forLanguageTag(dev.glassworks.engine.vitro.data.HaLocale.current.language)
         val pattern = android.text.format.DateFormat.getBestDateTimePattern(locale, "EEEEMMMMd")
         return SimpleDateFormat(pattern, locale).apply { timeZone = tz }.format(now)
     }
@@ -747,9 +771,10 @@ class StatisticCardView(ctx: VitroCardContext, private val config: CardConfig) :
         iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), ctx.theme.stateIconColor)
         valueView.text = when (val v = value) {
             null -> ""
-            else -> if (v.isNaN()) "?" else HaDisplay.formatState(
-                java.math.BigDecimal.valueOf(v).toPlainString(),
-                HaDisplay.displayPrecision(statisticId), null,
+            // `formatNumber(value, locale, getNumberFormatOptions(undefined, entity))`: the user's number format and
+            // the entity's display precision.
+            else -> if (v.isNaN()) "?" else dev.glassworks.engine.vitro.data.HaFormat.formatNumber(
+                v, options = HaDisplay.displayPrecision(statisticId)?.let { dev.glassworks.engine.vitro.data.HaFormat.NumberOptions(it, it) },
             )
         }
         val unit = raw.optString("unit", "").ifEmpty { null }

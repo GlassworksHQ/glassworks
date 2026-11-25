@@ -5,8 +5,12 @@
 package dev.glassworks.engine.vitro.ui
 
 import android.content.Context
+import android.graphics.Canvas
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
+import dev.glassworks.engine.vitro.VitroFailures
 import dev.glassworks.engine.vitro.model.AreaCardConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import kotlin.math.max
@@ -46,6 +50,50 @@ class HaGridLayout(
     /** The gap measuring and placing use: the configured one, or less when the gaps alone outgrow the content. */
     private var gap = 0f
 
+    /**
+     * A child threw in its measure, layout or draw past its own guards (a card that isn't a [CardSurface]: a heading,
+     * Mushroom's chips or title): the view swaps it for HA's error card, on the next message. Until then, and without
+     * a swap, the grid leaves it out of its draw and its layout, so the other cards carry on.
+     */
+    var onChildFailed: ((child: View) -> Unit)? = null
+
+    private val failedChildren = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<View, Boolean>())
+    private val main = Handler(Looper.getMainLooper())
+
+    private fun childFailed(child: View, where: String, e: Exception) {
+        if (!failedChildren.add(child)) return
+        VitroFailures.report(where, (child as? CardSurface)?.cardType, e)
+        val swap = onChildFailed ?: return
+        main.post { if (child.parent === this) runCatching { swap(child) } }
+    }
+
+    /** [block] for [child], whose throw is contained ([childFailed]). */
+    private inline fun guard(child: View, where: String, block: () -> Unit) {
+        if (child in failedChildren) return
+        try {
+            block()
+        } catch (e: Exception) {
+            childFailed(child, where, e)
+        }
+    }
+
+    override fun drawChild(canvas: Canvas, child: View, drawingTime: Long): Boolean {
+        if (child in failedChildren) return false
+        val saved = canvas.saveCount
+        return try {
+            super.drawChild(canvas, child, drawingTime)
+        } catch (e: Exception) {
+            canvas.restoreToCount(saved)
+            childFailed(child, "draw", e)
+            false
+        }
+    }
+
+    override fun onViewRemoved(child: View) {
+        super.onViewRemoved(child)
+        failedChildren.remove(child)
+    }
+
     private fun span(child: View): Int = ((child.layoutParams as? LayoutParams)?.span ?: columns).coerceIn(1, columns)
 
     private fun cellWidth(col: Int, span: Int): Int {
@@ -78,7 +126,7 @@ class HaGridLayout(
             val lp = child.layoutParams as? LayoutParams
             val hs = lp?.fixedHeight?.let { MeasureSpec.makeMeasureSpec(it, MeasureSpec.EXACTLY) }
                 ?: MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-            child.measure(MeasureSpec.makeMeasureSpec(cellWidth(colOf[i], s), MeasureSpec.EXACTLY), hs)
+            guard(child, "measure") { child.measure(MeasureSpec.makeMeasureSpec(cellWidth(colOf[i], s), MeasureSpec.EXACTLY), hs) }
             heights[row] = max(heights[row], child.measuredHeight)
         }
         rowHeight = heights.toIntArray()
@@ -87,10 +135,12 @@ class HaGridLayout(
                 val child = getChildAt(i)
                 if (rowOf[i] < 0 || (child.layoutParams as? LayoutParams)?.fixedHeight != null) continue
                 if (child.measuredHeight < rowHeight[rowOf[i]]) {
-                    child.measure(
-                        MeasureSpec.makeMeasureSpec(child.measuredWidth, MeasureSpec.EXACTLY),
-                        MeasureSpec.makeMeasureSpec(rowHeight[rowOf[i]], MeasureSpec.EXACTLY),
-                    )
+                    guard(child, "measure") {
+                        child.measure(
+                            MeasureSpec.makeMeasureSpec(child.measuredWidth, MeasureSpec.EXACTLY),
+                            MeasureSpec.makeMeasureSpec(rowHeight[rowOf[i]], MeasureSpec.EXACTLY),
+                        )
+                    }
                 }
             }
         }
@@ -110,7 +160,7 @@ class HaGridLayout(
             if (i >= rowOf.size || rowOf[i] < 0 || child.visibility == GONE) continue
             val x = contentLeft + (colOf[i] * (colWidth + gap)).roundToInt()
             val y = rowTop[rowOf[i]]
-            child.layout(x, y, x + child.measuredWidth, y + child.measuredHeight)
+            guard(child, "layout") { child.layout(x, y, x + child.measuredWidth, y + child.measuredHeight) }
         }
     }
 
@@ -174,6 +224,8 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
         fun minimums(card: CardConfig): HaGridSize = when (card.type) {
             "entity", "sensor", "history-graph" -> HaGridSize(6, 2)
             "statistics-graph" -> HaGridSize(6, 3)
+            // hui-error-card: `min_columns: 6, min_rows: 1`.
+            ErrorCardView.TYPE -> HaGridSize(6, 1)
             else -> HaGridSize(null, null)
         }
 
@@ -234,6 +286,8 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                     val featureRows = if (inline) (below + 1) / 2 else features
                     HaGridSize(if (inline) 12 else 6, 1 + featureRows + if (vertical) 1 else 0)
                 }
+                // hui-error-card's getGridOptions: 6 columns, 1 row.
+                ErrorCardView.TYPE -> HaGridSize(6, 1)
                 // hui-entity-card's (and so hui-sensor-card's) getGridOptions: 6 columns, 2 rows.
                 "entity", "sensor" -> HaGridSize(6, 2)
                 // hui-logbook-card's and hui-calendar-card's getGridOptions: 12 columns, 6 rows.

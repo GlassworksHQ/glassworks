@@ -4,6 +4,8 @@
 
 package dev.glassworks.engine.vitro.cards
 
+import dev.glassworks.engine.vitro.data.HaFormat
+import dev.glassworks.engine.vitro.data.HaLocale
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -16,9 +18,6 @@ import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.VitroFonts
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.text.DecimalFormat
-import java.text.DecimalFormatSymbols
-import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -144,7 +143,8 @@ object ECharts {
             else -> 0
         }
         val target = (max - min) / approx
-        val cal = Calendar.getInstance()
+        // The zone the labels are written in (HaFormat): ticks fall on its hours and days.
+        val cal = Calendar.getInstance(HaLocale.timeZone())
         // Level boundaries, coarse to fine: year (0), month (1), day (2), hour (3), minute (4), second (5).
         var upper: List<Long> = emptyList()
         val levels = ArrayList<List<Long>>()
@@ -306,33 +306,26 @@ object ECharts {
     }
 }
 
-/** HA's formatters for chart labels, in its `en` locale (`formatNumber`, `formatTime`, `formatDateVeryShort`, …). */
+/** HA's formatters for chart labels (`formatNumber`, `formatTime`, `formatDateVeryShort`, …), in the user's locale. */
 object HaChartFormat {
-    private val US = DecimalFormatSymbols(Locale.US)
-
     /**
      * `formatNumber(value, locale, {minimumFractionDigits, maximumFractionDigits})`, grouped like `Intl`, which rounds
      * ties away from zero (`halfExpand`) on the number's shortest decimal form: 2.5 at no decimals is "3".
      */
-    fun number(v: Double, minFraction: Int, maxFraction: Int): String {
-        val f = DecimalFormat("#,##0", US)
-        f.minimumFractionDigits = minFraction
-        f.maximumFractionDigits = maxFraction
-        f.roundingMode = RoundingMode.HALF_UP
-        return f.format(if (v == 0.0 || !v.isFinite()) (if (v == 0.0) 0.0 else v) else BigDecimal(v.toString()))
-    }
+    fun number(v: Double, minFraction: Int, maxFraction: Int): String =
+        HaFormat.formatNumber(if (v == 0.0) 0.0 else v, HaLocale.current, HaFormat.NumberOptions(minFraction, maxFraction))
 
-    fun time(t: Long): String = SimpleDateFormat("h:mm a", Locale.US).format(Date(t))
-    fun timeWithSeconds(t: Long): String = SimpleDateFormat("h:mm:ss a", Locale.US).format(Date(t))
-    fun dateVeryShort(t: Long): String = SimpleDateFormat("MMM d", Locale.US).format(Date(t))
-    fun weekdayShort(t: Long): String = SimpleDateFormat("EEE", Locale.US).format(Date(t))
-    fun month(t: Long): String = SimpleDateFormat("MMMM", Locale.US).format(Date(t))
-    fun monthYear(t: Long): String = SimpleDateFormat("MMMM yyyy", Locale.US).format(Date(t))
+    fun time(t: Long): String = HaFormat.formatTime(t)
+    fun timeWithSeconds(t: Long): String = HaFormat.formatTimeWithSeconds(t)
+    fun dateVeryShort(t: Long): String = HaFormat.formatDateVeryShort(t)
+    fun weekdayShort(t: Long): String = HaFormat.formatDateWeekdayShort(t)
+    fun month(t: Long): String = HaFormat.formatDateMonth(t)
+    fun monthYear(t: Long): String = HaFormat.formatDateMonthYear(t)
 
     /** `formatTimeLabel`: the label of a time tick, and whether it's bold (`{bold|…}`), for an axis [minutes] wide. */
     fun timeLabel(t: Long, minutes: Double): Pair<String, Boolean> {
         val days = minutes / 60 / 24
-        val cal = Calendar.getInstance().apply { timeInMillis = t }
+        val cal = Calendar.getInstance(HaLocale.timeZone()).apply { timeInMillis = t }
         return when {
             days > 88 -> if (cal.get(Calendar.MONTH) == 0) monthYear(t) to true else month(t) to false
             days > 35 -> dateVeryShort(t) to (cal.get(Calendar.DAY_OF_MONTH) == 1)

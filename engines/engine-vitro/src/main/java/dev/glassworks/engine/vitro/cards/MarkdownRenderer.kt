@@ -1207,9 +1207,10 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
     }
 
     private fun transform(text: String, t: String?): String = when (t) {
-        "uppercase" -> text.uppercase(Locale.getDefault())
-        "lowercase" -> text.lowercase(Locale.getDefault())
-        "capitalize" -> text.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.titlecase(Locale.getDefault()) } }
+        // CSS case rules follow the page's language (`<html lang>`, HA's `hass.language`), not the panel's.
+        "uppercase" -> text.uppercase(pageLocale())
+        "lowercase" -> text.lowercase(pageLocale())
+        "capitalize" -> text.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.titlecase(pageLocale()) } }
         else -> text
     }
 
@@ -1502,3 +1503,6 @@ internal class MdLinkSpan(val href: String, private val navigate: (String) -> Un
         }
     }
 }
+
+/** The language HA's page is in (`<html lang>`), for CSS case rules. */
+private fun pageLocale(): Locale = Locale.forLanguageTag(dev.glassworks.engine.vitro.data.HaLocale.current.language)

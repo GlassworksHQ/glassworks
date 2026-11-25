@@ -236,7 +236,7 @@ class IframeCardView(
         page = null
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val r = ratio
         if (r != null && MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
             // `#root { padding-top: <ratio> }`: the frame's height from the card's content width.
@@ -245,7 +245,7 @@ class IframeCardView(
             val lp = frame.layoutParams
             if (lp.height != h) lp.height = h
         }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
     }
 
     override fun onAttachedToWindow() {

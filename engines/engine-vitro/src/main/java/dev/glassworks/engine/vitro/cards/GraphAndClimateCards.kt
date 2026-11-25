@@ -30,6 +30,8 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
+import dev.glassworks.engine.vitro.data.HaText
+import dev.glassworks.engine.vitro.data.HaFormat
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.ForecastDay
 import dev.glassworks.engine.vitro.data.HaDisplay
@@ -297,8 +299,7 @@ private class SparklineCanvasView(
     }
 
     private fun formatValue(v: Double): String =
-        if (kotlin.math.abs(v) >= 100.0 || v == Math.rint(v)) String.format(Locale.US, "%.0f", v)
-        else String.format(Locale.US, "%.1f", v)
+        HaDisplay.formatFixed(v, if (kotlin.math.abs(v) >= 100.0 || v == Math.rint(v)) 0 else 1)
 
     private fun rebuild(w: Float, h: Float) {
         builtW = width
@@ -445,14 +446,14 @@ class GaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         }
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         // A fixed grid height: the gauge also fits the height the name leaves (`100cqh * 100 / 55`).
         dial.maxHeightPx = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
             (MeasureSpec.getSize(heightMeasureSpec) - paddingTop - paddingBottom - ctx.px(12f) * 2 - ctx.px(28f)).coerceAtLeast(0)
         } else {
             Int.MAX_VALUE
         }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
     }
 
     private fun render(s: EntityState?) {
@@ -477,7 +478,7 @@ class GaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
 
     private fun numberText(v: Any?): String {
         val d = (v as? Number)?.toDouble() ?: v?.toString()?.toDoubleOrNull() ?: return v?.toString().orEmpty()
-        return java.text.DecimalFormat("#,##0.###", java.text.DecimalFormatSymbols(java.util.Locale.US)).format(d)
+        return HaDisplay.formatValue(d, 3)
     }
 
     /** HA's `_computeSeverity`: the segment (or old severity threshold) the value is in, else `--info-color`. */
@@ -777,7 +778,7 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
         val dots = FrameLayout(ctx.context).apply {
             isClickable = true
             applyHaRipple(this, 999f, ctx.theme.dark)
-            contentDescription = "More info"
+            contentDescription = HaText.ui("ui.panel.lovelace.editor.action-editor.actions.more-info")
             addView(MdiIconView(ctx.context).apply { setIcon("mdi:dots-vertical", ctx.theme.primaryTextColor) },
                 LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
             setOnClickListener { eid?.let { ctx.performAction(ActionConfig("more-info"), it) } }
@@ -1049,11 +1050,12 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             observe(eid) { s ->
                 val state = s?.state.orEmpty()
                 icon.setCondition(state)
-                condition.text = conditionLabel(state)
+                // HA's formatEntityState: the weather domain's own words, in the user's language.
+                condition.text = s?.let { HaDisplay.stateLabel(it) }?.takeIf { it.isNotEmpty() && it != state } ?: conditionLabel(state)
                 name.text = config.name ?: s?.friendlyName ?: eid
                 val t = s?.attributes?.get("temperature")
                 val u = (s?.attributes?.get("temperature_unit") as? String) ?: "°C"
-                temp.text = if (t != null) "$t " else "–"
+                temp.text = if (t != null) "${(t as? Number)?.let { HaDisplay.formatValue(it.toDouble(), 1) } ?: t} " else "–"
                 tempUnit.text = if (t != null) u else ""
                 updateMetric = { showMetric(s, u, metric, metricIcon, metricRow) }
                 updateMetric()
@@ -1097,6 +1099,13 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         }
         val text: String
         var iconName: String? = null
+        // A humidity an integration reports as text ("55", or a word) is a number only if it reads as one: no cast
+        // that throws on the main thread for a template or custom weather entity.
+        val humidity = when (val h = s?.attributes?.get("humidity")) {
+            is Number -> h.toDouble()
+            is String -> h.trim().toDoubleOrNull()
+            else -> null
+        }?.takeIf { it.isFinite() }
         when {
             high != null || low != null -> text = listOfNotNull(high, low).joinToString(" / ") { "${formatNumber(it)} $unit" }
             forecast.firstOrNull()?.precipitation != null -> {
@@ -1104,8 +1113,8 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 text = "${formatNumber(forecast.first().precipitation!!)} $precipUnit".trim()
                 iconName = "mdi:weather-rainy"
             }
-            s?.attributes?.get("humidity") != null -> {
-                text = "${formatNumber((s.attributes["humidity"] as Number).toDouble())}%"
+            humidity != null -> {
+                text = "${formatNumber(humidity)}%"
                 iconName = "mdi:water-percent"
             }
             else -> text = ""
@@ -1150,13 +1159,13 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         forecastRow.contentDescription = "Forecast in $unit"
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val t = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY && MeasureSpec.getSize(heightMeasureSpec) / ctx.dp >= 235f
         if (t != tall) {
             tall = t
             applySize()
         }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
     }
 
     private fun applySize() {
@@ -1173,7 +1182,7 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     }
 
     companion object {
-        /** HA's English condition names. */
+        /** HA's English condition names, until the weather domain's translations are in. */
         fun conditionLabel(state: String): String = when (state) {
             "clear-night" -> "Clear, night"
             "partlycloudy" -> "Partly cloudy"
@@ -1186,12 +1195,10 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         }
 
         /** HA's `formatNumber` of a forecast value: as given, up to three decimals, grouped ("16.7", "1,012"). */
-        internal fun forecastNumber(v: Double): String =
-            java.text.DecimalFormat("#,##0.###", java.text.DecimalFormatSymbols(Locale.US)).format(v)
+        internal fun forecastNumber(v: Double): String = HaDisplay.formatValue(v, 3)
 
         /** A number as HA's formatNumber shows it: no trailing ".0", one decimal kept ("76", "12.2"). */
-        private fun formatNumber(v: Double): String =
-            if (v % 1.0 == 0.0) v.toLong().toString() else String.format(Locale.US, "%.1f", v).trimEnd('0').trimEnd('.')
+        private fun formatNumber(v: Double): String = HaDisplay.formatValue(v, 1)
 
         private fun parseIso(iso: String): Date? = runCatching {
             val clean = iso.replace(Regex("\\.\\d+"), "").replace("Z", "+00:00")
@@ -1201,10 +1208,10 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
 
         private fun sameDay(a: String, b: String): Boolean = a.length >= 10 && b.length >= 10 && a.substring(0, 10) == b.substring(0, 10)
 
-        /** `Wed` for a daily forecast, `14:00` for an hourly one. */
+        /** HA's forecast label: `formatDateWeekdayShort` ("Wed") for a day, `formatTime` ("2:00 PM") for an hour. */
         fun forecastLabel(iso: String, hourly: Boolean): String {
             val date = parseIso(iso) ?: return iso.take(10)
-            return SimpleDateFormat(if (hourly) "HH:mm" else "EEE", Locale.getDefault()).format(date)
+            return if (hourly) HaFormat.formatTime(date.time) else HaFormat.formatDateWeekdayShort(date.time)
         }
     }
 }
@@ -1273,10 +1280,10 @@ private fun configNumber(raw: JSONObject, key: String, fallback: Double): Double
 
 /** `12.0` → `12`, `12.345` → `12.3`; [decimals] pins the digits when set. */
 private fun formatNumber(v: Double, decimals: Int? = null): String = when {
-    decimals != null -> String.format(Locale.getDefault(), "%.${decimals.coerceIn(0, 6)}f", v)
-    v == Math.rint(v) && kotlin.math.abs(v) < 1e12 -> v.toLong().toString()
-    kotlin.math.abs(v) >= 100.0 -> String.format(Locale.getDefault(), "%.0f", v)
-    else -> String.format(Locale.getDefault(), "%.1f", v)
+    decimals != null -> HaDisplay.formatFixed(v, decimals.coerceIn(0, 6))
+    v == Math.rint(v) && kotlin.math.abs(v) < 1e12 -> HaDisplay.formatFixed(v, 0)
+    kotlin.math.abs(v) >= 100.0 -> HaDisplay.formatFixed(v, 0)
+    else -> HaDisplay.formatFixed(v, 1)
 }
 
 /**

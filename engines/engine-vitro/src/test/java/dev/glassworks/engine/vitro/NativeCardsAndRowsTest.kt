@@ -271,12 +271,12 @@ class NativeCardsAndRowsTest {
         put("light.a", "off"); put("light.b", "off")
         val v = ToggleGroupCardView(ctx(), card("""{"type": "toggle-group", "title": "Lights", "entities": ["light.a", "light.b"]}"""))
         assertEquals(listOf("Lights", "All off"), texts(v))
-        all(v).first { it.contentDescription == "Turn on Lights" }.performClick()
+        all(v).first { it.contentDescription == "Turn Lights on" }.performClick()
         assertEquals(Triple("light", "turn_on", "[\"light.a\",\"light.b\"]"), calls.single().let { Triple(it.first, it.second, it.third!!.optJSONArray("entity_id").toString()) })
         put("light.a", "on")
         idle()
         assertEquals(listOf("Lights", "1 of 2 on"), texts(v))
-        assertNotNull(all(v).firstOrNull { it.contentDescription == "Turn off Lights" })
+        assertNotNull(all(v).firstOrNull { it.contentDescription == "Turn Lights off" })
         assertEquals("press", ToggleGroupCardView.toggleAction("button", false))
         assertEquals("close_cover", ToggleGroupCardView.toggleAction("cover", false))
     }
@@ -306,7 +306,7 @@ class NativeCardsAndRowsTest {
         assertTrue(AlertCardView.isAlertActive(store["binary_sensor.door"]!!))
         assertEquals("now", AlertCardView.shortRelative(NOW, NOW))
         assertEquals("2 hr. ago", AlertCardView.shortRelative(NOW - 2 * 3_600_000, NOW))
-        assertEquals("yesterday", AlertCardView.shortRelative(NOW - 26 * 3_600_000, NOW, TimeZone.getTimeZone("UTC")))
+        assertEquals("yesterday", AlertCardView.shortRelative(NOW - 26 * 3_600_000, NOW))
         v.performClick()
         assertEquals(listOf("binary_sensor.door"), moreInfo)
     }

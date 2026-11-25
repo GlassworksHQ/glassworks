@@ -22,6 +22,7 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import dev.glassworks.engine.vitro.VitroFailures
 import dev.glassworks.engine.vitro.cards.AlarmPanelCardView
 import dev.glassworks.engine.vitro.cards.CustomButtonCardView
 import dev.glassworks.engine.vitro.cards.HaErrorCardView
@@ -85,9 +86,12 @@ import dev.glassworks.engine.vitro.cards.WeatherCardView
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
 import dev.glassworks.engine.vitro.cards.IslandCard
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.data.EntityState
+import dev.glassworks.engine.vitro.data.FrontendLocale
+import dev.glassworks.engine.vitro.data.HaLocale
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.EntityFilterConfig
@@ -187,7 +191,13 @@ class VitroView(
 
     private val tabs = ArrayList<TabEntry>()
     private var moreInfo: MoreInfoSheet? = null
+
+    /** The entity the open More Info sheet shows (to open it again in a new language). */
+    private var moreInfoEntityId: String? = null
     private val viewCache = LinkedHashMap<Int, View>()
+
+    /** Cached views that hold a dead island ([islandPagesGone]): built again, not shown from the cache, next time. */
+    private val staleViews = HashSet<Int>()
 
     /** For each cached view, the scripts its islands could load when it was built ([IslandScripts]). */
     private val builtScripts = HashMap<Int, IslandScripts>()
@@ -196,7 +206,7 @@ class VitroView(
     private val viewBackStack = ArrayDeque<Int>()
 
     private val bannerText = TextView(context).apply {
-        text = "Connection lost. Reconnecting…"
+        text = HaText.ui("ui.notification_toast.connection_lost")
         textSize = 13f
         setTextColor(0xFFFFFFFF.toInt())
         typeface = VitroFonts.typeface(context, Inter.MEDIUM, 13f)
@@ -466,6 +476,29 @@ class VitroView(
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
     }
 
+    /** The language, formats and time zone the built views were drawn with. */
+    private var drawnLocale: Triple<FrontendLocale, String, Long>? = null
+
+    /**
+     * The user's language or formats changed ([HaLocale]): every text, number, date and time was written with the
+     * old ones, so the view is built again, as a theme change does.
+     */
+    fun setLocale(locale: FrontendLocale, timeZone: String, strings: Long) {
+        val next = Triple(locale, timeZone, strings)
+        if (next == drawnLocale) return
+        drawnLocale = next
+        if (dashboard == null) return
+        // An open More Info sheet built its words once: it opens again in the new language.
+        val reopen = moreInfoEntityId?.takeIf { moreInfo != null }
+        closeMoreInfo()
+        viewCache.clear()
+        builtScripts.clear()
+        contentHost.removeAllViews()
+        clearOverlay()
+        dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
+        reopen?.let { openMoreInfo(it) }
+    }
+
     /**
      * What the dashboard's look is made of in [catalog]: for each theme its views and cards ask for, the theme Home
      * Assistant picks for it in [dark] mode and that theme's definition. Equal inputs draw the same dashboard. Null
@@ -496,6 +529,7 @@ class VitroView(
     }
 
     fun setDashboard(config: DashboardConfig, initialViewPath: String?) {
+        drawnLocale = Triple(HaLocale.current, HaLocale.timeZone().id, HaText.version)
         holding?.cancel?.invoke()
         holding = null
         waited.clear()
@@ -568,6 +602,7 @@ class VitroView(
     /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
     internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
         closeMoreInfo()
+        moreInfoEntityId = entityId
         val cfg = dashboard?.views?.getOrNull(currentViewIndex)
         val theme = ThemeResolver.resolve(themeCatalog, darkMode, cfg?.theme ?: userThemeName, cfg?.background)
         val cardCtx = contextFactory?.invoke(theme) ?: return
@@ -796,9 +831,10 @@ class VitroView(
         onThemeResolved?.invoke(theme)
         onViewSelected?.invoke(viewCfg)
 
-        val cached = if (!forceRebuild) viewCache[index] else null
+        val cached = if (!forceRebuild && index !in staleViews) viewCache[index] else null
         // A first build waits for the view's states, as HA's frontend renders a view's cards once hass has them.
-        if (cached == null && holdForStates(index, viewCfg)) {
+        // Only a first build waits: a stale view (a dead island, [islandPagesGone]) still has its tree, and builds now.
+        if (cached == null && viewCache[index] == null && holdForStates(index, viewCfg)) {
             // The previous view's cards don't stay on screen (and tappable) under this view's tab while it waits.
             for (i in 0 until contentHost.childCount) contentHost.getChildAt(i).visibility = GONE
             for (i in 0 until overlayLayer.childCount) overlayLayer.getChildAt(i).visibility = GONE
@@ -819,6 +855,7 @@ class VitroView(
             guessedStates.clear()
             // The view's old tree, if it has one, goes first: its islands wait for this build to take them back.
             dropView(index, keepIslands = true)
+            staleViews -= index
             buildingIndex = index
             clarity?.buildStarted(index)
             val built = try {
@@ -960,6 +997,7 @@ class VitroView(
 
     /** Drops built view [index] and its pinned cards. */
     private fun dropView(index: Int, keepIslands: Boolean) {
+        staleViews -= index
         viewCache.remove(index)?.let { retireIslands(it, keepIslands); contentHost.removeView(it) }
         overlayFrames.remove(index)?.let { retireIslands(it, keepIslands); overlayLayer.removeView(it) }
         builtScripts.remove(index)
@@ -968,6 +1006,7 @@ class VitroView(
 
     /** Drops every built view and the pinned cards. */
     private fun dropBuiltViews(keepIslands: Boolean) {
+        staleViews.clear()
         viewCache.values.forEach { retireIslands(it, keepIslands) }
         overlayFrames.values.forEach { retireIslands(it, keepIslands) }
         viewCache.clear()
@@ -1012,7 +1051,7 @@ class VitroView(
     /**
      * The content of island [pages] went away (a crashed or killed content process): they draw nothing again. A dead
      * page waiting in the pool closes, so no build takes it. A card that holds one closes it, and its view is built
-     * again: the view on screen now, with its other islands handed over alive; a hidden view when it's shown.
+     * again with its other islands handed over alive: the view on screen now, a hidden view when it's shown.
      */
     fun islandPagesGone(pages: Set<Page>) {
         if (pages.isEmpty()) return
@@ -1031,7 +1070,9 @@ class VitroView(
         }
         for (index in hit) {
             if (index == currentViewIndex) renderView(index, forceRebuild = true, pushHistory = false)
-            else dropView(index, keepIslands = false)
+            // A hidden view keeps its tree, live islands and all, and is built again when it's shown: they're handed
+            // over then, and only the dead card opens a new page.
+            else staleViews += index
         }
     }
 
@@ -1361,6 +1402,18 @@ class VitroView(
         val rowHeight = dim("ha-section-grid-row-height", 56f)
         val columns = 12 * span
         val grid = HaGridLayout(context, columns, px(colGap), px(rowGap), stretch = true)
+        // A card that throws past its own guards (one that isn't a CardSurface) becomes HA's error card in its slot.
+        val slotCards = java.util.IdentityHashMap<View, CardConfig>()
+        grid.onChildFailed = { child ->
+            val card = slotCards.remove(child)
+            val i = grid.indexOfChild(child)
+            if (card != null && i >= 0) {
+                val lp = child.layoutParams
+                grid.removeViewAt(i)
+                // Its visibility conditions still hold: a hidden card stays hidden as the error card.
+                grid.addView(wrapVisibility(card, errorCard(card, ctx), ctx), i, lp)
+            }
+        }
         section.title?.let { title ->
             grid.addView(TextView(context).apply {
                 text = title
@@ -1376,8 +1429,11 @@ class VitroView(
                 grid.addView(wrapVisibility(card, View(context), ctx), HaGridLayout.LayoutParams(columns))
                 continue
             }
-            val size = HaGridSize.of(card, stateForBuild(card))
-            val cardView = wrapVisibility(card, buildCard(card, ctx, fillViewport = false, layout = "grid"), ctx)
+            val built = buildCard(card, ctx, fillViewport = false, layout = "grid")
+            // A card that failed to build takes hui-error-card's size (its grid_options still apply), as in HA.
+            val size = HaGridSize.of(if (built is ErrorCardView) card.copy(type = ErrorCardView.TYPE) else card, stateForBuild(card))
+            val cardView = wrapVisibility(card, built, ctx)
+            slotCards[cardView] = card
             cacheCardAsLayer(cardView, ctx)
             val fixed = size.rows?.let { r -> px(r * (rowHeight + rowGap) - rowGap) }
             grid.addView(cardView, HaGridLayout.LayoutParams(size.columns?.coerceAtMost(columns) ?: columns, fixed))
@@ -1567,12 +1623,28 @@ class VitroView(
         ctx.cardLayout = layout
         try {
             return buildCardWithVars(card, ctx, fillViewport, childBuilder, stackMod)
+        } catch (e: Exception) {
+            // One card that can't be built is HA's error card in its slot: the rest of the view builds as before.
+            VitroFailures.report("build", card.type, e)
+            return errorCard(card, parentCtx)
         } finally {
             inheritedCardVars = outerVars
             ctx.cardVars = outerCtxVars
             ctx.cardLayout = outerLayout
         }
     }
+
+    /** HA's error card for [card], or an empty view if even that can't be made (a theme it can't read). */
+    private fun errorCard(card: CardConfig, ctx: VitroCardContext): View =
+        try {
+            ErrorCardView(ctx, card)
+        } catch (e: Exception) {
+            VitroFailures.report("build", ErrorCardView.TYPE, e)
+            View(context)
+        }
+
+    /** Tests: a card of their own for a config (one that throws), before Vitro's; null for Vitro's. */
+    internal var testCards: ((CardConfig, VitroCardContext) -> View?)? = null
 
     /** Card-scoped custom properties in force while building the current card's children. */
     private var inheritedCardVars: Map<String, String> = emptyMap()
@@ -1602,7 +1674,7 @@ class VitroView(
             }
         }
         // Anything outside Vitro's supported set goes to an island on purpose (CardCompat), decided once per card.
-        val built: View = if (card.inIsland(IslandScripts.of(ctx.resources))) {
+        val built: View = testCards?.invoke(card, ctx) ?: if (card.inIsland(IslandScripts.of(ctx.resources))) {
             WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(card, fillViewport))
         } else when (card.type) {
             // Layout containers
@@ -1723,6 +1795,12 @@ class VitroView(
             "custom:weather-card" -> LegacyWeatherCardView(ctx, card)
             // Tier 3: Arbitrary unrecognized custom cards -> stripped Micro-Web Island
             else -> WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(card, fillViewport))
+        }
+        (built as? CardSurface)?.let { surface ->
+            // A conditional's child keeps its own type.
+            if (surface.cardType == null) surface.cardType = card.type
+            // Its first render threw (and was contained): HA's error card, sized as one, rather than the half-made card.
+            if (surface.failure != null && surface !is ErrorCardView) return errorCard(card, ctx)
         }
         // An island that loads card-mod styles its card itself: styling the native frame too would apply it twice
         // (a 0.5 opacity would show as 0.25). Only for the island drawing this card: a `conditional` returns its

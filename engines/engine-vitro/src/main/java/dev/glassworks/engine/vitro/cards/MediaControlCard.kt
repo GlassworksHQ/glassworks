@@ -24,6 +24,7 @@ import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.model.CardConfig
@@ -57,7 +58,7 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
     private val stateIcon = MdiIconView(ctx.context)
     private val nameView = label(14f, Inter.REGULAR)
     private val moreIcon = MdiIconView(ctx.context)
-    private val more = button(moreIcon, 48f, 24f).apply { contentDescription = "More info" }
+    private val more = button(moreIcon, 48f, 24f).apply { contentDescription = HaText.ui("ui.panel.lovelace.editor.action-editor.actions.more-info") }
     private val titleView = label(16.8f, Inter.REGULAR)
     private val descriptionView = label(14f, Inter.REGULAR)
     private val mediaInfo = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
@@ -134,7 +135,7 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
         }
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         // HA's _measureCard: narrow under 350 px, very narrow under 300.
         if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
             val w = MeasureSpec.getSize(widthMeasureSpec) / ctx.dp
@@ -146,7 +147,7 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
                 render(last)
             }
         }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
     }
 
     private fun label(sp: Float, weight: Int): TextView = TextView(ctx.context).apply {
@@ -231,14 +232,14 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
             val endSize = if (narrow && !veryNarrow) 40f else 44f
             if (features and BROWSE_MEDIA != 0) {
                 end.addView(button(MdiIconView(ctx.context).apply { setIcon("mdi:play-box-multiple", fg) }, endSize, 24f).apply {
-                    contentDescription = "Browse media"
+                    contentDescription = HaText.ui("ui.card.media_player.browse_media")
                     // Vitro has no media browser: More info is the nearest place to pick media.
                     setOnClickListener { eid?.let(ctx.openMoreInfo) }
                 }, LinearLayout.LayoutParams(ctx.px(endSize), ctx.px(endSize)))
             }
             if (features and GROUPING != 0) {
                 val join = button(MdiIconView(ctx.context).apply { setIcon("mdi:speaker-multiple", fg) }, endSize, 24f).apply {
-                    contentDescription = "Join"
+                    contentDescription = HaText.ui("ui.card.media_player.join")
                     setOnClickListener { eid?.let(ctx.openMoreInfo) }
                 }
                 val members = (s.attributes["group_members"] as? List<*>)?.size ?: 0

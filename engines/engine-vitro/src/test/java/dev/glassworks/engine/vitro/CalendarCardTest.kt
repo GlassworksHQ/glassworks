@@ -108,7 +108,7 @@ class CalendarCardTest {
     fun theToggleAndNextMoveTheView() {
         val c = card("""{"type": "calendar", "entities": ["calendar.maintenance"]}""")
         show(c)
-        all(c).first { it.contentDescription == "List View" }.performClick()
+        all(c).first { it.contentDescription == "List (7 days)" }.performClick()
         show(c)
         assertTrue(texts(c).contains("Nov 24 – 30, 2026"))
         assertEquals("2026-11-24T08:00:00.000Z", asked.last().getString("start"))

@@ -315,6 +315,20 @@
   "missingText": 1,
   "reason": "s1 only: Vitro ends 'Reading Lamp Reading' with an ellipsis in the 2-column tile where HA's 146 CSS px run just fits; one name, the rest matches (2026-11-25, fake HA)"
  },
+ "s1/locale-de-weather-forecast": {
+  "pixel": 0.0133,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 3,
+  "reason": "as weather-forecast: HA shows today's high/low ('14,7 °C / 9,1 °C') under the temperature when the forecast holds today; Vitro shows the precipitation there. The German condition ('Bewölkt'), weekday names and decimal-comma numbers match (2026-11-25, fake HA)"
+ },
+ "s1/locale-fr-clock": {
+  "pixel": 0.0211,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "at 1.5x only (the tablet matches), as clock-date: the 112 px digits' and the date line's glyph edges; the French date line ('jeudi 12 novembre 2026') and 24-hour digits match HA's text for text (2026-11-25, fake HA)"
+ },
  "s1/logbook-user": {
   "pixel": 0.0071,
   "bounds": 0,
@@ -503,6 +517,13 @@
   "font": 0,
   "missingText": 0,
   "reason": "HA 2026's humidifier card: a 270-degree arc with the target in blue, 'Humidifying' and the current humidity under the number, and +/- buttons; Vitro draws a smaller arc with 'Currently 41%', and adds a power/mode row ('Normal') HA no longer shows, so the card is ~20 px taller (2026-11-25, fake HA)"
+ },
+ "tablet/locale-de-weather-forecast": {
+  "pixel": 0.0145,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 3,
+  "reason": "as weather-forecast: HA shows today's high/low ('14,7 °C / 9,1 °C') under the temperature when the forecast holds today; Vitro shows the precipitation there. The German condition ('Bewölkt'), weekday names and decimal-comma numbers match (2026-11-25, fake HA)"
  },
  "tablet/logbook-user": {
   "pixel": 0.007,

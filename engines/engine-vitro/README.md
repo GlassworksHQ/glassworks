@@ -55,6 +55,19 @@ nothing gets installed there.
 > The one number measured so far: on an Aqara S1 Plus, the Vitro test app builds a view in about 1.6 to 1.8 seconds.
 > Memory and startup haven't been compared with GeckoView yet, so this page makes no other speed or memory claims.
 
+## When a card fails
+
+A card that Vitro can't build, or that throws while it updates, measures, lays out, draws or handles a touch, shows
+Home Assistant's own error card in its place: the card tinted with the error color, its icon, and "Configuration error"
+for an administrator. The other cards keep working, and the log gets one line for each kind of failure rather than one
+per update. A sections view also catches the few card types that draw without Vitro's card surface (a heading,
+Mushroom's chips and title).
+
+If something still gets past the cards and the app stops twice in a row within a minute of starting, the app turns
+Vitro off for the next start, which runs on the browser engine. The panel says so once when it starts, the Labs page
+explains why on the panel and on its Manage page, and the Manage overview's Engine tile points there. Turning Vitro on
+again in Labs gives it a fresh start. A single crash, or a restart, never turns it off.
+
 ## How it works
 
 Vitro moves the Home Assistant data plane out of the browser into Kotlin (`HaDashboardClient` over `WsHaSocket`) and splits every card across three automatic tiers:
@@ -230,6 +243,7 @@ Vitro follows Home Assistant's own rules, so a dashboard never looks right only 
 | Images | `<img width height>`, block images (`display: block`, `width: 100%`), and `data:image/svg+xml` images built with Jinja, drawn natively from a small SVG subset. |
 | Sections | HA's grid: the `--ha-view-sections-*` gaps and column widths, 12 columns per section with `--ha-section-grid-*` gaps, and each card's `grid_options` (or the size its type reports, such as a large clock's 6 x 2). Hidden cards and sections leave no gap. |
 | Graphs | The sensor card, the history graph and the statistics graph ask Home Assistant for the same history and statistics its frontend does and draw them its way: the sensor card's hourly averages as a smooth line along the bottom, and full charts for the other two, with time and value axes, gridlines, a legend, timeline bars for entities without a unit, and the statistics' min-to-max band. A thermostat, water heater or humidifier draws its current and target temperature or humidity, shaded while it heats, cools, dries or humidifies. A legend longer than two rows ends in HA's "More" chip, which expands it (or starts expanded with `expand_legend`). On a touch screen the legend has the taller rows HA gives a finger; on a panel without one, such as the Mirror, it keeps the compact ones. In a fixed `grid_options.rows` slot the chart shrinks so the chart and its legend fill it, as in HA. A long statistics window (`period: 5minute` over weeks) is thinned out the way HA's chart thins it, off the main thread, keeping its gaps and the band's edges. The paths are built when the data or the size changes, never while drawing. |
+| Language and formats | Text, numbers, dates and times follow the signed-in user's profile in Home Assistant, the same way HA's frontend reads it: the language, the number format (including "none" and the system's), 12 or 24 hours, the date order, the first day of the week and the time zone (the panel's or the server's). Words HA's frontend shows ("Unavailable", "Today", "Add item") come from the signed-in Home Assistant's own translation files, kept per HA version and language so a panel that can't reach HA still has them, and state names come from the backend in the same language, with English for anything a language is missing. Numbers, dates, plurals and relative times ("5 minutes ago") follow the rules HA's page gets from the browser, from a copy bundled with Vitro so every language matches. Changing the profile in HA redraws the dashboard right away. "System" means the panel's Android locale, which is what HA's own page sees on the panel. Two known gaps: Persian dates use the Gregorian calendar, and calendar range titles in day-first languages lose a small mark ("24 – 30. Nov. 2026" instead of "24.–30. Nov. 2026"). |
 | Cards | The clock reads `clock_size`, `time_format`, `time_zone`, `no_background` and the `--ha-clock-card-digital-font-size-*` variables. Mushroom chips honor `conditional` chips and ignore a chip's own `visibility` and `card_mod`, like Mushroom does. stack-in-card follows version 0.2.0. A card's `margin` insets it in its slot. |
 
 ## What Vitro draws natively

@@ -32,6 +32,7 @@ import android.widget.Space
 import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.model.ActionConfig
@@ -234,7 +235,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     /** The features slot beside the info (`features_position: inline`), sized to HA's half-card width. */
     private var inlineFeatures: View? = null
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         mushroom?.row?.let { row ->
             // Mushroom 5's `.container { margin: calc(-1 * var(--ha-card-border-width, 1px)) }`: the variable, not the
             // border drawn. With the theme's border the content covers it; with `border: none` (card-mod) it runs past
@@ -250,7 +251,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 if (slot.layoutParams.width != w) slot.layoutParams.width = w
             }
         }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
     }
 
     /** Shows HA's "Entity not found" warning in place of the tile while [missing]. */
@@ -271,7 +272,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             addView(MdiIconView(ctx.context).apply { setIcon("mdi:alert-outline", color) },
                 LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply { marginEnd = ctx.px(8f) })
             addView(textView(ctx, 14f, ctx.theme.primaryTextColor, 700).apply {
-                text = "Entity not found"
+                text = HaText.ui("ui.card.common.entity_not_found")
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
@@ -744,7 +745,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         rangeRow.visibility = if (range) VISIBLE else GONE
                         // HA's number: the step's decimals, then the unit unless the buttons are narrow.
                         fun fill(g: NumberButtons, v: Double?, name: String) {
-                            val number = v?.let { String.format(Locale.US, "%.${digits}f", it) }
+                            val number = v?.let { HaDisplay.formatFixed(it, digits) }
                             g.value.text = number?.let { if (g.narrow) it else "$it $unit" } ?: "–"
                             // HA's spin button, named after the target, with its unit always.
                             g.value.contentDescription = "$name, " + (number?.let { "$it $unit" } ?: "–")
@@ -810,7 +811,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         background = featureFill(ctx)
                         applyHaRipple(this, 12f * ctx.dp, ctx.theme.dark)
                         isClickable = true
-                        contentDescription = "Mute"
+                        contentDescription = HaText.ui("ui.card.media_player.volume_mute")
                         addView(muteIcon, LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
                         setOnClickListener {
                             val muted = ctx.store[entityId]?.attributes?.get("is_volume_muted") == true
@@ -834,7 +835,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 "toggle" -> {
                     // HA's `ha-control-switch` as two halves; the half matching the state fills with its color.
                     val (offLabel, onLabel) = when (domain) {
-                        "lock" -> "Lock" to "Unlock"
+                        "lock" -> HaText.ui("ui.card.lock.lock") to HaText.ui("ui.card.lock.unlock")
                         "cover", "valve" -> "Close" to "Open"
                         else -> "Off" to "On"
                     }
@@ -1128,7 +1129,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     }
 
     private fun formatTemp(t: Double, unit: String): String =
-        if (t % 1.0 == 0.0) String.format(Locale.US, "%.0f %s", t, unit) else String.format(Locale.US, "%.1f %s", t, unit)
+        "${HaDisplay.formatFixed(t, if (t % 1.0 == 0.0) 0 else 1)} $unit"
 
     /**
      * `custom:mushroom-template-card`: a 40 dp shape avatar (icon tinted by `icon_color`, or a round `picture`)
@@ -2184,8 +2185,9 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             val switchView = HaSwitchView(ctx)
             val isSwitchable = rowCfg.entity.substringBefore('.') in SWITCH_DOMAINS
             val isCover = rowCfg.entity.startsWith("cover.")
+            // HA's `.secondary` line: 14 px, as HA's page draws it (the locale-* cases measure it).
             val secondaryView = if (rowCfg.secondaryInfo == "last-changed" || rowCfg.secondaryInfo == "last-updated") {
-                textView(ctx, 12f, ctx.theme.secondaryTextColor).apply {
+                textView(ctx, 14f, ctx.theme.secondaryTextColor).apply {
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
                 }
@@ -2200,9 +2202,10 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             if (secondaryView != null) {
                 val labels = LinearLayout(ctx.context).apply {
                     orientation = LinearLayout.VERTICAL
-                    setPadding(0, ctx.px(4f), 0, ctx.px(4f))
+                    // HA's name and `.secondary` lines as its page lays them out (measured by the locale-* cases).
+                    setPadding(0, ctx.px(3f), 0, ctx.px(3f))
                     addView(nameView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-                    addView(secondaryView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(2f) })
+                    addView(secondaryView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(6.4f) })
                 }
                 row.addView(labels, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ctx.px(8f) })
             } else {
@@ -2549,7 +2552,7 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
         }
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
         if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED && w > 0) {
             val border = (ctx.theme.cardBorderWidthDp * ctx.dp).roundToInt()
@@ -2562,7 +2565,7 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
             }
             if (iconLp.width != size) { iconLp.width = size; iconLp.height = size }
         }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
     }
 }
 
@@ -3024,15 +3027,15 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         }
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val mode = MeasureSpec.getMode(widthMeasureSpec)
         val width = MeasureSpec.getSize(widthMeasureSpec)
         if (mode == MeasureSpec.UNSPECIFIED || width <= 0) {
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            super.measureCard(widthMeasureSpec, heightMeasureSpec)
             return
         }
         val height = (width / (imageAspect ?: aspect)).toInt().coerceAtLeast(1)
-        super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
+        super.measureCard(widthMeasureSpec, MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
     }
 
     override fun onAttachedToWindow() {
