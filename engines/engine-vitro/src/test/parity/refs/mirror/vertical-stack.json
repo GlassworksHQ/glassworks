@@ -2,7 +2,7 @@
  "case": "vertical-stack",
  "frame": "mirror",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 720,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Kitchen",
    "x": 30,
    "y": 3,
@@ -43,10 +44,11 @@
   },
   {
    "slot": 0,
-   "text": "Kitchen Blind",
+   "clipped": false,
+   "text": "Office Blind",
    "x": 56,
    "y": 46.2,
-   "w": 83.92,
+   "w": 74.38,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -55,6 +57,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Open",
    "x": 56,
    "y": 65.59,
@@ -67,10 +70,11 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "·",
-   "x": 85.56,
+   "x": 88.92,
    "y": 65.59,
-   "w": 10.28,
+   "w": 3.55,
    "h": 14,
    "size": 12,
    "weight": 400,
@@ -79,6 +83,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "100%",
    "x": 95.84,
    "y": 65.59,
@@ -91,6 +96,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Fridge power",
    "x": 56,
    "y": 110.2,
@@ -103,7 +109,8 @@
   },
   {
    "slot": 0,
-   "text": "50 W",
+   "clipped": false,
+   "text": "49 W",
    "x": 56,
    "y": 129.59,
    "w": 28.7,
@@ -115,40 +122,41 @@
   }
  ],
  "states": {
-  "cover.kitchen_blind": {
+  "cover.office_blind": {
    "s": "open",
    "a": {
     "is_closed": false,
     "current_position": 100,
     "assumed_state": true,
-    "friendly_name": "Kitchen Blind",
+    "friendly_name": "Office Blind",
     "supported_features": 11
    },
-   "lc": 1795505391.0030644
+   "lc": 1794491700,
+   "lu": 1794491700
   },
-  "sensor.kitchen_fridge_power": {
-   "s": "50.0",
+  "sensor.fridge_power": {
+   "s": "48.6",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "W",
     "device_class": "power",
     "friendly_name": "Fridge Power"
    },
-   "lc": 1795522833.0296257
+   "lc": 1794487740,
+   "lu": 1794487740
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "cover.kitchen_blind",
+    "ei": "cover.office_blind",
     "pl": "template",
-    "en": "Kitchen Blind"
+    "en": "Office Blind"
    },
    {
-    "ei": "sensor.kitchen_fridge_power",
-    "pl": "localthings",
-    "tk": "power_watts",
+    "ei": "sensor.fridge_power",
+    "pl": "demo",
     "dp": 0,
     "di": "device-1",
     "en": "Power"
@@ -165,9 +173,7 @@
     "cover",
     "sensor"
    ],
-   "platforms": [
-    "localthings"
-   ]
+   "platforms": []
   },
   "icons": {
    "entity_component": {

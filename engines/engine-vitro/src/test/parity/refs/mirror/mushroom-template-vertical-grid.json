@@ -2,7 +2,7 @@
  "case": "mushroom-template-vertical-grid",
  "frame": "mirror",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 720,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Living",
    "x": 104,
    "y": 71,
@@ -43,6 +44,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Lights off · 21°",
    "x": 80.8,
    "y": 90.39,
@@ -55,6 +57,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Bedroom",
    "x": 348.13,
    "y": 71,
@@ -67,6 +70,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "1 of 2 on",
    "x": 351.77,
    "y": 90.39,

@@ -2,12 +2,13 @@
  "case": "tile-fan",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
   "height": 800,
-  "density": 2
+  "density": 2,
+  "touch": true
  },
  "clip": {
   "x": 382,
@@ -31,10 +32,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "Air purifier",
+   "clipped": false,
+   "text": "Ceiling Fan",
    "x": 56,
    "y": 17.61,
-   "w": 67.64,
+   "w": 70.52,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -43,6 +45,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "20%",
    "x": 56,
    "y": 37,
@@ -55,7 +58,7 @@
   }
  ],
  "states": {
-  "fan.air_purifier": {
+  "fan.ceiling_fan": {
    "s": "on",
    "a": {
     "preset_modes": [
@@ -64,17 +67,18 @@
     "percentage": 20,
     "percentage_step": 10,
     "preset_mode": null,
-    "friendly_name": "Air purifier",
+    "friendly_name": "Ceiling Fan",
     "supported_features": 57
    },
-   "lc": 1795504930.0582252
+   "lc": 1794484020,
+   "lu": 1794484020
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "fan.air_purifier",
+    "ei": "fan.ceiling_fan",
     "pl": "zha",
     "tk": "fan",
     "di": "device-1"
@@ -83,7 +87,7 @@
   "devices": [
    {
     "id": "device-1",
-    "name": "Air purifier"
+    "name": "Ceiling Fan"
    }
   ],
   "requested": {

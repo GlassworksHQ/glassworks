@@ -1,0 +1,35 @@
+{
+ "title": "Gauge: a sensor whose state isn't a number",
+ "card": {
+  "type": "gauge",
+  "entity": "sensor.printer_black_ink",
+  "name": "Black ink"
+ },
+ "fixture": {
+  "states": {
+   "sensor.printer_black_ink": {
+    "state": "low",
+    "last_changed": "-2h",
+    "attributes": {
+     "unit_of_measurement": "%",
+     "friendly_name": "Office Printer Black ink"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.printer_black_ink",
+    "pl": "demo",
+    "di": "dev-printer",
+    "en": "Black ink",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-printer",
+    "name": "Office Printer"
+   }
+  ]
+ }
+}

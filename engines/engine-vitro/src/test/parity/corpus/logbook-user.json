@@ -1,0 +1,83 @@
+{
+ "title": "Logbook: changes made by people (their names from HA's users)",
+ "card": {
+  "type": "logbook",
+  "entities": [
+   "light.bedroom_accent"
+  ],
+  "hours_to_show": 24
+ },
+ "fixture": {
+  "states": {
+   "light.bedroom_accent": {
+    "state": "on",
+    "last_changed": "-20m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 128,
+     "icon": "mdi:led-strip-variant",
+     "friendly_name": "Bedroom Strip Accent",
+     "supported_features": 32
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.bedroom_accent",
+    "pl": "zha",
+    "di": "dev-bedroom-strip",
+    "en": "Accent",
+    "tk": "light",
+    "ic": "mdi:led-strip-variant",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-bedroom-strip",
+    "name": "Bedroom Strip"
+   }
+  ],
+  "users": [
+   {
+    "id": "user-alex",
+    "name": "Alex"
+   }
+  ],
+  "logbook": [
+   {
+    "state": "on",
+    "entity_id": "light.bedroom_accent",
+    "icon": "mdi:led-strip-variant",
+    "when": "-9h40m",
+    "context_user_id": "user-alex",
+    "context_event_type": "call_service",
+    "context_domain": "light",
+    "context_service": "turn_on"
+   },
+   {
+    "state": "off",
+    "entity_id": "light.bedroom_accent",
+    "icon": "mdi:led-strip-variant",
+    "when": "-8h5m",
+    "context_user_id": "parity-user",
+    "context_event_type": "call_service",
+    "context_domain": "light",
+    "context_service": "turn_off"
+   },
+   {
+    "state": "on",
+    "entity_id": "light.bedroom_accent",
+    "icon": "mdi:led-strip-variant",
+    "when": "-20m",
+    "context_user_id": "user-alex",
+    "context_event_type": "call_service",
+    "context_domain": "light",
+    "context_service": "turn_on"
+   }
+  ]
+ }
+}

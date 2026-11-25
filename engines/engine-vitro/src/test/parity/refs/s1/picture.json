@@ -2,12 +2,13 @@
  "case": "picture",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
