@@ -10,7 +10,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { readNamedBackupZip, sha256Hex, type InPlaceSimDevice } from '@glassworks/kiln-core';
+import { readNamedBackupZip, sha256Hex, type InPlaceCode, type InPlaceSimDevice } from '@glassworks/kiln-core';
 import { FAKE_SERIAL, buildFakeGwsbBundle } from '@glassworks/lululemon-mirror-installer/fakes';
 import { kilnSim } from '@glassworks/lululemon-mirror-installer/sim';
 import type { PanelShell } from '@glassworks/adb';
@@ -19,7 +19,7 @@ import type { BluetoothLike } from '../src/device/channels';
 import { ImageFlow, inPlaceStep, installRoutes } from '../src/device/DevicePage';
 import { imageDemo } from '../src/device/imageDemo';
 import { ImageSession, type DeviceProgress, type ImageDeps, type ProgressMark } from '../src/device/imageSession';
-import { memoryInPlaceStore, type InPlaceStore } from '../src/device/inPlace';
+import { memoryInPlaceStore, restorePointZip, type InPlaceStore } from '../src/device/inPlace';
 import { routesOf } from '../src/app/[frame]/frames';
 import { withAppStreams } from '../src/wizard/demo';
 import { handTo, mirrorEntry, mirrorFrame } from './mirror-frame';
@@ -48,20 +48,27 @@ interface Rig { image: ImageSession; dev: InPlaceSimDevice; store: InPlaceStore;
 
 /** A session on a simulated stock Mirror; `store` and `progress` carry over to a second browser load or a second run. */
 function rig(o: { lan?: 'ok' | 'drop-midway' | 'offline' | 'lna-denied'; tampered?: boolean; refusedBuild?: boolean; store?: InPlaceStore; progress?: ReturnType<typeof tab>;
-  dev?: InPlaceSimDevice; deps?: Partial<ImageDeps> } = {}): Rig {
+  dev?: InPlaceSimDevice; deps?: Partial<ImageDeps>; code?: Partial<InPlaceCode>;
+  /** a write (`flash <partition>`) or a restart (`reboot`) that fails, by what it is and how many such calls came before it */
+  fail?: (what: string, n: number) => boolean } = {}): Rig {
   const dev = o.dev ?? sim.device({ lan: o.lan ?? 'ok', tampered: o.tampered, refusedBuild: o.refusedBuild });
   const store = o.store ?? memoryInPlaceStore();
   const progress = o.progress ?? tab();
   const flashed: string[] = [];
+  const calls = new Map<string, number>();
+  const failing = (what: string) => { const n = calls.get(what) ?? 0; calls.set(what, n + 1); if (o.fail?.(what, n)) throw new Error(`the bootloader stopped answering (${what})`); };
   const fastboot = () => {
     const fb = dev.fastboot();
-    return { ...fb, flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { await fb.flashBlob(p, b, on); flashed.push(p); } };
+    return { ...fb,
+      flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { failing(`flash ${p}`); await fb.flashBlob(p, b, on); flashed.push(p); },
+      reboot: async () => { failing('reboot'); await fb.reboot(); } };
   };
+  const frame_ = o.code ? { ...frame, imageFlow: { ...frame.imageFlow, inPlace: { ...sim.code, ...o.code } } } : frame;
   const adb = () => { const a = dev.adb(); return Object.assign(withAppStreams(a, { online: true, radio: false }), { rebootToBootloader: () => a.rebootToBootloader!() }); };
   const app = new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true);
   const apk = mirrorEntry.sim.apk();
   const image = new ImageSession({
-    frame,
+    frame: frame_,
     images: { fetch: async () => {}, download: async () => {}, file: async () => new Blob([]), check: async () => {}, build: async () => { throw new Error('no'); },
       wifi: async () => new Blob([]), adbKey: async () => new Blob([]), systemKey: async () => new Blob([]), discard: async () => {} },
     requestFastboot: async () => fastboot(),
@@ -138,7 +145,19 @@ describe('Glassworks on the stock software', () => {
     expect(r.image.state.receive?.fallback).toMatch(/switched to Bluetooth/);
   });
 
-  it('a second run on the same Mirror takes the bundle this browser kept, with nothing sent', async () => {
+  it('a second run takes the bundle this browser kept only while the frame says it still fits the device', async () => {
+    const store = memoryInPlaceStore();
+    const first = rig({ store });
+    await toReceive(first);
+    await toRestorePoint(first);
+    const second = rig({ store, code: { keptMatches: () => true } });
+    await toReceive(second);
+    await toRestorePoint(second);
+    expect(second.image.state.receive?.channel).toBe('cache');
+    expect(second.image.state.log.join('\n')).toContain('this browser\'s saved copy');
+  });
+
+  it('a second run on the same Mirror takes the bundle again: its Bluetooth description can\'t say where services.jar sits now', async () => {
     const store = memoryInPlaceStore();
     const first = rig({ store });
     await toReceive(first);
@@ -146,8 +165,34 @@ describe('Glassworks on the stock software', () => {
     const second = rig({ store });
     await toReceive(second);
     await toRestorePoint(second);
-    expect(second.image.state.receive?.channel).toBe('cache');
-    expect(second.image.state.log.join('\n')).toContain('this browser\'s saved copy');
+    expect(second.image.state.receive?.channel).toBe('lan');
+  });
+
+  it('a new run forgets what the last run\'s agent said: a file from this run\'s agent, with another jar, is taken', async () => {
+    const secret = new Uint8Array(32).fill(7);
+    const r = rig({ deps: { secret: () => secret } });
+    await toReceive(r);
+    await toRestorePoint(r); // the agent's description (its digest) read over Bluetooth
+    r.image.toFastboot();
+    await r.image.connectFastboot();
+    r.image.understand(true);
+    await r.image.flash();
+    expect(r.image.state).toMatchObject({ screen: 'receive', round: 1 });
+    const other = await buildFakeGwsbBundle({ secret, jarBytes: new Uint8Array(16384).fill(3) });
+    await r.image.receiveFile(new NodeBlob([other.bytes as Uint8Array<ArrayBuffer>]) as unknown as Blob);
+    expect(r.image.state.receive?.error ?? null).toBeNull();
+    expect(r.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
+  });
+
+  it('a Cancel while the bundle comes in stops it there: nothing it brings moves the install on', async () => {
+    const r = rig();
+    await toReceive(r);
+    const p = r.image.receive();
+    await r.image.cancelReceive();
+    await p;
+    expect(r.image.state.screen).toBe('receive');
+    expect(r.image.state.receive?.stage).toBe('ready');
+    expect(r.progress.mark).toMatchObject({ at: 'staged' });
   });
 
   it('refuses a bundle whose signature doesn\'t match: nothing kept, nothing more written', async () => {
@@ -226,6 +271,27 @@ describe('a reload', () => {
     expect(c.image.state.restorePoint?.status).toBe('ready');
   });
 
+  it('after the system write, a reload doesn\'t write the system again: it goes on from the write that didn\'t finish', async () => {
+    const dev = sim.device({});
+    const store = memoryInPlaceStore();
+    const progress = tab();
+    const a = rig({ dev, store, progress, fail: (what, n) => what === 'flash userdata' && n === 1 }); // the stage's is n 0
+    await toReceive(a);
+    await toRestorePoint(a);
+    await a.image.continueInstall();
+    expect(a.flashed).toEqual(['userdata', 'system']);
+    expect(a.image.state.screen).toBe('error');
+    expect(progress.mark).toMatchObject({ at: 'received', wrote: ['system-in-place'] });
+    const b = rig({ dev, store, progress });
+    expect(b.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
+    await b.image.connectFastboot();
+    for (let i = 0; i < 200 && b.image.state.restorePoint?.status !== 'ready'; i++) await new Promise((x) => setTimeout(x, 5));
+    await b.image.continueInstall();
+    expect(b.flashed).toEqual(['userdata']);
+    expect(b.image.state.screen).toBe('adb');
+    expect(b.image.state.log.join('\n')).toMatch(/already written before this page reloaded/);
+  });
+
   it('refuses another Mirror in the second fastboot session', async () => {
     const r = rig();
     await toReceive(r);
@@ -251,16 +317,72 @@ describe('the way back (restore-blocks)', () => {
     return { r, zip };
   }
 
-  it('writes this browser\'s restore point over the blocks it changed, after showing the stock apps again', async () => {
+  it('writes this browser\'s restore point over the blocks it changed, then a fresh userdata, so nothing the app set stays', async () => {
     const { r } = await installed();
     await r.image.startUndo();
     expect(r.image.state).toMatchObject({ screen: 'undo', undo: { at: 'start', source: 'browser' } });
     await r.image.undoRestart();
     expect(r.image.state.undo).toMatchObject({ at: 'fastboot', restarted: true });
+    const before = r.flashed.length;
     await r.image.undoFlash();
     expect(r.image.state.undo?.at).toBe('done');
-    expect(r.flashed.at(-1)).toBe('system');
-    expect(r.image.state.log.join('\n')).toContain('Show the stock apps again');
+    expect(r.flashed.slice(before)).toEqual(['system', 'userdata']);
+    expect(r.image.state.log.join('\n')).toContain('as after a factory reset');
+  });
+
+  it('runs the frame\'s undo over adb only on the device the restore point was made on', async () => {
+    const before = vi.fn(async () => {});
+    const r = rig({ code: { beforeRestore: before } });
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    await r.image.connectAdb();
+    // another Mirror that trusts this browser, on the cable for the way back
+    const other = () => { const a = r.adb(); const run = a.run.bind(a); return Object.assign(a, { run: async (c: string) => (c === 'getprop ro.serialno' ? { out: '0000fake02\n', code: 0 } : run(c)) }); };
+    const swapped = rig({ dev: r.dev, store: r.store, code: { beforeRestore: before }, deps: { requestAdb: async () => other() } });
+    await swapped.image.startUndo();
+    await swapped.image.undoRestart();
+    expect(swapped.image.state.connectError).toMatch(/another device/);
+    expect(before).not.toHaveBeenCalled();
+    await r.image.startUndo();
+    await r.image.undoRestart();
+    expect(before).toHaveBeenCalledOnce();
+  });
+
+  it('refuses a restore point that doesn\'t say which device it was made on', async () => {
+    const { r } = await installed();
+    const kept = (await r.store.latestRestore())!;
+    const files = kept.files.map((f) => {
+      if (f.filename !== 'manifest.json') return f;
+      const m = JSON.parse(new TextDecoder().decode(f.data)) as Record<string, unknown>;
+      delete m.deviceIdHash;
+      return { ...f, data: new TextEncoder().encode(JSON.stringify(m)) };
+    });
+    const zip = await restorePointZip('glassworks-in-place', files);
+    const fresh = rig({ dev: r.dev });
+    await fresh.image.startUndo();
+    await fresh.image.pickRestoreZip(new NodeBlob([await bytesOf(zip.blob) as Uint8Array<ArrayBuffer>]) as unknown as Blob, zip.name);
+    fresh.image.undoByHand();
+    await fresh.image.undoFlash();
+    expect(fresh.image.state.undo?.error).toMatch(/doesn't say which device/);
+    expect(fresh.flashed).toEqual([]);
+  });
+
+  it('doesn\'t open over an install that is writing: that install keeps its screens', async () => {
+    let release!: () => void;
+    const r = rig();
+    await toReceive(r);
+    await r.image.receive();
+    const slow = rig({ dev: { ...r.dev, fastboot: () => { const f = r.dev.fastboot(); return { ...f, flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { await new Promise<void>((x) => { release = x; }); await f.flashBlob(p, b, on); } }; } }, store: r.store, progress: r.progress });
+    await slow.image.connectFastboot();
+    for (let i = 0; i < 200 && slow.image.state.restorePoint?.status !== 'ready'; i++) await new Promise((x) => setTimeout(x, 5));
+    const writing = slow.image.continueInstall();
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    await slow.image.startUndo();
+    expect(slow.image.state.screen).toBe('working');
+    for (let i = 0; i < 3; i++) { release(); await new Promise((x) => setTimeout(x, 5)); }
+    await writing;
+    expect(slow.image.state.screen).toBe('adb');
   });
 
   it('takes the downloaded zip in a browser that kept nothing, and refuses a damaged one', async () => {
@@ -278,7 +400,68 @@ describe('the way back (restore-blocks)', () => {
     fresh.image.undoByHand();
     await fresh.image.undoFlash();
     expect(fresh.image.state.undo?.at).toBe('done');
-    expect(fresh.flashed).toEqual(['system']);
+    expect(fresh.flashed).toEqual(['system', 'userdata']);
+  });
+});
+
+describe('the app\'s install after a reload', () => {
+  it('keeps the APK picker, and Connect shut, until an APK passes its checks', async () => {
+    const progress = tab();
+    progress.mark = { at: 'flashed', image: RECIPE.id };
+    const r = rig({ progress });
+    expect(r.image.state).toMatchObject({ screen: 'adb', round: 2 });
+    const app = new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true);
+    await app.pickApk('not-an-apk.apk', new Uint8Array([1, 2, 3]));
+    expect(app.state.apk?.error).toBeTruthy();
+    render(<ImageFlow image={r.image} app={app} />);
+    const picker = () => document.querySelector('input[type=file][accept*=".apk"]');
+    expect(picker()).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Connect' }).hasAttribute('disabled')).toBe(true);
+    await act(async () => { await app.pickApk('glassworks.apk', mirrorEntry.sim.apk()); });
+    expect(picker()).toBeNull();
+    expect(screen.getByRole('button', { name: 'Connect' }).hasAttribute('disabled')).toBe(false);
+  });
+});
+
+describe('a stop in the second fastboot session', () => {
+  async function stopped(fail: (what: string, n: number) => boolean) {
+    const r = rig({ fail });
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    expect(r.image.state.screen).toBe('error');
+    return r;
+  }
+
+  it('Try again writes the system again when its write failed, rather than skipping to userdata', async () => {
+    const r = await stopped((what, n) => what === 'flash system' && n === 0);
+    expect(r.flashed).toEqual(['userdata']);
+    expect(r.image.tryAgainLands()).toBe('fastboot');
+    r.image.tryAgain();
+    await r.image.connectFastboot();
+    await vi.waitFor(() => expect(r.image.state.screen).toBe('adb'));
+    expect(r.flashed).toEqual(['userdata', 'system', 'userdata']);
+  });
+
+  it('a restart that failed is tried again on the same round, with nothing staged or written again', async () => {
+    const r = await stopped((what, n) => what === 'reboot' && n === 1); // the stage's restart is n 0
+    expect(r.flashed).toEqual(['userdata', 'system', 'userdata']);
+    expect(r.image.tryAgainLands()).toBe('fastboot');
+    r.image.tryAgain();
+    expect(r.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
+    await r.image.connectFastboot();
+    await vi.waitFor(() => expect(r.image.state.screen).toBe('adb'));
+    expect(r.flashed).toEqual(['userdata', 'system', 'userdata']);
+  });
+
+  it('offers the restore point from the error once it is saved, and writes it with a fresh userdata', async () => {
+    const r = await stopped((what, n) => what === 'flash userdata' && n === 1);
+    render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Restore the original system' }));
+    expect(r.image.state).toMatchObject({ screen: 'undo', undo: { at: 'fastboot', source: 'browser' } });
+    await act(async () => { await r.image.undoFlash(); });
+    expect(r.image.state.undo?.at).toBe('done');
+    expect(r.flashed).toEqual(['userdata', 'system', 'system', 'userdata']);
   });
 });
 

@@ -199,6 +199,21 @@ describe('FakeStockAgent over BLE', () => {
     expect(JSON.parse(new TextDecoder().decode(v)).fiemap).toEqual({ truncated: true, extentCount: 12 });
   });
 
+  it('META tiers down as StockBundle.bleMetaJson does, and a fixture no real agent could describe is refused', async () => {
+    const secret = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
+    const signed = new FakeStockAgent(await buildFakeGwsbBundle({ secret }));
+    const m = JSON.parse(new TextDecoder().decode(signed.bleMeta())) as Record<string, unknown>;
+    expect(m).toMatchObject({ fiemap: { truncated: true, extentCount: 1 }, hasHmac: true });
+    expect(m.hmacSha256).toBeUndefined();
+    const long = new FakeStockAgent(await buildFakeGwsbBundle({ secret, fingerprint: `fake/${'x'.repeat(400)}` }));
+    const c = JSON.parse(new TextDecoder().decode(long.bleMeta())) as Record<string, unknown>;
+    expect(c).toMatchObject({ compact: true, serialno: FAKE_SERIAL, servicesOdexFound: false, servicesHasClassesDex: true, hasHmac: true });
+    expect(c.fingerprint).toBeUndefined();
+    expect(long.bleMeta().length).toBeLessThanOrEqual(512);
+    const absurd = new FakeStockAgent(await buildFakeGwsbBundle({ lanIp: `192.0.2.${'9'.repeat(500)}` }));
+    expect(() => absurd.bleMeta()).toThrow(/still over 512 bytes/);
+  });
+
   it('0x01 streams INFO, the chunks and END; a dropped chunk comes back on 0x02, byte-identical', async () => {
     const agent = await agentWith({ bleDropChunks: [1, 5, 40] });
     const ble = await connectBle(agent);

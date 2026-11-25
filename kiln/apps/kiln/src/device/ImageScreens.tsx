@@ -320,13 +320,14 @@ export function ImageAdb({ f, s, m, ms }: P) {
         ? <p className="lede">{`Its first start takes a few minutes. Click Connect and ${pickInList(d)}, and Kiln switches its Wi-Fi on.`}</p>
         : <p className="lede">{rich(d.words['adb.firstStart'])}</p>}
       {f.inPlace && <p className="small">{d.imageFlow.inPlace?.words['inPlace.appInstall.lede']}</p>}
-      {f.inPlace && !ms.apk?.sha256 && <ApkInput d={d} m={m} ms={ms} />}
+      {/* until an APK passes its checks: one the checks refused (another app's, say) keeps the picker, with why */}
+      {f.inPlace && !m.apkBytes() && <ApkInput d={d} m={m} ms={ms} />}
       {s.connecting && !s.adbWaiting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.adbWaiting && <><p className="status work" role="status">{`Waiting for ${d.the} to finish starting…`}</p><div className="bar wait"><i /></div></>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
         <Log s={s} />
-        <button type="button" className="btn ember pulsing" disabled={s.connecting} onClick={() => void f.connectAdb()}>Connect</button>
+        <button type="button" className="btn ember pulsing" disabled={s.connecting || (f.inPlace && !m.apkBytes())} onClick={() => void f.connectAdb()}>Connect</button>
       </div>
     </section>
   );
@@ -413,6 +414,8 @@ export function ImageError({ f, s }: P) {
           {s.wifiOnFailed && s.connectError && <span className="status err" role="alert">{s.connectError}</span>}
           {s.wifiOnFailed && <button type="button" className="btn ghost" disabled={s.connecting} onClick={() => void f.connectAdb()}>Connect again</button>}
           {!s.wifiOnFailed && !f.inPlace && f.tryAgainLands() !== 'image' && <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to download</button>}
+          {/* a stop after the restore point was saved: the way back, from fastboot, next to finishing the install */}
+          {f.inPlace && s.round === 2 && s.restorePoint?.status === 'ready' && <button type="button" className="btn ghost" onClick={() => f.restoreAfterError()}>Restore the original system</button>}
         </span>
         {/* the step that stopped, on its own screen: the first start over adb, a write over fastboot, else the download */}
         {!s.wifiOnFailed && <button type="button" className="btn ember" onClick={() => f.tryAgain()}>Try again</button>}

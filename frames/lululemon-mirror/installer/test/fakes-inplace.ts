@@ -50,6 +50,8 @@ export interface FakeGwsbOptions {
   corruptHmac?: boolean;
   /** the meta's servicesSha256 doesn't match the jar */
   corruptSha?: boolean;
+  /** fields laid over the meta before it's signed (an undefined one is left out): a meta of another shape */
+  metaPatch?: Record<string, unknown>;
 }
 
 export interface FakeGwsbBundle {
@@ -140,7 +142,7 @@ export async function buildFakeGwsbBundle(o: FakeGwsbOptions = {}): Promise<Fake
     hasClassesDex: o.servicesHasClassesDex ?? !odexFound,
     fiemap: { size: jarBytes.length, ino: 1234, extents },
   });
-  const metaBaseJson = JSON.stringify(base);
+  const metaBaseJson = JSON.stringify(o.metaPatch ? { ...base, ...o.metaPatch } : base);
   let metaJson = metaBaseJson;
   let hmacSha256: string | undefined;
   if (o.secret) {
@@ -385,14 +387,36 @@ export class FakeStockAgent {
 
   // --- BLE ----------------------------------------------------------------------------------------------------------
 
-  /** The META characteristic: the bundle meta plus bundleSize, chunkSize, chunkLocked; FIEMAP trimmed to fit 512 bytes. */
+  /**
+   * The META characteristic as StockBundle.bleMetaJson builds it: the bundle meta plus bundleSize, chunkSize and
+   * chunkLocked (and the HMAC when signed), then, until it fits 512 bytes, FIEMAP trimmed to its extent count, the HMAC
+   * left to the bundle (`hasHmac`), and last the compact meta, with the serial and then without. A fixture whose compact
+   * meta still doesn't fit is one the real agent can't describe either, so it's refused here.
+   */
   bleMeta(): Uint8Array {
     const base = JSON.parse(this.bundle.metaBaseJson) as Record<string, unknown>;
     const extra = { bundleSize: this.bundle.bytes.length, chunkSize: this.chunkSize, chunkLocked: this.locked };
-    const full = enc.encode(JSON.stringify({ ...base, ...extra }));
-    if (full.length <= MAX_ATTR) return full;
+    const signed = this.bundle.hmacSha256;
+    const hmac = signed ? { hmacSha256: signed } : {};
     const fiemap = base.fiemap as { extents?: unknown[] } | null;
-    return enc.encode(JSON.stringify({ ...base, fiemap: { truncated: true, extentCount: fiemap?.extents?.length ?? 0 }, ...extra }));
+    const trimmed = { truncated: true, extentCount: fiemap?.extents?.length ?? 0 };
+    const compact = (serial: boolean) => ({
+      version: base.version, compact: true, ...(serial ? { serialno: base.serialno } : {}),
+      servicesSize: base.servicesSize, servicesSha256: base.servicesSha256, servicesOdexFound: base.servicesOdexFound,
+      servicesHasClassesDex: base.servicesHasClassesDex, lanIp: base.lanIp, httpPort: base.httpPort, ...extra, ...(signed ? { hasHmac: true } : {}),
+    });
+    const tries: Record<string, unknown>[] = [
+      { ...base, ...extra, ...hmac },
+      { ...base, fiemap: trimmed, ...extra, ...hmac },
+      ...(signed ? [{ ...base, fiemap: trimmed, ...extra, hasHmac: true }] : []),
+      compact(true),
+      compact(false),
+    ];
+    for (const t of tries) {
+      const b = enc.encode(JSON.stringify(t));
+      if (b.length <= MAX_ATTR) return b;
+    }
+    throw new Error(`the agent's compact META is still over ${MAX_ATTR} bytes: no real agent sends that, so this fixture can't stand for one`);
   }
 
   /** A CTRL write, as BleProbeServer.command handles it. */

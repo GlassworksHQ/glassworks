@@ -129,6 +129,8 @@ export interface FakeMirrorOptions {
   rotationStuck?: boolean;
   /** each command takes this long (the demo) */
   delayMs?: number;
+  /** ro.serialno, as Android reads it from the bootloader (the same serial fastboot gives) */
+  serialno?: string;
   /** our app is the image's privileged copy (Kiln's fastboot install), so an adb install updates it */
   privileged?: boolean;
 }
@@ -237,7 +239,7 @@ export class FakeMirror implements PanelShell {
     const props: Record<string, string> = {
       'ro.build.version.sdk': String(o.sdk ?? 23), 'ro.build.version.release': o.release ?? '6.0.1',
       'ro.board.platform': o.platform ?? 'msm8916', 'ro.product.cpu.abilist': o.abilist ?? 'arm64-v8a,armeabi-v7a,armeabi',
-      'ro.product.model': 'MSM8916 for arm64', 'sys.boot_completed': '1',
+      'ro.product.model': 'MSM8916 for arm64', 'sys.boot_completed': '1', ...(o.serialno ? { 'ro.serialno': o.serialno } : {}),
     };
     let m: RegExpExecArray | null;
     if ((m = /^getprop (\S+)$/.exec(cmd))) return ok(`${props[m[1]!] ?? ''}\n`);

@@ -10,7 +10,7 @@ import {
   type BackupFile, type BackupMeta, type InPlaceCode, type NamedPart,
 } from '@glassworks/kiln-core';
 import {
-  BundleFormatError, buildAgentPageUrl, connectBleAgent, isBluetoothAvailable, readBundleFromFile, receiveBundle,
+  BundleFormatError, abortError, buildAgentPageUrl, connectBleAgent, isBluetoothAvailable, readBundleFromFile, receiveBundle,
   type AgentMeta, type BleAgentConnection, type BluetoothLike, type BundleCacheAdapter, type FallbackEvent, type TransferProgress,
 } from './channels';
 
@@ -155,7 +155,8 @@ export interface ReceiverDeps {
  * Takes the bundle for one run: over the channels (Bluetooth first, for the agent's description and address; then this
  * browser's copy, the local network, and Bluetooth again for the bytes), or from a file the person picked. Each is
  * checked by Kiln (verifyGwsbBundle: SHA-256, serial, signature) and by the frame (its readBundle, with its stop-gates)
- * before it is kept; nothing is written to the device here.
+ * before it is kept; nothing is written to the device here. A new run gets a new receiver: the agent's description
+ * this one read belongs to its run.
  */
 export class InPlaceReceiver {
   private meta?: AgentMeta;
@@ -197,6 +198,8 @@ export class InPlaceReceiver {
       bluetooth: this.d.bluetooth,
       channels: ['cache', ...(enabled.has('lan') ? ['lan' as const] : []), ...(enabled.has('ble') ? ['ble' as const] : [])],
       cache: cacheOf(this.d.store),
+      // a kept bundle is built from only while the frame's code says it still fits the device (where its file sits now)
+      verifyKept: (bytes, meta) => !!code.keptMatches?.(bytes, meta.raw),
       fetchImpl: this.d.fetchImpl,
       localNetworkPermission: this.d.localNetworkPermission,
       ...(this.d.lanTimeoutMs ? { lanTimeoutMs: this.d.lanTimeoutMs } : {}),
@@ -211,22 +214,29 @@ export class InPlaceReceiver {
   }
 
   /** A bundle file the person picked (downloaded from the agent's own page), checked the same way. */
-  async receiveFile(file: Blob, o: { secret: Uint8Array; serial: string } & ReceiveEvents): Promise<Received> {
+  async receiveFile(file: Blob, o: { secret: Uint8Array; serial: string; signal?: AbortSignal } & ReceiveEvents): Promise<Received> {
     o.onChannel?.('file');
-    const bytes = await readBundleFromFile(file, (p) => o.onProgress?.(p));
+    const bytes = await readBundleFromFile(file, (p) => { if (!o.signal?.aborted) o.onProgress?.(p); });
     return this.accept(bytes, 'file', o);
   }
 
-  /** Kiln's check, then the frame's, then kept: a bundle that fails either is never stored and never built from. */
-  private async accept(bytes: Uint8Array, channel: Received['channel'], o: { secret: Uint8Array; serial: string } & ReceiveEvents): Promise<Received> {
+  /**
+   * Kiln's check, then the frame's, then kept: a bundle that fails either is never stored and never built from. A
+   * cancel during any of it (`signal`) stops it there: nothing is kept or handed back.
+   */
+  private async accept(bytes: Uint8Array, channel: Received['channel'], o: { secret: Uint8Array; serial: string; signal?: AbortSignal } & ReceiveEvents): Promise<Received> {
+    const check = () => { if (o.signal?.aborted) throw abortError(); };
+    check();
     o.onVerifying?.();
     const kept = channel === 'cache';
     await verifyGwsbBundle(bytes, { ...(kept ? {} : { secret: o.secret }), expectedSerial: o.serial, requireSerial: true, requireHmac: !kept });
     const r = await this.d.code.readBundle(bytes, { secret: o.secret, serial: o.serial, ...(kept ? { kept } : {}) });
+    check();
     if (this.meta?.digest && this.meta.digest.toLowerCase() !== r.digest.toLowerCase()) {
       throw new BundleFormatError('This bundle is from another device or an older run. Get it again from the device.');
     }
     if (!kept) await this.d.store.putBundle(o.serial, r.digest, bytes);
+    check();
     return { bytes, channel, ...r };
   }
 

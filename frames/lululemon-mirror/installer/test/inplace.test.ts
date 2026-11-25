@@ -8,6 +8,8 @@ import design from '../../design/installer.json';
 import {
   BundleRefused, DEFAULT_PROBE_APP_UID, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildStageUserdata, installInPlace, mirrorInPlace,
 } from '../src';
+import { ADB_KEYS } from '../src/image';
+import { factoryUserdata, keptBundleFits } from '../src/inplace';
 import { GLASSWORKS } from '../src/app';
 import { simInPlace } from '../src/sim';
 import { SYSTEM_BYTES } from '../src/flash';
@@ -68,6 +70,63 @@ describe('the bundle', () => {
     await expect(code.readBundle((await buildFakeGwsbBundle({})).bytes, { secret: SECRET, serial: FAKE_SERIAL })).rejects.toThrow(/not signed/);
     await expect(code.readBundle((await buildFakeGwsbBundle({ secret: SECRET, servicesOdexFound: true })).bytes, { secret: SECRET, serial: FAKE_SERIAL })).rejects.toThrow(BundleRefused);
     await expect(code.readBundle((await buildFakeGwsbBundle({ secret: SECRET, servicesHasClassesDex: false })).bytes, { secret: SECRET, serial: FAKE_SERIAL })).rejects.toThrow(/services.odex/);
+  });
+});
+
+describe('the dex layout', () => {
+  it('goes on only when the bundle says, as booleans, that there is no services.odex and services.jar has its classes.dex', async () => {
+    const refused = async (metaPatch: Record<string, unknown>) => {
+      const b = await buildFakeGwsbBundle({ secret: SECRET, metaPatch });
+      const e = await code.readBundle(b.bytes, { secret: SECRET, serial: FAKE_SERIAL }).catch((x: unknown) => x);
+      expect(e).toBeInstanceOf(BundleRefused);
+      return (e as Error).message;
+    };
+    expect(await refused({ servicesOdexFound: undefined })).toMatch(/doesn't say whether/);
+    expect(await refused({ servicesHasClassesDex: undefined })).toMatch(/doesn't say whether/);
+    expect(await refused({ servicesOdexFound: 'false' })).toMatch(/doesn't say whether/);
+    expect(await refused({ servicesHasClassesDex: 1 })).toMatch(/doesn't say whether/);
+    // the refusal says what was and wasn't written: the stage's app storage, never lululemon's system
+    const odexed = await refused({ servicesOdexFound: true });
+    expect(odexed).toMatch(/precompiled copy/);
+    expect(odexed).toMatch(/didn't change lululemon's system/);
+    expect(odexed).not.toMatch(/Nothing was written/);
+  });
+});
+
+describe('a bundle this browser kept', () => {
+  const fiemapOf = (b: { meta: Record<string, unknown> }) => b.meta.fiemap as Record<string, unknown>;
+  it('fits only while the agent reports services.jar in the same blocks', async () => {
+    const b = await buildFakeGwsbBundle({ secret: SECRET });
+    expect(keptBundleFits(b.bytes, { fiemap: fiemapOf(b) })).toBe(true);
+    const moved = { ...fiemapOf(b), extents: [{ logical: 0, physical: 4096 * 900, length: 16384, flags: 1 }] };
+    expect(keptBundleFits(b.bytes, { fiemap: moved })).toBe(false);
+  });
+
+  it('doesn\'t fit when the agent\'s description carries no whole file map (it trims it for Bluetooth)', async () => {
+    const b = await buildFakeGwsbBundle({ secret: SECRET });
+    expect(keptBundleFits(b.bytes, { fiemap: { truncated: true, extentCount: 1 } })).toBe(false);
+    expect(keptBundleFits(b.bytes, { compact: true })).toBe(false);
+    expect(keptBundleFits(new Uint8Array([1, 2, 3]), { fiemap: fiemapOf(b) })).toBe(false);
+  });
+});
+
+describe('the way back', () => {
+  it('has nothing to undo over adb: it writes userdata fresh, so Device Owner, the hidden apps and the home screen go', async () => {
+    expect(code.beforeRestore).toBeUndefined();
+    expect(code.wayBack?.partitions).toEqual(['userdata']);
+    const out = await code.wayBack!.build({ partitionBytes: { userdata: 64 * 2 ** 20 } });
+    const fs = await openSparse(out.writes.userdata!);
+    expect((await fs.readdir('/')).map((e) => e.name).filter((n) => n !== '.' && n !== '..').sort()).toEqual(['lost+found']);
+    expect(await fs.exists(ADB_KEYS)).toBe(false); // stock asks for no key
+    const root = await fs.stat('/');
+    expect([root.mode & 0o7777, root.uid, root.gid]).toEqual([0o771, 1000, 1000]);
+    await expect(code.wayBack!.build({ partitionBytes: {} })).rejects.toThrow(/userdata partition's size/);
+  });
+
+  it('an empty userdata is what factoryUserdata makes at any size', async () => {
+    const fs = await openSparse(await factoryUserdata(32 * 2 ** 20, 1_700_000_000));
+    expect(await fs.exists('/lost+found')).toBe(true);
+    expect(await fs.exists('/misc')).toBe(false);
   });
 });
 

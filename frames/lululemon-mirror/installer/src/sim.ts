@@ -62,6 +62,11 @@ export const simInPlaceCode: InPlaceCode = {
       manifest: { version: 1, systemBytes, servicesJar: { size: jar.length, restoreSparse: 'restore-services.sparse' } },
     };
   },
+  // the way back's fresh userdata, as a stand-in of one block (the real one is a whole empty filesystem)
+  wayBack: {
+    partitions: ['userdata'],
+    async build() { return { writes: { userdata: new Blob([new Uint8Array(4096)]) }, what: 'userdata: fresh, as after a factory reset' }; },
+  },
 };
 
 /**
@@ -81,7 +86,7 @@ export const simInPlace: InPlaceSim = {
     let installed = false;
     const tick = o.tick ?? (async () => {});
     // after the install, adb with this browser's key; it can restart into fastboot (the way back's restart)
-    const mirror = Object.assign(new FakeMirror({ kiosk: 'none' }), { rebootToBootloader: async () => { installed = false; } });
+    const mirror = Object.assign(new FakeMirror({ kiosk: 'none', serialno: FAKE_SERIAL }), { rebootToBootloader: async () => { installed = false; } });
     const lanMode = o.lan ?? 'ok';
     const fastboot = (): FastbootLike => {
       if (!fb.connected) fb.nextSession();

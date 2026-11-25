@@ -125,6 +125,13 @@ export interface InPlaceCode {
     info: readonly string[];
   }>;
   /**
+   * Whether a bundle this browser kept from an earlier run still describes the device as its agent describes it now
+   * (`agent`: the agent's own description, as it sent it): the same file can sit in other blocks after an update or a
+   * reflash, and the writes are built from where the bundle says it sits. Without it, or when it says no, Kiln takes
+   * the bundle again from the device.
+   */
+  keptMatches?(bundle: Uint8Array, agent: Record<string, unknown>): boolean;
+  /**
    * The `in-place` step: the write images by name (the step's `makes`), and the restore image for every block the
    * surgical one changes. `manifest`: the restore point's description, kept with it and in its download. `files`: other
    * files the restore point keeps (the original file, say), by file name. `partitionBytes`: each partition's size as
@@ -141,8 +148,21 @@ export interface InPlaceCode {
    * installed and started, the stock apps it replaces out of the way, and whether updates install by themselves.
    */
   appInstall(p: PanelShell, o: { apk: Uint8Array; onStep: Step; sleep: Sleep }): Promise<FirstStart>;
-  /** The way back's first part, over adb when Kiln still reaches the device: undoes what `appInstall` changed. Best effort. */
+  /**
+   * The way back's first part, over adb when Kiln still reaches the device: undoes what `appInstall` changed. Best
+   * effort, and only on the device the restore point was made on (Kiln checks its serial first).
+   */
   beforeRestore?(p: PanelShell, o: { onStep: Step }): Promise<void>;
+  /**
+   * The way back's other writes over fastboot, after the restore image: what the install changed outside the blocks
+   * the restore point covers, put back as the device had it (a fresh userdata, say, so nothing `appInstall` set stays).
+   * `partitions`: the partitions it writes, whose sizes Kiln reads from fastboot before it calls `build`, and before
+   * anything is written. `what`: a line for the log.
+   */
+  wayBack?: {
+    partitions: readonly string[];
+    build(o: { partitionBytes: Record<string, number> }): Promise<{ writes: Record<string, Blob>; what: string }>;
+  };
   /** How the `receive` step reaches the agent: its HTTP port and path on the LAN, its Bluetooth GATT service and characteristics. */
   channels: {
     lan?: { port: number; path: string; pagePath?: string };
