@@ -20,8 +20,8 @@
  "fixture": {
   "states": {
    "sensor.living_room_temperature": {
-    "state": "21.42",
-    "last_changed": "-131m",
+    "state": "19.72",
+    "last_changed": -480,
     "attributes": {
      "state_class": "measurement",
      "unit_of_measurement": "°C",

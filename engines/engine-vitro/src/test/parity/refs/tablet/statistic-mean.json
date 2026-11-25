@@ -72,15 +72,15 @@
  ],
  "states": {
   "sensor.living_room_temperature": {
-   "s": "21.42",
+   "s": "19.72",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
     "friendly_name": "Living Room Temperature"
    },
-   "lc": 1794491820,
-   "lu": 1794491820
+   "lc": 1794499200,
+   "lu": 1794499200
   }
  },
  "templates": {},
@@ -155,8 +155,8 @@
    },
    "events": [],
    "result": {
-    "max": 23.37,
-    "mean": 21.497431,
+    "max": 23.36,
+    "mean": 21.497292,
     "min": 19.61
    }
   }

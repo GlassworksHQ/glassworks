@@ -17,8 +17,8 @@
  "fixture": {
   "states": {
    "sensor.kitchen_energy": {
-    "state": "412.6",
-    "last_changed": "-3m",
+    "state": "401.89",
+    "last_changed": -480,
     "attributes": {
      "state_class": "total_increasing",
      "unit_of_measurement": "kWh",
