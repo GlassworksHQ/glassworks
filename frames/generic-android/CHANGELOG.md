@@ -31,6 +31,8 @@ line of each version is what Home Assistant shows on the update card. A change o
   set the key, no other device can point the panel at its own page. Home Assistant 2026.11 or newer sets the key by
   itself when you add the panel; do that from a network you trust. On an older Home Assistant, change these on the
   panel or on the Manage page. The speaker, reload, restart and the other everyday controls work as before.
+  Notifications sent with the `notify` action need the key too, so a stranger on your network can't put an alert on
+  the screen. On an older Home Assistant, `notify` calls fail until you update it.
 
 ## [0.9.0] - 2026-11-24
 

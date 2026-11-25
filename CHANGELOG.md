@@ -27,6 +27,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   set the key, no other device can point the panel at its own page. Home Assistant 2026.11 or newer sets the key by
   itself when you add the panel; do that from a network you trust. On an older Home Assistant, change these on the
   panel or on the Manage page. The speaker, reload, restart and the other everyday controls work as before.
+  Notifications sent with the `notify` action and every radio control (**Radio mode**, **Radio allowed clients**,
+  **Join** and **Leave Zigbee network**, **Thread dataset**) need the key too, so a stranger on your network can't
+  put an alert on the screen or move the panel's radio to another network. On an older Home Assistant, `notify`
+  calls fail until you update it.
 
 ## [0.9.0] - 2026-11-24
 
