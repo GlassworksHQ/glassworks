@@ -127,6 +127,41 @@ def access_units(path):
     return aus
 
 
+MJPEG_S = 20          # the MJPEG loop: the stream's first seconds, as JPEG pictures (~5 MB at 360p)
+
+
+def mjpeg_args(seconds=MJPEG_S):
+    """The segments (joined, on stdin) decoded to JPEG pictures, one after another, at the stream's rate."""
+    return ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "mp4", "-i", "pipe:0", "-t", str(seconds),
+            "-c:v", "mjpeg", "-q:v", "5", "-threads", "1", "-fflags", "+bitexact", "-flags:v", "+bitexact",
+            "-f", "mjpeg", "pipe:1"]
+
+
+@functools.lru_cache(maxsize=None)
+def mjpeg_frames(profile):
+    """The profile's stream as a list of JPEG pictures (HA's camera_proxy_stream, MJPEG): the same video
+    the segments carry, burnt-in counter and all, decoded once and kept in the cache next to them."""
+    d = os.path.join(root(), "mjpeg")
+    path = os.path.join(d, f"{profile}.mjpeg")
+    if not os.path.exists(path):
+        src = os.path.join(root(), profile)
+        joined = b""
+        for name in ["init.mp4"] + sorted(f for f in os.listdir(src) if f.endswith(".m4s")):
+            with open(os.path.join(src, name), "rb") as fh:
+                joined += fh.read()
+        out =subprocess.run(mjpeg_args(), input=joined, capture_output=True, check=True).stdout
+        os.makedirs(d, exist_ok=True)
+        with open(path + ".tmp", "wb") as f:
+            f.write(out)
+        os.replace(path + ".tmp", path)
+    with open(path, "rb") as f:
+        data = f.read()
+    # One picture ends (EOI) where the next starts (SOI); a JPEG's entropy-coded data never has FFD9 FFD8.
+    parts = data.split(b"\xff\xd9\xff\xd8")
+    frames = [(b"" if i == 0 else b"\xff\xd8") + p + (b"" if i == len(parts) - 1 else b"\xff\xd9") for i, p in enumerate(parts)]
+    return [f for f in frames if f.startswith(b"\xff\xd8") and f.endswith(b"\xff\xd9")]
+
+
 def annexb(profile):
     """The profile's whole loop as one Annex B H.264 stream (the WebRTC peer's video)."""
     return os.path.join(root(), profile, "stream.h264")
