@@ -117,6 +117,12 @@ class RebuildTest(unittest.TestCase):
             with open(os.path.join(d, compact.NAME), "rb") as a, open(ZIP, "rb") as b:
                 self.assertEqual(a.read(), b.read())
 
+    def test_refuses_a_screen_whose_artwork_overflows_the_box(self):
+        import compact
+        from target import Target
+        with self.assertRaisesRegex(ValueError, "reaches past the compact"):
+            compact.frames(Target(name="uhd", width=3840, height=2160, compact_budget=STOCK_BYTES))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -44,9 +44,10 @@ picture itself.
 
 `bootanimation-compact.zip` is built for that player: upright like stock's own, the Glassworks stack
 and wordmark in a 300x400 box centered on the screen, breathing through four glow levels, then
-holding full glow until Android has booted. It's about 19 KB. Kiln pads it to stock's exact size
-with an empty zip comment, which every zip reader skips. The generator builds it because the
-Mirror's `frame.json` sets `"compactBudget": 22901`.
+holding full glow until Android has booted. It's about 19 KB. The generator builds it because the
+Mirror's `frame.json` sets `"compactBudget": 22901`. The stock install doesn't write it yet: when it
+does, `padZipToExactLength` in the installer's `stock.ts` pads it to stock's exact size with an
+empty zip comment, which every zip reader skips.
 
 ## Not changeable: the boot logo
 

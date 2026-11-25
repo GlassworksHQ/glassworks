@@ -2,8 +2,9 @@
 replace a stock bootanimation.zip in place, for a frame whose `boot.compactBudget` is that file's size.
 
 The Mirror's stock-in-place install writes it over /system/media/bootanimation.zip in its own ext4
-blocks, so it may not grow past the stock file (22,901 bytes on stock 1.24.0). Kiln pads it to the
-stock file's exact length (the zip comment, stock.ts padZipToExactLength).
+blocks, so it may not grow past the stock file (22,901 bytes on stock 1.24.0). stock.ts
+padZipToExactLength pads a zip to the stock file's exact length (the zip comment); the stock install
+doesn't write this zip yet.
 
 What it is: the Glassworks stack and wordmark at rest, cropped to a BOX in the middle of the screen at
 the screen's own pixels (no scaling), in four glow levels of the top plate. desc.txt plays them as a
@@ -66,6 +67,12 @@ def frames(target):
         cov = scene.word(0.0)
         cv.px += (np.asarray(stack.FG, np.float64) - cv.px) * cov[..., None]
         px = np.clip(cv.px + 0.5, 0, 255).astype(np.uint8)
+        art = (px != np.array(BG, np.uint8)).any(-1)
+        art[y0:y0 + BOX[1], x0:x0 + BOX[0]] = False
+        if art.any():   # the layout scales with the screen; BOX doesn't
+            ys, xs = np.nonzero(art)
+            raise ValueError(f"the artwork on a {target.width}x{target.height} screen reaches past the compact "
+                             f"{BOX[0]}x{BOX[1]} box (e.g. x={xs[0]}, y={ys[0]}): it would be cropped")
         out[f"g{i}"] = np.ascontiguousarray(px[y0:y0 + BOX[1], x0:x0 + BOX[0]])
     return out
 
