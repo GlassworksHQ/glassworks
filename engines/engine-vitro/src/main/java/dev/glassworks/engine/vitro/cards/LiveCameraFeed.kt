@@ -63,9 +63,22 @@ internal class LiveCameraFeed(
     /** Bumped by [stop]: a snapshot or capabilities answer of an earlier run neither lands nor clears [inFlight]. */
     private var generation = 0
 
-    /** `camera/capabilities`' kinds; null until known. Kept across runs, as HA asks again only for another entity. */
+    /**
+     * `camera/capabilities`' kinds; null until HA answers. HA's answer, an empty one included, is kept across runs (HA
+     * asks again only for another entity); a request that failed is not: MJPEG plays meanwhile, and it's asked again.
+     */
     private var capabilities: List<CameraStreamKind>? = null
     private var capabilitiesAsked = false
+
+    /** The last `camera/capabilities` request failed: MJPEG plays until a later one answers. */
+    private var capabilitiesFailed = false
+
+    /** The wait before asking again after a failed request: doubled each time, up to [CAPABILITIES_RETRY_MAX_MS]. */
+    private var capabilitiesRetryMs = CAPABILITIES_RETRY_MS
+
+    private val askAgain = Runnable {
+        if (running && active && capabilities == null) askCapabilities()
+    }
 
     /** What HLS and WebRTC reported this run (HA's `hasVideo`): true with video, false failed, null loading. */
     private var hlsVideo: Boolean? = null
@@ -147,6 +160,7 @@ internal class LiveCameraFeed(
         if (!active) {
             stopPolling()
             ctx.main.removeCallbacks(retry)
+            ctx.main.removeCallbacks(askAgain)
             ctx.main.removeCallbacks(recomputeTask)
             recomputePosted = false
             // A player that can't pause is closed: it never keeps decoding once its slot goes back. (Not a failure of
@@ -193,6 +207,8 @@ internal class LiveCameraFeed(
             startPolling()
             ctx.main.postDelayed(retry, RETRY_MS)
         }
+        // Shown again after a failed capabilities request: ask now (the connection may be back).
+        if (capabilities == null && !capabilitiesAsked) askCapabilities()
         recompute()
     }
 
@@ -203,6 +219,7 @@ internal class LiveCameraFeed(
         generation++
         ctx.main.removeCallbacks(retry)
         ctx.main.removeCallbacks(recomputeTask)
+        ctx.main.removeCallbacks(askAgain)
         recomputePosted = false
         // A capabilities request still out lands on nothing; the next start asks again.
         if (capabilities == null) capabilitiesAsked = false
@@ -226,8 +243,21 @@ internal class LiveCameraFeed(
         ctx.callWs(JSONObject().put("type", "camera/capabilities").put("entity_id", entityId)) { ok, result, _ ->
             ctx.main.post {
                 if (run != generation) return@post
-                // HA's frontend shows no stream when this fails; every camera has MJPEG, so Vitro plays that.
-                capabilities = if (ok) CameraStreamChoice.kindsOf(result) else emptyList()
+                if (ok) {
+                    capabilities = CameraStreamChoice.kindsOf(result)
+                    capabilitiesFailed = false
+                    capabilitiesRetryMs = CAPABILITIES_RETRY_MS
+                } else {
+                    // HA's frontend shows no stream when this fails; every camera has MJPEG, so Vitro plays that now.
+                    // A failure is often passing (the connection dropped): not kept, asked again after a while.
+                    capabilitiesFailed = true
+                    capabilitiesAsked = false
+                    if (running && active) {
+                        ctx.main.removeCallbacks(askAgain)
+                        ctx.main.postDelayed(askAgain, capabilitiesRetryMs)
+                        capabilitiesRetryMs = (capabilitiesRetryMs * 2).coerceAtMost(CAPABILITIES_RETRY_MAX_MS)
+                    }
+                }
                 recompute()
             }
         }
@@ -242,7 +272,7 @@ internal class LiveCameraFeed(
     /** Runs the players the choice asks for now: closes the others, opens the missing ones, shows the visible one. */
     private fun recompute() {
         if (!running || !active || !stream) return
-        val offered = capabilities ?: return
+        val offered = capabilities ?: (if (capabilitiesFailed) emptyList() else return)
         val supported = CameraStreamChoice.playable(offered) { ctx.cameraPlayers?.supports(it) == true }
         var plan = CameraStreamChoice.streams(supported, hlsVideo, webRtcVideo)
         val video = plan.filter { it.kind != CameraStreamKind.MJPEG }
@@ -266,7 +296,13 @@ internal class LiveCameraFeed(
             releaseSlots()
         }
         val wanted = plan.associateBy { it.kind }
-        for (kind in slots.keys.toList()) if (kind !in wanted) closeSlot(kind)
+        // MJPEG on screen stays until what replaces it draws (a slot freed for video, capabilities known at last): the
+        // video players are clear until their first frame and lie over it, so the card never blanks meanwhile.
+        val bridge = slots[CameraStreamKind.MJPEG]?.hasFrame == true && CameraStreamKind.MJPEG !in wanted &&
+            plan.none { p -> p.visible && slots[p.kind]?.hasFrame == true }
+        for (kind in slots.keys.toList()) {
+            if (kind !in wanted && !(bridge && kind == CameraStreamKind.MJPEG)) closeSlot(kind)
+        }
         for (p in plan) {
             if (p.kind == CameraStreamKind.MJPEG && mjpegDown) continue
             val slot = slots[p.kind] ?: open(p.kind) ?: continue
@@ -440,5 +476,9 @@ internal class LiveCameraFeed(
         /** HA's `hui-image` refresh of a camera snapshot (`camera_view: auto`). */
         const val SNAPSHOT_MS = 10_000L
         const val RETRY_MS = 10_000L
+
+        /** The first wait before asking `camera/capabilities` again after a failed request, and the longest. */
+        const val CAPABILITIES_RETRY_MS = 10_000L
+        const val CAPABILITIES_RETRY_MAX_MS = 300_000L
     }
 }

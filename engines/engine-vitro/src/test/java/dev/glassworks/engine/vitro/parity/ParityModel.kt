@@ -120,7 +120,11 @@ data class ParityCase(
     val theme: String?,
     val span: Int,
     val threshold: Threshold,
-    /** Regions (CSS px, relative to the card) left out of the pixel diff, each with a reason. */
+    /**
+     * Regions (CSS px, relative to the card) left out of the pixel diff, each with a reason. A negative `x` counts from
+     * the card's right edge (`-104`: 104 px in from it), for a region that sits at the right of a slot as wide as the
+     * panel (a bottom sheet) on one frame and narrower on another.
+     */
     val masks: List<Pair<CssRect, String>>,
     /**
      * Lovelace resources the case's page loads (`type: css` only), each a file of the corpus's `fixtures/` folder at
@@ -130,6 +134,11 @@ data class ParityCase(
     val resources: List<LovelaceResource> = emptyList(),
     /** A whole view (`view_config`), for the view layouts: drawn as written, and compared slot by slot and as a page. */
     val viewConfig: JSONObject? = null,
+    /**
+     * `more_info`: an entity whose More Info dialog opens over the card's view (#885). The one slot compared is the
+     * dialog's surface (HA's `<dialog>`, Vitro's sheet), and its texts are the dialog's own.
+     */
+    val moreInfo: String? = null,
 ) {
     fun runsOn(frame: ParityFrame) = frames == null || frame.id in frames
 
@@ -169,6 +178,7 @@ data class ParityCase(
                 card = o.optJSONObject("card"),
                 dashboard = o.optString("dashboard").ifBlank { null },
                 viewConfig = o.optJSONObject("view_config"),
+                moreInfo = o.optString("more_info").ifBlank { null }?.also { require(o.has("card")) { "$id: `more_info` opens over a card's view: the case needs a `card`" } },
                 view = o.optString("view").ifBlank { null },
                 frames = frames,
                 dark = o.optBoolean("dark", true),

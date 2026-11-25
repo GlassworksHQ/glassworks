@@ -474,7 +474,7 @@ internal fun historyPath(entityIds: List<String>, startMs: Long): String {
 // Shared views: the card header and the chart legend
 // ---------------------------------------------------------------------------------------------
 
-private fun cssText(ctx: VitroCardContext, sizeCss: Float, color: Int, weight: Int = Inter.REGULAR) = TextView(ctx.context).apply {
+internal fun cssText(ctx: VitroCardContext, sizeCss: Float, color: Int, weight: Int = Inter.REGULAR) = TextView(ctx.context).apply {
     setTextSize(TypedValue.COMPLEX_UNIT_DIP, sizeCss * ctx.theme.fontScale)
     setTextColor(color)
     typeface = VitroFonts.typeface(ctx.context, weight, sizeCss)
@@ -482,7 +482,7 @@ private fun cssText(ctx: VitroCardContext, sizeCss: Float, color: Int, weight: I
 }
 
 /** Makes [tv]'s text (set before) one CSS line box [lineHeight] times its font size, its leading split as Blink does. */
-private fun lineBox(ctx: VitroCardContext, tv: TextView, sizeCss: Float, lineHeight: Float) {
+internal fun lineBox(ctx: VitroCardContext, tv: TextView, sizeCss: Float, lineHeight: Float) {
     val fm = tv.paint.fontMetrics
     val total = lineHeight * sizeCss * ctx.dp * ctx.theme.fontScale
     val above = CssLineBoxSpan.above(-fm.ascent, fm.descent, total, ctx.dp)
@@ -1383,60 +1383,15 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         }
     }
 
-    /** `.entry-container`: a line chart 8 px down, a first timeline 16 px down; later ones under a 2 px divider. */
-    private fun entry(child: View, timeline: Boolean, first: Boolean): View {
-        val box = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
-        if (!first) {
-            box.addView(View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) },
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(2f * ctx.dp)))
-        }
-        if (!timeline) box.setPadding(0, if (first) Math.round(8f * ctx.dp) else 0, 0, 0)
-        box.addView(child, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            if (!first && !timeline) topMargin = Math.round(8f * ctx.dp)
-        })
-        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        lp.topMargin = Math.round((if (first) (if (timeline) 16f else 0f) else if (timeline) 32f else 16f) * ctx.dp)
-        box.layoutParams = lp
-        return box
-    }
+    private fun entry(child: View, timeline: Boolean, first: Boolean): View = historyEntry(ctx, child, timeline, first)
 
-    /** `generateStateHistoryChartLineData`: the unit's series, down-sampled, and the legend (fills aren't in it). */
-    private fun lineSpec(u: LineUnit, start: Long, end: Long): Pair<LineChartSpec, List<LegendItem>> {
-        val colorIndex = intArrayOf(0)
-        val lines = ArrayList<ChartLine>()
-        val legend = ArrayList<LegendItem>()
-        val endD = end.toDouble()
-        val tempUnit = temperatureUnit()
-        for (e in u.data) {
-            val state = ctx.store[e.entityId]
-            val series = HaHistoryLines.series(e, endD, ctx.now().toDouble(), names[e.entityId] ?: e.name, colors[e.entityId],
-                showNames, ctx.theme, colorIndex, state)
-            for (sr in series) {
-                // ha-chart-base's minmax down-sampling: one frame per device pixel of the chart's width.
-                val sampled = HaGraph.downSample(sr.xs.indices.map { doubleArrayOf(sr.xs[it], sr.ys[it]) }, chartWidthCss() * ctx.dp, start.toDouble(), endD, false)
-                val xs = DoubleArray(sampled.size) { sampled[it][0] }
-                val ys = DoubleArray(sampled.size) { sampled[it][1] }
-                lines += if (sr.fill) {
-                    // A fill: no line, the area down to the axis at half opacity (`color + "7F"`).
-                    ChartLine(xs, ys, sr.color, 0f, step = true, areaColor = CardSurface.withAlpha(sr.color, 0x7F / 255f), areaToOrigin = true)
-                } else {
-                    ChartLine(xs, ys, sr.color, 1.5f, step = true)
-                }
-                if (!sr.fill) legend += LegendItem(e.entityId, sr.name, sr.color, HaHistoryLines.legendValue(sr.id, state, tempUnit))
-            }
-        }
-        val chartHeight = defaultChartHeight()
-        // The same bounds as the chart drawn, so the shared y-axis width is measured from its labels.
-        return LineChartSpec(lines, start, end, u.unit.takeIf { it.isNotBlank() }, chartHeight, false,
+    private fun lineSpec(u: LineUnit, start: Long, end: Long): Pair<LineChartSpec, List<LegendItem>> =
+        stateHistoryLineSpec(ctx, u, start, end, chartWidthCss(), names, colors, showNames, temperatureUnit(),
             config.raw.optDouble("min_y_axis").takeIf { !it.isNaN() }, config.raw.optDouble("max_y_axis").takeIf { !it.isNaN() },
-            fitYData = config.raw.optBoolean("fit_y_data", false)) to legend
-    }
+            config.raw.optBoolean("fit_y_data", false))
 
     /** The charts' width (CSS px): the card's less its border and the content's 16 px sides. */
     private fun chartWidthCss(): Double = (width.takeIf { it > 0 }?.let { it / ctx.dp - 2.0 - 32.0 }) ?: 466.0
-
-    /** `_getDefaultHeight`: half the chart's width, at least 200, at most `--chart-max-height` (350). */
-    private fun defaultChartHeight(): Float = min(max(chartWidthCss().toFloat() / 2f, 200f), 350f)
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
@@ -1444,8 +1399,64 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
     }
 }
 
+/** `.entry-container`: a line chart 8 px down, a first timeline 16 px down; later ones under a 2 px divider. */
+internal fun historyEntry(ctx: VitroCardContext, child: View, timeline: Boolean, first: Boolean): View {
+    val box = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+    if (!first) {
+        box.addView(View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(2f * ctx.dp)))
+    }
+    if (!timeline) box.setPadding(0, if (first) Math.round(8f * ctx.dp) else 0, 0, 0)
+    box.addView(child, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        if (!first && !timeline) topMargin = Math.round(8f * ctx.dp)
+    })
+    val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+    lp.topMargin = Math.round((if (first) (if (timeline) 16f else 0f) else if (timeline) 32f else 16f) * ctx.dp)
+    box.layoutParams = lp
+    return box
+}
+
+/** `_getDefaultHeight`: half the chart's width, at least 200, at most `--chart-max-height` (350). */
+internal fun defaultHistoryChartHeight(widthCss: Double): Float = min(max(widthCss.toFloat() / 2f, 200f), 350f)
+
+/**
+ * `generateStateHistoryChartLineData`: [u]'s series over [start]..[end], down-sampled for a [widthCss] wide chart, and
+ * the legend (fills aren't in it). Shared by the history graph card and the More Info dialog's history (#885).
+ */
+internal fun stateHistoryLineSpec(
+    ctx: VitroCardContext, u: LineUnit, start: Long, end: Long, widthCss: Double,
+    names: Map<String, String>, colors: Map<String, Int>, showNames: Boolean, tempUnit: String?,
+    minYAxis: Double?, maxYAxis: Double?, fitYData: Boolean,
+): Pair<LineChartSpec, List<LegendItem>> {
+    val colorIndex = intArrayOf(0)
+    val lines = ArrayList<ChartLine>()
+    val legend = ArrayList<LegendItem>()
+    val endD = end.toDouble()
+    for (e in u.data) {
+        val state = ctx.store[e.entityId]
+        val series = HaHistoryLines.series(e, endD, ctx.now().toDouble(), names[e.entityId] ?: e.name, colors[e.entityId],
+            showNames, ctx.theme, colorIndex, state)
+        for (sr in series) {
+            // ha-chart-base's minmax down-sampling: one frame per device pixel of the chart's width.
+            val sampled = HaGraph.downSample(sr.xs.indices.map { doubleArrayOf(sr.xs[it], sr.ys[it]) }, widthCss * ctx.dp, start.toDouble(), endD, false)
+            val xs = DoubleArray(sampled.size) { sampled[it][0] }
+            val ys = DoubleArray(sampled.size) { sampled[it][1] }
+            lines += if (sr.fill) {
+                // A fill: no line, the area down to the axis at half opacity (`color + "7F"`).
+                ChartLine(xs, ys, sr.color, 0f, step = true, areaColor = CardSurface.withAlpha(sr.color, 0x7F / 255f), areaToOrigin = true)
+            } else {
+                ChartLine(xs, ys, sr.color, 1.5f, step = true)
+            }
+            if (!sr.fill) legend += LegendItem(e.entityId, sr.name, sr.color, HaHistoryLines.legendValue(sr.id, state, tempUnit))
+        }
+    }
+    // The same bounds as the chart drawn, so the shared y-axis width is measured from its labels.
+    return LineChartSpec(lines, start, end, u.unit.takeIf { it.isNotBlank() }, defaultHistoryChartHeight(widthCss), false,
+        minYAxis, maxYAxis, fitYData = fitYData) to legend
+}
+
 /** A line chart, as high as its spec unless a fixed slot sizes it. */
-private class LineChartHost(ctx: VitroCardContext, spec: LineChartSpec) : LinearLayout(ctx.context) {
+internal class LineChartHost(ctx: VitroCardContext, spec: LineChartSpec) : LinearLayout(ctx.context) {
     val chart = ChartView(ctx.context, ctx.dp).apply { heightCss = spec.heightCss }
 
     init {

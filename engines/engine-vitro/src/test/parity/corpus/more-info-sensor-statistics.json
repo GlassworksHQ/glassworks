@@ -1,0 +1,72 @@
+{
+ "title": "More Info of a sensor with a state class: 5-minute statistics, the two-line title and Show more, opaque under a translucent view theme (#885)",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "theme": "Vitro Mirror",
+ "card": {
+  "type": "tile",
+  "entity": "sensor.study_desk_illuminance"
+ },
+ "more_info": "sensor.study_desk_illuminance",
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "sensor.study_desk_illuminance": {
+    "state": "792",
+    "last_changed": -180,
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "lx",
+     "device_class": "illuminance",
+     "friendly_name": "Study Desk Sensor Illuminance"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.study_desk_illuminance",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "dev-study-desk-sensor",
+    "en": "Illuminance",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-study-desk-sensor",
+    "name": "Study Desk Sensor",
+    "area_id": "study"
+   }
+  ],
+  "areas": [
+   {
+    "area_id": "study",
+    "name": "Study",
+    "icon": "mdi:desk"
+   }
+  ],
+  "history": {
+   "sensor.study_desk_illuminance": {
+    "wave": {
+     "min": 40,
+     "max": 1450,
+     "period": "24h",
+     "step": "5m",
+     "decimals": 0,
+     "phase": 0.15
+    }
+   }
+  }
+ }
+}

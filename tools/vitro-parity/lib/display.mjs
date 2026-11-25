@@ -3,7 +3,7 @@
 // Touches: nothing (pure functions); capture.mjs fetches the inputs and writes the result through the scrubber.
 
 /** The list_for_display fields HaDisplay.applyRegistry reads (`ai`: an alert card names the area). Labels etc. stay out. */
-const ENTRY_KEYS = ['ei', 'pl', 'tk', 'dp', 'ic', 'di', 'en', 'ai'];
+const ENTRY_KEYS = ['ei', 'pl', 'tk', 'dp', 'ic', 'di', 'en', 'ai', 'np'];
 
 /**
  * The fixture's `display` block for [ids]: their registry entries, their devices' names (the one HA shows,
@@ -12,7 +12,8 @@ const ENTRY_KEYS = ['ei', 'pl', 'tk', 'dp', 'ic', 'di', 'en', 'ai'];
  * (`_`) and the entities' device classes ([deviceClasses]: entity id -> device class); per integration, the
  * entries' own translation keys. [icons] and [translations] are lookups: (category, name) -> HA's `resources`
  * for that one name. [areas] is `config/area_registry/list`; of it the block keeps the areas in [areaIds] (the ones
- * the case's area cards name), with the fields HaDisplay.applyAreas reads, and has no `areas` key without any.
+ * the case's area cards name) and the ones its entities or their devices are in, with the fields HaDisplay.applyAreas
+ * reads, and has no `areas` key without any. A device keeps its `area_id`.
  */
 export function buildDisplay(ids, registry, devices, icons, translations, deviceClasses = {}, areas = [], areaIds = []) {
   const byId = new Map((registry.entities || []).map((e) => [e.ei, e]));
@@ -33,7 +34,8 @@ export function buildDisplay(ids, registry, devices, icons, translations, device
   for (const [real, synthetic] of deviceIds) {
     const d = devices.find((x) => x.id === real);
     const name = d && (d.name_by_user || d.name);
-    if (name) deviceList.push({ id: synthetic, name });
+    // A device's area: an entity without its own is in its device's (HA's dialog title names it, #885).
+    if (name) deviceList.push({ id: synthetic, name, ...(d.area_id ? { area_id: d.area_id } : {}) });
   }
   const domains = [...new Set([...ids].map((id) => id.split('.')[0]))].sort();
   const keyed = entities.filter((e) => e.tk && e.pl);
@@ -65,8 +67,10 @@ export function buildDisplay(ids, registry, devices, icons, translations, device
     for (const [k, v] of Object.entries(translations('entity', e.pl) || {})) if (k.startsWith(prefix)) entityLabels[k] = v;
   }
   const areaList = [];
-  // The areas the case's area cards name, and the ones its entities are in (an alert card shows that area's name).
-  for (const id of [...new Set([...areaIds, ...entities.map((e) => e.ai).filter(Boolean)])].sort()) {
+  // The areas the case's area cards name, and the ones its entities (or their devices) are in: an alert card and a
+  // More Info dialog's title show that area's name.
+  const deviceAreas = deviceList.map((d) => d.area_id).filter(Boolean);
+  for (const id of [...new Set([...areaIds, ...entities.map((e) => e.ai).filter(Boolean), ...deviceAreas])].sort()) {
     const a = areas.find((x) => x.area_id === id);
     if (!a) continue;
     const out = {};
