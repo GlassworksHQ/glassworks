@@ -651,9 +651,10 @@ class HaDashboardClient(
     private fun applyLocale(update: () -> Any?) {
         if (closed.get()) return
         val before = HaLocale.current
-        val version = HaLocale.version
+        val zone = HaLocale.timeZone().id
         update()
-        if (HaLocale.version == version) return
+        // Only what changes a text: HA's own zone arriving while the user keeps the panel's changes nothing.
+        if (HaLocale.current == before && HaLocale.timeZone().id == zone) return
         if (HaLocale.current.language != before.language) {
             synchronized(storeWriteLock) {
                 if (closed.get()) return

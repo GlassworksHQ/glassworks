@@ -760,7 +760,7 @@ class VitroEngine(
             }
 
             override fun onLocaleChanged() {
-                post { vitroView.setLocale(HaLocale.current, HaLocale.serverTimeZone) }
+                post { vitroView.setLocale(HaLocale.current, HaLocale.timeZone().id) }
             }
 
             override fun onDashboardConfig(urlPath: String?, config: DashboardConfig) {
