@@ -13,8 +13,9 @@ path still needs a run on a real Mirror.
 
 Device: lululemon Studio Mirror, original Qualcomm MSM8916 board, lululemon's signed boot image
 (`androidboot.authorized_kernel=true`), on both stock software and the Glass Panes community `system`.
-Tools: adb, a decompiler for `com.mirror.services`, the stock kernel's sources and config as published by the
-community (see the frame README's credits).
+Tools: adb, a decompiler for `com.mirror.services`, the stock kernel's config as published by the community (see
+the frame README's credits), and the stock 1.24.0 kernel itself, extracted with `vmlinux-to-elf` and disassembled
+locally. This vendor build's kernel source isn't published.
 
 ## Question
 
