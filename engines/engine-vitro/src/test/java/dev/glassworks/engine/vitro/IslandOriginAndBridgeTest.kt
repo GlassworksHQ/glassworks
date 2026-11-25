@@ -74,20 +74,6 @@ class IslandOriginAndBridgeTest {
         return null
     }
 
-    /**
-     * Waits until [port] can be bound again: a stopped server's listening socket is released once its accept thread
-     * leaves `accept()`, a moment after `stop()` returns. The next app start is another process, which never sees that.
-     */
-    private fun awaitFree(port: Int) {
-        val deadline = System.nanoTime() + 5_000_000_000L
-        while (true) {
-            val free = runCatching { ServerSocket().use { it.reuseAddress = true; it.bind(java.net.InetSocketAddress(loopback, port)) } }.isSuccess
-            if (free) return
-            if (System.nanoTime() > deadline) throw AssertionError("port $port is still held 5 s after the server stopped")
-            Thread.sleep(20)
-        }
-    }
-
     @Test
     fun anAppRestartKeepsTheIslandsOrigin() {
         val memory = Memory()
@@ -95,15 +81,13 @@ class IslandOriginAndBridgeTest {
         val origin = first.ensureStarted()
         assertTrue("a new port is picked below the ephemeral range: $origin", first.port in VitroIslandServer.NEW_PORTS)
         assertEquals("and remembered", first.port, memory.port)
-        val port = first.port
+        // stop() returns with the port free (HttpServer waits for its listener), as a new process would find it.
         first.stop()
-        awaitFree(port)
 
         // The next app start: a new server, the same preferences.
         val second = server(memory)
         assertEquals("the same origin, so the cards' storage is still theirs", origin, second.ensureStarted())
         second.stop()
-        awaitFree(port)
         assertEquals(origin, server(memory).ensureStarted())
         assertTrue("nothing moved: ${logs.joinToString()}", logs.none { "taken" in it })
     }
@@ -125,7 +109,6 @@ class IslandOriginAndBridgeTest {
         // The next start keeps the new one, though the old one is free again.
         val now = s.port
         s.stop()
-        awaitFree(now)
         assertEquals(now, server(memory).ensureStarted().substringAfterLast(':').toInt())
     }
 

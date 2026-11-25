@@ -131,6 +131,9 @@ class HttpServer(
 
     /** Sees every request before [handler]; null passes it on. Set before [start] (the panel's setup over the LAN, #34). */
     @Volatile var front: ((HttpRequest) -> HttpResponse?)? = null
+    /** The thread accepting connections, while the server listens ([stop] waits for it). */
+    @Volatile private var acceptThread: Thread? = null
+
     /** Every connection accepted and not yet closed, also those still waiting for a worker, so [stop] can close them. */
     private val open: MutableSet<Socket> = ConcurrentHashMap.newKeySet()
 
@@ -149,7 +152,7 @@ class HttpServer(
         }
         serverSocket = ss
         running = true
-        Thread({
+        acceptThread = Thread({
             while (running) {
                 val s = try { ss.accept() } catch (e: IOException) { if (running) log("accept failed: ${e.message}"); break }
                 open += s
@@ -163,10 +166,20 @@ class HttpServer(
         log("listening on ${ss.localPort}")
     }
 
+    /**
+     * Stops listening and closes every connection. The port is free again when this returns: closing a socket that
+     * a thread is blocked accepting on only releases it once that thread leaves `accept()` (the JDK hands the descriptor
+     * over to it on Linux), so this waits for the accept thread, up to [STOP_WAIT_MS].
+     */
     fun stop() {
         running = false
         try { serverSocket?.close() } catch (_: IOException) {}
         serverSocket = null
+        acceptThread?.takeIf { it !== Thread.currentThread() }?.let { t ->
+            try { t.join(STOP_WAIT_MS) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+            if (t.isAlive) log("the listener didn't stop within $STOP_WAIT_MS ms")
+        }
+        acceptThread = null
         // Tasks still in the queue never run: close their connections here, and the running ones' too.
         pool.shutdownNow()
         refusals.shutdownNow()
@@ -310,6 +323,9 @@ class HttpServer(
     companion object {
         /** How long the refusal thread reads a refused connection's request, in all. */
         private const val BUSY_DRAIN_MS = 300L
+
+        /** How long [stop] waits for the accept thread to leave `accept()` and release the port. */
+        private const val STOP_WAIT_MS = 2_000L
 
         /** Refused connections that may wait for the refusal thread. Beyond that they close without the drain. */
         private const val BUSY_QUEUED = 8
