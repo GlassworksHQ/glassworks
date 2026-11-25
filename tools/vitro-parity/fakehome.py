@@ -303,6 +303,34 @@ def translations(category, integrations=None):
     return out
 
 
+def translations_for(category, integrations=None, language="en"):
+    """frontend/get_translations in [language], as HA core's helpers/translation.py answers: the language's texts over
+    English's, key by key (English fills every key the language lacks). The languages are hacore.py's LANGUAGES."""
+    out = translations(category, integrations)
+    if language == "en":
+        return out
+    comps = integrations if integrations else config()["components"]
+    own = {}
+    for comp in comps:
+        data = HACORE.get("localized", {}).get(language, {}).get(comp, {})
+        if category == "title":
+            if "title" in data:
+                own[f"component.{comp}.title"] = data["title"]
+        elif category in data:
+            _flatten(f"component.{comp}.{category}", data[category], own)
+    out.update({k: v for k, v in own.items() if k in out or category == "title"})
+    return out
+
+
+def user_data(key):
+    """frontend/get_user_data and subscribe_user_data: the case's `user_data` (`{"language": {"language": "de",
+    "number_format": "decimal_comma", ...}}`), else the home's, else none (a user who never set a profile)."""
+    for src in (fixture().get("user_data"), HOME.get("user_data")):
+        if isinstance(src, dict) and key in src:
+            return src[key]
+    return None
+
+
 def icons(category, integrations=None):
     """frontend/get_icons: {component: icons.json[category]}."""
     comps = integrations if integrations else config()["components"]

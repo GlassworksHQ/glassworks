@@ -2625,11 +2625,11 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
 internal object AlarmModes {
     /** The arming modes in HA's order, with their `supported_features` bit. */
     private val ARM_MODES = listOf(
-        Triple(1, "ui.card.alarm_control_panel.arm_home" /* ha-key */, "alarm_arm_home"),
-        Triple(2, "ui.card.alarm_control_panel.arm_away" /* ha-key */, "alarm_arm_away"),
-        Triple(4, "ui.card.alarm_control_panel.arm_night" /* ha-key */, "alarm_arm_night"),
-        Triple(32, "ui.card.alarm_control_panel.arm_vacation" /* ha-key */, "alarm_arm_vacation"),
-        Triple(16, "ui.card.alarm_control_panel.arm_custom_bypass" /* ha-key */, "alarm_arm_custom_bypass"),
+        Triple(1, "ui.card.alarm_control_panel.arm_home", "alarm_arm_home"),
+        Triple(2, "ui.card.alarm_control_panel.arm_away", "alarm_arm_away"),
+        Triple(4, "ui.card.alarm_control_panel.arm_night", "alarm_arm_night"),
+        Triple(32, "ui.card.alarm_control_panel.arm_vacation", "alarm_arm_vacation"),
+        Triple(16, "ui.card.alarm_control_panel.arm_custom_bypass", "alarm_arm_custom_bypass"),
     )
 
     /**

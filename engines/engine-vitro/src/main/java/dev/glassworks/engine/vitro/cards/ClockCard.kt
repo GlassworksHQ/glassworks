@@ -533,14 +533,21 @@ internal class ClockDate private constructor(private val preset: String?, privat
     }
 
     /**
-     * A preset (an older card's `date_format` string; HA 2026.11 reads only a list of parts) in HA's nearest format:
-     * ISO, `formatDateNumeric`'s, `formatDateShort`'s, `formatDate`'s, `formatDateWeekdayShortDateYear`'s.
+     * A preset (an older card's `date_format` string; HA 2026.11 reads only a list of parts): the date styles of the
+     * user's language, or ISO.
      */
     private fun presetFormat(preset: String, language: String, zone: TimeZone): (Date) -> String {
-        if (preset == "iso") return { d -> SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply { timeZone = zone }.format(d) }
-        val name = when (preset) { "short" -> "dateNumeric"; "medium" -> "dateShort"; "long" -> "date"; else -> "weekdayShortDateYear" }
-        val t = HaIntl.of(language).dateFormat(name) ?: HaIntl.of("en").dateFormat(name)!!
-        return { d -> t.format(d.time, zone) }
+        val f = if (preset == "iso") SimpleDateFormat("yyyy-MM-dd", Locale.ROOT) else {
+            val style = when (preset) {
+                "short" -> java.text.DateFormat.SHORT
+                "medium" -> java.text.DateFormat.MEDIUM
+                "long" -> java.text.DateFormat.LONG
+                else -> java.text.DateFormat.FULL
+            }
+            java.text.DateFormat.getDateInstance(style, Locale.forLanguageTag(language))
+        }
+        f.timeZone = zone
+        return { d -> f.format(d) }
     }
 
     companion object {

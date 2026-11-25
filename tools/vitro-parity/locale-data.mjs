@@ -13,7 +13,7 @@
 //   - every Intl.DateTimeFormat option set HA's common/datetime functions use, as a template of fields and
 //     literals, with the month, weekday and day-period names each format uses;
 //   - useAmPm's test and the first day of the week (Intl.Locale weekInfo).
-// It also copies the UI strings Vitro uses (every key Vitro's code passes to HaText.ui("…")) from the frontend's
+// It also copies the UI strings Vitro uses (every frontend key Vitro's code names) from the frontend's
 // translation files (core, then the fragments), per language. The frontend's build already fills a language's
 // missing keys with English.
 //
@@ -66,13 +66,15 @@ function kotlinFiles(dir, out = []) {
   return out;
 }
 
-/** Every key Vitro's code asks HaText for: `ui("…")`, `HaText.ui("…")` and keys listed in `HA_KEYS` blocks. */
+/**
+ * Every key Vitro's code asks HaText for: any string literal shaped like a frontend key (`"ui.card.lock.lock"`,
+ * `"state.default.unknown"`), wherever it is passed from. A literal that isn't one of HA's keys fails the run below.
+ */
 function usedKeys() {
   const keys = new Set();
   for (const f of kotlinFiles(SRC)) {
     const s = readFileSync(f, 'utf8');
-    for (const m of s.matchAll(/\bui\(\s*"((?:state|state_badge|ui)\.[A-Za-z0-9_.\-]+)"/g)) keys.add(m[1]);
-    for (const m of s.matchAll(/"((?:state|state_badge|ui)\.[A-Za-z0-9_\-]+(?:\.[A-Za-z0-9_\-]+)+)"\s*\/\*\s*ha-key\s*\*\//g)) keys.add(m[1]);
+    for (const m of s.matchAll(/"((?:state|state_badge|ui)\.[A-Za-z0-9_\-]+(?:\.[A-Za-z0-9_\-]+)+)"/g)) keys.add(m[1]);
   }
   return [...keys].sort();
 }

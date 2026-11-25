@@ -566,26 +566,32 @@ class EntityStoreTest {
 
     @Test
     fun relativeLastChangedSpeaksInTheLargestWholeUnit() {
-        val now = 2_000_000_000.0
-        fun text(agoSec: Long) = changedAt(now - agoSec).relativeLastChanged(now)
-        assertEquals("Just now", text(0))
-        assertEquals("Just now", text(59))
-        assertEquals("1 minute ago", text(60))
-        assertEquals("2 minutes ago", text(150))
-        assertEquals("59 minutes ago", text(3_599))
-        assertEquals("1 hour ago", text(3_600))
-        assertEquals("23 hours ago", text(23 * 3_600L + 59))
-        assertEquals("1 day ago", text(86_400))
-        assertEquals("6 days ago", text(6 * 86_400L + 100))
-        assertEquals("1 week ago", text(7 * 86_400L))
-        assertEquals("4 weeks ago", text(29 * 86_400L))
-        assertEquals("1 month ago", text(30 * 86_400L))
-        assertEquals("3 months ago", text(100 * 86_400L))
+        // HA's <ha-relative-time capitalize>: selectUnit's thresholds and Intl's numeric "auto" phrases, here in English
+        // on a Tuesday noon (UTC), weeks from Sunday.
+        val zone = dev.glassworks.engine.vitro.data.HaLocale.deviceTimeZone
+        dev.glassworks.engine.vitro.data.HaLocale.deviceTimeZone = { java.util.TimeZone.getTimeZone("UTC") }
+        try {
+            val now = java.util.GregorianCalendar(java.util.TimeZone.getTimeZone("UTC")).apply { clear(); set(2026, 10, 24, 12, 0) }.timeInMillis / 1000.0
+            fun text(agoSec: Long) = changedAt(now - agoSec).relativeLastChanged(now)
+            assertEquals("Now", text(0))
+            assertEquals("58 seconds ago", text(58))
+            assertEquals("1 minute ago", text(60))
+            assertEquals("2 minutes ago", text(150))
+            assertEquals("1 hour ago", text(3_599))
+            assertEquals("5 hours ago", text(5 * 3_600L))
+            assertEquals("Yesterday", text(86_400))
+            assertEquals("3 days ago", text(3 * 86_400L))
+            assertEquals("2 weeks ago", text(10 * 86_400L))
+            assertEquals("Last month", text(40 * 86_400L))
+            assertEquals("3 months ago", text(100 * 86_400L))
+        } finally {
+            dev.glassworks.engine.vitro.data.HaLocale.deviceTimeZone = zone
+        }
     }
 
     @Test
-    fun relativeLastChangedInTheFutureIsJustNow() {
-        assertEquals("Just now", changedAt(1_000_100.0).relativeLastChanged(1_000_000.0))
+    fun relativeLastChangedInTheFutureCountsForward() {
+        assertEquals("In 2 minutes", changedAt(1_000_100.0).relativeLastChanged(1_000_000.0))
     }
 
     @Test

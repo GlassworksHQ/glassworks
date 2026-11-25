@@ -54,7 +54,8 @@ data class FrontendLocale(
  * counts changes; [addListener] hears them.
  */
 object HaLocale {
-    @Volatile var current: FrontendLocale = FrontendLocale(language = deviceLanguage())
+    /** The locale in use; the browser's defaults until HA's profile answers (set in `init`, after the providers). */
+    @Volatile var current: FrontendLocale = FrontendLocale()
         private set
 
     /** HA's own time zone (`get_config`), for `time_zone: server`; null until it arrives. */
@@ -156,4 +157,7 @@ object HaLocale {
         languages.firstOrNull { it.lowercase(Locale.ROOT) == lower }?.let { return it }
         return if ('-' in tag) findAvailableLanguage(tag.substringBefore('-')) else null
     }
+
+    // Last: deviceLanguage() needs the providers and CHINESE above.
+    init { current = FrontendLocale(language = deviceLanguage()) }
 }
