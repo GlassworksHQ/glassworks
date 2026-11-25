@@ -139,14 +139,14 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         renderBody()
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         // Out of a grid, FullCalendar's own aspect ratio (1.35) sizes the view.
         val lp = body.layoutParams as LinearLayout.LayoutParams
         val grid = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY
         val h = if (grid) 0 else (MeasureSpec.getSize(widthMeasureSpec) / 1.35f).roundToInt()
         val w = if (grid) 1f else 0f
         if (lp.height != h || lp.weight != w) { lp.height = h; lp.weight = w }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
     }
 
     override fun onAttachedToWindow() {

@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.data
 
+import dev.glassworks.engine.vitro.VitroFailures
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -393,10 +394,21 @@ class EntityStore {
             val value = states[id]
             for (fn in subs) {
                 notificationsDispatched.incrementAndGet()
-                fn(value)
+                // One listener that throws (a card's) doesn't stop the others, or the socket reader that dispatches.
+                try {
+                    fn(value)
+                } catch (e: Exception) {
+                    VitroFailures.report("update", null, e)
+                }
             }
         }
-        for (fn in anyListeners) fn(changed)
+        for (fn in anyListeners) {
+            try {
+                fn(changed)
+            } catch (e: Exception) {
+                VitroFailures.report("update", null, e)
+            }
+        }
     }
 
     companion object {

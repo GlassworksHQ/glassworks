@@ -1196,11 +1196,11 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
     private val slotCharts = ArrayList<SlotChart>()
     private val fixedHeight = hasFixedHeight(config)
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         if (fixedHeight && slotCharts.isNotEmpty() && MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
-            measureInSlot(this, slotCharts, widthMeasureSpec, heightMeasureSpec, ctx.dp) { w, h -> super.onMeasure(w, h) }
+            measureInSlot(this, slotCharts, widthMeasureSpec, heightMeasureSpec, ctx.dp) { w, h -> super.measureCard(w, h) }
         } else {
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            super.measureCard(widthMeasureSpec, heightMeasureSpec)
         }
     }
 
@@ -1650,12 +1650,12 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
 
     private val fixedHeight = hasFixedHeight(config)
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         if (fixedHeight && chart.visibility == VISIBLE && MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
             val natural = chartWidthCss()?.let(::defaultChartHeight) ?: chart.heightCss
-            measureInSlot(this, listOf(SlotChart(chart, legendBox, natural)), widthMeasureSpec, heightMeasureSpec, ctx.dp) { w, h -> super.onMeasure(w, h) }
+            measureInSlot(this, listOf(SlotChart(chart, legendBox, natural)), widthMeasureSpec, heightMeasureSpec, ctx.dp) { w, h -> super.measureCard(w, h) }
         } else {
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            super.measureCard(widthMeasureSpec, heightMeasureSpec)
         }
     }
 

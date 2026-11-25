@@ -823,7 +823,7 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
         }
 
         // The grid fills the card's content box; with a definite height it centers in it (ha-card is a flex column).
-        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
             val w = MeasureSpec.getSize(widthMeasureSpec)
             val inner = (w - paddingLeft - paddingRight).coerceAtLeast(0)
             val exact = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY
@@ -843,7 +843,7 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
             }
         }
 
-        override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        override fun layoutCard(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
             val child = getChildAt(0) ?: return
             child.layout(paddingLeft, paddingTop, paddingLeft + child.measuredWidth, paddingTop + child.measuredHeight)
         }

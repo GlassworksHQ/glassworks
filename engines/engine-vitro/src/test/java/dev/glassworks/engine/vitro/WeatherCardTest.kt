@@ -84,4 +84,14 @@ class WeatherCardTest {
         assertTrue(shown.toString(), "76%" in shown)
         assertTrue(shown.toString(), shown.none { " / " in it })
     }
+
+    @Test
+    fun aHumidityReportedAsTextShowsWhenItReadsAsANumber() {
+        // A template or custom weather entity: `humidity` as text. It threw ClassCastException on the main thread.
+        val noForecast = """{"type": "weather-forecast", "entity": "weather.home", "show_forecast": false}"""
+        assertTrue("65%" in texts(card(mapOf("humidity" to "65"), noForecast)))
+        // Not a number at all: no humidity line, as when there's none.
+        val shown = texts(card(mapOf("humidity" to "humid"), noForecast))
+        assertTrue(shown.toString(), shown.none { it.endsWith("%") })
+    }
 }
