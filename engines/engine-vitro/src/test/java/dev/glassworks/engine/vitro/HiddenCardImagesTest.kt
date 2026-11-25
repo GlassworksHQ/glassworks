@@ -55,14 +55,21 @@ class HiddenCardImagesTest {
         val deadline = System.nanoTime() + 10_000_000_000L
         while (System.nanoTime() < deadline) {
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(50))
-            if (requests.size >= requested.size && VitroCardContext.pendingImageLoads.get() == 0) break
+            if (requests.size >= requested.size && VitroCardContext.pendingImageLoads.get() == pendingBefore) break
             Thread.sleep(10)
         }
         shadowOf(Looper.getMainLooper()).idle()
     }
 
+    /**
+     * The shared load counter when this test starts: a load another test left behind (its looper never runs again)
+     * stays counted, so this test checks its own loads against it.
+     */
+    private var pendingBefore = 0
+
     @Test
     fun aHiddenCardsPictureIsRequestedOnlyOnceItShows() {
+        pendingBefore = VitroCardContext.pendingImageLoads.get()
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val store = EntityStore()
         store.putLocal(EntityState("binary_sensor.presence", "off", emptyMap()))
@@ -90,7 +97,7 @@ class HiddenCardImagesTest {
         assertEquals("the card that turned visible gets its picture", listOf("/local/shown.png", "/local/hidden.png"), requests.toList())
         // Its request was answered and handed back: nothing is left waiting. (This checks the scheduling of loads,
         // not the decoded pixels, which the Markdown image tests cover.)
-        assertEquals(0, VitroCardContext.pendingImageLoads.get())
+        assertEquals(pendingBefore, VitroCardContext.pendingImageLoads.get())
         assertEquals(View.VISIBLE, vv.visibility)
     }
 }
