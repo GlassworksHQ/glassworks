@@ -179,6 +179,11 @@ function flowScalar(s: string, pos: { i: number }, line: number, isKey: boolean)
   if (/(^|:\s+)\*[^\s,\]}]+(\s|$)/.test(raw.trim())) {
     throw new YamlError(`alias ${raw.trim()} inside a flow collection isn't supported; use a block list`, line);
   }
+  // `[type: custom:button-card]` is a list holding a one-pair map in YAML, not the text "type: …": read as a string
+  // it would hide the card from the audit (a PASS for a custom card), so refuse it.
+  if (!isKey && /:(\s|$)/.test(raw.trim())) {
+    throw new YamlError(`a key: value pair inside [ ] (${raw.trim().split(":")[0]}) isn't supported; write it as {key: value} or a block list`, line);
+  }
   return isKey ? raw.trim() : scalar(raw, line);
 }
 
@@ -477,11 +482,18 @@ function fail(error: string): VitroAuditResult {
   return { ok: false, error, isFullyNative: false, totals: { tier1: 0, tier2: 0, tier3: 0 }, views: [], triggers: [], warnings: [] };
 }
 
+/** card_mod selector-map keys the renderer reads (ThemeResolver.cardModStyleString): the card, HA's markdown and clock roots. */
+const SUPPORTED_STYLE_KEYS = new Set([".", "ha-markdown$", "hui-clock-card-digital$"]);
+
 function cardModWarning(card: Obj, loc: string, out: string[]) {
   const cm = card.card_mod;
   if (!isObj(cm)) return;
   const style = cm.style;
-  if (isObj(style) || (typeof style === "string" && (style.includes("$:") || style.includes("@keyframes") || style.includes("::")))) {
+  const complex = (css: unknown) => typeof css !== "string" || css.includes("$:") || css.includes("@keyframes") || css.includes("::");
+  const unsupported = isObj(style)
+    ? Object.entries(style).some(([k, v]) => !SUPPORTED_STYLE_KEYS.has(k) || complex(v))
+    : typeof style === "string" && complex(style);
+  if (unsupported) {
     out.push(`${loc}: complex Shadow-DOM, pseudo-element, or keyframe card_mod (only ha-card container styles carry over natively)`);
   }
 }

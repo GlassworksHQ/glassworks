@@ -45,6 +45,17 @@ test('scrub drops private attributes and media lists, keeps pictures only when a
   assert.equal(scrubText('host 10.1.2.3 and 192.0.2.7', null), 'host 192.0.2.1 and 192.0.2.7');
 });
 
+test('scrub drops API keys at every depth', () => {
+  const states = { 'sensor.x': { s: '1', a: { api_key: 'k1', nested: { api_key: 'k2', list: [{ api_key: 'k3', keep: 1 }] } } } };
+  assert.deepEqual(scrubStates(states, null)['sensor.x'].a, { nested: { list: [{ keep: 1 }] } });
+});
+
+test('scrub replaces IPv6 literals, but not times, CSS or the documentation prefix', () => {
+  assert.equal(scrubText('gw fe80::1c2b:3cff:fe4d:5e6f and 2001:db8::7', null), 'gw 2001:db8::1 and 2001:db8::7');
+  assert.equal(scrubText('2a02:1810:4d02:aa00:1111:2222:3333:4444', null), '2001:db8::1');
+  for (const keep of ['10:08:00', 'a::before', 'std::map', 'aa:bb']) assert.equal(scrubText(keep, null), keep);
+});
+
 test('assetDestination checks the path fetch would request (CWE-180)', async () => {
   const { canonicalPath } = await import('../lib/assets.mjs');
   const dir = '/tmp/corpus/assets';
@@ -61,6 +72,8 @@ test('findPrivate flags what a screenshot would show, never the values', async (
   assert.deepEqual(findPrivate('20.7° 48% v1.2.3 192.0.2.4', null), []);
   assert.deepEqual(findPrivate('Router 10.0.0.1', null), ['an IPv4 address']);
   assert.deepEqual(findPrivate('aa:bb:cc:dd:ee:ff', null), ['a MAC address']);
+  assert.deepEqual(findPrivate('Router fd00::1', null), ['an IPv6 address']);
+  assert.deepEqual(findPrivate('Docs 2001:db8::1 at 10:08:00', null), []);
   assert.deepEqual(findPrivate('/api/x?token=secretvalue', null), ['a token']);
   const creds = { origin: 'http://ha.example.test:8123', token: 'secret-token' };
   assert.deepEqual(findPrivate('open ha.example.test:8123 now', creds), ["Home Assistant's address or token"]);

@@ -10,10 +10,16 @@ import { join } from 'node:path';
 /** Personal content (playlists, what's playing, artwork links): dropped from every state. */
 const PRIVATE_LIST = /^(source_list|sound_mode_list|media_playlist|media_title|media_artist|media_album_name|media_album_artist|media_series_title|app_name|entity_picture)$/;
 /** Attribute keys that can hold a device-unique or private value. Dropped from every state. */
-const PRIVATE_KEY = /(^|_)(ip|ips|ip_address|ipv4|ipv6|ip_addresses|mac|mac_address|serial|serial_number|sn|token|access_token|password|ssid|bssid|latitude|longitude|gps_accuracy|altitude|address|street|host|hostname|url|uuid|unique_id|device_id|user_id|ieee|eui64|ext_pan_id|pan_id|network_key|entity_picture_local|id)($|_)/i;
+const PRIVATE_KEY = /(^|_)(ip|ips|ip_address|ipv4|ipv6|ip_addresses|mac|mac_address|serial|serial_number|sn|token|access_token|api_key|api_keys|apikey|password|ssid|bssid|latitude|longitude|gps_accuracy|altitude|timezone|time_zone|address|street|host|hostname|url|uuid|unique_id|device_id|user_id|ieee|eui64|ext_pan_id|pan_id|network_key|entity_picture_local|id)($|_)/i;
 
 const IPV4 = /\b(?!192\.0\.2\.|198\.51\.100\.|203\.0\.113\.)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b/g;
 const MAC = /\b[0-9a-f]{2}([:-])[0-9a-f]{2}(\1[0-9a-f]{2}){4}\b/gi;
+/**
+ * An IPv6 literal: eight groups, or a `::` shortening with at least one group, set off by anything but a letter,
+ * digit or colon (so `::before`, `std::map` and a clock's `10:08:00` aren't). The documentation prefix
+ * (2001:db8::/32, RFC 3849) stays, as RFC 5737's IPv4 ranges do.
+ */
+const IPV6 = /(?<![0-9a-z:])(?!2001:0?db8:)(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}:(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?|::[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})(?![0-9a-z:])/gi;
 /**
  * A 6- or 12-hex-digit run mixing digits and letters, set off by anything but a letter or digit, as device names
  * and hostnames carry the end of a MAC ("airdot-4c83f8", "AirDot_a1b2c3d4e5f6": `_` and `-` separate it too). Not
@@ -28,14 +34,14 @@ export function hasMacFragment(text) {
 const JWT = /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g;
 const TOKEN_PARAM = /([?&](token|access_token|authSig)=)[^&"'\s]+/g;
 
-/** Text with the origin, token, IPs (but RFC 5737), MACs, JWTs and token parameters replaced. */
+/** Text with the origin, token, IPs (but RFC 5737 and RFC 3849), MACs, JWTs and token parameters replaced. */
 export function scrubText(text, creds) {
   let s = String(text);
   if (creds) {
     s = s.split(creds.token).join('<token>').split(creds.origin).join('');
     s = s.split(new URL(creds.origin).host).join('homeassistant.local');
   }
-  return s.replace(JWT, '<token>').replace(TOKEN_PARAM, '$1redacted').replace(MAC, '00:00:5e:00:53:00').replace(IPV4, (m, a, b, c, d) => {
+  return s.replace(JWT, '<token>').replace(TOKEN_PARAM, '$1redacted').replace(MAC, '00:00:5e:00:53:00').replace(IPV6, '2001:db8::1').replace(IPV4, (m, a, b, c, d) => {
     // Version-like strings ("1.2.3.4") stay; only plausible addresses go.
     return [a, b, c, d].every((p) => +p <= 255) ? '192.0.2.1' : m;
   });
@@ -114,6 +120,7 @@ export function findPrivate(text, creds) {
   const found = [];
   const ips = [...s.matchAll(new RegExp(IPV4.source, 'g'))].filter((m) => m.slice(1, 5).every((p) => +p <= 255));
   if (ips.length) found.push('an IPv4 address');
+  if (new RegExp(IPV6.source, 'i').test(s)) found.push('an IPv6 address');
   if (new RegExp(MAC.source, 'i').test(s)) found.push('a MAC address');
   if (MAC_FRAGMENT.test(s)) found.push('a MAC fragment');
   if (new RegExp(JWT.source).test(s) || new RegExp(TOKEN_PARAM.source).test(s)) found.push('a token');

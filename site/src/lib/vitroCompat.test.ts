@@ -198,9 +198,21 @@ views:
     expect(r.isFullyNative).toBe(true);
   });
 
-  it("treats a card_mod style map (Shadow-DOM selectors) as complex", () => {
-    const r = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            .: |\n              ha-card { color: red; }\n");
-    expect(r.warnings).toHaveLength(1);
+  it("reads a card_mod style map's own entry as native, and warns on the rest", () => {
+    const own = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            .: |\n              ha-card { opacity: .5; }\n");
+    expect(own.warnings).toHaveLength(0);
+    const deep = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            ha-tile-icon$: |\n              .icon { color: red; }\n");
+    expect(deep.warnings).toHaveLength(1);
+    const pseudo = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            .: |\n              ha-card::before { content: 'x'; }\n");
+    expect(pseudo.warnings).toHaveLength(1);
+  });
+
+  it("refuses a key: value pair inside a flow list instead of reading it as text", () => {
+    const r = auditDashboard("views:\n  - cards: [type: custom:button-card]\n");
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/key: value pair/);
+    // A quoted string with a colon stays a string; a map in braces is read.
+    expect(auditDashboard('views:\n  - cards: [{type: "custom:button-card"}]\n').triggers).toHaveLength(1);
   });
 
   it("reads the sample, which has one custom card on purpose", () => {

@@ -167,6 +167,23 @@ class ShowcaseTest(unittest.TestCase):
         self.assertEqual(http(self.port, "/local/vitro-demo/missing.js")[0], 404)
         self.assertEqual(http(self.port, "/local/../showcase_ha.py")[0], 404)
 
+    def test_a_local_folder_serves_its_files_and_nothing_beside_it(self):
+        # With --local-dir: a file inside is served; ../ out of the folder is not, even to a real file.
+        with tempfile.TemporaryDirectory() as root:
+            inside = os.path.join(root, "bundle")
+            os.mkdir(inside)
+            with open(os.path.join(inside, "card.js"), "w") as f:
+                f.write("export {};")
+            with open(os.path.join(root, "secret.txt"), "w") as f:
+                f.write("outside")
+            self.srv.local_dir = inside
+            try:
+                self.assertEqual(http(self.port, "/local/card.js")[0], 200)
+                self.assertEqual(http(self.port, "/local/../secret.txt")[0], 404)
+                self.assertEqual(http(self.port, "/local/%2e%2e/secret.txt")[0], 404)
+            finally:
+                self.srv.local_dir = None
+
     def test_local_wrapper_card_module(self):
         status, headers, body = http(self.port, "/local/vitro-demo/wrapper-card.js")
         self.assertEqual(status, 200)
@@ -863,10 +880,6 @@ class SynthDataTest(unittest.TestCase):
         self.assertEqual(hub.states["select.studio_scene"]["attributes"]["options"], ["a", "b"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class HubTest(unittest.TestCase):
     """The hub without a server: a service batch that fails midway, and the template output budget."""
 
@@ -896,11 +909,17 @@ class HubMemoryTest(unittest.TestCase):
         hub.call_service("light", "turn_off", {}, ["light.desk_lamp"])
         before = dict(hub.memory)
         hub.call_service("light", "turn_on", {}, ["light.desk_lamp"])
+        # Dimmed to 90: a turn_off would now save 90, unlike the 180 remembered.
+        hub.call_service("light", "turn_on", {"brightness": 90}, ["light.desk_lamp"])
         with self.assertRaises(S.ServiceError):
             # The lamp's turn_off saves its settings; the blind then fails: the save goes with the rollback.
             hub.call_service("homeassistant", "turn_off", {}, ["light.desk_lamp", "cover.studio_blind"])
         self.assertEqual(hub.states["light.desk_lamp"]["state"], "on")
+        self.assertEqual(hub.memory, before)
         hub.call_service("light", "turn_off", {}, ["light.desk_lamp"])
         hub.call_service("light", "turn_on", {}, ["light.desk_lamp"])
-        self.assertEqual(hub.states["light.desk_lamp"]["attributes"].get("brightness"), 180)
-        self.assertEqual(set(before), set(hub.memory))
+        self.assertEqual(hub.states["light.desk_lamp"]["attributes"].get("brightness"), 90)
+
+
+if __name__ == "__main__":
+    unittest.main()
