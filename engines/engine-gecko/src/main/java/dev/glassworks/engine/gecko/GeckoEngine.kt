@@ -149,7 +149,8 @@ class GeckoEngine(
         override val view = GeckoView(activity)
         private val main = Handler(Looper.getMainLooper())
         private var session: GeckoSession? = null
-        private var canGoBack = false
+        override var canGoBack = false
+            private set
         private val ports = mutableSetOf<Port>()
 
         fun start() {
@@ -189,6 +190,7 @@ class GeckoEngine(
             }
             session = null
             shown = null // the new session is empty until it reports a location
+            canGoBack = false // and has no history
             start()
         }
 

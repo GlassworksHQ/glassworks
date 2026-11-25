@@ -2,12 +2,13 @@
  "case": "tile-light-off-light-theme",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
@@ -31,10 +32,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "Sunset",
+   "clipped": false,
+   "text": "Reading",
    "x": 56,
    "y": 38.61,
-   "w": 44.02,
+   "w": 51.73,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -43,6 +45,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Off",
    "x": 56,
    "y": 58,
@@ -55,7 +58,7 @@
   }
  ],
  "states": {
-  "light.sunset_lamp": {
+  "light.reading_lamp": {
    "s": "off",
    "a": {
     "supported_color_modes": [
@@ -64,29 +67,30 @@
     "color_mode": null,
     "off_with_transition": false,
     "off_brightness": null,
-    "icon": "mdi:weather-sunset",
-    "friendly_name": "Sunset",
+    "icon": "mdi:floor-lamp",
+    "friendly_name": "Reading Lamp Reading",
     "supported_features": 8
    },
-   "lc": 1795508121.5749536
+   "lc": 1794488160,
+   "lu": 1794488160
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "light.sunset_lamp",
+    "ei": "light.reading_lamp",
     "pl": "zha",
     "tk": "light",
-    "ic": "mdi:weather-sunset",
+    "ic": "mdi:floor-lamp",
     "di": "device-1",
-    "en": "Sunset"
+    "en": "Reading"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "Sunset Lamp"
+    "name": "Reading Lamp"
    }
   ],
   "requested": {

@@ -92,9 +92,9 @@ class IslandSessionsTest {
 
     private fun vitroView(page: Page): VitroView = (page.view as ViewGroup).getChildAt(0) as VitroView
 
-    /** The pages opened for islands (with the island host, not the activity's), oldest first. */
+    /** The pages opened for islands (transparent, over the card; the fallback page has the page's color), oldest first. */
     private fun islandPages(): List<RecordingPage> =
-        fallback.opens.indices.filter { fallback.opens[it].host !== host }.map { fallback.pages[it] }
+        fallback.opens.indices.filter { fallback.opens[it].background == Color.TRANSPARENT }.map { fallback.pages[it] }
 
     private fun openIslandPages() = islandPages().filterNot { it.closed }
 
@@ -378,7 +378,7 @@ class IslandSessionsTest {
         awaitMain("view b built") { islandPages().size == 2 }
         p.load("$base/energy")
         idle()
-        val fallbackPage = fallback.pages[fallback.opens.indexOfFirst { it.host === host }]
+        val fallbackPage = fallback.pages[fallback.opens.indexOfFirst { it.background != Color.TRANSPARENT }]
 
         controller.pause().stop().destroy()
         idle()

@@ -72,7 +72,16 @@ interface Page {
     /** Goes back one page, if the page has history. */
     fun goBack()
 
-    /** Replaces the page with a new, empty one in the same view, after [PageHost.onContentGone]. */
+    /**
+     * True when [goBack] has a page of the page's own history to go back to. False when the engine can't tell: a page
+     * that wraps this one (Vitro's fallback) then takes Back for itself.
+     */
+    val canGoBack: Boolean get() = false
+
+    /**
+     * Replaces the page with a new, empty one in the same view, with no history: after [PageHost.onContentGone], or
+     * when a page that wraps this one starts it over.
+     */
     fun restart()
 
     /** Sends [message] to every connected [PagePort]. A port that fails is skipped. */

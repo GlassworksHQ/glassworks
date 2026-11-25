@@ -567,6 +567,14 @@ jobs:
         run: python3 -m unittest discover -s branding/boot/test -v
       - name: The S1's stock fastboot tools (fastboot-usb.py, wrap-ram-boot.py)
         run: python3 -m unittest discover -s frames/aqara-s1-plus/tools/fel/test -v
+      # The parity harness's capture tools and its fake HA's home (#793): the corpus's fixtures resolve, and each
+      # committed reference still holds what its fixture serves (tools/vitro-parity/test/test_fakehome.py).
+      - name: Vitro parity capture tools and fixtures
+        run: |
+          python3 -m venv "$RUNNER_TEMP/vitro-parity-venv"
+          "$RUNNER_TEMP/vitro-parity-venv/bin/pip" install --quiet --require-hashes -r tools/vitro-parity/requirements.txt
+          "$RUNNER_TEMP/vitro-parity-venv/bin/python" -m unittest discover -s tools/vitro-parity/test -v
+          node --test tools/vitro-parity/test/*.test.mjs
       - name: Docs links
         run: python3 tools/check-doc-links.py
       # Here, in a required check: a map that pr.yml or docs/ci.md no longer follows fails the PR.

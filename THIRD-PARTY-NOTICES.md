@@ -582,6 +582,31 @@ renders above:
   (Apache-2.0, Copyright Home Assistant contributors, [`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt)).
   Unlike the rest of this section, both **are distributed, in the source tree**, under Apache-2.0 with this
   notice. Neither is in an APK, the bundle or a web page.
+  Since the references come from the parity harness's fake Home Assistant (`tools/vitro-parity/fakehome.py`),
+  they draw made-up fixtures: the album art and person picture they show
+  (`engines/engine-vitro/src/test/parity/fixtures/images/`) are drawn by `tools/vitro-parity/fixture_images.py`
+  (this project's, MIT).
+- **Home Assistant core's English entity texts and icons** (`tools/vitro-parity/hacore-2026.11.0.json`, test
+  data in the repo): the `entity_component`, `entity` and `title` parts of each integration's
+  `translations/en.json` and the `entity_component`/`entity` parts of its `icons.json`, unmodified, cut from the
+  `homeassistant` 2026.11.0 wheel on PyPI (SHA-256 `7ca5fbde…391b00f7`) by `tools/vitro-parity/hacore.py`.
+  Apache-2.0 ([`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt)), Copyright Home Assistant contributors,
+  https://github.com/home-assistant/core (tag `2026.11.0`). **Distributed in the source tree** under Apache-2.0
+  with this notice; not in an APK, the bundle or a web page. The parity harness's fake HA answers the frontend's
+  `frontend/get_translations` and `frontend/get_icons` with it.
+- **Community Lovelace cards** (host only, test inputs of the parity harness): `tools/vitro-parity/cards.py`
+  downloads each from its GitHub release (or its repo at the tag, as HACS does), pinned by release and by the
+  SHA-256 of every file in `tools/vitro-parity/cards.json`, into a cache on the computer that captures the
+  references, and the fake Home Assistant serves them to a headless Chromium there. None is in the repo, an APK
+  or a web page; only the screenshots of what they draw are kept (with the references). Licences, read from each
+  repository on 2026-11-24: Mushroom v5.3.0 (Apache-2.0, Paul Bottein), card-mod v4.2.1,
+  layout-card v2.4.7 and auto-entities v1.16.1 (MIT, Copyright Thomas Lovén), stack-in-card 0.2.0 and
+  bar-card 3.2.0 (MIT, Copyright Custom cards for Home Assistant), mini-graph-card v0.13.0 and mini-media-player v1.16.12 (MIT, Copyright
+  Karl Kihlström), Bubble Card v3.4.3 (MIT, Copyright Cloos), vertical-stack-in-card v1.1.4 (MIT, Copyright
+  Ofek Ashery), clock-weather-card v3.1.0 (MIT, Copyright Patrick Kissling; its weather icons are Meteocons,
+  MIT, Copyright Bas Milius) and modern-circular-gauge v0.15.0 (MIT, Copyright Stanisław Krzeptowski).
+- **Jinja2** (BSD-3-Clause, Copyright Pallets, host only): the parity harness's fake HA renders templates with
+  the jinja2 already installed on the computer that captures the references. Nothing of it is in the repo.
 - **FFmpeg with libx264** (GPL-2.0-or-later as built with libx264). Clarity's camera streams
   (`tools/perf/camera.py`) run the ffmpeg already on the computer that runs the test, to encode its
   built-in test pattern into the test's HLS segments. Those segments are test data, served to the panel

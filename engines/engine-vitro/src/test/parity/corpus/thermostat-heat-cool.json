@@ -1,0 +1,47 @@
+{
+ "title": "Thermostat: heat/cool with a low and a high target",
+ "card": {
+  "type": "thermostat",
+  "entity": "climate.living_room"
+ },
+ "fixture": {
+  "states": {
+   "climate.living_room": {
+    "state": "heat_cool",
+    "last_changed": "-45m",
+    "attributes": {
+     "hvac_modes": [
+      "off",
+      "heat",
+      "cool",
+      "heat_cool"
+     ],
+     "min_temp": 7,
+     "max_temp": 35,
+     "target_temp_step": 0.5,
+     "current_temperature": 22.5,
+     "temperature": null,
+     "target_temp_high": 24,
+     "target_temp_low": 20,
+     "hvac_action": "idle",
+     "friendly_name": "Living Room",
+     "supported_features": 386
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "climate.living_room",
+    "pl": "demo",
+    "di": "dev-living-room-thermostat",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room-thermostat",
+    "name": "Living Room"
+   }
+  ]
+ }
+}
