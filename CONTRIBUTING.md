@@ -2,7 +2,7 @@
 
 ## Where to ask
 
-- **Community chat:** [Discord](https://discord.gg/BTn9NstFM).
+- **Community chat:** [Discord](https://discord.gg/hHpf77fBMj).
 - **Questions, ideas and frame bring-up** (porting Glassworks to a new device): [Discussions](https://github.com/GlassworksHQ/glassworks/discussions). Answers there stay searchable for the next person.
 - **Bugs and hardware reports:** an issue, from the templates below.
 - **Security problems:** privately, as [SECURITY.md](SECURITY.md) says. Not in Discussions or an issue.
@@ -38,6 +38,7 @@ build, the installer's typecheck, tests and build, the install scripts' tests an
 npm install && npm run stage -w kiln && npm test     # the web installer, from the repo root
 frames/aqara-s1-plus/tools/install/test/install-tests.sh                  # the install scripts
 python3 tools/check-doc-links.py                     # docs links
+python3 tools/check-status.py                        # status labels agree with frame.json and pane.json
 ```
 
 - Say in the PR what you tested on: a real panel (model, firmware, HA version) or tests only.

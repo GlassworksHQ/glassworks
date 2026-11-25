@@ -555,6 +555,13 @@ renders above:
   filled in with the test's harness script added first (`tools/perf/fakeha.py`). The project neither
   ships nor hosts it. `tools/showcase/render.mjs` serves the same build the same way to a headless
   Chrome on that computer, to make the device renders (section 4); only those screenshots are kept.
+- **Home Assistant core's icon data** (the `icons.json` of the integrations Clarity's fake Home
+  Assistant loads, from `home-assistant/core` 2026.11.0, commit `74cf5a49…`): Apache-2.0
+  ([`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt)), Copyright Home Assistant contributors,
+  https://github.com/home-assistant/core. Kept as data in `tools/perf/haicons.json`, with each file's
+  SHA-256, written and checked against that commit by `tools/perf/haicons.py`. The fake serves it to
+  the panel under test as HA core's `frontend/get_icons` answer. It names icons only; no code, and
+  nothing from anyone's install. Nothing from it ships in an app.
 - **FFmpeg with libx264** (GPL-2.0-or-later as built with libx264). Clarity's camera streams
   (`tools/perf/camera.py`) run the ffmpeg already on the computer that runs the test, to encode its
   built-in test pattern into the test's HLS segments. Those segments are test data, served to the panel

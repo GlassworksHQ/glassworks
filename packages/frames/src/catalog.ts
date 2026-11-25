@@ -41,10 +41,30 @@ export const RENDERS: Record<string, string> = {
 };
 
 /** Frames with a published Clarity result (`frames/<id>/clarity/clarity.json`); kiln/apps/kiln/test/frame-designs.test.ts keeps it true. */
-export const MEASURED: ReadonlySet<string> = new Set([s1Plus.id, pixelTablet.id]);
+export const MEASURED: ReadonlySet<string> = new Set([s1Plus.id, pixelTablet.id, mirror.id]);
 
 /** A frame's release line: its tags (`{version}` is the version) and the files a tag may serve (`{abi}`: one per frame.json `abis`). */
 export interface Release { line: string; tag: string; assets: string[] }
+
+/** How a flow step reaches the device. `agent`: the frame's own agent on the running device (an in-place install's bundle). */
+export const FLOW_TRANSPORTS = ['fel', 'fastboot', 'adb', 'usb', 'agent', 'none'] as const;
+export type FlowTransport = (typeof FLOW_TRANSPORTS)[number];
+
+/** Which of the engine's flows runs a flow: whole images, the app alone, or the stock software changed in place. */
+export const FLOW_ENGINES = ['image', 'app', 'in-place'] as const;
+export type FlowEngine = (typeof FLOW_ENGINES)[number];
+
+/**
+ * A way back. `restore-backup`: Kiln's undo routes; `restore-blocks`: the restore image an in-place install kept
+ * (`restore`, the file its `in-place` step names) puts back every block it changed. Others are the frame's own words.
+ */
+export type WayBack = { how: 'restore-blocks'; restore: string } | { how: string; [k: string]: unknown };
+
+/** A flow step as installer.json declares it (docs/design/kiln/frames-as-data.md). `transport` is one of FLOW_TRANSPORTS. */
+export interface FlowStep { id: string; route?: string; title?: string; transport?: string }
+
+/** A flow of installer.json. `engine`: which engine flow runs it; `wayBack`: its own, in place of the frame's. */
+export interface Flow { steps: FlowStep[]; engine?: FlowEngine; wayBack?: WayBack }
 
 /** What Kiln reads of a frame's installer.json before it loads the frame. */
 export interface Installer {
@@ -55,9 +75,9 @@ export interface Installer {
    * the route itself), `title` the first part of that page's title. Kiln gives every frame its steps' routes, the
    * standard flow's after them, and resumes at each.
    */
-  flows?: Record<string, { steps: { id: string; route?: string; title?: string }[] }>;
+  flows?: Record<string, Flow>;
   /** The way back: `restore-backup` has Kiln's undo routes. */
-  wayBack?: { how: string };
+  wayBack?: WayBack;
   /** The device has a touchscreen. Without one (false), set-up never offers "do it on the panel". */
   touch?: boolean;
   /** The picker's What you'll need bar for this frame: what to have at hand, and its way back, in a sentence or two. */
@@ -75,9 +95,20 @@ export interface Installer {
 }
 
 /** An installer.json as Kiln reads it, checked where it comes in: a frame names no page of its own (issue 621). */
-function installer(d: Installer & { page?: unknown }): Installer {
+function installer(d: Omit<Installer, 'flows'> & { page?: unknown; flows?: Record<string, { steps: FlowStep[]; engine?: string; wayBack?: WayBack }> }): Installer {
   if (d.page !== undefined) throw new Error('installer.json page: gone. Every frame runs on Kiln\'s one page, from its flows');
-  return d;
+  const restoreFile = (w: WayBack | undefined, at: string) => {
+    if (w?.how === 'restore-blocks' && (typeof w.restore !== 'string' || !w.restore)) throw new Error(`installer.json ${at}: restore-blocks needs its restore file`);
+  };
+  restoreFile(d.wayBack, 'wayBack');
+  for (const [name, flow] of Object.entries(d.flows ?? {})) {
+    if (flow.engine !== undefined && !(FLOW_ENGINES as readonly string[]).includes(flow.engine)) throw new Error(`installer.json flows.${name}.engine: ${flow.engine}`);
+    restoreFile(flow.wayBack, `flows.${name}.wayBack`);
+    for (const s of flow.steps) {
+      if (s.transport !== undefined && !(FLOW_TRANSPORTS as readonly string[]).includes(s.transport)) throw new Error(`installer.json flows.${name}.${s.id}: transport ${s.transport}`);
+    }
+  }
+  return d as Installer;
 }
 
 /** Each frame's installer.json, by frame id. */

@@ -15,7 +15,7 @@ object SecretFiles {
     /** The keys each file keeps sealed. Same files, same keys: only the stored text changes. A new secret goes here. */
     val SECRETS: Map<String, Set<String>> = mapOf(
         "kiosk" to setOf("api_key", "camera_stream_password"),
-        "auth" to setOf("refresh_token"),
+        "auth" to setOf("refresh_token", "pending_signins"),
         "sendspin" to setOf("identity", "pairing_psk", "records"),
     )
 

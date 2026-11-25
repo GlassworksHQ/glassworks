@@ -12,6 +12,11 @@ Each frame's `release` block in frames/<id>/design/frame.json says what it ships
     "frame": { "bundle": "signed" | "notice", ... }   its own frame release, if it has one
   }
 
+A frame whose installer writes the frame version into the device names that file in `frame.versionFile` (the
+Mirror's Kiln recipe). The file declares `{ id: '<frame id>', version: '<version>' }`, and a due frame release at
+another version fails the plan, so devices installed after the release report the version it names. A dry run with
+the Unreleased notes only warns: the version is bumped in the same change that cuts the section.
+
 The plan is every app line some frame runs, each once whatever the number of frames on it, and every frame
 release. With --what all (the default), an item is due when its changelog has a `## [<version>]` section and no
 release has its tag yet. --what can name some instead, comma or space separated: `<frame>` (its app lines and its
@@ -34,6 +39,8 @@ import sys
 # The S1 app's and the generic app's rule (their build.gradle.kts): MAJOR.MINOR.PATCH, minor and patch below 100,
 # so versionCode = major*10000 + minor*100 + patch. No SemVer pre-release part: a beta is a plain version.
 APP_VERSION = re.compile(r'^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$')
+# How a frame's versionFile declares the version its installer writes: `id: '<frame id>', version: '<version>'`.
+VERSION_DECL = r"""\bid:\s*['"]{fid}['"]\s*,\s*version:\s*['"]([^'"]*)['"]"""
 # The frame loader's rule (glassworks_loader.sh semver): each part 0..999, no leading zeros, not 0.0.0.
 FRAME_VERSION = re.compile(r'^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$')
 RECIPES = ('s1-kiosk', 'gradle')
@@ -119,6 +126,8 @@ def lines_and_frames(frames):
             raise PlanError(f'{fid}: a signed frame bundle names its script, pubkey and assets')
         if fr['bundle'] == 'notice' and fr.get('assets'):
             raise PlanError(f'{fid}: a notice has no assets')
+        if 'versionFile' in fr and not (isinstance(fr['versionFile'], str) and fr['versionFile']):
+            raise PlanError(f'{fid}: release.frame.versionFile is the path of a file in the repo')
         frame_rel[fid] = fr
     return lines, users, frame_rel
 
@@ -130,6 +139,18 @@ def section(root, version, changelog):
         raise PlanError(f'{changelog} does not exist')
     r = subprocess.run([str(root / 'tools/release/changelog-section.sh'), version, str(path)], capture_output=True, text=True)
     return r.stdout if r.returncode == 0 else None
+
+
+def device_version(root, fid, version_file):
+    """The frame version `version_file` declares for `fid` (`id: '<fid>', version: '<version>'`, exactly once)."""
+    path = root / version_file
+    if not path.is_file():
+        raise PlanError(f'{fid}: release.frame.versionFile {version_file} does not exist')
+    found = re.findall(VERSION_DECL.format(fid=re.escape(fid)), path.read_text())
+    if len(found) != 1:
+        raise PlanError(f"{fid}: {version_file} should declare {{ id: '{fid}', version: '<version>' }} once, "
+                        f'not {len(found)} times')
+    return found[0]
 
 
 def parse_what(what, frames, lines, users, frame_rel):
@@ -265,6 +286,15 @@ def plan(root, version, what='all', channel='stable', released=(), dry_run=False
             pass
         else:
             item['status'] = 'due'
+            if fr.get('versionFile'):
+                on_device = device_version(root, fid, fr['versionFile'])
+                if on_device != version:
+                    why = (f'{fr["versionFile"]} installs frame version {on_device}, not {version}: '
+                           f'bump it to {version} with the [{version}] section')
+                    if item['notes'] == version:
+                        errors.append(f'{tag}: {why}')
+                    else:
+                        warnings.append(f'{tag}: {why}; the dry run goes on, a real run would fail')
             if fr['bundle'] == 'signed':
                 item['assets'] = [a.replace('{version}', version) for a in fr['assets']]
                 item['assets'] += [a + '.sha256' for a in item['assets']]

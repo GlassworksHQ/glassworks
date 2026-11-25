@@ -13,6 +13,31 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ### Fixed
 - **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it avoids Android's display-off path and sleeps the way lululemon's own software did — dropping the backlight to zero under a black screen so waking brings the picture straight back (physical `screen_brightness=0` verified on stock firmware; live check of the app's window-brightness override pending before release). In the legacy build.
+- **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
+  restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
+  you back, so the panel said "This link has expired" until you signed in again. The panel now remembers a sign-in
+  in progress across the restart.
+- **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the
+  dashboard's page to free memory while another app was in front, the page the panel opened in its place kept
+  running as if it were on screen until you came back to the panel. It now waits in the background, as the page did
+  before Android closed it.
+- **Kiln asks for Chrome or Edge before it starts.** In a browser that can't talk to USB devices, such as Firefox or
+  Safari, Kiln's Mirror and Android pages now say so on their first screen, as the S1 page does. Before, the Mirror
+  page let you download and build its whole system image first, then stopped at the first USB step. Comes with Kiln,
+  not the app.
+- **Only Home Assistant gets the microphone and the camera.** The panel used to hand the microphone, the camera and
+  every other page permission to any page it showed, without asking. Now only pages on your Home Assistant and on the
+  secure hosts in the panel's settings get them. A link that leads off your dashboard, or another site framed inside it,
+  is refused, and the panel's log says so, unless your dashboard explicitly shares a permission with that frame (an
+  `allow` attribute). Permissions an older version saved for other sites are forgotten when the app starts.
+- **Some Home Assistant controls need the encryption key.** Until Home Assistant gives the panel its key, anyone on
+  your network can reach the panel's ESPHome connection. **Dashboard URL**, **Sign out**, **Start Wi-Fi setup
+  (Bluetooth)** and **Open device settings** now work only over the encrypted connection, so once Home Assistant has
+  set the key, no other device can point the panel at its own page. Home Assistant 2026.11 or newer sets the key by
+  itself when you add the panel; do that from a network you trust. On an older Home Assistant, change these on the
+  panel or on the Manage page. The speaker, reload, restart and the other everyday controls work as before.
+  Notifications sent with the `notify` action need the key too, so a stranger on your network can't put an alert on
+  the screen. On an older Home Assistant, `notify` calls fail until you update it.
 
 ## [0.9.0] - 2026-11-24
 

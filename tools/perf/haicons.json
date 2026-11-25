@@ -1,0 +1,1188 @@
+{
+ "_comment": "HA core's icons.json for each integration Clarity's fake Home Assistant loads, at the release it reports, written by tools/perf/haicons.py --write; don't edit it by hand. null: the integration has no icons.json at that commit. The icons are HA core's (Apache-2.0, Copyright Home Assistant contributors).",
+ "commit": "74cf5a49c63ed8d4d87717844bf14f79c28c9cea",
+ "components": {
+  "binary_sensor": {
+   "icons": {
+    "entity_component": {
+     "_": {
+      "default": "mdi:radiobox-blank",
+      "state": {
+       "on": "mdi:checkbox-marked-circle"
+      }
+     },
+     "battery": {
+      "default": "mdi:battery",
+      "state": {
+       "on": "mdi:battery-outline"
+      }
+     },
+     "battery_charging": {
+      "default": "mdi:battery",
+      "state": {
+       "on": "mdi:battery-charging"
+      }
+     },
+     "carbon_monoxide": {
+      "default": "mdi:smoke-detector",
+      "state": {
+       "on": "mdi:smoke-detector-alert"
+      }
+     },
+     "cold": {
+      "default": "mdi:thermometer",
+      "state": {
+       "on": "mdi:snowflake"
+      }
+     },
+     "connectivity": {
+      "default": "mdi:close-network-outline",
+      "state": {
+       "on": "mdi:check-network-outline"
+      }
+     },
+     "door": {
+      "default": "mdi:door-closed",
+      "state": {
+       "on": "mdi:door-open"
+      }
+     },
+     "garage_door": {
+      "default": "mdi:garage",
+      "state": {
+       "on": "mdi:garage-open"
+      }
+     },
+     "gas": {
+      "default": "mdi:check-circle",
+      "state": {
+       "on": "mdi:alert-circle"
+      }
+     },
+     "glass_break": {
+      "default": "mdi:glass-fragile"
+     },
+     "heat": {
+      "default": "mdi:thermometer",
+      "state": {
+       "on": "mdi:fire"
+      }
+     },
+     "light": {
+      "default": "mdi:brightness-5",
+      "state": {
+       "on": "mdi:brightness-7"
+      }
+     },
+     "lock": {
+      "default": "mdi:lock",
+      "state": {
+       "on": "mdi:lock-open"
+      }
+     },
+     "moisture": {
+      "default": "mdi:water-off",
+      "state": {
+       "on": "mdi:water"
+      }
+     },
+     "motion": {
+      "default": "mdi:motion-sensor-off",
+      "state": {
+       "on": "mdi:motion-sensor"
+      }
+     },
+     "moving": {
+      "default": "mdi:octagon",
+      "state": {
+       "on": "mdi:arrow-right"
+      }
+     },
+     "occupancy": {
+      "default": "mdi:home-outline",
+      "state": {
+       "on": "mdi:home"
+      }
+     },
+     "opening": {
+      "default": "mdi:square",
+      "state": {
+       "on": "mdi:square-outline"
+      }
+     },
+     "plug": {
+      "default": "mdi:power-plug-off",
+      "state": {
+       "on": "mdi:power-plug"
+      }
+     },
+     "power": {
+      "default": "mdi:power-plug-off",
+      "state": {
+       "on": "mdi:power-plug"
+      }
+     },
+     "presence": {
+      "default": "mdi:home-outline",
+      "state": {
+       "on": "mdi:home"
+      }
+     },
+     "problem": {
+      "default": "mdi:check-circle",
+      "state": {
+       "on": "mdi:alert-circle"
+      }
+     },
+     "running": {
+      "default": "mdi:stop",
+      "state": {
+       "on": "mdi:play"
+      }
+     },
+     "safety": {
+      "default": "mdi:check-circle",
+      "state": {
+       "on": "mdi:alert-circle"
+      }
+     },
+     "smoke": {
+      "default": "mdi:smoke-detector-variant",
+      "state": {
+       "on": "mdi:smoke-detector-variant-alert"
+      }
+     },
+     "sound": {
+      "default": "mdi:music-note-off",
+      "state": {
+       "on": "mdi:music-note"
+      }
+     },
+     "tamper": {
+      "default": "mdi:check-circle",
+      "state": {
+       "on": "mdi:alert-circle"
+      }
+     },
+     "update": {
+      "default": "mdi:package",
+      "state": {
+       "on": "mdi:package-up"
+      }
+     },
+     "vibration": {
+      "default": "mdi:crop-portrait",
+      "state": {
+       "on": "mdi:vibrate"
+      }
+     },
+     "window": {
+      "default": "mdi:window-closed",
+      "state": {
+       "on": "mdi:window-open"
+      }
+     }
+    }
+   },
+   "sha256": "74a67ed93eb792a73b0a7336ce80615932a1c9a4b080c29f1003b94a392016eb"
+  },
+  "camera": {
+   "icons": {
+    "entity_component": {
+     "_": {
+      "default": "mdi:video",
+      "state": {
+       "off": "mdi:video-off"
+      }
+     }
+    },
+    "services": {
+     "disable_motion_detection": {
+      "service": "mdi:motion-sensor-off"
+     },
+     "enable_motion_detection": {
+      "service": "mdi:motion-sensor"
+     },
+     "play_stream": {
+      "service": "mdi:play"
+     },
+     "record": {
+      "service": "mdi:record-rec"
+     },
+     "snapshot": {
+      "service": "mdi:camera"
+     },
+     "turn_off": {
+      "service": "mdi:video-off"
+     },
+     "turn_on": {
+      "service": "mdi:video"
+     }
+    }
+   },
+   "sha256": "afdc33fb1a263e73713fc260ec733f6519b05f424c330f38e050e4ab850e66d1"
+  },
+  "climate": {
+   "icons": {
+    "conditions": {
+     "is_cooling": {
+      "condition": "mdi:snowflake"
+     },
+     "is_drying": {
+      "condition": "mdi:water-percent"
+     },
+     "is_heating": {
+      "condition": "mdi:fire"
+     },
+     "is_hvac_mode": {
+      "condition": "mdi:thermostat"
+     },
+     "is_off": {
+      "condition": "mdi:power-off"
+     },
+     "is_on": {
+      "condition": "mdi:power-on"
+     },
+     "is_target_humidity": {
+      "condition": "mdi:water-percent"
+     },
+     "is_target_temperature": {
+      "condition": "mdi:thermometer"
+     }
+    },
+    "entity_component": {
+     "_": {
+      "default": "mdi:thermostat",
+      "state_attributes": {
+       "fan_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "auto": "mdi:fan-auto",
+         "diffuse": "mdi:weather-windy",
+         "focus": "mdi:target",
+         "high": "mdi:speedometer",
+         "low": "mdi:speedometer-slow",
+         "medium": "mdi:speedometer-medium",
+         "middle": "mdi:speedometer-medium",
+         "off": "mdi:fan-off",
+         "on": "mdi:fan"
+        }
+       },
+       "hvac_action": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "cooling": "mdi:snowflake",
+         "defrosting": "mdi:snowflake-melt",
+         "drying": "mdi:water-percent",
+         "fan": "mdi:fan",
+         "heating": "mdi:fire",
+         "idle": "mdi:clock-outline",
+         "off": "mdi:power",
+         "preheating": "mdi:heat-wave"
+        }
+       },
+       "preset_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "activity": "mdi:motion-sensor",
+         "away": "mdi:account-arrow-right",
+         "boost": "mdi:rocket-launch",
+         "comfort": "mdi:sofa",
+         "eco": "mdi:leaf",
+         "home": "mdi:home",
+         "sleep": "mdi:bed"
+        }
+       },
+       "swing_horizontal_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:arrow-oscillating-off",
+         "on": "mdi:arrow-expand-horizontal"
+        }
+       },
+       "swing_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "both": "mdi:arrow-all",
+         "horizontal": "mdi:arrow-left-right",
+         "off": "mdi:arrow-oscillating-off",
+         "on": "mdi:arrow-oscillating",
+         "vertical": "mdi:arrow-up-down"
+        }
+       }
+      }
+     }
+    },
+    "services": {
+     "set_aux_heat": {
+      "service": "mdi:radiator"
+     },
+     "set_fan_mode": {
+      "service": "mdi:fan"
+     },
+     "set_humidity": {
+      "service": "mdi:water-percent"
+     },
+     "set_hvac_mode": {
+      "service": "mdi:hvac"
+     },
+     "set_preset_mode": {
+      "service": "mdi:sofa"
+     },
+     "set_swing_horizontal_mode": {
+      "service": "mdi:arrow-expand-horizontal"
+     },
+     "set_swing_mode": {
+      "service": "mdi:arrow-oscillating"
+     },
+     "set_temperature": {
+      "service": "mdi:thermometer"
+     },
+     "toggle": {
+      "service": "mdi:toggle-switch"
+     },
+     "turn_off": {
+      "service": "mdi:power-off"
+     },
+     "turn_on": {
+      "service": "mdi:power-on"
+     }
+    },
+    "triggers": {
+     "hvac_mode_changed": {
+      "trigger": "mdi:thermostat"
+     },
+     "started_cooling": {
+      "trigger": "mdi:snowflake"
+     },
+     "started_drying": {
+      "trigger": "mdi:water-percent"
+     },
+     "started_heating": {
+      "trigger": "mdi:fire"
+     },
+     "target_humidity_changed": {
+      "trigger": "mdi:water-percent"
+     },
+     "target_humidity_crossed_threshold": {
+      "trigger": "mdi:water-percent"
+     },
+     "target_temperature_changed": {
+      "trigger": "mdi:thermometer"
+     },
+     "target_temperature_crossed_threshold": {
+      "trigger": "mdi:thermometer"
+     },
+     "turned_off": {
+      "trigger": "mdi:power-off"
+     },
+     "turned_on": {
+      "trigger": "mdi:power-on"
+     }
+    }
+   },
+   "sha256": "50f79fc05b64cfe2a227533f2560fc7249834f47adeec8e36ec09067ca7cb31c"
+  },
+  "frontend": {
+   "icons": {
+    "services": {
+     "reload_themes": {
+      "service": "mdi:reload"
+     },
+     "set_theme": {
+      "service": "mdi:palette-swatch"
+     }
+    }
+   },
+   "sha256": "82d8eb1e36a4021080a8a5226dd72cc03ccf28dccb028a47582898e0e01dcb03"
+  },
+  "history": null,
+  "homeassistant": {
+   "icons": {
+    "conditions": {
+     "host_reboot_required": {
+      "condition": "mdi:restart-alert"
+     },
+     "restart_required": {
+      "condition": "mdi:restart-alert"
+     }
+    },
+    "integration_category": {
+     "ai_voice": {
+      "default": "mdi:creation",
+      "subcategory": {
+       "ai_models": {
+        "default": "mdi:robot"
+       },
+       "image_recognition": {
+        "default": "mdi:image-search"
+       },
+       "speech": {
+        "default": "mdi:microphone-message"
+       },
+       "voice_assistants": {
+        "default": "mdi:account-voice"
+       }
+      }
+     },
+     "appliances_cleaning": {
+      "default": "mdi:washing-machine",
+      "subcategory": {
+       "cleaning": {
+        "default": "mdi:robot-vacuum"
+       },
+       "cooking": {
+        "default": "mdi:stove"
+       },
+       "laundry": {
+        "default": "mdi:tumble-dryer"
+       }
+      }
+     },
+     "blinds_curtains": {
+      "default": "mdi:blinds-horizontal"
+     },
+     "buttons_remotes": {
+      "default": "mdi:remote"
+     },
+     "climate": {
+      "default": "mdi:thermostat",
+      "subcategory": {
+       "air_purifiers_humidifiers": {
+        "default": "mdi:air-purifier"
+       },
+       "fans_ventilation": {
+        "default": "mdi:fan"
+       },
+       "heat_pumps_air_conditioning": {
+        "default": "mdi:heat-pump"
+       },
+       "thermostats_heating": {
+        "default": "mdi:radiator"
+       },
+       "water_heaters": {
+        "default": "mdi:water-boiler"
+       }
+      }
+     },
+     "computers_network": {
+      "default": "mdi:server-network",
+      "subcategory": {
+       "cloud_developer_tools": {
+        "default": "mdi:cloud-braces"
+       },
+       "monitoring": {
+        "default": "mdi:monitor-dashboard"
+       },
+       "nas_servers": {
+        "default": "mdi:nas"
+       },
+       "printers": {
+        "default": "mdi:printer"
+       },
+       "routers_network": {
+        "default": "mdi:router-wireless"
+       }
+      }
+     },
+     "diy_makers": {
+      "default": "mdi:chip",
+      "subcategory": {
+       "boards_hardware": {
+        "default": "mdi:developer-board"
+       },
+       "web_data_connectors": {
+        "default": "mdi:api"
+       }
+      }
+     },
+     "energy": {
+      "default": "mdi:lightning-bolt",
+      "subcategory": {
+       "backup_power": {
+        "default": "mdi:battery-charging-high"
+       },
+       "energy_prices": {
+        "default": "mdi:cash-clock"
+       },
+       "ev_charging": {
+        "default": "mdi:ev-station"
+       },
+       "meters_monitoring": {
+        "default": "mdi:meter-electric"
+       },
+       "solar_batteries": {
+        "default": "mdi:solar-power-variant"
+       }
+      }
+     },
+     "finance": {
+      "default": "mdi:finance"
+     },
+     "garden_plants": {
+      "default": "mdi:flower"
+     },
+     "health_wellbeing": {
+      "default": "mdi:heart-pulse"
+     },
+     "helpers": {
+      "default": "mdi:tools",
+      "subcategory": {
+       "calculate_value": {
+        "default": "mdi:calculator-variant"
+       },
+       "store_value": {
+        "default": "mdi:form-textbox"
+       }
+      }
+     },
+     "hubs_protocols": {
+      "default": "mdi:hub",
+      "subcategory": {
+       "building_automation": {
+        "default": "mdi:office-building-cog"
+       },
+       "smart_home_hubs": {
+        "default": "mdi:home-automation"
+       },
+       "wireless_protocols": {
+        "default": "mdi:zigbee"
+       }
+      }
+     },
+     "lighting": {
+      "default": "mdi:lightbulb",
+      "subcategory": {
+       "bulbs_lamps": {
+        "default": "mdi:lamp"
+       },
+       "led_strips_controllers": {
+        "default": "mdi:led-strip-variant"
+       },
+       "lighting_systems": {
+        "default": "mdi:lightbulb-group"
+       }
+      }
+     },
+     "local_services": {
+      "default": "mdi:city-variant"
+     },
+     "media_entertainment": {
+      "default": "mdi:television-play",
+      "subcategory": {
+       "gaming": {
+        "default": "mdi:gamepad-variant"
+       },
+       "music_radio_services": {
+        "default": "mdi:music"
+       },
+       "speakers_audio": {
+        "default": "mdi:speaker"
+       },
+       "tv_streaming": {
+        "default": "mdi:television"
+       }
+      }
+     },
+     "messaging_notifications": {
+      "default": "mdi:message-badge",
+      "subcategory": {
+       "chat_apps": {
+        "default": "mdi:chat"
+       },
+       "email_sms_calls": {
+        "default": "mdi:email"
+       },
+       "push_notifications": {
+        "default": "mdi:bell-ring"
+       }
+      }
+     },
+     "news_social_media": {
+      "default": "mdi:newspaper-variant"
+     },
+     "other_ecosystems": {
+      "default": "mdi:home-export-outline"
+     },
+     "pets": {
+      "default": "mdi:paw"
+     },
+     "plugs_switches": {
+      "default": "mdi:power-socket-eu"
+     },
+     "presence_location": {
+      "default": "mdi:map-marker-account",
+      "subcategory": {
+       "network_presence": {
+        "default": "mdi:lan-connect"
+       },
+       "phones_companion_apps": {
+        "default": "mdi:cellphone"
+       },
+       "trackers": {
+        "default": "mdi:crosshairs-gps"
+       }
+      }
+     },
+     "productivity_information": {
+      "default": "mdi:calendar-check",
+      "subcategory": {
+       "calendars_todos": {
+        "default": "mdi:calendar"
+       },
+       "documents_photos": {
+        "default": "mdi:file-document-multiple"
+       },
+       "shopping_groceries": {
+        "default": "mdi:cart"
+       }
+      }
+     },
+     "security_safety": {
+      "default": "mdi:shield-home",
+      "subcategory": {
+       "alarm_systems": {
+        "default": "mdi:alarm-light"
+       },
+       "cameras": {
+        "default": "mdi:cctv"
+       },
+       "doorbells_intercoms": {
+        "default": "mdi:doorbell-video"
+       },
+       "locks_access": {
+        "default": "mdi:lock"
+       },
+       "smoke_co_alarms": {
+        "default": "mdi:smoke-detector"
+       }
+      }
+     },
+     "sensors": {
+      "default": "mdi:motion-sensor",
+      "subcategory": {
+       "air_quality": {
+        "default": "mdi:air-filter"
+       },
+       "door_window": {
+        "default": "mdi:door-open"
+       },
+       "motion_presence": {
+        "default": "mdi:walk"
+       },
+       "temperature_humidity": {
+        "default": "mdi:thermometer-water"
+       }
+      }
+     },
+     "vehicles_transport": {
+      "default": "mdi:car",
+      "subcategory": {
+       "bikes_scooters": {
+        "default": "mdi:bicycle"
+       },
+       "cars_evs": {
+        "default": "mdi:car-electric"
+       },
+       "flights": {
+        "default": "mdi:airplane"
+       },
+       "public_transport": {
+        "default": "mdi:bus"
+       }
+      }
+     },
+     "water": {
+      "default": "mdi:water",
+      "subcategory": {
+       "meters_leak_detection": {
+        "default": "mdi:water-alert"
+       },
+       "pools_spas": {
+        "default": "mdi:pool"
+       },
+       "water_treatment": {
+        "default": "mdi:water-check"
+       }
+      }
+     },
+     "weather_alerts": {
+      "default": "mdi:weather-partly-cloudy",
+      "subcategory": {
+       "air_quality_pollen": {
+        "default": "mdi:flower-pollen"
+       },
+       "forecasts": {
+        "default": "mdi:weather-partly-rainy"
+       },
+       "public_warnings": {
+        "default": "mdi:alert"
+       }
+      }
+     }
+    },
+    "integration_connectivity": {
+     "bluetooth": {
+      "default": "mdi:bluetooth"
+     },
+     "cloud": {
+      "default": "mdi:cloud"
+     },
+     "dali": {
+      "default": "mdi:lightbulb-group"
+     },
+     "dect": {
+      "default": "mdi:phone-classic"
+     },
+     "enocean": {
+      "default": "mdi:leaf"
+     },
+     "esphome": {
+      "default": "mdi:esphome"
+     },
+     "homekit": {
+      "default": "mdi:apple"
+     },
+     "host": {
+      "default": "mdi:server"
+     },
+     "infrared": {
+      "default": "mdi:remote"
+     },
+     "insteon": {
+      "default": "mdi:home-lightning-bolt"
+     },
+     "knx": {
+      "default": "mdi:office-building-cog"
+     },
+     "lorawan": {
+      "default": "mdi:access-point-network"
+     },
+     "matter": {
+      "default": "mdi:matter"
+     },
+     "modbus": {
+      "default": "mdi:connection"
+     },
+     "mqtt": {
+      "default": "mdi:mqtt"
+     },
+     "network": {
+      "default": "mdi:lan"
+     },
+     "onewire": {
+      "default": "mdi:thermometer"
+     },
+     "rf": {
+      "default": "mdi:radio-tower"
+     },
+     "serial": {
+      "default": "mdi:serial-port"
+     },
+     "x10": {
+      "default": "mdi:power-plug"
+     },
+     "zigbee": {
+      "default": "mdi:zigbee"
+     },
+     "zwave": {
+      "default": "mdi:z-wave"
+     }
+    },
+    "services": {
+     "check_config": {
+      "service": "mdi:receipt-text-check"
+     },
+     "reload_all": {
+      "service": "mdi:reload"
+     },
+     "reload_config_entry": {
+      "service": "mdi:reload"
+     },
+     "reload_core_config": {
+      "service": "mdi:receipt-text-send"
+     },
+     "reload_custom_templates": {
+      "service": "mdi:palette-swatch"
+     },
+     "restart": {
+      "service": "mdi:restart"
+     },
+     "save_persistent_states": {
+      "service": "mdi:content-save"
+     },
+     "set_location": {
+      "service": "mdi:map-marker"
+     },
+     "stop": {
+      "service": "mdi:stop"
+     },
+     "toggle": {
+      "service": "mdi:toggle-switch"
+     },
+     "turn_off": {
+      "service": "mdi:power-off"
+     },
+     "turn_on": {
+      "service": "mdi:power-on"
+     },
+     "update_entity": {
+      "service": "mdi:update"
+     }
+    },
+    "triggers": {
+     "host_reboot_required": {
+      "trigger": "mdi:restart-alert"
+     },
+     "restart_required": {
+      "trigger": "mdi:restart-alert"
+     },
+     "updated": {
+      "trigger": "mdi:package-up"
+     }
+    }
+   },
+   "sha256": "2c0fcd78bc073f0116c76369085979f763ac415854ea4135d9190e18d12bdc2d"
+  },
+  "light": {
+   "icons": {
+    "conditions": {
+     "is_brightness": {
+      "condition": "mdi:lightbulb-on-50"
+     },
+     "is_off": {
+      "condition": "mdi:lightbulb-off"
+     },
+     "is_on": {
+      "condition": "mdi:lightbulb-on"
+     }
+    },
+    "entity_component": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "services": {
+     "toggle": {
+      "service": "mdi:lightbulb"
+     },
+     "turn_off": {
+      "service": "mdi:lightbulb-off"
+     },
+     "turn_on": {
+      "service": "mdi:lightbulb-on"
+     }
+    },
+    "triggers": {
+     "brightness_changed": {
+      "trigger": "mdi:lightbulb-on-50"
+     },
+     "brightness_crossed_threshold": {
+      "trigger": "mdi:lightbulb-on-50"
+     },
+     "turned_off": {
+      "trigger": "mdi:lightbulb-off"
+     },
+     "turned_on": {
+      "trigger": "mdi:lightbulb-on"
+     }
+    }
+   },
+   "sha256": "c443cae9b130ec1250e0c45496c8f28ee22d804276f436376fd9bd8faf52fe09"
+  },
+  "lovelace": {
+   "icons": {
+    "services": {
+     "reload_resources": {
+      "service": "mdi:reload"
+     }
+    }
+   },
+   "sha256": "9e856a884eccf88abe1c41049760325564d511449629724af0ce0427b59f63b6"
+  },
+  "sensor": {
+   "icons": {
+    "entity_component": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "absolute_humidity": {
+      "default": "mdi:water-opacity"
+     },
+     "apparent_power": {
+      "default": "mdi:flash"
+     },
+     "aqi": {
+      "default": "mdi:air-filter"
+     },
+     "area": {
+      "default": "mdi:texture-box"
+     },
+     "atmospheric_pressure": {
+      "default": "mdi:thermometer-lines"
+     },
+     "battery": {
+      "default": "mdi:battery-unknown",
+      "range": {
+       "0": "mdi:battery-alert",
+       "10": "mdi:battery-10",
+       "100": "mdi:battery",
+       "20": "mdi:battery-20",
+       "30": "mdi:battery-30",
+       "40": "mdi:battery-40",
+       "50": "mdi:battery-50",
+       "60": "mdi:battery-60",
+       "70": "mdi:battery-70",
+       "80": "mdi:battery-80",
+       "90": "mdi:battery-90"
+      }
+     },
+     "blood_glucose_concentration": {
+      "default": "mdi:spoon-sugar"
+     },
+     "carbon_dioxide": {
+      "default": "mdi:molecule-co2"
+     },
+     "carbon_monoxide": {
+      "default": "mdi:molecule-co"
+     },
+     "conductivity": {
+      "default": "mdi:sprout-outline"
+     },
+     "current": {
+      "default": "mdi:current-ac"
+     },
+     "data_rate": {
+      "default": "mdi:transmission-tower"
+     },
+     "data_size": {
+      "default": "mdi:database"
+     },
+     "date": {
+      "default": "mdi:calendar"
+     },
+     "distance": {
+      "default": "mdi:arrow-left-right"
+     },
+     "duration": {
+      "default": "mdi:progress-clock"
+     },
+     "energy": {
+      "default": "mdi:lightning-bolt"
+     },
+     "energy_storage": {
+      "default": "mdi:car-battery"
+     },
+     "enum": {
+      "default": "mdi:eye"
+     },
+     "frequency": {
+      "default": "mdi:sine-wave"
+     },
+     "gas": {
+      "default": "mdi:meter-gas"
+     },
+     "humidity": {
+      "default": "mdi:water-percent"
+     },
+     "illuminance": {
+      "default": "mdi:brightness-5"
+     },
+     "irradiance": {
+      "default": "mdi:sun-wireless"
+     },
+     "moisture": {
+      "default": "mdi:water-percent"
+     },
+     "monetary": {
+      "default": "mdi:cash"
+     },
+     "nitrogen_dioxide": {
+      "default": "mdi:molecule"
+     },
+     "nitrogen_monoxide": {
+      "default": "mdi:molecule"
+     },
+     "nitrous_oxide": {
+      "default": "mdi:molecule"
+     },
+     "ozone": {
+      "default": "mdi:molecule"
+     },
+     "ph": {
+      "default": "mdi:ph"
+     },
+     "pm1": {
+      "default": "mdi:molecule"
+     },
+     "pm10": {
+      "default": "mdi:molecule"
+     },
+     "pm25": {
+      "default": "mdi:molecule"
+     },
+     "pm4": {
+      "default": "mdi:molecule"
+     },
+     "power": {
+      "default": "mdi:flash"
+     },
+     "power_factor": {
+      "default": "mdi:angle-acute"
+     },
+     "precipitation": {
+      "default": "mdi:weather-rainy"
+     },
+     "precipitation_intensity": {
+      "default": "mdi:weather-pouring"
+     },
+     "pressure": {
+      "default": "mdi:gauge"
+     },
+     "radon": {
+      "default": "mdi:radioactive"
+     },
+     "reactive_energy": {
+      "default": "mdi:lightning-bolt"
+     },
+     "reactive_power": {
+      "default": "mdi:flash"
+     },
+     "signal_strength": {
+      "default": "mdi:wifi"
+     },
+     "sound_pressure": {
+      "default": "mdi:ear-hearing"
+     },
+     "speed": {
+      "default": "mdi:speedometer"
+     },
+     "sulphur_dioxide": {
+      "default": "mdi:molecule"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     },
+     "temperature_delta": {
+      "default": "mdi:thermometer"
+     },
+     "timestamp": {
+      "default": "mdi:clock"
+     },
+     "uptime": {
+      "default": "mdi:clock-start"
+     },
+     "volatile_organic_compounds": {
+      "default": "mdi:molecule"
+     },
+     "volatile_organic_compounds_parts": {
+      "default": "mdi:molecule"
+     },
+     "voltage": {
+      "default": "mdi:sine-wave"
+     },
+     "volume": {
+      "default": "mdi:car-coolant-level"
+     },
+     "volume_flow_rate": {
+      "default": "mdi:pipe-valve"
+     },
+     "volume_storage": {
+      "default": "mdi:storage-tank"
+     },
+     "water": {
+      "default": "mdi:water"
+     },
+     "weight": {
+      "default": "mdi:weight"
+     },
+     "wind_direction": {
+      "default": "mdi:compass-rose",
+      "range": {
+       "0": "mdi:arrow-down",
+       "112.5": "mdi:arrow-top-left",
+       "157.5": "mdi:arrow-up",
+       "202.5": "mdi:arrow-top-right",
+       "22.5": "mdi:arrow-bottom-left",
+       "247.5": "mdi:arrow-right",
+       "292.5": "mdi:arrow-bottom-right",
+       "337.5": "mdi:arrow-down",
+       "67.5": "mdi:arrow-left"
+      }
+     },
+     "wind_speed": {
+      "default": "mdi:weather-windy"
+     }
+    }
+   },
+   "sha256": "e9f1c649723c41ca16482afb86ff6714d329b7e1533f1df1535d70bef17b3f57"
+  },
+  "stream": null,
+  "switch": {
+   "icons": {
+    "conditions": {
+     "is_off": {
+      "condition": "mdi:toggle-switch-variant-off"
+     },
+     "is_on": {
+      "condition": "mdi:toggle-switch-variant"
+     }
+    },
+    "entity_component": {
+     "_": {
+      "default": "mdi:toggle-switch-variant",
+      "state": {
+       "off": "mdi:toggle-switch-variant-off"
+      }
+     },
+     "outlet": {
+      "default": "mdi:power-plug",
+      "state": {
+       "off": "mdi:power-plug-off"
+      }
+     },
+     "switch": {
+      "default": "mdi:toggle-switch-variant",
+      "state": {
+       "off": "mdi:toggle-switch-variant-off"
+      }
+     }
+    },
+    "services": {
+     "toggle": {
+      "service": "mdi:toggle-switch-variant"
+     },
+     "turn_off": {
+      "service": "mdi:toggle-switch-variant-off"
+     },
+     "turn_on": {
+      "service": "mdi:toggle-switch-variant"
+     }
+    },
+    "triggers": {
+     "turned_off": {
+      "trigger": "mdi:toggle-switch-variant-off"
+     },
+     "turned_on": {
+      "trigger": "mdi:toggle-switch-variant"
+     }
+    }
+   },
+   "sha256": "f8e5c3fe5d0906d37ba4f7c331ed41f620e21db6cbe32c8990b0f998793c2675"
+  }
+ },
+ "core": "2026.11.0",
+ "license": "Apache-2.0",
+ "source": "https://github.com/home-assistant/core/tree/74cf5a49c63ed8d4d87717844bf14f79c28c9cea/homeassistant/components"
+}

@@ -25,6 +25,11 @@ const RULES: Rule[] = [
     fix: 'Check that you picked the right panel on the first screen.' },
   { test: (_, m) => /two reads of .* differ/.test(m), title: 'The USB connection isn\'t steady',
     fix: 'Plug the cable straight into this computer rather than through a hub, then try again.' },
+  // the app from its release (wizard/assets.ts, release/apk.ts), before the disconnect rule: its /stall/ is in "install"
+  { test: (_, m) => /release to install yet/.test(m), title: 'There\'s no release to install yet',
+    fix: 'Kiln couldn\'t find a published release of the app. Try again in a little while.' },
+  { test: (_, m) => /^Couldn't (check for releases|download|verify the release)|^The release checksum|didn't match the published release/.test(m),
+    title: 'A download failed', fix: 'Check this computer\'s internet connection, then try again.' },
   { test: (e, m) => named('NetworkError')(e) || /disconnect|transfer|LIBUSB|stall|No device selected|device was lost/i.test(m),
     title: 'The panel disconnected', fix: 'Plug the cable straight into this computer or try another USB port, then try again.' },
   { test: (_, m) => /SHA-256|installer files are missing|could not download|not in the manifest|HTTP \d/.test(m),

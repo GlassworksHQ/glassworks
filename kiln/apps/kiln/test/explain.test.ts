@@ -10,6 +10,12 @@ describe('a failure, in words', () => {
     [new Error('two reads of boot differ: USB is unreliable here.'), 'The USB connection isn\'t steady'],
     [new Error('transferIn: the device was disconnected'), 'The panel disconnected'],
     [new Error('magisk failed its SHA-256 check (got 00…): refusing to use it'), 'A download failed'],
+    // the app from its release (wizard/assets.ts): a download, never "disconnected" for the "stall" in "install"
+    [new Error('Couldn\'t check for releases: the release server answered 502'), 'A download failed'],
+    [new Error('Couldn\'t download Glassworks 1.0.0 (the download proxy sent nothing for 30 s)'), 'A download failed'],
+    [new Error('Couldn\'t verify the release checksum for 1.0.0 (the download proxy answered 404)'), 'A download failed'],
+    [new Error('The downloaded file didn\'t match the published release, so Kiln discarded it'), 'A download failed'],
+    [new Error('There\'s no Glassworks release to install yet'), 'There\'s no release to install yet'],
     [new Error('something odd'), 'Something went wrong'],
   ])('%s', (e, title) => {
     const f = explain(e, 2, 'none');
