@@ -93,6 +93,7 @@ function load(): Source[] {
     ["updates", "Updates"],
     ["blueprints", "Blueprints"],
     ["clarity", "Clarity Grades"],
+    ["vitro", "Try Vitro"],
   ];
   for (const [slug, label] of dailyFeatures) {
     add({ file: `docs/${slug}.md`, url: `/docs/${slug}`, section: "user", label });

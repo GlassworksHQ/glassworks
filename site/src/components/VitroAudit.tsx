@@ -16,8 +16,9 @@ export function VitroAudit() {
         <span className="label">Vitro compatibility check</span>
         <h2 id="vitro-check-heading">Will your dashboard run natively?</h2>
         <p>
-          Paste your Lovelace YAML or JSON to see which cards Vitro draws itself and which ones would start the web engine. Scripts and AI agents can read the same
-          rules from <a href="/vitro-compat.json">/vitro-compat.json</a> and check dashboards on their own machine.
+          Paste your Lovelace YAML or JSON to see which cards Vitro draws itself and which ones would start the web engine, and why. It follows the same rules as
+          the panel, assuming every custom card and card-mod is installed. Scripts and AI agents can read those rules from{" "}
+          <a href="/vitro-compat.json">/vitro-compat.json</a> and check dashboards on their own machine.
         </p>
         <p className={s.privacy}>
           <span className={s.badge} aria-hidden="true">
@@ -111,6 +112,7 @@ export function VitroAudit() {
                       <li key={`${t.path}-${i}`}>
                         <code>{t.type}</code>
                         <span>{t.path}</span>
+                        {t.reasons.length > 0 && <span className={s.why}>{t.reasons.join("; ")}</span>}
                       </li>
                     ))}
                   </ul>
@@ -119,7 +121,7 @@ export function VitroAudit() {
 
               {result.warnings.length > 0 && (
                 <div className={s.group}>
-                  <h3>Warnings</h3>
+                  <h3>Notes</h3>
                   <ul className={s.list}>
                     {result.warnings.map((w, i) => (
                       <li key={`${w}-${i}`}>
