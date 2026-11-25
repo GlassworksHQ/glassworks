@@ -1146,6 +1146,23 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun aRefetchStillWaitingWhenTheLastWatcherGoesIsNeverSent() {
+        withRegistries()
+        val c = connected()
+        val sets = CopyOnWriteArrayList<JSONObject>()
+        val release = c.watchRegistries { sets += it }
+        awaitCondition("the registries") { sets.size == 1 }
+        val devicesAsked = server.commands("config/device_registry/list").size
+        val sub = server.eventSubscriptionId("device_registry_updated")!!
+        server.pushEvent(sub, JSONObject().put("event_type", "device_registry_updated").put("data", JSONObject()))
+        awaitCondition("the event is in") { c.javaClass.getDeclaredField("registryDue").apply { isAccessible = true }.let { (it.get(c) as Set<*>).isNotEmpty() } }
+        release()
+        Thread.sleep(HaDashboardClient.REGISTRY_DEBOUNCE_MS + 300)
+        assertEquals(devicesAsked, server.commands("config/device_registry/list").size)
+        assertEquals(1, sets.size)
+    }
+
+    @Test
     fun theRegistryFeedStartsAgainOnANewConnection() {
         withRegistries()
         val c = connected()

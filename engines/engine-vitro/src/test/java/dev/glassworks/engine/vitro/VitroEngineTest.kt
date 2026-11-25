@@ -276,9 +276,15 @@ class VitroEngineTest {
     fun aViewWhoseIslandWalksTheStatesFollowsEveryEntity() {
         val page = readyPage()
         awaitMain("view-scoped subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
-        val followAll = page.javaClass.getDeclaredMethod("followAllForIsland", Int::class.javaPrimitiveType).apply { isAccessible = true }
-        followAll.invoke(page, 0)
-        followAll.invoke(page, 0) // once is enough
+        val followAll = page.javaClass.getDeclaredMethod("followAllForIsland", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+            .apply { isAccessible = true }
+        val gen = page.javaClass.getDeclaredField("walkGeneration").apply { isAccessible = true }.getInt(page)
+        val before = server.commands("subscribe_entities").size
+        followAll.invoke(page, 0, gen - 1) // an island of an earlier dashboard config, reporting late: nothing
+        idle()
+        assertEquals(before, server.commands("subscribe_entities").size)
+        followAll.invoke(page, 0, gen)
+        followAll.invoke(page, 0, gen) // once is enough
         awaitMain("every entity") { !server.commands("subscribe_entities").last().has("entity_ids") }
         val all = server.commands("subscribe_entities").size
 
@@ -936,6 +942,9 @@ class VitroEngineTest {
         assertTrue(html.contains("user: { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false }"))
         // HA's registries, asked for on a card's first read of one; and every state once a card walks them.
         assertTrue(html.contains("const registries = { entities: {}, devices: {}, areas: {}, floors: {} };"))
+        // Each hass keeps the registries it was made with: a card comparing old and new sees a change.
+        assertTrue(html.contains("const snapshot = Object.assign({}, registries);"))
+        assertTrue(html.contains("return snapshot[key];"))
         assertTrue(html.contains("sendBridge({ type: 'registries' });"))
         assertTrue(html.contains("m.type === 'registries' && m.registries"))
         assertTrue(html.contains("ownKeys(target) {"))

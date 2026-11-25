@@ -167,9 +167,15 @@ class VitroEngine(
          */
         private val walkedViews = HashSet<Int>()
 
-        /** A web island on view [viewIndex] walked `hass.states`: that view follows every entity. On the main thread. */
-        private fun followAllForIsland(viewIndex: Int) {
-            if (disposed || !walkedViews.add(viewIndex)) return
+        /** Bumped with every dashboard config: a walk an island of the previous one reported late is dropped. */
+        private var walkGeneration = 0
+
+        /**
+         * A web island on view [viewIndex] of dashboard config [generation] walked `hass.states`: that view follows
+         * every entity. On the main thread.
+         */
+        private fun followAllForIsland(viewIndex: Int, generation: Int = walkGeneration) {
+            if (disposed || generation != walkGeneration || !walkedViews.add(viewIndex)) return
             if (viewIndex != vitroView.currentViewIndex || selectedFollowsAll) return
             selectedFollowsAll = true
             subscribeSelectedView()
@@ -346,6 +352,7 @@ class VitroEngine(
                 val haBase = currentOrigin.orEmpty()
                 // The view being built: the context is made for its cards.
                 val viewIndex = vitroView.currentViewIndex
+                val walkGen = walkGeneration
                 VitroCardContext(
                     context = activity,
                     haBase = haBase,
@@ -359,7 +366,7 @@ class VitroEngine(
                         client?.callService(domain, service, data, target)
                     },
                     watchEntity = { id -> main.post { watchRuntimeEntity(id) } },
-                    watchAllEntities = { main.post { followAllForIsland(viewIndex) } },
+                    watchAllEntities = { main.post { followAllForIsland(viewIndex, walkGen) } },
                     watchRegistries = { onChange -> watchIslandRegistries(onChange) },
                     callServiceThen = { domain, service, data, target, done ->
                         val c = client
@@ -711,6 +718,8 @@ class VitroEngine(
                     // Images fetched with the rejected sign-in go too.
                     VitroCardContext.clearImageCache()
                     clientGeneration++
+                    // Nor does the page keep that session's registries for its islands: the next client's feed brings them.
+                    detachRegistries()
                     client?.close()
                     client = null
                     host.onLocationChange("$base/auth/authorize")
@@ -749,6 +758,7 @@ class VitroEngine(
                     // A new config builds new islands; they ask again for what they read.
                     runtimeEntities.clear()
                     walkedViews.clear()
+                    walkGeneration++
                     vitroView.setConnectionBanner(null)
                     vitroView.setDashboard(config, pendingViewPath)
                     client?.dashboardShown()

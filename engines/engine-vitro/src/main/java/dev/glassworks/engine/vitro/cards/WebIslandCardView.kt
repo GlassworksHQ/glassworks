@@ -902,10 +902,12 @@ const hassBase = {
 };
 if (haUser) hassBase.user = haUser;
 
-// A new object on every patch: Lit cards compare hass by reference to decide whether to re-render.
+// A new object on every patch: Lit cards compare hass by reference to decide whether to re-render. Each hass keeps
+// the registries it was made with, as HA's does: a card comparing the old one's with the new one's sees the change.
 function makeHass() {
   const h = Object.assign({}, hassBase, { states: statesProxy });
-  for (const key of Object.keys(registries)) {
+  const snapshot = Object.assign({}, registries);
+  for (const key of Object.keys(snapshot)) {
     Object.defineProperty(h, key, {
       enumerable: true,
       configurable: true,
@@ -914,7 +916,7 @@ function makeHass() {
           registriesAsked = true;
           sendBridge({ type: 'registries' });
         }
-        return registries[key];
+        return snapshot[key];
       },
     });
   }
