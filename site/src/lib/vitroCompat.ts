@@ -5,6 +5,7 @@
 // public/vitro-compat.json (also served at /vitro-compat.json), which a test keeps equal to
 // VitroSupport.kt in the engine and to the audit script's lists.
 import manifest from "../../public/vitro-compat.json";
+import { buttonCardReasons } from "./vitroButtonCard";
 
 export const VITRO_COMPAT = manifest;
 
@@ -22,6 +23,9 @@ const BUBBLE_CARD_TYPES = new Set<string>(manifest.configDependentTypes["custom:
 const LAYOUT_CARD_TYPES = new Set<string>(manifest.configDependentTypes["custom:layout-card"].native);
 const UNSUPPORTED_OPTIONS: Record<string, Record<string, string>> = manifest.unsupportedOptions;
 const AUTO_ENTITIES_RULE_KEYS = new Set<string>(manifest.autoEntitiesRuleKeys);
+const SWIPE_PARAMETERS = new Set<string>(manifest.swipeCardParameters);
+/** The dashboard's `button_card_templates`, which button-card merges before it draws (set by auditDashboard). */
+let buttonCardTemplates: Record<string, unknown> = {};
 const CARD_MOD_SHEETS: Record<string, string[]> = manifest.cardModSheets;
 const CARD_MOD_OTHER_KEYS: Record<string, string> = manifest.cardModOtherKeys;
 const CARD_MOD_NOT_APPLIED: Record<string, string> = manifest.cardModNotApplied;
@@ -697,6 +701,30 @@ function checkOptions(card: Obj, type: string, reasons: Set<string>, notes: Set<
       if (!LAYOUT_CARD_TYPES.has(t)) reasons.add(`layout-card \`layout_type: ${t}\` isn't drawn natively`);
       break;
     }
+    // button-card without JavaScript templates, cards or HTML, and with styles Vitro draws (vitroButtonCard.ts).
+    case "custom:button-card":
+      for (const r of buttonCardReasons(card, buttonCardTemplates)) reasons.add(`button-card ${r}`);
+      break;
+    case "custom:swipe-card": {
+      const params = isObj(card.parameters) ? card.parameters : {};
+      for (const k of Object.keys(params)) if (!SWIPE_PARAMETERS.has(k)) reasons.add("swipe-card has a Swiper parameter Vitro doesn't run natively");
+      if ("pagination" in params) {
+        const p = params.pagination;
+        const t = isObj(p) && typeof p.type === "string" && p.type ? p.type : "bullets";
+        if (t !== "bullets" && t !== "fraction") reasons.add("swipe-card `pagination.type` isn't one Vitro draws natively");
+        if (isObj(p) && p.dynamicBullets === true) reasons.add("swipe-card `dynamicBullets` isn't drawn natively");
+      }
+      if ("slidesPerView" in params) {
+        const v = params.slidesPerView;
+        if (v !== "auto" && !(typeof v === "number" && v > 0)) reasons.add("swipe-card `slidesPerView` isn't a value Vitro draws natively");
+      }
+      if ("card_width" in card) reasons.add("swipe-card `card_width` isn't drawn natively");
+      break;
+    }
+    // weather-card's script shows an error without an entity; the island draws that error as HA does.
+    case "custom:weather-card":
+      if (!optString(card, "entity", "")) reasons.add("weather-card needs an `entity` (HA shows an error)");
+      break;
   }
 }
 
@@ -1291,6 +1319,7 @@ export function auditDashboard(input: string): VitroAuditResult {
     );
   }
 
+  buttonCardTemplates = isObj(data.button_card_templates) ? data.button_card_templates : {};
   const views: ViewAudit[] = [];
   data.views.forEach((v, vi) => {
     if (!isObj(v)) return;

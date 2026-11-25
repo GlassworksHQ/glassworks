@@ -42,6 +42,8 @@ object VitroSupport {
         "weather-forecast", "markdown", "picture", "picture-entity", "picture-glance", "media-control", "grid",
         "horizontal-stack", "vertical-stack", "conditional", "entity-filter", "entity", "light", "alarm-panel",
         "todo-list", "statistics-graph", "area", "picture-elements", "humidifier", "calendar", "logbook",
+        // HA's legacy name for `button` (`hui-entity-button-card` extends `hui-button-card`, entity required).
+        "entity-button",
     )
 
     /** HACS cards with a native fast path (Tier 2). */
@@ -53,7 +55,8 @@ object VitroSupport {
         "custom:mushroom-media-player-card", "custom:mushroom-lock-card", "custom:mushroom-alarm-control-panel-card",
         "custom:mushroom-vacuum-card", "custom:mushroom-humidifier-card", "custom:mushroom-number-card",
         "custom:mushroom-select-card", "custom:mini-media-player", "custom:auto-entities", "custom:stack-in-card",
-        "custom:vertical-stack-in-card", "custom:layout-card",
+        "custom:vertical-stack-in-card", "custom:layout-card", "custom:button-card", "custom:mushroom-empty-card",
+        "custom:swipe-card", "custom:weather-card",
     )
 
     /**
@@ -65,6 +68,7 @@ object VitroSupport {
             type.startsWith("custom:mushroom-") -> setOf("mushroom.js")
             type == "custom:mini-graph-card" -> setOf("mini-graph-card-bundle.js", "mini-graph-card.js")
             type == "custom:mini-media-player" -> setOf("mini-media-player-bundle.js", "mini-media-player.js")
+            type == "custom:weather-card" -> setOf("weather-card.js")
             else -> setOf(type.removePrefix("custom:") + ".js")
         }
     }
@@ -97,6 +101,119 @@ object VitroSupport {
 
     /** `custom:layout-card` `layout_type` values (with or without `custom:`). */
     val LAYOUT_CARD_TYPES: Set<String> = setOf("masonry-layout", "horizontal-layout", "vertical-layout", "grid-layout")
+
+    // ---------------------------------------------------------------------------------------------------------
+    // custom:button-card (v7.0.1). Its JavaScript (`[[[ ]]]`) always goes to an island; this is the rest.
+    // ---------------------------------------------------------------------------------------------------------
+
+    /** button-card `layout` values: each is one of its CSS grids (`#container.<layout>`). */
+    val BUTTON_CARD_LAYOUTS: Set<String> = setOf(
+        "vertical", "icon_name_state", "name_state", "icon_name", "icon_state", "icon_name_state2nd",
+        "icon_state_name2nd", "icon_label",
+    )
+
+    /** Actions a native button-card runs (`tap_action`, `hold_action`, `double_tap_action`). */
+    val BUTTON_CARD_ACTIONS: Set<String> = setOf(
+        "none", "toggle", "more-info", "navigate", "url", "call-service", "perform-action",
+    )
+
+    /** button-card options Vitro doesn't draw: setting one sends the card to an island. */
+    val BUTTON_CARD_UNSUPPORTED_OPTIONS: Map<String, String> = mapOf(
+        "show_live_stream" to "a camera's live stream",
+        "spinner" to "the spinner overlay",
+        "protect" to "PIN- or password-protected actions",
+        "extra_styles" to "its own stylesheet (`extra_styles`)",
+        "press_action" to "momentary press actions",
+        "release_action" to "momentary release actions",
+        "icon_tap_action" to "actions on the icon",
+        "icon_hold_action" to "actions on the icon",
+        "icon_double_tap_action" to "actions on the icon",
+        "icon_press_action" to "actions on the icon",
+        "icon_release_action" to "actions on the icon",
+    )
+
+    /** Fields of an action that a native button-card doesn't run: one of them sends the card to an island. */
+    val BUTTON_CARD_UNSUPPORTED_ACTION_FIELDS: Map<String, String> = mapOf(
+        "repeat" to "a hold that repeats", "repeat_limit" to "a hold that repeats", "sound" to "a sound",
+        "protect" to "a PIN or password",
+    )
+
+    /** button-card options that don't change the look without JavaScript, and why Vitro ignores them. */
+    val BUTTON_CARD_IGNORED_OPTIONS: Map<String, String> = mapOf(
+        "tooltip" to "a hover tooltip; a touch panel has no pointer",
+        "update_timer" to "re-renders on a timer, which only JavaScript templates need",
+        "group_expand" to "follows a group's members, which only JavaScript templates read",
+        "triggers_update" to "version 7 no longer reads it",
+        "variables" to "only JavaScript templates read them",
+        "disable_kbd" to "keyboard actions; a wall panel has no keyboard",
+        "card_size" to "masonry's size estimate",
+    )
+
+    /** button-card `styles:` parts. `custom_fields` holds one list per field. */
+    val BUTTON_CARD_STYLE_PARTS: Set<String> = setOf(
+        "card", "icon", "name", "state", "label", "grid", "img_cell", "entity_picture", "lock", "custom_fields",
+        "tooltip", "spinner",
+    )
+
+    /** Text styles every text part (name, state, label, a custom field) draws. */
+    private val BUTTON_CARD_TEXT: Set<String> = setOf(
+        "color", "opacity", "font-size", "font-weight", "font-family", "font-style", "text-transform",
+        "letter-spacing", "line-height", "text-align", "white-space", "text-overflow", "overflow",
+        "justify-self", "align-self", "display",
+        "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
+        "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
+        "background-color", "border-radius", "width", "max-width", "min-width",
+    )
+
+    /** The properties Vitro draws in each button-card style part (values are checked in `ButtonCardCompat`). */
+    val BUTTON_CARD_STYLE_PROPERTIES: Map<String, Set<String>> = mapOf(
+        "card" to setOf(
+            "background", "background-color", "background-image", "border", "border-width", "border-style",
+            "border-color", "border-radius", "box-shadow", "opacity", "color", "font-size", "font-weight",
+            "font-family", "font-style", "text-transform", "letter-spacing", "line-height", "height", "min-height",
+            "padding", "padding-top", "padding-right", "padding-bottom", "padding-left", "transform", "animation",
+            "display", "overflow", "text-align", "box-sizing",
+        ),
+        "name" to BUTTON_CARD_TEXT,
+        "state" to BUTTON_CARD_TEXT,
+        "label" to BUTTON_CARD_TEXT,
+        "custom_field" to BUTTON_CARD_TEXT + setOf("position", "top", "right", "bottom", "left", "grid-area"),
+        "icon" to setOf("color", "width", "height", "opacity", "animation", "display", "max-width", "max-height"),
+        "img_cell" to setOf(
+            "width", "height", "justify-self", "align-self", "justify-content", "align-items", "background-color",
+            "border-radius", "opacity", "overflow", "display", "max-width", "max-height", "color",
+            "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
+            "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
+            // The cell is a flex box: `text-align` doesn't move the icon in it.
+            "text-align",
+        ),
+        "entity_picture" to setOf("width", "border-radius", "opacity", "color",
+            "padding", "padding-top", "padding-right", "padding-bottom", "padding-left"),
+        "grid" to setOf(
+            "grid-template-areas", "grid-template-columns", "grid-template-rows", "gap", "grid-gap", "column-gap",
+            "row-gap", "grid-column-gap", "grid-row-gap", "justify-items", "align-items", "display", "text-align",
+        ),
+        "lock" to setOf("color", "opacity", "justify-content", "align-items",
+            "padding", "padding-top", "padding-right", "padding-bottom", "padding-left"),
+    )
+
+    /** button-card's own `@keyframes`: the animations Vitro runs on the icon and the card. */
+    val BUTTON_CARD_ANIMATIONS: Set<String> = setOf("blink", "rotating")
+
+    // ---------------------------------------------------------------------------------------------------------
+    // custom:swipe-card (v5.0.0): Swiper's parameters.
+    // ---------------------------------------------------------------------------------------------------------
+
+    /** Swiper `parameters` Vitro's pager reads. */
+    val SWIPE_CARD_PARAMETERS: Set<String> = setOf(
+        "pagination", "loop", "slidesPerView", "spaceBetween", "centeredSlides", "initialSlide", "autoplay",
+        "speed", "grabCursor", "keyboard", "mousewheel", "simulateTouch", "observer", "observeParents", "roundLengths",
+    )
+
+    /** Swiper parameters that only matter with a pointer or are hints, never the look. */
+    val SWIPE_CARD_BENIGN_PARAMETERS: Set<String> = setOf(
+        "speed", "grabCursor", "keyboard", "mousewheel", "simulateTouch", "observer", "observeParents", "roundLengths",
+    )
 
     /** Card options Vitro doesn't draw, by card type: having one sends the card to an island. */
     val UNSUPPORTED_OPTIONS: Map<String, Map<String, String>> = mapOf(

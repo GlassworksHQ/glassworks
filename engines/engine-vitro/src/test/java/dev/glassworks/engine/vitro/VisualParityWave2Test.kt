@@ -207,7 +207,7 @@ class VisualParityWave2Test {
         for (t in listOf("custom:modern-circular-gauge", "custom:bar-card")) {
             assertEquals("$t is Tier 2", CardTier.NATIVE_HACS, CardRouter.tier(card("""{"type": "$t"}""")))
         }
-        assertEquals(26, CardRouter.NATIVE_HACS_TYPES.size)
+        assertEquals(30, CardRouter.NATIVE_HACS_TYPES.size)
     }
 
     // ---- Mirror polish: clock zone and alignment, icons, markdown images, chip card-mod, to-do limits ----

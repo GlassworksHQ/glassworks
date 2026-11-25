@@ -246,8 +246,12 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                 }
                 // Measured in HA: the light card spans the section's width.
                 "light" -> HaGridSize(12, null)
-                // hui-button-card's getGridOptions: 6 columns, 2 rows.
-                "button" -> HaGridSize(6, 2)
+                // hui-button-card's getGridOptions: 6 columns, 2 rows (`entity-button` is the same card).
+                "button", "entity-button" -> HaGridSize(6, 2)
+                // button-card answers only with `section_mode`: 6 columns, 2 rows; otherwise the full width.
+                "custom:button-card" -> if (raw.optBoolean("section_mode", false)) HaGridSize(6, 2) else HaGridSize(12, null)
+                // Mushroom's empty card: 6 columns, 1 row.
+                "custom:mushroom-empty-card" -> HaGridSize(6, 1)
                 // Measured in HA: the picture cards span the section's full width at their image's height.
                 "picture", "picture-entity", "picture-glance" -> HaGridSize(12, null)
                 "heading" -> HaGridSize(null, null)
