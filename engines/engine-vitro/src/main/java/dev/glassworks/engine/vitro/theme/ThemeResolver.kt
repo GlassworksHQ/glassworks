@@ -730,6 +730,8 @@ object ThemeResolver {
             for (name in names) {
                 if (name !in lowerCss) continue
                 for (m in themeDecl(name).findAll(css)) {
+                    // An invalid declaration is dropped before the cascade (`border: nonsense` hides no width).
+                    if (!borderDeclValid(name, m.groupValues[1].replace(IMPORTANT, "").trim())) continue
                     val key = IMPORTANT.containsMatchIn(m.groupValues[1]) to m.range.first
                     val b = best
                     if (b == null || key.first && !b.third.first || key.first == b.third.first && key.second > b.third.second) {
@@ -758,6 +760,43 @@ object ThemeResolver {
 
         return CardModStyle(bg, radius, bw, bc, opacity, blur, complex)
     }
+
+    /**
+     * False for a border declaration CSS would drop as invalid before the cascade. Other properties, and values with
+     * `var()` (whose validity is known only after substitution), pass. A name Vitro doesn't know as a color
+     * (`rebeccapurple`) passes beside a width or a style, so a valid border isn't lost to the short color table, but
+     * alone it's no border at all.
+     */
+    private fun borderDeclValid(name: String, value: String): Boolean {
+        if (value.isEmpty()) return false
+        val lower = value.lowercase(Locale.ROOT)
+        if ("var(" in lower || lower in CSS_WIDE_KEYWORDS) return true
+        fun width(t: String) = t in BORDER_WIDTH_KEYWORDS || BORDER_LENGTH.matches(t) || t.startsWith("calc(")
+        fun color(t: String) = parseColor(t) != null || t == "currentcolor" || t == "transparent" ||
+            COLOR_FUNCTION.containsMatchIn(t)
+        val tokens = splitTopLevelSpaces(lower)
+        return when (name) {
+            "border-width" -> tokens.size in 1..4 && tokens.all(::width)
+            "border-color" -> tokens.size in 1..4 && tokens.all { color(it) || IDENT.matches(it) }
+            "border" -> {
+                if (tokens.size > 3) return false
+                val widths = tokens.count(::width)
+                val styles = tokens.count { it in BORDER_STYLES }
+                val colors = tokens.count(::color)
+                val unknown = tokens.size - widths - styles - colors
+                widths <= 1 && styles <= 1 && colors + unknown <= 1 &&
+                    (unknown == 0 || widths + styles > 0 && tokens.none { !width(it) && it !in BORDER_STYLES && !color(it) && !IDENT.matches(it) })
+            }
+            else -> true
+        }
+    }
+
+    private val CSS_WIDE_KEYWORDS = setOf("inherit", "initial", "unset", "revert", "revert-layer")
+    private val BORDER_WIDTH_KEYWORDS = setOf("thin", "medium", "thick")
+    private val BORDER_STYLES = setOf("none", "hidden", "dotted", "dashed", "solid", "double", "groove", "ridge", "inset", "outset")
+    private val BORDER_LENGTH = Regex("""0|\d*\.?\d+(?:px|r?em|pt|pc|cm|mm|in|q|vh|vw|vmin|vmax|ch|ex)""")
+    private val COLOR_FUNCTION = Regex("""^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix)\(""")
+    private val IDENT = Regex("""-?[a-z_][a-z0-9_-]*""")
 
     /** One declaration of [name] in a theme's card-mod CSS, its value with any `!important` kept. */
     private fun themeDecl(name: String): Regex = themeDecls.getOrPut(name) {
@@ -834,6 +873,8 @@ object ThemeResolver {
             for (name in names) {
                 if (name !in lowerDecls) continue
                 for (m in declProp(name).findAll(decls)) {
+                    // An invalid declaration is dropped before the cascade (`border: nonsense` hides no width).
+                    if (!borderDeclValid(name, m.groupValues[1].replace(IMPORTANT, "").trim())) continue
                     val key = IMPORTANT.containsMatchIn(m.groupValues[1]) to m.range.first
                     val b = best
                     if (b == null || key.first && !b.third.first || key.first == b.third.first && key.second > b.third.second) {

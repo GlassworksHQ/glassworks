@@ -218,6 +218,13 @@ views:
     expect(inside.warnings).toHaveLength(1);
     const hover = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            .: |\n              ha-card:hover { opacity: .5; }\n");
     expect(hover.warnings).toHaveLength(0);
+    // A root compound is the card itself; a descendant of one isn't.
+    const style = (css: string) => auditDashboard(`views:\n  - cards:\n      - type: tile\n        card_mod:\n          style: |\n            ${css}\n`);
+    expect(style("ha-card.compact { opacity: .5; }").warnings).toHaveLength(0);
+    expect(style("ha-card[data-x] { opacity: .5; }").warnings).toHaveLength(0);
+    expect(style("ha-card.compact .card-header { color: red; }").warnings).toHaveLength(1);
+    // Jinja inside a declaration isn't read as a selector.
+    expect(style("ha-card { opacity: {{ 0.5 }}; }").warnings).toHaveLength(0);
   });
 
   it("refuses a key: value pair inside a flow list instead of reading it as text", () => {

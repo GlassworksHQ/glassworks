@@ -191,6 +191,7 @@ class VitroEngine(
         fun dispose() {
             if (disposed) return
             disposed = true
+            readyOnBuild = null
             activity.application.unregisterActivityLifecycleCallbacks(lifecycle)
             clientGeneration++
             client?.close()
@@ -237,8 +238,12 @@ class VitroEngine(
             container.addView(vitroView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             vitroView.onMetrics = { m ->
                 lastMetrics = m
-                // The view waited for its states: it's on screen now.
-                readyOnBuild?.let { why -> readyOnBuild = null; signalReady(why) }
+                // The view waited for its states: it's on screen now. Only while the native dashboard still owns the
+                // page: leaving it for the fallback or disposing drops the pending readiness.
+                readyOnBuild?.let { why ->
+                    readyOnBuild = null
+                    if (nativeActive && !disposed) signalReady(why)
+                }
             }
             // A view's first build waits (up to a second) for its states, as HA's frontend does: no wrong layout first,
             // and no second build once they land.
@@ -523,6 +528,7 @@ class VitroEngine(
          */
         private fun leaveNativeDashboard() {
             nativeActive = false
+            readyOnBuild = null
             currentDashboardPath = NO_DASHBOARD
             client?.releaseDashboard()
         }

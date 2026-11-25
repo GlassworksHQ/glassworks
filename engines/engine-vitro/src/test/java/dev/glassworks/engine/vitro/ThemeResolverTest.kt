@@ -387,6 +387,19 @@ class ThemeResolverTest {
     }
 
     @Test
+    fun anInvalidBorderDeclarationIsDroppedBeforeTheCascade() {
+        val css = "ha-card { border-width: 8px; border: nonsense; }"
+        assertEquals(8f, ThemeResolver.parseCardMod(mapOf("card-mod-card" to css)).borderWidthDp!!, 0f)
+        assertEquals(8f, ThemeResolver.parseCardMod(css).borderWidthDp!!, 0f)
+        // A color name Vitro doesn't know, beside a width and a style, is still a valid shorthand: it wins.
+        val unknownColor = "ha-card { border-width: 8px; border: 2px solid rebeccapurple; }"
+        assertEquals(2f, ThemeResolver.parseCardMod(mapOf("card-mod-card" to unknownColor)).borderWidthDp!!, 0f)
+        assertEquals(2f, ThemeResolver.parseCardMod(unknownColor).borderWidthDp!!, 0f)
+        // An invalid width longhand doesn't beat the shorthand before it.
+        assertEquals(3f, ThemeResolver.parseCardMod("ha-card { border: 3px solid #123456; border-width: wide; }").borderWidthDp!!, 0f)
+    }
+
+    @Test
     fun aCardVariableThatNeedsAMissingOneTakesTheFallback() {
         // `--fill` needs `--missing`, defined nowhere: it's invalid, so `var(--fill, …)` takes its fallback.
         val s = ThemeResolver.parseCardMod("ha-card { --fill: var(--missing); background-color: var(--fill, #123456); }")

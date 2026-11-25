@@ -143,14 +143,18 @@ LEGACY_PSEUDO = re.compile(r":(before|after|first-line|first-letter)\b", re.I)
 
 
 # A selector for the card itself (ha-card, :host, :host > ha-card), with interaction states at most.
-OWN_CARD_SELECTOR = re.compile(r"^(?::host(?:\s*>?\s*ha-card)?|ha-card)(?::[a-z-]+(?:\([^)]*\))?)*$", re.I)
+OWN_CARD_SELECTOR = re.compile(
+    r"^(?::host(?:\s*>?\s*ha-card)?|ha-card)(?:\.[\w-]+|#[\w-]+|\[[^\]]*\]|:[a-z-]+(?:\([^)]*\))?)*$", re.I
+)
+# Jinja is masked before reading selectors, as the renderer replaces it first.
+JINJA = re.compile(r"\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|\{#[\s\S]*?#\}")
 
 
 def reaches_inside(card_type: str, css: str) -> bool:
     """A rule in the card's own sheet for something inside it (ha-card .card-header): not applied natively."""
     if card_type in ("markdown", "clock"):
         return False
-    text = re.sub(r"/\*[\s\S]*?\*/", " ", css)
+    text = JINJA.sub(" ", re.sub(r"/\*[\s\S]*?\*/", " ", css))
     for m in re.finditer(r"([^{}]+)\{", text):
         for sel in m.group(1).split(","):
             t = sel.strip()

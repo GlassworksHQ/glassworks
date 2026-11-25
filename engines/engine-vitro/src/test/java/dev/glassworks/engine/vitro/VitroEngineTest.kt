@@ -327,6 +327,24 @@ class VitroEngineTest {
     // ---- On: pages that are not dashboards ----
 
     @Test
+    fun aViewStillWaitingForItsStatesSignalsNothingOnceTheFallbackHasThePage() {
+        // No states ever come: the first build waits its whole second.
+        server.initialEntities = JSONObject()
+        val page = openPage(vitro())
+        page.load("$base/wall-test/living")
+        awaitMain("dashboard shown") { vitroView(page).dashboard != null }
+        assertTrue("not ready while the view waits", host.messages("ready").isEmpty())
+        // The fallback takes the page during the wait; the wait's build then happens behind it and says nothing.
+        page.load("$base/auth/authorize?client_id=abc&redirect_uri=def")
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_500))
+        assertTrue("no ready behind the fallback", host.messages("ready").isEmpty())
+        assertTrue(host.pageStops.isEmpty())
+        // Back to the dashboard: its view is built, so it's ready at once.
+        page.load("$base/wall-test/living")
+        assertEquals("view", host.messages("ready").single().getString("why"))
+    }
+
+    @Test
     fun onlyANonDashboardUrlOpensTheFallbackAndItIsReusedAfterwards() {
         val page = readyPage()
         assertTrue("a dashboard alone never opens the fallback", fallback.opens.isEmpty())

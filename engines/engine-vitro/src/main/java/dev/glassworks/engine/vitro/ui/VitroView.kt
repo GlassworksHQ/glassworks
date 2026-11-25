@@ -368,7 +368,7 @@ class VitroView(
      * rebuilt with the new server's resources before the new dashboard arrives.
      */
     fun resetForServer() {
-        holding?.second?.invoke()
+        holding?.cancel?.invoke()
         holding = null
         waited.clear()
         stateRebuilds.values.forEach { it() }
@@ -416,7 +416,7 @@ class VitroView(
     }
 
     fun setDashboard(config: DashboardConfig, initialViewPath: String?) {
-        holding?.second?.invoke()
+        holding?.cancel?.invoke()
         holding = null
         waited.clear()
         stateRebuilds.values.forEach { it() }
@@ -544,8 +544,11 @@ class VitroView(
      */
     var holdFirstBuildForStatesMs: Long = 0
 
-    /** The view whose first build waits for its states, and what ends the wait (its listener and timer). */
-    private var holding: Pair<Int, () -> Unit>? = null
+    /** A view's first build waiting for its states, and what ends the wait (its listener and timer). */
+    private class Wait(val index: Int, val cancel: () -> Unit)
+
+    /** The wait in progress. Each wait is its own object: a late callback of an older wait never ends a newer one. */
+    private var holding: Wait? = null
 
     /**
      * The main thread's handler: a view's own post() waits until it's attached to a window, which a page built
@@ -565,19 +568,19 @@ class VitroView(
      */
     private fun holdForStates(index: Int, viewCfg: ViewConfig): Boolean {
         if (holdFirstBuildForStatesMs <= 0 || index in waited) return false
-        holding?.let { (i, _) -> if (i == index) return true }
-        holding?.second?.invoke()
+        holding?.let { if (it.index == index) return true }
+        holding?.cancel?.invoke()
         holding = null
         val refs = CardRouter.referencedEntities(viewCfg)
         if (refs.isEmpty() || refs.any { store[it] != null }) return false
         val config = dashboard
         var unsub: (() -> Unit)? = null
         lateinit var timeout: Runnable
+        lateinit var mine: Wait
         fun release() {
-            val h = holding ?: return
-            if (h.first != index) return
+            if (holding !== mine) return
             holding = null
-            h.second()
+            mine.cancel()
             waited += index
             if (dashboard === config && currentViewIndex == index && viewCache[index] == null) {
                 renderView(index, forceRebuild = false, pushHistory = false)
@@ -585,7 +588,8 @@ class VitroView(
         }
         timeout = Runnable { release() }
         unsub = store.subscribeAny { changed -> if (changed.any { it in refs }) mainHandler.post { release() } }
-        holding = index to { unsub?.invoke(); mainHandler.removeCallbacks(timeout) }
+        mine = Wait(index) { unsub?.invoke(); mainHandler.removeCallbacks(timeout) }
+        holding = mine
         mainHandler.postDelayed(timeout, holdFirstBuildForStatesMs)
         // States that landed between the check above and the listener (the store is written on another thread).
         if (refs.any { store[it] != null }) mainHandler.post { release() }
@@ -649,7 +653,12 @@ class VitroView(
 
         val cached = if (!forceRebuild) viewCache[index] else null
         // A first build waits for the view's states, as HA's frontend renders a view's cards once hass has them.
-        if (cached == null && holdForStates(index, viewCfg)) return
+        if (cached == null && holdForStates(index, viewCfg)) {
+            // The previous view's cards don't stay on screen (and tappable) under this view's tab while it waits.
+            for (i in 0 until contentHost.childCount) contentHost.getChildAt(i).visibility = GONE
+            for (i in 0 until overlayLayer.childCount) overlayLayer.getChildAt(i).visibility = GONE
+            return
+        }
         val viewRoot = if (cached != null) {
             cached
         } else {

@@ -755,9 +755,62 @@ class CardModAndOverlayTest {
         assertEquals(1, all(vv).count { it is dev.glassworks.engine.vitro.cards.MushroomLightCardView && it.isShown })
     }
 
+    @Test
+    fun aLateStateOfAnOlderWaitDoesntEndANewerOne() {
+        val store = EntityStore()
+        val vv = vitroView(store, MUSHROOM_LIGHTS, holdMs = 1_000)
+        activity.setContentView(vv)
+        fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+        ShadowLooper.idleMainLooper()
+        // A state of the first dashboard lands: its wait's end is queued, not run yet.
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("light.switch_only", "on", mapOf("supported_color_modes" to listOf("onoff"))))
+        // Another dashboard comes first, and its view (the same index) waits in turn.
+        vv.setDashboard(LovelaceParser.parseDashboard(JSONObject(OTHER_LIGHT)), null)
+        ShadowLooper.idleMainLooper()
+        assertEquals("the old wait's end didn't build the new view", 0, all(vv).count { it is dev.glassworks.engine.vitro.cards.MushroomLightCardView })
+        // The new view's own state still ends its wait.
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("light.other", "on", mapOf("supported_color_modes" to listOf("brightness"))))
+        ShadowLooper.idleMainLooper()
+        assertEquals(1, all(vv).count { it is dev.glassworks.engine.vitro.cards.MushroomLightCardView && it.isShown })
+    }
+
+    @Test
+    fun theViewShownBeforeIsHiddenWhileTheNextOneWaits() {
+        val store = EntityStore()
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("light.switch_only", "on", mapOf("supported_color_modes" to listOf("onoff"))))
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("light.dimmer", "on", mapOf("supported_color_modes" to listOf("brightness"))))
+        val vv = vitroView(store, TWO_VIEWS, holdMs = 1_000)
+        activity.setContentView(vv)
+        fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+        fun shown() = all(vv).filterIsInstance<dev.glassworks.engine.vitro.cards.MushroomLightCardView>().filter { it.isShown }
+        ShadowLooper.idleMainLooper()
+        // (The switch-only light is built as another card: one light card with brightness.)
+        assertEquals("the first view has its states: built at once", 1, shown().size)
+        val first = shown().single()
+        // The second view's entity has no state yet: it waits, and the first view's cards aren't left tappable under it.
+        vv.navigateToView("other")
+        ShadowLooper.idleMainLooper()
+        assertEquals(0, shown().size)
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("light.other", "on", mapOf("supported_color_modes" to listOf("brightness"))))
+        ShadowLooper.idleMainLooper()
+        assertTrue("the second view's card", shown().single() !== first)
+        // Back to the first view: cached, shown at once.
+        vv.navigateToView("home")
+        ShadowLooper.idleMainLooper()
+        assertTrue("the first view's own card", shown().single() === first)
+    }
+
     private companion object {
         const val MUSHROOM_LIGHTS = """{"views": [{"title": "Home", "type": "sections", "sections": [{"type": "grid", "cards": [
             {"type": "custom:mushroom-light-card", "entity": "light.switch_only", "show_brightness_control": true},
             {"type": "custom:mushroom-light-card", "entity": "light.dimmer", "show_brightness_control": true}]}]}]}"""
+        const val OTHER_LIGHT = """{"views": [{"title": "Other", "type": "sections", "sections": [{"type": "grid", "cards": [
+            {"type": "custom:mushroom-light-card", "entity": "light.other", "show_brightness_control": true}]}]}]}"""
+        const val TWO_VIEWS = """{"views": [
+            {"title": "Home", "path": "home", "type": "sections", "sections": [{"type": "grid", "cards": [
+                {"type": "custom:mushroom-light-card", "entity": "light.switch_only", "show_brightness_control": true},
+                {"type": "custom:mushroom-light-card", "entity": "light.dimmer", "show_brightness_control": true}]}]},
+            {"title": "Other", "path": "other", "type": "sections", "sections": [{"type": "grid", "cards": [
+                {"type": "custom:mushroom-light-card", "entity": "light.other", "show_brightness_control": true}]}]}]}"""
     }
 }

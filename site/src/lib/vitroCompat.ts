@@ -496,8 +496,14 @@ function supportedStyleKey(type: string, key: string): boolean {
 /** Legacy single-colon pseudo-elements (`ha-card:before`): generated content, which isn't drawn natively either. */
 const LEGACY_PSEUDO = /:(before|after|first-line|first-letter)\b/i;
 
-/** A selector for the card itself (`ha-card`, `:host`, `:host > ha-card`), with interaction states at most. */
-const OWN_CARD_SELECTOR = /^(?::host(?:\s*>?\s*ha-card)?|ha-card)(?::[a-z-]+(?:\([^)]*\))?)*$/i;
+/**
+ * A selector for the card itself (`ha-card`, `:host`, `:host > ha-card`), compounded with classes, ids, attributes
+ * and pseudo-classes at most (`ha-card.compact`), as the renderer's host check reads it.
+ */
+const OWN_CARD_SELECTOR = /^(?::host(?:\s*>?\s*ha-card)?|ha-card)(?:\.[\w-]+|#[\w-]+|\[[^\]]*\]|:[a-z-]+(?:\([^)]*\))?)*$/i;
+
+/** Jinja (`{{ … }}`, `{% … %}`, `{# … #}`): masked before reading selectors, as the renderer replaces it first. */
+const JINJA = /\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|\{#[\s\S]*?#\}/g;
 
 /**
  * True when a card's own sheet has a rule for something inside the card (`ha-card .card-header`): the renderer
@@ -506,7 +512,7 @@ const OWN_CARD_SELECTOR = /^(?::host(?:\s*>?\s*ha-card)?|ha-card)(?::[a-z-]+(?:\
  */
 function reachesInside(type: string, css: string): boolean {
   if (type === "markdown" || type === "clock") return false;
-  const text = css.replace(/\/\*[\s\S]*?\*\//g, " ");
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, " ").replace(JINJA, " ");
   for (const m of text.matchAll(/([^{}]+)\{/g)) {
     for (const sel of m[1].split(",")) {
       const t = sel.trim();
