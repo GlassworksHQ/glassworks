@@ -23,7 +23,8 @@ object VitroFailures {
     /** Distinct failures logged with their stack per process; past it only the count grows ([contained]). */
     const val MAX_LOGGED = 16
 
-    private val logged = ConcurrentHashMap.newKeySet<String>()
+    // A map, not ConcurrentHashMap.newKeySet (API 24): this module runs on Android 6.
+    private val logged = ConcurrentHashMap<String, Boolean>()
     private val count = AtomicLong()
 
     /** Every failure contained since the process started (each one, logged or not). */
@@ -43,7 +44,7 @@ object VitroFailures {
         runCatching { listener?.invoke(where, cardType, error) }
         val site = error.stackTrace.firstOrNull { it.className.startsWith("dev.glassworks") } ?: error.stackTrace.firstOrNull()
         val key = "$where|$cardType|${error.javaClass.name}|$site"
-        if (logged.size >= MAX_LOGGED || !logged.add(key)) return
+        if (logged.size >= MAX_LOGGED || logged.putIfAbsent(key, true) != null) return
         runCatching {
             val what = cardType?.let { "The $it card" } ?: "A card update"
             Log.w(TAG, "$what failed in $where and was contained (${error.javaClass.simpleName} at $site); " +
