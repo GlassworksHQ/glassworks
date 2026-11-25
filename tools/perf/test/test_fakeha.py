@@ -401,6 +401,7 @@ class FakeHA(unittest.TestCase):
         self.http("GET", base + "/init.mp4")
         hls = {s["token"]: s for s in self.cameras()["hls"]}[token]
         self.assertEqual((hls["camera"], hls["playlists"], hls["segments"]), ("camera.clarity_hls_1", 2, 0))
+        self.assertGreaterEqual(self.cameras()["hls_fetched"]["camera.clarity_hls_1"], 2)       # a running total
         self.assertLess(hls["idle_s"], 5)
 
     def test_lovelace_updated_reaches_its_subscribers_only(self):

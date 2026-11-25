@@ -121,8 +121,9 @@ class Hub:
         # What the cameras serve right now (/clarity/cameras): open MJPEG streams and each HLS
         # stream's fetches, so a test sees a stream pause (no more frames or fetches) or close.
         self.cam_lock, self.mjpeg_live, self.mjpeg_n, self.hls_fetches = threading.Lock(), {}, 0, {}
-        # Every MJPEG frame sent per camera, closed streams' too: a stream that ends between two reads still counts.
-        self.mjpeg_sent = {}
+        # Every MJPEG frame sent and HLS fetch served per camera, ended or expired streams' too: running totals, so a
+        # stream that ends (or whose record expires) between two reads still counts.
+        self.mjpeg_sent, self.hls_fetched = {}, {}
 
     def mjpeg_open(self, cam):
         with self.cam_lock:
@@ -155,6 +156,7 @@ class Hub:
             f = self.hls_fetches.setdefault(token, {"camera": cam, "playlists": 0, "segments": 0, "last": 0.0})
             f["segments" if name.startswith("segment/") else "playlists"] += 1
             f["last"] = time.monotonic()
+            self.hls_fetched[cam] = self.hls_fetched.get(cam, 0) + 1
 
     def cameras(self):
         """What each transport serves now. `idle_s`: since the stream's last frame (MJPEG) or fetch (HLS)."""
@@ -164,11 +166,12 @@ class Hub:
                      for n, s in self.mjpeg_live.items()]
             hls = [{"token": t, "camera": f["camera"], "playlists": f["playlists"], "segments": f["segments"],
                     "idle_s": round(now - f["last"], 2)} for t, f in self.hls_fetches.items()]
-            sent = dict(self.mjpeg_sent)
+            sent, fetched = dict(self.mjpeg_sent), dict(self.hls_fetched)
         w = self.webrtc
         rtc = [{"session": sid, "camera": s.get("entity_id"), "sent": s.get("sent", 0)}
                for sid, s in list(w.sessions.items())] if w else []
-        return {"mjpeg": mjpeg, "mjpeg_sent": sent, "hls": hls, "webrtc": rtc, "webrtc_available": w is not None}
+        return {"mjpeg": mjpeg, "mjpeg_sent": sent, "hls": hls, "hls_fetched": fetched, "webrtc": rtc,
+                "webrtc_available": w is not None}
 
     def fire(self, event_type, data):
         """An HA bus event to every frontend subscribed to its type (subscribe_events)."""

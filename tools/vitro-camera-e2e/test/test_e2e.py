@@ -153,6 +153,18 @@ class Screen(unittest.TestCase):
         with self.assertRaisesRegex(e2e.Fail, "colours"):
             e2e.assert_rendered(e2e.check_motion(Dev(), captures=4, gap=0), "test")
 
+    def test_moving_grey_noise_isnt_the_test_pattern(self):
+        grey = lambda k: lambda x, y: ((x * 31 + y * 17 + k * 47) % 256,) * 3  # noqa: E731
+        frames = iter([frame(box=(8, 4, 56, 28), box_fill=grey(k)) for k in range(4)])
+
+        class Dev:
+            def frame(self):
+                return next(frames)
+        m = e2e.check_motion(Dev(), captures=4, gap=0)
+        self.assertGreaterEqual(m["colours"], 8)
+        with self.assertRaisesRegex(e2e.Fail, "hues"):
+            e2e.assert_rendered(m, "test")
+
     def test_a_small_moving_spot_isnt_a_video(self):
         frames = iter([frame(box=(4, 4, 10, 10), box_fill=pattern(k)) for k in range(4)])
 
@@ -228,11 +240,20 @@ class Pause(unittest.TestCase):
 
     def test_hls_fetches_while_hidden_fail(self):
         cam = "camera.clarity_hls_1"
-        b = {"mjpeg": [], "hls": [{"token": "t", "camera": cam, "segments": 5, "playlists": 6}], "webrtc": []}
-        a = {"mjpeg": [], "hls": [{"token": "t", "camera": cam, "segments": 5, "playlists": 6}], "webrtc": []}
+        rec = [{"token": "t", "camera": cam, "segments": 5, "playlists": 6, "idle_s": 0.5}]
+        b = {"mjpeg": [], "hls": rec, "hls_fetched": {cam: 11}, "webrtc": []}
+        a = {"mjpeg": [], "hls": rec, "hls_fetched": {cam: 11}, "webrtc": []}
         self.assertEqual(e2e.check_paused("hls", cam, {"before": b, "after": a}), {"hls_fetches_while_hidden": 0})
-        a["hls"][0]["segments"] = 7
+        a = dict(a, hls_fetched={cam: 13})
         with self.assertRaises(e2e.Fail):
+            e2e.check_paused("hls", cam, {"before": b, "after": a})
+
+    def test_an_expired_hls_record_cant_hide_a_fetch(self):
+        cam = "camera.clarity_hls_1"
+        b = {"mjpeg": [], "hls": [{"token": "t", "camera": cam, "segments": 5, "playlists": 6, "idle_s": 299.0}],
+             "hls_fetched": {cam: 11}, "webrtc": []}
+        a = {"mjpeg": [], "hls": [], "hls_fetched": {cam: 12}, "webrtc": []}     # the record went, the fetch counts
+        with self.assertRaisesRegex(e2e.Fail, "1 HLS fetches"):
             e2e.check_paused("hls", cam, {"before": b, "after": a})
 
     def test_another_clients_stream_is_seen(self):

@@ -208,6 +208,25 @@ def colours(frame, box, step=4):
     return len(seen)
 
 
+def hues(frame, box, step=4, chroma=96):
+    """Which of six hue sectors (red, yellow, green, cyan, blue, magenta) a box's saturated pixels cover. The test
+    pattern's colour bars and gradient cover all six; grey, black or noise around grey covers none."""
+    w, _, px = frame
+    x0, y0, x1, y1 = box
+    seen = set()
+    for y in range(y0, y1, step):
+        for x in range(x0, x1, step):
+            i = (y * w + x) * 4
+            r, g, b = px[i], px[i + 1], px[i + 2]
+            hi, lo = max(r, g, b), min(r, g, b)
+            if hi - lo < chroma:
+                continue
+            c = hi - lo
+            h = ((g - b) / c) % 6 if hi == r else (b - r) / c + 2 if hi == g else (r - g) / c + 4
+            seen.add(int(h + 0.5) % 6)
+    return len(seen)
+
+
 def check_motion(dev, captures=4, gap=0.5):
     """Captures spaced `gap` s apart: every pair must differ (a live picture), over the same area (the video)."""
     frames = []
@@ -224,7 +243,7 @@ def check_motion(dev, captures=4, gap=0.5):
         xs, ys = [p[0] for p in pts], [p[1] for p in pts]
         box = (min(xs), min(ys), max(xs) + 1, max(ys) + 1)
     return {"moving_fraction": [round(m, 4) for m in moving], "box": box,
-            "colours": colours(frames[-1], box) if box else 0, "size": [w, h]}
+            "colours": colours(frames[-1], box) if box else 0, "hues": hues(frames[-1], box) if box else 0, "size": [w, h]}
 
 
 def first_motion(dev, t0, timeout, streak=3, gap=0.25):
@@ -251,8 +270,14 @@ def first_motion(dev, t0, timeout, streak=3, gap=0.25):
     return None
 
 
+# Every pair of captures must change at least this share of the screen. The test pattern's moving parts (its
+# gradient bar, counter and circle) change 12 to 14% of a 1280x720 screen with the card in a panel view; sparse
+# flicker or a blinking cursor changes far less.
+MIN_MOVING = 0.01
+
+
 def assert_rendered(m, what):
-    if min(m["moving_fraction"]) < 0.001:
+    if min(m["moving_fraction"]) < MIN_MOVING:
         raise Fail(f"{what}: the picture didn't move between captures {m['moving_fraction']} (a still, or no video)")
     x0, y0, x1, y1 = m["box"]
     w, h = m["size"]
@@ -260,6 +285,8 @@ def assert_rendered(m, what):
         raise Fail(f"{what}: only a small area moved ({m['box']}): not a video picture")
     if m["colours"] < 8:
         raise Fail(f"{what}: the moving area has {m['colours']} colours: blank, not the test pattern")
+    if m["hues"] < 4:
+        raise Fail(f"{what}: the moving area has {m['hues']} of 6 hues: grey or noise, not the test pattern's colours")
 
 
 # ---- one transport
@@ -345,10 +372,12 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
     time.sleep(3.0)
     pause["after"] = fake.cameras()
     probe.poll()
-    drawn = [e for e in probe.events[n_before:] if e["event"] in ("frames", "first_frame") and e.get("id") == sid]
+    # Any of the camera's streams, the paused one or one opened in its place: frame lines name only their stream.
+    cam_ids = {e["id"] for e in probe.events if e["event"] == "open" and e.get("entity") == cam}
+    drawn = [e for e in probe.events[n_before:] if e["event"] in ("frames", "first_frame") and e.get("id") in cam_ids]
     r["pause"] = check_paused(name, cam, pause)
     if drawn:
-        raise Fail(f"{name}: the hidden stream still drew frames: {drawn}")
+        raise Fail(f"{name}: a stream of the hidden camera still drew frames: {drawn}")
     mark = len(probe.events)
     t1 = time.monotonic()
     dev.open(f"{url}/{name}")
@@ -362,6 +391,8 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
         raise Fail(f"{name}: no first frame after the app came back")
     r["resume_first_frame_ms"] = int(again["since_start_ms"]) if again else None
     r["resume_wall_ms"] = round((time.monotonic() - t1) * 1000) if again else None
+    if again and r["resume_first_frame_ms"] > budget_ms:
+        raise Fail(f"{name}: first frame {r['resume_first_frame_ms']} ms after the app came back, over the {budget_ms} ms budget")
     if again:
         sid = again["id"]
     time.sleep(1.0)
@@ -416,8 +447,8 @@ def check_paused(name, cam, pause):
         if sent > 10:
             raise Fail(f"mjpeg: the fake sent {sent} frames in 3 s while the app was hidden")
     elif name == "hls":
-        fetched = sum(s["segments"] + s["playlists"] for s in a["hls"] if s["camera"] == cam) - \
-            sum(s["segments"] + s["playlists"] for s in b["hls"] if s["camera"] == cam)
+        # The fake's running total per camera: a stream's record expiring can't hide a fetch.
+        fetched = a["hls_fetched"].get(cam, 0) - b["hls_fetched"].get(cam, 0)
         out = {"hls_fetches_while_hidden": fetched}
         if fetched > 0:
             raise Fail(f"hls: {fetched} HLS fetches in 3 s while the app was hidden")
