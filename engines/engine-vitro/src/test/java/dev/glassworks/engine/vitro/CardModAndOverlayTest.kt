@@ -669,4 +669,20 @@ class CardModAndOverlayTest {
         templates.push("lounge_lamp", "on")
         assertEquals(listOf("on"), card.rendered)
     }
+
+    @Test
+    fun aTemplatePictureThatChangesDropsTheOldPictureUntilTheNewOneLoads() {
+        val templates = Templates()
+        val tile = dev.glassworks.engine.vitro.cards.TileCardView(context(EntityStore(), templates), card(
+            """{"type": "custom:mushroom-template-card", "icon": "mdi:account", "picture": "{{ states('sensor.who') }}"}""",
+        ))
+        val picture = tile.all().filterIsInstance<android.widget.ImageView>().first()
+        templates.push("sensor.who", "/local/a.png")
+        // Picture A on screen (its load stands in here), then the template moves to B, whose load fails.
+        picture.setImageDrawable(android.graphics.drawable.ColorDrawable(0xFFFF0000.toInt()))
+        templates.push("sensor.who", "/local/b.png")
+        assertNull(picture.drawable)
+        assertEquals(View.GONE, picture.visibility)
+        assertTrue(tile.all().any { it is dev.glassworks.engine.vitro.ui.MdiIconView && it.visibility == View.VISIBLE })
+    }
 }

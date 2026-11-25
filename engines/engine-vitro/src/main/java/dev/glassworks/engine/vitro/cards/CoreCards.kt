@@ -28,6 +28,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.Space
 import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
@@ -422,12 +423,31 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         if (entityId != null) {
             addExtraFeatures(rootCol, featuresArr, featureTypes, entityId, pad)
         }
-        // `features_position: inline`: HA shows the first feature beside the info, 36 px tall and centered.
+        // `features_position: inline`: HA shows the first feature beside the info, 36 px tall and centered, and the
+        // others below it in up to two columns (frontend 20261028's computeCardFeatureLayout).
         if (!vertical && config.raw.optString("features_position") == "inline" && rootCol.childCount > 1) {
-            // HA shows only the first configured feature inline (the others aren't drawn).
             val built = (1 until rootCol.childCount).map { rootCol.getChildAt(it) }
             val first = featureTypes.firstNotNullOfOrNull { t -> built.firstOrNull { it.tag == FEATURE_TAG + t } } ?: built.first()
+            // The rest in config order.
+            val order = { v: View -> featureTypes.indexOfFirst { v.tag == FEATURE_TAG + it }.let { if (it < 0) Int.MAX_VALUE else it } }
+            val rest = built.filter { it !== first }.sortedBy(order)
             while (rootCol.childCount > 1) rootCol.removeViewAt(1)
+            if (rest.size == 1) {
+                rootCol.addView(rest[0])
+            } else {
+                for (pair in rest.chunked(2)) {
+                    val line = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
+                    for (v in pair) {
+                        val lp = v.layoutParams as? LinearLayout.LayoutParams
+                        line.addView(v, LinearLayout.LayoutParams(0, lp?.height ?: WRAP_CONTENT, 1f).apply {
+                            if (lp != null) { topMargin = lp.topMargin; bottomMargin = lp.bottomMargin }
+                        })
+                    }
+                    // A lone last one keeps its column's width.
+                    if (pair.size == 1) line.addView(Space(ctx.context), LinearLayout.LayoutParams(0, 0, 1f))
+                    rootCol.addView(line, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                }
+            }
             if (first.paddingBottom == ctx.px(12f)) first.setPadding(0, 0, 0, 0)
             val slot = FrameLayout(ctx.context).apply {
                 setPadding(0, 0, ctx.px(12f), 0)
@@ -1166,10 +1186,12 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         var iconName = ""
         var iconColor: Int? = null
         var pictureUrl = ""
+        /** The picture of [pictureUrl] has loaded: until then (or when it fails) the icon shows. */
+        var pictureLoaded = false
         var badgeIconName = ""
         var badgeColorValue: Int? = null
         fun refreshAvatar() {
-            val showPicture = pictureUrl.isNotBlank()
+            val showPicture = pictureUrl.isNotBlank() && pictureLoaded
             picture.visibility = if (showPicture) VISIBLE else GONE
             icon.visibility = if (showPicture) GONE else VISIBLE
             avatar.background = if (showPicture) null else avatarBg
@@ -1208,9 +1230,19 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         bindTpl("icon", config.icon ?: "") { v -> iconName = v; refreshAvatar() }
         bindTpl("icon_color", "") { v -> iconColor = MushroomColors.parse(v, ctx.theme); refreshAvatar() }
         bindTpl("picture", "") { v ->
+            if (v == pictureUrl) return@bindTpl
+            // A new picture: the old one goes at once, and the icon shows until this one loads (or if it fails).
             pictureUrl = v
+            pictureLoaded = false
+            picture.setImageDrawable(null)
             refreshAvatar()
-            if (v.isNotBlank()) ctx.loadImage(v, this) { bmp -> if (bmp != null && pictureUrl == v) picture.setImageDrawable(CircleCropDrawable(bmp)) }
+            if (v.isNotBlank()) ctx.loadImage(v, this) { bmp ->
+                if (bmp != null && pictureUrl == v) {
+                    picture.setImageDrawable(CircleCropDrawable(bmp))
+                    pictureLoaded = true
+                    refreshAvatar()
+                }
+            }
         }
         bindTpl("badge_icon", "") { v -> badgeIconName = v; refreshBadge() }
         bindTpl("badge_color", "") { v -> badgeColorValue = MushroomColors.parse(v, ctx.theme); refreshBadge() }

@@ -224,9 +224,11 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                 "tile" -> {
                     val features = raw.optJSONArray("features")?.length() ?: 0
                     val vertical = raw.optBoolean("vertical", false)
-                    // Inline features sit beside the info, so they add no rows (HA shows only the first one).
+                    // Inline, the first feature sits beside the info; the others go below in up to two columns.
                     val inline = features > 0 && !vertical && raw.optString("features_position") == "inline"
-                    HaGridSize(if (inline) 12 else 6, 1 + (if (inline) 0 else features) + if (vertical) 1 else 0)
+                    val below = if (inline) features - 1 else features
+                    val featureRows = if (inline) (below + 1) / 2 else features
+                    HaGridSize(if (inline) 12 else 6, 1 + featureRows + if (vertical) 1 else 0)
                 }
                 // hui-entity-card's (and so hui-sensor-card's) getGridOptions: 6 columns, 2 rows.
                 "entity", "sensor" -> HaGridSize(6, 2)
