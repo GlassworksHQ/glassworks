@@ -504,6 +504,8 @@ class VitroView(
     }
 
     private fun highlightTab(selected: Int, theme: ResolvedTheme) {
+        // The strip itself follows the theme too (a light/dark switch, a cached view's own theme).
+        tabScroll.setBackgroundColor(theme.secondaryBackgroundColor)
         for (t in tabs) {
             val active = t.viewIndex == selected
             val color = if (active) theme.primaryColor else theme.secondaryTextColor
@@ -862,6 +864,8 @@ class VitroView(
             nameView.text = name.orEmpty()
             nameView.visibility = if (name != null && state != null) VISIBLE else GONE
             stateView.text = state ?: name.orEmpty()
+            // Neither line asked for: no text slot at all.
+            texts.visibility = if (name == null && state == null) GONE else VISIBLE
             if (showIcon) icon.setIcon(MdiIcons.resolveIconName(badge.icon, s), badgeIconColor(theme, s))
         }
         render(store[eid])
@@ -1464,7 +1468,8 @@ class VitroView(
             val showName = raw.optBoolean("show_name", badge.name != null)
             val showState = raw.optBoolean("show_state", true)
             val name = if (showName) badge.name ?: s?.friendlyName ?: badge.entity.orEmpty() else null
-            val state = if (showState || !showName) s?.formattedState() ?: "…" else null
+            // `show_state: false` hides the state even when no name shows (an icon-only badge).
+            val state = if (showState) s?.formattedState() ?: "…" else null
             return name to state
         }
 

@@ -775,6 +775,11 @@ class LovelaceModelTest {
             "Outdoor temperature" to null,
             VitroView.badgeLines(card("""{"type": "entity", "entity": "sensor.outdoor", "show_name": true, "show_state": false}"""), temp),
         )
+        // Icon only: neither line.
+        assertEquals(
+            null to null,
+            VitroView.badgeLines(card("""{"type": "entity", "entity": "sensor.outdoor", "show_icon": true, "show_name": false, "show_state": false}"""), temp),
+        )
     }
 
     @Test

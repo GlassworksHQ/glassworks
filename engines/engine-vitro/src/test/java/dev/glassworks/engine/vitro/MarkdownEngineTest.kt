@@ -539,6 +539,22 @@ class MarkdownEngineTest {
     // ---- clock ----
 
     @Test
+    fun aHiddenClockStopsTicking() {
+        val clock = ClockCardView(context(), card("""{"type": "clock", "show_seconds": true}"""))
+        val holder = android.widget.FrameLayout(activity).apply { addView(clock) }
+        activity.setContentView(holder)
+        val looper = org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+        assertTrue("ticking while shown", looper.nextScheduledTaskTime.toMillis() > 0)
+        // A cached tab behind another: nothing left scheduled.
+        holder.visibility = View.GONE
+        looper.idleFor(java.time.Duration.ofSeconds(3))
+        assertEquals(java.time.Duration.ZERO, looper.nextScheduledTaskTime)
+        // Shown again: ticking resumes.
+        holder.visibility = View.VISIBLE
+        assertTrue(looper.nextScheduledTaskTime.toMillis() > 0)
+    }
+
+    @Test
     fun clockReadsHaVariablesAndCardModSheets() {
         val clock = ClockCardView(
             context(JSONObject().put("time_zone", "UTC")),

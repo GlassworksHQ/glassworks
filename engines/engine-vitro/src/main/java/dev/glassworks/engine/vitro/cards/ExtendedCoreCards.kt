@@ -1241,11 +1241,15 @@ class AreaCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             return
         }
         ctx.loadImage(url, this) { bmp ->
-            if (bmp != null && pictureUrl == url) {
+            if (pictureUrl != url) return@loadImage
+            if (bmp != null) {
                 picture.setImageBitmap(bmp)
                 picture.visibility = VISIBLE
                 headerIcon.visibility = GONE
                 header.background = null
+            } else {
+                // Failed: forget it was asked for, so the next render of the same picture tries again.
+                pictureUrl = null
             }
         }
     }
