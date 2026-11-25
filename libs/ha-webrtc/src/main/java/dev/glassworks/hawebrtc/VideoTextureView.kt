@@ -12,10 +12,9 @@ import livekit.org.webrtc.EglRenderer
 import livekit.org.webrtc.GlRectDrawer
 import livekit.org.webrtc.VideoFrame
 import livekit.org.webrtc.VideoSink
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 
 /** How a picture fills its view, as a `<video>`'s `object-fit`. */
 public enum class VideoScaling {
@@ -36,7 +35,12 @@ public enum class VideoScaling {
  * behind it (a still) shows while the stream connects.
  */
 @SuppressLint("ViewConstructor")
-internal class VideoTextureView(context: Context, scaling: VideoScaling) : TextureView(context), TextureView.SurfaceTextureListener, VideoSink {
+internal class VideoTextureView(
+    context: Context,
+    scaling: VideoScaling,
+    /** Where a destroyed surface is given back and released, off the main thread ([TEXTURE_RELEASER]). */
+    private val releaser: Executor = TEXTURE_RELEASER,
+) : TextureView(context), TextureView.SurfaceTextureListener, VideoSink {
     private val renderer = EglRenderer("ha-webrtc")
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var frameWidth = 0
@@ -73,15 +77,25 @@ internal class VideoTextureView(context: Context, scaling: VideoScaling) : Textu
 
     private val handoff = SurfaceHandoff(renderer::releaseEglSurface)
 
+    /**
+     * Called on the main thread each time a new picture is on screen (the TextureView took a frame the renderer drew),
+     * with the picture's size, rotation applied. A frame the renderer drops, with no surface to draw on, isn't one.
+     */
+    @Volatile
+    var onDrawn: ((width: Int, height: Int) -> Unit)? = null
+
     override fun onFrame(frame: VideoFrame) {
-        val w = frame.rotatedWidth
-        val h = frame.rotatedHeight
+        frameSize(frame.rotatedWidth, frame.rotatedHeight)
+        renderer.onFrame(frame)
+    }
+
+    /** The size of the frames coming in (rotation applied); the layout follows it. */
+    internal fun frameSize(w: Int, h: Int) {
         if (w != frameWidth || h != frameHeight) {
             frameWidth = w
             frameHeight = h
             main.post(::updateLayout)
         }
-        renderer.onFrame(frame)
     }
 
     /** The render thread runs ([init] was called): only then can it take a surface. */
@@ -101,12 +115,17 @@ internal class VideoTextureView(context: Context, scaling: VideoScaling) : Textu
 
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
         attached = false
-        // The render thread lets go of the texture before anyone releases it: the view, if that is done in time,
-        // else the render thread itself once it has.
-        return releaseAfter(handoff::whenReleased, surface::release, RELEASE_WAIT_MS)
+        // The texture is ours to release (false), once the render thread has let go of it. Asking it to let go can
+        // block (EglRenderer's lock, held through a buffer swap), so even the asking happens off the main thread.
+        releaser.execute { handoff.whenReleased { surface.release() } }
+        return false
     }
 
-    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
+    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+        val w = frameWidth
+        val h = frameHeight
+        if (w > 0 && h > 0) onDrawn?.invoke(w, h)
+    }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
@@ -122,9 +141,6 @@ internal class VideoTextureView(context: Context, scaling: VideoScaling) : Textu
         setTransform(Matrix().apply { setScale(sx, sy, vw / 2f, vh / 2f) })
     }
 
-    private companion object {
-        const val RELEASE_WAIT_MS = 1_000L
-    }
 }
 
 /**
@@ -186,25 +202,11 @@ internal class SurfaceHandoff(private val releaseEglSurface: (Runnable) -> Unit)
 }
 
 /**
- * Asks the render thread to let go of a surface ([releaseSurface], which calls its argument once it has) and decides
- * who releases the surface itself, as `onSurfaceTextureDestroyed` must: true when the render thread finished within
- * [waitMs], so the view releases it; false otherwise, and then [releaseTexture] runs on the render thread as soon as
- * it has finished, never before. The main thread waits at most [waitMs].
+ * The thread that gives destroyed surfaces back: it waits for the render thread to let go of each, then releases the
+ * texture. One for every view in the process; it lives as long as the process, idle but for those moments.
  */
-internal fun releaseAfter(releaseSurface: (Runnable) -> Unit, releaseTexture: () -> Unit, waitMs: Long): Boolean {
-    val pending = 0
-    val done = 1
-    val ours = 2
-    val state = AtomicInteger(pending)
-    val finished = CountDownLatch(1)
-    releaseSurface(Runnable {
-        // Past the wait, the view has handed the texture to us: release it here, now that nothing draws into it.
-        if (!state.compareAndSet(pending, done)) releaseTexture()
-        finished.countDown()
-    })
-    if (finished.await(waitMs, TimeUnit.MILLISECONDS)) return true
-    // Still drawing: the render thread releases it when it's done, unless it finished just now.
-    return !state.compareAndSet(pending, ours)
+internal val TEXTURE_RELEASER: Executor = Executors.newSingleThreadExecutor { r ->
+    Thread(r, "ha-webrtc-texture").apply { isDaemon = true }
 }
 
 /**

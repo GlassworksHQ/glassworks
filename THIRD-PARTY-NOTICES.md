@@ -97,10 +97,10 @@ build if one is missing here.
   - `org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.1`
   - `org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1`
 
-### libwebrtc (WebRTC camera streams, in the generic app)
+### libwebrtc (Vitro's WebRTC camera streams)
 
-Glassworks for generic Android plays Home Assistant cameras over WebRTC with the
-[`ha-webrtc`](libs/ha-webrtc/README.md) library, which runs on libwebrtc. The S1 app doesn't carry it.
+With Vitro on, the S1 app and Glassworks for generic Android play Home Assistant cameras over WebRTC with the
+[`ha-webrtc`](libs/ha-webrtc/README.md) library, which runs on libwebrtc. Both APKs carry it.
 
 - **WebRTC Android SDK** 150.7871.04, prefixed: `io.github.webrtc-sdk:android-prefixed:150.7871.04`, the
   webrtc-sdk project's build of Chromium's WebRTC M150 (branch-heads/7871) with its Java package renamed to

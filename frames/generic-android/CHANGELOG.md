@@ -16,6 +16,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   *Settings → Labs*, on the panel or the Manage page, and after the app restarts your Home Assistant dashboard is drawn
   with the device's own views instead of a browser. Cards it can't draw yet show in a small browser view. It's off by
   default, and with it off the app works exactly as before.
+- **Vitro plays cameras over WebRTC, as Home Assistant does.** With Vitro on, a camera that Home Assistant streams
+  over WebRTC (through go2rtc, Nest and other integrations) plays that way, with low delay and hardware decoding
+  where the device has it. Cameras without WebRTC, or where it doesn't connect, play HLS or MJPEG as before. Nothing
+  changes in Home Assistant.
 
 ### Fixed
 - **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the
