@@ -416,7 +416,7 @@ details > summary, .disclose { cursor: pointer; }
 .net .grow { display: grid; min-width: 0; }
 .net .lab { font: 500 10.5px/1 var(--f-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
 .net .name { font: 500 20px/1.25 var(--f-mono); letter-spacing: -0.01em; margin-top: 5px; overflow-wrap: anywhere; }
-.net .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.net .sub { font-size: 13px; color: var(--muted); margin: 2px 0 0; }
 .live { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--turn-ink); }
 .live.ok { color: var(--ok-ink); }
 .live .tick { width: 18px; height: 18px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: color-mix(in srgb, var(--green) 20%, transparent); }
