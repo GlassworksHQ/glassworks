@@ -1,0 +1,46 @@
+{
+ "_comment": "A made-up climate entity for island-check.mjs and island-probe.mjs (docs/research/vitro-island-better-thermostat.md).",
+ "card": {
+  "type": "custom:better-thermostat-ui-card",
+  "entity": "climate.study"
+ },
+ "resources": [
+  "/hacsfiles/better-thermostat-ui-card/better-thermostat-ui-card.js?hacstag=3.4.0"
+ ],
+ "fixture": {
+  "states": {
+   "climate.study": {
+    "state": "heat",
+    "last_changed": -1800,
+    "attributes": {
+     "hvac_modes": [
+      "off",
+      "heat"
+     ],
+     "min_temp": 7,
+     "max_temp": 35,
+     "target_temp_step": 0.5,
+     "current_temperature": 20.5,
+     "temperature": 21,
+     "hvac_action": "heating",
+     "friendly_name": "Study",
+     "supported_features": 385
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "climate.study",
+    "pl": "better_thermostat",
+    "di": "dev-study",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-study",
+    "name": "Study"
+   }
+  ]
+ }
+}

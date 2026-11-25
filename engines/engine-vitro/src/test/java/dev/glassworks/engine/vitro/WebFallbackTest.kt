@@ -216,6 +216,20 @@ class WebFallbackTest {
         assertNull(reason("""{"type": "grid", "cards": [{"type": "tile"}, {"type": "entities", "entities": ["light.a"]}]}"""))
     }
 
+    @Test fun aCustomCardThatDrawsWithHasOwnElementsShowsInHomeAssistantsFrontend() {
+        // #885: Better Thermostat's climate card draws its dial with HA's ha-control-circular-slider, which an island
+        // page doesn't have. Its view goes to HA's frontend; its mini card (Mushroom pieces it ships) stays an island.
+        fun reason(card: String) = WebFallback.viewReason(LovelaceParser.parseView(0, JSONObject("""{"cards": [$card]}""")))
+        val why = reason("""{"type": "custom:better-thermostat-normal-climate-card", "entity": "climate.study"}""")
+        assertEquals(
+            "a `custom:better-thermostat-normal-climate-card` card (its dial and target are HA's `ha-control-circular-slider` and " +
+                "`ha-big-number`, which only HA's frontend has)",
+            why,
+        )
+        assertNotNull("nested too", reason("""{"type": "vertical-stack", "cards": [{"type": "custom:better-thermostat-normal-climate-card", "entity": "climate.study"}]}"""))
+        assertNull(reason("""{"type": "custom:better-thermostat-mini-climate-card", "entity": "climate.study"}"""))
+    }
+
     // ---- The way back ----
 
     private val mapView = """{"title": "Map", "path": "map", "cards": [{"type": "map", "entities": ["light.lounge_lamp"]}]}"""

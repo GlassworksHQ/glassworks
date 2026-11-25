@@ -54,6 +54,11 @@ CARDS = [
      "main": "clock-weather-card.js", "assets": [".js", ".svg"]},
     {"name": "modern-circular-gauge", "repo": "selvalt7/modern-circular-gauge", "tag": "v0.15.0", "license": "MIT",
      "main": "modern-circular-gauge.js", "assets": ["modern-circular-gauge.js"]},
+    # The tablet's blank island (#885). AGPL-3.0: downloaded into the cache for the harness only, never committed or
+    # shipped in an app. On demand: served at /hacsfiles/ but not a Lovelace resource of the fake, so the other cases'
+    # pages don't load it (it bundles its own Mushroom elements and wraps customElements.define).
+    {"name": "better-thermostat-ui-card", "repo": "KartoffelToby/better-thermostat-ui-card", "tag": "3.4.0", "license": "AGPL-3.0",
+     "main": "better-thermostat-ui-card.js", "assets": ["better-thermostat-ui-card.js"], "on_demand": True},
 ]
 
 
@@ -86,10 +91,11 @@ def load():
 
 
 def resources(pins=None):
-    """The Lovelace resources an HA with these cards installed through HACS lists: one module per card."""
+    """The Lovelace resources an HA with these cards installed through HACS lists: one module per card, but for the
+    cards pinned `on_demand` (served at /hacsfiles/ for a page that loads them itself, not a resource)."""
     pins = pins or load()
     return [{"id": c["name"], "type": "module", "url": f"/hacsfiles/{c['name']}/{c['main']}?hacstag={c['version']}"}
-            for c in pins]
+            for c in pins if not c.get("on_demand")]
 
 
 def path(name, file, pins=None):
@@ -131,7 +137,7 @@ def pin():
         if c["main"] not in files:
             raise SystemExit(f"{c['name']}: {c['main']} isn't among the pinned files")
         cards.append({"name": c["name"], "repo": c["repo"], "version": c["tag"], "license": c["license"],
-                      "main": c["main"], "files": files})
+                      "main": c["main"], "files": files, **({"on_demand": True} if c.get("on_demand") else {})})
         print(f"{c['name']} {c['tag']} ({c['license']}): {len(files)} file(s)")
     with open(PINS, "w") as f:
         json.dump({"_comment": "Community cards the parity harness's fake HA serves at /hacsfiles/, pinned by release and "

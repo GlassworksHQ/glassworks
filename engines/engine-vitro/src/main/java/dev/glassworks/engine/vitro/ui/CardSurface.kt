@@ -4,19 +4,23 @@
 
 package dev.glassworks.engine.vitro.ui
 
+import android.annotation.TargetApi
 import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Handler
 import android.util.LruCache
 import android.os.Looper
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewParent
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
@@ -39,6 +43,7 @@ import dev.glassworks.engine.vitro.theme.CardModStyle
 import dev.glassworks.engine.vitro.theme.CssBackground
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
 import dev.glassworks.engine.vitro.theme.ThemeResolver
+import dev.glassworks.platform.Platform
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.net.HttpURLConnection
@@ -806,6 +811,31 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
             canvas.restoreToCount(saved)
             fail("draw", e)
         }
+    }
+
+    /**
+     * A view inside the card changed (Android 8 and later, hardware drawing): the card records itself again when it's
+     * the nearest card guard to the change ([isNearestGuard]), so the changed view's draw runs inside [draw]'s catch.
+     * Without it Android rebuilds only that view's display list, straight from the card's, and a throw there would
+     * reach the app. The card's other views keep their lists: it costs the card's own small list. A failed card
+     * records itself again too, whether or not its error card is in yet: its [draw] then runs no view of the card's
+     * own, so nothing of it is drawn outside a catch, and the guards above can keep leaving it to this one.
+     */
+    @TargetApi(Build.VERSION_CODES.O)
+    override fun onDescendantInvalidated(child: View, target: View) {
+        super.onDescendantInvalidated(child, target)
+        if (isNearestGuard(this, target)) invalidate()
+    }
+
+    /**
+     * As [onDescendantInvalidated], on Android 6 and 7, where hardware drawing finds the changed view this way. It
+     * doesn't say which view changed, so every card guard above it records itself again.
+     */
+    @Deprecated("ViewGroup's, deprecated in API 26, where onDescendantInvalidated takes over")
+    override fun invalidateChildInParent(location: IntArray, dirty: Rect): ViewParent? {
+        if (!Platform.hasDescendantInvalidated && isHardwareAccelerated) invalidate()
+        @Suppress("DEPRECATION")
+        return super.invalidateChildInParent(location, dirty)
     }
 
     /** The error card's draw: the card's surface (its background), then its views, without the card's [onDraw]. */

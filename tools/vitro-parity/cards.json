@@ -832,6 +832,20 @@
      "sha256": "317eca5d6d31af86f8b71d1abc8766ca9823f7140f74cdcb637f90f8bb6698ca"
     }
    }
+  },
+  {
+   "name": "better-thermostat-ui-card",
+   "repo": "KartoffelToby/better-thermostat-ui-card",
+   "version": "3.4.0",
+   "license": "AGPL-3.0",
+   "main": "better-thermostat-ui-card.js",
+   "files": {
+    "better-thermostat-ui-card.js": {
+     "url": "https://github.com/KartoffelToby/better-thermostat-ui-card/releases/download/3.4.0/better-thermostat-ui-card.js",
+     "sha256": "23ece9ce9598a6b1c4e274ee966e13374e031715caa9398f6e7ca9dd2f1f09dd"
+    }
+   },
+   "on_demand": true
   }
  ]
 }
