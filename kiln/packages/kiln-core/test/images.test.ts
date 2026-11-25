@@ -468,6 +468,23 @@ describe('an in-place recipe', () => {
       steps: [...inPlace().steps.slice(0, 5), { do: 'app-install' }, ...inPlace().steps.slice(5, 10)],
     });
     expect(validateImage(rightAfterReceive, IN_PLACE)).toContain('step 6: app-install comes after restarting into the in-place writes');
+    // partial in-place flash before restart cannot satisfy app-install
+    const partialBeforeApp = inPlace({
+      steps: [
+        ...inPlace().steps.slice(0, 8), { do: 'restart' }, { do: 'app-install' },
+        { do: 'fastboot' }, { do: 'flash', partition: 'userdata', file: 'userdata-final' }, { do: 'restart' },
+      ],
+    });
+    expect(validateImage(partialBeforeApp, IN_PLACE)).toContain('step 10: app-install comes after restarting into the in-place writes');
+    // stage output cannot be flashed again after the stage session restarted
+    const stageOverwriteAfter = inPlace({
+      steps: [
+        ...inPlace().steps.slice(0, 10),
+        { do: 'fastboot' }, { do: 'flash', partition: 'userdata', file: 'stage-userdata' }, { do: 'restart' },
+        { do: 'app-install' },
+      ],
+    });
+    expect(validateImage(stageOverwriteAfter, IN_PLACE)).toContain('step 12: stage-userdata can only be written in the stage session');
     expect(validateImage(inPlace({ steps: [...inPlace().steps, { do: 'app-install' }] }), IN_PLACE)).toContain('step 12: the app is installed once');
     expect(validateImage(at(10, { do: 'app-install', apk: 'x' }), IN_PLACE)).toContain('step 11: "app-install" takes no apk');
   });

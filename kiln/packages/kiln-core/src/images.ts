@@ -204,11 +204,12 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
   let systemKeyed = false;
   const flashed = new Set<string>();
   let device = false, fastboot = false, restarted = false, writes = 0, wifi = false, wifiOn = false;
-  // in-place: stage → flash(stage) → restart → receive → fastboot → in-place → flash(in-place) → restart → app-install
+  // in-place: stage → flash(stage) → restart → receive → fastboot → in-place → flash(all in-place) → restart → app-install
   let staged = false, stageFile: string | undefined, stageFlashed = false, stageRestarted = false;
   let received: string | undefined, fastbootAfterReceive = false;
-  let inPlaced = false, inPlaceFlashed = false, inPlaceRestarted = false, appInstalled = false;
+  let inPlaced = false, inPlaceRestarted = false, appInstalled = false;
   const inPlaceFiles = new Set<string>();
+  const inPlaceWritten = new Set<string>();
   const restores = new Set<string>();
   const newName = (n: unknown) => typeof n === 'string' && FILE_NAME.test(n) && !files.has(n) && !made.has(n) && !restores.has(n) && n !== received;
   const inPlaceOnly = (i: number, kind: string) => {
@@ -258,11 +259,13 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
         flashed.add(s.partition);
         if (restores.has(s.file)) bad.push(`${at(i)}: ${s.file} is the way back: the install never writes it`);
         else if (inPlace) {
-          if (s.file !== stageFile && !inPlaceFiles.has(s.file)) {
-            bad.push(`${at(i)}: ${s.file} isn't the stage output or something in-place made`);
+          if (s.file === stageFile) {
+            if (stageRestarted) bad.push(`${at(i)}: ${s.file} can only be written in the stage session`);
+            else stageFlashed = true;
+          } else if (inPlaceFiles.has(s.file)) {
+            inPlaceWritten.add(s.file);
           } else {
-            if (s.file === stageFile) stageFlashed = true;
-            if (inPlaceFiles.has(s.file)) inPlaceFlashed = true;
+            bad.push(`${at(i)}: ${s.file} isn't the stage output or something in-place made`);
           }
         } else if (!checked.has(s.file) && !made.has(s.file)) {
           bad.push(`${at(i)}: ${s.file} isn't a checked download or something Kiln made from one`);
@@ -274,7 +277,7 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
         if (inPlace) {
           flashed.clear();
           if (stageFlashed) stageRestarted = true;
-          if (inPlaceFlashed) inPlaceRestarted = true;
+          if (inPlaced && inPlaceFiles.size > 0 && [...inPlaceFiles].every((f) => inPlaceWritten.has(f))) inPlaceRestarted = true;
         }
         break;
       case 'stage':
