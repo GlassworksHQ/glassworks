@@ -98,6 +98,8 @@ class HardwareRedrawTest {
                     done(ids.associateWith { (0 until 48).map { i -> HistoryPoint(now - (48 - i) * 1800, 20.0 + (i % 7) * 0.3) } })
                 },
                 subscribeTemplate = { _, _ -> {} },
+                // HA's error card shows its title to an administrator.
+                haUser = { JSONObject().put("id", "u1").put("is_admin", true) },
             )
         }
         val view = JSONObject().put("title", "Home").put("cards", JSONArray().apply { cards.forEach { put(it) } })

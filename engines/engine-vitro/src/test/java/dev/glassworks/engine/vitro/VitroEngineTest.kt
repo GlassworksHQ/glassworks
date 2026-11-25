@@ -887,6 +887,7 @@ class VitroEngineTest {
         token: String? = FakeHaServer.TOKEN,
         navigate: (String) -> Unit = {},
         store: EntityStore = EntityStore(),
+        user: JSONObject = JSONObject(),
     ) = VitroCardContext(
         context = activity,
         haBase = base,
@@ -900,6 +901,7 @@ class VitroEngineTest {
         openMoreInfo = {},
         fetchHistory = { _, _, _ -> },
         subscribeTemplate = { _, _ -> {} },
+        haUser = { user },
     )
 
     private fun islandCard() = LovelaceParser.parseCard(
@@ -1142,7 +1144,8 @@ class VitroEngineTest {
         assertTrue(html.contains("sendBridge({ type: 'cardError', message: \"Custom element doesn't exist: \" + tag + '.' });"))
         assertTrue("a setConfig that throws is reported too", html.contains("sendBridge({ type: 'cardError', message: String((e && e.message) || e) });"))
 
-        val island = WebIslandCardView(cardContext(), islandCard())
+        // An administrator: HA's error card is titled for one.
+        val island = WebIslandCardView(cardContext(user = JSONObject().put("id", "u1").put("is_admin", true)), islandCard())
         activity.setContentView(island)
         island.handleIslandMessage(
             JSONObject().put("type", "cardError").put("message", "Custom element doesn't exist: acme-floorplan-card."),
