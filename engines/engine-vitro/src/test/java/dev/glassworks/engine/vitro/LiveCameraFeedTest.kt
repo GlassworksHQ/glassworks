@@ -387,6 +387,7 @@ class LiveCameraFeedTest {
         val st = store()
         val sheet = dev.glassworks.engine.vitro.cards.MoreInfoSheet(context(st, kinds = setOf(HLS, MJPEG))) {}
         activity.setContentView(sheet)
+        showWindow(activity.window.decorView)
         sheet.show("camera.porch")
         idle()
         idle()
@@ -398,6 +399,59 @@ class LiveCameraFeedTest {
         assertEquals("active false", hls.calls.last())
         sheet.dispatchWindowVisibilityChanged(View.VISIBLE)
         idle()
+        assertEquals("active true", hls.calls.last())
+    }
+
+    @Test
+    fun aCardInAWindowThatIsGoneStartsNothingUntilTheWindowShows() {
+        // Android doesn't call onWindowVisibilityChanged on attach to a GONE window (Robolectric's window is GONE).
+        val parent = FrameLayout(activity)
+        parent.addView(card(context(store(), kinds = setOf(HLS, MJPEG))), FrameLayout.LayoutParams(720, 405))
+        activity.setContentView(parent)
+        idle()
+        assertTrue(made.isEmpty())
+        assertTrue(wsCalls.isEmpty())
+        showWindow(activity.window.decorView)
+        idle()
+        val hls = live(HLS)
+        // The window goes away (the screen off) and comes back: paused, then resumed.
+        hideWindow(activity.window.decorView)
+        assertEquals("active false", hls.calls.last())
+        showWindow(activity.window.decorView)
+        idle()
+        assertEquals("active true", hls.calls.last())
+    }
+
+    @Test
+    fun aCardAttachedToAVisibleWindowStartsAtOnce() {
+        val parent = FrameLayout(activity)
+        activity.setContentView(parent)
+        showWindow(activity.window.decorView)
+        idle()
+        // Added to a window that shows: the card reads it on attach and starts, no callback needed.
+        parent.addView(card(context(store(), kinds = setOf(HLS, MJPEG))), FrameLayout.LayoutParams(720, 405))
+        assertEquals("camera/capabilities", wsCalls.single().optString("type"))
+        idle()
+        assertEquals(listOf(HLS), running())
+    }
+
+    @Test
+    fun theMoreInfoCameraStartsOnlyOnceItsWindowShows() {
+        val sheet = dev.glassworks.engine.vitro.cards.MoreInfoSheet(context(store(), kinds = setOf(HLS, MJPEG))) {}
+        activity.setContentView(sheet)
+        sheet.show("camera.porch")
+        idle()
+        idle()
+        // The sheet's window is GONE: nothing starts.
+        assertTrue(made.isEmpty())
+        assertTrue(wsCalls.isEmpty())
+        showWindow(activity.window.decorView)
+        idle()
+        val hls = live(HLS)
+        assertEquals(listOf("start"), hls.calls)
+        hideWindow(activity.window.decorView)
+        assertEquals("active false", hls.calls.last())
+        showWindow(activity.window.decorView)
         assertEquals("active true", hls.calls.last())
     }
 
@@ -425,6 +479,7 @@ class LiveCameraFeedTest {
         val c = card(context(store(), kinds = setOf(HLS, MJPEG)))
         parent.addView(c, FrameLayout.LayoutParams(720, 405))
         activity.setContentView(parent)
+        showWindow(activity.window.decorView)
         idle()
         val hls = live(HLS)
         // A cached view another one hides (or HA's own page in front of the dashboard).
@@ -444,6 +499,7 @@ class LiveCameraFeedTest {
         val parent = FrameLayout(activity).apply { visibility = View.GONE }
         parent.addView(card(context(store())), FrameLayout.LayoutParams(720, 405))
         activity.setContentView(parent)
+        showWindow(activity.window.decorView)
         idle()
         assertTrue(made.isEmpty())
         assertTrue(wsCalls.isEmpty())
@@ -458,6 +514,7 @@ class LiveCameraFeedTest {
         val c = card(context(store(), kinds = setOf(HLS, MJPEG)))
         parent.addView(c, FrameLayout.LayoutParams(720, FrameLayout.LayoutParams.WRAP_CONTENT))
         activity.setContentView(parent)
+        showWindow(activity.window.decorView)
         idle()
         c.measure(View.MeasureSpec.makeMeasureSpec(720, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
         // hui-image's width is the card's inside its border: the picture's height comes from that, then the border.
@@ -492,6 +549,7 @@ class LiveCameraFeedTest {
         val c = card(context(store(), kinds = setOf(HLS, MJPEG)))
         parent.addView(c, FrameLayout.LayoutParams(720, 405))
         activity.setContentView(parent)
+        showWindow(activity.window.decorView)
         idle()
         val hls = live(HLS)
         c.fail("test", IllegalStateException("boom"))

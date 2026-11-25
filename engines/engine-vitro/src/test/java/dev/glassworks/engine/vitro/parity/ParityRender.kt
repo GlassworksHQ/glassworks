@@ -368,6 +368,8 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
             val dash = LovelaceParser.parseDashboard(case.dashboardJson(root))
             view.setDashboard(dash, case.view ?: case.id)
             activity.setContentView(view)
+            // A panel's window shows: what waits for it (a live camera's still) starts, as on the panel.
+            dev.glassworks.engine.vitro.showWindow(activity.window.decorView)
             val w = frame.pxWidth
             var h = frame.pxHeight
             layout(view, w, h)

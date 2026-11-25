@@ -200,6 +200,7 @@ class MjpegStreamPlayerTest {
 
     private fun attach(view: View) {
         activity.setContentView(FrameLayout(activity).apply { addView(view, FrameLayout.LayoutParams(720, 405)) })
+        showWindow(activity.window.decorView)
         ShadowLooper.idleMainLooper()
     }
 
