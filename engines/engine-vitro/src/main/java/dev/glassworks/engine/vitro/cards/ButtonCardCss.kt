@@ -398,8 +398,15 @@ object CssGridSpec {
 
     private val REPEAT = Regex("""repeat\(\s*(\d+)\s*,\s*([^()]+)\)""")
 
+    /** The most tracks a `repeat()` may make natively: more is a grid Vitro doesn't draw (null). */
+    private const val MAX_REPEAT = 24
+
     private fun expandRepeat(s: String): String? {
-        val out = REPEAT.replace(s) { m -> List(m.groupValues[1].toInt().coerceAtMost(24)) { m.groupValues[2].trim() }.joinToString(" ") }
-        return if ("(" in out) null else out
+        var bad = false
+        val out = REPEAT.replace(s) { m ->
+            val n = m.groupValues[1].toIntOrNull()
+            if (n == null || n > MAX_REPEAT) { bad = true; "" } else List(n) { m.groupValues[2].trim() }.joinToString(" ")
+        }
+        return if (bad || "(" in out) null else out
     }
 }

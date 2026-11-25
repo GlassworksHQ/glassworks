@@ -5,8 +5,8 @@ evidence: verified
 
 # Vitro: which dashboard cards still need a web island?
 
-**Status (2026-11-24): measured, recommendation below; the first fast paths are in (see
-[After the first fast paths](#after-the-first-fast-paths)): island cards in the sample went from 22.9% to 14.9%.** After the native fast paths on `exp/vitro`, about a
+**Status (2026-11-24): measured, recommendation below; the first fast paths are in (see "After the first fast paths"
+below): island cards in the sample went from 22.9% to 14.9%.** After the native fast paths on `exp/vitro`, about a
 quarter of the cards in typical community dashboards still go to a web island, and one card type, `custom:button-card`, is
 nearly half of those. The rest is a long tail. Our own dashboards, once written as native cards, use no card type that
 is routed to an island. This counts card types only: a native-routed card can still fall back for an option Vitro

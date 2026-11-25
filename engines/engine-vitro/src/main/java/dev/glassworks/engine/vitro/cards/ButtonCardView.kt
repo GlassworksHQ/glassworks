@@ -505,7 +505,8 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
             val maxM = (s.attributes["max_mireds"] as? Number)?.toFloat()
             color = when {
                 rgb != null && rgb.size >= 3 -> "rgb(${rgb.take(3).joinToString(",") { jsString((it as? Number)?.toDouble() ?: 0.0) }})"
-                useTemperature && ct != null && ct != 0f && minM != null && minM != 0f && maxM != null && maxM != 0f ->
+                useTemperature && ct != null && ct != 0f && minM != null && minM != 0f && maxM != null && maxM != 0f &&
+                    ct.isFinite() && minM.isFinite() && maxM.isFinite() && maxM > minM ->
                     ButtonCardColors.temperatureColor(ct, minM, maxM)
                 else -> ButtonCardColors.stateColorCss(s, s.state, colorType) ?: DEFAULT_COLOR
             }
@@ -564,15 +565,18 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
         val ripple = raw.opt("show_ripple").let { if (it is Boolean) it else clickable }
         if (ripple) applyHaRipple(surface, ctx.theme.cardBorderRadiusDp * ctx.dp, ctx.theme.dark)
         if (!clickable) return
+        // The tap runs through the view's click, so an accessibility or keyboard activation (`performClick`) runs it
+        // too. A touch's own click is skipped when the gesture detector already ran something for it: the tap after a
+        // possible double tap, the double tap, or the hold.
+        var touchHandled = false
         val detector = GestureDetector(ctx.context, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDown(e: MotionEvent) = true
+            override fun onDown(e: MotionEvent): Boolean {
+                touchHandled = double != null
+                return true
+            }
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 if (double != null) tap?.let(::run)
                 return double != null
-            }
-            override fun onSingleTapUp(e: MotionEvent): Boolean {
-                if (double == null) tap?.let(::run)
-                return true
             }
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 double?.let(::run)
@@ -580,17 +584,28 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
             }
             override fun onLongPress(e: MotionEvent) {
                 hold?.let {
+                    touchHandled = true
                     surface.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
                     run(it)
                 }
             }
         })
         surface.isClickable = true
-        surface.isLongClickable = hold != null
+        // The detector times the hold; the view's own long click would let the touch's click through after it.
+        surface.isLongClickable = false
+        surface.setOnClickListener {
+            if (touchHandled) {
+                touchHandled = false
+                return@setOnClickListener
+            }
+            // The lock covers the card for touches; an accessibility click honors it too.
+            if (lockOverlay?.isLocked == true) return@setOnClickListener
+            tap?.let(::run)
+        }
         @Suppress("ClickableViewAccessibility")
         surface.setOnTouchListener { v, ev ->
             detector.onTouchEvent(ev)
-            // Let the ripple draw.
+            // The ripple, and the click on release.
             v.onTouchEvent(ev)
             true
         }
@@ -612,6 +627,9 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
         val a = raw.optJSONObject(key) ?: default ?: return null
         val type = a.optString("action", "")
         if (type.isEmpty() || type == "none") return null
+        // A PIN- or password-protected action only runs in an island, where button-card asks for it. A card that stays
+        // native without its script (no Lovelace resource for it) never runs it unprotected.
+        if (truthy(a.opt("protect")) || truthy(raw.opt("protect"))) return null
         val copy = JSONObject(a.toString())
         // button-card's `entity_id: entity` in the data is the card's entity.
         copy.optJSONObject("data")?.let { if (it.optString("entity_id") == "entity") it.put("entity_id", entityId) }
@@ -694,7 +712,8 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
             interpolator = LinearInterpolator()
         }
         animKeys[anim] = key
-        post { if (isAttachedToWindow) anim.start() }
+        // Only while it still owns its slot: a later render may have replaced it before this runs.
+        post { if (isAttachedToWindow && (anim === cardAnimator || anim === iconAnimator)) anim.start() }
         return anim
     }
 
@@ -909,6 +928,7 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
         private val keepIcon = lock.optBoolean("keep_unlock_icon", false)
         private val iconView = MdiIconView(ctx.context)
         private var locked = true
+        val isLocked: Boolean get() = locked
         private val relock = Runnable { setLocked(true) }
 
         init {

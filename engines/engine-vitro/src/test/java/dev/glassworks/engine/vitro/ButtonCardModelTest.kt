@@ -133,6 +133,9 @@ class ButtonCardModelTest {
         assertNull(CssGridSpec.areas("\"a b\" \"c\""))
         assertNull(CssGridSpec.areas("\"a b a\""))
         assertEquals(3, CssGridSpec.tracks("repeat(2, 1fr) 40px")?.size)
+        // More tracks than the native grid takes, or a count past Int, is a grid Vitro doesn't draw.
+        assertNull(CssGridSpec.tracks("repeat(25, 1fr)"))
+        assertNull(CssGridSpec.tracks("repeat(99999999999, 1fr)"))
     }
 
     @Test

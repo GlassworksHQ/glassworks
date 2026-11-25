@@ -192,6 +192,21 @@ class ButtonCardViewTest {
     }
 
     @Test
+    fun accessibilityClicksRunTheTapButNeverAProtectedAction() {
+        put("light.desk_lamp", "on", "friendly_name" to "Desk lamp")
+        val card = button("""{"type": "custom:button-card", "entity": "light.desk_lamp", "tap_action": {"action": "call-service", "service": "light.turn_off", "data": {"entity_id": "entity"}}}""")
+        assertTrue(card.getChildAt(0).performClick())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(calls.toString(), calls.any { it.startsWith("light.turn_off") })
+        calls.clear()
+        // Natively (no script resource for the island), a PIN-protected action never runs unprotected.
+        val guarded = button("""{"type": "custom:button-card", "entity": "light.desk_lamp", "tap_action": {"action": "call-service", "service": "light.turn_off", "protect": {"pin": "1234"}}}""")
+        guarded.getChildAt(0).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(calls.toString(), calls.isEmpty())
+    }
+
+    @Test
     fun entityButtonWithoutAnEntityIsHasErrorCard() {
         val err = HaErrorCardView(ctx(), "Entity must be specified")
         layout(err, 300)

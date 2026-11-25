@@ -373,6 +373,8 @@ class VitroCardContext(
         val fullUrl = absoluteUrl(rawUrl)
         synchronized(SVG_CACHE) { SVG_CACHE[fullUrl] }?.let { hit -> done(hit); return }
         pendingImageLoads.incrementAndGet()
+        // A clear while it's in flight (another sign-in) keeps its image out of the cache and off the card.
+        val generation = cacheGeneration
         IMAGE_POOL.execute {
             val svg = runCatching {
                 val conn = (URL(fullUrl).openConnection() as HttpURLConnection).apply {
@@ -390,8 +392,8 @@ class VitroCardContext(
                     conn.disconnect()
                 }
             }.getOrNull()
-            if (svg != null) synchronized(SVG_CACHE) { SVG_CACHE[fullUrl] = svg }
-            main.post { try { done(svg) } finally { pendingImageLoads.decrementAndGet() } }
+            if (svg != null) synchronized(SVG_CACHE) { if (generation == cacheGeneration) SVG_CACHE[fullUrl] = svg }
+            main.post { try { done(svg?.takeIf { generation == cacheGeneration }) } finally { pendingImageLoads.decrementAndGet() } }
         }
     }
 
@@ -498,6 +500,7 @@ class VitroCardContext(
             // A load already on its way under the old sign-in doesn't put its image back afterwards.
             cacheGeneration++
             IMAGE_CACHE.evictAll()
+            synchronized(SVG_CACHE) { SVG_CACHE.clear() }
         }
 
         @Volatile private var cacheGeneration = 0

@@ -719,7 +719,7 @@ class HacsParityWaveTest {
         val view = LovelaceParser.parseView(
             0,
             JSONObject(
-                """{"cards": [{"type": "custom:stack-in-card", "cards": [{"type": "tile"}, {"type": "custom:button-card"}]},
+                """{"cards": [{"type": "custom:stack-in-card", "cards": [{"type": "tile"}, {"type": "custom:apexcharts-card"}]},
                    {"type": "custom:layout-card", "cards": [{"type": "custom:mushroom-lock-card", "entity": "lock.a"}]},
                    {"type": "custom:auto-entities", "card": {"type": "entities"}, "filter": {"include": [{"domain": "light"}]}}]}""",
             ),
@@ -730,7 +730,7 @@ class HacsParityWaveTest {
         assertEquals(1, tiers[CardTier.WEB_ISLAND])
         assertTrue(CardRouter.followsAllEntities(view))
         assertTrue("lock.a" in CardRouter.referencedEntities(view))
-        assertEquals(26, CardRouter.NATIVE_HACS_TYPES.size)
+        assertEquals(30, CardRouter.NATIVE_HACS_TYPES.size)
     }
 
     // ---- Bubble Card sub_button ----
