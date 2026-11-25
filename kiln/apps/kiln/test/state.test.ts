@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eta, initial, milestones, rail, reduce, stackLevel, type Action, type WizardState } from '../src/wizard/state';
+import { eta, firingSteps, initial, milestones, rail, reduce, stackLevel, type Action, type WizardState } from '../src/wizard/state';
 
 const run = (s: WizardState, ...as: Action[]) => as.reduce(reduce, s);
 const progress = (overall: number, phase: 'boot' | 'backup' | 'patch' | 'flash' | 'verify', title = 't'): Action =>
@@ -70,6 +70,17 @@ describe('wizard state', () => {
     expect(milestones(s, 'S1 Plus').at(-1)).toEqual({ text: 'Writing and verifying the new software', done: false });
     s = reduce(s, progress(0.98, 'verify'));
     expect(milestones(s, 'S1 Plus').slice(-2)).toEqual([{ text: 'Writing and verifying the new software', done: true }, { text: 'Restarting the panel', done: false }]);
+  });
+
+  it('the install screen lists every step from the start, the ones still to come too, in present-tense words', () => {
+    let s = run(initial(), { type: 'start', flow: 'install', now: 0 }, progress(0.3, 'backup'));
+    const marks = () => firingSteps(s, 'S1 Plus').map((m) => `${m.done ? '✓' : m.reached ? '●' : '·'} ${m.text}`);
+    expect(marks()).toEqual([
+      '✓ Find your S1 Plus', '✓ Start the installer in its memory', '● Back up your original software and check the copy',
+      '· Prepare the new software', '· Write the new software and check every write', '· Restart the panel',
+    ]);
+    s = reduce(s, progress(0.98, 'verify'));
+    expect(marks().slice(-2)).toEqual(['✓ Write the new software and check every write', '● Restart the panel']);
   });
 
   it('estimates the time left only once there is enough to go on', () => {
