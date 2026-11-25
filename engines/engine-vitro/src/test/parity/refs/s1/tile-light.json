@@ -2,12 +2,13 @@
  "case": "tile-light",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
@@ -32,10 +33,10 @@
   {
    "slot": 0,
    "clipped": true,
-   "text": "Entryway Ceiling Light Entryway Ceiling Halo",
+   "text": "Hallway Ceiling Light Hallway Ceiling Ring",
    "x": 56,
    "y": 17.61,
-   "w": 282.44,
+   "w": 266.11,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -44,6 +45,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "5%",
    "x": 56,
    "y": 37,
@@ -56,7 +58,7 @@
   }
  ],
  "states": {
-  "light.entryway_ceiling_halo": {
+  "light.hallway_ceiling_ring": {
    "s": "on",
    "a": {
     "min_color_temp_kelvin": 2702,
@@ -83,28 +85,28 @@
     ],
     "off_with_transition": false,
     "off_brightness": null,
-    "friendly_name": "Entryway Ceiling Light Entryway Ceiling Halo",
+    "friendly_name": "Hallway Ceiling Light Hallway Ceiling Ring",
     "supported_features": 40
    },
-   "lc": 1795504930.063075,
-   "lu": 1795508469.1702254
+   "lc": 1794484080,
+   "lu": 1794484080
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "light.entryway_ceiling_halo",
+    "ei": "light.hallway_ceiling_ring",
     "pl": "zha",
     "tk": "light",
     "di": "device-1",
-    "en": "Entryway Ceiling Halo"
+    "en": "Hallway Ceiling Ring"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "Entryway Ceiling Light"
+    "name": "Hallway Ceiling Light"
    }
   ],
   "requested": {

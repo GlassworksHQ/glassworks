@@ -1,0 +1,45 @@
+{
+ "title": "Humidifier: HA's humidifier card, humidifying to a target",
+ "card": {
+  "type": "humidifier",
+  "entity": "humidifier.bedroom"
+ },
+ "fixture": {
+  "states": {
+   "humidifier.bedroom": {
+    "state": "on",
+    "last_changed": "-45m",
+    "attributes": {
+     "min_humidity": 30,
+     "max_humidity": 80,
+     "available_modes": [
+      "normal",
+      "eco",
+      "sleep"
+     ],
+     "current_humidity": 41,
+     "humidity": 45,
+     "mode": "normal",
+     "action": "humidifying",
+     "device_class": "humidifier",
+     "friendly_name": "Bedroom Humidifier",
+     "supported_features": 1
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "humidifier.bedroom",
+    "pl": "demo",
+    "di": "dev-humidifier",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-humidifier",
+    "name": "Bedroom Humidifier"
+   }
+  ]
+ }
+}

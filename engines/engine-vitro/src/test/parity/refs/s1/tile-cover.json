@@ -2,12 +2,13 @@
  "case": "tile-cover",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
@@ -31,10 +32,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "Kitchen Blind",
+   "clipped": false,
+   "text": "Office Blind",
    "x": 56,
    "y": 17.61,
-   "w": 83.92,
+   "w": 74.38,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -43,6 +45,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Open",
    "x": 56,
    "y": 37,
@@ -55,10 +58,11 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "·",
-   "x": 85.56,
+   "x": 88.92,
    "y": 37,
-   "w": 10.28,
+   "w": 3.55,
    "h": 14,
    "size": 12,
    "weight": 400,
@@ -67,6 +71,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "100%",
    "x": 95.84,
    "y": 37,
@@ -79,25 +84,26 @@
   }
  ],
  "states": {
-  "cover.kitchen_blind": {
+  "cover.office_blind": {
    "s": "open",
    "a": {
     "is_closed": false,
     "current_position": 100,
     "assumed_state": true,
-    "friendly_name": "Kitchen Blind",
+    "friendly_name": "Office Blind",
     "supported_features": 11
    },
-   "lc": 1795505391.0030644
+   "lc": 1794491700,
+   "lu": 1794491700
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "cover.kitchen_blind",
+    "ei": "cover.office_blind",
     "pl": "template",
-    "en": "Kitchen Blind"
+    "en": "Office Blind"
    }
   ],
   "devices": [],

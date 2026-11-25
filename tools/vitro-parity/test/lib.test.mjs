@@ -378,3 +378,38 @@ test('pendingOneShots lists the one-shot graph calls still unanswered, never a s
   ];
   assert.deepEqual(pendingOneShots(calls), ['recorder/get_statistics_metadata']);
 });
+
+test('parseArgs takes the HA switches, never both', () => {
+  assert.deepEqual(parseArgs(['capture', '--fakeha', '--cases', 'a']), { cmd: 'capture', fakeha: true, cases: 'a' });
+  assert.deepEqual(parseArgs(['capture', '--real-ha']), { cmd: 'capture', 'real-ha': true });
+  assert.throws(() => parseArgs(['capture', '--fakeha', '--real-ha']), /one or the other/);
+  assert.throws(() => parseArgs(['capture', '--fakeha', '--fakeha']), /twice/);
+});
+
+test('restHistoryRequest reads mini-graph-card\'s REST history URL as a recorded call', async () => {
+  const { restHistoryRequest, wsRecorder, pendingOneShots } = await import('../lib/wsdata.mjs');
+  const r = restHistoryRequest('http://127.0.0.1:1/api/history/period/2026-11-11T16:08:00.000Z?filter_entity_id=sensor.a,sensor.b&end_time=2026-11-12T16%3A08%3A00.000Z&minimal_response');
+  assert.deepEqual(r, {
+    type: 'rest/history/period', entity_ids: ['sensor.a', 'sensor.b'], start_time: '2026-11-11T16:08:00.000Z',
+    end_time: '2026-11-12T16:08:00.000Z', minimal_response: true, no_attributes: false, significant_changes_only: true,
+    skip_initial_state: false,
+  });
+  assert.equal(restHistoryRequest('http://127.0.0.1:1/api/states'), null);
+  const rec = wsRecorder();
+  const call = rec.push({ request: r, events: [] });
+  assert.deepEqual(pendingOneShots(rec.calls), ['rest/history/period']);
+  call.result = [[]];
+  assert.deepEqual(pendingOneShots(rec.calls), []);
+});
+
+test('scrubStates keeps a made-up fixture\'s attributes whole', () => {
+  const st = { 'media_player.a': { s: 'playing', a: { media_title: 'Evening Tide', entity_picture: '/local/x.png', user_id: 'u' } } };
+  assert.deepEqual(scrubStates(st, null, { keepPictures: true, synthetic: true })['media_player.a'].a, st['media_player.a'].a);
+  assert.deepEqual(scrubStates(st, null)['media_player.a'].a, {});
+});
+
+test('a fixture picture is served to the capture with its image type', async () => {
+  const { fixtureFile } = await import('../lib/fixtures.mjs');
+  const dir = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', 'engines', 'engine-vitro', 'src', 'test', 'parity', 'fixtures');
+  assert.equal(fixtureFile(dir, '/local/vitro-harness-fixtures/images/album.png')?.type, 'image/png');
+});

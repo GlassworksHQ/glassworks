@@ -2,12 +2,13 @@
  "case": "button",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
   "height": 800,
-  "density": 2
+  "density": 2,
+  "touch": true
  },
  "clip": {
   "x": 382,
@@ -31,10 +32,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "Cactus",
-   "x": 98.09,
+   "clipped": false,
+   "text": "Desk Lamp",
+   "x": 83.19,
    "y": 86.19,
-   "w": 49.8,
+   "w": 79.61,
    "h": 19,
    "size": 16,
    "weight": 400,
@@ -43,6 +45,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Off",
    "x": 114.28,
    "y": 105.38,
@@ -55,24 +58,25 @@
   }
  ],
  "states": {
-  "light.living_room_cactus": {
+  "light.desk_lamp": {
    "s": "off",
    "a": {
     "supported_color_modes": [
      "onoff"
     ],
     "color_mode": null,
-    "friendly_name": "Cactus",
+    "friendly_name": "Desk Lamp",
     "supported_features": 0
    },
-   "lc": 1795508121.7617655
+   "lc": 1794483360,
+   "lu": 1794483360
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "light.living_room_cactus",
+    "ei": "light.desk_lamp",
     "pl": "switch_as_x",
     "di": "device-1"
    }
@@ -80,7 +84,7 @@
   "devices": [
    {
     "id": "device-1",
-    "name": "Cactus"
+    "name": "Desk Lamp"
    }
   ],
   "requested": {

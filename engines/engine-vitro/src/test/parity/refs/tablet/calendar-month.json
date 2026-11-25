@@ -2,12 +2,13 @@
  "case": "calendar-month",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
   "height": 800,
-  "density": 2
+  "density": 2,
+  "touch": true
  },
  "clip": {
   "x": 382,
@@ -31,6 +32,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "November 2026",
    "x": 17,
    "y": 17.08,
@@ -43,6 +45,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Today",
    "x": 30,
    "y": 69.95,
@@ -55,6 +58,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Sun",
    "x": 33.95,
    "y": 108.95,
@@ -67,6 +71,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Mon",
    "x": 101.2,
    "y": 108.95,
@@ -79,6 +84,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Tue",
    "x": 172.09,
    "y": 108.95,
@@ -91,6 +97,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Wed",
    "x": 239.58,
    "y": 108.95,
@@ -103,6 +110,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Thu",
    "x": 308.81,
    "y": 108.95,
@@ -115,6 +123,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Fri",
    "x": 380.06,
    "y": 108.95,
@@ -127,6 +136,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Sat",
    "x": 446.92,
    "y": 108.95,
@@ -139,6 +149,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "1",
    "x": 40.48,
    "y": 128.86,
@@ -151,6 +162,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "2",
    "x": 109.2,
    "y": 128.86,
@@ -163,6 +175,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "3",
    "x": 177.92,
    "y": 128.86,
@@ -175,6 +188,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "4",
    "x": 246.64,
    "y": 128.86,
@@ -187,6 +201,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "5",
    "x": 315.36,
    "y": 128.86,
@@ -199,6 +214,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "6",
    "x": 384.08,
    "y": 128.86,
@@ -211,6 +227,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "7",
    "x": 452.8,
    "y": 128.86,
@@ -223,6 +240,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "8",
    "x": 40.48,
    "y": 174.39,
@@ -235,6 +253,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "9",
    "x": 109.2,
    "y": 174.39,
@@ -247,6 +266,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "10",
    "x": 174.55,
    "y": 174.39,
@@ -259,6 +279,20 @@
   },
   {
    "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 161.05,
+   "y": 206.39,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
    "text": "11",
    "x": 243.27,
    "y": 174.39,
@@ -271,18 +305,33 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "12",
    "x": 311.98,
-   "y": 174.39,
+   "y": 174.8,
    "w": 13.48,
    "h": 14,
    "size": 12,
+   "weight": 400,
+   "color": "rgb(255, 255, 255)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 298.48,
+   "y": 206.39,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
    "weight": 400,
    "color": "rgb(225, 225, 225)",
    "transform": "none"
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "13",
    "x": 380.7,
    "y": 174.39,
@@ -295,6 +344,20 @@
   },
   {
    "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 367.2,
+   "y": 206.39,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
    "text": "14",
    "x": 449.42,
    "y": 174.39,
@@ -307,6 +370,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "15",
    "x": 37.11,
    "y": 214.92,
@@ -319,6 +383,20 @@
   },
   {
    "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 23.61,
+   "y": 246.11,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
    "text": "16",
    "x": 105.83,
    "y": 214.92,
@@ -331,6 +409,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "17",
    "x": 174.55,
    "y": 214.92,
@@ -343,6 +422,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "18",
    "x": 243.27,
    "y": 214.92,
@@ -355,6 +435,20 @@
   },
   {
    "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 229.77,
+   "y": 246.11,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
    "text": "19",
    "x": 311.98,
    "y": 214.92,
@@ -367,6 +461,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "20",
    "x": 380.7,
    "y": 214.92,
@@ -379,6 +474,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "21",
    "x": 449.42,
    "y": 214.92,
@@ -391,6 +487,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "22",
    "x": 37.11,
    "y": 255.45,
@@ -403,6 +500,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "23",
    "x": 105.83,
    "y": 255.45,
@@ -415,21 +513,10 @@
   },
   {
    "slot": 0,
-   "text": "24",
-   "x": 174.55,
-   "y": 255.86,
-   "w": 13.48,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(255, 255, 255)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
+   "clipped": false,
    "text": "+1 more",
-   "x": 161.05,
-   "y": 287.45,
+   "x": 92.33,
+   "y": 286.64,
    "w": 40.5,
    "h": 13,
    "size": 11,
@@ -439,6 +526,20 @@
   },
   {
    "slot": 0,
+   "clipped": false,
+   "text": "24",
+   "x": 174.55,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
    "text": "25",
    "x": 243.27,
    "y": 255.45,
@@ -451,6 +552,20 @@
   },
   {
    "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 229.77,
+   "y": 286.64,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
    "text": "26",
    "x": 311.98,
    "y": 255.45,
@@ -463,9 +578,10 @@
   },
   {
    "slot": 0,
-   "text": "+1 more",
+   "clipped": false,
+   "text": "+2 more",
    "x": 298.48,
-   "y": 287.45,
+   "y": 286.64,
    "w": 40.5,
    "h": 13,
    "size": 11,
@@ -475,6 +591,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "27",
    "x": 380.7,
    "y": 255.45,
@@ -487,6 +604,20 @@
   },
   {
    "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 367.2,
+   "y": 286.64,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
    "text": "28",
    "x": 449.42,
    "y": 255.45,
@@ -499,6 +630,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "29",
    "x": 37.11,
    "y": 295.98,
@@ -511,6 +643,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "30",
    "x": 105.83,
    "y": 295.98,
@@ -523,6 +656,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "1",
    "x": 177.92,
    "y": 295.98,
@@ -535,6 +669,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "2",
    "x": 246.64,
    "y": 295.98,
@@ -547,6 +682,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "3",
    "x": 315.36,
    "y": 295.98,
@@ -559,6 +695,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "4",
    "x": 384.08,
    "y": 295.98,
@@ -571,6 +708,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "5",
    "x": 452.8,
    "y": 295.98,
@@ -583,6 +721,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "6",
    "x": 40.48,
    "y": 336.52,
@@ -595,6 +734,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "7",
    "x": 109.2,
    "y": 336.52,
@@ -607,6 +747,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "8",
    "x": 177.92,
    "y": 336.52,
@@ -619,6 +760,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "9",
    "x": 246.64,
    "y": 336.52,
@@ -631,6 +773,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "10",
    "x": 311.98,
    "y": 336.52,
@@ -643,6 +786,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "11",
    "x": 380.7,
    "y": 336.52,
@@ -655,6 +799,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "12",
    "x": 449.42,
    "y": 336.52,
@@ -667,28 +812,28 @@
   }
  ],
  "states": {
-  "calendar.maintenance_schedule": {
+  "calendar.family": {
    "s": "on",
    "a": {
-    "message": "🔴 Oil Boards (Wood Cutting Boards)",
+    "message": "Recycling pickup",
     "all_day": true,
-    "start_time": "2026-11-24 00:00:00",
-    "end_time": "2026-11-25 00:00:00",
+    "start_time": "2026-11-12 00:00:00",
+    "end_time": "2026-11-13 00:00:00",
     "location": "",
-    "description": "Due: 2026-11-19\nType: Service\nInterval: 31 days\nLast performed: 2026-10-19",
-    "friendly_name": "Maintenance Schedule"
+    "description": "Blue bin out the night before",
+    "friendly_name": "Family"
    },
-   "lc": 1795507310.7685673
+   "lc": 1794488280,
+   "lu": 1794488280
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "calendar.maintenance_schedule",
-    "pl": "maintenance_supporter",
-    "tk": "maintenance_schedule",
-    "en": "Maintenance Schedule"
+    "ei": "calendar.family",
+    "pl": "local_calendar",
+    "en": "Family"
    }
   ],
   "devices": [],
@@ -696,9 +841,7 @@
    "domains": [
     "calendar"
    ],
-   "platforms": [
-    "maintenance_supporter"
-   ]
+   "platforms": []
   },
   "icons": {
    "entity_component": {
@@ -726,26 +869,84 @@
   {
    "request": {
     "type": "calendar/event/subscribe",
-    "entity_id": "calendar.maintenance_schedule",
-    "start": "2026-11-01T07:00:00.000Z",
-    "end": "2026-12-13T08:00:00.000Z"
+    "entity_id": "calendar.family",
+    "start": "2026-11-01T05:00:00.000Z",
+    "end": "2026-12-13T06:00:00.000Z"
    },
    "events": [
     {
      "events": [
       {
-       "start": "2026-11-26",
-       "end": "2026-11-27",
-       "summary": "🟡 Pre Filter Clean (Air Purifier)",
-       "description": "Type: Cleaning\nInterval: 21 days\nLast performed: 2026-11-05",
-       "all_day": true
+       "description": "Blue bin out the night before",
+       "location": null,
+       "all_day": true,
+       "summary": "Recycling pickup",
+       "start": "2026-11-12",
+       "end": "2026-11-13"
       },
       {
-       "start": "2026-11-24",
-       "end": "2026-11-25",
-       "summary": "🔴 Oil Boards (Wood Cutting Boards)",
-       "description": "Due: 2026-11-19\nType: Service\nInterval: 31 days\nLast performed: 2026-10-19",
-       "all_day": true
+       "description": null,
+       "location": null,
+       "all_day": false,
+       "summary": "Dentist",
+       "start": "2026-11-13T09:30:00-06:00",
+       "end": "2026-11-13T10:15:00-06:00"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": false,
+       "summary": "Book club",
+       "start": "2026-11-15T19:00:00-06:00",
+       "end": "2026-11-15T21:00:00-06:00"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": true,
+       "summary": "Garden waste",
+       "start": "2026-11-18",
+       "end": "2026-11-19"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": false,
+       "summary": "Piano lesson",
+       "start": "2026-11-10T16:00:00-06:00",
+       "end": "2026-11-10T17:00:00-06:00"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": true,
+       "summary": "Boiler service",
+       "start": "2026-11-23",
+       "end": "2026-11-24"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": true,
+       "summary": "School holiday",
+       "start": "2026-11-25",
+       "end": "2026-11-28"
+      },
+      {
+       "description": "Blue bin out the night before",
+       "location": null,
+       "all_day": true,
+       "summary": "Recycling pickup",
+       "start": "2026-11-26",
+       "end": "2026-11-27"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": false,
+       "summary": "Window cleaner",
+       "start": "2026-11-06T11:00:00-06:00",
+       "end": "2026-11-06T12:00:00-06:00"
       }
      ]
     }

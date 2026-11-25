@@ -85,9 +85,10 @@ class WebFallbackTest {
 
     private fun vitroView(page: Page): VitroView = (page.view as ViewGroup).getChildAt(0) as VitroView
 
-    /** The page's own fallback (opened with the activity's host); islands open theirs with the island host. */
-    private fun pageFallback(): RecordingPage? = fallback.opens.indexOfFirst { it.host === host }.takeIf { it >= 0 }?.let { fallback.pages[it] }
-    private fun islandOpens() = fallback.opens.count { it.host !== host }
+    /** The page's own fallback (opened with the page's background); islands open theirs transparent. */
+    private fun pageFallback(): RecordingPage? = fallback.opens.indexOfFirst { it.background == Color.BLACK }.takeIf { it >= 0 }?.let { fallback.pages[it] }
+    private fun pageFallbackHost() = fallback.opens.single { it.background == Color.BLACK }.host
+    private fun islandOpens() = fallback.opens.count { it.background == Color.TRANSPARENT }
 
     private fun views(vararg views: String) = JSONObject("""{"views": [${views.joinToString(",")}]}""")
 
@@ -211,6 +212,96 @@ class WebFallbackTest {
         assertEquals("the built-in `iframe` card", reason("""{"type": "custom:layout-card", "cards": [{"type": "iframe"}]}"""))
         assertNull("a custom card goes to its island", reason("""{"type": "custom:acme-card"}"""))
         assertNull(reason("""{"type": "grid", "cards": [{"type": "tile"}, {"type": "entities", "entities": ["light.a"]}]}"""))
+    }
+
+    // ---- The way back ----
+
+    private val mapView = """{"title": "Map", "path": "map", "cards": [{"type": "map", "entities": ["light.lounge_lamp"]}]}"""
+    private val areasView = """{"title": "Areas", "path": "areas", "strategy": {"type": "areas"}}"""
+
+    @Test fun backFromAMapViewReturnsToTheNativeViewBeforeIt() {
+        server.dashboardConfig = views(living, mapView)
+        val p = page()
+        p.load("$base/wall-test/living")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        val vv = vitroView(p)
+        tab(vv, "Map").performClick()
+        idle()
+        val fp = pageFallback()!!
+        assertEquals(View.VISIBLE, fp.view.visibility)
+
+        // HA's frontend reports the map view it draws: no hand-back to Vitro (which would only send it here again).
+        pageFallbackHost().onLocationChange("$base/wall-test/map")
+        idle()
+        assertEquals(View.GONE, vv.visibility)
+        assertEquals("the map view loaded once", listOf("$base/wall-test/map"), fp.loads)
+
+        // Back: HA's page has no history of its own, so it returns to the native view the tab tap left.
+        p.goBack()
+        idle()
+        assertEquals(View.VISIBLE, vv.visibility)
+        assertEquals(View.GONE, fp.view.visibility)
+        assertEquals(0, vv.currentViewIndex)
+        assertEquals("$base/wall-test/living", host.locations.last())
+    }
+
+    @Test fun backAndReloadFromAStrategyViewReturnToTheNativeViewBeforeIt() {
+        server.dashboardConfig = views(living, areasView)
+        val p = page()
+        p.load("$base/wall-test/living")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        val vv = vitroView(p)
+
+        p.load("$base/wall-test/areas")
+        idle()
+        val fp = pageFallback()!!
+        assertEquals(View.GONE, vv.visibility)
+        assertTrue(p.canGoBack)
+
+        // Reload dashboard returns to the native view, not to the strategy view the page shows.
+        p.reload()
+        idle()
+        assertEquals(View.VISIBLE, vv.visibility)
+        assertEquals(0, vv.currentViewIndex)
+        assertEquals("not a reload of HA's page", 0, fp.reloads)
+
+        // And Back from the strategy view does too.
+        p.load("$base/wall-test/areas")
+        idle()
+        assertEquals(View.GONE, vv.visibility)
+        p.goBack()
+        idle()
+        assertEquals(View.VISIBLE, vv.visibility)
+        assertEquals(0, vv.currentViewIndex)
+    }
+
+    @Test fun startingOnAMapViewBackGoesToTheDashboardThePanelIsSetTo() {
+        server.dashboardConfig = views(living, mapView)
+        val p = page()
+        p.load("$base/wall-test/map")
+        awaitMain("fallback") { pageFallback() != null }
+        val vv = vitroView(p)
+        assertEquals(View.GONE, vv.visibility)
+
+        // The map view is no return target: Back goes to the panel's dashboard (its living view).
+        p.goBack()
+        idle()
+        assertEquals(View.VISIBLE, vv.visibility)
+        assertEquals(0, vv.currentViewIndex)
+    }
+
+    @Test fun aStrategyDashboardHomeAssistantsFrontendReportsIsNotHandedBack() {
+        server.dashboardConfig = JSONObject("""{"strategy": {"type": "original-states"}}""")
+        val p = page()
+        p.load("$base/wall-test")
+        awaitMain("fallback") { pageFallback() != null }
+        val fetches = server.commands("lovelace/config").size
+
+        pageFallbackHost().onLocationChange("$base/wall-test/0")
+        idle()
+        assertEquals(View.GONE, vitroView(p).visibility)
+        assertEquals("not fetched again", fetches, server.commands("lovelace/config").size)
+        assertEquals(listOf("$base/wall-test"), pageFallback()!!.loads)
     }
 
     // ---- entities rows Vitro doesn't draw ----

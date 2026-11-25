@@ -2,7 +2,7 @@
  "case": "entities",
  "frame": "mirror",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 720,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Kitchen",
    "x": 17,
    "y": 21,
@@ -43,10 +44,11 @@
   },
   {
    "slot": 0,
-   "text": "Fridge Fridge temperature",
+   "clipped": false,
+   "text": "Fridge Temperature",
    "x": 73,
    "y": 77.59,
-   "w": 160.59,
+   "w": 121.09,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -55,7 +57,8 @@
   },
   {
    "slot": 0,
-   "text": "1.1 °C",
+   "clipped": false,
+   "text": "3.4 °C",
    "x": 445.78,
    "y": 77.59,
    "w": 37.22,
@@ -67,6 +70,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Fridge Power",
    "x": 73,
    "y": 125.59,
@@ -79,7 +83,8 @@
   },
   {
    "slot": 0,
-   "text": "50 W",
+   "clipped": false,
+   "text": "49 W",
    "x": 451.39,
    "y": 125.59,
    "w": 31.61,
@@ -91,10 +96,11 @@
   },
   {
    "slot": 0,
-   "text": "Fridge Fridge door open",
+   "clipped": false,
+   "text": "Fridge Door",
    "x": 73,
    "y": 173.59,
-   "w": 147.72,
+   "w": 72.22,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -103,6 +109,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Closed",
    "x": 439.97,
    "y": 173.59,
@@ -115,10 +122,11 @@
   },
   {
    "slot": 0,
-   "text": "Guest mode",
+   "clipped": false,
+   "text": "Vacation mode",
    "x": 73,
    "y": 230.59,
-   "w": 75.5,
+   "w": 93.88,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -127,10 +135,11 @@
   },
   {
    "slot": 0,
-   "text": "Window",
+   "clipped": false,
+   "text": "Accent",
    "x": 73,
    "y": 278.59,
-   "w": 49.95,
+   "w": 43.52,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -139,24 +148,26 @@
   }
  ],
  "states": {
-  "binary_sensor.kitchen_fridge_fridge_door_open": {
+  "binary_sensor.fridge_door": {
    "s": "off",
    "a": {
     "device_class": "door",
-    "friendly_name": "Fridge Fridge door open"
+    "friendly_name": "Fridge Door"
    },
-   "lc": 1795504918.0336182
+   "lc": 1794483060,
+   "lu": 1794483060
   },
-  "input_boolean.guest_mode": {
+  "input_boolean.vacation_mode": {
    "s": "off",
    "a": {
     "editable": true,
     "icon": "mdi:account-multiple",
-    "friendly_name": "Guest mode"
+    "friendly_name": "Vacation mode"
    },
-   "lc": 1795504897.1536012
+   "lc": 1794489360,
+   "lu": 1794489360
   },
-  "light.window_accent": {
+  "light.bedroom_accent": {
    "s": "off",
    "a": {
     "supported_color_modes": [
@@ -169,72 +180,72 @@
     "xy_color": null,
     "off_with_transition": false,
     "off_brightness": 254,
-    "icon": "mdi:window-open",
-    "friendly_name": "Window",
+    "icon": "mdi:led-strip-variant",
+    "friendly_name": "Bedroom Strip Accent",
     "supported_features": 40
    },
-   "lc": 1795507611.0189574
+   "lc": 1794496680,
+   "lu": 1794496680
   },
-  "sensor.kitchen_fridge_fridge_temperature": {
-   "s": "1.11111111111111",
-   "a": {
-    "state_class": "measurement",
-    "unit_of_measurement": "°C",
-    "device_class": "temperature",
-    "icon": "mdi:thermometer",
-    "friendly_name": "Fridge Fridge temperature"
-   },
-   "lc": 1795504918.0331674
-  },
-  "sensor.kitchen_fridge_power": {
-   "s": "50.0",
+  "sensor.fridge_power": {
+   "s": "48.6",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "W",
     "device_class": "power",
     "friendly_name": "Fridge Power"
    },
-   "lc": 1795522833.0296257
+   "lc": 1794487740,
+   "lu": 1794487740
+  },
+  "sensor.fridge_temperature": {
+   "s": "3.4",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "icon": "mdi:thermometer",
+    "friendly_name": "Fridge Temperature"
+   },
+   "lc": 1794494100,
+   "lu": 1794494100
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "binary_sensor.kitchen_fridge_fridge_door_open",
-    "pl": "localthings",
-    "tk": "instance_open",
+    "ei": "binary_sensor.fridge_door",
+    "pl": "demo",
     "di": "device-1",
-    "en": "Fridge door open"
+    "en": "Door"
    },
    {
-    "ei": "input_boolean.guest_mode",
+    "ei": "input_boolean.vacation_mode",
     "pl": "input_boolean",
-    "en": "Guest mode"
+    "en": "Vacation mode"
    },
    {
-    "ei": "light.window_accent",
+    "ei": "light.bedroom_accent",
     "pl": "zha",
     "tk": "light",
-    "ic": "mdi:window-open",
+    "ic": "mdi:led-strip-variant",
     "di": "device-2",
-    "en": "Window"
+    "en": "Accent"
    },
    {
-    "ei": "sensor.kitchen_fridge_fridge_temperature",
-    "pl": "localthings",
-    "tk": "instance_temperature",
-    "dp": 1,
-    "di": "device-1",
-    "en": "Fridge temperature"
-   },
-   {
-    "ei": "sensor.kitchen_fridge_power",
-    "pl": "localthings",
-    "tk": "power_watts",
+    "ei": "sensor.fridge_power",
+    "pl": "demo",
     "dp": 0,
     "di": "device-1",
     "en": "Power"
+   },
+   {
+    "ei": "sensor.fridge_temperature",
+    "pl": "demo",
+    "dp": 1,
+    "di": "device-1",
+    "en": "Temperature"
    }
   ],
   "devices": [
@@ -244,7 +255,7 @@
    },
    {
     "id": "device-2",
-    "name": "LED Strip"
+    "name": "Bedroom Strip"
    }
   ],
   "requested": {
@@ -255,7 +266,6 @@
     "sensor"
    ],
    "platforms": [
-    "localthings",
     "zha"
    ]
   },
