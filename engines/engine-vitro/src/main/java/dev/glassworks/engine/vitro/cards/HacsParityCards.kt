@@ -1403,7 +1403,7 @@ class MiniMediaPlayerCardView(ctx: VitroCardContext, private val config: CardCon
     }
 
     private fun updateProgress(s: EntityState?) {
-        val f = if (hidden("progress")) null else mediaProgressFraction(s)
+        val f = if (hidden("progress")) null else mediaProgressFraction(s, ctx.now())
         if (f == null) {
             progress.visibility = GONE
             return

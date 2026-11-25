@@ -17,6 +17,9 @@ export const RECORDED_TYPES = new Set([
   'logbook/event_stream',
   'weather/subscribe_forecast',
   'calendar/event/subscribe',
+  // Not a WebSocket command: HA's REST history (`GET /api/history/period/<start>`), which mini-graph-card reads. The
+  // capture records it in the same list (restHistoryCall), and Vitro's fetchHistory is answered from it.
+  'rest/history/period',
 ]);
 
 /**
@@ -42,6 +45,8 @@ export function wsRecorder() {
   let calls = [];
   return {
     get calls() { return calls; },
+    /** A call made outside the WebSocket (REST history): recorded as is, its answer set on it later. */
+    push(call) { calls.push(call); return call; },
     reset() {
       for (const byId of sockets) byId.clear();
       calls = [];
@@ -75,7 +80,30 @@ export function wsRecorder() {
 }
 
 /** The commands answered by one result (everything recorded but `history/stream`, a subscription). */
-const ONE_SHOT = new Set(['history/history_during_period', 'recorder/statistics_during_period', 'recorder/get_statistics_metadata']);
+const ONE_SHOT = new Set(['history/history_during_period', 'recorder/statistics_during_period', 'recorder/get_statistics_metadata', 'rest/history/period']);
+
+/**
+ * The request a REST history URL stands for (`/api/history/period/<start>?filter_entity_id=a,b&end_time=..`), as a
+ * recorded call's `request`, or null for another URL. Times as the page sent them.
+ */
+export function restHistoryRequest(url) {
+  let u;
+  try { u = new URL(url); } catch { return null; }
+  const prefix = '/api/history/period';
+  if (!u.pathname.startsWith(prefix)) return null;
+  const start = decodeURIComponent(u.pathname.slice(prefix.length).replace(/^\//, '')) || null;
+  const q = u.searchParams;
+  return {
+    type: 'rest/history/period',
+    entity_ids: (q.get('filter_entity_id') || '').split(',').filter(Boolean),
+    start_time: start,
+    end_time: q.get('end_time'),
+    minimal_response: q.has('minimal_response'),
+    no_attributes: q.has('no_attributes'),
+    significant_changes_only: q.has('significant_changes_only') ? q.get('significant_changes_only') !== '0' : true,
+    skip_initial_state: q.has('skip_initial_state'),
+  };
+}
 
 /** The one-shot calls in [calls] still waiting for their result or error, by type. */
 export const pendingOneShots = (calls) =>

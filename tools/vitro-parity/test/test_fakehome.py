@@ -1,0 +1,232 @@
+"""python3 -m unittest discover -s tools/vitro-parity/test
+
+The parity harness's home for the fake HA (fakehome.py): fixture times, history, statistics, templates, HA core's
+texts and icons, and the WebSocket answers the cards read, without a browser or a download. Also checks the committed
+corpus: every case has a fixture that covers the entities its card names, and nothing in it looks real."""
+import datetime
+import json
+import os
+import re
+import sys
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
+sys.path.insert(0, os.path.dirname(HERE))
+os.environ.setdefault("GW_PERF_FRONTEND", os.path.join(ROOT, "tools", "perf", "test", "stub_frontend"))
+import fakehome as H  # noqa: E402
+
+CORPUS = os.path.join(ROOT, "engines", "engine-vitro", "src", "test", "parity")
+
+
+class Conn:
+    """What fakeha's Conn gives a handler: result() and event(), kept here."""
+
+    def __init__(self):
+        self.out = []
+
+    def result(self, mid, result=None, success=True, error=None):
+        self.out.append({"id": mid, "type": "result", "success": success, ("result" if success else "error"): result if success else error})
+
+    def event(self, mid, ev):
+        self.out.append({"id": mid, "type": "event", "event": ev})
+
+
+def call(msg):
+    c = Conn()
+    H.HANDLERS[msg["type"]](c, dict(msg, id=1))
+    return c.out
+
+
+class Home(unittest.TestCase):
+    def setUp(self):
+        H.set_home({"now": "2026-11-12T10:08:00", "config": {"time_zone": "America/Chicago"}, "user": {"id": "parity-user", "name": "Parity"}})
+        H.CASE.update(id=None, fixture={})
+
+    def case(self, fx):
+        H.CASE.update(id="t", fixture=fx)
+
+    def test_now_is_local_time_in_the_homes_zone(self):
+        self.assertEqual(H.NOW, datetime.datetime(2026, 11, 12, 16, 8, tzinfo=datetime.timezone.utc).timestamp())
+
+    def test_fixture_times(self):
+        self.assertEqual(H.at(-60), H.NOW - 60)
+        self.assertEqual(H.at("-2h30m"), H.NOW - 9000)
+        self.assertEqual(H.at("+1d"), H.NOW + 86400)
+        self.assertEqual(H.resolve("@D+1"), "2026-11-13")
+        self.assertEqual(H.resolve("@D-1 09:30"), "2026-11-11T09:30:00-06:00")
+        self.assertEqual(H.resolve({"a": ["@0s"]}), {"a": [H.iso(H.NOW)]})
+        with self.assertRaises(ValueError):
+            H.offset("yesterday")
+
+    def test_states_from_the_fixture(self):
+        self.case({"states": {"light.a": {"state": "on", "last_changed": "-1h", "attributes": {"friendly_name": "A"}}}})
+        st = H.states()["light.a"]
+        self.assertEqual((st["state"], st["last_changed"], st["last_updated"]), ("on", H.NOW - 3600, H.NOW - 3600))
+        self.assertEqual(st["attributes"], {"friendly_name": "A"})
+
+    def test_history_starts_at_the_window_and_ends_in_the_current_state(self):
+        self.case({"states": {"binary_sensor.m": {"state": "off", "last_changed": "-10m", "attributes": {}}},
+                   "history": {"binary_sensor.m": {"steps": [["-30h", "off"], ["-3h", "on"], ["-10m", "off"]]}}})
+        start = H.iso(H.NOW - 86400)
+        rows = H.history(["binary_sensor.m"], start, None)["binary_sensor.m"]
+        self.assertEqual([r["s"] for r in rows], ["off", "on", "off"])
+        self.assertEqual(rows[0]["lu"], round(H.NOW - 86400, 6))
+        self.assertNotIn("a", rows[0])
+
+    def test_a_wave_is_the_same_every_time_and_keeps_its_quantum(self):
+        spec = {"wave": {"min": 1010, "max": 1020, "period": "12h", "step": "10m", "decimals": 1, "quantum": 1}}
+        self.case({"states": {}, "history": {"sensor.p": spec}})
+        a = H.history(["sensor.p"], H.iso(H.NOW - 86400), None)
+        self.assertEqual(a, H.history(["sensor.p"], H.iso(H.NOW - 86400), None))
+        vals = [float(r["s"]) for r in a["sensor.p"]]
+        self.assertTrue(all(1009 <= v <= 1021 and v == round(v) for v in vals), vals[:5])
+        self.assertTrue(all(r["s"].endswith(".0") for r in a["sensor.p"]))
+
+    def test_climate_rows_keep_their_own_attributes(self):
+        self.case({"states": {"climate.c": {"state": "off", "last_changed": "-1h", "attributes": {"current_temperature": 18}}},
+                   "history": {"climate.c": {"points": [["-5h", "heat", {"current_temperature": 20}], ["-1h", "off", {"current_temperature": 19}]]}}})
+        rows = H.history(["climate.c"], H.iso(H.NOW - 6 * 3600), None, no_attributes=False, minimal=True)["climate.c"]
+        self.assertEqual([(r["s"], r["a"]["current_temperature"]) for r in rows], [("heat", 20), ("off", 19)])
+
+    def test_statistics_are_hourly_means_of_the_series(self):
+        self.case({"states": {"sensor.t": {"state": "21", "attributes": {"state_class": "measurement", "unit_of_measurement": "°C",
+                                                                           "device_class": "temperature"}}},
+                   "history": {"sensor.t": {"wave": {"min": 20, "max": 22, "period": "24h", "step": "10m"}}}})
+        meta = H.statistics_metadata(["sensor.t", "sensor.none"])
+        self.assertEqual([(m["statistic_id"], m["has_mean"], m["unit_class"]) for m in meta], [("sensor.t", True, "temperature")])
+        out = H.statistics(["sensor.t"], H.iso(H.NOW - 6 * 3600), None, "hour", ["mean", "min", "max"])["sensor.t"]
+        self.assertGreaterEqual(len(out), 5)
+        self.assertTrue(all(r["min"] <= r["mean"] <= r["max"] and r["end"] - r["start"] == 3600000 for r in out))
+
+    def test_templates_render_as_ha_does(self):
+        self.case({"states": {"sensor.h": {"state": "47.3", "attributes": {"unit_of_measurement": "%"}},
+                              "climate.c": {"state": "heat_cool", "attributes": {}}}})
+        self.assertEqual(H.render_template("{{ states('sensor.h') | float(0) | round(0) | int }}%"), "47%")
+        self.assertEqual(H.render_template("{{ states('sensor.h') | float(0) | round(0) | int }}"), 47)
+        # Jinja's own title filter, which HA keeps: an underscore doesn't start a word.
+        self.assertEqual(H.render_template("{{ states('climate.c') | title }}"), "Heat_cool")
+        self.assertEqual(H.render_template("{{ state_attr('sensor.h', 'unit_of_measurement') }}"), "%")
+        self.assertEqual(H.render_template("{{ is_state('sensor.h', '47.3') }}"), True)
+        self.assertEqual(H.render_template("{{ states.sensor.h.state }}"), 47.3)
+        self.assertEqual(H.render_template("{{ states('sensor.missing') }}"), "unknown")
+        self.assertEqual(H.render_template("{{ now().hour }}"), 10)
+
+    def test_render_template_subscription(self):
+        self.case({"states": {"sensor.h": {"state": "5", "attributes": {}}}})
+        out = call({"type": "render_template", "template": "{{ states('sensor.h') }} W"})
+        self.assertEqual(out[0]["success"], True)
+        self.assertEqual(out[1]["event"]["result"], "5 W")
+        bad = call({"type": "render_template", "template": "{{ 1 / 0 }}", "report_errors": True})
+        self.assertFalse(bad[0]["success"])
+
+    def test_ha_core_texts_and_icons(self):
+        tr = H.translations("entity_component", ["humidifier", "alarm_control_panel"])
+        self.assertEqual(tr["component.humidifier.entity_component._.state.on"], "On")
+        self.assertEqual(tr["component.alarm_control_panel.entity_component._.state.armed_away"], "Armed away")
+        self.assertEqual(H.icons("entity_component", ["lock"])["lock"]["_"]["default"], "mdi:lock")
+        self.assertTrue(all(k.startswith("component.") for k in H.translations("entity_component")))
+        self.assertEqual(H.HACORE["version"], H.HA_VERSION)
+
+    def test_the_cards_subscriptions(self):
+        self.case({"todo": {"todo.c": [{"summary": "x", "uid": "item-1", "status": "needs_action", "due": "@D+1"}]},
+                   "forecast": {"weather.h": {"daily": [{"datetime": "@D+1 12:00", "condition": "sunny"}]}},
+                   "calendar": {"calendar.f": [{"summary": "All day", "start": "@D+0", "end": "@D+1"},
+                                               {"summary": "Later", "start": "@D+40 09:00", "end": "@D+40 10:00"}]},
+                   "logbook": [{"entity_id": "light.a", "state": "on", "when": "-2h"}, {"entity_id": "light.b", "state": "on", "when": "-1h"}]})
+        self.assertEqual(call({"type": "todo/item/subscribe", "entity_id": "todo.c"})[1]["event"]["items"][0]["due"], "2026-11-13")
+        fc = call({"type": "weather/subscribe_forecast", "entity_id": "weather.h", "forecast_type": "daily"})[1]["event"]
+        self.assertEqual((fc["type"], fc["forecast"][0]["datetime"]), ("daily", "2026-11-13T12:00:00-06:00"))
+        self.assertFalse(call({"type": "weather/subscribe_forecast", "entity_id": "weather.h", "forecast_type": "hourly"})[0]["success"])
+        cal = call({"type": "calendar/event/subscribe", "entity_id": "calendar.f", "start": H.iso(H.NOW - 86400 * 10),
+                    "end": H.iso(H.NOW + 86400 * 10)})[1]["event"]["events"]
+        self.assertEqual([(e["summary"], e["all_day"]) for e in cal], [("All day", True)])
+        log = call({"type": "logbook/event_stream", "start_time": H.iso(H.NOW - 86400), "entity_ids": ["light.a"]})
+        self.assertEqual([e["entity_id"] for e in log[1]["event"]["events"]], ["light.a"])
+        self.assertTrue(log[1]["event"]["partial"])
+        self.assertEqual(log[2]["event"]["events"], [])
+
+    def test_registries_and_users(self):
+        self.case({"entities": [{"ei": "light.a", "pl": "zha", "di": "dev-a", "hn": True}], "devices": [{"id": "dev-a", "name": "A"}],
+                   "areas": [{"area_id": "kitchen", "name": "Kitchen"}], "users": [{"id": "u2", "name": "Alex"}]})
+        self.assertEqual(H.registry()["entities"][0]["ei"], "light.a")
+        self.assertEqual((H.devices()[0]["name"], H.devices()[0]["name_by_user"]), ("A", None))
+        self.assertEqual(H.areas()[0]["picture"], None)
+        self.assertEqual([u["name"] for u in H.users()], ["Parity", "Alex"])
+        self.assertTrue(H.user()["is_admin"])
+
+    def test_rest_history_as_mini_graph_reads_it(self):
+        self.case({"states": {"sensor.t": {"state": "21.5", "last_changed": "-5m", "attributes": {"unit_of_measurement": "°C"}}},
+                   "history": {"sensor.t": {"steps": [["-2d", "20.0"], ["-3h", "21.0"]]}}})
+        start = H.iso(H.NOW - 86400).replace("+00:00", "Z")
+        code, body, ctype = H.http_get(f"/api/history/period/{start}", {"filter_entity_id": ["sensor.t"], "minimal_response": [""]})
+        rows = json.loads(body)[0]
+        self.assertEqual((code, ctype), (200, "application/json"))
+        self.assertEqual(rows[0]["entity_id"], "sensor.t")
+        self.assertEqual([r["state"] for r in rows], ["20.0", "21.0", "21.5"])
+        self.assertNotIn("entity_id", rows[1])
+
+    def test_fixture_files_stay_in_the_fixtures_folder(self):
+        H.HOME["fixtures_dir"] = os.path.join(CORPUS, "fixtures")
+        code, body, ctype = H.http_get("/local/vitro-harness-fixtures/images/album.png", {})
+        self.assertEqual((code, ctype), (200, "image/png"))
+        self.assertEqual(H.http_get("/local/vitro-harness-fixtures/../home.json", {})[0], 404)
+        self.assertIsNone(H.http_get("/lovelace/0", {}))
+
+    def test_community_cards_are_pinned(self):
+        res = {r["url"].split("/")[2] for r in H._cards.resources(H.CARDS)}
+        for name in ("lovelace-mushroom", "lovelace-card-mod", "mini-graph-card", "Bubble-Card", "clock-weather-card"):
+            self.assertIn(name, res)
+        for c in H.CARDS:
+            self.assertIn(c["main"], c["files"])
+            self.assertTrue(all(re.fullmatch(r"[0-9a-f]{64}", f["sha256"]) for f in c["files"].values()))
+            self.assertIn(c["license"], ("MIT", "Apache-2.0"))
+        self.assertEqual(H.http_get("/hacsfiles/mini-graph-card/not-pinned.js", {})[0], 404)
+        self.assertEqual(H.http_get("/hacsfiles/mini-graph-card/../x.js", {})[0], 404)
+
+
+ID = re.compile(r"\b([a-z_]+\.[a-z0-9_]+)\b")
+DOMAINS = set(H._domains())
+
+
+class Corpus(unittest.TestCase):
+    """The committed corpus: each case's fixture serves what its card shows, and is made up."""
+
+    def cases(self):
+        d = os.path.join(CORPUS, "corpus")
+        for f in sorted(os.listdir(d)):
+            if f.endswith(".json"):
+                with open(os.path.join(d, f)) as fh:
+                    yield f[:-5], json.load(fh)
+
+    def test_every_case_has_a_fixture_with_the_entities_its_card_names(self):
+        missing = []
+        for cid, doc in self.cases():
+            fx = doc.get("fixture")
+            if not isinstance(fx, dict):
+                missing.append(f"{cid}: no fixture")
+                continue
+            named = {m for m in ID.findall(json.dumps(doc["card"])) if m.split(".")[0] in DOMAINS and not m.startswith(("sun.", "sensor.missing"))}
+            named = {m for m in named if not re.match(r"^(todo|calendar|person)\.(item|event)", m)}
+            for e in sorted(named - set(fx.get("states") or {})):
+                missing.append(f"{cid}: {e} has no state")
+            for e in sorted(set(doc.get("expect") or {}) - set(fx.get("states") or {})):
+                missing.append(f"{cid}: expects {e}, which has no state")
+            for e, want in (doc.get("expect") or {}).items():
+                got = (fx.get("states") or {}).get(e, {}).get("state")
+                if got is not None and got != want:
+                    missing.append(f"{cid}: expects {e} {want}, the fixture says {got}")
+        self.assertEqual(missing, [])
+
+    def test_the_fixtures_times_and_series_resolve(self):
+        H.set_home(json.load(open(os.path.join(CORPUS, "home.json"))))
+        for cid, doc in self.cases():
+            H.CASE.update(id=cid, fixture=doc["fixture"])
+            sts = H.states()
+            for eid in (doc["fixture"].get("history") or {}):
+                self.assertTrue(H.history([eid], H.iso(H.NOW - 7 * 86400), None).get(eid), f"{cid}: {eid} has no history")
+            self.assertEqual(set(sts), set(doc["fixture"].get("states") or {}))
+
+
+if __name__ == "__main__":
+    unittest.main()

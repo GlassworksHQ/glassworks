@@ -383,7 +383,9 @@ class ParityHarnessSelfTest {
         val ipv4 = Regex("""\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b""")
         val mac = Regex("""\b[0-9a-fA-F]{2}([:-])[0-9a-fA-F]{2}(\1[0-9a-fA-F]{2}){4}\b""")
         val jwt = Regex("""eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}""")
-        val privateKeys = Regex("""\"(ip_address|mac_address|serial_number|latitude|longitude|access_token|ssid|bssid|source_list|sound_mode_list|media_playlist|media_title|media_artist)\"\s*:""")
+        // The fixtures are made up (the fake HA serves them), so a playing speaker's title and artist are fine; a media
+        // list (sources, playlists) still isn't: those came from real homes.
+        val privateKeys = Regex("""\"(ip_address|mac_address|serial_number|latitude|longitude|access_token|ssid|bssid|source_list|sound_mode_list|media_playlist)\"\s*:""")
         val problems = ArrayList<String>()
         for (f in files) {
             val text = f.readText()

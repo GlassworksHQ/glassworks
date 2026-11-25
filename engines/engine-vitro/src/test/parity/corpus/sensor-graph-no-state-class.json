@@ -1,4 +1,51 @@
 {
-  "title": "Sensor: a line graph of a sensor without a state class",
-  "card": { "type": "sensor", "entity": "sensor.living_room_airdot_living_room_backlight_level", "name": "Backlight", "graph": "line" }
+ "title": "Sensor: a line graph of a sensor without a state class",
+ "card": {
+  "type": "sensor",
+  "entity": "sensor.wall_display_backlight",
+  "name": "Backlight",
+  "graph": "line"
+ },
+ "fixture": {
+  "states": {
+   "sensor.wall_display_backlight": {
+    "state": "64.0",
+    "last_changed": "-287m",
+    "attributes": {
+     "unit_of_measurement": "%",
+     "icon": "mdi:brightness-auto",
+     "friendly_name": "Wall Display Backlight Level"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.wall_display_backlight",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "dev-wall-display",
+    "hn": true,
+    "en": "Backlight Level"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-wall-display",
+    "name": "Wall Display"
+   }
+  ],
+  "history": {
+   "sensor.wall_display_backlight": {
+    "wave": {
+     "min": 52,
+     "max": 72,
+     "period": "20h",
+     "step": "15m",
+     "decimals": 1,
+     "quantum": 2,
+     "phase": 2.0
+    }
+   }
+  }
+ }
 }

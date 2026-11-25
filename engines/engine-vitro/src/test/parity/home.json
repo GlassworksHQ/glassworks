@@ -1,8 +1,12 @@
 {
- "_comment": "What every reference shares: HA version, the config fields Vitro reads, and the themes (scrubbed). Written by tools/vitro-parity/capture.mjs.",
- "haVersion": "2026.11.0",
- "haConfig": {
-  "time_zone": "America/Los_Angeles",
+ "_comment": "The fake Home Assistant's shared inputs for every case (tools/vitro-parity/fakehome.py): the fixed instant every page and Vitro's clock show (local time in time_zone), the config fields HA's frontend and Vitro read, the themes, and the signed-in user. Made up: no real home.",
+ "now": "2026-11-12T10:08:00",
+ "config": {
+  "time_zone": "America/Chicago",
+  "location_name": "Home",
+  "language": "en",
+  "country": "US",
+  "currency": "USD",
   "unit_system": {
    "length": "km",
    "accumulated_precipitation": "mm",
@@ -12,9 +16,7 @@
    "temperature": "°C",
    "volume": "L",
    "wind_speed": "m/s"
-  },
-  "language": "en",
-  "location_name": "Home"
+  }
  },
  "themes": {
   "themes": {
@@ -85,5 +87,9 @@
   },
   "default_theme": "default",
   "default_dark_theme": null
+ },
+ "user": {
+  "id": "parity-user",
+  "name": "Sam"
  }
 }

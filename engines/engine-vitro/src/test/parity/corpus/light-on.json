@@ -1,5 +1,42 @@
 {
-  "title": "Light: a light that is on",
-  "expect": {"light.u7_pro_xg_wall_led": "on"},
-  "card": { "type": "light", "entity": "light.u7_pro_xg_wall_led", "name": "AP LED" }
+ "title": "Light: a light that is on",
+ "expect": {
+  "light.kitchen_pendant": "on"
+ },
+ "card": {
+  "type": "light",
+  "entity": "light.kitchen_pendant",
+  "name": "Pendant"
+ },
+ "fixture": {
+  "states": {
+   "light.kitchen_pendant": {
+    "state": "on",
+    "last_changed": "-285m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": "onoff",
+     "friendly_name": "Kitchen Pendant",
+     "supported_features": 0
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.kitchen_pendant",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "hn": true,
+    "en": "Pendant"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen",
+    "name": "Kitchen"
+   }
+  ]
+ }
 }
