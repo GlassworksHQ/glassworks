@@ -60,7 +60,9 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
 - **Microphone/camera work over plain `http://`.** The dashboard host is added to
   Gecko's `dom.securecontext.allowlist`, so `window.isSecureContext` is true and
   `navigator.mediaDevices.getUserMedia()` / AudioWorklet are available. Mic, camera and
-  autoplay are granted without prompts (Gecko `PermissionDelegate` + Android `RECORD_AUDIO`).
+  autoplay are granted without prompts (Gecko `PermissionDelegate` + Android `RECORD_AUDIO`),
+  but only to pages on the signed-in Home Assistant or a secure-context host. Any other page,
+  or a frame of another site inside the dashboard, is refused and logged.
   Verified on the panel: `getUserMedia({audio:true})` returns a live 48 kHz track.
 - HOME + LAUNCHER intent filters (can be the default launcher), `BootReceiver`
   (`BOOT_COMPLETED`, `MY_PACKAGE_REPLACED`).

@@ -96,8 +96,9 @@ class GeckoEngine(
             // Belt and braces for the same thing via the legacy insecure-media prefs.
             "media.devices.insecure.enabled" to true,
             "media.getusermedia.insecure.enabled" to true,
-            // Kiosk: no prompts (the PermissionDelegate grants too), autoplay allowed.
-            "media.navigator.permission.disabled" to true,
+            // No media.navigator.permission.disabled: it hands getUserMedia the devices without asking the
+            // PermissionDelegate, which grants them only to Home Assistant and the secure hosts (#847).
+            // Kiosk: no prompts (the PermissionDelegate answers), autoplay allowed.
             "media.autoplay.default" to 0,
             "media.autoplay.blocking_policy" to 0,
             "media.autoplay.block-webaudio" to false,
@@ -266,6 +267,10 @@ class GeckoEngine(
                 session: GeckoSession,
                 perm: ContentPermission
             ): GeckoResult<Int> {
+                if (!trusted(perm.uri)) {
+                    Log.w(logTag, "Refusing content permission ${perm.permission} for ${perm.uri} on $shown: not Home Assistant or a secure host")
+                    return GeckoResult.fromValue(ContentPermission.VALUE_DENY)
+                }
                 Log.i(logTag, "Granting content permission ${perm.permission} for ${perm.uri}")
                 return GeckoResult.fromValue(ContentPermission.VALUE_ALLOW)
             }
@@ -277,10 +282,24 @@ class GeckoEngine(
                 audio: Array<out MediaSource>?,
                 callback: PermissionDelegate.MediaCallback
             ) {
+                if (!trusted(uri)) {
+                    Log.w(logTag, "Refusing media for $uri on $shown: not Home Assistant or a secure host")
+                    callback.reject()
+                    return
+                }
                 val mic = audio?.firstOrNull { it.source == MediaSource.SOURCE_MICROPHONE } ?: audio?.firstOrNull()
                 val cam = video?.firstOrNull { it.source == MediaSource.SOURCE_CAMERA } ?: video?.firstOrNull()
                 Log.i(logTag, "Granting media for $uri: audio=${mic?.name} video=${cam?.name}")
                 callback.grant(cam, mic)
+            }
+
+            /**
+             * Both the top-level page ([shown]) and the document that asks ([uri]) are ones the app trusts (#847): a
+             * page off Home Assistant gets nothing, and neither does a frame of another site inside a dashboard.
+             */
+            private fun trusted(uri: String?): Boolean {
+                val top = shown
+                return top != null && uri != null && host.trusts(top) && host.trusts(uri)
             }
         }
 

@@ -99,7 +99,6 @@ class GeckoBehaviourPinTest {
               dom.securecontext.allowlist: "192.0.2.10"
               media.devices.insecure.enabled: true
               media.getusermedia.insecure.enabled: true
-              media.navigator.permission.disabled: true
               media.autoplay.default: 0
               media.autoplay.blocking_policy: 0
               media.autoplay.block-webaudio: false
@@ -392,13 +391,38 @@ class GeckoBehaviourPinTest {
         assertTrue("s2.active true" !in ev)
     }
 
-    // ---- permissions
+    // ---- permissions: Home Assistant and the secure hosts get them with no prompt, any other page none (#847)
+
+    /** The top-level page is at [url], as GeckoView reports a committed load. */
+    private fun GeckoPinHarness.at(url: String) = navigation.onLocationChange(session, url, mutableListOf(), false)
+
+    private fun GeckoPinHarness.content(uri: String) =
+        value(permission.onContentPermissionRequest(session, contentPermission(uri, PermissionDelegate.PERMISSION_PERSISTENT_STORAGE)))
 
     @Test
-    fun `every content permission is allowed`() = harness().use { h ->
-        val p = h.contentPermission(dash, PermissionDelegate.PERMISSION_PERSISTENT_STORAGE)
-        assertEquals(ContentPermission.VALUE_ALLOW, h.value(h.permission.onContentPermissionRequest(h.session, p)))
+    fun `every content permission Home Assistant asks for is allowed`() = harness().use { h ->
+        h.at(dash)
+        assertEquals(ContentPermission.VALUE_ALLOW, h.content(dash))
         assertTrue(h.logs("Glassworks").contains("Granting content permission ${PermissionDelegate.PERMISSION_PERSISTENT_STORAGE} for $dash"))
+    }
+
+    @Test
+    fun `a page off Home Assistant gets no content permission`() = harness().use { h ->
+        val away = "http://192.0.2.66/page"
+        h.at(away)
+        assertEquals(ContentPermission.VALUE_DENY, h.content(away))
+        assertTrue(h.logs("Glassworks").contains(
+            "Refusing content permission ${PermissionDelegate.PERMISSION_PERSISTENT_STORAGE} for $away on $away: not Home Assistant or a secure host",
+        ))
+    }
+
+    @Test
+    fun `before a page is shown nothing gets a permission`() = harness().use { h ->
+        assertEquals(ContentPermission.VALUE_DENY, h.content(dash))
+        // A new session after a crash starts with no page again.
+        h.at(dash)
+        h.eventsDuring { h.content.onCrash(h.session) }
+        assertEquals(ContentPermission.VALUE_DENY, h.content(dash))
     }
 
     private class Media : PermissionDelegate.MediaCallback {
@@ -410,6 +434,7 @@ class GeckoBehaviourPinTest {
 
     @Test
     fun `getUserMedia gets the microphone and the camera, else the first of each`() = harness().use { h ->
+        h.at(dash)
         val screen = h.mediaSource(MediaSource.SOURCE_SCREEN, "Screen")
         val camera = h.mediaSource(MediaSource.SOURCE_CAMERA, "Back camera")
         val other = h.mediaSource(MediaSource.SOURCE_OTHER, "Line in")
@@ -423,6 +448,40 @@ class GeckoBehaviourPinTest {
             m.calls,
         )
         assertTrue(h.logs("Glassworks").contains("Granting media for $dash: audio=Mic video=Back camera"))
+    }
+
+    @Test
+    fun `a page off Home Assistant gets no microphone and no camera`() = harness().use { h ->
+        val mic = h.mediaSource(MediaSource.SOURCE_MICROPHONE, "Mic")
+        val camera = h.mediaSource(MediaSource.SOURCE_CAMERA, "Back camera")
+        val away = "http://192.0.2.66/listen"
+        val m = Media()
+        h.at(away) // a link tapped on the dashboard, or a dashboard URL set to another site
+        h.permission.onMediaPermissionRequest(h.session, away, arrayOf(camera), arrayOf(mic), m)
+        h.at(dash) // a frame of another site inside the dashboard
+        h.permission.onMediaPermissionRequest(h.session, away, arrayOf(camera), arrayOf(mic), m)
+        h.at(away) // a Home Assistant frame inside another site
+        h.permission.onMediaPermissionRequest(h.session, dash, arrayOf(camera), arrayOf(mic), m)
+        assertEquals(listOf("reject", "reject", "reject"), m.calls)
+        assertTrue(h.logs("Glassworks").contains("Refusing media for $away on $away: not Home Assistant or a secure host"))
+        assertTrue(h.logs("Glassworks").contains("Refusing media for $away on $dash: not Home Assistant or a secure host"))
+        assertFalse(h.logs("Glassworks").any { it.startsWith("Granting media") })
+    }
+
+    @Test
+    fun `the signed-in Home Assistant and the extra secure hosts get the microphone`() = harness(prefs = { p ->
+        configured(p)
+        p.extraSecureHosts = "cams.example"
+    }).use { h ->
+        val signedIn = "https://ha.example"
+        h.signIn(signedIn)
+        val mic = h.mediaSource(MediaSource.SOURCE_MICROPHONE, "Mic")
+        val m = Media()
+        h.at("$signedIn/lovelace/0")
+        h.permission.onMediaPermissionRequest(h.session, "$signedIn/lovelace/0", null, arrayOf(mic), m)
+        h.at("$dash?external_auth=1")
+        h.permission.onMediaPermissionRequest(h.session, "http://cams.example:1984/webrtc.html", null, arrayOf(mic), m)
+        assertEquals(listOf("grant video=null audio=Mic", "grant video=null audio=Mic"), m.calls)
     }
 
     private class Grant : PermissionDelegate.Callback {

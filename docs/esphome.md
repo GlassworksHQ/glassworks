@@ -31,6 +31,22 @@ Glassworks uses standard ESPHome Noise encryption (`Noise_NNpsk0_25519_ChaChaPol
 
 See [onboarding.md](onboarding.md#2-adoption--encryption-esphome-dynamic-keys-) for wire-level provisioning details.
 
+### What works without encryption
+
+Until Home Assistant gives the panel its key, anyone on your network can talk to the panel's ESPHome API, not only Home Assistant. That covers a panel you haven't added yet, and one that a Home Assistant older than 2026.11 added without a key. The panel keeps the everyday controls working in that case, but anything that changes which page the panel shows, who it's signed in as, or what it does with its radio, panes or camera waits for an encrypted connection.
+
+| Works without encryption | Needs an encrypted connection with the panel's key |
+|---|---|
+| Sensors and diagnostics, the screen light, screen mode, idle timeout, brightness, zoom, **Hide HA header**, the **Dashboard** select (Home Assistant's own dashboards only) | **Dashboard URL** (`dashboard_url`) |
+| **Speaker**: playback, volume, TTS and announcements | **Sign out** (`sign_out`) |
+| **Reload dashboard**, **Restart app** | **Start Wi-Fi setup (Bluetooth)** (`improv_ble`) and **Open device settings** (`open_settings`) |
+| **Allow setup over the network**: pairing still needs the code shown on the panel's screen | Pane switches, the radio (mode, Zigbee stack, firmware flash, Thread join and leave), the time zone, the Bluetooth proxy and the camera |
+| App and frame updates, voice | |
+
+Without a key, the controls in the right column do nothing when Home Assistant uses them, and the entity snaps back to its old state. You can still change all of them on the panel itself or on the [Manage page](manage.md).
+
+The dashboard's address matters because the panel gives the microphone and the camera, with no prompt, only to pages on your Home Assistant and on the secure hosts set in the panel's settings. Any other page gets neither, so a link that leads off your dashboard can't listen in.
+
 ## Device identity
 
 | Field | Value |
@@ -101,7 +117,7 @@ To enable any disabled entity in Home Assistant: open **Settings → Devices & s
 | Dashboard | `dashboard` | Core | Config | No | Enable to pick a Lovelace dashboard from HA |
 | Dashboard URL | `dashboard_url` | Core | Config | No | Custom dashboard URL override |
 | Hide HA header | `hide_ha_header` | Core | Config | No | Usually configured once |
-| Open device settings | `open_settings` | Core | Config | No | Opens the hidden settings overlay on screen |
+| Open device settings | `open_settings` | Core | Config | No | Opens the device's Android settings on screen |
 | Start Wi-Fi setup (Bluetooth) | `improv_ble` | Core | Config | No | Needed only when changing Wi-Fi via BLE |
 | Sign out | `sign_out` | Core | Config | No | Revokes dashboard sign-in |
 | App version, Update status, Home Assistant URL, Signed in | `app_version`, `update_status`, `home_assistant_url`, `signed_in` | Core | Diagnostic | No | Troubleshooting |
@@ -159,13 +175,13 @@ Home Assistant applies `disabled_by_default` only when an entity is registered f
 | `number` **Idle timeout** (`s`) | `idle_timeout` | Seconds of inactivity before turning the screen off (`0` = never). Setting a value above 0 switches **Screen mode** to `presence`. Automated by [Panel night mode](blueprints.md). |
 | `number` **Max auto brightness** (`%`, 5–100, step 5) | `max_brightness` | Caps the maximum brightness that **Auto brightness** can reach (default 100%). Manual brightness and high/critical notifications are not capped. |
 | `number` **Presence range** (`m`, 0–2.5, step 0.1) | `presence_range` | Adjusts VI5300 detection distance on the S1 Plus (`0` = firmware default; requires `WRITE_SECURE_SETTINGS`). |
-| `text` **Dashboard URL** | `dashboard_url` | Loads a specific dashboard URL (`auto` loads your default Home Assistant dashboard). |
+| `text` **Dashboard URL** | `dashboard_url` | Loads a specific dashboard URL (`auto` loads your default Home Assistant dashboard). Encrypted connection only ([why](#what-works-without-encryption)). |
 | `select` **Dashboard** | `dashboard` | Lists `Default` plus every Lovelace dashboard fetched from Home Assistant (and `Custom` if a custom URL is saved). Selecting an option saves and reloads immediately. |
 | `number` **Zoom** (`0` = auto) | `zoom` | Overrides CSS display scale ratio and restarts the app. |
 | `button` **Reload dashboard** | `reload_dashboard` | Reloads the active dashboard web page. |
-| `button` **Open device settings** | `open_settings` | Opens the panel's hidden settings menu on screen. |
+| `button` **Open device settings** | `open_settings` | Opens the device's own Android settings app on screen (encrypted connection only). |
 | `button` **Restart app** | `restart_app` | Restarts the Glassworks kiosk process. |
-| `button` **Start Wi-Fi setup (Bluetooth)** | `improv_ble` | Starts Improv Wi-Fi provisioning over Bluetooth on demand. |
+| `button` **Start Wi-Fi setup (Bluetooth)** | `improv_ble` | Starts Improv Wi-Fi provisioning over Bluetooth on demand (encrypted connection only). |
 | `button` **Allow setup over the network** | `lan_setup` | Opens `/setup` network pairing for 30 minutes ([Manage guide](manage.md#set-up-over-the-network)). |
 | `switch` **Hide HA header** | `hide_ha_header` | Hides Home Assistant's top header bar and sidebar live. |
 | `media_player` **Speaker** | `speaker` | Supports play, pause, stop, volume, mute, `play_media`, and `announce` (MP3 format). |
@@ -193,7 +209,7 @@ Home Assistant applies `disabled_by_default` only when an entity is registered f
 | `text_sensor` **App version** / `update` **App update** / `text_sensor` **Update status** | `app_version`, `app_update`, `update_status` | Installed version, Home Assistant update control, and detailed download/install progress ([App updates](#app-updates)). |
 | `update` **Frame update** | `frame_update` | Tracks Glassworks frame-layer releases on S1 Plus and Mirror ([Frame updates](#frame-updates)). |
 | `text_sensor` **Silent updates** | `silent_updates` | Reports whether updates install hands-free (`Yes: …` or `No: …`; [Silent updates](#silent-updates)). |
-| `text_sensor` **Home Assistant URL** / **Signed in** / `button` **Sign out** | `home_assistant_url`, `signed_in`, `sign_out` | Active dashboard server URL, QR sign-in state (`yes`/`no`), and remote sign-out. |
+| `text_sensor` **Home Assistant URL** / **Signed in** / `button` **Sign out** | `home_assistant_url`, `signed_in`, `sign_out` | Active dashboard server URL, QR sign-in state (`yes`/`no`), and remote sign-out (encrypted connection only). |
 
 #### Screen entities by frame
 

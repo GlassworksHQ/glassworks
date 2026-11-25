@@ -20,6 +20,16 @@ line of each version is what Home Assistant shows on the update card. A change o
   Safari, Kiln's Mirror and Android pages now say so on their first screen, as the S1 page does. Before, the Mirror
   page let you download and build its whole system image first, then stopped at the first USB step. Comes with Kiln,
   not the app.
+- **Only Home Assistant gets the microphone and the camera.** The panel used to hand the microphone, the camera and
+  every other page permission to any page it showed, without asking. Now only pages on your Home Assistant and on the
+  secure hosts in the panel's settings get them. A link that leads off your dashboard, or another site framed inside it,
+  is refused, and the panel's log says so.
+- **Some Home Assistant controls need the encryption key.** Until Home Assistant gives the panel its key, anyone on
+  your network can reach the panel's ESPHome connection. **Dashboard URL**, **Sign out**, **Start Wi-Fi setup
+  (Bluetooth)** and **Open device settings** now work only over the encrypted connection, so nobody else can point the
+  panel at their own page. With Home Assistant 2026.11 or newer this happens by itself. On an older Home Assistant,
+  change these on the panel or on the Manage page. The speaker, reload, restart and the other everyday controls work as
+  before.
 
 ## [0.9.0] - 2026-11-24
 

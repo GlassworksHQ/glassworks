@@ -8,8 +8,8 @@ import java.util.Collections
 
 /**
  * [ApiEntity.authOnly]: on a panel without a provisioned key anyone on the LAN can talk plaintext to
- * the API. Commands for auth-only entities (radio firmware, Zigbee stack, Thread leave) are refused
- * then; ordinary entities still work.
+ * the API. Commands for auth-only entities (radio firmware, Zigbee stack, Thread leave, the dashboard URL)
+ * are refused then; ordinary entities still work.
  */
 class AuthOnlyCommandTest {
     private fun varint(o: ByteArrayOutputStream, v: Int) {
@@ -36,7 +36,8 @@ class AuthOnlyCommandTest {
         val guarded = SelectEntity("radio_firmware_image", "Radio firmware image", options = listOf("A", "B"), get = { "A" },
             set = { calls += "guarded $it" }).apply { authOnly = true }
         val button = ButtonEntity("radio_firmware_flash", "Flash radio firmware", press = { calls += "flash" }).apply { authOnly = true }
-        val server = ApiServer(0, { identity }, listOf(open, guarded, button), psk = null) // plaintext: never authenticated
+        val text = TextEntity("dashboard_url", "Dashboard URL", get = { "auto" }, set = { calls += "text $it" }).apply { authOnly = true }
+        val server = ApiServer(0, { identity }, listOf(open, guarded, button, text), psk = null) // plaintext: never authenticated
         server.start()
         try {
             Socket("127.0.0.1", server.localPort).use { s ->
@@ -44,6 +45,7 @@ class AuthOnlyCommandTest {
                 out.write(frame(Msg.HELLO_REQUEST, ProtoWriter().string(1, "lan stranger").uint32(2, 1).uint32(3, 10).toByteArray()))
                 out.write(frame(Msg.SELECT_COMMAND, ProtoWriter().fixed32(1, guarded.key, force = true).string(2, "B").toByteArray()))
                 out.write(frame(Msg.BUTTON_COMMAND, ProtoWriter().fixed32(1, button.key, force = true).toByteArray()))
+                out.write(frame(Msg.TEXT_COMMAND, ProtoWriter().fixed32(1, text.key, force = true).string(2, "http://192.0.2.66/").toByteArray()))
                 out.write(frame(Msg.SELECT_COMMAND, ProtoWriter().fixed32(1, open.key, force = true).string(2, "B").toByteArray()))
                 out.flush()
                 val until = System.currentTimeMillis() + 5_000
