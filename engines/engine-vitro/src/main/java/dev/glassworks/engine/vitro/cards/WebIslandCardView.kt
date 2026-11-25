@@ -1070,12 +1070,14 @@ vitroDefine('action-handler', class extends HTMLElement {
     const fire = (target, action) => target.dispatchEvent(new CustomEvent('action', { detail: { action }, bubbles: true, composed: true }));
     const prev = element.actionHandler;
     if (prev && JSON.stringify(prev.options) === JSON.stringify(opts)) return;
-    // A tap the old binding still holds back for a double tap never fires under the new one (disabled, say). Only
-    // this element's: another element's pending tap stays.
-    if (prev && prev.pendingTap !== undefined) {
-      clearTimeout(prev.pendingTap);
-      if (this.dblClickTimeout === prev.pendingTap) { this.dblClickTimeout = undefined; this.dblClickTarget = undefined; }
-      prev.pendingTap = undefined;
+    // The taps the old binding still holds back for a double tap (one per click, on any of its descendants) never fire
+    // under the new one (disabled, say). Only this element's: another element's pending taps stay.
+    if (prev && prev.pendingTaps) {
+      for (const id of prev.pendingTaps) {
+        clearTimeout(id);
+        if (this.dblClickTimeout === id) { this.dblClickTimeout = undefined; this.dblClickTarget = undefined; }
+      }
+      prev.pendingTaps.clear();
     }
     if (prev && prev.start) {
       element.removeEventListener('touchstart', prev.start);
@@ -1085,7 +1087,7 @@ vitroDefine('action-handler', class extends HTMLElement {
       element.removeEventListener('click', prev.end);
       element.removeEventListener('keydown', prev.key);
     }
-    const handler = { options: opts };
+    const handler = { options: opts, pendingTaps: new Set() };
     element.actionHandler = handler;
     if (opts.disabled) return;
     handler.start = () => {
@@ -1108,16 +1110,16 @@ vitroDefine('action-handler', class extends HTMLElement {
       } else if (opts.hasDoubleClick) {
         if ((ev.type === 'click' && ev.detail < 2) || !this.dblClickTimeout || this.dblClickTarget !== target) {
           const id = setTimeout(() => {
-            if (handler.pendingTap === id) handler.pendingTap = undefined;
+            handler.pendingTaps.delete(id);
             if (this.dblClickTimeout === id) { this.dblClickTimeout = undefined; this.dblClickTarget = undefined; }
             if (opts.hasTap !== false) fire(target, 'tap');
           }, 250);
-          handler.pendingTap = id;
+          handler.pendingTaps.add(id);
           this.dblClickTimeout = id;
           this.dblClickTarget = target;
         } else {
           clearTimeout(this.dblClickTimeout);
-          if (handler.pendingTap === this.dblClickTimeout) handler.pendingTap = undefined;
+          handler.pendingTaps.delete(this.dblClickTimeout);
           this.dblClickTimeout = undefined;
           this.dblClickTarget = undefined;
           fire(target, 'double_tap');

@@ -1208,8 +1208,8 @@ class VitroEngineTest {
         // #897's last round, checked in Chromium on the dumped page (a rebind to disabled leaves no tap behind; a hold
         // cancelled by a wheel fires nothing; a plain hold and tap still fire). Here: the lines that do it.
         val html = WebIslandCardView.buildIslandHtml(cardContext(), islandCard())
-        assertTrue(html.contains("if (prev && prev.pendingTap !== undefined) {"))
-        assertTrue(html.contains("handler.pendingTap = id;"))
+        assertTrue(html.contains("if (prev && prev.pendingTaps) {"))
+        assertTrue("every pending tap of the binding, not the last one", html.contains("handler.pendingTaps.add(id);"))
         assertTrue(html.contains("if (type !== 'mouseup' && type !== 'mouseout' && type !== 'touchcancel') this.scrolled = true;"))
         assertTrue(html.contains("if (ev.type === 'click' && this.scrolled) { this.scrolled = false; return; }"))
     }

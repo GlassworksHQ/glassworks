@@ -22,8 +22,8 @@ const TEST_PREFIX = '/__island-test/';
 
 /**
  * Probes [caseFile]'s island page. Options: `frame` (frames.json id, default tablet), `waitMs` (how long the page runs
- * before it's read, default 6000: the island waits up to 4 s for the card's element, and its frontend watch decides
- * about 3 s after the card draws), `click` ([x, y]), `shot` (a PNG path), `browser` (one to reuse), `evaluate` (a
+ * before it's read, default 9000: the island waits up to 4 s for the card's element, and its frontend watch decides
+ * about 3 s after the card draws (a 0.4 s first scan and a 2.5 s grace), so a card defined late still gets its report), `click` ([x, y]), `shot` (a PNG path), `browser` (one to reuse), `evaluate` (a
  * function's source, called in the page with the card's element, or null when there is none), `snapshotDelayMs` (hold
  * the bridge's first snapshot back that long, so the card draws once with no states, as when its script loads before
  * the bridge connects).
@@ -84,7 +84,7 @@ export async function probeIsland(root, caseFile, opts = {}) {
     page.on('pageerror', (e) => errors.push(e.message.slice(0, 200)));
     page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text().slice(0, 200)); });
     await page.goto(origin + '/__vitro/island/probe', { waitUntil: 'load' });
-    await page.waitForTimeout(opts.waitMs ?? 6000);
+    await page.waitForTimeout(opts.waitMs ?? 9000);
 
     const before = await page.evaluate((tag) => {
       const mount = document.getElementById('mount');
