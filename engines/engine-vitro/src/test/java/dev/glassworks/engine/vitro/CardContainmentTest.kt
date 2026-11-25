@@ -363,6 +363,8 @@ class CardContainmentTest {
                 context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = emptyList(),
                 accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
                 fetchHistory = { _, _, done -> done(emptyMap()) }, subscribeTemplate = { _, _ -> {} },
+                // HA's error card shows its title to an administrator.
+                haUser = { JSONObject().put("id", "u1").put("is_admin", true) },
             )
         }
         vv.testCards = testCards
