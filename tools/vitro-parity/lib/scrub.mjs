@@ -138,14 +138,25 @@ export function scrubGraphCalls(calls) {
         : st))
       : list]));
   };
-  // The logbook's rows: who and what caused them (`context_user_id`, `context_id` and the rest) stay out.
+  // The logbook's rows keep what HA draws their cause from (the context's domain, event type, entity and name) but
+  // not who or which run it was: the user and context ids stay out.
+  const LOGBOOK_IDS = new Set(['context_user_id', 'context_id', 'context_parent_id']);
   const scrubLogbook = (ev) => (ev && Array.isArray(ev.events)
     ? { ...ev, events: ev.events.map((row) => (row && typeof row === 'object'
-      ? Object.fromEntries(Object.entries(row).filter(([k]) => !k.startsWith('context_')))
+      ? Object.fromEntries(Object.entries(row).filter(([k]) => !LOGBOOK_IDS.has(k)))
       : row)) }
     : ev);
+  // A to-do item's uid is an id unique to one HA: `item-1`, `item-2`, ... in the order HA sent them.
+  const scrubTodo = (calls) => {
+    const uids = new Map();
+    const syn = (u) => { if (!uids.has(u)) uids.set(u, `item-${uids.size + 1}`); return uids.get(u); };
+    return (ev) => (ev && Array.isArray(ev.items)
+      ? { ...ev, items: ev.items.map((it) => (it && typeof it === 'object' && it.uid != null ? { ...it, uid: syn(it.uid) } : it)) }
+      : ev);
+  };
   return calls.map((c) => {
     if (c.request?.type === 'logbook/event_stream') return { ...c, events: c.events.map(scrubLogbook) };
+    if (c.request?.type === 'todo/item/subscribe') return { ...c, events: c.events.map(scrubTodo()) };
     if (!String(c.request?.type).startsWith('history/')) return c;
     return {
       ...c,
