@@ -7,7 +7,8 @@
  "viewport": {
   "width": 1280,
   "height": 800,
-  "density": 2
+  "density": 2,
+  "touch": true
  },
  "clip": {
   "x": 382,
@@ -46,8 +47,8 @@
    "slot": 0,
    "clipped": false,
    "text": "Living room (min)",
-   "x": 79.73,
-   "y": 211.8,
+   "x": 78.23,
+   "y": 203.8,
    "w": 93.88,
    "h": 14,
    "size": 12,
@@ -59,8 +60,8 @@
    "slot": 0,
    "clipped": false,
    "text": "Living room (mean)",
-   "x": 207.61,
-   "y": 211.8,
+   "x": 213.11,
+   "y": 203.8,
    "w": 103.84,
    "h": 14,
    "size": 12,
@@ -72,8 +73,8 @@
    "slot": 0,
    "clipped": false,
    "text": "Living room (max)",
-   "x": 345.45,
-   "y": 211.8,
+   "x": 357.95,
+   "y": 203.8,
    "w": 96.81,
    "h": 14,
    "size": 12,
