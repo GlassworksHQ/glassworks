@@ -55,6 +55,25 @@ class IslandOriginAndBridgeTest {
 
     // ---- #881: one origin across app starts ----
 
+    /**
+     * A socket listening on a free port in [VitroIslandServer.NEW_PORTS], or null when none of a few tries is free. The
+     * caller closes it.
+     */
+    private fun listenInNewPorts(): ServerSocket? {
+        val random = java.util.Random()
+        repeat(20) {
+            val port = VitroIslandServer.NEW_PORTS.first + random.nextInt(VitroIslandServer.NEW_PORTS.last - VitroIslandServer.NEW_PORTS.first + 1)
+            val s = ServerSocket()
+            try {
+                s.bind(java.net.InetSocketAddress(loopback, port))
+                return s
+            } catch (_: java.io.IOException) {
+                s.close()
+            }
+        }
+        return null
+    }
+
     @Test
     fun anAppRestartKeepsTheIslandsOrigin() {
         val memory = Memory()
@@ -62,6 +81,7 @@ class IslandOriginAndBridgeTest {
         val origin = first.ensureStarted()
         assertTrue("a new port is picked below the ephemeral range: $origin", first.port in VitroIslandServer.NEW_PORTS)
         assertEquals("and remembered", first.port, memory.port)
+        // stop() returns with the port free (HttpServer waits for its listener), as a new process would find it.
         first.stop()
 
         // The next app start: a new server, the same preferences.
@@ -74,24 +94,22 @@ class IslandOriginAndBridgeTest {
 
     @Test
     fun aPortAnotherAppHoldsMovesTheIslandsAndTheNewOneIsRemembered() {
-        val memory = Memory()
-        val first = server(memory)
-        val old = first.ensureStarted().substringAfterLast(':').toInt()
-        first.stop()
-
-        // Another app took the port while the app was stopped.
-        ServerSocket().use { squatter ->
-            squatter.reuseAddress = true
-            squatter.bind(java.net.InetSocketAddress(loopback, old))
-            val second = server(memory)
-            val moved = second.ensureStarted()
+        // Another app holds the port the islands had last time: bound here first, so nothing races for it.
+        val squatter = listenInNewPorts() ?: throw AssertionError("no free port in ${VitroIslandServer.NEW_PORTS} after 20 tries")
+        val old = squatter.localPort
+        val memory = Memory(port = old)
+        val s = server(memory)
+        squatter.use {
+            val moved = s.ensureStarted()
             assertNotEquals("a free port", "http://127.0.0.1:$old", moved)
-            assertEquals("remembered for the next start", second.port, memory.port)
+            assertTrue("a new one below the ephemeral range: $moved", s.port in VitroIslandServer.NEW_PORTS)
+            assertEquals("remembered for the next start", s.port, memory.port)
             assertTrue("logged: ${logs.joinToString()}", logs.any { "$old is taken" in it })
-            second.stop()
         }
-        // The new one is kept even once the old one is free again.
-        assertEquals(memory.port, server(memory).ensureStarted().substringAfterLast(':').toInt())
+        // The next start keeps the new one, though the old one is free again.
+        val now = s.port
+        s.stop()
+        assertEquals(now, server(memory).ensureStarted().substringAfterLast(':').toInt())
     }
 
     @Test
