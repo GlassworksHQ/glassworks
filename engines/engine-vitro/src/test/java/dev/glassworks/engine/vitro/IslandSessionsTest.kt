@@ -148,6 +148,8 @@ class IslandSessionsTest {
         idle()
         assertSame(card, islandCards(p).single())
 
+        // The island's document ran (its bridge connected), as on a panel.
+        slots(engines.single().islandServer).values.single().onConnected {}
         // The user's theme changes: the native cards are built again, the island keeps its page.
         val slotsBefore = slots(engines.single().islandServer).toMap()
         vitroView(p).setUserTheme("night", true)
@@ -283,6 +285,30 @@ class IslandSessionsTest {
         assertTrue(a.active)
         assertFalse(b.active)
         assertEquals("a cached view shows its islands again, with no new page", 2, islandPages().size)
+        assertOnePagePerIsland(p)
+    }
+
+    @Test fun aCardThatTakesAPausedPageFromAHiddenViewRunsIt() {
+        // The same card on two views: a theme change rebuilds the view on screen, which may take the hidden view's page.
+        server.dashboardConfig = JSONObject("""{"views": [
+            {"path": "a", "cards": [{"type": "custom:acme-a-card", "entity": "light.lounge_lamp"}]},
+            {"path": "b", "cards": [{"type": "custom:acme-a-card", "entity": "light.lounge_lamp"}]}]}""")
+        val p = page()
+        p.load("$base/wall-test/a")
+        awaitMain("view a built") { readyCount() == 1 && islandPages().size == 1 }
+        p.load("$base/wall-test/b")
+        awaitMain("view b built") { islandPages().size == 2 }
+        val (a, b) = islandPages()
+        assertFalse(a.active)
+        slots(engines.single().islandServer).values.forEach { it.onConnected {} } // their documents ran
+
+        vitroView(p).setUserTheme("night", true)
+        idle()
+        val open = openIslandPages()
+        assertEquals("one view built, one page kept", 1, open.size)
+        assertTrue("whichever page the shown card took runs", open.single().active)
+        assertTrue(open.single().view.isAttachedToWindow)
+        assertEquals("the other closes", 1, listOf(a, b).count { it.closed })
         assertOnePagePerIsland(p)
     }
 
@@ -528,6 +554,7 @@ class IslandSessionsTest {
         val config = LovelaceParser.parseCard(JSONObject(cardJson))
         val old = WebIslandCardView(context(store, islands, dark = true, pages, calls = calls), config)
         val page = pages.single()
+        slots(islands).values.single().onConnected {} // its document ran
         // The page walks hass.states and reads the registries: it asks for both once.
         old.handleIslandMessage(JSONObject().put("type", "watchAll")) {}
         old.handleIslandMessage(JSONObject().put("type", "registries")) {}
@@ -558,6 +585,20 @@ class IslandSessionsTest {
         next.release()
         assertTrue(page.closed)
         assertTrue(slots(islands).isEmpty())
+    }
+
+    @Test fun aPageHandedOffBeforeItsDocumentRanLoadsTheIslandAgain() {
+        val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
+        val pages = ArrayList<RecordingPage>()
+        val store = EntityStore()
+        val old = WebIslandCardView(context(store, islands, dark = true, pages), LovelaceParser.parseCard(JSONObject(cardJson)))
+        val page = pages.single()
+        val url = page.loads.single()
+        // Handed off before its bridge ever connected: its first document may have come from the parked slot.
+        val handed = old.handOff()!!
+        WebIslandCardView(context(store, islands, dark = true, pages), LovelaceParser.parseCard(JSONObject(cardJson)), adopted = handed)
+        assertEquals("the same page", 1, pages.size)
+        assertEquals("loads the island again", listOf(url, url), page.loads)
     }
 
     @Test fun aHandedOffIslandWhoseSlotIsGoneClosesAndTheCardOpensANewPage() {

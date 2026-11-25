@@ -60,6 +60,12 @@ class WebIslandCardView(
         internal val registriesAsked: Boolean = false,
         /** Whether the page was active when handed off: a paused one (a hidden view's) is shown again when needed. */
         internal val active: Boolean = true,
+        /**
+         * The island's address, and whether its document ever ran (its bridge connected). One that hadn't may have got
+         * the parked slot's empty page meanwhile: the card that takes it loads [url] again.
+         */
+        internal val url: String = "",
+        internal val loaded: Boolean = true,
     ) {
         fun close() {
             server.unregisterSlot(slotId)
@@ -70,6 +76,10 @@ class WebIslandCardView(
     private val watchedEntities = CopyOnWriteArraySet<String>()
     private var slotId: String? = null
     private var islandPage: Page? = null
+
+    /** The island's address on the island server, and whether its document ever ran there (a bridge connected). */
+    private var islandUrl = ""
+    @Volatile private var documentRan = false
 
     /** True once the island left this card for good ([release]) or for its next build ([handOff]). */
     private var islandGone = false
@@ -129,6 +139,7 @@ class WebIslandCardView(
                     // The snapshot goes first: no patch for this socket can be queued before it (the observer
                     // below takes the same lock). This card's theme before it: a page an earlier build of the card
                     // handed over was drawn in that build's.
+                    documentRan = true
                     synchronized(seedLock) {
                         send(themeMessage())
                         send(authMessage(currentToken(), currentUser()))
@@ -150,16 +161,20 @@ class WebIslandCardView(
             // The earlier build's page, if its slot is still there: the slot now answers to this card.
             val kept = adopted?.takeIf { server.replaceSlot(it.slotId, handler) }
             if (adopted != null && kept == null) adopted.close()
-            val (id, url) = if (kept != null) kept.slotId to "" else server.registerSlot(handler)
+            val (id, url) = if (kept != null) kept.slotId to kept.url else server.registerSlot(handler)
             idRef = id
             slotId = id
+            islandUrl = url
+            // A page whose document ran keeps it; one handed over before that loads the island now (it may hold the
+            // parked slot's empty page).
+            if (kept != null) documentRan = kept.loaded
 
             val page = kept?.page ?: opener(url)
             if (page != null) {
                 islandPage = page
                 val h = if (fillViewport) LayoutParams.MATCH_PARENT else kept?.height ?: ctx.px(160f)
                 addView(page.view, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, h))
-                if (kept == null) page.load(url)
+                if (kept == null || (!kept.loaded && url.isNotEmpty())) page.load(url)
                 if (kept != null) {
                     // Paused under the card before this one: setShown(true) shows it again.
                     pageActive = kept.active
@@ -373,7 +388,10 @@ class WebIslandCardView(
         islandPage = null
         slotId = null
         // What the page asked for once, and won't ask again: the next card keeps it up.
-        return Island(keyOf(config, fillViewport), page, id, height, server, walksAllStates, registriesAsked.get(), pageActive)
+        return Island(
+            keyOf(config, fillViewport), page, id, height, server, walksAllStates, registriesAsked.get(), pageActive,
+            islandUrl, documentRan,
+        )
     }
 
     /** Holds the shared registry feed for the page, once, until the island leaves this card. */
