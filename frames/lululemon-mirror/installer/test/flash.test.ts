@@ -180,6 +180,7 @@ describe('first boot', () => {
       `pm grant ${pkg} android.permission.ACCESS_FINE_LOCATION`,
       `pm grant ${pkg} android.permission.ACCESS_COARSE_LOCATION`,
       `dumpsys package ${pkg}`,
+      'dumpsys device_policy',
       'settings put system accelerometer_rotation 0',
       'settings put system user_rotation 3',
       'dumpsys window windows',
