@@ -1402,7 +1402,8 @@ class VitroView(
         val rowHeight = dim("ha-section-grid-row-height", 56f)
         val columns = 12 * span
         val grid = HaGridLayout(context, columns, px(colGap), px(rowGap), stretch = true)
-        // A card that throws past its own guards (one that isn't a CardSurface) becomes HA's error card in its slot.
+        // A card that throws past its own guards (CardSurface's, or the ContainedCard round every other card) still
+        // becomes HA's error card in its slot: the grid is the last line.
         val slotCards = java.util.IdentityHashMap<View, CardConfig>()
         grid.onChildFailed = { child ->
             val card = slotCards.remove(child)
@@ -1808,14 +1809,27 @@ class VitroView(
         val islandStyles = built is WebIslandCardView && built.config === card && IslandScripts.of(ctx.resources).cardMod
         if (!islandStyles) (built as? CardSurface)?.applyCardMod(card)
         // swipe-card has no card of its own (no background to restyle): its `:host` opacity still applies to the pager.
-        if (built is SwipeCardView) stackMod.opacity?.let { built.restingAlpha = it.coerceIn(0f, 1f); built.alpha = built.restingAlpha }
+        // Its guard ([contain]) is what a visibility change fades, so the pager keeps this opacity throughout.
+        if (built is SwipeCardView) stackMod.opacity?.let { built.alpha = it.coerceIn(0f, 1f) }
+        val contained = contain(card, built, ctx)
         // `margin` on the card insets it inside its slot, as an outer margin does in the browser.
         // Not around an island that applies card-mod: its `margin` is drawn there, and twice would double the inset.
-        val margin = stackMod.marginInsets?.takeUnless { islandStyles } ?: return built
+        val margin = stackMod.marginInsets?.takeUnless { islandStyles } ?: return contained
         return FrameLayout(context).apply {
             setPadding(px(margin.left), px(margin.top), px(margin.right), px(margin.bottom))
-            addView(built, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            addView(contained, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         }
+    }
+
+    /**
+     * [built] inside a [ContainedCard] when it's a card without [CardSurface]'s own guards (a heading, Mushroom's chips
+     * and title, a stack or another container): a throw in its measure, layout, draw or touch shows HA's error card in
+     * its slot, wherever the card sits. A [CardSurface] guards itself; a conditional's card was contained when it was
+     * built; a plain [View] (an empty slot) runs no card code.
+     */
+    private fun contain(card: CardConfig, built: View, ctx: VitroCardContext): View = when {
+        built is CardSurface || built is ContainedCard || card.type == "conditional" || built.javaClass == View::class.java -> built
+        else -> ContainedCard(ctx, card.type, built) { errorCard(card, ctx) }
     }
 
     private fun wrapVisibility(
@@ -1921,11 +1935,11 @@ class VitroView(
         view.alpha = if (show) restingAlpha(view) else 0f
     }
 
-    /** A shown card's opacity: its `card_mod` `opacity` when it sets one, else fully opaque. */
-    private fun restingAlpha(view: View): Float = when (view) {
-        is SwipeCardView -> view.restingAlpha
-        else -> (view as? CardSurface)?.activeCardMod?.opacity?.coerceIn(0f, 1f) ?: 1f
-    }
+    /**
+     * A shown card's opacity: its `card_mod` `opacity` when it sets one, else fully opaque. A [ContainedCard] rests
+     * opaque: the card inside it (a swipe-card's pager) keeps its own opacity.
+     */
+    private fun restingAlpha(view: View): Float = (view as? CardSurface)?.activeCardMod?.opacity?.coerceIn(0f, 1f) ?: 1f
 
     // ---- Periodic visibility re-checks (`time` and `user` conditions) ----
 

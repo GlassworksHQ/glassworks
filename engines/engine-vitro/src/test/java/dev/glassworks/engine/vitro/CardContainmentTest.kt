@@ -23,7 +23,10 @@ import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.LovelaceParser
+import dev.glassworks.engine.vitro.cards.HeadingCardView
+import dev.glassworks.engine.vitro.cards.MushroomChipsCardView
 import dev.glassworks.engine.vitro.ui.CardSurface
+import dev.glassworks.engine.vitro.ui.ContainedCard
 import dev.glassworks.engine.vitro.ui.ErrorCardView
 import dev.glassworks.engine.vitro.ui.HaGridLayout
 import dev.glassworks.engine.vitro.ui.VitroCardContext
@@ -302,8 +305,8 @@ class CardContainmentTest {
         assertTileStillUpdates(vv)
     }
 
-    @Test fun aCardThatIsntACardSurfaceIsContainedByItsSectionsGrid() {
-        // A heading, Mushroom's chips or title: plain views, without CardSurface's guards. The grid holds the line.
+    @Test fun aCardThatIsntACardSurfaceIsContainedInASectionsGrid() {
+        // A heading, Mushroom's chips or title: plain views, without CardSurface's guards. Their own guard holds the line.
         var armed = false
         val vv = view(Boom.NONE)
         vv.testCards = { card, ctx ->
@@ -324,6 +327,137 @@ class CardContainmentTest {
         assertEquals("measure", contained.single().first)
         assertEquals(1, all(vv).filterIsInstance<ErrorCardView>().size)
         assertTileStillUpdates(vv)
+    }
+
+    /** A view of [cards] (masonry unless [type] says otherwise), with [testCards] standing in for Vitro's own. */
+    private fun dashboard(cards: JSONArray, type: String? = null, testCards: (CardConfig, VitroCardContext) -> View?): VitroView {
+        store.putLocal(EntityState("light.kitchen", "off", mapOf("friendly_name" to "Kitchen")))
+        val vv = VitroView(activity, store, 0xFF000000.toInt())
+        vv.contextFactory = { theme ->
+            VitroCardContext(
+                context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = emptyList(),
+                accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+                fetchHistory = { _, _, done -> done(emptyMap()) }, subscribeTemplate = { _, _ -> {} },
+            )
+        }
+        vv.testCards = testCards
+        val view = JSONObject().put("title", "Home").put("cards", cards)
+        type?.let { view.put("type", it) }
+        vv.setDashboard(LovelaceParser.parseDashboard(JSONObject().put("views", JSONArray().put(view))), null)
+        activity.setContentView(vv)
+        drawAll(vv)
+        return vv
+    }
+
+    private fun tile(entity: String = "light.kitchen") = JSONObject().put("type", "tile").put("entity", entity)
+
+    /** The error card in [guard]'s place, and nothing of the card it replaced. */
+    private fun assertGuardShowsErrorCard(vv: VitroView, guard: ContainedCard) {
+        assertNotNull("the card failed", guard.failure)
+        assertTrue("the guard is still in the view", all(vv).contains(guard))
+        val error = guard.content as ErrorCardView
+        assertEquals(listOf(ErrorCardView.TITLE), texts(error))
+        assertEquals(1, all(vv).filterIsInstance<ErrorCardView>().size)
+    }
+
+    @Test fun aHeadingWhoseDrawThrowsBecomesTheErrorCardInAMasonryView() {
+        var armed = false
+        val vv = dashboard(JSONArray().put(JSONObject().put("type", "heading").put("heading", "Living room")).put(tile())) { card, ctx ->
+            if (card.type != "heading") return@dashboard null
+            // A real heading card, with a view inside it whose draw throws.
+            HeadingCardView(ctx, card).apply {
+                addView(object : View(ctx.context) {
+                    override fun onDraw(canvas: Canvas) {
+                        if (armed) throw IllegalStateException("heading draw boom")
+                    }
+                }, android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.px(8f)))
+            }
+        }
+        val heading = all(vv).filterIsInstance<HeadingCardView>().single()
+        val guard = heading.parent as ContainedCard
+        assertTrue("Living room" in texts(vv))
+        armed = true
+        heading.invalidate()
+        drawAll(vv)
+        assertEquals(listOf("draw" to "heading"), contained.map { it.first to it.second })
+        drawAll(vv)
+        assertGuardShowsErrorCard(vv, guard)
+        assertTrue("the heading left the view", all(vv).none { it is HeadingCardView })
+        // The error card draws: the next frame throws nothing.
+        drawAll(vv)
+        assertEquals(1, contained.size)
+        assertTileStillUpdates(vv)
+    }
+
+    @Test fun chipsWhoseMeasureThrowsInAStackInAMasonryViewBecomeTheErrorCard() {
+        var armed = false
+        var boomChip: View? = null
+        val chipsCard = JSONObject().put("type", "custom:mushroom-chips-card").put("chips", JSONArray())
+        val stack = JSONObject().put("type", "vertical-stack").put("cards", JSONArray().put(chipsCard).put(tile()))
+        store.putLocal(EntityState("light.hall", "off", mapOf("friendly_name" to "Hall")))
+        val vv = dashboard(JSONArray().put(stack).put(tile("light.hall"))) { card, ctx ->
+            if (card.type != "custom:mushroom-chips-card") return@dashboard null
+            // Real Mushroom chips, with a chip whose measure throws.
+            MushroomChipsCardView(ctx, card).apply {
+                addView(object : View(ctx.context) {
+                    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                        if (armed) throw IndexOutOfBoundsException("chips measure boom")
+                        setMeasuredDimension(ctx.px(40f), ctx.px(36f))
+                    }
+                }.also { boomChip = it })
+            }
+        }
+        val chips = all(vv).filterIsInstance<MushroomChipsCardView>().single()
+        val guard = chips.parent as ContainedCard
+        val stackView = guard.parent as ViewGroup
+        assertTrue("the stack is guarded too", stackView.parent is ContainedCard)
+        armed = true
+        // The chip asks for a new measure (its own spec hasn't changed, so asking on the card alone reuses its size).
+        boomChip!!.requestLayout()
+        drawAll(vv)
+        assertEquals(listOf("measure" to "custom:mushroom-chips-card"), contained.map { it.first to it.second })
+        drawAll(vv)
+        assertGuardShowsErrorCard(vv, guard)
+        assertSame("in the chips' slot in the stack", stackView, guard.parent)
+        assertTrue(guard.height > 0)
+        // The tile next to it in the stack, and the one outside it, keep following their lights.
+        store.putLocal(EntityState("light.hall", "on", mapOf("friendly_name" to "Hall")))
+        assertTileStillUpdates(vv)
+        assertEquals(2, texts(vv).count { it.equals("On", ignoreCase = true) })
+        assertEquals(1, contained.size)
+    }
+
+    @Test fun cardSurfacesAreNeverWrappedTwice() {
+        val stack = JSONObject().put("type", "vertical-stack").put("cards", JSONArray().put(tile()))
+        val conditional = JSONObject().put("type", "conditional").put("conditions", JSONArray())
+            .put("card", JSONObject().put("type", "heading").put("heading", "Shown"))
+        val vv = dashboard(JSONArray().put(stack).put(tile()).put(conditional)) { _, _ -> null }
+        val guards = all(vv).filterIsInstance<ContainedCard>()
+        assertTrue("a tile is a card surface, never guarded", guards.none { it.content is CardSurface })
+        assertTrue("a guard never holds another", guards.none { it.content is ContainedCard || it.parent is ContainedCard })
+        // The stack and the conditional's heading: one guard each.
+        assertEquals(2, guards.size)
+    }
+
+    @Test fun aCardThatHidesItselfHidesItsGuardToo() {
+        // auto-entities with nothing to show and `show_empty: false` takes no space, and no gap in its stack.
+        val auto = JSONObject().put("type", "custom:auto-entities").put("show_empty", false)
+            .put("filter", JSONObject().put("include", JSONArray().put(JSONObject().put("entity_id", "switch.none*"))))
+        val stack = JSONObject().put("type", "vertical-stack").put("cards", JSONArray().put(auto).put(tile()))
+        val vv = dashboard(JSONArray().put(stack)) { _, _ -> null }
+        val autoView = all(vv).filterIsInstance<dev.glassworks.engine.vitro.cards.AutoEntitiesCardView>().single()
+        val guard = autoView.parent as ContainedCard
+        assertEquals(View.GONE, autoView.visibility)
+        assertEquals(View.GONE, guard.visibility)
+        // Something to show: both come back.
+        store.putLocal(EntityState("switch.none_kettle", "off", mapOf("friendly_name" to "Kettle")))
+        drawAll(vv)
+        assertEquals(View.VISIBLE, autoView.visibility)
+        assertEquals(View.VISIBLE, guard.visibility)
+        // The guard's own visibility (the card's conditions) still holds while the card shows.
+        guard.visibility = View.GONE
+        assertEquals(View.GONE, guard.visibility)
+        assertTrue(contained.isEmpty())
     }
 
     @Test fun anUpdateOnTheCardsHandlerThatThrowsIsDroppedAndLogged() {
