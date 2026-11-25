@@ -66,16 +66,16 @@ Options:
 export class StockProbeUsageError extends Error {}
 const fail = (m: string): never => { throw new StockProbeUsageError(m); };
 
-function fastbootPath(): string {
+export function fastbootPath(): string {
   const p = process.env.FASTBOOT ?? join(homedir(), 'Library/Android/sdk/platform-tools/fastboot');
   return existsSync(p) ? p : 'fastboot';
 }
 
-function redact(text: string, serial?: string): string {
+export function redact(text: string, serial?: string): string {
   return serial ? text.split(serial).join('<serial>') : text;
 }
 
-function execText(bin: string, args: string[], timeoutMs = 120_000, serialToRedact?: string): Promise<{ stdout: string; stderr: string }> {
+export function execText(bin: string, args: string[], timeoutMs = 120_000, serialToRedact?: string): Promise<{ stdout: string; stderr: string }> {
   const timeout = Math.max(1, Math.floor(timeoutMs));
   return new Promise((res, rej) => {
     try {
@@ -93,7 +93,7 @@ function execText(bin: string, args: string[], timeoutMs = 120_000, serialToReda
   });
 }
 
-function execBuffer(bin: string, args: string[], timeoutMs = 120_000, serialToRedact?: string): Promise<Buffer> {
+export function execBuffer(bin: string, args: string[], timeoutMs = 120_000, serialToRedact?: string): Promise<Buffer> {
   const timeout = Math.max(1, Math.floor(timeoutMs));
   return new Promise((res, rej) => {
     try {
@@ -111,14 +111,14 @@ function execBuffer(bin: string, args: string[], timeoutMs = 120_000, serialToRe
   });
 }
 
-function parseFastbootDevices(out: string): string[] {
+export function parseFastbootDevices(out: string): string[] {
   return out.split(/\r?\n/)
     .map((l) => l.trim().split(/\s+/))
     .filter(([id, state]) => !!id && state === 'fastboot')
     .map(([id]) => id!);
 }
 
-function parseAdbDevices(out: string): Map<string, AdbState> {
+export function parseAdbDevices(out: string): Map<string, AdbState> {
   const map = new Map<string, AdbState>();
   for (const line of out.split(/\r?\n/)) {
     const trimmed = line.trim();
@@ -130,7 +130,7 @@ function parseAdbDevices(out: string): Map<string, AdbState> {
   return map;
 }
 
-function createHostAdbSession(target: string, bin: string, serialToRedact?: string): StockAdbSession {
+export function createHostAdbSession(target: string, bin: string, serialToRedact?: string): StockAdbSession {
   const RC = '__GW_SP_RC=';
   const targetArgs = ['-s', target];
   return {
@@ -240,7 +240,7 @@ export function parseFiemapResponse(path: string, raw: unknown): FiemapResult {
   };
 }
 
-function createHostHttpSession(host: string, port: number): StockHttpSession {
+export function createHostHttpSession(host: string, port: number): StockHttpSession {
   const base = `http://${host}:${port}`;
   const withTimeout = async <T>(path: string, timeoutMs: number, read: (r: Response) => Promise<T>): Promise<T> => {
     const ctl = new AbortController();
@@ -293,6 +293,14 @@ function createHostHttpSession(host: string, port: number): StockHttpSession {
         return (await r.text()).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
       });
     },
+    async listRaw(path: string) {
+      return withTimeout(`/list?path=${encodeURIComponent(path)}`, 15_000, async (r) => {
+        if (r.status === 404) return { status: 404, entries: [] };
+        if (r.status === 403) return { status: 403, entries: [] };
+        if (!r.ok) throw new Error(`HTTP probe /list(${path}) failed with status ${r.status}`);
+        return { status: 200, entries: (await r.text()).split(/\r?\n/).map((l) => l.trim()).filter(Boolean) };
+      });
+    },
     async readFile(path: string) {
       return withTimeout(`/file?path=${encodeURIComponent(path)}`, 60_000, async (r) => {
         if (r.status === 200) return { status: 'ok' as const, data: new Uint8Array(await r.arrayBuffer()) };
@@ -320,7 +328,7 @@ function createHostHttpSession(host: string, port: number): StockHttpSession {
   };
 }
 
-async function loadOrBuildProbeApp(opts: {
+export async function loadOrBuildProbeApp(opts: {
   apkPath?: string;
   certHexPath?: string;
   fiemapPath?: string;
