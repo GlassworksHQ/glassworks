@@ -227,6 +227,9 @@ export function planDpmdHook(so: Uint8Array, module: Uint8Array): DpmdHookPlan {
   if (!slot) fail(`no relocation for .init_array[0] at 0x${layout.initArrayVaddr.toString(16)}`);
   if (slot.type !== R_AARCH64_RELATIVE) fail(`.init_array[0] is not R_AARCH64_RELATIVE (type ${slot.type})`);
   if (slot.addend === 0) fail('.init_array[0] relocation has a zero addend');
+  if (slot.addend >= layout.ehFrame.addr && slot.addend < layout.ehFrame.addr + layout.ehFrame.size) {
+    fail('.init_array[0] already points into .eh_frame (library appears already patched; restore stock first)');
+  }
   rxSegmentHolding(layout, slot.addend, 4); // the constructor we chain to must itself be code
 
   const payloadBytes = payloadSizeFor(module.length);

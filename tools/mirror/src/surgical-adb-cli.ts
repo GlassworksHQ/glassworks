@@ -56,6 +56,9 @@ Modes:
   --build-only              Run Steps 1-2 only (build patch-services.sparse locally; no flash)
   --undo --backup-dir <d>   Flash restore-dpmd.sparse (if any) + restore-post-boot.sparse (if any) + restore-services.sparse
   --apply-adb --backup-dir <d>  Re-flash saved patch-services.sparse to re-enable USB ADB (Enforcing)
+  --backup-only --backup-dir <d> --backup-module <ko>
+                            USB-only Step 4 backup on a Mirror that already has authorized USB ADB
+                            (tunnels probe app via adb forward — no Wi-Fi SoftAP needed)
   --dry-run                 Run Steps 1-3 on a fake stock Mirror (no device touched)
 
 Options:
@@ -142,6 +145,12 @@ function createSurgicalAdbSession(target: string, bin: string, serialToRedact?: 
     async rebootBootloader() {
       await execText(bin, [...tArgs, 'reboot', 'bootloader'], 30_000, serialToRedact);
     },
+    async forwardTcp(localPort: number, remotePort: number) {
+      await execText(bin, [...tArgs, 'forward', `tcp:${localPort}`, `tcp:${remotePort}`], 15_000, serialToRedact);
+    },
+    async removeForward(localPort: number) {
+      await execText(bin, [...tArgs, 'forward', '--remove', `tcp:${localPort}`], 15_000, serialToRedact).catch(() => {});
+    },
     async streamCommandToFile(remoteCmd: string, outPath: string) {
       mkdirSync(dirname(outPath), { recursive: true });
       return new Promise<{ bytes: number; sha256: string }>((res, rej) => {
@@ -208,6 +217,7 @@ export async function surgicalAdbCli(argv: string[], log: (l: string) => void = 
       'build-only': { type: 'boolean' },
       undo: { type: 'boolean' },
       'apply-adb': { type: 'boolean' },
+      'backup-only': { type: 'boolean' },
       'dry-run': { type: 'boolean' },
       'probe-host': { type: 'string' },
       'probe-http-port': { type: 'string' },
@@ -230,19 +240,21 @@ export async function surgicalAdbCli(argv: string[], log: (l: string) => void = 
     return 0;
   }
 
-  const modes = [a['preflight-only'], a['build-only'], a.undo, a['apply-adb']].filter(Boolean).length;
-  if (modes > 1) fail('choose at most one of --preflight-only, --build-only, --undo, --apply-adb');
+  const modes = [a['preflight-only'], a['build-only'], a.undo, a['apply-adb'], a['backup-only']].filter(Boolean).length;
+  if (modes > 1) fail('choose at most one of --preflight-only, --build-only, --undo, --apply-adb, --backup-only');
   if (a['keep-adb'] && a['restore-all']) fail('choose at most one of --keep-adb and --restore-all');
 
   const mode = a.undo
     ? 'undo'
     : a['apply-adb']
       ? 'apply-adb'
-      : a['preflight-only']
-        ? 'preflight-only'
-        : a['build-only']
-          ? 'build-only'
-          : 'full';
+      : a['backup-only']
+        ? 'backup-only'
+        : a['preflight-only']
+          ? 'preflight-only'
+          : a['build-only']
+            ? 'build-only'
+            : 'full';
   const probeHost = a['probe-host'] ?? '192.168.43.1';
   const probeHttpPort = a['probe-http-port'] ? Number.parseInt(a['probe-http-port'], 10) : DEFAULT_PROBE_HTTP_PORT;
   if (!Number.isInteger(probeHttpPort) || probeHttpPort < 1 || probeHttpPort > 65535) {
@@ -259,7 +271,7 @@ export async function surgicalAdbCli(argv: string[], log: (l: string) => void = 
   mkdirSync(outDir, { recursive: true, mode: 0o700 });
 
   let adbKey: string | undefined;
-  if (mode !== 'preflight-only' && mode !== 'undo' && mode !== 'apply-adb') {
+  if (mode !== 'preflight-only' && mode !== 'undo' && mode !== 'apply-adb' && mode !== 'backup-only') {
     if (a['dry-run']) {
       adbKey = fakeAdbKey(0x21, 'dryrun@glassworks');
     } else {

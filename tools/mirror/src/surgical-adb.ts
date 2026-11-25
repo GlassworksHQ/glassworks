@@ -715,6 +715,8 @@ export interface SurgicalAdbSession extends StockAdbSession {
   push(localPath: string, remotePath: string): Promise<void>;
   rebootBootloader(): Promise<void>;
   streamCommandToFile(remoteCmd: string, outPath: string): Promise<{ bytes: number; sha256: string }>;
+  forwardTcp?(localPort: number, remotePort: number): Promise<void>;
+  removeForward?(localPort: number): Promise<void>;
 }
 
 export interface BackupManifest {
@@ -754,7 +756,7 @@ export interface BackupManifest {
 }
 
 export interface SurgicalAdbOptions {
-  mode: 'full' | 'preflight-only' | 'build-only' | 'undo' | 'apply-adb';
+  mode: 'full' | 'preflight-only' | 'build-only' | 'undo' | 'apply-adb' | 'backup-only';
   probeHost: string;
   probeHttpPort: number;
   adbKey?: string;
@@ -880,9 +882,11 @@ export function renderSurgicalReport(r: SurgicalAdbReport): string {
     out.push('', '`/system/priv-app`:', '```', ...r.privAppListing, '```');
   }
 
-  if (r.servicesPatchedSha256) {
+  if (r.servicesPatchedSha256 || r.dpmdPatchedSha256) {
     out.push('', '## Step 2 — Surgical Patch Build (exact byte length)', '');
-    out.push(`- Patched \`services.jar\` SHA-256: \`${r.servicesPatchedSha256}\` (EOCD pad: ${r.servicesPadBytes ?? 0} B)`);
+    if (r.servicesPatchedSha256) {
+      out.push(`- Patched \`services.jar\` SHA-256: \`${r.servicesPatchedSha256}\` (EOCD pad: ${r.servicesPadBytes ?? 0} B)`);
+    }
     if (r.dpmdPatchedSha256) {
       const entry = r.dpmdEntryVaddr !== undefined ? `0x${r.dpmdEntryVaddr.toString(16)}` : '?';
       const chained = r.dpmdChainedVaddr !== undefined ? `0x${r.dpmdChainedVaddr.toString(16)}` : '?';
@@ -1038,6 +1042,339 @@ export async function runStockSurgicalAdb(
     report.notes.push('Re-applied surgical USB ADB services.jar hook to system and rebooted (SELinux stays Enforcing).');
     await saveReport();
     return { report, ok: true };
+  }
+
+  // Shared Step 4 runner: flashes patch-dpmd.sparse (and optional restore-post-boot.sparse),
+  // polls for Permissive + readable block nodes, streams raw system + boot, scrubs system back
+  // to untouched stock, and flashes restore-dpmd.sparse (plus restore-services.sparse if asked).
+  const executeDpmdBackup = async (args: {
+    adbSession: SurgicalAdbSession;
+    targetSystemBytes: number;
+    origServices: Uint8Array;
+    servicesExtents: readonly FiemapExtent[];
+    restoreServicesPath: string;
+    origDpmd: Uint8Array;
+    dpmdExtents: readonly FiemapExtent[];
+    patchDpmdPath: string;
+    restoreDpmdPath: string;
+    preRestorePostBootPath?: string;
+    verifyFastbootGate?: boolean;
+  }): Promise<{ report: SurgicalAdbReport; ok: boolean }> => {
+    const preRestoreNote = args.preRestorePostBootPath ? ' (and restore original init.qcom.post_boot.sh first)' : '';
+    const okBackup = await d.confirm(
+      `Step 4/4: Surgically patch ${STOCK_DPMD_LIB_PATH}${preRestoreNote} so dpmd loads the backup module and makes mmcblk0p22 and mmcblk0p19 readable for one boot, stream raw system + boot, then restore the library?`,
+    );
+    if (!okBackup) {
+      report.notes.push('Step 4 (raw system/boot backup) skipped by user.');
+      await saveReport();
+      return { report, ok: true };
+    }
+
+    await args.adbSession.rebootBootloader();
+    const fb2 = await d.waitForFastboot(120_000);
+    if (!fb2) {
+      report.stopReason = 'Mirror did not enter fastboot for Step 4 backup hook';
+      await saveReport();
+      return { report, ok: false };
+    }
+    if (args.verifyFastbootGate) {
+      const product = await fb2.getvar('product');
+      const sysBytes = parseHexOrDecSize(await fb2.getvar('partition-size:system'));
+      report.systemPartitionBytes = sysBytes;
+      if (product !== 'MSM8916' || sysBytes !== args.targetSystemBytes) {
+        report.stopReason = `fastboot gate failed for backup-only (product=${product ?? 'unknown'}, system=${sysBytes ?? 'unknown'} vs manifest ${args.targetSystemBytes})`;
+        await saveReport();
+        return { report, ok: false };
+      }
+    }
+    if (args.preRestorePostBootPath) {
+      d.log('  flashing restore-post-boot.sparse to clear any earlier post_boot patch...');
+      await fb2.flashPartition('system', args.preRestorePostBootPath);
+      report.restoredPostBoot = true;
+    }
+    d.log('  flashing surgical patch-dpmd.sparse (libdpmframework.so blocks only)...');
+    await fb2.flashPartition('system', args.patchDpmdPath);
+    await fb2.reboot();
+
+    const waitUntil2 = mono() + Math.max(60, o.waitSeconds) * 1000;
+    let backupAdb: SurgicalAdbSession | undefined;
+    while (mono() < waitUntil2) {
+      const rem = Math.max(1000, Math.min(10_000, waitUntil2 - mono()));
+      const st = await d.checkAdb(rem);
+      if (st.usb === 'device' && st.session) {
+        backupAdb = st.session;
+        break;
+      }
+      await d.sleep(3000);
+    }
+    if (!backupAdb) {
+      report.stopReason = `USB ADB did not return after Step 4 hook (restore the library with: fastboot flash system ${args.restoreDpmdPath})`;
+      await saveReport();
+      return { report, ok: false };
+    }
+
+    // dpmd's constructor runs a few seconds after boot, before USB ADB is up. The chmod lives in
+    // devtmpfs until the next reboot, so once adb returns it is enough to see Permissive plus both
+    // block nodes readable. Give that 45 s.
+    const hookDeadline = mono() + 45_000;
+    let enf = '';
+    let blockReadable = false;
+    while (mono() < hookDeadline) {
+      const bc = (await backupAdb.shell('getprop sys.boot_completed')).out.trim();
+      enf = (await backupAdb.shell('getenforce')).out.trim();
+      if (enf.toLowerCase() === 'permissive') {
+        const rchk = await backupAdb.shell('[ -r /dev/block/mmcblk0p22 ] && [ -r /dev/block/mmcblk0p19 ]');
+        if (rchk.code === 0) {
+          blockReadable = true;
+          break;
+        }
+      }
+      if (bc === '1' && enf.toLowerCase() === 'permissive') {
+        await d.sleep(1000);
+      } else {
+        await d.sleep(2000);
+      }
+    }
+    report.notes.push(`Step 4 boot getenforce=${enf || 'unknown'} blockReadable=${blockReadable}`);
+    if (enf.toLowerCase() !== 'permissive' || !blockReadable) {
+      try {
+        const mods = (await backupAdb.shell('lsmod')).out.trim();
+        if (mods) {
+          d.log(`  lsmod:\n${mods}`);
+          report.notes.push(`Step 4 lsmod: ${mods.replace(/\r?\n/g, ' | ')}`);
+        }
+        const dm = (await backupAdb.shell("dmesg | grep -iE 'selinux_permissive|module|kallsyms|dpm|avc' | tail -n 30")).out.trim();
+        if (dm) {
+          d.log(`  dmesg (filtered):\n${dm}`);
+          report.notes.push(`Step 4 dmesg:\n${dm}`);
+        }
+      } catch {
+        // best-effort diagnostics only
+      }
+      report.stopReason = `backup module did not switch SELinux to Permissive + readable block nodes (getenforce=${enf || 'unknown'}, readable=${blockReadable}); restore the library via fastboot flash system ${args.restoreDpmdPath}`;
+      await saveReport();
+      return { report, ok: false };
+    }
+
+    d.log('  streaming raw system (/dev/block/mmcblk0p22, ~1.2 GiB) over USB ADB...');
+    const sysDump = await backupAdb.streamCommandToFile(
+      'dd if=/dev/block/mmcblk0p22 bs=1048576 2>/dev/null',
+      `${o.outDir}/backup/system-stock.raw.img`,
+    );
+    report.backupSystemPath = `${o.outDir}/backup/system-stock.raw.img`;
+    report.backupSystemBytes = sysDump.bytes;
+    report.backupSystemSha256 = sysDump.sha256;
+    if (sysDump.bytes === args.targetSystemBytes && d.restoreExtentsInRawImage) {
+      d.log('  scrubbing temporary services.jar + libdpmframework.so patches out of system-stock.raw.img -> pure untouched stock...');
+      report.backupSystemSha256 = await d.restoreExtentsInRawImage(report.backupSystemPath, [
+        { extents: args.servicesExtents, origData: args.origServices },
+        { extents: args.dpmdExtents, origData: args.origDpmd },
+      ]);
+      report.notes.push('Restored original services.jar and libdpmframework.so blocks inside system-stock.raw.img so the saved image is pure untouched stock.');
+    }
+
+    d.log('  streaming raw boot (/dev/block/mmcblk0p19, 32 MiB) over USB ADB...');
+    const bootDump = await backupAdb.streamCommandToFile(
+      'dd if=/dev/block/mmcblk0p19 bs=1048576 2>/dev/null',
+      `${o.outDir}/backup/boot-stock.raw.img`,
+    );
+    report.backupBootPath = `${o.outDir}/backup/boot-stock.raw.img`;
+    report.backupBootBytes = bootDump.bytes;
+    report.backupBootSha256 = bootDump.sha256;
+
+    await backupAdb.rebootBootloader();
+    const fb3 = await d.waitForFastboot(120_000);
+    if (fb3) {
+      d.log('  restoring original libdpmframework.so blocks...');
+      await fb3.flashPartition('system', args.restoreDpmdPath);
+      report.restoredDpmd = true;
+      if (o.restoreAllAfterBackup) {
+        d.log('  --restore-all: restoring original services.jar blocks...');
+        await fb3.flashPartition('system', args.restoreServicesPath);
+        report.restoredServices = true;
+      } else {
+        report.restoredServices = false;
+        d.log(`  keeping authorized USB ADB services.jar hook active (SELinux Enforcing). Revert anytime with: --undo --backup-dir ${o.outDir}/backup`);
+        report.notes.push('Kept surgical USB ADB services.jar hook active (SELinux Enforcing); libdpmframework.so restored to stock.');
+      }
+      await fb3.reboot();
+    } else {
+      report.restoredDpmd = false;
+      report.notes.push(`Manual restore needed: fastboot flash system ${args.restoreDpmdPath}`);
+    }
+
+    if (sysDump.bytes !== args.targetSystemBytes) {
+      report.stopReason = `raw system dump size ${sysDump.bytes} !== expected ${args.targetSystemBytes}`;
+      await saveReport();
+      return { report, ok: false };
+    }
+
+    await saveReport();
+    return { report, ok: true };
+  };
+
+  // --- Backup-only mode (USB-only Step 4 using existing authorized USB ADB + saved backup-dir) ---
+  if (o.mode === 'backup-only') {
+    if (!o.backupDir) throw new Error('--backup-only requires --backup-dir <dir> (from a prior Phase 2 run)');
+    if (!o.backupModulePath) throw new Error('--backup-only requires --backup-module <path-to-ko>');
+
+    const backupKoBytes = await d.readHostFile(o.backupModulePath);
+    const koInfo = validateKernelModuleElf(backupKoBytes);
+    d.log(`  validated backup module: ${koInfo.arch}, vermagic="${koInfo.vermagic}"${koInfo.moduleLayoutCrc ? `, module_layout=${koInfo.moduleLayoutCrc}` : ''}`);
+    report.notes.push(`Validated external backup .ko (${koInfo.arch}, vermagic=${koInfo.vermagic}${koInfo.moduleLayoutCrc ? `, module_layout=${koInfo.moduleLayoutCrc}` : ''}).`);
+
+    const manifestRaw = await d.readHostFile(`${o.backupDir}/manifest.json`);
+    const prevManifest = JSON.parse(td.decode(manifestRaw)) as BackupManifest;
+    const origServices = await d.readHostFile(`${o.backupDir}/${prevManifest.servicesJar.origFile}`);
+    if (origServices.length !== prevManifest.servicesJar.size) {
+      throw new Error(`backup services.jar.orig size ${origServices.length} !== manifest ${prevManifest.servicesJar.size}`);
+    }
+    const targetSystemBytes = prevManifest.systemBytes;
+    report.servicesOriginalSha256 = prevManifest.servicesJar.originalSha256;
+    report.servicesFiemap = {
+      path: prevManifest.servicesJar.path,
+      size: prevManifest.servicesJar.size,
+      extents: prevManifest.servicesJar.extents,
+    };
+
+    // Wait briefly for authorized USB ADB (no Wi-Fi swap required)
+    d.log('Step 1/2: Connecting to Mirror over USB ADB (no Wi-Fi SoftAP needed)...');
+    const adbDeadline = mono() + Math.min(30, o.waitSeconds) * 1000;
+    let adbSession: SurgicalAdbSession | undefined;
+    while (mono() < adbDeadline) {
+      const st = await d.checkAdb(5_000);
+      if (st.usb === 'device' && st.session) {
+        adbSession = st.session;
+        break;
+      }
+      await d.sleep(2000);
+    }
+    if (!adbSession) {
+      report.adbAuthorized = false;
+      report.stopReason = '--backup-only requires an authorized USB ADB connection (connect micro-USB first)';
+      await saveReport();
+      return { report, ok: false };
+    }
+
+    report.adbAuthorized = true;
+    report.adbId = (await adbSession.shell('id')).out.trim();
+    report.adbEnforce = (await adbSession.shell('getenforce')).out.trim();
+    report.adbMirrorVersion = (await adbSession.shell('getprop ro.build.version.mirror')).out.trim();
+    d.log(`  connected over USB ADB: id=${report.adbId}, getenforce=${report.adbEnforce}, mirror=${report.adbMirrorVersion}`);
+
+    // Tunnel the installed stock probe app over USB via `adb forward` so FIEMAP + file reads need no Wi-Fi.
+    d.log(`  forwarding tcp:${o.probeHttpPort} over USB ADB to probe app...`);
+    await adbSession.forwardTcp?.(o.probeHttpPort, o.probeHttpPort);
+    let origDpmd: Uint8Array | undefined;
+    let dpmdReadError: string | undefined;
+    try {
+      const http = d.connectHttp('127.0.0.1', o.probeHttpPort);
+      let status = await http.status(5_000);
+      if (!status || !status.ok) {
+        d.log('  probe app not yet listening; starting ProbeServerService via broadcast...');
+        await adbSession.shell('am broadcast -n dev.glassworks.stockprobe/.BootReceiver');
+        await d.sleep(2000);
+        status = await http.status(8_000);
+      }
+      if (!status || !status.ok) {
+        dpmdReadError = `HTTP probe app did not answer over USB adb forward (127.0.0.1:${o.probeHttpPort})`;
+      } else if (!status.fiemap) {
+        dpmdReadError = 'HTTP probe app does not have libfiemap.so loaded (fiemap=false)';
+      } else {
+        report.dpmdFiemap = await http.fiemap(STOCK_DPMD_LIB_PATH);
+        const libRead = await http.readFile(STOCK_DPMD_LIB_PATH);
+        if (libRead.status !== 'ok') {
+          dpmdReadError = `could not read ${STOCK_DPMD_LIB_PATH} (${libRead.status}); dpmd links the ELF64 copy under vendor/lib64`;
+        } else if (report.dpmdFiemap.error || !report.dpmdFiemap.extents?.length) {
+          dpmdReadError = `FIEMAP failed for ${STOCK_DPMD_LIB_PATH}: ${report.dpmdFiemap.error ?? 'no extents'}`;
+        } else if (report.dpmdFiemap.size !== undefined && report.dpmdFiemap.size !== libRead.data.length) {
+          dpmdReadError = `size mismatch for ${STOCK_DPMD_LIB_PATH}: FIEMAP=${report.dpmdFiemap.size} vs read=${libRead.data.length}`;
+        } else {
+          origDpmd = libRead.data;
+          report.dpmdOriginalSha256 = sha256Hex(origDpmd);
+        }
+      }
+    } finally {
+      await adbSession.removeForward?.(o.probeHttpPort);
+    }
+
+    if (dpmdReadError || !origDpmd || !report.dpmdFiemap?.extents?.length) {
+      report.stopReason = dpmdReadError ?? `could not read ${STOCK_DPMD_LIB_PATH} over USB adb forward`;
+      await saveReport();
+      return { report, ok: false };
+    }
+
+    let built: ReturnType<typeof buildDpmdHook>;
+    try {
+      built = buildDpmdHook(origDpmd, backupKoBytes);
+    } catch (err) {
+      report.stopReason = err instanceof Error ? err.message : String(err);
+      await saveReport();
+      return { report, ok: false };
+    }
+
+    // Write complete self-contained undo files in outDir/backup BEFORE offering any flash.
+    await d.writeFile('backup/services.jar.orig', origServices);
+    const restoreServicesPath = await d.writeFile(
+      'backup/restore-services.sparse',
+      buildSurgicalSparseImage(targetSystemBytes, prevManifest.servicesJar.extents, origServices),
+    );
+    await d.writeFile('backup/libdpmframework.so.orig', origDpmd);
+    const restoreDpmdPath = await d.writeFile(
+      'backup/restore-dpmd.sparse',
+      buildSurgicalSparseImage(targetSystemBytes, report.dpmdFiemap.extents, origDpmd),
+    );
+    const patchDpmdSparse = buildSurgicalSparseImage(targetSystemBytes, report.dpmdFiemap.extents, built.bytes);
+    const patchDpmdPath = await d.writeFile('patch-dpmd.sparse', patchDpmdSparse);
+    await d.writeFile('backup/patch-dpmd.sparse', patchDpmdSparse);
+
+    let preRestorePostBootPath: string | undefined;
+    if (prevManifest.postBoot) {
+      try {
+        const postBootRestoreBytes = await d.readHostFile(`${o.backupDir}/${prevManifest.postBoot.restoreSparse}`);
+        preRestorePostBootPath = await d.writeFile('backup/restore-post-boot.sparse', postBootRestoreBytes);
+      } catch {
+        // restore-post-boot.sparse absent; skip
+      }
+    }
+
+    report.dpmdPatchedSha256 = sha256Hex(built.bytes);
+    report.dpmdEntryVaddr = built.plan.entryVaddr;
+    report.dpmdChainedVaddr = built.plan.chainedVaddr;
+    const newManifest: BackupManifest = {
+      ...prevManifest,
+      createdAt: nowIso(),
+      dpmdLib: {
+        path: STOCK_DPMD_LIB_PATH,
+        size: origDpmd.length,
+        originalSha256: report.dpmdOriginalSha256!,
+        patchedSha256: report.dpmdPatchedSha256,
+        extents: report.dpmdFiemap.extents,
+        origFile: 'libdpmframework.so.orig',
+        restoreSparse: 'restore-dpmd.sparse',
+        patchSparse: 'patch-dpmd.sparse',
+      },
+    };
+    await d.writeFile('backup/manifest.json', `${JSON.stringify(newManifest, null, 2)}\n`);
+    report.notes.push(
+      `dpmd hook: .init_array[0] -> 0x${built.plan.entryVaddr.toString(16)}, chains to 0x${built.plan.chainedVaddr.toString(16)}, payload ${built.plan.payloadBytes} B embedding ${built.plan.moduleBytes} B.`,
+    );
+    await saveReport();
+    d.log(`  saved byte-exact undo image: ${restoreDpmdPath}`);
+
+    return executeDpmdBackup({
+      adbSession,
+      targetSystemBytes,
+      origServices,
+      servicesExtents: prevManifest.servicesJar.extents,
+      restoreServicesPath,
+      origDpmd,
+      dpmdExtents: report.dpmdFiemap.extents,
+      patchDpmdPath,
+      restoreDpmdPath,
+      preRestorePostBootPath,
+      verifyFastbootGate: true,
+    });
   }
 
   // Validate ADB key up front when patching
@@ -1416,127 +1753,17 @@ export async function runStockSurgicalAdb(
     return { report, ok: true };
   }
 
-  const okBackup = await d.confirm(
-    `Step 4/4: Surgically patch ${STOCK_DPMD_LIB_PATH} so dpmd loads the backup module and makes mmcblk0p22 and mmcblk0p19 readable for one boot, stream raw system + boot, then restore the library?`,
-  );
-  if (!okBackup) {
-    report.notes.push('Step 4 (raw system/boot backup) skipped by user.');
-    await saveReport();
-    return { report, ok: true };
-  }
-
-  await adbSession.rebootBootloader();
-  const fb2 = await d.waitForFastboot(120_000);
-  if (!fb2) {
-    report.stopReason = 'Mirror did not enter fastboot for Step 4 backup hook';
-    await saveReport();
-    return { report, ok: false };
-  }
-  d.log('  flashing surgical patch-dpmd.sparse (libdpmframework.so blocks only)...');
-  await fb2.flashPartition('system', patchDpmdPath);
-  await fb2.reboot();
-
-  const waitUntil2 = mono() + Math.max(60, o.waitSeconds) * 1000;
-  let backupAdb: SurgicalAdbSession | undefined;
-  while (mono() < waitUntil2) {
-    const rem = Math.max(1000, Math.min(10_000, waitUntil2 - mono()));
-    const st = await d.checkAdb(rem);
-    if (st.usb === 'device' && st.session) {
-      backupAdb = st.session;
-      break;
-    }
-    await d.sleep(3000);
-  }
-  if (!backupAdb) {
-    report.stopReason = `USB ADB did not return after Step 4 hook (restore the library with: fastboot flash system ${restoreDpmdPath})`;
-    await saveReport();
-    return { report, ok: false };
-  }
-
-  // dpmd's constructor runs a few seconds after boot, before USB ADB is up. The chmod lives in
-  // devtmpfs until the next reboot, so once adb returns it is enough to see Permissive plus both
-  // block nodes readable. Give that 45 s.
-  const hookDeadline = mono() + 45_000;
-  let enf = '';
-  let blockReadable = false;
-  while (mono() < hookDeadline) {
-    const bc = (await backupAdb.shell('getprop sys.boot_completed')).out.trim();
-    enf = (await backupAdb.shell('getenforce')).out.trim();
-    if (enf.toLowerCase() === 'permissive') {
-      const rchk = await backupAdb.shell('[ -r /dev/block/mmcblk0p22 ] && [ -r /dev/block/mmcblk0p19 ]');
-      if (rchk.code === 0) {
-        blockReadable = true;
-        break;
-      }
-    }
-    if (bc === '1' && enf.toLowerCase() === 'permissive') {
-      await d.sleep(1000);
-    } else {
-      await d.sleep(2000);
-    }
-  }
-  report.notes.push(`Step 4 boot getenforce=${enf || 'unknown'} blockReadable=${blockReadable}`);
-  if (enf.toLowerCase() !== 'permissive' || !blockReadable) {
-    report.stopReason = `backup module did not switch SELinux to Permissive + readable block nodes (getenforce=${enf || 'unknown'}, readable=${blockReadable}); restore the library via fastboot flash system ${restoreDpmdPath}`;
-    await saveReport();
-    return { report, ok: false };
-  }
-
-  d.log('  streaming raw system (/dev/block/mmcblk0p22, ~1.2 GiB) over USB ADB...');
-  const sysDump = await backupAdb.streamCommandToFile(
-    'dd if=/dev/block/mmcblk0p22 bs=1048576 2>/dev/null',
-    `${o.outDir}/backup/system-stock.raw.img`,
-  );
-  report.backupSystemPath = `${o.outDir}/backup/system-stock.raw.img`;
-  report.backupSystemBytes = sysDump.bytes;
-  report.backupSystemSha256 = sysDump.sha256;
-  if (sysDump.bytes === targetSystemBytes && d.restoreExtentsInRawImage) {
-    d.log('  scrubbing temporary services.jar + libdpmframework.so patches out of system-stock.raw.img -> pure untouched stock...');
-    report.backupSystemSha256 = await d.restoreExtentsInRawImage(report.backupSystemPath, [
-      { extents: report.servicesFiemap.extents, origData: origServices },
-      { extents: report.dpmdFiemap.extents, origData: origDpmd },
-    ]);
-    report.notes.push('Restored original services.jar and libdpmframework.so blocks inside system-stock.raw.img so the saved image is pure untouched stock.');
-  }
-
-  d.log('  streaming raw boot (/dev/block/mmcblk0p19, 32 MiB) over USB ADB...');
-  const bootDump = await backupAdb.streamCommandToFile(
-    'dd if=/dev/block/mmcblk0p19 bs=1048576 2>/dev/null',
-    `${o.outDir}/backup/boot-stock.raw.img`,
-  );
-  report.backupBootPath = `${o.outDir}/backup/boot-stock.raw.img`;
-  report.backupBootBytes = bootDump.bytes;
-  report.backupBootSha256 = bootDump.sha256;
-
-  await backupAdb.rebootBootloader();
-  const fb3 = await d.waitForFastboot(120_000);
-  if (fb3) {
-    d.log('  restoring original libdpmframework.so blocks...');
-    await fb3.flashPartition('system', restoreDpmdPath);
-    report.restoredDpmd = true;
-    if (o.restoreAllAfterBackup) {
-      d.log('  --restore-all: restoring original services.jar blocks...');
-      await fb3.flashPartition('system', restoreServicesPath);
-      report.restoredServices = true;
-    } else {
-      report.restoredServices = false;
-      d.log(`  keeping authorized USB ADB services.jar hook active (SELinux Enforcing). Revert anytime with: --undo --backup-dir ${o.outDir}/backup`);
-      report.notes.push('Kept surgical USB ADB services.jar hook active (SELinux Enforcing); libdpmframework.so restored to stock.');
-    }
-    await fb3.reboot();
-  } else {
-    report.restoredDpmd = false;
-    report.notes.push(`Manual restore needed: fastboot flash system ${restoreDpmdPath}`);
-  }
-
-  if (sysDump.bytes !== targetSystemBytes) {
-    report.stopReason = `raw system dump size ${sysDump.bytes} !== expected ${targetSystemBytes}`;
-    await saveReport();
-    return { report, ok: false };
-  }
-
-  await saveReport();
-  return { report, ok: true };
+  return executeDpmdBackup({
+    adbSession,
+    targetSystemBytes,
+    origServices,
+    servicesExtents: report.servicesFiemap.extents,
+    restoreServicesPath,
+    origDpmd,
+    dpmdExtents: report.dpmdFiemap.extents,
+    patchDpmdPath,
+    restoreDpmdPath,
+  });
 }
 
 export { DEFAULT_PROBE_HTTP_PORT };

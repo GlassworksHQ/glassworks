@@ -568,4 +568,148 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
       'system:patch-services.sparse',
     ]);
   });
+
+  it('runs --backup-only over USB adb forward without SoftAP, clearing leftover post_boot first', async () => {
+    const dpmdSo = syntheticDpmdSo();
+    const origServices = new Uint8Array(4096).fill(0x55);
+    const fakePostBootRestore = new Uint8Array(64).fill(0x22);
+    const fakeKo = new Uint8Array(256);
+    fakeKo.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0], 0);
+    const kdv = new DataView(fakeKo.buffer);
+    kdv.setUint16(16, 1, true);
+    kdv.setUint16(18, 183, true);
+    fakeKo.set(new TextEncoder().encode('vermagic=3.10.49-perf-g4869d64961b SMP preempt mod_unload modversions aarch64\0'), 64);
+    kdv.setUint32(160, 0xa5b7f7dd, true);
+    fakeKo.set(new TextEncoder().encode('module_layout\0'), 168);
+
+    const prevManifest = {
+      version: 1,
+      createdAt: '2026-11-24T21:32:26.000Z',
+      systemBytes: STOCK_SYSTEM_PARTITION_BYTES,
+      userdataBytes: USERDATA_BYTES,
+      servicesJar: {
+        path: STOCK_SERVICES_JAR_PATH,
+        size: origServices.length,
+        originalSha256: '0'.repeat(64),
+        extents: [{ logical: 0, physical: 40597 * 4096, block: 40597, length: 4096, blocks: 1, flags: 1 }],
+        origFile: 'services.jar.orig',
+        restoreSparse: 'restore-services.sparse',
+      },
+      postBoot: {
+        path: STOCK_POST_BOOT_PATH,
+        size: 4096,
+        originalSha256: '1'.repeat(64),
+        extents: [{ logical: 0, physical: 22517 * 4096, block: 22517, length: 4096, blocks: 1, flags: 1 }],
+        origFile: 'init.qcom.post_boot.sh.orig',
+        restoreSparse: 'restore-post-boot.sparse',
+      },
+    };
+
+    const writes = new Map<string, Uint8Array | string>();
+    const flashed: Array<{ part: string; path: string }> = [];
+    const forwarded: number[] = [];
+    const removedForwards: number[] = [];
+    const httpHosts: string[] = [];
+    let step4Boot = false;
+    let scrubCount = 0;
+
+    const deps: SurgicalAdbDeps = {
+      now: () => new Date('2026-11-24T23:00:00.000Z'),
+      sleep: async () => {},
+      log: () => {},
+      confirm: async () => true,
+      connectHttp: (host) => {
+        httpHosts.push(host);
+        return {
+          async status() { return { ok: true, uid: 10099, pid: 100, sdk: 23, fiemap: true, bootCompleted: '1' }; },
+          async props() { return ''; },
+          async dtPanel() { return ''; },
+          async list() { return []; },
+          async readFile(p: string) {
+            if (p === STOCK_DPMD_LIB_PATH) return { status: 'ok', data: dpmdSo };
+            return { status: 'missing' };
+          },
+          async fiemap(p: string) {
+            const blocks = Math.ceil(dpmdSo.length / 4096);
+            return { path: p, size: dpmdSo.length, ino: 880, extents: [{ logical: 0, physical: 18000 * 4096, block: 18000, length: blocks * 4096, blocks, flags: 1 }] };
+          },
+        };
+      },
+      waitForFastboot: async () => ({
+        serial: 'FAKE1234',
+        async oemDeviceInfo() { return ['Device unlocked: false']; },
+        async getvar(name: string) {
+          if (name === 'product') return 'MSM8916';
+          if (name === 'partition-size:system') return `0x${STOCK_SYSTEM_PARTITION_BYTES.toString(16)}`;
+          return undefined;
+        },
+        async flashPartition(part, path) {
+          flashed.push({ part, path });
+          if (path.includes('patch-dpmd')) step4Boot = true;
+        },
+        async erasePartition() {},
+        async reboot() {},
+      }),
+      checkAdb: async () => ({
+        usb: 'device',
+        session: {
+          async shell(cmd: string) {
+            if (cmd === 'id') return { out: 'uid=2000(shell)\n', code: 0 };
+            if (cmd === 'getenforce') return { out: step4Boot ? 'Permissive\n' : 'Enforcing\n', code: 0 };
+            if (cmd.includes('sys.boot_completed')) return { out: '1\n', code: 0 };
+            if (cmd.includes('[ -r /dev/block/mmcblk0p22 ]')) return { out: '', code: step4Boot ? 0 : 1 };
+            if (cmd.includes('ro.build.version.mirror')) return { out: '1.24.0\n', code: 0 };
+            return { out: '', code: 0 };
+          },
+          async readFile() { return null; },
+          async push() {},
+          async rebootBootloader() {},
+          async forwardTcp(localPort: number) { forwarded.push(localPort); },
+          async removeForward(localPort: number) { removedForwards.push(localPort); },
+          async streamCommandToFile(cmd: string) {
+            if (cmd.includes('mmcblk0p22')) return { bytes: STOCK_SYSTEM_PARTITION_BYTES, sha256: 'a'.repeat(64) };
+            return { bytes: 32 * 1024 * 1024, sha256: 'b'.repeat(64) };
+          },
+        },
+      }),
+      loadProbeApp: async () => undefined,
+      writeFile: async (rel, data) => { writes.set(rel, data); return `/tmp/out-usb/${rel}`; },
+      readHostFile: async (absPath) => {
+        if (absPath === '/tmp/fake.ko') return fakeKo;
+        if (absPath === '/tmp/prev/backup/manifest.json') return new TextEncoder().encode(JSON.stringify(prevManifest));
+        if (absPath === '/tmp/prev/backup/services.jar.orig') return origServices;
+        if (absPath === '/tmp/prev/backup/restore-post-boot.sparse') return fakePostBootRestore;
+        throw new Error(`unexpected readHostFile: ${absPath}`);
+      },
+      restoreExtentsInRawImage: async (_p, patches) => {
+        scrubCount = patches.length;
+        return 'c'.repeat(64);
+      },
+    };
+
+    const { report, ok } = await runStockSurgicalAdb({
+      mode: 'backup-only',
+      probeHost: '192.168.43.1',
+      probeHttpPort: 18765,
+      backupDir: '/tmp/prev/backup',
+      backupModulePath: '/tmp/fake.ko',
+      waitSeconds: 30,
+      outDir: '/tmp/out-usb',
+    }, deps);
+
+    expect(ok).toBe(true);
+    expect(httpHosts).toEqual(['127.0.0.1']);
+    expect(forwarded).toEqual([18765]);
+    expect(removedForwards).toEqual([18765]);
+    expect(scrubCount).toBe(2);
+    expect(report.restoredPostBoot).toBe(true);
+    expect(report.restoredDpmd).toBe(true);
+    expect(report.restoredServices).toBe(false);
+    expect(report.backupSystemSha256).toBe('c'.repeat(64));
+    expect(flashed.map((f) => `${f.part}:${f.path.split('/').pop()}`)).toEqual([
+      'system:restore-post-boot.sparse',
+      'system:patch-dpmd.sparse',
+      'system:restore-dpmd.sparse',
+    ]);
+  });
 });

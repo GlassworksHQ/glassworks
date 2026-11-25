@@ -227,6 +227,12 @@ describe('planDpmdHook', () => {
     expect(() => planDpmdHook(so, moduleFixture())).toThrow(/not R_AARCH64_RELATIVE/);
   });
 
+  it('refuses a library whose .init_array[0] already points into .eh_frame', () => {
+    const { so } = fixture();
+    const { bytes } = buildDpmdHook(so, moduleFixture());
+    expect(() => planDpmdHook(bytes, moduleFixture())).toThrow(/already points into .eh_frame/);
+  });
+
   it('refuses an empty or absurd module', () => {
     const { so } = fixture();
     expect(() => planDpmdHook(so, new Uint8Array(0))).toThrow(/module image is empty/);
