@@ -322,3 +322,192 @@ describe('names a step makes', () => {
     }
   });
 });
+
+describe('an in-place recipe', () => {
+  const IN_PLACE: FrameAccess = { steps: [...FRAME.steps, 'stage', 'receive', 'in-place', 'app-install'], partitions: ['system', 'userdata'] };
+  /** Glassworks' second recipe: stage the agent, take its bundle, write only the blocks it names, install the app. */
+  const inPlace = (o: Partial<ImageRecipe> = {}): ImageRecipe => ({
+    ...glassworks(), id: 'glassworks-in-place', name: 'Glassworks (keep the stock software)', mode: 'in-place', files: [],
+    steps: [
+      { do: 'fastboot' }, { do: 'stage', makes: 'stage-userdata' }, { do: 'flash', partition: 'userdata', file: 'stage-userdata' }, { do: 'restart' },
+      { do: 'receive', bundle: 'bundle', channels: ['lan', 'ble', 'file'] },
+      { do: 'fastboot' }, { do: 'in-place', bundle: 'bundle', makes: ['system-blocks', 'userdata-final'], restore: 'restore-blocks' },
+      { do: 'flash', partition: 'system', file: 'system-blocks' }, { do: 'flash', partition: 'userdata', file: 'userdata-final' }, { do: 'restart' },
+      { do: 'app-install' },
+    ],
+    ...o,
+  });
+  const at = (i: number, step: unknown) => inPlace({ steps: inPlace().steps.map((s, k) => (k === i ? step : s)) as ImageStep[] });
+  const without = (i: number) => inPlace({ steps: inPlace().steps.filter((_, k) => k !== i) });
+  const swap = (i: number, j: number) => { const s = [...inPlace().steps]; [s[i], s[j]] = [s[j]!, s[i]!]; return inPlace({ steps: s }); };
+
+  it('passes, as Glassworks\' second recipe after the first', () => {
+    expect(validateImage(inPlace(), IN_PLACE)).toEqual([]);
+    expect(() => assertImages([glassworks(), inPlace()], IN_PLACE)).not.toThrow();
+    expect(() => assertImages([inPlace(), glassworks()], IN_PLACE)).not.toThrow(); // either of Glassworks' own first
+    expect(() => assertImages([community(), inPlace()], IN_PLACE)).toThrow(/Glassworks comes first/);
+  });
+
+  it('only Glassworks ids are not community images, and a community image can\'t take one', () => {
+    expect(validateImage(inPlace({ id: 'other-in-place' }), IN_PLACE)).toContain('only Glassworks is not a community image');
+    expect(validateImage(inPlace({ id: 'glassworksx' }), IN_PLACE)).toContain('only Glassworks is not a community image');
+    expect(validateImage(community({ id: 'glassworks-lite' }), FRAME)).toContain('id "glassworks-lite" is Glassworks\' own');
+    expect(validateImage(inPlace({ mode: 'swap' as 'replace' }), IN_PLACE)).toContain('mode "swap": replace or in-place');
+  });
+
+  it('a frame that doesn\'t run its steps refuses them', () => {
+    expect(validateImage(inPlace(), FRAME)).toContain('step 2: this frame can\'t run "stage"');
+  });
+
+  it('a community image gets none of its steps, nor its mode', () => {
+    const r = inPlace({ id: 'demo-os', community: true });
+    expect(validateImage(r, IN_PLACE)).toEqual(expect.arrayContaining([
+      'a community image is installed as published: no in-place mode',
+      'step 2: a community image gets no "stage": it is Glassworks\' own in-place install',
+      'step 5: a community image gets no "receive": it is Glassworks\' own in-place install',
+      'step 7: a community image gets no "in-place": it is Glassworks\' own in-place install',
+      'step 11: a community image gets no "app-install": it is Glassworks\' own in-place install',
+    ]));
+  });
+
+  it('its steps need mode "in-place", and the mode needs all of stage, receive and in-place, and no patch', () => {
+    expect(validateImage(inPlace({ mode: 'replace' }), IN_PLACE)).toEqual(expect.arrayContaining([
+      'step 2: "stage" is only for an in-place recipe (mode "in-place")',
+      'step 11: "app-install" is only for an in-place recipe (mode "in-place")',
+    ]));
+    expect(validateImage(inPlace({ mode: undefined }), IN_PLACE)).toContain('step 11: "app-install" is only for an in-place recipe (mode "in-place")');
+    expect(validateImage(inPlace({ steps: glassworks().steps }), IN_PLACE)).toEqual(expect.arrayContaining([
+      'an in-place recipe needs a stage step', 'an in-place recipe needs a receive step', 'an in-place recipe needs a in-place step',
+      'an in-place recipe keeps the stock software: no patch',
+    ]));
+  });
+
+  it('writes userdata once per fastboot session: again after a restart, never twice in one', () => {
+    // the stage's userdata, then the final one in the second session: allowed
+    expect(validateImage(inPlace(), IN_PLACE)).toEqual([]);
+    const twice = inPlace({ steps: [...inPlace().steps.slice(0, 9), { do: 'flash', partition: 'userdata', file: 'userdata-final' }, ...inPlace().steps.slice(9)] });
+    expect(validateImage(twice, IN_PLACE)).toContain('step 10: userdata is written once');
+  });
+
+  it('stage: after fastboot, before restart, once, naming a new file that gets written', () => {
+    expect(validateImage(swap(0, 1), IN_PLACE)).toContain('step 1: stage comes after fastboot and before restart');
+    expect(validateImage(at(1, { do: 'stage', makes: '../x' }), IN_PLACE)).toContain('step 2: stage must name a new file it makes');
+    expect(validateImage(at(1, { do: 'stage', makes: 'stage-userdata', size: 1 }), IN_PLACE)).toContain('step 2: "stage" takes no size');
+    expect(validateImage(at(2, { do: 'flash', partition: 'system', file: 'system-blocks' }), IN_PLACE)).toEqual(expect.arrayContaining([
+      'step 3: system-blocks isn\'t the stage output or something in-place made',
+      'stage makes stage-userdata, but nothing writes it: flash it',
+    ]));
+    // in-place mode rejects flashing a checked download directly
+    const flashedDownload = inPlace({
+      files: [file('system.img')],
+      steps: [{ do: 'download', file: 'system.img' }, ...inPlace().steps.slice(0, 7), { do: 'flash', partition: 'system', file: 'system.img' }, ...inPlace().steps.slice(8)],
+    });
+    expect(validateImage(flashedDownload, IN_PLACE)).toContain('step 9: system.img isn\'t the stage output or something in-place made');
+    // stage must be flashed before the restart that leads into receive (a later flash doesn't count)
+    const deferredStageFlash = inPlace({
+      steps: [
+        { do: 'fastboot' }, { do: 'stage', makes: 'stage-userdata' }, { do: 'restart' },
+        { do: 'receive', bundle: 'bundle', channels: ['lan'] },
+        { do: 'fastboot' }, { do: 'in-place', bundle: 'bundle', makes: ['system-blocks'], restore: 'restore-blocks' },
+        { do: 'flash', partition: 'system', file: 'system-blocks' }, { do: 'flash', partition: 'userdata', file: 'stage-userdata' }, { do: 'restart' },
+        { do: 'app-install' },
+      ],
+    });
+    expect(validateImage(deferredStageFlash, IN_PLACE)).toContain('step 4: receive comes after a stage step and the restart into it');
+    // replace recipes still enforce written-once across restarts
+    const replaceTwice = community({
+      steps: [
+        { do: 'download', file: 'system.img' }, { do: 'download', file: 'userdata.img' },
+        { do: 'fastboot' }, { do: 'flash', partition: 'system', file: 'system.img' }, { do: 'restart' },
+        { do: 'fastboot' }, { do: 'flash', partition: 'system', file: 'system.img' }, { do: 'flash', partition: 'userdata', file: 'userdata.img' }, { do: 'restart' },
+      ],
+    });
+    expect(validateImage(replaceTwice, FRAME)).toContain('step 7: system is written once');
+    const twice = inPlace({ steps: [...inPlace().steps.slice(0, 2), { do: 'stage', makes: 'stage-2' }, ...inPlace().steps.slice(2)] });
+    expect(validateImage(twice, IN_PLACE)).toContain('step 3: the stage is built once');
+  });
+
+  it('receive: after a stage and the restart into it, from known channels, once', () => {
+    // no restart between stage and receive: the agent isn't running yet
+    expect(validateImage(without(3), IN_PLACE)).toContain('step 4: receive comes after a stage step and the restart into it');
+    // no stage at all
+    const noStage = inPlace({ steps: [{ do: 'fastboot' }, { do: 'flash', partition: 'userdata', file: 'x' }, ...inPlace().steps.slice(3)] });
+    expect(validateImage(noStage, IN_PLACE)).toContain('step 4: receive comes after a stage step and the restart into it');
+    expect(validateImage(at(4, { do: 'receive', bundle: 'bundle', channels: [] }), IN_PLACE)).toContain('step 5: receive takes channels from lan, ble, file, each once');
+    expect(validateImage(at(4, { do: 'receive', bundle: 'bundle', channels: ['usb'] }), IN_PLACE)).toContain('step 5: receive takes channels from lan, ble, file, each once');
+    expect(validateImage(at(4, { do: 'receive', bundle: 'bundle', channels: ['lan', 'lan'] }), IN_PLACE)).toContain('step 5: receive takes channels from lan, ble, file, each once');
+    expect(validateImage(at(4, { do: 'receive', bundle: 'stage-userdata', channels: ['lan'] }), IN_PLACE)).toContain('step 5: receive must name a new bundle');
+    const twice = inPlace({ steps: [...inPlace().steps.slice(0, 5), { do: 'receive', bundle: 'bundle2', channels: ['lan'] }, ...inPlace().steps.slice(5)] });
+    expect(validateImage(twice, IN_PLACE)).toContain('step 6: the bundle is received once');
+  });
+
+  it('in-place: after receive, in a new fastboot session, before restart, from the bundle received', () => {
+    // in the session the agent runs in: no fastboot after receive
+    expect(validateImage(without(5), IN_PLACE)).toContain('step 6: in-place comes after receive, in a new fastboot session, before restart');
+    // before receive
+    const early = inPlace({ steps: [...inPlace().steps.slice(0, 4), { do: 'fastboot' }, inPlace().steps[6]!, inPlace().steps[4]!, ...inPlace().steps.slice(7)] });
+    expect(validateImage(early, IN_PLACE)).toContain('step 6: in-place needs a receive step first');
+    expect(validateImage(at(6, { do: 'in-place', bundle: 'other', makes: ['system-blocks', 'userdata-final'], restore: 'restore-blocks' }), IN_PLACE))
+      .toContain('step 7: in-place builds from other, but the bundle received is bundle');
+    expect(validateImage(at(6, { do: 'in-place', bundle: 'bundle', makes: [], restore: 'restore-blocks' }), IN_PLACE)).toContain('step 7: in-place must say what it makes');
+    expect(validateImage(at(6, { do: 'in-place', bundle: 'bundle', makes: ['system-blocks', 'stage-userdata'], restore: 'restore-blocks' }), IN_PLACE))
+      .toContain('step 7: in-place must name new files it makes');
+    expect(validateImage(at(6, { do: 'in-place', bundle: 'bundle', makes: ['system-blocks', 'userdata-final'], restore: 'system-blocks' }), IN_PLACE))
+      .toContain('step 7: in-place must name a new restore file');
+  });
+
+  it('in-place: what it makes is written, and its restore never is', () => {
+    expect(validateImage(without(8), IN_PLACE)).toContain('in-place makes userdata-final, but nothing writes it: flash it');
+    expect(validateImage(at(8, { do: 'flash', partition: 'userdata', file: 'restore-blocks' }), IN_PLACE)).toContain('step 9: restore-blocks is the way back: the install never writes it');
+  });
+
+  it('app-install: after restarting into the in-place writes, once, takes nothing', () => {
+    const early = inPlace({ steps: [...inPlace().steps.slice(0, 9), { do: 'app-install' }, { do: 'restart' }] });
+    expect(validateImage(early, IN_PLACE)).toContain('step 10: app-install comes after restarting into the in-place writes');
+    const rightAfterReceive = inPlace({
+      steps: [...inPlace().steps.slice(0, 5), { do: 'app-install' }, ...inPlace().steps.slice(5, 10)],
+    });
+    expect(validateImage(rightAfterReceive, IN_PLACE)).toContain('step 6: app-install comes after restarting into the in-place writes');
+    // partial in-place flash before restart cannot satisfy app-install
+    const partialBeforeApp = inPlace({
+      steps: [
+        ...inPlace().steps.slice(0, 8), { do: 'restart' }, { do: 'app-install' },
+        { do: 'fastboot' }, { do: 'flash', partition: 'userdata', file: 'userdata-final' }, { do: 'restart' },
+      ],
+    });
+    expect(validateImage(partialBeforeApp, IN_PLACE)).toContain('step 10: app-install comes after restarting into the in-place writes');
+    // stage output cannot be flashed again after the stage session restarted
+    const stageOverwriteAfter = inPlace({
+      steps: [
+        ...inPlace().steps.slice(0, 10),
+        { do: 'fastboot' }, { do: 'flash', partition: 'userdata', file: 'stage-userdata' }, { do: 'restart' },
+        { do: 'app-install' },
+      ],
+    });
+    expect(validateImage(stageOverwriteAfter, IN_PLACE)).toContain('step 12: stage-userdata can only be written in the stage session');
+    // in-place outputs cannot be flashed again after app-install
+    const inPlaceAfterApp = inPlace({
+      steps: [
+        ...inPlace().steps,
+        { do: 'fastboot' }, { do: 'flash', partition: 'userdata', file: 'userdata-final' }, { do: 'restart' },
+      ],
+    });
+    expect(validateImage(inPlaceAfterApp, IN_PLACE)).toContain('step 13: userdata-final must be written before restarting into app-install');
+    expect(validateImage(inPlace({ steps: [...inPlace().steps, { do: 'app-install' }] }), IN_PLACE)).toContain('step 12: the app is installed once');
+    expect(validateImage(at(10, { do: 'app-install', apk: 'x' }), IN_PLACE)).toContain('step 11: "app-install" takes no apk');
+  });
+
+  it('a recipe can\'t name restore-point', () => {
+    const r = inPlace({ steps: [...inPlace().steps.slice(0, 7), { do: 'restore-point' } as unknown as ImageStep, ...inPlace().steps.slice(7)] });
+    expect(validateImage(r, IN_PLACE)).toContain('step 8: "restore-point" is Kiln\'s own safety step; a recipe can\'t list it');
+  });
+
+  it('plan puts the restore point right before the first write of what in-place made', () => {
+    const p = plan(inPlace());
+    expect(p.map((s) => s.do)).toEqual(['fastboot', 'checks', 'backup', 'confirm', 'stage', 'flash', 'restart', 'receive', 'fastboot', 'in-place',
+      'restore-point', 'flash', 'flash', 'restart', 'app-install', 'way-back']);
+    expect(p.find((s) => s.do === 'restore-point')).toEqual({ do: 'restore-point', safety: true, bundle: 'bundle', restore: 'restore-blocks' });
+    // and only there: a replace recipe has none
+    expect(plan(glassworks()).some((s) => s.do === 'restore-point')).toBe(false);
+  });
+});
