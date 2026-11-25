@@ -36,7 +36,7 @@ class PanelDeviceApiBindTest {
 
     @Test fun theProductionApiServerAnswersOnANonLoopbackAddress() {
         val lan = lanAddress()
-        assumeTrue("this machine has no non-loopback IPv4 address", lan != null)
+        assumeTrue("this machine reaches itself on no non-loopback IPv4 address", lan != null)
         val port = ApiServer.DEFAULT_PORT
         assumeTrue("port $port is in use on this machine", portFree(port))
 
@@ -57,7 +57,7 @@ class PanelDeviceApiBindTest {
 
     @Test fun aServerBoundToLoopbackRefusesTheLanAddress() {
         val lan = lanAddress()
-        assumeTrue("this machine has no non-loopback IPv4 address", lan != null)
+        assumeTrue("this machine reaches itself on no non-loopback IPv4 address", lan != null)
         val mdns = RecordingMdns()
         val runtime = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         val device = PanelDevice(RuntimeEnvironment.getApplication(), runtime, runtime::devicePanes,
@@ -83,10 +83,24 @@ class PanelDeviceApiBindTest {
         }
     }
 
+    /**
+     * A non-loopback IPv4 address this machine reaches itself on, or null (the tests skip). Not just the first one
+     * listed: a Mac can list an interface that is up with an address it can't bind (a virtual machine's network
+     * bridge: "Can't assign requested address"), and the order of the interfaces isn't fixed, so the tests failed
+     * whenever that one came first.
+     */
     private fun lanAddress(): InetAddress? = NetworkInterface.getNetworkInterfaces().asSequence()
         .filter { it.isUp && !it.isLoopback }
         .flatMap { it.inetAddresses.asSequence() }
-        .firstOrNull { it is Inet4Address && !it.isLinkLocalAddress }
+        .filter { it is Inet4Address && !it.isLinkLocalAddress }
+        .firstOrNull(::reachesItself)
+
+    private fun reachesItself(address: InetAddress) = try {
+        ServerSocket(0, 1, address).use { probe ->
+            Socket().use { it.connect(InetSocketAddress(address, probe.localPort), 2_000) }
+        }
+        true
+    } catch (_: IOException) { false }
 
     /**
      * SO_REUSEADDR off: a JDK ServerSocket turns it on by default, and with it macOS binds every
