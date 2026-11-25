@@ -35,6 +35,25 @@ evidence: verified
   all 3 previously touched files verified byte-for-byte untouched stock after scrub; `boot-stock.raw.img`
   = `33,554,432` B, valid `ANDROID!` image), and `restore-dpmd.sparse` restored `libdpmframework.so`
   back to stock automatically.
+- **Track B offline forensics on the untouched stock `1.24.0` `boot` + `system` dumps (2026-11-25, read):**
+  ramdisk `init` is a `user` build with **no `ALLOW_DISABLE_SELINUX`**; the `boot` image carries **48
+  generic Qualcomm DTBs**, all with the `TC358775` LVDS bridge and a PWM backlight; there is **no
+  native watchdog** (`mapd`/`cfgchkup` are harmless — the watchdog is the `com.mirror.watchdog.apk`
+  app, not a daemon); `/system/media/bootanimation.zip` is `22,901` B, `1080×1920` portrait; the full
+  [option-c-vendor-files.tsv](option-c-vendor-files.tsv) audit is **462/462 complete offline** (34
+  match Glass Panes, 423 differ — including all 14 `*_exec` daemons that were SELinux-denied over
+  HTTP — and 5 absent); and `pronto_wlan.ko`'s **262/262 `__versions` CRCs are identical** to the dev
+  Mirror's (`gf46dad5260f`).
+- **Track A live Stock-in-place verification on the dev Mirror (2026-11-25, verified):** `pm
+  disable-user` throws `SecurityException` as `shell`, but **`pm hide` works on all 8 lululemon apps**
+  and survives reboot (0 lululemon processes, **663 MB free RAM** — `337 MB` with Glassworks +
+  GeckoView running); the backlight drops `200 → 0` on sleep; the panel is native `1080×1920`
+  portrait; an **8-byte `services.jar` Device Owner patch** (`mHasFeature = true` + NOP
+  `setBackupServiceActive`) lets `dpm set-device-owner` succeed with SELinux **Enforcing**, and a live
+  **silent `PackageInstaller` self-update (`v1 → v2`, zero taps)** followed. USB MTP
+  (`mUsbDataUnlocked=false` → 0 storages) and AOA v2 (`android.hardware.usb.accessory` feature absent)
+  are dead ends; a live BLE GATT benchmark measured `MTU=185`, `6.8 KB/s` (~5.5 min for `2.41 MB`),
+  with `bluetooth_on=1` by default.
 
 Device: untouched stock lululemon Studio Mirror (`MSM8916`, `variant: SBC eMMC`, `secure: yes`,
 `Device unlocked: false`, `ro.build.version.mirror=1.24.0`, `ro.build.hwver.mirror=mirror-v1`).
@@ -578,21 +597,29 @@ npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-onl
    Glass Panes' `pronto_wlan.ko` (or test on a `1.24.0` unit) to be 100% certain.
 3. **Zero-Wi-Fi-swap transport & Stock-in-place Kiln checks (next on a stock `1.24.0` unit with live
    USB ADB):**
-   - **MTP over the existing micro-USB cable:** stock `1.24.0` sets `persist.sys.usb.config=mtp,adb`
-     and `persist.fuse_sdcard=true`. Test whether Android 6's `MtpService` automatically exposes
-     `/sdcard` over USB without a screen tap on fresh OOBE (no lock screen). If so, the probe app
-     can write `services.jar` + `FIEMAP` metadata to `/sdcard/Glassworks/stock-backup.bin`, letting
-     Kiln read it directly over WebUSB MTP (macOS/Linux) or the file picker (Windows) with **zero
-     Wi-Fi swapping and zero HTTPS→HTTP mixed content**.
-   - **Fallback if MTP stays locked until tapped:** test pre-saving the user's home Wi-Fi in Stage 1
-     `userdata` + `enable_wifi` marker to see if stock joins home Wi-Fi cleanly instead of
-     `mirror-<serial>` SoftAP.
-   - **Stock-in-place viability:** `/system/framework/oat/arm64/services.odex` is now **verified
-     absent** (2026-11-24). Still to test over the live stock `1.24.0` USB ADB session: (a) free RAM
-     after `pm disable-user` on lululemon's stock apps (`com.mirror.*`, `co.mirror.*`), (b) whether
-     stock `1.24.0` turns the backlight completely dark on sleep, (c) `/data/local/bootanimation.zip`
-     SELinux access vs surgical `/system/media/bootanimation.zip` size, and (d) silent-update
-     options (in-place priv-app slot vs device-owner).
+   - **MTP over the existing micro-USB cable — ruled out (2026-11-25, verified):** stock `1.24.0`
+     sets `persist.sys.usb.config=mtp,adb` and `persist.fuse_sdcard=true`, and `MtpService` starts
+     when `device_provisioned=1`, but `UsbDeviceManager` keeps `mUsbDataUnlocked=false` until a
+     screen tap, so `GetStorageIDs` returns **0 storages** on untouched stock OOBE.
+   - **Home Wi-Fi fallback (untested):** pre-saving the user's home Wi-Fi in Stage 1 `userdata` +
+     `enable_wifi` marker to see if stock joins home Wi-Fi cleanly instead of `mirror-<serial>`
+     SoftAP (still untested on stock `1.24.0`).
+   - **Stock-in-place viability — verified (2026-11-25):** `/system/framework/oat/arm64/services.odex`
+     is absent (2026-11-24), and the live Track A run on the dev Mirror answered the rest. (a) `pm
+     disable-user` throws `SecurityException` as `shell`, but **`pm hide` works on all 8 lululemon
+     apps** (`co.mirror.cw`, `co.mirror.datacap`, `co.mirror.elevator`, `com.mirror.launcher`,
+     `com.mirror.mirrorupdater`, `com.mirror.remover`, `com.mirror.services`, `com.mirror.watchdog`),
+     survives reboot, and leaves **663 MB free RAM** (`337 MB` with Glassworks + GeckoView running).
+     (b) The backlight drops `200 → 0` on sleep. (c) `/system/media/bootanimation.zip` is `22,901` B,
+     `1080×1920` portrait (Track B). (d) **Silent updates come from a Device Owner, not a priv-app
+     slot:** an 8-byte `services.jar` patch (`mHasFeature = true` + NOP `setBackupServiceActive`) lets
+     `dpm set-device-owner` succeed with SELinux **Enforcing**, and a live `PackageInstaller`
+     self-update (`v1 → v2`) ran with zero taps. The browser-safe core for this —
+     `patchStockServicesJar` with the Device Owner fixes, `buildSurgicalSparseImage`, the `GWSB` Stage 1
+     bundle, and `hideStockBloat`/`unhideStockBloat` — lives in
+     [`frames/lululemon-mirror/installer/src/stock.ts`](../installer/src/stock.ts), shared by Kiln and
+     the Node tool. USB MTP (`mUsbDataUnlocked=false` → 0 storages) and AOA v2 are dead ends, so the
+     Stage 1 transport stays the SoftAP HTTP probe (or USB `adb forward`), not MTP.
 4. **Trust model for binding the SoftAP probe to the fastboot flash target — partially closed
    (2026-11-25, read):** a compatible but different Mirror in fastboot could otherwise receive
    writes computed from another unit's FIEMAP offsets (CodeRabbit, #769). `stock-surgical-adb.ts`
