@@ -661,7 +661,7 @@ class HacsParityWaveTest {
 
     @Test
     fun cardSizesFollowHasGetCardSize() {
-        fun size(json: String) = dev.glassworks.engine.vitro.model.HaCardSize.of(card(json))
+        fun size(json: String) = dev.glassworks.engine.vitro.model.HaCardSize.of(card(json)).toInt()
         assertEquals(5, size("""{"type": "entities", "title": "T", "entities": ["a.a", "a.b", "a.c"]}"""))
         assertEquals(1, size("""{"type": "entities", "entities": []}"""))
         assertEquals(3, size("""{"type": "tile", "entity": "a.a", "features": [{"type": "x"}, {"type": "y"}]}"""))

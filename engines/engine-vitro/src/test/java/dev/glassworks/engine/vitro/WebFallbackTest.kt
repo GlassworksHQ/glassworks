@@ -174,21 +174,23 @@ class WebFallbackTest {
         assertEquals("the map card costs no island session", 0, islandOpens())
     }
 
-    @Test fun aLoadedViewWithAnIframeCardOpensInTheFallback() {
+    @Test fun anIframeCardIsAnIslandOfItsOwnAndItsViewStaysNative() {
         server.dashboardConfig = views("""{"title": "Cam", "path": "cam", "type": "panel", "cards": [
-            {"type": "iframe", "url": "https://example.com/"}]}""")
+            {"type": "iframe", "url": "https://example.com/", "allow": "fullscreen; autoplay"}]}""")
         page().load("$base/wall-test/cam")
-        awaitMain("fallback") { pageFallback() != null }
-        assertEquals(listOf("$base/wall-test/cam"), pageFallback()!!.loads)
-        assertEquals(0, islandOpens())
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        assertNull("the view is drawn natively", pageFallback())
+        assertEquals("one browser page, for the iframe's own page", 1, islandOpens())
+        val island = fallback.pages[fallback.opens.indexOfFirst { it.host !== host }]
+        assertTrue(island.loads.single(), island.loads.single().contains("/__vitro/island/"))
     }
 
     @Test fun aBuiltInCardNestedInAStackOrAutoEntitiesCounts() {
         fun reason(card: String) = WebFallback.viewReason(LovelaceParser.parseView(0, JSONObject("""{"cards": [$card]}""")))
         assertEquals("the built-in `map` card", reason("""{"type": "vertical-stack", "cards": [{"type": "tile"}, {"type": "map"}]}"""))
-        assertEquals("the built-in `plant-status` card", reason("""{"type": "conditional", "conditions": [], "card": {"type": "plant-status"}}"""))
+        assertEquals("the built-in `energy-distribution` card", reason("""{"type": "conditional", "conditions": [], "card": {"type": "energy-distribution"}}"""))
         assertEquals("the built-in `map` card", reason("""{"type": "custom:auto-entities", "card": {"type": "map"}, "filter": {"include": [{"domain": "person"}]}}"""))
-        assertEquals("the built-in `iframe` card", reason("""{"type": "custom:layout-card", "cards": [{"type": "iframe"}]}"""))
+        assertEquals("the built-in `water-sankey` card", reason("""{"type": "custom:layout-card", "cards": [{"type": "water-sankey"}]}"""))
         assertNull("a custom card goes to its island", reason("""{"type": "custom:acme-card"}"""))
         assertNull(reason("""{"type": "grid", "cards": [{"type": "tile"}, {"type": "entities", "entities": ["light.a"]}]}"""))
     }
@@ -208,12 +210,22 @@ class WebFallbackTest {
         fun reason(row: String) = WebFallback.viewReason(LovelaceParser.parseView(0, JSONObject(
             """{"cards": [{"type": "entities", "entities": ["light.a", $row]}]}""",
         )))
-        for (t in listOf("attribute", "button", "buttons", "call-service", "cast", "conditional", "text", "weblink")) {
+        for (t in listOf("attribute", "cast")) {
             assertEquals(t, "an `$t` row in an entities card", reason("""{"type": "$t", "name": "x"}"""))
         }
+        // In a conditional row too.
+        assertEquals("an `attribute` row in an entities card", reason(
+            """{"type": "conditional", "conditions": [], "row": {"type": "attribute", "entity": "sun.sun", "attribute": "elevation"}}""",
+        ))
         for (row in listOf(
             """{"type": "divider"}""", """{"type": "section", "label": "Lights"}""", """{"entity": "light.b"}""",
             """{"type": "toggle-entity", "entity": "light.b"}""", "\"light.b\"",
+            """{"type": "button", "name": "Go", "tap_action": {"action": "toggle"}}""",
+            """{"type": "call-service", "name": "Ring", "action": "script.ring"}""",
+            """{"type": "text", "name": "Wi-Fi", "text": "Guest"}""",
+            """{"type": "weblink", "url": "https://example.com/"}""",
+            """{"type": "buttons", "entities": ["light.a", "light.b"]}""",
+            """{"type": "conditional", "conditions": [{"condition": "state", "entity": "light.a", "state": "on"}], "row": {"type": "text", "name": "a", "text": "b"}}""",
         )) {
             assertNull(row, reason(row))
         }
@@ -221,6 +233,47 @@ class WebFallbackTest {
         assertNotNull(WebFallback.viewReason(LovelaceParser.parseView(0, JSONObject(
             """{"cards": [{"type": "entity-filter", "entities": ["light.a"], "card": {"type": "map"}}]}""",
         ))))
+    }
+
+    // ---- View layouts ----
+
+    @Test fun aViewLayoutVitroDoesntDrawGoesToTheFallbackAndHasLayoutsStayNative() {
+        fun reason(type: String) = WebFallback.viewReason(LovelaceParser.parseView(0, JSONObject(
+            """{"type": "$type", "cards": [{"type": "tile", "entity": "light.a"}]}""",
+        )))
+        for (t in listOf("masonry", "panel", "sidebar", "sections", "custom:masonry-layout", "custom:grid-layout",
+            "custom:horizontal-layout", "custom:vertical-layout")) {
+            assertNull(t, reason(t))
+        }
+        assertEquals("a `custom:kiosk-layout` view (a layout Vitro doesn't draw)", reason("custom:kiosk-layout"))
+        assertEquals("a `grid-layout` view (a layout Vitro doesn't draw)", reason("grid-layout"))
+    }
+
+    @Test fun aViewWithAnUnknownLayoutOpensInTheFallback() {
+        server.dashboardConfig = views("""{"title": "Odd", "path": "odd", "type": "custom:kiosk-layout", "cards": [{"type": "tile", "entity": "light.lounge_lamp"}]}""")
+        page().load("$base/wall-test/odd")
+        awaitMain("fallback") { pageFallback() != null }
+        assertEquals(listOf("$base/wall-test/odd"), pageFallback()!!.loads)
+    }
+
+    // ---- Shortcut defaults only HA's frontend knows ----
+
+    @Test fun aShortcutNamedByThePageItOpensGoesToTheFallback() {
+        fun reason(card: String) = WebFallback.viewReason(LovelaceParser.parseView(0, JSONObject("""{"cards": [$card]}""")))
+        assertEquals("a `shortcut` card that shows the page it opens by its title or icon",
+            reason("""{"type": "shortcut", "tap_action": {"action": "navigate", "navigation_path": "/lovelace/kitchen"}}"""))
+        assertEquals("a `shortcut` card that shows its action's name or icon",
+            reason("""{"type": "shortcut", "label": "Lights out", "tap_action": {"action": "perform-action", "perform_action": "light.turn_off"}}"""))
+        for (card in listOf(
+            """{"type": "shortcut"}""",
+            """{"type": "shortcut", "label": "Kitchen", "icon": "mdi:knife", "tap_action": {"action": "navigate", "navigation_path": "/lovelace/kitchen"}}""",
+            """{"type": "shortcut", "tap_action": {"action": "navigate", "navigation_path": "/config/areas/area/kitchen"}}""",
+            """{"type": "shortcut", "tap_action": {"action": "navigate", "navigation_path": "/config/automation"}}""",
+            """{"type": "shortcut", "tap_action": {"action": "url", "url_path": "https://example.com/"}}""",
+            """{"type": "shortcut", "tap_action": {"action": "assist"}}""",
+        )) {
+            assertNull(card, reason(card))
+        }
     }
 
     // ---- The compatibility checker says so ----
@@ -297,6 +350,12 @@ class WebFallbackTest {
         "picture-elements" -> """{"type": "$type", "image": "/local/plan.png", "elements": []}"""
         "picture-glance" -> """{"type": "$type", "image": "/local/plan.png", "entities": ["light.lounge_lamp"]}"""
         "picture" -> """{"type": "$type", "image": "/local/plan.png"}"""
+        "statistic" -> """{"type": "$type", "entity": "sensor.energy", "stat_type": "change", "period": {"calendar": {"period": "month"}}}"""
+        "plant-status" -> """{"type": "$type", "entity": "plant.fern"}"""
+        "alert" -> """{"type": "$type", "entity": "binary_sensor.door"}"""
+        "toggle-group" -> """{"type": "$type", "entities": ["light.lounge_lamp"]}"""
+        "iframe" -> """{"type": "$type", "url": "https://example.com/"}"""
+        "date", "shortcut", "section", "shopping-list" -> """{"type": "$type"}"""
         "markdown" -> """{"type": "$type", "content": "Hello"}"""
         "heading" -> """{"type": "$type", "heading": "Lights"}"""
         "clock" -> """{"type": "$type"}"""

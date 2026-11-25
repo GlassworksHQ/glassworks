@@ -219,6 +219,8 @@ object CardCompat {
                     notes += gap("tile features_position: inline", "`features_position: inline`")
                 }
             }
+            // Native, but its page is a web page: it takes a browser session, as HA's iframe does.
+            "iframe" -> notes += "the `iframe` card shows its page in a browser island of its own"
             "entities", "entity-filter" -> {
                 val rows = raw.optJSONArray("entities") ?: JSONArray()
                 for (i in 0 until rows.length()) {

@@ -72,10 +72,22 @@ data class ViewConfig(
     val backPath: String? = null,
     /** Saved as a `strategy:`: HA's frontend generates the cards, so the config has none ([WebFallback]). */
     val strategy: Boolean = false,
+    /** The view's config as HA stores it: a layout-card view's `layout:` and the like. */
+    val raw: JSONObject = JSONObject(),
 ) {
+    /** A layout-card view (`type: custom:masonry-layout`, ...): the layout's name without `custom:`, else null. */
+    val layoutCardType: String? get() = type.takeIf { it in LAYOUT_CARD_VIEW_TYPES }?.removePrefix("custom:")
+
     /** Why this view goes to HA's own frontend instead of being drawn ([WebFallback.viewReason]), or null. */
     val webFallbackReason: String? by lazy { WebFallback.viewReason(this) }
 }
+
+/** The view types layout-card registers (`masonry-layout`, ...), as a view's `type`. */
+val LAYOUT_CARD_VIEW_TYPES: Set<String> =
+    setOf("custom:masonry-layout", "custom:horizontal-layout", "custom:vertical-layout", "custom:grid-layout")
+
+/** The view types Vitro lays out natively: HA's own masonry, panel, sidebar and sections, and layout-card's. */
+val NATIVE_VIEW_TYPES: Set<String> = setOf("masonry", "panel", "sidebar", "sections") + LAYOUT_CARD_VIEW_TYPES
 
 data class SectionConfig(
     val type: String, // "grid"
@@ -137,10 +149,138 @@ data class EntityRowConfig(
     val secondaryInfo: String? = null,
     val tapAction: ActionConfig? = null,
     val holdAction: ActionConfig? = null,
-    /** `entity` for an entity row; `divider` and `section` for HA's special rows, which carry no entity. */
+    /**
+     * `entity` for an entity row; HA's special rows by their `type` otherwise: `divider`, `section`, `button` (also
+     * `call-service` and `perform-action`, as HA builds them), `text`, `weblink`, `buttons` and `conditional`.
+     */
     val rowType: String = "entity",
+    /** A special row's own config, as HA's `hui-*-row` reads it (null for entity rows). */
+    val raw: JSONObject? = null,
+    /** A `conditional` row's `conditions`. */
+    val conditions: List<VisibilityCondition> = emptyList(),
+    /** A `conditional` row's `row`, or null when it has none HA can build. */
+    val inner: EntityRowConfig? = null,
+    /** A `buttons` row's entities, as `processConfigEntities` reads them. */
+    val buttons: List<JSONObject> = emptyList(),
 ) {
     val isEntity: Boolean get() = rowType == "entity"
+
+    /** Every entity this row reads: its own, a conditional's conditions and row, a buttons row's buttons. */
+    fun referencedEntities(out: MutableSet<String>) {
+        if (entity.isNotEmpty()) out += entity
+        conditions.forEach { it.referencedEntities(out) }
+        inner?.referencedEntities(out)
+        buttons.forEach { b -> b.optString("entity", "").takeIf { it.isNotEmpty() }?.let { out += it } }
+    }
+
+    companion object {
+        /** HA's `DOMAINS_TOGGLE` (`common/const.ts`): the domains a button row or button toggles by default. */
+        val HA_DOMAINS_TOGGLE: Set<String> = setOf("fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve")
+
+        /** The special row types Vitro draws ([parse]); `attribute` and `cast` go to HA's frontend ([WebFallback]). */
+        val SPECIAL_TYPES: Set<String> = setOf(
+            "divider", "section", "button", "call-service", "perform-action", "text", "weblink", "buttons", "conditional",
+        )
+
+        /**
+         * One `entities:` entry as HA's `createRowElement` builds it, or null for one HA can't build (it shows an error
+         * row there, Vitro leaves it out): a string is an entity row, an object with a special [SPECIAL_TYPES] `type`
+         * that row, any other object with an `entity` an entity row.
+         */
+        fun parse(item: Any?): EntityRowConfig? = when (item) {
+            is String -> item.takeIf { it.isNotBlank() }?.let { EntityRowConfig(it) }
+            is JSONObject -> parseObject(item)
+            else -> null
+        }
+
+        private fun JSONObject.str(key: String): String? = if (isNull(key)) null else optString(key, "").ifEmpty { null }
+
+        private fun parseObject(item: JSONObject): EntityRowConfig? {
+            val name = item.str("name")
+            val icon = item.str("icon")
+            return when (val type = item.optString("type", "")) {
+                "divider" -> EntityRowConfig(entity = "", rowType = "divider", raw = item)
+                "section" -> EntityRowConfig(entity = "", name = item.str("label"), rowType = "section", raw = item)
+                // hui-call-service-row: a button row whose tap runs its `action` (or `service`) with its data.
+                "call-service", "perform-action" -> {
+                    if (name == null) return null
+                    val service = item.str("action") ?: item.str("service") ?: return null
+                    val tap = JSONObject().put("action", "perform-action").put("perform_action", service)
+                    (item.optJSONObject("data") ?: item.optJSONObject("service_data"))?.let { tap.put("data", it) }
+                    val merged = JSONObject(item.toString()).apply {
+                        if (!has("tap_action")) put("tap_action", tap)
+                        put("type", "button")
+                    }
+                    parseObject(merged)
+                }
+                "button" -> {
+                    val entity = item.str("entity")
+                    if (name == null && entity == null) return null
+                    val defaultTap = if (entity != null && entity.substringBefore('.') in HA_DOMAINS_TOGGLE) "toggle" else "more-info"
+                    EntityRowConfig(
+                        entity = entity.orEmpty(), name = name, icon = icon, rowType = "button", raw = item,
+                        tapAction = ActionConfig.parse(item.optJSONObject("tap_action"), defaultTap),
+                        holdAction = ActionConfig.parse(item.optJSONObject("hold_action"), "more-info"),
+                    )
+                }
+                // hui-text-row: both are required.
+                "text" -> if (name == null || item.str("text") == null) null
+                    else EntityRowConfig(entity = "", name = name, icon = icon, rowType = "text", raw = item)
+                "weblink" -> {
+                    val url = item.str("url") ?: return null
+                    // HA refuses a scheme that would run script (`javascript:`, `data:`, `vbscript:`).
+                    if (unsafeUrl(url)) return null
+                    EntityRowConfig(entity = "", name = name ?: url, icon = icon ?: "mdi:link", rowType = "weblink", raw = item)
+                }
+                "buttons" -> {
+                    val arr = item.optJSONArray("entities") ?: return null
+                    val list = ArrayList<JSONObject>(arr.length())
+                    for (i in 0 until arr.length()) {
+                        when (val e = arr.opt(i)) {
+                            is String -> list += JSONObject().put("entity", e)
+                            is JSONObject -> if (e.has("type") || e.has("entity")) list += e else return null
+                            else -> return null
+                        }
+                    }
+                    EntityRowConfig(entity = "", rowType = "buttons", raw = item, buttons = list)
+                }
+                "conditional" -> {
+                    val conds = item.optJSONArray("conditions") ?: return null
+                    val row = item.optJSONObject("row") ?: return null
+                    // hui-conditional-row passes the card's `color` on to its row (applyDefaultColor).
+                    val inner = parse(row) ?: return null
+                    EntityRowConfig(
+                        entity = "", rowType = "conditional", raw = item,
+                        conditions = VisibilityCondition.parseList(conds), inner = inner,
+                    )
+                }
+                else -> {
+                    val id = item.str("entity") ?: return null
+                    // `attribute` and `cast` rows send their view to HA's frontend; any other row with an entity (an
+                    // explicit `*-entity` type, a custom row) is drawn as an entity row.
+                    EntityRowConfig(
+                        entity = id,
+                        name = name,
+                        icon = icon,
+                        secondaryInfo = item.str("secondary_info"),
+                        tapAction = item.optJSONObject("tap_action")?.let { ActionConfig.parse(it) },
+                        holdAction = item.optJSONObject("hold_action")?.let { ActionConfig.parse(it) },
+                        raw = if (type.isEmpty()) null else item,
+                    )
+                }
+            }
+        }
+
+        /** `@braintree/sanitize-url` turning [url] into `about:blank`: a script-running scheme, as HA's weblink row and iframe card check. */
+        fun unsafeUrl(url: String): Boolean {
+            // sanitize-url strips control and whitespace characters and HTML entities before it reads the scheme.
+            val cleaned = url.replace(Regex("""[\u0000-\u001F\u007F-\u009F\u2000-\u200D\uFEFF\s]"""), "")
+                .replace(Regex("""&#?\w+;"""), "")
+                .trim()
+            val scheme = Regex("""^([^:/?#]+):""").find(cleaned)?.groupValues?.get(1)?.lowercase() ?: return false
+            return scheme in setOf("javascript", "data", "vbscript")
+        }
+    }
 }
 
 sealed class VisibilityCondition {
@@ -586,29 +726,7 @@ data class CardConfig(
     fun entities(): List<EntityRowConfig> {
         val arr = raw.optJSONArray("entities") ?: return emptyList()
         val out = ArrayList<EntityRowConfig>(arr.length())
-        for (i in 0 until arr.length()) {
-            when (val item = arr.opt(i)) {
-                is String -> if (item.isNotBlank()) out += EntityRowConfig(item)
-                is JSONObject -> {
-                    when (item.optString("type", "")) {
-                        "divider" -> { out += EntityRowConfig(entity = "", rowType = "divider"); continue }
-                        "section" -> {
-                            out += EntityRowConfig(entity = "", name = item.optString("label", "").ifEmpty { null }, rowType = "section")
-                            continue
-                        }
-                    }
-                    val id = item.optString("entity", "").ifEmpty { continue }
-                    out += EntityRowConfig(
-                        entity = id,
-                        name = item.optString("name", "").ifEmpty { null },
-                        icon = item.optString("icon", "").ifEmpty { null },
-                        secondaryInfo = item.optString("secondary_info", "").ifEmpty { null },
-                        tapAction = item.optJSONObject("tap_action")?.let { ActionConfig.parse(it) },
-                        holdAction = item.optJSONObject("hold_action")?.let { ActionConfig.parse(it) },
-                    )
-                }
-            }
-        }
+        for (i in 0 until arr.length()) EntityRowConfig.parse(arr.opt(i))?.let { out += it }
         return out
     }
 
@@ -741,6 +859,9 @@ object CardRouter {
         view.type == "panel" && view.cards.isNotEmpty() -> listOf(ViewRoot(null, 0, view.cards.first()))
         view.type == "sections" && view.sections.isNotEmpty() ->
             view.sections.flatMapIndexed { s, section -> section.cards.mapIndexed { i, c -> ViewRoot(s, i, c) } }
+        // A vertical layout-card view consumes its `custom:layout-break` markers, as the card does.
+        view.layoutCardType == "vertical-layout" -> view.cards.withIndex().filter { it.value.type != LAYOUT_BREAK }.map { ViewRoot(null, it.index, it.value) }
+        // Masonry, sidebar and the other layout-card views: the view's own cards.
         else -> view.cards.mapIndexed { i, c -> ViewRoot(null, i, c) }
     }
 
@@ -750,7 +871,9 @@ object CardRouter {
      */
     fun followsAllEntities(view: ViewConfig): Boolean {
         // An area card's sensors, alerts and camera are its area's entities, known only from HA's registries.
+        // A shopping list card without an entity shows the first to-do list it finds.
         fun walk(c: CardConfig): Boolean = c.type in FOLLOWS_ALL_TYPES || c.childCards.any(::walk) ||
+            (c.type == "shopping-list" && c.entity == null) ||
             (c.type == "area" && AreaCardConfig.readsAreaEntities(c.raw)) ||
             (c.type.startsWith("custom:") && c.raw.optJSONObject("card")?.optString("type") in FOLLOWS_ALL_TYPES)
         return view.sections.any { s -> s.cards.any(::walk) } || view.cards.any(::walk)
@@ -803,7 +926,7 @@ object CardRouter {
         }
         fun walkCard(c: CardConfig) {
             c.entity?.let { out += it }
-            c.entities().forEach { if (it.entity.isNotEmpty()) out += it.entity }
+            c.entities().forEach { it.referencedEntities(out) }
             c.visibility.forEach { it.referencedEntities(out) }
             VisibilityCondition.parseList(c.raw.optJSONArray("conditions")).forEach { it.referencedEntities(out) }
             // Deep-scan custom cards (e.g. room arrays, sleep/outside/camera objects) so view-scoped
@@ -856,10 +979,12 @@ object LovelaceParser {
         val cards = parseCards(raw.optJSONArray("cards"))
         val badges = parseBadges(raw.optJSONArray("badges"))
         val explicitType = raw.optString("type", "").ifEmpty { null }
+        // HA's getViewType: `type`, else `panel: true`, else sections when the view has `sections`, else masonry when
+        // it has `cards`, else (neither) an empty sections view.
         val inferredType = when {
             explicitType != null -> explicitType
             raw.optBoolean("panel", false) -> "panel"
-            sections.isNotEmpty() -> "sections"
+            raw.has("sections") && !raw.isNull("sections") -> "sections"
             else -> "masonry"
         }
         return ViewConfig(
@@ -877,6 +1002,7 @@ object LovelaceParser {
             subview = raw.optBoolean("subview", false),
             backPath = raw.optString("back_path", "").ifEmpty { null },
             strategy = hasStrategy(raw),
+            raw = raw,
         )
     }
 
@@ -985,27 +1111,87 @@ object EntityFilterConfig {
 }
 
 /**
- * A card's size in HA's `getCardSize` units (about 50 px each), as layout-card's masonry columns weigh them: the
- * core cards' own rules, else 1 (layout-card's answer for a card that has none or doesn't answer in time).
+ * A card's size in HA's `getCardSize` units (about 50 px each), as HA's masonry view and layout-card's masonry columns
+ * weigh them: each built-in card's own `getCardSize` in frontend 20261028, else 1 (`computeCardSize`'s answer for a
+ * card that has none or doesn't answer in time). Stacks add up (vertical) or take the largest (horizontal) of their
+ * cards; a conditional card is its card's size, shown or not.
  */
 object HaCardSize {
-    fun of(card: CardConfig): Int {
+    fun of(card: CardConfig): Double {
         val raw = card.raw
+        fun has(key: String) = raw.has(key) && !raw.isNull(key)
+        fun titled() = card.title != null
+        fun headerFooter() = (if (has("header")) 3 else 0) + (if (has("footer")) 3 else 0)
         return when (card.type) {
-            "entities" -> (if (card.title != null) 2 else 0) + card.entities().size.coerceAtLeast(1)
+            "vertical-stack" -> card.childCards.sumOf { of(it) }
+            "horizontal-stack" -> card.childCards.maxOfOrNull { of(it) } ?: 0.0
+            "conditional" -> card.childCards.firstOrNull()?.let { of(it) } ?: 1.0
+            "grid" -> {
+                val cols = card.gridColumns()
+                val title = if (titled()) 1.0 else 0.0
+                if (raw.optBoolean("square", true)) {
+                    val rowHeight = when (cols) { 1 -> 5.0; 2 -> 3.0; 3 -> 2.0; else -> 1.0 }
+                    val n = card.childCards.size
+                    (if (n < cols) rowHeight else n.toDouble() / cols * rowHeight) + title
+                } else {
+                    title + card.childCards.chunked(cols).sumOf { row -> row.maxOf { of(it) } }
+                }
+            }
+            "iframe" -> 1 + (raw.optString("aspect_ratio", "").replace("%", "").ifEmpty { "50" }.toDoubleOrNull() ?: 50.0) / 25
+            "entity-filter" -> of(EntityFilterConfig.innerCard(card))
+            else -> intSize(card).toDouble()
+        }
+    }
+
+    private fun intSize(card: CardConfig): Int {
+        val raw = card.raw
+        fun has(key: String) = raw.has(key) && !raw.isNull(key)
+        fun titled() = card.title != null
+        fun headerFooter() = (if (has("header")) 3 else 0) + (if (has("footer")) 3 else 0)
+        return when (card.type) {
+            "entities" -> {
+                val rows = raw.optJSONArray("entities")?.length() ?: 0
+                (if (titled() || raw.optBoolean("show_header_toggle", false)) 2 else 0) + rows.coerceAtLeast(1) + headerFooter()
+            }
             "tile" -> {
                 val features = raw.optJSONArray("features")?.length() ?: 0
                 val inline = features > 0 && raw.optString("features_position") == "inline"
                 1 + (if (raw.optBoolean("vertical", false)) 1 else 0) + (if (inline) 0 else features)
             }
+            "area" -> {
+                val compact = raw.optString("display_type", "picture") == "compact"
+                val features = raw.optJSONArray("features")?.length() ?: 0
+                1 + (if (compact) (if (raw.optBoolean("vertical", false)) 1 else 0) else 2) + features
+            }
             "glance" -> {
                 val lines = listOf("show_icon", "show_name", "show_state").count { raw.optBoolean(it, true) }
                 val rows = Math.ceil(card.entities().size / raw.optInt("columns", 5).coerceAtLeast(1).toDouble()).toInt()
-                (if (card.title != null) 2 else 0) + lines * rows
+                (if (titled()) 2 else 0) + lines * rows
             }
-            "button" -> (if (raw.optBoolean("show_icon", true)) 4 else 0) + (if (raw.optBoolean("show_name", true)) 1 else 0)
+            "button", "entity-button" -> (if (raw.optBoolean("show_icon", true)) 4 else 0) + (if (raw.optBoolean("show_name", true)) 1 else 0)
             "markdown" -> if (raw.has("card_size")) raw.optInt("card_size", 1)
-                else Math.round(raw.optString("content", "").split("\n").size / 2.0).toInt() + (if (card.title != null) 1 else 0)
+                else Math.round(raw.optString("content", "").split("\n").size / 2.0).toInt() + (if (titled()) 1 else 0)
+            "entity", "statistic" -> 2 + (if (has("footer")) 3 else 0)
+            "sensor" -> 2 + (if (raw.optString("graph") == "line") 3 else 0)
+            "heading", "error", "section" -> 1
+            // `title ? 2 : 0 + 2 * n`: HA's precedence, a titled history graph weighs 2 whatever it shows.
+            "history-graph" -> if (titled()) 2 else 2 * (raw.optJSONArray("entities")?.length() ?: 0).coerceAtLeast(1)
+            "statistics-graph" -> 5 + (if (titled()) 2 else 0) +
+                (if (!raw.optBoolean("hide_legend", false)) raw.optJSONArray("entities")?.length() ?: 0 else 0)
+            "gauge", "picture-elements" -> 4
+            "thermostat", "humidifier" -> 7
+            "light", "picture" -> 5
+            "media-control", "picture-entity", "picture-glance", "plant-status" -> 3
+            "calendar" -> 12
+            "logbook" -> 9 + (if (titled()) 1 else 0)
+            "todo-list", "shopping-list" -> (if (titled()) 2 else 0) + 3
+            // Sized before its first update, when it can't know the code format yet.
+            "alarm-panel" -> 10
+            "clock" -> if (raw.optString("clock_size") == "small") 1 else 2
+            "date" -> if (raw.optString("date_size") in setOf("medium", "large")) 2 else 1
+            "alert", "shortcut", "toggle-group" -> if (raw.optBoolean("vertical", false)) 2 else 1
+            "weather-forecast" -> 1 + (if (raw.opt("show_current") != false) 1 else 0) + (if (raw.opt("show_forecast") != false) 1 else 0) +
+                (if (raw.optString("forecast_type") == "daily") 1 else 0)
             else -> 1
         }
     }

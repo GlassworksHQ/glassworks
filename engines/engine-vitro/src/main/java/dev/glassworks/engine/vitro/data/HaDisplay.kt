@@ -132,6 +132,15 @@ object HaDisplay {
         areas = out
     }
 
+    /** [areaId]'s name, or null before the area registry is in (or for an unknown area). */
+    fun areaName(areaId: String): String? = areas[areaId]?.name
+
+    /** [areaId]'s icon, or null. */
+    fun areaIcon(areaId: String): String? = areas[areaId]?.icon
+
+    /** [deviceId]'s name (`name_by_user`, else `name`), or null. */
+    fun deviceName(deviceId: String): String? = devices[deviceId]
+
     /** The area [entityId] is in: its own, else its device's (HA's `getEntityContext`). */
     fun areaOf(entityId: String): String? {
         val e = registry[entityId] ?: return null

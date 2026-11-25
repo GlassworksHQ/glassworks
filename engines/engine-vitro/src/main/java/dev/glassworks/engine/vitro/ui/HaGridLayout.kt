@@ -246,8 +246,18 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                 }
                 // Measured in HA: the light card spans the section's width.
                 "light" -> HaGridSize(12, null)
-                // hui-button-card's getGridOptions: 6 columns, 2 rows.
-                "button" -> HaGridSize(6, 2)
+                // hui-button-card's getGridOptions: 6 columns, 2 rows (`entity-button` is the same card).
+                "button", "entity-button" -> HaGridSize(6, 2)
+                // hui-statistic-card: 6 columns, 2 rows.
+                "statistic" -> HaGridSize(6, 2)
+                // hui-date-card: one row small, two medium or large.
+                "date" -> HaGridSize(6, if (raw.optString("date_size") in setOf("medium", "large")) 2 else 1)
+                // hui-toggle-group-card, hui-shortcut-card, hui-alert-card: one row, two vertical.
+                "toggle-group", "shortcut", "alert" -> HaGridSize(6, if (raw.optBoolean("vertical", false)) 2 else 1)
+                // hui-iframe-card: the section's full width, 4 rows.
+                "iframe" -> HaGridSize(12, 4)
+                // hui-error-card (a `section` card, a config HA rejects): 6 columns, 1 row.
+                "section" -> HaGridSize(6, 1)
                 // Measured in HA: the picture cards span the section's full width at their image's height.
                 "picture", "picture-entity", "picture-glance" -> HaGridSize(12, null)
                 "heading" -> HaGridSize(null, null)

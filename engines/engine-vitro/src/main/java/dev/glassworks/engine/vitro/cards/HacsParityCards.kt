@@ -2048,12 +2048,12 @@ class LayoutCardView(
                 }
             }
             else -> {
-                val length = IntArray(n)
+                val length = DoubleArray(n)
                 for ((c, v) in columnCards) {
                     if (v == null) continue
                     var pick = 0
                     for (k in 0 until n) {
-                        if (length[k] in 1 until minHeight) { pick = k; break }
+                        if (length[k] > 0 && length[k] < minHeight) { pick = k; break }
                         if (length[k] < length[pick]) pick = k
                     }
                     cols[pick] += v
