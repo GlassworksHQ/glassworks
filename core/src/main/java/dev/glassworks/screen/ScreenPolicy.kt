@@ -495,9 +495,10 @@ class ScreenPolicy(
                 stayOn(VOICE_RUN, false)
                 stayOn(VOICE_SHOWN, false)
             }
-            // A blackout keeps Android's display on: renew the wake lock a wake took, as while awake.
+            // A blackout keeps Android's display on: renew the wake lock a wake took, as while awake, and
+            // not once the device isn't interactive (the same power-key race as below).
             if (blackout) {
-                if (awake?.isHeld == true && SystemClock.elapsedRealtime() - awakeSince >= AWAKE_REFRESH_MS) keepAwake()
+                if (awake?.isHeld == true && pm.isInteractive && SystemClock.elapsedRealtime() - awakeSince >= AWAKE_REFRESH_MS) keepAwake()
                 return
             }
             if (!screenOn) return

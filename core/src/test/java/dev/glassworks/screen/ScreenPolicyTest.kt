@@ -812,6 +812,30 @@ class ScreenPolicyTest {
         screen.stop()
     }
 
+    /**
+     * A blackout renews the wake lock a wake took while Android is interactive, and stops once it isn't: the power key
+     * may have just turned the display off, and the lock's ACQUIRE_CAUSES_WAKEUP would turn it back on.
+     */
+    @Test fun backlightOffRenewsTheWakeLockOnlyWhileInteractive() {
+        val screen = policy(settings = Settings(), sleepMode = SleepMode.BACKLIGHT_OFF)
+        screen.start(context)
+        screen.wake("test")
+        val lock = ShadowPowerManager.getLatestWakeLock()
+        screen.sleep("home assistant")
+        assertTrue(screen.blackout)
+        assertTrue("the wake's lock is kept through the blackout", lock.isHeld)
+
+        val held = shadowOf(lock).timesHeld
+        advance(ScreenPolicy.AWAKE_REFRESH_MS + 2_000)
+        assertTrue("renewed while interactive", shadowOf(lock).timesHeld > held)
+
+        shadowOf(context.getSystemService(PowerManager::class.java)).setIsInteractive(false)
+        val off = shadowOf(lock).timesHeld
+        advance(ScreenPolicy.AWAKE_REFRESH_MS + 2_000)
+        assertEquals("not renewed once Android isn't interactive", off, shadowOf(lock).timesHeld)
+        screen.stop()
+    }
+
     @Test fun backlightOffWakeRestoresAutoBrightnessAtTheRoomsLevelAndRestartsTheIdleTimeout() {
         val light = FakeSource()
         val settings = Settings().apply { idleOffSec = 30 }
