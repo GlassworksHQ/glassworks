@@ -58,6 +58,8 @@ class WebIslandCardView(
         /** The page walked `hass.states` and asked for the registries: it asks once, so the next card keeps them up. */
         internal val walksAllStates: Boolean = false,
         internal val registriesAsked: Boolean = false,
+        /** Whether the page was active when handed off: a paused one (a hidden view's) is shown again when needed. */
+        internal val active: Boolean = true,
     ) {
         fun close() {
             server.unregisterSlot(slotId)
@@ -129,7 +131,7 @@ class WebIslandCardView(
                     // handed over was drawn in that build's.
                     synchronized(seedLock) {
                         send(themeMessage())
-                        send(authMessage(currentToken()))
+                        send(authMessage(currentToken(), currentUser()))
                         seedInitialStates(send)
                         registries?.let { send(registriesMessage(it)) }
                         senders += send
@@ -159,6 +161,8 @@ class WebIslandCardView(
                 addView(page.view, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, h))
                 if (kept == null) page.load(url)
                 if (kept != null) {
+                    // Paused under the card before this one: setShown(true) shows it again.
+                    pageActive = kept.active
                     // The page asked for these once, from the card before this one.
                     if (kept.walksAllStates) {
                         walksAllStates = true
@@ -369,7 +373,7 @@ class WebIslandCardView(
         islandPage = null
         slotId = null
         // What the page asked for once, and won't ask again: the next card keeps it up.
-        return Island(keyOf(config, fillViewport), page, id, height, server, walksAllStates, registriesAsked.get())
+        return Island(keyOf(config, fillViewport), page, id, height, server, walksAllStates, registriesAsked.get(), pageActive)
     }
 
     /** Holds the shared registry feed for the page, once, until the island leaves this card. */
@@ -431,25 +435,34 @@ class WebIslandCardView(
         .put("dark", ctx.theme.dark)
         .put("name", ctx.theme.name)
 
-    /** The token sent to the page last (under [seedLock]). */
+    /** The token and the user (`hass.user`, as JSON text) sent to the page last (under [seedLock]). */
     private var sentToken: String? = null
+    private var sentUser: String? = null
 
     private fun currentToken(): String = ctx.accessToken().orEmpty()
 
-    /** Sends the current token to the open bridges if it isn't the one sent last. Under [seedLock]. */
+    /** The signed-in user as the island's `hass.user` has it, or null while Home Assistant hasn't said. */
+    private fun currentUser(): JSONObject? = islandUser(ctx.haUser())
+
+    /**
+     * Sends the current sign-in to the open bridges if its token or its user isn't the one sent last: a page kept
+     * across a reconnect, or a sign-in to another account, follows it. Under [seedLock].
+     */
     private fun sendTokenIfChanged() {
         if (senders.isEmpty()) return
         val token = currentToken()
-        if (token != sentToken) {
-            val msg = authMessage(token)
+        val user = currentUser()
+        if (token != sentToken || user?.toString() != sentUser) {
+            val msg = authMessage(token, user)
             senders.forEach { it(msg) }
         }
     }
 
-    /** The bridge message with the sign-in the page's own requests use. Under [seedLock]. */
-    private fun authMessage(token: String): JSONObject {
+    /** The bridge message with the sign-in the page's own requests use, and its user (null: not known yet). */
+    private fun authMessage(token: String, user: JSONObject?): JSONObject {
         sentToken = token
-        return JSONObject().put("type", "auth").put("token", token)
+        sentUser = user?.toString()
+        return JSONObject().put("type", "auth").put("token", token).put("user", user ?: JSONObject.NULL)
     }
 
     companion object {
@@ -1115,12 +1128,18 @@ function connectBridge() {
       let m;
       try { m = JSON.parse(line); } catch (e) { continue; }
       if (m.type === 'auth' && typeof m.token === 'string') {
-        // The sign-in now: a reconnect may have refreshed it since the page loaded.
+        // The sign-in now: a reconnect may have refreshed it since the page loaded, or another account signed in.
+        let changed = false;
         if (m.token !== accessToken) {
           accessToken = m.token;
           hassBase.auth = { data: { access_token: accessToken, hassUrl: location.origin }, accessToken };
-          if (cardEl) cardEl.hass = makeHass();
+          changed = true;
         }
+        if (m.user && typeof m.user === 'object' && JSON.stringify(m.user) !== JSON.stringify(hassBase.user)) {
+          hassBase.user = m.user;
+          changed = true;
+        }
+        if (changed && cardEl) cardEl.hass = makeHass();
       } else if (m.type === 'theme') {
         // The card's theme now (a theme change kept this page): its variables, and hass.themes for the card.
         const style = document.getElementById('vitro-theme');
