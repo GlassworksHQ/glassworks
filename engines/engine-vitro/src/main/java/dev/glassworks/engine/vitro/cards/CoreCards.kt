@@ -2863,9 +2863,10 @@ class MarkdownCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
 
 /**
  * Native HA `picture`, `picture-entity`, and `picture-glance` card.
- * With `camera_view: live` it plays HA's MJPEG stream while attached, falling back to a snapshot every
- * [LiveCameraFeed.POLL_MS] when the stream isn't available (no badge: HA draws none). A `camera.*` source without it
- * (`auto`, HA's default) shows a snapshot refreshed every [LiveCameraFeed.SNAPSHOT_MS], as HA's `hui-image` does.
+ * With `camera_view: live` it plays the camera as HA's `ha-camera-stream` does while it's on screen (WebRTC, HLS or
+ * MJPEG, [LiveCameraFeed]) over a still, falling back to a snapshot every [LiveCameraFeed.POLL_MS] when no stream
+ * plays (no badge: HA draws none). A `camera.*` source without it (`auto`, HA's default) shows a snapshot refreshed
+ * every [LiveCameraFeed.SNAPSHOT_MS], as HA's `hui-image` does.
  * A `picture-glance` with `entities` gets HA's row of tappable entity icons on the right of its caption bar.
  */
 class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
@@ -2885,8 +2886,17 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         ?.takeIf { config.raw.optString("camera_view") == "live" || it.startsWith("camera.") }
     private val isLive = liveEntityId != null
     private var latestPicture: String? = null
+    /** The live players' views, over [img] and under the caption bar. */
+    private val streamHost = FrameLayout(ctx.context)
     private val feed: LiveCameraFeed? = liveEntityId?.let { id ->
-        LiveCameraFeed(ctx, id, { latestPicture }, stream = config.raw.optString("camera_view") == "live") { bmp -> showBitmap(bmp) }
+        LiveCameraFeed(
+            ctx, id, { latestPicture },
+            stream = config.raw.optString("camera_view") == "live",
+            host = streamHost,
+            fitMode = config.raw.optString("fit_mode").ifEmpty { null },
+            onVideoSize = { w, h -> takeAspect(w, h) },
+            cardType = config.type,
+        ) { bmp -> showBitmap(bmp) }
     }
 
     /** Width / height, from `aspect_ratio` (`16:9`, `4:3`, `50%` = height as % of width, or a decimal). */
@@ -2908,22 +2918,36 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         val state = s?.state ?: "unavailable"
         val configured = stateFilters?.optString(state)?.takeIf { it.isNotBlank() }
         val css = configured ?: if (s == null || state in STATES_OFF) "grayscale(100%)" else null
-        img.colorFilter = CssFilter.matrix(css)?.let { android.graphics.ColorMatrixColorFilter(it) }
+        val filter = CssFilter.matrix(css)?.let { android.graphics.ColorMatrixColorFilter(it) }
+        img.colorFilter = filter
+        // hui-image filters its whole container, the live video included.
+        if (isLive) {
+            if (filter != null) {
+                streamHost.setLayerType(LAYER_TYPE_HARDWARE, android.graphics.Paint().apply { colorFilter = filter })
+            } else {
+                streamHost.setLayerType(LAYER_TYPE_NONE, null)
+            }
+        }
     }
 
     private fun showBitmap(bmp: android.graphics.Bitmap) {
         img.setImageBitmap(bmp)
-        if (naturalAspect && bmp.height > 0) {
-            val a = bmp.width.toFloat() / bmp.height
-            if (imageAspect == null || kotlin.math.abs(imageAspect!! - a) > 0.01f) {
-                imageAspect = a
-                requestLayout()
-            }
+        takeAspect(bmp.width, bmp.height)
+    }
+
+    /** Without `aspect_ratio` the card takes the picture's shape: the still's, then the live video's. */
+    private fun takeAspect(width: Int, height: Int) {
+        if (!naturalAspect || width <= 0 || height <= 0) return
+        val a = width.toFloat() / height
+        if (imageAspect == null || kotlin.math.abs(imageAspect!! - a) > 0.01f) {
+            imageAspect = a
+            requestLayout()
         }
     }
 
     init {
         addView(img, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        if (isLive) addView(streamHost, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         val showName = config.raw.optBoolean("show_name", true)
         val showState = config.raw.optBoolean("show_state", true)
         val glanceEntities = if (config.type == "picture-glance") config.entities().filter { it.isEntity } else emptyList()
@@ -3042,19 +3066,47 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        if (isShown) feed?.start()
+        followShown()
     }
 
     override fun onDetachedFromWindow() {
+        // The card went: its players close (it starts afresh if it comes back).
         feed?.stop()
         super.onDetachedFromWindow()
     }
 
-    /** A cached view that is hidden (another view shown) stays attached: its stream stops until it shows again. */
+    /**
+     * A cached view that is hidden (another view shown, HA's own page in front) stays attached: its players pause
+     * until it shows again, and a card that was never on screen opens none.
+     */
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
-        if (!isAttachedToWindow) return
-        if (isShown) feed?.start() else feed?.stop()
+        if (isAttachedToWindow) followShown()
+    }
+
+    /** The window went away (the panel's screen off, the app in the background) or came back. */
+    private var windowHidden = false
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        windowHidden = visibility != VISIBLE
+        if (isAttachedToWindow) followShown()
+    }
+
+    private fun followShown() {
+        val f = feed ?: return
+        guarded("camera") {
+            if (isShown && !windowHidden) {
+                f.start()
+                f.setActive(true)
+            } else {
+                f.setActive(false)
+            }
+        }
+    }
+
+    override fun onCardFailed() {
+        feed?.stop()
     }
 
     internal companion object {

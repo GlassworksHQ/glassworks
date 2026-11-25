@@ -132,7 +132,7 @@ The island server only serves islands. Its proxy forwards what a card loads (`/a
 | `sensor`, `history-graph`, `statistics-graph` | Yes | See [Graphs](#rendering-like-home-assistant-does) |
 | `weather-forecast` | Yes | Current conditions and the daily, hourly and twice-daily forecasts |
 | `clock`, `markdown` | Yes | A few Markdown tags draw nothing (see [What Vitro draws natively](#what-vitro-draws-natively)) |
-| `picture`, `picture-entity`, `picture-glance` | Yes | |
+| `picture`, `picture-entity`, `picture-glance` | Yes | With `camera_view: live`, a camera plays the way Home Assistant's player picks its stream: WebRTC, then HLS, then MJPEG, moving down the list when one fails, and showing stills when none plays. WebRTC isn't played yet, so a camera that offers it plays HLS. Up to four cameras play video at once; any others play MJPEG until one stops. The cards' frame is compared with HA, the video itself isn't |
 | `picture-elements` | Yes | State icons, labels and badges, icons and service buttons. `conditional` and `image` elements are left out |
 | `media-control` | Yes | |
 | `todo-list`, `calendar`, `logbook` | Yes | Read live from Home Assistant, as its own cards read them. The calendar has its month grid and its list views |
@@ -169,7 +169,7 @@ Tapping or holding a tile opens a native More-Info dialog styled after Home Assi
 | Climate | A circular thermostat dial with mode buttons, and two thumbs for a heat/cool range |
 | Cover | A top-down position slider |
 | Sensor | A 24-hour stepped history graph |
-| Camera | A live stream |
+| Camera | A live stream, chosen as on the picture cards (HLS or MJPEG for now) |
 | Switch | A toggle pill |
 | Alarm panel | A PIN pad |
 

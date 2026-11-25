@@ -11,6 +11,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
+import dev.glassworks.engine.vitro.camera.CameraPlayers
+import dev.glassworks.engine.vitro.camera.CameraStream
+import dev.glassworks.engine.vitro.camera.CameraStreamFactory
+import dev.glassworks.engine.vitro.camera.CameraStreamKind
+import dev.glassworks.engine.vitro.camera.MjpegCameraStream
 import dev.glassworks.engine.vitro.cards.PictureCardView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -167,7 +172,7 @@ class MjpegStreamPlayerTest {
     private fun context(
         store: EntityStore,
         calls: MutableList<String> = ArrayList(),
-        cameraStream: ((String, String?, (Bitmap) -> Unit, () -> Unit) -> () -> Unit)? = null,
+        cameraPlayers: CameraPlayers? = null,
     ) = VitroCardContext(
         context = activity,
         haBase = base,
@@ -180,7 +185,7 @@ class MjpegStreamPlayerTest {
         openMoreInfo = { calls += "more-info $it" },
         fetchHistory = { _, _, _ -> },
         subscribeTemplate = { _, _ -> {} },
-        cameraStream = cameraStream,
+        cameraPlayers = cameraPlayers,
     )
 
     private fun <T : View> ViewGroup.find(type: Class<T>): List<T> {
@@ -240,20 +245,31 @@ class MjpegStreamPlayerTest {
         var pushFrame: ((Bitmap) -> Unit)? = null
         var asked: String? = null
         var stopped = 0
+        val mjpeg = object : CameraStreamFactory {
+            override fun create(entityId: String, kind: CameraStreamKind): CameraStream {
+                val url = MjpegStreamPlayer.streamUrl(base, entityId, store[entityId]?.entityPicture)!!
+                return MjpegCameraStream(activity, url, { null }) { u, _, onFrame, _ ->
+                    asked = u
+                    pushFrame = onFrame
+                    object : MjpegCameraStream.Player {
+                        override fun start() = Unit
+                        override fun stop() { stopped++ }
+                    }
+                }
+            }
+        }
         val card = PictureCardView(
-            context(store, cameraStream = { id, picture, onFrame, _ ->
-                asked = "$id $picture"
-                pushFrame = onFrame
-                ({ stopped++ })
-            }),
+            context(store, cameraPlayers = CameraPlayers(mapOf(CameraStreamKind.MJPEG to mjpeg))),
             LovelaceParser.parseCard(JSONObject("""{"type": "picture-entity", "entity": "camera.porch", "camera_view": "live"}""")),
         )
         attach(card)
-        assertEquals("camera.porch /api/camera_proxy/camera.porch?token=t1", asked)
+        // A camera without HA's STREAM feature plays MJPEG straight away, with the entity's signed token.
+        assertEquals("$base/api/camera_proxy_stream/camera.porch?token=t1", asked)
 
         val frame = Bitmap.createBitmap(4, 4, Bitmap.Config.RGB_565)
         pushFrame!!(frame)
-        val image = card.find(ImageView::class.java).first()
+        // The stream's own view, over the card's still.
+        val image = card.find(ImageView::class.java).last()
         val drawn = (image.drawable as android.graphics.drawable.BitmapDrawable).bitmap
         assertSame(frame, drawn)
 
@@ -268,8 +284,14 @@ class MjpegStreamPlayerTest {
         val store = EntityStore()
         store.putLocal(EntityState("camera.porch", "idle", mapOf("entity_picture" to "/api/camera_proxy/camera.porch?token=t1")))
         var streams = 0
+        val counting = object : CameraStreamFactory {
+            override fun create(entityId: String, kind: CameraStreamKind): CameraStream? {
+                streams++
+                return null
+            }
+        }
         val card = PictureCardView(
-            context(store, cameraStream = { _, _, _, _ -> streams++; {} }),
+            context(store, cameraPlayers = CameraPlayers(CameraStreamKind.values().associateWith { counting })),
             LovelaceParser.parseCard(JSONObject("""{"type": "picture-entity", "entity": "camera.porch"}""")),
         )
         attach(card)

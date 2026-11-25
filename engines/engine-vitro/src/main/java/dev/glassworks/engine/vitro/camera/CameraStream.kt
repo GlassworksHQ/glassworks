@@ -51,6 +51,18 @@ interface CameraStream {
 }
 
 /**
+ * Optional on a [CameraStream]: the picture's size in pixels (0 × 0 until known), read after
+ * [CameraStream.Listener.onFirstFrame] and each [CameraStream.Listener.onFrameRendered]. With it the card fits the
+ * picture the way HA's `<video>` does (`object-fit`) and sizes itself to it when it has no `aspect_ratio`; without
+ * it the stream's view fills the card.
+ */
+interface CameraStreamVideoSize {
+    val videoWidth: Int
+
+    val videoHeight: Int
+}
+
+/**
  * The kinds of live stream, in HA's order of preference: WebRTC, then HLS (both from `camera/capabilities`'
  * `frontend_stream_types`), then the MJPEG proxy stream every camera has.
  */
