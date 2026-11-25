@@ -125,6 +125,13 @@ internal object ClarityStats {
         return JSONObject().put("blocking_ms", round2(blocking)).put("long_frames", n).put("longest_ms", round2(longest))
     }
 
+    /**
+     * [frameBlocking] over a span whose frames may have been dropped to bound the list ([droppedUntil]: the newest one
+     * dropped, or null): when any frame inside the span was, its gaps can't be told, so the blocking isn't measured.
+     */
+    fun blocking(times: List<Double>, droppedUntil: Double?, start: Double?, end: Double?): JSONObject? =
+        if (start != null && droppedUntil != null && droppedUntil >= start) null else frameBlocking(times, start, end)
+
     data class Dialog(
         val opened: Double? = null,
         val shown: Double? = null,
@@ -260,6 +267,11 @@ internal class Taps {
         current = null
         t.upAt = at
         return t
+    }
+
+    /** Android cancelled the gesture that is down: that tap stays unfinished, and no other gesture's up ends it. */
+    fun cancel() {
+        current = null
     }
 
     fun downDone(t: Tap, frameEnd: Double) {

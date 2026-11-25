@@ -9,6 +9,7 @@ import dev.glassworks.engine.vitro.compat.CardRoute
 import dev.glassworks.engine.vitro.compat.CardVerdict
 import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.compat.VitroSupport
+import dev.glassworks.engine.vitro.compat.WebFallback
 import dev.glassworks.engine.vitro.data.EntityState
 import org.json.JSONArray
 import org.json.JSONObject
@@ -40,6 +41,8 @@ data class LovelaceResource(
 data class DashboardConfig(
     val title: String?,
     val views: List<ViewConfig>,
+    /** Saved as a `strategy:`: HA's frontend generates the views, so the config has none ([WebFallback]). */
+    val strategy: Boolean = false,
 ) {
     /**
      * The view a path opens, as HA's router picks it: none (or blank) is the first view, then a view's own `path`,
@@ -67,7 +70,12 @@ data class ViewConfig(
     val badges: List<CardConfig>,
     val subview: Boolean = false,
     val backPath: String? = null,
-)
+    /** Saved as a `strategy:`: HA's frontend generates the cards, so the config has none ([WebFallback]). */
+    val strategy: Boolean = false,
+) {
+    /** Why this view goes to HA's own frontend instead of being drawn ([WebFallback.viewReason]), or null. */
+    val webFallbackReason: String? by lazy { WebFallback.viewReason(this) }
+}
 
 data class SectionConfig(
     val type: String, // "grid"
@@ -75,6 +83,8 @@ data class SectionConfig(
     val columnSpan: Int,
     val cards: List<CardConfig>,
     val visibility: List<VisibilityCondition>,
+    /** Saved as a `strategy:`: HA's frontend generates the cards ([WebFallback]). */
+    val strategy: Boolean = false,
 )
 
 data class ActionConfig(
@@ -837,7 +847,7 @@ object LovelaceParser {
             val v = viewsArr.optJSONObject(i) ?: continue
             views += parseView(i, v)
         }
-        return DashboardConfig(title, views)
+        return DashboardConfig(title, views, strategy = hasStrategy(raw))
     }
 
     fun parseView(index: Int, raw: JSONObject): ViewConfig {
@@ -870,8 +880,12 @@ object LovelaceParser {
             badges = badges,
             subview = raw.optBoolean("subview", false),
             backPath = raw.optString("back_path", "").ifEmpty { null },
+            strategy = hasStrategy(raw),
         )
     }
+
+    /** HA's own test: a config with a `strategy` is generated from it, whatever else it holds. */
+    private fun hasStrategy(raw: JSONObject): Boolean = raw.has("strategy") && !raw.isNull("strategy")
 
     private fun parseSection(raw: JSONObject): SectionConfig = SectionConfig(
         type = raw.optString("type", "grid"),
@@ -879,6 +893,7 @@ object LovelaceParser {
         columnSpan = raw.optInt("column_span", 1).coerceIn(1, 4),
         cards = parseCards(raw.optJSONArray("cards")),
         visibility = VisibilityCondition.parseList(raw.optJSONArray("visibility")),
+        strategy = hasStrategy(raw),
     )
 
     fun parseCards(arr: JSONArray?): List<CardConfig> {
