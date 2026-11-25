@@ -14,6 +14,7 @@ import dev.glassworks.engine.vitro.model.LovelaceResource
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -85,6 +86,31 @@ class CompatWarmupTest {
         val seen = cards(config).map { it.compat }
         running.get(30, TimeUnit.SECONDS)
         cards(config).zip(seen).forEach { (c, v) -> assertSame(c.type, v, c.compat) }
+    }
+
+    @Test
+    fun theWarmUpComputesAVerdictBeforeAnythingReadsIt() {
+        val config = parse()
+        // A card the warm-up must check (it isn't native-only): its verdict is there once the future is done.
+        val island = cards(config).first { it.type == "custom:button-card" }
+        assertFalse(island.compatComputed)
+        CompatWarmup.start(config, null).get(30, TimeUnit.SECONDS)
+        assertTrue("computed by the warm-up, not by this test", island.compatComputed)
+        val seen = island.compat
+        assertSame(seen, island.compat)
+    }
+
+    @Test
+    fun theWarmUpStartsWithTheViewTheRendererOpens() {
+        // The first view has a path, the second none: no path asked for opens the first, and it is warmed first.
+        val config = LovelaceParser.parseDashboard(JSONObject("""{"views": [
+            {"path": "home", "cards": [{"type": "custom:button-card", "entity": "light.a"}]},
+            {"cards": [{"type": "custom:button-card", "entity": "light.b"}]}]}"""))
+        var checked = 0
+        CompatWarmup.warm(config, null) { checked++ >= 1 }
+        val (home, other) = config.views.map { CardRouter.viewRoots(it).single().card }
+        assertTrue(home.compatComputed)
+        assertFalse(other.compatComputed)
     }
 
     @Test

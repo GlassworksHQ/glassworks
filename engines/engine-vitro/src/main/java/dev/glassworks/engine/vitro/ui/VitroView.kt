@@ -452,13 +452,7 @@ class VitroView(
         addView(sheet, LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }
 
-    private fun resolveViewIndex(config: DashboardConfig, path: String?): Int {
-        if (config.views.isEmpty()) return 0
-        if (path.isNullOrBlank()) return 0
-        config.views.indexOfFirst { it.path == path }.takeIf { it >= 0 }?.let { return it }
-        path.toIntOrNull()?.takeIf { it in config.views.indices }?.let { return it }
-        return 0
-    }
+    private fun resolveViewIndex(config: DashboardConfig, path: String?): Int = config.viewIndex(path)
 
     private fun rebuildTabs(config: DashboardConfig) {
         tabBar.removeAllViews()

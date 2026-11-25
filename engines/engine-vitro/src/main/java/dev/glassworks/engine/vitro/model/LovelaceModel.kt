@@ -40,7 +40,18 @@ data class LovelaceResource(
 data class DashboardConfig(
     val title: String?,
     val views: List<ViewConfig>,
-)
+) {
+    /**
+     * The view a path opens, as HA's router picks it: none (or blank) is the first view, then a view's own `path`,
+     * then an index; anything else the first view. The renderer and the compat warm-up both read it.
+     */
+    fun viewIndex(path: String?): Int {
+        if (views.isEmpty() || path.isNullOrBlank()) return 0
+        views.indexOfFirst { it.path == path }.takeIf { it >= 0 }?.let { return it }
+        path.toIntOrNull()?.takeIf { it in views.indices }?.let { return it }
+        return 0
+    }
+}
 
 data class ViewConfig(
     val index: Int,
@@ -541,11 +552,16 @@ data class CardConfig(
     val name: String? get() = raw.optString("name", "").ifEmpty { null }
     val icon: String? get() = raw.optString("icon", "").ifEmpty { null }
 
+    private val compatHolder = lazy { CardCompat.check(this) }
+
     /**
      * Whether Vitro draws this card natively or sends it to a web island, and why ([CardCompat]). Decided once,
      * the first time it's asked after the dashboard is parsed, and never per frame.
      */
-    val compat: CardVerdict by lazy { CardCompat.check(this) }
+    val compat: CardVerdict by compatHolder
+
+    /** Whether [compat] has been computed, without computing it (the warm-up's test reads it). */
+    internal val compatComputed: Boolean get() = compatHolder.isInitialized()
 
     /**
      * Whether this card goes to an island ([CardVerdict.inIsland]). A card [CardCompat.staysNative] says can only be

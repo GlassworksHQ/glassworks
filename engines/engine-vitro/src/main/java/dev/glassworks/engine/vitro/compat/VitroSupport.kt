@@ -228,7 +228,6 @@ object VitroSupport {
         "focus-within" to "keyboard focus; a wall panel has no keyboard",
         "active" to "only while a finger is down",
         "visited" to "link history; browsers barely style it",
-        "link" to "an unvisited link, which Markdown styles anyway",
     )
 
     /** Pseudo-elements that don't draw content. */
@@ -295,6 +294,7 @@ object VitroSupport {
         "card_mod.class" to "Vitro ignores card_mod classes; they only matter with a card-mod theme",
         "card variable" to "Vitro doesn't read this custom property on this card; HA's card may",
         "templated selector" to "a selector built by a template isn't checked",
+        ":link" to "Vitro doesn't apply rules for unvisited links (`:link`); its links keep their own style",
     )
 
     // ---------------------------------------------------------------------------------------------------------
