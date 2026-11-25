@@ -1224,7 +1224,8 @@ export class ImageSession {
   async startUndo(): Promise<void> {
     if (this.busy()) return;
     const in_ = this.recipes.find((r) => r.mode === 'in-place');
-    if (in_) this.set({ picked: in_.id });
+    // the in-place install's own files (none), not the image picked before: an install after the way back asks for no system.img
+    if (in_ && in_.id !== this.state.picked) { void this.forget(); this.set({ picked: in_.id, files: waiting(in_) }); }
     this.set({ screen: 'undo', undo: { at: 'start' }, error: undefined });
     try {
       const kept = await this.store().latestRestore();

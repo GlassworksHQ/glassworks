@@ -490,6 +490,16 @@ describe('the way back (restore-blocks)', () => {
     expect(fresh.flashed).toEqual([]);
   });
 
+  it('an install after the way back asks only for what the in-place install needs, not the full image\'s system.img', async () => {
+    const r = rig();
+    await r.image.startUndo();
+    r.image.backToChoice();
+    r.image.choose();
+    expect(r.image.recipe.mode).toBe('in-place');
+    expect(r.image.state.files).toEqual([]);
+    expect(r.image.blocked() ?? '').not.toMatch(/system\.img/);
+  });
+
   it('doesn\'t open over an install that is writing: that install keeps its screens', async () => {
     let release!: () => void;
     const r = rig();
