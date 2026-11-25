@@ -41,6 +41,7 @@ npm install && npm run stage -w kiln && npm test     # npm workspaces, from the 
 npm run lint -w site && npm run build -w site        # glassworks.dev (site/), after the install above
 frames/aqara-s1-plus/tools/install/test/install-tests.sh   # install scripts, off-device
 python3 tools/check-doc-links.py                     # relative links and #anchors in docs
+python3 tools/check-status.py                        # status tables and badges agree with frame.json and pane.json
 frames/aqara-s1-plus/tools/root/build-verify.sh && frames/aqara-s1-plus/tools/radio/test/run.sh  # root side, in an armhf container (Docker)
 python3 -m unittest discover -s branding/boot/test   # boot generator: frame targets and layout
 python3 -m unittest discover -s tools/size/test      # APK size per frame and pane (CI's size job)
@@ -120,7 +121,9 @@ in HA. If a request goes against it, say so and point at the page instead of bui
   - The release workflow publishes this section as the release notes, and the first line of each
     version is what Home Assistant shows on the update card.
 - **Docs.** Update the frame README's status table (`frames/<id>/README.md`) and `docs/` when
-  behaviour, entities or install steps change. Keep `python3 tools/check-doc-links.py` passing.
+  behaviour, entities or install steps change. A frame's or pane's status lives only in its `frame.json` or
+  `pane.json`: change it there, then make the README tables and badges say the same
+  (`python3 tools/check-status.py` fails until they do). Keep `python3 tools/check-doc-links.py` passing.
   The docs are also published at glassworks.dev/docs: a new doc file gets a line in
   `site/src/lib/docs/sources.ts`, and the site's build fails on a link it can't resolve.
 - Labels: `frame: …`, `pane: …`, `area: …` ([CONTRIBUTING.md](CONTRIBUTING.md#labels)).

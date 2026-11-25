@@ -1,6 +1,6 @@
 # Updates and restoring stock software
 
-Glassworks updates right from Home Assistant, just like any other smart home device. On rooted panels and modern Android tablets, updates install completely hands-free, and every supported device includes a clean way to undo the install and return to stock software.
+Glassworks updates right from Home Assistant, just like any other smart home device. On rooted panels and modern Android tablets, updates install completely hands-free, and every supported device has a way back. On the Aqara S1 Plus and on Android tablets and phones, that means the device's original software. On the lululemon Studio Mirror, whose bootloader can't read lululemon's software back for a backup, it means the community Glass Panes image.
 
 ## Updating Glassworks from Home Assistant
 
@@ -51,7 +51,7 @@ Both Kiln (**Finish setting up**) and the command-line installer detect this aut
 
 ## Undoing and restoring stock software
 
-Every Glassworks install is designed to be reversible.
+Every Glassworks install has a way back. On most devices that's the software it came with; on the lululemon Studio Mirror it's the community Glass Panes image, as explained [below](#lululemon-studio-mirror).
 
 ### Aqara S1 Plus
 
@@ -66,3 +66,12 @@ For full step-by-step instructions and command-line undo commands, see [Undo in 
 
 - **With Kiln:** Plug the tablet in over USB and choose **Undo** in Kiln. Kiln clears the home screen assignment, deactivates device admin, and uninstalls Glassworks cleanly.
 - **Directly on the device:** Search Android's Settings for **Device admin apps** and turn off Glassworks first (Android blocks uninstalling an active device admin). If you set Glassworks as the device owner, release device owner over adb first as described in [Device owner](../frames/generic-android/README.md#device-owner). Once deactivated, uninstall Glassworks like any normal Android app.
+
+### lululemon Studio Mirror
+
+Installing Glassworks on the Mirror over fastboot replaces lululemon's software for good. The Mirror's bootloader can't read its partitions back, so Kiln can't make a backup to restore later, and it asks you to confirm before it writes anything. The way back is the community [Glass Panes](https://github.com/git-nimrod/glass-panes) image:
+
+- **After a full install:** Open [Kiln's Mirror page](https://kiln.glassworks.dev/lululemon-mirror) and choose **Install Glass Panes instead** (Kiln also offers it on the Done screen). Kiln flashes Glass Panes' own release, with all of its apps and its kiosk app as the home screen, and lets only your computer connect to the Mirror over USB ([details](../frames/lululemon-mirror/README.md#returning-to-plain-glass-panes)).
+- **After an app-only install** on a Mirror that already ran Glass Panes: choose **Undo** in Kiln. It removes Glassworks and brings back your previous launcher.
+
+Going back to lululemon's own software isn't possible yet.

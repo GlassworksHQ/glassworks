@@ -577,6 +577,8 @@ jobs:
           node --test tools/vitro-parity/test/*.test.mjs
       - name: Docs links
         run: python3 tools/check-doc-links.py
+      - name: Status labels agree with frame.json and pane.json
+        run: python3 tools/check-status.py && python3 -m unittest discover -s tools/test -v
       # Here, in a required check: a map that pr.yml or docs/ci.md no longer follows fails the PR.
       - name: CI job selection (tools/ci/changes.py)
         run: python3 -m unittest discover -s tools/ci/test -v
