@@ -1,5 +1,5 @@
 // The `dpmd` hook: a byte-exact, in-place patch of stock 1.24.0's `libdpmframework.so` that makes
-// the stock daemon load a user-supplied backup module at boot.
+// the stock daemon load the pinned selinux_permissive backup module at boot.
 //
 // Why this file exists: on stock `1.24.0` the `init.qcom.post_boot.sh` route is dead (that domain
 // has no `sys_module`), but `/system/bin/dpmd` runs as uid 0 with `CAP_SYS_MODULE` and links
@@ -15,8 +15,9 @@
 // The constructor loads the module (`init_module`), makes the two block nodes world-readable, and
 // then tail-jumps to the constructor it replaced, so the library's own initialisers still run.
 //
-// Nothing vendor-supplied or GPL is bundled here: the module is a path on the caller's disk
-// (Hard Rule 4), and the stock library is read from the device at run time (Hard Rule 3).
+// Nothing vendor-supplied or GPL is committed to this repo: the GPL-2.0 module is fetched at run
+// time from glassworks-device-bins by pinned SHA-256 (or passed in, Hard Rule 4), and the stock
+// library is read from the device at run time (Hard Rule 3).
 //
 // Layout facts this code relies on, read from stock 1.24.0's `libdpmframework.so` (223,232 bytes,
 // ELF64/AArch64, identical size in the published image):

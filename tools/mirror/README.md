@@ -162,7 +162,7 @@ npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --help
 `stock-surgical-adb.ts` builds on a Mirror that already has the Phase 1 HTTP probe app running on
 stock's `mirror-<serial>` SoftAP (`192.168.43.1:18765`). Instead of overwriting `system` with a
 third-party image, it backs up the original `/system/framework/services.jar`,
-`/system/etc/init.qcom.post_boot.sh`, and (with `--backup-module`) `/system/vendor/lib64/libdpmframework.so`
+`/system/etc/init.qcom.post_boot.sh`, and (with `--backup`) `/system/vendor/lib64/libdpmframework.so`
 plus their `FS_IOC_FIEMAP` block maps first, writes byte-exact
 `restore-*.sparse` undo images under `<out>/backup/`, and patches **only** `services.jar`'s
 physical 4 KiB blocks (`DONT_CARE` everywhere else) to authorize your own `--adb-key` in
@@ -177,21 +177,28 @@ physical 4 KiB blocks (`DONT_CARE` everywhere else) to authorize your own `--adb
 - **Exact byte size:** recompresses `classes.dex` with `@glassworks/bootpatch`'s `zlib-rs` level-9
   deflate and pads the ZIP EOCD comment so `patched.length === original.length` (zero ext4 metadata
   edits).
-- **Optional Step 4 raw backup (`--backup-module <path-to-ko>`):** accepts a user-supplied external
-  AArch64 `.ko` (never shipped in this repo, Hard Rule 4) and embeds it in an in-place, same-length
-  patch of `/system/vendor/lib64/libdpmframework.so`. `dpmd` runs as root with `CAP_SYS_MODULE` and
-  links that ELF64 library, so its constructor loads the module and makes `mmcblk0p22` and
-  `mmcblk0p19` world-readable for one boot. The tool then streams raw `system` and `boot` over USB
-  ADB, scrubs those blocks back to the original bytes inside the saved image, and flashes
-  `restore-dpmd.sparse`. `init.qcom.post_boot.sh` is not the hook: on stock 1.24.0 that shell has no
-  `sys_module` and cannot see `/data/local/tmp`. The 32-bit copy under `/system/vendor/lib/` is refused.
+- **Optional Step 4 raw backup (`--backup`):** loads the pinned `selinux_permissive` kernel module
+  and embeds it in an in-place, same-length patch of `/system/vendor/lib64/libdpmframework.so`.
+  `dpmd` runs as root with `CAP_SYS_MODULE` and links that ELF64 library, so its constructor loads
+  the module and makes `mmcblk0p22` and `mmcblk0p19` world-readable for one boot. The tool then
+  streams raw `system` and `boot` over USB ADB, scrubs those blocks back to the original bytes inside
+  the saved image, and flashes `restore-dpmd.sparse`. `init.qcom.post_boot.sh` is not the hook: on
+  stock 1.24.0 that shell has no `sys_module` and cannot see `/data/local/tmp`. The 32-bit copy under
+  `/system/vendor/lib/` is refused.
+
+  The module is a GPL-2.0 kernel module, so it can't live in this repo (Hard Rule 4). It's published
+  with its Corresponding Source in [`GlassworksHQ/glassworks-device-bins`](https://github.com/GlassworksHQ/glassworks-device-bins)
+  and consumed here by pinned release URL + SHA-256 (`tools/mirror/device-bins.json`, held to the
+  Refract allowlist by `tools/check-device-bins.py`). The published build only loads where its ABI
+  matches stock 1.24.0 (`module_layout=0xa5b7f7dd`); for another Mirror revision, build that module
+  yourself from the device-bins source and pass it with `--backup-module <path-to-ko>`.
 
 ```sh
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --preflight-only                  # Step 1 only (read-only over SoftAP)
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --build-only                      # Steps 1-2 locally (no flash)
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --keep-adb                        # Steps 1-3: reversible authorized USB ADB (Enforcing)
-npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-module <ko> --keep-adb   # Steps 1-4: dpmd hook, raw system+boot, then restore the library
-npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-only --backup-dir <out>/backup --backup-module <ko>  # Step 4 only over USB (adb forward, no SoftAP swap)
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup --keep-adb               # Steps 1-4: pinned module, dpmd hook, raw system+boot, then restore the library
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-only --backup-dir <out>/backup  # Step 4 only over USB (adb forward, no SoftAP swap)
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --undo --backup-dir <out>/backup  # Restore untouched stock system (add --erase-userdata for factory reset)
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --apply-adb --backup-dir <out>/backup  # Re-apply saved USB ADB hook without Wi-Fi AP
 ```

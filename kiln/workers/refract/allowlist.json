@@ -61,5 +61,14 @@
     "size": 159,
     "sha256": "cf9660a286d3a16f9ef66f94559713ceb1c0247b454c2dfda78c663096b7bd87",
     "credit": { "name": "git-nimrod", "url": "https://github.com/git-nimrod/glass-panes", "project": "Glass Panes" }
+  },
+  "glassworks-device-bins/lululemon-mirror-selinux-permissive-v1/selinux_permissive.ko": {
+    "owner": "GlassworksHQ",
+    "repo": "glassworks-device-bins",
+    "tag": "lululemon-mirror-selinux-permissive-v1",
+    "name": "selinux_permissive.ko",
+    "size": 2512,
+    "sha256": "ee7b39cfa0d6abccc2572035d6305e66369a3bba051b09e3edd8bbd926d79883",
+    "credit": { "name": "Glassworks", "url": "https://github.com/GlassworksHQ/glassworks-device-bins", "project": "Glassworks" }
   }
 }

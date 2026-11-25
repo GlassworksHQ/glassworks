@@ -1,9 +1,10 @@
 // Phase 2 stock Mirror tooling: reversible surgical sparse patching of /system/framework/services.jar
 // (for authorized USB ADB on untouched stock 1.24.0 without replacing system) and an optional
 // in-place patch of /system/vendor/lib64/libdpmframework.so. That library's constructor runs inside
-// dpmd (uid 0, CAP_SYS_MODULE). The patch embeds a user-supplied .ko, loads it, and makes the system
-// and boot block nodes readable for one boot so the raw partitions can be streamed out, then the
-// original library blocks are flashed back.
+// dpmd (uid 0, CAP_SYS_MODULE). The patch embeds the selinux_permissive .ko, loads it, and makes the
+// system and boot block nodes readable for one boot so the raw partitions can be streamed out, then
+// the original library blocks are flashed back. The module is the pinned GPL-2.0 artifact from
+// glassworks-device-bins, consumed by URL + SHA-256 (device-bins.json), or a local --backup-module.
 //
 // init.qcom.post_boot.sh is not the hook. qti_init_shell has no sys_module and cannot search
 // /data/local/tmp (verified on stock 1.24.0). patchPostBootForBackup remains for that record.
@@ -14,8 +15,10 @@
 //   metadata (i_size, extents, directory entries) is never modified; only the target file's
 //   physical 4 KiB blocks are written (DONT_CARE everywhere else).
 // - Byte-for-byte restore sparse images are written BEFORE any flash is offered.
-// - No GPL payloads or vendor binaries are bundled or committed (Rule 3 & Rule 4).
+// - No GPL payloads or vendor binaries are committed to this repo (Rule 3 & Rule 4): the GPL-2.0
+//   selinux_permissive module is fetched at run time from glassworks-device-bins, pinned by SHA-256.
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { zipEntry } from '@glassworks/app-adb';
 import { loadCompressor } from '@glassworks/bootpatch';
 import { Disk, MemoryStore, parseSparseHeader, SPARSE_MAGIC, writeSparse } from '@glassworks/ext4';
@@ -53,6 +56,33 @@ export const STOCK_POST_BOOT_PATH = '/system/etc/init.qcom.post_boot.sh';
 /** ELF64 copy. `/system/vendor/lib/libdpmframework.so` is ELF32; dpmd links this one. */
 export const STOCK_DPMD_LIB_PATH = '/system/vendor/lib64/libdpmframework.so';
 export const REMOTE_BACKUP_KO_PATH = '/data/local/tmp/gw_backup.ko';
+
+/** One pinned GPL binary published by GlassworksHQ/glassworks-device-bins and consumed by URL + SHA-256. */
+export interface DeviceBinPin {
+  /** The device-bins component name (`<frame>-<name>`). */
+  component: string;
+  /** The key of this file in `kiln/workers/refract/allowlist.json` (`<repo>/<tag>/<name>`). */
+  allowlistId: string;
+  /** Where the tool fetches it: Refract streams the pinned release asset with the SHA checked again. */
+  refractUrl: string;
+  /** The GitHub release asset behind Refract, for reference and as a documented fallback. */
+  releaseUrl: string;
+  name: string;
+  size: number;
+  sha256: string;
+  license: string;
+}
+
+/**
+ * The pinned device-bins artifacts this tool fetches, loaded from `tools/mirror/device-bins.json`
+ * (the single source `tools/check-device-bins.py` holds to the Refract allowlist). The Mirror backup
+ * module is a GPL-2.0 kernel module that can't live in this repo (Hard Rule 4), so it's published in
+ * `glassworks-device-bins` with its Corresponding Source and consumed by pinned URL + SHA-256 here.
+ */
+const DEVICE_BINS = JSON.parse(
+  readFileSync(new URL('../device-bins.json', import.meta.url), 'utf8'),
+) as { selinuxPermissive: DeviceBinPin };
+export const SELINUX_PERMISSIVE_PIN: DeviceBinPin = DEVICE_BINS.selinuxPermissive;
 
 const sha256Hex = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
 const sha1Bytes = (b: Uint8Array): Uint8Array => new Uint8Array(createHash('sha1').update(b).digest());
@@ -662,7 +692,7 @@ export interface KernelModuleInfo {
   moduleLayoutCrc?: string;
 }
 
-/** Validates that a user-supplied backup `.ko` is an AArch64 relocatable ELF and reads its vermagic/CRC. */
+/** Validates that the backup `.ko` (pinned or override) is an AArch64 relocatable ELF and reads its vermagic/CRC. */
 export function validateKernelModuleElf(ko: Uint8Array): KernelModuleInfo {
   if (ko.length < 64 || ko[0] !== 0x7f || ko[1] !== 0x45 || ko[2] !== 0x4c || ko[3] !== 0x46) {
     throw new Error('backup module is not an ELF file');
@@ -707,6 +737,40 @@ export function validateKernelModuleElf(ko: Uint8Array): KernelModuleInfo {
   }
 
   return { arch: 'aarch64', vermagic, ...(moduleLayoutCrc ? { moduleLayoutCrc } : {}) };
+}
+
+/**
+ * Resolves the Step 4 backup module. By default this is the pinned, hash-checked `selinux_permissive`
+ * artifact from `glassworks-device-bins` (fetched through Refract); `--backup-module <path>` overrides
+ * it with a local `.ko`, e.g. for a Mirror revision the pinned build doesn't match. Either way the
+ * bytes are validated as an AArch64 relocatable module before anything is built.
+ */
+export async function loadBackupModule(
+  o: Pick<SurgicalAdbOptions, 'backupModulePath'>,
+  d: Pick<SurgicalAdbDeps, 'readHostFile' | 'fetchUrl'>,
+): Promise<{ bytes: Uint8Array; sourceNote: string }> {
+  if (o.backupModulePath) {
+    const bytes = await d.readHostFile(o.backupModulePath);
+    return { bytes, sourceNote: `local override (--backup-module ${o.backupModulePath})` };
+  }
+  const pin = SELINUX_PERMISSIVE_PIN;
+  if (!d.fetchUrl) {
+    throw new Error('no way to fetch the pinned backup module; pass --backup-module <path> to supply one');
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = await d.fetchUrl(pin.refractUrl);
+  } catch (e) {
+    throw new Error(`could not fetch the pinned backup module from ${pin.refractUrl}: ${(e as Error).message}`);
+  }
+  if (bytes.length !== pin.size) {
+    throw new Error(`pinned backup module is ${bytes.length} B, the pin says ${pin.size} (${pin.component}); refusing`);
+  }
+  const got = sha256Hex(bytes);
+  if (got !== pin.sha256) {
+    throw new Error(`pinned backup module SHA-256 ${got} != pinned ${pin.sha256} (${pin.component}); refusing`);
+  }
+  return { bytes, sourceNote: `pinned ${pin.component} (${pin.license}, sha256 ${pin.sha256.slice(0, 12)}…)` };
 }
 
 export interface SurgicalFastboot {
@@ -773,6 +837,9 @@ export interface SurgicalAdbOptions {
   probeHost: string;
   probeHttpPort: number;
   adbKey?: string;
+  /** Run Step 4's raw backup, loading the pinned device-bins module (unless backupModulePath overrides it). */
+  wantBackup?: boolean;
+  /** An override backup `.ko` on the caller's disk, instead of the pinned device-bins artifact (implies wantBackup). */
   backupModulePath?: string;
   backupDir?: string;
   restoreAllAfterBackup?: boolean;
@@ -793,6 +860,8 @@ export interface SurgicalAdbDeps {
   loadProbeApp: () => Promise<ProbeAppPayload | undefined>;
   writeFile: (relPath: string, data: Uint8Array | string) => Promise<string>;
   readHostFile: (absPath: string) => Promise<Uint8Array>;
+  /** Fetches the pinned device-bins backup module by URL (its bytes are checked against the pin). */
+  fetchUrl?: (url: string) => Promise<Uint8Array>;
   restoreExtentsInRawImage?: (
     rawImagePath: string,
     patches: Array<{ extents: readonly FiemapExtent[]; origData: Uint8Array }>,
@@ -1334,12 +1403,11 @@ export async function runStockSurgicalAdb(
   // --- Backup-only mode (USB-only Step 4 using existing authorized USB ADB + saved backup-dir) ---
   if (o.mode === 'backup-only') {
     if (!o.backupDir) throw new Error('--backup-only requires --backup-dir <dir> (from a prior Phase 2 run)');
-    if (!o.backupModulePath) throw new Error('--backup-only requires --backup-module <path-to-ko>');
 
-    const backupKoBytes = await d.readHostFile(o.backupModulePath);
+    const { bytes: backupKoBytes, sourceNote } = await loadBackupModule(o, d);
     const koInfo = validateKernelModuleElf(backupKoBytes);
-    d.log(`  validated backup module: ${koInfo.arch}, vermagic="${koInfo.vermagic}"${koInfo.moduleLayoutCrc ? `, module_layout=${koInfo.moduleLayoutCrc}` : ''}`);
-    report.notes.push(`Validated external backup .ko (${koInfo.arch}, vermagic=${koInfo.vermagic}${koInfo.moduleLayoutCrc ? `, module_layout=${koInfo.moduleLayoutCrc}` : ''}).`);
+    d.log(`  backup module: ${sourceNote}; ${koInfo.arch}, vermagic="${koInfo.vermagic}"${koInfo.moduleLayoutCrc ? `, module_layout=${koInfo.moduleLayoutCrc}` : ''}`);
+    report.notes.push(`Backup module: ${sourceNote} (${koInfo.arch}, vermagic=${koInfo.vermagic}${koInfo.moduleLayoutCrc ? `, module_layout=${koInfo.moduleLayoutCrc}` : ''}).`);
 
     const manifestRaw = await d.readHostFile(`${o.backupDir}/manifest.json`);
     const prevManifest = JSON.parse(td.decode(manifestRaw)) as BackupManifest;
@@ -1503,13 +1571,15 @@ export async function runStockSurgicalAdb(
     cleanAdbKey = o.adbKey.trim();
   }
 
-  // Validate optional backup .ko up front
+  // Resolve the Step 4 backup module up front when a raw backup is wanted (--backup, or a local
+  // --backup-module override). By default it's the pinned device-bins artifact, fetched and hash-checked.
   let backupKoBytes: Uint8Array | undefined;
-  if (o.backupModulePath) {
-    backupKoBytes = await d.readHostFile(o.backupModulePath);
+  if (o.wantBackup || o.backupModulePath) {
+    const loaded = await loadBackupModule(o, d);
+    backupKoBytes = loaded.bytes;
     const info = validateKernelModuleElf(backupKoBytes);
-    d.log(`  validated backup module: ${info.arch}, vermagic="${info.vermagic}"${info.moduleLayoutCrc ? `, module_layout=${info.moduleLayoutCrc}` : ''}`);
-    report.notes.push(`Validated external backup .ko (${info.arch}, vermagic=${info.vermagic}${info.moduleLayoutCrc ? `, module_layout=${info.moduleLayoutCrc}` : ''}).`);
+    d.log(`  backup module: ${loaded.sourceNote}; ${info.arch}, vermagic="${info.vermagic}"${info.moduleLayoutCrc ? `, module_layout=${info.moduleLayoutCrc}` : ''}`);
+    report.notes.push(`Backup module: ${loaded.sourceNote} (${info.arch}, vermagic=${info.vermagic}${info.moduleLayoutCrc ? `, module_layout=${info.moduleLayoutCrc}` : ''}).`);
   }
 
   // --- Step 1: Read-only preflight over SoftAP HTTP ---
