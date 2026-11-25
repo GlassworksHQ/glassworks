@@ -496,28 +496,6 @@ class CardContainmentTest {
         assertTrue(contained.isEmpty())
     }
 
-    /**
-     * One hardware frame, as Android's renderer draws it: the root records again only if it was invalidated itself;
-     * otherwise each parent rebuilds just the display lists of the views that changed below it, straight from its
-     * own list, without running its draw or [ViewGroup.drawChild]. A throw comes out as it would on a panel.
-     */
-    private fun hardwareFrame(v: View) {
-        ShadowLooper.idleMainLooper()
-        val root = v.rootView
-        val flags = View::class.java.getDeclaredField("mPrivateFlags").apply { isAccessible = true }
-        val invalidated = View::class.java.getDeclaredField("PFLAG_INVALIDATED").apply { isAccessible = true }.getInt(null)
-        val recreate = View::class.java.getDeclaredField("mRecreateDisplayList").apply { isAccessible = true }
-        recreate.setBoolean(root, flags.getInt(root) and invalidated != 0)
-        flags.setInt(root, flags.getInt(root) and invalidated.inv())
-        try {
-            View::class.java.getDeclaredMethod("updateDisplayListIfDirty").apply { isAccessible = true }.invoke(root)
-        } catch (e: java.lang.reflect.InvocationTargetException) {
-            throw e.cause ?: e
-        } finally {
-            recreate.setBoolean(root, false)
-        }
-    }
-
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test fun aThrowWhenHardwareRedrawsOneViewInsideAGuardedCardIsContained() {
         var armed = false

@@ -39,6 +39,35 @@ fun awaitCondition(
 }
 
 /**
+ * One hardware frame of [v]'s window, as Android's renderer draws it (Robolectric's native graphics record real display
+ * lists): pending messages run first (unless not [idle]: a frame before a posted swap runs), then [beforeFrame], then the root records again only if it was invalidated
+ * itself. Otherwise each parent rebuilds just the display lists of the views that changed below it, straight from its
+ * own list, without running its draw or `drawChild`. A throw comes out as it would on a panel.
+ */
+fun hardwareFrame(v: View, idle: Boolean = true, beforeFrame: () -> Unit = {}) {
+    if (idle) org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    beforeFrame()
+    val root = v.rootView
+    val recreate = View::class.java.getDeclaredField("mRecreateDisplayList").apply { isAccessible = true }
+    recreate.setBoolean(root, root.isInvalidated())
+    privateFlags.setInt(root, privateFlags.getInt(root) and pflagInvalidated.inv())
+    try {
+        View::class.java.getDeclaredMethod("updateDisplayListIfDirty").apply { isAccessible = true }.invoke(root)
+    } catch (e: java.lang.reflect.InvocationTargetException) {
+        throw e.cause ?: e
+    } finally {
+        recreate.setBoolean(root, false)
+    }
+}
+
+// Lazily: the file's other helpers run in plain JVM tests too, where View is a stub without these fields.
+private val privateFlags by lazy { View::class.java.getDeclaredField("mPrivateFlags").apply { isAccessible = true } }
+private val pflagInvalidated by lazy { View::class.java.getDeclaredField("PFLAG_INVALIDATED").apply { isAccessible = true }.getInt(null) }
+
+/** The view asked to record its display list again ([View.invalidate]) and hasn't yet. */
+fun View.isInvalidated(): Boolean = privateFlags.getInt(this) and pflagInvalidated != 0
+
+/**
  * An in-memory Home Assistant WebSocket API, speaking just enough of the real protocol for [HaDashboardClient]:
  * `auth_required` -> `auth` -> `auth_ok` / `auth_invalid`, then request/`result` pairs and `event` pushes.
  *

@@ -1,5 +1,5 @@
 // The data HA's page asked for and got over its own WebSocket (history and statistics for the graphs, a to-do list's
-// items, the logbook, the weather forecast and calendar events), recorded so Vitro's cards can be handed exactly the data HA drew
+// items, the logbook, the weather forecast, calendar events and a live camera's capabilities), recorded so Vitro's cards can be handed exactly the data HA drew
 // (the fixture answers Vitro's same calls with it).
 //
 // Touches: nothing (in-memory bookkeeping over the frames capture.mjs hands it).
@@ -24,6 +24,9 @@ export const RECORDED_TYPES = new Set([
   // Who a logbook entry's `context_user_id` is: recorded only from the fake HA, whose users are made up, and only for a
   // case with a logbook (capture.mjs keepCall). A real HA's user list is never kept.
   'config/auth/list',
+  // Which streams a live camera offers (`camera_view: live`, ha-camera-stream): Vitro picks its player from the same
+  // answer. The stream itself (`camera/stream`, the video) isn't recorded: the video is masked out of the comparison.
+  'camera/capabilities',
 ]);
 
 /**

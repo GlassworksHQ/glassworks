@@ -11,6 +11,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
+import dev.glassworks.engine.vitro.camera.CameraPlayers
+import dev.glassworks.engine.vitro.camera.CameraStream
+import dev.glassworks.engine.vitro.camera.CameraStreamFactory
+import dev.glassworks.engine.vitro.camera.CameraStreamKind
+import dev.glassworks.engine.vitro.camera.MjpegCameraStream
 import dev.glassworks.engine.vitro.cards.PictureCardView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -167,7 +172,7 @@ class MjpegStreamPlayerTest {
     private fun context(
         store: EntityStore,
         calls: MutableList<String> = ArrayList(),
-        cameraStream: ((String, String?, (Bitmap) -> Unit, () -> Unit) -> () -> Unit)? = null,
+        cameraPlayers: CameraPlayers? = null,
     ) = VitroCardContext(
         context = activity,
         haBase = base,
@@ -180,7 +185,7 @@ class MjpegStreamPlayerTest {
         openMoreInfo = { calls += "more-info $it" },
         fetchHistory = { _, _, _ -> },
         subscribeTemplate = { _, _ -> {} },
-        cameraStream = cameraStream,
+        cameraPlayers = cameraPlayers,
     )
 
     private fun <T : View> ViewGroup.find(type: Class<T>): List<T> {
@@ -217,12 +222,12 @@ class MjpegStreamPlayerTest {
 
         val icons = card.find(MdiIconView::class.java)
         assertEquals(2, icons.size)
-        assertEquals(0xCCFFFFFF.toInt(), icons[0].tintColor) // off: white
+        assertEquals(0xFFA9A9A9.toInt(), icons[0].tintColor) // off: HA's #a9a9a9
         (icons[0].parent as View).performClick()
         assertEquals("light.toggle light.porch", calls.single())
         ShadowLooper.idleMainLooper()
-        // The optimistic flip tints it with the light's active color.
-        assertTrue(icons[0].tintColor != 0xCCFFFFFF.toInt())
+        // The optimistic flip turns it white, HA's on color for a picture-glance icon.
+        assertEquals(android.graphics.Color.WHITE, icons[0].tintColor)
 
         (icons[1].parent as View).performClick()
         assertEquals("more-info sensor.porch_temp", calls.last())
@@ -240,20 +245,31 @@ class MjpegStreamPlayerTest {
         var pushFrame: ((Bitmap) -> Unit)? = null
         var asked: String? = null
         var stopped = 0
+        val mjpeg = object : CameraStreamFactory {
+            override fun create(entityId: String, kind: CameraStreamKind): CameraStream {
+                val url = MjpegStreamPlayer.streamUrl(base, entityId, store[entityId]?.entityPicture)!!
+                return MjpegCameraStream(activity, url, { null }) { u, _, onFrame, _ ->
+                    asked = u
+                    pushFrame = onFrame
+                    object : MjpegCameraStream.Player {
+                        override fun start() = Unit
+                        override fun stop() { stopped++ }
+                    }
+                }
+            }
+        }
         val card = PictureCardView(
-            context(store, cameraStream = { id, picture, onFrame, _ ->
-                asked = "$id $picture"
-                pushFrame = onFrame
-                ({ stopped++ })
-            }),
+            context(store, cameraPlayers = CameraPlayers(mapOf(CameraStreamKind.MJPEG to mjpeg))),
             LovelaceParser.parseCard(JSONObject("""{"type": "picture-entity", "entity": "camera.porch", "camera_view": "live"}""")),
         )
         attach(card)
-        assertEquals("camera.porch /api/camera_proxy/camera.porch?token=t1", asked)
+        // A camera without HA's STREAM feature plays MJPEG straight away, with the entity's signed token.
+        assertEquals("$base/api/camera_proxy_stream/camera.porch?token=t1", asked)
 
         val frame = Bitmap.createBitmap(4, 4, Bitmap.Config.RGB_565)
         pushFrame!!(frame)
-        val image = card.find(ImageView::class.java).first()
+        // The stream's own view, over the card's still.
+        val image = card.find(ImageView::class.java).last()
         val drawn = (image.drawable as android.graphics.drawable.BitmapDrawable).bitmap
         assertSame(frame, drawn)
 
@@ -268,8 +284,14 @@ class MjpegStreamPlayerTest {
         val store = EntityStore()
         store.putLocal(EntityState("camera.porch", "idle", mapOf("entity_picture" to "/api/camera_proxy/camera.porch?token=t1")))
         var streams = 0
+        val counting = object : CameraStreamFactory {
+            override fun create(entityId: String, kind: CameraStreamKind): CameraStream? {
+                streams++
+                return null
+            }
+        }
         val card = PictureCardView(
-            context(store, cameraStream = { _, _, _, _ -> streams++; {} }),
+            context(store, cameraPlayers = CameraPlayers(CameraStreamKind.values().associateWith { counting })),
             LovelaceParser.parseCard(JSONObject("""{"type": "picture-entity", "entity": "camera.porch"}""")),
         )
         attach(card)

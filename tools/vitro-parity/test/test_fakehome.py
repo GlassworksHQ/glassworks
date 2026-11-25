@@ -38,8 +38,14 @@ def load(path):
 
 
 def call(msg):
+    """The answer fakeha gives: the home's own handler for the command, else Clarity's (a camera's capabilities)."""
     c = Conn()
-    H.HANDLERS[msg["type"]](c, dict(msg, id=1))
+    h = H.HANDLERS.get(msg["type"])
+    if h is None:
+        import fakeha  # tools/perf, on the path once fakehome is imported
+        fakeha.D = H
+        h = fakeha.HANDLERS[msg["type"]]
+    h(c, dict(msg, id=1))
     return c.out
 
 
@@ -288,7 +294,11 @@ class Home(unittest.TestCase):
         for c in H.CARDS:
             self.assertIn(c["main"], c["files"])
             self.assertTrue(all(re.fullmatch(r"[0-9a-f]{64}", f["sha256"]) for f in c["files"].values()))
-            self.assertIn(c["license"], ("MIT", "Apache-2.0"))
+            # A copyleft card is served on demand only: no other case's page loads it.
+            self.assertIn(c["license"], ("MIT", "Apache-2.0") if not c.get("on_demand") else ("MIT", "Apache-2.0", "AGPL-3.0"))
+        # Better Thermostat UI (#885) is pinned, served at /hacsfiles/, and not a Lovelace resource.
+        self.assertIn("better-thermostat-ui-card", {c["name"] for c in H.CARDS})
+        self.assertNotIn("better-thermostat-ui-card", res)
         self.assertEqual(H.http_get("/hacsfiles/mini-graph-card/not-pinned.js", {})[0], 404)
         self.assertEqual(H.http_get("/hacsfiles/mini-graph-card/../x.js", {})[0], 404)
 
