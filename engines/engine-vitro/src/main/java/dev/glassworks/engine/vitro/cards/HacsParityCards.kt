@@ -914,18 +914,38 @@ class MushroomFanCardView(ctx: VitroCardContext, config: CardConfig) : MushroomS
  */
 class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : MushroomShellCardView(ctx, config) {
     private val row = controlRow()
-    private val slider = if (!config.raw.optBoolean("show_buttons_control") && config.raw.optBoolean("show_position_control"))
+    /** Mushroom's `_controls`, in its order: with both, the buttons show first and a button switches to the other. */
+    private val coverControls = listOfNotNull(
+        "buttons_control".takeIf { config.raw.optBoolean("show_buttons_control") },
+        "position_control".takeIf { config.raw.optBoolean("show_position_control") },
+    )
+    private var activeControl = coverControls.firstOrNull()
+    private val slider = if ("position_control" in coverControls)
         mushroomSlider(BLUE) { frac -> call("cover", "set_cover_position") { it.put("position", (frac * 100f).roundToInt()) } } else null
+    private val buttons = if ("buttons_control" in coverControls) listOf(
+        mushroomButton("mdi:arrow-up", "Open") { call("cover", "open_cover") },
+        mushroomButton("mdi:stop", "Stop") { call("cover", "stop_cover") },
+        mushroomButton("mdi:arrow-down", "Close") { call("cover", "close_cover") },
+    ) else emptyList()
+    private val switchButtons = LinkedHashMap<String, View>()
 
     init {
-        if (slider != null) {
-            addCell(row, slider)
-        } else {
-            addCell(row, mushroomButton("mdi:arrow-up", "Open") { call("cover", "open_cover") })
-            addCell(row, mushroomButton("mdi:stop", "Stop") { call("cover", "stop_cover") })
-            addCell(row, mushroomButton("mdi:arrow-down", "Close") { call("cover", "close_cover") })
+        buttons.forEach { addCell(row, it) }
+        slider?.let { addCell(row, it) }
+        // The other control as a button beside the active one (Mushroom's _renderOtherControls).
+        if (coverControls.size > 1) coverControls.forEach { c ->
+            val b = mushroomButton(COVER_CONTROL_ICONS.getValue(c), c) { activeControl = c; showActive() }
+            switchButtons[c] = b
+            row.addView(b, LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)).apply { marginStart = ctx.px(12f) })
         }
+        showActive()
         start()
+    }
+
+    private fun showActive() {
+        buttons.forEach { it.visibility = if (activeControl == "buttons_control") VISIBLE else GONE }
+        slider?.visibility = if (activeControl == "position_control") VISIBLE else GONE
+        switchButtons.forEach { (c, b) -> b.visibility = if (c == activeControl) GONE else VISIBLE }
     }
 
     override fun render(s: EntityState?) {
@@ -943,6 +963,9 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
     private companion object {
         /** `--rgb-state-cover`: Mushroom's blue. */
         val BLUE = 0xFF2196F3.toInt()
+
+        /** Mushroom's cover CONTROLS_ICONS. */
+        val COVER_CONTROL_ICONS = mapOf("buttons_control" to "mdi:gesture-tap-button", "position_control" to "mdi:gesture-swipe-horizontal")
     }
 }
 

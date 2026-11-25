@@ -191,6 +191,18 @@ class HacsParityWaveTest {
         card.click("Open"); assertEquals("cover.open_cover", calls.last().service)
         card.click("Stop"); assertEquals("cover.stop_cover", calls.last().service)
         card.click("Close"); assertEquals("cover.close_cover", calls.last().service)
+
+        // Both controls: the buttons first, and a button that switches to the position slider (and back).
+        val both = dev.glassworks.engine.vitro.cards.MushroomCoverCardView(context(st),
+            card("""{"type": "custom:mushroom-cover-card", "entity": "cover.blind", "show_buttons_control": true, "show_position_control": true}"""))
+        idle()
+        fun shown(d: String) = both.all().any { it.contentDescription?.toString() == d && it.visibility == View.VISIBLE }
+        fun sliderShown() = both.all().any { it is dev.glassworks.engine.vitro.cards.HaHorizontalSliderView && it.visibility == View.VISIBLE }
+        assertTrue(shown("Open")); assertFalse(sliderShown())
+        both.click("position_control")
+        assertFalse(shown("Open")); assertTrue(sliderShown())
+        both.click("buttons_control")
+        assertTrue(shown("Open")); assertFalse(sliderShown())
     }
 
     @Test
