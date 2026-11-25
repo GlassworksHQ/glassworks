@@ -723,7 +723,7 @@ describe('the system write, read back after the restart', () => {
     const r = await toAppInstall({ systemNotTaken: true });
     await r.image.connectAdb();
     expect(r.image.state).toMatchObject({ screen: 'error', notTaken: true, work: { step: 'app-install' } });
-    expect(r.image.state.error).toMatch(/services\.jar on the Mirror isn't what Kiln wrote.*Nothing was installed.*restore point/);
+    expect(r.image.state.error).toMatch(/services\.jar on the Mirror isn't what Kiln wrote \(SHA-256 [0-9a-f]{12}…, expected [0-9a-f]{12}…\)\. Nothing was installed\./);
     expect(installed(r)).toBeUndefined();
     expect(r.image.state.log.join('\n')).not.toContain('Installing');
     render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);

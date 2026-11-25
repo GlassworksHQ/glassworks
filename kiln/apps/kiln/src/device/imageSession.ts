@@ -1690,8 +1690,9 @@ export class ImageSession {
         this.log('', `Kiln couldn't read ${f.path} back from ${the} (${(e as Error).message}), so this write is unchecked. Kiln goes on with the app; if ${the} doesn't start it, the way back puts the original system back.`);
         continue;
       }
-      if (await sha256Hex(bytes) !== f.sha256.toLowerCase()) {
-        throw new NotTaken(`${name} on ${the} isn't what Kiln wrote, so ${the}'s system didn't take the change. Nothing was installed. Restore the original system with the restore point Kiln saved before the write.`);
+      const got = await sha256Hex(bytes);
+      if (got !== f.sha256.toLowerCase()) {
+        throw new NotTaken(`${name} on ${the} isn't what Kiln wrote (SHA-256 ${got.slice(0, 12)}…, expected ${f.sha256.slice(0, 12)}…). Nothing was installed.`);
       }
       this.log('', `${name} on ${the} matches what Kiln wrote`);
     }
