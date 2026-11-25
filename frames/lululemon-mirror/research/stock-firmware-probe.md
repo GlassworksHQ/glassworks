@@ -597,15 +597,13 @@ npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-onl
    Glass Panes' `pronto_wlan.ko` (or test on a `1.24.0` unit) to be 100% certain.
 3. **Zero-Wi-Fi-swap transport & Stock-in-place Kiln checks (next on a stock `1.24.0` unit with live
    USB ADB):**
-   - **MTP over the existing micro-USB cable:** stock `1.24.0` sets `persist.sys.usb.config=mtp,adb`
-     and `persist.fuse_sdcard=true`. Test whether Android 6's `MtpService` automatically exposes
-     `/sdcard` over USB without a screen tap on fresh OOBE (no lock screen). If so, the probe app
-     can write `services.jar` + `FIEMAP` metadata to `/sdcard/Glassworks/stock-backup.bin`, letting
-     Kiln read it directly over WebUSB MTP (macOS/Linux) or the file picker (Windows) with **zero
-     Wi-Fi swapping and zero HTTPS→HTTP mixed content**.
-   - **Fallback if MTP stays locked until tapped:** test pre-saving the user's home Wi-Fi in Stage 1
-     `userdata` + `enable_wifi` marker to see if stock joins home Wi-Fi cleanly instead of
-     `mirror-<serial>` SoftAP.
+   - **MTP over the existing micro-USB cable — ruled out (2026-11-25, verified):** stock `1.24.0`
+     sets `persist.sys.usb.config=mtp,adb` and `persist.fuse_sdcard=true`, and `MtpService` starts
+     when `device_provisioned=1`, but `UsbDeviceManager` keeps `mUsbDataUnlocked=false` until a
+     screen tap, so `GetStorageIDs` returns **0 storages** on untouched stock OOBE.
+   - **Home Wi-Fi fallback (untested):** pre-saving the user's home Wi-Fi in Stage 1 `userdata` +
+     `enable_wifi` marker to see if stock joins home Wi-Fi cleanly instead of `mirror-<serial>`
+     SoftAP (still untested on stock `1.24.0`).
    - **Stock-in-place viability — verified (2026-11-25):** `/system/framework/oat/arm64/services.odex`
      is absent (2026-11-24), and the live Track A run on the dev Mirror answered the rest. (a) `pm
      disable-user` throws `SecurityException` as `shell`, but **`pm hide` works on all 8 lululemon

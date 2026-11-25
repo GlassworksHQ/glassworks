@@ -48,7 +48,7 @@ export function patchStockServicesJar(
   adbKey: string,
   options: { enableDeviceOwner?: boolean } = {},
 ): Promise<PatchedServicesJar> {
-  return patchStockServicesJarCore(jar, adbKey, { enableDeviceOwner: false, ...options });
+  return patchStockServicesJarCore(jar, adbKey, { ...options, enableDeviceOwner: options.enableDeviceOwner ?? false });
 }
 
 export const STOCK_POST_BOOT_PATH = '/system/etc/init.qcom.post_boot.sh';

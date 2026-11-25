@@ -74,16 +74,28 @@ describe('silent updates on the Mirror, read back (#422)', () => {
       .toEqual({ state: 'normal-app', privileged: false });
   });
 
-  it('isDeviceOwner reads the Device Owner block from dumpsys device_policy', () => {
+  it('isDeviceOwner reads the Device Owner block from dumpsys device_policy and stops before Profile Owner', () => {
     expect(isDeviceOwner(deviceOwnerDump(PKG), PKG)).toBe(true);
     expect(isDeviceOwner(deviceOwnerDump('com.other.app'), PKG)).toBe(false);
     expect(isDeviceOwner('Current Device Policy Manager state:\n  Enabled Device Admins (User 0):\n', PKG)).toBe(false);
     expect(isDeviceOwner('', PKG)).toBe(false);
+    const otherDoOurPo = [
+      'Current Device Policy Manager state:',
+      '  Device Owner:',
+      '    admin=ComponentInfo{com.other.app/com.other.Admin}',
+      '    package=com.other.app',
+      '  Profile Owner (User 10):',
+      `    admin=ComponentInfo{${PKG}/dev.glassworks.AdminReceiver}`,
+      `    package=${PKG}`,
+    ].join('\n');
+    expect(isDeviceOwner(otherDoOurPo, PKG)).toBe(false);
+    expect(parseMirrorUpdates(packageDump(PKG, 600), PKG, otherDoOurPo))
+      .toEqual({ state: 'normal-app', privileged: false });
   });
 
   it('describeMirrorUpdates names the Device Owner path', () => {
     const u = parseMirrorUpdates(packageDump(PKG, 600), PKG, deviceOwnerDump(PKG));
-    expect(describeMirrorUpdates(u)).toBe('silent updates: on (Device Owner, Device Owner)');
+    expect(describeMirrorUpdates(u)).toBe('silent updates: on (Device Owner)');
   });
 
   it('readMirrorUpdates reads dumpsys device_policy and reports a Device Owner as on', async () => {
@@ -98,6 +110,21 @@ describe('silent updates on the Mirror, read back (#422)', () => {
     // device_policy read failing is best-effort: fall back to the package dump's answer
     const noPolicy: PanelShell = { push: async () => {}, run: async (cmd) => (cmd.startsWith('dumpsys device_policy') ? { out: '', code: 1 } : { out: packageDump(PKG, 600), code: 0 }) };
     expect(await readMirrorUpdates(noPolicy)).toEqual({ state: 'normal-app', privileged: false });
+    // cancellation during device_policy read propagates as unknown instead of falling back
+    const ac = new AbortController();
+    const abortOnPolicy: PanelShell = {
+      push: async () => {},
+      run: async (cmd, signal) => {
+        if (cmd.startsWith('dumpsys device_policy')) {
+          ac.abort();
+          throw new Error('aborted during policy read');
+        }
+        expect(signal).toBe(ac.signal);
+        return { out: packageDump(PKG, 600), code: 0 };
+      },
+    };
+    expect(await readMirrorUpdates(abortOnPolicy, undefined, ac.signal))
+      .toEqual({ state: 'unknown', detail: 'aborted during policy read' });
   });
 
   it('the first boot after the fastboot install reads it back, and logs what it read', async () => {

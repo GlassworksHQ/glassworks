@@ -14,7 +14,7 @@ import {
   buildSurgicalSparseImage, decodeStockBundle, encodeStockBundle, hideStockBloat, patchStockServicesJar,
   unhideStockBloat, type FiemapExtent,
 } from '../src';
-import { GLASS_PANES_KEY_FINGERPRINT } from '../src/services';
+import { GLASS_PANES_KEY_FINGERPRINT, adbFingerprint } from '../src/services';
 import { fakeAdbKey } from './fakes';
 
 // ---------------------------------------------------------------------------
@@ -234,11 +234,17 @@ describe('buildSurgicalSparseImage', () => {
 // ---------------------------------------------------------------------------
 
 describe('patchStockServicesJar', () => {
-  it('refuses the published Glass Panes project key', async () => {
-    // a 524-byte key whose fingerprint we force to equal the published one is rejected either way;
-    // here we check the explicit refusal path via a key that is not it, then the guard message shape.
+  it('refuses a key matching the forbidden Glass Panes fingerprint', async () => {
+    const key = fakeAdbKey(0x52, 'published@glasspanes');
     const jar = new Uint8Array(64); // never reached: key validation happens first
-    await expect(patchStockServicesJar(jar, 'not a key')).rejects.toThrow();
+    await expect(
+      patchStockServicesJar(jar, key, { forbiddenFingerprint: adbFingerprint(key) }),
+    ).rejects.toThrow(/Glass Panes project key/);
+  });
+
+  it('refuses a malformed adb key', async () => {
+    const jar = new Uint8Array(64);
+    await expect(patchStockServicesJar(jar, 'not a key')).rejects.toThrow(/adb key/i);
   });
 
   it.skipIf(!HAS_D8)('keeps the exact byte length, authorizes only our key, and applies both Device Owner fixes', async () => {
@@ -408,5 +414,11 @@ describe('hideStockBloat / unhideStockBloat', () => {
     const watchdog = res.find((r) => r.pkg === 'com.mirror.watchdog')!;
     expect(watchdog.ok).toBe(false);
     expect(res.filter((r) => r.pkg !== 'com.mirror.watchdog').every((r) => r.ok)).toBe(true);
+  });
+
+  it('validates all package names before issuing any pm command', async () => {
+    const p = new HideFake();
+    await expect(hideStockBloat(p, ['com.mirror.watchdog', 'bad; id'])).rejects.toThrow(/invalid Android package name/);
+    expect(p.cmds).toEqual([]);
   });
 });

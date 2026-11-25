@@ -612,13 +612,15 @@ export interface PatchStockServicesJarOptions {
    * The Node surgical-ADB tool passes `false` explicitly to keep its USB-ADB-only behavior.
    */
   enableDeviceOwner?: boolean;
+  /** MD5 fingerprint to refuse (defaults to `GLASS_PANES_KEY_FINGERPRINT`). */
+  forbiddenFingerprint?: string;
 }
 
 /** Validates an adb_keys line and returns its Android-6 MD5 fingerprint, refusing the Glass Panes key. */
-function stockKeyFingerprint(adbKey: string): string {
-  const lines = adbKeyLines(adbKey); // throws on a published/forbidden key or a malformed line
+function stockKeyFingerprint(adbKey: string, forbiddenFingerprint = GLASS_PANES_KEY_FINGERPRINT): string {
+  const lines = adbKeyLines(adbKey, [forbiddenFingerprint]); // throws on a published/forbidden key or a malformed line
   const fp = adbFingerprint(lines[0]!);
-  if (fp === GLASS_PANES_KEY_FINGERPRINT) {
+  if (fp === forbiddenFingerprint) {
     throw new Error('refusing to patch services.jar with the published Glass Panes project key');
   }
   return fp;
@@ -643,7 +645,7 @@ export async function patchStockServicesJar(
   options: PatchStockServicesJarOptions = {},
 ): Promise<PatchedServicesJar> {
   const enableDeviceOwner = options.enableDeviceOwner ?? true;
-  const fp = stockKeyFingerprint(adbKey);
+  const fp = stockKeyFingerprint(adbKey, options.forbiddenFingerprint);
 
   const { list } = parseZipEntries(jar);
   const dexEntries = list.filter((e) => /^classes\d*\.dex$/.test(e.name));
@@ -917,7 +919,8 @@ export async function decodeStockBundle(bytes: Uint8Array): Promise<DecodedStock
   } catch (err) {
     throw new Error(`stock bundle metadata is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
   }
-  const servicesJar = bytes.slice(BUNDLE_HEADER_BYTES + metaLen);
+  // Owned copy before hashing so Node Buffer views cannot mutate caller memory under us.
+  const servicesJar = Uint8Array.from(bytes.subarray(BUNDLE_HEADER_BYTES + metaLen));
   const actual = await sha256Hex(servicesJar);
   if (typeof meta.jarSha256 !== 'string' || meta.jarSha256 !== actual) {
     throw new Error(`stock bundle services.jar SHA-256 ${actual} does not match metadata ${meta.jarSha256 ?? '(absent)'}`);
@@ -928,6 +931,8 @@ export async function decodeStockBundle(bytes: Uint8Array): Promise<DecodedStock
 // ---------------------------------------------------------------------------
 // Hiding / unhiding the stock lululemon packages
 // ---------------------------------------------------------------------------
+
+const ANDROID_PACKAGE_RE = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/;
 
 export interface StockBloatChange {
   pkg: string;
@@ -952,6 +957,11 @@ export async function unhideStockBloat(p: PanelShell, packages: readonly string[
 }
 
 async function setHidden(p: PanelShell, packages: readonly string[], hide: boolean): Promise<StockBloatChange[]> {
+  for (const pkg of packages) {
+    if (!ANDROID_PACKAGE_RE.test(pkg)) {
+      throw new Error(`invalid Android package name: "${pkg}"`);
+    }
+  }
   const verb = hide ? 'hide' : 'unhide';
   const out: StockBloatChange[] = [];
   for (const pkg of packages) {

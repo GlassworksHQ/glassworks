@@ -24,7 +24,9 @@ export type MirrorUpdates =
 export function isDeviceOwner(policyDump: string, pkg: string): boolean {
   const i = policyDump.indexOf('Device Owner');
   if (i < 0) return false;
-  const block = policyDump.slice(i, i + 500);
+  const profileOwner = policyDump.indexOf('Profile Owner', i);
+  const end = profileOwner >= 0 ? Math.min(profileOwner, i + 500) : i + 500;
+  const block = policyDump.slice(i, end);
   const esc = pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(?:ComponentInfo\\{|package=)${esc}(?:[/\\s]|$)`).test(block);
 }
@@ -62,7 +64,10 @@ export async function readMirrorUpdates(p: PanelShell, app: MirrorApp = GLASSWOR
     try {
       const pol = await p.run('dumpsys device_policy', signal);
       if (pol.code === 0) policyDump = pol.out;
-    } catch { /* best-effort: no device_policy read */ }
+    } catch (e) {
+      if (signal?.aborted || (e instanceof Error && e.name === 'AbortError')) throw e;
+      /* best-effort: no device_policy read */
+    }
     return parseMirrorUpdates(r.out, app.package, policyDump);
   } catch (e) {
     return { state: 'unknown', detail: (e as Error).message };
@@ -72,7 +77,8 @@ export async function readMirrorUpdates(p: PanelShell, app: MirrorApp = GLASSWOR
 /** The technical log's line. */
 export function describeMirrorUpdates(u: MirrorUpdates): string {
   if (u.state === 'unknown') return `silent updates: not read back (${u.detail})`;
-  const how = u.deviceOwner ? 'Device Owner' : u.privileged ? 'privileged system app' : 'not privileged';
-  const perm = u.deviceOwner ? 'Device Owner' : `INSTALL_PACKAGES ${u.state === 'on' ? 'granted' : 'not granted'}`;
+  if (u.deviceOwner) return 'silent updates: on (Device Owner)';
+  const how = u.privileged ? 'privileged system app' : 'not privileged';
+  const perm = `INSTALL_PACKAGES ${u.state === 'on' ? 'granted' : 'not granted'}`;
   return `silent updates: ${u.state === 'on' ? 'on' : 'off'} (${how}, ${perm})`;
 }
