@@ -245,7 +245,8 @@ class HaDashboardClientTest {
         assertFalse(c.currentUser.getBoolean("is_admin"))
         assertEquals(JSONObject().toString(), newClient().currentUser.toString()) // empty until it arrives
         assertEquals(1, server.commands("auth/current_user").size)
-        // The page hears of it, so islands whose pages stay get the user as it arrives.
+        // The page hears of it, so islands whose pages stay get the user as it arrives (just after it's stored).
+        awaitCondition("the listener heard of the user") { listener.users.isNotEmpty() }
         assertEquals(listOf("u1"), listener.users.map { it.optString("id") })
     }
 
