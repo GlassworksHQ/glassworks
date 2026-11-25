@@ -262,7 +262,8 @@ class CssSelector private constructor(
                     continue
                 }
                 if (c == '>' || c == '+' || c == '~') {
-                    if (parts.isEmpty()) return null
+                    // A second explicit combinator before the next compound (`div > > p`) is invalid CSS.
+                    if (parts.isEmpty() || pendingComb != null && pendingComb != ' ') return null
                     pendingComb = c
                     i++
                     continue
@@ -920,11 +921,11 @@ object MdCascade {
             val fallback = if (hasComma) value.substring(fbStart, j.coerceAtMost(value.length)).trim() else null
             val name = m.groupValues[1]
             val found = custom[name] ?: themeVars[name] ?: HA_DEFAULT_VARS[name]
-            val sub = when {
-                found != null -> resolveVars(found, custom, themeVars, depth + 1)
-                fallback != null -> resolveVars(fallback, custom, themeVars, depth + 1)
-                else -> null
-            } ?: return null
+            // A property that exists but is invalid (it needs one defined nowhere) is as good as missing: the
+            // fallback is tried. An empty but valid value stays.
+            val sub = found?.let { resolveVars(it, custom, themeVars, depth + 1) }
+                ?: fallback?.let { resolveVars(it, custom, themeVars, depth + 1) }
+                ?: return null
             sb.append(sub)
             i = j + 1
         }

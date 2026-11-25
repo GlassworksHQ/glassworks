@@ -57,6 +57,7 @@ object MarkedLite {
     private val ATX = Regex("""^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$""")
     private val HR = Regex("""^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$""")
     private val SETEXT = Regex("""^ {0,3}(=+|-+)[ \t]*$""")
+    private val ESCAPED_PUNCT = Regex("""\\([!-/:-@\[-`{-~])""")
     private val FENCE = Regex("""^( {0,3})(`{3,}|~{3,})(.*)$""")
     private val QUOTE = Regex("""^ {0,3}> ?(.*)$""")
     private val BULLET = Regex("""^( {0,3})([-*+])( +|$)(.*)$""")
@@ -93,6 +94,13 @@ object MarkedLite {
     }
 
     /** True when [line] ends the paragraph above it (CommonMark's interrupting blocks). */
+    /** How many leading characters make [line] an indented code line (four spaces, or a tab), or null. */
+    private fun codeIndent(line: String): Int? = when {
+        line.startsWith("    ") -> 4
+        line.startsWith("\t") -> 1
+        else -> null
+    }
+
     private fun interruptsParagraph(line: String): Boolean =
         ATX.matches(line) || HR.matches(line) || FENCE.matches(line) || QUOTE.matches(line) ||
             htmlBlockKind(line, canBe7 = false) != 0 ||
@@ -105,6 +113,21 @@ object MarkedLite {
         while (i < n) {
             val line = lines[i]
             if (isBlank(line)) { i++; continue }
+
+            // An indented code block (four spaces or a tab): literal text, as marked reads it. It can't interrupt a
+            // paragraph, so it's only checked where a block starts.
+            if (codeIndent(line) != null) {
+                val body = ArrayList<String>()
+                var j = i
+                while (j < n && (isBlank(lines[j]) || codeIndent(lines[j]) != null)) {
+                    body += if (isBlank(lines[j])) "" else lines[j].substring(codeIndent(lines[j])!!)
+                    j++
+                }
+                while (body.isNotEmpty() && body.last().isEmpty()) body.removeAt(body.lastIndex)
+                out.append("<pre><code>").append(escapeText(body.joinToString("\n") + "\n")).append("</code></pre>\n")
+                i = j
+                continue
+            }
 
             val fence = FENCE.find(line)
             if (fence != null && (fence.groupValues[2][0] == '~' || '`' !in fence.groupValues[3])) {
@@ -358,8 +381,17 @@ object MarkedLite {
                     var run = 0
                     while (i + run < to && s[i + run] == '`') run++
                     val ticks = "`".repeat(run)
-                    var close = s.indexOf(ticks, i + run)
-                    while (close in 0 until to && close + run < to && s[close + run] == '`') close = s.indexOf(ticks, close + run + 1)
+                    // The closer is a whole run of exactly as many backticks: a longer run is skipped as a whole.
+                    var close = -1
+                    var k = i + run
+                    while (k < to) {
+                        val p = s.indexOf('`', k)
+                        if (p < 0 || p >= to) break
+                        var len = 0
+                        while (p + len < to && s[p + len] == '`') len++
+                        if (len == run) { close = p; break }
+                        k = p + len
+                    }
                     if (close in 0 until to) {
                         var code = s.substring(i + run, close).replace('\n', ' ')
                         if (code.length > 2 && code.startsWith(" ") && code.endsWith(" ") && code.isNotBlank()) code = code.substring(1, code.length - 1)
@@ -511,7 +543,9 @@ object MarkedLite {
         }
         if (close < 0) return null
         val dest = s.substring(j + 2, close).trim()
-        val url = if (dest.startsWith("<") && ">" in dest) dest.substring(1, dest.indexOf('>')) else dest.substringBefore(' ')
+        val raw = if (dest.startsWith("<") && ">" in dest) dest.substring(1, dest.indexOf('>')) else dest.substringBefore(' ')
+        // Backslash escapes of punctuation come off (`plan\(v2\).png` is `plan(v2).png`), as marked does.
+        val url = ESCAPED_PUNCT.replace(raw, "$1")
         return Link(open + 1, j, url, close + 1)
     }
 

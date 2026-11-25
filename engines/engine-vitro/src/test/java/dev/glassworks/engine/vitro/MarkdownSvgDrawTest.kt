@@ -52,6 +52,27 @@ class MarkdownSvgDrawTest {
     }
 
     @Test
+    fun aShapesOpacityCoversItsFillAndStrokeTogether() {
+        // A black square with a black stroke at 50%: one even grey, no darker band where the stroke meets the fill.
+        val bmp = draw("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>" +
+            "<rect x='20' y='20' width='60' height='60' fill='#000' stroke='#000' stroke-width='10' opacity='0.5'/></svg>")
+        val inside = Color.red(bmp.getPixel(50, 50))
+        val onTheEdge = Color.red(bmp.getPixel(20, 50))
+        assertTrue("inside $inside", inside in 120..135)
+        assertEquals(inside.toFloat(), onTheEdge.toFloat(), 3f)
+    }
+
+    @Test
+    fun definitionsAreNotDrawnAndTheRootsOpacityCoversTheImage() {
+        val defs = draw("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><rect width='100' height='100' fill='#000'/></defs>" +
+            "<rect x='60' width='40' height='100' fill='#000'/></svg>")
+        assertTrue("an unused <defs> rect isn't painted", Color.red(defs.getPixel(20, 50)) > 250)
+        assertTrue("the rect outside <defs> is", Color.red(defs.getPixel(80, 50)) < 10)
+        val faded = draw("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' opacity='0.5'><rect width='100' height='100' fill='#000'/></svg>")
+        assertTrue(Color.red(faded.getPixel(50, 50)) in 120..135)
+    }
+
+    @Test
     fun aZeroFirstDashKeepsTheLaterDashes() {
         // "0 40 40 20" with a butt cap: the 40-unit dash from 40 to 80 paints.
         val bmp = draw(

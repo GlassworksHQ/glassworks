@@ -96,6 +96,26 @@ class MarkdownEngineTest {
     // ---- marked ----
 
     @Test
+    fun markedReadsIndentedCodeEscapedDestinationsAndWholeBacktickRuns() {
+        // Four spaces at a block's start: literal code, its indentation off; not inside a paragraph.
+        assertEquals("<pre><code>**literal**\n</code></pre>\n", MarkedLite.toHtml("    **literal**"))
+        assertTrue(MarkedLite.toHtml("text\n    **bold**").contains("<strong>bold</strong>"))
+        // Backslash-escaped parentheses in a destination reach the loader as plain ones.
+        assertTrue(MarkedLite.toHtml("![Plan](/local/plan\\(v2\\).png)").contains("src=\"/local/plan(v2).png\""))
+        // `` x ````` y `` : the run of five isn't a closer (nor part of one); the last two ticks are.
+        assertTrue(MarkedLite.toHtml("``a`````b``").contains("<code>a`````b</code>"))
+    }
+
+    @Test
+    fun aDoubleCombinatorIsInvalidAndAnInvalidVariableTakesItsFallback() {
+        assertNull(dev.glassworks.engine.vitro.cards.CssSelector.parse("div > > p"))
+        assertNotNull(dev.glassworks.engine.vitro.cards.CssSelector.parse("div  >  p"))
+        // `--size` needs `--missing`: var(--size, 24px) takes 24px; an empty but valid value stays empty.
+        assertEquals("24px", MdCascade.resolveVars("var(--size, 24px)", mapOf("size" to "var(--missing)"), emptyMap()))
+        assertEquals("", MdCascade.resolveVars("var(--empty, 24px)", mapOf("empty" to ""), emptyMap()))
+    }
+
+    @Test
     fun markedTurnsNewlinesIntoBreaksAndPassesHtmlBlocksThrough() {
         assertEquals("<p>one<br>two</p>\n", MarkedLite.toHtml("one\ntwo"))
         assertEquals("<h2>Title</h2>\n<h6>Small</h6>\n", MarkedLite.toHtml("## Title\n###### Small"))
