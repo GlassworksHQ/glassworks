@@ -9,11 +9,17 @@ import type { RailStep } from '../wizard/state';
 
 export type Chip = { kind: 'ok' | 'work' | 'bad'; text: string };
 
-/** WebUSB needs Chrome or Edge, and a secure page. Known only in the browser. */
+/** Demos run in `next dev` and in a build made with NEXT_PUBLIC_KILN_DEMO=1, as the pages' own do. */
+const demoOn = () => process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
+
+/**
+ * WebUSB needs Chrome or Edge, and a secure page. Known only in the browser. `&browser=no-usb` (where demos run) acts
+ * as a browser without WebUSB, on any page, so its Browser screen can be seen in Chrome.
+ */
 export function useBrowserChip(): Chip | undefined {
   const [chip, setChip] = useState<Chip>();
   useEffect(() => {
-    const usb = 'usb' in navigator;
+    const usb = 'usb' in navigator && !(demoOn() && new URLSearchParams(location.search).get('browser') === 'no-usb');
     setChip(usb && isSecureContext ? { kind: 'ok', text: 'Ready' } : { kind: 'bad', text: usb ? 'Needs HTTPS' : 'Use Chrome or Edge' });
   }, []);
   return chip;
