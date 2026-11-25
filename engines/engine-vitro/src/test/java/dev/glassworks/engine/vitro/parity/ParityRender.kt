@@ -373,10 +373,26 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
             val dash = LovelaceParser.parseDashboard(case.dashboardJson(root))
             view.setDashboard(dash, case.view ?: case.id)
             activity.setContentView(view)
+            // A panel's window shows: what waits for it (a live camera's still) starts, as on the panel.
+            dev.glassworks.engine.vitro.showWindow(activity.window.decorView)
             val w = frame.pxWidth
             var h = frame.pxHeight
             layout(view, w, h)
             settle(view, ref, w, h)
+            // A More Info case (#885): the sheet opens over the view, as a tap on the card opens it, at the panel's size
+            // (HA's dialog is shot in the window as it shows it). Its surface is the one slot.
+            case.moreInfo?.let { id ->
+                view.openMoreInfo(id)
+                settle(view, ref, w, h)
+                val sheet = view.openSheet ?: error("${case.id}: the More Info sheet didn't open")
+                val surface = sheet.surface
+                val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                Canvas(bmp).apply { drawColor(Color.BLACK) }.also { view.draw(it) }
+                val (x, y) = ParityViews.offsetIn(view, surface)
+                val d = frame.density.toDouble()
+                val slot = CssRect(x / d, y / d, surface.width / d, surface.height / d)
+                return VitroRender(bmp, frame.density, listOf(slot), listOf(surface), view, asked.toList(), missing.toList(), http.missing.toList(), ws.unmatched.toList())
+            }
             // Like a full-page screenshot: as tall as the content.
             val scroll = ParityViews.all(view).filterIsInstance<ScrollView>().firstOrNull { it.isShown && it.childCount > 0 }
             // HA's page may run longer than its cards (its view's bottom padding): lay Vitro out as tall, so the

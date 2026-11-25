@@ -101,6 +101,10 @@ Tier 3 never uses `android.webkit.WebView`. Each island is served from `VitroIsl
 
 Each island card gets one GeckoView page, which stays open only while the card is on the dashboard. A reconnect, a dashboard edit to other cards and a theme change all keep the page, and a new theme restyles it in place. When the card's own config changes or the card is removed, its page closes. Islands on a view that isn't on screen, or under one of Home Assistant's own pages, stop drawing until their view comes back.
 
+An island stays connected to the app for as long as its card is on the dashboard, also while its view is hidden. The app pings it every 30 seconds, and the browser answers on its own, so a quiet card keeps its one connection and isn't sent the whole state again.
+
+Many cards keep small things in the browser's `localStorage`, such as a snoozed row, a collapsed section or the selected tab. Every island shares one address on the panel, which stays the same from one app start to the next, so what a card stores there is still there after a restart. An island also starts from what Home Assistant's own web page keeps on this panel: whenever that page runs, the app keeps a copy of its storage (never sign-in tokens or anything else named like a credential), and each island takes it in before its card loads. A value Home Assistant's page changed since wins, and a value only the card changed in the island stays. It goes one way: what a card changes in an island doesn't reach Home Assistant's web page. Another app holding that address at start moves the islands to a new one, where their storage starts again from Home Assistant's copy.
+
 Non-dashboard pages, such as `/auth/authorize` for panel sign-in, history, settings or the Blueprint import dialog, are handed to the wrapped fallback `Engine`, which loads them from Home Assistant itself. Their WebSocket and sign-in work as they do with Vitro off.
 
 The way back from such a page always leads to the native dashboard:
@@ -146,7 +150,7 @@ The island server only serves islands. Its proxy forwards what a card loads (`/a
 | `sensor`, `history-graph`, `statistics-graph` | Yes | See [Graphs](#rendering-like-home-assistant-does) |
 | `weather-forecast` | Yes | Current conditions and the daily, hourly and twice-daily forecasts |
 | `clock`, `markdown` | Yes | A few Markdown tags draw nothing (see [What Vitro draws natively](#what-vitro-draws-natively)) |
-| `picture`, `picture-entity`, `picture-glance` | Yes | With `camera_view: live`, a camera plays the way Home Assistant's player picks its stream: WebRTC, then HLS, then MJPEG, moving down the list when one fails, and showing stills when none plays. WebRTC isn't played yet, so a camera that offers it plays HLS. Up to four cameras play video at once; any others play MJPEG until one stops. The cards' frame is compared with HA, the video itself isn't |
+| `picture`, `picture-entity`, `picture-glance` | Yes | With `camera_view: live`, a camera plays the way Home Assistant's player picks its stream: WebRTC, then HLS, then MJPEG, moving down the list when one fails, and showing stills when none plays. See [WebRTC cameras](#webrtc-cameras). Up to four cameras play video at once; any others play MJPEG until one stops. The cards' frame is compared with HA, the video itself isn't |
 | `picture-elements` | Yes | State icons, labels and badges, icons and service buttons. `conditional` and `image` elements are left out |
 | `media-control` | Yes | |
 | `todo-list`, `calendar`, `logbook` | Yes | Read live from Home Assistant, as its own cards read them. The calendar has its month grid and its list views |
@@ -175,15 +179,19 @@ To check a dashboard before you turn Vitro on, paste it into the [compatibility 
 
 ## More-Info dialogs
 
-Tapping or holding a tile opens a native More-Info dialog styled after Home Assistant 2026, with no web view involved:
+Tapping or holding a tile opens a native More-Info dialog styled after Home Assistant 2026, with no web view involved.
+Like Home Assistant's, it's a centered dialog 580 px wide when the screen is wider than 870 px and taller than 500 px
+(the Pixel Tablet), and a bottom sheet as wide as the screen otherwise (the S1 Plus, the Mirror). It draws on the
+dialog color of your own theme, never on the view's theme, so a view with see-through cards still gets a solid dialog.
+Its title names the entity on two lines, as Home Assistant does: the area and device over the entity's own name.
 
 | Entity | Dialog |
 |---|---|
 | Light | Brightness dimmer, an HSV color wheel, a Kelvin color-temperature picker, and color swatches |
 | Climate | A circular thermostat dial with mode buttons, and two thumbs for a heat/cool range |
 | Cover | A top-down position slider |
-| Sensor | A 24-hour stepped history graph |
-| Camera | A live stream, chosen as on the picture cards (HLS or MJPEG for now) |
+| Sensor | Its icon, name, last change and state, then the last 24 hours: Home Assistant's 5-minute statistics for a sensor with a state class ("5-minute aggregated"), its state history otherwise, and "Show more", which opens the history page in Home Assistant's frontend (Back returns to the dashboard) |
+| Camera | A live stream, chosen as on the picture cards (WebRTC, then HLS and MJPEG) |
 | Switch | A toggle pill |
 | Alarm panel | A PIN pad |
 
@@ -349,10 +357,26 @@ Islands load from a small web server inside the app, `VitroIslandServer`. It is 
 
 Vitro sits behind the same `Engine` interface as the GeckoView engine, and hands anything it can't draw to the engine it wraps. Today that fallback is GeckoView. The seam is deliberate: when a lighter web-component engine such as Servo or a purpose-built VitroView is ready, it can replace GeckoView for Tier 3 and for the fallback without touching the native tiers or the panes.
 
+## WebRTC cameras
+
+Cameras play over WebRTC the way Home Assistant's own `ha-web-rtc-player` does, through HA's `camera/webrtc`
+WebSocket API, with candidates trickled both ways and libwebrtc decoding the picture (hardware H.264 where the
+device has it). The player is the [ha-webrtc](../../libs/ha-webrtc/README.md) library. Its Vitro side lives in its
+own module, `engines/engine-vitro-webrtc`, which registers the `WEB_RTC` player with Vitro's camera seam
+(`camera/CameraStream.kt`) when an app calls `VitroWebRtc.register()`.
+
+It's a module of its own because libwebrtc is big, adding about 4.6 MB to an `armeabi-v7a` APK and 6.3 MB to an
+`arm64-v8a` one, so an app chooses to carry it. The S1 app and Glassworks for generic Android both do.
+
+On Vitro, the player is muted, letterboxed in a view the card sizes to the picture, and closes its connection as
+soon as it's paused (a hidden view, or HA's page in front), as the HLS player does. It reconnects when a connection
+that was playing drops, and gives up after 20 seconds without video, so the stream choice falls back to HLS.
+
 ## Modules & testing
 
 ```sh
 ./gradlew :engine-vitro:testDebugUnitTest
+./gradlew :engine-vitro-webrtc:testDebugUnitTest :ha-webrtc:testDebugUnitTest   # WebRTC cameras
 ./gradlew :vitro-test:assembleDebug
 ./gradlew test :kiosk:assembleDebug :generic-android:assembleDebug
 python3 -m unittest tools/vitro/test_showcase_ha.py   # the parity showcase server

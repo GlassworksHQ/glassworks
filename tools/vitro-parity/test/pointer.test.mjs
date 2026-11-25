@@ -14,5 +14,8 @@ test('a touch panel keeps its coarse pointer and one layout for the PNG, slots a
   assert.equal(captureMode({ touch: true, docHeight: 584, viewportHeight: 480, slots: [...card, { x: 0, y: 380, w: 200, h: 100, fixed: true }] }), 'pinned');
   // Pinned but fitting: nothing grows, so the pointer stays coarse.
   assert.equal(captureMode({ touch: true, docHeight: 480, viewportHeight: 480, slots: [{ x: 0, y: 380, w: 200, h: 100, fixed: true }] }), 'touch');
-  assert.deepEqual(['mouse', 'touch', 'grow', 'pinned'].map(capturedWithTouch), [false, true, true, false]);
+  assert.deepEqual(['mouse', 'touch', 'grow', 'pinned', 'dialog', 'dialog-touch'].map(capturedWithTouch), [false, true, true, false, false, true]);
+  // An open More Info dialog is shot in the window as it is, however tall the page behind it (#885).
+  assert.equal(captureMode({ touch: true, docHeight: 584, viewportHeight: 480, slots: card, dialog: true }), 'dialog-touch');
+  assert.equal(captureMode({ touch: false, docHeight: 2000, viewportHeight: 1280, slots: card, dialog: true }), 'dialog');
 });

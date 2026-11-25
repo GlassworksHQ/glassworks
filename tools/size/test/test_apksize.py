@@ -106,6 +106,17 @@ class Owners(unittest.TestCase):
         self.assertEqual(r["engine:vitro"]["total"], 10)
         self.assertEqual(A.label("engine:vitro"), "Engine (Vitro)")
 
+    def test_vitro_carries_libwebrtc(self):
+        """Vitro's WebRTC cameras (libs/ha-webrtc, engines/engine-vitro-webrtc): libwebrtc's classes, the library's and
+        its native library count in Vitro's row, not core's."""
+        lint = []
+        self.assertEqual(A.owner_of_file("lib/arm64-v8a/liblkjingle_peerconnection_so.so", PARTS, lint),
+                         (("engine", "vitro"), "native"))
+        self.assertEqual(lint, [])
+        for cls in ("livekit.org.webrtc.PeerConnection", "dev.glassworks.hawebrtc.HaWebRtcPlayer",
+                    "dev.glassworks.engine.vitro.webrtc.VitroWebRtc"):
+            self.assertEqual(A.owner_of_class(cls, PARTS), ("engine", "vitro"))
+
     def test_a_panes_classes_outside_its_package(self):
         """The verifier's note 6: classes only a pane uses, outside its package, are that pane's."""
         for name in ("dev.glassworks.VoiceOverlay", "dev.glassworks.VoiceOverlay$show$1",

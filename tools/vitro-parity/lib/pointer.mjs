@@ -14,8 +14,12 @@
  * - `pinned`: the same, but a card is pinned (`position: fixed`), so its place depends on the window: growing it
  *   would move the card away from where the panel shows it. Such a page is taken the usual way, with a fine pointer,
  *   and its reference says so (`touch` absent), so Vitro draws it with a fine pointer too.
+ * - `dialog` and `dialog-touch`: an open More Info dialog ([dialog], #885). It sits in the window whatever the page's
+ *   height, and its size follows the window's (HA's bottom sheet is `100vh` less 48 px), so it is shot as the window
+ *   shows it: never grown and never a full-page screenshot. `dialog-touch` keeps the touch panel's coarse pointer.
  */
-export function captureMode({ touch, docHeight, viewportHeight, slots }) {
+export function captureMode({ touch, docHeight, viewportHeight, slots, dialog }) {
+  if (dialog) return touch ? 'dialog-touch' : 'dialog';
   if (!touch) return 'mouse';
   if (docHeight <= viewportHeight) return 'touch';
   if ((slots || []).some((s) => s.fixed)) return 'pinned';
@@ -23,4 +27,4 @@ export function captureMode({ touch, docHeight, viewportHeight, slots }) {
 }
 
 /** Whether a page captured in [mode] had HA's coarse pointer (the reference's `viewport.touch`). */
-export const capturedWithTouch = (mode) => mode === 'touch' || mode === 'grow';
+export const capturedWithTouch = (mode) => mode === 'touch' || mode === 'grow' || mode === 'dialog-touch';

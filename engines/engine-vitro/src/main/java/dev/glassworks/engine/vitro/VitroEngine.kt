@@ -50,6 +50,7 @@ import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.VitroMetrics
 import dev.glassworks.engine.vitro.ui.VitroView
+import dev.glassworks.web.HaPageStorage
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -90,17 +91,39 @@ class VitroEngine(
     /** How Clarity's harness reaches its fake Home Assistant ([VitroClarity]); tests give one that touches no network. */
     internal var clarityHttp: ClarityHttp = ClarityHttp.Loopback
 
+    /** The app, once Vitro has seen it: where the island server keeps its port ([islandPort]). */
+    @Volatile private var appContext: Context? = null
+
+    /**
+     * The island server's port between app starts, in the app's preferences: the islands keep one origin, and the
+     * storage their cards keep there (#881). Before Vitro has seen the app, nothing is kept (a new port).
+     */
+    private val islandPort = object : VitroIslandServer.PortMemory {
+        private fun prefs() = appContext?.getSharedPreferences(ISLAND_PREFS, Context.MODE_PRIVATE)
+        override fun load(): Int = prefs()?.getInt(ISLAND_PORT, 0) ?: 0
+        override fun save(port: Int) { prefs()?.edit()?.putInt(ISLAND_PORT, port)?.apply() }
+    }
+
     val islandServer: VitroIslandServer = VitroIslandServer(
         session = { activePage?.islandSession() ?: (null to null) },
         log = { msg -> Log.d(logTag, "island: ${forLog(msg)}") },
         resources = { activePage?.resourceUrls().orEmpty() },
+        portMemory = islandPort,
     )
 
     /**
      * The island server's loopback origin, started now: the second origin a locked-down [fallback] lets pages load
      * (`EngineSettings.localOrigin`), for the islands alone. Home Assistant's own pages load from Home Assistant.
+     * With [context], on the port it had last time.
      */
-    fun islandOrigin(): String = islandServer.ensureStarted()
+    fun islandOrigin(context: Context? = null): String {
+        context?.let(::seeApp)
+        return islandServer.ensureStarted()
+    }
+
+    private fun seeApp(context: Context) {
+        if (appContext == null) appContext = context.applicationContext
+    }
     @Volatile private var startedSettings: EngineSettings? = null
     @Volatile var lastMetrics: VitroMetrics = VitroMetrics()
         private set
@@ -117,6 +140,7 @@ class VitroEngine(
     override fun isContentProcess(processName: String): Boolean = fallback.isContentProcess(processName)
 
     override fun open(activity: Activity, host: PageHost, background: Int): Page {
+        seeApp(activity)
         val useVitro = activeInProcess ?: enabled(activity.applicationContext).also { activeInProcess = it }
         if (!useVitro) return fallback.open(activity, host, background)
 
@@ -630,6 +654,7 @@ class VitroEngine(
                             ?.also { if (fallbackInFront()) hideIslandSurfaces(it.view) }
                     },
                     touch = touchScreen,
+                    pageStorage = { HaPageStorage.of(activity).items(haBase.ifEmpty { null }) },
                 )
             }
             main.post { host.onConnect(port) }
@@ -1005,7 +1030,10 @@ class VitroEngine(
 
             override fun onConnected(haVersion: String) {
                 Log.i(logTag, "Connected to Home Assistant $haVersion over native WebSocket")
-                post { vitroView.setConnectionBanner(null) }
+                post {
+                    vitroView.setConnectionBanner(null)
+                    vitroView.connectionRestored()
+                }
             }
 
             override fun onAuthRequired() {
@@ -1154,6 +1182,10 @@ class VitroEngine(
 
     companion object {
         const val VERSION_NAME = "Vitro 0.0.1 (experimental)"
+
+        /** The preferences that keep the island server's port, and its key ([islandPort]). */
+        private const val ISLAND_PREFS = "vitro_island"
+        private const val ISLAND_PORT = "port"
 
         /** How long a view's first build waits for its first states. */
         private const val FIRST_STATES_WAIT_MS = 1_000L

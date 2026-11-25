@@ -383,9 +383,55 @@ const TEXTS_JS = (slot) => {
       }
     }
   };
-  walk(document.body);
+  // A More Info case (#885) reads the dialog's own text only: the card under its scrim isn't in the reference.
+  if (slot.scope === 'more-info') {
+    const find = (root) => { for (const e of root.querySelectorAll('*')) { if (e.localName === 'ha-more-info-dialog') return e; if (e.shadowRoot) { const f = find(e.shadowRoot); if (f) return f; } } return null; };
+    const dialog = find(document);
+    if (dialog && dialog.shadowRoot) walk(dialog.shadowRoot);
+  } else {
+    walk(document.body);
+  }
   return out.slice(0, 300);
 };
+
+/**
+ * Runs in the page: the open More Info dialog's surface (document px), as a slot: HA's `<dialog>` inside its wa-dialog
+ * (a centred dialog) or wa-drawer (a bottom sheet), whichever `ha-adaptive-dialog` chose for the window. Null while
+ * none is open.
+ */
+const DIALOG_JS = () => {
+  const find = (root, name) => {
+    for (const e of root.querySelectorAll('*')) {
+      if (e.localName === name) return e;
+      if (e.shadowRoot) { const f = find(e.shadowRoot, name); if (f) return f; }
+    }
+    return null;
+  };
+  const mi = find(document, 'ha-more-info-dialog');
+  if (!mi || !mi.shadowRoot || !find(mi.shadowRoot, 'ha-more-info-info')) return null;
+  for (const host of ['wa-dialog', 'wa-drawer']) {
+    const w = find(mi.shadowRoot, host);
+    const d = w && w.shadowRoot && w.shadowRoot.querySelector('dialog');
+    if (!d) continue;
+    const r = d.getBoundingClientRect();
+    if (r.width >= 1 && r.height >= 1) return { x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height, type: 'ha-more-info-dialog', mode: host === 'wa-drawer' ? 'bottom-sheet' : 'dialog' };
+  }
+  return null;
+};
+
+/** Opens HA's More Info dialog for [entityId], as a card's tap does (`hass-more-info`), and waits for its surface. */
+async function openMoreInfo(page, entityId) {
+  if (await page.evaluate(DIALOG_JS)) return;
+  await page.evaluate((id) => {
+    document.querySelector('home-assistant').dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId: id }, bubbles: true, composed: true }));
+  }, entityId);
+  const t0 = Date.now();
+  while (Date.now() - t0 < 10000) {
+    if (await page.evaluate(DIALOG_JS)) return;
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`HA's More Info dialog for ${entityId} didn't open`);
+}
 
 /**
  * Follows HA's subscribe_entities stream on the page's own socket, so the states are exactly what it drew, and
@@ -683,6 +729,8 @@ async function restoreWindow(page) {
  */
 async function captureShot(page, mode, opts) {
   if (mode === 'mouse' || mode === 'pinned') return page.screenshot({ ...opts, fullPage: true });
+  // An open dialog: the window as it shows it, never a full page (lib/pointer.mjs).
+  if (mode === 'dialog') return page.screenshot(opts);
   if (!(await page.evaluate(() => matchMedia('(pointer: coarse)').matches))) {
     throw new Error('a touch frame\'s page lost its coarse pointer: HA would draw it for a mouse');
   }
@@ -716,7 +764,7 @@ const FREEZE_JS = () => {
   }
 };
 
-async function settle(page, expectType, timeoutMs) {
+async function settle(page, expectType, timeoutMs, plain = false) {
   const t0 = Date.now();
   let info;
   while (Date.now() - t0 < timeoutMs) {
@@ -735,7 +783,8 @@ async function settle(page, expectType, timeoutMs) {
     await page.evaluate(FREEZE_JS);
     // CSS animations, transitions and Web Animations stopped at their end state, so a card that animates despite
     // reduced motion doesn't leave an arbitrary frame (timers and requestAnimationFrame still run).
-    const shot = await fullShot(page, { animations: 'disabled' });
+    // [plain]: the window as it is (an open dialog's size follows the window, which a grown one would change).
+    const shot = plain ? await page.screenshot({ animations: 'disabled' }) : await fullShot(page, { animations: 'disabled' });
     if (prev && shot.equals(prev)) {
       await page.evaluate(FREEZE_JS);
       return { info: await page.evaluate(SLOTS_JS), stable: true };
@@ -928,9 +977,10 @@ async function capture() {
           language = userLocale?.language || 'en';
           // A case with its own stylesheets gets a page of its own, and the next case a fresh one: what a sheet
           // declares (a font) stays in the page it was added to.
-          if (!loaded || c.dashboard || resources.length) {
+          // A More Info case too: its dialog stays open on the page, so it starts from a fresh one and leaves it.
+          if (!loaded || c.dashboard || resources.length || c.more_info) {
             await page.goto(creds.origin + path, { waitUntil: 'load', timeout: 45000 });
-            loaded = !c.dashboard && !resources.length;
+            loaded = !c.dashboard && !resources.length && !c.more_info;
           } else {
             await page.evaluate((p) => { history.pushState(null, '', p); window.dispatchEvent(new CustomEvent('location-changed', { detail: { replace: false } })); scrollTo(0, 0); }, path);
           }
@@ -957,7 +1007,12 @@ async function capture() {
           for (let attempt = 1; ; attempt++) {
             // A window an earlier attempt (or a failed case) grew goes back to the panel's size first.
             await restoreWindow(page);
-            ({ info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000));
+            ({ info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000, Boolean(c.more_info)));
+            // A More Info case (#885): the dialog opens over the card's view, as a tap on the card opens it, and settles.
+            if (c.more_info) {
+              await openMoreInfo(page, c.more_info);
+              ({ stable } = await settle(page, cardElement(c.card), 15000, true));
+            }
             // A graph waits on one-shot answers (the statistics card asks for statistics after its metadata): a call
             // still unanswered means the card isn't drawn yet. Wait for them (10 s at most), then settle again.
             const pending = () => [...pendingOneShots(graphs.calls), ...pendingFirstEvents(graphs.calls)];
@@ -972,7 +1027,7 @@ async function capture() {
             }
             // On a touch panel, a page taller than the window is measured and shot in a window grown to it: the PNG,
             // the slots and the texts below all describe that one layout (lib/pointer.mjs).
-            mode = captureMode({ touch: touchPages.has(page), docHeight: info.docH, viewportHeight: page.viewportSize().height, slots: info.slots });
+            mode = captureMode({ touch: touchPages.has(page), docHeight: info.docH, viewportHeight: page.viewportSize().height, slots: info.slots, dialog: Boolean(c.more_info) });
             if (mode === 'grow') {
               await growTo(page, Math.ceil(info.docH));
               ({ info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000));
@@ -987,7 +1042,14 @@ async function capture() {
             }
             if (!info.slots.length && c.card) throw new Error('no card on the page');
             if (!info.slots.length) log(`${frame.id}/${c.id}: HA shows no card (all hidden?): comparing the whole page`);
-            if (c.card) {
+            if (c.more_info) {
+              // The one slot is the dialog's surface; the crop around it stays inside the window.
+              const d = await page.evaluate(DIALOG_JS);
+              if (!d) throw new Error('the More Info dialog closed during the capture');
+              slots = [{ ...d, scope: 'more-info' }];
+              const vp = page.viewportSize();
+              clip = clipFor(d, { docW: vp.width, docH: vp.height });
+            } else if (c.card) {
               slots = [info.slots[0]];
               clip = clipFor(slots[0], info);
             } else {
@@ -995,6 +1057,7 @@ async function capture() {
               clip = { x: 0, y: 0, width: info.docW, height: info.docH };
             }
             ids = referencedEntities(config, states);
+            if (c.more_info) ids.add(c.more_info);
             // The entities a case expects a state of are part of its snapshot even when HA has no state for them yet:
             // one that appears during the capture then starts it over, like any other change.
             for (const id of Object.keys(c.expect || {})) ids.add(id);
@@ -1014,6 +1077,7 @@ async function capture() {
             await page.evaluate(FREEZE_JS);
             texts = [];
             for (const [i, s] of slots.entries()) for (const t of await page.evaluate(TEXTS_JS, s)) texts.push({ slot: i, ...roundRect(t) });
+            if (c.more_info) slots = slots.map(({ scope, ...rest }) => rest);
             // The templates Vitro asks for, rendered now.
             templates = {};
             for (const tpl of wanted[c.id] || []) {

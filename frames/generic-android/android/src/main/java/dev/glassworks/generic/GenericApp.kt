@@ -12,6 +12,7 @@ import dev.glassworks.engine.Engine
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.gecko.GeckoEngine
 import dev.glassworks.engine.vitro.VitroEngine
+import dev.glassworks.engine.vitro.webrtc.VitroWebRtc
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.generic_android.BuildConfig
@@ -97,7 +98,7 @@ class GenericApp : Application(), GlassworksApp {
         ): EngineSettings {
             val settings = engineSettings(context, build, applicationId)
             val v = if (legacy(applicationId)) vitro() else null
-            return if (v != null) settings.copy(localOrigin = v.islandOrigin()) else settings
+            return if (v != null) settings.copy(localOrigin = v.islandOrigin(context)) else settings
         }
 
         /**
@@ -114,6 +115,8 @@ class GenericApp : Application(), GlassworksApp {
                 generatedBy = PRODUCT,
             )
             if (!vitro) return gecko
+            // Its cameras play over WebRTC first, as HA's frontend does, then HLS and MJPEG.
+            VitroWebRtc.register()
             return VitroEngine(
                 fallback = gecko,
                 settings = { context -> engineSettings(context, build, applicationId) },
