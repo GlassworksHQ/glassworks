@@ -641,11 +641,15 @@ Number 4 was the cheapest and turned out to be it. HA's profile panel is one sma
    `wm size 1280x800`), the app set to `--es url http://10.0.2.2:8133` and signed in with
    `tools/legacy/emulator-signin.sh` (the panel's own QR sign-in server through `adb forward tcp:18099 tcp:8099`,
    then HA's `/auth/login_flow` API with the S256 `code_challenge` from the authorize URL: HA 2026.11 refuses the
-   code exchange with `invalid_request` without it). Then, 30 s apart:
+   code exchange with `invalid_request` without it). Then, 45 s apart:
    `am start -n dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity --es open http://10.0.2.2:8133/profile/<route>`.
-   - `general`: the page background, nothing else, as in Chromium (the kiosk hides HA's header and sidebar).
-   - `dashboard`: the full profile, including **This mobile app**, the section HA shows only to an external app, so
-     the external-auth bridge answered `config/get` on GeckoView 144.
+   Each `open` loads a new page behind the app's connecting screen, which lifts on HA's `frontend/loaded` (logcat:
+   `Connecting screen hidden: ready, frontend/loaded`, 4.8 s for `general`, 2.9 s for `dashboard`), so a capture
+   taken sooner shows that screen, not HA.
+   - `general`: one color over the whole page, `#fafafa` (HA's background; counted with PIL), as in Chromium. The
+     kiosk hides HA's header and sidebar, so nothing else is left.
+   - `dashboard`: the full profile (1,763 colors), including **This mobile app**, the section HA shows only to an
+     external app, so the external-auth bridge answered `config/get` on GeckoView 144.
    - Logcat over both: no `lockdown: blocked`, no `Loading failed for the module`, no `Script terminated by timeout`.
 
 **A dead end worth knowing.** The first emulator run, at the AVD's own 2560×1800 with SwiftShader, while the Mac ran
