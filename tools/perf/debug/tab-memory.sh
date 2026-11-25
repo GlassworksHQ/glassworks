@@ -12,27 +12,39 @@
 # Each sample: the time, MemAvailable, every PSS line of the app's processes from `dumpsys meminfo` (the tab is
 # `:sandboxed_tab…`), and utime/stime (clock ticks) of each tab process. A new tab pid is a page that died and came
 # back. The output holds no serials, MACs or addresses.
+# A failed device read (adb gone, a command refused) stops the run with an error, so a run never ends looking complete
+# without its numbers. A tab process that ends between the list and its /proc read is not an error: the page restarts.
 set -uo pipefail
 OUT=${1:?out file}; MIN=${2:?minutes}; VISIT=${3:-0}
 read -ra A <<< "${ADB:-adb}"
 PKG=${PKG:-sh.edm.s1kiosk}; ACTIVITY=${ACTIVITY:-sh.edm.s1kiosk/.MainActivity}
-sh() { "${A[@]}" shell "$1" < /dev/null | tr -d '\r'; }
+fail() { echo "tab-memory: $1" >&2; echo "# stopped: $1" >> "$OUT"; exit 1; }
+# One device command: its output without carriage returns, or the run stops.
+need() {
+  local out
+  out=$("${A[@]}" shell "$1" < /dev/null) || fail "adb failed: $1"
+  printf '%s\n' "$out" | tr -d '\r'
+}
 
 echo "# tab-memory $PKG, $MIN min, visit every ${VISIT} min, start $(date -u +%H:%M:%SZ)" >> "$OUT"
 for i in $(seq 0 "$MIN"); do
   if [ "$VISIT" != 0 ] && [ "$i" != 0 ] && [ $((i % VISIT)) = 0 ]; then
-    sh "am start -n $ACTIVITY" > /dev/null; sleep 3
-    sh "am start -a android.settings.SETTINGS" > /dev/null
+    need "am start -n $ACTIVITY" > /dev/null || exit 1; sleep 3
+    need "am start -a android.settings.SETTINGS" > /dev/null || exit 1
     echo "visit $(date -u +%H:%M:%SZ)" >> "$OUT"
   fi
+  # Each read in its own variable: `need` runs in a subshell there, so its failure is checked here.
+  avail=$(need "grep MemAvailable /proc/meminfo") || exit 1
+  meminfo=$(need "dumpsys meminfo") || exit 1
+  procs=$(need "ps -A -o PID,NAME") || exit 1
   {
     echo "== t=${i}m $(date -u +%H:%M:%SZ)"
-    sh "grep MemAvailable /proc/meminfo"
-    sh "dumpsys meminfo" | grep -F "$PKG" | grep -F "K: "
-    for p in $(sh "ps -A -o PID,NAME" | awk -v p="$PKG:sandboxed_tab" 'index($2, p) == 1 {print $1}'); do
-      sh "cat /proc/$p/stat" | awk '{print "tab", $1, "utime", $14, "stime", $15}'
+    echo "$avail"
+    printf '%s\n' "$meminfo" | grep -F "$PKG" | grep -F "K: "
+    for p in $(printf '%s\n' "$procs" | awk -v p="$PKG:sandboxed_tab" 'index($2, p) == 1 {print $1}'); do
+      "${A[@]}" shell "cat /proc/$p/stat 2>/dev/null" < /dev/null | tr -d '\r' | awk '{print "tab", $1, "utime", $14, "stime", $15}'
     done
-  } >> "$OUT" 2>&1
+  } >> "$OUT"
   [ "$i" = "$MIN" ] || sleep 57
 done
 echo "# end $(date -u +%H:%M:%SZ)" >> "$OUT"
