@@ -253,6 +253,10 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
             if (round) shape = GradientDrawable.OVAL else cornerRadius = ctx.px(8f).toFloat()
             setColor(CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.08f))
         }
+        // The previous picture (another track's artwork) goes now: the icon shows until this one has loaded.
+        shapePicture.setImageDrawable(null)
+        shapePicture.visibility = GONE
+        shapeIcon.visibility = VISIBLE
         ctx.loadImage(url, this) { bmp ->
             if (pictureUrl != url) return@loadImage
             shapePicture.setImageBitmap(bmp)
@@ -355,8 +359,9 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
 class MushroomMediaPlayerCardView(ctx: VitroCardContext, config: CardConfig) : MushroomShellCardView(ctx, config) {
     private val useMediaInfo = config.raw.optBoolean("use_media_info", false)
     private val showVolumeLevel = config.raw.optBoolean("show_volume_level", false)
-    private val mediaControls = stringList(config.raw, "media_controls")
-    private val volumeControls = stringList(config.raw, "volume_controls")
+    // Each control once: its button owns a single icon view, and a repeated entry would attach that view twice.
+    private val mediaControls = stringList(config.raw, "media_controls").distinct()
+    private val volumeControls = stringList(config.raw, "volume_controls").distinct()
     private val mediaRow = if (mediaControls.isNotEmpty()) controlRow() else null
     private val volumeRow = if (volumeControls.isNotEmpty()) controlRow() else null
     private val playIcon = MdiIconView(ctx.context)
@@ -549,7 +554,7 @@ class MushroomAlarmControlPanelCardView(ctx: VitroCardContext, config: CardConfi
  * `start_pause`, `stop`, `locate`, `clean_spot`, `return_home`).
  */
 class MushroomVacuumCardView(ctx: VitroCardContext, config: CardConfig) : MushroomShellCardView(ctx, config) {
-    private val commands = stringList(config.raw, "commands")
+    private val commands = stringList(config.raw, "commands").distinct()
     private val startPauseIcon = MdiIconView(ctx.context)
     private var startPause: View? = null
 
@@ -1634,6 +1639,16 @@ class AutoEntitiesCardView(
     var matchedEntities: List<String> = emptyList()
         private set
 
+    /**
+     * Runs on every inner card built from now on, and on the one shown now: an enclosing stack-in-card takes its
+     * surface off a replacement as it did the first.
+     */
+    var onInnerBuilt: ((View) -> Unit)? = null
+        set(v) {
+            field = v
+            if (v != null && childCount > 0) v(getChildAt(0))
+        }
+
     init {
         refresh()
         unsubscribe = ctx.store.subscribeAny { scheduleRefresh() }
@@ -1662,8 +1677,9 @@ class AutoEntitiesCardView(
             return
         }
         visibility = VISIBLE
-        val inner = innerCard(matches)
-        addView(build(inner), LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        val inner = build(innerCard(matches))
+        onInnerBuilt?.invoke(inner)
+        addView(inner, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
     }
 
     private fun innerCard(matches: List<AutoEntitiesFilter.Match>): CardConfig {
@@ -1772,6 +1788,11 @@ open class StackInCardView(
     private fun strip(v: View) {
         if (v is CardSurface) {
             v.makeSeamless(keepBackground = keep.optBoolean("background", false), keepRadius = keep.optBoolean("border_radius", false))
+        }
+        // auto-entities replaces its inner card when its matches change: the replacement shares the surface too.
+        if (v is AutoEntitiesCardView) {
+            v.onInnerBuilt = { inner -> strip(inner) }
+            return
         }
         if (v is ViewGroup) for (i in 0 until v.childCount) strip(v.getChildAt(i))
     }

@@ -505,6 +505,39 @@ class HacsParityWaveTest {
     }
 
     @Test
+    fun aStackInCardKeepsAnAutoEntitiesReplacementSeamless() {
+        val st = store(entity("light.a", "on"))
+        lateinit var auto: AutoEntitiesCardView
+        val inner = builder(st)
+        val build: (CardConfig) -> View = { c ->
+            if (c.type == "custom:auto-entities") AutoEntitiesCardView(context(st), c, inner).also { auto = it } else inner(c)
+        }
+        StackInCardView(context(st), card("""{"type": "custom:stack-in-card", "cards": [
+            {"type": "custom:auto-entities", "card": {"type": "entities"}, "filter": {"include": [{"domain": "light"}]}}]}"""), build)
+        val first = auto.getChildAt(0) as dev.glassworks.engine.vitro.ui.CardSurface
+        assertTrue(first.seamless)
+        // Another light matches: auto-entities builds a new inner card, which shares the stack's surface too.
+        st.putLocal(entity("light.b", "on"))
+        idle()
+        val replacement = auto.getChildAt(0) as dev.glassworks.engine.vitro.ui.CardSurface
+        assertTrue("rebuilt", replacement !== first)
+        assertTrue(replacement.seamless)
+    }
+
+    @Test
+    fun repeatedControlsAreBuiltOnce() {
+        // A repeated entry would attach one icon view to two buttons (Android throws): each control appears once.
+        val st = store(
+            entity("media_player.den", "playing", "supported_features" to 0xFFFF),
+            entity("vacuum.robo", "docked", "supported_features" to 0xFFFF),
+        )
+        MushroomMediaPlayerCardView(context(st), card("""{"type": "custom:mushroom-media-player-card", "entity": "media_player.den",
+            "media_controls": ["play_pause_stop", "play_pause_stop", "next"], "volume_controls": ["volume_mute", "volume_mute"]}"""))
+        MushroomVacuumCardView(context(st), card("""{"type": "custom:mushroom-vacuum-card", "entity": "vacuum.robo",
+            "commands": ["start_pause", "start_pause", "return_home"]}"""))
+    }
+
+    @Test
     fun layoutCardLaysOutAGridWithSpans() {
         val st = store()
         val cfg = card(
