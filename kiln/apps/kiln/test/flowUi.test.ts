@@ -7,7 +7,7 @@ import { FakeBrom, FakeUboot, makeSpl } from '@glassworks/fel/fakes';
 import type { BackupMeta } from '@glassworks/kiln-core';
 import { frame as s1PlusUi } from './s1-frame';
 import { demoBootImage } from '../src/wizard/demo';
-import { AskBridge, flowUi } from '../src/wizard/flowUi';
+import { AskBridge, Declined, flowUi } from '../src/wizard/flowUi';
 import { Session } from '../src/wizard/session';
 import { initial, reduce, type Action } from '../src/wizard/state';
 
@@ -18,6 +18,29 @@ function store() {
 }
 
 describe('AskBridge', () => {
+  it('Not now ends a set-up connect ask with Declined, and the sheet goes; an install\'s own asks can\'t be declined', async () => {
+    const st = store();
+    const bridge = new AskBridge(st.dispatch);
+    const connect = bridge.open('connect', () => new Promise<string>(() => {}), new AbortController().signal);
+    expect(bridge.declinable()).toBe(true);
+    expect(bridge.decline()).toBe(true);
+    await expect(connect).rejects.toBeInstanceOf(Declined);
+    expect(st.get().ask).toBeUndefined();
+    void bridge.open('fastboot', () => new Promise<string>(() => {}), new AbortController().signal);
+    expect(bridge.declinable()).toBe(false);
+    expect(bridge.decline()).toBe(false);
+    expect(st.get().ask?.kind).toBe('fastboot');
+  });
+
+  it('not while its picker is open: the list is the browser\'s, and it answers', () => {
+    const st = store();
+    const bridge = new AskBridge(st.dispatch);
+    void bridge.open('connect', () => new Promise<string>(() => {}), new AbortController().signal);
+    void bridge.click();
+    expect(bridge.declinable()).toBe(false);
+    expect(bridge.decline()).toBe(false);
+  });
+
   it('starts the action inside click(), before anything is awaited', () => {
     const st = store();
     const bridge = new AskBridge(st.dispatch);

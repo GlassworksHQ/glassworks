@@ -81,6 +81,8 @@ export function YourTurn({ s, session, asks }: { s: WizardState; session: Standa
             <button type="button" className="btn ember pulsing" disabled={ask.busy} onClick={() => void session.asks.click()}>Choose the panel</button>
             {ask.busy && <p className="status work" role="status">Select the panel in the browser list…</p>}
             {ask.error && <p className="status err" role="alert">{ask.error}</p>}
+            {/* set-up's connect only: after a reload with the device off, the person isn't stuck in the sheet */}
+            {ask.kind === 'connect' && !ask.busy && session.asks.declinable() && <button type="button" className="link" onClick={() => session.asks.decline()}>Not now</button>}
           </>}
         </Dialog.Content>
       </Dialog.Portal>
