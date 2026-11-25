@@ -36,7 +36,7 @@ The committed corpus never depends on anyone's real Home Assistant. `capture.mjs
 - **The shared inputs** come from `home.json`: the fixed instant every page and Vitro's clock show, the config (time zone, units), the themes and the signed-in user.
 - **HA core's words and icons** for states ("Heat/Cool", "Armed away") come from `hacore-2026.11.0.json`, which `hacore.py` cuts from the `homeassistant` wheel of the same release (pinned by SHA-256). Run it again for a newer HA.
 - **Templates** (Markdown, Mushroom, conditions) are rendered by the fake with jinja2 and the HA helpers the corpus uses (`states`, `is_state`, `state_attr`, `now`, …). A template that needs a helper the fake lacks fails the case's capture.
-- **Community cards** are Lovelace resources at `/hacsfiles/`, as HACS serves them: Mushroom, card-mod, stack-in-card, layout-card, auto-entities, mini-graph-card, mini-media-player, Bubble Card, vertical-stack-in-card, bar-card, clock-weather-card and modern-circular-gauge. `cards.json` pins each one's release and the SHA-256 of every file it loads, and `cards.py` downloads them into `~/.cache/glassworks-perf/cards` on first use. They're never committed.
+- **Community cards** are Lovelace resources at `/hacsfiles/`, as HACS serves them: Mushroom, card-mod, stack-in-card, layout-card, auto-entities, mini-graph-card, mini-media-player, Bubble Card, vertical-stack-in-card, bar-card, clock-weather-card and modern-circular-gauge. `cards.json` pins each one's release, its license and the SHA-256 of every file it loads, and `cards.py` downloads them into `~/.cache/glassworks-perf/cards` on first use. They're never committed. A card pinned `on_demand` (Better Thermostat UI, which is AGPL-3.0 and bundles its own Mushroom elements) is served at `/hacsfiles/` too but isn't a Lovelace resource, so no case's page loads it unless a probe adds it.
 
 Templates render in jinja2's sandbox: the fake listens on 127.0.0.1, but anything that reaches its port may send one. The fake logs any WebSocket command it doesn't answer, and the capture lists them at the end: a newer frontend or card that asks for something new can't pass unnoticed.
 
@@ -93,6 +93,21 @@ A local corpus (`--local [dir]`, default `~/.t3/glassworks-m1/vitro-parity/harne
 ### More Info cases
 
 A case with `more_info` opens HA's More Info dialog for that entity over the card's view, as a tap on the card would (`hass-more-info`), and compares the dialog instead of the card: its surface is the one slot (HA's `<dialog>`, a centered dialog or a bottom sheet as `ha-adaptive-dialog` picks for the window), its texts are the dialog's own, and its PNG is the window as it shows the dialog (never grown or shot full page, because the sheet's height follows the window). Vitro opens its sheet over the same view and crops its surface. The history and statistics calls the dialog makes are recorded and answered like a graph card's. HA's Settings and menu buttons are admin-only pages Vitro's sheet doesn't offer, so the `more-info-*` cases mask them.
+
+### Can a custom card draw in an island?
+
+`island-check.mjs` renders one custom card in HA's frontend on the fake HA, with its pinned script from `cards.json`, and lists the custom elements it draws with that an island page lacks: HA's own elements that are neither the card's nor among the island's stand-ins. A card whose main control is one of them goes to HA's frontend (`WebFallback.FRONTEND_CUSTOM_CARDS`). It writes nothing.
+
+```sh
+node tools/vitro-parity/island-check.mjs <case.json> --card better-thermostat-ui-card [--frame tablet] [--shot out.png]
+```
+
+`island-probe.mjs` runs the other side: the island page Vitro would serve for the card (written by `IslandPageDumpTest`), with the card's pinned script and the island's bridge answered by the probe, and reports what the card drew, which elements it found undefined, and what it sent over the bridge. Example cases are in `island-cases/`.
+
+```sh
+./gradlew :engine-vitro:testDebugUnitTest --tests '*IslandPageDumpTest*' -PvitroIslandCase=$PWD/tools/vitro-parity/island-cases/better-thermostat-mini-climate.json
+node tools/vitro-parity/island-probe.mjs tools/vitro-parity/island-cases/better-thermostat-mini-climate.json [--click x,y] [--shot out.png]
+```
 
 ### Cases with their own stylesheets
 

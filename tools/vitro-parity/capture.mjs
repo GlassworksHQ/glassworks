@@ -32,7 +32,6 @@
 //   node tools/vitro-parity/capture.mjs capture [--root <dir>] [--frames s1,tablet] [--cases a,b] [--templates <file>]
 //
 // tools/vitro-parity/run.sh runs both with the Gradle steps in between; see the README.
-import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -50,6 +49,7 @@ import { wsRecorder, snapshotCalls, pendingOneShots, pendingFirstEvents, restHis
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
 import { FIXTURE_PREFIX, fixtureFile, fixtureResources } from './lib/fixtures.mjs';
 import { captureMode, capturedWithTouch } from './lib/pointer.mjs';
+import { launch } from './lib/browser.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEFAULT_CORPUS = join(ROOT, 'engines', 'engine-vitro', 'src', 'test', 'parity');
@@ -232,19 +232,6 @@ function loadCasesAll() {
   return readdirSync(dir).filter((f) => f.endsWith('.json')).sort().map((f) => ({ id: f.replace(/\.json$/, ''), ...JSON.parse(readFileSync(join(dir, f), 'utf8')) }));
 }
 
-function launchOptions() {
-  if (process.env.CHROME) return { executablePath: process.env.CHROME };
-  return {};
-}
-
-async function launch() {
-  try {
-    return await chromium.launch({ headless: true, ...launchOptions() });
-  } catch (e) {
-    if (process.env.CHROME) throw e;
-    return chromium.launch({ headless: true, channel: 'chrome' });
-  }
-}
 
 /** Runs in the page: the top-level card slots (grid cells of each grid section), in order, document px. */
 const SLOTS_JS = () => {
