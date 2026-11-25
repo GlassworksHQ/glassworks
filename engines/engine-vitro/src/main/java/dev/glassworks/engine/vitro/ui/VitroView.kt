@@ -313,11 +313,10 @@ class VitroView(
      * island found drawing with Home Assistant's own elements this session ([IslandFrontend]). Null: Vitro draws it.
      */
     fun fallbackReason(view: ViewConfig): String? =
-        view.webFallbackReason ?: if (IslandFrontend.isEmpty) null else WebFallback.viewReason(view, ::learnedReason)
+        view.webFallbackReason ?: if (IslandFrontend.isEmpty) null else WebFallback.viewReason(view) { learnedReason(it, resourcesList) }
 
-    /** What this session learned about [card] ([IslandFrontend]): only for a card that goes to an island. */
-    private fun learnedReason(card: CardConfig): String? {
-        val resources = resourcesList
+    /** What this session learned about [card] with [resources] ([IslandFrontend]): only for a card that goes to an island. */
+    private fun learnedReason(card: CardConfig, resources: List<LovelaceResource>): String? {
         if (CardRouter.tier(card, IslandScripts.of(resources)) != CardTier.WEB_ISLAND) return null
         return IslandFrontend.reason(resources, card.type)
     }
@@ -327,10 +326,10 @@ class VitroView(
      * (the island's own card, or one inside it). Remembered for the session ([IslandFrontend]), so every view with such
      * a card goes to HA's frontend from now on, without drawing it again: the view on screen now, through [onWebView]
      * as any view Vitro doesn't draw, and another when it's opened. Their built trees go, islands and all: they never
-     * show again. Without a page ([onWebView] null) it's only remembered, and the view stays as it is.
+     * show again. Without a page ([onWebView] null) it's only remembered, and the view stays as it is. [resources]: the
+     * scripts the island was built with (a report that lands after the dashboard changed is about those).
      */
-    fun cardNeedsFrontend(card: CardConfig, tags: List<String>, owners: List<String>) {
-        val resources = resourcesList
+    fun cardNeedsFrontend(card: CardConfig, tags: List<String>, owners: List<String>, resources: List<LovelaceResource> = resourcesList) {
         for (type in owners.ifEmpty { listOf(card.type) }) {
             if (IslandFrontend.record(resources, type, tags)) {
                 Log.i(TAG, "Island ${card.type}: $type draws with ${tags.joinToString()}, which only HA's frontend has")
@@ -338,7 +337,7 @@ class VitroView(
         }
         // An inner card that doesn't go to an island where it stands alone (a native type) would blame no card: the
         // island's own card, then, so its view still leaves.
-        if (WebFallback.cardReason(card, ::learnedReason) == null) IslandFrontend.record(resources, card.type, tags)
+        if (WebFallback.cardReason(card) { learnedReason(it, resources) } == null) IslandFrontend.record(resources, card.type, tags)
         val cfg = dashboard ?: return
         if (onWebView == null) return
         for (index in viewCache.keys.toList()) {

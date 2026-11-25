@@ -150,6 +150,31 @@ test('an element that appears later (an option, a state) is caught through the o
   assert.deepEqual(reports, [{ tags: ['ha-big-number'], cards: ['acme-option-card'] }]);
 });
 
+test("an element in the card's light DOM, with no shadow root, that appears later is caught", () => {
+  const card = el('acme-light-card', { card: true });
+  const { c, o, reports } = watch(card);
+  c.advance(5000);
+  assert.ok(o.all[0].targets.includes(card), 'the card itself is observed');
+  card.append(el('div').append(el('ha-big-number')));
+  o.mutate();
+  c.advance(5000);
+  assert.deepEqual(reports, [{ tags: ['ha-big-number'], cards: ['acme-light-card'] }]);
+});
+
+test('only tags past their grace are reported, with their own cards', () => {
+  // Card A's dial has waited long enough; card B's element appeared later and is still in its grace.
+  const late = el('acme-b-card', { card: true }).shadow();
+  const stack = el('acme-stack-card', { card: true }).shadow(
+    el('div').append(el('acme-a-card', { card: true }).shadow(el('ha-control-circular-slider')), late),
+  );
+  const { c, o, reports } = watch(stack, { defined: new Set([...ISLAND, 'acme-a-card', 'acme-b-card']) });
+  c.advance(2000);
+  late.shadowRoot.append(el('ha-acme-lazy'));
+  o.mutate();
+  c.advance(1000);
+  assert.deepEqual(reports, [{ tags: ['ha-control-circular-slider'], cards: ['acme-a-card'] }]);
+});
+
 test('an element that leaves the tree before its grace is over never counts', () => {
   const spinner = el('ha-circular-progress');
   const root = el('ha-card').append(spinner);
@@ -200,8 +225,8 @@ test('elements in nested shadow roots and the light DOM are found', () => {
 test('a scan stops at maxNodes', () => {
   const w = load();
   const big = el('acme-big-card', { card: true }).shadow(...Array.from({ length: 50 }, () => el('div')), el('ha-big-number'));
-  assert.deepEqual([...w.vitroFrontendScan(big, () => false, 20).tags], []);
-  assert.deepEqual([...w.vitroFrontendScan(big, () => false, 100).tags], ['ha-big-number']);
+  assert.deepEqual([...w.vitroFrontendScan(big, () => false, 20).tags.keys()], []);
+  assert.deepEqual([...w.vitroFrontendScan(big, () => false, 100).tags.keys()], ['ha-big-number']);
 });
 
 test('the rule matches HA element names only', () => {

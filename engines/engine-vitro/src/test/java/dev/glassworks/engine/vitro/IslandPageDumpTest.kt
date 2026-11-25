@@ -42,7 +42,11 @@ class IslandPageDumpTest {
     fun writesTheIslandPageOfACase() {
         val paths = System.getProperty("vitro.islandCase")
         assumeTrue("only with -PvitroIslandCase=<case.json> (tools/vitro-parity/island-probe.mjs)", !paths.isNullOrBlank())
-        for (path in paths!!.split(',').map { it.trim() }.filter { it.isNotEmpty() }) writePage(File(path))
+        val files = paths!!.split(',').map { it.trim() }.filter { it.isNotEmpty() }.map(::File)
+        // Each page is named after its case file: two cases of one name would write (and probe) one page.
+        val clash = files.groupBy { it.nameWithoutExtension }.filterValues { it.size > 1 }
+        require(clash.isEmpty()) { "cases with the same file name write the same page: ${clash.values.flatten().joinToString()}" }
+        files.forEach(::writePage)
     }
 
     private fun writePage(caseFile: File) {

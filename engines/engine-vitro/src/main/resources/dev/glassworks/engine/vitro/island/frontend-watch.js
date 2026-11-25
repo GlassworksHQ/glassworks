@@ -57,12 +57,11 @@ function vitroFrontendOwner(el, card) {
 
 /**
  * The tags under [card] (its light DOM and every open shadow root below it) that look like HA's frontend's and that
- * [isDefined] says nothing defines, the cards that draw them ([vitroFrontendOwner]), and every shadow root walked (to
- * observe). At most [maxNodes] elements.
+ * [isDefined] says nothing defines, each with the cards that draw it ([vitroFrontendOwner]), and every shadow root
+ * walked (to observe). At most [maxNodes] elements. `tags` maps a tag to its owners.
  */
 function vitroFrontendScan(card, isDefined, maxNodes) {
-  const tags = new Set();
-  const owners = new Set();
+  const tags = new Map();
   const roots = [];
   const stack = [];
   if (card.shadowRoot) stack.push(card.shadowRoot);
@@ -77,18 +76,18 @@ function vitroFrontendScan(card, isDefined, maxNodes) {
       seen++;
       const tag = el.localName;
       if (VITRO_FRONTEND_TAG.test(tag) && !VITRO_FRONTEND_HARMLESS.has(tag) && !isDefined(tag)) {
-        tags.add(tag);
-        owners.add(vitroFrontendOwner(el, card));
+        if (!tags.has(tag)) tags.set(tag, new Set());
+        tags.get(tag).add(vitroFrontendOwner(el, card));
       }
       if (el.shadowRoot) stack.push(el.shadowRoot);
     }
   }
-  return { tags, owners, roots };
+  return { tags, roots };
 }
 
 /**
- * Watches [card] and calls [env.report] once, with the sorted HA frontend tags it draws with (one of them undefined
- * for [graceMs]) and the cards that draw them ([vitroFrontendOwner]). [env] holds `report` and, for tests, `isDefined`, `setTimeout`, `clearTimeout`, `now`,
+ * Watches [card] and calls [env.report] once, with the sorted HA frontend tags it draws with that stayed undefined for
+ * [graceMs], and the cards that draw those ([vitroFrontendOwner]): never a tag still in its grace, nor its card. [env] holds `report` and, for tests, `isDefined`, `setTimeout`, `clearTimeout`, `now`,
  * `MutationObserver` and limits; the page's own by default. Returns a stop function.
  */
 function vitroWatchFrontend(card, env) {
@@ -127,24 +126,28 @@ function vitroWatchFrontend(card, env) {
     timerAt = Infinity;
     if (done) return;
     scans++;
-    const { tags, owners, roots } = vitroFrontendScan(card, isDefined, e.maxNodes);
+    const { tags, roots } = vitroFrontendScan(card, isDefined, e.maxNodes);
     if (observer) {
-      for (const r of roots) {
+      // The card itself too: its light DOM, and a card with no shadow root at all.
+      for (const r of [card, ...roots]) {
         if (!observed.has(r)) { observed.add(r); observer.observe(r, { childList: true, subtree: true }); }
       }
     }
     const t = now();
     // A tag that left the tree, or got defined, starts its grace over if it comes back undefined.
     for (const tag of [...firstSeen.keys()]) if (!tags.has(tag)) firstSeen.delete(tag);
-    for (const tag of tags) if (!firstSeen.has(tag)) firstSeen.set(tag, t);
-    if ([...tags].some((tag) => t - firstSeen.get(tag) >= e.graceMs)) {
-      e.report([...tags].sort(), [...owners].sort());
+    for (const tag of tags.keys()) if (!firstSeen.has(tag)) firstSeen.set(tag, t);
+    const due = [...tags.keys()].filter((tag) => t - firstSeen.get(tag) >= e.graceMs).sort();
+    if (due.length) {
+      const owners = new Set();
+      for (const tag of due) for (const o of tags.get(tag)) owners.add(o);
+      e.report(due, [...owners].sort());
       stop();
       return;
     }
     if (tags.size) {
       // Decide when the oldest one's grace is over, whatever the observer does meanwhile.
-      const oldest = Math.min(...[...tags].map((tag) => firstSeen.get(tag)));
+      const oldest = Math.min(...[...tags.keys()].map((tag) => firstSeen.get(tag)));
       schedule(Math.max(0, oldest + e.graceMs - t));
     } else if (scans >= e.maxScans) {
       stop();

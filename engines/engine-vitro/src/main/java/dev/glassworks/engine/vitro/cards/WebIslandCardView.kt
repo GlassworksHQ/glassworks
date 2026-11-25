@@ -348,8 +348,10 @@ class WebIslandCardView(
                 val tags = frontendTags(msg.optJSONArray("tags"))
                 if (tags.isEmpty() || needsFrontendSent) return
                 needsFrontendSent = true
-                // The custom cards that draw them (a stack's inner card, not the stack), as `custom:` types.
-                val owners = frontendTags(msg.optJSONArray("cards")).map { "custom:$it" }
+                // The custom cards that draw them (a stack's inner card, not the stack), as `custom:` types: only
+                // ones this island's config holds, so a page can't name a card it doesn't draw.
+                val mine = customTypes(config.raw)
+                val owners = frontendTags(msg.optJSONArray("cards")).map { "custom:$it" }.filter { it in mine }
                 ctx.main.post { ctx.needsFrontend(config, tags, owners) }
             }
             "resize" -> {
@@ -553,6 +555,22 @@ class WebIslandCardView(
             return (0 until raw.length()).mapNotNull { raw.opt(it) as? String }
                 .filter { it.length <= 64 && ELEMENT_TAG.matches(it) }
                 .distinct().sorted().take(MAX_FRONTEND_TAGS)
+        }
+
+        /** Every `custom:` card type in [raw], its nested cards' included (a stack's `cards`, a wrapper's `card`). */
+        internal fun customTypes(raw: Any?): Set<String> {
+            val out = HashSet<String>()
+            fun walk(v: Any?) {
+                when (v) {
+                    is JSONObject -> {
+                        v.optString("type").takeIf { it.startsWith("custom:") }?.let { out += it }
+                        v.keys().forEach { walk(v.opt(it)) }
+                    }
+                    is org.json.JSONArray -> for (i in 0 until v.length()) walk(v.opt(i))
+                }
+            }
+            walk(raw)
+            return out
         }
 
         /**

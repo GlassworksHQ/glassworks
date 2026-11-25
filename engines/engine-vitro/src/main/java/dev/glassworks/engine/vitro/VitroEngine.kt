@@ -579,12 +579,13 @@ class VitroEngine(
                 // The view being built: the context is made for its cards.
                 val viewIndex = vitroView.currentViewIndex
                 val walkGen = walkGeneration
+                val resources = vitroView.resourcesList
                 VitroCardContext(
                     context = activity,
                     haBase = haBase,
                     store = store,
                     theme = theme,
-                    resources = vitroView.resourcesList,
+                    resources = resources,
                     accessToken = { tokenFor(haBase) },
                     haConfig = { client?.haConfig ?: JSONObject() },
                     pageUrl = { lastNativeUrl ?: currentUrl },
@@ -630,7 +631,7 @@ class VitroEngine(
                             ?.also { if (fallbackInFront()) hideIslandSurfaces(it.view) }
                     },
                     touch = touchScreen,
-                    needsFrontend = { card, tags, owners -> vitroView.cardNeedsFrontend(card, tags, owners) },
+                    needsFrontend = { card, tags, owners -> vitroView.cardNeedsFrontend(card, tags, owners, resources) },
                 )
             }
             main.post { host.onConnect(port) }

@@ -1186,9 +1186,20 @@ class VitroEngineTest {
         island.handleIslandMessage(msg) { throw AssertionError("needsFrontend needs no reply") }
         idle()
         assertEquals(
-            listOf(Triple(islandCard().type, listOf("ha-big-number", "ha-control-circular-slider"), listOf("custom:better-thermostat-normal-climate-card"))),
+            "a card the island's config doesn't hold is never named",
+            listOf(Triple(islandCard().type, listOf("ha-big-number", "ha-control-circular-slider"), emptyList<String>())),
             reports,
         )
+        // A stack's inner card is named: it's in the island's config.
+        reports.clear()
+        val stack = LovelaceParser.parseCard(JSONObject(
+            """{"type": "custom:acme-stack-card", "cards": [{"type": "custom:better-thermostat-normal-climate-card", "entity": "climate.study"}]}""",
+        ))
+        val stacked = WebIslandCardView(ctx, stack)
+        activity.setContentView(stacked)
+        stacked.handleIslandMessage(msg) { throw AssertionError("needsFrontend needs no reply") }
+        idle()
+        assertEquals(listOf("custom:better-thermostat-normal-climate-card"), reports.single().third)
         assertEquals(WebIslandCardView.MAX_FRONTEND_TAGS, WebIslandCardView.frontendTags(JSONArray((1..40).map { "ha-x$it" })).size)
     }
 
