@@ -125,6 +125,15 @@ without asking again, and saved it again. So every Gradle job ends with a step t
 failure and deletes `~/.gradle/caches/modules-2/metadata-*`. The next run resolves its dependencies afresh,
 and the downloaded files stay. `tools/ci/test/test_changes.py` checks that each Gradle job ends with it.
 
+Resolving afresh costs a request per file. On 2026-11-24 main's `libs-api23` failed, and the entry it saved
+without its metadata was the one every PR's `libs-api23` restored after it. Gradle then asked Maven Central
+about each file it already had: 1,047 HEAD and 148 GET requests for that job's lint (measured locally from such a home,
+against none with the metadata kept). Central answered part of each burst with 429 (too many requests). Gradle's
+default tries a request 3 times in 3 s and then stops asking that repository for the rest of the build, so the job
+failed, and its rerun failed the same way. So `pr.yml` and `core-emulators.yml` give Gradle 7 tries, 2 s apart and
+twice as long each time (`GRADLE_OPTS` at the top of each), and a burst waits out the limit instead.
+`tools/ci/test/test_changes.py` checks that every workflow restoring Gradle's home sets it.
+
 To clear a bad entry by hand, delete that job's `gradle-home-v2|Linux-X64|<job>[…]` entries on `main`
 (`gh cache list --ref refs/heads/main`, then `gh cache delete <id>`). The next run starts from another
 job's entry and saves a clean one.
@@ -192,6 +201,10 @@ Like `size-comment.yml`, it runs from the default branch after the PR's run, che
 script, and reads only the run's jobs and logs. Its token may only rerun runs and read (`actions: write`,
 `contents: read`). `tools/ci/test/test_rerun_flakes.py` tests the patterns against lines from real failed jobs, and the
 workflow's trigger, conditions and permissions.
+
+A rerun doesn't help when the cause comes with the job rather than the runner. On 2026-11-24 it reran `libs-api23`
+four times after Maven Central's 429s, and each rerun failed the same way: it restored the same Gradle home and sent
+the same burst ([Caches](#caches)).
 
 To see what it would have decided on a past run: `tools/ci/rerun_flakes.py --repo GlassworksHQ/glassworks --run <id>
 --dry-run --any-attempt`. Replayed on 12 red runs from 2026-11-18 and 19, it would have rerun the 9 that failed on
