@@ -28,8 +28,10 @@ import dev.glassworks.engine.vitro.model.ViewConfig
  * - **Special `entities` rows Vitro doesn't draw** ([UNDRAWN_ROW_TYPES]). Without this, an `attribute` row would
  *   show the entity's state instead of the attribute. A view with one goes to HA's page.
  *
- * A custom card never comes here: its island runs its own script, so it draws as in HA. A custom card that wraps a
- * built-in card Vitro doesn't draw does: the reason walks every card a card builds ([CardRouter.producedCards]).
+ * A custom card's island runs its own script, so it draws as in HA, with two exceptions that come here: a custom card
+ * that wraps a built-in card Vitro doesn't draw (the reason walks every card a card builds, [CardRouter.producedCards]),
+ * and one whose script draws with elements of HA's own frontend that an island page doesn't have
+ * ([FRONTEND_CUSTOM_CARDS]).
  */
 object WebFallback {
     /**
@@ -38,6 +40,17 @@ object WebFallback {
      * type), and [EntityRowConfig.SPECIAL_TYPES]. A `custom:` row with an `entity` is drawn as a plain entity row.
      */
     val UNDRAWN_ROW_TYPES: Set<String> = setOf("attribute", "cast")
+
+    /**
+     * Custom cards whose own script draws its main control with elements of HA's frontend (which HA's page defines
+     * once its own cards load them), not shipped in the card: an island page has no HA frontend, so the card would
+     * draw without them. Each with what it misses. Found by rendering the card in HA's frontend and in an island page
+     * against the parity harness's fake HA (#885).
+     */
+    val FRONTEND_CUSTOM_CARDS: Map<String, String> = mapOf(
+        "custom:better-thermostat-normal-climate-card" to
+            "its dial and target are HA's `ha-control-circular-slider` and `ha-big-number`, which only HA's frontend has",
+    )
 
     /** Why the whole [dashboard] goes to HA's page, or null when Vitro draws it. */
     fun dashboardReason(dashboard: DashboardConfig): String? =
@@ -57,6 +70,7 @@ object WebFallback {
     fun cardReason(card: CardConfig): String? {
         val type = card.type
         if (!type.startsWith("custom:") && type !in VitroSupport.CORE_CARD_TYPES) return "the built-in `$type` card"
+        FRONTEND_CUSTOM_CARDS[type]?.let { return "a `$type` card ($it)" }
         if (type == "entities") undrawnRow(card)?.let { return it }
         if (type == "shortcut") shortcutReason(card)?.let { return it }
         // Vitro has no double tap yet: a card it newly draws whose double-tap action does something stays HA's.
