@@ -32,13 +32,14 @@ object VitroWebRtc {
     }
 
     /**
-     * How Vitro plays: muted (dashboard cameras are), the picture letterboxed in a view the card sizes to it, and a
-     * paused stream closing its connection at once, as the seam asks (`setActive(false)` stops pulling and decoding,
-     * like Vitro's HLS player releasing ExoPlayer).
+     * How Vitro plays: muted (dashboard cameras are), and a paused stream closing its connection at once, as the seam
+     * asks (`setActive(false)` stops pulling and decoding, like Vitro's HLS player releasing ExoPlayer). The picture
+     * fills the view: the card's `CameraFitFrame` does the fitting (HA's `object-fit`), sizing the view to the picture
+     * for `contain` and `cover` and to the card for `fill`, which then stretches as HA's does.
      */
     internal val OPTIONS = HaWebRtcPlayer.Options(
         stream = HaWebRtcStream.Options(audio = false, idleTeardownMs = 0),
-        scaling = VideoScaling.FIT,
+        scaling = VideoScaling.STRETCH,
     )
 
     internal class Factory(private val host: CameraStreamHost) : CameraStreamFactory {
