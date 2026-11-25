@@ -183,6 +183,10 @@ def measurements(rep, report_url="report.json"):
     # Rubric 2: a frame without touch isn't graded on scrolling (grade_summary reads `touch`). Only said when false, so
     # a frame with touch keeps its summary byte for byte (test_summary).
     no_touch = {"touch": False} if (rep["frame"].get("device") or {}).get("touch") is False else {}
+    # The engine, only when it isn't the web engine (Vitro, Settings → Labs): a Vitro result is never shown as the
+    # frame's web one, and a web summary stays byte for byte.
+    engine = (rep["frame"].get("device") or {}).get("engine")
+    vitro = {"engine": engine} if engine and engine != "web" else {}
     return {
         "schema": SCHEMA,
         "test": G.NAME,
@@ -193,6 +197,7 @@ def measurements(rep, report_url="report.json"):
         "measured_on": rep.get("measured_on"),
         "frame": {"id": rep["frame"]["id"], "name": rep["frame"]["name"]},
         **no_touch,
+        **vitro,
         "app_version": (rep["frame"].get("app") or {}).get("version_name"),
         "viewport": {"css": list(seen[0][0]) if len(seen) == 1 and seen[0][0] else None,
                      "dpr": seen[0][1] if len(seen) == 1 else None, "default_dpr": default_dpr},
@@ -243,6 +248,21 @@ def summarise(rep, report_url="report.json", allow_provisional=False):
     return out
 
 
+# The file a frame's published grade lives in (frames/<id>/clarity/clarity.json), which glassworks.dev shows as the
+# frame's grade.
+PUBLISHED = "clarity.json"
+
+
+def check_publishable(summary, path):
+    """A summary of another engine than the web engine (Vitro, docs/perf.md "Vitro") is never written as a frame's
+    published grade: the site shows clarity.json as the frame's web grade. Refused there; anywhere else it is written,
+    with its `engine`."""
+    engine = summary.get("engine")
+    if engine and engine != "web" and os.path.basename(path) == PUBLISHED:
+        raise Refused(f"this summary is {engine}'s, not the web engine's: a frame's {PUBLISHED} is its web grade, so it "
+                      "isn't written there (write it under another name)")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("report", help="a finished report.json")
@@ -254,6 +274,7 @@ def main():
         rep = json.load(f)
     try:
         out = summarise(rep, a.report_url, a.allow_provisional)
+        check_publishable(out, a.out)
     except Refused as e:
         sys.exit(f"summary not written: {e}")
     with open(a.out, "w") as f:
