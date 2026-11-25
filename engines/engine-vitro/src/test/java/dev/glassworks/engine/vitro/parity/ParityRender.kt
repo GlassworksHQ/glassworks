@@ -21,6 +21,7 @@ import dev.glassworks.engine.vitro.cards.ClockCardView
 import dev.glassworks.engine.vitro.cards.GraphWork
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDisplay
+import dev.glassworks.engine.vitro.data.HaLocale
 import dev.glassworks.engine.vitro.fonts.WebFonts
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
@@ -236,14 +237,20 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
     }
 
     fun render(case: ParityCase, ref: ParityReference?): VitroRender {
-        // HaDisplay is process-wide: hold the case's display data while it renders, and nothing after.
+        // HaDisplay and HaLocale are process-wide: hold the case's display data and its user's language and formats
+        // while it renders, and nothing after. The browser's own locale and zone are the harness's (en-US, HA's zone),
+        // as capture.mjs gives Chromium.
         HaDisplay.reset()
+        HaLocale.reset()
         try {
             // Inside the try: a setup that fails halfway (a bad `requested.domains`) is cleared too.
+            shared?.haConfig?.let(HaLocale::applyConfig)
+            ref?.json?.optJSONObject("locale")?.let(HaLocale::applyUserData)
             ref?.display?.let(::applyDisplay)
             return renderWithDisplay(case, ref)
         } finally {
             HaDisplay.reset()
+            HaLocale.reset()
         }
     }
 
