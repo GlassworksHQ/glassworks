@@ -405,6 +405,12 @@ class WebIslandCardView(
         islandPage = null
     }
 
+    /**
+     * The card failed and is HA's error card now: its page closes at once, with its slot and bridges, rather than
+     * when the card leaves the view.
+     */
+    override fun onCardFailed() = release()
+
     override fun onAttachedToWindow() {
         val wasDetached = attachedOnce
         attachedOnce = true
