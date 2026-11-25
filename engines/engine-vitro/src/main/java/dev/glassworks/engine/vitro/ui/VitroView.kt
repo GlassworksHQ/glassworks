@@ -907,6 +907,16 @@ class VitroView(
         }
     }
 
+    /**
+     * The islands' content went away (a crashed or killed content process): every island closes, none is handed
+     * over, and the view on screen is built again with new pages. A cached view builds its own when it's shown.
+     */
+    fun reopenIslands() {
+        dropBuiltViews(keepIslands = false)
+        closePooledIslands()
+        if (dashboard != null) renderView(currentViewIndex, forceRebuild = true, pushHistory = false)
+    }
+
     /** The page is gone: every island closes, and nothing is built again. */
     fun closeIslands() {
         cancelPendingBuilds()

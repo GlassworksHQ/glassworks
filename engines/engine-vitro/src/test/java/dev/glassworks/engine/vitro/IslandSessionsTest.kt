@@ -311,6 +311,35 @@ class IslandSessionsTest {
         assertTrue(a.active)
     }
 
+    @Test fun anIslandsContentGoingAwayReopensEveryIslandOnceAndARebuildNeverAdoptsADeadPage() {
+        server.dashboardConfig = JSONObject(twoViews)
+        val p = page()
+        p.load("$base/wall-test/a")
+        awaitMain("ready") { readyCount() == 1 && islandPages().size == 1 }
+        p.load("$base/wall-test/b")
+        awaitMain("view b built") { islandPages().size == 2 }
+        val (a, b) = islandPages()
+
+        // The content process the islands run in is killed: both report it, in the same turn.
+        fallback.opens.filter { it.host !== host }.forEach { it.host.onContentGone(killed = true) }
+        idle()
+        assertTrue("dead pages close", a.closed && b.closed)
+        assertEquals("the view on screen gets one new page, once", 3, islandPages().size)
+        assertOnePagePerIsland(p)
+
+        // The dashboard comes back after the kill (the activity's own page restarts): the same config, and the island
+        // keeps the new page, not a dead one.
+        val fresh = islandPages()[2]
+        vitroView(p).setUserTheme("night", true)
+        idle()
+        assertFalse(fresh.closed)
+        assertEquals(3, islandPages().size)
+        // The hidden view builds its island anew when it's shown.
+        p.load("$base/wall-test/a")
+        awaitMain("view a rebuilt") { islandPages().size == 4 }
+        assertOnePagePerIsland(p)
+    }
+
     @Test fun theActivityGoingClosesEveryIslandAndTheFallbackPage() {
         server.dashboardConfig = JSONObject(twoViews)
         val p = page()

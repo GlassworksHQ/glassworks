@@ -137,12 +137,26 @@ class VitroEngine(
             override fun onFirstPaint() {}
             override fun onLocationChange(url: String?) {}
             override fun redirect(url: String): String? = null
-            override fun onContentGone(killed: Boolean) {}
+            // An island's content process crashed or was killed: its page draws nothing again, and the host doesn't
+            // say which island it was. Every island opens a new page (a rebuild would otherwise hand the dead ones
+            // over); once, however many islands report it.
+            override fun onContentGone(killed: Boolean) {
+                if (islandsGonePosted) return
+                islandsGonePosted = true
+                main.post {
+                    islandsGonePosted = false
+                    if (disposed) return@post
+                    Log.w(logTag, "An island's content process ${if (killed) "was killed" else "crashed"}; reopening the islands")
+                    vitroView.reopenIslands()
+                }
+            }
             override fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit) =
                 host.onAndroidPermissions(permissions, answer)
             override fun onConnect(port: PagePort) {}
             override fun onPortMessage(port: PagePort, message: JSONObject) {}
         }
+        /** An island's content went away and the islands' reopening is posted. Main thread. */
+        private var islandsGonePosted = false
         private var currentUrl: String? = null
         @Volatile var currentOrigin: String? = null
         private var currentDashboardPath: String? = null
