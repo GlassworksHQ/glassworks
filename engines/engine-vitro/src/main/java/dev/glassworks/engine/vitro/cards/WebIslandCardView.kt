@@ -433,7 +433,11 @@ class WebIslandCardView(
         super.onAttachedToWindow()
         ctx.main.removeCallbacks(releaseIfDetached)
         // Back from a move (the observer was off while detached): the page catches up on what changed meanwhile.
-        if (wasDetached && !islandGone) synchronized(seedLock) { senders.forEach { seedInitialStates(it) } }
+        // The token watcher was off too: a token that arrived meanwhile goes first, then the states.
+        if (wasDetached && !islandGone) synchronized(seedLock) {
+            sendTokenIfChanged()
+            senders.forEach { seedInitialStates(it) }
+        }
     }
 
     /** True once the card was first attached: a later attach is a return. */

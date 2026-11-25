@@ -520,7 +520,12 @@ class IslandSessionsTest {
     @Test fun aCardMovedWithinTheLayoutKeepsItsIslandAndOneThatLeavesClosesIt() {
         val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
         val pages = ArrayList<RecordingPage>()
-        val island = WebIslandCardView(context(EntityStore(), islands, dark = true, pages), LovelaceParser.parseCard(JSONObject(cardJson)))
+        var token = "first-token"
+        val watchers = HashSet<() -> Unit>()
+        val island = WebIslandCardView(
+            context(EntityStore(), islands, dark = true, pages, token = { token }, tokenWatchers = watchers),
+            LovelaceParser.parseCard(JSONObject(cardJson)),
+        )
         val left = FrameLayout(activity)
         val right = FrameLayout(activity)
         activity.setContentView(FrameLayout(activity).apply { addView(left); addView(right) })
@@ -539,8 +544,20 @@ class IslandSessionsTest {
         assertEquals(1, slots(islands).size)
         // The page catches up on what changed while the card was off the tree.
         assertEquals(listOf("snapshot"), sent.map { it.getString("type") })
+        sent.clear()
 
+        // A new token arrives while the card is off the tree, with no state change: its watcher was off, so the card
+        // sends it when it's back.
         right.removeView(island)
+        assertTrue("no token watcher while detached", watchers.isEmpty())
+        token = "second-token"
+        left.addView(island)
+        idle()
+        assertEquals(listOf("auth", "snapshot"), sent.map { it.getString("type") })
+        assertEquals("second-token", sent.first().getString("token"))
+        assertFalse(pages.single().closed)
+
+        left.removeView(island)
         idle()
         assertTrue("a card that left the tree closes its page", pages.single().closed)
         assertTrue(slots(islands).isEmpty())
