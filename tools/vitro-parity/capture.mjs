@@ -547,7 +547,7 @@ const touchPages = new WeakSet();
  * is taken by [captureShot], in the one layout its slots and texts are measured in.
  */
 async function fullShot(page, opts) {
-  if (!touchPages.has(page)) return page.screenshot({ ...opts, fullPage: true });
+  if (!touchPages.has(page) || touchOff.has(page)) return page.screenshot({ ...opts, fullPage: true });
   const vp = page.viewportSize();
   const h = await page.evaluate(() => Math.ceil(document.documentElement.scrollHeight));
   const grow = h > vp.height;
@@ -569,30 +569,46 @@ async function growTo(page, height) {
   await page.setViewportSize({ width: vp.width, height });
 }
 
-/** Puts a grown page's window back to the panel's size. */
+/** Touch pages whose touch emulation is off for a pinned page's capture (`pinned` mode). */
+const touchOff = new WeakSet();
+
+/** One DevTools session per touch page, kept open: an override goes away with the session that set it. */
+const touchSessions = new WeakMap();
+
+/** Turns [page]'s touch emulation on or off (HA's coarse or fine pointer). */
+async function setTouch(page, on) {
+  let cdp = touchSessions.get(page);
+  if (!cdp) {
+    cdp = await page.context().newCDPSession(page);
+    touchSessions.set(page, cdp);
+  }
+  await cdp.send('Emulation.setTouchEmulationEnabled', on ? { enabled: true, maxTouchPoints: 1 } : { enabled: false });
+}
+
+/**
+ * Puts a page back the way the panel has it, once a case's reference is taken: a grown window back to the panel's
+ * size, and touch emulation back on after a pinned page's full-page shot turned it off.
+ */
 async function restoreWindow(page) {
   const vp = grownPages.get(page);
-  if (!vp) return;
-  grownPages.delete(page);
-  await page.setViewportSize(vp);
+  if (vp) {
+    grownPages.delete(page);
+    await page.setViewportSize(vp);
+  }
+  if (touchOff.has(page)) {
+    touchOff.delete(page);
+    await setTouch(page, true);
+  }
 }
 
 /**
  * The reference's PNG, in the layout the case's slots and texts are measured in ([mode], `lib/pointer.mjs`). A touch
- * capture checks HA's page still has its coarse pointer and fails the case otherwise; a pinned page's full-page shot
- * turns touch emulation off, so it's turned on again for the cases after it.
+ * capture checks HA's page still has its coarse pointer and fails the case otherwise. A pinned page was settled again
+ * with touch emulation off before anything was measured, so its slots, PNG and texts all describe the fine-pointer
+ * layout its reference records.
  */
 async function captureShot(page, mode, opts) {
-  if (mode === 'mouse') return page.screenshot({ ...opts, fullPage: true });
-  if (mode === 'pinned') {
-    try {
-      return await page.screenshot({ ...opts, fullPage: true });
-    } finally {
-      const cdp = await page.context().newCDPSession(page);
-      await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
-      await cdp.detach();
-    }
-  }
+  if (mode === 'mouse' || mode === 'pinned') return page.screenshot({ ...opts, fullPage: true });
   if (!(await page.evaluate(() => matchMedia('(pointer: coarse)').matches))) {
     throw new Error('a touch frame\'s page lost its coarse pointer: HA would draw it for a mouse');
   }
@@ -808,7 +824,14 @@ async function capture() {
               await growTo(page, Math.ceil(info.docH));
               ({ info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000));
             }
-            if (mode === 'pinned') log(`${frame.id}/${c.id}: a pinned card on a page taller than the window: captured with a fine pointer`);
+            if (mode === 'pinned') {
+              // The whole capture with a fine pointer, as its reference will say: touch off before anything is
+              // measured, and on again once the case is done (restoreWindow).
+              log(`${frame.id}/${c.id}: a pinned card on a page taller than the window: captured with a fine pointer`);
+              touchOff.add(page);
+              await setTouch(page, false);
+              ({ info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000));
+            }
             if (!info.slots.length && c.card) throw new Error('no card on the page');
             if (!info.slots.length) log(`${frame.id}/${c.id}: HA shows no card (all hidden?): comparing the whole page`);
             if (c.card) {
