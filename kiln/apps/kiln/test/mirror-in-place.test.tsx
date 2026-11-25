@@ -25,6 +25,9 @@ import { withAppStreams } from '../src/wizard/demo';
 import { handTo, mirrorEntry, mirrorFrame } from './mirror-frame';
 
 beforeAll(() => {
+  // a browser that has WebUSB over HTTPS: without it every flow stops on the Browser screen (issue 849)
+  Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
+  Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
   // the restore point's download: a link the page clicks, which jsdom can't follow
   URL.createObjectURL = () => 'blob:kiln-test';
   URL.revokeObjectURL = () => {};
