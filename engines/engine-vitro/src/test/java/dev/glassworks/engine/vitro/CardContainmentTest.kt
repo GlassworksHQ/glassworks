@@ -241,6 +241,51 @@ class CardContainmentTest {
         assertTileStillUpdates(vv)
     }
 
+    /** A card whose own onDraw throws, always: once it's the error card, that onDraw never runs again. */
+    private class DrawBoomCard(ctx: VitroCardContext) : CardSurface(ctx) {
+        var draws = 0
+        override fun onDraw(canvas: Canvas) {
+            draws++
+            throw IllegalStateException("onDraw boom")
+        }
+    }
+
+    @Test fun aFailedCardsOwnOnDrawNeverRunsAgain() {
+        lateinit var card: DrawBoomCard
+        val vv = view(Boom.NONE)
+        vv.testCards = { c, ctx -> if (c.type == BOOM) DrawBoomCard(ctx).also { card = it } else null }
+        vv.setUserTheme(null, true)
+        drawAll(vv)
+        drawAll(vv)
+        val after = card.draws
+        drawAll(vv)
+        drawAll(vv)
+        assertEquals("the error card draws without the card's onDraw", after, card.draws)
+        assertErrorCard(card)
+        assertEquals(1, contained.size)
+    }
+
+    @Test fun aConfirmedActionThatThrowsIsContained() {
+        val ctx = VitroCardContext(
+            context = activity, haBase = FakeHaServer.BASE, store = store,
+            theme = dev.glassworks.engine.vitro.theme.ThemeResolver.resolve(dev.glassworks.engine.vitro.theme.ThemeCatalog(), true),
+            resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> },
+            navigate = { throw IllegalStateException("navigate boom") }, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+        )
+        val action = dev.glassworks.engine.vitro.model.ActionConfig.parse(
+            JSONObject().put("action", "navigate").put("navigation_path", "/lovelace/1").put("confirmation", JSONObject().put("text", "Go?")),
+            "none",
+        )
+        ctx.performAction(action, null)
+        ShadowLooper.idleMainLooper()
+        val dialog = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog()
+        assertNotNull("asks first", dialog)
+        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick()
+        ShadowLooper.idleMainLooper()
+        assertEquals(listOf("action"), contained.map { it.first })
+    }
+
     @Test fun aCardWhoseTouchThrowsBecomesTheErrorCard() {
         val vv = view(Boom.TOUCH)
         val card = boomCard(vv)

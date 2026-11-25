@@ -170,7 +170,14 @@ class VitroCardContext(
     private fun performActionNow(action: ActionConfig, defaultEntityId: String?) {
         val prompt = action.confirmation
         if (prompt != null && action.action != "none") {
-            confirmThen(prompt) { runAction(action, defaultEntityId) }
+            // The dialog's button runs on its own message, outside [performAction]'s guard.
+            confirmThen(prompt) {
+                try {
+                    runAction(action, defaultEntityId)
+                } catch (e: Exception) {
+                    VitroFailures.report("action", null, e)
+                }
+            }
             return
         }
         runAction(action, defaultEntityId)
@@ -728,13 +735,33 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
 
     /** The card's whole draw, its children's included ([setWillNotDraw] false sends every draw here). */
     override fun draw(canvas: Canvas) {
-        if (failure != null && !errorTileShown) return
+        if (failure != null) {
+            // The card's own onDraw may be what threw: once it's the error card, only its surface and the error
+            // card's views draw, never the card's own code again.
+            if (errorTileShown) drawErrorCard(canvas)
+            return
+        }
         val saved = canvas.saveCount
         try {
             super.draw(canvas)
         } catch (e: Exception) {
             canvas.restoreToCount(saved)
             fail("draw", e)
+        }
+    }
+
+    /** The error card's draw: the card's surface (its background), then its views, without the card's [onDraw]. */
+    private fun drawErrorCard(canvas: Canvas) {
+        val saved = canvas.saveCount
+        try {
+            background?.let { bg ->
+                bg.setBounds(0, 0, width, height)
+                bg.draw(canvas)
+            }
+            dispatchDraw(canvas)
+        } catch (e: Exception) {
+            canvas.restoreToCount(saved)
+            VitroFailures.report("draw", ErrorCardView.TYPE, e)
         }
     }
 

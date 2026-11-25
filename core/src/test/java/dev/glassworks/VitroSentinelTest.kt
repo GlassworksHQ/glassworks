@@ -121,6 +121,32 @@ class VitroSentinelTest {
         assertEquals(0, prefs().vitroCrashStrikes)
     }
 
+    @Test fun twoThreadsDyingInOneProcessAreOneStrike() {
+        prefs().vitroEnabled = true
+        val (s, _) = start()
+        now += 1_000L
+        assertFalse(s.onCrash(vitroCrash()))
+        assertFalse("the same process ending: not a second strike", s.onCrash(vitroCrash()))
+        assertTrue(prefs().vitroEnabled)
+        assertEquals(1, prefs().vitroCrashStrikes)
+    }
+
+    @Test fun aCrashAfterTheWindowClearsTheStrikesBeforeIt() {
+        // The stable mark couldn't run (a callback held the main thread across the window), then that callback threw.
+        prefs().vitroEnabled = true
+        val (first, _) = start()
+        now += 1_000L
+        first.onCrash(vitroCrash())
+        val (late, _) = start()
+        now += VitroSentinel.WINDOW_MS + 10
+        assertFalse(late.onCrash(vitroCrash()))
+        assertEquals(0, prefs().vitroCrashStrikes)
+        val (next, _) = start()
+        now += 1_000L
+        assertFalse("one early crash after a start that stayed up isn't a loop", next.onCrash(vitroCrash()))
+        assertTrue(prefs().vitroEnabled)
+    }
+
     @Test fun plainRestartsChangeNothing() {
         prefs().vitroEnabled = true
         repeat(5) {

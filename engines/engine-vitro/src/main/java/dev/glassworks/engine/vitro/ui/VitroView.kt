@@ -1101,7 +1101,8 @@ class VitroView(
             if (card != null && i >= 0) {
                 val lp = child.layoutParams
                 grid.removeViewAt(i)
-                grid.addView(errorCard(card, ctx), i, lp)
+                // Its visibility conditions still hold: a hidden card stays hidden as the error card.
+                grid.addView(wrapVisibility(card, errorCard(card, ctx), ctx), i, lp)
             }
         }
         section.title?.let { title ->
