@@ -251,11 +251,94 @@ passes 1 to 5 with nothing to fix. The first look at userdata's
 layout (`/` holds `lost+found` and `misc`; `/misc` is 01771 1000:9998 with only `adb`) came from
 `Ext4.readdir` and `stat` on the same file, which the test above now asserts.
 
+## The backlight floor: a framework overlay (2026-11-24)
+
+**The problem.** The app's backlight-off sleep asks for a dark screen the way Android allows a window
+to: `WindowManager.LayoutParams.screenBrightness = BRIGHTNESS_OVERRIDE_OFF` (`0f`). It keeps the
+display powered (the signed kernel's TC358775 LVDS bridge comes back with lines across the panel after
+a real screen-off, so turning the display off isn't an option). On the Mirror the backlight still
+glowed faintly at that setting.
+
+**How we got here.** The override goes through `PowerManagerService` into the display power request
+as brightness 0, and Android 6's `DisplayPowerController` (AOSP `android-6.0.1_r81`,
+`services/core/java/com/android/server/display/DisplayPowerController.java`) clamps every manual
+brightness with `clampScreenBrightness`, to `[mScreenBrightnessRangeMinimum, 255]`. The constructor
+sets that minimum to `min(config_screenBrightnessSettingMinimum, config_screenBrightnessDim,
+config_screenBrightnessDark)`, lowered further only by auto-brightness's first spline value. So the
+floor is a framework resource, not something an app can change. We weighed:
+
+| Path | Why not / why |
+|---|---|
+| The app writes the sysfs backlight (`/sys/class/leds/lcd-backlight/brightness`) | Needs root or `system` uid and fights `LightsService`, which writes it back on the next change |
+| Lower `config_screenBrightnessSettingMinimum` | Also the slider's floor: a person could slide the screen black with no touchscreen to bring it back |
+| Lower `config_screenBrightnessDim` | Changes what dimming does before a timeout; not the value that sets the floor here |
+| **Lower `config_screenBrightnessDark` to 0** | Only feeds the range minimum (and a log warning), so the slider keeps its floor of 10 |
+
+The framework overlay is a static RRO in `/vendor/overlay`, like `GlassworksSettings.apk`, but
+Android 6 loads one on `android` (framework-res) by its own path. The zygote's first system
+AssetManager runs `verifySystemIdmaps()` (`core/jni/android_util_AssetManager.cpp:122`), which forks
+`/system/bin/idmap --scan /vendor/overlay android /data/resource-cache /system/framework/framework-res.apk`.
+`idmap_scan` (`cmds/idmap/scan.cpp`) keeps every APK whose `<overlay>` names `android`, writes
+`/data/resource-cache/vendor@overlay@<name>.apk@idmap` (resources matched by type and name), and lists
+them in `/data/resource-cache/overlays.list`, which `AssetManager::addSystemOverlays` reads
+(`libs/androidfw/AssetManager.cpp`). It checks no signature.
+
+**What the image has.** Read 2026-11-24 with `aapt2 dump resources` from a `framework-res.apk` pulled
+off the dev unit on 2026-11-15 (outside the repo, an earlier Glass Panes image):
+
+| Resource | Image | AOSP 6.0.1 default |
+|---|---|---|
+| `integer/config_screenBrightnessSettingMinimum` | 10 | 10 |
+| `integer/config_screenBrightnessDim` | 10 | 10 |
+| `integer/config_screenBrightnessDark` | 1 | 1 |
+| `integer/config_screenBrightnessDoze` | 17 | 1 |
+| `bool/config_automatic_brightness_available` | true | false |
+| `array/config_autoBrightnessLcdBacklightValues` | 10 … 255 (8 values) | none |
+
+So the floor is `min(10, 10, 1) = 1`, and the spline's first value (10) doesn't lower it: the override
+lands at 1/255. Image 3 has the same three values (**read** by the maintainer's session; not re-read
+here). `config_screenBrightnessDark` is an `integer` and a `java-symbol` in AOSP 6.0.1's
+`core/res/res/values/symbols.xml`, so an overlay of that name and type maps onto it.
+
+**What Kiln writes.** `frames/lululemon-mirror/overlay/framework/` (`AndroidManifest.xml`,
+`res/values/config.xml`): package `dev.glassworks.mirror.framework`, `targetPackage="android"`,
+one resource, `config_screenBrightnessDark` 0. `build.sh` builds it next to the settings overlay, the
+same way (pinned build tools, v1 signing with AOSP's public test key); the settings overlay's bytes
+don't change. Kiln pins it by SHA-256 (`FRAMEWORK_OVERLAY`), stages it as `mirror-framework-overlay`,
+and `patchSystem` writes it to `/system/vendor/overlay/GlassworksFramework.apk`, 0644 root,
+`system_file`.
+
+```sh
+ANDROID_HOME=~/Library/Android/sdk frames/lululemon-mirror/overlay/build.sh
+# 4a8796d33b41da6a7ad44c065d57a5bfcad860794006d52b9977ff19f5f1c342  GlassworksSettings.apk  (unchanged)
+# d3b4200afd7ae6bf34b0bd452df91bafadec66301dd44cb05bfcac88b811c562  GlassworksFramework.apk
+aapt2 dump resources frames/lululemon-mirror/overlay/GlassworksFramework.apk
+# Package name=dev.glassworks.mirror.framework id=7f
+#   type integer id=01 entryCount=1
+#     resource 0x7f010000 integer/config_screenBrightnessDark
+#       () 0
+```
+
+**How sure we are.** The clamp, the floor and how framework overlays load: **read** (AOSP 6.0.1 source, the pulled
+framework-res).
+The APK's contents: **verified** off-device (above, and `image.test.ts`). That the Mirror's `idmap`
+accepts an overlay on `android` and the backlight reaches 0: **untested**. What the root's run checks
+after a flash:
+
+1. `ls -l /system/vendor/overlay/` lists both APKs, `/data/resource-cache/overlays.list` names
+   `GlassworksFramework.apk`, and `idmap --inspect /data/resource-cache/vendor@overlay@GlassworksFramework.apk@idmap`
+   maps one integer entry.
+2. `dumpsys display | grep mScreenBrightnessRangeMinimum` prints 0 (was 1).
+3. With the app's backlight-off sleep on, `cat /sys/class/leds/lcd-backlight/brightness` reads 0 and
+   the glass is dark; waking brings the old brightness back, and Settings' slider still stops at 10.
+
 ## Open questions
 
 - ~~Whether the overlay applies to SettingsProvider, which runs in the system process.~~ Yes
   (2026-11-16): `wifi_on=1`, the timeout and rotation came from it.
 - ~~Whether Android 6 keeps a pre-saved network enabled for auto-join with no `networkHistory.txt`.~~
   Yes (2026-11-16): it joined at the first boot and after a reboot.
+- Whether the framework overlay applies on the Mirror (idmap on `android`) and the backlight reaches 0.
+  Untested; steps above.
 - Whether the Mirror's power supply counts as AC for `stay_on_while_plugged_in`. Not checked; the
   timeout keeps the screen on either way.

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The framework's config (frameworks/base/core/res/res/values/config.xml, Android 6.0.1), changed for
+     the Mirror. Name and type as in AOSP 6.0.1 (an integer, a java-symbol in symbols.xml). -->
+<resources>
+    <!-- The lowest backlight the display may reach. DisplayPowerController clamps every brightness,
+         a window's BRIGHTNESS_OVERRIDE_OFF too, to min(config_screenBrightnessSettingMinimum,
+         config_screenBrightnessDim, config_screenBrightnessDark); the image has 10, 10 and 1, so "off"
+         left the backlight at 1/255. With 0 the app's backlight-off sleep turns the backlight off. The
+         slider's floor (config_screenBrightnessSettingMinimum, 10) stays, so a person can't slide the
+         screen dark. Android 6: 1 -->
+    <integer name="config_screenBrightnessDark">0</integer>
+</resources>

@@ -28,7 +28,7 @@ afterEach(() => cleanup());
 
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
-function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; proxy?: 'ok' | 'down' | 'bad'; settingsOverlay?: Uint8Array; serial?: string; refract?: string | null } = {}) {
+function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; proxy?: 'ok' | 'down' | 'bad'; settingsOverlay?: Uint8Array; frameworkOverlay?: Uint8Array; serial?: string; refract?: string | null } = {}) {
   let fails = o.flashFails ?? 0;
   const calls: string[] = [];
   const built: Parameters<ImageMaker['build']>[0][] = [];
@@ -58,7 +58,8 @@ function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; 
   const adb = new FirstBootMirror();
   const requestFastboot = vi.fn(async () => fb);
   const f = new ImageSession({ frame: mirrorFrame, simulated: true, images, ...(o.refract === null ? {} : { refract: o.refract ?? 'https://proxy.test' }), requestFastboot, requestAdb: async () => adb, adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
-    ...(o.settingsOverlay ? { settings: async () => o.settingsOverlay } : {}) });
+    ...(o.settingsOverlay ? { settings: async () => o.settingsOverlay } : {}),
+    ...(o.frameworkOverlay ? { framework: async () => o.frameworkOverlay } : {}) });
   f.choose(); // Glassworks, first and picked
   return { f, mirror, calls, adb, requestFastboot, built };
 }
@@ -108,14 +109,16 @@ describe('installing Glassworks over fastboot', () => {
     expect(adb.cmds.filter((c) => c.includes('--es url'))).toEqual([]);
   });
 
-  it('builds the settings overlay into the images; Glassworks\' Wi-Fi is set-up\'s, not the image\'s', async () => {
+  it('builds the overlays into the images; Glassworks\' Wi-Fi is set-up\'s, not the image\'s', async () => {
     const overlay = new Uint8Array([1, 2, 3]);
-    const { f, mirror, built } = setup({ settingsOverlay: overlay });
+    const framework = new Uint8Array([4, 5, 6]);
+    const { f, mirror, built } = setup({ settingsOverlay: overlay, frameworkOverlay: framework });
     await f.download();
     await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
     expect(built).toHaveLength(1);
     expect(built[0]!.settings).toBe(overlay);
+    expect(built[0]!.framework).toBe(framework);
     expect(built[0]!.wifi).toBeUndefined();
   });
 

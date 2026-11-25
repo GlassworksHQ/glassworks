@@ -54,7 +54,7 @@ export const kilnFrame: DeviceFrame = {
     wifiOn: (p, sleep) => wifiOn(p, sleep),
     images: workerImages,
     proxy: IMAGE_PROXY.base,
-    assets: { bootAnimation: d.assets.bootAnimation, settings: d.assets.settings },
+    assets: { bootAnimation: d.assets.bootAnimation, settings: d.assets.settings, framework: d.assets.framework },
     storage: { flashedFlag: d.storage.flashedFlag },
   },
   timings: { authMs: d.timings.authMs, firstStartAuthMs: d.timings.firstStartAuthMs, readMs: d.timings.readMs },

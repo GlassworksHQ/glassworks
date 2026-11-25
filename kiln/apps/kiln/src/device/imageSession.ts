@@ -74,6 +74,8 @@ export interface ImageDeps {
   bootAnimation?(): Promise<Uint8Array | undefined>;
   /** The settings APK the frame's image starts with (its `imageFlow.assets.settings`), when Kiln has it staged: a first boot with nothing to tap. */
   settings?(): Promise<Uint8Array | undefined>;
+  /** The framework overlay APK the frame's image starts with (its `imageFlow.assets.framework`), when Kiln has it staged. */
+  framework?(): Promise<Uint8Array | undefined>;
   sleep?: (ms: number) => Promise<void>;
   /** A simulated device needs no wait for the app's socket. */
   simulated?: boolean;
@@ -697,7 +699,7 @@ export class ImageSession {
           let at = { step: '', t: now() };
           const built = (step: string) => { if (at.step && at.step !== step) this.log('', `${at.step}: built in ${secs(now() - at.t)}`); if (at.step !== step) at = { step, t: now() }; };
           this.made = Object.assign(Object.create(null) as Record<string, Blob>, await this.d.images.build({
-            apk: this.d.apk()!, bootAnimation: await this.d.bootAnimation?.(), settings: await this.d.settings?.(),
+            apk: this.d.apk()!, bootAnimation: await this.d.bootAnimation?.(), settings: await this.d.settings?.(), framework: await this.d.framework?.(),
             adbKey, userdataBytes: s.fastboot.userdataBytes, fill: !s.noFill, ...(s.fastboot.deviceMac ? { deviceMac: s.fastboot.deviceMac } : {}),
             // the flag only: the key stays in this tab until the first start
             ...(this.apiKey ? { apiKeyHandover: true } : {}),

@@ -68,7 +68,7 @@ export interface ImageMaker {
   /** That Blob against its pinned size and SHA-256, right before it is flashed. Throws WrongImage. */
   check(blob: Blob, want: ImageFile, onProgress: (x: number) => void): Promise<void>;
   /** Builds the frame's images from the fetched one; can run again until discard(). */
-  build(o: { apk: Uint8Array; bootAnimation?: Uint8Array; settings?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
+  build(o: { apk: Uint8Array; bootAnimation?: Uint8Array; settings?: Uint8Array; framework?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
     deviceMac?: string; wifi?: { ssid: string; password: string }; apiKeyHandover?: boolean },
     onProgress: (step: PrepareStep, x: number) => void): Promise<{ system: Blob; userdata: Blob }>;
   /**
@@ -149,7 +149,7 @@ export interface ImageOverFastboot {
   /** Kiln's download route for the images. */
   proxy: string;
   /** Kiln's staged assets the build adds, by asset name. */
-  assets?: { bootAnimation?: string; settings?: string };
+  assets?: { bootAnimation?: string; settings?: string; framework?: string };
   /** An in-place recipe's code, for a frame that offers one. */
   inPlace?: InPlaceCode;
   /**

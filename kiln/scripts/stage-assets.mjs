@@ -52,6 +52,7 @@ const assets = [
   { name: 'bootlogo', file: repo('branding/glass-tile/bootlogo.bmp'), license: 'MIT', source: `${SRC}/tree/main/branding/glass-tile` },
   { name: 'mirror-bootanimation', file: repo('branding/lululemon-mirror/bootanimation.zip'), license: 'MIT', source: `${SRC}/tree/main/branding/lululemon-mirror` },
   { name: 'mirror-settings-overlay', file: repo('frames/lululemon-mirror/overlay/GlassworksSettings.apk'), license: 'MIT', source: `${SRC}/tree/main/frames/lululemon-mirror/overlay` },
+  { name: 'mirror-framework-overlay', file: repo('frames/lululemon-mirror/overlay/GlassworksFramework.apk'), license: 'MIT', source: `${SRC}/tree/main/frames/lululemon-mirror/overlay/framework` },
   { name: 'kiosk-apk', file: KIOSK, license: 'MIT', source: `${SRC}/tree/main/app` },
   ...(KEYBOARD || process.argv.includes('--remote') ? [{ name: 'keyboard-apk', file: KEYBOARD ?? '', license: 'Apache-2.0', source: 'https://github.com/rkkr/simple-keyboard' }] : []),
 ];

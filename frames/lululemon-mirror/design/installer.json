@@ -44,7 +44,8 @@
     "assets": {
       "bootAnimation": "mirror-bootanimation",
       "settings": "mirror-settings-overlay",
-      "why": "branding/lululemon-mirror/bootanimation.zip and frames/lululemon-mirror/overlay/GlassworksSettings.apk (Wi-Fi on, no screen timeout, no lock screen, no auto-rotate), staged with Kiln's other assets"
+      "framework": "mirror-framework-overlay",
+      "why": "branding/lululemon-mirror/bootanimation.zip, frames/lululemon-mirror/overlay/GlassworksSettings.apk (Wi-Fi on, no screen timeout, no lock screen, no auto-rotate) and frames/lululemon-mirror/overlay/GlassworksFramework.apk (the backlight can go fully off), staged with Kiln's other assets"
     },
     "storage": {
       "flashedFlag": "kiln.mirror.flashed",
