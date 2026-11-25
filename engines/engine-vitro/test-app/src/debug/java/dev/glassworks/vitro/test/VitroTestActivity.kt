@@ -30,6 +30,7 @@ import dev.glassworks.engine.Page
 import dev.glassworks.engine.PageHost
 import dev.glassworks.engine.PagePort
 import dev.glassworks.engine.vitro.VitroEngine
+import dev.glassworks.engine.vitro.webrtc.VitroWebRtc
 import dev.glassworks.platform.Platform
 import org.json.JSONObject
 
@@ -97,6 +98,8 @@ class VitroTestActivity : Activity() {
         url = prefs.getString(KEY_URL, null)
         if (prefs.contains(KEY_DARK)) forceNightMode(prefs.getBoolean(KEY_DARK, true))
 
+        // Cameras play over WebRTC first, then HLS and MJPEG, as in the generic app with Vitro on (GenericApp).
+        VitroWebRtc.register()
         engine = VitroEngine(
             fallback = StubFallbackEngine,
             settings = { EngineSettings(secureHosts = emptyList(), zoom = 0f, remoteDebugging = false, dashboard = url) },

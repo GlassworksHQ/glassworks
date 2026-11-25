@@ -48,10 +48,12 @@ TRANSPORTS = {
 }
 # Threads a process keeps for good once something used them, shared by every stream: Vitro's image loader pool,
 # media3's static BackgroundExecutor (androidx.media3.common.util, "ExoPlayer:BackgroundExecutor"; a player's own
-# thread is "ExoPlayer:Playback", and that one must go), and Android's binder pools, which grow when MediaCodec is
-# first used. A stream starting one isn't a leak. Every other thread that appeared with the stream must be gone once
+# thread is "ExoPlayer:Playback", and that one must go), Android's binder pools, which grow when MediaCodec is
+# first used, and ConnectivityManager's static callback thread ("ConnectivityManager" on API 23, "ConnectivityThread"
+# later), started the first time anything (libwebrtc's network monitor) registers a network callback. A stream
+# starting one isn't a leak. Every other thread that appeared with the stream must be gone once
 # it closed. Names are /proc's comm: 15 characters, after the last '.' (vitro-mjpeg-camera.x_mjpeg -> x_mjpeg).
-SHARED_THREADS = re.compile(r"^(vitro-img|ExoPlayer:Backg|HwBinder:|Binder:)")
+SHARED_THREADS = re.compile(r"^(vitro-img|ExoPlayer:Backg|HwBinder[:_]|Binder[:_]|ConnectivityMan|ConnectivityThr)")
 
 
 class Fail(AssertionError):
@@ -63,8 +65,10 @@ def log(msg):
 
 
 class Device:
-    def __init__(self, adb):
-        self.adb = shlex.split(adb)
+    def __init__(self, adb, serial=None):
+        # The serial goes on the command line: adb.exe started from WSL doesn't see ANDROID_SERIAL (WSL passes only
+        # the variables WSLENV names to Windows programs), and would take whichever device it finds.
+        self.adb = shlex.split(adb) + (["-s", serial] if serial else [])
 
     def run(self, *args, check=True, timeout=60, binary=False):
         # No stdin: adb (adb.exe from WSL above all) reads it, and would eat a calling script's input.
@@ -76,22 +80,33 @@ class Device:
     def shell(self, cmd, **kw):
         return self.run("shell", cmd, **kw)
 
+    def is_emulator(self):
+        """An emulator says so in its properties (ro.kernel.qemu up to API 30, ro.boot.qemu after)."""
+        props = self.shell("getprop ro.kernel.qemu; getprop ro.boot.qemu", check=False).split()
+        return "1" in props
+
     def api(self):
         return int(self.shell("getprop ro.build.version.sdk").strip())
 
     def pid(self):
-        for line in self.shell("ps -A 2>/dev/null || ps", check=False).splitlines():
+        # toybox's ps (API 24+) lists only this shell's processes without -A; toolbox's (API 23) takes -A as a name
+        # and lists none. So both, one after the other.
+        for line in self.shell("ps -A; ps", check=False).splitlines():
             cols = line.split()
             if cols and cols[-1] == PKG:
                 return cols[1]
         return None
 
     def threads(self):
+        """The app's thread names. Fails rather than return none: an empty list would pass every leak check."""
         pid = self.pid()
         if not pid:
-            return []
+            raise RuntimeError(f"{PKG} isn't running: no threads to read")
         out = self.shell(f"run-as {PKG} sh -c 'cat /proc/{pid}/task/*/comm'", check=False)
-        return [t.strip() for t in out.splitlines() if t.strip()]
+        names = [t.strip() for t in out.splitlines() if t.strip()]
+        if not names or any("No such file" in n or "denied" in n for n in names):
+            raise RuntimeError(f"couldn't read {PKG}'s threads: {out.strip()[:200]}")
+        return names
 
     def logcat(self):
         return self.run("logcat", "-d", "-v", "brief", "-s", f"{TAG}:I", check=False)
@@ -128,7 +143,11 @@ class Probe:
         for line in self.dev.logcat().splitlines():
             m = self.LINE.search(line)
             if m:
-                ev = dict(kv.split("=", 1) for kv in m.group(2).split() if "=" in kv)
+                # `reason=` comes last and keeps its spaces (an error's message).
+                rest, _, reason = m.group(2).partition("reason=")
+                ev = dict(kv.split("=", 1) for kv in rest.split() if "=" in kv)
+                if reason:
+                    ev["reason"] = reason.strip()
                 ev["event"] = m.group(1)
                 events.append(ev)
         self.events = events
@@ -208,13 +227,16 @@ def check_motion(dev, captures=4, gap=0.5):
             "colours": colours(frames[-1], box) if box else 0, "size": [w, h]}
 
 
-def first_motion(dev, t0, timeout, streak=3):
+def first_motion(dev, t0, timeout, streak=3, gap=0.25):
     """When a moving picture first shows, as the screen sees it, in ms since t0 (monotonic): the first of `streak`
-    back-to-back captures in a row that each changed. One change alone is a window or view appearing, or the poster
-    giving way to the video, not motion. Coarse: a capture takes 150 to 300 ms on an emulator."""
+    captures in a row, each at least `gap` s after the last, that each changed. One change alone is a window or view
+    appearing, or the poster giving way to the video, not motion. The gap keeps captures apart by more than a frame
+    (15 fps: 67 ms): an API 23 emulator captures in 90 ms, and two captures within one frame look like a still.
+    Coarse: a capture takes 90 to 300 ms on an emulator."""
     end = t0 + timeout
-    prev, run, since = dev.frame(), 0, None
+    prev, prev_at, run, since = dev.frame(), time.monotonic(), 0, None
     while time.monotonic() < end:
+        time.sleep(max(0.0, prev_at + gap - time.monotonic()))
         at = time.monotonic()
         cur = dev.frame()
         w, h, _ = cur
@@ -225,7 +247,7 @@ def first_motion(dev, t0, timeout, streak=3):
                 return round((since - t0) * 1000)
         else:
             run = 0
-        prev = cur
+        prev, prev_at = cur, at
     return None
 
 
@@ -247,6 +269,8 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
     """Fills `r` as it goes, so a failure still reports what was measured before it."""
     cam, kind = TRANSPORTS[name]
     r.update({"transport": name, "camera": cam, "kind": kind})
+    # On screen WebRTC and its HLS fallback look the same: only the seam tells them apart.
+    seam_required = seam_required or name == "webrtc"
     url = f"{base_url}/{DASHBOARD}"
 
     # 1. A fresh app on the view without a camera: the threads it runs without any stream.
@@ -256,6 +280,11 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
     time.sleep(4)
     baseline = set(dev.threads())
     probe.poll()
+    # Every device reaches the fake as 127.0.0.1 (adb reverse): a stream it serves now, with this app on a view
+    # without a camera, is another client's (an emulator left on a camera view), and would count as this one's.
+    busy = live_streams(fake.cameras())
+    if busy:
+        raise Fail(f"the fake already serves {busy}: another device or app is playing its cameras; stop it first")
 
     # 2. The camera's view: its stream's first frame.
     t0 = time.monotonic()
@@ -265,7 +294,8 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
     # few seconds are enough to know.
     wait_s = budget_ms / 1000 + 5 if seam_required or r["first_motion_ms"] is None else 3
     opened = probe.wait(lambda e: e["event"] == "open" and e.get("entity") == cam, wait_s)
-    first = probe.wait(lambda e: e["event"] == "first_frame" and e.get("entity") == cam,
+    # Vitro may run two kinds side by side (WebRTC beside HLS, as HA's ha-camera-stream does): the expected kind's.
+    first = probe.wait(lambda e: e["event"] == "first_frame" and e.get("entity") == cam and e.get("kind") == kind,
                        budget_ms / 1000 + 5 if opened else 0.1)
     r["wall_to_first_frame_ms"] = round((time.monotonic() - t0) * 1000) if first else None
     r["opened"] = [(e.get("kind"), e.get("id")) for e in probe.events if e["event"] == "open" and e.get("entity") == cam]
@@ -309,6 +339,7 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
             raise Fail(f"{name}: HOME didn't pause the stream (no setActive(false) or close)")
         r["hidden"] = inactive["event"] if inactive["event"] == "close" else "inactive"
     time.sleep(2.0)
+    probe.poll()                # what came while it settled (a frame drawn just before the pause) isn't counted
     n_before = len(probe.events)
     pause = {"before": fake.cameras()}
     time.sleep(3.0)
@@ -325,7 +356,7 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
     r["resume_first_motion_ms"] = first_motion(dev, t1, budget_ms / 1000 + 5)
     if not sid and (r["resume_first_motion_ms"] is None or r["resume_first_motion_ms"] > budget_ms):
         raise Fail(f"{name}: no moving picture within {budget_ms} ms after the app came back")
-    again = probe.wait(lambda e: e["event"] == "first_frame" and e.get("entity") == cam
+    again = probe.wait(lambda e: e["event"] == "first_frame" and e.get("entity") == cam and e.get("kind") == kind
                        and probe.events.index(e) >= mark, budget_ms / 1000 + 5) if sid else None
     if sid and not again:
         raise Fail(f"{name}: no first frame after the app came back")
@@ -367,6 +398,12 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
     return r
 
 
+def live_streams(cams):
+    """What the fake is serving right now: open MJPEG streams, HLS streams fetched in the last 3 s, WebRTC sessions."""
+    return ([("mjpeg", s["camera"]) for s in cams["mjpeg"]] + [("hls", s["camera"]) for s in cams["hls"] if s["idle_s"] < 3]
+            + [("webrtc", s["camera"]) for s in cams["webrtc"]])
+
+
 def check_paused(name, cam, pause):
     """While hidden, the fake sends no MJPEG frames and serves no HLS fetches for the camera."""
     b, a = pause["before"], pause["after"]
@@ -374,7 +411,8 @@ def check_paused(name, cam, pause):
     if name == "mjpeg":
         before = {s["stream"]: s["frames"] for s in b["mjpeg"] if s["camera"] == cam}
         after = {s["stream"]: s["frames"] for s in a["mjpeg"] if s["camera"] == cam}
-        sent = sum(after.get(k, v) - v for k, v in before.items())
+        # A stream opened while hidden counts from zero.
+        sent = sum(n - before.get(k, 0) for k, n in after.items())
         out = {"mjpeg_frames_sent_while_hidden": sent, "open": len(after)}
         # A paused reader stops reading; TCP buffers still take a few frames before the fake's writes block.
         if sent > 10:
@@ -396,46 +434,58 @@ def main():
     ap.add_argument("--base", default="http://127.0.0.1:8089", help="the fake as the device reaches it (adb reverse)")
     ap.add_argument("--fake", default="http://127.0.0.1:8089", help="the fake as this computer reaches it")
     ap.add_argument("--first-frame-budget-ms", type=int, default=10000)
-    ap.add_argument("--seam", choices=("required", "optional"), default="required",
-                    help="optional: a build that plays cameras without the CameraStream seam passes on the screen checks")
+    # Optional by default: Vitro's built-in HLS and MJPEG players don't go through CameraStreamFactories yet (#889),
+    # so the probe hears nothing from them and they pass on the screen checks. WebRTC always needs the seam.
+    ap.add_argument("--seam", choices=("required", "optional"), default="optional",
+                    help="required: HLS and MJPEG must report their first frame through the CameraStream seam too")
     ap.add_argument("--out", default="vitro-camera-e2e-out")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    dev = Device(os.environ.get("ADB", "adb"))
+    dev = Device(os.environ.get("ADB", "adb"), os.environ.get("ANDROID_SERIAL"))
+    if not dev.is_emulator():
+        raise SystemExit("this test presses HOME and force-stops apps: it runs on an emulator only (set ANDROID_SERIAL)")
     fake, probe = Fake(a.fake), Probe(dev)
     api = dev.api()
     log(f"device API {api}; fake {a.fake}; transports {a.transports}")
     results, failed = [], False
-    for name in [t.strip() for t in a.transports.split(",") if t.strip()]:
-        if name == "webrtc" and not fake.cameras().get("webrtc_available"):
-            raise SystemExit("the fake has no WebRTC peer (run serve.py from webrtcenv.py's venv)")
-        log(f"{name}: start")
-        r = {}
-        try:
-            run_transport(dev, fake, probe, name, a.base, a.first_frame_budget_ms, a.out, a.seam == "required", r)
-            r["ok"] = True
-        except (Fail, RuntimeError, subprocess.TimeoutExpired) as e:
-            failed = True
-            r.update({"transport": name, "ok": False, "error": str(e)})
-            try:
-                dev.png(os.path.join(a.out, f"{name}-failed.png"))
-                with open(os.path.join(a.out, f"{name}-logcat.txt"), "w") as f:
-                    f.write(dev.run("logcat", "-d", "-v", "threadtime", check=False)[-400_000:])
-                fake.get("/vitro-camera-e2e/restore")
-                fake.lovelace_updated()
-            except Exception as e2:  # noqa: BLE001 - the report matters more than the evidence
-                r["evidence_error"] = repr(e2)
-        r["api"] = api
-        results.append(r)
-        log(f"{name}: {'ok' if r['ok'] else 'FAILED: ' + r['error']}" + (
-            f" (first frame {r.get('first_frame_ms')} ms, resumed {r.get('resume_first_frame_ms')} ms)" if r["ok"] else ""))
-    dev.shell(f"am force-stop {PKG}", check=False)
-    with open(os.path.join(a.out, f"results-api{api}.json"), "w") as f:
-        json.dump(results, f, indent=1)
+    try:
+        for name in [t.strip() for t in a.transports.split(",") if t.strip()]:
+            failed |= not run_one(dev, fake, probe, name, a, api, results)
+    finally:
+        dev.shell(f"am force-stop {PKG}", check=False)
+        with open(os.path.join(a.out, f"results-api{api}.json"), "w") as f:
+            json.dump(results, f, indent=1)
     print(json.dumps([{k: r.get(k) for k in ("transport", "api", "ok", "first_frame_ms", "first_frame_since_open_ms", "first_motion_ms",
                                               "resume_first_frame_ms", "resume_first_motion_ms", "error", "seam")}
                       for r in results], indent=1))
     sys.exit(1 if failed else 0)
+
+
+def run_one(dev, fake, probe, name, a, api, results):
+    """One transport, its result appended to `results` whatever happens. True when it passed."""
+    r = {"transport": name, "api": api}
+    results.append(r)
+    log(f"{name}: start")
+    try:
+        if name == "webrtc" and not fake.cameras().get("webrtc_available"):
+            raise Fail("the fake has no WebRTC peer (run serve.py from webrtcenv.py's venv)")
+        run_transport(dev, fake, probe, name, a.base, a.first_frame_budget_ms, a.out, a.seam == "required", r)
+        r["ok"] = True
+    except (Fail, OSError, RuntimeError, ValueError, KeyError, subprocess.TimeoutExpired) as e:
+        # OSError: a request to the fake (urllib's URLError) or adb itself failing.
+        r.update({"ok": False, "error": f"{type(e).__name__}: {e}" if not isinstance(e, Fail) else str(e)})
+        try:
+            dev.png(os.path.join(a.out, f"{name}-failed.png"))
+            with open(os.path.join(a.out, f"{name}-logcat.txt"), "w") as f:
+                f.write(dev.run("logcat", "-d", "-v", "threadtime", check=False)[-400_000:])
+            fake.get("/vitro-camera-e2e/restore")
+            fake.lovelace_updated()
+        except Exception as e2:  # noqa: BLE001 - the report matters more than the evidence
+            r["evidence_error"] = repr(e2)
+    r["api"] = api
+    log(f"{name}: {'ok' if r['ok'] else 'FAILED: ' + r['error']}" + (
+        f" (first frame {r.get('first_frame_ms')} ms, resumed {r.get('resume_first_frame_ms')} ms)" if r["ok"] else ""))
+    return r["ok"]
 
 
 if __name__ == "__main__":

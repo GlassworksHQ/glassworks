@@ -30,9 +30,11 @@ for _prof in ("720p", "360p"):
         with open(os.path.join(STUB_CAMERA, _prof, f"seg{_n:03d}.m4s"), "wb") as _f:
             _f.write(f"seg{_n:03d}-{_prof}".encode())
 # The MJPEG pictures (camera.mjpeg_frames reads them when they are there): two stub "JPEGs" a profile.
+sys.path.insert(0, os.path.dirname(HERE))
+import camera  # noqa: E402
 os.makedirs(os.path.join(STUB_CAMERA, "mjpeg"))
 for _prof in ("720p", "360p"):
-    with open(os.path.join(STUB_CAMERA, "mjpeg", f"{_prof}.mjpeg"), "wb") as _f:
+    with open(os.path.join(STUB_CAMERA, "mjpeg", camera.mjpeg_name(_prof)), "wb") as _f:
         _f.write(b"\xff\xd8one-" + _prof.encode() + b"\xff\xd9\xff\xd8two-" + _prof.encode() + b"\xff\xd9")
 os.environ["GW_PERF_CAMERA"] = STUB_CAMERA
 sys.path.insert(0, os.path.dirname(HERE))
@@ -367,9 +369,12 @@ class FakeHA(unittest.TestCase):
         self.assertEqual(self.http("GET", "/api/camera_proxy_stream/camera.nope")[0], 404)
         sock = socket.create_connection(("127.0.0.1", self.port), timeout=10)
         sock.sendall(b"GET /api/camera_proxy_stream/camera.clarity_cam_1?token=x HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+        self.addCleanup(sock.close)
         data = b""
         while data.count(b"--frame") < 4:
-            data += sock.recv(4096)
+            chunk = sock.recv(4096)
+            self.assertTrue(chunk, f"the stream ended early: {data[:200]!r}")
+            data += chunk
         head, body = data.split(b"\r\n\r\n", 1)
         self.assertIn(b" 200 ", head.split(b"\r\n")[0])
         self.assertIn(b"Content-Type: multipart/x-mixed-replace;boundary=frame", head)
@@ -380,7 +385,6 @@ class FakeHA(unittest.TestCase):
         self.assertEqual(len(live), 1)
         self.assertGreaterEqual(live[0]["frames"], 3)
         sock.shutdown(socket.SHUT_RDWR)
-        sock.close()
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline and any(s["camera"] == "camera.clarity_cam_1" for s in self.cameras()["mjpeg"]):
             time.sleep(0.1)

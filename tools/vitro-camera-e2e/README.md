@@ -25,14 +25,29 @@ ADB=/mnt/c/Users/<you>/AppData/Local/Android/Sdk/platform-tools/adb.exe ANDROID_
   tools/vitro-camera-e2e/run.sh -- --transports webrtc,hls,mjpeg
 ```
 
-On Linux or macOS with a local emulator, leave `ADB` unset. The script needs `ffmpeg` with libx264 and Python
+On Linux or macOS with a local emulator, leave `ADB` unset. Both scripts refuse a device that isn't an emulator. The script needs `ffmpeg` with libx264 and Python
 3.11 or later with `venv`. On first use it builds the WebRTC peer's venv, the camera streams and HA's frontend
 into `~/.cache/glassworks-perf`, which takes a few minutes. Results and screenshots go to
 `build/vitro-camera-e2e/` (`--out` changes it). Use an emulator only: the test presses HOME and force-stops the
 test app.
 
-`e2e.py --seam optional` also accepts a build that plays cameras without Vitro's `CameraStream` seam. That build
-writes no first-frame line, so only the screen checks run.
+WebRTC always needs the seam's first frame, because on screen it looks just like the HLS stream Vitro falls back to.
+HLS and MJPEG pass on the screen checks when the probe hears nothing from them, which is today's case: Vitro builds
+its own HLS and MJPEG players without going through `CameraStreamFactories`. `--seam required` makes them report
+through the seam too.
+
+## Where each transport plays
+
+On METIS's x86_64 emulators, with the test pattern at 640×360 and 15 fps:
+
+| Android | WebRTC | HLS | MJPEG |
+|---|---|---|---|
+| 6 (API 23) | Plays. First frame in about 0.5 s, back from hidden in about 0.3 s | Plays. Moving after about 2.5 s | Plays. Moving after about 0.7 s |
+| 10 (API 29) | Doesn't play: libwebrtc offers no H.264 here (only VP8, VP9 and AV1), so the offer fails, as go2rtc's would, and Vitro plays HLS instead | Plays. Moving after about 2.5 s | Plays. Moving after about 0.5 s |
+
+HLS is slower because Home Assistant's first playlist waits for two 1-second segments. The API 29 image has the
+same software H.264 decoder as the API 23 one, plus the emulator's own (`OMX.android.goldfish.h264.decoder`), and
+libwebrtc's decoder factories take neither there. CI runs what plays on each image.
 
 ## Networking
 
@@ -54,6 +69,10 @@ emulator 127.0.0.1:8090 ──adb reverse──▶ adb host 127.0.0.1:8090 ─�
   relay's media address is WSL's own `eth0` address (`172.x`), which stays inside WSL. This needs WSL's default
   `localhostForwarding`, and mirrored networking works too.
 - **CI runs everything on one Linux runner**, so both hops are plain loopback.
+- **One device at a time.** Every device reaches the fake as `127.0.0.1`, so the fake can't tell two clients
+  apart. An emulator left on a camera view with its own `adb reverse` would count as the device under test.
+  The test refuses to start while the fake already serves a stream, and `run.sh` passes `-s` itself, because
+  `adb.exe` started from WSL doesn't see `ANDROID_SERIAL`.
 
 ## What it checks
 

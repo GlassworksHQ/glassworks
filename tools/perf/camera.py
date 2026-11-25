@@ -137,12 +137,18 @@ def mjpeg_args(seconds=MJPEG_S):
             "-f", "mjpeg", "pipe:1"]
 
 
+def mjpeg_name(profile):
+    """The MJPEG pictures' file under root()/mjpeg: named by the settings that made them, so changed settings
+    make a new file instead of serving an old one."""
+    return f"{profile}-{hashlib.sha256(json.dumps(mjpeg_args()).encode()).hexdigest()[:8]}.mjpeg"
+
+
 @functools.lru_cache(maxsize=None)
 def mjpeg_frames(profile):
     """The profile's stream as a list of JPEG pictures (HA's camera_proxy_stream, MJPEG): the same video
     the segments carry, burnt-in counter and all, decoded once and kept in the cache next to them."""
     d = os.path.join(root(), "mjpeg")
-    path = os.path.join(d, f"{profile}.mjpeg")
+    path = os.path.join(d, mjpeg_name(profile))
     if not os.path.exists(path):
         src = os.path.join(root(), profile)
         joined = b""

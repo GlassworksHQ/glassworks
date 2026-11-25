@@ -85,7 +85,7 @@ Android PR in a shared pool (see above).
 | `conformance (API 23, 26, 29, 34)` | The core's conformance test (`core/src/androidTest`), and on API 23 and 34 the [engine contract](engine-contract.md) (`engines/conformance`) on the same emulator | push to `main` when Android code changes, nightly at 03:17 UTC (`pr.yml`'s time), by hand |
 | `libs-api23` | `esphome-api-android` and `improv` androidTest on Android 6 | the same |
 | `legacy-verify` | The generic app's legacy APK (the Mirror's) installed on Android 6: fails when its verifier rejects a Glassworks class (`tools/legacy/verify-api23.sh`, #435). Before a Mirror flash, run the script on the build you flash | the same |
-| `Vitro cameras on API 29` (`vitro-camera`) | Vitro's camera end-to-end test ([tools/vitro-camera-e2e](../tools/vitro-camera-e2e/README.md)): a live camera card over each transport Vitro plays, against Clarity's fake Home Assistant on the runner, checked on screen | the same |
+| `Vitro cameras on API 23, 29` (`vitro-camera`) | Vitro's camera end-to-end test ([tools/vitro-camera-e2e](../tools/vitro-camera-e2e/README.md)): a live camera card over each transport Vitro plays, against Clarity's fake Home Assistant on the runner, checked on screen | the same |
 | `report` | Opens, updates or closes the red-main issue | after the jobs above, on `main` only |
 
 A PR still gets the fast checks for the same code: the unit tests (`app`), lint's NewApi at minSdk 23

@@ -18,10 +18,12 @@ TOOL = os.path.dirname(HERE)
 PERF = os.path.join(TOOL, "..", "perf")
 os.environ.setdefault("GW_PERF_FRONTEND", os.path.join(PERF, "test", "stub_frontend"))
 STUB_CAMERA = tempfile.mkdtemp(prefix="vitro-camera-e2e-")
+sys.path.insert(0, PERF)
+import camera  # noqa: E402
 os.makedirs(os.path.join(STUB_CAMERA, "mjpeg"))
 for _prof in ("720p", "360p"):
     os.makedirs(os.path.join(STUB_CAMERA, _prof))
-    with open(os.path.join(STUB_CAMERA, "mjpeg", f"{_prof}.mjpeg"), "wb") as _f:
+    with open(os.path.join(STUB_CAMERA, "mjpeg", camera.mjpeg_name(_prof)), "wb") as _f:
         _f.write(b"\xff\xd8a\xff\xd9\xff\xd8b\xff\xd9")
 os.environ["GW_PERF_CAMERA"] = STUB_CAMERA
 sys.path.insert(0, PERF)
@@ -188,6 +190,7 @@ class Probe(unittest.TestCase):
             "I/VitroCamE2E( 4242): open id=1 entity=camera.clarity_hls_1 kind=HLS live=1",
             "I/VitroCamE2E( 4242): first_frame id=1 entity=camera.clarity_hls_1 kind=HLS since_start_ms=812 since_open_ms=830",
             "I/VitroCamE2E( 4242): close id=1 entity=camera.clarity_hls_1 kind=HLS total=40 live=0",
+            "I/VitroCamE2E( 4242): error id=2 entity=camera.clarity_cam_1 kind=WEB_RTC reason=start_failed: the offer has no H.264 video",
         ])
 
         class Dev:
@@ -195,7 +198,8 @@ class Probe(unittest.TestCase):
                 return lines
         p = e2e.Probe(Dev())
         new = p.poll()
-        self.assertEqual([e["event"] for e in new], ["wrap", "open", "first_frame", "close"])
+        self.assertEqual([e["event"] for e in new], ["wrap", "open", "first_frame", "close", "error"])
+        self.assertEqual((new[-1]["kind"], new[-1]["reason"]), ("WEB_RTC", "start_failed: the offer has no H.264 video"))
         first = p.wait(lambda e: e["event"] == "first_frame", 1)
         self.assertEqual((first["entity"], first["kind"], first["since_start_ms"]), ("camera.clarity_hls_1", "HLS", "812"))
         self.assertEqual(p.poll(), [])
@@ -211,6 +215,19 @@ class Pause(unittest.TestCase):
         a["mjpeg"][0]["frames"] = 145
         with self.assertRaises(e2e.Fail):
             e2e.check_paused("mjpeg", self.CAM, {"before": b, "after": a})
+
+    def test_a_stream_opened_while_hidden_counts_from_zero(self):
+        b = {"mjpeg": [{"stream": 1, "camera": self.CAM, "frames": 100}], "hls": [], "webrtc": []}
+        a = {"mjpeg": [{"stream": 1, "camera": self.CAM, "frames": 104},
+                       {"stream": 2, "camera": self.CAM, "frames": 45}], "hls": [], "webrtc": []}
+        with self.assertRaisesRegex(e2e.Fail, "49 frames"):
+            e2e.check_paused("mjpeg", self.CAM, {"before": b, "after": a})
+
+    def test_another_clients_stream_is_seen(self):
+        cams = {"mjpeg": [], "webrtc": [{"session": "s", "camera": "camera.x", "sent": 3}],
+                "hls": [{"token": "t", "camera": "camera.y", "playlists": 1, "segments": 0, "idle_s": 1.0},
+                        {"token": "u", "camera": "camera.z", "playlists": 9, "segments": 8, "idle_s": 40.0}]}
+        self.assertEqual(e2e.live_streams(cams), [("hls", "camera.y"), ("webrtc", "camera.x")])
 
     def test_hls_fetches_while_hidden_fail(self):
         cam = "camera.clarity_hls_1"

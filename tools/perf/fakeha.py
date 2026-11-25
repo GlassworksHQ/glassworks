@@ -173,8 +173,11 @@ class Hub:
         for c in conns:
             for mid, kind in list(c.event_subs.items()):
                 if kind in (event_type, None):
-                    c.event(mid, {"event_type": event_type, "data": data, "origin": "LOCAL",
-                                  "time_fired": _iso_now(), "context": {"id": D.context(), "parent_id": None, "user_id": None}})
+                    try:
+                        c.event(mid, {"event_type": event_type, "data": data, "origin": "LOCAL", "time_fired": _iso_now(),
+                                      "context": {"id": D.context(), "parent_id": None, "user_id": None}})
+                    except OSError:
+                        break           # a frontend that went (its run loop drops it): the others still get it
 
     def ws_note(self, down=0, up=0, send_ms=0.0):
         with self.ws_lock:

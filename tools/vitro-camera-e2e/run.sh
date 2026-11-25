@@ -29,6 +29,9 @@ while [ $# -gt 0 ]; do
 done
 ADB=${ADB:-adb}
 export ADB
+# On the command line too: adb.exe started from WSL doesn't see ANDROID_SERIAL (e2e.py does the same).
+adb_s=$ADB
+[ -n "${ANDROID_SERIAL:-}" ] && adb_s="$ADB -s $ANDROID_SERIAL"
 mkdir -p "$out"
 
 [ -f "$apk" ] || { echo "no APK at $apk: ./gradlew :vitro-test:assembleDebug" >&2; exit 2; }
@@ -39,8 +42,8 @@ py=$(python3 "$repo/tools/perf/webrtcenv.py")
 fake=$!
 cleanup() {
   kill "$fake" 2>/dev/null || true
-  $ADB reverse --remove "tcp:$port" 2>/dev/null || true
-  $ADB reverse --remove "tcp:$((port + 1))" 2>/dev/null || true
+  $adb_s reverse --remove "tcp:$port" < /dev/null 2>/dev/null || true
+  $adb_s reverse --remove "tcp:$((port + 1))" < /dev/null 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -52,11 +55,17 @@ for _ in $(seq 1 300); do
 done
 cat "$out/fake.out"
 
-$ADB wait-for-device
+# No stdin for adb: it reads it, and would eat a calling script's input.
+$adb_s wait-for-device < /dev/null
+# Emulators only: nothing below installs, presses HOME or force-stops anything on a real device.
+case "$($adb_s shell 'getprop ro.kernel.qemu; getprop ro.boot.qemu' < /dev/null | tr -d '\r')" in
+  *1*) ;;
+  *) echo "refusing: ${ANDROID_SERIAL:-the attached device} isn't an emulator" >&2; exit 2 ;;
+esac
 # An adb.exe on Windows (METIS) needs a Windows path for the APK.
 case "$ADB" in *.exe) apk_arg=$(wslpath -w "$apk") ;; *) apk_arg=$apk ;; esac
-$ADB install -r "$apk_arg" >/dev/null
-$ADB reverse "tcp:$port" "tcp:$port" >/dev/null
-$ADB reverse "tcp:$((port + 1))" "tcp:$((port + 1))" >/dev/null
+$adb_s install -r "$apk_arg" < /dev/null >/dev/null
+$adb_s reverse "tcp:$port" "tcp:$port" < /dev/null >/dev/null
+$adb_s reverse "tcp:$((port + 1))" "tcp:$((port + 1))" < /dev/null >/dev/null
 
-python3 "$here/e2e.py" --out "$out" "$@"
+python3 "$here/e2e.py" --out "$out" "$@" < /dev/null

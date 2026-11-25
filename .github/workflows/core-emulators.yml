@@ -20,7 +20,7 @@
 #            when Android 6's verifier rejects a Glassworks class (tools/legacy/verify-api23.sh). The conformance
 #            test's APK can't show this: R8 shapes the release's dex, and on the Mirror a class it built crashed the app
 #            at every start (#435). Before a Mirror flash, run the script on the build you flash
-#   vitro-camera  Vitro's camera end-to-end test on an API 29 emulator (tools/vitro-camera-e2e): a live camera card
+#   vitro-camera  Vitro's camera end-to-end test on API 23 and 29 emulators (tools/vitro-camera-e2e): a live camera card
 #            over WebRTC, HLS and MJPEG against Clarity's fake Home Assistant, on Android's real media stack, which
 #            Robolectric can't run. The first frame within a budget, real frames on screen, a pause when hidden, and
 #            nothing left after the card goes. The fake runs on the runner, and the emulator reaches it through
@@ -255,7 +255,18 @@ jobs:
   vitro-camera:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
-    name: Vitro cameras on API 29
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Android 6, the Mirror's: every transport. libwebrtc offers H.264 there (OMX.google.h264.decoder).
+          - api: 23
+            transports: webrtc,hls,mjpeg
+          # libwebrtc offers no H.264 on this image (the SDP has only VP8, VP9 and AV1), so a camera's WebRTC offer
+          # fails as go2rtc's would and Vitro plays HLS: WebRTC joins here once ha-webrtc decodes H.264 on it.
+          - api: 29
+            transports: hls,mjpeg
+    name: Vitro cameras on API ${{ matrix.api }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -300,20 +311,22 @@ jobs:
       - name: Camera cards over each transport
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
-          api-level: 29
+          api-level: ${{ matrix.api }}
           arch: x86_64
           target: default
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          # One line: the action runs each line of a script on its own. The transports Vitro plays so far; screen
-          # checks only (--seam optional) until Vitro's built-in players go through CameraStreamFactories (#889).
-          script: tools/vitro-camera-e2e/run.sh --out build/vitro-camera-e2e -- --transports mjpeg,hls --seam optional
+          # A panel's landscape screen, as on METIS: the runner's default (320x640) leaves the card a sliver.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -skin 1280x720
+          # One line: the action runs each line of a script on its own. WebRTC always needs the seam's first frame;
+          # HLS and MJPEG run on screen checks (--seam optional) until Vitro's built-in players go through
+          # CameraStreamFactories (#889).
+          script: tools/vitro-camera-e2e/run.sh --out build/vitro-camera-e2e -- --transports ${{ matrix.transports }} --seam optional
 
       - name: Results and screenshots
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: vitro-camera-e2e
+          name: vitro-camera-e2e-api${{ matrix.api }}
           path: build/vitro-camera-e2e/
           retention-days: 7
           if-no-files-found: ignore
