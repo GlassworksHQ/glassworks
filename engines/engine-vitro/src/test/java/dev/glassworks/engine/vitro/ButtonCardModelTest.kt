@@ -61,7 +61,9 @@ class ButtonCardModelTest {
         val missing = parsed.views[0].cards[0 + 1].childCards[0]
         assertTrue(missing.raw.has("template"))
         assertEquals(CardRoute.ISLAND, missing.compat.route)
-        assertTrue(missing.compat.reasons.single(), "`missing`" in missing.compat.reasons.single())
+        assertTrue(missing.compat.reasons.single(), "button_card_templates" in missing.compat.reasons.single())
+        // The reason names the option, never the dashboard's template name.
+        assertFalse(missing.compat.reasons.single(), "missing" in missing.compat.reasons.single())
         // The dashboard object itself is left alone.
         assertTrue(dashboard.getJSONArray("views").getJSONObject(0).getJSONArray("cards").getJSONObject(0).has("template"))
     }
@@ -163,13 +165,34 @@ class ButtonCardModelTest {
         assertTrue("holds a card" in reasons("""{"type": "custom:button-card", "custom_fields": {"g": {"card": {"type": "tile"}}}}"""))
         assertTrue("HTML" in reasons("""{"type": "custom:button-card", "name": "Line<br>two"}"""))
         assertTrue("filter" in reasons("""{"type": "custom:button-card", "styles": {"card": [{"filter": "blur(2px)"}]}}"""))
-        assertTrue("dashed" in reasons("""{"type": "custom:button-card", "styles": {"card": [{"border": "1px dashed red"}]}}"""))
+        assertTrue("`border` to a value" in reasons("""{"type": "custom:button-card", "styles": {"card": [{"border": "1px dashed red"}]}}"""))
         assertTrue("spinner" in reasons("""{"type": "custom:button-card", "spinner": true}"""))
         assertTrue("layout" in reasons("""{"type": "custom:button-card", "layout": "sideways"}"""))
-        assertTrue("fire-dom-event" in reasons("""{"type": "custom:button-card", "tap_action": {"action": "fire-dom-event"}}"""))
+        // The option, not its value: the action type is the dashboard's text.
+        val action = reasons("""{"type": "custom:button-card", "tap_action": {"action": "fire-dom-event"}}""")
+        assertTrue(action, "`tap_action` has an action type" in action && "fire-dom-event" !in action)
         assertTrue("force_eval" in reasons("""{"type": "custom:button-card", "variables": {"v": {"value": 1, "force_eval": true}}}"""))
         // A value the browser rejects is dropped natively too, and `variables` without JavaScript reading them is ignored.
         assertEquals(CardRoute.NATIVE, card("""{"type": "custom:button-card", "variables": {"v": "[[[ return 1 ]]]"}, "styles": {"card": [{"padding": "0;"}]}}""").compat.route)
+    }
+
+    @Test
+    fun diagnosticsNameOptionsNeverValues() {
+        // A signed address hidden by a CSS escape (`u\72l(` is `url(`) and a bare address in `layout` both go to an
+        // island, and neither the address nor its signature reaches a reason (logcat, the HUD).
+        val escaped = card("""{"type": "custom:button-card", "styles": {"card": [{"background-image": "u\\72l(/img?sig=SECRET1)"}]}}""").compat
+        assertEquals(CardRoute.ISLAND, escaped.route)
+        val bare = card("""{"type": "custom:button-card", "layout": "https://example.invalid/x?sig=SECRET2"}""").compat
+        assertEquals(CardRoute.ISLAND, bare.route)
+        val js = card("""{"type": "custom:button-card", "custom_fields": {"SECRET3": "[[[ return 'x' ]]]"}, "x_SECRET4": "[[[ return 1 ]]]"}""").compat
+        val swipe = card("""{"type": "custom:swipe-card", "parameters": {"pagination": {"type": "SECRET5"}, "SECRET6": 1}, "cards": [{"type": "custom:button-card"}]}""").compat
+        for (v in listOf(escaped, bare, js, swipe)) {
+            assertTrue(v.reasons.isNotEmpty())
+            val text = (v.reasons + v.notes).joinToString()
+            assertFalse(text, Regex("SECRET|sig=|https?:|72l").containsMatchIn(text))
+        }
+        assertTrue(escaped.reasons.single(), "`background-image`" in escaped.reasons.single())
+        assertTrue(bare.reasons.single(), "`layout:`" in bare.reasons.single())
     }
 
     @Test

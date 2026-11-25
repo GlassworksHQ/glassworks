@@ -252,8 +252,8 @@ object ButtonCardCss {
         if (name in VitroSupport.BENIGN_PROPERTIES) return null
         VitroSupport.BENIGN_VALUES[name]?.let { ok -> if (lv in ok) return null }
         if (lv in GLOBAL_KEYWORDS && name !in INHERITING) return null
-        val allowed = VitroSupport.BUTTON_CARD_STYLE_PROPERTIES[part] ?: return "the `$part` style part"
-        if (name !in allowed) return "`$name`"
+        val allowed = VitroSupport.BUTTON_CARD_STYLE_PROPERTIES[part] ?: return "a style part Vitro doesn't draw natively"
+        if (name !in allowed) return "`${propertyName(name)}`, which Vitro doesn't draw natively"
         if ("var(" in lv) return null
         val ok = when (name) {
             "color", "background-color", "border-color" -> colorLike(v)
@@ -294,11 +294,15 @@ object ButtonCardCss {
             "grid-area" -> CssGridSpec.IDENT.matches(lv)
             else -> true
         }
-        return if (ok) null else "`$name: ${shown(v)}`"
+        // The property, never its value: a value is the dashboard's text (an address with a signature, a CSS escape that
+        // hides one), and diagnostics go to logcat and the HUD.
+        return if (ok) null else "`${propertyName(name)}` to a value Vitro doesn't draw natively"
     }
 
-    /** A value as the checker may log it: addresses (a signed `url(…)`, a query) redacted, long values cut. */
-    private fun shown(v: String): String = dev.glassworks.engine.vitro.compat.CardCompat.loggable(v)
+    private val PROPERTY_NAME = Regex("""^-?[a-z][a-z-]{0,39}$""")
+
+    /** A CSS property name as a reason may show it: a plain one as it is, anything else as "a property". */
+    private fun propertyName(name: String): String = if (PROPERTY_NAME.matches(name)) name else "a property"
 
     private val GLOBAL_KEYWORDS = setOf("initial", "unset", "inherit", "revert")
     /** Properties whose keyword values change what's drawn in a way Vitro doesn't follow. */

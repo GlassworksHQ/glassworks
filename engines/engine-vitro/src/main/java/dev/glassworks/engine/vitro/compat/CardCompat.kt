@@ -276,15 +276,15 @@ object CardCompat {
             "custom:swipe-card" -> {
                 val params = raw.optJSONObject("parameters") ?: JSONObject()
                 for (k in params.keys()) {
-                    if (k !in VitroSupport.SWIPE_CARD_PARAMETERS) reasons += "swipe-card parameter `$k` isn't drawn natively"
+                    if (k !in VitroSupport.SWIPE_CARD_PARAMETERS) reasons += "swipe-card has a Swiper parameter Vitro doesn't run natively" + (if (k in KNOWN_SWIPER_NAMES) " (`$k`)" else "")
                 }
                 params.opt("pagination")?.let { p ->
                     val type = (p as? JSONObject)?.optString("type", "bullets")?.ifEmpty { "bullets" } ?: "bullets"
-                    if (type !in setOf("bullets", "fraction")) reasons += "swipe-card pagination `type: $type` isn't drawn natively"
+                    if (type !in setOf("bullets", "fraction")) reasons += "swipe-card `pagination.type` isn't one Vitro draws natively"
                     if ((p as? JSONObject)?.optBoolean("dynamicBullets") == true) reasons += "swipe-card `dynamicBullets` isn't drawn natively"
                 }
                 params.opt("slidesPerView")?.let { v ->
-                    if (v != "auto" && (v as? Number)?.toDouble()?.takeIf { it > 0 } == null) reasons += "swipe-card `slidesPerView: $v` isn't drawn natively"
+                    if (v != "auto" && (v as? Number)?.toDouble()?.takeIf { it > 0 } == null) reasons += "swipe-card `slidesPerView` isn't a value Vitro draws natively"
                 }
                 if (raw.has("card_width")) reasons += "swipe-card `card_width` isn't drawn natively"
             }
@@ -294,6 +294,12 @@ object CardCompat {
             }
         }
     }
+
+    /** Swiper's own parameter names, which a reason may name; any other key is the dashboard's text and isn't shown. */
+    private val KNOWN_SWIPER_NAMES = setOf(
+        "effect", "navigation", "scrollbar", "direction", "freeMode", "autoHeight", "watchOverflow", "slidesPerGroup",
+        "zoom", "parallax", "thumbs", "virtual", "breakpoints", "cssMode", "grid", "mousewheel", "keyboard",
+    )
 
     // -------------------------------------------------------------------------------------------------------------
     // card_mod

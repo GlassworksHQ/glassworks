@@ -20,17 +20,19 @@ import org.json.JSONObject
  */
 internal object ButtonCardCompat {
     fun check(raw: JSONObject, reasons: MutableSet<String>, notes: MutableSet<String>) {
-        raw.opt("template")?.takeIf { it != JSONObject.NULL && it != "" && it != false }?.let { t ->
-            val names = if (t is JSONArray) (0 until t.length()).joinToString(", ") { "`${t.opt(it)}`" } else "`$t`"
-            reasons += "button-card template $names isn't in the dashboard's `button_card_templates`"
+        raw.opt("template")?.takeIf { it != JSONObject.NULL && it != "" && it != false }?.let {
+            reasons += "button-card `template:` names a template that isn't in the dashboard's `button_card_templates`"
         }
         val js = ButtonCardJs.paths(raw)
         if (js.isNotEmpty()) {
-            reasons += "button-card JavaScript templates (`[[[ ]]]`) in " + js.take(3).joinToString(", ") { "`$it`" } +
-                (if (js.size > 3) " and ${js.size - 3} more" else "")
+            // Only the top-level option holding each one, and only a name button-card reads: never a value or a key
+            // the dashboard made up.
+            val options = js.map { optionName(it) }.distinct()
+            reasons += "button-card JavaScript templates (`[[[ ]]]`) in " + options.take(3).joinToString(", ") { "`$it`" } +
+                (if (options.size > 3) " and ${options.size - 3} more" else "")
         }
         ButtonCardJs.forcedVariables(raw).takeIf { it.isNotEmpty() }?.let { v ->
-            reasons += "button-card variables with `force_eval` (" + v.joinToString { "`$it`" } + ")"
+            reasons += "button-card `variables` with `force_eval` (${v.size})"
         }
         for ((key, what) in VitroSupport.BUTTON_CARD_UNSUPPORTED_OPTIONS) {
             if (!raw.has(key)) continue
@@ -59,7 +61,7 @@ internal object ButtonCardCompat {
                     val s = states.optJSONObject(i) ?: continue
                     val op = s.optString("operator", "")
                     if (op == "template") continue // JavaScript, reported above
-                    if (op.isNotEmpty() && op !in STATE_OPERATORS) reasons += "button-card state operator `${CardCompat.loggable(op)}` isn't one it knows"
+                    if (op.isNotEmpty() && op !in STATE_OPERATORS) reasons += "button-card `state[$i].operator` isn't one it knows"
                     checkTexts(s, "state[$i].", reasons)
                     checkCustomFields(s, "state[$i].custom_fields", reasons)
                     checkStyles(s.opt("styles"), "state[$i].styles", reasons, notes)
@@ -69,17 +71,36 @@ internal object ButtonCardCompat {
         }
     }
 
+    /**
+     * The button-card option a JavaScript path starts with (`styles.card[0].color` is `styles`), or "an option" for a
+     * key button-card doesn't read: diagnostics name options, never the dashboard's own keys or values.
+     */
+    private fun optionName(path: String): String {
+        val top = path.substringBefore('.').substringBefore('[')
+        return if (top in KNOWN_OPTIONS) top else "an option"
+    }
+
+    private val KNOWN_OPTIONS = setOf(
+        "entity", "name", "icon", "color", "color_type", "size", "aspect_ratio", "layout", "label", "state_display",
+        "entity_picture", "units", "numeric_precision", "styles", "state", "custom_fields", "tap_action", "hold_action",
+        "double_tap_action", "press_action", "release_action", "icon_tap_action", "icon_hold_action",
+        "icon_double_tap_action", "icon_press_action", "icon_release_action", "lock", "hidden", "rotate", "spinner",
+        "tooltip", "confirmation", "protect", "update_timer", "extra_styles", "show_name", "show_state", "show_icon",
+        "show_label", "show_units", "show_entity_picture", "show_last_changed", "show_live_stream", "show_ripple",
+        "card_size", "section_mode", "group_expand", "triggers_update", "variables", "template",
+    )
+
     private val STATE_OPERATORS = setOf("==", "<=", "<", ">=", ">", "!=", "regex", "template", "default")
 
     private fun checkLayout(raw: JSONObject, reasons: MutableSet<String>) {
         raw.opt("layout")?.takeIf { it != JSONObject.NULL }?.let { l ->
-            if (l !is String || l !in VitroSupport.BUTTON_CARD_LAYOUTS) reasons += "button-card `layout: ${CardCompat.loggable(l.toString())}` isn't drawn natively"
+            if (l !is String || l !in VitroSupport.BUTTON_CARD_LAYOUTS) reasons += "button-card `layout:` isn't one Vitro draws natively"
         }
         raw.opt("aspect_ratio")?.takeIf { it != JSONObject.NULL && it != "" }?.let { a ->
-            if (aspectRatio(a) == null) reasons += "button-card `aspect_ratio: ${CardCompat.loggable(a.toString())}` isn't one Vitro reads"
+            if (aspectRatio(a) == null) reasons += "button-card `aspect_ratio:` isn't one Vitro reads"
         }
         raw.opt("size")?.takeIf { it != JSONObject.NULL }?.let { s ->
-            if (s !is String || ButtonCardCss.length(s, auto = true) == null) reasons += "button-card `size: ${CardCompat.loggable(s.toString())}` isn't a length Vitro reads"
+            if (s !is String || ButtonCardCss.length(s, auto = true) == null) reasons += "button-card `size:` isn't a length Vitro reads"
         }
         if (raw.has("entity_picture")) checkPicture(raw.opt("entity_picture"), "entity_picture", reasons)
     }
@@ -133,11 +154,11 @@ internal object ButtonCardCompat {
         val fields = o.optJSONObject("custom_fields") ?: return
         for (k in fields.keys()) {
             when (val v = fields.opt(k)) {
-                is JSONObject -> if (v.has("card")) reasons += "button-card `$where.$k` holds a card" else reasons += "button-card `$where.$k` isn't text"
-                is String -> if (!ButtonCardJs.isJs(v) && isHtml(v)) reasons += "button-card `$where.$k` holds HTML"
-                is JSONArray -> reasons += "button-card `$where.$k` isn't text"
+                is JSONObject -> if (v.has("card")) reasons += "button-card `$where` holds a card" else reasons += "button-card `$where` holds something other than text"
+                is String -> if (!ButtonCardJs.isJs(v) && isHtml(v)) reasons += "button-card `$where` holds HTML"
+                is JSONArray -> reasons += "button-card `$where` holds something other than text"
             }
-            if (!CssGridSpec.IDENT.matches(k)) reasons += "button-card custom field `$k` isn't a grid area name"
+            if (!CssGridSpec.IDENT.matches(k)) reasons += "button-card `$where` has a field name that isn't a grid area name"
         }
     }
 
@@ -146,7 +167,7 @@ internal object ButtonCardCompat {
             val a = raw.opt(key) as? JSONObject ?: continue
             val type = a.optString("action", "")
             if (type.isEmpty() || type == "none") continue
-            if (type !in VitroSupport.BUTTON_CARD_ACTIONS) reasons += "button-card `$key: ${CardCompat.loggable(type)}` isn't run natively"
+            if (type !in VitroSupport.BUTTON_CARD_ACTIONS) reasons += "button-card `$key` has an action type Vitro doesn't run natively"
             for ((f, what) in VitroSupport.BUTTON_CARD_UNSUPPORTED_ACTION_FIELDS) {
                 if (a.has(f) && truthy(a.opt(f))) reasons += "button-card `$key.$f` ($what) isn't run natively"
             }
@@ -162,7 +183,7 @@ internal object ButtonCardCompat {
     private fun checkLock(raw: JSONObject, reasons: MutableSet<String>) {
         val lock = raw.optJSONObject("lock") ?: return
         val unlock = lock.optString("unlock", "tap")
-        if (unlock !in setOf("tap", "hold", "double_tap")) reasons += "button-card `lock.unlock: ${CardCompat.loggable(unlock)}` isn't run natively"
+        if (unlock !in setOf("tap", "hold", "double_tap")) reasons += "button-card `lock.unlock` isn't a gesture Vitro runs natively"
     }
 
     /** Every style part and declaration: one Vitro doesn't draw is a reason, with where it is. */
@@ -177,7 +198,8 @@ internal object ButtonCardCompat {
             if (part == "tooltip" || part == "spinner") continue // only with a tooltip or a spinner, which are handled above
             if (part == "custom_fields") {
                 val fields = styles.optJSONObject(part) ?: continue
-                for (f in fields.keys()) checkList(fields.opt(f), "custom_field", "$where.custom_fields.$f", reasons, notes)
+                // A field's name is the dashboard's own text: never in a reason.
+                for (f in fields.keys()) checkList(fields.opt(f), "custom_field", "$where.custom_fields", reasons, notes)
                 continue
             }
             checkList(styles.opt(part), part, "$where.$part", reasons, notes)
@@ -193,11 +215,11 @@ internal object ButtonCardCompat {
         for (d in decls) {
             if (ButtonCardJs.isJs(d.value)) continue
             val problem = ButtonCardCss.problem(part, d) ?: run {
-                if (d.name.startsWith("--") && part != "card") notes += "button-card `$where` sets `${d.name}`: known gap, " +
+                if (d.name.startsWith("--") && part != "card") notes += "button-card `$where` sets a custom property: known gap, " +
                     (VitroSupport.KNOWN_GAP_PROPERTIES["card variable"] ?: "")
                 null
             } ?: continue
-            reasons += "button-card `$where` $problem isn't drawn natively"
+            reasons += "button-card `$where` sets $problem"
         }
     }
 
