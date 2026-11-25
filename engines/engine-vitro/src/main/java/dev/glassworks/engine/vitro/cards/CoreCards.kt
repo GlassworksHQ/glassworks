@@ -143,6 +143,17 @@ internal fun mushIconRadiusPx(ctx: VitroCardContext): Float? {
     return if (dp >= 0f) dp * ctx.dp else null
 }
 
+/**
+ * Mushroom's `--rgb-disabled` (an off entity's icon, its disc at 20%, a slider's track): `--mush-rgb-disabled`, else
+ * Mushroom's own default, 111, 111, 111 dark and 189, 189, 189 light. HA's `--state-inactive-color` (#9e9e9e) isn't
+ * Mushroom's.
+ */
+internal fun mushroomDisabledColor(ctx: VitroCardContext): Int {
+    val parts = ctx.theme.vars["mush-rgb-disabled"]?.split(',')?.mapNotNull { it.trim().toIntOrNull() }
+    if (parts != null && parts.size == 3 && parts.all { it in 0..255 }) return Color.rgb(parts[0], parts[1], parts[2])
+    return if (ctx.theme.dark) Color.rgb(111, 111, 111) else Color.rgb(189, 189, 189)
+}
+
 /** Mushroom's color names (`--rgb-<name>`), plus `primary` / `accent` from the theme and any CSS color. */
 internal object MushroomColors {
     private val NAMED = mapOf(
@@ -1265,6 +1276,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             s?.state == "unavailable" -> ctx.theme.disabledTextColor
             domain !in STATE_COLORED_DOMAINS -> ctx.theme.stateIconColor
             active -> s?.lightTintColor() ?: ctx.theme.activeColor(domain)
+            config.type.startsWith("custom:mushroom-") -> mushroomDisabledColor(ctx)
             else -> ctx.theme.stateInactiveColor
         }
         iconBadge.setIcon(iconName, iconBadge.tintColor)
