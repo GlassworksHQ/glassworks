@@ -170,6 +170,12 @@ class GeckoEngine(
             helper(activity).accept({ ext ->
                 if (ext != null) s.webExtensionController.setMessageDelegate(ext, messageDelegate, extension.nativeApp)
             }, { e -> Log.e(logTag, "helper extension failed", e) })
+            // A new session starts out active (shown). GeckoView makes it active when the view has a surface
+            // (setSession, and each new surface) and inactive when the surface goes, but setSession without a
+            // surface leaves it as it is. So a session opened while the app is in the background (the content
+            // process was killed there and restart() runs) would stay "shown" until the app comes back: the page
+            // keeps drawing for nobody, and Home Assistant never sees it hidden. Start it hidden; a surface shows it.
+            s.setActive(false)
             view.setSession(s)
             view.coverUntilFirstPaint(background)
             session = s
