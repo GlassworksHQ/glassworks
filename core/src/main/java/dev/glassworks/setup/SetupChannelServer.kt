@@ -69,7 +69,7 @@ object SetupChannelServer {
         init { HaAuth.init(ctx) }
 
         override fun state(): ChannelState {
-            val ip = InstallerGlue.wlanIpv4()
+            val ip = dev.glassworks.platform.PanelAddress.now(ctx)
             val haUrl = prefs.haBase.orEmpty()
             return ChannelState(
                 ip = ip,

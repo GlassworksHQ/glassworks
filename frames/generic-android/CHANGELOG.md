@@ -11,6 +11,9 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Fixed
+- **The Mirror's setup screen no longer points at its own hotspot's address.** On a Mirror still running its stock setup mode with no Wi-Fi, the Wi-Fi step said to open `http://192.168.43.1:8099/setup` on a computer, an address no computer on your network can reach. It now waits for Wi-Fi and says why the setup Wi-Fi isn't up. On every device, the address Glassworks shows and hands to Home Assistant (setup page, sign-in code, Thread join, camera, *IP address*) comes only from the Wi-Fi or Ethernet network Android is connected to, never from a hotspot or tethering.
+
 ## [0.9.0] - 2026-11-24
 
 **The last release before 1.0. For Android 8 and newer it's the first release since 0.2.0, and brings everything in 0.3.0; the legacy build moves up from 0.3.0.**

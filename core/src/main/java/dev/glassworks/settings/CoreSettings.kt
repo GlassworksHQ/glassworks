@@ -34,8 +34,8 @@ class CoreSettings(
     private val account: () -> String? = { null },
     /** The app's name, before [version] in About ([dev.glassworks.platform.AppBuild.product]). */
     private val product: String = dev.glassworks.platform.AppBuild.PRODUCT,
-    /** The panel's address on Wi-Fi, for the setup page's (null while it has none). */
-    private val panelIp: () -> String? = dev.glassworks.InstallerGlue::wlanIpv4,
+    /** The panel's address on the LAN ([dev.glassworks.platform.PanelAddress]), for the setup page's (null while it has none). */
+    private val panelIp: () -> String? = { null },
     private val now: () -> Long = System::currentTimeMillis,
     /** The device has a PIN, pattern or password ([dev.glassworks.platform.ScreenLock]): the Screen page says what that means. */
     private val screenLock: () -> Boolean = { false },

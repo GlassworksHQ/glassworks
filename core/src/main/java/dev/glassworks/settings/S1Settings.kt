@@ -69,6 +69,7 @@ object S1Settings {
             account = runtime.dashboardAccount::shown,
             product = runtime.build.product,
             screenLock = { dev.glassworks.platform.ScreenLock.secure(context) },
+            panelIp = { dev.glassworks.platform.PanelAddress.now(context) },
         )
         // One pane's failure leaves the others' pages.
         val sections = panes.flatMap { d ->
