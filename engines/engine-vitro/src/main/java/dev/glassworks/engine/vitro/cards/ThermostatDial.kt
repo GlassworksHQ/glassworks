@@ -62,10 +62,9 @@ internal data class ClimateTargets(val value: Double?, val low: Double?, val hig
         const val VALUE_NAME = "Target temperature"
 
         fun of(attrs: Map<String, Any?>): ClimateTargets {
-            // HA reads the feature bit; an entity with no supported_features at all (a test, an old integration)
-            // shows what it has.
+            // HA's supportsFeature: the range needs TARGET_TEMPERATURE_RANGE in the bitmask (none means none).
             val features = (attrs["supported_features"] as? Number)?.toInt()
-            val range = features == null || features and TARGET_TEMPERATURE_RANGE != 0
+            val range = features != null && features and TARGET_TEMPERATURE_RANGE != 0
             fun num(key: String) = (attrs[key] as? Number)?.toDouble()
             return ClimateTargets(
                 num("temperature"),
@@ -92,7 +91,7 @@ internal data class ClimateTargets(val value: Double?, val low: Double?, val hig
         /** [handle] one step of [delta] from where it is: HA's `_handleButton`, then [bound]. */
         fun stepped(handle: ClimateHandle, delta: Double, low: Double, high: Double, min: Double, max: Double): Pair<Double, Double> {
             val from = if (handle == ClimateHandle.LOW) low else high
-            val next = round2(bound(handle, from + delta, low, high, min, max))
+            val next = bound(handle, roundToStep(from + delta, delta), low, high, min, max)
             return if (handle == ClimateHandle.LOW) next to high else low to next
         }
 
@@ -108,7 +107,13 @@ internal data class ClimateTargets(val value: Double?, val low: Double?, val hig
         fun withValue(s: EntityState?, value: Double): EntityState? =
             s?.copy(attributes = s.attributes + ("temperature" to value))
 
-        internal fun round2(v: Double): Double = Math.round(v * 100.0) / 100.0
+        /** The decimals [step] has (`0.125` → 3, `0.5` → 1, `1` → 0): HA's `step.toString().split(".")[1].length`. */
+        fun decimalsOf(step: Double): Int =
+            runCatching { java.math.BigDecimal(kotlin.math.abs(step).toString()).stripTrailingZeros().scale().coerceAtLeast(0) }.getOrDefault(1)
+
+        /** [v] rounded to [step]'s decimals, so float sums (20 + 0.1 + 0.1) don't send 20.200000000000003. */
+        fun roundToStep(v: Double, step: Double): Double =
+            java.math.BigDecimal(v).setScale(decimalsOf(step), java.math.RoundingMode.HALF_UP).toDouble()
     }
 }
 
@@ -436,6 +441,7 @@ internal class ThermostatDialView(
     }
 
     override fun onDetachedFromWindow() {
+        if (keyPending) dropEdit()
         targetAnimator?.cancel()
         targetAnimator = null
         shownTarget = target
@@ -444,7 +450,7 @@ internal class ThermostatDialView(
 
     private fun snap(v: Double): Double {
         val snapped = min + Math.round((v - min) / step) * step
-        return (Math.round(snapped.coerceIn(min, max) * 100.0) / 100.0)
+        return ClimateTargets.roundToStep(snapped.coerceIn(min, max), step)
     }
 
     /** The heat, cool or auto/heat_cool accent this thermostat uses, or null when off. */
@@ -814,6 +820,42 @@ internal class ThermostatDialView(
     }
 
     /** A range: a press on a target in the centre selects it; one on the ring drags the nearer thumb. */
+    /**
+     * Sends the end [handle] moved, with the other end as Home Assistant last reported it (a change it reported
+     * meanwhile isn't overwritten), bounded so the two don't cross. If HA no longer reports a range (the mode changed),
+     * the edit is dropped.
+     */
+    private fun commitRange(handle: ClimateHandle) {
+        val lo = low
+        val hi = high
+        val bl = boundLow
+        val bh = boundHigh
+        if (lo == null || hi == null || bl == null || bh == null || boundTarget != null) {
+            dropEdit()
+            return
+        }
+        val (cl, ch) = if (handle == ClimateHandle.LOW) {
+            ClimateTargets.bound(ClimateHandle.LOW, lo, bl, bh, min, max) to bh
+        } else {
+            bl to ClimateTargets.bound(ClimateHandle.HIGH, hi, bl, bh, min, max)
+        }
+        low = cl
+        high = ch
+        describe()
+        invalidate()
+        if (cl != bl || ch != bh) onRangeCommit(cl, ch)
+    }
+
+    /** An edit nothing was sent for: back to what Home Assistant reported last. */
+    private fun dropEdit() {
+        keyPending = false
+        setTarget(boundTarget)
+        low = boundLow
+        high = boundHigh
+        describe()
+        invalidate()
+    }
+
     private fun onRangeTouch(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -853,24 +895,16 @@ internal class ThermostatDialView(
                 }
                 val handle = activeHandle ?: return false
                 activeHandle = null
-                dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
                 moveHandle(handle, valueAt(event.x, event.y))
-                invalidate()
-                val lo = low
-                val hi = high
-                if (lo != null && hi != null && (lo != boundLow || hi != boundHigh)) onRangeCommit(lo, hi)
+                dragging = false
+                commitRange(handle)
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
                 pressedNumber = null
-                if (activeHandle != null) {
-                    // Nothing was sent: back to the range Home Assistant has.
-                    low = boundLow
-                    high = boundHigh
-                    describe()
-                    invalidate()
-                }
+                // Nothing was sent: back to the range Home Assistant has.
+                if (activeHandle != null) dropEdit()
                 activeHandle = null
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
@@ -885,9 +919,10 @@ internal class ThermostatDialView(
     /** The value a key moves the target to, or null for a key the dial doesn't take. */
     private fun keyValue(keyCode: Int, from: Double): Double? {
         val tenth = maxOf(step, (max - min) / 10.0)
+        // Left and right, as on Android's SeekBar: up and down stay free for moving between controls.
         return when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_UP -> from + step
-            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_DOWN -> from - step
+            KeyEvent.KEYCODE_DPAD_RIGHT -> from + step
+            KeyEvent.KEYCODE_DPAD_LEFT -> from - step
             KeyEvent.KEYCODE_PAGE_UP -> from + tenth
             KeyEvent.KEYCODE_PAGE_DOWN -> from - tenth
             KeyEvent.KEYCODE_MOVE_HOME -> min
@@ -909,13 +944,16 @@ internal class ThermostatDialView(
             val from = (if (selected == ClimateHandle.LOW) low else high) ?: return super.onKeyDown(keyCode, event)
             val next = keyValue(keyCode, from) ?: return super.onKeyDown(keyCode, event)
             moveHandle(selected, snap(next))
+            // At an end (or against the other thumb) the key moves focus on instead, as SeekBar's does.
+            if ((if (selected == ClimateHandle.LOW) low else high) == from) return super.onKeyDown(keyCode, event)
             keyPending = true
             invalidate()
             return true
         }
         val t = target ?: return super.onKeyDown(keyCode, event)
-        val next = keyValue(keyCode, t) ?: return super.onKeyDown(keyCode, event)
-        dragTarget(snap(next))
+        val next = snap(keyValue(keyCode, t) ?: return super.onKeyDown(keyCode, event))
+        if (next == t) return super.onKeyDown(keyCode, event)
+        dragTarget(next)
         keyPending = true
         invalidate()
         return true
@@ -923,19 +961,26 @@ internal class ThermostatDialView(
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         if (!keyPending || keyValue(keyCode, 0.0) == null) return super.onKeyUp(keyCode, event)
+        // A cancelled release sends nothing.
+        if (event.isCanceled) {
+            dropEdit()
+            return true
+        }
         keyPending = false
-        if (isRange) {
-            val lo = low
-            val hi = high
-            if (lo != null && hi != null && (lo != boundLow || hi != boundHigh)) onRangeCommit(lo, hi)
-        } else {
+        if (low != null && high != null && target == null) {
+            commitRange(selected)
+        } else if (boundTarget != null) {
             target?.takeIf { it != boundTarget }?.let(onCommit)
+        } else {
+            dropEdit()
         }
         return true
     }
 
     override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
         super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        // Focus left before the key came up: the edit is dropped, HA's target shows again.
+        if (!gainFocus && keyPending) dropEdit()
         invalidate()
     }
 
@@ -1042,9 +1087,19 @@ internal class ThermostatDialView(
                 else -> false
             }
         }
+
+        override fun findFocus(focus: Int): AccessibilityNodeInfo? =
+            if (focus == AccessibilityNodeInfo.FOCUS_ACCESSIBILITY && isRange && a11yFocused != NO_NODE) {
+                createAccessibilityNodeInfo(a11yFocused)
+            } else {
+                null
+            }
     }
 
     override fun getAccessibilityNodeProvider(): AccessibilityNodeProvider? = if (isRange) provider else null
+
+    /** The thumb under a finger exploring the dial, so TalkBack hears it entered and left. */
+    private var hovered = NO_NODE
 
     /** Touch exploration over a range: the thumb under the finger is the node TalkBack reads. */
     override fun dispatchHoverEvent(event: MotionEvent): Boolean {
@@ -1052,14 +1107,18 @@ internal class ThermostatDialView(
         val lo = low ?: return super.dispatchHoverEvent(event)
         val hi = high ?: return super.dispatchHoverEvent(event)
         val node = when {
+            event.actionMasked == MotionEvent.ACTION_HOVER_EXIT -> NO_NODE
             thumbBounds(lo).contains(event.x.toInt(), event.y.toInt()) || lowRect.contains(event.x, event.y) -> LOW_NODE
             thumbBounds(hi).contains(event.x.toInt(), event.y.toInt()) || highRect.contains(event.x, event.y) -> HIGH_NODE
-            else -> return super.dispatchHoverEvent(event)
+            else -> NO_NODE
         }
-        if (event.actionMasked == MotionEvent.ACTION_HOVER_ENTER || event.actionMasked == MotionEvent.ACTION_HOVER_MOVE) {
-            sendVirtualEvent(node, AccessibilityEvent.TYPE_VIEW_HOVER_ENTER)
+        if (node != hovered) {
+            // Left one thumb (exit), reached another (enter), as ExploreByTouchHelper sends them.
+            if (hovered != NO_NODE) sendVirtualEvent(hovered, AccessibilityEvent.TYPE_VIEW_HOVER_EXIT)
+            hovered = node
+            if (node != NO_NODE) sendVirtualEvent(node, AccessibilityEvent.TYPE_VIEW_HOVER_ENTER)
         }
-        return true
+        return if (node == NO_NODE) super.dispatchHoverEvent(event) else true
     }
 
     /** "Lower target temperature, 20.5 °C": HA's name for the target and its value. */
@@ -1122,10 +1181,11 @@ internal class ThermostatDialView(
         internal const val LOW_NODE = 1
         internal const val HIGH_NODE = 2
 
-        /** `21.5` → `("21", ".5")`; whole steps drop the decimal. */
+        /** `21.5` → `("21", ".5")`, with as many decimals as the step has (HA's `digits`); whole steps drop them. */
         fun splitTemp(v: Double, step: Double): Pair<String, String> {
-            if (step >= 1.0) return String.format(Locale.US, "%.0f", v) to ""
-            val text = String.format(Locale.US, "%.1f", v)
+            val digits = ClimateTargets.decimalsOf(step)
+            if (digits == 0) return String.format(Locale.US, "%.0f", v) to ""
+            val text = String.format(Locale.US, "%.${digits}f", v)
             return text.substringBefore('.') to "." + text.substringAfter('.')
         }
     }

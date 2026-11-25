@@ -97,10 +97,12 @@ reader:
 - Every control has a name, and the role Home Assistant gives it: a button, a switch (entity toggles), a check box
   (to-do items), a choice (HVAC modes, the tile's toggle), or a pressed button (the light's modes, the calendar's
   views).
-- Dials and sliders read their value, and TalkBack's swipe up and down change it.
-- With a keyboard, Tab and the arrows move between controls and Enter presses them. On a dial, the arrows change the
-  value (page keys by a tenth, Home and End to the ends), and Enter switches between the two ends of a heat/cool
-  range. Back or Escape closes More-Info.
+- The thermostat dial and More-Info's brightness, speed, color temperature and position sliders read their value, and
+  TalkBack's swipe up and down change it.
+- With a keyboard or D-pad, Tab and the arrows move between controls and Enter presses them. On those dials and
+  sliders, the left and right arrows change the value instead (page keys by a tenth, Home and End to the ends), and
+  Enter switches between the two ends of a heat/cool range. Back or Escape closes More-Info, and focus stays in it
+  while it's open.
 
 ## Themes
 

@@ -1646,6 +1646,43 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
     var onChange: ((Int) -> Unit)? = null
     var onRelease: ((Int) -> Unit)? = null
 
+    /** TalkBack and keys: a 0–100 % slider, as HA's `ha-control-slider` is. */
+    private val access = dev.glassworks.engine.vitro.ui.AdjustableAccess(
+        min = { 0 }, max = { 100 }, step = 1,
+        value = { Math.round(targetPct) },
+        preview = { v ->
+            pctAnimator?.cancel()
+            pct = v.toFloat()
+            targetPct = v.toFloat()
+            invalidate()
+            onChange?.invoke(v)
+        },
+        commit = { v -> onRelease?.invoke(v) },
+    )
+
+    init {
+        isFocusable = true
+    }
+
+    override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        access.onInitialize(info)
+    }
+
+    override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean =
+        access.perform(action) ?: super.performAccessibilityAction(action, arguments)
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyDown(keyCode) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyUp(event) || super.onKeyUp(keyCode, event)
+
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        if (!gainFocus) access.cancel()
+    }
+
     /** Re-tints the fill, e.g. when a light's RGB color or color temperature changes; cross-fades over 180 ms. */
     fun setActiveColor(color: Int) {
         if (color == targetColor) return
@@ -2182,6 +2219,43 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
     var onChange: ((Int) -> Unit)? = null
     var onRelease: ((Int) -> Unit)? = null
 
+    /** TalkBack and keys: a Kelvin slider; an arrow moves it a hundredth of the range. */
+    private val access = dev.glassworks.engine.vitro.ui.AdjustableAccess(
+        min = { minOf(minK, maxK) }, max = { maxOf(minK, maxK) }, step = maxOf(1, kotlin.math.abs(maxK - minK) / 100),
+        value = { kelvin },
+        preview = { k ->
+            animator?.cancel()
+            kelvin = k
+            shown = fractionOf(k, minK, maxK)
+            invalidate()
+            onChange?.invoke(k)
+        },
+        commit = { k -> onRelease?.invoke(k) },
+    )
+
+    init {
+        isFocusable = true
+    }
+
+    override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        access.onInitialize(info)
+    }
+
+    override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean =
+        access.perform(action) ?: super.performAccessibilityAction(action, arguments)
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyDown(keyCode) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyUp(event) || super.onKeyUp(keyCode, event)
+
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        if (!gainFocus) access.cancel()
+    }
+
     /** Moves the bar to [k]: animated over 180 ms on screen, snapped before attach. Ignored mid-drag. */
     /** The temperature bound last, kept during a drag so a cancelled one goes back to it. */
     private var bound: Int? = null
@@ -2311,6 +2385,43 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
         private set
     var onChange: ((Int) -> Unit)? = null
     var onRelease: ((Int) -> Unit)? = null
+
+    /** TalkBack and keys: the cover's position, 0–100 % open. */
+    private val access = dev.glassworks.engine.vitro.ui.AdjustableAccess(
+        min = { 0 }, max = { 100 }, step = 1,
+        value = { pct },
+        preview = { v ->
+            animator?.cancel()
+            pct = v
+            shown = v.toFloat()
+            invalidate()
+            onChange?.invoke(v)
+        },
+        commit = { v -> onRelease?.invoke(v) },
+    )
+
+    init {
+        isFocusable = true
+    }
+
+    override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        access.onInitialize(info)
+    }
+
+    override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean =
+        access.perform(action) ?: super.performAccessibilityAction(action, arguments)
+
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyDown(keyCode) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyUp(event) || super.onKeyUp(keyCode, event)
+
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        if (!gainFocus) access.cancel()
+    }
 
     /** Moves the fill to [value] % open: animated over 180 ms on screen, snapped before attach. Ignored mid-drag. */
     /** The position bound last, kept during a drag so a cancelled one goes back to it. */

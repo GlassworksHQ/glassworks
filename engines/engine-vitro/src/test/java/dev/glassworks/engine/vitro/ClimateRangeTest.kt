@@ -113,6 +113,8 @@ class ClimateRangeTest {
         val single = ClimateTargets.of(heatCool("supported_features" to 1).attributes)
         assertFalse(single.isRange)
         assertNull(single.low)
+        // No supported_features at all is no range, as HA's supportsFeature reads it.
+        assertFalse(ClimateTargets.of(mapOf("target_temp_low" to 20.0, "target_temp_high" to 24.0)).isRange)
         // An off thermostat with no ends (the reference HA's climate.ac) has none either.
         assertFalse(ClimateTargets.of(mapOf("supported_features" to 395, "target_temp_low" to null, "target_temp_high" to null)).isRange)
     }
@@ -127,6 +129,11 @@ class ClimateRangeTest {
         assertEquals(20.0 to 20.0, ClimateTargets.stepped(ClimateHandle.HIGH, -1.0, 20.0, 20.5, 10.0, 30.0))
         assertEquals(20.0 to 30.0, ClimateTargets.stepped(ClimateHandle.HIGH, 0.5, 20.0, 30.0, 10.0, 30.0))
         assertEquals(10.0 to 24.0, ClimateTargets.stepped(ClimateHandle.LOW, -0.5, 10.0, 24.0, 10.0, 30.0))
+        // A fine step keeps its decimals, on the wire and on screen (HA's `digits`).
+        assertEquals(20.125 to 24.0, ClimateTargets.stepped(ClimateHandle.LOW, 0.125, 20.0, 24.0, 10.0, 30.0))
+        assertEquals("20" to ".25", ThermostatDialView.splitTemp(20.25, 0.25))
+        assertEquals("21" to "", ThermostatDialView.splitTemp(21.0, 1.0))
+        assertEquals(20.2, ClimateTargets.roundToStep(20.0 + 0.1 + 0.1, 0.1), 0.0)
         // °F steps by one when the entity doesn't say.
         assertEquals(1.0, ClimateTargets.stepOf(emptyMap(), "°F"), 0.0)
         assertEquals(0.5, ClimateTargets.stepOf(emptyMap(), "°C"), 0.0)
@@ -191,11 +198,24 @@ class ClimateRangeTest {
         touch(dial, MotionEvent.ACTION_MOVE, 28.0)
         touch(dial, MotionEvent.ACTION_UP, 28.0)
         assertEquals(26.0 to 26.0, commits.last())
+        // HA moves the high end while a finger moves the low one: the release keeps HA's high end.
+        dial.bind(10.0, 30.0, 0.5, 22.0, null, "heat_cool", "idle", "Heat/Cool", low = 20.0, high = 24.0)
+        touch(dial, MotionEvent.ACTION_DOWN, 18.0)
+        dial.bind(10.0, 30.0, 0.5, 22.0, null, "heat_cool", "idle", "Heat/Cool", low = 20.0, high = 26.0)
+        touch(dial, MotionEvent.ACTION_UP, 19.0)
+        assertEquals(19.0 to 26.0, commits.last())
+        assertEquals(3, commits.size)
+        // A mode change to a single target mid-drag: the range edit is dropped.
+        dial.bind(10.0, 30.0, 0.5, 22.0, null, "heat_cool", "idle", "Heat/Cool", low = 20.0, high = 26.0)
+        touch(dial, MotionEvent.ACTION_DOWN, 18.0)
+        dial.bind(10.0, 30.0, 0.5, 22.0, 21.0, "heat", "idle")
+        touch(dial, MotionEvent.ACTION_UP, 18.0)
+        assertEquals(3, commits.size)
         // A cancelled drag sends nothing and goes back to HA's range.
         dial.bind(10.0, 30.0, 0.5, 22.0, null, "heat_cool", "idle", "Heat/Cool", low = 20.0, high = 26.0)
         touch(dial, MotionEvent.ACTION_DOWN, 18.0)
         touch(dial, MotionEvent.ACTION_CANCEL, 18.0)
-        assertEquals(2, commits.size)
+        assertEquals(3, commits.size)
         assertTrue(dial.contentDescription.toString(), "20.0 °C, 26.0 °C" in dial.contentDescription.toString())
     }
 
@@ -207,13 +227,26 @@ class ClimateRangeTest {
             dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
         }
         assertTrue(dial.isFocusable)
-        key(KeyEvent.KEYCODE_DPAD_UP)
+        // Right and left move it, as on a SeekBar; up and down are left for moving between controls.
+        assertFalse(dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_DOWN)))
+        key(KeyEvent.KEYCODE_DPAD_RIGHT)
         assertEquals(listOf(20.5 to 24.0), commits)
+        // The optimistic write's state comes back, as the cards bind it.
+        dial.bind(10.0, 30.0, 0.5, 22.0, null, "heat_cool", "idle", "Heat/Cool", low = 20.5, high = 24.0)
         // Enter switches to the other end; End takes it to the device's max.
         key(KeyEvent.KEYCODE_ENTER)
         assertEquals(ClimateHandle.HIGH, dial.selected)
         key(KeyEvent.KEYCODE_MOVE_END)
         assertEquals(20.5 to 30.0, commits.last())
+        // At an end the arrow isn't taken, so a D-pad moves on to the next control.
+        dial.bind(10.0, 30.0, 0.5, 22.0, null, "heat_cool", "idle", "Heat/Cool", low = 20.5, high = 30.0)
+        assertFalse(dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT)))
+        // A cancelled release sends nothing and shows HA's range again.
+        val before = commits.size
+        dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT))
+        dial.dispatchKeyEvent(KeyEvent.changeFlags(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_LEFT), KeyEvent.FLAG_CANCELED))
+        assertEquals(before, commits.size)
+        assertTrue(dial.contentDescription.toString(), "20.5 °C, 30.0 °C" in dial.contentDescription.toString())
     }
 
     @Test
@@ -304,10 +337,11 @@ class ClimateRangeTest {
             """{"type": "tile", "entity": "climate.hall", "features": [{"type": "target-temperature"}]}""",
         ))
         ShadowLooper.idleMainLooper()
-        assertTrue(tile.all().any { it.visible() && it.contentDescription == "Lower target temperature, 20 °C" })
+        assertTrue(tile.all().any { it.visible() && it.contentDescription == "Lower target temperature, 20.0 °C" })
         tile.byDescription("Decrease upper target temperature").performClick()
         assertRange(calls.last(), 20.0, 23.5)
-        // A second press steps from the first one's value before HA reports it.
+        // Through the shared optimistic write: the store shows it at once, and a second press steps from it.
+        assertEquals(23.5, st["climate.hall"]!!.attributes["target_temp_high"])
         tile.byDescription("Decrease upper target temperature").performClick()
         assertRange(calls.last(), 20.0, 23.0)
     }

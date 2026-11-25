@@ -431,6 +431,13 @@ class VitroView(
         return true
     }
 
+    /** Keeps keyboard focus out of the dashboard (tabs, cards, pinned cards) while More Info is over it. */
+    private fun blockDashboardFocus(block: Boolean) {
+        val mode = if (block) FOCUS_BLOCK_DESCENDANTS else FOCUS_AFTER_DESCENDANTS
+        shell.descendantFocusability = mode
+        overlayLayer.descendantFocusability = mode
+    }
+
     fun closeMoreInfo(): Boolean {
         val sheet = moreInfo ?: return false
         moreInfo = null
@@ -449,8 +456,12 @@ class VitroView(
                 removeView(it)
                 if (moreInfo === it) moreInfo = null
             }
+            // The dashboard takes keyboard focus again once no sheet is over it.
+            if (moreInfo == null) blockDashboardFocus(false)
         }
         sheetRef = sheet
+        // Keys stay in the sheet, as in HA's modal dialog: nothing behind it takes focus while it's open.
+        blockDashboardFocus(true)
         sheet.show(entityId)
         moreInfo = sheet
         addView(sheet, LayoutParams(MATCH_PARENT, MATCH_PARENT))

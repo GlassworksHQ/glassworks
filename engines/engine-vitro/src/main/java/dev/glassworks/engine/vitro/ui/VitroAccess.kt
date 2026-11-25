@@ -6,6 +6,7 @@ package dev.glassworks.engine.vitro.ui
 
 import android.content.Context
 import android.content.res.Configuration
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
@@ -167,3 +168,80 @@ internal object VitroAccess {
         }
     }
 }
+
+/**
+ * A slider TalkBack and keys can move, as HA's `role="slider"` controls are: its value and range for TalkBack, whose
+ * swipe up and down move it a tenth; with keys, the left and right arrows move it one [step], the page keys a tenth,
+ * Home and End to the ends, committed on release (HA's `keyup`). Up and down are left for moving between controls, and
+ * an arrow at an end is too, as Android's SeekBar does, so a D-pad never gets stuck on a slider.
+ *
+ * [preview] shows a value (and tells the slider's listeners), [commit] sends it.
+ */
+internal class AdjustableAccess(
+    private val min: () -> Int,
+    private val max: () -> Int,
+    private val step: Int,
+    private val value: () -> Int,
+    private val preview: (Int) -> Unit,
+    private val commit: (Int) -> Unit,
+) {
+    private var pending = false
+
+    private val tenth: Int get() = maxOf(step, (max() - min()) / 10)
+
+    fun onInitialize(info: AccessibilityNodeInfo) {
+        val v = value()
+        info.className = "android.widget.SeekBar"
+        info.rangeInfo = AccessibilityNodeInfo.RangeInfo.obtain(
+            AccessibilityNodeInfo.RangeInfo.RANGE_TYPE_INT, min().toFloat(), max().toFloat(), v.toFloat(),
+        )
+        if (v < max()) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD)
+        if (v > min()) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD)
+    }
+
+    /** TalkBack's scroll actions: a tenth, sent at once. Null for an action this doesn't take. */
+    fun perform(action: Int): Boolean? {
+        val sign = when (action) {
+            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD -> 1
+            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> -1
+            else -> return null
+        }
+        val next = (value() + sign * tenth).coerceIn(min(), max())
+        if (next == value()) return false
+        preview(next)
+        commit(next)
+        return true
+    }
+
+    /** A key: true when it moved the value (the view keeps the key), false to let Android move focus. */
+    fun keyDown(keyCode: Int): Boolean {
+        val v = value()
+        val next = when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_RIGHT -> v + step
+            KeyEvent.KEYCODE_DPAD_LEFT -> v - step
+            KeyEvent.KEYCODE_PAGE_UP -> v + tenth
+            KeyEvent.KEYCODE_PAGE_DOWN -> v - tenth
+            KeyEvent.KEYCODE_MOVE_HOME -> min()
+            KeyEvent.KEYCODE_MOVE_END -> max()
+            else -> return false
+        }.coerceIn(min(), max())
+        if (next == v) return false
+        preview(next)
+        pending = true
+        return true
+    }
+
+    /** The release of a key that moved the value: sends it (a cancelled one doesn't). */
+    fun keyUp(event: KeyEvent): Boolean {
+        if (!pending) return false
+        pending = false
+        if (!event.isCanceled) commit(value())
+        return true
+    }
+
+    /** Focus left mid-edit: the edit is dropped, nothing is sent. */
+    fun cancel() {
+        pending = false
+    }
+}
+

@@ -619,91 +619,100 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 }
                 "target-temperature" -> {
                     // hui-target-temperature-card-feature: ha-control-number-buttons for the target, or two side by
-                    // side (12 px apart) for a heat/cool range, each kept on its side of the other.
+                    // side (12 px apart) for a heat/cool range, each kept on its side of the other. Each is the value
+                    // centered across its whole width with 35 px − and + over its ends; at 100 px or less the unit
+                    // goes (`@container (max-width: 100px)`), so narrow tiles keep both numbers.
                     val unit = ThermostatCardView.temperatureUnit(ctx)
-                    /** The values shown until HA reports back: one press after another steps from the last one. */
-                    var pending: ClimateTargets? = null
-                    fun targetsOf(st: EntityState?) = pending ?: st?.let { ClimateTargets.of(it.attributes) }
-                    /** Shows the targets (set once the views exist). */
-                    var show: (EntityState?) -> Unit = {}
                     fun step(handle: ClimateHandle?, sign: Int) {
                         val st = ctx.store[entityId] ?: return
+                        val t = ClimateTargets.of(st.attributes)
                         val stepSize = ClimateTargets.stepOf(st.attributes, unit)
                         val min = num(st, "min_temp") ?: 7.0
                         val max = num(st, "max_temp") ?: 35.0
-                        val t = targetsOf(st) ?: return
+                        // Written through the shared optimistic path: every view of the entity shows the new value at
+                        // once, the next press steps from it, and a refusal puts HA's value back everywhere.
                         if (handle == null) {
                             val cur = t.value ?: return
-                            val next = (Math.round((cur + sign * stepSize) / stepSize) * stepSize).coerceIn(min, max)
-                            pending = t.copy(value = next)
-                            ctx.callService("climate", "set_temperature", data().put("temperature", next), null)
+                            val next = ClimateTargets.roundToStep((Math.round((cur + sign * stepSize) / stepSize) * stepSize).coerceIn(min, max), stepSize)
+                            if (next == cur) return
+                            ctx.callOptimistic(ClimateTargets.withValue(st, next), "climate", "set_temperature", data().put("temperature", next))
                         } else {
+                            if (!t.isRange) return
                             val (lo, hi) = ClimateTargets.stepped(handle, sign * stepSize, t.low ?: return, t.high ?: return, min, max)
                             if (lo == t.low && hi == t.high) return
-                            pending = t.copy(low = lo, high = hi)
-                            ctx.callService("climate", "set_temperature", ClimateTargets.rangeData(entityId, lo, hi), null)
+                            ctx.callOptimistic(ClimateTargets.withRange(st, lo, hi), "climate", "set_temperature", ClimateTargets.rangeData(entityId, lo, hi))
                         }
-                        show(st)
                     }
-                    fun numberButtons(handle: ClimateHandle?): Pair<LinearLayout, TextView> {
+                    /** One ha-control-number-buttons: its value view, and whether it's narrow enough to drop the unit. */
+                    class NumberButtons(val root: FrameLayout, val value: TextView) {
+                        var narrow = false
+                    }
+                    var show: () -> Unit = {}
+                    fun numberButtons(handle: ClimateHandle?): NumberButtons {
                         val value = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
                             gravity = Gravity.CENTER
                             fontFeatureSettings = "tnum"
+                            maxLines = 1
                         }
-                        fun stepButton(iconName: String, sign: Int) = LinearLayout(ctx.context).apply {
-                            gravity = Gravity.CENTER
+                        fun stepButton(iconName: String, sign: Int) = FrameLayout(ctx.context).apply {
                             isClickable = true
                             isFocusable = true
                             applyHaRipple(this, 10f * ctx.dp, ctx.theme.dark)
                             contentDescription = ThermostatCardView.stepperLabel(sign, handle)
                             addView(MdiIconView(ctx.context).apply { setIcon(iconName, ctx.theme.primaryTextColor) },
-                                LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)))
+                                FrameLayout.LayoutParams(ctx.px(16f), ctx.px(16f), Gravity.CENTER))
                             setOnClickListener { step(handle, sign) }
                         }
-                        val group = LinearLayout(ctx.context).apply {
-                            orientation = LinearLayout.HORIZONTAL
-                            gravity = Gravity.CENTER_VERTICAL
+                        var group: NumberButtons? = null
+                        val root = object : FrameLayout(ctx.context) {
+                            override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+                                super.onSizeChanged(w, h, oldw, oldh)
+                                val narrow = w <= ctx.px(100f)
+                                group?.let { g -> if (g.narrow != narrow) { g.narrow = narrow; post { show() } } }
+                            }
+                        }.apply {
                             background = GradientDrawable().apply {
                                 cornerRadius = 10f * ctx.dp
                                 setColor(if (ctx.theme.dark) SEGMENT_DARK else SEGMENT_LIGHT)
                             }
-                            addView(stepButton("mdi:minus", -1), LinearLayout.LayoutParams(ctx.px(48f), MATCH_PARENT))
-                            addView(value, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-                            addView(stepButton("mdi:plus", 1), LinearLayout.LayoutParams(ctx.px(48f), MATCH_PARENT))
+                            addView(value, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                            addView(stepButton("mdi:minus", -1), FrameLayout.LayoutParams(ctx.px(35f), MATCH_PARENT, Gravity.START))
+                            addView(stepButton("mdi:plus", 1), FrameLayout.LayoutParams(ctx.px(35f), MATCH_PARENT, Gravity.END))
                         }
-                        return group to value
+                        return NumberButtons(root, value).also { group = it }
                     }
-                    val (single, singleValue) = numberButtons(null)
-                    val (lowGroup, lowValue) = numberButtons(ClimateHandle.LOW)
-                    val (highGroup, highValue) = numberButtons(ClimateHandle.HIGH)
+                    val single = numberButtons(null)
+                    val low = numberButtons(ClimateHandle.LOW)
+                    val high = numberButtons(ClimateHandle.HIGH)
                     val rangeRow = LinearLayout(ctx.context).apply {
                         orientation = LinearLayout.HORIZONTAL
-                        addView(lowGroup, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
-                        addView(highGroup, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { marginStart = ctx.px(12f) })
+                        addView(low.root, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+                        addView(high.root, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { marginStart = ctx.px(12f) })
                     }
                     val holder = FrameLayout(ctx.context).apply {
-                        addView(single, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                        addView(single.root, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
                         addView(rangeRow, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
                     }
                     rootCol.addView(holder, lp())
-                    show = { s ->
-                        val t = targetsOf(s)
-                        val range = t?.value == null && t?.isRange == true
-                        single.visibility = if (range) GONE else VISIBLE
+                    show = {
+                        val st = ctx.store[entityId]
+                        val t = st?.let { ClimateTargets.of(it.attributes) }
+                        val digits = ClimateTargets.decimalsOf(st?.let { ClimateTargets.stepOf(it.attributes, unit) } ?: 0.5)
+                        val range = t?.isRange == true
+                        single.root.visibility = if (range) GONE else VISIBLE
                         rangeRow.visibility = if (range) VISIBLE else GONE
-                        singleValue.text = t?.value?.let { formatTemp(it, unit) } ?: "–"
-                        lowValue.text = t?.low?.let { formatTemp(it, unit) } ?: "–"
-                        highValue.text = t?.high?.let { formatTemp(it, unit) } ?: "–"
-                        // The values TalkBack reads: HA's spin buttons, named after the target.
-                        singleValue.contentDescription = ClimateTargets.VALUE_NAME + ", " + singleValue.text
-                        lowValue.contentDescription = ClimateTargets.LOW_NAME + ", " + lowValue.text
-                        highValue.contentDescription = ClimateTargets.HIGH_NAME + ", " + highValue.text
+                        // HA's number: the step's decimals, then the unit unless the buttons are narrow.
+                        fun fill(g: NumberButtons, v: Double?, name: String) {
+                            val number = v?.let { String.format(Locale.US, "%.${digits}f", it) }
+                            g.value.text = number?.let { if (g.narrow) it else "$it $unit" } ?: "–"
+                            // HA's spin button, named after the target, with its unit always.
+                            g.value.contentDescription = "$name, " + (number?.let { "$it $unit" } ?: "–")
+                        }
+                        fill(single, t?.value, ClimateTargets.VALUE_NAME)
+                        fill(low, t?.low, ClimateTargets.LOW_NAME)
+                        fill(high, t?.high, ClimateTargets.HIGH_NAME)
                     }
-                    // A state from HA replaces what was pending.
-                    featureBinders += { s ->
-                        pending = null
-                        show(s)
-                    }
+                    featureBinders += { _ -> show() }
                 }
                 "fan-speed" -> {
                     val slider = HaHorizontalSliderView(ctx, ctx.theme.activeColor("fan"), haGeometry = true) { frac ->
@@ -1213,7 +1222,12 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             VitroAccess.role(avatar, A11yRole.BUTTON, name = {
                 val n = primary.text?.toString()?.takeIf { it.isNotBlank() }
                     ?: config.entity?.let { ctx.store[it]?.displayName ?: it }
-                if (iconAction.action == "toggle" && n != null) "Toggle $n" else n
+                when {
+                    iconAction.action == "toggle" && n != null -> "Toggle $n"
+                    n != null -> n
+                    // No name to give it: what it does ("Navigate", "Perform action").
+                    else -> iconAction.action.replace('-', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
+                }
             })
         }
 

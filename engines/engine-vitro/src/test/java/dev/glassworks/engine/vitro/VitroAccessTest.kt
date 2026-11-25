@@ -111,6 +111,30 @@ class VitroAccessTest {
     }
 
     @Test
+    fun moreInfoSlidersMoveWithTalkBackAndKeys() {
+        val released = ArrayList<Int>()
+        val pill = dev.glassworks.engine.vitro.cards.VerticalSliderPillView(activity, 0xFFFFA000.toInt()).apply {
+            onRelease = { released += it }
+            setPercent(40)
+        }
+        activity.setContentView(pill)
+        val info = pill.node()
+        assertEquals("android.widget.SeekBar", info.className)
+        assertEquals(40f, info.rangeInfo.current, 0f)
+        // A TalkBack swipe moves it a tenth and sends it.
+        assertTrue(pill.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null))
+        assertEquals(listOf(50), released)
+        // Right moves it one step, sent on release; down is left for moving focus.
+        assertTrue(pill.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT)))
+        pill.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT))
+        assertEquals(51, released.last())
+        assertFalse(pill.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_DOWN)))
+        val cover = dev.glassworks.engine.vitro.cards.VerticalCoverSliderView(activity).apply { setPercent(100) }
+        // At the end an arrow isn't taken, so a D-pad moves on.
+        assertFalse(cover.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT)))
+    }
+
+    @Test
     fun backAndEscapeCloseMoreInfo() {
         val store = EntityStore()
         store.putLocal(EntityState("light.desk", "on", mapOf("friendly_name" to "Desk lamp", "supported_color_modes" to listOf("onoff"))))
