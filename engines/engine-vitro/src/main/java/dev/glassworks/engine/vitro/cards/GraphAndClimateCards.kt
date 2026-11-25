@@ -43,6 +43,8 @@ import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.bindHoldAction
 import dev.glassworks.ui.Inter
 import dev.glassworks.engine.vitro.ui.VitroFonts
+import dev.glassworks.engine.vitro.ui.A11yRole
+import dev.glassworks.engine.vitro.ui.VitroAccess
 import org.json.JSONArray
 import kotlin.math.roundToInt
 import dev.glassworks.engine.vitro.theme.ThemeResolver
@@ -712,9 +714,7 @@ private class GaugeCanvasView(
 }
 
 private const val HEAT_COLOR = 0xFFFF6F22.toInt()
-private const val HEAT_SOFT = 0xFFFFAD7A.toInt()
 private const val COOL_COLOR = 0xFF2196F3.toInt()
-private const val COOL_SOFT = 0xFF90CAF9.toInt()
 private const val OFF_COLOR = 0xFF757575.toInt()
 
 /** Native HA `thermostat` (`hui-thermostat-card`) + `custom:mushroom-climate-card`: a 270° dial and a mode bar. */
@@ -737,7 +737,9 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
     }
     private var modes: List<String> = emptyList()
     private val modeButtons = ArrayList<Pair<FrameLayout, MdiIconView>>()
+    private var currentMode: String? = null
     private var steppers: View? = null
+    private var stepButtons: Pair<View, View>? = null
 
     init {
         // hui-thermostat-card: a 48 px title row over the 262 px dial; the mode bar only when its feature is set
@@ -779,7 +781,7 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
         fun stepBtn(symbol: String, sign: Int) = label(ctx, 22f, ctx.theme.primaryTextColor).apply {
             text = symbol
             gravity = Gravity.CENTER
-            contentDescription = if (sign > 0) "Raise target temperature" else "Lower target temperature"
+            contentDescription = stepperLabel(sign, null)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(Color.TRANSPARENT)
@@ -790,8 +792,11 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
             setOnClickListener { dial.nudge(sign) }
         }
         val btn = ctx.px(42f)
-        steppers.addView(stepBtn("−", -1), LinearLayout.LayoutParams(btn, btn).apply { marginEnd = ctx.px(16f) })
-        steppers.addView(stepBtn("+", 1), LinearLayout.LayoutParams(btn, btn))
+        val minus = stepBtn("−", -1)
+        val plus = stepBtn("+", 1)
+        stepButtons = minus to plus
+        steppers.addView(minus, LinearLayout.LayoutParams(btn, btn).apply { marginEnd = ctx.px(16f) })
+        steppers.addView(plus, LinearLayout.LayoutParams(btn, btn))
         dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
         col.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(262f)))
 
@@ -801,32 +806,59 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
 
         if (eid != null) {
             bindHoldAction(holdFor(config.raw, eid), eid)
+            // A water heater sets its tank through its own domain's service, and has no heat/cool range.
+            val waterHeater = eid.startsWith("water_heater.")
             dial.onCommit = { target ->
-                // A water heater sets its tank through its own domain's service.
-                val domain = if (eid.startsWith("water_heater.")) "water_heater" else "climate"
-                ctx.callService(domain, "set_temperature", JSONObject().put("entity_id", eid).put("temperature", target), null)
+                val domain = if (waterHeater) "water_heater" else "climate"
+                ctx.callOptimistic(ClimateTargets.withValue(ctx.store[eid], target), domain, "set_temperature",
+                    JSONObject().put("entity_id", eid).put("temperature", target))
             }
+            dial.onRangeCommit = { low, high ->
+                ctx.callOptimistic(ClimateTargets.withRange(ctx.store[eid], low, high), "climate", "set_temperature",
+                    ClimateTargets.rangeData(eid, low, high))
+            }
+            dial.onSelect = { styleSteppers() }
             observe(eid) { s ->
                 titleView.text = config.name ?: s?.displayName ?: eid
                 val attrs = s?.attributes.orEmpty()
                 val mode = s?.state ?: "off"
                 val action = attrs["hvac_action"] as? String
+                val unit = temperatureUnit(ctx)
+                val targets = ClimateTargets.of(attrs).let { if (waterHeater) it.copy(low = null, high = null) else it }
                 dial.bind(
                     min = (attrs["min_temp"] as? Number)?.toDouble() ?: 7.0,
                     max = (attrs["max_temp"] as? Number)?.toDouble() ?: 35.0,
-                    step = (attrs["target_temp_step"] as? Number)?.toDouble()?.takeIf { it > 0 } ?: 0.5,
+                    step = ClimateTargets.stepOf(attrs, unit),
                     current = (attrs["current_temperature"] as? Number)?.toDouble(),
-                    target = (attrs["temperature"] as? Number)?.toDouble(),
+                    target = targets.value,
                     mode = mode,
                     action = action,
                     stateLabel = s?.let { HaDisplay.stateLabel(it) } ?: mode.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) },
+                    low = targets.low,
+                    high = targets.high,
                 )
-                // HA shows the steppers only while there's a target to step.
-                this.steppers?.visibility = if (attrs["temperature"] is Number) VISIBLE else GONE
+                // HA shows the steppers only while there's a target (or a range) to step.
+                this.steppers?.visibility = if (targets.value != null || targets.isRange) VISIBLE else GONE
+                styleSteppers()
                 val list = (attrs["hvac_modes"] as? List<*>)?.mapNotNull { it?.toString() }?.takeIf { it.isNotEmpty() }
                     ?: listOf("off", "heat", "cool")
                 renderModes(list, mode, eid)
             }
+        }
+    }
+
+    /**
+     * HA's − and + for the target, or for the selected end of a range: named after it ("Increase lower target
+     * temperature") and outlined in its color (heat for the low end, cool for the high one) while the thermostat is on.
+     */
+    private fun styleSteppers() {
+        val (minus, plus) = stepButtons ?: return
+        val handle = dial.selected.takeIf { dial.isRange }
+        val outline = handle?.let { dial.handleColor(it) }?.takeIf { it != ctx.theme.secondaryTextColor }
+            ?: withAlpha(ctx.theme.secondaryTextColor, 0.5f)
+        for ((view, sign) in listOf(minus to -1, plus to 1)) {
+            view.contentDescription = stepperLabel(sign, handle)
+            (view.background as? GradientDrawable)?.setStroke(ctx.px(1f).coerceAtLeast(1), outline)
         }
     }
 
@@ -842,6 +874,8 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                     isClickable = true
                     applyHaRipple(this, 10f * ctx.dp, ctx.theme.dark)
                     contentDescription = m.replace('_', ' ')
+                    // ha-control-select: one radio per mode, checked on the current one.
+                    VitroAccess.role(this, A11yRole.RADIO) { m == currentMode }
                     addView(icon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
                     setOnClickListener {
                         ctx.callService("climate", "set_hvac_mode", JSONObject().put("entity_id", eid).put("hvac_mode", m), null)
@@ -851,6 +885,7 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                 modeButtons += cell to icon
             }
         }
+        currentMode = current
         list.forEachIndexed { i, m ->
             val (cell, icon) = modeButtons[i]
             val active = m == current
@@ -888,419 +923,20 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
             else -> "mdi:thermostat"
         }
 
+        /** HA's names for the − and + (`ui.components.climate-control.*`): the target, or one end of a range. */
+        internal fun stepperLabel(sign: Int, handle: ClimateHandle?): String {
+            val verb = if (sign > 0) "Increase" else "Decrease"
+            return when (handle) {
+                null -> "$verb temperature"
+                ClimateHandle.LOW -> "$verb lower target temperature"
+                ClimateHandle.HIGH -> "$verb upper target temperature"
+            }
+        }
+
         /** `hass.config.unit_system.temperature`, else °C. */
         fun temperatureUnit(ctx: VitroCardContext): String =
             runCatching { ctx.haConfig().optJSONObject("unit_system")?.optString("temperature", "") }.getOrNull()
                 ?.ifEmpty { null } ?: "°C"
-    }
-}
-
-/**
- * The thermostat's 270° dial: a 14 dp track from 135°, a soft fill up to the lower of current and target, a solid
- * bridge between them with a dot at the current temperature and a white thumb at the target. Dragging along the
- * ring moves the target in `target_temp_step` steps and commits it on release. With [showCurrentInDial] off (the
- * More-Info sheet, which prints the current temperature above the dial) the thermometer row in the centre is left out.
- */
-internal class ThermostatDialView(
-    private val ctx: VitroCardContext,
-    private val unit: String,
-    private val showCurrentInDial: Boolean = true,
-) : View(ctx.context) {
-    private val dp = ctx.dp
-    /** ha-control-circular-slider: a 24 / 320 ring at radius 145 / 320 of the dial's size. */
-    private var strokeW = 14f * dp
-    private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = strokeW
-        strokeCap = Paint.Cap.ROUND
-    }
-    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private fun textPaint(size: Float, weight: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textSize = spToPx(ctx.context, size)
-        typeface = VitroFonts.typeface(ctx.context, weight, size)
-    }
-    private val labelPaint = textPaint(14f, Inter.MEDIUM).apply { textAlign = Paint.Align.CENTER }
-    private val bigPaint = textPaint(44f, Inter.REGULAR)
-    private val unitPaint = textPaint(13f, Inter.REGULAR)
-    private val decPaint = textPaint(20f, Inter.REGULAR)
-    private val curPaint = textPaint(14f, Inter.MEDIUM)
-    private val offPaint = textPaint(36f, Inter.REGULAR).apply { textAlign = Paint.Align.CENTER }
-    private val offCurPaint = textPaint(16f, Inter.MEDIUM)
-
-    // What onDraw reuses instead of building: formatted texts (rebuilt only when their value changes), the font
-    // metrics, the thermometer glyph and one point on the ring.
-    private val offCurMemo = NumberText()
-    private val curMemo = NumberText()
-    private val labelMemo = KeyedText()
-    private var splitValue = Double.NaN
-    private var splitStep = Double.NaN
-    private var splitWhole = ""
-    private var splitDec = ""
-    private val fmBuf = Paint.FontMetrics()
-    private val thermometer: Path by lazy { MdiIcons.pathFor("mdi:thermometer") }
-    private val pt = FloatArray(2)
-
-    /** The thermometer and the current temperature, centered on [centerY]. */
-    private fun drawCurrent(canvas: Canvas, cur: Double, color: Int, paint: Paint, iconSize: Float, centerY: Float) {
-        val curText = offCurText(cur)
-        paint.color = color
-        val textW = paint.measureText(curText)
-        val gap = 4f * dp
-        val left = cx - (iconSize + gap + textW) / 2f
-        iconPath.set(thermometer)
-        iconMatrix.setScale(iconSize / 24f, iconSize / 24f)
-        iconMatrix.postTranslate(left, centerY - iconSize / 2f)
-        iconPath.transform(iconMatrix)
-        fill.color = color
-        canvas.drawPath(iconPath, fill)
-        paint.textAlign = Paint.Align.LEFT
-        val fm = fmBuf.also { paint.getFontMetrics(it) }
-        canvas.drawText(curText, left + iconSize + gap, centerY - (fm.ascent + fm.descent) / 2f, paint)
-    }
-    private val iconMatrix = Matrix()
-    private val iconPath = Path()
-    private val oval = RectF()
-
-    // The texts the dial draws, built once per value (onDraw and the description share them).
-    private fun offCurText(cur: Double) =
-        offCurMemo.of(cur) { v -> HaDisplay.formatValue(v, 1).let { if ('.' in it) it else String.format(Locale.US, "%.1f", v) } + " " + unit }
-    private fun curText(cur: Double) = curMemo.of(cur) { v -> String.format(Locale.US, "%.1f %s", v, unit) }
-    private fun labelText() = labelMemo.of(action, mode) { (action ?: mode).replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) } }
-
-    /**
-     * The texts the dial draws, in order, as its content description: what HA's page has as text (the state or the
-     * action, the target, the current temperature), so TalkBack reads them and the parity harness finds them.
-     */
-    private fun describe() {
-        val cur = current
-        val t = target
-        val parts = ArrayList<String>(3)
-        if (t == null) {
-            if (stateLabel.isNotEmpty()) parts += stateLabel
-            if (cur != null && showCurrentInDial) parts += offCurText(cur)
-        } else {
-            parts += labelText()
-            val (whole, dec) = splitTemp(t, step)
-            parts += "$whole$dec $unit"
-            if (cur != null && showCurrentInDial) parts += curText(cur)
-        }
-        val text = parts.joinToString(", ")
-        if (contentDescription?.toString() != text) contentDescription = text
-    }
-
-    private var min = 7.0
-    private var max = 35.0
-    private var step = 0.5
-    private var current: Double? = null
-    private var target: Double? = null
-
-    /** The target as drawn on the ring; eases towards [target] when it changes from a nudge or from HA. */
-    private var shownTarget: Double? = null
-    private var targetAnimator: ValueAnimator? = null
-    private var mode = "off"
-    private var action: String? = null
-    private var dragging = false
-    private var glowKey = 0
-    private var cx = 0f
-    private var cy = 0f
-    private var radius = 0f
-
-    var onCommit: (Double) -> Unit = {}
-
-    /** The target Home Assistant last reported, kept during a drag so a cancelled one goes back to it. */
-    private var boundTarget: Double? = null
-
-    /** The state as HA shows it big when there's no target ("Off"). */
-    private var stateLabel = ""
-
-    fun bind(min: Double, max: Double, step: Double, current: Double?, target: Double?, mode: String, action: String?, stateLabel: String = "") {
-        this.stateLabel = stateLabel
-        this.min = min
-        this.max = if (max > min) max else min + 1.0
-        this.step = step
-        this.current = current
-        boundTarget = target
-        if (!dragging) setTarget(target)
-        this.mode = mode
-        this.action = action
-        describe()
-        invalidate()
-    }
-
-    /** One `target_temp_step` up ([sign] > 0) or down, committed straight away. */
-    fun nudge(sign: Int) {
-        val t = target ?: return
-        val next = snap(t + sign * step)
-        if (next == t) return
-        setTarget(next)
-        describe()
-        invalidate()
-        onCommit(next)
-    }
-
-    /** Sets the target and eases the thumb there over 200 ms on screen; snaps before attach or from nothing. */
-    private fun setTarget(value: Double?) {
-        if (value == target && (targetAnimator != null || shownTarget == value)) return
-        target = value
-        targetAnimator?.cancel()
-        targetAnimator = null
-        val from = shownTarget
-        if (value == null || from == null || !isAttachedToWindow) {
-            shownTarget = value
-            return
-        }
-        targetAnimator = HaMotion.run(this, TARGET_MS) { t ->
-            shownTarget = from + (value - from) * t
-            invalidate()
-        }
-    }
-
-    /** The target from a finger on the ring: follows it exactly, with no easing. */
-    private fun dragTarget(value: Double) {
-        targetAnimator?.cancel()
-        targetAnimator = null
-        target = value
-        shownTarget = value
-        describe()
-    }
-
-    override fun onDetachedFromWindow() {
-        targetAnimator?.cancel()
-        targetAnimator = null
-        shownTarget = target
-        super.onDetachedFromWindow()
-    }
-
-    private fun snap(v: Double): Double {
-        val snapped = min + Math.round((v - min) / step) * step
-        return (Math.round(snapped.coerceIn(min, max) * 100.0) / 100.0)
-    }
-
-    /** The heat, cool or auto/heat_cool accent this thermostat uses, or null when off. */
-    private fun accent(): Pair<Int, Int>? = when {
-        action == "heating" || mode == "heat" -> HEAT_COLOR to HEAT_SOFT
-        action == "cooling" || mode == "cool" -> COOL_COLOR to COOL_SOFT
-        mode == "heat_cool" || mode == "auto" -> AUTO_COLOR to AUTO_SOFT
-        else -> null
-    }
-
-    private fun angleOf(v: Double): Float = 135f + 270f * ((v - min) / (max - min)).toFloat().coerceIn(0f, 1f)
-
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        cx = w / 2f
-        cy = h / 2f
-        val size = minOf(w, h).toFloat()
-        strokeW = size * 24f / 320f
-        arcPaint.strokeWidth = strokeW
-        radius = (size * 145f / 320f).coerceAtLeast(10f)
-        glowKey = 0
-    }
-
-    override fun onDraw(canvas: Canvas) {
-        if (width <= 0 || height <= 0) return
-        oval.set(cx - radius, cy - radius, cx + radius, cy + radius)
-        val accent = accent()
-        val activeTint = when (action) {
-            "heating" -> HEAT_COLOR
-            "cooling" -> COOL_COLOR
-            else -> null
-        }
-
-        // Soft radial glow while the HVAC is actually running.
-        if (activeTint != null) {
-            if (glowKey != activeTint) {
-                glowKey = activeTint
-                glowPaint.shader = RadialGradient(
-                    cx, cy, radius,
-                    CardSurface.withAlpha(activeTint, 0.12f), Color.TRANSPARENT, Shader.TileMode.CLAMP,
-                )
-            }
-            canvas.drawCircle(cx, cy, radius, glowPaint)
-        }
-
-        val isAutoIdle = (mode == "heat_cool" || mode == "auto") && activeTint == null
-        arcPaint.color = when {
-            isAutoIdle -> AUTO_SOFT
-            ctx.theme.dark -> TRACK_DARK
-            else -> TRACK_LIGHT
-        }
-        canvas.drawArc(oval, 135f, 270f, false, arcPaint)
-
-        val cur = current
-        val tgt = shownTarget ?: target
-        if (accent != null && tgt != null && !isAutoIdle) {
-            val (solid, soft) = accent
-            val low = if (cur != null) minOf(cur, tgt) else tgt
-            val lowAngle = angleOf(low)
-            if (lowAngle > 135f) {
-                arcPaint.color = soft
-                canvas.drawArc(oval, 135f, lowAngle - 135f, false, arcPaint)
-            }
-            if (cur != null && cur != tgt) {
-                val a = angleOf(cur)
-                val b = angleOf(tgt)
-                arcPaint.color = solid
-                canvas.drawArc(oval, minOf(a, b), kotlin.math.abs(b - a), false, arcPaint)
-                fill.color = Color.WHITE
-                pointAt(a)
-                canvas.drawCircle(pt[0], pt[1], 2.5f * dp, fill)
-            }
-        } else if (isAutoIdle && cur != null) {
-            fill.color = CardSurface.withAlpha(Color.WHITE, 0.7f)
-            pointAt(angleOf(cur))
-            canvas.drawCircle(pt[0], pt[1], 3f * dp, fill)
-        } else if (tgt == null && cur != null) {
-            // With no target HA still marks the current temperature on the ring.
-            fill.color = ctx.theme.secondaryTextColor
-            pointAt(angleOf(cur))
-            canvas.drawCircle(pt[0], pt[1], 4f * dp, fill)
-        }
-        if (tgt != null) {
-            pointAt(angleOf(tgt))
-            val x = pt[0]
-            val y = pt[1]
-            fill.color = accent?.first ?: ctx.theme.secondaryTextColor
-            canvas.drawCircle(x, y, 6.5f * dp, fill)
-            fill.color = Color.WHITE
-            canvas.drawCircle(x, y, 5f * dp, fill)
-        }
-
-        // Centre: action label, split target temperature, current temperature.
-        if (target == null) {
-            // ha-state-control-climate-temperature with no target: the state big (36 px) in the middle, the current
-            // temperature (16 px / 500, primary color) 49 px under it, no label above.
-            offPaint.color = ctx.theme.primaryTextColor
-            val fm = fmBuf.also { offPaint.getFontMetrics(it) }
-            canvas.drawText(stateLabel, cx, cy - (fm.ascent + fm.descent) / 2f - 1.6f * dp, offPaint)
-            if (cur != null && showCurrentInDial) drawCurrent(canvas, cur, ctx.theme.primaryTextColor, offCurPaint, 16f * dp, cy + 48.8f * dp)
-            return
-        }
-        val labelText = labelText()
-        labelPaint.color = activeTint ?: ctx.theme.secondaryTextColor
-        canvas.drawText(labelText, cx, cy - 34f * dp, labelPaint)
-
-        val baseline = cy + 16f * dp
-        bigPaint.color = ctx.theme.primaryTextColor
-        unitPaint.color = ctx.theme.primaryTextColor
-        decPaint.color = ctx.theme.primaryTextColor
-        val shownValue = target
-        if (shownValue == null) {
-            bigPaint.textAlign = Paint.Align.CENTER
-            canvas.drawText("–", cx, baseline, bigPaint)
-        } else {
-            bigPaint.textAlign = Paint.Align.LEFT
-            if (shownValue != splitValue || step != splitStep) {
-                val parts = splitTemp(shownValue, step)
-                splitValue = shownValue
-                splitStep = step
-                splitWhole = parts.first
-                splitDec = parts.second
-            }
-            val whole = splitWhole
-            val dec = splitDec
-            val wholeW = bigPaint.measureText(whole)
-            val sideW = maxOf(unitPaint.measureText(unit), if (dec.isEmpty()) 0f else decPaint.measureText(dec))
-            val gap = 2f * dp
-            val x0 = cx - (wholeW + gap + sideW) / 2f
-            canvas.drawText(whole, x0, baseline, bigPaint)
-            val sideX = x0 + wholeW + gap
-            canvas.drawText(unit, sideX, baseline - 20f * dp, unitPaint)
-            if (dec.isNotEmpty()) canvas.drawText(dec, sideX, baseline, decPaint)
-        }
-
-        if (cur != null && showCurrentInDial) {
-            val curText = curText(cur)
-            val curColor = if (action == "heating") HEAT_COLOR else if (action == "cooling") COOL_COLOR else ctx.theme.secondaryTextColor
-            curPaint.color = curColor
-            val iconSize = 14f * dp
-            val textW = curPaint.measureText(curText)
-            val total = iconSize + 4f * dp + textW
-            val left = cx - total / 2f
-            val rowBase = cy + 46f * dp
-            iconPath.set(thermometer)
-            iconMatrix.setScale(iconSize / 24f, iconSize / 24f)
-            iconMatrix.postTranslate(left, rowBase - iconSize + 2f * dp)
-            iconPath.transform(iconMatrix)
-            fill.color = curColor
-            canvas.drawPath(iconPath, fill)
-            curPaint.textAlign = Paint.Align.LEFT
-            canvas.drawText(curText, left + iconSize + 4f * dp, rowBase, curPaint)
-        }
-    }
-
-    /** The point on the ring at [angleDeg], into [pt]. */
-    private fun pointAt(angleDeg: Float) {
-        val rad = Math.toRadians(angleDeg.toDouble())
-        pt[0] = (cx + radius * cos(rad)).toFloat()
-        pt[1] = (cy + radius * sin(rad)).toFloat()
-    }
-
-    private fun valueAt(x: Float, y: Float): Double {
-        var deg = Math.toDegrees(atan2((y - cy).toDouble(), (x - cx).toDouble()))
-        if (deg < 0) deg += 360.0
-        var rel = (deg - 135.0 + 360.0) % 360.0
-        // In the bottom opening, snap to the nearer end.
-        if (rel > 270.0) rel = if (rel > 315.0) 0.0 else 270.0
-        return snap(min + rel / 270.0 * (max - min))
-    }
-
-    @android.annotation.SuppressLint("ClickableViewAccessibility")
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                if (target == null) return false
-                val d = hypot((event.x - cx).toDouble(), (event.y - cy).toDouble())
-                if (d < radius - 32f * dp || d > radius + 24f * dp) return false
-                dragging = true
-                parent?.requestDisallowInterceptTouchEvent(true)
-                dragTarget(valueAt(event.x, event.y))
-                invalidate()
-                return true
-            }
-            MotionEvent.ACTION_MOVE -> {
-                if (!dragging) return false
-                dragTarget(valueAt(event.x, event.y))
-                invalidate()
-                return true
-            }
-            MotionEvent.ACTION_UP -> {
-                if (!dragging) return false
-                dragging = false
-                parent?.requestDisallowInterceptTouchEvent(false)
-                dragTarget(valueAt(event.x, event.y))
-                invalidate()
-                target?.let(onCommit)
-                return true
-            }
-            MotionEvent.ACTION_CANCEL -> {
-                if (dragging) {
-                    // Nothing was sent: drop the preview and show the target Home Assistant has.
-                    setTarget(boundTarget)
-                    invalidate()
-                }
-                dragging = false
-                parent?.requestDisallowInterceptTouchEvent(false)
-                return true
-            }
-        }
-        return super.onTouchEvent(event)
-    }
-
-    companion object {
-        private const val TRACK_LIGHT = 0xFFE8E8E8.toInt()
-        private const val TRACK_DARK = 0xFF333333.toInt()
-        private const val AUTO_COLOR = 0xFFFFC107.toInt()
-        private const val AUTO_SOFT = 0xFFFFE082.toInt()
-        private const val TARGET_MS = 200L
-
-        /** `21.5` → `("21", ".5")`; whole steps drop the decimal. */
-        fun splitTemp(v: Double, step: Double): Pair<String, String> {
-            if (step >= 1.0) return String.format(Locale.US, "%.0f", v) to ""
-            val text = String.format(Locale.US, "%.1f", v)
-            return text.substringBefore('.') to "." + text.substringAfter('.')
-        }
     }
 }
 

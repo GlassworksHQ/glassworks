@@ -317,6 +317,8 @@ class VitroView(
     init {
         WebFonts.addListener(fontListener)
         MdiIcons.init(context)
+        // Keyboard focus and HA's roles for every control, while TalkBack or a keyboard is there to use them.
+        VitroAccess.install(this)
         setBackgroundColor(neutralBackground)
         addView(backdrop, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         tabScroll.addView(tabBar, LayoutParams(WRAP_CONTENT, WRAP_CONTENT))

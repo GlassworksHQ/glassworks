@@ -75,7 +75,7 @@ Tapping or holding a tile opens a native More-Info dialog styled after Home Assi
 | Entity | Dialog |
 |---|---|
 | Light | Brightness dimmer, an HSV color wheel, a Kelvin color-temperature picker, and color swatches |
-| Climate | A circular thermostat dial with mode buttons |
+| Climate | A circular thermostat dial with mode buttons, and two thumbs for a heat/cool range |
 | Cover | A top-down position slider |
 | Sensor | A 24-hour stepped history graph |
 | Camera | A live stream |
@@ -83,6 +83,24 @@ Tapping or holding a tile opens a native More-Info dialog styled after Home Assi
 | Alarm panel | A PIN pad |
 
 Tiles can also carry the inline features Home Assistant adds under the card: `climate-hvac-modes`, `target-temperature`, `fan-speed`, `cover-position`, `light-color-temp`, `media-player-volume-slider`, `toggle`, `media-player-playback`, `light-color-favorites`, `numeric-input` and `vacuum-commands`, next to the brightness, select and open/close controls.
+
+A thermostat in `heat_cool` or `auto` with a low and a high target shows both, as Home Assistant does: on the
+thermostat card and in More-Info, the dial gets two thumbs, and the − and + move whichever target you pick in the
+middle of the dial. The tile's `target-temperature` feature and Mushroom's climate card show a pair of steppers
+instead. The low target can't go above the high one.
+
+## Accessibility
+
+Vitro's controls work with TalkBack and with a keyboard or D-pad, the way Home Assistant's page works with a screen
+reader:
+
+- Every control has a name, and the role Home Assistant gives it: a button, a switch (entity toggles), a check box
+  (to-do items), a choice (HVAC modes, the tile's toggle), or a pressed button (the light's modes, the calendar's
+  views).
+- Dials and sliders read their value, and TalkBack's swipe up and down change it.
+- With a keyboard, Tab and the arrows move between controls and Enter presses them. On a dial, the arrows change the
+  value (page keys by a tenth, Home and End to the ends), and Enter switches between the two ends of a heat/cool
+  range. Back or Escape closes More-Info.
 
 ## Themes
 

@@ -77,7 +77,13 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         ellipsize = TextUtils.TruncateAt.END
     }
     private val historyIcon = MdiIconView(ctx.context)
-    private val historyButton = iconButton(historyIcon, "mdi:chart-box-outline")
+    private val historyButton = iconButton(historyIcon, "mdi:chart-box-outline").apply {
+        // HA's header button between the controls and the history: pressed while the history shows.
+        dev.glassworks.engine.vitro.ui.VitroAccess.role(this, dev.glassworks.engine.vitro.ui.A11yRole.TOGGLE_BUTTON, "History") { showingHistory }
+    }
+
+    /** The header's Close: where keyboard focus starts when the sheet opens. */
+    private var closeButton: View? = null
     private val body = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(ctx.px(24f), ctx.px(if (compact) 4f else 8f), ctx.px(24f), ctx.px(if (compact) 12f else 24f))
@@ -109,11 +115,15 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         background = scrim
         isClickable = true
         setOnClickListener { dismiss() }
+        // The scrim and the panel take taps only to close the sheet or keep it open: not controls for TalkBack or
+        // keys, which close it with Close, Back or Escape as HA's dialog does.
+        dev.glassworks.engine.vitro.ui.VitroAccess.notAControl(this)
 
         val radius = 28f * ctx.dp
         panel.apply {
             orientation = LinearLayout.VERTICAL
             isClickable = true // swallows taps so only the scrim dismisses
+            dev.glassworks.engine.vitro.ui.VitroAccess.notAControl(this)
             background = GradientDrawable().apply {
                 setColor(theme.cardBackgroundColor)
                 cornerRadii = if (wide) FloatArray(8) { radius }
@@ -140,7 +150,11 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             setPadding(ctx.px(12f), ctx.px(if (wide) 12f else 6f), ctx.px(12f), ctx.px(4f))
         }
         val closeIcon = MdiIconView(ctx.context)
-        val closeButton = iconButton(closeIcon, "mdi:close").apply { setOnClickListener { dismiss() } }
+        val closeButton = iconButton(closeIcon, "mdi:close").apply {
+            contentDescription = "Close"
+            setOnClickListener { dismiss() }
+        }
+        this.closeButton = closeButton
         header.addView(closeButton, LinearLayout.LayoutParams(ctx.px(40f), ctx.px(40f)))
         header.addView(titleView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
             marginStart = ctx.px(12f)
@@ -183,6 +197,18 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         ctx.main.postDelayed(clockTick, TIME_REFRESH_MS)
 
         playEnter()
+        // A keyboard lands in the sheet, as in HA's dialog, and TalkBack announces it by the entity's name.
+        closeButton?.requestFocus()
+        if (android.os.Build.VERSION.SDK_INT >= 28) panel.accessibilityPaneTitle = titleView.text
+    }
+
+    /** Back and Escape close the sheet, as Escape closes HA's dialog. */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.keyCode == android.view.KeyEvent.KEYCODE_BACK || event.keyCode == android.view.KeyEvent.KEYCODE_ESCAPE) {
+            if (event.action == android.view.KeyEvent.ACTION_UP && !dismissed) dismiss()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     /**
@@ -354,7 +380,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 onToggle = { on -> optimisticToggle(id, "light", on) }
             }
             addPill(toggle)
-            val power = circleButton("mdi:power", 52f, 24f) { optimisticToggle(id, "light", ctx.store[id]?.state != "on") }
+            val power = circleButton("mdi:power", "Toggle", 52f, 24f) { optimisticToggle(id, "light", ctx.store[id]?.state != "on") }
             addCentered(power, topDp = dockGap, widthDp = 52f, heightDp = 52f)
             return { s ->
                 stateLabel.text = lightStateText(s)
@@ -607,7 +633,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
         }
         addPill(slider)
-        val power = circleButton("mdi:power", 52f, 24f) { optimisticToggle(id, "fan", ctx.store[id]?.state != "on") }
+        val power = circleButton("mdi:power", "Toggle", 52f, 24f) { optimisticToggle(id, "fan", ctx.store[id]?.state != "on") }
         addCentered(power, topDp = dockGap, widthDp = 52f, heightDp = 52f)
         var lastPct: Int? = initial.takeIf { it.state == "on" }?.let { (it.attributes["percentage"] as? Number)?.toInt() }?.takeIf { it > 0 }
         return { s ->
@@ -838,8 +864,10 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
         val dial = ThermostatDialView(ctx, unit, showCurrentInDial = false).apply {
             onCommit = { t ->
-                val next = ctx.store[id]?.let { cur -> cur.copy(attributes = cur.attributes + ("temperature" to t)) }
-                ctx.callOptimistic(next, "climate", "set_temperature", JSONObject().put("entity_id", id).put("temperature", t))
+                ctx.callOptimistic(ClimateTargets.withValue(ctx.store[id], t), "climate", "set_temperature", JSONObject().put("entity_id", id).put("temperature", t))
+            }
+            onRangeCommit = { low, high ->
+                ctx.callOptimistic(ClimateTargets.withRange(ctx.store[id], low, high), "climate", "set_temperature", ClimateTargets.rangeData(id, low, high))
             }
         }
         val dialFrame = FrameLayout(ctx.context)
@@ -851,7 +879,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         fun stepBtn(icon: String, sign: Int) = FrameLayout(ctx.context).apply {
             addView(MdiIconView(ctx.context).apply { setIcon(icon, theme.primaryTextColor) },
                 LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
-            contentDescription = if (sign > 0) "Raise target temperature" else "Lower target temperature"
+            contentDescription = ThermostatCardView.stepperLabel(sign, null)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(Color.TRANSPARENT)
@@ -861,8 +889,21 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             ripple(this)
             setOnClickListener { dial.nudge(sign) }
         }
-        steppers.addView(stepBtn("mdi:minus", -1), LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)).apply { marginEnd = ctx.px(20f) })
-        steppers.addView(stepBtn("mdi:plus", 1), LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)))
+        val minus = stepBtn("mdi:minus", -1)
+        val plus = stepBtn("mdi:plus", 1)
+        // A range: the − and + move the selected end, named after it and outlined in its color while it runs.
+        fun styleSteppers() {
+            val handle = dial.selected.takeIf { dial.isRange }
+            val outline = handle?.let { dial.handleColor(it) }?.takeIf { it != theme.secondaryTextColor }
+                ?: CardSurface.withAlpha(theme.secondaryTextColor, 0.5f)
+            for ((view, sign) in listOf(minus to -1, plus to 1)) {
+                view.contentDescription = ThermostatCardView.stepperLabel(sign, handle)
+                (view.background as? GradientDrawable)?.setStroke(ctx.px(1f).coerceAtLeast(1), outline)
+            }
+        }
+        dial.onSelect = { styleSteppers() }
+        steppers.addView(minus, LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)).apply { marginEnd = ctx.px(20f) })
+        steppers.addView(plus, LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)))
         dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
         body.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(dialDp)).apply { topMargin = ctx.px(dialGap) })
 
@@ -895,15 +936,20 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         return { s ->
             val attrs = s?.attributes.orEmpty()
             val mode = s?.state ?: "off"
+            val targets = ClimateTargets.of(attrs)
             dial.bind(
                 min = (attrs["min_temp"] as? Number)?.toDouble() ?: 7.0,
                 max = (attrs["max_temp"] as? Number)?.toDouble() ?: 35.0,
-                step = (attrs["target_temp_step"] as? Number)?.toDouble()?.takeIf { it > 0 } ?: 0.5,
+                step = ClimateTargets.stepOf(attrs, unit),
                 current = (attrs["current_temperature"] as? Number)?.toDouble(),
-                target = (attrs["temperature"] as? Number)?.toDouble(),
+                target = targets.value,
                 mode = mode,
                 action = attrs["hvac_action"] as? String,
+                stateLabel = s?.let { dev.glassworks.engine.vitro.data.HaDisplay.stateLabel(it) }.orEmpty(),
+                low = targets.low,
+                high = targets.high,
             )
+            styleSteppers()
             current.text = (attrs["current_temperature"] as? Number)?.toDouble()
                 ?.let { String.format(Locale.US, "%.1f %s", it, unit) } ?: "–"
             modeBtn.icon.setIcon(ThermostatCardView.modeIcon(mode), theme.primaryTextColor)
@@ -1016,6 +1062,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                         }
                         codeView.text = "•".repeat(code.length)
                     }
+                    if (key == "⌫") b.contentDescription = "Backspace"
                     row.addView(b, LinearLayout.LayoutParams(ctx.px(72f), ctx.px(52f)).apply { if (i > 0) marginStart = ctx.px(12f) })
                 }
                 pad.addView(row, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { if (r > 0) topMargin = ctx.px(10f) })
@@ -1095,13 +1142,13 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             gravity = Gravity.CENTER
         }
         val playIcon = MdiIconView(ctx.context)
-        val play = circleButton(playIcon, "mdi:play", 64f, 30f) { media("media_play_pause") }
-        transport.addView(circleButton("mdi:skip-previous", 52f, 24f) { media("media_previous_track") },
+        val play = circleButton(playIcon, "mdi:play", "Play", 64f, 30f) { media("media_play_pause") }
+        transport.addView(circleButton("mdi:skip-previous", "Previous track", 52f, 24f) { media("media_previous_track") },
             LinearLayout.LayoutParams(ctx.px(52f), ctx.px(52f)))
         transport.addView(play, LinearLayout.LayoutParams(ctx.px(64f), ctx.px(64f)).apply {
             marginStart = ctx.px(20f); marginEnd = ctx.px(20f)
         })
-        transport.addView(circleButton("mdi:skip-next", 52f, 24f) { media("media_next_track") },
+        transport.addView(circleButton("mdi:skip-next", "Next track", 52f, 24f) { media("media_next_track") },
             LinearLayout.LayoutParams(ctx.px(52f), ctx.px(52f)))
         addCentered(transport, topDp = 20f)
 
@@ -1140,6 +1187,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             artist.visibility = if (a == null) GONE else VISIBLE
             state.text = listOf(s?.formattedState().orEmpty(), relativeTime(s)).filter { it.isNotEmpty() }.joinToString(" · ")
             playIcon.setIcon(if (playing) "mdi:pause" else "mdi:play", theme.primaryTextColor)
+            play.contentDescription = if (playing) "Pause" else "Play"
             val level = (s?.attributes?.get("volume_level") as? Number)?.toDouble()
             volumeRow.visibility = if (level == null) GONE else VISIBLE
             if (level != null && !tracking) volume.progress = (level * 100).roundToInt()
@@ -1329,11 +1377,13 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     /** HA's ripple on a sheet control, clipped to [radiusPx] (a pill or circle by default). */
     private fun ripple(v: View, radiusPx: Float = 999f) = applyHaRipple(v, radiusPx, theme.dark)
 
-    private fun circleButton(name: String, sizeDp: Float, iconDp: Float, onClick: () -> Unit): FrameLayout =
-        circleButton(MdiIconView(ctx.context), name, sizeDp, iconDp, onClick)
+    private fun circleButton(name: String, label: String, sizeDp: Float, iconDp: Float, onClick: () -> Unit): FrameLayout =
+        circleButton(MdiIconView(ctx.context), name, label, sizeDp, iconDp, onClick)
 
-    private fun circleButton(icon: MdiIconView, name: String, sizeDp: Float, iconDp: Float, onClick: () -> Unit): FrameLayout =
+    /** A round icon button, named [label] for TalkBack (HA's `.label`). */
+    private fun circleButton(icon: MdiIconView, name: String, label: String, sizeDp: Float, iconDp: Float, onClick: () -> Unit): FrameLayout =
         FrameLayout(ctx.context).apply {
+            contentDescription = label
             icon.setIcon(name, theme.primaryTextColor)
             addView(icon, LayoutParams(ctx.px(iconDp), ctx.px(iconDp), Gravity.CENTER))
             background = GradientDrawable().apply {
@@ -1391,6 +1441,14 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
         var chosen = false
             set(v) { if (field != v) { field = v; invalidate() } }
+
+        /** HA's mode buttons stay pressed (`aria-pressed`) on the mode that shows. */
+        override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+            super.onInitializeAccessibilityNodeInfo(info)
+            info.className = "android.widget.ToggleButton"
+            info.isCheckable = true
+            info.isChecked = chosen
+        }
 
         init {
             isClickable = true

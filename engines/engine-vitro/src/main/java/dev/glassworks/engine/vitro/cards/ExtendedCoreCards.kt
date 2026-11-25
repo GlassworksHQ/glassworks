@@ -993,6 +993,8 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             isClickable = true
             setOnClickListener { toggle(item) }
         }
+        // ha-check-list-item: a checkbox named by its summary, checked once done.
+        dev.glassworks.engine.vitro.ui.VitroAccess.role(row, dev.glassworks.engine.vitro.ui.A11yRole.CHECKBOX) { item.completed }
         val box = FrameLayout(ctx.context).apply {
             background = GradientDrawable().apply {
                 cornerRadius = 4f * ctx.dp
@@ -1508,6 +1510,11 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
             else -> return
         }
         el.title?.let { view.contentDescription = it }
+        // HA's tooltip (computeTooltip) when the element has no title: "Window light: Off", what TalkBack reads.
+        val eid = el.entity
+        if (el.title == null && eid != null && view !is TextView) {
+            observe(eid) { s -> view.contentDescription = s?.let { "${it.displayName}: ${it.formattedState()}" } ?: eid }
+        }
         floorplan.addView(view, FloorplanLayout.Params(el.xFrac, el.yFrac))
     }
 
