@@ -655,10 +655,14 @@ Number 4 was the cheapest and turned out to be it. HA's profile panel is one sma
 **A dead end worth knowing.** The first emulator run, at the AVD's own 2560×1800 with SwiftShader, while the Mac ran
 other builds (load average 600–850), looked like a real engine bug: 87 `Loading failed for the module` warnings for
 HA's chunks, a `Script terminated by timeout` inside them, and the app's connecting screen that never left, for
-`/profile/dashboard` too. HA served
-every one of those chunks (200 to `curl`). It was the host, not GeckoView: at 1280×800 with the load down, the same
-APK loaded the dashboard in 8 s and the profile with no warning. Before blaming the legacy engine for chunks that
-don't load on an emulator, check `uptime` on the host.
+`/profile/dashboard` too. HA served every one of those chunks (200 to `curl`).
+
+The likely cause is the host, not GeckoView, but the runs don't prove it. The later runs changed two things at once,
+the display (1280×800 with `wm size`) and the load. At 1280×800 the load alone made a large difference: the dashboard
+took 59 s to load at load 440–700 (logcat `Connecting screen hidden … (58726 ms …)`), 7.8 s at about 300 after the
+reboot, and 6.4 s at about 50, with no module failure or script timeout in the last two. No run was made at
+2560×1800 with the host idle, so an engine problem at that size is not ruled out (**untested**). Before blaming the
+legacy engine for chunks that don't load on an emulator, check `uptime` on the host and try the display at 1280×800.
 
 Lesson for the next blank HA page on the legacy engine: open the same URL in a desktop browser before suspecting
 GeckoView 144. HA renames and removes frontend routes between releases.

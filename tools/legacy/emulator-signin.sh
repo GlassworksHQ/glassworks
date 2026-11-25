@@ -7,9 +7,10 @@
 # panel's /callback. The panel then exchanges it and stores its refresh token, as after a phone sign-in.
 #
 # What it touches: the emulator's app (it signs it in), through the adb command you give it, and one adb forward
-# (tcp:18099), removed at the end. HA's login flow runs against HA_LOCAL, the address this computer reaches HA at;
-# the app must already know HA by the address the emulator uses (`--es url http://10.0.2.2:8123`). Use it only
-# against a throwaway HA: the password file is read in place and never echoed.
+# (tcp:18099, or FWD_PORT) that it creates and removes at the end; it refuses to start if that port is taken.
+# HA's login flow runs against HA_LOCAL, the address this computer reaches HA at; the app must already know HA by the
+# address the emulator uses (`--es url http://10.0.2.2:8123`). Use it only against a throwaway HA: the password file
+# is read in place and never echoed.
 #
 #   ADB="adb -P 5091 -s 127.0.0.1:5621" HA_LOCAL=http://127.0.0.1:8123 HA_USER=test \
 #     tools/legacy/emulator-signin.sh <file holding the password>
@@ -21,9 +22,14 @@ pass_file=${1:?usage: emulator-signin.sh <password file>}
 : "${ADB:?set ADB to the adb command for the emulator}"
 ha=${HA_LOCAL:-http://127.0.0.1:8123}
 user=${HA_USER:-test}
-fwd=18099
+fwd=${FWD_PORT:-18099}
 
-$ADB forward tcp:$fwd tcp:8099 >/dev/null
+# --no-rebind: a forward someone else holds on this port stays theirs (adb refuses, and so do we). The cleanup trap
+# is set only once the forward is ours, so it never removes another session's.
+if ! $ADB forward --no-rebind tcp:"$fwd" tcp:8099 >/dev/null; then
+  echo "tcp:$fwd is already forwarded or in use on this computer; set FWD_PORT to a free port" >&2
+  exit 1
+fi
 trap '$ADB forward --remove tcp:$fwd >/dev/null 2>&1 || true' EXIT
 
 loc=$(curl -fsS -o /dev/null -w '%{redirect_url}' -H 'Host: 127.0.0.1:8099' "http://127.0.0.1:$fwd/signin/continue")
