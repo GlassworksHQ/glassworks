@@ -72,7 +72,8 @@ object HaHistory {
         for (id in LinkedHashSet(entityIds + history.keys)) {
             val h = history[id]
             if (h != null) local[id] = h
-            else store(id)?.let { st -> local[id] = listOf(HistoryState(st.state, st.lastUpdated)) }
+            // limitedHistoryFromStateObj: the current state with its attributes, which a climate's chart draws.
+            else store(id)?.let { st -> local[id] = listOf(HistoryState(st.state, st.lastUpdated, attributesJson(st.attributes))) }
         }
         val lineGroups = LinkedHashMap<String, LinkedHashMap<String, MutableList<HistoryState>>>()
         val timeline = ArrayList<TimelineRow>()
@@ -117,6 +118,13 @@ object HaHistory {
      * `processLineChartEntities`: a state is dropped only when it repeats the two before it, attributes included
      * (`equalState`), so a climate whose mode stays the same keeps every recorded temperature.
      */
+    /** An entity's attributes as the JSON a history state carries (a null stays a JSON null). */
+    private fun attributesJson(attrs: Map<String, Any?>): JSONObject {
+        val o = JSONObject()
+        for ((k, v) in attrs) o.put(k, if (v == null) JSONObject.NULL else JSONObject.wrap(v) ?: JSONObject.NULL)
+        return o
+    }
+
     private fun lineEntity(id: String, states: List<HistoryState>, current: EntityState?): LineEntity {
         val useLu = id.substringBefore('.') in USE_LAST_UPDATED
         val out = ArrayList<LineState>(states.size)
@@ -1434,9 +1442,12 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
     private var prepareGeneration = 0
     private var preparedWidth = Float.NaN
 
-    /** The chart's width (CSS px): its own once laid out, else the card's less its border and 16 px sides. */
+    /**
+     * The chart's width (CSS px): its own once laid out and shown, else the card's less its border and 16 px sides.
+     * A hidden chart ("No statistics found.") keeps the width of its last layout, which a resize since has outdated.
+     */
     private fun chartWidthCss(): Float? =
-        chart.width.takeIf { it > 0 }?.let { it / ctx.dp }
+        chart.width.takeIf { it > 0 && chart.visibility != GONE }?.let { it / ctx.dp }
             ?: width.takeIf { it > 0 }?.let { (it - paddingLeft - paddingRight) / ctx.dp - 32f }
 
     /** `_getDefaultHeight`: half the chart's width, at least 200, at most `--chart-max-height` (350). */

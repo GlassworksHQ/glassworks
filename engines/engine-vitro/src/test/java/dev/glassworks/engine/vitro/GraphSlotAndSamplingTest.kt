@@ -204,4 +204,18 @@ class GraphSlotAndSamplingTest {
         // No more than about one point per pixel: nothing to do.
         assertEquals(100, StatisticsChartData.lttbIndices(v, 80f).size)
     }
+
+    @Test
+    fun aBucketMissingABandEdgeStaysANullForLttb() {
+        val rows = JSONArray()
+        for (i in 0 until 4) {
+            val t = start + i * fiveMinutes
+            val row = JSONObject().put("start", t).put("end", t + fiveMinutes).put("mean", -5.0).put("min", -10.0)
+            if (i != 2) row.put("max", 0.0)
+            rows.put(row)
+        }
+        val top = StatisticsChartData.build(input(JSONObject().put("sensor.t", rows))).series.single { it.bandBottom != null }
+        // Rows 0, 1 and 3 have both edges (height 10); row 2 has no max, so no height to choose by.
+        assertEquals(listOf(10.0, 10.0, null, 10.0), top.sampleBy.take(4).map { if (it.isNaN()) null else it })
+    }
 }

@@ -176,9 +176,11 @@ object StatisticsChartData {
                     else if (firstSum == null) { firstSum = v.takeIf { !it.isNaN() }; 0.0 }
                     else (if (v.isNaN()) 0.0 else v) - firstSum!!
                 }
-                // The band's top row is [|top - bottom|, top], nulls as 0 (`stat[bandTop] || 0`).
+                // The band's top row is [|top - bottom|, top]: LTTB chooses by the height. A bucket missing either
+                // edge has none, so it stays a null for LTTB and the gap Vitro draws there survives sampling.
                 val bottom = value(bandBottom)
-                val height = abs((value(bandTop).takeIf { !it.isNaN() } ?: 0.0) - (bottom.takeIf { !it.isNaN() } ?: 0.0))
+                val topValue = value(bandTop)
+                val height = if (topValue.isNaN() || bottom.isNaN()) Double.NaN else abs(topValue - bottom)
                 if (prevEnd != null && prevVals != null && prevEnd != start) {
                     for (t in types) {
                         push(t, prevEnd, prevVals.getValue(t), prevBottom, prevHeight)

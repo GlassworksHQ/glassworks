@@ -151,4 +151,16 @@ class ClimateHistoryTest {
         val hum = EntityState("humidifier.room", "on", emptyMap())
         assertTrue(HaHistoryLines.legendValue("humidifier.room-target_humidity", hum, "°C")!!.isNotEmpty())
     }
+
+    @Test
+    fun aClimateWithoutRecordedHistoryDrawsItsCurrentAttributes() {
+        // limitedHistoryFromStateObj: no history, so the current state stands in, attributes included.
+        val ac = EntityState("climate.ac", "heat", mapOf("current_temperature" to 18, "temperature" to 22, "target_temp_high" to null, "target_temp_low" to null, "hvac_action" to "heating"))
+        val result = HaHistory.compute({ if (it == ac.entityId) ac else null }, emptyMap(), listOf("climate.ac"), "°C")
+        val s = series(result.line.single().data.single())
+        assertEquals(listOf("current_temperature", "heating", "target_temperature"), s.map { it.id.substringAfter('-') })
+        assertEquals(18.0, s[0].ys.first(), 0.0)
+        assertEquals(18.0, s[1].ys.first(), 0.0)
+        assertEquals(22.0, s[2].ys.first(), 0.0)
+    }
 }
