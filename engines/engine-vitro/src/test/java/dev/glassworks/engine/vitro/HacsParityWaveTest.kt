@@ -550,6 +550,28 @@ class HacsParityWaveTest {
     }
 
     @Test
+    fun layoutCardGridUsesLayoutCardsMarginsAndNoGapByDefault() {
+        // HA (layout-card's grid-layout) at 512 px: margin 0 4, padding 4 0, no gap, each card in 4 4 8 inside its
+        // track, so two 1fr tiles are 244 px wide, 8 px apart, 8 px in from the top and the left.
+        val st = store()
+        val grid = LayoutCardView(context(st), card("""{"type": "custom:layout-card", "layout_type": "custom:grid-layout",
+            "layout": {"grid-template-columns": "1fr 1fr"}, "cards": [{"type": "tile"}, {"type": "tile"}, {"type": "tile"}]}"""),
+            builder(st), widthDp = 512)
+        val dp = activity.resources.displayMetrics.density
+        grid.measure(View.MeasureSpec.makeMeasureSpec((512 * dp).toInt(), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        grid.layout(0, 0, grid.measuredWidth, grid.measuredHeight)
+        val a = grid.tracks[0].getChildAt(0)
+        val b = grid.tracks[0].getChildAt(1)
+        assertEquals(244f, a.width / dp, 1f)
+        assertEquals(244f, b.width / dp, 1f)
+        assertEquals(8f, (a.left + grid.tracks[0].left) / dp, 1f)
+        assertEquals(8f, (b.left - a.right) / dp, 1f)
+        assertEquals(8f, (a.top + grid.tracks[0].top) / dp, 1f)
+        // The second row: the first's bottom margin (8) and the next card's top margin (4), no gap.
+        assertEquals(12f, (grid.tracks[1].getChildAt(0).top + grid.tracks[1].top - (a.bottom + grid.tracks[0].top)) / dp, 1f)
+    }
+
+    @Test
     fun layoutCardLaysOutAGridWithSpans() {
         val st = store()
         val cfg = card(
@@ -584,7 +606,8 @@ class HacsParityWaveTest {
         half.measure(View.MeasureSpec.makeMeasureSpec(px(640), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
         half.layout(0, 0, half.measuredWidth, half.measuredHeight)
         val first = half.tracks[0].getChildAt(0)
-        assertEquals(px(320).toFloat(), first.width.toFloat(), 2f)
+        // grid-layout's 4 px side margins leave 632: the 50% track is 316, and the card's own 4 + 4 margin is in it.
+        assertEquals(px(308).toFloat(), first.width.toFloat(), 2f)
 
         val horizontal = LayoutCardView(
             context(st),

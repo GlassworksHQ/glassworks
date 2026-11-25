@@ -2334,7 +2334,7 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
     }
 }
 
-/** Native HA `heading` card + `custom:mushroom-title-card`. */
+/** Native HA `heading` card (`custom:mushroom-title-card` is [MushroomTitleCardView]). */
 class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : LinearLayout(ctx.context) {
     private val unsubs = ArrayList<() -> Unit>()
 

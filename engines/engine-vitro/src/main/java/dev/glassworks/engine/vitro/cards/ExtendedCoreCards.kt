@@ -736,9 +736,17 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
 // todo-list
 // ---------------------------------------------------------------------------------------------
 
-/** One item of a `todo.*` list, as `todo/item/list` returns it. */
+/** One item of a `todo.*` list, as `todo/item/subscribe` sends it. */
 /** [pending]: added here and not yet listed by Home Assistant (its [uid] is made up; a real one can look alike). */
-data class TodoItem(val uid: String, val summary: String, val completed: Boolean, val pending: Boolean = false)
+/** [due]: a date (`2026-11-26`) or a date and time; [description] as HA keeps it. */
+data class TodoItem(
+    val uid: String,
+    val summary: String,
+    val completed: Boolean,
+    val pending: Boolean = false,
+    val due: String? = null,
+    val description: String? = null,
+)
 
 /** Native HA `todo-list` card (`hui-todo-list-card`): live items, checkboxes, completed section and add row. */
 class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
@@ -763,6 +771,10 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     private val maxItems = config.raw.optInt("max_items", 0).coerceAtLeast(0)
     private val addRow: LinearLayout
 
+    /** The list's `supported_features` (CREATE 1, DELETE 2, UPDATE 4, MOVE 8): what HA offers on it. */
+    private var features = 0
+    private val sortMode = config.raw.optString("display_order", "none").ifEmpty { "none" }
+
     /**
      * hui-todo-list-card as measured in HA: the add field on top (a 56 px filled input with its + button, 16 px
      * in), then 48 px "Active" / "Completed" headers with their menus over 40 px rows with 20 px square
@@ -778,7 +790,8 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         addRow = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(ctx.px(16f), ctx.px(16f), ctx.px(16f), ctx.px(8f))
-            if (hideCreate) visibility = GONE
+            // Shown once the list says it can create items (HA's CREATE_TODO_ITEM), unless `hide_create`.
+            visibility = GONE
         }
         input.apply {
             hint = "Add item"
@@ -830,19 +843,19 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             orientation = LinearLayout.VERTICAL
             setPadding(0, ctx.px(16f), 0, ctx.px(8f))
         }
-        list.addView(activeHeader, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(48f)))
+        list.addView(activeHeader, LinearLayout.LayoutParams(MATCH_PARENT, HEADER_PX(ctx)))
         list.addView(activeBox, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         list.addView(completedDivider, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)).apply {
             topMargin = ctx.px(10f); bottomMargin = ctx.px(10f)
         })
-        list.addView(completedHeader, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(48f)))
+        list.addView(completedHeader, LinearLayout.LayoutParams(MATCH_PARENT, HEADER_PX(ctx)))
         list.addView(completedBox, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         col.addView(list, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         renderItems()
     }
 
-    /** A 48 px section header: the 14 px / 500 title and, at the end, a 48 px menu button. */
+    /** A section header (44.2 px: the 14 px / 500 title on a 21 px line, 11.6 px above and below) and its menu. */
     private fun sectionHeader(title: String, onMenu: ((View) -> Unit)?): LinearLayout = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -872,38 +885,51 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         val eid = config.entity ?: return
-        // `observe` delivers the current state at once, so this fetches on attach and again on every change.
-        observe(eid) { _ -> fetch(eid) }
-        // HA's card follows the items themselves (`todo/item/subscribe`): a rename leaves the entity's count alone.
+        observe(eid) { s -> applyFeatures(s) }
+        // HA's card keeps one `todo/item/subscribe` while it shows: every event is the whole list, so a rename (which
+        // leaves the entity's count alone) shows too. A rejected subscription falls back to one read.
         track(ctx.subscribeWs(JSONObject().put("type", "todo/item/subscribe").put("entity_id", eid), { ev ->
             val parsed = parseItems(ev)
             ctx.main.post {
                 if (!isAttachedToWindow) return@post
-                // Newer than any list still on its way.
+                // Newer than any one-shot read still on its way.
                 fetchGeneration++
                 items = parsed
                 renderItems()
             }
-        }, { _ -> }))
+        }, { _ -> ctx.main.post { if (isAttachedToWindow) fetch(eid) } }))
     }
 
+    /**
+     * Reads the list as HA's card does, through `todo/item/subscribe`: its first event is the whole list, and the
+     * subscription is dropped right after (a state change reads it again, as before).
+     */
     private fun fetch(eid: String, retry: Boolean = true) {
         val gen = ++fetchGeneration
-        ctx.callWs(JSONObject().put("type", "todo/item/list").put("entity_id", eid)) { ok, result, _ ->
-            if (!ok) {
-                // A row added here waits for this list to get its uid: ask once more rather than leave it untoggleable.
-                if (retry) ctx.main.postDelayed({
-                    if (gen == fetchGeneration && isAttachedToWindow && items.any { it.pending }) fetch(eid, retry = false)
-                }, RETRY_MS)
-                return@callWs
-            }
-            val parsed = parseItems(result as? JSONObject)
+        var unsub: (() -> Unit)? = null
+        var done = false
+        fun finish() {
+            done = true
+            unsub?.let { u -> ctx.main.post { runCatching { u() } } }
+        }
+        unsub = ctx.subscribeWs(JSONObject().put("type", "todo/item/subscribe").put("entity_id", eid), { ev ->
+            if (done) return@subscribeWs
+            finish()
+            val parsed = parseItems(ev)
             ctx.main.post {
                 if (gen != fetchGeneration) return@post
                 items = parsed
                 renderItems()
             }
-        }
+        }, { _ ->
+            if (done) return@subscribeWs
+            finish()
+            // A row added here waits for this list to get its uid: ask once more rather than leave it untoggleable.
+            if (retry) ctx.main.postDelayed({
+                if (gen == fetchGeneration && isAttachedToWindow && items.any { it.pending }) fetch(eid, retry = false)
+            }, RETRY_MS)
+        })
+        if (done) unsub?.let { u -> ctx.main.post { runCatching { u() } } }
     }
 
     private fun toggle(item: TodoItem) {
@@ -953,13 +979,24 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         }
     }
 
+    /**
+     * HA shows what the list supports: the add row with CREATE (and no `hide_create`), the reorder menu with MOVE
+     * (unsorted), the clear menu with DELETE.
+     */
+    private fun applyFeatures(s: EntityState?) {
+        features = (s?.attributes?.get("supported_features") as? Number)?.toInt() ?: 0
+        addRow.visibility = if (!hideCreate && features and CREATE != 0) VISIBLE else GONE
+        activeHeader.getChildAt(1).visibility = if (features and MOVE != 0 && sortMode == "none") VISIBLE else GONE
+        completedHeader.getChildAt(1).visibility = if (features and DELETE != 0) VISIBLE else GONE
+    }
+
     private fun renderItems() {
         activeBox.removeAllViews()
         completedBox.removeAllViews()
         val active = items.filter { !it.completed }
         val done = items.filter { it.completed }
         val shown = if (maxItems > 0) active.take(maxItems) else active
-        shown.forEach { activeBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f))) }
+        shown.forEach { activeBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, rowHeight(it))) }
         val hidden = active.size - shown.size
         if (hidden > 0) {
             activeBox.addView(extLabel(ctx, 12f, ctx.theme.secondaryTextColor).apply {
@@ -979,7 +1016,7 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         completedHeader.visibility = if (showCompleted) VISIBLE else GONE
         completedBox.visibility = if (showCompleted) VISIBLE else GONE
         if (showCompleted) {
-            done.forEach { completedBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f))) }
+            done.forEach { completedBox.addView(itemRow(it), LinearLayout.LayoutParams(MATCH_PARENT, rowHeight(it))) }
         }
     }
 
@@ -1006,10 +1043,67 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             this.text = item.summary
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER_VERTICAL
             if (item.completed) paintFlags = paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
         }
-        row.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        if (!isMultiline(item)) {
+            row.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            return row
+        }
+        // A multiline row: the summary and each extra line 21 px tall (14 / 12 px text), 8 px above and below.
+        val column = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(text, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(21f)))
+        item.description?.let { d ->
+            column.addView(extLabel(ctx, 12f, ctx.theme.secondaryTextColor).apply {
+                this.text = d
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                gravity = Gravity.CENTER_VERTICAL
+            }, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(21f)))
+        }
+        dueText(item)?.let { (label, overdue) ->
+            // `.due`: a 14 px clock, then the time, in the secondary color (`--warning-color` once overdue).
+            val color = if (overdue) ThemeResolver.parseColor(ctx.theme.vars["warning-color"]) ?: WARNING else ctx.theme.secondaryTextColor
+            column.addView(LinearLayout(ctx.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(MdiIconView(ctx.context).apply { setIcon("mdi:clock", color) }, LinearLayout.LayoutParams(ctx.px(14f), ctx.px(14f)).apply { marginEnd = ctx.px(4f) })
+                addView(extLabel(ctx, 12f, color).apply { this.text = label; maxLines = 1 })
+            }, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(21f)))
+        }
+        row.addView(column, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         return row
+    }
+
+    private fun isMultiline(item: TodoItem) = item.due != null || item.description != null
+
+    private fun rowHeight(item: TodoItem): Int =
+        if (isMultiline(item)) ctx.px(16f + 21f * (1 + (if (item.due != null) 1 else 0) + (if (item.description != null) 1 else 0))) else ctx.px(40f)
+
+    /**
+     * HA's due line: "Today" for a date due today, else the relative time ("In 2 days", "Last week"), and whether
+     * it's past. A date is due at the end of its day; a date and time at that instant.
+     */
+    private fun dueText(item: TodoItem): Pair<String, Boolean>? {
+        val raw = item.due ?: return null
+        val tz = TimeZone.getDefault()
+        val dateOnly = 'T' !in raw
+        val dueMs = if (dateOnly) {
+            val parts = raw.split('-').mapNotNull { it.toIntOrNull() }
+            if (parts.size < 3) return null
+            Calendar.getInstance(tz).apply { clear(); set(parts[0], parts[1] - 1, parts[2], 23, 59, 59); set(Calendar.MILLISECOND, 999) }.timeInMillis
+        } else {
+            (EntityStore.parseTimestamp(raw) * 1000).toLong().takeIf { it > 0 } ?: return null
+        }
+        val now = ctx.now()
+        val today = dateOnly && Calendar.getInstance(tz).run {
+            timeInMillis = now
+            val d = get(Calendar.YEAR) * 400 + get(Calendar.DAY_OF_YEAR)
+            timeInMillis = dueMs
+            d == get(Calendar.YEAR) * 400 + get(Calendar.DAY_OF_YEAR)
+        }
+        val label = if (today) "Today" else HaRelativeTime.format(dueMs, now, tz, capitalize = true)
+        return label to (dueMs < now)
     }
 
     /** Test hooks: whether the add row shows, and the active box's rows (items plus any "+ N more" line). */
@@ -1028,15 +1122,21 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         private const val RETRY_MS = 2_000L
         /** HA's checked checkbox: its brand fill (#009ac7, measured). */
         private const val CHECKED = 0xFF009AC7.toInt()
+        private const val WARNING = 0xFFFFA600.toInt()
+        private const val CREATE = 1
+        private const val DELETE = 2
+        private const val MOVE = 8
+        private val HEADER_PX = { ctx: VitroCardContext -> (44.2f * ctx.dp).roundToInt() }
 
-        /** Reads `{ items: [{ uid, summary, status }] }` from `todo/item/list`. */
+        /** Reads `{ items: [{ uid, summary, status }] }`, a `todo/item/subscribe` event. */
         fun parseItems(result: JSONObject?): List<TodoItem> {
             val arr = result?.optJSONArray("items") ?: return emptyList()
             return (0 until arr.length()).mapNotNull { i ->
                 val o = arr.optJSONObject(i) ?: return@mapNotNull null
                 val summary = o.optString("summary", "")
                 val uid = o.optString("uid", "").ifEmpty { summary }
-                if (uid.isEmpty()) null else TodoItem(uid, summary, o.optString("status") == "completed")
+                fun str(k: String) = if (o.isNull(k)) null else o.optString(k).ifEmpty { null }
+                if (uid.isEmpty()) null else TodoItem(uid, summary, o.optString("status") == "completed", due = str("due"), description = str("description"))
             }
         }
     }
@@ -1465,14 +1565,11 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
 
     private fun stateIcon(el: PictureElement): View {
         val icon = MdiIconView(ctx.context)
+        // hui-state-icon-element: a bare 40 px state-badge, its 24 px icon in the middle, nothing behind it.
         val halo = FrameLayout(ctx.context).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(overlayColor(0.55f))
-            }
-            addView(icon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
+            addView(icon, LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
         }
-        halo.layoutParams = LayoutParams(ctx.px(36f), ctx.px(36f))
+        halo.layoutParams = LayoutParams(ctx.px(40f), ctx.px(40f))
         bindActions(halo, el, if (VitroCardContext.isToggleable(el.entity)) "toggle" else "more-info")
         val eid = el.entity
         if (eid != null) {
@@ -1484,10 +1581,13 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
     }
 
     private fun stateLabel(el: PictureElement): View {
-        val label = extLabel(ctx, 12f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+        // hui-state-label-element: `div { padding: 8px; white-space: nowrap }` in the card's 14 px / 400 on a 22.4 px
+        // line, nothing behind it.
+        val label = extLabel(ctx, 14f, ctx.theme.primaryTextColor).apply {
             maxLines = 1
-            setPadding(ctx.px(8f), ctx.px(3f), ctx.px(8f), ctx.px(3f))
-            background = pillBackground(overlayColor(0.75f))
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(ctx.px(8f), ctx.px(8f), ctx.px(8f), ctx.px(8f))
+            minHeight = (38.4f * ctx.dp).roundToInt()
         }
         bindActions(label, el, "more-info")
         val eid = el.entity
@@ -2004,245 +2104,93 @@ internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.co
 }
 
 // ---------------------------------------------------------------------------------------------
-// calendar
-// ---------------------------------------------------------------------------------------------
-
-/** One event from `GET /api/calendars/<entity_id>`: times in epoch ms, all-day events from local midnight. */
-data class CalendarEvent(
-    val summary: String,
-    val startMs: Long,
-    val endMs: Long,
-    val allDay: Boolean,
-    val calendarId: String,
-)
-
-/**
- * Native HA `calendar` card as an agenda: the next 7 days of the named `calendar.*` entities, one row per event
- * with a date badge, the calendar's color dot, the summary and the time range. Read over HA's REST calendar API.
- */
-class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
-    private val titleView = extLabel(ctx, 16f, ctx.theme.primaryTextColor, Inter.MEDIUM)
-    private val list = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
-    private val ids: List<String> = calendarIds(config)
-    /** Each calendar's last successful answer, kept through a failed refresh. */
-    private val lastEvents = HashMap<String, List<CalendarEvent>>()
-    private val refresh = Runnable { fetch() }
-    private var generation = 0
-
-    init {
-        val pad = ctx.px(16f)
-        val col = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
-        }
-        titleView.text = config.title ?: ""
-        titleView.visibility = if (config.title == null) GONE else VISIBLE
-        col.addView(titleView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = ctx.px(10f) })
-        col.addView(list, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        render(emptyList())
-    }
-
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        fetch()
-    }
-
-    override fun onDetachedFromWindow() {
-        ctx.main.removeCallbacks(refresh)
-        generation++
-        super.onDetachedFromWindow()
-    }
-
-    /**
-     * A cached view another one hides stays attached: it stops polling Home Assistant (an answer still on its way is
-     * dropped), and asks once again when it shows.
-     */
-    override fun onVisibilityChanged(changedView: View, visibility: Int) {
-        super.onVisibilityChanged(changedView, visibility)
-        if (!isAttachedToWindow) return
-        if (isShown) {
-            fetch()
-        } else {
-            ctx.main.removeCallbacks(refresh)
-            generation++
-        }
-    }
-
-    private fun fetch() {
-        ctx.main.removeCallbacks(refresh)
-        if (ids.isEmpty()) return
-        val gen = ++generation
-        val startCal = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }
-        val start = StatisticsGraphCardView.isoUtc(startCal.time)
-        // Seven calendar days, not 7 x 24 h: a DST change in between must not cut off the last hour.
-        val endCal = (startCal.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, DAYS) }
-        val end = StatisticsGraphCardView.isoUtc(endCal.time)
-        val results = arrayOfNulls<List<CalendarEvent>>(ids.size)
-        var pending = ids.size
-        ids.forEachIndexed { i, eid ->
-            val path = "/api/calendars/$eid?start=${URLEncoder.encode(start, "UTF-8")}&end=${URLEncoder.encode(end, "UTF-8")}"
-            ctx.fetchJson(path) { json ->
-                if (gen != generation) return@fetchJson
-                // A failed or timed-out read keeps this calendar's last answer: only HA saying "no events" empties it.
-                val arr = json as? JSONArray
-                results[i] = if (arr != null) parseEvents(arr, eid).also { lastEvents[eid] = it } else lastEvents[eid].orEmpty()
-                if (--pending == 0) {
-                    render(upcoming(results.filterNotNull().flatten(), System.currentTimeMillis()))
-                    if (isAttachedToWindow && isShown) ctx.main.postDelayed(refresh, REFRESH_MS)
-                }
-            }
-        }
-    }
-
-    private fun render(events: List<CalendarEvent>) {
-        list.removeAllViews()
-        if (events.isEmpty()) {
-            list.addView(extLabel(ctx, 14f, ctx.theme.secondaryTextColor).apply { text = "No upcoming events" })
-            return
-        }
-        val tz = TimeZone.getDefault()
-        var lastDay = ""
-        events.forEachIndexed { idx, ev ->
-            val (weekday, day) = dateBadge(ev.startMs, tz)
-            val dayKey = "$weekday $day"
-            val row = LinearLayout(ctx.context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                isClickable = true
-                setOnClickListener { ctx.openMoreInfo(ev.calendarId) }
-            }
-            val badge = LinearLayout(ctx.context).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_HORIZONTAL
-            }
-            if (dayKey != lastDay) {
-                badge.addView(extLabel(ctx, 12f, ctx.theme.secondaryTextColor, Inter.MEDIUM).apply { text = weekday })
-                badge.addView(extLabel(ctx, 20f, ctx.theme.primaryTextColor).apply { text = day })
-                lastDay = dayKey
-            }
-            row.addView(badge, LinearLayout.LayoutParams(ctx.px(44f), WRAP_CONTENT))
-            val color = PALETTE[ids.indexOf(ev.calendarId).coerceAtLeast(0) % PALETTE.size]
-            row.addView(View(ctx.context).apply { background = pillBackground(color) },
-                LinearLayout.LayoutParams(ctx.px(8f), ctx.px(8f)).apply { marginEnd = ctx.px(10f) })
-            val text = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
-            text.addView(extLabel(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
-                this.text = ev.summary
-                maxLines = 1
-                ellipsize = TextUtils.TruncateAt.END
-            })
-            text.addView(extLabel(ctx, 12f, ctx.theme.secondaryTextColor).apply { this.text = timeRange(ev, tz) },
-                LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(3f) })
-            row.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            list.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (idx > 0) topMargin = ctx.px(10f) })
-        }
-    }
-
-    companion object {
-        private const val DAYS = 7
-        private const val MAX_EVENTS = 20
-        private const val REFRESH_MS = 15 * 60_000L
-        private val PALETTE = intArrayOf(
-            0xFF03A9F4.toInt(), 0xFFFF9800.toInt(), 0xFF4CAF50.toInt(), 0xFFE91E63.toInt(),
-            0xFF9C27B0.toInt(), 0xFF009688.toInt(), 0xFFFFC107.toInt(), 0xFF795548.toInt(),
-        )
-
-        /** The card's `entities` (ids or `{entity}` objects), else its single `entity`; only `calendar.*` ids. */
-        fun calendarIds(config: CardConfig): List<String> {
-            val fromList = config.entities().filter { it.isEntity }.map { it.entity }
-            return fromList.ifEmpty { listOfNotNull(config.entity) }.filter { it.startsWith("calendar.") }.distinct()
-        }
-
-        /** Events of one calendar from the REST result; `start` / `end` are `{dateTime}`, `{date}` or bare strings. */
-        fun parseEvents(arr: JSONArray?, calendarId: String, tz: TimeZone = TimeZone.getDefault()): List<CalendarEvent> {
-            if (arr == null) return emptyList()
-            val out = ArrayList<CalendarEvent>(arr.length())
-            for (i in 0 until arr.length()) {
-                val o = arr.optJSONObject(i) ?: continue
-                val (start, allDay) = parseWhen(o.opt("start"), tz) ?: continue
-                val end = parseWhen(o.opt("end"), tz)?.first ?: start
-                out += CalendarEvent(o.optString("summary", "").ifEmpty { "Untitled" }, start, end, allDay, calendarId)
-            }
-            return out
-        }
-
-        /** Events still to come (or under way) at [nowMs], soonest first, capped for the card. */
-        fun upcoming(events: List<CalendarEvent>, nowMs: Long): List<CalendarEvent> =
-            events.filter { it.endMs > nowMs || it.startMs >= nowMs }
-                .sortedWith(compareBy({ it.startMs }, { !it.allDay }))
-                .take(MAX_EVENTS)
-
-        private fun parseWhen(v: Any?, tz: TimeZone): Pair<Long, Boolean>? {
-            val text = when (v) {
-                is JSONObject -> v.optString("dateTime", "").ifEmpty { v.optString("date", "") }
-                is String -> v
-                else -> ""
-            }.trim()
-            if (text.isEmpty()) return null
-            if (DATE_ONLY.matches(text)) {
-                val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply { timeZone = tz; isLenient = false }
-                return runCatching { fmt.parse(text)?.time }.getOrNull()?.let { it to true }
-            }
-            val sec = EntityStore.parseIsoEpochSeconds(text) ?: return null
-            return (sec * 1000.0).toLong() to false
-        }
-
-        private val DATE_ONLY = Regex("""^\d{4}-\d{2}-\d{2}$""")
-
-        /** `("Mon", "24")` for the date badge. */
-        fun dateBadge(ms: Long, tz: TimeZone): Pair<String, String> {
-            val wd = SimpleDateFormat("EEE", Locale.US).apply { timeZone = tz }.format(Date(ms))
-            val d = SimpleDateFormat("d", Locale.US).apply { timeZone = tz }.format(Date(ms))
-            return wd to d
-        }
-
-        /** `10:00 – 11:00`, or `All day`. */
-        fun timeRange(ev: CalendarEvent, tz: TimeZone): String {
-            if (ev.allDay) return "All day"
-            val fmt = SimpleDateFormat("HH:mm", Locale.ROOT).apply { timeZone = tz }
-            val s = fmt.format(Date(ev.startMs))
-            return if (ev.endMs > ev.startMs) "$s – ${fmt.format(Date(ev.endMs))}" else s
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
 // logbook
 // ---------------------------------------------------------------------------------------------
 
-/** One `logbook/get_events` row. [whenSec] is epoch seconds. */
+/**
+ * One logbook row (`logbook/event_stream`). [whenSec] is epoch seconds; the `context*` fields are what HA tells its
+ * cause from (the user and run ids aren't kept).
+ */
 data class LogbookEntry(
-    val entityId: String,
+    val entityId: String?,
     val name: String?,
-    val message: String,
+    val message: String?,
     val state: String?,
     val whenSec: Double,
+    val domain: String? = null,
+    val source: String? = null,
+    val contextEventType: String? = null,
+    val contextDomain: String? = null,
+    val contextEntityId: String? = null,
+    val contextEntityIdName: String? = null,
+    val contextName: String? = null,
+    val contextState: String? = null,
+    val contextMessage: String? = null,
 )
 
 /**
- * Native HA `logbook` card: the newest 12 logbook rows of the card's `entities` over `hours_to_show`, each with
- * the domain icon, "<name> turned on" and how long ago. A row opens that entity's More-Info.
+ * Native HA `logbook` card, as HA 2026's `hui-logbook-card` and `ha-logbook` draw it (`narrow`, `no-icon`): 6 grid
+ * rows, the card's title if it has one, and its rows newest first under day headers ("Today · November 24, 2026"),
+ * scrolling inside the card. One entity's rows are inline (`ha-logbook-entry` with no name: a state dot on a rail,
+ * the value, what caused it and the time); several entities' rows name the entity. A row opens the entity's
+ * More-Info.
  */
 class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
     private val list = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
     private val ids: List<String> = config.entities().filter { it.isEntity }.map { it.entity }
         .ifEmpty { listOfNotNull(config.entity) }.distinct()
     private val hours = config.raw.optInt("hours_to_show", 24).coerceIn(1, 24 * 30)
-    private val refresh = Runnable { fetch() }
+    /** HA's `_getAutoNameDetail`: one entity needs no name. */
+    private val inline = ids.size <= 1
+
+    /** Re-renders the day headers ("Today", "Yesterday"); the rows themselves come live from the subscription. */
+    private val refresh = Runnable { tick() }
     private var generation = 0
+    private var unsub: (() -> Unit)? = null
+    private var rows: List<LogbookEntry> = emptyList()
+    private var startSec = 0.0
+
+    /** `.floating-date`: the day of the first row in view, pinned over the list's top on the card's color. */
+    private val floating = extLabel(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(ctx.px(16f), ctx.px(8f), ctx.px(16f), ctx.px(8f))
+        setBackgroundColor(ctx.theme.cardBackgroundColor)
+        visibility = GONE
+    }
+    private val scroll = android.widget.ScrollView(ctx.context)
+
+    /** The rendered rows, each with the entry it shows: what the floating header reads its day from. */
+    private val rowViews = ArrayList<Pair<View, LogbookEntry>>()
 
     init {
-        val pad = ctx.px(16f)
-        val col = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
+        val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+        config.title?.let { t ->
+            // hui-card's header: 24 px, 24 / 16 / 16 around it.
+            col.addView(extLabel(ctx, 24f, ctx.theme.primaryTextColor).apply {
+                text = t
+                setPadding(ctx.px(16f), ctx.px(24f), ctx.px(16f), ctx.px(16f))
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
-        col.addView(extLabel(ctx, 16f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply { text = config.title ?: "Logbook" },
-            LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = ctx.px(10f) })
-        col.addView(list, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        // `.content { padding: 16px 0 }` (no top padding under a title), the list scrolling in what's left.
+        scroll.apply {
+            isVerticalScrollBarEnabled = false
+            addView(list, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            setOnScrollChangeListener { _, _, _, _, _ -> updateFloating() }
+        }
+        // The floating header comes first, as in HA's page (TalkBack reads it first), and draws over the list.
+        floating.translationZ = 1f
+        floating.outlineProvider = null
+        val frame = FrameLayout(ctx.context).apply {
+            addView(floating, FrameLayout.LayoutParams(MATCH_PARENT, (38.4f * ctx.dp).roundToInt(), Gravity.TOP))
+            addView(scroll, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        }
+        col.addView(frame, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f).apply {
+            topMargin = if (config.title == null) ctx.px(16f) else 0
+            bottomMargin = ctx.px(16f)
+        })
+        addView(col, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         render(emptyList())
     }
 
@@ -2252,110 +2200,291 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
     }
 
     override fun onDetachedFromWindow() {
-        ctx.main.removeCallbacks(refresh)
-        generation++
+        stop()
         super.onDetachedFromWindow()
     }
 
+    private fun stop() {
+        ctx.main.removeCallbacks(refresh)
+        generation++
+        unsub?.let { runCatching { it() } }
+        unsub = null
+    }
+
     /**
-     * A cached view another one hides stays attached: it stops polling Home Assistant (an answer still on its way is
-     * dropped), and asks once again when it shows.
+     * A cached view another one hides stays attached: it drops its subscription, and opens it again when it shows.
      */
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
         if (!isAttachedToWindow) return
-        if (isShown) {
-            fetch()
-        } else {
-            ctx.main.removeCallbacks(refresh)
-            generation++
-        }
+        if (isShown) fetch() else stop()
     }
 
+    /**
+     * ha-logbook's stream, as HA's card opens it: `logbook/event_stream` from `hours_to_show` ago to a year ahead,
+     * for the card's entities. The first messages are the history (in parts), later ones the new rows.
+     */
     private fun fetch() {
-        ctx.main.removeCallbacks(refresh)
+        stop()
         if (ids.isEmpty()) return
-        val gen = ++generation
-        val now = System.currentTimeMillis()
-        val msg = JSONObject()
-            .put("type", "logbook/get_events")
-            .put("start_time", StatisticsGraphCardView.isoUtc(Date(now - hours * 3_600_000L)))
-            .put("end_time", StatisticsGraphCardView.isoUtc(Date(now)))
-            .put("entity_ids", JSONArray(ids))
-        ctx.callWs(msg) { ok, result, _ ->
-            val rows = if (ok) parseEntries(result as? JSONArray) else null
+        val gen = generation
+        val now = ctx.now()
+        startSec = (now - hours * 3_600_000L) / 1000.0
+        rows = emptyList()
+        val msg = streamRequest(ids, hours, now)
+        unsub = ctx.subscribeWs(msg, { ev ->
+            val incoming = parseEntries(ev.optJSONArray("events"))
             ctx.main.post {
                 if (gen != generation) return@post
-                if (rows != null) render(rows)
+                rows = (incoming + rows).distinct().filter { it.whenSec > startSec }.sortedByDescending { it.whenSec }.take(MAX_ROWS)
+                render(rows)
+                ctx.main.removeCallbacks(refresh)
                 if (isAttachedToWindow && isShown) ctx.main.postDelayed(refresh, REFRESH_MS)
             }
-        }
+        }, { _ -> })
+    }
+
+    private fun tick() {
+        if (!isAttachedToWindow || !isShown) return
+        render(rows)
+        ctx.main.postDelayed(refresh, REFRESH_MS)
+    }
+
+    private fun updateFloating() {
+        val y = scroll.scrollY
+        val first = rowViews.firstOrNull { (v, _) -> v.bottom > y }?.second ?: rows.firstOrNull()
+        floating.visibility = if (first != null) VISIBLE else GONE
+        if (first != null) floating.text = dateHeader((first.whenSec * 1000).toLong(), ctx.now(), TimeZone.getDefault())
     }
 
     private fun render(entries: List<LogbookEntry>) {
         list.removeAllViews()
+        rowViews.clear()
+        updateFloating()
         if (entries.isEmpty()) {
-            list.addView(extLabel(ctx, 14f, ctx.theme.secondaryTextColor).apply { text = "No logbook events found" })
+            list.addView(extLabel(ctx, 14f, ctx.theme.secondaryTextColor).apply {
+                text = "No logbook events found"
+                gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             return
         }
-        val nowSec = System.currentTimeMillis() / 1000.0
-        entries.forEachIndexed { idx, e ->
-            val live = ctx.store[e.entityId]
-            val iconState = EntityState(e.entityId, e.state ?: live?.state.orEmpty(), live?.attributes.orEmpty())
-            val row = LinearLayout(ctx.context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                isClickable = true
-                setOnClickListener { ctx.openMoreInfo(e.entityId) }
+        val tz = TimeZone.getDefault()
+        val now = ctx.now()
+        entries.forEachIndexed { i, e ->
+            val firstOfDay = i == 0 || !sameDay(e, entries[i - 1], tz)
+            val lastOfDay = i == entries.size - 1 || !sameDay(e, entries[i + 1], tz)
+            if (firstOfDay) {
+                // `.date`: 14 px / 500 on a 22.4 px line, 8 px margin and 8 px padding above: 38.4 px. The floating
+                // copy covers the first one.
+                list.addView(extLabel(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+                    text = dateHeader((e.whenSec * 1000).toLong(), now, tz)
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(ctx.px(16f), ctx.px(16f), ctx.px(16f), 0)
+                }, LinearLayout.LayoutParams(MATCH_PARENT, (38.4f * ctx.dp).roundToInt()))
             }
-            row.addView(MdiIconView(ctx.context).apply {
-                setIcon(MdiIcons.resolveIconName(null, iconState), iconColorFor(ctx, iconState))
-            }, LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)).apply { marginEnd = ctx.px(12f) })
-            val text = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
-            val name = e.name ?: live?.friendlyName ?: e.entityId
-            text.addView(extLabel(ctx, 13f, ctx.theme.primaryTextColor).apply {
-                this.text = "$name ${e.message}"
-                maxLines = 2
-                ellipsize = TextUtils.TruncateAt.END
-            })
-            text.addView(extLabel(ctx, 11f, ctx.theme.secondaryTextColor).apply {
-                this.text = relativeTime(e.whenSec, nowSec)
-            }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = ctx.px(3f) })
-            row.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            list.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (idx > 0) topMargin = ctx.px(10f) })
+            val v = row(e, firstOfDay, lastOfDay)
+            rowViews += v to e
+            list.addView(v, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(if (inline) 40f else 60f)))
         }
+        updateFloating()
     }
 
-    companion object {
-        private const val MAX_ROWS = 12
-        private const val REFRESH_MS = 60_000L
+    /**
+     * One `ha-logbook-entry`: 16 px in, the 28 px node column (its dot on the rail, the rail trimmed at the day's
+     * ends), 8 px, then the body: the value (and, listed, the entity's name), the cause's 20 px icon and the time
+     * (12 px, at least 6em, right-aligned), and a 24 px chevron. Rows of a day are split by a 1 px line under the body.
+     */
+    private fun row(e: LogbookEntry, firstOfDay: Boolean, lastOfDay: Boolean): View {
+        val unavailable = e.state == "unavailable"
+        val color = when {
+            unavailable -> Color.TRANSPARENT
+            e.entityId != null && e.state != null -> HaTimelineChart.stateColor(ctx, e.entityId, e.state).takeIf { it != Color.TRANSPARENT }
+                ?: ctx.theme.secondaryTextColor
+            category(e) == "automation" -> ThemeResolver.parseColor(ctx.theme.vars["light-blue-color"]) ?: 0xFF03A9F4.toInt()
+            else -> ThemeResolver.parseColor(ctx.theme.vars["teal-color"]) ?: 0xFF009688.toInt()
+        }
+        val row = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(ctx.px(16f), 0, ctx.px(16f), 0)
+            isClickable = true
+            e.entityId?.let { eid -> setOnClickListener { ctx.openMoreInfo(eid) } }
+        }
+        row.addView(LogbookNode(ctx.context, color, ctx.theme.dividerColor, ThemeResolver.parseColor(ctx.theme.vars["disabled-color"]) ?: if (ctx.theme.dark) 0xFF464646.toInt() else 0xFFBDBDBD.toInt(), unavailable, firstOfDay, lastOfDay),
+            LinearLayout.LayoutParams(ctx.px(28f), MATCH_PARENT).apply { marginEnd = ctx.px(8f) })
 
-        /** The newest [MAX_ROWS] rows with an entity, newest first. */
+        val body = FrameLayout(ctx.context)
+        val line = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val value = valueText(e).replaceFirstChar { it.uppercaseChar() }
+        val text = if (inline) value else listOfNotNull(entityName(e), value.ifEmpty { null }).joinToString(" ")
+        line.addView(extLabel(ctx, 14f, ctx.theme.primaryTextColor).apply {
+            this.text = text
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        cause(e)?.let { icon ->
+            line.addView(MdiIconView(ctx.context).apply { setIcon(icon, ctx.theme.secondaryTextColor) },
+                LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)).apply { marginStart = ctx.px(8f) })
+        }
+        line.addView(extLabel(ctx, 12f, ctx.theme.secondaryTextColor).apply {
+            this.text = timeText((e.whenSec * 1000).toLong())
+            gravity = Gravity.END
+            minWidth = ctx.px(72f)
+            maxLines = 1
+        }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(8f) })
+        line.addView(MdiIconView(ctx.context).apply { setIcon("mdi:chevron-right", ctx.theme.secondaryTextColor) },
+            LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply { marginStart = ctx.px(8f) })
+        body.addView(line, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        if (!lastOfDay) {
+            body.addView(View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) },
+                FrameLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1), Gravity.BOTTOM))
+        }
+        row.addView(body, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
+        row.contentDescription = listOfNotNull(entityName(e), value, timeText((e.whenSec * 1000).toLong())).joinToString(", ")
+        return row
+    }
+
+    private fun entityName(e: LogbookEntry): String? =
+        e.name ?: e.entityId?.let { ctx.store[it]?.displayName ?: it }
+
+    /** HA's `_renderValue`: the state as HA shows it for a state change, else the row's message. */
+    private fun valueText(e: LogbookEntry): String {
+        val state = e.state
+        val eid = e.entityId
+        if (state != null && eid != null) {
+            val live = ctx.store[eid] ?: EntityState(eid, state, emptyMap())
+            return live.copy(state = state).plainState()
+        }
+        return e.message.orEmpty()
+    }
+
+    /** HA's `classifyLogbookEntry`. */
+    private fun category(e: LogbookEntry): String = when {
+        e.entityId != null && e.state != null -> "entity"
+        e.domain in TRIGGER_DOMAINS -> "automation"
+        else -> "integration"
+    }
+
+    /**
+     * The cause's icon, from HA's `computeContextCause` (a user's cause needs the user list Vitro doesn't read):
+     * a robot for an automation run, a script for a script, a state machine for a state change, a clock for a
+     * schedule, HA's logo for its start or stop, else the integration's own icon or a puzzle piece.
+     */
+    private fun cause(e: LogbookEntry): String? {
+        if (e.contextEventType == "automation_triggered" || e.contextEventType == "script_started") {
+            val name = e.contextEntityId?.let { ctx.store[it]?.displayName } ?: e.contextName
+            if (name != null) return if (e.contextEventType == "script_started") "mdi:script-text" else "mdi:robot"
+        }
+        if (e.contextEventType == "call_service" && e.contextDomain != null) return domainIcon(e.contextDomain)
+        if (e.contextState != null && e.contextEntityId != null) {
+            val name = ctx.store[e.contextEntityId]?.displayName ?: e.contextEntityIdName
+            if (name != null) return "mdi:state-machine"
+        }
+        val hasContext = e.contextEventType != null || e.contextState != null || e.contextMessage != null
+        if (e.domain in TRIGGER_DOMAINS && !hasContext && e.source != null) {
+            val src = e.source
+            return when {
+                src.startsWith("state of ") || src.startsWith("numeric state of ") -> "mdi:state-machine"
+                src.startsWith("time") -> "mdi:clock-outline"
+                src.startsWith("Home Assistant") -> "mdi:home-assistant"
+                else -> "mdi:puzzle"
+            }
+        }
+        if (e.contextName != null) return e.contextDomain?.let(::domainIcon) ?: "mdi:puzzle"
+        return null
+    }
+
+    /** `ha-domain-icon`: the domain's own icon. */
+    private fun domainIcon(domain: String): String = MdiIcons.resolveIconName(null, EntityState("$domain.cause", "", emptyMap()))
+
+    companion object {
+        private const val MAX_ROWS = 200
+        private const val REFRESH_MS = 60_000L
+        private val TRIGGER_DOMAINS = setOf("automation", "script")
+
+        /** HA's `subscribeLogbook` request: its times as JavaScript's `toISOString()` writes them. */
+        fun streamRequest(ids: List<String>, hours: Int, nowMs: Long): JSONObject = JSONObject()
+            .put("type", "logbook/event_stream")
+            .put("start_time", isoMillis(nowMs - hours * 3_600_000L))
+            .put("end_time", isoMillis(nowMs + 86_400_000L * 365))
+            .put("entity_ids", JSONArray(ids))
+
+        /** `Date.toISOString()`: UTC with milliseconds. */
+        fun isoMillis(ms: Long): String = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT)
+            .apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(ms))
+
+        /** The stream's rows, newest first. */
         fun parseEntries(arr: JSONArray?): List<LogbookEntry> {
             if (arr == null) return emptyList()
             val out = ArrayList<LogbookEntry>(arr.length())
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
-                val eid = o.optString("entity_id", "").ifEmpty { continue }
-                val state = if (o.has("state") && !o.isNull("state")) o.optString("state") else null
-                val message = o.optString("message", "").ifEmpty { stateMessage(state) }
-                out += LogbookEntry(eid, o.optString("name", "").ifEmpty { null }, message, state, EntityStore.parseTimestamp(o.opt("when")))
+                fun str(k: String) = if (o.has(k) && !o.isNull(k)) o.optString(k).ifEmpty { null } else null
+                out += LogbookEntry(
+                    entityId = str("entity_id"), name = str("name"), message = str("message"), state = str("state"),
+                    whenSec = EntityStore.parseTimestamp(o.opt("when")), domain = str("domain"), source = str("source"),
+                    contextEventType = str("context_event_type"), contextDomain = str("context_domain"),
+                    contextEntityId = str("context_entity_id"), contextEntityIdName = str("context_entity_id_name"),
+                    contextName = str("context_name"), contextState = str("context_state"), contextMessage = str("context_message"),
+                )
             }
-            return out.sortedByDescending { it.whenSec }.take(MAX_ROWS)
+            return out.sortedByDescending { it.whenSec }
         }
 
-        /** HA's wording for a state change with no `message`. */
-        fun stateMessage(state: String?): String = when (state) {
-            null -> "changed"
-            "on" -> "turned on"
-            "off" -> "turned off"
-            "unavailable" -> "became unavailable"
-            "unknown" -> "became unknown"
-            else -> "changed to ${state.replace('_', ' ')}"
+        /** `formatTimeWithSeconds` in English: "12:06:51 AM". */
+        fun timeText(ms: Long): String = java.text.SimpleDateFormat("h:mm:ss a", Locale.US).format(Date(ms))
+
+        /** `_formatDateHeader`: "Today · November 24, 2026", "Yesterday · …", else the date. */
+        fun dateHeader(ms: Long, nowMs: Long, tz: TimeZone): String {
+            val full = java.text.SimpleDateFormat("MMMM d, yyyy", Locale.US).apply { timeZone = tz }.format(Date(ms))
+            val diff = Math.floorDiv(nowMs + tz.getOffset(nowMs), 86_400_000L) - Math.floorDiv(ms + tz.getOffset(ms), 86_400_000L)
+            return when (diff) {
+                0L -> "Today · $full"
+                1L -> "Yesterday · $full"
+                else -> full
+            }
         }
 
-        /** "5 minutes ago", by the same rules as an entity's last-changed line. */
-        fun relativeTime(whenSec: Double, nowSec: Double): String =
-            EntityState("logbook.entry", "", emptyMap(), lastChanged = whenSec).relativeLastChanged(nowSec) ?: ""
+        private fun sameDay(a: LogbookEntry, b: LogbookEntry, tz: TimeZone): Boolean {
+            fun day(e: LogbookEntry): Long { val ms = (e.whenSec * 1000).toLong(); return Math.floorDiv(ms + tz.getOffset(ms), 86_400_000L) }
+            return day(a) == day(b)
+        }
+    }
+}
+
+/** `.node`: the logbook's rail (2 px, the divider color, 9 px clear of the dot) and its 10 px dot. */
+private class LogbookNode(
+    context: Context,
+    private val color: Int,
+    private val rail: Int,
+    private val disabled: Int,
+    private val unavailable: Boolean,
+    private val trimTop: Boolean,
+    private val trimBottom: Boolean,
+) : View(context) {
+    private val dp = resources.displayMetrics.density
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    override fun onDraw(canvas: Canvas) {
+        val cx = width / 2f
+        val cy = height / 2f
+        paint.style = Paint.Style.FILL
+        paint.color = rail
+        if (!trimTop) canvas.drawRect(cx - dp, 0f, cx + dp, cy - 9f * dp, paint)
+        if (!trimBottom) canvas.drawRect(cx - dp, cy + 9f * dp, cx + dp, height.toFloat(), paint)
+        if (unavailable) {
+            // `.dot.unavailable`: transparent inside a 2 px `--disabled-color` ring.
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 2f * dp
+            paint.color = disabled
+            canvas.drawCircle(cx, cy, 4f * dp, paint)
+        } else {
+            paint.color = color
+            canvas.drawCircle(cx, cy, 5f * dp, paint)
+        }
     }
 }

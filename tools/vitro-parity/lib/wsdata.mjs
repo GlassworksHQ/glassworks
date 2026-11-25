@@ -1,15 +1,35 @@
-// The history and statistics HA's page asked for and got, recorded from its own WebSocket, so Vitro's graphs can
-// be handed exactly the data HA drew (the fixture answers Vitro's same calls with it).
+// The data HA's page asked for and got over its own WebSocket (history and statistics for the graphs, a to-do list's
+// items, the logbook, the weather forecast and calendar events), recorded so Vitro's cards can be handed exactly the data HA drew
+// (the fixture answers Vitro's same calls with it).
 //
 // Touches: nothing (in-memory bookkeeping over the frames capture.mjs hands it).
 
-/** The WebSocket commands whose answers a graph draws: history streams and periods, and long-term statistics. */
+/**
+ * The WebSocket commands whose answers a card draws: history streams and periods and long-term statistics (graphs),
+ * a to-do list's items, the logbook's stream, the weather forecast and a calendar's events.
+ */
 export const RECORDED_TYPES = new Set([
   'history/stream',
   'history/history_during_period',
   'recorder/statistics_during_period',
   'recorder/get_statistics_metadata',
+  'todo/item/subscribe',
+  'logbook/event_stream',
+  'weather/subscribe_forecast',
+  'calendar/event/subscribe',
 ]);
+
+/**
+ * Subscriptions whose first answer is what the card draws: the capture waits for it. The logbook sends its history
+ * in parts (`partial: true`), so it waits for the part that ends it.
+ */
+const FIRST_EVENT = new Set(['todo/item/subscribe', 'logbook/event_stream', 'weather/subscribe_forecast', 'calendar/event/subscribe']);
+
+/** The subscriptions in [calls] still waiting for the event a card draws, by type. */
+export const pendingFirstEvents = (calls) =>
+  calls.filter((c) => FIRST_EVENT.has(c.request?.type) && !('error' in c) &&
+    !(c.events || []).some((ev) => c.request.type !== 'logbook/event_stream' || !(ev && ev.partial)))
+    .map((c) => c.request.type);
 
 /**
  * The page's recorder. `socket()` gives each WebSocket its own `sent(msg)` / `received(msg)` pair (message ids are

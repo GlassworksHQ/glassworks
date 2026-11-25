@@ -288,10 +288,17 @@ class VisualParityWave2Test {
         assertEquals(4, capped.activeRowCount)
         assertTrue(capped.all().filterIsInstance<TextView>().any { it.text.toString() == "+ 2 more" })
 
-        val open = dev.glassworks.engine.vitro.cards.TodoListCardView(context(), card("""{"type": "todo-list", "entity": "todo.shopping"}"""))
+        // HA offers the add row only on a list that can create items (CREATE_TODO_ITEM = 1).
+        val store = EntityStore()
+        store.putLocal(EntityState("todo.shopping", "0", mapOf("supported_features" to 1)))
+        val open = dev.glassworks.engine.vitro.cards.TodoListCardView(context(store), card("""{"type": "todo-list", "entity": "todo.shopping"}"""))
+        activity.setContentView(open)
         assertTrue(open.addRowVisible)
         open.setItemsForTest(items)
         assertEquals(5, open.activeRowCount)
+        store.putLocal(EntityState("todo.shopping", "0", mapOf("supported_features" to 4)))
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertFalse(open.addRowVisible)
     }
 
     @Test

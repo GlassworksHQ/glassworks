@@ -215,6 +215,30 @@ test('buildDisplay keeps the areas the case names, and referencedAreas finds the
   assert.ok(!('areas' in buildDisplay(new Set(), { entities: [] }, [], () => undefined, () => undefined, {}, areas, [])));
 });
 
+test('the to-do, logbook and forecast subscriptions are recorded and waited for, the logbook scrubbed', async () => {
+  const { wsRecorder, pendingFirstEvents } = await import('../lib/wsdata.mjs');
+  const { scrubGraphCalls } = await import('../lib/scrub.mjs');
+  const rec = wsRecorder();
+  const sock = rec.socket();
+  sock.sent({ id: 1, type: 'todo/item/subscribe', entity_id: 'todo.x' });
+  sock.sent({ id: 2, type: 'logbook/event_stream', start_time: 'a', end_time: 'b', entity_ids: ['light.x'] });
+  sock.sent({ id: 3, type: 'weather/subscribe_forecast', entity_id: 'weather.x', forecast_type: 'daily' });
+  sock.sent({ id: 4, type: 'config/area_registry/list' }); // not a card's data
+  assert.deepEqual(pendingFirstEvents(rec.calls), ['todo/item/subscribe', 'logbook/event_stream', 'weather/subscribe_forecast']);
+  sock.received({ id: 1, type: 'event', event: { items: [{ uid: '0f3c9a8e2b6d4e1f8a7c5b3d9e2f1a0b', summary: 'A' }, { uid: 'f00d', summary: 'B' }] } });
+  // The logbook's history in parts: a partial one isn't enough.
+  sock.received({ id: 2, type: 'event', event: { events: [{ entity_id: 'light.x', when: 1, context_user_id: 'u1', context_id: 'c1', context_domain: 'script', context_event_type: 'call_service' }], partial: true } });
+  assert.deepEqual(pendingFirstEvents(rec.calls), ['logbook/event_stream', 'weather/subscribe_forecast']);
+  sock.received({ id: 2, type: 'event', event: { events: [] } });
+  sock.received({ id: 3, type: 'event', event: { forecast: [] } });
+  assert.deepEqual(pendingFirstEvents(rec.calls), []);
+  assert.equal(rec.calls.length, 3);
+  const scrubbed = scrubGraphCalls(rec.calls);
+  assert.deepEqual(scrubbed[0].events[0].items.map((i) => i.uid), ['item-1', 'item-2']);
+  // The cause stays (what HA draws its badge from); who and which run don't.
+  assert.deepEqual(scrubbed[1].events[0].events[0], { entity_id: 'light.x', when: 1, context_domain: 'script', context_event_type: 'call_service' });
+});
+
 test('findPrivate flags a MAC fragment but not a colour or a model id', async () => {
   const { findPrivate } = await import('../lib/scrub.mjs');
   assert.deepEqual(findPrivate('AirDot 4c83f8', null), ['a MAC fragment']);

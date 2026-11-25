@@ -1,0 +1,4 @@
+{
+  "title": "Calendar: one calendar in HA's default month view",
+  "card": { "type": "calendar", "entities": ["calendar.maintenance_schedule"] }
+}

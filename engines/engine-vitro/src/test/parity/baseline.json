@@ -1,5 +1,12 @@
 {
  "_comment": "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: 2.0% pixels, 1.0 px bounds, 0.5 px font). Regenerate with -PvitroParityUpdateBaseline=true; keep or write each \"reason\". An update records regressions too: read the diff before committing it, and keep the entries of cases with an open regression. #794 empties this file.",
+ "mirror/calendar-list": {
+  "pixel": 0.0201,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "at 1.5x every text sits 0.6-0.9 px above HA's (the header's 61 and 37 px rows and the list's 39.8 and 44 px rows round to device pixels) and the right-aligned dates 1.4 px off; the layout, sizes and colors match (the tablet case matches at 1.3%), the diff is text edges and the emoji's antialiasing: 2.01% against the 2.0% slack (2026-11-24)"
+ },
  "mirror/clock-date": {
   "pixel": 0.0233,
   "bounds": 0,
@@ -20,20 +27,6 @@
   "font": 0,
   "missingText": 0,
   "reason": "the chart's geometry follows HA (grid, ECharts 6 nice axis, 4 h ticks, step lines, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"1,018.5\": 41 px), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
- },
- "mirror/entity-filter": {
-  "pixel": 0.0336,
-  "bounds": 49.5,
-  "font": 0,
-  "missingText": 3,
-  "reason": "the wrapped entities card loses its title (\"Lights off\") and header toggle, and rows show the bare entity name (\"Window\") where HA prefixes the device (\"LED Strip Window\"); card ~50 px shorter (coverage #794, 2026-11-24)"
- },
- "mirror/layout-card": {
-  "pixel": 0.0908,
-  "bounds": 24,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the 2x2 grid of tiles is laid out, but its column gap and margins differ: Vitro's tiles start ~10 px higher and right of HA's and the card is ~24 px off (coverage #794, 2026-11-24)"
  },
  "mirror/markdown-cardmod": {
   "pixel": 0.0202,
@@ -56,19 +49,12 @@
   "missingText": 0,
   "reason": "at 1.5x HA's border is 1.5 px and Vitro's 1 px (every card's), so the blue inside is 2 device px wider (748 vs 746) and each white icon and the name sit half a pixel off; the diff is their edges and the border line, 2.3% on this small high-contrast card. The layout, colors and sizes match (the tablet case matches; 2026-11-24)"
  },
- "mirror/mushroom-title": {
-  "pixel": 0.038,
-  "bounds": 53.3,
-  "font": 8,
-  "missingText": 0,
-  "reason": "title 16 vs 24 px and subtitle 13 vs 16 px, with less top padding: the text sits ~25 px higher than HA's (coverage #794, 2026-11-24)"
- },
- "mirror/picture-elements": {
-  "pixel": 0.0092,
+ "s1/calendar-list": {
+  "pixel": 0.0201,
   "bounds": 0,
-  "font": 2,
+  "font": 0,
   "missingText": 0,
-  "reason": "image and positions match; the state icon sits on a dark disc and the state label on a dark pill that HA doesn't draw, label 12 vs 14 px (coverage #794, 2026-11-24)"
+  "reason": "at 1.5x every text sits 0.6-0.9 px above HA's (the header's 61 and 37 px rows and the list's 39.8 and 44 px rows round to device pixels) and the right-aligned dates 1.4 px off; the layout, sizes and colors match (the tablet case matches at 1.3%), the diff is text edges and the emoji's antialiasing: 2.01% against the 2.0% slack (2026-11-24)"
  },
  "s1/clock-date": {
   "pixel": 0.0233,
@@ -91,20 +77,6 @@
   "missingText": 0,
   "reason": "the chart's geometry follows HA (grid, ECharts 6 nice axis, 4 h ticks, step lines, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"1,018.5\": 41 px), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
  },
- "s1/entity-filter": {
-  "pixel": 0.0336,
-  "bounds": 49.5,
-  "font": 0,
-  "missingText": 3,
-  "reason": "the wrapped entities card loses its title (\"Lights off\") and header toggle, and rows show the bare entity name (\"Window\") where HA prefixes the device (\"LED Strip Window\"); card ~50 px shorter (coverage #794, 2026-11-24)"
- },
- "s1/layout-card": {
-  "pixel": 0.1011,
-  "bounds": 24,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the 2x2 grid of tiles is laid out, but its column gap and margins differ: Vitro's tiles start ~10 px higher and right of HA's and the card is ~24 px off (coverage #794, 2026-11-24)"
- },
  "s1/markdown-cardmod": {
   "pixel": 0.0148,
   "bounds": 2.7,
@@ -125,20 +97,6 @@
   "font": 0,
   "missingText": 0,
   "reason": "at 1.5x HA's border is 1.5 px and Vitro's 1 px (every card's), so the blue inside is 2 device px wider (748 vs 746) and each white icon and the name sit half a pixel off; the diff is their edges and the border line, 2.3% on this small high-contrast card. The layout, colors and sizes match (the tablet case matches; 2026-11-24)"
- },
- "s1/mushroom-title": {
-  "pixel": 0.038,
-  "bounds": 53.3,
-  "font": 8,
-  "missingText": 0,
-  "reason": "title 16 vs 24 px and subtitle 13 vs 16 px, with less top padding: the text sits ~25 px higher than HA's (coverage #794, 2026-11-24)"
- },
- "s1/picture-elements": {
-  "pixel": 0.0092,
-  "bounds": 0,
-  "font": 2,
-  "missingText": 0,
-  "reason": "image and positions match; the state icon sits on a dark disc and the state label on a dark pill that HA doesn't draw, label 12 vs 14 px (coverage #794, 2026-11-24)"
  },
  "tablet/clock-date": {
   "pixel": 0.0271,
@@ -161,20 +119,6 @@
   "missingText": 0,
   "reason": "the chart's geometry follows HA (grid, ECharts 6 nice axis, 4 h ticks, step lines, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"1,018.5\": 41 px), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
  },
- "tablet/entity-filter": {
-  "pixel": 0.0331,
-  "bounds": 48.8,
-  "font": 0,
-  "missingText": 3,
-  "reason": "the wrapped entities card loses its title (\"Lights off\") and header toggle, and rows show the bare entity name (\"Window\") where HA prefixes the device (\"LED Strip Window\"); card ~50 px shorter (coverage #794, 2026-11-24)"
- },
- "tablet/layout-card": {
-  "pixel": 0.09,
-  "bounds": 24,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the 2x2 grid of tiles is laid out, but its column gap and margins differ: Vitro's tiles start ~10 px higher and right of HA's and the card is ~24 px off (coverage #794, 2026-11-24)"
- },
  "tablet/markdown-cardmod": {
   "pixel": 0.0097,
   "bounds": 2.5,
@@ -195,19 +139,5 @@
   "font": 0,
   "missingText": 0,
   "reason": "matches on the 1.5x frames; on the tablet the icon disc and text antialiasing land just over 2% (coverage #794, 2026-11-24)"
- },
- "tablet/mushroom-title": {
-  "pixel": 0.0344,
-  "bounds": 53.5,
-  "font": 8,
-  "missingText": 0,
-  "reason": "title 16 vs 24 px and subtitle 13 vs 16 px, with less top padding: the text sits ~25 px higher than HA's (coverage #794, 2026-11-24)"
- },
- "tablet/picture-elements": {
-  "pixel": 0.006,
-  "bounds": 0,
-  "font": 2,
-  "missingText": 0,
-  "reason": "image and positions match; the state icon sits on a dark disc and the state label on a dark pill that HA doesn't draw, label 12 vs 14 px (coverage #794, 2026-11-24)"
  }
 }

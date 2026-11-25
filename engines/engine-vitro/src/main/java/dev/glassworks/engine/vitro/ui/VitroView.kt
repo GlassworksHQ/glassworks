@@ -51,6 +51,7 @@ import dev.glassworks.engine.vitro.cards.LightCardView
 import dev.glassworks.engine.vitro.cards.LogbookCardView
 import dev.glassworks.engine.vitro.cards.MarkdownCardView
 import dev.glassworks.engine.vitro.cards.MediaControlCardView
+import dev.glassworks.engine.vitro.cards.MushroomTitleCardView
 import dev.glassworks.engine.vitro.cards.ModernCircularGaugeCardView
 import dev.glassworks.engine.vitro.cards.MoreInfoSheet
 import dev.glassworks.engine.vitro.cards.MushroomChipsCardView
@@ -73,6 +74,7 @@ import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
+import dev.glassworks.engine.vitro.model.EntityFilterConfig
 import dev.glassworks.engine.vitro.fonts.WebFonts
 import dev.glassworks.engine.vitro.compat.CompatChecker
 import dev.glassworks.engine.vitro.compat.IslandScripts
@@ -1190,7 +1192,9 @@ class VitroView(
             }
             // Tier 1: Built-in HA cards
             "tile" -> TileCardView(ctx, card)
-            "entities", "entity-filter" -> EntitiesCardView(ctx, card)
+            "entities" -> EntitiesCardView(ctx, card)
+            // HA wraps the passing entities in its inner card (an entities card by default): its title and toggle.
+            "entity-filter" -> EntitiesCardView(ctx, EntityFilterConfig.innerCard(card))
             "glance" -> GlanceCardView(ctx, card)
             "button" -> ButtonCardView(ctx, card)
             "heading" -> HeadingCardView(ctx, card)
@@ -1221,7 +1225,7 @@ class VitroView(
             "custom:mushroom-entity-card",
             "custom:mushroom-person-card",
             "custom:mushroom-template-card" -> TileCardView(ctx, card)
-            "custom:mushroom-title-card" -> HeadingCardView(ctx, card)
+            "custom:mushroom-title-card" -> MushroomTitleCardView(ctx, card)
             "custom:mushroom-chips-card" -> MushroomChipsCardView(ctx, card)
             "custom:mushroom-climate-card" -> MushroomClimateCardView(ctx, card)
             "custom:bubble-card" -> BubbleCardView(ctx, card)
