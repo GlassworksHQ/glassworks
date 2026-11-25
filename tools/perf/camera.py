@@ -22,6 +22,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 # The streams in page/tiers.json (CAMERAS): main stream 1280x720 and sub-streams 640x360, 15 fps.
 PROFILES = {
@@ -157,9 +158,17 @@ def mjpeg_frames(profile):
                 joined += fh.read()
         out =subprocess.run(mjpeg_args(), input=joined, capture_output=True, check=True).stdout
         os.makedirs(d, exist_ok=True)
-        with open(path + ".tmp", "wb") as f:
-            f.write(out)
-        os.replace(path + ".tmp", path)
+        # A temporary file of its own per writer: two first requests at once each write theirs, and each replace
+        # puts a whole file in place (the same bytes: the encode is bitexact).
+        fd, tmp = tempfile.mkstemp(dir=d, prefix=f".{profile}-", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(out)
+            os.replace(tmp, path)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
     with open(path, "rb") as f:
         data = f.read()
     # One picture ends (EOI) where the next starts (SOI); a JPEG's entropy-coded data never has FFD9 FFD8.

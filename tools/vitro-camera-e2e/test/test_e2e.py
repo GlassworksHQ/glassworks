@@ -165,6 +165,26 @@ class Screen(unittest.TestCase):
         with self.assertRaisesRegex(e2e.Fail, "hues"):
             e2e.assert_rendered(m, "test")
 
+    def test_a_still_colour_poster_inside_a_moving_grey_border_fails(self):
+        def poster(k):
+            w, h, px = frame(box=(8, 4, 56, 28), box_fill=pattern(0))       # the colours never change
+            px = bytearray(px)
+            for y in range(h):
+                for x in range(w):
+                    if not (8 <= x < 56 and 4 <= y < 28):                   # everything around them does, in grey
+                        v = (x * 13 + y * 7 + k * 90) % 256
+                        px[(y * w + x) * 4:(y * w + x) * 4 + 3] = bytes((v, v, v))
+            return w, h, bytes(px)
+        frames = iter([poster(k) for k in range(4)])
+
+        class Dev:
+            def frame(self):
+                return next(frames)
+        m = e2e.check_motion(Dev(), captures=4, gap=0)
+        self.assertGreater(m["box"][2] - m["box"][0], 40)                     # the moving area spans the poster
+        with self.assertRaisesRegex(e2e.Fail, "hues"):
+            e2e.assert_rendered(m, "test")
+
     def test_a_small_moving_spot_isnt_a_video(self):
         frames = iter([frame(box=(4, 4, 10, 10), box_fill=pattern(k)) for k in range(4)])
 

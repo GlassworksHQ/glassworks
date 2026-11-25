@@ -52,10 +52,19 @@ on:
       - 'gradle.properties'
       - 'tools/legacy/api23-emulator.gradle'
       - 'tools/legacy/verify-api23.sh'
+      # vitro-camera's fake Home Assistant: the server, its home, its streams, its WebRTC peer and the venv and
+      # frontend it runs with.
       - 'tools/vitro-camera-e2e/**'
       - 'tools/perf/fakeha.py'
+      - 'tools/perf/dashboards.py'
       - 'tools/perf/camera.py'
       - 'tools/perf/webrtc.py'
+      - 'tools/perf/webrtcenv.py'
+      - 'tools/perf/webrtc-requirements.txt'
+      - 'tools/perf/hafrontend.py'
+      - 'tools/perf/haicons.py'
+      - 'tools/perf/haicons.json'
+      - 'tools/perf/page/tiers.json'
       - '.github/workflows/core-emulators.yml'
   # pr.yml's nightly time: the same net under the paths above.
   schedule:

@@ -69,7 +69,8 @@ class Device:
     def __init__(self, adb, serial=None):
         # The serial goes on the command line: adb.exe started from WSL doesn't see ANDROID_SERIAL (WSL passes only
         # the variables WSLENV names to Windows programs), and would take whichever device it finds.
-        self.adb = shlex.split(adb) + (["-s", serial] if serial else [])
+        # ADB is one executable, never split: its path may have spaces (/mnt/c/Program Files/...).
+        self.adb = [adb] + (["-s", serial] if serial else [])
 
     def run(self, *args, check=True, timeout=60, binary=False):
         # No stdin: adb (adb.exe from WSL above all) reads it, and would eat a calling script's input.
@@ -197,39 +198,33 @@ def changed(a, b, step=4, tol=24):
     return out
 
 
-def colours(frame, box, step=4):
-    """How many distinct coarse colours (4 bits a channel) a box of a raw frame has."""
+def colours(frame, pts):
+    """How many distinct coarse colours (4 bits a channel) a raw frame has at the points `pts`."""
     w, _, px = frame
-    x0, y0, x1, y1 = box
-    seen = set()
-    for y in range(y0, y1, step):
-        for x in range(x0, x1, step):
-            i = (y * w + x) * 4
-            seen.add((px[i] >> 4, px[i + 1] >> 4, px[i + 2] >> 4))
-    return len(seen)
+    return len({(px[i] >> 4, px[i + 1] >> 4, px[i + 2] >> 4) for i in ((y * w + x) * 4 for x, y in pts)})
 
 
-def hues(frame, box, step=4, chroma=96):
-    """Which of six hue sectors (red, yellow, green, cyan, blue, magenta) a box's saturated pixels cover. The test
-    pattern's colour bars and gradient cover all six; grey, black or noise around grey covers none."""
+def hues(frame, pts, chroma=96):
+    """Which of six hue sectors (red, yellow, green, cyan, blue, magenta) a raw frame's saturated pixels at `pts`
+    cover. The test pattern's moving gradient bar covers all six; grey, black or noise around grey covers none."""
     w, _, px = frame
-    x0, y0, x1, y1 = box
     seen = set()
-    for y in range(y0, y1, step):
-        for x in range(x0, x1, step):
-            i = (y * w + x) * 4
-            r, g, b = px[i], px[i + 1], px[i + 2]
-            hi, lo = max(r, g, b), min(r, g, b)
-            if hi - lo < chroma:
-                continue
-            c = hi - lo
-            h = ((g - b) / c) % 6 if hi == r else (b - r) / c + 2 if hi == g else (r - g) / c + 4
-            seen.add(int(h + 0.5) % 6)
+    for x, y in pts:
+        i = (y * w + x) * 4
+        r, g, b = px[i], px[i + 1], px[i + 2]
+        hi, lo = max(r, g, b), min(r, g, b)
+        if hi - lo < chroma:
+            continue
+        c = hi - lo
+        h = ((g - b) / c) % 6 if hi == r else (b - r) / c + 2 if hi == g else (r - g) / c + 4
+        seen.add(int(h + 0.5) % 6)
     return len(seen)
 
 
 def check_motion(dev, captures=4, gap=0.5):
-    """Captures spaced `gap` s apart: every pair must differ (a live picture), over the same area (the video)."""
+    """Captures spaced `gap` s apart: every pair must differ (a live picture), over the same area (the video). The
+    colours are read where the last pair changed, on its newer capture: what moves must be the test pattern, so a
+    still colour poster with something grey moving around it fails."""
     frames = []
     for _ in range(captures):
         frames.append(dev.frame())
@@ -244,7 +239,7 @@ def check_motion(dev, captures=4, gap=0.5):
         xs, ys = [p[0] for p in pts], [p[1] for p in pts]
         box = (min(xs), min(ys), max(xs) + 1, max(ys) + 1)
     return {"moving_fraction": [round(m, 4) for m in moving], "box": box,
-            "colours": colours(frames[-1], box) if box else 0, "hues": hues(frames[-1], box) if box else 0, "size": [w, h]}
+            "colours": colours(frames[-1], pairs[-1]), "hues": hues(frames[-1], pairs[-1]), "size": [w, h]}
 
 
 def first_motion(dev, t0, timeout, streak=3, gap=0.25):
