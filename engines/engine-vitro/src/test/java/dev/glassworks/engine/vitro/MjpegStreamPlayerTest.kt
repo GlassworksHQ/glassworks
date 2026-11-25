@@ -130,6 +130,27 @@ class MjpegStreamPlayerTest {
     }
 
     @Test
+    fun aRedirectedStreamFallsBackWithoutLeavingHomeAssistant() {
+        val elsewhere = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val other = dev.glassworks.web.HttpServer(0, { req -> elsewhere += req.target; dev.glassworks.web.HttpResponse.text(200, "x") },
+            bindAddress = java.net.InetAddress.getByName("127.0.0.1"), workers = 1).apply { start() }
+        val ha = dev.glassworks.web.HttpServer(0, { _ ->
+            dev.glassworks.web.HttpResponse(302, mapOf("Location" to "http://127.0.0.1:${other.localPort}/stolen"), ByteArray(0))
+        }, bindAddress = java.net.InetAddress.getByName("127.0.0.1"), workers = 1).apply { start() }
+        try {
+            val failed = java.util.concurrent.atomic.AtomicBoolean(false)
+            val player = MjpegStreamPlayer("http://127.0.0.1:${ha.localPort}/api/camera_proxy_stream/camera.door", "t", onFrame = {}, onError = { failed.set(true) })
+            player.start()
+            awaitCondition("the fallback", tick = { org.robolectric.shadows.ShadowLooper.idleMainLooper() }) { failed.get() }
+            player.stop()
+            assertTrue("nothing reached the other host: $elsewhere", elsewhere.isEmpty())
+        } finally {
+            ha.stop()
+            other.stop()
+        }
+    }
+
+    @Test
     fun streamUrlCarriesTheSignedToken() {
         assertEquals(
             "$base/api/camera_proxy_stream/camera.porch?token=abc123",
