@@ -89,8 +89,13 @@ object VitroSupport {
         "media-player-playback", "light-color-favorites", "numeric-input", "vacuum-commands",
     )
 
-    /** `entities` rows with a `type:`. A row without one is a plain entity row, which Vitro draws. */
-    val ENTITIES_ROW_TYPES: Set<String> get() = dev.glassworks.engine.vitro.model.EntityRowConfig.SPECIAL_TYPES
+    /**
+     * `entities` rows with a `type:` Vitro draws (`EntityRowConfig.parse`). A row without one is a plain entity row,
+     * which Vitro draws; `attribute` and `cast` send their view to HA's frontend ([WebFallback.UNDRAWN_ROW_TYPES]).
+     */
+    val ENTITIES_ROW_TYPES: Set<String> = setOf(
+        "divider", "section", "button", "call-service", "perform-action", "text", "weblink", "buttons", "conditional",
+    )
 
     /** `picture-elements` element types Vitro draws (`conditional` and `image` elements are not). */
     val PICTURE_ELEMENT_TYPES: Set<String> = setOf("state-icon", "state-label", "state-badge", "icon", "service-button")

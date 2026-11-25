@@ -18,6 +18,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.widget.FrameLayout
+import dev.glassworks.GlassworksApp
 import dev.glassworks.auth.HaSocket
 import dev.glassworks.auth.OAuth
 import dev.glassworks.auth.WsHaSocket
@@ -26,6 +27,8 @@ import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.PageHost
 import dev.glassworks.engine.PagePort
+import dev.glassworks.engine.vitro.clarity.ClarityHttp
+import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatWarmup
 import dev.glassworks.engine.vitro.compat.WebFallback
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -62,6 +65,13 @@ class VitroEngine(
     private val tokenProvider: (force: Boolean, done: (String?) -> Unit) -> Unit = { _, done -> done(null) },
     private val socketFactory: (String) -> HaSocket = HaDashboardClient::connectLongLived,
     private val logTag: String = "Glassworks.Vitro",
+    /**
+     * The test hold's dashboard (ScreenPolicy.testDashboard: a loopback page, only while a test holds the screen), or
+     * null. Clarity's native harness runs only while it is Clarity's reference dashboard ([VitroClarity]).
+     */
+    private val testDashboard: (Context) -> String? = { c ->
+        (c.applicationContext as? GlassworksApp)?.glassworks?.screen?.testDashboard
+    },
 ) : Engine {
 
     @Volatile private var activeInProcess: Boolean? = null
@@ -73,6 +83,9 @@ class VitroEngine(
      * The legacy engine (a locked-down [fallback]) is held to the dashboard's origin, so [islandOrigin] gives it this
      * one up front as well.
      */
+    /** How Clarity's harness reaches its fake Home Assistant ([VitroClarity]); tests give one that touches no network. */
+    internal var clarityHttp: ClarityHttp = ClarityHttp.Loopback
+
     val islandServer: VitroIslandServer = VitroIslandServer(
         session = { activePage?.islandSession() ?: (null to null) },
         log = { msg -> Log.d(logTag, "island: ${forLog(msg)}") },
@@ -244,6 +257,47 @@ class VitroEngine(
         /** True while a native dashboard owns the page; false once the fallback took it over. */
         private var nativeActive = false
 
+        /** Clarity's native harness, while the test hold shows its reference dashboard here; null otherwise. */
+        private var clarity: VitroClarity? = null
+
+        /**
+         * Starts Clarity's harness when the page shows the reference dashboard (`/clarity-ref/…`) on the origin of the
+         * test hold's dashboard, a loopback fake Home Assistant; stops it on anything else. Outside a Clarity run this
+         * is one lookup per load.
+         */
+        private fun followClarity(origin: String, dashPath: String?, viewPath: String?) {
+            val test = runCatching { testDashboard(activity.applicationContext) }.getOrNull()
+            if (test == null || OAuth.origin(test) != origin || dashPath != VitroClarity.DASHBOARD) {
+                stopClarity()
+                return
+            }
+            // One harness per fake: a test hold moved to another loopback port gets a new one, polling that fake.
+            if (clarity?.fake == origin) return
+            stopClarity()
+            Log.i(logTag, "Clarity: measuring Vitro on the test dashboard")
+            clarity = VitroClarity(
+                origin, vitroView, store, viewPath ?: "start", follow = ::watchRuntimeEntity,
+                // A harness that ended by itself goes, unless another has replaced it meanwhile: the next load starts one.
+                onExit = { done -> if (clarity === done) stopClarity() },
+                // The hold ending (or moving) ends it too, whether or not a page load follows.
+                active = {
+                    runCatching { testDashboard(activity.applicationContext) }.getOrNull()
+                        ?.let { OAuth.origin(it) == origin } == true
+                },
+                transport = clarityHttp,
+            ).also {
+                vitroView.attachClarity(it)
+                it.start()
+            }
+        }
+
+        private fun stopClarity() {
+            val c = clarity ?: return
+            clarity = null
+            vitroView.attachClarity(null)
+            c.stop()
+        }
+
         /** The selected view's own entities, and whether it follows every entity (an empty filter). */
         private var selectedRefs: Set<String> = emptySet()
         private var selectedFollowsAll = false
@@ -358,6 +412,7 @@ class VitroEngine(
             if (disposed) return
             disposed = true
             readyOnBuild = null
+            stopClarity()
             vitroView.cancelPendingBuilds()
             activity.application.unregisterActivityLifecycleCallbacks(lifecycle)
             clientGeneration++
@@ -548,6 +603,7 @@ class VitroEngine(
             }
             nativeActive = true
             val (dashPath, viewPath) = LovelaceParser.parseRoute(url)
+            followClarity(origin, dashPath, viewPath)
             pendingViewPath = viewPath
             host.onPageStart(url)
             host.onLocationChange(url)
@@ -761,6 +817,7 @@ class VitroEngine(
          * the page (it would render, report its location and signal ready behind the fallback).
          */
         private fun leaveNativeDashboard() {
+            stopClarity()
             nativeActive = false
             readyOnBuild = null
             currentDashboardPath = NO_DASHBOARD

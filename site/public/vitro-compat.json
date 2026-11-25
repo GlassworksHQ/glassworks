@@ -1,5 +1,5 @@
 {
-  "version": "0.0.1",
+  "version": "0.0.2",
   "nativeCoreTypes": [
     "tile",
     "entities",
@@ -31,7 +31,17 @@
     "picture-elements",
     "humidifier",
     "calendar",
-    "logbook"
+    "logbook",
+    "entity-button",
+    "shopping-list",
+    "section",
+    "statistic",
+    "date",
+    "plant-status",
+    "toggle-group",
+    "shortcut",
+    "alert",
+    "iframe"
   ],
   "nativeHacsTypes": [
     "custom:mushroom-entity-card",
@@ -105,5 +115,350 @@
         "grid-layout"
       ]
     }
+  },
+  "stackTypes": [
+    "vertical-stack",
+    "horizontal-stack",
+    "grid",
+    "conditional"
+  ],
+  "entitiesRowTypes": [
+    "divider",
+    "section",
+    "button",
+    "call-service",
+    "perform-action",
+    "text",
+    "weblink",
+    "buttons",
+    "conditional"
+  ],
+  "pictureElementTypes": [
+    "state-icon",
+    "state-label",
+    "state-badge",
+    "icon",
+    "service-button"
+  ],
+  "chipTypes": [
+    "entity",
+    "template",
+    "weather",
+    "light",
+    "action",
+    "menu",
+    "back",
+    "spacer",
+    "conditional"
+  ],
+  "unsupportedOptions": {
+    "entities": {
+      "header": "an entities header (picture or buttons)",
+      "footer": "an entities footer (buttons, graph or picture)"
+    }
+  },
+  "autoEntitiesRuleKeys": [
+    "domain",
+    "entity_id",
+    "state",
+    "name",
+    "attributes",
+    "group",
+    "not",
+    "or",
+    "and",
+    "options",
+    "sort"
+  ],
+  "cardModSheets": {
+    "markdown": [
+      ".",
+      "ha-markdown$"
+    ],
+    "clock": [
+      ".",
+      "hui-clock-card-digital$"
+    ],
+    "*": [
+      "."
+    ]
+  },
+  "cardModOtherKeys": {
+    "debug": "card-mod's console logging",
+    "prepend": "card-mod's load order"
+  },
+  "cardModNotApplied": {
+    "custom:mushroom-chips-card": "the chips card doesn't apply its card_mod yet (padding, background, `--chip-*` and color variables); #792"
+  },
+  "fontSizeTypes": [
+    "tile",
+    "custom:mushroom-entity-card",
+    "custom:mushroom-light-card",
+    "custom:mushroom-fan-card",
+    "custom:mushroom-cover-card",
+    "custom:mushroom-person-card",
+    "custom:mushroom-template-card",
+    "custom:mushroom-media-player-card",
+    "custom:mushroom-lock-card",
+    "custom:mushroom-alarm-control-panel-card",
+    "custom:mushroom-vacuum-card",
+    "custom:mushroom-humidifier-card",
+    "custom:mushroom-number-card",
+    "custom:mushroom-select-card"
+  ],
+  "cardProperties": [
+    "background",
+    "background-color",
+    "background-image",
+    "border",
+    "border-width",
+    "border-color",
+    "border-radius",
+    "box-shadow",
+    "opacity",
+    "padding",
+    "padding-top",
+    "padding-right",
+    "padding-bottom",
+    "padding-left",
+    "margin",
+    "margin-top",
+    "margin-right",
+    "margin-bottom",
+    "margin-left",
+    "transition",
+    "position",
+    "top",
+    "right",
+    "bottom",
+    "left",
+    "width",
+    "height",
+    "transform",
+    "box-sizing",
+    "font-family"
+  ],
+  "cardFontProperties": [
+    "font-size"
+  ],
+  "stackProperties": [
+    "padding",
+    "padding-top",
+    "padding-right",
+    "padding-bottom",
+    "padding-left",
+    "margin",
+    "margin-top",
+    "margin-right",
+    "margin-bottom",
+    "margin-left",
+    "transition"
+  ],
+  "cardVariables": [
+    "vertical-stack-card-gap",
+    "horizontal-stack-card-gap",
+    "stack-card-gap",
+    "grid-card-gap"
+  ],
+  "cascadeProperties": [
+    "font-size",
+    "font-weight",
+    "font-style",
+    "font-family",
+    "line-height",
+    "letter-spacing",
+    "text-transform",
+    "text-align",
+    "color",
+    "opacity",
+    "text-decoration",
+    "text-decoration-line",
+    "white-space",
+    "visibility",
+    "list-style",
+    "list-style-type",
+    "display",
+    "width",
+    "height",
+    "max-width",
+    "background",
+    "background-color",
+    "border-radius",
+    "border-spacing",
+    "border-collapse",
+    "table-layout",
+    "vertical-align",
+    "overflow",
+    "overflow-x",
+    "overflow-y",
+    "align-items",
+    "align-self",
+    "justify-content",
+    "margin",
+    "margin-top",
+    "margin-right",
+    "margin-bottom",
+    "margin-left",
+    "margin-block",
+    "margin-inline",
+    "margin-block-start",
+    "margin-block-end",
+    "margin-inline-start",
+    "margin-inline-end",
+    "padding",
+    "padding-top",
+    "padding-right",
+    "padding-bottom",
+    "padding-left",
+    "padding-block",
+    "padding-inline",
+    "padding-block-start",
+    "padding-block-end",
+    "padding-inline-start",
+    "padding-inline-end",
+    "border",
+    "border-top",
+    "border-right",
+    "border-bottom",
+    "border-left",
+    "border-width",
+    "border-style",
+    "border-color",
+    "border-top-width",
+    "border-right-width",
+    "border-bottom-width",
+    "border-left-width",
+    "border-top-style",
+    "border-right-style",
+    "border-bottom-style",
+    "border-left-style",
+    "border-top-color",
+    "border-right-color",
+    "border-bottom-color",
+    "border-left-color"
+  ],
+  "markdownDisplay": [
+    "none",
+    "block",
+    "inline",
+    "inline-block",
+    "list-item",
+    "table",
+    "table-row",
+    "table-cell",
+    "table-row-group",
+    "table-header-group",
+    "table-footer-group"
+  ],
+  "pseudoClasses": [
+    "first-child",
+    "last-child",
+    "only-child",
+    "first-of-type",
+    "last-of-type",
+    "only-of-type",
+    "nth-child",
+    "nth-last-child",
+    "nth-of-type",
+    "nth-last-of-type",
+    "empty",
+    "root",
+    "not",
+    "is",
+    "where"
+  ],
+  "benignPseudoClasses": {
+    "hover": "pointer hover; a touch panel has no pointer",
+    "focus": "keyboard focus; a wall panel has no keyboard",
+    "focus-visible": "keyboard focus; a wall panel has no keyboard",
+    "focus-within": "keyboard focus; a wall panel has no keyboard",
+    "active": "only while a finger is down",
+    "visited": "link history; browsers barely style it"
+  },
+  "benignPseudoElements": {
+    "selection": "selected text only",
+    "-webkit-scrollbar": "scrollbars; Vitro cards don't scroll",
+    "-webkit-scrollbar-thumb": "scrollbars; Vitro cards don't scroll",
+    "-webkit-scrollbar-track": "scrollbars; Vitro cards don't scroll"
+  },
+  "benignProperties": {
+    "cursor": "the pointer's shape; panels are touch screens",
+    "transition": "how a change animates; Vitro draws the end state (and fades opacity on the card)",
+    "transition-property": "how a change animates; Vitro draws the end state",
+    "transition-duration": "how a change animates; Vitro draws the end state",
+    "transition-timing-function": "how a change animates; Vitro draws the end state",
+    "transition-delay": "how a change animates; Vitro draws the end state",
+    "user-select": "text selection only",
+    "-webkit-user-select": "text selection only",
+    "-webkit-tap-highlight-color": "the browser's tap flash; Vitro draws HA's ripple instead",
+    "touch-action": "which gestures the browser handles, not how it looks",
+    "will-change": "a browser performance hint",
+    "-webkit-font-smoothing": "a macOS font-smoothing hint",
+    "-moz-osx-font-smoothing": "a macOS font-smoothing hint",
+    "text-rendering": "a font-rendering hint",
+    "z-index": "stacking order; Vitro's cards never overlap except pinned ones, which sit on top anyway",
+    "scroll-behavior": "scrolling only",
+    "overscroll-behavior": "scrolling only",
+    "scrollbar-width": "scrollbars; Vitro cards don't scroll",
+    "scrollbar-color": "scrollbars; Vitro cards don't scroll",
+    "-webkit-overflow-scrolling": "scrolling only"
+  },
+  "benignValues": {
+    "outline": [
+      "none",
+      "0",
+      "0px"
+    ],
+    "animation": [
+      "none"
+    ],
+    "filter": [
+      "none"
+    ],
+    "text-shadow": [
+      "none"
+    ],
+    "pointer-events": [
+      "auto"
+    ],
+    "contain": [
+      "none",
+      "layout",
+      "paint",
+      "style",
+      "content",
+      "layout paint",
+      "paint layout",
+      "layout style",
+      "paint style",
+      "layout paint style"
+    ]
+  },
+  "knownGaps": {
+    "!important": "Vitro keeps the value at normal precedence here, so HA's own rule can win where card-mod's wins in HA",
+    "backdrop-filter": "Vitro doesn't blur what's behind a card; an island can't blur native views either",
+    "-webkit-backdrop-filter": "Vitro doesn't blur what's behind a card; an island can't blur native views either",
+    "text-overflow": "no ellipsis yet; it only shows when the text doesn't fit",
+    "white-space: nowrap": "Vitro may wrap the line; it only shows when the text doesn't fit",
+    "position: relative": "Vitro ignores the small offset (`top`, `left`, ...)",
+    "box-shadow: glow": "drawn as an elevation shadow, not a colored glow",
+    "tile features_position: inline": "Vitro puts the features under the tile; #792",
+    "card_mod.class": "Vitro ignores card_mod classes; they only matter with a card-mod theme",
+    "card variable": "Vitro doesn't read this custom property on this card; HA's card may",
+    "templated selector": "a selector built by a template isn't checked",
+    ":link": "Vitro doesn't apply rules for unvisited links (`:link`); its links keep their own style"
+  },
+  "undrawnMarkdownTags": {
+    "audio": "audio players",
+    "video": "video players",
+    "source": "media sources",
+    "picture": "responsive pictures",
+    "details": "collapsible sections",
+    "summary": "collapsible sections",
+    "input": "checkboxes",
+    "area": "image maps",
+    "ha-alert": "HA's alert boxes",
+    "ha-qr-code": "QR codes",
+    "ha-svg-icon": "raw SVG icons"
   }
 }

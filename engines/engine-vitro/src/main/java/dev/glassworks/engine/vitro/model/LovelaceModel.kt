@@ -178,9 +178,7 @@ data class EntityRowConfig(
         val HA_DOMAINS_TOGGLE: Set<String> = setOf("fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve")
 
         /** The special row types Vitro draws ([parse]); `attribute` and `cast` go to HA's frontend ([WebFallback]). */
-        val SPECIAL_TYPES: Set<String> = setOf(
-            "divider", "section", "button", "call-service", "perform-action", "text", "weblink", "buttons", "conditional",
-        )
+        val SPECIAL_TYPES: Set<String> get() = VitroSupport.ENTITIES_ROW_TYPES
 
         /**
          * One `entities:` entry as HA's `createRowElement` builds it, or null for one HA can't build (it shows an error

@@ -13,6 +13,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -86,6 +87,7 @@ import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.EntityFilterConfig
 import dev.glassworks.engine.vitro.fonts.WebFonts
+import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatChecker
 import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.model.CardRouter
@@ -235,6 +237,7 @@ class VitroView(
             val views = dashboard?.views ?: return
             viewCache.keys.filter { views.getOrNull(it)?.subview == true && it != currentViewIndex }.forEach { idx ->
                 viewCache.remove(idx)?.let { contentHost.removeView(it) }
+                clarity?.keepCards(viewCache.keys)
                 overlayFrames.remove(idx)?.let { overlayLayer.removeView(it) }
                 builtScripts.remove(idx)
             }
@@ -250,6 +253,7 @@ class VitroView(
             if (field == v) return
             field = v
             viewCache.clear()
+            clarity?.keepCards(viewCache.keys)
             builtScripts.clear()
             contentHost.removeAllViews()
             clearOverlay()
@@ -259,6 +263,31 @@ class VitroView(
         private set
 
     var onMetrics: ((VitroMetrics) -> Unit)? = null
+
+    /**
+     * Clarity's native harness while a Clarity run shows its reference dashboard ([VitroClarity], started by the
+     * engine); null otherwise, and then every hook below is one null check.
+     */
+    internal var clarity: VitroClarity? = null
+        private set
+
+    /**
+     * Gives the view Clarity's harness ([VitroClarity]), or takes it away (null). A harness learns each view's cards as
+     * the view is built, so the views built before it (cached) are dropped: the load that attaches it renders its view
+     * next (a tab-like switch or a new dashboard), built with the harness there, and none is measured without its cards.
+     * Only when a harness attaches; tab switches within its run keep the cache.
+     */
+    internal fun attachClarity(c: VitroClarity?) {
+        clarity = c
+        if (c == null || viewCache.isEmpty()) return
+        viewCache.clear()
+        builtScripts.clear()
+        contentHost.removeAllViews()
+        clearOverlay()
+    }
+
+    /** The view whose cards [buildViewTree] is building (Clarity's card registry). */
+    private var buildingIndex = -1
     var onViewSelected: ((ViewConfig) -> Unit)? = null
 
     /**
@@ -327,6 +356,7 @@ class VitroView(
         val cfg = dashboard ?: return
         if (cfg.views.getOrNull(currentViewIndex) == null) return
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -398,6 +428,7 @@ class VitroView(
         dashboard = null
         viewBackStack.clear()
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -416,6 +447,7 @@ class VitroView(
         if (catalog == themeCatalog) return
         themeCatalog = catalog
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -430,6 +462,7 @@ class VitroView(
         userThemeName = nextTheme
         darkMode = nextDark
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -445,6 +478,7 @@ class VitroView(
         dashboard = config
         viewBackStack.clear()
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -458,6 +492,32 @@ class VitroView(
         val idx = resolveViewIndex(cfg, viewPath)
         renderView(idx, forceRebuild = false)
         return true
+    }
+
+    /** A more-info sheet is open, or still closing. */
+    internal val moreInfoOpen: Boolean
+        get() = moreInfo != null || (0 until childCount).any { getChildAt(it) is MoreInfoSheet }
+
+    /** The loading or connecting status covers the view. */
+    internal val statusShowing: Boolean get() = statusLabel.visibility == VISIBLE
+
+    /** The view on screen's scrolling container, if it scrolls (a panel view doesn't). */
+    internal fun currentScroll(): ScrollView? = viewCache[currentViewIndex] as? ScrollView
+
+    /** Opens the view at [path] as its tab does (the page's history and location follow). False with no dashboard. */
+    internal fun openViewAsTab(path: String): Boolean {
+        val cfg = dashboard ?: return false
+        val idx = resolveViewIndex(cfg, path)
+        if (idx != currentViewIndex) onTabNavigation?.invoke()
+        renderView(idx, forceRebuild = false)
+        return true
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        val c = clarity ?: return super.dispatchTouchEvent(ev)
+        val handled = super.dispatchTouchEvent(ev)
+        c.touched(ev)
+        return handled
     }
 
     /**
@@ -480,7 +540,10 @@ class VitroView(
         return true
     }
 
-    fun openMoreInfo(entityId: String) {
+    fun openMoreInfo(entityId: String) = openMoreInfo(entityId, null)
+
+    /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
+    internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
         closeMoreInfo()
         val cfg = dashboard?.views?.getOrNull(currentViewIndex)
         val theme = ThemeResolver.resolve(themeCatalog, darkMode, cfg?.theme ?: userThemeName, cfg?.background)
@@ -495,6 +558,7 @@ class VitroView(
             if (moreInfo == null) blockDashboardFocus(false)
         }
         sheetRef = sheet
+        sheet.trace = trace
         // Keys stay in the sheet, as in HA's modal dialog: nothing behind it takes focus while it's open.
         blockDashboardFocus(true)
         sheet.show(entityId)
@@ -668,6 +732,7 @@ class VitroView(
                 renderView(index, forceRebuild = true, pushHistory = false)
             } else {
                 viewCache.remove(index)?.let { contentHost.removeView(it) }
+                clarity?.keepCards(viewCache.keys)
                 overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
             }
         }
@@ -722,10 +787,13 @@ class VitroView(
             val pinned = ArrayList<Pair<View, FrameLayout.LayoutParams>>()
             pendingPinned = pinned
             guessedStates.clear()
+            buildingIndex = index
+            clarity?.buildStarted(index)
             val built = try {
                 buildViewTree(viewCfg, cardCtx)
             } finally {
                 pendingPinned = null
+                buildingIndex = -1
             }
             rebuildWhenStatesLand(index, guessedStates.toSet())
             viewCache.remove(index)?.let { contentHost.removeView(it) }
@@ -791,6 +859,7 @@ class VitroView(
         while (viewCache.size > MAX_CACHED_VIEWS) {
             val oldest = viewCache.keys.firstOrNull { it != keep } ?: return
             viewCache.remove(oldest)?.let { contentHost.removeView(it) }
+            clarity?.keepCards(viewCache.keys)
             overlayFrames.remove(oldest)?.let { overlayLayer.removeView(it) }
             builtScripts.remove(oldest)
         }
@@ -1153,7 +1222,9 @@ class VitroView(
         cards.forEachIndexed { i, card ->
             if (pinIfFixed(card, ctx)) return@forEachIndexed
             val column = columns[placement[i]]
-            column.addView(wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx), cardMarginParams(ctx, widthDp, first = column.childCount == 0))
+            val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
+            clarity?.cardBuilt(buildingIndex, i, card, v)
+            column.addView(v, cardMarginParams(ctx, widthDp, first = column.childCount == 0))
         }
         return row
     }
@@ -1167,11 +1238,13 @@ class VitroView(
         val main = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         val split = widthDp >= 760
         val side = if (split) LinearLayout(context).apply { orientation = LinearLayout.VERTICAL } else main
-        for (card in cards) {
+        for ((cardIndex, card) in cards.withIndex()) {
             if (pinIfFixed(card, ctx)) continue
             val inSidebar = card.raw.optJSONObject("view_layout")?.optString("position") == "sidebar"
             val column = if (inSidebar) side else main
-            column.addView(wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx), cardMarginParams(ctx, widthDp, first = column.childCount == 0))
+            val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
+            clarity?.cardBuilt(buildingIndex, cardIndex, card, v)
+            column.addView(v, cardMarginParams(ctx, widthDp, first = column.childCount == 0))
         }
         if (!split) {
             return LinearLayout(context).apply {

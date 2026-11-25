@@ -1,17 +1,44 @@
 // Vitro dashboard compatibility check, 100% client-side. Nothing here touches the network: the
-// caller hands in the dashboard text and gets a verdict back. The lists come from
+// caller hands in the dashboard text and gets a verdict back. It routes each card the way the Vitro
+// engine does (compat/CardCompat.kt and CompatReport.kt), with every card's script and card-mod
+// assumed installed, as the engine's own offline checker assumes. The lists come from
 // public/vitro-compat.json (also served at /vitro-compat.json), which a test keeps equal to
-// LovelaceModel.kt in the Vitro engine and to the audit script's lists.
+// VitroSupport.kt in the engine and to the audit script's lists.
 import manifest from "../../public/vitro-compat.json";
 
 export const VITRO_COMPAT = manifest;
 
-const NATIVE_CORE = new Set<string>(manifest.nativeCoreTypes);
-const NATIVE_HACS = new Set<string>(manifest.nativeHacsTypes);
+const CORE = new Set<string>(manifest.nativeCoreTypes);
+const HACS = new Set<string>(manifest.nativeHacsTypes);
 const CONTAINERS = new Set<string>(manifest.containerTypes);
+/** Containers whose children are their `cards:` list (LovelaceParser.CARDS_FIELD_TYPES): all but `conditional`. */
+const CARDS_FIELD = new Set<string>(manifest.containerTypes.filter((t) => t !== "conditional"));
+const STACK_TYPES = new Set<string>(manifest.stackTypes);
 const TILE_FEATURES = new Set<string>(manifest.supportedTileFeatures);
-/** Cards drawn natively only in some configurations: `option` (or its `default`) must be one of `native`. */
-const CONFIG_DEPENDENT: Record<string, { option: string; default: string; native: string[] }> = manifest.configDependentTypes;
+const ENTITIES_ROW_TYPES = new Set<string>(manifest.entitiesRowTypes);
+const PICTURE_ELEMENT_TYPES = new Set<string>(manifest.pictureElementTypes);
+const CHIP_TYPES = new Set<string>(manifest.chipTypes);
+const BUBBLE_CARD_TYPES = new Set<string>(manifest.configDependentTypes["custom:bubble-card"].native);
+const LAYOUT_CARD_TYPES = new Set<string>(manifest.configDependentTypes["custom:layout-card"].native);
+const UNSUPPORTED_OPTIONS: Record<string, Record<string, string>> = manifest.unsupportedOptions;
+const AUTO_ENTITIES_RULE_KEYS = new Set<string>(manifest.autoEntitiesRuleKeys);
+const CARD_MOD_SHEETS: Record<string, string[]> = manifest.cardModSheets;
+const CARD_MOD_OTHER_KEYS: Record<string, string> = manifest.cardModOtherKeys;
+const CARD_MOD_NOT_APPLIED: Record<string, string> = manifest.cardModNotApplied;
+const FONT_SIZE_TYPES = new Set<string>(manifest.fontSizeTypes);
+const CARD_PROPERTIES = new Set<string>(manifest.cardProperties);
+const CARD_FONT_PROPERTIES = new Set<string>(manifest.cardFontProperties);
+const STACK_PROPERTIES = new Set<string>(manifest.stackProperties);
+const CARD_VARIABLES = new Set<string>(manifest.cardVariables);
+const CASCADE_PROPERTIES = new Set<string>(manifest.cascadeProperties);
+const MARKDOWN_DISPLAY = new Set<string>(manifest.markdownDisplay);
+const PSEUDO_CLASSES = new Set<string>(manifest.pseudoClasses);
+const BENIGN_PSEUDO_CLASSES: Record<string, string> = manifest.benignPseudoClasses;
+const BENIGN_PSEUDO_ELEMENTS: Record<string, string> = manifest.benignPseudoElements;
+const BENIGN_PROPERTIES: Record<string, string> = manifest.benignProperties;
+const BENIGN_VALUES: Record<string, string[]> = manifest.benignValues;
+const KNOWN_GAPS: Record<string, string> = manifest.knownGaps;
+const UNDRAWN_MARKDOWN_TAGS: Record<string, string> = manifest.undrawnMarkdownTags;
 
 // ---------------------------------------------------------------------------------------------
 // A small YAML reader for Lovelace: block maps and lists, flow [..] and {..}, plain and quoted
@@ -445,13 +472,15 @@ export function parseDashboardText(input: string): unknown {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The audit
+// The audit: the engine's routing (CardCompat.kt, CompatReport.kt), card by card
 // ---------------------------------------------------------------------------------------------
 
 export interface TriggerItem {
   view: string;
   path: string;
   type: string;
+  /** Why the card goes to an island, as the engine's checker words it. */
+  reasons: string[];
 }
 
 export interface ViewAudit {
@@ -477,154 +506,753 @@ export interface VitroAuditResult {
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
+const has = <T>(o: Record<string, T>, k: string): k is string => Object.prototype.hasOwnProperty.call(o, k);
 
 function fail(error: string): VitroAuditResult {
   return { ok: false, error, isFullyNative: false, totals: { tier1: 0, tier2: 0, tier3: 0 }, views: [], triggers: [], warnings: [] };
 }
 
-/**
- * card_mod selector-map keys the renderer reads for a card type (VitroSupport.cardModSheets): the card itself always,
- * HA's markdown root only on a Markdown card, the digital clock's only on a clock.
- */
-function supportedStyleKey(type: string, key: string): boolean {
-  if (key === ".") return true;
-  if (key === "ha-markdown$") return type === "markdown";
-  if (key === "hui-clock-card-digital$") return type === "clock";
-  return false;
+/** org.json's `optString`: the value as text, or `fallback` when it's missing or null. */
+function optString(o: Obj, key: string, fallback: string): string {
+  const v = o[key];
+  if (v === undefined || v === null) return fallback;
+  return typeof v === "string" ? v : typeof v === "object" ? JSON.stringify(v) : String(v);
 }
 
-/** Legacy single-colon pseudo-elements (`ha-card:before`): generated content, which isn't drawn natively either. */
-const LEGACY_PSEUDO = /:(before|after|first-line|first-letter)\b/i;
+/** The objects in a list, as the engine's `objects()` reads it: anything else in it is skipped. */
+const objects = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : []);
 
-/**
- * A selector for the card itself (`ha-card`, `:host`, `:host > ha-card`), compounded with classes, ids, attributes
- * (`ha-card.compact`) and interaction states at most, as the renderer's host check reads it. A structural
- * pseudo-class (`:nth-child(1)`) isn't one it applies.
- */
-const OWN_CARD_SELECTOR =
-  /^(?::host(?:\s*>?\s*ha-card)?|ha-card)(?:\.[\w-]+|#[\w-]+|\[[^\]]*\]|:(?:hover|active|focus|focus-visible|focus-within)(?![\w-]))*$/i;
+/** A card's type as the engine parses it: `entities` when it has none. */
+const cardType = (card: Obj): string => optString(card, "type", "entities") || "entities";
 
-/** An at-rule the renderer doesn't evaluate (`@media`, `@supports`): only keyframes and `@charset` are harmless. */
-const UNSUPPORTED_AT_RULE = /@(?!(?:-webkit-)?keyframes(?![\w-])|charset(?![\w-]))[a-z-]+/i;
+/** A reason or a note for the page: the engine's wording, without its issue numbers. */
+const plain = (s: string) => s.replace(/;\s*#\d+$/, "");
 
-/** Jinja (`{{ … }}`, `{% … %}`, `{# … #}`): masked before reading selectors, as the renderer replaces it first. */
-const JINJA = /\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|\{#[\s\S]*?#\}/g;
+/** A known-gap note: what it's about, then why it stays native. */
+const gap = (key: string, subject: string) => `${subject}: known gap, ${plain(has(KNOWN_GAPS, key) ? KNOWN_GAPS[key] : key)}`;
 
-/** [css] without comments and Jinja: what the renderer reads rules from. */
-const maskCss = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, " ").replace(JINJA, " ");
+// ---- The cards a card builds (CardRouter.builtChildren, producedCards) ----
 
-/** Quoted strings emptied: an `@` in one (`[data-label="@media"]`) isn't an at-rule. */
-const QUOTED = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g;
+const LAYOUT_BREAK = "custom:layout-break";
 
-/**
- * True when a card's own sheet has a rule for something inside the card (`ha-card .card-header`): the renderer
- * models no card's inner DOM, so it doesn't apply it. A Markdown or clock card's own sheet reaches into the parts the
- * renderer draws, so they're left to the native check.
- */
-function reachesInside(type: string, css: string): boolean {
-  if (type === "markdown" || type === "clock") return false;
-  const text = maskCss(css);
-  for (const m of text.matchAll(/([^{}]+)\{/g)) {
-    for (const sel of m[1].split(",")) {
-      const t = sel.trim();
-      if (t && !t.startsWith("@") && !OWN_CARD_SELECTOR.test(t)) return true;
+/** The children a container builds, with their index in its `cards:` (a conditional's is its `card:`). */
+function builtChildren(card: Obj, type = cardType(card)): [number, Obj][] {
+  let all: [number, Obj][] = [];
+  if (CARDS_FIELD.has(type)) all = (Array.isArray(card.cards) ? card.cards : []).filter(isObj).map((c, i) => [i, c] as [number, Obj]);
+  else if (type === "conditional" && isObj(card.card)) all = [[0, card.card]];
+  if (type !== "custom:layout-card") return all;
+  const layout = optString(card, "layout_type", "masonry-layout").replace(/^custom:/, "");
+  return layout === "vertical-layout" || layout === "vertical" ? all.filter(([, c]) => cardType(c) !== LAYOUT_BREAK) : all;
+}
+
+/** The cards auto-entities builds per entity, one per `entities:` entry and include rule (no entity filled in). */
+function generatedCards(card: Obj): Obj[] {
+  const out: Obj[] = [];
+  if (Array.isArray(card.entities)) {
+    for (const e of card.entities) {
+      if (typeof e === "string") out.push({});
+      else if (isObj(e)) {
+        const copy: Obj = { ...e };
+        delete copy.entity;
+        out.push(copy);
+      }
     }
   }
-  return false;
+  const include = isObj(card.filter) && Array.isArray(card.filter.include) ? card.filter.include : null;
+  if (include) for (const r of include) out.push(isObj(r) && isObj(r.options) ? { ...r.options } : {});
+  for (const c of out) if (!("type" in c)) c.type = "tile";
+  return out;
 }
 
-function cardModWarning(card: Obj, loc: string, out: string[]) {
-  const cm = card.card_mod;
-  if (!isObj(cm)) return;
-  const style = cm.style;
-  const type = typeof card.type === "string" ? card.type.trim() : "";
-  const complex = (css: unknown) =>
-    typeof css !== "string" || css.includes("$:") || css.includes("@keyframes") || css.includes("::") || LEGACY_PSEUDO.test(css) ||
-    UNSUPPORTED_AT_RULE.test(maskCss(css).replace(QUOTED, '""'));
-  const own = (css: unknown) => complex(css) || (typeof css === "string" && reachesInside(type, css));
-  const unsupported = isObj(style)
-    ? Object.entries(style).some(([k, v]) => !supportedStyleKey(type, k) || (k === "." ? own(v) : complex(v)))
-    : typeof style === "string" && own(style);
-  if (unsupported) {
-    out.push(`${loc}: complex Shadow-DOM, pseudo-element, or keyframe card_mod (only ha-card container styles carry over natively)`);
+const generatesCards = (card: Obj, type: string) => type === "custom:auto-entities" && optString(card, "card_param", "entities") === "cards";
+
+/** Every card a card's config produces one level down: a container's children, and the cards auto-entities builds. */
+function producedCards(card: Obj, perEntity: boolean): [number, Obj][] {
+  const type = cardType(card);
+  const out = builtChildren(card, type);
+  if (type !== "custom:auto-entities") return out;
+  // Only top-level fields change, so a shallow copy keeps the config as written.
+  const inner: Obj = isObj(card.card) ? { ...card.card } : {};
+  if (!("type" in inner)) inner.type = "entities";
+  const param = optString(card, "card_param", "entities") || "entities";
+  // auto-entities replaces this field with what it matched, so what the config wrote there never shows.
+  delete inner[param];
+  const generated = param === "cards" ? generatedCards(card) : [];
+  if (param === "cards") inner.cards = generated.map((g) => ({ ...g }));
+  out.push([out.length, inner]);
+  if (perEntity) for (const g of generated) out.push([out.length, g]);
+  return out;
+}
+
+/** True when a card is built in or produces one at any depth: the island can only draw those as summaries. */
+function needsHaFrontend(card: Obj): boolean {
+  const type = cardType(card);
+  return !type.startsWith("custom:") || type === "custom:stack-in-card" || producedCards(card, true).some(([, c]) => needsHaFrontend(c));
+}
+
+// ---- One card's verdict (CardCompat.check, with every script and card-mod assumed installed) ----
+
+interface Verdict {
+  native: boolean;
+  reasons: string[];
+  notes: string[];
+}
+
+function verdict(card: Obj): Verdict {
+  const type = cardType(card);
+  const reasons = new Set<string>();
+  const notes = new Set<string>();
+  if (!CORE.has(type) && !HACS.has(type)) {
+    reasons.add(type.startsWith("custom:") ? `\`${type}\` is a custom card with no native renderer` : `\`${type}\` isn't a card type Vitro draws`);
+  } else {
+    checkOptions(card, type, reasons, notes);
+    checkCardMod(card, type, reasons, notes);
+    if (type === "markdown") checkMarkdownContent(optString(card, "content", ""), reasons);
+  }
+  // The island runs a custom card's own code but has no HA frontend, so a built-in card there would be a plain
+  // summary. A built-in card stays native, and so does a custom card Vitro draws with a built-in card inside it.
+  if (reasons.size > 0) {
+    const why = CORE.has(type)
+      ? "the island can't draw built-in cards yet"
+      : HACS.has(type) && needsHaFrontend(card)
+        ? "the island can't draw the built-in cards inside it yet"
+        : null;
+    if (why) {
+      for (const r of reasons) notes.add(`would fall back for ${r}, but ${why}`);
+      return { native: true, reasons: [], notes: [...notes] };
+    }
+  }
+  return { native: reasons.size === 0, reasons: [...reasons], notes: [...notes] };
+}
+
+function checkOptions(card: Obj, type: string, reasons: Set<string>, notes: Set<string>) {
+  const unsupported = has(UNSUPPORTED_OPTIONS, type) ? UNSUPPORTED_OPTIONS[type] : {};
+  for (const [key, what] of Object.entries(unsupported)) {
+    if (card[key] !== undefined && card[key] !== null) reasons.add(`\`${key}:\` (${what}) isn't drawn natively`);
+  }
+  switch (type) {
+    case "tile": {
+      for (const f of objects(card.features)) {
+        const t = optString(f, "type", "");
+        if (t && !TILE_FEATURES.has(t)) reasons.add(`tile feature \`${t}\` isn't drawn natively`);
+      }
+      if (optString(card, "features_position", "") === "inline" && Array.isArray(card.features) && card.features.length > 0) {
+        notes.add(gap("tile features_position: inline", "`features_position: inline`"));
+      }
+      break;
+    }
+    case "entities":
+    case "entity-filter":
+      for (const row of objects(card.entities)) {
+        const t = optString(row, "type", "");
+        if (t && !ENTITIES_ROW_TYPES.has(t)) reasons.add(`entities row type \`${t}\` isn't drawn natively`);
+      }
+      break;
+    case "picture-elements":
+      for (const el of objects(card.elements)) {
+        const t = optString(el, "type", "");
+        if (!PICTURE_ELEMENT_TYPES.has(t)) reasons.add(`picture-elements element \`${t || "(no type)"}\` isn't drawn natively`);
+      }
+      break;
+    case "custom:mushroom-chips-card":
+      for (const chip of objects(card.chips)) {
+        const t = optString(chip, "type", "entity");
+        if (!CHIP_TYPES.has(t)) reasons.add(`mushroom chip \`${t}\` isn't drawn natively`);
+        if (t === "conditional" && isObj(chip.chip)) {
+          const inner = optString(chip.chip, "type", "entity");
+          if (!CHIP_TYPES.has(inner) || inner === "conditional") reasons.add(`mushroom chip \`${inner}\` (in a conditional chip) isn't drawn natively`);
+        }
+      }
+      break;
+    case "custom:bubble-card": {
+      const t = optString(card, "card_type", "button") || "button";
+      if (!BUBBLE_CARD_TYPES.has(t)) reasons.add(`Bubble Card \`card_type: ${t}\` isn't drawn natively`);
+      break;
+    }
+    case "custom:auto-entities": {
+      // Filter keys Vitro doesn't evaluate: the child stays native, but the entities those keys would match are left out.
+      const unknown = new Set<string>();
+      const scan = (rule: Obj) => {
+        for (const k of Object.keys(rule)) {
+          if (!AUTO_ENTITIES_RULE_KEYS.has(k)) unknown.add(k);
+          if (k === "not" && isObj(rule[k])) scan(rule[k] as Obj);
+          if (k === "or" || k === "and") objects(rule[k]).forEach(scan);
+        }
+      };
+      if (isObj(card.filter)) {
+        objects(card.filter.include).forEach(scan);
+        objects(card.filter.exclude).forEach(scan);
+        if ("template" in card.filter) unknown.add("template");
+      }
+      if (unknown.size > 0) {
+        notes.add(
+          `auto-entities filter ${[...unknown].map((k) => `\`${k}\``).join(", ")} isn't evaluated natively: entities an include rule ` +
+            "matches are left out, and an exclude rule can't remove its matches",
+        );
+      }
+      break;
+    }
+    case "custom:layout-card": {
+      const t = optString(card, "layout_type", "masonry-layout").replace(/^custom:/, "") || "masonry-layout";
+      if (!LAYOUT_CARD_TYPES.has(t)) reasons.add(`layout-card \`layout_type: ${t}\` isn't drawn natively`);
+      break;
+    }
   }
 }
 
-function walkCard(card: unknown, loc: string, view: ViewAudit) {
-  if (!isObj(card)) {
-    view.warnings.push(`${loc}: not a card (expected a map with a type), skipped`);
+const OPEN_TAG = /<([a-zA-Z][a-zA-Z0-9-]*)/g;
+
+function checkMarkdownContent(content: string, reasons: Set<string>) {
+  for (const m of content.matchAll(OPEN_TAG)) {
+    const tag = m[1].toLowerCase();
+    if (has(UNDRAWN_MARKDOWN_TAGS, tag)) reasons.add(`Markdown \`<${tag}>\` (${UNDRAWN_MARKDOWN_TAGS[tag]}) isn't drawn natively`);
+  }
+}
+
+// ---- card_mod ----
+
+/** Which CSS a sheet holds, so selectors and properties are checked against what Vitro draws there. */
+type Sheet = "card" | "stack" | "markdownCard" | "markdownContent" | "clockCard" | "clockDigital";
+
+function checkCardMod(card: Obj, type: string, reasons: Set<string>, notes: Set<string>) {
+  const cardMod = card.card_mod;
+  if (!isObj(cardMod)) return;
+  for (const key of Object.keys(cardMod)) {
+    if (key === "style") continue;
+    if (key === "class") notes.add(gap("card_mod.class", "`card_mod.class`"));
+    else if (!has(CARD_MOD_OTHER_KEYS, key)) notes.add(`card_mod \`${key}:\` is ignored`);
+  }
+  const style = cardMod.style;
+  const sheets: [string, string][] = [];
+  if (typeof style === "string") sheets.push([".", style]);
+  else if (isObj(style)) {
+    for (const [k, v] of Object.entries(style)) {
+      if (typeof v === "string") sheets.push([k, v]);
+      else {
+        // A nested selector map walks further into shadow roots than Vitro models.
+        reasons.add(`card_mod path \`${redactAttributeValues(k)}\` nests further into the card's shadow DOM, which Vitro doesn't model`);
+        sheets.push([k, ""]);
+      }
+    }
+  }
+  const allowed = has(CARD_MOD_SHEETS, type) ? CARD_MOD_SHEETS[type] : CARD_MOD_SHEETS["*"];
+  const notApplied = has(CARD_MOD_NOT_APPLIED, type) ? CARD_MOD_NOT_APPLIED[type] : null;
+  for (const [key, css] of sheets) {
+    if (!allowed.includes(key)) {
+      reasons.add(`card_mod path \`${redactAttributeValues(key)}\` styles the card's inner DOM, which Vitro doesn't model`);
+      continue;
+    }
+    if (css.trim() === "") continue;
+    const sheet: Sheet =
+      key === "ha-markdown$"
+        ? "markdownContent"
+        : key === "hui-clock-card-digital$"
+          ? "clockDigital"
+          : type === "markdown"
+            ? "markdownCard"
+            : type === "clock"
+              ? "clockCard"
+              : STACK_TYPES.has(type)
+                ? "stack"
+                : "card";
+    if (notApplied !== null && key === ".") {
+      // Vitro doesn't apply this sheet yet: its properties are one known gap. A selector reaching into the card's
+      // DOM still needs the island, as it would on any card.
+      checkSheet(type, key, css, sheet, reasons, new Set(), new Set());
+      notes.add(`card_mod on \`${type}\`: known gap, ${plain(notApplied)}`);
+    } else {
+      checkSheet(type, key, css, sheet, reasons, reasons, notes);
+    }
+  }
+}
+
+const TPL = "__vitro_tpl__";
+const JINJA_BLOCK = /\{%[\s\S]*?%\}|\{#[\s\S]*?#\}/g;
+const JINJA_EXPR = /\{\{[\s\S]*?\}\}/g;
+const JINJA_ANY = /\{%[\s\S]*?%\}|\{\{[\s\S]*?\}\}|\{#[\s\S]*?#\}/g;
+const CSS_COMMENT = /\/\*[\s\S]*?\*\//g;
+const HARMLESS_AT_RULES = new Set(["keyframes", "-webkit-keyframes", "charset"]);
+const OFFSETS = ["top", "right", "bottom", "left"];
+const PLACEMENT = new Set(["position", "width", "transform", ...OFFSETS]);
+const UNSET = new Set(["auto", "unset", "initial"]);
+
+/** Splits `s` at `sep` outside brackets, parentheses and quotes. */
+function splitTopLevel(s: string, sep: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let quote = "";
+  let b = 0;
+  for (let k = 0; k < s.length; k++) {
+    const c = s[k];
+    if (quote) {
+      if (c === quote) quote = "";
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === "(" || c === "[") depth++;
+    else if (c === ")" || c === "]") depth--;
+    else if (c === sep && depth === 0) {
+      out.push(s.slice(b, k));
+      b = k + 1;
+    }
+  }
+  out.push(s.slice(b));
+  return out;
+}
+
+type Decl = { name: string; value: string; important: boolean };
+
+/** The sheet's rules as the browser reads them (ThemeResolver.cssRulesImportant): at-rules and bare declarations left out. */
+function cssRules(css: string): { selector: string; decls: Decl[] }[] {
+  const cleaned = css.replace(CSS_COMMENT, " ").replace(JINJA_ANY, " ");
+  const out: { selector: string; decls: Decl[] }[] = [];
+  let depth = 0;
+  let segStart = 0;
+  let bodyStart = 0;
+  let selector = "";
+  for (let i = 0; i < cleaned.length; i++) {
+    const c = cleaned[i];
+    if (c === "{") {
+      if (depth === 0) {
+        selector = cleaned.slice(segStart, i).trim();
+        bodyStart = i + 1;
+      }
+      depth++;
+    } else if (c === "}" && depth > 0) {
+      depth--;
+      if (depth === 0) {
+        const decls: Decl[] = [];
+        for (const d of cleaned.slice(bodyStart, i).split(";")) {
+          const colon = d.indexOf(":");
+          if (colon <= 0) continue;
+          const name = d.slice(0, colon).trim().toLowerCase();
+          const raw = d.slice(colon + 1);
+          const value = raw.replace(/\s*!\s*important\s*$/i, "").trim();
+          if (name && value) decls.push({ name, value, important: /\s*!\s*important\s*$/i.test(raw) });
+        }
+        if (selector && !selector.startsWith("@")) out.push({ selector, decls });
+        segStart = i + 1;
+      }
+    } else if (c === ";" && depth === 0) segStart = i + 1;
+  }
+  return out;
+}
+
+/** The names of at-rules at the top level of a sheet (`@media`, `@keyframes`, ...). */
+function topLevelAtRules(css: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  for (let i = 0; i < css.length; i++) {
+    const c = css[i];
+    if (c === "{") depth++;
+    else if (c === "}" && depth > 0) depth--;
+    else if (c === "@" && depth === 0) {
+      const m = css.slice(i).match(/^@([a-zA-Z-]+)/);
+      if (m) out.push(m[1].toLowerCase());
+    }
+  }
+  return out;
+}
+
+type Sel =
+  | { kind: "honored"; host: boolean }
+  | { kind: "benign" }
+  | { kind: "unchecked"; selector: string }
+  | { kind: "noted"; selector: string; gap: string }
+  | { kind: "unsupported"; selector: string; why: string };
+
+const INTERACTION = /:(hover|active|focus|focus-visible|focus-within)\b/;
+const PSEUDO_ELEMENT = /::|:(before|after|first-line|first-letter)\b/;
+const ATTRIBUTE = /\[[^\]]*\]/g;
+const ATTRIBUTE_VALUE = /\[(?:"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|\\[\s\S]|[^\]"'\\])*\]/g;
+const PSEUDO = /(::?)([a-zA-Z-]+)/g;
+const FUNCTIONAL = /:(not|is|where|matches|-webkit-any|has)\(/g;
+const LEGACY_PSEUDO_ELEMENTS = new Set(["before", "after", "first-line", "first-letter"]);
+
+/** True when a selector has a combinator (whitespace, `>`, `+`, `~`) outside brackets, parentheses and quotes. */
+function hasCombinator(s: string): boolean {
+  let depth = 0;
+  let quote = "";
+  for (const c of s) {
+    if (quote) {
+      if (c === quote) quote = "";
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === "(" || c === "[") depth++;
+    else if (c === ")" || c === "]") {
+      if (depth > 0) depth--;
+    } else if (depth === 0 && (c === " " || c === ">" || c === "+" || c === "~")) return true;
+  }
+  return false;
+}
+
+/** True when a selector styles the card itself: `ha-card`, `:host`, `:host ha-card`, `ha-card.x` (ThemeResolver.isHostSelector). */
+function isHostSelector(selector: string): boolean {
+  return splitTopLevel(selector, ",").some((raw) => {
+    const s = raw.trim().toLowerCase().replace(/\s+/g, " ");
+    return (
+      s === "ha-card" ||
+      s === ":host" ||
+      s === "." ||
+      s === ":host ha-card" ||
+      s === ":host > ha-card" ||
+      (s.startsWith("ha-card") &&
+        s.length > 7 &&
+        ".[#".includes(s[7]) &&
+        !INTERACTION.test(s) &&
+        !hasCombinator(s) &&
+        !PSEUDO_ELEMENT.test(s.replace(ATTRIBUTE, "[]")))
+    );
+  });
+}
+
+/** A selector with each attribute selector's value replaced by `…`, its name and operator kept (`[src^=…]`). */
+function redactAttributeValues(sel: string): string {
+  return sel.replace(ATTRIBUTE_VALUE, (m) => {
+    const inner = m.slice(1, -1);
+    const op = inner.match(/[~|^$*]?=/);
+    return op && op.index !== undefined ? `[${inner.slice(0, op.index + op[0].length)}…]` : m;
+  });
+}
+
+/** Each functional pseudo-class in a selector (`:not(`, `:is(`, ...) with the range of its parentheses. */
+function functionalGroups(sel: string): [string, number, number][] {
+  return [...sel.matchAll(FUNCTIONAL)].map((m) => {
+    const open = m.index! + m[0].length - 1;
+    let depth = 0;
+    let end = sel.length - 1;
+    for (let k = open; k < sel.length; k++) {
+      if (sel[k] === "(") depth++;
+      else if (sel[k] === ")" && --depth === 0) {
+        end = k;
+        break;
+      }
+    }
+    return [m[1], open, end];
+  });
+}
+
+/**
+ * True when the interaction state at `at` keeps the selector from matching at rest: it isn't inside a `:not()` or
+ * `:has()`, and inside each enclosing `:is()` / `:where()` every alternative has an interaction state too.
+ */
+function rulesOutRest(sel: string, at: number, groups: [string, number, number][], memo: Map<string, boolean>): boolean {
+  for (const [name, from, to] of groups) {
+    if (at < from || at > to) continue;
+    if (name === "not" || name === "has") return false;
+    const alternatives = splitTopLevel(sel.slice(from + 1, to), ",");
+    if (alternatives.some((alt) => !requiresInteraction(alt.trim(), memo))) return false;
+  }
+  return true;
+}
+
+function requiresInteraction(sel: string, memo: Map<string, boolean>): boolean {
+  const known = memo.get(sel);
+  if (known !== undefined) return known;
+  const groups = functionalGroups(sel);
+  const out = [...sel.matchAll(PSEUDO)].some((m) => m[1] === ":" && has(BENIGN_PSEUDO_CLASSES, m[2]) && rulesOutRest(sel, m.index!, groups, memo));
+  memo.set(sel, out);
+  return out;
+}
+
+/**
+ * One selector against what Vitro draws for its sheet. In a Markdown or clock sheet, the engine also checks that
+ * the selector matches an element Vitro rebuilds; this checker leaves that to the panel's report, so it reads any
+ * other selector there as applied. Those cards are built in, so it only changes a note, never the route.
+ */
+function classifySelector(sel: string, sheet: Sheet): Sel {
+  if (sel.includes(TPL)) return { kind: "unchecked", selector: sel.split(TPL).join("{{ … }}") };
+  const norm = sel.toLowerCase().replace(/\s+/g, " ");
+  if (sheet === "stack") {
+    // A stack has no ha-card of its own: `ha-card …` in its sheet matches nothing in HA either.
+    if (norm === ":host") return { kind: "honored", host: true };
+    if (norm.startsWith("ha-card") || norm.startsWith(":host ha-card") || norm.startsWith(":host > ha-card")) return { kind: "benign" };
+  } else if (isHostSelector(norm)) {
+    return { kind: "honored", host: true };
+  }
+  let benign = false;
+  let restLink = false;
+  const stripped = norm.replace(ATTRIBUTE_VALUE, "[]");
+  const groups = functionalGroups(stripped);
+  const memo = new Map<string, boolean>();
+  for (const m of stripped.matchAll(PSEUDO)) {
+    const name = m[2];
+    const element = m[1] === "::" || LEGACY_PSEUDO_ELEMENTS.has(name);
+    if (element && has(BENIGN_PSEUDO_ELEMENTS, name)) benign = true;
+    else if (element) return { kind: "unsupported", selector: sel, why: `pseudo-element \`::${name}\` isn't drawn natively` };
+    else if (name === "link") restLink = true;
+    else if (has(BENIGN_PSEUDO_CLASSES, name)) {
+      if (rulesOutRest(stripped, m.index!, groups, memo)) benign = true;
+    } else if (PSEUDO_CLASSES.has(name)) continue;
+    else if (name === "host") return { kind: "unsupported", selector: sel, why: "`:host` with a selector isn't modeled" };
+    else return { kind: "unsupported", selector: sel, why: `\`:${name}\` isn't evaluated natively` };
+  }
+  if (benign) return { kind: "benign" };
+  if (restLink && sheet !== "card" && sheet !== "stack") return { kind: "noted", selector: sel, gap: ":link" };
+  if (sheet === "card") return { kind: "unsupported", selector: sel, why: "it reaches inside the card, whose DOM Vitro doesn't model" };
+  if (sheet === "stack") return { kind: "unsupported", selector: sel, why: "it reaches inside the stack, whose DOM Vitro doesn't model" };
+  return { kind: "honored", host: false };
+}
+
+function checkSheet(type: string, key: string, rawCss: string, sheet: Sheet, reasons: Set<string>, propertyReasons: Set<string>, notes: Set<string>) {
+  // Template blocks go; expressions become a placeholder so the shape around them still parses.
+  const css = rawCss.replace(CSS_COMMENT, " ").replace(JINJA_BLOCK, " ").replace(JINJA_EXPR, TPL);
+  for (const at of topLevelAtRules(css)) {
+    if (!HARMLESS_AT_RULES.has(at)) reasons.add(`card_mod \`@${at}\` rules aren't evaluated natively`);
+  }
+  const rules = cssRules(css).map(({ selector, decls }) => ({
+    decls,
+    verdicts: splitTopLevel(selector, ",")
+      .map((p) => p.trim())
+      .filter((p) => p !== "")
+      .map((p) => classifySelector(p, sheet)),
+  }));
+  // Every rule on the card itself merges into one style, so the position that wins there pins the card for all of
+  // them; as in the browser, the last `!important` one wins, else the last one. The offsets settle the same way.
+  const hostDecls = rules.filter((r) => r.verdicts.some((v) => v.kind === "honored" && v.host)).flatMap((r) => r.decls);
+  const hostPlacement: Record<string, string> = {};
+  for (const name of PLACEMENT) {
+    const all = hostDecls.filter((d) => d.name === name);
+    const win = [...all].reverse().find((d) => d.important) ?? all[all.length - 1];
+    if (win) hostPlacement[name] = win.value.trim().toLowerCase();
+  }
+  const surfaceSheet = sheet === "card" || sheet === "markdownCard" || sheet === "clockCard";
+  if (surfaceSheet && (hostPlacement.position === "fixed" || hostPlacement.position === "absolute")) {
+    const problem = pinnedGeometryProblem(hostPlacement);
+    if (problem) propertyReasons.add(`card_mod \`${key}\` pinned card: ${problem}`);
+  }
+  const shownKey = redactAttributeValues(key);
+  for (const { decls, verdicts } of rules) {
+    // card-mod keeps `!important`; the cascade inside Markdown and the clock doesn't honor it yet.
+    if (sheet !== "card" && sheet !== "stack" && decls.some((d) => d.important) && verdicts.some((v) => v.kind === "honored")) {
+      notes.add(gap("!important", `card_mod \`${key}\` \`!important\``));
+    }
+    for (const v of verdicts) {
+      if (v.kind === "unsupported") reasons.add(`card_mod \`${shownKey}\` selector \`${redactAttributeValues(v.selector)}\`: ${v.why}`);
+      else if (v.kind === "unchecked") notes.add(gap("templated selector", `card_mod \`${shownKey}\` \`${redactAttributeValues(v.selector)}\``));
+      else if (v.kind === "noted") notes.add(gap(v.gap, `card_mod \`${shownKey}\` \`${redactAttributeValues(v.selector)}\``));
+    }
+    const honored = verdicts.filter((v): v is { kind: "honored"; host: boolean } => v.kind === "honored");
+    if (honored.length === 0) continue;
+    const host = honored.some((v) => v.host);
+    checkDeclarations(type, key, decls, sheet, host, host ? hostPlacement : {}, propertyReasons, notes);
+  }
+}
+
+const PINNED_SIZE = /^-?[\d.]+(px|dp|%|r?em)?$/;
+const TRANSLATE = /^(translate[xy]?)\((.*)\)$/;
+const CENTER_OR_ZERO = new Set(["-50%", "0", "0px", "0%"]);
+const BORDER_STYLE_WORDS = new Set(["dashed", "dotted", "double", "groove", "ridge", "inset", "outset"]);
+const GLOW = /^0(px)?\s+0(px)?\s/;
+
+/**
+ * A value as the report shows it, as the engine's `CardCompat.loggable` writes it: `url(…)`, a quoted string that
+ * looks like an address (in `image-set()` or anywhere) as `"…"`, and cut at 80 characters.
+ */
+function shownValue(value: string): string {
+  const safe = value
+    .trim()
+    .replace(/url\(\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|(?:\\.|[^)\\])*)\s*\)/gi, "url(…)")
+    .replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, (q) => {
+      const inner = q.slice(1, -1).trim();
+      return inner.includes("://") || inner.startsWith("/") || inner.includes("?") || inner.includes("=") || /image-set\(/i.test(value) ? '"…"' : q;
+    });
+  return safe.length <= 80 ? safe : `${safe.slice(0, 80)}…`;
+}
+
+/** Checks one rule's declarations against what Vitro draws for its sheet (CardCompat.checkDeclarations). */
+function checkDeclarations(
+  type: string,
+  key: string,
+  decls: Decl[],
+  sheet: Sheet,
+  host: boolean,
+  hostPlacement: Record<string, string>,
+  reasons: Set<string>,
+  notes: Set<string>,
+) {
+  const cascade = sheet !== "card" && sheet !== "stack";
+  const surface = sheet === "card" || (host && (sheet === "markdownCard" || sheet === "clockCard"));
+  const byName: Record<string, string> = {};
+  for (const d of decls) byName[d.name] = d.value.trim().toLowerCase();
+  const placement = host ? hostPlacement : byName;
+  const position = placement.position as string | undefined;
+  const pinned = position === "fixed" || position === "absolute";
+  for (const { name, value: rawValue } of decls) {
+    const shown = () => `\`${name}: ${shownValue(rawValue)}\``;
+    const value = rawValue.trim().toLowerCase();
+    // On the card itself only the placement that wins the cascade counts.
+    if (host && PLACEMENT.has(name) && hostPlacement[name] !== undefined && value !== hostPlacement[name]) continue;
+    // A templated or var() value can't be checked here: the property alone decides.
+    const checkable = !value.includes(TPL) && !value.includes("var(");
+    if (name.startsWith("--")) {
+      if (!cascade && !CARD_VARIABLES.has(name.slice(2))) notes.add(gap("card variable", `\`${name}\` on \`${type}\``));
+      continue;
+    }
+    const asCard = surface && (CARD_PROPERTIES.has(name) || (CARD_FONT_PROPERTIES.has(name) && FONT_SIZE_TYPES.has(type)));
+    const asStack = sheet === "stack" && STACK_PROPERTIES.has(name);
+    const asCascade = cascade && (CASCADE_PROPERTIES.has(name) || name === "position" || OFFSETS.includes(name));
+    if (!asCard && !asStack && !asCascade) {
+      const benignValues = has(BENIGN_VALUES, name) ? BENIGN_VALUES[name] : null;
+      if (has(BENIGN_PROPERTIES, name)) continue;
+      if (benignValues && benignValues.includes(value)) continue;
+      if (has(KNOWN_GAPS, name)) notes.add(gap(name, shown()));
+      // Offsets without a position do nothing in the browser either.
+      else if (OFFSETS.includes(name) && (position === undefined || position === "static")) continue;
+      else reasons.add(`card_mod \`${key}\` ${shown()} isn't supported here`);
+      continue;
+    }
+    if (!checkable) continue;
+    const problem = asCard ? checkCardValue(name, value, pinned, position, shown, notes) : asCascade ? checkCascadeValue(sheet, name, value, position, shown, notes) : null;
+    if (problem) reasons.add(`card_mod \`${key}\` ${shown()} ${problem}`);
+  }
+}
+
+/** Why a card-surface value can't be drawn, or null when it can. */
+function checkCardValue(name: string, value: string, pinned: boolean, position: string | undefined, shown: () => string, notes: Set<string>): string | null {
+  switch (name) {
+    case "background":
+    case "background-image":
+      return backgroundProblem(value, true);
+    case "border":
+      return value.split(/\s+/).some((w) => BORDER_STYLE_WORDS.has(w)) ? "isn't drawn natively (only solid borders)" : null;
+    case "position":
+      return ["fixed", "absolute", "static", "relative", "initial", "unset", "inherit"].includes(value) ? null : "isn't drawn natively";
+    case "top":
+    case "right":
+    case "bottom":
+    case "left":
+      if (pinned) return UNSET.has(value) || PINNED_SIZE.test(value) ? null : "isn't drawn natively (a pinned offset is px, rem or %)";
+      if (position !== undefined && position !== "static") notes.add(gap("position: relative", shown()));
+      return null;
+    case "width":
+      if (["auto", "100%", "initial", "unset"].includes(value)) return null;
+      if (!pinned) return "only applies to pinned (`position: fixed`) cards";
+      if (!PINNED_SIZE.test(value)) return "isn't drawn natively (a pinned width is px, rem or %)";
+      // As the engine reads it: a number that doesn't parse counts as positive, and zero or less is refused.
+      const n = Number(value.replace(/[a-z%]+$/, ""));
+      return (Number.isNaN(n) ? 1 : n) <= 0 ? "isn't drawn natively (a pinned width of zero)" : null;
+    case "height":
+      return ["auto", "100%", "initial", "unset", "inherit", "fit-content"].includes(value) ? null : "isn't drawn natively (only `auto` and `100%`)";
+    case "transform":
+      if (value === "none" || (pinned && centeredAxes(value) !== null)) return null;
+      return "isn't drawn natively (only centering a pinned card at `left: 50%` / `top: 50%`)";
+    case "box-shadow":
+      if (value === "none") return null;
+      if (value.includes("inset")) return "isn't drawn natively (inset shadow)";
+      if (GLOW.test(value)) notes.add(gap("box-shadow: glow", shown()));
+      return null;
+    default:
+      return null;
+  }
+}
+
+/** Which axes a pinned card's transform centers, or null for a transform the overlay can't apply. */
+function centeredAxes(value: string): [boolean, boolean] | null {
+  if (value === "none") return [false, false];
+  let x = 0;
+  let y = 0;
+  for (const fn of splitTopLevel(value, " ").filter((f) => f.trim() !== "")) {
+    const m = fn.match(TRANSLATE);
+    if (!m) return null;
+    const args = splitTopLevel(m[2], ",").map((a) => a.trim());
+    const maxArgs = m[1] === "translate" ? 2 : 1;
+    if (args.length < 1 || args.length > maxArgs || args.some((a) => !CENTER_OR_ZERO.has(a))) return null;
+    if (m[1] === "translate") {
+      if (args[0] === "-50%") x++;
+      if (args[1] === "-50%") y++;
+    } else if (m[1] === "translatex" && args[0] === "-50%") x++;
+    else if (m[1] === "translatey" && args[0] === "-50%") y++;
+  }
+  return x > 1 || y > 1 ? null : [x === 1, y === 1];
+}
+
+/** Why the overlay can't place a pinned card the way HA does, or null when it can. */
+function pinnedGeometryProblem(placement: Record<string, string>): string | null {
+  const inset = (n: string) => (placement[n] !== undefined && !UNSET.has(placement[n]) ? placement[n] : null);
+  const left = inset("left");
+  const right = inset("right");
+  const top = inset("top");
+  const bottom = inset("bottom");
+  const width = placement.width !== undefined && !UNSET.has(placement.width) ? placement.width : null;
+  const [cx, cy] = (placement.transform !== undefined ? centeredAxes(placement.transform) : null) ?? [false, false];
+  if ((cx && (left !== "50%" || right !== null)) || (cy && (top !== "50%" || bottom !== null))) {
+    return "isn't drawn natively (only centering a pinned card at `left: 50%` / `top: 50%`)";
+  }
+  if (left !== null && right !== null && width === null) return "`left` and `right` without a `width` stretch it between them, which the overlay doesn't draw";
+  if (top !== null && bottom !== null) return "`top` and `bottom` stretch it between them, which the overlay doesn't draw";
+  return null;
+}
+
+/** Why a value in a Markdown or clock sheet can't be drawn, or null when it can. */
+function checkCascadeValue(sheet: Sheet, name: string, value: string, position: string | undefined, shown: () => string, notes: Set<string>): string | null {
+  switch (name) {
+    case "display":
+      return sheet === "clockCard" || sheet === "clockDigital" || MARKDOWN_DISPLAY.has(value) ? null : "isn't laid out natively";
+    case "background":
+    case "background-color":
+      return backgroundProblem(value, false);
+    case "white-space":
+      if (value === "nowrap") notes.add(gap("white-space: nowrap", shown()));
+      return null;
+    case "position":
+      if (value === "static" || value === "initial" || value === "unset") return null;
+      if (value === "relative") {
+        notes.add(gap("position: relative", shown()));
+        return null;
+      }
+      return "isn't laid out natively";
+    case "top":
+    case "right":
+    case "bottom":
+    case "left":
+      return position === undefined || position === "static" || position === "relative" ? null : "isn't laid out natively";
+    case "overflow":
+    case "overflow-x":
+    case "overflow-y":
+      return ["hidden", "clip", "visible", "initial", "unset"].includes(value) ? null : "isn't drawn natively (no scrolling inside a card)";
+    default:
+      return null;
+  }
+}
+
+function backgroundProblem(value: string, allowGradient: boolean): string | null {
+  if (value.includes("url(") || value.includes("image-set(")) return "isn't drawn natively (background images)";
+  if (value.includes("radial-gradient") || value.includes("conic-gradient") || value.includes("repeating-")) return "isn't drawn natively (only linear gradients)";
+  if (!allowGradient && value.includes("gradient")) return "isn't drawn natively (no gradients inside Markdown)";
+  if (splitTopLevel(value, ",").length > 1) return "isn't drawn natively (layered backgrounds)";
+  return null;
+}
+
+// ---- The dashboard (CompatChecker.walk) ----
+
+/**
+ * Walks one card the way the engine's checker does: an island draws everything inside it, so its cards aren't
+ * listed; a native card's children are. A container that builds its children natively isn't counted itself.
+ * `holdsGenerated`: the card is auto-entities' inner card under `card_param: cards`, whose first `holdsGenerated`
+ * cards are the explicit `entities:` entries (the ones its filter adds depend on live states).
+ */
+function walkCard(card: Obj, loc: string, view: ViewAudit, holdsGenerated = -1) {
+  const type = cardType(card);
+  if (!("type" in card) || card.type === null || card.type === "") view.warnings.push(`${loc}: no \`type\`, so Vitro draws it as an entities card`);
+  const v = verdict(card);
+  for (const note of v.notes) view.warnings.push(`${loc}: ${note}`);
+  if (!v.native) {
+    view.tier3++;
+    view.triggers.push({ view: view.name, path: loc, type, reasons: v.reasons });
     return;
   }
-  const type = typeof card.type === "string" ? card.type.trim() : "";
-  cardModWarning(card, loc, view.warnings);
-
-  // A native card type in a configuration Vitro doesn't draw (a Bubble Card pop-up) is a web card when its script
-  // is installed, as the engine routes it.
-  // Own keys only: a card typed `constructor` or `__proto__` is an unknown card, not an inherited rule.
-  const rule = Object.prototype.hasOwnProperty.call(CONFIG_DEPENDENT, type) ? CONFIG_DEPENDENT[type] : undefined;
-  if (rule) {
-    const raw = card[rule.option];
-    const given = typeof raw === "string" && raw.trim() ? raw.trim() : rule.default;
-    // The engine reads layout-card's `layout_type` with or without `custom:`; Bubble Card's `card_type` as written.
-    const value = rule.option === "layout_type" ? given.replace(/^custom:/, "") : given;
-    if (!rule.native.includes(value)) {
-      view.tier3++;
-      view.triggers.push({ view: view.name, path: loc, type: `${type} (${rule.option}: ${value})` });
-      return;
-    }
+  if (holdsGenerated >= 0 && CARDS_FIELD.has(type)) {
+    for (const [i, child] of producedCards(card, false)) if (i < holdsGenerated) walkCard(child, `${loc}.entities[${i}]`, view);
+    return;
   }
-
-  if (type === "tile" && Array.isArray(card.features)) {
-    for (const f of card.features) {
-      const ft = isObj(f) ? (typeof f.type === "string" ? f.type : "") : String(f);
-      if (ft && !TILE_FEATURES.has(ft)) view.warnings.push(`${loc}: tile feature '${ft}' is not rendered natively yet`);
-    }
+  const children = producedCards(card, false);
+  if (!(CONTAINERS.has(type) && children.length > 0)) {
+    if (CORE.has(type)) view.tier1++;
+    else view.tier2++;
   }
-
-  if (CONTAINERS.has(type)) {
-    let children: unknown[] = Array.isArray(card.cards) ? card.cards : [];
-    if (children.length === 0 && isObj(card.card)) children = [card.card];
-    if (children.length > 0) {
-      children.forEach((child, i) => walkCard(child, `${loc}.${type}[${i}]`, view));
-      return;
-    }
+  const explicit = generatesCards(card, type) ? (Array.isArray(card.entities) ? card.entities.length : 0) : -1;
+  for (const [i, child] of children) {
+    const where = type === "custom:auto-entities" ? `${loc}.card` : `${loc}.${type}[${i}]`;
+    walkCard(child, where, view, explicit);
   }
-
-  if (NATIVE_CORE.has(type)) view.tier1++;
-  else if (NATIVE_HACS.has(type)) {
-    view.tier2++;
-    if (type === "custom:auto-entities") walkAutoEntities(card, loc, view);
-  } else {
-    view.tier3++;
-    view.triggers.push({ view: view.name, path: loc, type: type || "<missing>" });
-  }
-}
-
-/**
- * The cards auto-entities builds at runtime, as the engine builds them: its inner card (`entities` when it names
- * none, without the field `card_param` fills in) and, with `card_param: cards`, one card per explicit `entities:`
- * entry (`tile` unless it names a type, its `entity` taken out) and per include rule's `options`.
- */
-function walkAutoEntities(card: Obj, loc: string, view: ViewAudit) {
-  const inner: Obj = isObj(card.card) ? { ...card.card } : {};
-  if (typeof inner.type !== "string" || !inner.type) inner.type = "entities";
-  const param = typeof card.card_param === "string" && card.card_param ? card.card_param : "entities";
-  delete inner[param];
-  walkCard(inner, `${loc}.card`, view);
-  if (param !== "cards") return;
-  const entries = Array.isArray(card.entities) ? card.entities : [];
-  entries.forEach((e, i) => {
-    if (typeof e === "string") walkCard({ type: "tile" }, `${loc}.entities[${i}]`, view);
-    else if (isObj(e)) {
-      const built: Obj = { type: "tile", ...e };
-      delete built.entity;
-      walkCard(built, `${loc}.entities[${i}]`, view);
-    }
-  });
-  const rules = isObj(card.filter) && Array.isArray(card.filter.include) ? card.filter.include : [];
-  rules.forEach((r, i) => {
-    if (isObj(r) && isObj(r.options)) walkCard({ type: "tile", ...r.options }, `${loc}.include[${i}].options`, view);
-  });
 }
 
 /** Finds the `{ views: [...] }` object in a pasted Lovelace config or a lovelace/config response. */
@@ -637,6 +1265,15 @@ function unwrap(data: unknown): unknown {
     d = inner;
   }
   return d;
+}
+
+/** The view's type as the engine infers it: its `type`, else `panel` with `panel: true`, `sections` with sections. */
+function viewType(v: Obj, sections: Obj[]): string {
+  const explicit = optString(v, "type", "");
+  if (explicit) return explicit;
+  // `panel` as org.json's optBoolean reads it: true, or the text "true" in any case.
+  if (v.panel === true || (typeof v.panel === "string" && v.panel.toLowerCase() === "true")) return "panel";
+  return sections.length > 0 ? "sections" : "masonry";
 }
 
 export function auditDashboard(input: string): VitroAuditResult {
@@ -658,13 +1295,31 @@ export function auditDashboard(input: string): VitroAuditResult {
   data.views.forEach((v, vi) => {
     if (!isObj(v)) return;
     const name = String(v.path ?? v.title ?? `view_${vi}`);
-    const view: ViewAudit = { name, type: typeof v.type === "string" ? v.type : "masonry", tier1: 0, tier2: 0, tier3: 0, native: true, triggers: [], warnings: [] };
-    const sections = Array.isArray(v.sections) ? v.sections : [];
-    sections.forEach((sec, si) => {
-      if (!isObj(sec) || !Array.isArray(sec.cards)) return;
-      sec.cards.forEach((card, ci) => walkCard(card, `${name}/section[${si}]/card[${ci}]`, view));
-    });
-    if (Array.isArray(v.cards)) v.cards.forEach((card, ci) => walkCard(card, `${name}/card[${ci}]`, view));
+    const sections = objects(v.sections);
+    const type = viewType(v, sections);
+    const view: ViewAudit = { name, type, tier1: 0, tier2: 0, tier3: 0, native: true, triggers: [], warnings: [] };
+    const each = (list: unknown, loc: (i: number) => string) => {
+      (Array.isArray(list) ? list : []).forEach((card, i) => {
+        if (isObj(card)) walkCard(card, loc(i), view);
+        else view.warnings.push(`${loc(i)}: not a card (expected a map with a type), skipped`);
+      });
+    };
+    // The cards the engine builds for a view: a panel view's first card, a sections view's section cards, or else the
+    // view's own cards.
+    const cards = Array.isArray(v.cards) ? v.cards : [];
+    const cardObjects = cards.filter(isObj);
+    if (type === "panel" && cardObjects.length > 0) {
+      // The engine parses only the objects in `cards:`, so a panel view's card is the first of those.
+      const first = cards.indexOf(cardObjects[0]);
+      walkCard(cardObjects[0], `${name}/card[${first}]`, view);
+      if (cardObjects.length > 1) {
+        view.warnings.push(`${name}: a panel view shows only its first card, so the other ${cardObjects.length - 1} aren't checked`);
+      }
+    } else if (type === "sections" && sections.length > 0) {
+      sections.forEach((sec, si) => each(sec.cards, (ci) => `${name}/section[${si}]/card[${ci}]`));
+    } else {
+      each(cards, (ci) => `${name}/card[${ci}]`);
+    }
     view.native = view.tier3 === 0;
     views.push(view);
   });

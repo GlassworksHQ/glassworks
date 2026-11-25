@@ -100,18 +100,6 @@
     "name": "Home"
    }
   ],
-  "history": {
-   "sensor.living_room_temperature": {
-    "wave": {
-     "min": 19.6,
-     "max": 23.4,
-     "period": "24h",
-     "step": "10m",
-     "decimals": 2,
-     "phase": 4.4
-    }
-   }
-  },
   "forecast": {
    "weather.forecast_home": {
     "daily": [

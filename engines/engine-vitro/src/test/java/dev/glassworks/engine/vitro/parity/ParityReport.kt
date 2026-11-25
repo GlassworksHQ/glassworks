@@ -95,14 +95,21 @@ object ParityCompare {
      * Where [needle] first occurs in [haystack] at or after [from], ignoring case, as an index into [haystack] itself:
      * chars are folded one by one, so the index stays valid for [VitroText.offsets]. -1 when absent.
      */
-    fun indexOfFolded(haystack: String, needle: String, from: Int = 0): Int {
+    fun indexOfFolded(haystack: String, needle: String, from: Int = 0, whole: Boolean = false): Int {
         if (needle.isEmpty()) return if (from <= haystack.length) from else -1
         outer@ for (i in from.coerceAtLeast(0)..haystack.length - needle.length) {
             for (j in needle.indices) if (fold(haystack[i + j]) != fold(needle[j])) continue@outer
+            if (whole && (haystack.getOrNull(i - 1)?.isLetterOrDigit() == true || haystack.getOrNull(i + needle.length)?.isLetterOrDigit() == true)) continue
             return i
         }
         return -1
     }
+
+    /**
+     * A run of one or two letters or digits (an avatar's initial, a badge) is matched only as a word of its own: the
+     * "A" of a user's avatar must not be found inside "9:48 AM" and use that text up.
+     */
+    fun standalone(needle: String): Boolean = needle.length <= 2 && needle.all { it.isLetterOrDigit() }
 
     fun measure(case: ParityCase, frame: ParityFrame, ref: ParityReference, render: VitroRender): Pair<ParityMeasure, Bitmap> {
         val d = frame.density
@@ -150,7 +157,7 @@ object ParityCompare {
             var hit: Pair<VitroText, Int>? = null
             var elidedHit: Pair<VitroText, Int>? = null
             for (vt in candidates) {
-                val idx = indexOfFolded(vt.normalized, needle, used[vt] ?: 0)
+                val idx = indexOfFolded(vt.normalized, needle, used[vt] ?: 0, whole = standalone(needle))
                 if (idx < 0) continue
                 val cut = ParityViews.elided(vt.view, vt.offsets[idx], vt.offsets[idx + needle.length - 1] + 1) && !haCut
                 if (!cut) { hit = vt to idx; break }
@@ -162,7 +169,7 @@ object ParityCompare {
                 continue
             }
             if (hit == null) {
-                val drawn = describedTexts[t.slot].orEmpty().any { indexOfFolded(it, needle) >= 0 }
+                val drawn = describedTexts[t.slot].orEmpty().any { indexOfFolded(it, needle, whole = standalone(needle)) >= 0 }
                 texts += TextCheck(t.text, t.size, null, null, null, described = drawn)
                 continue
             }

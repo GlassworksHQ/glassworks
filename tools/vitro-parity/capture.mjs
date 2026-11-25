@@ -46,7 +46,7 @@ import { aliasPaths, assetDestination, canonicalPath, capturableImage, staleAsse
 import { applyEntityEvent, unmetExpectations } from './lib/states.mjs';
 import { imageOutcomes, noteSaved } from './lib/images.mjs';
 import { buildDisplay, referencedAreas } from './lib/display.mjs';
-import { wsRecorder, snapshotCalls, pendingOneShots, pendingFirstEvents, restHistoryRequest } from './lib/wsdata.mjs';
+import { wsRecorder, snapshotCalls, pendingOneShots, pendingFirstEvents, restHistoryRequest, keepCall } from './lib/wsdata.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
 import { FIXTURE_PREFIX, fixtureFile, fixtureResources } from './lib/fixtures.mjs';
 import { captureMode, capturedWithTouch } from './lib/pointer.mjs';
@@ -988,7 +988,7 @@ async function capture() {
             drawnStates = snapshotStates(states, ids);
             // The history and statistics the graphs drew, as of the screenshot (an answer after it would be data HA
             // never showed: the same check as the states).
-            drawnGraphs = snapshotCalls(graphs.calls);
+            drawnGraphs = snapshotCalls(graphs.calls).filter((call) => keepCall(call, fakeMode, config));
             // The images the screenshot shows, read just before it and checked again after (bracketed like the
             // states): saved for Vitro's fixture server after the checks.
             drawn = await page.evaluate(DRAWN_IMAGES_JS, slots);
@@ -1011,7 +1011,7 @@ async function capture() {
             // One instant for the PNG, its states and its images: anything that moved meanwhile starts it over.
             const sameStates = JSON.stringify(snapshotStates(states, ids)) === JSON.stringify(drawnStates);
             const sameImages = JSON.stringify(await page.evaluate(DRAWN_IMAGES_JS, slots)) === JSON.stringify(drawn);
-            const sameGraphs = JSON.stringify(graphs.calls) === JSON.stringify(drawnGraphs);
+            const sameGraphs = JSON.stringify(graphs.calls.filter((call) => keepCall(call, fakeMode, config))) === JSON.stringify(drawnGraphs);
             // Only the drawn images' bodies: another card loading a picture meanwhile changes nothing here.
             const drawnPaths = drawn.drawn.map((url) => { try { const u = new URL(url); return u.origin === creds.origin ? u.pathname : null; } catch { return null; } }).filter(Boolean);
             const sameBodies = drawnPaths.every((p) => images.loaded.get(p) === loadedAtShot.get(p));
