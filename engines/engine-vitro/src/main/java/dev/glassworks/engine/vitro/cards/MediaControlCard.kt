@@ -134,7 +134,7 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
         }
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         // HA's _measureCard: narrow under 350 px, very narrow under 300.
         if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
             val w = MeasureSpec.getSize(widthMeasureSpec) / ctx.dp
@@ -146,7 +146,7 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
                 render(last)
             }
         }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
     }
 
     private fun label(sp: Float, weight: Int): TextView = TextView(ctx.context).apply {

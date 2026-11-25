@@ -1268,7 +1268,7 @@ class AreaCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         renewing { ctx.store.subscribeAny { changed -> if (changed.any { it in watched }) ctx.main.post { render() } } }
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         if (displayType != "compact") {
             // In a grid the header takes the height the row leaves; elsewhere it keeps the aspect ratio (16:9).
             val lp = header.layoutParams as LinearLayout.LayoutParams
@@ -1283,7 +1283,7 @@ class AreaCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             if (colLp.bottomMargin != over) colLp.bottomMargin = over
             clipToPadding = !grid
         }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
     }
 
     /** ha-tile-container: a 36 px icon 10 px in, the name 14 px / 500 and the sensors line, 56 px tall. */

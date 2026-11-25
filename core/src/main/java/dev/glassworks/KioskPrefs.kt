@@ -132,10 +132,48 @@ class KioskPrefs(
     val lanSetupArmed: Boolean
         get() = haSeen && System.currentTimeMillis() < lanSetupUntil
 
-    /** Experimental native Lovelace rendering engine (Vitro): off by default, read once at process start. */
+    /**
+     * Experimental native Lovelace rendering engine (Vitro): off by default, read once at process start. Written with
+     * commit(): the app restarts for it, and an async write could be lost with the process. Turning it on clears
+     * what [VitroSentinel] recorded, so Vitro starts again with a clean slate.
+     */
     var vitroEnabled: Boolean
         get() = sp.getBoolean(KEY_VITRO_ENABLED, false)
-        set(v) = sp.edit().putBoolean(KEY_VITRO_ENABLED, v).apply()
+        set(v) {
+            val e = sp.edit().putBoolean(KEY_VITRO_ENABLED, v)
+            if (v) e.remove(KEY_VITRO_STRIKES).remove(KEY_VITRO_OFF_REASON).remove(KEY_VITRO_OFF_AT).remove(KEY_VITRO_OFF_NOTICE)
+            e.commit()
+        }
+
+    /** Crashes in a row soon after a start with Vitro on ([VitroSentinel]); 0 once a start stays up. */
+    var vitroCrashStrikes: Int
+        get() = sp.getInt(KEY_VITRO_STRIKES, 0)
+        set(v) {
+            if (v == 0) sp.edit().remove(KEY_VITRO_STRIKES).commit() else sp.edit().putInt(KEY_VITRO_STRIKES, v).commit()
+        }
+
+    /** [VitroSentinel] turned Vitro off: why (the exception and where it came from), and when (ms since the epoch). */
+    class VitroTurnedOff(val reason: String, val atMs: Long)
+
+    /** What [turnVitroOffAfterCrashes] recorded, while Vitro stays off; null once it's turned on again. */
+    val vitroTurnedOff: VitroTurnedOff?
+        get() = sp.getString(KEY_VITRO_OFF_REASON, null)?.takeUnless { vitroEnabled }?.let { VitroTurnedOff(it, sp.getLong(KEY_VITRO_OFF_AT, 0L)) }
+
+    /**
+     * Turns Vitro off after it crashed the app at start again and again ([VitroSentinel]), and keeps why for the
+     * Labs page and a notice at the next start. One commit(), from the crashing thread: the process ends right after.
+     */
+    fun turnVitroOffAfterCrashes(reason: String, atMs: Long): Boolean =
+        sp.edit().putBoolean(KEY_VITRO_ENABLED, false).remove(KEY_VITRO_STRIKES)
+            .putString(KEY_VITRO_OFF_REASON, reason).putLong(KEY_VITRO_OFF_AT, atMs).putBoolean(KEY_VITRO_OFF_NOTICE, true)
+            .commit()
+
+    /** Whether the panel still has to say that Vitro was turned off ([turnVitroOffAfterCrashes]), cleared as it's read. */
+    fun takeVitroOffNotice(): Boolean {
+        val pending = sp.getBoolean(KEY_VITRO_OFF_NOTICE, false)
+        if (pending) sp.edit().remove(KEY_VITRO_OFF_NOTICE).commit()
+        return pending
+    }
 
     /** The panel has been online over Wi-Fi at least once (the boot screen's "Connecting to Wi-Fi…" hint). */
     var wifiSeen: Boolean
@@ -511,6 +549,10 @@ class KioskPrefs(
 
         const val KEY_URL = "url"
         const val KEY_VITRO_ENABLED = "vitro_enabled"
+        private const val KEY_VITRO_STRIKES = "vitro_crash_strikes"
+        private const val KEY_VITRO_OFF_REASON = "vitro_off_reason"
+        private const val KEY_VITRO_OFF_AT = "vitro_off_at"
+        private const val KEY_VITRO_OFF_NOTICE = "vitro_off_notice"
         const val KEY_UPDATE_CHANNEL = "update_channel"
         const val KEY_HA_SEEN = "ha_seen"
         const val KEY_WIFI_SEEN = "wifi_seen"

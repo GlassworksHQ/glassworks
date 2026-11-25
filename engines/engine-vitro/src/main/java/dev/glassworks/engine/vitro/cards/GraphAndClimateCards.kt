@@ -445,14 +445,14 @@ class GaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         }
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         // A fixed grid height: the gauge also fits the height the name leaves (`100cqh * 100 / 55`).
         dial.maxHeightPx = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
             (MeasureSpec.getSize(heightMeasureSpec) - paddingTop - paddingBottom - ctx.px(12f) * 2 - ctx.px(28f)).coerceAtLeast(0)
         } else {
             Int.MAX_VALUE
         }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
     }
 
     private fun render(s: EntityState?) {
@@ -1097,6 +1097,13 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         }
         val text: String
         var iconName: String? = null
+        // A humidity an integration reports as text ("55", or a word) is a number only if it reads as one: no cast
+        // that throws on the main thread for a template or custom weather entity.
+        val humidity = when (val h = s?.attributes?.get("humidity")) {
+            is Number -> h.toDouble()
+            is String -> h.trim().toDoubleOrNull()
+            else -> null
+        }?.takeIf { it.isFinite() }
         when {
             high != null || low != null -> text = listOfNotNull(high, low).joinToString(" / ") { "${formatNumber(it)} $unit" }
             forecast.firstOrNull()?.precipitation != null -> {
@@ -1104,8 +1111,8 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 text = "${formatNumber(forecast.first().precipitation!!)} $precipUnit".trim()
                 iconName = "mdi:weather-rainy"
             }
-            s?.attributes?.get("humidity") != null -> {
-                text = "${formatNumber((s.attributes["humidity"] as Number).toDouble())}%"
+            humidity != null -> {
+                text = "${formatNumber(humidity)}%"
                 iconName = "mdi:water-percent"
             }
             else -> text = ""
@@ -1150,13 +1157,13 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         forecastRow.contentDescription = "Forecast in $unit"
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val t = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY && MeasureSpec.getSize(heightMeasureSpec) / ctx.dp >= 235f
         if (t != tall) {
             tall = t
             applySize()
         }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
     }
 
     private fun applySize() {

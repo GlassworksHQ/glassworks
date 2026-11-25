@@ -22,6 +22,7 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import dev.glassworks.engine.vitro.VitroFailures
 import dev.glassworks.engine.vitro.cards.AlarmPanelCardView
 import dev.glassworks.engine.vitro.cards.CustomButtonCardView
 import dev.glassworks.engine.vitro.cards.HaErrorCardView
@@ -1332,6 +1333,18 @@ class VitroView(
         val rowHeight = dim("ha-section-grid-row-height", 56f)
         val columns = 12 * span
         val grid = HaGridLayout(context, columns, px(colGap), px(rowGap), stretch = true)
+        // A card that throws past its own guards (one that isn't a CardSurface) becomes HA's error card in its slot.
+        val slotCards = java.util.IdentityHashMap<View, CardConfig>()
+        grid.onChildFailed = { child ->
+            val card = slotCards.remove(child)
+            val i = grid.indexOfChild(child)
+            if (card != null && i >= 0) {
+                val lp = child.layoutParams
+                grid.removeViewAt(i)
+                // Its visibility conditions still hold: a hidden card stays hidden as the error card.
+                grid.addView(wrapVisibility(card, errorCard(card, ctx), ctx), i, lp)
+            }
+        }
         section.title?.let { title ->
             grid.addView(TextView(context).apply {
                 text = title
@@ -1347,8 +1360,11 @@ class VitroView(
                 grid.addView(wrapVisibility(card, View(context), ctx), HaGridLayout.LayoutParams(columns))
                 continue
             }
-            val size = HaGridSize.of(card, stateForBuild(card))
-            val cardView = wrapVisibility(card, buildCard(card, ctx, fillViewport = false, layout = "grid"), ctx)
+            val built = buildCard(card, ctx, fillViewport = false, layout = "grid")
+            // A card that failed to build takes hui-error-card's size (its grid_options still apply), as in HA.
+            val size = HaGridSize.of(if (built is ErrorCardView) card.copy(type = ErrorCardView.TYPE) else card, stateForBuild(card))
+            val cardView = wrapVisibility(card, built, ctx)
+            slotCards[cardView] = card
             cacheCardAsLayer(cardView, ctx)
             val fixed = size.rows?.let { r -> px(r * (rowHeight + rowGap) - rowGap) }
             grid.addView(cardView, HaGridLayout.LayoutParams(size.columns?.coerceAtMost(columns) ?: columns, fixed))
@@ -1507,12 +1523,28 @@ class VitroView(
         ctx.cardLayout = layout
         try {
             return buildCardWithVars(card, ctx, fillViewport, childBuilder, stackMod)
+        } catch (e: Exception) {
+            // One card that can't be built is HA's error card in its slot: the rest of the view builds as before.
+            VitroFailures.report("build", card.type, e)
+            return errorCard(card, parentCtx)
         } finally {
             inheritedCardVars = outerVars
             ctx.cardVars = outerCtxVars
             ctx.cardLayout = outerLayout
         }
     }
+
+    /** HA's error card for [card], or an empty view if even that can't be made (a theme it can't read). */
+    private fun errorCard(card: CardConfig, ctx: VitroCardContext): View =
+        try {
+            ErrorCardView(ctx, card)
+        } catch (e: Exception) {
+            VitroFailures.report("build", ErrorCardView.TYPE, e)
+            View(context)
+        }
+
+    /** Tests: a card of their own for a config (one that throws), before Vitro's; null for Vitro's. */
+    internal var testCards: ((CardConfig, VitroCardContext) -> View?)? = null
 
     /** Card-scoped custom properties in force while building the current card's children. */
     private var inheritedCardVars: Map<String, String> = emptyMap()
@@ -1542,7 +1574,7 @@ class VitroView(
             }
         }
         // Anything outside Vitro's supported set goes to an island on purpose (CardCompat), decided once per card.
-        val built: View = if (card.inIsland(IslandScripts.of(ctx.resources))) {
+        val built: View = testCards?.invoke(card, ctx) ?: if (card.inIsland(IslandScripts.of(ctx.resources))) {
             WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(card, fillViewport))
         } else when (card.type) {
             // Layout containers
@@ -1651,6 +1683,12 @@ class VitroView(
             "custom:weather-card" -> LegacyWeatherCardView(ctx, card)
             // Tier 3: Arbitrary unrecognized custom cards -> stripped Micro-Web Island
             else -> WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(card, fillViewport))
+        }
+        (built as? CardSurface)?.let { surface ->
+            // A conditional's child keeps its own type.
+            if (surface.cardType == null) surface.cardType = card.type
+            // Its first render threw (and was contained): HA's error card, sized as one, rather than the half-made card.
+            if (surface.failure != null && surface !is ErrorCardView) return errorCard(card, ctx)
         }
         // An island that loads card-mod styles its card itself: styling the native frame too would apply it twice
         // (a 0.5 opacity would show as 0.25). Only for the island drawing this card: a `conditional` returns its

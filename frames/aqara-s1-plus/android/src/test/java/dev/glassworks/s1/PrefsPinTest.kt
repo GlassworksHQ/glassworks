@@ -123,6 +123,10 @@ class PrefsPinTest {
         kiosk.carryOverApiKey(ByteArray(32) { 1 })
         kiosk.markSetupUpAtRestart(true) // the setup screen across the app's own restart (#621's Mirror run)
         kiosk.takeSetupUpAtRestart()
+        // VitroSentinel: Vitro turned off after crashes at start, its record, and the one-time notice
+        kiosk.turnVitroOffAfterCrashes("ClassCastException in WeatherCardView.showMetric", 1_700_000_000_000L)
+        kiosk.vitroTurnedOff
+        kiosk.takeVitroOffNotice()
         PanePrefs.PANE_FILES.keys.forEach(panes::paneFile)
         kiosk.remoteDebugging(BuildConfig.DEBUG) // the default the runtime passes (GlassworksRuntime.build)
         // #691: a custom theme's palettes, saved and cleared
@@ -260,6 +264,7 @@ class PrefsPinTest {
             "KioskPrefs.setCustomTheme",
             "KioskPrefs.setHaDark",
             "KioskPrefs.setHaColors",
+            "KioskPrefs.turnVitroOffAfterCrashes",
         )
     }
 }

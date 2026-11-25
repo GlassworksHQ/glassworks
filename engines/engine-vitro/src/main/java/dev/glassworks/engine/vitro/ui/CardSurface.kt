@@ -8,6 +8,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
@@ -21,6 +22,8 @@ import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
 import dev.glassworks.auth.OAuth
 import dev.glassworks.engine.Page
+import dev.glassworks.engine.vitro.GuardedHandler
+import dev.glassworks.engine.vitro.VitroFailures
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.ForecastDay
@@ -112,7 +115,8 @@ class VitroCardContext(
     val touch: Boolean = true,
 ) {
     val dp: Float = context.resources.displayMetrics.density
-    val main: Handler = Handler(Looper.getMainLooper())
+    /** The main thread, for the card's own updates: one that throws is logged and dropped ([GuardedHandler]). */
+    val main: Handler = GuardedHandler(Looper.getMainLooper())
 
     /**
      * CSS custom properties in force for the card being built: the ones its enclosing cards and its own `card_mod`
@@ -174,9 +178,25 @@ class VitroCardContext(
      * a `confirmation`, a native dialog asks first and the action only runs on Confirm.
      */
     fun performAction(action: ActionConfig, defaultEntityId: String?) {
+        // A tap runs in its own message, outside the card's guards: a throw here is logged, the tap does nothing.
+        try {
+            performActionNow(action, defaultEntityId)
+        } catch (e: Exception) {
+            VitroFailures.report("action", null, e)
+        }
+    }
+
+    private fun performActionNow(action: ActionConfig, defaultEntityId: String?) {
         val prompt = action.confirmation
         if (prompt != null && action.action != "none") {
-            confirmThen(prompt) { runAction(action, defaultEntityId) }
+            // The dialog's button runs on its own message, outside [performAction]'s guard.
+            confirmThen(prompt) {
+                try {
+                    runAction(action, defaultEntityId)
+                } catch (e: Exception) {
+                    VitroFailures.report("action", null, e)
+                }
+            }
             return
         }
         runAction(action, defaultEntityId)
@@ -666,6 +686,155 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
 
     init {
         applyTheme(ctx.theme)
+        // Every card's draw goes through [draw], where a throw is caught: a ViewGroup that draws nothing of its own
+        // would have Android call [dispatchDraw] alone.
+        setWillNotDraw(false)
+    }
+
+    // ---- containment: a card that throws shows HA's error card in its place and takes nothing else down
+
+    /** The card's type (`tile`, `custom:bubble-card`), for the log when it fails. The view sets it once it's built. */
+    var cardType: String? = null
+
+    /**
+     * What the card threw, once it has: from then on it is HA's error card ([showErrorTile]), and its own measure,
+     * layout, draw and updates no longer run. Null while it works.
+     */
+    var failure: Throwable? = null
+        private set
+
+    /** The error card is in place of the card's own views (the swap waits for the next message after a [fail]). */
+    private var errorTileShown = false
+
+    /**
+     * The card threw at [where]: it's logged once ([VitroFailures]) and the card becomes HA's error card. The swap
+     * waits for the next main-thread message, outside the measure, layout or draw it failed in; until then the card
+     * draws nothing. Only the first failure counts.
+     */
+    internal fun fail(where: String, error: Throwable) {
+        if (failure != null) return
+        failure = error
+        VitroFailures.report(where, cardType, error)
+        ctx.main.post { if (!errorTileShown) runCatching { showErrorTile() } }
+    }
+
+    /**
+     * Runs [block], the card's own code outside its build (a state update, a template's answer): a throw turns the
+     * card into HA's error card instead of reaching the main looper. Nothing runs once the card has failed.
+     */
+    protected fun guarded(where: String, block: () -> Unit) {
+        if (failure != null) return
+        try {
+            block()
+        } catch (e: Exception) {
+            fail(where, e)
+        }
+    }
+
+    /**
+     * Replaces the card's views with HA's error card (hui-error-card): its subscriptions end and its listeners go, so
+     * nothing of the card's own runs again. The card keeps its slot, its surface and its radius.
+     */
+    internal fun showErrorTile() {
+        errorTileShown = true
+        for (s in subscriptions) s.handle?.let { runCatching { it() } }
+        subscriptions.clear()
+        setOnClickListener(null)
+        setOnLongClickListener(null)
+        setOnTouchListener(null)
+        isClickable = false
+        isLongClickable = false
+        animate().cancel()
+        scaleX = 1f
+        scaleY = 1f
+        removeAllViews()
+        // hui-error-card's ha-card: `border-width: 0`, the tint filling it edge to edge.
+        (background as? GradientDrawable)?.let { (it.mutate() as GradientDrawable).setStroke(0, Color.TRANSPARENT) }
+        setBorderInset(0)
+        setPadding(0, 0, 0, 0)
+        addView(errorCardContent(ctx), LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        requestLayout()
+        invalidate()
+    }
+
+    final override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (failure == null) {
+            try {
+                measureCard(widthMeasureSpec, heightMeasureSpec)
+                return
+            } catch (e: Exception) {
+                fail("measure", e)
+            }
+        }
+        if (errorTileShown) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        } else {
+            setMeasuredDimension(resolveSize(suggestedMinimumWidth, widthMeasureSpec), resolveSize(ctx.px(ERROR_CARD_MIN_DP), heightMeasureSpec))
+        }
+    }
+
+    /** The card's own measure ([onMeasure] runs it, and shows HA's error card if it throws). */
+    protected open fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    final override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        if (failure == null) {
+            try {
+                layoutCard(changed, left, top, right, bottom)
+                return
+            } catch (e: Exception) {
+                fail("layout", e)
+            }
+        }
+        if (errorTileShown) super.onLayout(changed, left, top, right, bottom)
+    }
+
+    /** The card's own layout ([onLayout] runs it, and shows HA's error card if it throws). */
+    protected open fun layoutCard(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+    }
+
+    /** The card's whole draw, its children's included ([setWillNotDraw] false sends every draw here). */
+    override fun draw(canvas: Canvas) {
+        if (failure != null) {
+            // The card's own onDraw may be what threw: once it's the error card, only its surface and the error
+            // card's views draw, never the card's own code again.
+            if (errorTileShown) drawErrorCard(canvas)
+            return
+        }
+        val saved = canvas.saveCount
+        try {
+            super.draw(canvas)
+        } catch (e: Exception) {
+            canvas.restoreToCount(saved)
+            fail("draw", e)
+        }
+    }
+
+    /** The error card's draw: the card's surface (its background), then its views, without the card's [onDraw]. */
+    private fun drawErrorCard(canvas: Canvas) {
+        val saved = canvas.saveCount
+        try {
+            background?.let { bg ->
+                bg.setBounds(0, 0, width, height)
+                bg.draw(canvas)
+            }
+            dispatchDraw(canvas)
+        } catch (e: Exception) {
+            canvas.restoreToCount(saved)
+            VitroFailures.report("draw", ErrorCardView.TYPE, e)
+        }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (failure != null && !errorTileShown) return true
+        return try {
+            super.dispatchTouchEvent(ev)
+        } catch (e: Exception) {
+            fail("touch", e)
+            true
+        }
     }
 
     /**
@@ -963,11 +1132,11 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         // Subscribed before the first read, so a change between the two isn't missed; each render reads the store
         // then, not the value a dispatch carried, so dispatches posted out of order never leave an older one on screen.
         add(Subscription(
-            subscribe = { ctx.store.subscribe(entityId) { _ -> ctx.main.post { onState(ctx.store[entityId]) } } },
+            subscribe = { ctx.store.subscribe(entityId) { _ -> ctx.main.post { guarded("update") { onState(ctx.store[entityId]) } } } },
             renewable = !isAttachedToWindow,
-            catchUp = { onState(ctx.store[entityId]) },
+            catchUp = { guarded("update") { onState(ctx.store[entityId]) } },
         ))
-        onState(ctx.store[entityId])
+        guarded("update") { onState(ctx.store[entityId]) }
     }
 
     /**
@@ -1011,6 +1180,9 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
 
     companion object {
         private const val PRESS_SCALE = 0.975f
+
+        /** hui-error-card's height: 16 px padding above and below a 24 px icon. */
+        const val ERROR_CARD_MIN_DP = 56f
         private val ENTITY_WORD = Regex("""\bentity\b""")
 
         /** CSS gradient angle (0 = to top, clockwise) → the nearest of [GradientDrawable]'s eight orientations. */
