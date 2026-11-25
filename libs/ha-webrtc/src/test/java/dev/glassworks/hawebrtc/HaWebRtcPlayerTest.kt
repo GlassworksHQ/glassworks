@@ -83,6 +83,32 @@ class HaWebRtcPlayerTest {
     }
 
     @Test
+    fun `a frame report queued before a pause or resume isn't delivered, one after it is`() {
+        val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door")
+        val got = ArrayList<String>()
+        player.listener = object : HaWebRtcPlayer.Listener {
+            override fun onFirstFrame(sinceStartMs: Long, width: Int, height: Int) { got += "first $sinceStartMs ${width}x$height" }
+            override fun onFrameRendered() { got += "frame" }
+            override fun onError(error: HaError) {}
+        }
+        val events = player.Events()
+        // Posted by the player's thread in the run before; the main thread pauses and resumes before it runs.
+        events.onFirstFrame(500, 640, 480)
+        player.setActive(false)
+        player.setActive(true)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(emptyList<String>(), got)
+        assertEquals("the stale size isn't taken either", 0, player.videoWidth)
+        // The resumed run's own first frame.
+        events.onFirstFrame(120, 1280, 720)
+        events.onFrame(1280, 720)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("first 120 1280x720", "frame"), got)
+        assertEquals(1280 to 720, player.videoWidth to player.videoHeight)
+        player.close()
+    }
+
+    @Test
     fun `close before start, twice, and calls after close do nothing`() {
         val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door")
         player.close()

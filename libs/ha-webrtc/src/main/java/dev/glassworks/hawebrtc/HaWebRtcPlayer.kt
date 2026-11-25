@@ -111,13 +111,19 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
                 return@post report { it.onError(HaError(HaWebRtcStream.START_FAILED, "libwebrtc: ${e.message}")) }
             }
             // The render thread's EGL context can fail too (no EGL config, a lost display): give the runtime back and
-            // report it, as for the runtime itself, so the caller closes the player.
-            try {
-                video.init(rt.egl)
-            } catch (e: RuntimeException) {
-                WebRtcRuntime.rendererUnavailable = e.message ?: e.javaClass.simpleName
+            // report it, as for the runtime itself, so the caller closes the player. The check, the start and the
+            // record of a failure are one step across every player, so after one failure no other player tries.
+            val rendererFailed = synchronized(WebRtcRuntime.rendererLock) {
+                WebRtcRuntime.rendererUnavailable ?: try {
+                    video.init(rt.egl)
+                    null
+                } catch (e: RuntimeException) {
+                    (e.message ?: e.javaClass.simpleName).also { WebRtcRuntime.rendererUnavailable = it }
+                }
+            }
+            if (rendererFailed != null) {
                 WebRtcRuntime.release()
-                return@post report { it.onError(HaError(HaWebRtcStream.START_FAILED, "renderer: ${e.message}")) }
+                return@post report { it.onError(HaError(HaWebRtcStream.START_FAILED, "renderer: $rendererFailed")) }
             }
             runtime = rt
             val s = HaWebRtcStream(channel, entityId, { config, audio, events ->
@@ -135,6 +141,8 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
     public fun setActive(active: Boolean) {
         if (closed || this.active == active) return
         this.active = active
+        // A frame report the player's thread posted before this belongs to the run that just ended.
+        viewRun++
         worker?.post { stream?.setActive(active) }
     }
 
@@ -162,15 +170,24 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
 
     /** Like [report], with the picture's size updated first. */
     private fun frame(width: Int, height: Int, call: (Listener) -> Unit) {
+        val run = viewRun
         main.post {
-            if (closed) return@post
+            // A report from before a pause or resume (still queued here when it happened) is dropped, size and all.
+            if (closed || run != viewRun) return@post
             videoWidth = width
             videoHeight = height
             listener?.let(call)
         }
     }
 
-    private inner class Events : HaWebRtcStream.Listener {
+    /**
+     * The viewing run on the main thread: bumped by each pause and resume. A frame report carries the run it was
+     * posted in (read on the player's thread), so one still queued from the run before isn't delivered.
+     */
+    @Volatile
+    private var viewRun = 0
+
+    internal inner class Events : HaWebRtcStream.Listener {
         override fun onFirstFrame(sinceStartMs: Long, width: Int, height: Int) = frame(width, height) { it.onFirstFrame(sinceStartMs, width, height) }
         override fun onFrame(width: Int, height: Int) = frame(width, height) { it.onFrameRendered() }
         override fun onReconnecting(attempt: Int, error: HaError) = report { it.onReconnecting(attempt, error) }

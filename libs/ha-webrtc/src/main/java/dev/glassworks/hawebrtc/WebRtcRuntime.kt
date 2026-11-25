@@ -28,6 +28,9 @@ internal object WebRtcRuntime {
     @Volatile
     var rendererUnavailable: String? = null
 
+    /** Held by a player while it checks [rendererUnavailable], starts its renderer and records a failure. */
+    val rendererLock = Any()
+
     private var initialized = false
     private var refs = 0
     private var egl: EglBase? = null
