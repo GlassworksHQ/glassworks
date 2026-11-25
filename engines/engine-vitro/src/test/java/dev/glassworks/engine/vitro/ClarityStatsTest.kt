@@ -253,4 +253,67 @@ class ClarityStatsTest {
         assertEquals(48.0, ClarityStats.eventTimingDuration(45.0), 0.0)
         assertEquals(208.0, ClarityStats.eventTimingDuration(205.0), 0.0)
     }
+
+    /** Pictures every [every] ms from [from] through [to]. */
+    private fun steady(from: Double, to: Double, every: Double) = generateSequence(from) { it + every }.takeWhile { it <= to }.toList()
+
+    @Test
+    fun aFreezeIsLibwebrtcsGapAtLeastThreeMeansOrTheMeanPlus150() {
+        // 15 fps, gaps of 66 ms. The new gap joins the mean first (16 gaps, rounded down): 215 ms makes it 75, so a freeze
+        // would be at least 225 ms; 230 makes it 76, and 230 is at least max(228, 226).
+        val before = steady(0.0, 990.0, 66.0)
+        val under = ClarityStats.freezeGaps(before + steady(990.0 + 215, 3000.0, 66.0), 0.0, 3000.0)
+        assertEquals(0, under.freezes)
+        assertEquals(0.0, under.stallTotalMs, 0.0)
+        assertEquals(215.0, under.maxGapMs, 0.0)
+        val over = ClarityStats.freezeGaps(before + steady(990.0 + 230, 3000.0, 66.0), 0.0, 3000.0)
+        assertEquals(1, over.freezes)
+        assertEquals(230.0, over.stallTotalMs, 0.0)
+        assertEquals(listOf(990.0 to 1220.0), over.stallsAt)
+        // At 5 fps (200 ms, so 3 × the mean rules): 740 ms isn't a freeze (the mean 249, 747), 760 is (250, 750).
+        val slow = steady(0.0, 2000.0, 200.0)
+        assertEquals(0, ClarityStats.freezeGaps(slow + steady(2740.0, 4000.0, 200.0), 0.0, 4000.0).freezes)
+        assertEquals(1, ClarityStats.freezeGaps(slow + steady(2760.0, 4000.0, 200.0), 0.0, 4000.0).freezes)
+    }
+
+    @Test
+    fun noFreezeIsTakenBeforeFiveGapsAndItsMeanIsTheLast30() {
+        // The 4th gap is long, but the rule needs 5 gaps: no freeze.
+        assertEquals(0, ClarityStats.freezeGaps(listOf(0.0, 66.0, 132.0, 198.0, 900.0, 966.0), 0.0, 966.0).freezes)
+        // 30 gaps of 500 ms, then 30 of 66: the mean is the last 30's, so a 300 ms gap after them is a freeze.
+        val t = steady(0.0, 15_000.0, 500.0) + steady(15_066.0, 15_000.0 + 30 * 66, 66.0)
+        val g = ClarityStats.freezeGaps(t + (t.last() + 300), 0.0, t.last() + 300)
+        assertEquals(1, g.freezes)
+    }
+
+    @Test
+    fun theWindowsEdgesCountAsTheWebEnginesSamplesDo() {
+        // Only the part of a freeze inside the window counts.
+        val t = steady(0.0, 2000.0, 66.0) + steady(3000.0, 6000.0, 66.0)
+        val g = ClarityStats.freezeGaps(t, 2500.0, 6000.0)
+        assertEquals(1, g.freezes)
+        assertEquals(3000.0 - 2500.0, g.stallTotalMs, 0.0)
+        // Nothing drawn after 4 s of a 6 s window: a freeze still going on, to the window's end.
+        val end = ClarityStats.freezeGaps(steady(0.0, 4000.0, 66.0), 1000.0, 6000.0)
+        assertEquals(1, end.freezes)
+        assertEquals(6000.0 - 3960.0, end.stallTotalMs, 0.0)
+        assertEquals(end.stallTotalMs, end.maxGapMs, 0.0)
+        // Nothing drawn before the window: from its start to the first picture is a stall past 200 ms, as an interval
+        // with nothing decoded; under it, the sampling's.
+        assertEquals(300.0, ClarityStats.freezeGaps(steady(1300.0, 3000.0, 66.0), 1000.0, 3000.0).stallTotalMs, 0.0)
+        assertEquals(0.0, ClarityStats.freezeGaps(steady(1100.0, 3000.0, 66.0), 1000.0, 3000.0).stallTotalMs, 0.0)
+        // No picture at all: the whole window.
+        val none = ClarityStats.freezeGaps(emptyList(), 1000.0, 3000.0)
+        assertEquals(2000.0, none.stallTotalMs, 0.0)
+        assertEquals(2000.0, none.maxGapMs, 0.0)
+    }
+
+    @Test
+    fun hlsGapsAreTheWebEnginesVideoGaps() {
+        val g = ClarityStats.videoGaps(listOf(100.0, 500.0, 1100.0, 1300.0, 5000.0), 0.0, 2000.0)
+        assertEquals(700.0, g.maxGapMs, 0.0)
+        assertEquals(600.0 + 700.0, g.stallTotalMs, 0.0)
+        assertEquals(listOf(1300.0 to 2000.0, 500.0 to 1100.0), g.stallsAt)
+        assertNull(g.freezes)
+    }
 }

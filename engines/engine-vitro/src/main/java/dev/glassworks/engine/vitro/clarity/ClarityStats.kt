@@ -214,6 +214,124 @@ internal object ClarityStats {
         return parts.mapIndexed { k, p -> "$tag+ $key $k/${parts.size} $p" }
     }
 
+    /**
+     * stats.js videoGaps without presentedFrames (the HLS fallback's gaps on the web engine): a camera's pictures drawn
+     * over the window [t0, t1], with the window's edges, give the longest gap and the gaps over 500 ms added up.
+     */
+    fun videoGaps(times: List<Double>, t0: Double, t1: Double): CameraGaps {
+        val pts = listOf(t0) + times.filter { it in t0..t1 } + listOf(t1)
+        val spans = (1 until pts.size).map { pts[it - 1] to pts[it] }
+        val stalls = spans.filter { (a, b) -> b - a > STALL_GAP_MS }
+        return CameraGaps(
+            maxGapMs = spans.maxOf { (a, b) -> b - a },
+            stallTotalMs = stalls.sumOf { (a, b) -> b - a },
+            stallsAt = stalls.sortedByDescending { (a, b) -> b - a }.take(10),
+            freezes = null,
+        )
+    }
+
+    /**
+     * The WebRTC receiver's stalls (stats.js webrtcWindow, the graded ones on the web engine) from the pictures a
+     * camera drew, one by one: libwebrtc's freeze rule (VideoQualityObserver, docs/perf.md "Gaps and stalls over
+     * WebRTC"). Each gap between two pictures joins the mean of the last [FREEZE_MEAN_OF] (whole ms, rounded down);
+     * from the [FREEZE_MIN_SAMPLES]th on, a gap of at least max(3 × that mean, the mean + 150 ms) is a freeze, at its
+     * full length. [times] are every picture drawn, sorted, from before the window too, so the mean has warmed up.
+     *
+     * Over the window [t0, t1]: a freeze counts for the part of it inside the window. The time from the last picture to
+     * [t1] is a freeze still going on when it already meets the rule, as the web engine's receiver samples count an
+     * interval with nothing decoded; the time from [t0] to the first picture, when none came before, is a stall when it
+     * is longer than [EMPTY_MIN_MS] (nothing decoded), as there. The longest gap is the longest stretch inside the
+     * window without a new picture, freeze or not: the pictures give it outright, where the web engine's samples give
+     * the freeze rule's bound.
+     */
+    fun freezeGaps(times: List<Double>, t0: Double, t1: Double): CameraGaps {
+        val pts = times.filter { it <= t1 }
+        val delays = ArrayDeque<Long>()
+        var sum = 0L
+        var stall = 0.0
+        var longest = 0.0
+        var freezes = 0
+        val at = ArrayList<Pair<Double, Double>>()
+        fun overlap(a: Double, b: Double) = max(0.0, min(b, t1) - max(a, t0))
+        fun isFreeze(delay: Double, join: Boolean): Boolean {
+            val ms = delay.roundToLong()
+            var s = sum
+            var n = delays.size
+            if (join) {
+                delays.addLast(ms)
+                sum += ms
+                if (delays.size > FREEZE_MEAN_OF) sum -= delays.removeFirst()
+                s = sum
+                n = delays.size
+            } else {
+                // The open gap at the window's end: judged against the mean as it would be with it, never kept.
+                s += ms
+                n += 1
+                if (n > FREEZE_MEAN_OF) s -= delays.first()
+                n = min(n, FREEZE_MEAN_OF)
+            }
+            if (n < FREEZE_MIN_SAMPLES) return false
+            val mean = s / n
+            return ms >= max(3 * mean, mean + FREEZE_MIN_INCREASE_MS)
+        }
+        fun stalled(a: Double, b: Double) {
+            val o = overlap(a, b)
+            if (o <= 0) return
+            stall += o
+            freezes++
+            at += max(a, t0) to min(b, t1)
+        }
+        if (pts.none { it < t0 }) {
+            // Nothing drawn before the window: from its start to the first picture (or its end), nothing was decoded.
+            val first = pts.firstOrNull { it >= t0 } ?: t1
+            if (first - t0 > EMPTY_MIN_MS) stalled(t0, first)
+        }
+        for (i in 1 until pts.size) {
+            val a = pts[i - 1]
+            val b = pts[i]
+            val freeze = isFreeze(b - a, join = true)
+            longest = max(longest, overlap(a, b))
+            if (freeze) stalled(a, b)
+        }
+        val last = pts.lastOrNull()
+        if (last != null && last < t1) {
+            longest = max(longest, overlap(last, t1))
+            if (isFreeze(t1 - last, join = false)) stalled(last, t1)
+        }
+        // From the window's start to its first picture (the whole window when none came in it).
+        longest = max(longest, overlap(t0, pts.firstOrNull { it >= t0 } ?: t1))
+        return CameraGaps(
+            maxGapMs = longest,
+            stallTotalMs = stall,
+            stallsAt = at.sortedByDescending { (a, b) -> b - a }.take(10),
+            freezes = freezes,
+        )
+    }
+
+    /** A camera's gaps over a window: the longest, the stalls added up, where the longest stalls were, how many. */
+    data class CameraGaps(
+        val maxGapMs: Double,
+        val stallTotalMs: Double,
+        val stallsAt: List<Pair<Double, Double>>,
+        /** Freezes and stretches with nothing decoded ([freezeGaps]); null for [videoGaps], which counts none. */
+        val freezes: Int?,
+    )
+
+    /** stats.js videoGaps: a gap longer than this is a stall. */
+    const val STALL_GAP_MS = 500.0
+
+    /** libwebrtc's VideoQualityObserver: the mean of this many inter-frame gaps... */
+    const val FREEZE_MEAN_OF = 30
+
+    /** ...taken once it has this many... */
+    const val FREEZE_MIN_SAMPLES = 5
+
+    /** ...and a freeze is at least max(3 × the mean, the mean + this). */
+    const val FREEZE_MIN_INCREASE_MS = 150L
+
+    /** stats.js EMPTY_MIN_MS: an interval with nothing decoded this short is the sampling's, not a stall. */
+    const val EMPTY_MIN_MS = 200.0
+
     /** Event Timing's duration rounding (8 ms granularity), and its 16 ms floor: shorter taps aren't reported. */
     fun eventTimingDuration(ms: Double): Double = max(16.0, (ms / 8).roundToLong() * 8.0)
 }

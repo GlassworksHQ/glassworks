@@ -51,9 +51,10 @@ class HaGridLayout(
     private var gap = 0f
 
     /**
-     * A child threw in its measure, layout or draw past its own guards (a card that isn't a [CardSurface]: a heading,
-     * Mushroom's chips or title): the view swaps it for HA's error card, on the next message. Until then, and without
-     * a swap, the grid leaves it out of its draw and its layout, so the other cards carry on.
+     * A child threw in its measure, layout or draw past its own guards ([CardSurface]'s, or the [ContainedCard] round
+     * every other card): the view swaps it for HA's error card, on the next message. Until then, and without a swap,
+     * the grid leaves it out of its draw and its layout, so the other cards carry on. The last line: a card's own guard
+     * catches first.
      */
     var onChildFailed: ((child: View) -> Unit)? = null
 
