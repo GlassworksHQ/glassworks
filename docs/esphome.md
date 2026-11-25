@@ -33,16 +33,16 @@ See [onboarding.md](onboarding.md#2-adoption--encryption-esphome-dynamic-keys-) 
 
 ### What works without encryption
 
-Until Home Assistant gives the panel its key, anyone on your network can talk to the panel's ESPHome API, not only Home Assistant. That covers a panel you haven't added yet, and one that a Home Assistant older than 2026.11 added without a key. The panel keeps the everyday controls working in that case. Anything that changes which page the panel shows or who it's signed in as waits for an encrypted connection, and so do the pane switches, the camera and the radio's firmware, Zigbee stack and Thread controls.
+Until Home Assistant gives the panel its key, anyone on your network can talk to the panel's ESPHome API, not only Home Assistant. That covers a panel you haven't added yet, and one that a Home Assistant older than 2026.11 added without a key. The panel keeps the everyday controls working in that case. Anything that changes which page the panel shows or who it's signed in as waits for an encrypted connection, and so do the pane switches, the camera's pictures, stream and privacy switch, and the radio's firmware, Zigbee stack and Thread controls.
 
 | Works without encryption | Needs an encrypted connection with the panel's key |
 |---|---|
 | Sensors and diagnostics, the screen light, screen mode, idle timeout, brightness, zoom, **Hide HA header**, the **Dashboard** select (Home Assistant's own dashboards only) | **Dashboard URL** (`dashboard_url`) |
 | **Speaker**: playback, volume, TTS and announcements | **Sign out** (`sign_out`) |
 | **Reload dashboard**, **Restart app** | **Start Wi-Fi setup (Bluetooth)** (`improv_ble`) and **Open device settings** (`open_settings`) |
-| **Allow setup over the network**: pairing still needs the code shown on the panel's screen | Pane switches, the time zone, the Bluetooth proxy and the camera, including **Camera privacy** |
+| **Allow setup over the network**: pairing still needs the code shown on the panel's screen | Pane switches, the time zone, the Bluetooth proxy, and the camera's snapshots, **ONVIF stream** and **Camera privacy** |
 | **Radio mode**, **Join Zigbee network** and **Leave Zigbee network** as a router, **Radio allowed clients** | The radio's **Zigbee stack**, **Radio firmware image** and **Flash radio firmware**, **Join Home Assistant's Thread network** and **Leave Thread network** |
-| App and frame updates, voice | |
+| App and frame updates, voice, **Camera use** and the camera's motion sensitivity (no picture leaves the panel without the key) | |
 
 Without a key, the controls in the right column do nothing when Home Assistant uses them, and the entity snaps back to its old state. You can still change all of them on the panel itself or on the [Manage page](manage.md).
 
@@ -505,7 +505,7 @@ The test suite exercises `EspHomeApiTest` (end-to-end against real `aioesphomeap
 - **No acoustic echo cancellation / barge-in:** Wake word detections are paused while listening or speaking; tap the overlay to interrupt.
 - **Shared microphone with GeckoView:** Running in-browser Assist inside the dashboard competes with the on-device wake word engine; toggle **Mute microphone** if using in-browser Assist.
 - **No Chromecast:** Google Cast receivers require Google device certification; use native [Sendspin](sendspin.md) for synced audio instead.
-- **Privileged controls require encryption:** The radio's firmware, Zigbee stack and Thread controls, the time zone, pane switches, the camera (including **Camera privacy**), **Dashboard URL**, **Sign out**, **Start Wi-Fi setup (Bluetooth)** and **Open device settings** refuse changes over unencrypted plaintext connections ([What works without encryption](#what-works-without-encryption)).
+- **Privileged controls require encryption:** The radio's firmware, Zigbee stack and Thread controls, the time zone, pane switches, the camera's snapshots, ONVIF stream and **Camera privacy**, **Dashboard URL**, **Sign out**, **Start Wi-Fi setup (Bluetooth)** and **Open device settings** refuse changes over unencrypted plaintext connections ([What works without encryption](#what-works-without-encryption)).
 
 ### Aqara cloud
 

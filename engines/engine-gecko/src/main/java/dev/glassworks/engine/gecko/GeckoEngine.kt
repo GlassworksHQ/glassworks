@@ -31,9 +31,11 @@ import org.mozilla.geckoview.GeckoSession.PermissionDelegate.ContentPermission
 import org.mozilla.geckoview.GeckoSession.PermissionDelegate.MediaSource
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.StorageController
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebResponse
 import java.io.File
+import java.lang.ref.WeakReference
 
 /**
  * [Engine] on GeckoView. This package is the only code that imports GeckoView
@@ -82,31 +84,31 @@ class GeckoEngine(
         }
     }
 
-    private var grantsChecked = false
+    @Volatile private var grantsChecked = false
 
     /**
      * Once per process, at the first page: content permissions Gecko saved for a page the app doesn't trust go back to
      * asking (#847). Gecko keeps a page's answer and doesn't call the delegate again, and builds before #847 allowed
-     * every page. A later request from such a page then reaches the delegate, which refuses it.
+     * every page. A later request from such a page then reaches the delegate, which refuses it. A read that fails, or
+     * that answers once the page is gone, is tried again with the next page.
      */
     private fun forgetUntrustedGrants(rt: GeckoRuntime, host: PageHost) {
         if (grantsChecked) return
         grantsChecked = true
         val storage = try { rt.storageController } catch (e: Exception) { Log.w(logTag, "No saved content permissions to check", e); return }
+        // Weak: the read waits for Gecko's profile, and Gecko's dispatcher holds it until then (forever, where Gecko
+        // never starts: the JVM tests). It mustn't keep the activity, or this engine, alive meanwhile.
+        val hostRef = WeakReference(host)
+        val engineRef = WeakReference(this)
+        val tag = logTag
         storage.allPermissions.accept({ saved ->
-            saved.orEmpty().filter { it.value == ContentPermission.VALUE_ALLOW && !host.trusts(it.uri) }.forEach {
-                Log.i(logTag, "Forgetting content permission ${it.permission} for ${forLog(it.uri)}: not Home Assistant or a secure host")
-                storage.setPermission(it, ContentPermission.VALUE_PROMPT)
-            }
+            val h = hostRef.get()
+            if (h == null) engineRef.get()?.grantsChecked = false else forget(saved.orEmpty(), storage, h, tag)
         }, { e ->
-            Log.w(logTag, "Couldn't read saved content permissions; trying again with the next page", e)
-            grantsChecked = false
+            Log.w(tag, "Couldn't read saved content permissions; trying again with the next page", e)
+            engineRef.get()?.grantsChecked = false
         })
     }
-
-    /** A page in the log: its origin only, so a query or a path with a secret in it stays out (#847). */
-    private fun forLog(url: String?): String =
-        url?.let { OAuth.origin(it) ?: (it.substringBefore(':', "").ifEmpty { "a page" } + ":") } ?: "no page"
 
     private fun helper(context: Context): GeckoResult<WebExtension> {
         helper?.let { return it }
@@ -407,5 +409,19 @@ class GeckoEngine(
                 host.onConnect(p)
             }
         }
+    }
+
+    private companion object {
+        /** Sets [saved] grants for pages [host] doesn't trust back to asking. Holds nothing of the engine's. */
+        fun forget(saved: List<ContentPermission>, storage: StorageController, host: PageHost, tag: String) {
+            saved.filter { it.value == ContentPermission.VALUE_ALLOW && !host.trusts(it.uri) }.forEach {
+                Log.i(tag, "Forgetting content permission ${it.permission} for ${forLog(it.uri)}: not Home Assistant or a secure host")
+                storage.setPermission(it, ContentPermission.VALUE_PROMPT)
+            }
+        }
+
+        /** A page in the log: its origin only, so a query or a path with a secret in it stays out (#847). */
+        fun forLog(url: String?): String =
+            url?.let { OAuth.origin(it) ?: (it.substringBefore(':', "").ifEmpty { "a page" } + ":") } ?: "no page"
     }
 }
