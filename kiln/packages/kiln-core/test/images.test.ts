@@ -485,6 +485,14 @@ describe('an in-place recipe', () => {
       ],
     });
     expect(validateImage(stageOverwriteAfter, IN_PLACE)).toContain('step 12: stage-userdata can only be written in the stage session');
+    // in-place outputs cannot be flashed again after app-install
+    const inPlaceAfterApp = inPlace({
+      steps: [
+        ...inPlace().steps,
+        { do: 'fastboot' }, { do: 'flash', partition: 'userdata', file: 'userdata-final' }, { do: 'restart' },
+      ],
+    });
+    expect(validateImage(inPlaceAfterApp, IN_PLACE)).toContain('step 13: userdata-final must be written before restarting into app-install');
     expect(validateImage(inPlace({ steps: [...inPlace().steps, { do: 'app-install' }] }), IN_PLACE)).toContain('step 12: the app is installed once');
     expect(validateImage(at(10, { do: 'app-install', apk: 'x' }), IN_PLACE)).toContain('step 11: "app-install" takes no apk');
   });

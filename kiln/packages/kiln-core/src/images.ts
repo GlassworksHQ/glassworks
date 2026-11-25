@@ -263,7 +263,8 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
             if (stageRestarted) bad.push(`${at(i)}: ${s.file} can only be written in the stage session`);
             else stageFlashed = true;
           } else if (inPlaceFiles.has(s.file)) {
-            inPlaceWritten.add(s.file);
+            if (appInstalled || inPlaceRestarted) bad.push(`${at(i)}: ${s.file} must be written before restarting into app-install`);
+            else inPlaceWritten.add(s.file);
           } else {
             bad.push(`${at(i)}: ${s.file} isn't the stage output or something in-place made`);
           }
