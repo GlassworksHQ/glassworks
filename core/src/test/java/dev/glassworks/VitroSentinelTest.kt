@@ -131,6 +131,28 @@ class VitroSentinelTest {
         assertEquals(1, prefs().vitroCrashStrikes)
     }
 
+    @Test fun aSecondThreadWaitsUntilTheFirstCrashIsRecorded() {
+        prefs().vitroEnabled = true
+        val inFirst = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        // The first crash's record is held at the clock read, inside onCrash.
+        val slow = VitroSentinel(prefs(), clock = {
+            if (Thread.currentThread().name == "first") { inFirst.countDown(); release.await() }
+            now
+        })
+        slow.start()
+        val first = Thread({ slow.onCrash(vitroCrash()) }, "first").apply { start() }
+        inFirst.await()
+        var secondDone = false
+        val second = Thread({ slow.onCrash(vitroCrash()); secondDone = true }, "second").apply { start() }
+        second.join(200)
+        assertFalse("the second thread waits for the first record", secondDone)
+        release.countDown()
+        first.join(); second.join()
+        assertTrue(secondDone)
+        assertEquals("one strike for the one process end", 1, prefs().vitroCrashStrikes)
+    }
+
     @Test fun aCrashAfterTheWindowClearsTheStrikesBeforeIt() {
         // The stable mark couldn't run (a callback held the main thread across the window), then that callback threw.
         prefs().vitroEnabled = true

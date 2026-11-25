@@ -29,8 +29,13 @@ class VitroSentinel(
 ) {
     private var startedAt = 0L
 
-    /** This process has counted its crash: a second thread dying in the same process ending adds nothing. */
-    private val counted = java.util.concurrent.atomic.AtomicBoolean(false)
+    /**
+     * This process has counted its crash: a second thread dying in the same process ending adds nothing. Read and
+     * written under [lock], which [onCrash] holds while it records: a second thread waits there until the first
+     * one's strike is written, so its hand-off to Android's handler can't end the process before that.
+     */
+    private var counted = false
+    private val lock = Any()
 
     /** Whether this start runs on Vitro: its setting, as [VitroSentinel] left it. Starts the window when it does. */
     fun start(): Boolean {
@@ -43,10 +48,13 @@ class VitroSentinel(
      * The app is crashing with [error] (the process ends after this). A crash within [WINDOW_MS] of [start] is a
      * strike; the [STRIKES]th in a row turns Vitro off. True when this one did. Never throws.
      */
-    fun onCrash(error: Throwable): Boolean = runCatching {
+    fun onCrash(error: Throwable): Boolean = synchronized(lock) { record(error) }
+
+    private fun record(error: Throwable): Boolean = runCatching {
         if (!prefs.vitroEnabled) return@runCatching false
         // One process end, one strike, however many threads die on the way.
-        if (!counted.compareAndSet(false, true)) return@runCatching false
+        if (counted) return@runCatching false
+        counted = true
         val upMs = clock() - startedAt
         val inVitro = generateSequence(error) { it.cause }.take(8)
             .any { t -> t.stackTrace.any { it.className.startsWith(VITRO_PACKAGE) } }
