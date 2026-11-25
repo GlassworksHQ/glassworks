@@ -902,14 +902,22 @@ class LovelaceModelTest {
         )
         assertEquals(listOf("Standup", "Holiday", "Untitled"), events.map { it.summary })
         assertTrue(events[1].allDay && !events[0].allDay)
-        assertEquals("10:00 – 11:00", CalendarCardView.timeRange(events[0], utc))
-        assertEquals("All day", CalendarCardView.timeRange(events[1], utc))
-        assertEquals("Tue" to "24", CalendarCardView.dateBadge(events[0].startMs, utc))
-
-        val now = events[1].startMs + 3_600_000L // 01:00 on the 23rd: the all-day event is under way
-        assertEquals(listOf("Holiday", "Standup", "Untitled"), CalendarCardView.upcoming(events, now).map { it.summary })
-        assertEquals(listOf("Untitled"), CalendarCardView.upcoming(events, events[0].endMs + 1).map { it.summary })
         assertTrue(CalendarCardView.parseEvents(null, "calendar.home").isEmpty())
+
+        // The ranges HA asks for: the month's 6 weeks from the Sunday before the 1st; the list's 7 days.
+        val la = TimeZone.getTimeZone("America/Los_Angeles")
+        val now = 1_795_543_680_000L // 2026-11-24 10:08 in Los Angeles
+        val (ms, me) = CalendarCardView.range(CalendarCardView.MONTH, now, la)
+        assertEquals("2026-11-01T07:00:00.000Z", LogbookCardView.isoMillis(ms))
+        assertEquals("2026-12-13T08:00:00.000Z", LogbookCardView.isoMillis(me))
+        val (ls, le) = CalendarCardView.range(CalendarCardView.LIST, now, la)
+        assertEquals("2026-11-24T08:00:00.000Z", LogbookCardView.isoMillis(ls))
+        assertEquals("2026-12-01T08:00:00.000Z", LogbookCardView.isoMillis(le))
+        assertEquals("November 2026", CalendarCardView.title(CalendarCardView.MONTH, now, la))
+        assertEquals("Nov 24 – 30, 2026", CalendarCardView.title(CalendarCardView.LIST, now, la))
+        assertEquals("Nov 25 – Dec 1, 2026", CalendarCardView.title(CalendarCardView.LIST, now + 86_400_000L, la))
+        assertEquals("Dec 29, 2026 – Jan 4, 2027", CalendarCardView.title(CalendarCardView.LIST, now + 35 * 86_400_000L, la))
+        assertEquals("November 24, 2026", CalendarCardView.title(CalendarCardView.DAY, now, la))
     }
 
     @Test
