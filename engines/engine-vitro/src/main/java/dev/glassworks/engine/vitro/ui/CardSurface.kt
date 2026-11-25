@@ -594,6 +594,13 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         super.setPadding(left + lead, top + lead, right + trail, bottom + trail)
     }
 
+    /**
+     * Where the browser's content box starts against this card's, device px: a 1 px border at density 1.5 puts it
+     * 1.5 px in, where [setPadding] starts it at 2, so -0.5. Chrome snaps boxes and text there, but composites a
+     * canvas (a chart's) where it falls, half a pixel off the grid.
+     */
+    val contentSubpixel: Float get() = borderInsetF - Math.round(borderInsetF)
+
     /** Fills the card with [color] from a cascade that knows its content, keeping its radius and border. */
     protected fun fillFromCascade(color: Int) {
         (background as? GradientDrawable)?.let { (it.mutate() as GradientDrawable).setColor(color) }

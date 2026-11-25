@@ -484,6 +484,9 @@ class ChartView(context: Context, private val density: Float) : View(context) {
         ensureScene()
         val s = scene ?: return
         canvas.save()
+        // HA's chart is a canvas composited where its box falls, a fraction of a pixel off the grid at 1.5x.
+        val shift = cardSurface()?.contentSubpixel ?: 0f
+        if (shift != 0f) canvas.translate(shift, shift)
         canvas.scale(density, density)
         for (item in s.order) when (item) {
             is ChartScene.Fill -> {
@@ -515,6 +518,12 @@ class ChartView(context: Context, private val density: Float) : View(context) {
         canvas.clipRect(clip)
         draw()
         canvas.restore()
+    }
+
+    private fun cardSurface(): dev.glassworks.engine.vitro.ui.CardSurface? {
+        var p = parent
+        while (p != null && p !is dev.glassworks.engine.vitro.ui.CardSurface) p = p.parent
+        return p as? dev.glassworks.engine.vitro.ui.CardSurface
     }
 
     private fun drawText(canvas: Canvas, t: ChartScene.Text) {
