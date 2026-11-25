@@ -305,8 +305,9 @@ jobs:
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          # One line: the action runs each line of a script on its own. The transports Vitro plays so far.
-          script: tools/vitro-camera-e2e/run.sh --out build/vitro-camera-e2e -- --transports mjpeg --seam optional
+          # One line: the action runs each line of a script on its own. The transports Vitro plays so far; screen
+          # checks only (--seam optional) until Vitro's built-in players go through CameraStreamFactories (#889).
+          script: tools/vitro-camera-e2e/run.sh --out build/vitro-camera-e2e -- --transports mjpeg,hls --seam optional
 
       - name: Results and screenshots
         if: always()
