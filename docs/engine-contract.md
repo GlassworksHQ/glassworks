@@ -38,7 +38,7 @@ then. Every `PageHost` call comes on the main thread.
 | `restart()`, then `load` | After the content is gone, give a page in the same view that loads and is ready again |
 | `capture(done)` | Answer on the main thread with a still of the page at the view's size, or `null` when the engine can't take one |
 | `isContentProcess(name)` | Say which of the app's processes render web content. The app's own process never does |
-| `lockedDown`, `name` | Say whether pages are held to the dashboard's origin, and name the engine for the Manage page |
+| `lockedDown`, `name` | Say whether pages are held to the dashboard's origin, and name the engine for the Manage page. A locked-down engine never asks another origin for a page; an open one loads it |
 
 After any of these, the main thread must still answer within 5 seconds (no ANR), and the process must not crash.
 

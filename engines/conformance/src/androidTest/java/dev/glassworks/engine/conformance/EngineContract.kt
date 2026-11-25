@@ -141,6 +141,8 @@ abstract class EngineHarness {
         /** A first load starts the engine (GeckoView's runtime takes seconds on an emulator). */
         const val FIRST_LOAD_MS = 90_000L
         const val WAIT_MS = 30_000L
+        /** How long a refused load has to show it never went out: a load that is allowed takes about 2 s on an emulator. */
+        const val REFUSAL_MS = 6_000L
         /** Android's own ANR limit for input. */
         const val ANR_MS = 5_000L
     }
@@ -181,8 +183,16 @@ abstract class EngineContract : EngineHarness() {
     @Test fun aDashboardLoadStartsPaintsStopsAndIsReady() {
         val page = open()
         load(page, Subjects.dashboard(ha))
+        fun dashboardStart(e: List<RecordingHost.Event>) =
+            e.indexOfFirst { it.kind == START && RecordingHost.pathOf(it.value.orEmpty()) == "/lovelace/home" }
+        // `ready` may come first: wait for the paint and the stop too before reading the order.
+        await("a paint and a stop after the dashboard's start: $host") {
+            val e = host.events.toList()
+            val start = dashboardStart(e)
+            start >= 0 && e.drop(start + 1).let { after -> after.any { it.kind == PAINT } && after.any { it.kind == STOP } }
+        }
         val e = host.events.toList()
-        val start = e.indexOfFirst { it.kind == START && RecordingHost.pathOf(it.value.orEmpty()) == "/lovelace/home" }
+        val start = dashboardStart(e)
         assertTrue("onPageStart for the dashboard: $host", start >= 0)
         assertTrue("before it, only an empty first page: $host",
             e.take(start).filter { it.kind == START }.all { it.value == "about:blank" })
@@ -316,5 +326,28 @@ abstract class EngineContract : EngineHarness() {
         open()
         assertEquals("the same once open", subject.capabilities.lockedDown, engine.lockedDown)
         assertTrue("a name for the Manage page", engine.name.isNotBlank())
+    }
+
+    /**
+     * What `lockedDown` means, done: a locked-down engine never asks another origin for a page, and an open one loads
+     * it. The page is one no dashboard engine draws (a settings page), so a fallback engine hands it to its fallback.
+     */
+    @Test fun anotherOriginLoadsOnlyWhenNotLockedDown() {
+        val other = FakeHomeAssistant()
+        try {
+            val page = open()
+            load(page, Subjects.dashboard(ha))
+            onMain { page.load("${other.origin}/config/info") }
+            if (subject.capabilities.lockedDown) {
+                Thread.sleep(REFUSAL_MS)
+                assertTrue("no page asked of another origin: ${other.pages}", other.pages.isEmpty())
+                assertTrue("and none shown: ${host.locationPaths()}", "/config/info" !in host.locationPaths())
+            } else {
+                await("the other origin's page is where the page is: ${host.locationPaths()}") { "/config/info" in host.locationPaths() }
+                assertTrue("the other origin served it: ${other.pages}", "/config/info" in other.pages)
+            }
+        } finally {
+            other.stop()
+        }
     }
 }

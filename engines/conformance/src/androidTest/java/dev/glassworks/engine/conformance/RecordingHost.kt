@@ -54,7 +54,10 @@ class RecordingHost : PageHost {
     override fun onLocationChange(url: String?) = note(Event(LOCATION, url))
     override fun redirect(url: String): String? = null.also { note(Event(REDIRECT, url)) }
     override fun onContentGone(killed: Boolean) = note(Event(GONE, killed.toString()))
-    override fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit) = answer(true)
+    override fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit) {
+        note(Event(PERMISSIONS, permissions.joinToString()))
+        answer(true)
+    }
     override fun onConnect(port: PagePort) = note(Event(CONNECT, port.url, port))
     override fun onPortMessage(port: PagePort, message: JSONObject) = note(Event(MESSAGE, port.url, port, message))
 
@@ -75,6 +78,7 @@ class RecordingHost : PageHost {
         const val LOCATION = "location"
         const val REDIRECT = "redirect"
         const val GONE = "gone"
+        const val PERMISSIONS = "permissions"
         const val CONNECT = "connect"
         const val MESSAGE = "message"
 
