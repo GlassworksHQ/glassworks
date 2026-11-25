@@ -493,7 +493,10 @@ class VitroClarity internal constructor(
         val drawnAt = drawn.getDouble("rendered_tick_ms")
         // Frames dropped inside the span (a wait past MAX_FRAMES) would read as one long gap: then the blocking isn't
         // measured (null), never a number made of what was dropped.
-        val b = ClarityStats.blocking(framesIn(drawnAt, freeAt), onMain { droppedUntil }, drawnAt, freeAt)
+        // The span's frames and what was dropped, in one look: a frame dropped between two looks can't void a span its
+        // frames still cover.
+        val (span, dropped) = onMain { frames.filter { it in drawnAt..freeAt } to droppedUntil }
+        val b = ClarityStats.blocking(span, dropped, drawnAt, freeAt)
         val u = JSONObject(drawn.toString()).put("interactive_ms", ClarityStats.round1(freeAt)).put("busy_ms", busy)
             .put("blocking_ms", b?.opt("blocking_ms") ?: JSONObject.NULL).put("long_frames", b?.opt("long_frames") ?: JSONObject.NULL)
             .put("longest_frame_ms", b?.opt("longest_ms") ?: JSONObject.NULL)

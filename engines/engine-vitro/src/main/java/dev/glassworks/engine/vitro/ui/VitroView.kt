@@ -714,6 +714,7 @@ class VitroView(
                 renderView(index, forceRebuild = true, pushHistory = false)
             } else {
                 viewCache.remove(index)?.let { contentHost.removeView(it) }
+                clarity?.keepCards(viewCache.keys)
                 overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
             }
         }
