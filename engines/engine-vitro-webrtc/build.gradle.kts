@@ -4,7 +4,8 @@
 
 // Vitro's WebRTC cameras: the WEB_RTC player behind Vitro's camera seam (camera/CameraStream.kt), on libs/ha-webrtc.
 // Its own module because libwebrtc adds about 4.6 MB (armeabi-v7a) to 6.3 MB (arm64-v8a) to an APK: an app opts in by
-// depending on it and calling VitroWebRtc.register(). Without it, Vitro's cameras play HLS and MJPEG.
+// depending on it and calling VitroWebRtc.register() (the S1 app and the generic app do, with Vitro on). Without it,
+// Vitro's cameras play HLS and MJPEG.
 plugins {
     id("com.android.library")
     id("glassworks.android")

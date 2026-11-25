@@ -117,8 +117,7 @@ dependencies {
     releaseImplementation(project(":engine-gecko"))
     "legacyImplementation"(project(":engine-gecko-legacy"))
     implementation(project(":engine-vitro"))
-    // Vitro's cameras over WebRTC (libs/ha-webrtc on libwebrtc), registered when Vitro is on. Not in the S1 app: libwebrtc
-    // doesn't fit its size budget (frames/aqara-s1-plus/budgets.json).
+    // Vitro's cameras over WebRTC (libs/ha-webrtc on libwebrtc), registered when Vitro is on.
     implementation(project(":engine-vitro-webrtc"))
     implementation(project(":pane-assist"))
     implementation(project(":pane-timers"))
