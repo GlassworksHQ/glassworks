@@ -149,7 +149,10 @@ class ClimateRangeTest {
     private fun rangeDial(showCurrent: Boolean = true): Pair<ThermostatDialView, MutableList<Pair<Double, Double>>> {
         val commits = ArrayList<Pair<Double, Double>>()
         val dial = ThermostatDialView(context(), "°C", showCurrent)
-        dial.onRangeCommit = { _, lo, hi -> commits += lo to hi }
+        // As the cards do: the moved end bounded against the other end the entity reports (here the dial's own).
+        dial.onRangeCommit = { h, lo, hi ->
+            ClimateTargets.rangeToSend(h, lo, hi, heatCool("target_temp_low" to lo, "target_temp_high" to hi))?.let { commits += it }
+        }
         dial.bind(10.0, 30.0, 0.5, current = 22.0, target = null, mode = "heat_cool", action = "idle", stateLabel = "Heat/Cool", low = 20.0, high = 24.0)
         dial.measure(View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY))
         dial.layout(0, 0, 320, 320)
@@ -282,6 +285,26 @@ class ClimateRangeTest {
         dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_END))
         dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MOVE_END))
         assertEquals(listOf(30.25), sent)
+        // A maximum off the step grid: End reaches it exactly (30.2), not the step below it.
+        sent.clear()
+        dial.bind(10.0, 30.2, 0.5, 22.0, 21.0, "heat", "idle")
+        dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_END))
+        dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MOVE_END))
+        assertEquals(listOf(30.2), sent)
+    }
+
+    @Test
+    fun aCancelledSingleDragShowsTheRangeHaMovedTo() {
+        val sent = ArrayList<Double>()
+        val dial = ThermostatDialView(context(), "°C").apply { onCommit = { sent += it } }
+        dial.bind(10.0, 30.0, 0.5, 22.0, 21.0, "heat", "idle")
+        dial.measure(View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY))
+        dial.layout(0, 0, 320, 320)
+        touch(dial, MotionEvent.ACTION_DOWN, 25.0)
+        dial.bind(10.0, 30.0, 0.5, 22.0, null, "heat_cool", "idle", "Heat/Cool", low = 20.0, high = 24.0)
+        touch(dial, MotionEvent.ACTION_CANCEL, 25.0)
+        assertTrue(dial.isRange)
+        assertTrue(sent.isEmpty())
     }
 
     @Test

@@ -159,6 +159,31 @@ class VitroAccessTest {
     }
 
     @Test
+    fun aDetachDuringTheExitLeavesNoSheetAndAFreeDashboard() {
+        val store = EntityStore()
+        store.putLocal(EntityState("light.desk", "on", mapOf("friendly_name" to "Desk lamp", "supported_color_modes" to listOf("onoff"))))
+        val view = dev.glassworks.engine.vitro.ui.VitroView(activity, store, android.graphics.Color.BLACK)
+        view.contextFactory = { theme ->
+            VitroCardContext(
+                context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = emptyList(),
+                accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+                fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            )
+        }
+        activity.setContentView(view)
+        view.openMoreInfo("light.desk")
+        ShadowLooper.idleMainLooper()
+        view.closeMoreInfo()
+        // Detached while the exit runs, then back: no sheet left over, the dashboard reachable again.
+        activity.setContentView(View(activity))
+        activity.setContentView(view)
+        ShadowLooper.idleMainLooper()
+        assertTrue(view.all().none { it is MoreInfoSheet })
+        assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO, view.overlayLayer.importantForAccessibility)
+        assertEquals(ViewGroup.FOCUS_AFTER_DESCENDANTS, view.overlayLayer.descendantFocusability)
+    }
+
+    @Test
     fun aKeyEditKeepsItsValueUntilItsKeyComesUp() {
         val released = ArrayList<Int>()
         val pill = dev.glassworks.engine.vitro.cards.VerticalSliderPillView(activity, 0xFFFFA000.toInt()).apply {
@@ -173,6 +198,19 @@ class VitroAccessTest {
         assertTrue(released.isEmpty())
         pill.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT))
         assertEquals(listOf(41), released)
+        // Held at the end, the key stays with its edit (a repeat that moved focus would drop it).
+        pill.setPercent(99)
+        assertTrue(pill.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT)))
+        assertTrue(pill.dispatchKeyEvent(KeyEvent.changeTimeRepeat(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT), 0L, 1)))
+        pill.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT))
+        assertEquals(100, released.last())
+        // A cancelled release puts HA's value back, caption included.
+        val captions = ArrayList<Int>()
+        pill.onChange = { captions += it }
+        pill.setPercent(60)
+        pill.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT))
+        pill.dispatchKeyEvent(KeyEvent.changeFlags(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_LEFT), KeyEvent.FLAG_CANCELED))
+        assertEquals(listOf(59, 60), captions)
     }
 
     @Test

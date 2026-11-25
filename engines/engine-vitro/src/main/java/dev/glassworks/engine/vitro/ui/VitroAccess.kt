@@ -233,7 +233,9 @@ internal class AdjustableAccess(
             KeyEvent.KEYCODE_MOVE_END -> max()
             else -> return false
         }.coerceIn(min(), max())
-        if (next == v) return false
+        // At an end: a new press moves focus on, but the held key of an edit under way stays with it (a repeat
+        // that moves focus would drop the edit before its key comes up).
+        if (next == v) return pending && keyCode == pendingKey
         preview(next)
         pending = true
         pendingKey = keyCode

@@ -837,13 +837,9 @@ internal class ThermostatDialView(
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
-                if (dragging) {
-                    // Nothing was sent: drop the preview and show the target Home Assistant has.
-                    setTarget(boundTarget)
-                    // TalkBack reads the restored target, not the preview.
-                    describe()
-                    invalidate()
-                }
+                // Nothing was sent: back to everything Home Assistant reported last (a range, if it moved to one), and
+                // TalkBack reads that, not the preview.
+                if (dragging) dropEdit()
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
                 return true
@@ -875,7 +871,11 @@ internal class ThermostatDialView(
         high = ch
         describe()
         invalidate()
-        if (cl != bl || ch != bh) onRangeCommit(handle, cl, ch)
+        // The card bounds the proposal against the entity's state as the store holds it now, which may be newer
+        // than this bind: it gets the edited end unbounded, so a raised other end doesn't clip it.
+        if (cl != bl || ch != bh || proposed != (if (handle == ClimateHandle.LOW) cl else ch)) {
+            if (handle == ClimateHandle.LOW) onRangeCommit(handle, proposed, bh) else onRangeCommit(handle, bl, proposed)
+        }
     }
 
     /** An edit nothing was sent for: back to what Home Assistant reported last. */
@@ -963,6 +963,10 @@ internal class ThermostatDialView(
         }
     }
 
+    /** Where a key takes the value: Home and End to the device's exact limits, the others snapped to a step. */
+    private fun keyTarget(keyCode: Int, v: Double): Double =
+        if (keyCode == KeyEvent.KEYCODE_MOVE_HOME || keyCode == KeyEvent.KEYCODE_MOVE_END) v.coerceIn(min, max) else snap(v)
+
     private fun isConfirmKey(keyCode: Int) =
         keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
 
@@ -977,9 +981,12 @@ internal class ThermostatDialView(
             val handle = if (keyPending) keyHandle else selected
             val from = (if (handle == ClimateHandle.LOW) low else high) ?: return super.onKeyDown(keyCode, event)
             val next = keyValue(keyCode, from) ?: return super.onKeyDown(keyCode, event)
-            moveHandle(handle, snap(next))
-            // At an end (or against the other thumb) the key moves focus on instead, as SeekBar's does.
-            if ((if (handle == ClimateHandle.LOW) low else high) == from) return super.onKeyDown(keyCode, event)
+            moveHandle(handle, keyTarget(keyCode, next))
+            // At an end (or against the other thumb) a new press moves focus on, as SeekBar's does; the held key of an
+            // edit under way stays with it.
+            if ((if (handle == ClimateHandle.LOW) low else high) == from) {
+                return if (keyPending && keyCode == keyCodePending) true else super.onKeyDown(keyCode, event)
+            }
             keyPending = true
             keyHandle = handle
             keyCodePending = keyCode
@@ -987,8 +994,8 @@ internal class ThermostatDialView(
             return true
         }
         val t = target ?: return super.onKeyDown(keyCode, event)
-        val next = snap(keyValue(keyCode, t) ?: return super.onKeyDown(keyCode, event))
-        if (next == t) return super.onKeyDown(keyCode, event)
+        val next = keyTarget(keyCode, keyValue(keyCode, t) ?: return super.onKeyDown(keyCode, event))
+        if (next == t) return if (keyPending && keyCode == keyCodePending) true else super.onKeyDown(keyCode, event)
         dragTarget(next)
         keyPending = true
         keyCodePending = keyCode

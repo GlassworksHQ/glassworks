@@ -820,9 +820,12 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
             bindHoldAction(holdFor(config.raw, eid), eid)
             // A water heater sets its tank through its own domain's service, and has no heat/cool range.
             val waterHeater = eid.startsWith("water_heater.")
-            dial.onCommit = { target ->
+            dial.onCommit = commit@{ target ->
                 val domain = if (waterHeater) "water_heater" else "climate"
-                ctx.callOptimistic(ClimateTargets.withValue(ctx.store[eid], target), domain, "set_temperature",
+                val s = ctx.store[eid]
+                // HA moved to a range since (its state, not the dial's last bind): a single target isn't sent.
+                if (s != null && ClimateTargets.of(s.attributes).value == null) return@commit
+                ctx.callOptimistic(ClimateTargets.withValue(s, target), domain, "set_temperature",
                     JSONObject().put("entity_id", eid).put("temperature", target))
             }
             dial.onRangeCommit = { handle, low, high ->

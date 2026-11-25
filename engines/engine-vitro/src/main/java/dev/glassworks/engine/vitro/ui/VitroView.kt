@@ -1577,6 +1577,7 @@ class VitroView(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        tidyMoreInfo()
         scheduleTick()
         // Back on screen after fonts changed elsewhere, or after another dashboard took the font loader (which drops
         // the loads this view was waiting for, with no notice): build again, taking the loader back.
@@ -1587,6 +1588,21 @@ class VitroView(
     override fun onDetachedFromWindow() {
         removeCallbacks(periodicTick)
         super.onDetachedFromWindow()
+        // A detach can cut a sheet's exit short (its animation is cancelled, so it never calls back): finish it here.
+        tidyMoreInfo()
+    }
+
+    /**
+     * Removes every More Info sheet that's closed or closing and sets the dashboard's focus and TalkBack state from
+     * whether a live sheet is still open. Safe to run any number of times.
+     */
+    private fun tidyMoreInfo() {
+        if (moreInfo?.isDismissed == true) moreInfo = null
+        for (i in childCount - 1 downTo 0) {
+            val child = getChildAt(i)
+            if (child is MoreInfoSheet && child !== moreInfo && child.isDismissed) removeViewAt(i)
+        }
+        blockDashboardFocus(moreInfo != null)
     }
 
     companion object {

@@ -97,6 +97,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     private var showingHistory = false
     private var dismissed = false
 
+    /** Closed, or closing: its exit may still be running (VitroView tidies one a detach cut short). */
+    val isDismissed: Boolean get() = dismissed
+
     /** The dimmed backdrop; its alpha fades with the sheet. */
     private val scrim = ColorDrawable(SCRIM)
     private var scrimAnimator: ValueAnimator? = null
@@ -537,7 +540,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             val on = s?.state == "on"
             val pct = if (on) brightnessOf(s) else null
             val kelvin = (s?.attributes?.get("color_temp_kelvin") as? Number)?.toInt()
-            val busy = slider.dragging || wheel?.dragging == true || temp?.dragging == true
+            val busy = slider.adjusting || wheel?.dragging == true || temp?.adjusting == true
             if (!busy) {
                 stateLabel.text = if (mode == LightMode.TEMP && on && kelvin != null) "$kelvin K" else lightStateText(s)
             }
@@ -646,7 +649,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         return { s ->
             val on = s?.state == "on"
             val pct = (s?.attributes?.get("percentage") as? Number)?.toInt()?.takeIf { it > 0 }
-            if (!slider.dragging) {
+            if (!slider.adjusting) {
                 stateLabel.text = when {
                     s == null -> "Unknown"
                     s.isUnavailable -> s.formattedState()
@@ -864,7 +867,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
         return { s ->
             val pos = (s?.attributes?.get("current_position") as? Number)?.toInt()
-            if (!slider.dragging) {
+            if (!slider.adjusting) {
                 stateLabel.text = when {
                     s == null -> "Unknown"
                     s.isUnavailable -> s.formattedState()
@@ -891,8 +894,11 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         addCentered(current, topDp = 4f)
 
         val dial = ThermostatDialView(ctx, unit, showCurrentInDial = false).apply {
-            onCommit = { t ->
-                ctx.callOptimistic(ClimateTargets.withValue(ctx.store[id], t), "climate", "set_temperature", JSONObject().put("entity_id", id).put("temperature", t))
+            onCommit = commit@{ t ->
+                val s = ctx.store[id]
+                // HA moved to a range since (its state, not the dial's last bind): a single target isn't sent.
+                if (s != null && ClimateTargets.of(s.attributes).value == null) return@commit
+                ctx.callOptimistic(ClimateTargets.withValue(s, t), "climate", "set_temperature", JSONObject().put("entity_id", id).put("temperature", t))
             }
             onRangeCommit = { handle, low, high ->
                 // Finished against the entity as the store holds it now: HA's newer other end wins.
@@ -1682,6 +1688,9 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
         set(v) { if (field != v) { field = v; invalidate() } }
     var dragging = false
         private set
+
+    /** A drag or a key edit is under way: what the slider and its caption show is the user's, not HA's. */
+    val adjusting: Boolean get() = dragging || access.editing
     var onChange: ((Int) -> Unit)? = null
     var onRelease: ((Int) -> Unit)? = null
 
@@ -1697,7 +1706,8 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
             onChange?.invoke(v)
         },
         commit = { v -> onRelease?.invoke(v) },
-        restore = { bound?.let(::setPercent) },
+        // Back to HA's value, caption included (onChange), as a cancelled drag does: nothing is sent.
+        restore = { bound?.let { targetPct = -1f; setPercent(it); onChange?.invoke(it) } },
     )
 
     init {
@@ -2282,6 +2292,9 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
 
     var dragging = false
         private set
+
+    /** A drag or a key edit is under way: what the slider and its caption show is the user's, not HA's. */
+    val adjusting: Boolean get() = dragging || access.editing
     var onChange: ((Int) -> Unit)? = null
     var onRelease: ((Int) -> Unit)? = null
 
@@ -2297,7 +2310,8 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
             onChange?.invoke(k)
         },
         commit = { k -> onRelease?.invoke(k) },
-        restore = { bound?.let(::setKelvin) },
+        // Back to HA's value, caption included (onChange), as a cancelled drag does: nothing is sent.
+        restore = { bound?.let { kelvin = Int.MIN_VALUE; setKelvin(it); onChange?.invoke(it) } },
     )
 
     init {
@@ -2451,6 +2465,9 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
 
     var dragging = false
         private set
+
+    /** A drag or a key edit is under way: what the slider and its caption show is the user's, not HA's. */
+    val adjusting: Boolean get() = dragging || access.editing
     var onChange: ((Int) -> Unit)? = null
     var onRelease: ((Int) -> Unit)? = null
 
@@ -2466,7 +2483,8 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
             onChange?.invoke(v)
         },
         commit = { v -> onRelease?.invoke(v) },
-        restore = { bound?.let(::setPercent) },
+        // Back to HA's value, caption included (onChange), as a cancelled drag does: nothing is sent.
+        restore = { bound?.let { pct = -1; setPercent(it); onChange?.invoke(it) } },
     )
 
     init {
