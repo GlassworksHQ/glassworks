@@ -322,6 +322,8 @@ export class StandardSession implements SetupSteps, WifiSteps {
   protected get steps() { return this.setUp.steps; }
   /** The device has a touchscreen: the steps offer "do it on the panel" only then. */
   get touch(): boolean { return this.standard.touch; }
+  /** The device as the steps name it (its frame's `the`). */
+  get the(): string { return this.standard.the; }
   /** The Wi-Fi step. A device already on Wi-Fi says so first, with changing it as the other way. */
   async wifi(): Promise<void> {
     // Try again after the app couldn't be reached: a device that went off USB is connected again first, so a frame with

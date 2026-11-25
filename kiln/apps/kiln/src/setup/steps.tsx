@@ -22,6 +22,8 @@ const Lock = () => <svg className="lock" viewBox="0 0 24 24" aria-label="needs a
  * (issue 197), where the join ends this page's connection, so the panel's screen gives the outcome.
  */
 export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; setup: Extract<Setup, { phase: 'wifi' }> }) {
+  const the = steps.the ?? 'the panel';
+  const capThe = the.charAt(0).toUpperCase() + the.slice(1);
   const nets: Network[] = setup.networks ?? [];
   const [pick, setPick] = useState('');
   const [other, setOther] = useState('');
@@ -48,7 +50,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
       <section className="card" aria-labelledby="h">
         {/* One polite region from "Sending…" on, so a screen reader hears the change to the last word (CodeRabbit on PR 470). */}
         <div role="status" aria-live="polite">
-          <h2 id="h">{j.step === 'sent' ? 'Sending to the panel…' : 'Sent to the panel'}</h2>
+          <h2 id="h">{j.step === 'sent' ? `Sending to ${the}…` : `Sent to ${the}`}</h2>
           {setup.joinNote && <p className="lede">{setup.joinNote}</p>}
         </div>
       </section>
@@ -61,7 +63,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
       <section className="card" aria-labelledby="h">
         <h2 id="h">{j.step === 'ok' ? `Connected to ${j.ssid}` : j.step === 'err' ? `Couldn't join ${j.ssid}` : `Joining ${j.ssid}…`}</h2>
         <ol className="join" aria-live="polite">
-          {[setup.over === 'lan' ? 'Sent to the panel' : 'Sent to the panel over USB', 'The panel joins the network', 'Connected'].map((t, i) => (
+          {[setup.over === 'lan' ? `Sent to ${the}` : `Sent to ${the} over USB`, `${capThe} joins the network`, 'Connected'].map((t, i) => (
             <li key={t} className={j.step === 'ok' || i < at ? 'done' : i === at ? (j.step === 'err' ? 'fail' : 'cur') : ''}>{t}</li>
           ))}
         </ol>
@@ -69,7 +71,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
         {setup.joinNote && <p className="lede">{setup.joinNote}</p>}
         <div className="foot">
           {/* without touch the panel can't take Wi-Fi from its own screen: no skip to it */}
-          {j.step === 'err' && steps.touch !== false ? <button type="button" className="link" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>Skip, do it on the panel</button> : <span />}
+          {j.step === 'err' && steps.touch !== false ? <button type="button" className="link" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>{`Skip, do it on ${the}`}</button> : <span />}
           {j.step === 'ok' && <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>Continue</button>}
           {j.step === 'err' && <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('wifi', () => steps.wifi())}>Try again</button>}
         </div>
@@ -81,7 +83,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
     return (
       <section className="card" aria-labelledby="h">
         <h2 id="h">{ssid ? `Connected to ${ssid}` : 'Connected to Wi-Fi'}</h2>
-        <p className="lede">The panel is on this network already, at {ip}. Keep it, or use another network.</p>
+        <p className="lede">{capThe} is on this network already, at {ip}. Keep it, or use another network.</p>
         <div className="foot">
           <button type="button" className="link" disabled={busy} onClick={() => void steps.click('wifi-scan', () => steps.scanWifi())}>Use another network</button>
           <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>Continue</button>
@@ -96,7 +98,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
       {setup.networks === undefined && !setup.unreachable ? (
         <><p className="status" role="status">{setup.status}</p><div className="bar wait"><i /></div></>
       ) : setup.unreachable ? (
-        <p className="status err" role="alert">{setup.status}{steps.touch !== false ? ' Try again, or set up Wi-Fi directly on the panel.' : ' Try again.'}</p>
+        <p className="status err" role="alert">{setup.status}{steps.touch !== false ? ` Try again, or set up Wi-Fi directly on ${the}.` : ' Try again.'}</p>
       ) : (
         <>
           <RadioGroup.Root className="list" value={pick} onValueChange={setPick} aria-label="Networks">
@@ -115,7 +117,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
       <div className="foot">
         {setup.on || steps.touch !== false ? (
           <button type="button" className="link" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>
-            {setup.on ? `Keep ${setup.on.ssid ?? 'its Wi-Fi'}` : 'Skip, do it on the panel'}
+            {setup.on ? `Keep ${setup.on.ssid ?? 'its Wi-Fi'}` : `Skip, do it on ${the}`}
           </button>
         ) : <span />}
         {setup.unreachable
@@ -128,6 +130,8 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
 
 /** 6 · Home Assistant: the address it found, and sign-in on the panel's own page (no token in this browser). */
 export function HomeAssistant({ busy, steps, setup }: StepProps<'ha'>) {
+  const the = steps.the ?? 'the panel';
+  const capThe = the.charAt(0).toUpperCase() + the.slice(1);
   const suggested = setup.ha.url || setup.ha.discovered || 'http://homeassistant.local:8123';
   // kept in the session as it is typed, so another set-up step and back doesn't lose it
   const [typed, setTyped] = useState<string | undefined>(() => steps.haAddress);
@@ -137,7 +141,7 @@ export function HomeAssistant({ busy, steps, setup }: StepProps<'ha'>) {
       <h2 id="h">{setup.ha.signedIn ? 'Signed in to Home Assistant' : 'Sign in to Home Assistant'}</h2>
       <p className="lede">{setup.ha.discovered ? `Found Home Assistant at ${new URL(setup.ha.discovered).host}.` : 'We couldn\'t find Home Assistant automatically. Enter its address below.'}</p>
       <label className="field"><span>Address</span><input className="input" value={url} onChange={(e) => { setTyped(e.target.value); steps.haAddress = e.target.value; }} inputMode="url" autoComplete="off" /></label>
-      {setup.ha.signedIn && <p className="status ok">The panel is signed in.</p>}
+      {setup.ha.signedIn && <p className="status ok">{`${capThe} is signed in.`}</p>}
       {setup.note && !setup.ha.signedIn && <p className="status" role="status">{setup.note}</p>}
       {setup.error && <p className="status err" role="alert">{setup.error}</p>}
       {/* One way on: Sign in until the panel is signed in (the step then moves on by itself), Continue after. */}
@@ -148,7 +152,7 @@ export function HomeAssistant({ busy, steps, setup }: StepProps<'ha'>) {
         </div>
       ) : (
         <div className="foot">
-          <button type="button" className="link" disabled={setup.busy || busy} onClick={() => void steps.click('skip-ha', () => steps.skipHa(url.trim()))}>{steps.touch !== false ? 'Skip, sign in on the panel' : 'Skip, sign in later'}</button>
+          <button type="button" className="link" disabled={setup.busy || busy} onClick={() => void steps.click('skip-ha', () => steps.skipHa(url.trim()))}>{steps.touch !== false ? `Skip, sign in on ${the}` : 'Skip, sign in later'}</button>
           <button type="button" className="btn ember" disabled={setup.busy || setup.signingIn || busy} onClick={() => void steps.click('sign-in', () => steps.signIn(url.trim()))}>Sign in</button>
         </div>
       )}

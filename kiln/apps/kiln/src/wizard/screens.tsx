@@ -68,7 +68,7 @@ export function Connect({ s, session, frame }: P) {
 }
 
 /** 3 · Your turn: a sheet over the step when the browser needs a click. */
-export function YourTurn({ s, session, asks }: { s: WizardState; session: StandardSession; asks: Partial<Record<AskKind, AskCopy>> }) {
+export function YourTurn({ s, session, asks, the = 'the panel' }: { s: WizardState; session: StandardSession; asks: Partial<Record<AskKind, AskCopy>>; the?: string }) {
   const ask = s.ask;
   const copy = ask && asks[ask.kind];
   return (
@@ -80,8 +80,8 @@ export function YourTurn({ s, session, asks }: { s: WizardState; session: Standa
             <span className="label"><span className="pulse" />Your turn</span>
             <Dialog.Title asChild><h3>{copy.title}</h3></Dialog.Title>
             <Dialog.Description>{copy.body} Your browser asks for a fresh confirmation whenever a USB device switches modes, so pick <code>{copy.pick}</code> in the list.</Dialog.Description>
-            <button type="button" className="btn ember pulsing" disabled={ask.busy} onClick={() => void session.asks.click()}>Choose the panel</button>
-            {ask.busy && <p className="status work" role="status">Select the panel in the browser list…</p>}
+            <button type="button" className="btn ember pulsing" disabled={ask.busy} onClick={() => void session.asks.click()}>{`Choose ${the}`}</button>
+            {ask.busy && <p className="status work" role="status">{`Select ${the} in the browser list…`}</p>}
             {ask.error && <p className="status err" role="alert">{ask.error}</p>}
             {/* set-up's connect only: after a reload with the device off, the person isn't stuck in the sheet */}
             {ask.kind === 'connect' && !ask.busy && session.asks.declinable() && <button type="button" className="link" onClick={() => session.asks.decline()}>Not now</button>}
