@@ -19,7 +19,7 @@
         { "id": "stock", "route": "stock", "title": "On the stock software", "transport": "none", "inputs": ["apk", "wifi"] },
         { "id": "stock-fastboot", "route": "stock/fastboot", "title": "Fastboot", "transport": "fastboot", "enter": { "how": "button", "reachable": false, "why": "VOL- is on a board inside the case, and stock lululemon software has no adb Kiln can use: the back cover comes off once, and stays off until the second fastboot" }, "checks": ["fastboot-vars", "partition-sizes"] },
         { "id": "stage", "route": "stock/stage", "title": "Setup agent", "transport": "fastboot", "writes": true, "reboots": true, "backup": false },
-        { "id": "receive", "route": "stock/receive", "title": "Receive", "transport": "agent", "enter": { "how": "boot", "key": "stage" } },
+        { "id": "receive", "route": "stock/receive", "title": "Copy", "transport": "agent", "enter": { "how": "boot", "key": "stage" } },
         { "id": "install", "route": "stock/install", "title": "Install", "transport": "fastboot", "enter": { "how": "button", "reachable": false, "why": "VOL- again, with the back cover still off" }, "writes": true, "reboots": true, "backup": "restore-point" },
         { "id": "first-start", "route": "stock/first-start", "title": "First start", "transport": "adb", "enter": { "how": "boot", "key": "userdata" }, "writes": true }
       ],
@@ -68,7 +68,7 @@
     },
     "words": {
       "firstStart.note": "The screen stays dark until it’s ready. That’s normal.",
-      "time.total": "20–30 minutes",
+      "time.total.glassworks-in-place": "20–30 minutes",
       "time.flash-userdata": "1–2 minutes",
       "time.agent": "1–2 minutes",
       "time.fastboot": "about 10 minutes",

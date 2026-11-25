@@ -145,15 +145,28 @@ the same order.
 ### The restore point's copy
 
 A card of its own, outlined in ink: "Keep a copy on this computer too", with Download as the screen's ember button.
-Once it's downloaded the card turns green ("A copy is on this computer") and Continue becomes the ember button.
-Continue is never blocked on the download (the browser's copy is enough to go back), but nothing on the screen is
-more prominent until it's done. The fingerprint stays, small; the word SHA-256 goes.
+**Continue waits for the copy** (maintainer, round two): until it's downloaded, Continue is off and one line beside it
+says why ("Continue opens once a copy is on this computer."), tied to the button with `aria-describedby`. Once it's
+downloaded the card turns green ("A copy is on this computer") and Continue becomes the ember button. The session
+holds the same rule (`continueInstall` does nothing without the copy), so no other path writes past it.
+
+A download is recorded with the restore point in this browser (the in-place store's `markCopied`, keyed by the
+restore image's SHA-256). A reload saves the restore point again; if this browser already has a copy recorded for that
+same restore point, Continue opens at once. A new restore point (another bundle) asks again. The fingerprint stays,
+small; the word SHA-256 goes.
 
 ### The road
 
 The in-place install's first screen lists everything that will happen, read from the recipe's own steps
 (`inPlaceRoad`), the person's parts marked "You", the long ones with their time, and the total in the heading
 ("What happens · 20–30 minutes"). Nothing is a surprise later.
+
+### Time on the choice
+
+Each card on "Choose what to install" says how long that install usually takes ("Usually 20–30 minutes", with a
+clock), read from the frame's `time.total.<recipe id>` word and read out with the card's summary. A recipe whose frame
+gives no total shows no time: the Mirror's full image has none yet, since its download and system write were never
+timed, and a sum of the parts that were would be a guess.
 
 ## The visual system
 
@@ -174,6 +187,16 @@ The in-place install's first screen lists everything that will happen, read from
 | Five locks on the rail are noisy | **One note under the rail**: "The Mirror's system is changed, so the steps before this one are done for good." No lock per step. The foot says why there's no Back only on a phone, where the rail is hidden |
 | Start over on phones hides in the Steps sheet | **Also under the card** on a phone, as a quiet text button (`.flow-under`), and still in the sheet |
 
+## Round two's open questions, decided
+
+| Question | Decision |
+|---|---|
+| Timing words | **Kept**: "20–30 minutes" for the whole in-place install, "about 10 minutes" for fastboot. The choice shows each install's total too, from the frame's words |
+| "Setup helper" for the small app Kiln adds | **Kept** |
+| Ink for a selection | **Kept** |
+| Should Continue wait for the restore point's copy? | **Yes.** See [the restore point's copy](#the-restore-points-copy) |
+| The rail's "Receive" | **"Copy"**, the step's name wherever a person sees it. The code keeps `receive` |
+
 ## What a frame gives
 
 The screens read these from `frames/<id>/design/installer.json` `device.words`, where a frame has them; without
@@ -181,7 +204,8 @@ them the screens say less, never something wrong:
 
 | Word | Used for |
 |---|---|
-| `time.fastboot`, `time.agent`, `time.flash-userdata`, `time.first-start`, `time.total` | How long each part usually takes: the road, the rows, the waits |
+| `time.fastboot`, `time.agent`, `time.flash-userdata`, `time.first-start` | How long each part usually takes: the road, the rows, the waits |
+| `time.total.<recipe id>` | How long a whole install usually takes: its card on the choice, and the road's heading |
 | `fastboot.lede` | One line under the fastboot heading on why and how long |
 | `firstStart.note` | What the person sees during the first start |
 | `fastboot.byHandSteps`, `inPlace.fastboot.again` | One step per line, the action in `**bold**` |
@@ -195,6 +219,8 @@ Every state above has a demo at 1280×800 and 390 wide. New in round two, on `/l
 | `?demo=place-start` | The in-place first screen with the road |
 | `?demo=place-fastboot` | The first fastboot: the drawing beside the steps, then the browser's list |
 | `?demo=place-confirm` | The checks passed, add the setup helper |
+| `?demo=place-restore-point` | The restore point saved; Continue waits for the copy |
+| `?demo=place-restore-copied` | The copy downloaded; Continue is the ember button |
 | `?demo=place-connect` | The first start's Connect, with the whole list |
 | `?demo=place-first-start` | Picked, waiting for the first start: the Wait and the list |
 | `?demo=place-installing` | The first start on the working screen |
@@ -206,3 +232,4 @@ Every state above has a demo at 1280×800 and 390 wide. New in round two, on `/l
 - The picker, the choice cards and set-up's forms keep their layout; they take the new type, color and notes.
 - The S1's recovery drawing keeps its own chips; it has no numbered steps in its frame data to tick.
 - Times for the S1 and Android steps: their frames don't give `time.*` words yet.
+- The Mirror's full image has no `time.total.glassworks` word: its download and system write haven't been timed.

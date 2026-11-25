@@ -10,6 +10,8 @@ import * as RadioGroup from '@radix-ui/react-radio-group';
 import type { FileCheck, ImageSession, ImageState } from '../imageSession';
 import { TestOnly } from '../ReleaseApk';
 import { Foot } from '../../components/Nav';
+import { ClockGlyph } from '../../components/Kit';
+import { totalTime } from '../words';
 import c from './choice.module.css';
 
 type P = { f: ImageSession; s: ImageState };
@@ -36,17 +38,19 @@ export function Whose({ r }: { r: ImageRecipe }) {
  * One image. The radio is the card's whole face (stretched over it), and the project's link sits above it, beside the
  * radio rather than inside it: a link inside a button is neither a valid control nor one a screen reader can reach.
  */
-function Card({ r, picked }: { r: ImageRecipe; picked: boolean }) {
+function Card({ r, picked, time }: { r: ImageRecipe; picked: boolean; time?: string }) {
   const id = `image-${r.id}`;
   return (
     <div className={c.card} data-state={picked ? 'checked' : 'unchecked'}>
-      <RadioGroup.Item value={r.id} className={c.pick} aria-labelledby={`${id}-name`} aria-describedby={`${id}-sum`} />
+      <RadioGroup.Item value={r.id} className={c.pick} aria-labelledby={`${id}-name`} aria-describedby={time ? `${id}-sum ${id}-time` : `${id}-sum`} />
       <span className={c.head}>
         <span className="rd" aria-hidden="true" />
         <b className={c.name} id={`${id}-name`}>{r.name}</b>
         {r.community && <span className="pill soon">Community image</span>}
       </span>
       <span className={c.summary} id={`${id}-sum`}>{r.summary}</span>
+      {/* how long it usually takes, from the frame's words (time.total.<recipe id>): only where the frame gives one */}
+      {time && <span className={c.time} id={`${id}-time`}><ClockGlyph />{`Usually ${time}`}</span>}
       {/* who makes it, its licence, where questions go, its project: one quiet line (community-images.md keeps all four) */}
       <p className={c.facts}>
         <span>{`By ${r.by.name}`}</span>
@@ -75,7 +79,7 @@ export function Choose({ f, s }: P) {
         </p>
       )}
       <RadioGroup.Root id="images" className={`${c.cards}${s.open ? '' : ` ${c.one}`}`} value={r.id} onValueChange={(v) => f.pick(v)} aria-labelledby="h">
-        {shown.map((x) => <Card key={x.id} r={x} picked={x.id === r.id} />)}
+        {shown.map((x) => <Card key={x.id} r={x} picked={x.id === r.id} time={totalTime(f.frame, x.id)} />)}
       </RadioGroup.Root>
       {others > 0 && (
         <p className={`small ${c.more}`}>

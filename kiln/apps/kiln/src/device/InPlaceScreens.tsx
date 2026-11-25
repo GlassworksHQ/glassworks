@@ -424,7 +424,8 @@ export interface RestorePointScreenProps {
 
 /**
  * The restore point: saved in this browser and read back before anything is written, then a copy for this computer.
- * Until the copy is downloaded, downloading it is the screen's one ember action; Continue takes over once it is.
+ * Continue waits for that copy: until it's downloaded, downloading it is the screen's one ember action, and one line by
+ * Continue says what it waits for. Once it is (in this run, or before a reload), Continue is the ember button.
  */
 export function RestorePointScreen(p: RestorePointScreenProps) {
   const { status, words } = p;
@@ -441,6 +442,9 @@ export function RestorePointScreen(p: RestorePointScreenProps) {
     );
   }
   const ready = status === 'ready';
+  const go = ready && p.downloaded;
+  // what Continue waits for, in one line beside it
+  const wait = !ready ? 'Continue opens once the restore point is saved and checked.' : !p.downloaded ? 'Continue opens once a copy is on this computer.' : undefined;
   const digest = p.verifiedDigest;
   const rows = rowsAt([
     { id: 'save', label: 'Save it in this browser' },
@@ -466,9 +470,9 @@ export function RestorePointScreen(p: RestorePointScreenProps) {
         </div>
       )}
       <InPlaceNotice words={words} />
-      {!ready && <p className="small">Continue opens once the restore point is saved and checked.</p>}
       <Foot>
-        <button type="button" className={`btn ${ready && !p.downloaded ? 'ghost' : 'ember'}`} disabled={!ready} onClick={() => { if (ready) p.onContinue(); }}>Continue</button>
+        {wait && <span className="small foot-why" id="continue-why">{wait}</span>}
+        <button type="button" className={`btn ${go ? 'ember' : 'ghost'}`} disabled={!go} aria-describedby={wait ? 'continue-why' : undefined} onClick={() => { if (go) p.onContinue(); }}>Continue</button>
       </Foot>
       {p.log}
     </section>

@@ -111,6 +111,21 @@ describe('the choice', () => {
     expect(card('Glass Panes').textContent).toMatch(/Community image.*Its project, on GitHub/);
   });
 
+  it('each choice says how long it usually takes, from the frame\'s words, and only where the frame gives a time', async () => {
+    await show('image-choose');
+    const words = mirrorFrame.words as unknown as Record<string, string | undefined>;
+    const time = (name: string) => card(name).querySelector('[id$="-time"]')?.textContent;
+    for (const r of mirrorFrame.imageFlow.recipes.filter((x) => !x.community)) {
+      const want = words[`time.total.${r.id}`];
+      expect(time(r.name), r.id).toBe(want ? `Usually ${want}` : undefined);
+      // read with the card's summary
+      if (want) expect(screen.getByRole('radio', { name: r.name }).getAttribute('aria-describedby')).toContain(`image-${r.id}-time`);
+    }
+    // the in-place install has its total; the full image's isn't measured yet, so its card says no time
+    expect(time('Glassworks on the stock software')).toBe(`Usually ${words['time.total.glassworks-in-place']}`);
+    expect(time('Glassworks')).toBeUndefined();
+  });
+
   it('hiding the community images again goes back to Glassworks', async () => {
     await show('image-choose-panes');
     expect(embers()).toEqual(['Continue with Glass Panes']);

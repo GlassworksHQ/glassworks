@@ -1174,7 +1174,10 @@ export class ImageSession {
       }
       const sum = await sha256Hex(rp.files[0]!.data);
       this.log('', `${rp.sparse}: saved and read back, SHA-256 ${sum}`);
-      this.set({ restorePoint: { ...this.state.restorePoint!, status: 'ready', digest: sum, error: null } });
+      // a copy of this same restore point already downloaded from this browser (before a reload): Continue doesn't wait again
+      const copied = await this.store().copied(serial, digest, sum).catch(() => false);
+      if (copied) this.log('', 'a copy of it was downloaded from this browser before');
+      this.set({ restorePoint: { ...this.state.restorePoint!, status: 'ready', digest: sum, error: null, downloaded: copied || this.state.restorePoint!.downloaded } });
     } catch (e) {
       this.log('', `restore point: ${(e as Error).message}`);
       fail((e as Error).message);
@@ -1189,13 +1192,20 @@ export class ImageSession {
     const files = this.restore?.files ?? (this.serial && this.bundle ? await this.store().getRestore(this.serial, this.bundle.digest) : undefined);
     if (!files) throw new Error('Kiln has no restore point to download yet.');
     const zip = await restorePointZip(this.recipe.id, files);
-    if (this.state.restorePoint) this.set({ restorePoint: { ...this.state.restorePoint, downloaded: true } });
+    const rp = this.state.restorePoint;
+    if (rp) {
+      this.set({ restorePoint: { ...rp, downloaded: true } });
+      // kept with the restore point, so a reload that saves it again doesn't ask for the copy twice
+      if (rp.digest && this.serial && this.bundle) await this.store().markCopied(this.serial, this.bundle.digest, rp.digest).catch(() => undefined);
+      this.log('', 'a copy of the restore point downloaded to this computer');
+    }
     return zip;
   }
 
-  /** Continue on the restore point: the writes, once it is saved and checked. */
+  /** Continue on the restore point: the writes, once it is saved and checked and a copy is on the computer. */
   async continueInstall(): Promise<void> {
-    if (this.state.screen !== 'restore-point' || this.state.restorePoint?.status !== 'ready' || this.cursor === undefined) return;
+    const rp = this.state.restorePoint;
+    if (this.state.screen !== 'restore-point' || rp?.status !== 'ready' || !rp.downloaded || this.cursor === undefined) return;
     this.set({ screen: 'working' });
     await this.runFrom(this.cursor + 1);
   }

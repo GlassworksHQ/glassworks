@@ -177,6 +177,9 @@ h2.huge { font-size: 30px; font-weight: 400; }
 .foot-main { flex: 1; min-width: 0; display: flex; justify-content: space-between; align-items: center; gap: 10px 12px; flex-wrap: wrap; }
 .foot-main > :last-child { margin-left: auto; }
 .foot-main > .links:last-child { margin-left: 0; }
+/* what a disabled Continue waits for, one line beside it */
+.foot-why { margin-left: auto; text-align: right; }
+.foot-main > .foot-why + :last-child { margin-left: 0; }
 /* a foot not yet on Foot (the device's own browser page): its two ends apart, as before */
 .foot:not(:has(> .foot-main)) { justify-content: space-between; flex-wrap: wrap; }
 /* why there's no Back: the rail says it on a computer, so the foot says it only on a phone */
@@ -392,6 +395,7 @@ details > summary, .disclose { cursor: pointer; }
   .foot > .btn.back { order: 2; flex: none; }
   .foot-main > :last-child { order: 3; flex: 1 1 0; margin-left: 0; }
   .foot-lock { display: inline-flex; flex: 1 1 100%; max-width: none; font-size: 12.5px; }
+  .foot-why { text-align: center; }
   .foot-main > .links { display: grid; gap: 8px; }
   .foot-main > .links > .btn, .foot-main > .btn { width: 100%; }
   .foot-main > span:empty, .foot-main > .links:empty { display: none; }

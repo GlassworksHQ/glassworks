@@ -18,7 +18,7 @@ export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downl
   'image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-error', 'image-download-bad',
   'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes',
   'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed',
-  ...['place-choose', 'place-start', 'place-fastboot', 'place-confirm', 'place-stage', 'place-join-wifi', 'place-joined', 'place-wifi-unreachable', 'place-receive-lan', 'place-receive-ble', 'place-lna-denied', 'place-receive-file', 'place-restore-point',
+  ...['place-choose', 'place-start', 'place-fastboot', 'place-confirm', 'place-stage', 'place-join-wifi', 'place-joined', 'place-wifi-unreachable', 'place-receive-lan', 'place-receive-ble', 'place-lna-denied', 'place-receive-file', 'place-restore-point', 'place-restore-copied',
     'place-fastboot-again', 'place-working', 'place-connect', 'place-first-start', 'place-installing', 'place-done', 'place-error-bundle', 'place-error-write',
     'place-undo', 'place-undo-fastboot', 'place-undo-working', 'place-undo-error', 'place-undo-done', 'place-run', 'place-resume', 'place-resume-staged'] as const] as const;
 export type ImageDemo = (typeof IMAGE_DEMOS)[number];
@@ -292,10 +292,12 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
   if (name === 'place-error-bundle' || name === 'place-fastboot-again') return done;
   if (name === 'place-resume') return reloaded();
   const second = image.connectFastboot();
-  if (name === 'place-working') { await new Promise((r) => setTimeout(r, fast ? 0 : 50)); }
-  await waitFor(() => image.state.screen === 'restore-point' && image.state.restorePoint?.status === 'ready' || name === 'place-working' && image.state.work?.step === 'flash-system');
+  await waitFor(() => image.state.screen === 'restore-point' && image.state.restorePoint?.status === 'ready');
   await second;
-  if (name === 'place-restore-point' || name === 'place-working' || name === 'place-error-write') {
+  if (name === 'place-restore-point') return done; // Continue waits for the copy
+  // the person downloads the copy: Continue opens
+  await image.restoreZip();
+  if (name === 'place-restore-copied' || name === 'place-working' || name === 'place-error-write') {
     if (name === 'place-working') void image.continueInstall();
     if (name === 'place-error-write') await image.continueInstall();
     return done;

@@ -141,7 +141,7 @@ describe('resume', () => {
     expect(screen.getByRole('heading', { name: 'Pick up where you left off' })).toBeTruthy();
     const so = screen.getByRole('list', { name: 'Your install so far' });
     expect([...so.querySelectorAll('.prow')].map((x) => `${x.querySelector('.plabel')!.textContent} ${x.querySelector('.pmeta')!.textContent}`))
-      .toEqual(['Choose Done', 'Prepare Done', 'Fastboot Done', 'Receive Done', 'Install Your turn']);
+      .toEqual(['Choose Done', 'Prepare Done', 'Fastboot Done', 'Copy Done', 'Install Your turn']);
     expect(now()).toBe('Kiln has what it needs from the Mirror');
     expect(back()).toBeNull(); // resume has no Back: Continue, or a way out
     expect([...foot().querySelectorAll('.btn')].map((b) => b.textContent)).toEqual(['Start over', 'Continue']);

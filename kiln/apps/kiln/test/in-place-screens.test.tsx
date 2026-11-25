@@ -184,31 +184,46 @@ describe('RestorePointScreen', () => {
     expect(screen.queryByRole('button', { name: /Download/ })).toBeNull();
   });
 
-  it('ready: saved, checked, downloadable, and Continue goes on', () => {
+  it('ready: saved, checked, and Continue waits for a copy on this computer, saying so beside it', () => {
     const p = restore();
     expect(screen.getByText('Saved in this browser')).toBeTruthy();
     const code = screen.getByText('aaaaaaaaaaaa');
     expect(code.getAttribute('title')).toBe(p.verifiedDigest);
     expect(screen.queryByText(/SHA-256/)).toBeNull();
-    // until the copy is downloaded, downloading it is the one ember action
+    // until the copy is downloaded, downloading it is the one ember action, and Continue waits
     expect(button('Download a copy').className).toContain('ember');
-    expect(button('Continue').className).not.toContain('ember');
+    const c = button('Continue');
+    expect(c.className).not.toContain('ember');
+    expect(c.disabled).toBe(true);
+    fireEvent.click(c);
+    expect(p.onContinue).not.toHaveBeenCalled();
+    const why = document.getElementById(c.getAttribute('aria-describedby')!)!;
+    expect(why.textContent).toBe('Continue opens once a copy is on this computer.');
+    expect(why.closest('.foot')).toBe(c.closest('.foot'));
     fireEvent.click(button('Download a copy'));
     expect(p.onDownload).toHaveBeenCalledOnce();
-    const c = button('Continue');
-    expect(c.disabled).toBe(false);
-    fireEvent.click(c);
-    expect(p.onContinue).toHaveBeenCalledOnce();
     expect(screen.getByText(/go back to it at any time/)).toBeTruthy();
     // after the last VOL−: the cover note would ask for it once more
     expect(screen.queryByText('Keep the back cover off.')).toBeNull();
   });
 
-  it('ready and downloaded: says so', () => {
-    restore({ downloaded: true });
+  it('ready and downloaded: says so, and Continue goes on', () => {
+    const p = restore({ downloaded: true });
     expect(button('Downloaded ✓').className).not.toContain('ember');
-    expect(button('Continue').className).toContain('ember');
+    const c = button('Continue');
+    expect(c.className).toContain('ember');
+    expect(c.disabled).toBe(false);
+    expect(c.hasAttribute('aria-describedby')).toBe(false);
+    expect(screen.queryByText(/Continue opens once/)).toBeNull();
     expect(screen.getByText('A copy is on this computer')).toBeTruthy();
+    fireEvent.click(c);
+    expect(p.onContinue).toHaveBeenCalledOnce();
+  });
+
+  it('a download that failed says why, and Continue still waits', () => {
+    restore({ downloadError: 'QuotaExceededError' });
+    expect(screen.getByRole('alert').textContent).toContain('QuotaExceededError');
+    expect(button('Continue').disabled).toBe(true);
   });
 
   it('error: nothing changed yet, Try again, no Continue', () => {

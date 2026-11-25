@@ -16,6 +16,7 @@ import type { AppSession, AppState } from './appSession';
 import { SilentUpdates } from '../components/SilentUpdates';
 import { ImageKeep, KeyOutcome, keyHeld } from './KeepScreens';
 import { lines, rich } from './rich';
+import { totalTime, word } from './words';
 import { InPlaceNotice, ReceiveScreen, RestorePointScreen, type InPlaceWords } from './InPlaceScreens';
 import { Foot, StartOverDialog } from '../components/Nav';
 import { BrowserAsk, ClockGlyph, Details, Hands, Instructions, Note, Problem, Progress, Wait, rowsAt, useForward, type ProgressRow } from '../components/Kit';
@@ -26,10 +27,11 @@ type P = { f: ImageSession; s: ImageState; m: AppSession; ms: AppState };
 
 /**
  * The install's steps on the rail, before the standard flow's Set up and Done. Arriving by an image's link skips the
- * choice. An in-place install (`inPlace`) has no download: it prepares, connects fastboot, receives, then installs.
+ * choice. An in-place install (`inPlace`) has no download: it prepares, connects fastboot, copies the parts of the system
+ * it changes (the receive step), then installs.
  */
 export const imageSteps = (f: Pick<DeviceFrame, 'short'>, link: boolean, inPlace = false): string[] =>
-  (inPlace ? [f.short, 'Choose', 'Prepare', 'Fastboot', 'Receive', 'Install'] : [f.short, 'Choose', 'Download', 'Fastboot', 'Install']).filter((x) => !link || x !== 'Choose');
+  (inPlace ? [f.short, 'Choose', 'Prepare', 'Fastboot', 'Copy', 'Install'] : [f.short, 'Choose', 'Download', 'Fastboot', 'Install']).filter((x) => !link || x !== 'Choose');
 
 /** Where an in-place install's screens sit on its rail: its first fastboot session, the receive, then its second. */
 function inPlaceAt(s: ImageState, done: number): number {
@@ -88,8 +90,6 @@ function Log({ s }: { s: ImageState }) {
   return <Details label="Technical log"><pre className="rawlog">{[...s.log].reverse().join('\n') || 'Nothing yet.'}</pre></Details>;
 }
 
-/** A frame word that only some frames give (installer.json `words`): how long a step takes, an intro line. */
-const word = (d: DeviceFrame, k: string): string | undefined => (d.words as unknown as Record<string, string | undefined>)[k];
 
 /** The in-place screens' words, from the frame's data (its `inPlace.*` words). */
 export function inPlaceWordsOf(d: DeviceFrame): InPlaceWords {
@@ -199,7 +199,7 @@ export function InPlaceStart({ f, s, m, ms }: P) {
       {s.changed && <Note tone="info">{`An earlier try already changed ${d.the}. Going on puts it right.`}</Note>}
       {road.length > 0 && (
         <div className="road">
-          <span className="road-h">{word(d, 'time.total') ? `What happens · ${word(d, 'time.total')}` : 'What happens'}</span>
+          <span className="road-h">{totalTime(d, f.recipe.id) ? `What happens · ${totalTime(d, f.recipe.id)}` : 'What happens'}</span>
           <ol className="road-list">
             {road.map((x) => (
               <li key={x.text} className={x.you ? 'you' : undefined}>
