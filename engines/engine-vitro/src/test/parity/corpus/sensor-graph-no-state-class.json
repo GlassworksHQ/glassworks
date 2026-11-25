@@ -24,7 +24,8 @@
     "pl": "esphome",
     "dp": 0,
     "di": "dev-wall-display",
-    "en": "Backlight Level"
+    "en": "Backlight Level",
+    "np": "device"
    }
   ],
   "devices": [

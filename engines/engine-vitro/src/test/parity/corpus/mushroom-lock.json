@@ -22,7 +22,8 @@
    {
     "ei": "lock.front_door",
     "pl": "demo",
-    "di": "dev-front-door"
+    "di": "dev-front-door",
+    "np": "device"
    }
   ],
   "devices": [

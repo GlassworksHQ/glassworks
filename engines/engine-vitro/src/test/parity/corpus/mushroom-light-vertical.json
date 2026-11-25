@@ -33,7 +33,8 @@
     "tk": "light",
     "ic": "mdi:floor-lamp",
     "di": "dev-reading-lamp",
-    "en": "Reading"
+    "en": "Reading",
+    "np": "device"
    }
   ],
   "devices": [

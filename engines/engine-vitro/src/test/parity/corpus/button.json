@@ -24,7 +24,8 @@
    {
     "ei": "light.desk_lamp",
     "pl": "switch_as_x",
-    "di": "dev-desk-lamp"
+    "di": "dev-desk-lamp",
+    "np": "device"
    }
   ],
   "devices": [

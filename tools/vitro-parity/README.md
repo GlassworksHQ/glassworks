@@ -47,7 +47,7 @@ A fixture uses HA's own shapes, so a new case is mostly copied from another:
 ```json
 "fixture": {
   "states": { "light.desk_lamp": { "state": "on", "last_changed": "-35m", "attributes": { "brightness": 166, "friendly_name": "Desk Lamp" } } },
-  "entities": [{ "ei": "light.desk_lamp", "pl": "zha", "tk": "light", "di": "dev-desk-lamp" }],
+  "entities": [{ "ei": "light.desk_lamp", "pl": "zha", "tk": "light", "di": "dev-desk-lamp", "np": "device" }],
   "devices": [{ "id": "dev-desk-lamp", "name": "Desk Lamp" }],
   "history": { "sensor.living_room_temperature": { "wave": { "min": 19.6, "max": 23.4, "period": "24h", "step": "10m", "decimals": 2 } } }
 }
@@ -56,7 +56,7 @@ A fixture uses HA's own shapes, so a new case is mostly copied from another:
 | Key | What |
 |---|---|
 | `states` | Entity id → `state`, `attributes`, `last_changed` (and `last_updated`), like HA's state objects |
-| `entities`, `devices`, `areas`, `floors`, `users`, `persons` | The registries: `entities` in `list_for_display`'s short form (`ei`, `pl`, `di`, `ai`, `en`, `ic`, `tk`, `dp`, `hn`), the rest as HA lists them. `hn` (has an entity name) makes HA show the entity's name without its device's; Vitro doesn't read it yet, so the corpus leaves it out |
+| `entities`, `devices`, `areas`, `floors`, `users`, `persons` | The registries: `entities` in `list_for_display`'s short form (`ei`, `pl`, `di`, `ai`, `np`, `en`, `ic`, `tk`, `dp`), the rest as HA lists them. `np: "device"` puts the device's name before the entity's own, as HA does for an integration's entities; without it HA shows the entity's own name alone, which Vitro doesn't do yet, so every corpus entry on a device sets it |
 | `history` | Entity id → `wave` (`min`, `max`, `period`, `step`, `decimals`, `quantum`, `phase`), or `points`/`steps` (`[[time, state]]` or `[[time, state, attributes]]`). Statistics are computed from the same series for entities with a state class |
 | `todo`, `forecast`, `calendar` | Entity id → items; → `{daily: [...]}`; → events (`summary`, `start`, `end`) |
 | `logbook` | Entries as HA's `logbook/event_stream` sends them, with `when` as a time |

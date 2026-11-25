@@ -25,7 +25,8 @@
     "ei": "sensor.printer_black_ink",
     "pl": "demo",
     "di": "dev-office-printer",
-    "en": "Black ink"
+    "en": "Black ink",
+    "np": "device"
    }
   ],
   "devices": [

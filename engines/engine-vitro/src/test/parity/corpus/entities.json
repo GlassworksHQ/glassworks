@@ -82,7 +82,8 @@
     "ei": "binary_sensor.fridge_door",
     "pl": "demo",
     "di": "dev-fridge",
-    "en": "Door"
+    "en": "Door",
+    "np": "device"
    },
    {
     "ei": "input_boolean.vacation_mode",
@@ -95,21 +96,24 @@
     "tk": "light",
     "ic": "mdi:led-strip-variant",
     "di": "dev-bedroom-strip",
-    "en": "Accent"
+    "en": "Accent",
+    "np": "device"
    },
    {
     "ei": "sensor.fridge_power",
     "pl": "demo",
     "dp": 0,
     "di": "dev-fridge",
-    "en": "Power"
+    "en": "Power",
+    "np": "device"
    },
    {
     "ei": "sensor.fridge_temperature",
     "pl": "demo",
     "dp": 1,
     "di": "dev-fridge",
-    "en": "Temperature"
+    "en": "Temperature",
+    "np": "device"
    }
   ],
   "devices": [

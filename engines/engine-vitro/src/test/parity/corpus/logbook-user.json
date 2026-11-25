@@ -31,7 +31,8 @@
     "di": "dev-bedroom-strip",
     "en": "Accent",
     "tk": "light",
-    "ic": "mdi:led-strip-variant"
+    "ic": "mdi:led-strip-variant",
+    "np": "device"
    }
   ],
   "devices": [

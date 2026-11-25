@@ -35,7 +35,8 @@
     "pl": "esphome",
     "dp": 0,
     "di": "dev-living-room-sensor",
-    "en": "CO2"
+    "en": "CO2",
+    "np": "device"
    }
   ],
   "devices": [

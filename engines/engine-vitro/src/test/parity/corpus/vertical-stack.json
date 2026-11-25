@@ -54,7 +54,8 @@
     "pl": "demo",
     "dp": 0,
     "di": "dev-fridge",
-    "en": "Power"
+    "en": "Power",
+    "np": "device"
    }
   ],
   "devices": [

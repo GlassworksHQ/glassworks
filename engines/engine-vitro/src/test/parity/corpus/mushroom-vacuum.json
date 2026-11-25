@@ -35,7 +35,8 @@
    {
     "ei": "vacuum.rover",
     "pl": "demo",
-    "di": "dev-rover"
+    "di": "dev-rover",
+    "np": "device"
    }
   ],
   "devices": [

@@ -83,25 +83,29 @@
     "ei": "sensor.printer_black_ink",
     "pl": "demo",
     "di": "dev-printer",
-    "en": "Black ink"
+    "en": "Black ink",
+    "np": "device"
    },
    {
     "ei": "sensor.printer_cyan_ink",
     "pl": "demo",
     "di": "dev-printer",
-    "en": "Cyan ink"
+    "en": "Cyan ink",
+    "np": "device"
    },
    {
     "ei": "sensor.printer_magenta_ink",
     "pl": "demo",
     "di": "dev-printer",
-    "en": "Magenta ink"
+    "en": "Magenta ink",
+    "np": "device"
    },
    {
     "ei": "sensor.printer_yellow_ink",
     "pl": "demo",
     "di": "dev-printer",
-    "en": "Yellow ink"
+    "en": "Yellow ink",
+    "np": "device"
    }
   ],
   "devices": [

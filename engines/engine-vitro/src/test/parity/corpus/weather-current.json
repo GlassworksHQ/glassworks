@@ -34,13 +34,14 @@
    {
     "ei": "weather.forecast_home",
     "pl": "met",
-    "di": "dev-forecast-home"
+    "di": "dev-forecast-home",
+    "np": "device"
    }
   ],
   "devices": [
    {
     "id": "dev-forecast-home",
-    "name": "Forecast Home"
+    "name": "Home"
    }
   ],
   "forecast": {

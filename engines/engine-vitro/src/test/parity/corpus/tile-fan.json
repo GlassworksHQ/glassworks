@@ -31,7 +31,8 @@
     "ei": "fan.ceiling_fan",
     "pl": "zha",
     "tk": "fan",
-    "di": "dev-ceiling-fan"
+    "di": "dev-ceiling-fan",
+    "np": "device"
    }
   ],
   "devices": [

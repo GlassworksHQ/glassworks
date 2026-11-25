@@ -25,7 +25,8 @@
     "pl": "esphome",
     "dp": 0,
     "di": "dev-living-room-sensor",
-    "en": "Pressure"
+    "en": "Pressure",
+    "np": "device"
    }
   ],
   "devices": [

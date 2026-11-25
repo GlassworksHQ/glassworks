@@ -98,19 +98,22 @@
     "tk": "light",
     "ic": "mdi:led-strip-variant",
     "di": "dev-bedroom-strip",
-    "en": "Accent"
+    "en": "Accent",
+    "np": "device"
    },
    {
     "ei": "light.kitchen_pendant",
     "pl": "demo",
     "di": "dev-kitchen",
-    "en": "Pendant"
+    "en": "Pendant",
+    "np": "device"
    },
    {
     "ei": "light.porch_ceiling_light",
     "pl": "zha",
     "tk": "light",
-    "di": "dev-porch-ceiling-light"
+    "di": "dev-porch-ceiling-light",
+    "np": "device"
    },
    {
     "ei": "light.reading_lamp",
@@ -118,7 +121,8 @@
     "tk": "light",
     "ic": "mdi:floor-lamp",
     "di": "dev-reading-lamp",
-    "en": "Reading"
+    "en": "Reading",
+    "np": "device"
    }
   ],
   "devices": [

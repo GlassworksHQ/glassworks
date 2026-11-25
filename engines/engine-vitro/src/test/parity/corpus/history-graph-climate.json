@@ -48,7 +48,8 @@
    {
     "ei": "climate.heat_pump",
     "pl": "demo",
-    "di": "dev-heat-pump"
+    "di": "dev-heat-pump",
+    "np": "device"
    }
   ],
   "devices": [

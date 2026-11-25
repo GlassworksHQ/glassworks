@@ -72,19 +72,22 @@
     "pl": "esphome",
     "dp": 0,
     "di": "dev-living-room-sensor",
-    "en": "Humidity"
+    "en": "Humidity",
+    "np": "device"
    },
    {
     "ei": "sensor.living_room_temperature",
     "pl": "esphome",
     "dp": 1,
     "di": "dev-living-room-sensor",
-    "en": "Temperature"
+    "en": "Temperature",
+    "np": "device"
    },
    {
     "ei": "weather.forecast_home",
     "pl": "met",
-    "di": "dev-forecast-home"
+    "di": "dev-forecast-home",
+    "np": "device"
    }
   ],
   "devices": [
@@ -94,7 +97,7 @@
    },
    {
     "id": "dev-forecast-home",
-    "name": "Forecast Home"
+    "name": "Home"
    }
   ],
   "history": {

@@ -77,21 +77,24 @@
    {
     "ei": "light.desk_lamp",
     "pl": "switch_as_x",
-    "di": "dev-desk-lamp"
+    "di": "dev-desk-lamp",
+    "np": "device"
    },
    {
     "ei": "sensor.living_room_humidity",
     "pl": "esphome",
     "dp": 0,
     "di": "dev-living-room-sensor",
-    "en": "Humidity"
+    "en": "Humidity",
+    "np": "device"
    },
    {
     "ei": "sensor.living_room_temperature",
     "pl": "esphome",
     "dp": 1,
     "di": "dev-living-room-sensor",
-    "en": "Temperature"
+    "en": "Temperature",
+    "np": "device"
    }
   ],
   "devices": [

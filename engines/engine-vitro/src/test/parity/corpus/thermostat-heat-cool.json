@@ -33,7 +33,8 @@
    {
     "ei": "climate.living_room",
     "pl": "demo",
-    "di": "dev-living-room-thermostat"
+    "di": "dev-living-room-thermostat",
+    "np": "device"
    }
   ],
   "devices": [

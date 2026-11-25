@@ -30,7 +30,8 @@
     "ei": "light.kitchen_pendant",
     "pl": "demo",
     "di": "dev-kitchen",
-    "en": "Pendant"
+    "en": "Pendant",
+    "np": "device"
    }
   ],
   "devices": [

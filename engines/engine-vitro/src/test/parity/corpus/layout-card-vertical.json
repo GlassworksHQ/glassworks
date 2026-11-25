@@ -101,7 +101,8 @@
     "ei": "fan.ceiling_fan",
     "pl": "zha",
     "tk": "fan",
-    "di": "dev-ceiling-fan"
+    "di": "dev-ceiling-fan",
+    "np": "device"
    },
    {
     "ei": "light.bedroom_accent",
@@ -109,7 +110,8 @@
     "tk": "light",
     "ic": "mdi:led-strip-variant",
     "di": "dev-bedroom-strip",
-    "en": "Accent"
+    "en": "Accent",
+    "np": "device"
    },
    {
     "ei": "light.reading_lamp",
@@ -117,7 +119,8 @@
     "tk": "light",
     "ic": "mdi:floor-lamp",
     "di": "dev-reading-lamp",
-    "en": "Reading"
+    "en": "Reading",
+    "np": "device"
    }
   ],
   "devices": [
