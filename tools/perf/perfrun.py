@@ -1394,9 +1394,16 @@ def cmd_coldstart(dev, a):
                     dev.sh(f"am start -W -n {dev.component}", timeout=120)
             elif not rv.get("usable_at") and C.now() - rv["at"] > RECOVER_WAIT_S:
                 # RECOVER_WAIT_S is for the page to come back usable; once it has, the fallback above ends the wait.
-                res["error"] = (f"the kiosk didn't come back within {RECOVER_WAIT_S:.0f} s after "
-                                f"{res['recoveries'][-1]['after']} timed out")
-                break
+                # The lines logcat already gave first: this loop gets here before it reads the next one, so a usable
+                # line that came while the runner was busy (the kernel's log read for the lost page, a loaded
+                # computer) was still waiting in the queue, and the run failed though the page was back in time.
+                if drain():
+                    break
+                if st.get("recovering") is rv and not rv.get("usable_at"):
+                    res["error"] = (f"the kiosk didn't come back within {RECOVER_WAIT_S:.0f} s after "
+                                    f"{res['recoveries'][-1]['after']} timed out")
+                    break
+                continue
         if res["launch"] is None and C.now() - t0 > a.settle:
             if drain():
                 break
