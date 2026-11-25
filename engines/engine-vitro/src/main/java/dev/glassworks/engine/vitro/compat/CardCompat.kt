@@ -298,7 +298,7 @@ object CardCompat {
                     is String -> k to v
                     else -> {
                         // A nested selector map walks further into shadow roots than Vitro models.
-                        reasons += "card_mod path `$k` nests further into the card's shadow DOM, which Vitro doesn't model"
+                        reasons += "card_mod path `${redactAttributeValues(k)}` nests further into the card's shadow DOM, which Vitro doesn't model"
                         k to ""
                     }
                 }
@@ -309,7 +309,7 @@ object CardCompat {
         val notApplied = VitroSupport.CARD_MOD_NOT_APPLIED[card.type]
         for ((key, css) in sheets) {
             if (key !in allowed) {
-                reasons += "card_mod path `$key` styles the card's inner DOM, which Vitro doesn't model"
+                reasons += "card_mod path `${redactAttributeValues(key)}` styles the card's inner DOM, which Vitro doesn't model"
                 continue
             }
             if (css.isBlank()) continue
@@ -427,8 +427,8 @@ object CardCompat {
                 notes += gap("!important", "card_mod `$key` `!important`")
             }
             // Attribute values left out of what is reported (and logged): one can hold a signed URL or a name.
-            verdicts.filterIsInstance<Sel.Unsupported>().forEach { reasons += "card_mod `$key` selector `${redactAttributeValues(it.selector)}`: ${it.why}" }
-            verdicts.filterIsInstance<Sel.Unchecked>().forEach { notes += gap("templated selector", "card_mod `$key` `${redactAttributeValues(it.selector)}`") }
+            verdicts.filterIsInstance<Sel.Unsupported>().forEach { reasons += "card_mod `${redactAttributeValues(key)}` selector `${redactAttributeValues(it.selector)}`: ${it.why}" }
+            verdicts.filterIsInstance<Sel.Unchecked>().forEach { notes += gap("templated selector", "card_mod `${redactAttributeValues(key)}` `${redactAttributeValues(it.selector)}`") }
             val honored = verdicts.filterIsInstance<Sel.Honored>()
             if (honored.isEmpty()) continue
             val host = honored.any { it.host }

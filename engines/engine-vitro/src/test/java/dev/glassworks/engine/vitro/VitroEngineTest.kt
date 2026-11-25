@@ -526,7 +526,13 @@ class VitroEngineTest {
 
     @Test
     fun logLinesLeaveOutQueriesAndProxiedPaths() {
-        assertEquals("http://192.0.2.10:8123/auth/…?…", VitroEngine.forLog("http://192.0.2.10:8123/auth/authorize?client_id=a&state=secret"))
+        assertEquals("http://…/auth/…?…", VitroEngine.forLog("http://192.0.2.10:8123/auth/authorize?client_id=a&state=secret"))
+        // No Home Assistant address either: an origin, a host or an IP a connection error names.
+        assertEquals("Unable to resolve host \"…\": No address", VitroEngine.forLog("Unable to resolve host \"homeassistant.local\": No address"))
+        assertEquals("failed to connect to …/… (port 8123)", VitroEngine.forLog("failed to connect to ha.example/192.0.2.10 (port 8123)"))
+        assertEquals("connect to … refused", VitroEngine.forLog("connect to fd00::12:8123 refused"))
+        assertEquals("Closed by Home Assistant", VitroEngine.forLog("Closed by Home Assistant"))
+        assertEquals("Starting Vitro 0.0.1", VitroEngine.forLog("Starting Vitro 0.0.1"))
         assertEquals("[3] GET /api/… -> 200", VitroEngine.forLog("[3] GET /api/states/sensor.private_thing -> 200"))
         assertEquals("GET /__vitro/enter?…", VitroEngine.forLog("GET /__vitro/enter?c=capability&to=%2F"))
         assertEquals("GET /__vitro/island/… -> 200", VitroEngine.forLog("GET /__vitro/island/s0123abcd -> 200"))

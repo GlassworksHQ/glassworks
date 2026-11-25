@@ -676,12 +676,20 @@ class VitroEngine(
         private val LOG_QUERY = Regex("""[?#][^\s"'<>]*""")
         private val LOG_PROXIED = Regex("""/(api|local|hacsfiles|static|auth|__vitro/island|__vitro/ws|__vitro/enter)/[^\s?#"'<>]*""")
 
+        private val LOG_AUTHORITY = Regex("""\b([a-z][a-z0-9+.-]*://)[^/\s?#"'<>]+""", RegexOption.IGNORE_CASE)
+        private val LOG_IPV4 = Regex("""(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?(?![\d.])""")
+        private val LOG_IPV6 = Regex("""(?<![0-9a-z:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?![0-9a-z:])""", RegexOption.IGNORE_CASE)
+        private val LOG_HOST = Regex("""(?<![\w.-])(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*(?::\d+)?(?![\w.-])""", RegexOption.IGNORE_CASE)
+
         /**
          * [text] as it may go to logcat: no query or fragment (an OAuth `state`, a camera token, the proxy's
-         * capability), and no path below the proxied prefixes (entity ids, slot ids, resource names).
+         * capability), no path below the proxied prefixes (entity ids, slot ids, resource names), and no Home
+         * Assistant address (an origin, a host name or an IP a connection error names).
          */
         internal fun forLog(text: String): String =
             text.replace(LOG_QUERY, "?…").replace(LOG_PROXIED) { "/${it.groupValues[1]}/…" }
+                .replace(LOG_AUTHORITY) { "${it.groupValues[1]}…" }
+                .replace(LOG_IPV4, "…").replace(LOG_IPV6, "…").replace(LOG_HOST, "…")
 
         /** Back steps a page keeps. */
         private const val MAX_HISTORY = 50

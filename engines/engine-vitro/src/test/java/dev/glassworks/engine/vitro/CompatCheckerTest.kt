@@ -85,6 +85,11 @@ class CompatCheckerTest {
 
     @Test
     fun selectorDiagnosticsLeaveAttributeValuesOut() {
+        // A selector-map key is reported redacted too (it goes to logcat with the island's reasons).
+        val keyed = verdict("""{"type": "tile", "entity": "light.a", "card_mod": {"style": {"img[src=\"/api/image?token=key-secret\"]$": ".x { color: red }"}}}""")
+        val keyedAll = (keyed.reasons + keyed.notes).joinToString()
+        assertFalse(keyedAll, "key-secret" in keyedAll)
+        assertTrue(keyedAll, "img[src=…]" in keyedAll)
         val css = "img[src^=\"https://cam.example/signed?token=secret-value\"] { opacity: 0 }"
         val v = verdict("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(css)}}}""")
         val all = (v.reasons + v.notes).joinToString()
