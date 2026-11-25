@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assertImages, plan, validateImage } from '@glassworks/kiln-core';
 import { describe, expect, it } from 'vitest';
-import { GLASS_PANES, GLASS_PANES_IMAGE, GLASS_PANES_USERDATA, GLASSWORKS_IMAGE, MIRROR_ACCESS, MIRROR_IMAGES } from '../src';
+import { GLASS_PANES, GLASS_PANES_IMAGE, GLASS_PANES_USERDATA, GLASSWORKS_IMAGE, GLASSWORKS_IN_PLACE, MIRROR_ACCESS, MIRROR_IMAGES } from '../src';
 
 const ROOT = join(__dirname, '../../../..');
 const allowlist = JSON.parse(readFileSync(join(ROOT, 'kiln/workers/refract/allowlist.json'), 'utf8')) as Record<string, { owner: string; repo: string; tag?: string; name?: string; commit?: string; path?: string; size: number; sha256: string }>;
@@ -14,7 +14,18 @@ describe('the Mirror\'s images', () => {
   it('are valid recipes, Glassworks first', () => {
     expect(() => assertImages(MIRROR_IMAGES, MIRROR_ACCESS)).not.toThrow();
     for (const r of MIRROR_IMAGES) expect(validateImage(r, MIRROR_ACCESS)).toEqual([]);
-    expect(MIRROR_IMAGES.map((r) => [r.id, r.community])).toEqual([['glassworks', false], ['glass-panes', true]]);
+    expect(MIRROR_IMAGES.map((r) => [r.id, r.community])).toEqual([['glassworks', false], ['glassworks-in-place', false], ['glass-panes', true]]);
+  });
+
+  it('Glassworks on the stock software: no download, the stage on userdata, the bundle, the restore point before system, then the app', () => {
+    expect(GLASSWORKS_IN_PLACE.files).toEqual([]);
+    expect(plan(GLASSWORKS_IN_PLACE).map((s) => ('partition' in s ? `${s.do} ${s.partition} ${s.file}` : 'restore' in s ? `${s.do} ${s.restore}` : s.do))).toEqual([
+      'fastboot', 'checks', 'backup', 'confirm',
+      'stage', 'flash userdata stage-userdata', 'restart',
+      'receive', 'fastboot', 'in-place restore-services',
+      'restore-point restore-services', 'flash system system-in-place', 'flash userdata userdata', 'restart',
+      'app-install', 'way-back',
+    ]);
   });
 
   it('never let a recipe write the bootloader, boot or the modem', () => {

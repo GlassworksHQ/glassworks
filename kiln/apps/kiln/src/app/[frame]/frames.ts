@@ -22,7 +22,10 @@ export const STANDARD_ROUTES: Readonly<Record<string, string>> = {
   done: 'Done', resume: 'Finish setting up',
 };
 
-/** Undo's routes, for a frame whose way back restores its backup (installer.json `wayBack.how`: restore-backup). */
+/**
+ * Undo's routes, for a frame whose way back restores its backup (installer.json `wayBack.how`: restore-backup), or a
+ * flow's way back writes its restore point over the blocks it changed (a flow's `wayBack.how`: restore-blocks).
+ */
 export const UNDO_ROUTES: Readonly<Record<string, string>> = {
   undo: 'Undo', 'undo/connect': 'Undo: connect', 'undo/restore': 'Undo: restore', 'undo/done': 'Undo: done',
 };
@@ -39,5 +42,6 @@ export function routesOf(id: string): Record<string, string> {
   }
   // an install from the device's own browser, when the frame declares one (installer.json `onDevice`)
   if (i.onDevice) own[i.onDevice.route] = i.onDevice.title;
-  return { ...own, ...STANDARD_ROUTES, ...(i.wayBack?.how === 'restore-backup' ? UNDO_ROUTES : {}) };
+  const restores = i.wayBack?.how === 'restore-backup' || Object.values(i.flows ?? {}).some((f) => f.wayBack?.how === 'restore-blocks');
+  return { ...own, ...STANDARD_ROUTES, ...(restores ? UNDO_ROUTES : {}) };
 }

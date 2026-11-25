@@ -52,6 +52,10 @@ const assets = [
   { name: 'bootlogo', file: repo('branding/glass-tile/bootlogo.bmp'), license: 'MIT', source: `${SRC}/tree/main/branding/glass-tile` },
   { name: 'mirror-bootanimation', file: repo('branding/lululemon-mirror/bootanimation.zip'), license: 'MIT', source: `${SRC}/tree/main/branding/lululemon-mirror` },
   { name: 'mirror-settings-overlay', file: repo('frames/lululemon-mirror/overlay/GlassworksSettings.apk'), license: 'MIT', source: `${SRC}/tree/main/frames/lululemon-mirror/overlay` },
+  // the Mirror's in-place install: the MIT stock probe app its stage plants as the setup agent (tools/mirror/stock-probe-app)
+  { name: 'mirror-stock-probe-apk', file: repo('tools/mirror/stock-probe-app/prebuilt/stock-probe.apk'), license: 'MIT', source: `${SRC}/tree/main/tools/mirror/stock-probe-app` },
+  { name: 'mirror-stock-probe-fiemap', file: repo('tools/mirror/stock-probe-app/prebuilt/libfiemap.so'), license: 'MIT', source: `${SRC}/tree/main/tools/mirror/stock-probe-app` },
+  { name: 'mirror-stock-probe-cert', file: repo('tools/mirror/stock-probe-app/prebuilt/cert.hex'), license: 'MIT', source: `${SRC}/tree/main/tools/mirror/stock-probe-app` },
   { name: 'kiosk-apk', file: KIOSK, license: 'MIT', source: `${SRC}/tree/main/app` },
   ...(KEYBOARD || process.argv.includes('--remote') ? [{ name: 'keyboard-apk', file: KEYBOARD ?? '', license: 'Apache-2.0', source: 'https://github.com/rkkr/simple-keyboard' }] : []),
 ];

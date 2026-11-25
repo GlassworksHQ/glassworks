@@ -1,0 +1,189 @@
+// The Mirror's in-place install for Kiln (Stock-in-place): the code behind kiln-core's `InPlaceCode`, for what data
+// can't say. Kiln runs the steps (stage, receive, in-place, app-install), checks every image this builds against the
+// bundle's extents (kiln-core inplace.ts `checkInPlace`), keeps the restore point, and owns every screen.
+//
+//   stage        a fresh userdata with the MIT stock probe app as its setup agent (stage.ts): userdata only
+//   receive      the agent's GWSB bundle (the stock services.jar, where it sits on system, the serial): checked here
+//   in-place     services.jar patched in place (stock.ts), as a surgical sparse image of its own blocks, the restore
+//                image of the same blocks from the stock bytes, and a clean userdata
+//   app-install  Glassworks over adb, the stock apps hidden (pm hide), and Glassworks as Device Owner
+//
+// Browser-safe: no node:* imports. Nothing here logs the secret, the Wi-Fi password or the serial.
+import type { PanelShell } from '@glassworks/adb';
+import { Steps, grantPermissions, kioskVersion, startApp } from '@glassworks/app-adb';
+import { Disk, MemoryStore, writeSparse } from '@glassworks/ext4';
+import { inPlaceWords, parseGwsbBundle, sha256Hex, verifyGwsbBundle, type FirstStart, type InPlaceCode } from '@glassworks/kiln-core';
+import { GLASSWORKS, type MirrorApp } from './app';
+import { makeOnlyHome, setPortrait } from './flash';
+import { buildUserdata } from './image';
+import { DEFAULT_WIFI_TEMPLATE, STOCK_PROBE_ASSETS, buildStageUserdata } from './stage';
+import {
+  SPARSE_BLOCK_SIZE, STOCK_SERVICES_JAR_PATH, buildSurgicalSparseImage, hideStockBloat, patchStockServicesJar, unhideStockBloat,
+  type FiemapExtent,
+} from './stock';
+import { describeMirrorUpdates, readMirrorUpdates } from './updates';
+
+/** The probe app's HTTP server (ProbeServerService.PORT) and bundle path. */
+export const STOCK_PROBE_LAN = { port: 18765, path: '/stock-bundle.bin', pagePath: '/' } as const;
+
+/** The probe app's Bluetooth GATT service and characteristics (BleProbeServer). */
+export const STOCK_PROBE_BLE = {
+  service: '67770001-6b69-6c6e-7374-6f636b70726f',
+  meta: '67770002-6b69-6c6e-7374-6f636b70726f',
+  ctrl: '67770003-6b69-6c6e-7374-6f636b70726f',
+  data: '67770004-6b69-6c6e-7374-6f636b70726f',
+} as const;
+
+/** The restore point's files: the image that puts the stock services.jar back, its manifest, and the stock jar itself. */
+export const RESTORE_SPARSE = 'restore-services.sparse';
+export const ORIGINAL_JAR = 'services.jar.orig';
+
+/** A bundle Kiln mustn't build from, said in plain words. Nothing was written when it's thrown. */
+export class BundleRefused extends Error {}
+
+interface BundleMeta {
+  servicesPath?: unknown;
+  servicesSize?: unknown;
+  servicesSha256?: unknown;
+  servicesOdexFound?: unknown;
+  servicesHasClassesDex?: unknown;
+  mirrorVersion?: unknown;
+  fingerprint?: unknown;
+  fiemap?: { size?: unknown; extents?: unknown } | null;
+}
+
+/** The bundle's FIEMAP extents, whole (block and blocks filled in from bytes when the agent left them out). */
+export function bundleExtents(meta: BundleMeta, size: number): FiemapExtent[] {
+  const f = meta.fiemap;
+  if (!f || !Array.isArray(f.extents) || !f.extents.length) throw new BundleRefused('The bundle doesn\'t say where services.jar sits on the system partition, so Kiln can\'t change it in place. Nothing was written.');
+  if (f.size !== undefined && f.size !== size) throw new BundleRefused('The bundle\'s file map is for another copy of services.jar. Nothing was written.');
+  return (f.extents as Record<string, unknown>[]).map((e) => {
+    const n = (k: string) => (typeof e[k] === 'number' ? e[k] as number : NaN);
+    const physical = n('physical'), length = n('length');
+    return { logical: n('logical'), physical, length, flags: Number.isFinite(n('flags')) ? n('flags') : 0,
+      block: Number.isFinite(n('block')) ? n('block') : physical / SPARSE_BLOCK_SIZE, blocks: Number.isFinite(n('blocks')) ? n('blocks') : length / SPARSE_BLOCK_SIZE };
+  });
+}
+
+/**
+ * The stop-gate before any write: on an odexed build the code Android runs comes from services.odex, so a change to
+ * services.jar would do nothing (or worse, leave the two out of step). Kiln refuses those builds.
+ */
+export function checkNotOdexed(meta: BundleMeta): void {
+  if (meta.servicesOdexFound === true || meta.servicesHasClassesDex === false) {
+    throw new BundleRefused('This Mirror\'s software runs services.jar from a precompiled copy (services.odex), so Kiln can\'t change it in place. Nothing was written. Install the Glassworks image instead.');
+  }
+}
+
+/** Builds a fresh userdata as a sparse image: this browser's adb key, and the network when given. */
+async function cleanUserdata(o: { adbKey: string; userdataBytes: number; wifi?: { ssid: string; password: string } }): Promise<Blob> {
+  const disk = new Disk(new MemoryStore(), 4096, Math.floor(o.userdataBytes / 4096), { zeroed: true });
+  await buildUserdata(disk, { adbKey: o.adbKey, ...(o.wifi ? { wifi: { ...o.wifi, template: DEFAULT_WIFI_TEMPLATE } } : {}) });
+  const parts: Uint8Array[] = [];
+  await writeSparse(disk, (b) => { parts.push(b.slice()); });
+  return new Blob(parts as BlobPart[]);
+}
+
+const blob = (b: Uint8Array) => new Blob([b as Uint8Array<ArrayBuffer>]);
+
+/**
+ * The app-install step: Glassworks over adb, made the Device Owner (so its updates install by themselves), with the
+ * stock apps hidden and Glassworks the only home screen. Device Owner is best effort: a build that refuses it still
+ * gets the app, and Done says updates need a click.
+ */
+export async function installInPlace(p: PanelShell, o: { apk: Uint8Array; onStep: (step: string, detail?: string) => void; sleep: (ms: number) => Promise<void>; app?: MirrorApp }): Promise<FirstStart> {
+  const ours = o.app ?? GLASSWORKS;
+  const r = new Steps(p, o.onStep);
+  r.step(`Install ${ours.name}`);
+  const out = await r.tryInstall('glassworks', o.apk, true);
+  if (!/Success/.test(out)) throw new Error(`Android didn't install ${ours.name}: ${out.trim().split('\n').at(-1) ?? 'no answer'}`);
+  const app = await kioskVersion(p, undefined, ours);
+  if (!app) throw new Error(`Android says it installed the APK, but ${ours.name} (${ours.package}) isn't there.`);
+  r.detail(`${ours.name} ${app.name ?? ''} (${app.code}) installed`);
+
+  // Device Owner first, before anything else names it an admin: stock lets `dpm` do it once services.jar is patched
+  r.step(`Let ${ours.name} install its own updates (Device Owner)`);
+  if (ours.admin) {
+    const owner = await p.run(`dpm set-device-owner ${ours.admin}`);
+    r.detail(/Success/.test(owner.out) ? 'Device Owner: set' : `Device Owner: not set (${owner.out.trim().split('\n')[0] || `exit ${owner.code}`})`);
+  }
+  await grantPermissions(r, ours);
+  for (const perm of ['ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION']) await r.try(`pm grant ${ours.package} android.permission.${perm}`);
+
+  r.step('Hide the stock apps');
+  const bloat = await hideStockBloat(p);
+  for (const b of bloat) r.detail(`${b.ok ? 'hidden   ' : 'not yet  '} ${b.pkg}`);
+
+  r.step('Turn the screen upright (portrait)');
+  await setPortrait(p, o.onStep, o.sleep);
+  r.step(`Start ${ours.name}`);
+  await startApp(r, {}, ours);
+  r.step(`Make ${ours.name} the only home screen`);
+  // any other launcher the build carries goes too (the stock one is hidden above): HOME must open Glassworks with no chooser
+  const { hidden, home } = await makeOnlyHome(p, o.onStep, o.sleep, ours);
+  const updates = await readMirrorUpdates(p, ours);
+  r.detail(describeMirrorUpdates(updates));
+  return { app, hidden: [...bloat.filter((b) => b.ok).map((b) => b.pkg), ...hidden], home, updates: { state: updates.state } };
+}
+
+/** The Mirror's in-place code. `words`: installer.json `device.words` (the `inPlace.*` keys, checked here). */
+export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
+  return {
+    assets: [STOCK_PROBE_ASSETS.apk, STOCK_PROBE_ASSETS.fiemap, STOCK_PROBE_ASSETS.cert],
+    stage: (o) => buildStageUserdata(o),
+    async readBundle(bytes, { secret, serial, kept }) {
+      // the jar against its SHA-256, the serial, and the signature with this run's secret (a kept copy's was checked when it came)
+      const { meta: raw, payload } = await verifyGwsbBundle(bytes, { ...(kept ? {} : { secret }), expectedSerial: serial, requireSerial: true, requireHmac: !kept, requirePayloadHash: true });
+      const meta = raw as BundleMeta;
+      if (meta.servicesPath !== undefined && meta.servicesPath !== STOCK_SERVICES_JAR_PATH) throw new BundleRefused(`The bundle holds ${String(meta.servicesPath)}, not services.jar. Nothing was written.`);
+      if (meta.servicesSize !== undefined && meta.servicesSize !== payload.length) throw new BundleRefused('The bundle\'s services.jar isn\'t the size it says. Nothing was written.');
+      checkNotOdexed(meta);
+      const extents = bundleExtents(meta, payload.length);
+      const info = [
+        `stock ${typeof meta.mirrorVersion === 'string' ? meta.mirrorVersion : 'version unknown'}`,
+        `services.jar ${payload.length} bytes, SHA-256 ${String(meta.servicesSha256)}, in ${extents.length} extent${extents.length === 1 ? '' : 's'}`,
+        'services.odex: none, so services.jar is what Android runs',
+      ];
+      return { digest: String(meta.servicesSha256).toLowerCase(), extents: extents.map((e) => ({ physical: e.physical, length: e.length })), info };
+    },
+    async build(bundle, o) {
+      const { meta: raw, payload: jar } = parseGwsbBundle(bundle);
+      const meta = raw as BundleMeta;
+      checkNotOdexed(meta);
+      const extents = bundleExtents(meta, jar.length);
+      const systemBytes = o.partitionBytes.system;
+      if (!systemBytes) throw new Error('Kiln doesn\'t know the system partition\'s size from fastboot.');
+      const patched = await patchStockServicesJar(jar, o.adbKey, { enableDeviceOwner: true });
+      const write = buildSurgicalSparseImage(systemBytes, extents, patched.patched);
+      const restore = buildSurgicalSparseImage(systemBytes, extents, jar);
+      const userdata = await cleanUserdata(o);
+      const originalSha256 = await sha256Hex(jar);
+      // the same manifest as tools/mirror's surgical-adb --backup-dir, so its --undo restores from the download too
+      const manifest = {
+        version: 1,
+        createdAt: new Date().toISOString(),
+        systemBytes,
+        userdataBytes: o.userdataBytes,
+        deviceIdHash: await sha256Hex(new TextEncoder().encode(o.serial.trim())),
+        servicesJar: {
+          path: STOCK_SERVICES_JAR_PATH,
+          size: jar.length,
+          originalSha256,
+          patchedSha256: await sha256Hex(patched.patched),
+          fingerprint: patched.fingerprint,
+          extents,
+          origFile: ORIGINAL_JAR,
+          restoreSparse: RESTORE_SPARSE,
+        },
+      };
+      return { writes: { 'system-in-place': blob(write), userdata }, restore: blob(restore), manifest, files: { [ORIGINAL_JAR]: jar } };
+    },
+    appInstall: (p, o) => installInPlace(p, o),
+    async beforeRestore(p, { onStep }) {
+      onStep('Show the stock apps again');
+      for (const b of await unhideStockBloat(p)) onStep('', `${b.ok ? 'shown    ' : 'not yet  '} ${b.pkg}`);
+    },
+    channels: { lan: { ...STOCK_PROBE_LAN }, ble: { ...STOCK_PROBE_BLE } },
+    words: inPlaceWords(words),
+  };
+}

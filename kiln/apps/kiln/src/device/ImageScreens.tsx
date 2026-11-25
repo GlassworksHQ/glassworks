@@ -17,18 +17,33 @@ import type { AppSession, AppState } from './appSession';
 import { SilentUpdates } from '../components/SilentUpdates';
 import { ImageKeep, KeyOutcome, keyHeld } from './KeepScreens';
 import { lines, rich } from './rich';
+import { InPlaceNotice, ReceiveScreen, RestorePointScreen, type InPlaceWords } from './InPlaceScreens';
 import { ManagePageRow } from '../wizard/screens';
 
 type P = { f: ImageSession; s: ImageState; m: AppSession; ms: AppState };
 
-/** The install's steps on the rail, before the standard flow's Set up and Done. Arriving by an image's link skips the choice. */
-export const imageSteps = (f: Pick<DeviceFrame, 'short'>, link: boolean): string[] =>
-  [f.short, 'Choose', 'Download', 'Fastboot', 'Install'].filter((x) => !link || x !== 'Choose');
+/**
+ * The install's steps on the rail, before the standard flow's Set up and Done. Arriving by an image's link skips the
+ * choice. An in-place install (`inPlace`) has no download: it prepares, connects fastboot, receives, then installs.
+ */
+export const imageSteps = (f: Pick<DeviceFrame, 'short'>, link: boolean, inPlace = false): string[] =>
+  (inPlace ? [f.short, 'Choose', 'Prepare', 'Fastboot', 'Receive', 'Install'] : [f.short, 'Choose', 'Download', 'Fastboot', 'Install']).filter((x) => !link || x !== 'Choose');
+
+/** Where an in-place install's screens sit on its rail: its first fastboot session, the receive, then its second. */
+function inPlaceAt(s: ImageState, done: number): number {
+  if (s.screen === 'done') return done;
+  if (s.screen === 'choose') return 1;
+  if (s.screen === 'image' || s.screen === 'download') return 2;
+  if (s.screen === 'receive') return 4;
+  if (s.screen === 'undo') return 5;
+  return s.round === 2 ? 5 : 3;
+}
 
 /** Set up is Glassworks' (the standard flow, after the first start): a community image's install ends at Install. */
-export function imageRail(s: ImageState, f: Pick<DeviceFrame, 'short' | 'id'>, community = false): RailStep[] {
-  const names = [f.short, 'Choose', 'Download', 'Fastboot', 'Install', ...(community ? [] : ['Set up']), 'Done'];
-  const at = { choose: 1, image: 2, download: 2, keep: 3, fastboot: 3, confirm: 3, working: 4, adb: 4, error: 4, done: names.length }[s.screen];
+export function imageRail(s: ImageState, f: Pick<DeviceFrame, 'short' | 'id'>, community = false, inPlace = false): RailStep[] {
+  const names = [...imageSteps(f, false, inPlace), ...(community ? [] : ['Set up']), 'Done'];
+  const at = inPlace ? inPlaceAt(s, names.length)
+    : ({ choose: 1, image: 2, download: 2, keep: 3, fastboot: 3, confirm: 3, working: 4, adb: 4, error: 4, done: names.length, receive: 4, 'restore-point': 4, undo: 4 } as const)[s.screen];
   return names.map((name, i): RailStep => {
     const mark: RailMark = i < at ? 'done' : i > at ? 'todo' : s.screen === 'error' ? 'bad' : s.screen === 'adb' ? 'turn' : 'now';
     return { name, mark };
@@ -69,9 +84,67 @@ function Log({ s }: { s: ImageState }) {
   );
 }
 
+/** The in-place screens' words, from the frame's data (its `inPlace.*` words). */
+export function inPlaceWordsOf(d: DeviceFrame): InPlaceWords {
+  const w = d.imageFlow.inPlace?.words;
+  return {
+    the: d.the,
+    ...(w ? { bootHint: w['inPlace.receive.lede'], coverNote: w['inPlace.coverNote'], changes: w['inPlace.changes'], restoreLede: w['inPlace.restorePoint.lede'] } : {}),
+  };
+}
+
+/** The APK, from its release or a file: on the first screen, and on the app's install when it's missing. */
+function ApkInput({ d, m, ms }: { d: DeviceFrame; m: AppSession; ms: AppState }) {
+  return (
+    <>
+      {ms.release && <ReleaseApk m={m} ms={ms} />}
+      {!ms.release && (
+        <div className="fields">
+          <label className="field"><span>{d.words['image.apkLabel']}</span>
+            <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
+              onChange={(e) => { const x = e.target.files?.[0]; if (x) void m.pickApk(x.name, x.arrayBuffer().then((b) => new Uint8Array(b))); }} />
+          </label>
+        </div>
+      )}
+      {ms.apk && (!ms.release || ms.apk.error) && <p className={`small${ms.apk.error ? ' status err' : ''}`}>{ms.apk.name}: {ms.apk.error ?? `${ms.apk.package}, ${fmtSize(ms.apk.size)}`}</p>}
+    </>
+  );
+}
+
+/** Glassworks on the device's own software: nothing to download, the APK, and a network for a quick transfer. */
+export function InPlaceStart({ f, s, m, ms }: P) {
+  const d = f.frame;
+  const w = d.imageFlow.inPlace?.words;
+  const blocked = f.blocked();
+  return (
+    <section className="card" aria-labelledby="h">
+      <TestOnly f={f.frame} />
+      <h2 id="h">{`Install Glassworks on ${d.the}, keeping its system`}</h2>
+      <p className="lede">{w?.['inPlace.stage.lede']}</p>
+      {s.changed && <p className="small">{`An earlier try already changed ${d.the}.`}</p>}
+      <InPlaceNotice words={inPlaceWordsOf(d)} />
+      <div className="fields">
+        <label className="field"><span>Wi-Fi network (optional)</span>
+          <input className="input" autoComplete="off" value={s.wifi.ssid} onChange={(e) => f.setWifi({ ssid: e.target.value })} />
+        </label>
+        <label className="field"><span>Wi-Fi password</span>
+          <input className="input" type="password" autoComplete="off" value={s.wifi.password} onChange={(e) => f.setWifi({ password: e.target.value })} />
+        </label>
+      </div>
+      <ApkInput d={d} m={m} ms={ms} />
+      {blocked && <p className="status err" role="alert">{blocked}</p>}
+      <div className="foot">
+        <span className="links"><button type="button" className="link" onClick={() => f.backToChoice()}>Back</button></span>
+        <button type="button" className="btn ember" disabled={!!blocked} onClick={() => f.toFastboot()}>Continue</button>
+      </div>
+    </section>
+  );
+}
+
 /** Glassworks: its image, downloaded and checked, and what Kiln builds into it. */
 export function ImageImage({ f, s, m, ms }: P) {
   const d = f.frame;
+  if (f.inPlace) return <InPlaceStart f={f} s={s} m={m} ms={ms} />;
   const blocked = f.blocked();
   const ready = s.files.every((x) => x.state === 'ok');
   return (
@@ -112,12 +185,16 @@ export function ImageFastboot({ f, s }: P) {
       {f.recipe.community && <Whose r={f.recipe} />}
       <h2 id="h">{`Put ${d.the} in fastboot mode`}</h2>
       {/* by hand first: most people install over the vendor's software, which Kiln can't reach over adb (the maintainer, 2026-11-19) */}
-      {s.restarted ? <p className="lede">{rich(d.words['fastboot.restarted'])}</p> : <>
+      {f.inPlace && s.round === 2 ? <>
+        <p className="lede">{d.imageFlow.inPlace?.words['inPlace.fastboot.again']}</p>
+        <p className="small">{`The bundle is saved in this browser. Click Connect and ${pickInList(d)}.`}</p>
+      </> : s.restarted ? <p className="lede">{rich(d.words['fastboot.restarted'])}</p> : <>
         <Recovery data={d.recovery} />
         <ol className="join">
           {lines(d.words['fastboot.byHandSteps']).map((x) => <li key={x}>{x}</li>)}
         </ol>
         <p className="small">{d.words['fastboot.byHandNote']}</p>
+        {f.inPlace && <p className="small">{d.imageFlow.inPlace?.words['inPlace.coverNote']}</p>}
         <p className="small">{`Then click Connect and ${pickInList(d)}.`}</p>
       </>}
       {r && !r.ok && (
@@ -131,7 +208,7 @@ export function ImageFastboot({ f, s }: P) {
         <span className="links">
           <button type="button" className="link" onClick={() => f.retry()}>Back</button>
           {/* Glassworks goes through the keep step, which reads Home Assistant's key and then restarts the device (PR 603) */}
-          {!s.restarted && <><span aria-hidden="true">·</span><button type="button" className="link" disabled={s.connecting} onClick={() => (f.recipe.community ? void f.restartToFastboot() : f.toKeep())}>{d.words['fastboot.overUsb']}</button></>}
+          {!s.restarted && !f.inPlace && <><span aria-hidden="true">·</span><button type="button" className="link" disabled={s.connecting} onClick={() => (f.recipe.community ? void f.restartToFastboot() : f.toKeep())}>{d.words['fastboot.overUsb']}</button></>}
         </span>
         <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void f.connectFastboot()}>Connect</button>
       </div>
@@ -145,6 +222,23 @@ export function ImageConfirm(p: P) {
   const rev = reversible(d);
   if (f.recipe.community) return <ConfirmCommunity f={f} s={s} reversible={rev} />;
   const r = s.fastboot!;
+  if (f.inPlace) {
+    return (
+      <section className="card" aria-labelledby="h">
+        <h2 id="h">Add the setup agent</h2>
+        <ol className="join">
+          {r.checks.map((c) => <li key={c.what} className="done">{c.what}: {c.found}</li>)}
+        </ol>
+        <p className="lede">{d.imageFlow.inPlace?.words['inPlace.confirm.lede']}</p>
+        <InPlaceNotice words={inPlaceWordsOf(d)} />
+        <label className="check"><input type="checkbox" checked={s.understood} onChange={(e) => f.understand(e.target.checked)} />{` I understand ${d.the}'s app data starts fresh.`}</label>
+        <div className="foot">
+          <span className="links"><button type="button" className="link" onClick={() => f.retry()}>Back</button></span>
+          <button type="button" className="btn ember" disabled={!s.understood} onClick={() => void f.flash()}>Continue</button>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{d.words['confirm.title']}</h2>
@@ -177,13 +271,24 @@ const rowsOf = (d: DeviceFrame): Record<string, { id: WorkStep; text: string }[]
   'adb-key': [{ id: 'adb-key', text: 'Replace the shared USB key with this browser’s' }],
   wifi: [{ id: 'wifi', text: 'Save your Wi-Fi network for first start' }],
   'wifi-on': [{ id: 'wifi-on', text: 'Turn Wi-Fi on after first start' }],
+  stage: [{ id: 'stage', text: 'Prepare the setup agent' }],
+  'in-place': [{ id: 'in-place', text: 'Build and check the changes from the bundle' }],
+  'app-install': [{ id: 'app-install', text: 'Install Glassworks and hide the stock apps' }],
 });
+
+/** An in-place install's steps on the working screen: its first fastboot session's, or its second's. */
+function stepsOnScreen(f: ImageSession, s: ImageState) {
+  const all = f.writes();
+  if (!f.inPlace) return all;
+  const cut = all.findIndex((x) => x.do === 'receive');
+  return s.round === 2 ? all.slice(cut + 1) : all.slice(0, cut);
+}
 /** Issue 580: the hand-back row joins Glassworks' first start, when the tab holds Home Assistant's key. */
 const HAND_BACK = { id: 'hand-back' as WorkStep, text: 'Restore your Home Assistant connection key' };
 
 export function ImageWorking({ f, s }: P) {
   const ROWS = rowsOf(f.frame);
-  const rows = f.writes().flatMap((x) => [...(ROWS[x.do === 'flash' ? `flash-${x.partition}` : x.do] ?? []), ...(x.do === 'first-start' && keyHeld(s.key) ? [HAND_BACK] : [])]);
+  const rows = stepsOnScreen(f, s).flatMap((x) => [...(ROWS[x.do === 'flash' ? `flash-${x.partition}` : x.do] ?? []), ...(x.do === 'first-start' && keyHeld(s.key) ? [HAND_BACK] : [])]);
   const at = Math.max(0, rows.findIndex((r) => r.id === s.work?.step));
   const x = s.work?.x ?? 0;
   return (
@@ -191,7 +296,7 @@ export function ImageWorking({ f, s }: P) {
       {f.recipe.community && <Whose r={f.recipe} />}
       <h2 id="h" className="huge">Keep it plugged in</h2>
       <ol className="join">
-        {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}{i === at && x > 0 && x < 1 && <span className="sub-step">{Math.floor(x * 100)}%</span>}
+        {rows.map((r, i) => <li key={`${r.id}-${i}`} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}{i === at && x > 0 && x < 1 && <span className="sub-step">{Math.floor(x * 100)}%</span>}
           {/* the image is small to send; the device then writes an empty filesystem (212 MiB on the first frame), with nothing to report (a real run, 2026-11-19) */}
           {i === at && r.id === 'flash-userdata' && <span className="sub-step">This takes a minute or two, and the progress bar may pause — that&apos;s normal.</span>}</li>)}
       </ol>
@@ -203,7 +308,7 @@ export function ImageWorking({ f, s }: P) {
   );
 }
 
-export function ImageAdb({ f, s }: P) {
+export function ImageAdb({ f, s, m, ms }: P) {
   const d = f.frame;
   const r = f.recipe;
   return (
@@ -214,6 +319,8 @@ export function ImageAdb({ f, s }: P) {
       {r.community
         ? <p className="lede">{`Its first start takes a few minutes. Click Connect and ${pickInList(d)}, and Kiln switches its Wi-Fi on.`}</p>
         : <p className="lede">{rich(d.words['adb.firstStart'])}</p>}
+      {f.inPlace && <p className="small">{d.imageFlow.inPlace?.words['inPlace.appInstall.lede']}</p>}
+      {f.inPlace && !ms.apk?.sha256 && <ApkInput d={d} m={m} ms={ms} />}
       {s.connecting && !s.adbWaiting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.adbWaiting && <><p className="status work" role="status">{`Waiting for ${d.the} to finish starting…`}</p><div className="bar wait"><i /></div></>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
@@ -268,7 +375,16 @@ export function ImageOutcome({ f, s, away }: { f: ImageSession; s: ImageState; a
         </div>
       )}
       {fb && <KeyOutcome k={s.key} d={d} />}
-      {other && <WayBack f={f} other={other} then={away} />}
+      {f.inPlace && (
+        <div className="well">
+          <div className="grow">
+            <span className="status">The way back</span>
+            <span className="small">{d.imageFlow.inPlace?.words['inPlace.wayBack']}</span>
+          </div>
+          <button type="button" className="btn ghost" onClick={() => { away(); void f.startUndo(); }}>Restore the original system</button>
+        </div>
+      )}
+      {other && !f.inPlace && <WayBack f={f} other={other} then={away} />}
       {rev && <p className="small">{rev}.</p>}
     </>
   );
@@ -282,21 +398,21 @@ export function ImageError({ f, s }: P) {
       <h2 id="h">The install didn&apos;t finish</h2>
       <p className="lede">{s.wifiOnFailed
         ? 'Wi-Fi didn\'t turn on yet. Check the details below and click Connect again when you\'re ready.'
-        : s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on'].includes(s.work.step)
+        : s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on', 'app-install'].includes(s.work.step)
         ? `${cap(d.the)} is still in fastboot mode, so leave it plugged in. ${s.files.every((x) => x.state === 'ok') ? 'Click Try again to reconnect and pick up from fastboot.' : 'Click Try again to redownload the files and continue.'}`
         : 'Review the details below and click Try again when you\'re ready.'}</p>
       <pre className="raw">{s.error}</pre>
-      {s.flashFailed && !f.recipe.community && !s.noFill && (
+      {s.flashFailed && !f.recipe.community && !f.inPlace && !s.noFill && (
         <p className="small">{d.words['error.noFill']}</p>
       )}
       <div className="foot">
         <Log s={s} />
         <span className="links">
-          {s.flashFailed && !f.recipe.community && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try compatibility write mode</button>}
+          {s.flashFailed && !f.recipe.community && !f.inPlace && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try compatibility write mode</button>}
           {s.wifiOnFailed && s.connecting && <span className="status work" role="status">{`${cap(pickInList(d))}…`}</span>}
           {s.wifiOnFailed && s.connectError && <span className="status err" role="alert">{s.connectError}</span>}
           {s.wifiOnFailed && <button type="button" className="btn ghost" disabled={s.connecting} onClick={() => void f.connectAdb()}>Connect again</button>}
-          {!s.wifiOnFailed && f.tryAgainLands() !== 'image' && <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to download</button>}
+          {!s.wifiOnFailed && !f.inPlace && f.tryAgainLands() !== 'image' && <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to download</button>}
         </span>
         {/* the step that stopped, on its own screen: the first start over adb, a write over fastboot, else the download */}
         {!s.wifiOnFailed && <button type="button" className="btn ember" onClick={() => f.tryAgain()}>Try again</button>}
@@ -305,9 +421,122 @@ export function ImageError({ f, s }: P) {
   );
 }
 
+/** Saves a Blob as a file, from the page (the restore point's download). */
+function saveFile(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** The receive step: the bundle from the device's setup agent (InPlaceScreens). */
+export function InPlaceReceive({ f, s }: P) {
+  const r = s.receive ?? { stage: 'waiting-boot', channel: null, progress: null, pageUrl: null, fallback: null, error: null, bluetooth: true };
+  return (
+    <>
+      <ReceiveScreen stage={r.stage} channel={r.channel} bluetoothAvailable={r.bluetooth} progress={r.progress} agentPageUrl={r.pageUrl}
+        fallbackReason={r.fallback} errorMessage={r.error} words={inPlaceWordsOf(f.frame)}
+        onConnectBluetooth={() => void f.receive()} onRetryLan={() => void f.receive()} onPickFile={(x) => void f.receiveFile(x)}
+        onCancel={r.stage === 'transferring' || r.stage === 'connecting' ? () => void f.cancelReceive() : undefined}
+        onRetry={() => f.receiveAgain()} />
+      <Log s={s} />
+    </>
+  );
+}
+
+/** The restore point, saved in this browser and read back before any system write. */
+export function InPlaceRestorePoint({ f, s }: P) {
+  const r = s.restorePoint ?? { status: 'saving', digest: null, downloaded: false, error: null, filename: 'restore.sparse' };
+  return (
+    <>
+      <RestorePointScreen status={r.status} verifiedDigest={r.digest} downloaded={r.downloaded} restoreFilename={r.filename} errorMessage={r.error}
+        words={inPlaceWordsOf(f.frame)}
+        onDownload={() => { void f.restoreZip().then(({ blob, name }) => saveFile(blob, name)).catch(() => {}); }}
+        onContinue={() => void f.continueInstall()} onRetry={() => f.retryRestorePoint()} />
+      <Log s={s} />
+    </>
+  );
+}
+
+/** The way back from an in-place install: the restore point written over the blocks it changed. */
+export function InPlaceUndo({ f, s }: P) {
+  const d = f.frame;
+  const u = s.undo ?? { at: 'start' };
+  const words = d.imageFlow.inPlace?.words;
+  if (u.at === 'done') {
+    return (
+      <section className="card" aria-labelledby="h">
+        <span className="okmark" aria-hidden="true">✓</span>
+        <h2 id="h">{`${cap(d.the)} is back on its original system`}</h2>
+        <p className="lede">{`Kiln wrote the restore point over every block it had changed, and ${d.the} is restarting.`}</p>
+        <div className="foot"><Log s={s} /><span /></div>
+      </section>
+    );
+  }
+  if (u.at === 'working' || u.at === 'error') {
+    return (
+      <section className={`card${u.at === 'error' ? ' err' : ''}`} aria-labelledby="h">
+        <h2 id="h" className={u.at === 'working' ? 'huge' : undefined}>{u.at === 'working' ? 'Keep it plugged in' : 'The restore didn\'t finish'}</h2>
+        {u.at === 'working' && <div className="bar" role="progressbar" aria-label="Writing the restore point" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor((u.x ?? 0) * 100)}><i style={{ width: `${Math.max(2, (u.x ?? 0) * 100)}%` }} /></div>}
+        {u.error && <pre className="raw">{u.error}</pre>}
+        <div className="foot">
+          <Log s={s} />
+          {u.at === 'error' && <button type="button" className="btn ember" onClick={() => void f.undoFlash()}>Try again</button>}
+        </div>
+      </section>
+    );
+  }
+  if (u.at === 'fastboot') {
+    return (
+      <section className="card" aria-labelledby="h">
+        <h2 id="h">{`Put ${d.the} in fastboot mode`}</h2>
+        {u.restarted ? <p className="lede">{rich(d.words['fastboot.restarted'])}</p> : <>
+          <Recovery data={d.recovery} />
+          <ol className="join">{lines(d.words['fastboot.byHandSteps']).map((x) => <li key={x}>{x}</li>)}</ol>
+          <p className="small">{d.words['fastboot.byHandNote']}</p>
+        </>}
+        {u.error && <p className="status err" role="alert">{u.error}</p>}
+        {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
+        <div className="foot">
+          <span className="links"><button type="button" className="link" onClick={() => void f.startUndo()}>Back</button></span>
+          <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void f.undoFlash()}>Connect and restore</button>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="card" aria-labelledby="h">
+      <h2 id="h">Restore the original system</h2>
+      <p className="lede">{words?.['inPlace.wayBack']}</p>
+      {u.source === 'browser' && <p className="status ok" role="status">✓ This browser has the restore point it saved</p>}
+      {u.source === 'file' && <p className="status ok" role="status">{`✓ ${u.fileName ?? 'The restore point'} checks out`}</p>}
+      {!u.source && <p className="small">This browser has no restore point for it. Pick the copy you downloaded.</p>}
+      <div className="fields">
+        <label className="field"><span>Restore point (.zip)</span>
+          <input className="input" type="file" accept=".zip,application/zip" onChange={(e) => { const x = e.target.files?.[0]; if (x) void f.pickRestoreZip(x); }} />
+        </label>
+      </div>
+      {u.error && <p className="status err" role="alert">{u.error}</p>}
+      {s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
+      {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
+      <div className="foot">
+        <span className="links"><button type="button" className="link" disabled={!u.source} onClick={() => f.undoByHand()}>Fastboot by hand</button></span>
+        <button type="button" className="btn ember" disabled={!u.source || s.connecting} onClick={() => void f.undoRestart()}>Restart over USB</button>
+      </div>
+    </section>
+  );
+}
+
 export function ImageScreens(p: P) {
   const { s } = p;
-  return s.screen === 'choose' ? <Choose f={p.f} s={s} />
+  return s.screen === 'receive' ? <InPlaceReceive {...p} />
+    : s.screen === 'restore-point' ? <InPlaceRestorePoint {...p} />
+    : s.screen === 'undo' ? <InPlaceUndo {...p} />
+    : s.screen === 'choose' ? <Choose f={p.f} s={s} />
     : s.screen === 'image' ? <ImageImage {...p} />
     : s.screen === 'download' ? <Download f={p.f} s={s} />
     : s.screen === 'keep' ? <ImageKeep {...p} />

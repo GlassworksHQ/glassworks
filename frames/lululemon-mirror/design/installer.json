@@ -4,6 +4,7 @@
   "touch": false,
   "flows": {
     "fastboot": {
+      "engine": "image",
       "steps": [
         { "id": "image", "route": "", "transport": "none", "inputs": ["apk", "home-assistant", "wifi"], "downloads": ["glass-panes-system"] },
         { "id": "fastboot", "route": "fastboot", "title": "Fastboot", "transport": "fastboot", "enter": { "how": "button", "reachable": false, "why": "VOL- is on a board inside the case. On the Glass Panes image the Mirror runs adb, so phase 2 enters fastboot with adb reboot bootloader." }, "checks": ["fastboot-vars", "partition-sizes"] },
@@ -12,7 +13,21 @@
       ],
       "then": "set-up"
     },
+    "stock": {
+      "engine": "in-place",
+      "steps": [
+        { "id": "stock", "route": "stock", "title": "On the stock software", "transport": "none", "inputs": ["apk", "wifi"] },
+        { "id": "stock-fastboot", "route": "stock/fastboot", "title": "Fastboot", "transport": "fastboot", "enter": { "how": "button", "reachable": false, "why": "VOL- is on a board inside the case, and stock lululemon software has no adb Kiln can use: the back cover comes off once, and stays off until the second fastboot" }, "checks": ["fastboot-vars", "partition-sizes"] },
+        { "id": "stage", "route": "stock/stage", "title": "Setup agent", "transport": "fastboot", "writes": true, "reboots": true, "backup": false },
+        { "id": "receive", "route": "stock/receive", "title": "Receive", "transport": "agent", "enter": { "how": "boot", "key": "stage" } },
+        { "id": "install", "route": "stock/install", "title": "Install", "transport": "fastboot", "enter": { "how": "button", "reachable": false, "why": "VOL- again, with the back cover still off" }, "writes": true, "reboots": true, "backup": "restore-point" },
+        { "id": "first-start", "route": "stock/first-start", "title": "First start", "transport": "adb", "enter": { "how": "boot", "key": "userdata" }, "writes": true }
+      ],
+      "then": "set-up",
+      "wayBack": { "how": "restore-blocks", "restore": "restore-services", "why": "The restore point Kiln keeps before the install puts back every block of system it changed, from the Mirror's own bytes" }
+    },
     "app": {
+      "engine": "app",
       "steps": [
         { "id": "connect", "route": "app", "title": "The app alone", "transport": "adb", "enter": { "how": "usb-debugging", "key": "glass-panes" }, "inputs": ["apk", "home-assistant"], "checks": ["android-6", "free-space"] },
         { "id": "install", "route": "app/install", "title": "Install", "transport": "adb", "writes": true }
@@ -48,7 +63,8 @@
     },
     "storage": {
       "flashedFlag": "kiln.mirror.flashed",
-      "why": "localStorage: this browser has flashed a Mirror (issue 580). Browsers hold it: never rename"
+      "inPlaceDb": "glassworks-mirror-in-place",
+      "why": "flashedFlag, localStorage: this browser has flashed a Mirror (issue 580). inPlaceDb, IndexedDB: the bundles and restore points of in-place installs (Stock-in-place). Browsers hold both: never rename"
     },
     "words": {
       "image.vendor": "Its vendor files come from Qualcomm and Quectel, via the Glass Panes release.",
@@ -71,7 +87,20 @@
       "app.pick.local": "Choose the legacy build of Glassworks for Android. Kiln will set it as the Mirror's only home screen.",
       "app.connectHelp": "Plug the Mirror into this computer, click Connect, and select it in the list. Then choose **Allow** on the Mirror using a USB mouse.",
       "app.toImage": "Mirror still running lululemon's software?",
-      "fastboot.notLetIn": "The Mirror didn't allow this browser to connect — it may still run lululemon's software, or Glassworks installed from another browser. Put it into fastboot mode using the steps above."
+      "fastboot.notLetIn": "The Mirror didn't allow this browser to connect — it may still run lululemon's software, or Glassworks installed from another browser. Put it into fastboot mode using the steps above.",
+      "inPlace.stage.lede": "Kiln keeps lululemon's system and changes only the parts Glassworks needs. First it adds a small setup agent to the Mirror's app storage, so it can read those parts back. Your Wi-Fi network is optional: with it, the transfer takes seconds instead of minutes.",
+      "inPlace.receive.lede": "The Mirror is restarting into the setup agent, which takes a minute or two. The screen may stay dark. Leave it plugged in with the back cover still off.",
+      "inPlace.receive.waiting": "Waiting for the Mirror to start its setup agent",
+      "inPlace.receive.lan": "Sending over your local network",
+      "inPlace.receive.ble": "Sending over Bluetooth. This takes about five minutes, so keep this computer near the Mirror.",
+      "inPlace.receive.file": "Open the Mirror's download page, save the bundle, then pick it here.",
+      "inPlace.restorePoint.lede": "Before it changes anything in the system, Kiln keeps the exact parts it will change, from your Mirror's own copy. They're saved in this browser, and you can download a copy too.",
+      "inPlace.confirm.lede": "Kiln writes the setup agent to the Mirror's app storage now. lululemon's system isn't touched yet, and nothing in it changes until you've saved a restore point.",
+      "inPlace.appInstall.lede": "Kiln installs Glassworks, hides lululemon's apps, and lets Glassworks install its own updates.",
+      "inPlace.wayBack": "To go back, Kiln writes the restore point over the parts it changed, putting lululemon's system back as it was. The Mirror's app data starts fresh either way.",
+      "inPlace.fastboot.again": "Put the Mirror in fastboot mode once more: switch it off with the rocker switch, press and hold VOL− (SW3) on the small green board, and keep holding while you switch it on, then for about 5 seconds more. Keep the back cover off until the install is done.",
+      "inPlace.coverNote": "Keep the back cover off until the install is done: you'll need VOL− once more.",
+      "inPlace.changes": "The Mirror's app data starts fresh, while lululemon's system stays in place. Only the parts Kiln saved in the restore point change, so you can always go back."
     },
     "silent": {
       "on": {

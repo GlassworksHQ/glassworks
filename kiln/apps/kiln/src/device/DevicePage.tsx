@@ -21,6 +21,7 @@ import { Fastboot } from '@glassworks/fastboot';
 import { APP_DEMOS, appDemo, type AppDemo } from './demo';
 import type { AdbAsk } from './adbAsk';
 import { ImageSession, sessionProgress } from './imageSession';
+import { idbInPlaceStore } from './inPlace';
 import { IMAGE_DEMOS, imageDemo, type ImageDemo } from './imageDemo';
 import { KEEP_DEMOS, keepDemo, type KeepDemo } from './keepDemo';
 import { ImageOutcome, ImageScreens, imageLevel, imageRail, imageSteps } from './ImageScreens';
@@ -56,6 +57,8 @@ export function keyedConnect(loadKey: () => Promise<AdbKey>, connect: (key: AdbK
 
 /** The release list and Refract, from the page (a bare `fetch` held by an object is an illegal invocation). */
 const releaseRoute = (...a: Parameters<typeof fetch>) => fetch(...a);
+/** The device's setup agent on the local network, from the page (an in-place install's receive step). */
+const agentFetch = ((...a: Parameters<typeof fetch>) => fetch(...a)) as typeof fetch;
 
 /**
  * Whether this browser has flashed this frame's device (issue 580): a flag in its storage (the frame's
@@ -150,6 +153,11 @@ function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local', 
     apkBlocked: () => app.releaseBlocked(),
     handOver: (p) => { handOver?.(p); },
     progress: sessionProgress(`kiln:device:${base}:image`),
+    // an in-place recipe (the frame's `imageFlow.inPlace`): its bundles and restore points in this browser, its stage's
+    // staged files checked by SHA-256, and its agent on the local network
+    ...(flow.storage.inPlaceDb ? { inPlaceStore: idbInPlaceStore(flow.storage.inPlaceDb) } : {}),
+    stagedAssets: async (names) => Object.fromEntries(await Promise.all(names.map(async (n) => [n, await assets.get(n)] as const))),
+    agentFetch,
   });
   return { app, image };
 }
@@ -170,15 +178,50 @@ function standardEntry(frame: DeviceFrame, base: string, o: { demo?: string; dev
   return { base, name: frame.name, session, demo: o.demo, standard: true };
 }
 
+type FlowData = { steps: { id: string; route?: string; transport?: string }[]; engine?: string; wayBack?: { how: string } };
+
 /**
- * The install's step routes, from the frame's installer.json: its image flow (the one with a fastboot step) and its app
- * flow (the other), each step's `route` by id. The address follows the install's step; going to one starts nothing.
+ * Which engine runs a flow: its installer.json `engine`, or for a frame that doesn't say, `image` when it has a fastboot
+ * step and `app` when it hasn't.
  */
-function installRoutes(id: string): { image: Record<string, string>; app: Record<string, string> } {
-  const flows = Object.values(INSTALLERS[id]?.flows ?? {}) as { steps: { id: string; route?: string; transport?: string }[] }[];
-  const byId = (f?: { steps: { id: string; route?: string }[] }) => Object.fromEntries((f?.steps ?? []).filter((x) => x.route !== undefined).map((x) => [x.id, x.route!]));
-  return { image: byId(flows.find((f) => f.steps.some((x) => x.transport === 'fastboot'))), app: byId(flows.find((f) => !f.steps.some((x) => x.transport === 'fastboot'))) };
+export const engineOf = (f: FlowData): string => f.engine ?? (f.steps.some((x) => x.transport === 'fastboot') ? 'image' : 'app');
+
+/**
+ * The install's step routes, from the frame's installer.json, by engine: its image flow, its in-place flow (when it
+ * has one) and its app flow, each step's `route` by id. The address follows the install's step; going to one starts
+ * nothing.
+ */
+export function installRoutes(id: string): { image: Record<string, string>; app: Record<string, string>; inPlace: Record<string, string> } {
+  const flows = Object.values(INSTALLERS[id]?.flows ?? {}) as FlowData[];
+  const byId = (f?: FlowData) => Object.fromEntries((f?.steps ?? []).filter((x) => x.route !== undefined).map((x) => [x.id, x.route!]));
+  const of = (e: string) => flows.find((f) => engineOf(f) === e);
+  return { image: byId(of('image')), app: byId(of('app')), inPlace: byId(of('in-place')) };
 }
+
+/** Undo's routes of a frame whose in-place flow's way back is its restore point (installer.json `wayBack.how` restore-blocks). */
+export const restoresBlocks = (id: string) => Object.values(INSTALLERS[id]?.flows ?? {}).some((f) => (f as FlowData).wayBack?.how === 'restore-blocks');
+
+/**
+ * An in-place flow's step for each of its screens, in the order kiln-core's step library runs them: the first screen,
+ * the first fastboot session (and its warning), the stage's writes, the receive, the second session (with the restore
+ * point), and the app's install. The ids are the step ids its installer.json declares for each part, in order.
+ */
+export function inPlaceStep(s: ImageState, ids: readonly string[]): string {
+  const [first, fastboot, stage, receive, install, appInstall] = ids;
+  const step = s.work?.step;
+  if (s.screen === 'adb' || step === 'app-install') return appInstall ?? '';
+  if (s.screen === 'receive') return receive ?? '';
+  if (s.round === 2 && (s.screen === 'fastboot' || s.screen === 'restore-point' || s.screen === 'working' || s.screen === 'error')) return install ?? '';
+  if (s.screen === 'working' || (s.screen === 'error' && s.work)) return stage ?? '';
+  if (s.screen === 'fastboot' || s.screen === 'confirm') return fastboot ?? '';
+  return first ?? '';
+}
+
+/** The ids of a frame's in-place flow's steps, in order. */
+const inPlaceIds = (id: string) => ((Object.values(INSTALLERS[id]?.flows ?? {}) as FlowData[]).find((f) => engineOf(f) === 'in-place')?.steps ?? []).map((x) => x.id);
+
+/** The undo route of each way-back screen. */
+const undoRoute = (s: ImageState) => ({ start: 'undo', fastboot: 'undo/connect', working: 'undo/restore', error: 'undo/restore', done: 'undo/done' } as const)[s.undo?.at ?? 'start'];
 
 /** The image flow's step for each of its screens (installer.json step ids). */
 function imageStep(s: ImageState): string {
@@ -439,7 +482,7 @@ function Failed({ s, session }: { s: AppState; session: AppSession }) {
 
 const DEMOS = [...APP_DEMOS, ...IMAGE_DEMOS, ...KEEP_DEMOS];
 /** Glassworks over fastboot (`flash-…`) and the choice with a community image (`image-…`) run on ImageSession. */
-const isImageDemo = (d: string) => d.startsWith('flash-') || d.startsWith('image-');
+const isImageDemo = (d: string) => d.startsWith('flash-') || d.startsWith('image-') || d.startsWith('place-');
 
 /**
  * With ?apk=release or ?apk=local: the image over fastboot (the default), or the app alone over adb on a device that
@@ -458,11 +501,13 @@ export function DevicePage({ frame, demo: sim, base }: { frame: DeviceFrame; dem
     const routes = installRoutes(frame.id);
     const sub = location.pathname.slice(base.length).replace(/^\/+|\/+$/g, '');
     const appRoute = !!sub && Object.values(routes.app).includes(sub);
-    const imageFirst = m.demo ? isImageDemo(m.demo) : !appRoute && new URLSearchParams(location.search).get('mode') !== 'app';
-    if (m.demo) return { m, imageFirst, search: location.search };
+    // undo's routes, for a frame whose way back is its restore point: the image session's way back
+    const undo = restoresBlocks(frame.id) && /^undo(\/|$)/.test(sub);
+    const imageFirst = m.demo ? isImageDemo(m.demo) : undo || (!appRoute && new URLSearchParams(location.search).get('mode') !== 'app');
+    if (m.demo) return { m, imageFirst, search: location.search, undo };
     // the sessions live in Kiln's registry, not in this component: a running install outlives the picker
     const earlier = registry.activity(base);
-    if (!m.on && !earlier) return { m, imageFirst, search: location.search, real: realSessions(frame, false) };
+    if (!m.on && !earlier) return { m, imageFirst, search: location.search, real: realSessions(frame, false), undo };
     const kept = keptDevice(base, frame.name, () => realSessions(frame, true, m.apk, handOver, base), imageFirst);
     // back to a running install (or from a link without ?apk=…): as it was; otherwise the address's path
     if (kept === earlier && m.on && !kept.running()) {
@@ -473,7 +518,7 @@ export function DevicePage({ frame, demo: sim, base }: { frame: DeviceFrame; dem
       const fastbootIdle = ['choose', 'image', 'download'].includes(kept.sessions.image.state.screen);
       if (m.apk && (!imageFirst || fastbootIdle)) kept.sessions.app.switchApk(m.apk, releaseRoute);
     }
-    return { m, imageFirst: kept.imageMode, search: location.search, real: kept.sessions, kept };
+    return { m, imageFirst: kept.imageMode, search: location.search, real: kept.sessions, kept, undo };
   });
   const [demo, setDemo] = useState<{ app: AppSession; image?: ImageSession }>();
   const [imageMode, setMode] = useState(start.imageFirst);
@@ -538,10 +583,15 @@ export function DevicePage({ frame, demo: sim, base }: { frame: DeviceFrame; dem
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the demo runs once, on the page's first sessions
   }, [start, sim]);
   const live = start.real ?? demo;
+  // an undo route opened (a link, a reload there): the way back's first screen, once
+  useEffect(() => {
+    if (start.undo && live?.image && live.image.state.screen !== 'undo') void live.image.startUndo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per page, when its sessions are there
+  }, [start, !!live?.image]);
   // the standard flow shows on its routes, and from the hand-over until it has finished
   if (entry && (onStandard || (entry.handed && status(ws) !== 'finished'))) {
     const image = imageMode && live?.image;
-    const before = image ? imageSteps(frame, image.state.link) : appSteps(frame);
+    const before = image ? imageSteps(frame, image.state.link, image.inPlace) : appSteps(frame);
     const outcome = live ? (image ? <LiveImageOutcome image={image} away={away} /> : <LiveAppOutcome app={live.app} />) : undefined;
     return <StandardRoutes entry={entry} renew={renew} before={before} outcome={outcome} />;
   }
@@ -574,13 +624,17 @@ export function LiveAppOutcome({ app }: { app: AppSession }) {
 export function ImageFlow({ image, app, toApp, base }: { image: ImageSession; app: AppSession; toApp?: () => void; base?: string }) {
   const f = image.frame;
   const s = useSyncExternalStore(image.subscribe, image.get, image.get);
-  useInstallRoute(base ?? '', base === undefined ? undefined : installRoutes(f.id).image[imageStep(s)]);
+  const routes = installRoutes(f.id);
+  useInstallRoute(base ?? '', base === undefined ? undefined
+    : s.screen === 'undo' ? undoRoute(s)
+    : image.inPlace ? routes.inPlace[inPlaceStep(s, inPlaceIds(f.id))]
+    : routes.image[imageStep(s)]);
   const ms = useSyncExternalStore(app.subscribe, app.get, app.get);
   const chip = useBrowserChip();
-  useEffect(() => { document.title = s.screen === 'adb' ? `Your turn · ${f.name} · Kiln` : `${f.name} · Kiln`; }, [s.screen, f]);
+  useEffect(() => { document.title = s.screen === 'adb' || s.screen === 'receive' ? `Your turn · ${f.name} · Kiln` : `${f.name} · Kiln`; }, [s.screen, f]);
   const community = image.recipes.find((x) => x.community);
   return (
-    <Shell steps={imageRail(s, f, image.recipe.community)} level={imageLevel(s, image.recipe.community)} error={s.screen === 'error'} chip={chip}>
+    <Shell steps={imageRail(s, f, image.recipe.community, image.inPlace)} level={imageLevel(s, image.recipe.community)} error={s.screen === 'error' || s.undo?.at === 'error'} chip={chip}>
       <ImageScreens f={image} s={s} m={app} ms={ms} />
       {toApp && community && s.screen === 'image' && <p className="small">{`Already running the ${community.name} image? `}<button type="button" className="link" onClick={toApp}>Install just the app over USB</button></p>}
     </Shell>

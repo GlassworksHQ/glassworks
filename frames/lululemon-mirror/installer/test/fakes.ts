@@ -175,6 +175,8 @@ export class FakeMirror implements PanelShell {
   accelerometer = 1;
   installed?: number;
   admins = new Set<string>();
+  /** the Device Owner, once `dpm set-device-owner` made one (the in-place install): stock has none */
+  owner?: string;
 
   /** our app: its package, the HOME component Android records (an alias), its admin */
   readonly app: MirrorApp;
@@ -235,7 +237,7 @@ export class FakeMirror implements PanelShell {
     const props: Record<string, string> = {
       'ro.build.version.sdk': String(o.sdk ?? 23), 'ro.build.version.release': o.release ?? '6.0.1',
       'ro.board.platform': o.platform ?? 'msm8916', 'ro.product.cpu.abilist': o.abilist ?? 'arm64-v8a,armeabi-v7a,armeabi',
-      'ro.product.model': 'MSM8916 for arm64',
+      'ro.product.model': 'MSM8916 for arm64', 'sys.boot_completed': '1',
     };
     let m: RegExpExecArray | null;
     if ((m = /^getprop (\S+)$/.exec(cmd))) return ok(`${props[m[1]!] ?? ''}\n`);
@@ -272,7 +274,16 @@ export class FakeMirror implements PanelShell {
     }
     if (this.app.admin && cmd === `dpm set-active-admin ${this.app.admin}`) { this.admins.add(this.app.admin); return ok(`Success: Active admin set to component {${this.app.admin}}\n`); }
     if (cmd === `am start -n ${this.app.activity} --ez remove_admin true`) { if (!o.keepsAdmin && this.app.admin) this.admins.delete(this.app.admin); return ok(`Starting: Intent { cmp=${this.app.activity} (has extras) }\n`); }
-    if (cmd === 'dumpsys device_policy') return ok(`Current Device Policy Manager state:\n  Enabled Device Admins (User 0):\n${[...this.admins].map((a) => `  ${a}:\n    uid=10062\n`).join('')}`);
+    if ((m = /^dpm set-device-owner (\S+)$/.exec(cmd))) {
+      if (!this.installed || this.owner) return { out: 'java.lang.IllegalStateException: Trying to set device owner but device owner is already set.\n', code: 255 };
+      this.owner = m[1]!;
+      this.admins.add(m[1]!);
+      return ok(`Success: Device owner set to package ${m[1]!.split('/')[0]}\nActive admin set to component {${m[1]}}\n`);
+    }
+    if (cmd === 'dumpsys device_policy') {
+      const owner = this.owner ? `  Device Owner: \n    admin=ComponentInfo{${this.owner}}\n    name=\n    package=${this.owner.split('/')[0]}\n` : '';
+      return ok(`Current Device Policy Manager state:\n${owner}  Enabled Device Admins (User 0):\n${[...this.admins].map((a) => `  ${a}:\n    uid=10062\n`).join('')}`);
+    }
     if (cmd === `pm uninstall ${PKG}`) {
       if (!this.installed) return { out: 'Failure [DELETE_FAILED_INTERNAL_ERROR]\n', code: 0 };
       if (this.app.admin && this.admins.has(this.app.admin)) return { out: 'Failure [DELETE_FAILED_DEVICE_POLICY_MANAGER]\n', code: 0 };
@@ -402,3 +413,6 @@ export class FirstBootMirror implements PanelShell {
   async push() {}
 }
 
+
+// The stock Mirror for the in-place install (Stock-in-place): its bundle, its agent and its two fastboot sessions.
+export * from './fakes-inplace';

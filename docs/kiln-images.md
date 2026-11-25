@@ -93,6 +93,31 @@ bootloader, `boot` or the modem).
 | `wifi` | `file`, `template`, `makes` | Optional: when the person gives a network, saves it in a copy of a checked userdata image (`file`), or of what `adb-key` made from one, named `makes`. It writes one file, `/misc/wifi/wpa_supplicant.conf`: the template from the checked system image (`template`'s `/etc/wifi/wpa_supplicant.conf`, read where it lies), then the network with its PSK, never the password. It re-hashes a downloaded userdata as it reads it. Without a network, `makes` is its `file` as it was |
 | `wifi-on` | `key` (optional) | After the restart, when a network was saved: connects over adb with this browser's key, which an `adb-key` step put in, or with the image's own **published** adb key (`key`, a checked download, held in memory for that one connection), and runs `svc wifi enable`, nothing else, then waits for `dumpsys wifi` to say "Wi-Fi is enabled" (the driver up, not only the switch asked for). For an image that ships with Wi-Fi off, so the saved network joins without anyone opening its Settings |
 
+### Steps for an in-place install
+
+An in-place recipe (`mode: "in-place"`) keeps the device's own software and changes only the few
+blocks Glassworks needs, with a restore point for exactly those blocks. It is Glassworks' own: a
+community image is always installed as its project publishes it, so these steps are refused in one.
+On the Mirror this is "Glassworks on the stock software", which keeps lululemon's system.
+
+| Step | Fields | What Kiln does |
+|---|---|---|
+| `stage` | `makes` | After `fastboot` and before `restart`: the frame's code builds a small userdata image, sized from what fastboot reports, with the frame's setup agent, this browser's adb key, a new random secret for this run, and the person's network when they give one. Kiln writes it with a `flash` step. The device's system isn't touched |
+| `receive` | `bundle`, `channels` | After the restart into the setup agent: Kiln takes the bundle the agent reads off the running device (on the Mirror, `services.jar` and where it sits on `system`). It connects over Bluetooth for the agent's description, then uses this browser's saved copy if it has one, the local network when it can, and Bluetooth when it can't. A file downloaded from the agent's own page works at any time. Kiln checks the bundle's SHA-256, the device's serial and the run's signature, then the frame's own checks, before it keeps the bundle. Read-only |
+| `in-place` | `bundle`, `makes`, `restore` | After a second `fastboot`: the frame's code builds the write images (`makes`) and the restore image (`restore`) from the bundle. Kiln then runs `checkInPlace` on them. Writes nothing |
+| `app-install` | | After the last `restart`: the app over adb with this browser's key. On the Mirror this also hides lululemon's apps (`pm hide`) and makes Glassworks the Device Owner, so its updates install by themselves |
+
+`checkInPlace` (`kiln-core` `inplace.ts`) is Kiln's own check of what the frame's code built, run in
+the browser before any byte is written. It reads both sparse images and refuses unless every block
+the write changes lies inside the extents the bundle names, and the restore puts back exactly those
+blocks, from the device's own bytes (no filled blocks). A wrong offset in a frame's code fails there,
+never on the device.
+
+The secret only signs one run's bundle. It stays in the browser tab until the bundle is in, and is
+never saved in the browser's storage or written to the log. A bundle this browser kept from an
+earlier run was checked with that run's secret when it came, so a later run on the same device uses
+it without sending it again.
+
 A new kind of step is a change to Kiln's code, with its own review and tests, not part of adding an
 image.
 
@@ -105,7 +130,13 @@ Kiln puts its own steps around every recipe. A recipe can't list, skip or move t
 2. **Backup**: what the device has, or, where it can't be read back (the Mirror), the SHA-256 of each
    file about to be written, in the log.
 3. **The warning**: what will be replaced and what can't come back. The person must tick it.
-4. **The way back**, on Done: how to put the other image back.
+4. **The restore point**, in an in-place recipe only: right before the first write of what an
+   `in-place` step made. Kiln saves the restore image in this browser, asks the browser to keep it,
+   reads it back and checks its SHA-256 before Continue opens. It is offered as a download too: a zip
+   with the restore image, its `manifest.json` and a `SHA256SUMS`, which the Mirror's command-line
+   tool (`tools/mirror`, `--undo --backup-dir`) can also restore from.
+5. **The way back**, on Done: how to put the other image back, or for an in-place recipe, the restore
+   point written over the blocks it changed (from this browser, or from the downloaded zip).
 
 Every file is downloaded and checked before Kiln connects to the device, so a failed download never
 leaves a half-written device.
@@ -129,6 +160,9 @@ CI:
 - `wifi` takes a checked download, or what `adb-key` made, and names one new file; it's listed once.
 - `wifi-on` comes after `restart` and a `wifi` step, once, with a key that is a checked download, or
   with none after an `adb-key` step. It takes no command: what it runs is Kiln's code.
+- An in-place recipe has `stage`, then `restart`, then `receive`, then a new `fastboot`, then
+  `in-place`, then the writes of what it made, then `restart` and `app-install`, each once, and no
+  `patch`. What `stage` and `in-place` make is written; the restore file never is.
 - The frame's own test checks each file against Refract's allowlist: the same source (a release
   file, or a repository file at a pinned commit), size and SHA-256.
 

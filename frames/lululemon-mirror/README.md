@@ -66,6 +66,7 @@ These same credits are stored in [`design/frame.json`](design/frame.json) and di
 
 - **Supported hardware:** Original Qualcomm (MSM8916) Mirror units running stock software 1.x. Later revisions switched to an NXP i.MX8 board where only JTAG hardware access has been reported; those revisions are not supported. Note that screen size alone does not identify which board is inside ([see board revisions](research/revisions.md)).
 - **Android 6 legacy build:** Because the original Mirror runs Android 6.0.1, Kiln installs the dedicated legacy build of [Glassworks for Generic Android](../generic-android/README.md#the-legacy-build-android-6-and-7). It runs a frozen browser engine locked strictly to your Home Assistant address, starts upright in portrait mode, and guides you through Wi-Fi and Home Assistant sign-in from your phone or computer since the Mirror has no touchscreen.
+- **Keeping lululemon's system (experimental):** Kiln can also install Glassworks while keeping lululemon's own system in place, with a restore point that puts it back. It's new, and hasn't been through as many real Mirrors as the image install yet. See [Keeping lululemon's system](#keeping-lululemons-system).
 - **Performance grade:** A [Clarity performance grade](../../docs/clarity.md) will appear on the device page once benchmark runs are published.
 
 ## Hardware
@@ -97,6 +98,27 @@ Open **[kiln.glassworks.dev/lululemon-mirror](https://kiln.glassworks.dev/lulule
 4. **Flash and finish setup:** Kiln checks that your partition layout matches, flashes the system and userdata partitions, reboots into portrait mode with Glassworks as the home screen, and walks you through Wi-Fi and Home Assistant setup right in your browser (or from your phone via QR code).
 
 The initial boot logo before Android starts remains lululemon's logo, since it lives inside the locked signed bootloader.
+
+### Keeping lululemon's system
+
+Choose **Glassworks on the stock software** on Kiln's first screen to keep lululemon's system and change only the parts Glassworks needs. Nothing is downloaded for it, and it takes two trips into fastboot mode, so keep the back cover off until it's done.
+
+| | Glassworks (image) | Glassworks on the stock software |
+|---|---|---|
+| lululemon's system | Replaced by the Glass Panes image | Kept, with one file changed |
+| App data | Starts fresh | Starts fresh |
+| Way back | Install the plain Glass Panes image | The restore point puts lululemon's system back as it was |
+| Updates | Install by themselves | Install by themselves (Glassworks is the Device Owner) |
+| Status | Beta | Experimental |
+
+1. **Prepare:** Pick the Glassworks APK and, if you like, your Wi-Fi network. With Wi-Fi, the next transfer takes seconds; without it, it goes over Bluetooth and takes about five minutes.
+2. **First trip into fastboot:** Follow the same hardware guide as the image install. Kiln writes a small setup agent to the Mirror's app storage only, then restarts it. lululemon's system isn't touched.
+3. **Receive:** Click **Connect over Bluetooth** and pick the Mirror. The setup agent sends Kiln the one system file Glassworks changes (`services.jar`) and where it sits, over your network when it can and over Bluetooth when it can't. You can also download it from the agent's own page and pick the file. Kiln checks that it came from this Mirror, during this run, and stops before anything is written if the Mirror's software is a kind it can't change in place.
+4. **Second trip into fastboot:** Hold **VOL−** again while switching the Mirror on. Kiln builds the change in your browser and checks that it touches only that file's blocks.
+5. **Restore point:** Before writing anything to the system, Kiln saves the exact blocks it will change, from your Mirror's own copy, in this browser, reads them back to check them, and offers a copy to download. Continue opens only once that's done. Keep the download somewhere safe.
+6. **Install:** Kiln writes the changed blocks and fresh app storage, restarts the Mirror, installs Glassworks over USB, hides lululemon's apps, and makes Glassworks the Device Owner so its updates install by themselves. Then setup continues as usual.
+
+To go back, choose **Restore the original system** on Done (or open `kiln.glassworks.dev/lululemon-mirror/undo`). Kiln uses the restore point this browser saved, or the copy you downloaded, and writes it over the blocks it changed. The Mirror's command-line tool in [`tools/mirror`](../../tools/mirror) can restore from that download too.
 
 ### Returning to plain Glass Panes
 

@@ -106,26 +106,50 @@ export interface AppOverAdb {
 export interface InPlaceCode {
   /**
    * The `stage` step: a small userdata image, sized for the partition, that starts the frame's agent on the stock
-   * software, trusts `adbKey`, signs what it sends with `secret`, and joins `wifi` when given.
+   * software, trusts `adbKey`, signs what it sends with `secret`, and joins `wifi` when given. `assets`: the staged
+   * files it names in `assets` (each checked by its SHA-256 before it comes here), by name.
    */
-  stage(o: { adbKey: string; userdataBytes: number; secret: Uint8Array; wifi?: { ssid: string; password: string } }): Promise<Blob>;
+  stage(o: { adbKey: string; userdataBytes: number; secret: Uint8Array; wifi?: { ssid: string; password: string }; assets: Record<string, Uint8Array> }): Promise<Blob>;
+  /** Kiln's staged assets the stage puts on the device, by asset name. */
+  assets?: readonly string[];
   /**
    * The `receive` step's check, after Kiln's own (bundle.ts `verifyGwsbBundle`): the bundle is what the agent read off
    * this device. `digest`: its id in the bundle cache; `extents`: where the file it holds sits on the partition, in
-   * bytes; `info`: lines for the log.
+   * bytes; `info`: lines for the log. Throws, saying why in plain words, on a bundle Kiln mustn't build from. `kept`:
+   * a copy this browser kept from an earlier run, whose signature was checked with that run's secret when it came: its
+   * signature isn't checked again (the secret is never kept), everything else is.
    */
-  readBundle(bytes: Uint8Array, o: { secret: Uint8Array; serial: string }): Promise<{
+  readBundle(bytes: Uint8Array, o: { secret: Uint8Array; serial: string; kept?: boolean }): Promise<{
     digest: string;
     extents: readonly { physical: number; length: number }[];
     info: readonly string[];
   }>;
-  /** The `in-place` step: the write images by name (the step's `makes`), and the restore image for every block they change. */
-  build(bundle: Uint8Array, o: { adbKey: string; userdataBytes: number }): Promise<{ writes: Record<string, Blob>; restore: Blob; manifest?: Record<string, unknown> }>;
+  /**
+   * The `in-place` step: the write images by name (the step's `makes`), and the restore image for every block the
+   * surgical one changes. `manifest`: the restore point's description, kept with it and in its download. `files`: other
+   * files the restore point keeps (the original file, say), by file name. `partitionBytes`: each partition's size as
+   * fastboot reports it now.
+   */
+  build(bundle: Uint8Array, o: { adbKey: string; userdataBytes: number; partitionBytes: Record<string, number>; serial: string; wifi?: { ssid: string; password: string } }): Promise<{
+    writes: Record<string, Blob>;
+    restore: Blob;
+    manifest?: Record<string, unknown>;
+    files?: Record<string, Uint8Array>;
+  }>;
+  /**
+   * The `app-install` step, over adb with this browser's key after the restart into what was written: the app
+   * installed and started, the stock apps it replaces out of the way, and whether updates install by themselves.
+   */
+  appInstall(p: PanelShell, o: { apk: Uint8Array; onStep: Step; sleep: Sleep }): Promise<FirstStart>;
+  /** The way back's first part, over adb when Kiln still reaches the device: undoes what `appInstall` changed. Best effort. */
+  beforeRestore?(p: PanelShell, o: { onStep: Step }): Promise<void>;
   /** How the `receive` step reaches the agent: its HTTP port and path on the LAN, its Bluetooth GATT service and characteristics. */
   channels: {
     lan?: { port: number; path: string; pagePath?: string };
     ble?: { service: string; meta: string; ctrl: string; data: string };
   };
+  /** What the in-place screens say (installer.json `device.words`, the `inPlace.*` keys; inPlaceWords() checks them). */
+  words: Record<InPlaceWord, string>;
 }
 
 /** An image over fastboot, then Glassworks' first start over adb. */
@@ -217,6 +241,7 @@ export function deviceWords(w: Record<string, unknown>): Record<DeviceWord, stri
 export const IN_PLACE_WORDS = [
   'inPlace.stage.lede', 'inPlace.receive.lede', 'inPlace.receive.waiting', 'inPlace.receive.lan', 'inPlace.receive.ble',
   'inPlace.receive.file', 'inPlace.restorePoint.lede', 'inPlace.confirm.lede', 'inPlace.appInstall.lede', 'inPlace.wayBack',
+  'inPlace.fastboot.again', 'inPlace.coverNote', 'inPlace.changes',
 ] as const;
 export type InPlaceWord = (typeof IN_PLACE_WORDS)[number];
 
@@ -260,12 +285,41 @@ export interface DeviceSim {
    * Its agent after the restart into an in-place stage. `bundle`: what it sends, signed with `secret`; `tampered`: a
    * bundle whose signature doesn't match, `otherDevice`: one read from another serial.
    */
-  inPlace?: {
-    serial: string;
-    bundle(o: { secret: Uint8Array; tampered?: boolean; otherDevice?: boolean }): Promise<Uint8Array>;
-    /** The userdata partition's size, as its fastboot reports it. */
-    userdataBytes: number;
-  };
+  inPlace?: InPlaceSim;
+}
+
+/**
+ * A simulated device for an in-place recipe, across its two fastboot sessions (demos and tests only). `code`: the
+ * frame's in-place code with stand-ins where the real one needs the device's own files (the build), so a demo runs on
+ * made-up bytes.
+ */
+export interface InPlaceSim {
+  serial: string;
+  bundle(o: { secret: Uint8Array; tampered?: boolean; otherDevice?: boolean }): Promise<Uint8Array>;
+  /** The userdata partition's size, as its fastboot reports it. */
+  userdataBytes: number;
+  code: InPlaceCode;
+  /**
+   * One simulated device: its fastboot (`fastboot()` is the session connected now; after a restart the next
+   * `fastboot()` is the next session), its agent on the network and over Bluetooth once the stage is written, and adb
+   * after the install. `lan`: how the network behaves; `bluetooth: false`, no Bluetooth; `refusedBuild`: a build the frame's code refuses before any write;
+   * `tampered`: a bundle whose signature doesn't match.
+   */
+  device(o: { lan?: 'ok' | 'lna-denied' | 'drop-midway' | 'offline'; bluetooth?: boolean; refusedBuild?: boolean; tampered?: boolean; tick?: Sleep;
+    /** time between Bluetooth notifications, so a demo's transfer stays on screen */
+    bleFrameDelayMs?: number }): InPlaceSimDevice;
+}
+
+export interface InPlaceSimDevice {
+  fastboot(): FastbootLike;
+  /** The agent's HTTP server: a fetch that reaches only it. */
+  fetch: typeof fetch;
+  /** The agent's Bluetooth, as Web Bluetooth's `navigator.bluetooth` (structural: the app's channel types). */
+  bluetooth: unknown;
+  /** The device over adb after the install. */
+  adb(): PanelShell;
+  /** The device's agent is up (the stage was written and the device restarted into it). */
+  staged(): boolean;
 }
 
 export type DeviceEntry = { kind: 'device'; frame: DeviceFrame; sim: DeviceSim };

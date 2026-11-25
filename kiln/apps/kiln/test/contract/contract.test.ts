@@ -81,6 +81,7 @@ async function contract(d: Driver, c: Case) {
     case 'clean':
     case 'auth-refused-while-booting':
     case 'no-touch':
+    case 'channel-drop':
       reachedDone(r);
       expect(r.stops.length, 'no error screen on the way').toBe(1);
       if (c.kind === 'auth-refused-while-booting') expect(r.fired.refused, 'every refusal was asked through').toBe(c.knobs.refuseAuth);
@@ -111,6 +112,7 @@ function harness(c: Case, r: Result) {
     case 'auth-refused-while-booting': expect(r.fired.refused).toBeGreaterThan(0); break;
     case 'usb-drop': expect(r.fired.dropped).toBe(true); break;
     case 'stalled-download': expect(r.fired.stalled).toBe(true); break;
+    case 'channel-drop': expect(r.fired.channelDropped).toBe(true); break;
     case 'reload': expect(r.fired.reloaded).toBe(true); expect(r.stops[0]!.end).toBe('reload'); break;
     default: break;
   }

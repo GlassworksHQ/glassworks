@@ -3,12 +3,124 @@
 // demos click through its sessions, and this is the device behind them. The frame Kiln installs never carries it.
 import type { PanelShell } from '@glassworks/adb';
 import { FakeKeySocket, fakeApk } from '@glassworks/app-adb/fakes';
-import type { DeviceSim, FastbootLike } from '@glassworks/kiln-core';
-import { FakeMirror, FirstBootMirror, MIRROR_KIOSK, fakeMirrorApk, type FakeMirrorOptions } from '../test/fakes';
+import type { DeviceSim, FastbootLike, InPlaceCode, InPlaceSim } from '@glassworks/kiln-core';
+import {
+  FAKE_SERIAL, FakeMirror, FakeStockAgent, FakeTwoStageFastboot, FirstBootMirror, MIRROR_KIOSK, buildFakeGwsbBundle, fakeMirrorApk,
+  type FakeMirrorOptions,
+} from '../test/fakes';
+import design from '../../design/installer.json';
 import { SYSTEM_BYTES, USERDATA_BYTES } from './flash';
+import { bundleExtents, mirrorInPlace } from './inplace';
 import { HIDDEN_HOMES, PREVIOUS_HOME } from './recipe';
+import { buildSurgicalSparseImage } from './stock';
 
 const never = <T>() => new Promise<T>(() => {});
+
+/** What the stand-in stage writes: a marker, then the run's secret, as the simulated agent reads it back off userdata. */
+const STAGE_MARK = new TextEncoder().encode('KILN-DEMO-STAGE\n');
+
+/** A Blob's bytes, in a browser, in Node, and in jsdom (whose Blob has no arrayBuffer). */
+function bytesOf(b: Blob): Promise<Uint8Array> {
+  if (typeof b.arrayBuffer === 'function') return b.arrayBuffer().then((x) => new Uint8Array(x));
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(new Uint8Array(r.result as ArrayBuffer));
+    r.onerror = () => reject(r.error ?? new Error('could not read the stage image'));
+    r.readAsArrayBuffer(b);
+  });
+}
+
+/** The run's secret, out of a stand-in stage image (undefined for anything else). */
+async function stageSecret(blob: Blob): Promise<Uint8Array | undefined> {
+  const b = await bytesOf(blob);
+  if (b.length !== STAGE_MARK.length + 32 || STAGE_MARK.some((x, i) => b[i] !== x)) return undefined;
+  return b.slice(STAGE_MARK.length);
+}
+
+/**
+ * The Mirror's real in-place code with stand-ins where it needs the device's own files: the stage is a marker and the
+ * secret (no ext4 to build), and the build patches nothing (the bundle's jar is made up) but lays the same surgical
+ * images over the bundle's own extents, so Kiln's checks run on them as on a real Mirror.
+ */
+export const simInPlaceCode: InPlaceCode = {
+  ...mirrorInPlace(design.device.words),
+  assets: [],
+  async stage({ secret }) { return new Blob([STAGE_MARK, secret as Uint8Array<ArrayBuffer>]); },
+  async build(bundle, o) {
+    const dv = new DataView(bundle.buffer, bundle.byteOffset, bundle.byteLength);
+    const metaLen = dv.getUint32(4, true);
+    const meta = JSON.parse(new TextDecoder().decode(bundle.subarray(12, 12 + metaLen))) as Parameters<typeof bundleExtents>[0];
+    const jar = bundle.slice(12 + metaLen);
+    const extents = bundleExtents(meta, jar.length);
+    const patched = jar.slice();
+    patched[0] = patched[0]! ^ 0xff; // a stand-in change, inside the file's own blocks
+    const systemBytes = o.partitionBytes.system ?? SYSTEM_BYTES;
+    const sparse = (b: Uint8Array) => new Blob([buildSurgicalSparseImage(systemBytes, extents, b) as Uint8Array<ArrayBuffer>]);
+    return {
+      writes: { 'system-in-place': sparse(patched), userdata: new Blob([new Uint8Array(4096)]) },
+      restore: sparse(jar),
+      manifest: { version: 1, systemBytes, servicesJar: { size: jar.length, restoreSparse: 'restore-services.sparse' } },
+    };
+  },
+};
+
+/**
+ * A stock Mirror through its in-place install: its two fastboot sessions (FakeTwoStageFastboot), the setup agent the
+ * stage starts (FakeStockAgent: its HTTP server and Bluetooth, signing with the secret it read off userdata), and adb
+ * with this browser's key after the install (FakeMirror, nothing of the community image on it).
+ */
+export const simInPlace: InPlaceSim = {
+  serial: FAKE_SERIAL,
+  userdataBytes: USERDATA_BYTES,
+  bundle: async ({ secret, tampered, otherDevice }) => (await buildFakeGwsbBundle({ secret, corruptHmac: tampered, ...(otherDevice ? { serialno: '0000fake02' } : {}) })).bytes,
+  code: simInPlaceCode,
+  device(o) {
+    const fb = new FakeTwoStageFastboot({ serialno: FAKE_SERIAL, systemBytes: SYSTEM_BYTES, userdataBytes: USERDATA_BYTES });
+    let secret: Uint8Array | undefined;
+    let agent: FakeStockAgent | undefined;
+    let installed = false;
+    const tick = o.tick ?? (async () => {});
+    // after the install, adb with this browser's key; it can restart into fastboot (the way back's restart)
+    const mirror = Object.assign(new FakeMirror({ kiosk: 'none' }), { rebootToBootloader: async () => { installed = false; } });
+    const lanMode = o.lan ?? 'ok';
+    const fastboot = (): FastbootLike => {
+      if (!fb.connected) fb.nextSession();
+      return {
+        getvar: (n) => fb.getvar(n),
+        partitionSize: (n) => fb.partitionSize(n),
+        async flashBlob(partition, blob, onProgress) {
+          const session = fb.session;
+          await tick(150);
+          await fb.flashBlob(partition, blob, onProgress);
+          if (partition === 'userdata' && session === 1) secret = await stageSecret(blob);
+          if (session >= 2 && partition === 'system') installed = true;
+        },
+        async reboot() {
+          const session = fb.session;
+          await fb.reboot();
+          // the stage's restart: the agent comes up, signing with the secret it found on userdata
+          if (session === 1 && secret) {
+            agent = new FakeStockAgent(await buildFakeGwsbBundle({ secret, corruptHmac: o.tampered, ...(o.refusedBuild ? { servicesOdexFound: true } : {}) }), { lanMode, bleUnavailable: o.bluetooth === false, ...(o.bleFrameDelayMs ? { bleFrameDelayMs: o.bleFrameDelayMs } : {}) });
+          }
+          if (session >= 2 && installed) agent = undefined;
+        },
+      };
+    };
+    return {
+      fastboot,
+      fetch: ((input: RequestInfo | URL, init?: RequestInit) => (agent ? agent.fakeFetch(input, init) : Promise.reject(new TypeError('Failed to fetch')))) as typeof fetch,
+      bluetooth: {
+        getAvailability: async () => o.bluetooth !== false,
+        requestDevice: async (opts: RequestDeviceOptions) => {
+          if (!agent) throw new DOMException('User cancelled the requestDevice() chooser.', 'NotFoundError');
+          return agent.fakeBluetooth.requestDevice(opts);
+        },
+      },
+      adb: () => mirror,
+      staged: () => !!agent,
+    };
+  },
+};
 
 export const kilnSim: DeviceSim = {
   /** The Panes step's cards as Glassworks' legacy build on the Mirror shows them (each pane's PaneChoice), for ?demo=setup-panes */
@@ -66,4 +178,5 @@ export const kilnSim: DeviceSim = {
     if (socket) m.withKeySocket(new FakeKeySocket(key));
     return Object.assign(m, { rebootToBootloader: async () => {} });
   },
+  inPlace: simInPlace,
 };
