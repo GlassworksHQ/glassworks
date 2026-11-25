@@ -1167,8 +1167,8 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
 
     /** The CSS inline box of text in style [s]: its line height split evenly around the glyphs. */
     private fun lineBox(s: MdStyle, start: Int, end: Int): CssLineBoxSpan.Run {
-        val (ascent, descent) = fontMetrics(s)
-        val lh = s.lineHeightPx() * dp
+        val (ascent, descent, gap) = fontMetrics(s)
+        val lh = s.lineHeightPx(dp, ascent + descent + gap)
         val half = (lh - (ascent + descent)) / 2f
         return CssLineBoxSpan.Run(start, end, ascent + half, descent + half)
     }
@@ -1181,7 +1181,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             metricsPaint.typeface = tf
             metricsPaint.textSize = px
             val fm = metricsPaint.fontMetrics
-            floatArrayOf(-fm.ascent, fm.descent)
+            floatArrayOf(-fm.ascent, fm.descent, fm.leading)
         }
     }
 
@@ -1205,7 +1205,7 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             if (s.letterSpacing != 0f && s.fontSize > 0f) letterSpacing = s.letterSpacing / s.fontSize
             val p = TextPaint().apply { typeface = tf; textSize = s.fontSize * dp }
             val fm = p.fontMetrics
-            val half = (s.lineHeightPx() * dp - (fm.descent - fm.ascent)) / 2f
+            val half = (s.lineHeightPx(dp, fm.descent - fm.ascent + fm.leading) - (fm.descent - fm.ascent)) / 2f
             val strut = CssLineBoxSpan.Run(0, 0, -fm.ascent + half, fm.descent + half)
             val sb = SpannableStringBuilder(text)
             sb.setSpan(CssLineBoxSpan(emptyList(), strut), 0, sb.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
