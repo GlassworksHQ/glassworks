@@ -226,6 +226,7 @@ class VitroView(
             val views = dashboard?.views ?: return
             viewCache.keys.filter { views.getOrNull(it)?.subview == true && it != currentViewIndex }.forEach { idx ->
                 viewCache.remove(idx)?.let { contentHost.removeView(it) }
+                clarity?.keepCards(viewCache.keys)
                 overlayFrames.remove(idx)?.let { overlayLayer.removeView(it) }
                 builtScripts.remove(idx)
             }
@@ -241,6 +242,7 @@ class VitroView(
             if (field == v) return
             field = v
             viewCache.clear()
+            clarity?.keepCards(viewCache.keys)
             builtScripts.clear()
             contentHost.removeAllViews()
             clearOverlay()
@@ -336,6 +338,7 @@ class VitroView(
         val cfg = dashboard ?: return
         if (cfg.views.getOrNull(currentViewIndex) == null) return
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -407,6 +410,7 @@ class VitroView(
         dashboard = null
         viewBackStack.clear()
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -425,6 +429,7 @@ class VitroView(
         if (catalog == themeCatalog) return
         themeCatalog = catalog
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -439,6 +444,7 @@ class VitroView(
         userThemeName = nextTheme
         darkMode = nextDark
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -454,6 +460,7 @@ class VitroView(
         dashboard = config
         viewBackStack.clear()
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -831,6 +838,7 @@ class VitroView(
         while (viewCache.size > MAX_CACHED_VIEWS) {
             val oldest = viewCache.keys.firstOrNull { it != keep } ?: return
             viewCache.remove(oldest)?.let { contentHost.removeView(it) }
+            clarity?.keepCards(viewCache.keys)
             overlayFrames.remove(oldest)?.let { overlayLayer.removeView(it) }
             builtScripts.remove(oldest)
         }

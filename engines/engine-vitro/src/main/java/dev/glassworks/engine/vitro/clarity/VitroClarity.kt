@@ -125,6 +125,9 @@ class VitroClarity internal constructor(
         return false
     }
 
+    /** Tests: told each time the worker has queued a step for the main thread, before that step runs. */
+    @Volatile internal var onPosted: (() -> Unit)? = null
+
     /** The worker still runs (tests). */
     internal val workerAlive: Boolean get() = thread?.isAlive == true
 
@@ -200,6 +203,7 @@ class VitroClarity internal constructor(
         // dashboard) means it never runs, so nothing opens or switches after the harness stopped.
         val task = FutureTask { if (stopped) throw Stopped() else block() }
         main.post(task)
+        onPosted?.invoke()
         try {
             return task.get(MAIN_WAIT_S, TimeUnit.SECONDS)
         } catch (_: InterruptedException) {
@@ -241,7 +245,12 @@ class VitroClarity internal constructor(
     private var ticking = false
     private var frameCallbackPosted = false
     private val frames = ArrayList<Double>()
-    private val steps = ArrayList<(Double) -> Boolean>()
+    /** One look at each frame until it says done ([awaitFrames]); a probe whose wait ended is dropped unread. */
+    private class Probe(val step: (Double) -> Boolean) {
+        @Volatile var cancelled = false
+    }
+
+    private val steps = ArrayList<Probe>()
     private val choreographer: Choreographer by lazy { Choreographer.getInstance() }
 
     private val frameCallback = object : Choreographer.FrameCallback {
@@ -252,13 +261,20 @@ class VitroClarity internal constructor(
             if (ticking) {
                 // A view's frames, bounded: past MAX_FRAMES (over 8 minutes at 60 Hz, more than any view's deadline)
                 // the oldest go.
-                if (frames.size >= MAX_FRAMES) frames.subList(0, frames.size - MAX_FRAMES + 1).clear()
+                if (frames.size >= MAX_FRAMES) {
+                    val drop = frames.subList(0, frames.size - MAX_FRAMES + 1)
+                    droppedUntil = drop.last()
+                    drop.clear()
+                }
                 frames += ts
                 markTicks(ts)
             }
             if (steps.isNotEmpty()) {
                 val it = steps.iterator()
-                while (it.hasNext()) if (it.next()(ts)) it.remove()
+                while (it.hasNext()) {
+                    val p = it.next()
+                    if (p.cancelled || p.step(ts)) it.remove()
+                }
             }
             requestFrame()
         }
@@ -274,6 +290,7 @@ class VitroClarity internal constructor(
 
     private fun startTicks() = onMain {
         frames.clear()
+        droppedUntil = null
         ticking = true
         requestFrame()
     }
@@ -282,6 +299,10 @@ class VitroClarity internal constructor(
 
     private fun framesIn(from: Double, to: Double): List<Double> = onMain { frames.filter { it in from..to } }
 
+    /** The newest frame dropped to keep [frames] bounded (main thread), or null when none was. */
+    private var droppedUntil: Double? = null
+
+
     /**
      * Runs [step] on the main thread at each frame until it returns true (that frame's time) or [timeoutMs] pass
      * (null).
@@ -289,7 +310,7 @@ class VitroClarity internal constructor(
     private fun awaitFrames(timeoutMs: Double, step: (Double) -> Boolean): Double? {
         val done = CountDownLatch(1)
         var at: Double? = null
-        val s: (Double) -> Boolean = { ts ->
+        val s = Probe { ts ->
             if (step(ts)) {
                 at = ts
                 done.countDown()
@@ -298,16 +319,25 @@ class VitroClarity internal constructor(
                 false
             }
         }
-        onMain {
-            steps += s
-            requestFrame()
+        var ok = false
+        try {
+            onMain {
+                steps += s
+                requestFrame()
+            }
+            ok = try {
+                done.await(timeoutMs.toLong().coerceAtLeast(1), TimeUnit.MILLISECONDS)
+            } catch (_: InterruptedException) {
+                throw Stopped()
+            }
+        } finally {
+            if (!ok) {
+                // Ended without its frame (timed out, stopped, the main thread stalled past onMain's wait): the next frame
+                // drops it unread, and its removal is posted, never waited for.
+                s.cancelled = true
+                main.post { steps.remove(s) }
+            }
         }
-        val ok = try {
-            done.await(timeoutMs.toLong().coerceAtLeast(1), TimeUnit.MILLISECONDS)
-        } catch (_: InterruptedException) {
-            throw Stopped()
-        }
-        if (!ok) onMain { steps.remove(s) }
         check()
         return if (ok) at else null
     }
@@ -321,6 +351,11 @@ class VitroClarity internal constructor(
     /** VitroView: view [index] is being built again; its cards follow. Main thread. */
     internal fun buildStarted(index: Int) {
         built[index] = java.util.TreeMap()
+    }
+
+    /** VitroView: only the views in [cached] are still built; the cards of the others are let go. Main thread. */
+    internal fun keepCards(cached: Set<Int>) {
+        built.keys.retainAll(cached)
     }
 
     /** VitroView: the top-level card [cardIndex] of view [index] (its config order). Main thread. */
@@ -455,7 +490,10 @@ class VitroClarity internal constructor(
         line(clockFields(JSONObject().put("t", "drawn").put("tier", tier).put("protocol", c.getInt("PROTOCOL"))
             .put("clarity", c.getInt("CLARITY")).put("nav_ms", ClarityStats.round1(nav)).put("usable", drawn)))
         val (freeAt, busy) = freeFrom()
-        val b = ClarityStats.frameBlocking(framesIn(drawn.getDouble("rendered_tick_ms"), freeAt), drawn.getDouble("rendered_tick_ms"), freeAt)
+        val drawnAt = drawn.getDouble("rendered_tick_ms")
+        // Frames dropped inside the span (a wait past MAX_FRAMES) would read as one long gap: then the blocking isn't
+        // measured (null), never a number made of what was dropped.
+        val b = ClarityStats.blocking(framesIn(drawnAt, freeAt), onMain { droppedUntil }, drawnAt, freeAt)
         val u = JSONObject(drawn.toString()).put("interactive_ms", ClarityStats.round1(freeAt)).put("busy_ms", busy)
             .put("blocking_ms", b?.opt("blocking_ms") ?: JSONObject.NULL).put("long_frames", b?.opt("long_frames") ?: JSONObject.NULL)
             .put("longest_frame_ms", b?.opt("longest_ms") ?: JSONObject.NULL)
@@ -705,6 +743,8 @@ class VitroClarity internal constructor(
                 val t = taps.down(at) ?: return
                 afterNextFrame { end -> taps.downDone(t, end) }
             }
+            // Android ends the gesture: its tap stays unfinished, and no later gesture's up is taken for it.
+            MotionEvent.ACTION_CANCEL -> taps.cancel()
             MotionEvent.ACTION_UP -> {
                 // The up of a tap already down, even after counting stopped: it ends that tap.
                 val t = taps.up(at) ?: return
