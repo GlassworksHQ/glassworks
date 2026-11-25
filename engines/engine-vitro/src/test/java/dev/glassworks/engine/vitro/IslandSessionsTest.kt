@@ -148,6 +148,8 @@ class IslandSessionsTest {
         idle()
         assertSame(card, islandCards(p).single())
 
+        // The island's document ran (its bridge connected), as on a panel.
+        slots(engines.single().islandServer).values.single().onConnected {}
         // The user's theme changes: the native cards are built again, the island keeps its page.
         val slotsBefore = slots(engines.single().islandServer).toMap()
         vitroView(p).setUserTheme("night", true)
@@ -286,6 +288,30 @@ class IslandSessionsTest {
         assertOnePagePerIsland(p)
     }
 
+    @Test fun aCardThatTakesAPausedPageFromAHiddenViewRunsIt() {
+        // The same card on two views: a theme change rebuilds the view on screen, which may take the hidden view's page.
+        server.dashboardConfig = JSONObject("""{"views": [
+            {"path": "a", "cards": [{"type": "custom:acme-a-card", "entity": "light.lounge_lamp"}]},
+            {"path": "b", "cards": [{"type": "custom:acme-a-card", "entity": "light.lounge_lamp"}]}]}""")
+        val p = page()
+        p.load("$base/wall-test/a")
+        awaitMain("view a built") { readyCount() == 1 && islandPages().size == 1 }
+        p.load("$base/wall-test/b")
+        awaitMain("view b built") { islandPages().size == 2 }
+        val (a, b) = islandPages()
+        assertFalse(a.active)
+        slots(engines.single().islandServer).values.forEach { it.onConnected {} } // their documents ran
+
+        vitroView(p).setUserTheme("night", true)
+        idle()
+        val open = openIslandPages()
+        assertEquals("one view built, one page kept", 1, open.size)
+        assertTrue("whichever page the shown card took runs", open.single().active)
+        assertTrue(open.single().view.isAttachedToWindow)
+        assertEquals("the other closes", 1, listOf(a, b).count { it.closed })
+        assertOnePagePerIsland(p)
+    }
+
     @Test fun aPageInTheFallbackPausesEveryIsland() {
         server.dashboardConfig = JSONObject(twoViews)
         val p = page()
@@ -351,6 +377,70 @@ class IslandSessionsTest {
         assertEquals("nothing opens for a view that isn't shown", 4, islandPages().size)
         p.load("$base/wall-test/b")
         awaitMain("view b rebuilt") { islandPages().size == 5 }
+        assertOnePagePerIsland(p)
+    }
+
+    @Test fun aHiddenViewsLiveIslandKeepsItsPageWhenASiblingDies() {
+        server.dashboardConfig = JSONObject("""{"views": [
+            {"path": "a", "cards": [{"type": "custom:acme-a-card", "entity": "light.lounge_lamp"},
+                                    {"type": "custom:acme-c-card", "entity": "sensor.kitchen_temp"}]},
+            {"path": "b", "cards": [{"type": "custom:acme-b-card", "entity": "sensor.kitchen_temp"}]}]}""")
+        val p = page()
+        p.load("$base/wall-test/a")
+        awaitMain("view a built") { readyCount() == 1 && islandPages().size == 2 }
+        val (a, c) = islandPages()
+        p.load("$base/wall-test/b")
+        awaitMain("view b built") { islandPages().size == 3 }
+        fun hostOf(page: RecordingPage) = fallback.opens[fallback.pages.indexOf(page)].host
+
+        // View a is hidden: its island a dies, its sibling c lives.
+        hostOf(a).onContentGone(killed = true)
+        idle()
+        assertTrue(a.closed)
+        assertFalse("the live sibling on the hidden view keeps its page", c.closed)
+        assertEquals("nothing opens for a view that isn't shown", 3, islandPages().size)
+
+        // Shown again: built anew, c handed over, a alone gets a new page.
+        p.load("$base/wall-test/a")
+        awaitMain("view a rebuilt") { islandPages().size == 4 }
+        assertFalse(c.closed)
+        assertTrue(c.view.isAttachedToWindow)
+        assertTrue(c.active)
+        assertOnePagePerIsland(p)
+    }
+
+    @Test fun aStaleViewWhoseEntitiesAreGoneStillBuildsWhenShown() {
+        val config = """{"views": [
+            {"path": "a", "cards": [{"type": "custom:acme-a-card", "entity": "light.lounge_lamp"},
+                                    {"type": "custom:acme-c-card", "entity": "sensor.kitchen_temp"}]},
+            {"path": "b", "title": "%s", "cards": [{"type": "custom:acme-b-card", "entity": "sensor.kitchen_temp"}]}]}"""
+        server.dashboardConfig = JSONObject(config.format("B"))
+        val p = page()
+        p.load("$base/wall-test/b")
+        awaitMain("view b built") { readyCount() == 1 && islandPages().size == 1 }
+        // An edit: the dashboard is set again, and view a's first build after it doesn't wait (its states are there).
+        server.dashboardConfig = JSONObject(config.format("Bee"))
+        lovelaceUpdated()
+        awaitMain("the edit is built") { readyCount() >= 2 }
+        idle()
+        p.load("$base/wall-test/a")
+        awaitMain("view a built") { openIslandPages().size == 3 }
+        p.load("$base/wall-test/b")
+        idle()
+        val (a, c) = islandPages().takeLast(2) // view a's, opened last
+        fallback.opens[fallback.pages.indexOf(a)].host.onContentGone(killed = true)
+        idle()
+        assertTrue(a.closed)
+
+        // Every entity view a names is gone from the store: the wait for a first build must not hide its tree.
+        (p.javaClass.getDeclaredField("store").apply { isAccessible = true }.get(p) as EntityStore).clear()
+        val before = islandPages().size
+        p.load("$base/wall-test/a")
+        idle()
+        assertEquals("view a is built again now, a new page for the dead card", before + 1, islandPages().size)
+        assertTrue(islandPages().last().view.isShown)
+        assertFalse(c.closed)
+        assertTrue("its live sibling is shown", c.view.isShown)
         assertOnePagePerIsland(p)
     }
 
@@ -465,7 +555,12 @@ class IslandSessionsTest {
     @Test fun aCardMovedWithinTheLayoutKeepsItsIslandAndOneThatLeavesClosesIt() {
         val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
         val pages = ArrayList<RecordingPage>()
-        val island = WebIslandCardView(context(EntityStore(), islands, dark = true, pages), LovelaceParser.parseCard(JSONObject(cardJson)))
+        var token = "first-token"
+        val watchers = HashSet<() -> Unit>()
+        val island = WebIslandCardView(
+            context(EntityStore(), islands, dark = true, pages, token = { token }, tokenWatchers = watchers),
+            LovelaceParser.parseCard(JSONObject(cardJson)),
+        )
         val left = FrameLayout(activity)
         val right = FrameLayout(activity)
         activity.setContentView(FrameLayout(activity).apply { addView(left); addView(right) })
@@ -484,8 +579,20 @@ class IslandSessionsTest {
         assertEquals(1, slots(islands).size)
         // The page catches up on what changed while the card was off the tree.
         assertEquals(listOf("snapshot"), sent.map { it.getString("type") })
+        sent.clear()
 
+        // A new token arrives while the card is off the tree, with no state change: its watcher was off, so the card
+        // sends it when it's back.
         right.removeView(island)
+        assertTrue("no token watcher while detached", watchers.isEmpty())
+        token = "second-token"
+        left.addView(island)
+        idle()
+        assertEquals(listOf("auth", "snapshot"), sent.map { it.getString("type") })
+        assertEquals("second-token", sent.first().getString("token"))
+        assertFalse(pages.single().closed)
+
+        left.removeView(island)
         idle()
         assertTrue("a card that left the tree closes its page", pages.single().closed)
         assertTrue(slots(islands).isEmpty())
@@ -499,6 +606,7 @@ class IslandSessionsTest {
         val config = LovelaceParser.parseCard(JSONObject(cardJson))
         val old = WebIslandCardView(context(store, islands, dark = true, pages, calls = calls), config)
         val page = pages.single()
+        slots(islands).values.single().onConnected {} // its document ran
         // The page walks hass.states and reads the registries: it asks for both once.
         old.handleIslandMessage(JSONObject().put("type", "watchAll")) {}
         old.handleIslandMessage(JSONObject().put("type", "registries")) {}
@@ -531,6 +639,20 @@ class IslandSessionsTest {
         assertTrue(slots(islands).isEmpty())
     }
 
+    @Test fun aPageHandedOffBeforeItsDocumentRanLoadsTheIslandAgain() {
+        val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
+        val pages = ArrayList<RecordingPage>()
+        val store = EntityStore()
+        val old = WebIslandCardView(context(store, islands, dark = true, pages), LovelaceParser.parseCard(JSONObject(cardJson)))
+        val page = pages.single()
+        val url = page.loads.single()
+        // Handed off before its bridge ever connected: its first document may have come from the parked slot.
+        val handed = old.handOff()!!
+        WebIslandCardView(context(store, islands, dark = true, pages), LovelaceParser.parseCard(JSONObject(cardJson)), adopted = handed)
+        assertEquals("the same page", 1, pages.size)
+        assertEquals("loads the island again", listOf(url, url), page.loads)
+    }
+
     @Test fun aHandedOffIslandWhoseSlotIsGoneClosesAndTheCardOpensANewPage() {
         val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
         val pages = ArrayList<RecordingPage>()
@@ -556,6 +678,7 @@ class IslandSessionsTest {
         slots(islands).values.single().onConnected { sent += it }
         assertEquals(listOf("theme", "auth", "snapshot"), sent.map { it.getString("type") })
         assertEquals("first-token", sent[1].getString("token"))
+        assertTrue("no user known yet", sent[1].isNull("user"))
         sent.clear()
 
         // A reconnect refreshed the token, and the dashboard (and this page) stayed.
@@ -576,6 +699,58 @@ class IslandSessionsTest {
         assertEquals("third-token", sent.single().getString("token"))
         watchers.toList().forEach { it() }
         assertEquals("the same token isn't sent again", 1, sent.size)
+    }
+
+    @Test fun anotherAccountSigningInReachesAPageThatStays() {
+        val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
+        var token = "first-token"
+        var user = JSONObject().put("id", "user-1").put("name", "Wall").put("is_admin", false)
+        val watchers = HashSet<() -> Unit>()
+        val ctx = VitroCardContext(
+            context = activity, haBase = base, store = EntityStore(), theme = ThemeResolver.resolve(ThemeCatalog(), true),
+            resources = emptyList(), accessToken = { token }, haUser = { user }, callService = { _, _, _, _ -> },
+            navigate = {}, openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            islandServer = islands, openIslandPage = { RecordingPage(activity) },
+            watchToken = { onChange -> watchers += onChange; { watchers -= onChange } },
+        )
+        WebIslandCardView(ctx, LovelaceParser.parseCard(JSONObject(cardJson)))
+        val sent = ArrayList<JSONObject>()
+        slots(islands).values.single().onConnected { sent += it }
+        assertEquals("user-1", sent.first { it.getString("type") == "auth" }.getJSONObject("user").getString("id"))
+        sent.clear()
+
+        // Another account signs in: a new token, and hass.user follows it.
+        token = "second-token"
+        user = JSONObject().put("id", "user-2").put("name", "Hallway").put("is_admin", true)
+        watchers.toList().forEach { it() }
+        val auth = sent.single()
+        assertEquals("second-token", auth.getString("token"))
+        assertEquals("user-2", auth.getJSONObject("user").getString("id"))
+        assertTrue(auth.getJSONObject("user").getBoolean("is_admin"))
+
+        // The user alone changing (current_user answered after the token) goes too.
+        sent.clear()
+        user = JSONObject().put("id", "user-2").put("name", "Hall").put("is_admin", true)
+        watchers.toList().forEach { it() }
+        assertEquals("Hall", sent.single().getJSONObject("user").getString("name"))
+        sent.clear()
+        watchers.toList().forEach { it() }
+        assertTrue("nothing changed, nothing sent", sent.isEmpty())
+
+        // A sign-in whose user isn't known yet (current_user hasn't answered): the user goes as null, and the page
+        // falls back to the anonymous panel, not the previous account; then the new user when it's known.
+        token = "third-token"
+        user = JSONObject()
+        watchers.toList().forEach { it() }
+        assertTrue(sent.single().isNull("user"))
+        sent.clear()
+        user = JSONObject().put("id", "user-3").put("name", "Kitchen")
+        watchers.toList().forEach { it() }
+        assertEquals("user-3", sent.single().getJSONObject("user").getString("id"))
+        // The page applies it to hass.user.
+        val html = WebIslandCardView.buildIslandHtml(ctx, LovelaceParser.parseCard(JSONObject(cardJson)))
+        assertTrue(html.contains("const user = (m.user && typeof m.user === 'object') ? m.user : ANON_USER;"))
+        assertTrue(html.contains("hassBase.user = user;"))
     }
 
     @Test fun anIslandPageStopsRetryingItsBridgeOnceItsSlotIsGone() {
