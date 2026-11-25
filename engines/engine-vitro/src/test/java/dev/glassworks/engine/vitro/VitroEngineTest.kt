@@ -12,6 +12,7 @@ import android.graphics.Color
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.TextView
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
@@ -268,6 +269,52 @@ class VitroEngineTest {
             setOf("light.lounge_lamp", "sensor.kitchen_temp", "binary_sensor.front_door", "sensor.outdoor_temp", "sensor.indoor_temp"),
             (0 until ids.length()).map { ids.getString(it) }.toSet(),
         )
+    }
+
+    /** #838: an island that walked `hass.states` makes its view follow every entity, when shown again from the cache too. */
+    @Test
+    fun aViewWhoseIslandWalksTheStatesFollowsEveryEntity() {
+        val page = readyPage()
+        awaitMain("view-scoped subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
+        val followAll = page.javaClass.getDeclaredMethod("followAllForIsland", Int::class.javaPrimitiveType).apply { isAccessible = true }
+        followAll.invoke(page, 0)
+        followAll.invoke(page, 0) // once is enough
+        awaitMain("every entity") { !server.commands("subscribe_entities").last().has("entity_ids") }
+        val all = server.commands("subscribe_entities").size
+
+        // Another view is scoped again; back on this one, it follows every entity without being asked again.
+        page.load("$base/wall-test/wall")
+        awaitMain("the wall view's own") { server.commands("subscribe_entities").size > all }
+        page.load("$base/wall-test/living")
+        awaitMain("every entity again") { !server.commands("subscribe_entities").last().has("entity_ids") }
+    }
+
+    /** #838: every island shares one registry feed on the client, started by the first and ended by the last. */
+    @Test
+    fun islandsShareOneRegistryFeed() {
+        server.floorRegistry = org.json.JSONArray("""[{"floor_id": "ground", "name": "Ground floor"}]""")
+        val page = readyPage()
+        val watch = page.javaClass.getDeclaredMethod("watchIslandRegistries", Function1::class.java).apply { isAccessible = true }
+        val a = CopyOnWriteArrayList<JSONObject>()
+        val b = CopyOnWriteArrayList<JSONObject>()
+        @Suppress("UNCHECKED_CAST")
+        val releaseA = watch.invoke(page, { set: JSONObject -> a += set }) as () -> Unit
+        awaitMain("the first island's registries") { a.isNotEmpty() }
+        @Suppress("UNCHECKED_CAST")
+        val releaseB = watch.invoke(page, { set: JSONObject -> b += set }) as () -> Unit
+        awaitMain("the second island's, from the same feed") { b.isNotEmpty() }
+        assertEquals("ground", b.single().getJSONObject("floors").getJSONObject("ground").getString("floor_id"))
+        assertEquals(1, server.commands("config/floor_registry/list").size)
+        assertEquals(1, server.received.count { it.optString("type") == "subscribe_events" && it.optString("event_type") == "floor_registry_updated" })
+
+        val floorSub = server.eventSubscriptionId("floor_registry_updated")!!
+        fun cancelled() = server.commands("unsubscribe_events").any { it.getInt("subscription") == floorSub }
+        releaseA()
+        idle()
+        Thread.sleep(100)
+        assertFalse(cancelled())
+        releaseB()
+        awaitMain("the feed ends with the last island") { cancelled() }
     }
 
     @Test
@@ -806,6 +853,31 @@ class VitroEngineTest {
         assertFalse(inline.contains("100vw"))
     }
 
+    /**
+     * #839: a panel card sized as `calc(100vh - var(--header-height))` filled the screen but for 56 px, over white. In
+     * the kiosk's HA the header is hidden and its height 0 (the GeckoView extension's `--header-height: 0px`), and the
+     * view's background shows under a short card.
+     */
+    @Test
+    fun anIslandHasNoHeaderHeightAndAFullViewportOneTheViewsBackground() {
+        for (fill in listOf(true, false)) {
+            val html = WebIslandCardView.buildIslandHtml(cardContext(), islandCard(), fillViewport = fill)
+            val root = html.indexOf(":root { --header-height: 0px; }")
+            assertTrue("fill=$fill", root > 0)
+            // After the theme's own variables, so a theme that sets one doesn't put the strip back.
+            assertTrue(root > html.indexOf("--primary-background-color: #111111;"))
+        }
+        val full = WebIslandCardView.buildIslandHtml(cardContext(), islandCard(), fillViewport = true)
+        val bg = full.indexOf("html { background-color: #111111; }")
+        assertTrue(bg > 0)
+        // After the page's `background: transparent`, which it would otherwise lose to.
+        assertTrue(bg > full.indexOf("html, body { margin: 0; padding: 0; background: transparent;"))
+        assertTrue(WebIslandCardView.buildIslandHtml(cardContext(dark = false), islandCard(), fillViewport = true)
+            .contains("html { background-color: #fafafa; }"))
+        val inline = WebIslandCardView.buildIslandHtml(cardContext(), islandCard(), fillViewport = false)
+        assertFalse("an inline island sits in a card", inline.contains("html { background-color"))
+    }
+
     @Test
     fun anIslandViewHoldsOneChildAndSurvivesWithoutAWebView() {
         val island = WebIslandCardView(cardContext(), islandCard(), fillViewport = true)
@@ -834,9 +906,13 @@ class VitroEngineTest {
         assertTrue(html.contains("locale: { language: 'en', number_format: 'language', time_format: 'language' }"))
         assertTrue(html.contains("themes: {} }"))
         assertTrue(html.contains("user: { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false }"))
-        assertTrue(html.contains("areas: {},"))
-        assertTrue(html.contains("devices: {},"))
-        assertTrue(html.contains("entities: {},"))
+        // HA's registries, asked for on a card's first read of one; and every state once a card walks them.
+        assertTrue(html.contains("const registries = { entities: {}, devices: {}, areas: {}, floors: {} };"))
+        assertTrue(html.contains("sendBridge({ type: 'registries' });"))
+        assertTrue(html.contains("m.type === 'registries' && m.registries"))
+        assertTrue(html.contains("ownKeys(target) {"))
+        assertTrue(html.contains("sendBridge({ type: 'watchAll' });"))
+        assertTrue("no lookup watch once it follows all", html.contains("if (!walksAll && typeof prop === 'string' && prop.includes('.'))"))
         assertTrue(html.contains("auth: { data: { access_token: accessToken, hassUrl: location.origin }"))
         // Navigation and actions go back over the bridge.
         assertTrue(html.contains("window.addEventListener('location-changed'"))
@@ -992,6 +1068,91 @@ class VitroEngineTest {
         // A watched entity that is removed goes out as null too.
         island.handleIslandMessage(JSONObject().put("type", "watch").put("entity_id", "light.gone")) {}
         assertTrue(island.patchFor(setOf("light.gone"))!!.getJSONObject("states").isNull("light.gone"))
+    }
+
+    /** An island on a real slot of [server], its context reporting what the island asks of the engine. */
+    private fun liveIsland(
+        server: VitroIslandServer,
+        store: EntityStore,
+        card: String,
+        watchAll: () -> Unit = {},
+        watchRegistries: ((JSONObject) -> Unit) -> () -> Unit = { { } },
+    ): Pair<WebIslandCardView, VitroIslandServer.SlotHandler> {
+        val ctx = VitroCardContext(
+            context = activity, haBase = base, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), true),
+            resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {},
+            openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            islandServer = server, openIslandPage = { RecordingPage(activity) },
+            watchAllEntities = watchAll, watchRegistries = watchRegistries,
+        )
+        val island = WebIslandCardView(ctx, LovelaceParser.parseCard(JSONObject(card)))
+        @Suppress("UNCHECKED_CAST")
+        val handler = (server.javaClass.getDeclaredField("slots").apply { isAccessible = true }.get(server) as Map<String, VitroIslandServer.SlotHandler>).values.last()
+        return island to handler
+    }
+
+    /** #838: a card that walks `hass.states` (the tablet's to-do summary) gets every state, as in HA's frontend. */
+    @Test
+    fun anIslandThatWalksTheStatesFollowsEveryEntity() {
+        val store = storeWith("light.lounge_lamp", "sensor.oil_boards")
+        val server = VitroIslandServer(haBase = { base }, accessToken = { null })
+        try {
+            var asked = 0
+            val (island, handler) = liveIsland(server, store, """{"type": "custom:tablet-home-card", "entity": "light.lounge_lamp"}""", watchAll = { asked++ })
+            assertFalse(island.followsAllEntities)
+            val sent = CopyOnWriteArrayList<JSONObject>()
+            handler.onConnected { sent += it }
+            sent.clear()
+            assertNull("before it walks them, only its own entities", island.patchFor(setOf("sensor.oil_boards")))
+
+            handler.onMessage(JSONObject().put("type", "watchAll")) {}
+            assertEquals("the engine widens the view's subscription", 1, asked)
+            store.putLocal(EntityState("sensor.oil_boards", "overdue", emptyMap()))
+            assertEquals("overdue", sent.single().getJSONObject("states").getJSONObject("sensor.oil_boards").getString("state"))
+        } finally {
+            server.stop()
+        }
+    }
+
+    /** #838: `hass.entities`, `devices`, `areas` and `floors` come from the shared feed, asked for on first read. */
+    @Test
+    fun anIslandGetsTheRegistriesOnceItReadsOne() {
+        val server = VitroIslandServer(haBase = { base }, accessToken = { null })
+        try {
+            val feeds = CopyOnWriteArrayList<(JSONObject) -> Unit>()
+            var released = 0
+            val (island, handler) = liveIsland(server, storeWith(), """{"type": "custom:tablet-home-card"}""", watchRegistries = { cb ->
+                feeds += cb
+                ({ released++ })
+            })
+            val first = CopyOnWriteArrayList<JSONObject>()
+            handler.onConnected { first += it }
+            assertTrue("nothing asked before a card reads one", feeds.isEmpty())
+
+            handler.onMessage(JSONObject().put("type", "registries")) {}
+            handler.onMessage(JSONObject().put("type", "registries")) {} // a second read asks nothing more
+            assertEquals(1, feeds.size)
+            val set = JSONObject().put("entities", JSONObject().put("light.ball_lamp", JSONObject().put("device_id", "dev-1")))
+                .put("devices", JSONObject()).put("areas", JSONObject()).put("floors", JSONObject())
+            feeds.single()(set)
+            val msg = first.last()
+            assertEquals("registries", msg.getString("type"))
+            assertEquals("dev-1", msg.getJSONObject("registries").getJSONObject("entities").getJSONObject("light.ball_lamp").getString("device_id"))
+
+            // A socket that connects later (a reconnect) gets them right after its snapshot.
+            val later = CopyOnWriteArrayList<JSONObject>()
+            handler.onConnected { later += it }
+            assertEquals(listOf("snapshot", "registries"), later.map { it.getString("type") })
+
+            // Gone with the island.
+            val parent = FrameLayout(activity)
+            activity.setContentView(parent)
+            parent.addView(island)
+            parent.removeView(island)
+            assertEquals(1, released)
+        } finally {
+            server.stop()
+        }
     }
 
     @Test

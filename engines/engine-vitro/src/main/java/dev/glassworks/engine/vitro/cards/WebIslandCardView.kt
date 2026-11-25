@@ -58,6 +58,17 @@ class WebIslandCardView(
         config.raw.has("filter") || referencedEntities().isEmpty()
     }
 
+    /** The card walked `hass.states` (`watchAll`): it follows every entity from then on, as [followsAllEntities]. */
+    @Volatile private var walksAllStates = false
+
+    /** The card read `hass.entities`, `devices`, `areas` or `floors`: the shared registry feed, until detached. */
+    private val registriesAsked = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val registriesRelease = java.util.concurrent.atomic.AtomicReference<(() -> Unit)?>(null)
+    @Volatile private var detached = false
+
+    /** The last registries the feed gave (under [seedLock]): a socket that connects later gets them after its snapshot. */
+    private var registries: JSONObject? = null
+
     // An inline island sits in Vitro's vertical scroller: a vertical drag belongs to the scroller, while taps and
     // horizontal drags (sliders, carousels, charts) stay inside the island.
     private val touchSlop = ViewConfiguration.get(ctx.context).scaledTouchSlop
@@ -81,6 +92,7 @@ class WebIslandCardView(
                     // below takes the same lock).
                     synchronized(seedLock) {
                         seedInitialStates(send)
+                        registries?.let { send(registriesMessage(it)) }
                         senders += send
                     }
                 }
@@ -157,7 +169,7 @@ class WebIslandCardView(
     internal fun patchFor(changed: Set<String>): JSONObject? {
         val patch = JSONObject()
         for (eid in changed) {
-            if (!followsAllEntities && eid !in watchedEntities) continue
+            if (!followsAllEntities && !walksAllStates && eid !in watchedEntities) continue
             val state = ctx.store[eid]
             // A removed entity goes as null, for a watched one too, so the card doesn't keep a stale state.
             patch.put(eid, state?.toHassJson() ?: JSONObject.NULL)
@@ -211,6 +223,25 @@ class WebIslandCardView(
                 // Read at runtime, beyond what the config names: the view's subscription takes it in.
                 if (added && !followsAllEntities) ctx.watchEntity(id)
             }
+            "watchAll" -> {
+                // Every change reaches the card now, and the view's subscription takes in every entity, so the
+                // states it walks are all of HA's, as in HA's frontend.
+                walksAllStates = true
+                ctx.watchAllEntities()
+            }
+            "registries" -> {
+                if (!registriesAsked.compareAndSet(false, true)) return
+                val release = ctx.watchRegistries { set ->
+                    synchronized(seedLock) {
+                        registries = set
+                        val msg = registriesMessage(set)
+                        senders.forEach { it(msg) }
+                    }
+                }
+                registriesRelease.set(release)
+                // Detached while the feed was being asked for: give it back at once.
+                if (detached) releaseRegistries()
+            }
             "resize" -> {
                 if (fillViewport) return
                 val cssH = msg.optInt("height", 160).coerceIn(48, 1200)
@@ -258,8 +289,14 @@ class WebIslandCardView(
         }
     }
 
+    private fun releaseRegistries() {
+        registriesRelease.getAndSet(null)?.invoke()
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        detached = true
+        releaseRegistries()
         senders.clear()
         slotId?.let { ctx.islandServer?.unregisterSlot(it) }
         slotId = null
@@ -267,6 +304,10 @@ class WebIslandCardView(
     }
 
     companion object {
+        /** The bridge message that replaces an island's `hass.entities`, `devices`, `areas` and `floors`. */
+        internal fun registriesMessage(set: JSONObject): JSONObject =
+            JSONObject().put("type", "registries").put("registries", set)
+
         private const val AXIS_NONE = 0
         private const val AXIS_HORIZONTAL = 1
         private const val AXIS_VERTICAL = 2
@@ -338,6 +379,9 @@ class WebIslandCardView(
             val haUserJson = islandUser(ctx.haUser())?.toString() ?: "null"
             val tokenJson = JSONObject.quote(ctx.accessToken().orEmpty())
             val heightRule = if (fillViewport) "height: 100vh; width: 100vw;" else ""
+            // A full-viewport island is the view: under a card shorter than the screen the theme's background shows,
+            // as in HA's panel view, not the white GeckoView draws behind a transparent page.
+            val pageBackground = if (fillViewport) "html { background-color: ${ctx.theme.hex(ctx.theme.backgroundColor)}; }" else ""
             return """
 <!DOCTYPE html>
 <html>
@@ -346,8 +390,12 @@ class WebIslandCardView(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 $cssVars
+/* The island is the card's whole page, with no HA header above it: a card that takes var(--header-height) off the
+   viewport's height fills it, as in HA's kiosk view (the header hidden, its height 0). */
+:root { --header-height: 0px; }
 html, body { margin: 0; padding: 0; background: transparent; color: var(--primary-text-color); font-family: Inter, system-ui, sans-serif; overflow: hidden; $heightRule }
 #mount { width: 100%; ${if (fillViewport) "height: 100vh;" else ""} }
+$pageBackground
 ha-card { display: block; background: var(--ha-card-background, var(--card-background-color)); border-radius: var(--ha-card-border-radius, 12px); color: var(--primary-text-color); }
 ha-card.vitro-fallback { padding: 12px 16px; }
 .vitro-title { font-size: 1.15em; font-weight: 500; padding-bottom: 8px; }
@@ -720,14 +768,29 @@ function sendBridge(obj, id) {
   return false;
 }
 
+// True once the card walked hass.states: the island follows every entity, so no single lookup needs a watch.
+let walksAll = false;
 const statesProxy = new Proxy(rawStates, {
   get(target, prop) {
-    if (typeof prop === 'string' && prop.includes('.')) {
+    if (!walksAll && typeof prop === 'string' && prop.includes('.')) {
       sendBridge({ type: 'watch', entity_id: prop });
     }
     return target[prop];
-  }
+  },
+  // Object.keys/values/entries, for…in, spreads: HA's frontend hands a card every state, so a card that walks them
+  // asks (once) for all of them. Cards that only look entities up by id never pay for that.
+  ownKeys(target) {
+    if (!walksAll) {
+      walksAll = true;
+      sendBridge({ type: 'watchAll' });
+    }
+    return Reflect.ownKeys(target);
+  },
 });
+
+// hass.entities, devices, areas and floors, as HA's frontend has them: asked for (once) when a card first reads one.
+const registries = { entities: {}, devices: {}, areas: {}, floors: {} };
+let registriesAsked = false;
 
 function vitroTitle(s) {
   const t = String(s == null ? '' : s).replace(/_/g, ' ');
@@ -814,10 +877,6 @@ const hassBase = {
   themes: { darkMode: ${ctx.theme.dark}, default_theme: ${JSONObject.quote(ctx.theme.name)}, themes: {} },
   selectedTheme: null,
   user: { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false },
-  areas: {},
-  devices: {},
-  entities: {},
-  floors: {},
   services: {},
   panels: {},
   resources: {},
@@ -846,6 +905,19 @@ if (haUser) hassBase.user = haUser;
 // A new object on every patch: Lit cards compare hass by reference to decide whether to re-render.
 function makeHass() {
   const h = Object.assign({}, hassBase, { states: statesProxy });
+  for (const key of Object.keys(registries)) {
+    Object.defineProperty(h, key, {
+      enumerable: true,
+      configurable: true,
+      get() {
+        if (!registriesAsked) {
+          registriesAsked = true;
+          sendBridge({ type: 'registries' });
+        }
+        return registries[key];
+      },
+    });
+  }
   window.__vitroHass = h;
   return h;
 }
@@ -876,6 +948,10 @@ function connectBridge() {
           if (m.states[id] === null) delete rawStates[id];
           else rawStates[id] = m.states[id];
         }
+        if (cardEl) cardEl.hass = makeHass();
+      } else if (m.type === 'registries' && m.registries) {
+        // New objects every time: Lit cards compare them by reference.
+        for (const key of Object.keys(registries)) registries[key] = m.registries[key] || {};
         if (cardEl) cardEl.hass = makeHass();
       } else if (m.type === 'wsReply') {
         const entry = wsPending.get(m.id);

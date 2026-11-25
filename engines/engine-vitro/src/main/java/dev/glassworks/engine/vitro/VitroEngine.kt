@@ -156,6 +156,66 @@ class VitroEngine(
         private val runtimeEntities = LinkedHashSet<String>()
         private var runtimeResubscribe = false
 
+        /**
+         * Views of the shown dashboard (by index) where a web island walked `hass.states`: they follow every entity,
+         * as HA's frontend hands a card every state, also when shown again from the cache (the island asks only once).
+         * Cleared with the dashboard.
+         */
+        private val walkedViews = HashSet<Int>()
+
+        /** A web island on view [viewIndex] walked `hass.states`: that view follows every entity. On the main thread. */
+        private fun followAllForIsland(viewIndex: Int) {
+            if (disposed || !walkedViews.add(viewIndex)) return
+            if (viewIndex != vitroView.currentViewIndex || selectedFollowsAll) return
+            selectedFollowsAll = true
+            subscribeSelectedView()
+        }
+
+        /**
+         * The islands holding the registry feed ([watchIslandRegistries]); main thread only. One feed for them all,
+         * on the current client, while at least one holds it.
+         */
+        private val registryWatchers = LinkedHashSet<(JSONObject) -> Unit>()
+        private var registriesNow: JSONObject? = null
+        private var registryFeed: (() -> Unit)? = null
+
+        /** [onChange] gets the islands' registries until the returned handle is called. Any thread. */
+        private fun watchIslandRegistries(onChange: (JSONObject) -> Unit): () -> Unit {
+            main.post {
+                if (disposed || !registryWatchers.add(onChange)) return@post
+                if (registryFeed == null) attachRegistries()
+                registriesNow?.let(onChange)
+            }
+            return {
+                main.post {
+                    if (registryWatchers.remove(onChange) && registryWatchers.isEmpty()) detachRegistries()
+                }
+            }
+        }
+
+        /** Moves the registry feed onto the current client (a new one after a reconnect to another server). */
+        private fun attachRegistries() {
+            detachRegistries()
+            val c = client ?: return
+            if (registryWatchers.isEmpty()) return
+            lateinit var feed: () -> Unit
+            feed = c.watchRegistries { set ->
+                main.post {
+                    // Only the feed still attached: one replaced or released since drops its last answer.
+                    if (registryFeed !== feed) return@post
+                    registriesNow = set
+                    registryWatchers.toList().forEach { it(set) }
+                }
+            }
+            registryFeed = feed
+        }
+
+        private fun detachRegistries() {
+            registryFeed?.invoke()
+            registryFeed = null
+            registriesNow = null
+        }
+
         private fun subscribeSelectedView() {
             client?.subscribeViewEntities(if (selectedFollowsAll) emptySet() else selectedRefs + runtimeEntities)
         }
@@ -195,6 +255,8 @@ class VitroEngine(
             vitroView.cancelPendingBuilds()
             activity.application.unregisterActivityLifecycleCallbacks(lifecycle)
             clientGeneration++
+            detachRegistries()
+            registryWatchers.clear()
             client?.close()
             client = null
             if (activePage === this) activePage = null
@@ -251,7 +313,7 @@ class VitroEngine(
             vitroView.holdFirstBuildForStatesMs = FIRST_STATES_WAIT_MS
             vitroView.onViewSelected = { v ->
                 // An empty filter subscribes to every entity, which auto-entities' runtime filters need.
-                selectedFollowsAll = CardRouter.followsAllEntities(v)
+                selectedFollowsAll = CardRouter.followsAllEntities(v) || v.index in walkedViews
                 selectedRefs = if (selectedFollowsAll) emptySet() else CardRouter.referencedEntities(v)
                 subscribeSelectedView()
                 // Only the dashboard that owns the route reports a location: one still on screen while another loads
@@ -275,6 +337,8 @@ class VitroEngine(
             vitroView.onThemeResolved = { theme -> reportThemeToHost(theme) }
             vitroView.contextFactory = { theme ->
                 val haBase = currentOrigin.orEmpty()
+                // The view being built: the context is made for its cards.
+                val viewIndex = vitroView.currentViewIndex
                 VitroCardContext(
                     context = activity,
                     haBase = haBase,
@@ -288,6 +352,8 @@ class VitroEngine(
                         client?.callService(domain, service, data, target)
                     },
                     watchEntity = { id -> main.post { watchRuntimeEntity(id) } },
+                    watchAllEntities = { main.post { followAllForIsland(viewIndex) } },
+                    watchRegistries = { onChange -> watchIslandRegistries(onChange) },
                     callServiceThen = { domain, service, data, target, done ->
                         val c = client
                         if (c != null) c.callService(domain, service, data, target, done) else done(false)
@@ -427,6 +493,8 @@ class VitroEngine(
                 listener = WsListener(generation),
             )
             client = wsClient
+            // Islands holding the registries keep them, now from this Home Assistant.
+            if (registryWatchers.isNotEmpty()) attachRegistries()
             wsClient.start(dashPath)
         }
 
@@ -657,6 +725,7 @@ class VitroEngine(
                     displayedDashboard = currentOrigin to urlPath
                     // A new config builds new islands; they ask again for what they read.
                     runtimeEntities.clear()
+                    walkedViews.clear()
                     vitroView.setConnectionBanner(null)
                     vitroView.setDashboard(config, pendingViewPath)
                     client?.dashboardShown()

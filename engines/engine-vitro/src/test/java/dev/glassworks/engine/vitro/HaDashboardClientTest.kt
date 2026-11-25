@@ -18,6 +18,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -1072,6 +1073,91 @@ class HaDashboardClientTest {
         // After the 1 s backoff it connects once the server is back.
         server.refuseConnections = false
         awaitCondition("reconnect", timeoutMs = 15_000) { listener.connected.isNotEmpty() }
+    }
+
+    // ---- Registries for web islands ----
+
+    private fun withRegistries() {
+        server.entityRegistryDisplay = JSONObject(
+            """{"entity_categories": {"0": "config", "1": "diagnostic"}, "entities": [
+                 {"ei": "light.lounge_lamp", "di": "dev-1", "pl": "hue", "lb": ["evening"]},
+                 {"ei": "sensor.lamp_signal", "di": "dev-1", "ec": 1, "hb": true}]}""",
+        )
+        server.deviceRegistry = JSONArray("""[{"id": "dev-1", "name": "Ball Lamp", "area_id": "lounge"}]""")
+        server.floorRegistry = JSONArray("""[{"floor_id": "ground", "name": "Ground floor", "level": 0}]""")
+    }
+
+    @Test
+    fun registriesAreReadOnlyOnceSomeoneWatchesThem() {
+        withRegistries()
+        val c = connected()
+        Thread.sleep(200)
+        // The startup reads no floors and subscribes to no registry event: only islands need those.
+        assertTrue(server.commands("config/floor_registry/list").isEmpty())
+        assertNull(server.eventSubscriptionId("device_registry_updated"))
+
+        val sets = CopyOnWriteArrayList<JSONObject>()
+        val release = c.watchRegistries { sets += it }
+        awaitCondition("the registries") { sets.isNotEmpty() }
+        val set = sets.single()
+        assertEquals(setOf("entities", "devices", "areas", "floors"), set.keys().asSequence().toSet())
+        assertEquals("dev-1", set.getJSONObject("entities").getJSONObject("light.lounge_lamp").getString("device_id"))
+        assertEquals("diagnostic", set.getJSONObject("entities").getJSONObject("sensor.lamp_signal").getString("entity_category"))
+        assertEquals("Ball Lamp", set.getJSONObject("devices").getJSONObject("dev-1").getString("name"))
+        assertEquals("Lounge", set.getJSONObject("areas").getJSONObject("lounge").getString("name"))
+        assertEquals(0, set.getJSONObject("floors").getJSONObject("ground").getInt("level"))
+        val registrySubs = listOf("entity_registry_updated", "device_registry_updated", "area_registry_updated", "floor_registry_updated")
+            .map { event -> server.eventSubscriptionId(event).also { assertNotNull(event, it) }!! }
+        fun cancelled() = server.commands("unsubscribe_events").map { it.getInt("subscription") }.filter { it in registrySubs }
+
+        // A second watcher shares the feed: nothing more is asked of Home Assistant, and it gets the set at once.
+        val floorsAsked = server.commands("config/floor_registry/list").size
+        val second = CopyOnWriteArrayList<JSONObject>()
+        val releaseSecond = c.watchRegistries { second += it }
+        assertEquals(1, second.size)
+        Thread.sleep(100)
+        assertEquals(floorsAsked, server.commands("config/floor_registry/list").size)
+
+        // The last one to go ends the feed: its event subscriptions are cancelled.
+        release()
+        Thread.sleep(100)
+        assertTrue(cancelled().isEmpty())
+        releaseSecond()
+        awaitCondition("registry events unsubscribed") { cancelled().toSet() == registrySubs.toSet() }
+    }
+
+    @Test
+    fun aRegistryUpdateRereadsThatRegistryOnceItsBurstIsOver() {
+        withRegistries()
+        val c = connected()
+        val sets = CopyOnWriteArrayList<JSONObject>()
+        c.watchRegistries { sets += it }
+        awaitCondition("the registries") { sets.size == 1 }
+        val entitiesAsked = server.commands("config/entity_registry/list_for_display").size
+        val devicesAsked = server.commands("config/device_registry/list").size
+
+        server.deviceRegistry = JSONArray("""[{"id": "dev-1", "name": "Ball Lamp", "area_id": "lounge"}, {"id": "dev-2", "name": "Fan"}]""")
+        val sub = server.eventSubscriptionId("device_registry_updated")!!
+        repeat(5) { server.pushEvent(sub, JSONObject().put("event_type", "device_registry_updated").put("data", JSONObject())) }
+        awaitCondition("the new devices") { sets.size == 2 }
+        assertEquals(setOf("dev-1", "dev-2"), sets[1].getJSONObject("devices").keys().asSequence().toSet())
+        assertEquals("one read for the burst", devicesAsked + 1, server.commands("config/device_registry/list").size)
+        assertEquals("the other registries aren't read again", entitiesAsked, server.commands("config/entity_registry/list_for_display").size)
+    }
+
+    @Test
+    fun theRegistryFeedStartsAgainOnANewConnection() {
+        withRegistries()
+        val c = connected()
+        val sets = CopyOnWriteArrayList<JSONObject>()
+        c.watchRegistries { sets += it }
+        awaitCondition("the registries") { sets.size == 1 }
+        server.floorRegistry = null // an older Home Assistant: no floors, the others still go out
+        server.dropConnection()
+        awaitCondition("the registries again", timeoutMs = 15_000) { sets.size == 2 }
+        assertEquals(0, sets[1].getJSONObject("floors").length())
+        assertEquals("Ball Lamp", sets[1].getJSONObject("devices").getJSONObject("dev-1").getString("name"))
+        assertNotNull(server.eventSubscriptionId("entity_registry_updated"))
     }
 
     // ---- Connection life ----

@@ -168,6 +168,7 @@ class HaDashboardClient(
         runCatching { socket?.close() }
         socket = null
         sendExecutor.shutdownNow()
+        synchronized(registryLock) { registryTimer?.shutdownNow() }
     }
 
     /** Switches the entity subscription to [entityIds] for the active view. */
@@ -341,6 +342,103 @@ class HaDashboardClient(
         val subId = subscribeWithId(JSONObject(msg.toString()), onError) { _, ev -> onEvent(ev) }
         if (subId <= 0) onError(null)
         return { if (subId > 0) unsubscribe(subId) }
+    }
+
+    // ---- Registries for web islands ----
+
+    /** Guards the registry feed's state below. Taken before [queueLock] (start and stop send), never inside it. */
+    private val registryLock = Any()
+    private val registryWatchers = ArrayList<(JSONObject) -> Unit>()
+
+    /** The connection ([connectionGen]) the feed runs on, -1 when it doesn't run. */
+    private var registryGen = -1
+    private var registrySubs: List<Int> = emptyList()
+
+    /** Each registry's last `result` on this connection; the set goes out once all four answered. */
+    private val registryParts = HashMap<HassRegistries.Kind, Any?>()
+    private var registriesNow: JSONObject? = null
+
+    /** Registries whose refetch is waiting out [REGISTRY_DEBOUNCE_MS]. */
+    private val registryDue = Collections.newSetFromMap(ConcurrentHashMap<HassRegistries.Kind, Boolean>())
+    @Volatile private var registryTimer: java.util.concurrent.ScheduledExecutorService? = null
+
+    /**
+     * HA's registries as its frontend hands them to cards ([HassRegistries]: `{entities, devices, areas, floors}`), for
+     * web islands. Nothing is fetched or subscribed until the first watcher: then the four lists are read and each is
+     * read again on its `*_registry_updated` event (debounced, as HA's frontend does), on every connection, until the
+     * last handle is called. [onChange] gets the whole set on the socket's thread, now when one is known and on every
+     * change; the returned handle stops it.
+     */
+    fun watchRegistries(onChange: (JSONObject) -> Unit): () -> Unit {
+        val now = synchronized(registryLock) {
+            registryWatchers += onChange
+            startRegistries()
+            registriesNow
+        }
+        now?.let(onChange)
+        return {
+            synchronized(registryLock) {
+                if (registryWatchers.remove(onChange) && registryWatchers.isEmpty()) stopRegistries()
+            }
+        }
+    }
+
+    /** Starts the feed on this connection when someone watches and it doesn't run yet. Under [registryLock]. */
+    private fun startRegistries() {
+        val gen = connectionGen.get()
+        if (registryWatchers.isEmpty() || !authenticated || registryGen == gen) return
+        registryGen = gen
+        registryParts.clear()
+        registrySubs = HassRegistries.Kind.values().map { kind ->
+            subscribe(JSONObject().put("type", "subscribe_events").put("event_type", kind.event)) { refetchRegistry(kind, gen) }
+        }.filter { it > 0 }
+        for (kind in HassRegistries.Kind.values()) fetchRegistry(kind, gen)
+    }
+
+    /** Stops the feed and forgets the registries: nobody watches. Under [registryLock]. */
+    private fun stopRegistries() {
+        if (registryGen == connectionGen.get()) registrySubs.forEach(::unsubscribe)
+        registrySubs = emptyList()
+        registryGen = -1
+        registryParts.clear()
+        registriesNow = null
+    }
+
+    private fun fetchRegistry(kind: HassRegistries.Kind, gen: Int) {
+        request(JSONObject().put("type", kind.command)) { res ->
+            val (set, watchers) = synchronized(registryLock) {
+                if (gen != connectionGen.get() || registryGen != gen) return@request
+                // A refused list (an older Home Assistant without floors) counts as empty; a failed refetch keeps the
+                // last answer.
+                if (res.optBoolean("success", false)) registryParts[kind] = res.opt("result")
+                else if (kind !in registryParts) registryParts[kind] = null
+                if (registryParts.size < HassRegistries.Kind.values().size) return@request
+                val built = HassRegistries.build(registryParts)
+                registriesNow = built
+                built to registryWatchers.toList()
+            }
+            watchers.forEach { it(set) }
+        }
+    }
+
+    /** A registry changed: read it again once its burst of events is over (an integration reload sends dozens). */
+    private fun refetchRegistry(kind: HassRegistries.Kind, gen: Int) {
+        if (!registryDue.add(kind)) return
+        val timer = synchronized(registryLock) {
+            // Checked under the lock close() takes to stop the timer: a closed client starts no new one.
+            if (closed.get()) return
+            registryTimer ?: Executors.newSingleThreadScheduledExecutor { r ->
+                Thread(r, "vitro-ha-registries").apply { isDaemon = true }
+            }.also { registryTimer = it }
+        }
+        try {
+            timer.schedule({
+                registryDue.remove(kind)
+                fetchRegistry(kind, gen)
+            }, REGISTRY_DEBOUNCE_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (_: RejectedExecutionException) {
+            registryDue.remove(kind)
+        }
     }
 
     /** Subscribes to HA's server-side Jinja2 `render_template` (for markdown & mushroom-template-card). */
@@ -634,6 +732,8 @@ class HaDashboardClient(
             if (res.optBoolean("success", false)) res.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyAreas(r) } }
             settleDisplay()
         }
+        // 8. The registries web islands read, when one does (they ask on first read): again on every connection.
+        synchronized(registryLock) { startRegistries() }
     }
 
     /** Reads `selectedTheme` (a theme name, or `{theme, dark}`) out of the `core` user data and tells the listener. */
@@ -807,6 +907,9 @@ class HaDashboardClient(
         /** A result the client made up for a failed connection, not an answer from Home Assistant. */
         fun isTransportError(res: JSONObject): Boolean =
             !res.optBoolean("success", false) && res.optJSONObject("error")?.optString("code") in setOf(DISCONNECTED, SEND_FAILED)
+
+        /** How long a registry's refetch waits for its burst of update events to end, as HA's frontend debounces its own. */
+        internal const val REGISTRY_DEBOUNCE_MS = 500L
 
         /** Default bound on the greeting and auth exchange; after `auth_ok` reads may idle for as long as they like. */
         const val AUTH_TIMEOUT_MS = 20_000L

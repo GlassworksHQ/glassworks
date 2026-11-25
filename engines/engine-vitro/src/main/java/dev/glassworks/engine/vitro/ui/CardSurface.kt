@@ -89,6 +89,17 @@ class VitroCardContext(
      * island. Any thread. The default (tests, no engine) does nothing.
      */
     val watchEntity: (entityId: String) -> Unit = {},
+    /**
+     * A web island walked `hass.states` (`Object.values`, `for…in`): HA's frontend hands a card every state, so the
+     * view it sits on follows every entity from now on. Any thread. The default (tests, no engine) does nothing.
+     */
+    val watchAllEntities: () -> Unit = {},
+    /**
+     * HA's registries for a web island's `hass` ([dev.glassworks.engine.vitro.data.HassRegistries]), shared by every
+     * island: `onChange` gets the whole set (now when one is known, again on each change) on any thread until the
+     * returned handle is called. Any thread. The default (tests, no engine) never delivers.
+     */
+    val watchRegistries: (onChange: (JSONObject) -> Unit) -> () -> Unit = { { } },
 ) {
     val dp: Float = context.resources.displayMetrics.density
     val main: Handler = Handler(Looper.getMainLooper())
@@ -136,6 +147,8 @@ class VitroCardContext(
         subscribeWs = subscribeWs,
         now = now,
         watchEntity = watchEntity,
+        watchAllEntities = watchAllEntities,
+        watchRegistries = watchRegistries,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout
