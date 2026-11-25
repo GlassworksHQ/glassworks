@@ -1,0 +1,8330 @@
+{
+ "schema": "glassworks.perf/4",
+ "protocol_version": 1,
+ "clarity": 1,
+ "measured_on": "2026-11-23",
+ "runs_attempted": 3,
+ "frame": {
+  "id": "lululemon-mirror",
+  "name": "lululemon Studio Mirror",
+  "device": {
+   "touch": false,
+   "model": "MSM8916 for arm64",
+   "manufacturer": "unknown",
+   "android": "6.0.1",
+   "api": 23,
+   "abi": "arm64-v8a",
+   "abilist": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "armeabi"
+   ],
+   "soc": "msm8916",
+   "cpu": {
+    "cores": 4,
+    "parts": [
+     "0xd03"
+    ],
+    "max_mhz": [
+     1209
+    ]
+   },
+   "mem_total_kb": 952252,
+   "display": {
+    "px": [
+     1920,
+     1080
+    ],
+    "density": "240",
+    "vsync_ms": 16.667
+   },
+   "thermal_c": {
+    "tsens_tz_sensor0": 0.059,
+    "tsens_tz_sensor1": 0.057,
+    "tsens_tz_sensor2": 0.055,
+    "tsens_tz_sensor4": 0.058,
+    "tsens_tz_sensor5": 0.059,
+    "pm8916_tz": 51.896,
+    "battery": 24.6
+   },
+   "loadavg": [
+    "7.56",
+    "6.79",
+    "5.09"
+   ]
+  },
+  "app": {
+   "package": "dev.glassworks.generic_android.legacy",
+   "version_name": "0.3.0-1d900da",
+   "version_code": null,
+   "apk_bytes": 96035319,
+   "geckoview": null,
+   "version_label": "given"
+  }
+ },
+ "apk": [],
+ "ram": {
+  "reference_idle": {
+   "samples": 3,
+   "app_pss_kb": {
+    "median": 399307.0,
+    "min": 396516.0,
+    "max": 403479.0,
+    "n": 3
+   },
+   "by_role_pss_kb": {
+    "main": {
+     "median": 196961.0,
+     "min": 195696.0,
+     "max": 202916.0,
+     "n": 3
+    },
+    "tab": {
+     "median": 198363.0,
+     "min": 189866.0,
+     "max": 206201.0,
+     "n": 3
+    },
+    "utility": {
+     "median": 3734.0,
+     "min": 1582.0,
+     "max": 3983.0,
+     "n": 3
+    }
+   },
+   "main_kb": {
+    "code_kb": {
+     "median": 14360.0,
+     "min": 14344.0,
+     "max": 15044.0,
+     "n": 3
+    },
+    "graphics_kb": {
+     "median": 82704.0,
+     "min": 82056.0,
+     "max": 88496.0,
+     "n": 3
+    },
+    "java_heap_kb": {
+     "median": 17436.0,
+     "min": 14956.0,
+     "max": 17696.0,
+     "n": 3
+    },
+    "native_heap_kb": {
+     "median": 8408.0,
+     "min": 8080.0,
+     "max": 8552.0,
+     "n": 3
+    },
+    "private_other_kb": {
+     "median": 57804.0,
+     "min": 56884.0,
+     "max": 57988.0,
+     "n": 3
+    },
+    "stack_kb": {
+     "median": 1292.0,
+     "min": 1280.0,
+     "max": 1340.0,
+     "n": 3
+    },
+    "system_kb": {
+     "median": 15327.0,
+     "min": 14894.0,
+     "max": 15343.0,
+     "n": 3
+    },
+    "total_pss_kb": {
+     "median": 196731.0,
+     "min": 194946.0,
+     "max": 202607.0,
+     "n": 3
+    }
+   },
+   "device_used_pct": null,
+   "cpu_app_pct_of_core": {
+    "median": 0.0,
+    "min": 0.0,
+    "max": 0.0,
+    "n": 3
+   }
+  },
+  "graded_peak": {
+   "samples": 9,
+   "app_pss_kb": 354753,
+   "by_role_pss_kb": {
+    "main": 200029,
+    "tab": 169784,
+    "utility": 0
+   },
+   "app_rss_hwm_kb": 502096,
+   "mem_available_min_kb": null
+  },
+  "panes": [],
+  "screen_off_samples": [],
+  "panes_waiting": [],
+  "panes_not_switched": [],
+  "budget": {
+   "budget": {
+    "app_pss_max_pct_of_ram": 50,
+    "device_available_min_pct": 15
+   },
+   "checks": {
+    "app_pss_peak": {
+     "value_kb": 354753,
+     "budget_kb": 476126,
+     "ok": true
+    },
+    "device_available_min": {
+     "value_kb": null,
+     "budget_kb": 142838,
+     "ok": null
+    }
+   },
+   "ok": null
+  },
+  "pane_budget": {}
+ },
+ "fake_ha": {
+  "commands": 1285,
+  "unknown": {},
+  "failed": {},
+  "stream_sent": 3193,
+  "stream_late_max_ms": 37.6,
+  "stream_late_detail_max_ms": 20.7
+ },
+ "webrtc_transport": {
+  "transport": "lan-turn",
+  "chosen_by": "auto",
+  "reason": "UDP from the panel didn't arrive, a TCP connection did: the relay over the LAN",
+  "limited": null
+ },
+ "test_network": {
+  "gateway": {
+   "sent": 40,
+   "received": 40,
+   "min_ms": 0.4,
+   "median_ms": 1.0,
+   "p95_ms": 1.9,
+   "max_ms": 4.7
+  },
+  "panel": {
+   "sent": 40,
+   "received": 40,
+   "min_ms": 2.7,
+   "median_ms": 4.2,
+   "p95_ms": 58.4,
+   "max_ms": 170.7
+  },
+  "link": "wired",
+  "adb_over_network": false,
+  "quiet": true,
+  "tail_ms": 20,
+  "carried": [
+   "camera video"
+  ],
+  "limited": null
+ },
+ "grade": {
+  "rubric_version": 2,
+  "grade": "E",
+  "meaning": "not a good wall panel, even for light dashboards",
+  "capped_by_start": false,
+  "provisional": false,
+  "missing": [],
+  "bands": {
+   "light": {
+    "tap": "needs-improvement",
+    "scroll": "n/a",
+    "updates": "fluid",
+    "load": "good",
+    "camera": "none",
+    "blocking": "needs-improvement",
+    "dialog": "fluid"
+   },
+   "typical-nocam": {
+    "tap": "needs-improvement",
+    "scroll": "n/a",
+    "updates": "fluid",
+    "load": "needs-improvement",
+    "camera": "none",
+    "blocking": "poor",
+    "dialog": "slow"
+   },
+   "typical": {
+    "tap": "poor",
+    "scroll": "n/a",
+    "updates": "slow",
+    "load": "good",
+    "camera": "slow",
+    "blocking": "poor",
+    "dialog": "slow"
+   },
+   "heavy": {
+    "tap": "poor",
+    "scroll": "n/a",
+    "updates": "slow",
+    "load": "poor",
+    "camera": "slow",
+    "blocking": "poor",
+    "dialog": "slow"
+   }
+  },
+  "levels": {
+   "light": null,
+   "typical-nocam": null,
+   "typical": null,
+   "heavy": null
+  },
+  "start": {
+   "value": 23548.0,
+   "band": "poor"
+  },
+  "not_applicable": {
+   "scroll": "this frame has no touch"
+  },
+  "viewport": {
+   "state": "ok",
+   "reason": null
+  },
+  "headline": "lululemon Studio Mirror: Clarity E, not a good wall panel, even for light dashboards. Held back by light dashboards: taps take 480 ms to show."
+ },
+ "graded": {
+  "reference": {
+   "lost": [
+    [
+     1,
+     "heavy",
+     "the panel ran out of memory and its browser page was closed (low-memory killer)"
+    ],
+    [
+     2,
+     "heavy",
+     "the panel ran out of memory and its browser page was closed (low-memory killer)"
+    ],
+    [
+     3,
+     "heavy",
+     "the panel ran out of memory and its browser page was closed (low-memory killer)"
+    ]
+   ],
+   "runs": 3,
+   "graded_runs": 3,
+   "start_ms": {
+    "median": 23548.0,
+    "min": 22158.0,
+    "max": 23749.0,
+    "n": 3
+   },
+   "start_errors": [],
+   "engine_uris": [
+    "about:blank"
+   ],
+   "android_ttid_ms": {
+    "median": 3514.0,
+    "min": 2710.0,
+    "max": 3645.0,
+    "n": 3
+   },
+   "engine_ready_ms": {
+    "median": 4624.0,
+    "min": 3820.0,
+    "max": 4961.0,
+    "n": 3
+   },
+   "restart_to": "usable",
+   "launch": [
+    "relaunched-by-system"
+   ],
+   "own_page_states": [
+    "reference"
+   ],
+   "orders": [
+    [
+     "light",
+     "typical-nocam",
+     "typical",
+     "heavy"
+    ],
+    [
+     "typical-nocam",
+     "typical",
+     "heavy",
+     "light"
+    ],
+    [
+     "typical",
+     "heavy",
+     "light",
+     "typical-nocam"
+    ]
+   ],
+   "cpu_max_mhz": 1209.6,
+   "cpu_clock_s": 5.0,
+   "bad_page_lines": 0,
+   "lost_scroll_steps": 0,
+   "timed_out": [],
+   "protocols": [
+    1
+   ],
+   "clarity": [
+    1
+   ],
+   "warmups": [
+    null,
+    null,
+    null
+   ],
+   "tiers": {
+    "light": {
+     "inp_ms": {
+      "median": 480.0,
+      "min": 328.0,
+      "max": 784.0,
+      "n": 3
+     },
+     "input_method": [
+      "event-timing"
+     ],
+     "load_ms": {
+      "median": 2167.0,
+      "min": 2120.0,
+      "max": 2189.0,
+      "n": 3
+     },
+     "load_errors": [],
+     "blocking_ms": {
+      "median": 398.9,
+      "min": 312.9,
+      "max": 700.04,
+      "n": 3
+     },
+     "usable_ms": {
+      "median": 2628.0,
+      "min": 2577.0,
+      "max": 3056.0,
+      "n": 3
+     },
+     "drawn_ms": {
+      "median": 1929.0,
+      "min": 1914.0,
+      "max": 1936.0,
+      "n": 3
+     },
+     "cpu_mhz": {
+      "median": 1209.6,
+      "min": 800.0,
+      "max": 1209.6,
+      "n": 128
+     },
+     "cpu_mhz_by_core": {
+      "0": {
+       "median": 1209.6,
+       "min": 800.0,
+       "max": 1209.6,
+       "n": 32
+      },
+      "1": {
+       "median": 1209.6,
+       "min": 800.0,
+       "max": 1209.6,
+       "n": 32
+      },
+      "2": {
+       "median": 1209.6,
+       "min": 998.4,
+       "max": 1209.6,
+       "n": 32
+      },
+      "3": {
+       "median": 1209.6,
+       "min": 998.4,
+       "max": 1209.6,
+       "n": 32
+      }
+     },
+     "scroll": {
+      "p95_ms": null,
+      "jank_pct": null,
+      "frozen_pct": null,
+      "fps": null,
+      "n": null
+     },
+     "scroll_bands": [],
+     "scroll_levels": [],
+     "scroll_level": null,
+     "scroll_runs": [],
+     "updates_runs": [
+      {
+       "latency_n": 21,
+       "latency_median_ms": 153.9,
+       "latency_p95_ms": 171.7,
+       "frames": {
+        "p95_ms": 116.67,
+        "jank_pct": 90.91,
+        "frozen_pct": 0.0,
+        "fps": 15.71,
+        "n": 11
+       },
+       "sent": 22,
+       "arrived": 22
+      },
+      {
+       "latency_n": 21,
+       "latency_median_ms": 140.3,
+       "latency_p95_ms": 173.6,
+       "frames": {
+        "p95_ms": 116.67,
+        "jank_pct": 71.43,
+        "frozen_pct": 0.0,
+        "fps": 21.0,
+        "n": 14
+       },
+       "sent": 22,
+       "arrived": 22
+      },
+      {
+       "latency_n": 21,
+       "latency_median_ms": 147.7,
+       "latency_p95_ms": 196.8,
+       "frames": {
+        "p95_ms": 133.33,
+        "jank_pct": 100.0,
+        "frozen_pct": 0.0,
+        "fps": 15.0,
+        "n": 11
+       },
+       "sent": 22,
+       "arrived": 22
+      }
+     ],
+     "scroll_band": null,
+     "scroll_sources": [],
+     "scroll_limited_by": [],
+     "scroll_errors": [
+      "no swipes",
+      "no swipes",
+      "no swipes"
+     ],
+     "scrolled_px": null,
+     "first_scroll_ms": null,
+     "sf_valid": [
+      null,
+      null,
+      null
+     ],
+     "scroll_raf_only": [],
+     "sf_swipes": 0,
+     "swipes_moved": 0,
+     "swipes_at_edge": 0,
+     "updates": {
+      "p95_ms": {
+       "median": 116.67,
+       "min": 116.67,
+       "max": 133.33,
+       "n": 3
+      },
+      "jank_pct": {
+       "median": 90.91,
+       "min": 71.43,
+       "max": 100.0,
+       "n": 3
+      },
+      "frozen_pct": {
+       "median": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "n": 3
+      },
+      "fps": {
+       "median": 15.71,
+       "min": 15.0,
+       "max": 21.0,
+       "n": 3
+      },
+      "n": {
+       "median": 11.0,
+       "min": 11.0,
+       "max": 14.0,
+       "n": 3
+      }
+     },
+     "updates_bands": [
+      "poor",
+      "poor",
+      "poor"
+     ],
+     "updates_band": "poor",
+     "updates_errors": [],
+     "updates_all_p95_ms": {
+      "median": 83.34,
+      "min": 66.67,
+      "max": 83.34,
+      "n": 3
+     },
+     "latency_p95_ms": {
+      "median": 173.6,
+      "min": 171.7,
+      "max": 196.8,
+      "n": 3
+     },
+     "latency_median_ms": {
+      "median": 147.7,
+      "min": 140.3,
+      "max": 153.9,
+      "n": 3
+     },
+     "camera_runs": [],
+     "camera_levels": [],
+     "camera_level": null,
+     "timed_out_runs": 0,
+     "timed_out_tasks": [],
+     "camera_fallback": null,
+     "dialog_runs": [
+      {
+       "n": 3,
+       "failed": 0,
+       "settled_ms": 1846.5,
+       "frames": {
+        "p95_ms": 1233.33,
+        "jank_pct": 100.0,
+        "frozen_pct": 50.0,
+        "fps": 1.33,
+        "n": 2
+       },
+       "open_ms": 715.2,
+       "close_ms": 1168,
+       "longest_frame_ms": 1233.6,
+       "dropped": 88,
+       "modes": [
+        "bottom-sheet"
+       ],
+       "reduced_motion": false,
+       "errors": [],
+       "dialogs": [
+        {
+         "entity": "light.clarity_2",
+         "kind": "light",
+         "open_ms": 655.6,
+         "shown_ms": 655.6,
+         "graph_ms": null,
+         "settled_ms": 655.6200000000026,
+         "close_ms": 769.3,
+         "dropped": 0,
+         "longest_frame_ms": 655.6,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "climate.clarity_0",
+         "kind": "climate",
+         "open_ms": 715.2,
+         "shown_ms": 715.2,
+         "graph_ms": null,
+         "settled_ms": 715.1999999999971,
+         "close_ms": 1168,
+         "dropped": 0,
+         "longest_frame_ms": 715.2,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "sensor.clarity_10",
+         "kind": "sensor",
+         "open_ms": 346.2,
+         "shown_ms": 1846.5,
+         "graph_ms": 1846.5,
+         "settled_ms": 1846.5,
+         "close_ms": 776.4,
+         "dropped": 88,
+         "longest_frame_ms": 1233.6,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        }
+       ]
+      },
+      {
+       "n": 3,
+       "failed": 0,
+       "settled_ms": 1379.2799999999988,
+       "frames": {
+        "p95_ms": 683.33,
+        "jank_pct": 100.0,
+        "frozen_pct": 0.0,
+        "fps": 2.79,
+        "n": 4
+       },
+       "open_ms": 390,
+       "close_ms": 1013.4,
+       "longest_frame_ms": 733.4,
+       "dropped": 82,
+       "modes": [
+        "bottom-sheet"
+       ],
+       "reduced_motion": false,
+       "errors": [],
+       "dialogs": [
+        {
+         "entity": "light.clarity_2",
+         "kind": "light",
+         "open_ms": 390,
+         "shown_ms": 1123.4,
+         "graph_ms": null,
+         "settled_ms": 1123.3600000000006,
+         "close_ms": 1013.4,
+         "dropped": 42,
+         "longest_frame_ms": 683.4,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "climate.clarity_0",
+         "kind": "climate",
+         "open_ms": 377.8,
+         "shown_ms": 727.8,
+         "graph_ms": null,
+         "settled_ms": 727.820000000007,
+         "close_ms": 872.2,
+         "dropped": 20,
+         "longest_frame_ms": 377.8,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "sensor.clarity_10",
+         "kind": "sensor",
+         "open_ms": 295.9,
+         "shown_ms": 645.9,
+         "graph_ms": 1379.3,
+         "settled_ms": 1379.2799999999988,
+         "close_ms": 724.7,
+         "dropped": 20,
+         "longest_frame_ms": 733.4,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        }
+       ]
+      },
+      {
+       "n": 3,
+       "failed": 0,
+       "settled_ms": 1893.0599999999977,
+       "frames": {
+        "p95_ms": 783.33,
+        "jank_pct": 100.0,
+        "frozen_pct": 20.0,
+        "fps": 2.29,
+        "n": 5
+       },
+       "open_ms": 504.1,
+       "close_ms": 1300.6,
+       "longest_frame_ms": 1200,
+       "dropped": 126,
+       "modes": [
+        "bottom-sheet"
+       ],
+       "reduced_motion": false,
+       "errors": [],
+       "dialogs": [
+        {
+         "entity": "light.clarity_2",
+         "kind": "light",
+         "open_ms": 504.1,
+         "shown_ms": 1254.1,
+         "graph_ms": null,
+         "settled_ms": 1254.0999999999985,
+         "close_ms": 1229.2,
+         "dropped": 43,
+         "longest_frame_ms": 683.4,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "climate.clarity_0",
+         "kind": "climate",
+         "open_ms": 487.5,
+         "shown_ms": 1554.2,
+         "graph_ms": null,
+         "settled_ms": 1554.2400000000052,
+         "close_ms": 1300.6,
+         "dropped": 62,
+         "longest_frame_ms": 783.4,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "sensor.clarity_10",
+         "kind": "sensor",
+         "open_ms": 326.4,
+         "shown_ms": 693,
+         "graph_ms": 1893.1,
+         "settled_ms": 1893.0599999999977,
+         "close_ms": 473.1,
+         "dropped": 21,
+         "longest_frame_ms": 1200,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        }
+       ]
+      }
+     ],
+     "dialog_levels": [
+      "fluid",
+      "fluid",
+      "fluid"
+     ],
+     "dialog_level": "fluid",
+     "dialog_settled_ms": {
+      "median": 1846.5,
+      "min": 1379.28,
+      "max": 1893.06,
+      "n": 3
+     },
+     "dialog_open_ms": {
+      "median": 504.1,
+      "min": 390.0,
+      "max": 715.2,
+      "n": 3
+     },
+     "dialog_close_ms": {
+      "median": 1168.0,
+      "min": 1013.4,
+      "max": 1300.6,
+      "n": 3
+     },
+     "dialog_errors": [],
+     "dialog_settles_away": [],
+     "updates_levels": [
+      "fluid",
+      "fluid",
+      "fluid"
+     ],
+     "updates_level": "fluid",
+     "swipes_during_updates": [],
+     "paint_to_screen_ms": null,
+     "positions": [
+      1,
+      4,
+      3
+     ],
+     "by_position": {
+      "1": [
+       {
+        "scroll_fps": null,
+        "scroll_p95_ms": null,
+        "scroll_level": null,
+        "latency_p95_ms": 171.7,
+        "updates_level": "fluid",
+        "inp_ms": 784,
+        "load_ms": 2167,
+        "dialog_settled_ms": 1846.5,
+        "dialog_level": "fluid"
+       }
+      ],
+      "4": [
+       {
+        "scroll_fps": null,
+        "scroll_p95_ms": null,
+        "scroll_level": null,
+        "latency_p95_ms": 173.6,
+        "updates_level": "fluid",
+        "inp_ms": 328,
+        "load_ms": 2120,
+        "dialog_settled_ms": 1379.2799999999988,
+        "dialog_level": "fluid"
+       }
+      ],
+      "3": [
+       {
+        "scroll_fps": null,
+        "scroll_p95_ms": null,
+        "scroll_level": null,
+        "latency_p95_ms": 196.8,
+        "updates_level": "fluid",
+        "inp_ms": 480,
+        "load_ms": 2189,
+        "dialog_settled_ms": 1893.0599999999977,
+        "dialog_level": "fluid"
+       }
+      ]
+     },
+     "fcp_ms": null,
+     "clock_rtt_ms": [
+      18,
+      16,
+      17
+     ],
+     "arrivals": [
+      {
+       "sent": 22,
+       "arrived": 22,
+       "wait_p95_ms": 85,
+       "wait_max_ms": 91,
+       "clock_rtt_ms": 18
+      },
+      {
+       "sent": 22,
+       "arrived": 22,
+       "wait_p95_ms": 63.3,
+       "wait_max_ms": 63.3,
+       "clock_rtt_ms": 16
+      },
+      {
+       "sent": 22,
+       "arrived": 22,
+       "wait_p95_ms": 73,
+       "wait_max_ms": 115,
+       "clock_rtt_ms": 17
+      }
+     ],
+     "nodes": [
+      1120
+     ],
+     "cards": [
+      20
+     ],
+     "viewport": [
+      [
+       [
+        720,
+        1280
+       ],
+       1.5
+      ]
+     ]
+    },
+    "typical-nocam": {
+     "inp_ms": {
+      "median": 280.0,
+      "min": 208.0,
+      "max": 800.0,
+      "n": 3
+     },
+     "input_method": [
+      "event-timing"
+     ],
+     "load_ms": {
+      "median": 3897.0,
+      "min": 3455.0,
+      "max": 4508.0,
+      "n": 3
+     },
+     "load_errors": [],
+     "blocking_ms": {
+      "median": 4516.66,
+      "min": 4483.38,
+      "max": 4900.24,
+      "n": 3
+     },
+     "usable_ms": {
+      "median": 9646.0,
+      "min": 9178.0,
+      "max": 9878.0,
+      "n": 3
+     },
+     "drawn_ms": {
+      "median": 3725.0,
+      "min": 3268.0,
+      "max": 4168.0,
+      "n": 3
+     },
+     "cpu_mhz": {
+      "median": 1209.6,
+      "min": 998.4,
+      "max": 1209.6,
+      "n": 136
+     },
+     "cpu_mhz_by_core": {
+      "0": {
+       "median": 1209.6,
+       "min": 998.4,
+       "max": 1209.6,
+       "n": 34
+      },
+      "1": {
+       "median": 1209.6,
+       "min": 998.4,
+       "max": 1209.6,
+       "n": 34
+      },
+      "2": {
+       "median": 1209.6,
+       "min": 998.4,
+       "max": 1209.6,
+       "n": 34
+      },
+      "3": {
+       "median": 1209.6,
+       "min": 998.4,
+       "max": 1209.6,
+       "n": 34
+      }
+     },
+     "scroll": {
+      "p95_ms": null,
+      "jank_pct": null,
+      "frozen_pct": null,
+      "fps": null,
+      "n": null
+     },
+     "scroll_bands": [],
+     "scroll_levels": [],
+     "scroll_level": null,
+     "scroll_runs": [],
+     "updates_runs": [
+      {
+       "latency_n": 21,
+       "latency_median_ms": 195.4,
+       "latency_p95_ms": 237.5,
+       "frames": {
+        "p95_ms": 150.0,
+        "jank_pct": 83.33,
+        "frozen_pct": 0.0,
+        "fps": 13.59,
+        "n": 12
+       },
+       "sent": 22,
+       "arrived": 22
+      },
+      {
+       "latency_n": 21,
+       "latency_median_ms": 197.7,
+       "latency_p95_ms": 249.7,
+       "frames": {
+        "p95_ms": 183.33,
+        "jank_pct": 100.0,
+        "frozen_pct": 0.0,
+        "fps": 9.48,
+        "n": 9
+       },
+       "sent": 22,
+       "arrived": 22
+      },
+      {
+       "latency_n": 21,
+       "latency_median_ms": 185.3,
+       "latency_p95_ms": 224.6,
+       "frames": {
+        "p95_ms": 166.67,
+        "jank_pct": 100.0,
+        "frozen_pct": 0.0,
+        "fps": 10.19,
+        "n": 9
+       },
+       "sent": 22,
+       "arrived": 22
+      }
+     ],
+     "scroll_band": null,
+     "scroll_sources": [],
+     "scroll_limited_by": [],
+     "scroll_errors": [
+      "no swipes",
+      "no swipes",
+      "no swipes"
+     ],
+     "scrolled_px": null,
+     "first_scroll_ms": null,
+     "sf_valid": [
+      null,
+      null,
+      null
+     ],
+     "scroll_raf_only": [],
+     "sf_swipes": 0,
+     "swipes_moved": 0,
+     "swipes_at_edge": 0,
+     "updates": {
+      "p95_ms": {
+       "median": 166.67,
+       "min": 150.0,
+       "max": 183.33,
+       "n": 3
+      },
+      "jank_pct": {
+       "median": 100.0,
+       "min": 83.33,
+       "max": 100.0,
+       "n": 3
+      },
+      "frozen_pct": {
+       "median": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "n": 3
+      },
+      "fps": {
+       "median": 10.19,
+       "min": 9.48,
+       "max": 13.59,
+       "n": 3
+      },
+      "n": {
+       "median": 9.0,
+       "min": 9.0,
+       "max": 12.0,
+       "n": 3
+      }
+     },
+     "updates_bands": [
+      "poor",
+      "poor",
+      "poor"
+     ],
+     "updates_band": "poor",
+     "updates_errors": [],
+     "updates_all_p95_ms": {
+      "median": 116.67,
+      "min": 116.67,
+      "max": 116.67,
+      "n": 3
+     },
+     "latency_p95_ms": {
+      "median": 237.5,
+      "min": 224.6,
+      "max": 249.7,
+      "n": 3
+     },
+     "latency_median_ms": {
+      "median": 195.4,
+      "min": 185.3,
+      "max": 197.7,
+      "n": 3
+     },
+     "camera_runs": [],
+     "camera_levels": [],
+     "camera_level": null,
+     "timed_out_runs": 0,
+     "timed_out_tasks": [],
+     "camera_fallback": null,
+     "dialog_runs": [
+      {
+       "n": 3,
+       "failed": 0,
+       "settled_ms": 2295.9800000000105,
+       "frames": {
+        "p95_ms": 683.33,
+        "jank_pct": 100.0,
+        "frozen_pct": 0.0,
+        "fps": 1.89,
+        "n": 4
+       },
+       "open_ms": 926,
+       "close_ms": 971.5,
+       "longest_frame_ms": 1300,
+       "dropped": 123,
+       "modes": [
+        "bottom-sheet"
+       ],
+       "reduced_motion": false,
+       "errors": [],
+       "dialogs": [
+        {
+         "entity": "light.clarity_2",
+         "kind": "light",
+         "open_ms": 926,
+         "shown_ms": 1859.3,
+         "graph_ms": null,
+         "settled_ms": 1859.3399999999965,
+         "close_ms": 833.9,
+         "dropped": 54,
+         "longest_frame_ms": 926,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "climate.clarity_0",
+         "kind": "climate",
+         "open_ms": 529.1,
+         "shown_ms": 1195.7,
+         "graph_ms": null,
+         "settled_ms": 1195.7000000000116,
+         "close_ms": 971.5,
+         "dropped": 39,
+         "longest_frame_ms": 666.6,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "sensor.clarity_10",
+         "kind": "sensor",
+         "open_ms": 479.3,
+         "shown_ms": 995.9,
+         "graph_ms": 2296,
+         "settled_ms": 2295.9800000000105,
+         "close_ms": 446.7,
+         "dropped": 30,
+         "longest_frame_ms": 1300,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        }
+       ]
+      },
+      {
+       "n": 3,
+       "failed": 0,
+       "settled_ms": 2303.1399999999994,
+       "frames": {
+        "p95_ms": 816.67,
+        "jank_pct": 100.0,
+        "frozen_pct": 50.0,
+        "fps": 2.14,
+        "n": 2
+       },
+       "open_ms": 1122.3,
+       "close_ms": 805.7,
+       "longest_frame_ms": 1316.7,
+       "dropped": 54,
+       "modes": [
+        "bottom-sheet"
+       ],
+       "reduced_motion": false,
+       "errors": [],
+       "dialogs": [
+        {
+         "entity": "light.clarity_2",
+         "kind": "light",
+         "open_ms": 1047.5,
+         "shown_ms": 1980.9,
+         "graph_ms": null,
+         "settled_ms": 1980.8600000000006,
+         "close_ms": 773.9,
+         "dropped": 54,
+         "longest_frame_ms": 1047.5,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "climate.clarity_0",
+         "kind": "climate",
+         "open_ms": 1122.3,
+         "shown_ms": 1122.3,
+         "graph_ms": null,
+         "settled_ms": 1122.320000000007,
+         "close_ms": 805.7,
+         "dropped": 0,
+         "longest_frame_ms": 1122.3,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "sensor.clarity_10",
+         "kind": "sensor",
+         "open_ms": 986.4,
+         "shown_ms": 986.4,
+         "graph_ms": 2303.1,
+         "settled_ms": 2303.1399999999994,
+         "close_ms": 604.5,
+         "dropped": 0,
+         "longest_frame_ms": 1316.7,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        }
+       ]
+      },
+      {
+       "n": 3,
+       "failed": 0,
+       "settled_ms": 2312.959999999992,
+       "frames": {
+        "p95_ms": 533.33,
+        "jank_pct": 100.0,
+        "frozen_pct": 0.0,
+        "fps": 1.88,
+        "n": 1
+       },
+       "open_ms": 1044.8,
+       "close_ms": 960,
+       "longest_frame_ms": 1283.3,
+       "dropped": 31,
+       "modes": [
+        "bottom-sheet"
+       ],
+       "reduced_motion": false,
+       "errors": [],
+       "dialogs": [
+        {
+         "entity": "light.clarity_2",
+         "kind": "light",
+         "open_ms": 1044.8,
+         "shown_ms": 1044.8,
+         "graph_ms": null,
+         "settled_ms": 1044.8399999999965,
+         "close_ms": 465.7,
+         "dropped": 0,
+         "longest_frame_ms": 1044.8,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "climate.clarity_0",
+         "kind": "climate",
+         "open_ms": 1027.3,
+         "shown_ms": 1027.3,
+         "graph_ms": null,
+         "settled_ms": 1027.3399999999965,
+         "close_ms": 960,
+         "dropped": 0,
+         "longest_frame_ms": 1027.3,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "sensor.clarity_10",
+         "kind": "sensor",
+         "open_ms": 496.3,
+         "shown_ms": 1029.6,
+         "graph_ms": 2313,
+         "settled_ms": 2312.959999999992,
+         "close_ms": 430.9,
+         "dropped": 31,
+         "longest_frame_ms": 1283.3,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        }
+       ]
+      }
+     ],
+     "dialog_levels": [
+      "slow",
+      "slow",
+      "slow"
+     ],
+     "dialog_level": "slow",
+     "dialog_settled_ms": {
+      "median": 2303.14,
+      "min": 2295.98,
+      "max": 2312.96,
+      "n": 3
+     },
+     "dialog_open_ms": {
+      "median": 1044.8,
+      "min": 926.0,
+      "max": 1122.3,
+      "n": 3
+     },
+     "dialog_close_ms": {
+      "median": 960.0,
+      "min": 805.7,
+      "max": 971.5,
+      "n": 3
+     },
+     "dialog_errors": [],
+     "dialog_settles_away": [],
+     "updates_levels": [
+      "fluid",
+      "fluid",
+      "fluid"
+     ],
+     "updates_level": "fluid",
+     "swipes_during_updates": [],
+     "paint_to_screen_ms": null,
+     "positions": [
+      2,
+      1,
+      4
+     ],
+     "by_position": {
+      "2": [
+       {
+        "scroll_fps": null,
+        "scroll_p95_ms": null,
+        "scroll_level": null,
+        "latency_p95_ms": 237.5,
+        "updates_level": "fluid",
+        "inp_ms": 280,
+        "load_ms": 4508,
+        "dialog_settled_ms": 2295.9800000000105,
+        "dialog_level": "slow"
+       }
+      ],
+      "1": [
+       {
+        "scroll_fps": null,
+        "scroll_p95_ms": null,
+        "scroll_level": null,
+        "latency_p95_ms": 249.7,
+        "updates_level": "fluid",
+        "inp_ms": 800,
+        "load_ms": 3455,
+        "dialog_settled_ms": 2303.1399999999994,
+        "dialog_level": "slow"
+       }
+      ],
+      "4": [
+       {
+        "scroll_fps": null,
+        "scroll_p95_ms": null,
+        "scroll_level": null,
+        "latency_p95_ms": 224.6,
+        "updates_level": "fluid",
+        "inp_ms": 208,
+        "load_ms": 3897,
+        "dialog_settled_ms": 2312.959999999992,
+        "dialog_level": "slow"
+       }
+      ]
+     },
+     "fcp_ms": null,
+     "clock_rtt_ms": [
+      22,
+      19,
+      20
+     ],
+     "arrivals": [
+      {
+       "sent": 22,
+       "arrived": 22,
+       "wait_p95_ms": 104,
+       "wait_max_ms": 143,
+       "clock_rtt_ms": 22
+      },
+      {
+       "sent": 22,
+       "arrived": 22,
+       "wait_p95_ms": 106.1,
+       "wait_max_ms": 108.1,
+       "clock_rtt_ms": 19
+      },
+      {
+       "sent": 22,
+       "arrived": 22,
+       "wait_p95_ms": 107,
+       "wait_max_ms": 108,
+       "clock_rtt_ms": 20
+      }
+     ],
+     "nodes": [
+      2858,
+      2859
+     ],
+     "cards": [
+      50
+     ],
+     "viewport": [
+      [
+       [
+        720,
+        1280
+       ],
+       1.5
+      ]
+     ]
+    },
+    "typical": {
+     "inp_ms": {
+      "median": 536.0,
+      "min": 368.0,
+      "max": 600.0,
+      "n": 3
+     },
+     "input_method": [
+      "event-timing"
+     ],
+     "load_ms": {
+      "median": 2091.0,
+      "min": 1802.0,
+      "max": 2134.0,
+      "n": 3
+     },
+     "load_errors": [],
+     "blocking_ms": {
+      "median": 12400.5,
+      "min": 11667.18,
+      "max": 12833.76,
+      "n": 3
+     },
+     "usable_ms": {
+      "median": 20123.0,
+      "min": 20008.0,
+      "max": 20263.0,
+      "n": 3
+     },
+     "drawn_ms": {
+      "median": 1784.0,
+      "min": 1547.0,
+      "max": 1844.0,
+      "n": 3
+     },
+     "cpu_mhz": {
+      "median": 1209.6,
+      "min": 998.4,
+      "max": 1209.6,
+      "n": 164
+     },
+     "cpu_mhz_by_core": {
+      "0": {
+       "median": 1209.6,
+       "min": 998.4,
+       "max": 1209.6,
+       "n": 41
+      },
+      "1": {
+       "median": 1209.6,
+       "min": 998.4,
+       "max": 1209.6,
+       "n": 41
+      },
+      "2": {
+       "median": 1209.6,
+       "min": 998.4,
+       "max": 1209.6,
+       "n": 41
+      },
+      "3": {
+       "median": 1209.6,
+       "min": 998.4,
+       "max": 1209.6,
+       "n": 41
+      }
+     },
+     "scroll": {
+      "p95_ms": null,
+      "jank_pct": null,
+      "frozen_pct": null,
+      "fps": null,
+      "n": null
+     },
+     "scroll_bands": [],
+     "scroll_levels": [],
+     "scroll_level": null,
+     "scroll_runs": [],
+     "updates_runs": [
+      {
+       "latency_n": 21,
+       "latency_median_ms": 199.3,
+       "latency_p95_ms": 282.6,
+       "frames": {
+        "p95_ms": 216.67,
+        "jank_pct": 83.33,
+        "frozen_pct": 0.0,
+        "fps": 11.08,
+        "n": 12
+       },
+       "sent": 22,
+       "arrived": 22
+      },
+      {
+       "latency_n": 21,
+       "latency_median_ms": 207.8,
+       "latency_p95_ms": 440.1,
+       "frames": {
+        "p95_ms": 166.67,
+        "jank_pct": 71.43,
+        "frozen_pct": 0.0,
+        "fps": 14.24,
+        "n": 14
+       },
+       "sent": 22,
+       "arrived": 22
+      },
+      {
+       "latency_n": 21,
+       "latency_median_ms": 201.6,
+       "latency_p95_ms": 294.9,
+       "frames": {
+        "p95_ms": 183.33,
+        "jank_pct": 81.82,
+        "frozen_pct": 0.0,
+        "fps": 10.31,
+        "n": 11
+       },
+       "sent": 22,
+       "arrived": 22
+      }
+     ],
+     "scroll_band": null,
+     "scroll_sources": [],
+     "scroll_limited_by": [],
+     "scroll_errors": [
+      "no swipes",
+      "no swipes",
+      "no swipes"
+     ],
+     "scrolled_px": null,
+     "first_scroll_ms": null,
+     "sf_valid": [
+      null,
+      null,
+      null
+     ],
+     "scroll_raf_only": [],
+     "sf_swipes": 0,
+     "swipes_moved": 0,
+     "swipes_at_edge": 0,
+     "updates": {
+      "p95_ms": {
+       "median": 183.33,
+       "min": 166.67,
+       "max": 216.67,
+       "n": 3
+      },
+      "jank_pct": {
+       "median": 81.82,
+       "min": 71.43,
+       "max": 83.33,
+       "n": 3
+      },
+      "frozen_pct": {
+       "median": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "n": 3
+      },
+      "fps": {
+       "median": 11.08,
+       "min": 10.31,
+       "max": 14.24,
+       "n": 3
+      },
+      "n": {
+       "median": 12.0,
+       "min": 11.0,
+       "max": 14.0,
+       "n": 3
+      }
+     },
+     "updates_bands": [
+      "poor",
+      "poor",
+      "poor"
+     ],
+     "updates_band": "poor",
+     "updates_errors": [],
+     "updates_all_p95_ms": {
+      "median": 150.0,
+      "min": 116.67,
+      "max": 166.67,
+      "n": 3
+     },
+     "latency_p95_ms": {
+      "median": 294.9,
+      "min": 282.6,
+      "max": 440.1,
+      "n": 3
+     },
+     "latency_median_ms": {
+      "median": 201.6,
+      "min": 199.3,
+      "max": 207.8,
+      "n": 3
+     },
+     "camera_runs": [
+      {
+       "path": "web_rtc",
+       "first_frame_ms": null,
+       "shown_pct": null,
+       "max_gap_ms": null,
+       "stall_total_ms": null,
+       "streams": 1,
+       "expected": 1,
+       "window_ms": 30010,
+       "detail": [
+        {
+         "w": null,
+         "h": null,
+         "first_frame_ms": null,
+         "shown_pct": null,
+         "max_gap_ms": null,
+         "stall_total_ms": null,
+         "stall_presented": null,
+         "frames": null,
+         "decoded": null,
+         "dropped": null,
+         "waiting": null,
+         "source": null,
+         "webrtc": null,
+         "others": [
+          {
+           "path": "hls",
+           "first_frame_ms": null,
+           "connected": false
+          }
+         ],
+         "gaps_source": null,
+         "callback_gaps": null,
+         "span_ms": null,
+         "stalls_at": null
+        }
+       ],
+       "fetches": {
+        "segment": {
+         "n": 0,
+         "queued_ms": null,
+         "wait_ms": null,
+         "total_ms": null,
+         "kb": 0,
+         "arrival_gap_max_ms": null
+        },
+        "playlist": {
+         "n": 0,
+         "queued_ms": null,
+         "wait_ms": null,
+         "total_ms": null
+        },
+        "streams": 0
+       },
+       "media": null
+      },
+      {
+       "path": "web_rtc",
+       "first_frame_ms": null,
+       "shown_pct": null,
+       "max_gap_ms": null,
+       "stall_total_ms": null,
+       "streams": 1,
+       "expected": 1,
+       "window_ms": 30033,
+       "detail": [
+        {
+         "w": null,
+         "h": null,
+         "first_frame_ms": null,
+         "shown_pct": null,
+         "max_gap_ms": null,
+         "stall_total_ms": null,
+         "stall_presented": null,
+         "frames": null,
+         "decoded": null,
+         "dropped": null,
+         "waiting": null,
+         "source": null,
+         "webrtc": null,
+         "others": [
+          {
+           "path": "hls",
+           "first_frame_ms": null,
+           "connected": false
+          }
+         ],
+         "gaps_source": null,
+         "callback_gaps": null,
+         "span_ms": null,
+         "stalls_at": null
+        }
+       ],
+       "fetches": {
+        "segment": {
+         "n": 0,
+         "queued_ms": null,
+         "wait_ms": null,
+         "total_ms": null,
+         "kb": 0,
+         "arrival_gap_max_ms": null
+        },
+        "playlist": {
+         "n": 0,
+         "queued_ms": null,
+         "wait_ms": null,
+         "total_ms": null
+        },
+        "streams": 0
+       },
+       "media": null
+      },
+      {
+       "path": "web_rtc",
+       "first_frame_ms": null,
+       "shown_pct": null,
+       "max_gap_ms": null,
+       "stall_total_ms": null,
+       "streams": 1,
+       "expected": 1,
+       "window_ms": 30060,
+       "detail": [
+        {
+         "w": null,
+         "h": null,
+         "first_frame_ms": null,
+         "shown_pct": null,
+         "max_gap_ms": null,
+         "stall_total_ms": null,
+         "stall_presented": null,
+         "frames": null,
+         "decoded": null,
+         "dropped": null,
+         "waiting": null,
+         "source": null,
+         "webrtc": null,
+         "others": [
+          {
+           "path": "hls",
+           "first_frame_ms": null,
+           "connected": false
+          }
+         ],
+         "gaps_source": null,
+         "callback_gaps": null,
+         "span_ms": null,
+         "stalls_at": null
+        }
+       ],
+       "fetches": {
+        "segment": {
+         "n": 0,
+         "queued_ms": null,
+         "wait_ms": null,
+         "total_ms": null,
+         "kb": 0,
+         "arrival_gap_max_ms": null
+        },
+        "playlist": {
+         "n": 0,
+         "queued_ms": null,
+         "wait_ms": null,
+         "total_ms": null
+        },
+        "streams": 0
+       },
+       "media": null
+      }
+     ],
+     "camera_levels": [
+      "slow",
+      "slow",
+      "slow"
+     ],
+     "camera_level": "slow",
+     "timed_out_runs": 0,
+     "timed_out_tasks": [],
+     "camera_fallback": {
+      "path": "hls",
+      "runs": [
+       {
+        "path": "hls",
+        "first_frame_ms": 10513.8,
+        "shown_pct": 27.7,
+        "max_gap_ms": 10983.6,
+        "stall_total_ms": 28194.3,
+        "streams": 1,
+        "expected": 1,
+        "window_ms": 30096,
+        "detail": [
+         {
+          "w": 1280,
+          "h": 720,
+          "first_frame_ms": 10513.8,
+          "shown_pct": 27.7,
+          "max_gap_ms": 10983.6,
+          "stall_total_ms": 28194.3,
+          "stall_presented": 90,
+          "frames": 125,
+          "decoded": 125,
+          "dropped": 0,
+          "waiting": 9,
+          "source": "quality+rvfc",
+          "webrtc": null,
+          "others": [],
+          "gaps_source": "rvfc",
+          "callback_gaps": null,
+          "span_ms": null,
+          "stalls_at": [
+           [
+            57472.14,
+            68455.72
+           ],
+           [
+            72455.82,
+            76672.58
+           ],
+           [
+            68455.72,
+            72455.82
+           ],
+           [
+            50922,
+            54805.42
+           ],
+           [
+            54805.42,
+            57472.14
+           ],
+           [
+            76672.58,
+            78133
+           ],
+           [
+            49671.98,
+            50655.32
+           ]
+          ]
+         }
+        ],
+        "fetches": {
+         "segment": {
+          "n": 15,
+          "queued_ms": {
+           "median": 45,
+           "p95": 100,
+           "max": 100
+          },
+          "wait_ms": {
+           "median": 7,
+           "p95": 20,
+           "max": 20
+          },
+          "total_ms": {
+           "median": 99,
+           "p95": 152,
+           "max": 152
+          },
+          "kb": 846,
+          "arrival_gap_max_ms": 4000
+         },
+         "playlist": {
+          "n": 20,
+          "queued_ms": {
+           "median": 38,
+           "p95": 81,
+           "max": 83
+          },
+          "wait_ms": {
+           "median": 6,
+           "p95": 13,
+           "max": 13
+          },
+          "total_ms": {
+           "median": 47,
+           "p95": 95,
+           "max": 96
+          }
+         },
+         "streams": 1
+        },
+        "view": "typical-hls",
+        "media": {
+         "codecs": [
+          "OMX.google.h264.decoder"
+         ],
+         "flushes": 0,
+         "eos": 0
+        },
+        "error": null
+       },
+       {
+        "path": "hls",
+        "first_frame_ms": 10111.1,
+        "shown_pct": 27.8,
+        "max_gap_ms": 4983.5,
+        "stall_total_ms": 28426.7,
+        "streams": 1,
+        "expected": 1,
+        "window_ms": 30208,
+        "detail": [
+         {
+          "w": 1280,
+          "h": 720,
+          "first_frame_ms": 10111.1,
+          "shown_pct": 27.8,
+          "max_gap_ms": 4983.5,
+          "stall_total_ms": 28426.7,
+          "stall_presented": 115,
+          "frames": 126,
+          "decoded": 138,
+          "dropped": 12,
+          "waiting": 10,
+          "source": "quality+rvfc",
+          "webrtc": null,
+          "others": [],
+          "gaps_source": "rvfc",
+          "callback_gaps": null,
+          "span_ms": null,
+          "stalls_at": [
+           [
+            113886.88,
+            118870.36
+           ],
+           [
+            124420.54,
+            129120.66
+           ],
+           [
+            109336.74,
+            113886.88
+           ],
+           [
+            106603.34,
+            109336.74
+           ],
+           [
+            120987.1,
+            122920.48
+           ],
+           [
+            105019.96,
+            106603.34
+           ],
+           [
+            122920.48,
+            124420.54
+           ],
+           [
+            129120.66,
+            130320.7
+           ],
+           [
+            118870.36,
+            120037.06
+           ],
+           [
+            130804.06,
+            131937.42
+           ]
+          ]
+         }
+        ],
+        "fetches": {
+         "segment": {
+          "n": 19,
+          "queued_ms": {
+           "median": 33,
+           "p95": 64,
+           "max": 64
+          },
+          "wait_ms": {
+           "median": 9,
+           "p95": 15,
+           "max": 15
+          },
+          "total_ms": {
+           "median": 92,
+           "p95": 121,
+           "max": 121
+          },
+          "kb": 1072,
+          "arrival_gap_max_ms": 2782
+         },
+         "playlist": {
+          "n": 24,
+          "queued_ms": {
+           "median": 32,
+           "p95": 59,
+           "max": 60
+          },
+          "wait_ms": {
+           "median": 6,
+           "p95": 16,
+           "max": 25
+          },
+          "total_ms": {
+           "median": 40,
+           "p95": 65,
+           "max": 85
+          }
+         },
+         "streams": 1
+        },
+        "view": "typical-hls",
+        "media": {
+         "codecs": [
+          "OMX.google.h264.decoder"
+         ],
+         "flushes": 0,
+         "eos": 0
+        },
+        "error": null
+       },
+       {
+        "path": "hls",
+        "first_frame_ms": 11262.7,
+        "shown_pct": 23.4,
+        "max_gap_ms": 10050.5,
+        "stall_total_ms": 27542.8,
+        "streams": 1,
+        "expected": 1,
+        "window_ms": 30138,
+        "detail": [
+         {
+          "w": 1280,
+          "h": 720,
+          "first_frame_ms": 11262.7,
+          "shown_pct": 23.4,
+          "max_gap_ms": 10050.5,
+          "stall_total_ms": 27542.8,
+          "stall_presented": 70,
+          "frames": 106,
+          "decoded": 109,
+          "dropped": 3,
+          "waiting": 5,
+          "source": "quality+rvfc",
+          "webrtc": null,
+          "others": [],
+          "gaps_source": "rvfc",
+          "callback_gaps": null,
+          "span_ms": null,
+          "stalls_at": [
+           [
+            182987.28,
+            193037.74
+           ],
+           [
+            194687.76,
+            202737.84
+           ],
+           [
+            179637.26,
+            182987.28
+           ],
+           [
+            202737.84,
+            205930
+           ],
+           [
+            177770.56,
+            178853.92
+           ],
+           [
+            193654.42,
+            194687.76
+           ],
+           [
+            178853.92,
+            179637.26
+           ]
+          ]
+         }
+        ],
+        "fetches": {
+         "segment": {
+          "n": 17,
+          "queued_ms": {
+           "median": 37,
+           "p95": 90,
+           "max": 90
+          },
+          "wait_ms": {
+           "median": 7,
+           "p95": 18,
+           "max": 18
+          },
+          "total_ms": {
+           "median": 97,
+           "p95": 156,
+           "max": 156
+          },
+          "kb": 962,
+          "arrival_gap_max_ms": 3050
+         },
+         "playlist": {
+          "n": 23,
+          "queued_ms": {
+           "median": 34,
+           "p95": 72,
+           "max": 105
+          },
+          "wait_ms": {
+           "median": 6,
+           "p95": 13,
+           "max": 15
+          },
+          "total_ms": {
+           "median": 40,
+           "p95": 80,
+           "max": 114
+          }
+         },
+         "streams": 1
+        },
+        "view": "typical-hls",
+        "media": {
+         "codecs": [
+          "OMX.google.h264.decoder"
+         ],
+         "flushes": 0,
+         "eos": 0
+        },
+        "error": null
+       }
+      ],
+      "levels": [
+       "slow",
+       "slow",
+       "slow"
+      ],
+      "level": "slow"
+     },
+     "dialog_runs": [
+      {
+       "n": 3,
+       "failed": 0,
+       "settled_ms": 2629.179999999993,
+       "frames": {
+        "p95_ms": 716.67,
+        "jank_pct": 100.0,
+        "frozen_pct": 33.33,
+        "fps": 1.98,
+        "n": 3
+       },
+       "open_ms": 1579.3,
+       "close_ms": 1092,
+       "longest_frame_ms": 1579.3,
+       "dropped": 88,
+       "modes": [
+        "bottom-sheet"
+       ],
+       "reduced_motion": false,
+       "errors": [],
+       "dialogs": [
+        {
+         "entity": "light.clarity_2",
+         "kind": "light",
+         "open_ms": 816.5,
+         "shown_ms": 1699.8,
+         "graph_ms": null,
+         "settled_ms": 1699.820000000007,
+         "close_ms": 1008.6,
+         "dropped": 51,
+         "longest_frame_ms": 816.5,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "climate.clarity_0",
+         "kind": "climate",
+         "open_ms": 465.3,
+         "shown_ms": 1098.6,
+         "graph_ms": null,
+         "settled_ms": 1098.640000000014,
+         "close_ms": 1092,
+         "dropped": 37,
+         "longest_frame_ms": 633.4,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "sensor.clarity_10",
+         "kind": "sensor",
+         "open_ms": 1579.3,
+         "shown_ms": 1579.3,
+         "graph_ms": 2629.2,
+         "settled_ms": 2629.179999999993,
+         "close_ms": 457.5,
+         "dropped": 0,
+         "longest_frame_ms": 1579.3,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        }
+       ]
+      },
+      {
+       "n": 3,
+       "failed": 0,
+       "settled_ms": 2260.579999999987,
+       "frames": {
+        "p95_ms": 616.67,
+        "jank_pct": 100.0,
+        "frozen_pct": 0.0,
+        "fps": 1.62,
+        "n": 1
+       },
+       "open_ms": 1094.1,
+       "close_ms": 1090.8,
+       "longest_frame_ms": 1250,
+       "dropped": 36,
+       "modes": [
+        "bottom-sheet"
+       ],
+       "reduced_motion": false,
+       "errors": [],
+       "dialogs": [
+        {
+         "entity": "light.clarity_2",
+         "kind": "light",
+         "open_ms": 987,
+         "shown_ms": 987,
+         "graph_ms": null,
+         "settled_ms": 986.9599999999919,
+         "close_ms": 623.7,
+         "dropped": 0,
+         "longest_frame_ms": 987,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "climate.clarity_0",
+         "kind": "climate",
+         "open_ms": 1094.1,
+         "shown_ms": 1094.1,
+         "graph_ms": null,
+         "settled_ms": 1094.0799999999872,
+         "close_ms": 1090.8,
+         "dropped": 0,
+         "longest_frame_ms": 1094.1,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "sensor.clarity_10",
+         "kind": "sensor",
+         "open_ms": 393.9,
+         "shown_ms": 1010.5,
+         "graph_ms": 2260.6,
+         "settled_ms": 2260.579999999987,
+         "close_ms": 513.3,
+         "dropped": 36,
+         "longest_frame_ms": 1250,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        }
+       ]
+      },
+      {
+       "n": 3,
+       "failed": 0,
+       "settled_ms": 2463.9600000000064,
+       "frames": {
+        "p95_ms": 716.67,
+        "jank_pct": 100.0,
+        "frozen_pct": 50.0,
+        "fps": 1.6,
+        "n": 2
+       },
+       "open_ms": 1083,
+       "close_ms": 1024.2,
+       "longest_frame_ms": 1300,
+       "dropped": 73,
+       "modes": [
+        "bottom-sheet"
+       ],
+       "reduced_motion": false,
+       "errors": [],
+       "dialogs": [
+        {
+         "entity": "light.clarity_2",
+         "kind": "light",
+         "open_ms": 1083,
+         "shown_ms": 1083,
+         "graph_ms": null,
+         "settled_ms": 1083,
+         "close_ms": 661.4,
+         "dropped": 0,
+         "longest_frame_ms": 1083,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "climate.clarity_0",
+         "kind": "climate",
+         "open_ms": 546.4,
+         "shown_ms": 1079.8,
+         "graph_ms": null,
+         "settled_ms": 1079.7799999999988,
+         "close_ms": 1024.2,
+         "dropped": 31,
+         "longest_frame_ms": 546.4,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        },
+        {
+         "entity": "sensor.clarity_10",
+         "kind": "sensor",
+         "open_ms": 447.2,
+         "shown_ms": 1163.9,
+         "graph_ms": 2464,
+         "settled_ms": 2463.9600000000064,
+         "close_ms": 567.7,
+         "dropped": 42,
+         "longest_frame_ms": 1300,
+         "show_duration_ms": 300,
+         "error": null,
+         "close_error": null
+        }
+       ]
+      }
+     ],
+     "dialog_levels": [
+      "slow",
+      "slow",
+      "slow"
+     ],
+     "dialog_level": "slow",
+     "dialog_settled_ms": {
+      "median": 2463.96,
+      "min": 2260.58,
+      "max": 2629.18,
+      "n": 3
+     },
+     "dialog_open_ms": {
+      "median": 1094.1,
+      "min": 1083.0,
+      "max": 1579.3,
+      "n": 3
+     },
+     "dialog_close_ms": {
+      "median": 1090.8,
+      "min": 1024.2,
+      "max": 1092.0,
+      "n": 3
+     },
+     "dialog_errors": [],
+     "dialog_settles_away": [],
+     "updates_levels": [
+      "slow",
+      "slow",
+      "slow"
+     ],
+     "updates_level": "slow",
+     "swipes_during_updates": [],
+     "paint_to_screen_ms": null,
+     "positions": [
+      3,
+      2,
+      1
+     ],
+     "by_position": {
+      "3": [
+       {
+        "scroll_fps": null,
+        "scroll_p95_ms": null,
+        "scroll_level": null,
+        "latency_p95_ms": 282.6,
+        "updates_level": "slow",
+        "inp_ms": 368,
+        "load_ms": 2091,
+        "dialog_settled_ms": 2629.179999999993,
+        "dialog_level": "slow"
+       }
+      ],
+      "2": [
+       {
+        "scroll_fps": null,
+        "scroll_p95_ms": null,
+        "scroll_level": null,
+        "latency_p95_ms": 440.1,
+        "updates_level": "slow",
+        "inp_ms": 536,
+        "load_ms": 2134,
+        "dialog_settled_ms": 2260.579999999987,
+        "dialog_level": "slow"
+       }
+      ],
+      "1": [
+       {
+        "scroll_fps": null,
+        "scroll_p95_ms": null,
+        "scroll_level": null,
+        "latency_p95_ms": 294.9,
+        "updates_level": "slow",
+        "inp_ms": 600,
+        "load_ms": 1802,
+        "dialog_settled_ms": 2463.9600000000064,
+        "dialog_level": "slow"
+       }
+      ]
+     },
+     "fcp_ms": null,
+     "clock_rtt_ms": [
+      17,
+      20,
+      27
+     ],
+     "arrivals": [
+      {
+       "sent": 22,
+       "arrived": 22,
+       "wait_p95_ms": 157.3,
+       "wait_max_ms": 187.3,
+       "clock_rtt_ms": 17
+      },
+      {
+       "sent": 22,
+       "arrived": 22,
+       "wait_p95_ms": 152.5,
+       "wait_max_ms": 190.5,
+       "clock_rtt_ms": 20
+      },
+      {
+       "sent": 22,
+       "arrived": 22,
+       "wait_p95_ms": 119.1,
+       "wait_max_ms": 121.1,
+       "clock_rtt_ms": 27
+      }
+     ],
+     "nodes": [
+      2862,
+      2863
+     ],
+     "cards": [
+      50
+     ],
+     "viewport": [
+      [
+       [
+        720,
+        1280
+       ],
+       1.5
+      ]
+     ]
+    },
+    "heavy": {
+     "inp_ms": {
+      "median": 300000.0,
+      "min": 300000.0,
+      "max": 300000.0,
+      "n": 3
+     },
+     "input_method": [],
+     "load_ms": {
+      "median": 300000.0,
+      "min": 300000.0,
+      "max": 300000.0,
+      "n": 3
+     },
+     "load_errors": [],
+     "blocking_ms": {
+      "median": 300000.0,
+      "min": 300000.0,
+      "max": 300000.0,
+      "n": 3
+     },
+     "usable_ms": null,
+     "drawn_ms": null,
+     "cpu_mhz": {
+      "median": 1209.6,
+      "min": 800.0,
+      "max": 1209.6,
+      "n": 180
+     },
+     "cpu_mhz_by_core": {
+      "0": {
+       "median": 1209.6,
+       "min": 800.0,
+       "max": 1209.6,
+       "n": 45
+      },
+      "1": {
+       "median": 1209.6,
+       "min": 800.0,
+       "max": 1209.6,
+       "n": 45
+      },
+      "2": {
+       "median": 1209.6,
+       "min": 800.0,
+       "max": 1209.6,
+       "n": 45
+      },
+      "3": {
+       "median": 1209.6,
+       "min": 800.0,
+       "max": 1209.6,
+       "n": 45
+      }
+     },
+     "scroll": {
+      "p95_ms": null,
+      "jank_pct": null,
+      "frozen_pct": null,
+      "fps": null,
+      "n": {
+       "median": 0.0,
+       "min": 0.0,
+       "max": 0.0,
+       "n": 3
+      }
+     },
+     "scroll_bands": [
+      null,
+      null,
+      null
+     ],
+     "scroll_levels": [
+      "slow",
+      "slow",
+      "slow"
+     ],
+     "scroll_level": "slow",
+     "scroll_runs": [
+      {
+       "p95_ms": null,
+       "jank_pct": null,
+       "frozen_pct": null,
+       "fps": null,
+       "n": 0,
+       "lost": true
+      },
+      {
+       "p95_ms": null,
+       "jank_pct": null,
+       "frozen_pct": null,
+       "fps": null,
+       "n": 0,
+       "lost": true
+      },
+      {
+       "p95_ms": null,
+       "jank_pct": null,
+       "frozen_pct": null,
+       "fps": null,
+       "n": 0,
+       "lost": true
+      }
+     ],
+     "updates_runs": [
+      {
+       "lost": true
+      },
+      {
+       "lost": true
+      },
+      {
+       "lost": true
+      }
+     ],
+     "scroll_band": null,
+     "scroll_sources": [
+      "page lost"
+     ],
+     "scroll_limited_by": [],
+     "scroll_errors": [],
+     "scrolled_px": null,
+     "first_scroll_ms": null,
+     "sf_valid": [
+      null,
+      null,
+      null
+     ],
+     "scroll_raf_only": [
+      false,
+      false,
+      false
+     ],
+     "sf_swipes": 0,
+     "swipes_moved": 0,
+     "swipes_at_edge": 0,
+     "updates": {
+      "p95_ms": null,
+      "jank_pct": null,
+      "frozen_pct": null,
+      "fps": null,
+      "n": null
+     },
+     "updates_bands": [],
+     "updates_band": null,
+     "updates_errors": [],
+     "updates_all_p95_ms": null,
+     "latency_p95_ms": null,
+     "latency_median_ms": null,
+     "camera_runs": [
+      {
+       "lost": true,
+       "first_frame_ms": null,
+       "shown_pct": null,
+       "max_gap_ms": null,
+       "stall_total_ms": null,
+       "streams": 0,
+       "detail": [],
+       "media": null
+      },
+      {
+       "lost": true,
+       "first_frame_ms": null,
+       "shown_pct": null,
+       "max_gap_ms": null,
+       "stall_total_ms": null,
+       "streams": 0,
+       "detail": [],
+       "media": null
+      },
+      {
+       "lost": true,
+       "first_frame_ms": null,
+       "shown_pct": null,
+       "max_gap_ms": null,
+       "stall_total_ms": null,
+       "streams": 0,
+       "detail": [],
+       "media": null
+      }
+     ],
+     "camera_levels": [
+      "slow",
+      "slow",
+      "slow"
+     ],
+     "camera_level": "slow",
+     "timed_out_runs": 0,
+     "timed_out_tasks": [],
+     "camera_fallback": {
+      "path": "hls",
+      "runs": [
+       {
+        "first_frame_ms": null,
+        "shown_pct": null,
+        "max_gap_ms": null,
+        "stall_total_ms": null,
+        "streams": 0,
+        "path": "hls",
+        "view": "heavy-hls",
+        "media": {
+         "codecs": [
+          "OMX.google.h264.decoder",
+          "OMX.google.h264.decoder",
+          "OMX.google.h264.decoder",
+          "OMX.google.h264.decoder",
+          "OMX.google.h264.decoder"
+         ],
+         "flushes": 0,
+         "eos": 0
+        },
+        "error": "the panel ran out of memory and its browser page was closed (low-memory killer)"
+       },
+       {
+        "first_frame_ms": null,
+        "shown_pct": null,
+        "max_gap_ms": null,
+        "stall_total_ms": null,
+        "streams": 0,
+        "path": "hls",
+        "view": "heavy-hls",
+        "media": {
+         "codecs": [
+          "OMX.google.h264.decoder",
+          "OMX.google.h264.decoder",
+          "OMX.google.h264.decoder",
+          "OMX.google.h264.decoder"
+         ],
+         "flushes": 0,
+         "eos": 0
+        },
+        "error": "the panel ran out of memory and its browser page was closed (low-memory killer)"
+       },
+       {
+        "first_frame_ms": null,
+        "shown_pct": null,
+        "max_gap_ms": null,
+        "stall_total_ms": null,
+        "streams": 0,
+        "path": "hls",
+        "view": "heavy-hls",
+        "media": {
+         "codecs": [
+          "OMX.google.h264.decoder",
+          "OMX.google.h264.decoder",
+          "OMX.google.h264.decoder",
+          "OMX.google.h264.decoder"
+         ],
+         "flushes": 0,
+         "eos": 0
+        },
+        "error": "the panel ran out of memory and its browser page was closed (low-memory killer)"
+       }
+      ],
+      "levels": [
+       "slow",
+       "slow",
+       "slow"
+      ],
+      "level": "slow"
+     },
+     "dialog_runs": [
+      {
+       "lost": true
+      },
+      {
+       "lost": true
+      },
+      {
+       "lost": true
+      }
+     ],
+     "dialog_levels": [
+      "slow",
+      "slow",
+      "slow"
+     ],
+     "dialog_level": "slow",
+     "dialog_settled_ms": null,
+     "dialog_open_ms": null,
+     "dialog_close_ms": null,
+     "dialog_errors": [],
+     "dialog_settles_away": [],
+     "updates_levels": [
+      "slow",
+      "slow",
+      "slow"
+     ],
+     "updates_level": "slow",
+     "swipes_during_updates": [
+      null,
+      null,
+      null
+     ],
+     "paint_to_screen_ms": null,
+     "positions": [
+      4,
+      3,
+      2
+     ],
+     "by_position": {
+      "4": [
+       {
+        "scroll_fps": null,
+        "scroll_p95_ms": null,
+        "scroll_level": "slow",
+        "latency_p95_ms": null,
+        "updates_level": "slow",
+        "inp_ms": 300000,
+        "load_ms": 300000,
+        "dialog_settled_ms": null,
+        "dialog_level": "slow"
+       }
+      ],
+      "3": [
+       {
+        "scroll_fps": null,
+        "scroll_p95_ms": null,
+        "scroll_level": "slow",
+        "latency_p95_ms": null,
+        "updates_level": "slow",
+        "inp_ms": 300000,
+        "load_ms": 300000,
+        "dialog_settled_ms": null,
+        "dialog_level": "slow"
+       }
+      ],
+      "2": [
+       {
+        "scroll_fps": null,
+        "scroll_p95_ms": null,
+        "scroll_level": "slow",
+        "latency_p95_ms": null,
+        "updates_level": "slow",
+        "inp_ms": 300000,
+        "load_ms": 300000,
+        "dialog_settled_ms": null,
+        "dialog_level": "slow"
+       }
+      ]
+     },
+     "fcp_ms": null,
+     "clock_rtt_ms": [],
+     "arrivals": [],
+     "nodes": [],
+     "cards": [],
+     "viewport": [
+      [
+       [
+        720,
+        1280
+       ],
+       1.5
+      ]
+     ],
+     "lost_runs": 3,
+     "lost_why": [
+      "the panel ran out of memory and its browser page was closed (low-memory killer)"
+     ]
+    }
+   },
+   "errors": [],
+   "per_run": [
+    {
+     "run": 1,
+     "ttid_ms": 2710,
+     "launch": "relaunched-by-system",
+     "own_page_state": "reference",
+     "own_page_loads": 1,
+     "engine_uri": "about:blank",
+     "engine_ready_ms": 3820,
+     "restart_to": "usable",
+     "camera_fallback": {
+      "typical": {
+       "path": "hls",
+       "first_frame_ms": 10513.8,
+       "shown_pct": 27.7,
+       "max_gap_ms": 10983.6,
+       "stall_total_ms": 28194.3,
+       "streams": 1,
+       "expected": 1,
+       "window_ms": 30096,
+       "detail": [
+        {
+         "w": 1280,
+         "h": 720,
+         "first_frame_ms": 10513.8,
+         "shown_pct": 27.7,
+         "max_gap_ms": 10983.6,
+         "stall_total_ms": 28194.3,
+         "stall_presented": 90,
+         "frames": 125,
+         "decoded": 125,
+         "dropped": 0,
+         "waiting": 9,
+         "source": "quality+rvfc",
+         "webrtc": null,
+         "others": [],
+         "gaps_source": "rvfc",
+         "callback_gaps": null,
+         "span_ms": null,
+         "stalls_at": [
+          [
+           57472.14,
+           68455.72
+          ],
+          [
+           72455.82,
+           76672.58
+          ],
+          [
+           68455.72,
+           72455.82
+          ],
+          [
+           50922,
+           54805.42
+          ],
+          [
+           54805.42,
+           57472.14
+          ],
+          [
+           76672.58,
+           78133
+          ],
+          [
+           49671.98,
+           50655.32
+          ]
+         ]
+        }
+       ],
+       "fetches": {
+        "segment": {
+         "n": 15,
+         "queued_ms": {
+          "median": 45,
+          "p95": 100,
+          "max": 100
+         },
+         "wait_ms": {
+          "median": 7,
+          "p95": 20,
+          "max": 20
+         },
+         "total_ms": {
+          "median": 99,
+          "p95": 152,
+          "max": 152
+         },
+         "kb": 846,
+         "arrival_gap_max_ms": 4000
+        },
+        "playlist": {
+         "n": 20,
+         "queued_ms": {
+          "median": 38,
+          "p95": 81,
+          "max": 83
+         },
+         "wait_ms": {
+          "median": 6,
+          "p95": 13,
+          "max": 13
+         },
+         "total_ms": {
+          "median": 47,
+          "p95": 95,
+          "max": 96
+         }
+        },
+        "streams": 1
+       },
+       "view": "typical-hls",
+       "media": {
+        "codecs": [
+         "OMX.google.h264.decoder"
+        ],
+        "flushes": 0,
+        "eos": 0
+       },
+       "error": null
+      },
+      "heavy": {
+       "first_frame_ms": null,
+       "shown_pct": null,
+       "max_gap_ms": null,
+       "stall_total_ms": null,
+       "streams": 0,
+       "path": "hls",
+       "view": "heavy-hls",
+       "media": {
+        "codecs": [
+         "OMX.google.h264.decoder",
+         "OMX.google.h264.decoder",
+         "OMX.google.h264.decoder",
+         "OMX.google.h264.decoder",
+         "OMX.google.h264.decoder"
+        ],
+        "flushes": 0,
+        "eos": 0
+       },
+       "error": "the panel ran out of memory and its browser page was closed (low-memory killer)"
+      }
+     },
+     "bad_page_lines": 0,
+     "lost_scroll_steps": 0,
+     "timed_out": [],
+     "content_gone": [
+      {
+       "cause": "killed",
+       "low_memory": true,
+       "during": "heavy",
+       "mono": 1561.779917,
+       "why": "the panel ran out of memory and its browser page was closed (low-memory killer)"
+      },
+      {
+       "cause": "killed",
+       "low_memory": true,
+       "during": "heavy-hls",
+       "mono": 1836.709089,
+       "why": "the panel ran out of memory and its browser page was closed (low-memory killer)"
+      }
+     ],
+     "cpu_khz": [
+      [
+       "light",
+       1795473963.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795473968.3,
+       {
+        "0": 1094400,
+        "1": 1094400,
+        "2": 1094400,
+        "3": 1094400
+       }
+      ],
+      [
+       "light",
+       1795473973.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795473978.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795473983.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795473988.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795473993.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795473998.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795474003.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795474009.0,
+       {
+        "0": 998400,
+        "1": 998400,
+        "2": 998400,
+        "3": 998400
+       }
+      ],
+      [
+       "light",
+       1795474014.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474029.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474034.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474039.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474044.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474049.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474054.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474059.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474064.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474070.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474075.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474080.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474100.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474105.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474110.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474115.5,
+       {
+        "0": 1094400,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474120.6,
+       {
+        "0": 1094400,
+        "1": 1094400,
+        "2": 1094400,
+        "3": 1094400
+       }
+      ],
+      [
+       "typical",
+       1795474125.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474130.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474135.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474141.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474146.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474151.2,
+       {
+        "0": 998400,
+        "1": 998400,
+        "2": 998400,
+        "3": 998400
+       }
+      ],
+      [
+       "typical",
+       1795474156.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474161.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474166.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474181.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474186.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474191.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474196.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474201.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474207.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474212.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474217.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474222.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474227.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474232.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474237.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474242.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474247.8,
+       {
+        "0": 1094400,
+        "1": 1094400,
+        "2": 1094400,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474253.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474283.1,
+       {
+        "0": 800000,
+        "1": 800000,
+        "2": 800000,
+        "3": 800000
+       }
+      ],
+      [
+       "typical-hls",
+       1795474288.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474293.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474298.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474303.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474308.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474313.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474318.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474324.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474329.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474334.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474354.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474359.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474364.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474369.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474375.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474380.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474385.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474390.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474395.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474400.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474406.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474411.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474416.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474421.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474426.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474432.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474437.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474442.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474447.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474453.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474458.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474463.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474468.6,
+       {
+        "0": 1152000,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474473.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474478.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474484.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474489.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474494.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474499.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474505.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474510.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474515.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474520.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474526.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795474531.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ]
+     ],
+     "cpu_max_khz": {
+      "0": 1209600,
+      "1": 1209600,
+      "2": 1209600,
+      "3": 1209600
+     },
+     "cpu_clock_s": 5.0,
+     "start_ms": 22158,
+     "start_error": null,
+     "tiers": {
+      "light": {
+       "tier": "light",
+       "css": [
+        720,
+        1280
+       ],
+       "dpr": 1.5,
+       "protocol": 1,
+       "clarity": 1,
+       "load_ms": 2167,
+       "first_screen_cards": 20,
+       "usable_ms": 2628,
+       "blocking_ms": 398.9,
+       "long_frames": 6,
+       "drawn_ms": 1929,
+       "busy_ms": [
+        222,
+        9
+       ],
+       "updates_all": {
+        "n": 60,
+        "median_ms": 16.68,
+        "p95_ms": 66.67,
+        "p95_raw_ms": 66.68,
+        "max_ms": 116.66,
+        "fps": 36,
+        "jank_pct": 28.33,
+        "frozen_pct": 0
+       },
+       "updates": {
+        "n": 11,
+        "median_ms": 66.6,
+        "p95_ms": 116.67,
+        "p95_raw_ms": 116.6,
+        "max_ms": 116.6,
+        "fps": 15.71,
+        "jank_pct": 90.91,
+        "frozen_pct": 0.0
+       },
+       "latency": {
+        "n": 21,
+        "median_ms": 153.9,
+        "p95_ms": 171.7,
+        "max_ms": 189.3,
+        "skipped": 1,
+        "unshown_floor_ms": 250.1
+       },
+       "arrivals": {
+        "sent": 22,
+        "arrived": 22,
+        "wait_p95_ms": 85,
+        "wait_max_ms": 91,
+        "clock_rtt_ms": 18
+       },
+       "updates_run": {
+        "latency_n": 21,
+        "latency_median_ms": 153.9,
+        "latency_p95_ms": 171.7,
+        "frames": {
+         "p95_ms": 116.67,
+         "jank_pct": 90.91,
+         "frozen_pct": 0.0,
+         "fps": 15.71,
+         "n": 11
+        },
+        "sent": 22,
+        "arrived": 22
+       },
+       "state_ticks": 20,
+       "camera_run": null,
+       "dialog_run": {
+        "n": 3,
+        "failed": 0,
+        "settled_ms": 1846.5,
+        "frames": {
+         "p95_ms": 1233.33,
+         "jank_pct": 100.0,
+         "frozen_pct": 50.0,
+         "fps": 1.33,
+         "n": 2
+        },
+        "open_ms": 715.2,
+        "close_ms": 1168,
+        "longest_frame_ms": 1233.6,
+        "dropped": 88,
+        "modes": [
+         "bottom-sheet"
+        ],
+        "reduced_motion": false,
+        "errors": [],
+        "dialogs": [
+         {
+          "entity": "light.clarity_2",
+          "kind": "light",
+          "open_ms": 655.6,
+          "shown_ms": 655.6,
+          "graph_ms": null,
+          "settled_ms": 655.6200000000026,
+          "close_ms": 769.3,
+          "dropped": 0,
+          "longest_frame_ms": 655.6,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "climate.clarity_0",
+          "kind": "climate",
+          "open_ms": 715.2,
+          "shown_ms": 715.2,
+          "graph_ms": null,
+          "settled_ms": 715.1999999999971,
+          "close_ms": 1168,
+          "dropped": 0,
+          "longest_frame_ms": 715.2,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "sensor.clarity_10",
+          "kind": "sensor",
+          "open_ms": 346.2,
+          "shown_ms": 1846.5,
+          "graph_ms": 1846.5,
+          "settled_ms": 1846.5,
+          "close_ms": 776.4,
+          "dropped": 88,
+          "longest_frame_ms": 1233.6,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         }
+        ]
+       },
+       "dialog_settle": {
+        "ms": 2,
+        "clean": true,
+        "closed": 0,
+        "pending": [],
+        "open": false,
+        "history": false
+       },
+       "inp_ms": 784,
+       "input_method": "event-timing",
+       "fcp_ms": null,
+       "nodes": 1120,
+       "cards": 20,
+       "scroll": null,
+       "scroll_error": "no swipes",
+       "position": 1
+      },
+      "typical-nocam": {
+       "tier": "typical-nocam",
+       "css": [
+        720,
+        1280
+       ],
+       "dpr": 1.5,
+       "protocol": 1,
+       "clarity": 1,
+       "load_ms": 4508,
+       "first_screen_cards": 16,
+       "usable_ms": 9646,
+       "blocking_ms": 4516.66,
+       "long_frames": 19,
+       "drawn_ms": 4168,
+       "busy_ms": [
+        693,
+        1447,
+        0,
+        498,
+        417,
+        272
+       ],
+       "updates_all": {
+        "n": 43,
+        "median_ms": 16.68,
+        "p95_ms": 116.67,
+        "p95_raw_ms": 116.64,
+        "max_ms": 149.98,
+        "fps": 26.07,
+        "jank_pct": 41.86,
+        "frozen_pct": 0
+       },
+       "updates": {
+        "n": 12,
+        "median_ms": 66.6,
+        "p95_ms": 150.0,
+        "p95_raw_ms": 150.0,
+        "max_ms": 150.0,
+        "fps": 13.59,
+        "jank_pct": 83.33,
+        "frozen_pct": 0.0
+       },
+       "latency": {
+        "n": 21,
+        "median_ms": 195.4,
+        "p95_ms": 237.5,
+        "max_ms": 274.8,
+        "skipped": 1,
+        "unshown_floor_ms": 250.1
+       },
+       "arrivals": {
+        "sent": 22,
+        "arrived": 22,
+        "wait_p95_ms": 104,
+        "wait_max_ms": 143,
+        "clock_rtt_ms": 22
+       },
+       "updates_run": {
+        "latency_n": 21,
+        "latency_median_ms": 195.4,
+        "latency_p95_ms": 237.5,
+        "frames": {
+         "p95_ms": 150.0,
+         "jank_pct": 83.33,
+         "frozen_pct": 0.0,
+         "fps": 13.59,
+         "n": 12
+        },
+        "sent": 22,
+        "arrived": 22
+       },
+       "state_ticks": 20,
+       "camera_run": null,
+       "dialog_run": {
+        "n": 3,
+        "failed": 0,
+        "settled_ms": 2295.9800000000105,
+        "frames": {
+         "p95_ms": 683.33,
+         "jank_pct": 100.0,
+         "frozen_pct": 0.0,
+         "fps": 1.89,
+         "n": 4
+        },
+        "open_ms": 926,
+        "close_ms": 971.5,
+        "longest_frame_ms": 1300,
+        "dropped": 123,
+        "modes": [
+         "bottom-sheet"
+        ],
+        "reduced_motion": false,
+        "errors": [],
+        "dialogs": [
+         {
+          "entity": "light.clarity_2",
+          "kind": "light",
+          "open_ms": 926,
+          "shown_ms": 1859.3,
+          "graph_ms": null,
+          "settled_ms": 1859.3399999999965,
+          "close_ms": 833.9,
+          "dropped": 54,
+          "longest_frame_ms": 926,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "climate.clarity_0",
+          "kind": "climate",
+          "open_ms": 529.1,
+          "shown_ms": 1195.7,
+          "graph_ms": null,
+          "settled_ms": 1195.7000000000116,
+          "close_ms": 971.5,
+          "dropped": 39,
+          "longest_frame_ms": 666.6,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "sensor.clarity_10",
+          "kind": "sensor",
+          "open_ms": 479.3,
+          "shown_ms": 995.9,
+          "graph_ms": 2296,
+          "settled_ms": 2295.9800000000105,
+          "close_ms": 446.7,
+          "dropped": 30,
+          "longest_frame_ms": 1300,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         }
+        ]
+       },
+       "dialog_settle": {
+        "ms": 5,
+        "clean": true,
+        "closed": 0,
+        "pending": [],
+        "open": false,
+        "history": false
+       },
+       "inp_ms": 280,
+       "input_method": "event-timing",
+       "fcp_ms": null,
+       "nodes": 2859,
+       "cards": 50,
+       "scroll": null,
+       "scroll_error": "no swipes",
+       "position": 2
+      },
+      "typical": {
+       "tier": "typical",
+       "css": [
+        720,
+        1280
+       ],
+       "dpr": 1.5,
+       "protocol": 1,
+       "clarity": 1,
+       "load_ms": 2091,
+       "first_screen_cards": 14,
+       "usable_ms": 20263,
+       "blocking_ms": 11667.18,
+       "long_frames": 68,
+       "drawn_ms": 1784,
+       "busy_ms": [
+        1918,
+        694,
+        843,
+        350,
+        1549,
+        286,
+        536,
+        271,
+        544,
+        291,
+        159,
+        147,
+        153,
+        153,
+        154,
+        153,
+        150,
+        145,
+        168
+       ],
+       "updates_all": {
+        "n": 38,
+        "median_ms": 16.68,
+        "p95_ms": 150,
+        "p95_raw_ms": 150.02,
+        "max_ms": 216.66,
+        "fps": 22.8,
+        "jank_pct": 39.47,
+        "frozen_pct": 0
+       },
+       "updates": {
+        "n": 12,
+        "median_ms": 66.7,
+        "p95_ms": 216.67,
+        "p95_raw_ms": 216.6,
+        "max_ms": 216.6,
+        "fps": 11.08,
+        "jank_pct": 83.33,
+        "frozen_pct": 0.0
+       },
+       "latency": {
+        "n": 21,
+        "median_ms": 199.3,
+        "p95_ms": 282.6,
+        "max_ms": 332.6,
+        "skipped": 1,
+        "unshown_floor_ms": 250.1
+       },
+       "arrivals": {
+        "sent": 22,
+        "arrived": 22,
+        "wait_p95_ms": 157.3,
+        "wait_max_ms": 187.3,
+        "clock_rtt_ms": 17
+       },
+       "updates_run": {
+        "latency_n": 21,
+        "latency_median_ms": 199.3,
+        "latency_p95_ms": 282.6,
+        "frames": {
+         "p95_ms": 216.67,
+         "jank_pct": 83.33,
+         "frozen_pct": 0.0,
+         "fps": 11.08,
+         "n": 12
+        },
+        "sent": 22,
+        "arrived": 22
+       },
+       "state_ticks": 20,
+       "camera_run": {
+        "path": "web_rtc",
+        "first_frame_ms": null,
+        "shown_pct": null,
+        "max_gap_ms": null,
+        "stall_total_ms": null,
+        "streams": 1,
+        "expected": 1,
+        "window_ms": 30010,
+        "detail": [
+         {
+          "w": null,
+          "h": null,
+          "first_frame_ms": null,
+          "shown_pct": null,
+          "max_gap_ms": null,
+          "stall_total_ms": null,
+          "stall_presented": null,
+          "frames": null,
+          "decoded": null,
+          "dropped": null,
+          "waiting": null,
+          "source": null,
+          "webrtc": null,
+          "others": [
+           {
+            "path": "hls",
+            "first_frame_ms": null,
+            "connected": false
+           }
+          ],
+          "gaps_source": null,
+          "callback_gaps": null,
+          "span_ms": null,
+          "stalls_at": null
+         }
+        ],
+        "fetches": {
+         "segment": {
+          "n": 0,
+          "queued_ms": null,
+          "wait_ms": null,
+          "total_ms": null,
+          "kb": 0,
+          "arrival_gap_max_ms": null
+         },
+         "playlist": {
+          "n": 0,
+          "queued_ms": null,
+          "wait_ms": null,
+          "total_ms": null
+         },
+         "streams": 0
+        },
+        "media": null
+       },
+       "dialog_run": {
+        "n": 3,
+        "failed": 0,
+        "settled_ms": 2629.179999999993,
+        "frames": {
+         "p95_ms": 716.67,
+         "jank_pct": 100.0,
+         "frozen_pct": 33.33,
+         "fps": 1.98,
+         "n": 3
+        },
+        "open_ms": 1579.3,
+        "close_ms": 1092,
+        "longest_frame_ms": 1579.3,
+        "dropped": 88,
+        "modes": [
+         "bottom-sheet"
+        ],
+        "reduced_motion": false,
+        "errors": [],
+        "dialogs": [
+         {
+          "entity": "light.clarity_2",
+          "kind": "light",
+          "open_ms": 816.5,
+          "shown_ms": 1699.8,
+          "graph_ms": null,
+          "settled_ms": 1699.820000000007,
+          "close_ms": 1008.6,
+          "dropped": 51,
+          "longest_frame_ms": 816.5,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "climate.clarity_0",
+          "kind": "climate",
+          "open_ms": 465.3,
+          "shown_ms": 1098.6,
+          "graph_ms": null,
+          "settled_ms": 1098.640000000014,
+          "close_ms": 1092,
+          "dropped": 37,
+          "longest_frame_ms": 633.4,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "sensor.clarity_10",
+          "kind": "sensor",
+          "open_ms": 1579.3,
+          "shown_ms": 1579.3,
+          "graph_ms": 2629.2,
+          "settled_ms": 2629.179999999993,
+          "close_ms": 457.5,
+          "dropped": 0,
+          "longest_frame_ms": 1579.3,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         }
+        ]
+       },
+       "dialog_settle": {
+        "ms": 1,
+        "clean": true,
+        "closed": 0,
+        "pending": [],
+        "open": false,
+        "history": false
+       },
+       "inp_ms": 368,
+       "input_method": "event-timing",
+       "fcp_ms": null,
+       "nodes": 2863,
+       "cards": 50,
+       "scroll": null,
+       "scroll_error": "no swipes",
+       "position": 3
+      },
+      "heavy": {
+       "tier": "heavy",
+       "css": [
+        720,
+        1280
+       ],
+       "dpr": 1.5,
+       "protocol": 1,
+       "clarity": 1,
+       "inp_ms": 300000,
+       "input_method": null,
+       "fcp_ms": null,
+       "nodes": null,
+       "cards": null,
+       "load_ms": 300000,
+       "updates": null,
+       "latency": null,
+       "arrivals": null,
+       "camera_run": {
+        "lost": true,
+        "first_frame_ms": null,
+        "shown_pct": null,
+        "max_gap_ms": null,
+        "stall_total_ms": null,
+        "streams": 0,
+        "detail": [],
+        "media": null
+       },
+       "updates_run": {
+        "lost": true
+       },
+       "scroll": {
+        "lost": true,
+        "p95_ms": null,
+        "jank_pct": null,
+        "frozen_pct": null,
+        "fps": null,
+        "n": 0
+       },
+       "blocking_ms": 300000,
+       "dialog_run": {
+        "lost": true
+       },
+       "lost": "the panel ran out of memory and its browser page was closed (low-memory killer)",
+       "lost_tasks": [
+        "open",
+        "tap",
+        "blocking",
+        "scroll",
+        "updates",
+        "dialog",
+        "camera"
+       ],
+       "load_error": null,
+       "scroll_error": null,
+       "scroll_source": "page lost",
+       "updates_error": null,
+       "dialog_error": null,
+       "position": 4
+      }
+     },
+     "order": [
+      "light",
+      "typical-nocam",
+      "typical",
+      "heavy"
+     ],
+     "warmup": null,
+     "between": [
+      "still",
+      "moving",
+      "moving",
+      "moving",
+      "still",
+      "moving"
+     ],
+     "error": null
+    },
+    {
+     "run": 2,
+     "ttid_ms": 3514,
+     "launch": "relaunched-by-system",
+     "own_page_state": "reference",
+     "own_page_loads": 1,
+     "engine_uri": "about:blank",
+     "engine_ready_ms": 4624,
+     "restart_to": "usable",
+     "camera_fallback": {
+      "typical": {
+       "path": "hls",
+       "first_frame_ms": 10111.1,
+       "shown_pct": 27.8,
+       "max_gap_ms": 4983.5,
+       "stall_total_ms": 28426.7,
+       "streams": 1,
+       "expected": 1,
+       "window_ms": 30208,
+       "detail": [
+        {
+         "w": 1280,
+         "h": 720,
+         "first_frame_ms": 10111.1,
+         "shown_pct": 27.8,
+         "max_gap_ms": 4983.5,
+         "stall_total_ms": 28426.7,
+         "stall_presented": 115,
+         "frames": 126,
+         "decoded": 138,
+         "dropped": 12,
+         "waiting": 10,
+         "source": "quality+rvfc",
+         "webrtc": null,
+         "others": [],
+         "gaps_source": "rvfc",
+         "callback_gaps": null,
+         "span_ms": null,
+         "stalls_at": [
+          [
+           113886.88,
+           118870.36
+          ],
+          [
+           124420.54,
+           129120.66
+          ],
+          [
+           109336.74,
+           113886.88
+          ],
+          [
+           106603.34,
+           109336.74
+          ],
+          [
+           120987.1,
+           122920.48
+          ],
+          [
+           105019.96,
+           106603.34
+          ],
+          [
+           122920.48,
+           124420.54
+          ],
+          [
+           129120.66,
+           130320.7
+          ],
+          [
+           118870.36,
+           120037.06
+          ],
+          [
+           130804.06,
+           131937.42
+          ]
+         ]
+        }
+       ],
+       "fetches": {
+        "segment": {
+         "n": 19,
+         "queued_ms": {
+          "median": 33,
+          "p95": 64,
+          "max": 64
+         },
+         "wait_ms": {
+          "median": 9,
+          "p95": 15,
+          "max": 15
+         },
+         "total_ms": {
+          "median": 92,
+          "p95": 121,
+          "max": 121
+         },
+         "kb": 1072,
+         "arrival_gap_max_ms": 2782
+        },
+        "playlist": {
+         "n": 24,
+         "queued_ms": {
+          "median": 32,
+          "p95": 59,
+          "max": 60
+         },
+         "wait_ms": {
+          "median": 6,
+          "p95": 16,
+          "max": 25
+         },
+         "total_ms": {
+          "median": 40,
+          "p95": 65,
+          "max": 85
+         }
+        },
+        "streams": 1
+       },
+       "view": "typical-hls",
+       "media": {
+        "codecs": [
+         "OMX.google.h264.decoder"
+        ],
+        "flushes": 0,
+        "eos": 0
+       },
+       "error": null
+      },
+      "heavy": {
+       "first_frame_ms": null,
+       "shown_pct": null,
+       "max_gap_ms": null,
+       "stall_total_ms": null,
+       "streams": 0,
+       "path": "hls",
+       "view": "heavy-hls",
+       "media": {
+        "codecs": [
+         "OMX.google.h264.decoder",
+         "OMX.google.h264.decoder",
+         "OMX.google.h264.decoder",
+         "OMX.google.h264.decoder"
+        ],
+        "flushes": 0,
+        "eos": 0
+       },
+       "error": "the panel ran out of memory and its browser page was closed (low-memory killer)"
+      }
+     },
+     "bad_page_lines": 0,
+     "lost_scroll_steps": 0,
+     "timed_out": [],
+     "content_gone": [
+      {
+       "cause": "killed",
+       "low_memory": true,
+       "during": "heavy",
+       "mono": 2179.520824,
+       "why": "the panel ran out of memory and its browser page was closed (low-memory killer)"
+      },
+      {
+       "cause": "killed",
+       "low_memory": true,
+       "during": "heavy-hls",
+       "mono": 2453.670034,
+       "why": "the panel ran out of memory and its browser page was closed (low-memory killer)"
+      }
+     ],
+     "cpu_khz": [
+      [
+       "typical-nocam",
+       1795474636.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474641.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474646.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474651.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474657.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474662.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474667.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474672.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474677.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474682.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474687.7,
+       {
+        "0": 998400,
+        "1": 998400,
+        "2": 998400,
+        "3": 998400
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474692.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795474698.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474718.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474723.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474728.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474733.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474738.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474743.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474748.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474753.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474758.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474764.0,
+       {
+        "0": 998400,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474769.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474774.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795474779.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474799.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474804.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474809.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474814.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474819.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474824.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474830.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474835.1,
+       {
+        "0": 800000,
+        "1": 800000,
+        "2": 800000,
+        "3": 800000
+       }
+      ],
+      [
+       "heavy",
+       1795474840.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474845.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474850.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474855.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474860.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474865.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795474870.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795474900.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795474906.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795474911.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795474916.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795474921.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795474926.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795474931.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795474936.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795474941.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 998400,
+        "3": 998400
+       }
+      ],
+      [
+       "light",
+       1795474946.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474966.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474972.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474977.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474982.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474987.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474992.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795474997.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795475002.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795475007.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475028.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475033.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475038.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475043.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475048.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475053.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475059.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475064.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475069.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475074.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475079.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475085.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475090.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475095.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475101.1,
+       {
+        "0": 1152000,
+        "1": 1152000,
+        "2": 1152000,
+        "3": 1152000
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475106.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475111.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475116.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475121.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475126.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475131.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475137.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475142.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475147.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ]
+     ],
+     "cpu_max_khz": {
+      "0": 1209600,
+      "1": 1209600,
+      "2": 1209600,
+      "3": 1209600
+     },
+     "cpu_clock_s": 5.0,
+     "start_ms": 23749,
+     "start_error": null,
+     "tiers": {
+      "typical-nocam": {
+       "tier": "typical-nocam",
+       "css": [
+        720,
+        1280
+       ],
+       "dpr": 1.5,
+       "protocol": 1,
+       "clarity": 1,
+       "load_ms": 3455,
+       "first_screen_cards": 16,
+       "usable_ms": 9878,
+       "blocking_ms": 4900.24,
+       "long_frames": 21,
+       "drawn_ms": 3268,
+       "busy_ms": [
+        594,
+        1453,
+        0,
+        561,
+        468,
+        286,
+        102,
+        7
+       ],
+       "updates_all": {
+        "n": 41,
+        "median_ms": 16.68,
+        "p95_ms": 116.67,
+        "p95_raw_ms": 116.68,
+        "max_ms": 183.34,
+        "fps": 25.1,
+        "jank_pct": 36.59,
+        "frozen_pct": 0
+       },
+       "updates": {
+        "n": 9,
+        "median_ms": 83.3,
+        "p95_ms": 183.33,
+        "p95_raw_ms": 183.4,
+        "max_ms": 183.4,
+        "fps": 9.48,
+        "jank_pct": 100.0,
+        "frozen_pct": 0.0
+       },
+       "latency": {
+        "n": 21,
+        "median_ms": 197.7,
+        "p95_ms": 249.7,
+        "max_ms": 288.0,
+        "skipped": 1,
+        "unshown_floor_ms": 250.1
+       },
+       "arrivals": {
+        "sent": 22,
+        "arrived": 22,
+        "wait_p95_ms": 106.1,
+        "wait_max_ms": 108.1,
+        "clock_rtt_ms": 19
+       },
+       "updates_run": {
+        "latency_n": 21,
+        "latency_median_ms": 197.7,
+        "latency_p95_ms": 249.7,
+        "frames": {
+         "p95_ms": 183.33,
+         "jank_pct": 100.0,
+         "frozen_pct": 0.0,
+         "fps": 9.48,
+         "n": 9
+        },
+        "sent": 22,
+        "arrived": 22
+       },
+       "state_ticks": 20,
+       "camera_run": null,
+       "dialog_run": {
+        "n": 3,
+        "failed": 0,
+        "settled_ms": 2303.1399999999994,
+        "frames": {
+         "p95_ms": 816.67,
+         "jank_pct": 100.0,
+         "frozen_pct": 50.0,
+         "fps": 2.14,
+         "n": 2
+        },
+        "open_ms": 1122.3,
+        "close_ms": 805.7,
+        "longest_frame_ms": 1316.7,
+        "dropped": 54,
+        "modes": [
+         "bottom-sheet"
+        ],
+        "reduced_motion": false,
+        "errors": [],
+        "dialogs": [
+         {
+          "entity": "light.clarity_2",
+          "kind": "light",
+          "open_ms": 1047.5,
+          "shown_ms": 1980.9,
+          "graph_ms": null,
+          "settled_ms": 1980.8600000000006,
+          "close_ms": 773.9,
+          "dropped": 54,
+          "longest_frame_ms": 1047.5,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "climate.clarity_0",
+          "kind": "climate",
+          "open_ms": 1122.3,
+          "shown_ms": 1122.3,
+          "graph_ms": null,
+          "settled_ms": 1122.320000000007,
+          "close_ms": 805.7,
+          "dropped": 0,
+          "longest_frame_ms": 1122.3,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "sensor.clarity_10",
+          "kind": "sensor",
+          "open_ms": 986.4,
+          "shown_ms": 986.4,
+          "graph_ms": 2303.1,
+          "settled_ms": 2303.1399999999994,
+          "close_ms": 604.5,
+          "dropped": 0,
+          "longest_frame_ms": 1316.7,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         }
+        ]
+       },
+       "dialog_settle": {
+        "ms": 9,
+        "clean": true,
+        "closed": 0,
+        "pending": [],
+        "open": false,
+        "history": false
+       },
+       "inp_ms": 800,
+       "input_method": "event-timing",
+       "fcp_ms": null,
+       "nodes": 2858,
+       "cards": 50,
+       "scroll": null,
+       "scroll_error": "no swipes",
+       "position": 1
+      },
+      "typical": {
+       "tier": "typical",
+       "css": [
+        720,
+        1280
+       ],
+       "dpr": 1.5,
+       "protocol": 1,
+       "clarity": 1,
+       "load_ms": 2134,
+       "first_screen_cards": 13,
+       "usable_ms": 20123,
+       "blocking_ms": 12400.5,
+       "long_frames": 63,
+       "drawn_ms": 1844,
+       "busy_ms": [
+        2905,
+        0,
+        0,
+        649,
+        371,
+        1621,
+        0,
+        576,
+        275,
+        547,
+        283,
+        189,
+        189,
+        170,
+        148,
+        157,
+        165,
+        148,
+        114
+       ],
+       "updates_all": {
+        "n": 42,
+        "median_ms": 16.68,
+        "p95_ms": 116.67,
+        "p95_raw_ms": 116.68,
+        "max_ms": 166.68,
+        "fps": 25.98,
+        "jank_pct": 38.1,
+        "frozen_pct": 0
+       },
+       "updates": {
+        "n": 14,
+        "median_ms": 66.6,
+        "p95_ms": 166.67,
+        "p95_raw_ms": 166.7,
+        "max_ms": 166.7,
+        "fps": 14.24,
+        "jank_pct": 71.43,
+        "frozen_pct": 0.0
+       },
+       "latency": {
+        "n": 21,
+        "median_ms": 207.8,
+        "p95_ms": 440.1,
+        "max_ms": 443.1,
+        "skipped": 1,
+        "unshown_floor_ms": 250.1
+       },
+       "arrivals": {
+        "sent": 22,
+        "arrived": 22,
+        "wait_p95_ms": 152.5,
+        "wait_max_ms": 190.5,
+        "clock_rtt_ms": 20
+       },
+       "updates_run": {
+        "latency_n": 21,
+        "latency_median_ms": 207.8,
+        "latency_p95_ms": 440.1,
+        "frames": {
+         "p95_ms": 166.67,
+         "jank_pct": 71.43,
+         "frozen_pct": 0.0,
+         "fps": 14.24,
+         "n": 14
+        },
+        "sent": 22,
+        "arrived": 22
+       },
+       "state_ticks": 20,
+       "camera_run": {
+        "path": "web_rtc",
+        "first_frame_ms": null,
+        "shown_pct": null,
+        "max_gap_ms": null,
+        "stall_total_ms": null,
+        "streams": 1,
+        "expected": 1,
+        "window_ms": 30033,
+        "detail": [
+         {
+          "w": null,
+          "h": null,
+          "first_frame_ms": null,
+          "shown_pct": null,
+          "max_gap_ms": null,
+          "stall_total_ms": null,
+          "stall_presented": null,
+          "frames": null,
+          "decoded": null,
+          "dropped": null,
+          "waiting": null,
+          "source": null,
+          "webrtc": null,
+          "others": [
+           {
+            "path": "hls",
+            "first_frame_ms": null,
+            "connected": false
+           }
+          ],
+          "gaps_source": null,
+          "callback_gaps": null,
+          "span_ms": null,
+          "stalls_at": null
+         }
+        ],
+        "fetches": {
+         "segment": {
+          "n": 0,
+          "queued_ms": null,
+          "wait_ms": null,
+          "total_ms": null,
+          "kb": 0,
+          "arrival_gap_max_ms": null
+         },
+         "playlist": {
+          "n": 0,
+          "queued_ms": null,
+          "wait_ms": null,
+          "total_ms": null
+         },
+         "streams": 0
+        },
+        "media": null
+       },
+       "dialog_run": {
+        "n": 3,
+        "failed": 0,
+        "settled_ms": 2260.579999999987,
+        "frames": {
+         "p95_ms": 616.67,
+         "jank_pct": 100.0,
+         "frozen_pct": 0.0,
+         "fps": 1.62,
+         "n": 1
+        },
+        "open_ms": 1094.1,
+        "close_ms": 1090.8,
+        "longest_frame_ms": 1250,
+        "dropped": 36,
+        "modes": [
+         "bottom-sheet"
+        ],
+        "reduced_motion": false,
+        "errors": [],
+        "dialogs": [
+         {
+          "entity": "light.clarity_2",
+          "kind": "light",
+          "open_ms": 987,
+          "shown_ms": 987,
+          "graph_ms": null,
+          "settled_ms": 986.9599999999919,
+          "close_ms": 623.7,
+          "dropped": 0,
+          "longest_frame_ms": 987,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "climate.clarity_0",
+          "kind": "climate",
+          "open_ms": 1094.1,
+          "shown_ms": 1094.1,
+          "graph_ms": null,
+          "settled_ms": 1094.0799999999872,
+          "close_ms": 1090.8,
+          "dropped": 0,
+          "longest_frame_ms": 1094.1,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "sensor.clarity_10",
+          "kind": "sensor",
+          "open_ms": 393.9,
+          "shown_ms": 1010.5,
+          "graph_ms": 2260.6,
+          "settled_ms": 2260.579999999987,
+          "close_ms": 513.3,
+          "dropped": 36,
+          "longest_frame_ms": 1250,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         }
+        ]
+       },
+       "dialog_settle": {
+        "ms": 9,
+        "clean": true,
+        "closed": 0,
+        "pending": [],
+        "open": false,
+        "history": false
+       },
+       "inp_ms": 536,
+       "input_method": "event-timing",
+       "fcp_ms": null,
+       "nodes": 2863,
+       "cards": 50,
+       "scroll": null,
+       "scroll_error": "no swipes",
+       "position": 2
+      },
+      "heavy": {
+       "tier": "heavy",
+       "css": [
+        720,
+        1280
+       ],
+       "dpr": 1.5,
+       "protocol": 1,
+       "clarity": 1,
+       "inp_ms": 300000,
+       "input_method": null,
+       "fcp_ms": null,
+       "nodes": null,
+       "cards": null,
+       "load_ms": 300000,
+       "updates": null,
+       "latency": null,
+       "arrivals": null,
+       "camera_run": {
+        "lost": true,
+        "first_frame_ms": null,
+        "shown_pct": null,
+        "max_gap_ms": null,
+        "stall_total_ms": null,
+        "streams": 0,
+        "detail": [],
+        "media": null
+       },
+       "updates_run": {
+        "lost": true
+       },
+       "scroll": {
+        "lost": true,
+        "p95_ms": null,
+        "jank_pct": null,
+        "frozen_pct": null,
+        "fps": null,
+        "n": 0
+       },
+       "blocking_ms": 300000,
+       "dialog_run": {
+        "lost": true
+       },
+       "lost": "the panel ran out of memory and its browser page was closed (low-memory killer)",
+       "lost_tasks": [
+        "open",
+        "tap",
+        "blocking",
+        "scroll",
+        "updates",
+        "dialog",
+        "camera"
+       ],
+       "load_error": null,
+       "scroll_error": null,
+       "scroll_source": "page lost",
+       "updates_error": null,
+       "dialog_error": null,
+       "position": 3
+      },
+      "light": {
+       "tier": "light",
+       "css": [
+        720,
+        1280
+       ],
+       "dpr": 1.5,
+       "protocol": 1,
+       "clarity": 1,
+       "load_ms": 2120,
+       "first_screen_cards": 20,
+       "usable_ms": 2577,
+       "blocking_ms": 312.9,
+       "long_frames": 7,
+       "drawn_ms": 1914,
+       "busy_ms": [
+        82,
+        8
+       ],
+       "updates_all": {
+        "n": 66,
+        "median_ms": 16.68,
+        "p95_ms": 83.34,
+        "p95_raw_ms": 83.32,
+        "max_ms": 116.66,
+        "fps": 40,
+        "jank_pct": 24.24,
+        "frozen_pct": 0
+       },
+       "updates": {
+        "n": 14,
+        "median_ms": 33.3,
+        "p95_ms": 116.67,
+        "p95_raw_ms": 116.6,
+        "max_ms": 116.6,
+        "fps": 21.0,
+        "jank_pct": 71.43,
+        "frozen_pct": 0.0
+       },
+       "latency": {
+        "n": 21,
+        "median_ms": 140.3,
+        "p95_ms": 173.6,
+        "max_ms": 196.3,
+        "skipped": 1,
+        "unshown_floor_ms": 250.1
+       },
+       "arrivals": {
+        "sent": 22,
+        "arrived": 22,
+        "wait_p95_ms": 63.3,
+        "wait_max_ms": 63.3,
+        "clock_rtt_ms": 16
+       },
+       "updates_run": {
+        "latency_n": 21,
+        "latency_median_ms": 140.3,
+        "latency_p95_ms": 173.6,
+        "frames": {
+         "p95_ms": 116.67,
+         "jank_pct": 71.43,
+         "frozen_pct": 0.0,
+         "fps": 21.0,
+         "n": 14
+        },
+        "sent": 22,
+        "arrived": 22
+       },
+       "state_ticks": 20,
+       "camera_run": null,
+       "dialog_run": {
+        "n": 3,
+        "failed": 0,
+        "settled_ms": 1379.2799999999988,
+        "frames": {
+         "p95_ms": 683.33,
+         "jank_pct": 100.0,
+         "frozen_pct": 0.0,
+         "fps": 2.79,
+         "n": 4
+        },
+        "open_ms": 390,
+        "close_ms": 1013.4,
+        "longest_frame_ms": 733.4,
+        "dropped": 82,
+        "modes": [
+         "bottom-sheet"
+        ],
+        "reduced_motion": false,
+        "errors": [],
+        "dialogs": [
+         {
+          "entity": "light.clarity_2",
+          "kind": "light",
+          "open_ms": 390,
+          "shown_ms": 1123.4,
+          "graph_ms": null,
+          "settled_ms": 1123.3600000000006,
+          "close_ms": 1013.4,
+          "dropped": 42,
+          "longest_frame_ms": 683.4,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "climate.clarity_0",
+          "kind": "climate",
+          "open_ms": 377.8,
+          "shown_ms": 727.8,
+          "graph_ms": null,
+          "settled_ms": 727.820000000007,
+          "close_ms": 872.2,
+          "dropped": 20,
+          "longest_frame_ms": 377.8,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "sensor.clarity_10",
+          "kind": "sensor",
+          "open_ms": 295.9,
+          "shown_ms": 645.9,
+          "graph_ms": 1379.3,
+          "settled_ms": 1379.2799999999988,
+          "close_ms": 724.7,
+          "dropped": 20,
+          "longest_frame_ms": 733.4,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         }
+        ]
+       },
+       "dialog_settle": {
+        "ms": 0,
+        "clean": true,
+        "closed": 0,
+        "pending": [],
+        "open": false,
+        "history": false
+       },
+       "inp_ms": 328,
+       "input_method": "event-timing",
+       "fcp_ms": null,
+       "nodes": 1120,
+       "cards": 20,
+       "scroll": null,
+       "scroll_error": "no swipes",
+       "position": 4
+      }
+     },
+     "order": [
+      "typical-nocam",
+      "typical",
+      "heavy",
+      "light"
+     ],
+     "warmup": null,
+     "between": [
+      "still",
+      "moving",
+      "moving",
+      "still",
+      "moving",
+      "moving"
+     ],
+     "error": null
+    },
+    {
+     "run": 3,
+     "ttid_ms": 3645,
+     "launch": "relaunched-by-system",
+     "own_page_state": "reference",
+     "own_page_loads": 1,
+     "engine_uri": "about:blank",
+     "engine_ready_ms": 4961,
+     "restart_to": "usable",
+     "camera_fallback": {
+      "typical": {
+       "path": "hls",
+       "first_frame_ms": 11262.7,
+       "shown_pct": 23.4,
+       "max_gap_ms": 10050.5,
+       "stall_total_ms": 27542.8,
+       "streams": 1,
+       "expected": 1,
+       "window_ms": 30138,
+       "detail": [
+        {
+         "w": 1280,
+         "h": 720,
+         "first_frame_ms": 11262.7,
+         "shown_pct": 23.4,
+         "max_gap_ms": 10050.5,
+         "stall_total_ms": 27542.8,
+         "stall_presented": 70,
+         "frames": 106,
+         "decoded": 109,
+         "dropped": 3,
+         "waiting": 5,
+         "source": "quality+rvfc",
+         "webrtc": null,
+         "others": [],
+         "gaps_source": "rvfc",
+         "callback_gaps": null,
+         "span_ms": null,
+         "stalls_at": [
+          [
+           182987.28,
+           193037.74
+          ],
+          [
+           194687.76,
+           202737.84
+          ],
+          [
+           179637.26,
+           182987.28
+          ],
+          [
+           202737.84,
+           205930
+          ],
+          [
+           177770.56,
+           178853.92
+          ],
+          [
+           193654.42,
+           194687.76
+          ],
+          [
+           178853.92,
+           179637.26
+          ]
+         ]
+        }
+       ],
+       "fetches": {
+        "segment": {
+         "n": 17,
+         "queued_ms": {
+          "median": 37,
+          "p95": 90,
+          "max": 90
+         },
+         "wait_ms": {
+          "median": 7,
+          "p95": 18,
+          "max": 18
+         },
+         "total_ms": {
+          "median": 97,
+          "p95": 156,
+          "max": 156
+         },
+         "kb": 962,
+         "arrival_gap_max_ms": 3050
+        },
+        "playlist": {
+         "n": 23,
+         "queued_ms": {
+          "median": 34,
+          "p95": 72,
+          "max": 105
+         },
+         "wait_ms": {
+          "median": 6,
+          "p95": 13,
+          "max": 15
+         },
+         "total_ms": {
+          "median": 40,
+          "p95": 80,
+          "max": 114
+         }
+        },
+        "streams": 1
+       },
+       "view": "typical-hls",
+       "media": {
+        "codecs": [
+         "OMX.google.h264.decoder"
+        ],
+        "flushes": 0,
+        "eos": 0
+       },
+       "error": null
+      },
+      "heavy": {
+       "first_frame_ms": null,
+       "shown_pct": null,
+       "max_gap_ms": null,
+       "stall_total_ms": null,
+       "streams": 0,
+       "path": "hls",
+       "view": "heavy-hls",
+       "media": {
+        "codecs": [
+         "OMX.google.h264.decoder",
+         "OMX.google.h264.decoder",
+         "OMX.google.h264.decoder",
+         "OMX.google.h264.decoder"
+        ],
+        "flushes": 0,
+        "eos": 0
+       },
+       "error": "the panel ran out of memory and its browser page was closed (low-memory killer)"
+      }
+     },
+     "bad_page_lines": 0,
+     "lost_scroll_steps": 0,
+     "timed_out": [],
+     "content_gone": [
+      {
+       "cause": "killed",
+       "low_memory": true,
+       "during": "heavy",
+       "mono": 2727.817522,
+       "why": "the panel ran out of memory and its browser page was closed (low-memory killer)"
+      },
+      {
+       "cause": "killed",
+       "low_memory": true,
+       "during": "heavy-hls",
+       "mono": 3052.348639,
+       "why": "the panel ran out of memory and its browser page was closed (low-memory killer)"
+      }
+     ],
+     "cpu_khz": [
+      [
+       "typical",
+       1795475264.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795475269.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795475274.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795475279.4,
+       {
+        "0": 998400,
+        "1": 998400,
+        "2": 998400,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795475284.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795475289.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795475294.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795475299.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795475304.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795475309.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795475315.0,
+       {
+        "0": 998400,
+        "1": 998400,
+        "2": 998400,
+        "3": 998400
+       }
+      ],
+      [
+       "typical",
+       1795475320.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795475325.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical",
+       1795475330.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475350.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475355.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475360.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475365.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475370.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475375.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475380.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475385.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475391.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475396.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475401.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475406.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475411.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475416.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy",
+       1795475421.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795475447.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795475452.1,
+       {
+        "0": 800000,
+        "1": 800000,
+        "2": 998400,
+        "3": 998400
+       }
+      ],
+      [
+       "light",
+       1795475457.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795475462.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795475467.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795475472.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795475478.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795475483.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795475488.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795475493.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "light",
+       1795475498.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795475518.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795475523.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795475528.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795475533.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795475539.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795475544.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795475549.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795475554.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795475559.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-nocam",
+       1795475564.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795475584.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795475589.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795475594.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795475600.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795475605.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795475610.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795475615.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795475620.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795475625.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "typical-hls",
+       1795475630.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475645.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475651.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475656.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475661.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475666.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475671.6,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475676.8,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475682.0,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475687.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475692.4,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475697.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475702.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475708.1,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475713.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475718.5,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475723.7,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475728.9,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475734.2,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475739.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ],
+      [
+       "heavy-hls",
+       1795475744.3,
+       {
+        "0": 1209600,
+        "1": 1209600,
+        "2": 1209600,
+        "3": 1209600
+       }
+      ]
+     ],
+     "cpu_max_khz": {
+      "0": 1209600,
+      "1": 1209600,
+      "2": 1209600,
+      "3": 1209600
+     },
+     "cpu_clock_s": 5.0,
+     "start_ms": 23548,
+     "start_error": null,
+     "tiers": {
+      "typical": {
+       "tier": "typical",
+       "css": [
+        720,
+        1280
+       ],
+       "dpr": 1.5,
+       "protocol": 1,
+       "clarity": 1,
+       "load_ms": 1802,
+       "first_screen_cards": 12,
+       "usable_ms": 20008,
+       "blocking_ms": 12833.76,
+       "long_frames": 62,
+       "drawn_ms": 1547,
+       "busy_ms": [
+        1069,
+        2006,
+        0,
+        1019,
+        444,
+        1725,
+        0,
+        589,
+        381,
+        612,
+        397,
+        292,
+        168,
+        156,
+        155,
+        145,
+        145,
+        168,
+        123
+       ],
+       "updates_all": {
+        "n": 37,
+        "median_ms": 16.68,
+        "p95_ms": 166.67,
+        "p95_raw_ms": 166.68,
+        "max_ms": 183.34,
+        "fps": 22.65,
+        "jank_pct": 37.84,
+        "frozen_pct": 0
+       },
+       "updates": {
+        "n": 11,
+        "median_ms": 83.3,
+        "p95_ms": 183.33,
+        "p95_raw_ms": 183.4,
+        "max_ms": 183.4,
+        "fps": 10.31,
+        "jank_pct": 81.82,
+        "frozen_pct": 0.0
+       },
+       "latency": {
+        "n": 21,
+        "median_ms": 201.6,
+        "p95_ms": 294.9,
+        "max_ms": 317.2,
+        "skipped": 1,
+        "unshown_floor_ms": 250.1
+       },
+       "arrivals": {
+        "sent": 22,
+        "arrived": 22,
+        "wait_p95_ms": 119.1,
+        "wait_max_ms": 121.1,
+        "clock_rtt_ms": 27
+       },
+       "updates_run": {
+        "latency_n": 21,
+        "latency_median_ms": 201.6,
+        "latency_p95_ms": 294.9,
+        "frames": {
+         "p95_ms": 183.33,
+         "jank_pct": 81.82,
+         "frozen_pct": 0.0,
+         "fps": 10.31,
+         "n": 11
+        },
+        "sent": 22,
+        "arrived": 22
+       },
+       "state_ticks": 20,
+       "camera_run": {
+        "path": "web_rtc",
+        "first_frame_ms": null,
+        "shown_pct": null,
+        "max_gap_ms": null,
+        "stall_total_ms": null,
+        "streams": 1,
+        "expected": 1,
+        "window_ms": 30060,
+        "detail": [
+         {
+          "w": null,
+          "h": null,
+          "first_frame_ms": null,
+          "shown_pct": null,
+          "max_gap_ms": null,
+          "stall_total_ms": null,
+          "stall_presented": null,
+          "frames": null,
+          "decoded": null,
+          "dropped": null,
+          "waiting": null,
+          "source": null,
+          "webrtc": null,
+          "others": [
+           {
+            "path": "hls",
+            "first_frame_ms": null,
+            "connected": false
+           }
+          ],
+          "gaps_source": null,
+          "callback_gaps": null,
+          "span_ms": null,
+          "stalls_at": null
+         }
+        ],
+        "fetches": {
+         "segment": {
+          "n": 0,
+          "queued_ms": null,
+          "wait_ms": null,
+          "total_ms": null,
+          "kb": 0,
+          "arrival_gap_max_ms": null
+         },
+         "playlist": {
+          "n": 0,
+          "queued_ms": null,
+          "wait_ms": null,
+          "total_ms": null
+         },
+         "streams": 0
+        },
+        "media": null
+       },
+       "dialog_run": {
+        "n": 3,
+        "failed": 0,
+        "settled_ms": 2463.9600000000064,
+        "frames": {
+         "p95_ms": 716.67,
+         "jank_pct": 100.0,
+         "frozen_pct": 50.0,
+         "fps": 1.6,
+         "n": 2
+        },
+        "open_ms": 1083,
+        "close_ms": 1024.2,
+        "longest_frame_ms": 1300,
+        "dropped": 73,
+        "modes": [
+         "bottom-sheet"
+        ],
+        "reduced_motion": false,
+        "errors": [],
+        "dialogs": [
+         {
+          "entity": "light.clarity_2",
+          "kind": "light",
+          "open_ms": 1083,
+          "shown_ms": 1083,
+          "graph_ms": null,
+          "settled_ms": 1083,
+          "close_ms": 661.4,
+          "dropped": 0,
+          "longest_frame_ms": 1083,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "climate.clarity_0",
+          "kind": "climate",
+          "open_ms": 546.4,
+          "shown_ms": 1079.8,
+          "graph_ms": null,
+          "settled_ms": 1079.7799999999988,
+          "close_ms": 1024.2,
+          "dropped": 31,
+          "longest_frame_ms": 546.4,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "sensor.clarity_10",
+          "kind": "sensor",
+          "open_ms": 447.2,
+          "shown_ms": 1163.9,
+          "graph_ms": 2464,
+          "settled_ms": 2463.9600000000064,
+          "close_ms": 567.7,
+          "dropped": 42,
+          "longest_frame_ms": 1300,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         }
+        ]
+       },
+       "dialog_settle": {
+        "ms": 4,
+        "clean": true,
+        "closed": 0,
+        "pending": [],
+        "open": false,
+        "history": false
+       },
+       "inp_ms": 600,
+       "input_method": "event-timing",
+       "fcp_ms": null,
+       "nodes": 2862,
+       "cards": 50,
+       "scroll": null,
+       "scroll_error": "no swipes",
+       "position": 1
+      },
+      "heavy": {
+       "tier": "heavy",
+       "css": [
+        720,
+        1280
+       ],
+       "dpr": 1.5,
+       "protocol": 1,
+       "clarity": 1,
+       "inp_ms": 300000,
+       "input_method": null,
+       "fcp_ms": null,
+       "nodes": null,
+       "cards": null,
+       "load_ms": 300000,
+       "updates": null,
+       "latency": null,
+       "arrivals": null,
+       "camera_run": {
+        "lost": true,
+        "first_frame_ms": null,
+        "shown_pct": null,
+        "max_gap_ms": null,
+        "stall_total_ms": null,
+        "streams": 0,
+        "detail": [],
+        "media": null
+       },
+       "updates_run": {
+        "lost": true
+       },
+       "scroll": {
+        "lost": true,
+        "p95_ms": null,
+        "jank_pct": null,
+        "frozen_pct": null,
+        "fps": null,
+        "n": 0
+       },
+       "blocking_ms": 300000,
+       "dialog_run": {
+        "lost": true
+       },
+       "lost": "the panel ran out of memory and its browser page was closed (low-memory killer)",
+       "lost_tasks": [
+        "open",
+        "tap",
+        "blocking",
+        "scroll",
+        "updates",
+        "dialog",
+        "camera"
+       ],
+       "load_error": null,
+       "scroll_error": null,
+       "scroll_source": "page lost",
+       "updates_error": null,
+       "dialog_error": null,
+       "position": 2
+      },
+      "light": {
+       "tier": "light",
+       "css": [
+        720,
+        1280
+       ],
+       "dpr": 1.5,
+       "protocol": 1,
+       "clarity": 1,
+       "load_ms": 2189,
+       "first_screen_cards": 20,
+       "usable_ms": 3056,
+       "blocking_ms": 700.04,
+       "long_frames": 5,
+       "drawn_ms": 1936,
+       "busy_ms": [
+        477,
+        38
+       ],
+       "updates_all": {
+        "n": 57,
+        "median_ms": 16.68,
+        "p95_ms": 83.34,
+        "p95_raw_ms": 83.34,
+        "max_ms": 133.34,
+        "fps": 34.9,
+        "jank_pct": 29.82,
+        "frozen_pct": 0
+       },
+       "updates": {
+        "n": 11,
+        "median_ms": 50.0,
+        "p95_ms": 133.33,
+        "p95_raw_ms": 133.3,
+        "max_ms": 133.3,
+        "fps": 15.0,
+        "jank_pct": 100.0,
+        "frozen_pct": 0.0
+       },
+       "latency": {
+        "n": 21,
+        "median_ms": 147.7,
+        "p95_ms": 196.8,
+        "max_ms": 264.3,
+        "skipped": 1,
+        "unshown_floor_ms": 250.1
+       },
+       "arrivals": {
+        "sent": 22,
+        "arrived": 22,
+        "wait_p95_ms": 73,
+        "wait_max_ms": 115,
+        "clock_rtt_ms": 17
+       },
+       "updates_run": {
+        "latency_n": 21,
+        "latency_median_ms": 147.7,
+        "latency_p95_ms": 196.8,
+        "frames": {
+         "p95_ms": 133.33,
+         "jank_pct": 100.0,
+         "frozen_pct": 0.0,
+         "fps": 15.0,
+         "n": 11
+        },
+        "sent": 22,
+        "arrived": 22
+       },
+       "state_ticks": 20,
+       "camera_run": null,
+       "dialog_run": {
+        "n": 3,
+        "failed": 0,
+        "settled_ms": 1893.0599999999977,
+        "frames": {
+         "p95_ms": 783.33,
+         "jank_pct": 100.0,
+         "frozen_pct": 20.0,
+         "fps": 2.29,
+         "n": 5
+        },
+        "open_ms": 504.1,
+        "close_ms": 1300.6,
+        "longest_frame_ms": 1200,
+        "dropped": 126,
+        "modes": [
+         "bottom-sheet"
+        ],
+        "reduced_motion": false,
+        "errors": [],
+        "dialogs": [
+         {
+          "entity": "light.clarity_2",
+          "kind": "light",
+          "open_ms": 504.1,
+          "shown_ms": 1254.1,
+          "graph_ms": null,
+          "settled_ms": 1254.0999999999985,
+          "close_ms": 1229.2,
+          "dropped": 43,
+          "longest_frame_ms": 683.4,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "climate.clarity_0",
+          "kind": "climate",
+          "open_ms": 487.5,
+          "shown_ms": 1554.2,
+          "graph_ms": null,
+          "settled_ms": 1554.2400000000052,
+          "close_ms": 1300.6,
+          "dropped": 62,
+          "longest_frame_ms": 783.4,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "sensor.clarity_10",
+          "kind": "sensor",
+          "open_ms": 326.4,
+          "shown_ms": 693,
+          "graph_ms": 1893.1,
+          "settled_ms": 1893.0599999999977,
+          "close_ms": 473.1,
+          "dropped": 21,
+          "longest_frame_ms": 1200,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         }
+        ]
+       },
+       "dialog_settle": {
+        "ms": 1,
+        "clean": true,
+        "closed": 0,
+        "pending": [],
+        "open": false,
+        "history": false
+       },
+       "inp_ms": 480,
+       "input_method": "event-timing",
+       "fcp_ms": null,
+       "nodes": 1120,
+       "cards": 20,
+       "scroll": null,
+       "scroll_error": "no swipes",
+       "position": 3
+      },
+      "typical-nocam": {
+       "tier": "typical-nocam",
+       "css": [
+        720,
+        1280
+       ],
+       "dpr": 1.5,
+       "protocol": 1,
+       "clarity": 1,
+       "load_ms": 3897,
+       "first_screen_cards": 16,
+       "usable_ms": 9178,
+       "blocking_ms": 4483.38,
+       "long_frames": 19,
+       "drawn_ms": 3725,
+       "busy_ms": [
+        516,
+        1452,
+        177,
+        538,
+        413,
+        259
+       ],
+       "updates_all": {
+        "n": 44,
+        "median_ms": 16.68,
+        "p95_ms": 116.67,
+        "p95_raw_ms": 116.66,
+        "max_ms": 166.66,
+        "fps": 26.94,
+        "jank_pct": 34.09,
+        "frozen_pct": 0
+       },
+       "updates": {
+        "n": 9,
+        "median_ms": 83.3,
+        "p95_ms": 166.67,
+        "p95_raw_ms": 166.7,
+        "max_ms": 166.7,
+        "fps": 10.19,
+        "jank_pct": 100.0,
+        "frozen_pct": 0.0
+       },
+       "latency": {
+        "n": 21,
+        "median_ms": 185.3,
+        "p95_ms": 224.6,
+        "max_ms": 226.6,
+        "skipped": 1,
+        "unshown_floor_ms": 250.1
+       },
+       "arrivals": {
+        "sent": 22,
+        "arrived": 22,
+        "wait_p95_ms": 107,
+        "wait_max_ms": 108,
+        "clock_rtt_ms": 20
+       },
+       "updates_run": {
+        "latency_n": 21,
+        "latency_median_ms": 185.3,
+        "latency_p95_ms": 224.6,
+        "frames": {
+         "p95_ms": 166.67,
+         "jank_pct": 100.0,
+         "frozen_pct": 0.0,
+         "fps": 10.19,
+         "n": 9
+        },
+        "sent": 22,
+        "arrived": 22
+       },
+       "state_ticks": 20,
+       "camera_run": null,
+       "dialog_run": {
+        "n": 3,
+        "failed": 0,
+        "settled_ms": 2312.959999999992,
+        "frames": {
+         "p95_ms": 533.33,
+         "jank_pct": 100.0,
+         "frozen_pct": 0.0,
+         "fps": 1.88,
+         "n": 1
+        },
+        "open_ms": 1044.8,
+        "close_ms": 960,
+        "longest_frame_ms": 1283.3,
+        "dropped": 31,
+        "modes": [
+         "bottom-sheet"
+        ],
+        "reduced_motion": false,
+        "errors": [],
+        "dialogs": [
+         {
+          "entity": "light.clarity_2",
+          "kind": "light",
+          "open_ms": 1044.8,
+          "shown_ms": 1044.8,
+          "graph_ms": null,
+          "settled_ms": 1044.8399999999965,
+          "close_ms": 465.7,
+          "dropped": 0,
+          "longest_frame_ms": 1044.8,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "climate.clarity_0",
+          "kind": "climate",
+          "open_ms": 1027.3,
+          "shown_ms": 1027.3,
+          "graph_ms": null,
+          "settled_ms": 1027.3399999999965,
+          "close_ms": 960,
+          "dropped": 0,
+          "longest_frame_ms": 1027.3,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         },
+         {
+          "entity": "sensor.clarity_10",
+          "kind": "sensor",
+          "open_ms": 496.3,
+          "shown_ms": 1029.6,
+          "graph_ms": 2313,
+          "settled_ms": 2312.959999999992,
+          "close_ms": 430.9,
+          "dropped": 31,
+          "longest_frame_ms": 1283.3,
+          "show_duration_ms": 300,
+          "error": null,
+          "close_error": null
+         }
+        ]
+       },
+       "dialog_settle": {
+        "ms": 2,
+        "clean": true,
+        "closed": 0,
+        "pending": [],
+        "open": false,
+        "history": false
+       },
+       "inp_ms": 208,
+       "input_method": "event-timing",
+       "fcp_ms": null,
+       "nodes": 2859,
+       "cards": 50,
+       "scroll": null,
+       "scroll_error": "no swipes",
+       "position": 4
+      }
+     },
+     "order": [
+      "typical",
+      "heavy",
+      "light",
+      "typical-nocam"
+     ],
+     "warmup": null,
+     "between": [
+      "moving",
+      "moving",
+      "still",
+      "moving",
+      "moving",
+      "moving"
+     ],
+     "error": null
+    }
+   ]
+  }
+ },
+ "detail": {
+  "synthetic": {
+   "runs": 1,
+   "screen_off_runs": 0,
+   "complete_runs": 0,
+   "ladder": {},
+   "steps_without_sf": 0,
+   "scroll_moved": null,
+   "scroll": {
+    "p95_ms": null,
+    "jank_pct": null,
+    "fps": null
+   },
+   "js_burst_ms": null,
+   "js_checksum_ok": false,
+   "page_lcp_ms": null,
+   "page_lcp_from": [],
+   "js_band": null,
+   "per_run": [
+    {
+     "ua": null,
+     "page_load": {},
+     "dpr": null,
+     "ladder": {},
+     "scroll": null,
+     "js": null,
+     "complete": false,
+     "screen_off": false
+    }
+   ]
+  }
+ },
+ "real_use": {
+  "app_start_to_dashboard_ms": {
+   "median": 5782.0,
+   "min": 5068.0,
+   "max": 6670.0,
+   "n": 3
+  },
+  "android_ttid_ms": {
+   "median": 2790.0,
+   "min": 2650.0,
+   "max": 3489.0,
+   "n": 3
+  },
+  "dashboard_load_ms": {
+   "median": 11687.0,
+   "min": 11411.0,
+   "max": 12333.0,
+   "n": 3
+  },
+  "dashboard_page_stop_ms": {
+   "median": 11145.0,
+   "min": 11097.0,
+   "max": 11738.0,
+   "n": 3
+  },
+  "stop_to_dashboard_ms": {
+   "median": 18579.0,
+   "min": 17071.0,
+   "max": 18920.0,
+   "n": 3
+  },
+  "settle_how": [
+   "quiet-gap"
+  ],
+  "launch": [
+   "relaunched-by-system"
+  ],
+  "errors": [],
+  "screen_off_samples": [],
+  "idle": {
+   "samples": 3,
+   "app_pss_kb": {
+    "median": 434996.0,
+    "min": 410494.0,
+    "max": 435840.0,
+    "n": 3
+   },
+   "by_role_pss_kb": {
+    "main": {
+     "median": 235767.0,
+     "min": 233174.0,
+     "max": 237716.0,
+     "n": 3
+    },
+    "tab": {
+     "median": 198124.0,
+     "min": 177320.0,
+     "max": 199229.0,
+     "n": 3
+    }
+   },
+   "main_kb": {
+    "code_kb": {
+     "median": 34736.0,
+     "min": 25492.0,
+     "max": 43436.0,
+     "n": 3
+    },
+    "graphics_kb": {
+     "median": 72300.0,
+     "min": 70676.0,
+     "max": 72572.0,
+     "n": 3
+    },
+    "java_heap_kb": {
+     "median": 25772.0,
+     "min": 25504.0,
+     "max": 25804.0,
+     "n": 3
+    },
+    "native_heap_kb": {
+     "median": 11532.0,
+     "min": 11520.0,
+     "max": 11888.0,
+     "n": 3
+    },
+    "private_other_kb": {
+     "median": 53104.0,
+     "min": 52648.0,
+     "max": 57100.0,
+     "n": 3
+    },
+    "stack_kb": {
+     "median": 1368.0,
+     "min": 1312.0,
+     "max": 1396.0,
+     "n": 3
+    },
+    "system_kb": {
+     "median": 36217.0,
+     "min": 32219.0,
+     "max": 36365.0,
+     "n": 3
+    },
+    "total_pss_kb": {
+     "median": 234933.0,
+     "min": 229945.0,
+     "max": 238083.0,
+     "n": 3
+    }
+   },
+   "radio_pss_kb": {
+    "median": 0.0,
+    "min": 0.0,
+    "max": 0.0,
+    "n": 3
+   },
+   "device_used_pct": null,
+   "cpu_app_pct_of_core": {
+    "median": 0.0,
+    "min": 0.0,
+    "max": 0.0,
+    "n": 3
+   },
+   "cpu_radio_pct_of_core": {
+    "median": 0.0,
+    "min": 0.0,
+    "max": 0.0,
+    "n": 3
+   },
+   "cpu_device_busy_pct": {
+    "median": 74.28,
+    "min": 73.01,
+    "max": 77.0,
+    "n": 3
+   },
+   "frames": {
+    "presented_fps": {
+     "median": 57.6,
+     "min": 56.53,
+     "max": 57.67,
+     "n": 3
+    },
+    "p95_ms": {
+     "median": 33.33,
+     "min": 33.33,
+     "max": 33.33,
+     "n": 3
+    },
+    "max_ms": {
+     "median": 50.15,
+     "min": 49.91,
+     "max": 83.39,
+     "n": 3
+    }
+   }
+  },
+  "peak": {
+   "app_pss_kb": 435840,
+   "app_rss_hwm_kb": 551516,
+   "mem_available_min_kb": null
+  },
+  "per_run": [
+   {
+    "ttid_ms": 2650,
+    "launch": "relaunched-by-system",
+    "am_total_ms": null,
+    "page_stop_ms": 11145,
+    "dashboard_load_ms": 11687,
+    "settle": "quiet-gap",
+    "app_start_to_dashboard_ms": 5068,
+    "engine_ready_ms": 3493,
+    "stop_to_dashboard_ms": 17071
+   },
+   {
+    "ttid_ms": 2790,
+    "launch": "relaunched-by-system",
+    "am_total_ms": null,
+    "page_stop_ms": 11738,
+    "dashboard_load_ms": 12333,
+    "settle": "quiet-gap",
+    "app_start_to_dashboard_ms": 5782,
+    "engine_ready_ms": 4179,
+    "stop_to_dashboard_ms": 18579
+   },
+   {
+    "ttid_ms": 3489,
+    "launch": "relaunched-by-system",
+    "am_total_ms": null,
+    "page_stop_ms": 11097,
+    "dashboard_load_ms": 11411,
+    "settle": "quiet-gap",
+    "app_start_to_dashboard_ms": 6670,
+    "engine_ready_ms": 4937,
+    "stop_to_dashboard_ms": 18920
+   }
+  ],
+  "memory": {
+   "idle": {
+    "samples": 3,
+    "app_pss_kb": {
+     "median": 434996.0,
+     "min": 410494.0,
+     "max": 435840.0,
+     "n": 3
+    },
+    "by_role_pss_kb": {
+     "main": {
+      "median": 235767.0,
+      "min": 233174.0,
+      "max": 237716.0,
+      "n": 3
+     },
+     "tab": {
+      "median": 198124.0,
+      "min": 177320.0,
+      "max": 199229.0,
+      "n": 3
+     }
+    },
+    "main_kb": {
+     "code_kb": {
+      "median": 34736.0,
+      "min": 25492.0,
+      "max": 43436.0,
+      "n": 3
+     },
+     "graphics_kb": {
+      "median": 72300.0,
+      "min": 70676.0,
+      "max": 72572.0,
+      "n": 3
+     },
+     "java_heap_kb": {
+      "median": 25772.0,
+      "min": 25504.0,
+      "max": 25804.0,
+      "n": 3
+     },
+     "native_heap_kb": {
+      "median": 11532.0,
+      "min": 11520.0,
+      "max": 11888.0,
+      "n": 3
+     },
+     "private_other_kb": {
+      "median": 53104.0,
+      "min": 52648.0,
+      "max": 57100.0,
+      "n": 3
+     },
+     "stack_kb": {
+      "median": 1368.0,
+      "min": 1312.0,
+      "max": 1396.0,
+      "n": 3
+     },
+     "system_kb": {
+      "median": 36217.0,
+      "min": 32219.0,
+      "max": 36365.0,
+      "n": 3
+     },
+     "total_pss_kb": {
+      "median": 234933.0,
+      "min": 229945.0,
+      "max": 238083.0,
+      "n": 3
+     }
+    },
+    "radio_pss_kb": {
+     "median": 0.0,
+     "min": 0.0,
+     "max": 0.0,
+     "n": 3
+    },
+    "device_used_pct": null,
+    "cpu_app_pct_of_core": {
+     "median": 0.0,
+     "min": 0.0,
+     "max": 0.0,
+     "n": 3
+    },
+    "cpu_radio_pct_of_core": {
+     "median": 0.0,
+     "min": 0.0,
+     "max": 0.0,
+     "n": 3
+    },
+    "cpu_device_busy_pct": {
+     "median": 74.28,
+     "min": 73.01,
+     "max": 77.0,
+     "n": 3
+    },
+    "frames": {
+     "presented_fps": {
+      "median": 57.6,
+      "min": 56.53,
+      "max": 57.67,
+      "n": 3
+     },
+     "p95_ms": {
+      "median": 33.33,
+      "min": 33.33,
+      "max": 33.33,
+      "n": 3
+     },
+     "max_ms": {
+      "median": 50.15,
+      "min": 49.91,
+      "max": 83.39,
+      "n": 3
+     }
+    }
+   },
+   "peak": {
+    "app_pss_kb": 435840,
+    "app_rss_hwm_kb": 551516,
+    "mem_available_min_kb": null
+   },
+   "budget": {
+    "budget": {
+     "app_pss_max_pct_of_ram": 50,
+     "device_available_min_pct": 15
+    },
+    "checks": {
+     "app_pss_peak": {
+      "value_kb": 435840,
+      "budget_kb": 476126,
+      "ok": true
+     },
+     "device_available_min": {
+      "value_kb": null,
+      "budget_kb": 142838,
+      "ok": null
+     }
+    },
+    "ok": null
+   }
+  },
+  "panes": [
+   {
+    "id": "radio",
+    "method": "process",
+    "pss_kb": 0.0,
+    "cpu_pct_of_core": 0.0,
+    "note": "the radio's own processes (outside the app); measured in place, not switched off"
+   }
+  ]
+ },
+ "thermal": [
+  {
+   "phase": "start",
+   "zones": {
+    "tsens_tz_sensor0": 57.0,
+    "tsens_tz_sensor1": 57.0,
+    "tsens_tz_sensor2": 55.0,
+    "tsens_tz_sensor4": 56.0,
+    "tsens_tz_sensor5": 58.0,
+    "pm8916_tz": 51.8,
+    "battery": 24.6
+   }
+  },
+  {
+   "phase": "synthetic-1",
+   "zones": {
+    "tsens_tz_sensor0": 58.0,
+    "tsens_tz_sensor1": 57.0,
+    "tsens_tz_sensor2": 55.0,
+    "tsens_tz_sensor4": 57.0,
+    "tsens_tz_sensor5": 59.0,
+    "pm8916_tz": 52.7,
+    "battery": 24.6
+   }
+  },
+  {
+   "phase": "refstart-1",
+   "zones": {
+    "tsens_tz_sensor0": 61.0,
+    "tsens_tz_sensor1": 60.0,
+    "tsens_tz_sensor2": 57.0,
+    "tsens_tz_sensor4": 63.0,
+    "tsens_tz_sensor5": 63.0,
+    "pm8916_tz": 54.5,
+    "battery": 24.6
+   }
+  },
+  {
+   "phase": "refstart-2",
+   "zones": {
+    "tsens_tz_sensor0": 62.0,
+    "tsens_tz_sensor1": 62.0,
+    "tsens_tz_sensor2": 60.0,
+    "tsens_tz_sensor4": 60.0,
+    "tsens_tz_sensor5": 62.0,
+    "pm8916_tz": 57.8,
+    "battery": 24.6
+   }
+  },
+  {
+   "phase": "refstart-3",
+   "zones": {
+    "tsens_tz_sensor0": 63.0,
+    "tsens_tz_sensor1": 63.0,
+    "tsens_tz_sensor2": 61.0,
+    "tsens_tz_sensor4": 61.0,
+    "tsens_tz_sensor5": 64.0,
+    "pm8916_tz": 58.0,
+    "battery": 24.7
+   }
+  },
+  {
+   "phase": "coldstart-1",
+   "zones": {
+    "tsens_tz_sensor0": 70.0,
+    "tsens_tz_sensor1": 69.0,
+    "tsens_tz_sensor2": 65.0,
+    "tsens_tz_sensor4": 71.0,
+    "tsens_tz_sensor5": 73.0,
+    "pm8916_tz": 62.5,
+    "battery": 24.6
+   }
+  },
+  {
+   "phase": "coldstart-2",
+   "zones": {
+    "tsens_tz_sensor0": 72.0,
+    "tsens_tz_sensor1": 71.0,
+    "tsens_tz_sensor2": 69.0,
+    "tsens_tz_sensor4": 73.0,
+    "tsens_tz_sensor5": 74.0,
+    "pm8916_tz": 63.9,
+    "battery": 24.7
+   }
+  },
+  {
+   "phase": "coldstart-3",
+   "zones": {
+    "tsens_tz_sensor0": 73.0,
+    "tsens_tz_sensor1": 72.0,
+    "tsens_tz_sensor2": 70.0,
+    "tsens_tz_sensor4": 73.0,
+    "tsens_tz_sensor5": 75.0,
+    "pm8916_tz": 64.8,
+    "battery": 24.6
+   }
+  },
+  {
+   "phase": "end",
+   "zones": {
+    "tsens_tz_sensor0": 73.0,
+    "tsens_tz_sensor1": 72.0,
+    "tsens_tz_sensor2": 70.0,
+    "tsens_tz_sensor4": 74.0,
+    "tsens_tz_sensor5": 75.0,
+    "pm8916_tz": 64.5,
+    "battery": 24.6
+   }
+  }
+ ],
+ "notes": {
+  "good": "Light dashboards come closest: opening a view is quick, and live updates and more-info dialogs are fluid.",
+  "limits": "It slows down: light takes 480 ms to answer a tap, typical without a camera blocks for 4.5 s after it is drawn, and typical with a camera has a camera stream that shows no frame.",
+  "causes": [
+   "On heavy, the page was lost in 3 of 3 runs: the panel ran out of memory and its browser page was closed (low-memory killer)."
+  ],
+  "text": "Light dashboards come closest: opening a view is quick, and live updates and more-info dialogs are fluid. It slows down: light takes 480 ms to answer a tap, typical without a camera blocks for 4.5 s after it is drawn, and typical with a camera has a camera stream that shows no frame. On heavy, the page was lost in 3 of 3 runs: the panel ran out of memory and its browser page was closed (low-memory killer).",
+  "rubric": 2
+ }
+}

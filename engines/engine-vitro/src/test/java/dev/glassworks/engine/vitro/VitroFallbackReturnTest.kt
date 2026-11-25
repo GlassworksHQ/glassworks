@@ -445,16 +445,23 @@ class VitroFallbackReturnTest {
         val page = readyPage(fb, wall)
         awaitMain("an island") { fb.islandPages().isNotEmpty() }
         fun surfaceOf(p: RecordingPage) = (p.view as ViewGroup).getChildAt(0) as SurfaceView
-        val first = surfaceOf(fb.islandPages().first())
+        val island = fb.islandPages().single()
+        val first = surfaceOf(island)
 
         page.load("$base/energy")
         val fp = fb.fallbackPage()
         assertEquals(View.INVISIBLE, first.visibility)
 
-        // A theme change rebuilds the view behind the fallback: its new island opens hidden.
-        val islands = fb.islandPages().size
+        // A theme change rebuilds the view behind the fallback: the island keeps its page, and it stays hidden.
         vitroView(page).setUserTheme("night", true)
-        awaitMain("a rebuilt island") { fb.islandPages().size > islands }
+        idle()
+        assertEquals("the same page", listOf(island), fb.islandPages())
+        assertEquals("not drawn over HA's page", View.INVISIBLE, first.visibility)
+        assertEquals(View.VISIBLE, fp.view.visibility)
+
+        // The island's content process dies behind the fallback: its card opens a new page, hidden too.
+        fb.opens[fb.pages.indexOf(island)].host.onContentGone(killed = true)
+        awaitMain("a rebuilt island") { fb.islandPages().size > 1 }
         val rebuilt = surfaceOf(fb.islandPages().last())
         assertEquals("not drawn over HA's page", View.INVISIBLE, rebuilt.visibility)
         assertEquals(View.VISIBLE, fp.view.visibility)
@@ -463,6 +470,27 @@ class VitroFallbackReturnTest {
         idle()
         assertNative(page, fp)
         assertEquals(View.VISIBLE, rebuilt.visibility)
+    }
+
+    @Test fun anIslandKeptThroughARebuildBehindTheFallbackComesBackWithTheDashboard() {
+        val fb = RecordingEngine(surfaces = true)
+        val page = readyPage(fb, wall)
+        awaitMain("an island") { fb.islandPages().isNotEmpty() }
+        val island = fb.islandPages().single()
+        val surface = (island.view as ViewGroup).getChildAt(0) as SurfaceView
+
+        page.load("$base/energy")
+        val fp = fb.fallbackPage()
+        vitroView(page).setUserTheme("night", true)
+        idle()
+        assertEquals(View.INVISIBLE, surface.visibility)
+        assertFalse("and it doesn't run", island.active)
+
+        page.goBack()
+        idle()
+        assertNative(page, fp)
+        assertEquals("its surface shows with the dashboard", View.VISIBLE, surface.visibility)
+        assertTrue(island.active)
     }
 
     @Test fun pageCanGoBackSaysWhetherBackHasSomewhereToGo() {

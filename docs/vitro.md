@@ -1,0 +1,32 @@
+# Try Vitro
+
+Vitro is an experimental way for Glassworks to show your Home Assistant dashboard. Instead of loading the dashboard in a browser, the panel reads the dashboard you already have and draws each card with its own native views. It's meant for low-power panels, where the browser is the heaviest thing running. Your dashboard stays in Home Assistant, written the same way as before, and nothing gets installed there.
+
+> [!NOTE]
+> **Feature status:** Vitro is experimental and off by default. Some cards still look slightly different from Home Assistant, and some aren't drawn natively yet. Turning it off puts the panel back exactly as it was.
+
+## Turn it on
+
+1. Open **Settings → Labs** on the panel, or **Labs** on its Manage page in a browser.
+2. Turn on **Vitro renderer**.
+3. The app restarts and opens your dashboard with Vitro.
+
+To go back, turn **Vitro renderer** off the same way.
+
+## What works
+
+Vitro draws 32 of Home Assistant's built-in cards and 30 popular HACS cards natively, including the whole Mushroom set, Bubble Card buttons, button-card (when it doesn't use JavaScript templates), mini-graph-card, auto-entities, swipe-card, stack-in-card and layout-card. It reads your themes, your fonts and the card-mod styles it can draw the way Home Assistant does.
+
+A card Vitro can't draw yet still shows. A custom card opens in a small browser view of its own, so it looks the way it does in Home Assistant. A built-in card Vitro doesn't have, such as the map, shows a plain summary instead.
+
+To see how your own dashboard will do, paste it into the [Vitro compatibility check](https://www.glassworks.dev/blueprints#vitro-check). It runs in your browser and lists every card that won't be drawn natively, and why. The full list of cards, and what each one leaves out, is in [Vitro's README](../engines/engine-vitro/README.md#what-works).
+
+## Report a card that looks wrong
+
+Home Assistant's own look is the goal, so any difference is worth a report. [Open a bug report](https://github.com/GlassworksHQ/glassworks/issues/new?template=bug.yml) with:
+
+- the card's YAML, with entity names and anything private taken out,
+- a screenshot of the card in Home Assistant and one on the panel with Vitro on,
+- your panel and its Glassworks version.
+
+If the card doesn't show at all, or shows as a small browser view you didn't expect, the compatibility check's reason for that card helps too.

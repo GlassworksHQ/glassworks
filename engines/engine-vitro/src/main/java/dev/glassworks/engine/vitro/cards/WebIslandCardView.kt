@@ -37,10 +37,46 @@ class WebIslandCardView(
     /** The card the island draws: its config, card_mod included, is what the island page receives. */
     internal val config: CardConfig,
     private val fillViewport: Boolean = false,
+    /**
+     * The island of an earlier build of this very card ([keyOf] equal), which [handOff] gave up: this card takes its
+     * page and slot instead of opening a new page, and restyles it to its own theme. Null opens a new page.
+     */
+    adopted: Island? = null,
 ) : CardSurface(ctx) {
+
+    /**
+     * An island's page and its slot on the island server, between a card that let it go ([handOff]) and the next
+     * build of that card, which takes it. [close] ends it when no build does.
+     */
+    class Island internal constructor(
+        val key: String,
+        internal val page: Page,
+        internal val slotId: String,
+        /** The island's height when it was handed off (it reports a new one only when its content resizes). */
+        internal val height: Int,
+        private val server: VitroIslandServer,
+        /** The page walked `hass.states` and asked for the registries: it asks once, so the next card keeps them up. */
+        internal val walksAllStates: Boolean = false,
+        internal val registriesAsked: Boolean = false,
+    ) {
+        fun close() {
+            server.unregisterSlot(slotId)
+            page.close()
+        }
+    }
+
     private val watchedEntities = CopyOnWriteArraySet<String>()
     private var slotId: String? = null
     private var islandPage: Page? = null
+
+    /** True once the island left this card for good ([release]) or for its next build ([handOff]). */
+    private var islandGone = false
+
+    /** Whether the island's page is active ([setShown]); a new page starts active. */
+    private var pageActive = true
+
+    /** A release queued by a detach, which an attach before it runs takes back (a layout that moves its cards). */
+    private val releaseIfDetached = Runnable { if (!isAttachedToWindow) release() }
     /** The senders of the bridge sockets open for this island (a replacement can connect before the old one closes). */
     private val senders = CopyOnWriteArraySet<(JSONObject) -> Unit>()
 
@@ -89,8 +125,11 @@ class WebIslandCardView(
 
                 override fun onConnected(send: (JSONObject) -> Unit) {
                     // The snapshot goes first: no patch for this socket can be queued before it (the observer
-                    // below takes the same lock).
+                    // below takes the same lock). This card's theme before it: a page an earlier build of the card
+                    // handed over was drawn in that build's.
                     synchronized(seedLock) {
+                        send(themeMessage())
+                        send(authMessage(currentToken()))
                         seedInitialStates(send)
                         registries?.let { send(registriesMessage(it)) }
                         senders += send
@@ -106,25 +145,45 @@ class WebIslandCardView(
                     synchronized(seedLock) { senders -= send }
                 }
             }
-            val (id, url) = server.registerSlot(handler)
+            // The earlier build's page, if its slot is still there: the slot now answers to this card.
+            val kept = adopted?.takeIf { server.replaceSlot(it.slotId, handler) }
+            if (adopted != null && kept == null) adopted.close()
+            val (id, url) = if (kept != null) kept.slotId to "" else server.registerSlot(handler)
             idRef = id
             slotId = id
 
-            val page = opener(url)
+            val page = kept?.page ?: opener(url)
             if (page != null) {
                 islandPage = page
-                val h = if (fillViewport) LayoutParams.MATCH_PARENT else ctx.px(160f)
+                val h = if (fillViewport) LayoutParams.MATCH_PARENT else kept?.height ?: ctx.px(160f)
                 addView(page.view, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, h))
-                page.load(url)
+                if (kept == null) page.load(url)
+                if (kept != null) {
+                    // The page asked for these once, from the card before this one.
+                    if (kept.walksAllStates) {
+                        walksAllStates = true
+                        ctx.watchAllEntities()
+                    }
+                    if (kept.registriesAsked) askRegistries()
+                }
 
                 // `send` only queues (the island server writes on the socket's own thread): this runs on HA's event
                 // thread under the store's write lock, where a write to a browser that stopped reading would block.
-                track(ctx.store.subscribeAny { changed ->
-                    synchronized(seedLock) {
-                        if (senders.isEmpty()) return@subscribeAny
-                        patchFor(changed)?.let { patch -> senders.forEach { it(patch) } }
+                // Renewed on attach: a layout that moves the card detaches and attaches it, and the island stays.
+                renewing {
+                    ctx.store.subscribeAny { changed ->
+                        synchronized(seedLock) {
+                            if (senders.isEmpty()) return@subscribeAny
+                            // A token that changed and wasn't sent yet goes before the patch (belt and braces: the
+                            // token watcher below sends it as it arrives).
+                            sendTokenIfChanged()
+                            patchFor(changed)?.let { patch -> senders.forEach { it(patch) } }
+                        }
                     }
-                })
+                }
+                // A new token (a reconnect refreshed it) goes to the page as it arrives, with no state change needed: a
+                // reconnect that changed no state sends no patch.
+                renewing { ctx.watchToken { synchronized(seedLock) { sendTokenIfChanged() } } }
             } else {
                 server.unregisterSlot(id)
                 slotId = null
@@ -229,19 +288,7 @@ class WebIslandCardView(
                 walksAllStates = true
                 ctx.watchAllEntities()
             }
-            "registries" -> {
-                if (!registriesAsked.compareAndSet(false, true)) return
-                val release = ctx.watchRegistries { set ->
-                    synchronized(seedLock) {
-                        registries = set
-                        val msg = registriesMessage(set)
-                        senders.forEach { it(msg) }
-                    }
-                }
-                registriesRelease.set(release)
-                // Detached while the feed was being asked for: give it back at once.
-                if (detached) releaseRegistries()
-            }
+            "registries" -> askRegistries()
             "resize" -> {
                 if (fillViewport) return
                 val cssH = msg.optInt("height", 160).coerceIn(48, 1200)
@@ -289,21 +336,149 @@ class WebIslandCardView(
         }
     }
 
+    /** Whether the island's page is one of [pages]. */
+    fun holds(pages: Set<Page>): Boolean = islandPage?.let { it in pages } == true
+
+    /**
+     * Shows or hides the island's page ([Page.setActive]): a page on a view that isn't on screen stops painting.
+     * Main thread.
+     */
+    fun setShown(shown: Boolean) {
+        if (shown == pageActive) return
+        pageActive = shown
+        islandPage?.setActive(shown)
+    }
+
+    /**
+     * Gives the island up for the next build of this card (the view is being built again), or null when it has none.
+     * The page leaves this card; its slot stays until that build takes it ([Island]) or [Island.close] ends it. Until
+     * then the slot answers to no card: what the page sends meanwhile reaches nothing.
+     */
+    fun handOff(): Island? {
+        if (islandGone) return null
+        val page = islandPage ?: return null
+        val id = slotId ?: return null
+        val server = ctx.islandServer ?: return null
+        islandGone = true
+        detached = true
+        releaseRegistries()
+        server.replaceSlot(id, PARKED)
+        val height = page.view.layoutParams?.height ?: ctx.px(160f)
+        removeView(page.view)
+        senders.clear()
+        islandPage = null
+        slotId = null
+        // What the page asked for once, and won't ask again: the next card keeps it up.
+        return Island(keyOf(config, fillViewport), page, id, height, server, walksAllStates, registriesAsked.get())
+    }
+
+    /** Holds the shared registry feed for the page, once, until the island leaves this card. */
+    private fun askRegistries() {
+        if (!registriesAsked.compareAndSet(false, true)) return
+        val release = ctx.watchRegistries { set ->
+            synchronized(seedLock) {
+                registries = set
+                val msg = registriesMessage(set)
+                senders.forEach { it(msg) }
+            }
+        }
+        registriesRelease.set(release)
+        // Gone while the feed was being asked for: give it back at once.
+        if (detached) releaseRegistries()
+    }
+
     private fun releaseRegistries() {
         registriesRelease.getAndSet(null)?.invoke()
     }
 
-    override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
+    /** Closes the island for good: its slot goes and its page ([Page.close]) stops. Main thread; once. */
+    fun release() {
+        ctx.main.removeCallbacks(releaseIfDetached)
+        if (islandGone) return
+        islandGone = true
         detached = true
         releaseRegistries()
         senders.clear()
         slotId?.let { ctx.islandServer?.unregisterSlot(it) }
         slotId = null
+        islandPage?.close()
         islandPage = null
     }
 
+    override fun onAttachedToWindow() {
+        val wasDetached = attachedOnce
+        attachedOnce = true
+        super.onAttachedToWindow()
+        ctx.main.removeCallbacks(releaseIfDetached)
+        // Back from a move (the observer was off while detached): the page catches up on what changed meanwhile.
+        if (wasDetached && !islandGone) synchronized(seedLock) { senders.forEach { seedInitialStates(it) } }
+    }
+
+    /** True once the card was first attached: a later attach is a return. */
+    private var attachedOnce = false
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        // A card that left the tree is gone, unless it comes back before the next turn of the main loop (a layout
+        // that moves its cards between columns detaches and attaches them at once): then it keeps its island.
+        if (!islandGone) ctx.main.post(releaseIfDetached)
+    }
+
+    /** The bridge message that restyles the island to this card's theme. */
+    private fun themeMessage(): JSONObject = JSONObject()
+        .put("type", "theme")
+        .put("css", themeCss(ctx, fillViewport))
+        .put("dark", ctx.theme.dark)
+        .put("name", ctx.theme.name)
+
+    /** The token sent to the page last (under [seedLock]). */
+    private var sentToken: String? = null
+
+    private fun currentToken(): String = ctx.accessToken().orEmpty()
+
+    /** Sends the current token to the open bridges if it isn't the one sent last. Under [seedLock]. */
+    private fun sendTokenIfChanged() {
+        if (senders.isEmpty()) return
+        val token = currentToken()
+        if (token != sentToken) {
+            val msg = authMessage(token)
+            senders.forEach { it(msg) }
+        }
+    }
+
+    /** The bridge message with the sign-in the page's own requests use. Under [seedLock]. */
+    private fun authMessage(token: String): JSONObject {
+        sentToken = token
+        return JSONObject().put("type", "auth").put("token", token)
+    }
+
     companion object {
+        /**
+         * What makes two builds of a card the same island: its whole config and whether it fills the view. A
+         * rebuild that only changed the theme, or other cards, hands the island over ([handOff]) instead of opening
+         * a new page.
+         */
+        fun keyOf(config: CardConfig, fillViewport: Boolean): String = (if (fillViewport) "fill:" else "card:") + config.raw
+
+        /** A handed-off island's slot until the next build takes it: it serves nothing and drops what the page sends. */
+        private val PARKED = object : VitroIslandServer.SlotHandler {
+            override val html: String get() = "<!DOCTYPE html>"
+            override fun onConnected(send: (JSONObject) -> Unit) {}
+            override fun onMessage(msg: JSONObject, send: (JSONObject) -> Unit) {}
+            override fun onDisconnected(send: (JSONObject) -> Unit) {}
+        }
+
+        /**
+         * The island's theme: its variables, and for a full-viewport island the page's background. A full-viewport
+         * island is the view: under a card shorter than the screen the theme's background shows, as in HA's panel
+         * view, not the white GeckoView draws behind a transparent page. A theme change sends it again. `html:root`
+         * outranks the page's own `html, body { background: transparent }`, which comes after this block.
+         */
+        internal fun themeCss(ctx: VitroCardContext, fillViewport: Boolean): String {
+            val vars = ctx.theme.toCssRootBlock()
+            return if (fillViewport) vars + "html:root { background-color: ${ctx.theme.hex(ctx.theme.backgroundColor)}; }\n" else vars
+        }
+
         /** The bridge message that replaces an island's `hass.entities`, `devices`, `areas` and `floors`. */
         internal fun registriesMessage(set: JSONObject): JSONObject =
             JSONObject().put("type", "registries").put("registries", set)
@@ -364,7 +539,7 @@ class WebIslandCardView(
             slotId: String = "s0",
         ): String {
             val tag = config.type.removePrefix("custom:")
-            val cssVars = ctx.theme.toCssRootBlock()
+            val themeCss = themeCss(ctx, fillViewport)
             val resourceScripts = ctx.resources.joinToString("\n") { r ->
                 val inlineJs = decodeInlineModule(r.url)
                 when {
@@ -379,23 +554,20 @@ class WebIslandCardView(
             val haUserJson = islandUser(ctx.haUser())?.toString() ?: "null"
             val tokenJson = JSONObject.quote(ctx.accessToken().orEmpty())
             val heightRule = if (fillViewport) "height: 100vh; width: 100vw;" else ""
-            // A full-viewport island is the view: under a card shorter than the screen the theme's background shows,
-            // as in HA's panel view, not the white GeckoView draws behind a transparent page.
-            val pageBackground = if (fillViewport) "html { background-color: ${ctx.theme.hex(ctx.theme.backgroundColor)}; }" else ""
             return """
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<style id="vitro-theme">
+$themeCss</style>
 <style>
-$cssVars
 /* The island is the card's whole page, with no HA header above it: a card that takes var(--header-height) off the
    viewport's height fills it, as in HA's kiosk view (the header hidden, its height 0). */
 :root { --header-height: 0px; }
 html, body { margin: 0; padding: 0; background: transparent; color: var(--primary-text-color); font-family: Inter, system-ui, sans-serif; overflow: hidden; $heightRule }
 #mount { width: 100%; ${if (fillViewport) "height: 100vh;" else ""} }
-$pageBackground
 ha-card { display: block; background: var(--ha-card-background, var(--card-background-color)); border-radius: var(--ha-card-border-radius, 12px); color: var(--primary-text-color); }
 ha-card.vitro-fallback { padding: 12px 16px; }
 .vitro-title { font-size: 1.15em; font-weight: 500; padding-bottom: 8px; }
@@ -751,7 +923,7 @@ $resourceScripts
 const rawStates = {};
 const haConfig = $haCfgJson;
 const haUser = $haUserJson;
-const accessToken = $tokenJson;
+let accessToken = $tokenJson;
 const wsPending = new Map();
 // Lines waiting for the bridge: { line, id } (id: the call's, when it is one).
 const outQueue = [];
@@ -760,6 +932,7 @@ const outQueue = [];
 const QUEUED_CALL_MS = 5000;
 let wsId = 1;
 let sock = null;
+let bridgeOpened = false;
 
 function sendBridge(obj, id) {
   const line = JSON.stringify(obj) + '\n';
@@ -932,6 +1105,7 @@ function connectBridge() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   sock = new WebSocket(proto + '//' + location.host + '/__vitro/ws/' + ${JSONObject.quote(slotId)});
   sock.onopen = () => {
+    bridgeOpened = true;
     while (outQueue.length) sock.send(outQueue.shift().line);
     for (const entry of wsPending.values()) entry.sent = true;
   };
@@ -940,7 +1114,20 @@ function connectBridge() {
     for (const line of lines) {
       let m;
       try { m = JSON.parse(line); } catch (e) { continue; }
-      if (m.type === 'snapshot' && m.states) {
+      if (m.type === 'auth' && typeof m.token === 'string') {
+        // The sign-in now: a reconnect may have refreshed it since the page loaded.
+        if (m.token !== accessToken) {
+          accessToken = m.token;
+          hassBase.auth = { data: { access_token: accessToken, hassUrl: location.origin }, accessToken };
+          if (cardEl) cardEl.hass = makeHass();
+        }
+      } else if (m.type === 'theme') {
+        // The card's theme now (a theme change kept this page): its variables, and hass.themes for the card.
+        const style = document.getElementById('vitro-theme');
+        if (style && typeof m.css === 'string') style.textContent = m.css;
+        hassBase.themes = Object.assign({}, hassBase.themes, { darkMode: !!m.dark, default_theme: String(m.name || '') });
+        if (cardEl) cardEl.hass = makeHass();
+      } else if (m.type === 'snapshot' && m.states) {
         // A (re)connect: the whole store, replacing what the island had.
         for (const id of Object.keys(rawStates)) delete rawStates[id];
         Object.assign(rawStates, m.states);
@@ -969,8 +1156,20 @@ function connectBridge() {
     for (const [id, entry] of wsPending) {
       if (entry.sent) { wsPending.delete(id); entry.reject(new Error('Connection lost')); }
     }
-    setTimeout(connectBridge, 1500);
+    // A bridge that was open closes when the card hands this page to its next build: connect again at once. One
+    // that never opened waits.
+    const quick = bridgeOpened;
+    bridgeOpened = false;
+    setTimeout(retryBridge, quick ? 50 : 1500);
   };
+}
+
+// Connects again unless the slot is gone: a closed island's page stops here instead of retrying for good.
+function retryBridge() {
+  fetch('/__vitro/ws/' + ${JSONObject.quote(slotId)}, { cache: 'no-store' }).then(
+    (r) => { if (r.status !== 404) connectBridge(); },
+    () => setTimeout(retryBridge, 1500),
+  );
 }
 
 async function boot() {

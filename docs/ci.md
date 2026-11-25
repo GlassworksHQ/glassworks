@@ -45,7 +45,7 @@ A pattern matches a path and everything under it. `*` stays within one folder, `
 | api23 | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `tools/legacy` |
 | libs-publish | `libs`, `build-logic`, `LICENSE`, `LICENSES`, `THIRD-PARTY-NOTICES.md`, `tools/release/check-lib-artifact.sh`, `tools/release/lib-consumer-check.sh` |
 | wake-word | `libs`, `build-logic`, `tools/voice` |
-| web | anything but `**/*.md`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/{*.kt,*.java}`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/{test,androidTest}/**`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/*/res/**`, `!testing/kotlin/dev/glassworks/testing/RepoFiles.kt`, `!core/src/main/res/font/**`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/model/LovelaceModel.kt`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/compat/VitroSupport.kt` |
+| web | anything but `**/*.md`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/{*.kt,*.java}`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/{test,androidTest}/**`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/*/res/**`, `!testing/kotlin/dev/glassworks/testing/RepoFiles.kt`, `!core/src/main/res/font/**`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/model/LovelaceModel.kt`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/compat/VitroSupport.kt`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/cards/HacsParityCards.kt` |
 | refract | `kiln/workers` |
 | scripts: Clarity tests (ffmpeg, fast and slow sets) | `tools/perf`, `frames/*/budgets.json`, `frames/*/clarity`, `docs/perf.md` |
 | perf-webrtc | `tools/perf`, `frames/*/budgets.json`, `frames/*/clarity` |
@@ -56,7 +56,7 @@ A pattern matches a path and everything under it. `*` stays within one folder, `
 | site | `site`, `packages`, `frames`, `docs`, `tools/perf/grade.ts`, `tools/perf/page/rubric.json`, `**/*.md`, `libs/*/build.gradle.kts`, `libs/*/gradle.properties`; or deletes or renames any file |
 <!-- end -->
 
-`scripts` always runs: its install script tests, tool tests, this selector's tests and the docs' link check take seconds. Its
+`scripts` always runs: its install script tests, tool tests, this selector's tests, the docs' link check and the status-label check take seconds. Its
 Clarity tests (ffmpeg, the fast and slow sets) run only on their row.
 
 Some rows need explaining.
@@ -82,7 +82,7 @@ Android PR in a shared pool (see above).
 
 | Job | What | Runs |
 |---|---|---|
-| `conformance (API 23, 26, 29, 34)` | The core's conformance test (`core/src/androidTest`) | push to `main` when Android code changes, nightly at 03:17 UTC (`pr.yml`'s time), by hand |
+| `conformance (API 23, 26, 29, 34)` | The core's conformance test (`core/src/androidTest`), and on API 23 and 34 the [engine contract](engine-contract.md) (`engines/conformance`) on the same emulator | push to `main` when Android code changes, nightly at 03:17 UTC (`pr.yml`'s time), by hand |
 | `libs-api23` | `esphome-api-android` and `improv` androidTest on Android 6 | the same |
 | `legacy-verify` | The generic app's legacy APK (the Mirror's) installed on Android 6: fails when its verifier rejects a Glassworks class (`tools/legacy/verify-api23.sh`, #435). Before a Mirror flash, run the script on the build you flash | the same |
 | `report` | Opens, updates or closes the red-main issue | after those two, on `main` only |
@@ -133,6 +133,30 @@ default tries a request 3 times in 3 s and then stops asking that repository for
 failed, and its rerun failed the same way. So `pr.yml` and `core-emulators.yml` give Gradle 7 tries, 2 s apart and
 twice as long each time (`GRADLE_OPTS` at the top of each), and a burst waits out the limit instead.
 `tools/ci/test/test_changes.py` checks that every workflow restoring Gradle's home sets it.
+
+The waits weren't enough. On 2026-11-24 Central's 429s still hit lint's own jars (groovy, kotlin-reflect,
+kotlin-stdlib, httpclient) in `extractReleaseAnnotations` and `generateDebugUnitTestLintModel`, and Robolectric's
+fetch of its Android jars in the middle of a test run. So every build asks Google's mirror of Maven Central,
+`https://maven-central.storage-download.googleapis.com/maven2/`, before Central itself:
+
+| Who downloads | Where it's set | When the mirror can't help |
+|---|---|---|
+| Gradle: dependencies and plugins | Every `repositories` block (`settings.gradle.kts`, `build-logic/settings.gradle.kts`, `tools/mirror/probe-app/settings.gradle.kts`): `google()`, then the mirror, then `mavenCentral()` | Gradle chooses a repository per module, not per file: it asks Central only for a module whose metadata (its `.pom` or `.module`) the mirror doesn't have, a 404, such as a release the mirror hasn't copied yet. Once the mirror has served a module's metadata, Gradle takes all of that module's files from the mirror, so a file missing there fails the build without asking Central. Any other error from the mirror fails the build too, after the tries above, as it would from Central |
+| Robolectric: its Android jars | `robolectric.dependency.repo.url` on every `Test` task, in `glassworks.android` | Robolectric 4.17 takes one repository, so it never falls back to Central. The jars are old releases the mirror has, and a job with the `robolectric-…` cache below doesn't fetch them at all |
+
+The mirror serves Central's files byte for byte, with the same checksum files, so Gradle's and Robolectric's
+checksum checks pass the same. The repo has no `gradle/verification-metadata.xml`. Gradle keeps its dependency
+metadata per repository, so until a run on `main` saves Gradle's home again, a run asks the mirror about each file
+it already has (the files themselves stay, and Central isn't asked). `tools/ci/test/test_changes.py` checks that every `mavenCentral()` follows the mirror
+and that the convention plugin sets Robolectric's.
+
+Gradle asks the repositories in a list in turn until one has the module, and any answer but a 404 ends the search.
+So a repository in front of the one that hosts a module can lose it for the build, which is why a plugin that only
+the plugin portal hosts goes to the portal alone. On #868's first run, build-logic's `kotlin-dsl` plugin was asked of Google, the mirror and then Central before the
+portal. On a clean runner Central's answer wasn't a 404, and the build lost the plugin. build-logic now sends the
+`org.gradle.kotlin` groups to the portal only (`exclusiveContent`). To check a change like this before CI,
+`tools/ci/gradle-without-central.sh` runs `./gradlew help` (or the tasks you name) the way a clean runner does, with
+an empty Gradle home, and Central refuses every request. The build must pass without it.
 
 To clear a bad entry by hand, delete that job's `gradle-home-v2|Linux-X64|<job>[…]` entries on `main`
 (`gh cache list --ref refs/heads/main`, then `gh cache delete <id>`). The next run starts from another

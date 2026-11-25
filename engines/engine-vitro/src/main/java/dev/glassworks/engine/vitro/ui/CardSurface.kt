@@ -104,6 +104,11 @@ class VitroCardContext(
      */
     val watchRegistries: (onChange: (JSONObject) -> Unit) -> () -> Unit = { { } },
     /**
+     * [onChange] runs (on any thread) each time the page gets a new Home Assistant token, until the returned handle is
+     * called: a web island whose page stays sends it the new one. The default (tests, no engine) never calls it.
+     */
+    val watchToken: (onChange: () -> Unit) -> () -> Unit = { { } },
+    /**
      * Whether the screen takes a tap (the frame's `input`), which is what HA's page reads as `(pointer: coarse)` in
      * the browser on that device. False on a frame without touch (the Mirror): HA there styles for a fine pointer.
      */
@@ -158,6 +163,7 @@ class VitroCardContext(
         watchEntity = watchEntity,
         watchAllEntities = watchAllEntities,
         watchRegistries = watchRegistries,
+        watchToken = watchToken,
         touch = touch,
     ).also {
         it.cardVars = cardVars
@@ -402,6 +408,40 @@ class VitroCardContext(
         }
     }
 
+    /**
+     * Loads an SVG image (weather-card's icons, from its `icons:` folder or its CDN, as the browser would) and parses it
+     * with [dev.glassworks.engine.vitro.cards.MdSvg]'s subset, delivering on the main thread: null when it can't be
+     * fetched, is over 512 KB or isn't an SVG Vitro reads. Parsed images are kept, so a dashboard reads each once.
+     * Only Home Assistant's own origin gets the panel's token.
+     */
+    fun loadSvg(rawUrl: String, done: (dev.glassworks.engine.vitro.cards.MdSvg?) -> Unit) {
+        val fullUrl = absoluteUrl(rawUrl)
+        synchronized(SVG_CACHE) { SVG_CACHE[fullUrl] }?.let { hit -> done(hit); return }
+        pendingImageLoads.incrementAndGet()
+        // A clear while it's in flight (another sign-in) keeps its image out of the cache and off the card.
+        val generation = cacheGeneration
+        IMAGE_POOL.execute {
+            val svg = runCatching {
+                val conn = (URL(fullUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 5_000
+                    readTimeout = 8_000
+                    haToken(fullUrl)?.let { setRequestProperty("Authorization", "Bearer $it") }
+                }
+                try {
+                    if (conn.responseCode in 200..299) {
+                        dev.glassworks.engine.vitro.cards.MdSvg.parse(String(conn.inputStream.use { VitroIslandServer.readCapped(it, MAX_SVG_BYTES) }, Charsets.UTF_8))
+                    } else {
+                        null
+                    }
+                } finally {
+                    conn.disconnect()
+                }
+            }.getOrNull()
+            if (svg != null) synchronized(SVG_CACHE) { if (generation == cacheGeneration) SVG_CACHE[fullUrl] = svg }
+            main.post { try { done(svg?.takeIf { generation == cacheGeneration }) } finally { pendingImageLoads.decrementAndGet() } }
+        }
+    }
+
     /** An embedded picture: the decoded [bitmap] (maybe sampled down) and the image's own [width] and [height]. */
     class Embedded(val bitmap: Bitmap, val width: Int, val height: Int)
 
@@ -475,6 +515,14 @@ class VitroCardContext(
 
         fun isToggleable(entityId: String?): Boolean = entityId != null && entityId.substringBefore('.') in TOGGLE_DOMAINS
 
+        /** SVGs [loadSvg] parsed, by address (a few weather icons). */
+        private val SVG_CACHE = object : LinkedHashMap<String, dev.glassworks.engine.vitro.cards.MdSvg>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, dev.glassworks.engine.vitro.cards.MdSvg>?) = size > 32
+        }
+
+        /** The largest SVG [loadSvg] reads. */
+        private const val MAX_SVG_BYTES = 512 shl 10
+
         /** The largest encoded image [loadImage] reads; past it the load fails (null). */
         private const val MAX_IMAGE_BYTES = 12 shl 20
 
@@ -497,6 +545,7 @@ class VitroCardContext(
             // A load already on its way under the old sign-in doesn't put its image back afterwards.
             cacheGeneration++
             IMAGE_CACHE.evictAll()
+            synchronized(SVG_CACHE) { SVG_CACHE.clear() }
         }
 
         @Volatile private var cacheGeneration = 0

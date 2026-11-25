@@ -3,6 +3,11 @@
 
 Exits 0 if the entire dashboard renders 100% natively in Vitro (zero Tier 3 GeckoView triggers),
 or exits 1 if any card would boot GeckoView.
+
+Routes cards the way the engine does (compat/CardCompat.kt): a custom card with something Vitro can't draw goes
+to an island; a built-in card stays native and gets a WARN line instead, because the island can't draw built-in
+cards. Its card_mod check is coarser than the engine's: the site's checker (glassworks.dev/blueprints#vitro-check)
+and the panel's own report read every property.
 """
 import argparse
 import json
@@ -42,6 +47,7 @@ NATIVE_CORE_TYPES = {
     "humidifier",
     "calendar",
     "logbook",
+    "entity-button",
 }
 
 NATIVE_HACS_TYPES = {
@@ -71,6 +77,10 @@ NATIVE_HACS_TYPES = {
     "custom:stack-in-card",
     "custom:vertical-stack-in-card",
     "custom:layout-card",
+    "custom:button-card",
+    "custom:mushroom-empty-card",
+    "custom:swipe-card",
+    "custom:weather-card",
 }
 
 SUPPORTED_TILE_FEATURES = {
@@ -98,6 +108,33 @@ CONFIG_DEPENDENT_TYPES = {
     "custom:layout-card": ("layout_type", "masonry-layout", {"masonry-layout", "horizontal-layout", "vertical-layout", "grid-layout"}),
 }
 
+# `entities` rows with a `type:` Vitro draws; a row without one is a plain entity row.
+ENTITIES_ROW_TYPES = {"divider", "section"}
+
+# Options of an `entities` card Vitro doesn't draw.
+ENTITIES_UNSUPPORTED_OPTIONS = {"header", "footer"}
+
+# `picture-elements` element types Vitro draws.
+PICTURE_ELEMENT_TYPES = {"state-icon", "state-label", "state-badge", "icon", "service-button"}
+
+# Mushroom chip types Vitro draws; `conditional` wraps one of the others.
+CHIP_TYPES = {"entity", "template", "weather", "light", "action", "menu", "back", "spacer", "conditional"}
+
+# Tags HA's Markdown sanitizer keeps that Vitro doesn't draw.
+UNDRAWN_MARKDOWN_TAGS = {
+    "audio",
+    "video",
+    "source",
+    "picture",
+    "details",
+    "summary",
+    "input",
+    "area",
+    "ha-alert",
+    "ha-qr-code",
+    "ha-svg-icon",
+}
+
 CONTAINER_TYPES = {
     "grid",
     "horizontal-stack",
@@ -106,7 +143,164 @@ CONTAINER_TYPES = {
     "custom:stack-in-card",
     "custom:vertical-stack-in-card",
     "custom:layout-card",
+    "custom:swipe-card",
 }
+
+
+# checker (site/src/lib/vitroButtonCard.ts) also check its styles; this script only reports those as a warning.
+BUTTON_CARD_JS = re.compile(r"^\[\[\[(?!\[).*(?<!\])\]\]\]$", re.S)
+
+
+def _merge(prev, obj):
+    """button-card's mergeDeep: lists concatenate, maps merge, anything else replaces."""
+    out = dict(prev)
+    for k, o in obj.items():
+        p = out.get(k)
+        if isinstance(p, list) and isinstance(o, list):
+            out[k] = p + [y for x in o for y in (x if isinstance(x, list) else [x])]
+        elif isinstance(p, dict) and isinstance(o, dict):
+            out[k] = _merge(p, o)
+        else:
+            out[k] = o
+    return out
+
+
+def _merge_states(into, frm):
+    """button-card's mergeStatesById: entries with the same truthy id merge, the others follow."""
+    out = []
+    for s in into or []:
+        local = s
+        for f in frm or []:
+            if isinstance(f, dict) and isinstance(s, dict) and f.get("id") and s.get("id") and f["id"] == s["id"] and isinstance(local, dict):
+                local = _merge(local, f)
+        out.append(local)
+    for f in frm or []:
+        fid = f.get("id") if isinstance(f, dict) else None
+        if not into or not fid or not any(isinstance(s, dict) and s.get("id") and s["id"] == fid for s in into):
+            out.append(f)
+    return out
+
+
+def expand_button_card(card: dict, templates: dict, depth: int = 0):
+    """The card with its `template:` merged in from button_card_templates, or None when one is missing or they loop."""
+    tpl = card.get("template")
+    if not tpl:
+        return card
+    if depth > 32:
+        return None
+    result, states = {}, None
+    for name in tpl if isinstance(tpl, list) else [tpl]:
+        t = templates.get(name) if isinstance(name, str) else None
+        res = expand_button_card(t, templates, depth + 1) if isinstance(t, dict) else None
+        if res is None:
+            return None
+        result = _merge(result, res)
+        if isinstance(res.get("state"), list):
+            states = _merge_states(states, res["state"])
+    result = _merge(result, {k: v for k, v in card.items() if k != "template"})
+    # `state` entries merge by id, not by concatenation (non-list states are left for the caller to report).
+    if states is not None or isinstance(card.get("state"), list):
+        result["state"] = _merge_states(states, card.get("state") if isinstance(card.get("state"), list) else None)
+    return result
+
+
+def button_card_reason(card: dict, templates: dict) -> str | None:
+    cfg = expand_button_card(card, templates)
+    if cfg is None:
+        return "a template that isn't in button_card_templates"
+
+    def js(v, top=True):
+        if isinstance(v, str):
+            return bool(BUTTON_CARD_JS.match(v.strip()))
+        if isinstance(v, dict):
+            return any(js(x, False) for k, x in v.items() if not (top and k == "variables"))
+        if isinstance(v, list):
+            return any(js(x, False) for x in v)
+        return False
+
+    if js(cfg):
+        return "JavaScript templates ([[[ ]]])"
+    # Options and actions the engine's ButtonCardCompat doesn't run natively (VitroSupport's button-card lists).
+    for key in BUTTON_CARD_UNSUPPORTED_OPTIONS:
+        if key not in cfg:
+            continue
+        v = cfg[key]
+        on = (isinstance(v, dict) and v.get("action") not in (None, "", "none")) or (isinstance(v, str) and v != "") \
+            if key.endswith("_action") else bool(v)
+        if on:
+            return f"{key}:"
+    for key in ("tap_action", "hold_action", "double_tap_action"):
+        a = cfg.get(key)
+        if not isinstance(a, dict) or a.get("action") in (None, "", "none"):
+            continue
+        if not isinstance(a.get("action"), str) or a["action"] not in BUTTON_CARD_ACTIONS:
+            return f"a {key} type it doesn't run natively"
+        if any(a.get(f) for f in ("repeat", "repeat_limit", "sound", "protect")):
+            return f"a {key} it doesn't run natively"
+        if isinstance(a.get("confirmation"), dict) and "exemptions" in a["confirmation"]:
+            return f"{key} confirmation exemptions"
+    if isinstance(cfg.get("confirmation"), dict) and "exemptions" in cfg["confirmation"]:
+        return "confirmation exemptions"
+    layout = cfg.get("layout")
+    if layout is not None and (not isinstance(layout, str) or layout not in BUTTON_CARD_LAYOUTS):
+        return "a layout it doesn't draw natively"
+    # button-card evaluates a `force_eval` variable on every render, JavaScript or not (the engine sends it to an island).
+    variables = cfg.get("variables") if isinstance(cfg.get("variables"), dict) else {}
+    if any(isinstance(v, dict) and v.get("force_eval") is True for v in variables.values()):
+        return "variables with force_eval"
+    fields = cfg.get("custom_fields") if isinstance(cfg.get("custom_fields"), dict) else {}
+    if any(isinstance(v, dict) and "card" in v for v in fields.values()):
+        return "a card in custom_fields"
+    if cfg.get("state") is not None and not isinstance(cfg.get("state"), list):
+        return "a state: that isn't a list"
+    texts = [cfg] + [st for st in (cfg.get("state") or []) if isinstance(st, dict)]
+    if any(isinstance(t.get(k), str) and re.search(r"<[a-zA-Z/!]", t[k]) for t in texts for k in ("name", "label", "state_display")):
+        return "HTML in its texts"
+    return None
+
+
+TEMPLATES: dict = {}
+
+# VitroSupport.BUTTON_CARD_UNSUPPORTED_OPTIONS, BUTTON_CARD_ACTIONS and BUTTON_CARD_LAYOUTS (buttonCard in
+# site/public/vitro-compat.json).
+BUTTON_CARD_UNSUPPORTED_OPTIONS = {
+    "show_live_stream", "spinner", "protect", "extra_styles", "press_action", "release_action", "icon_tap_action",
+    "icon_hold_action", "icon_double_tap_action", "icon_press_action", "icon_release_action",
+}
+BUTTON_CARD_ACTIONS = {"none", "toggle", "more-info", "navigate", "url", "call-service", "perform-action"}
+BUTTON_CARD_LAYOUTS = {
+    "vertical", "icon_name_state", "name_state", "icon_name", "icon_state", "icon_name_state2nd",
+    "icon_state_name2nd", "icon_label",
+}
+
+# Swiper parameters Vitro's native swipe-card reads (VitroSupport.SWIPE_CARD_PARAMETERS, swipeCardParameters in
+# site/public/vitro-compat.json).
+SWIPE_CARD_PARAMETERS = {
+    "pagination", "loop", "slidesPerView", "spaceBetween", "centeredSlides", "initialSlide", "autoplay",
+    "speed", "grabCursor", "keyboard", "mousewheel", "simulateTouch", "observer", "observeParents", "roundLengths",
+}
+
+
+def swipe_card_reason(card: dict) -> str | None:
+    """What the engine's CardCompat doesn't run natively on a swipe-card: unknown parameters and the values it reads."""
+    params = card.get("parameters") if isinstance(card.get("parameters"), dict) else {}
+    for k in params:
+        if k not in SWIPE_CARD_PARAMETERS:
+            return f"parameter {k}"
+    if "pagination" in params:
+        p = params["pagination"]
+        ptype = (p.get("type") or "bullets") if isinstance(p, dict) else "bullets"
+        if ptype not in ("bullets", "fraction"):
+            return f"pagination type {ptype}"
+        if isinstance(p, dict) and p.get("dynamicBullets") is True:
+            return "dynamicBullets"
+    if "slidesPerView" in params:
+        v = params["slidesPerView"]
+        if v != "auto" and not (isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0):
+            return f"slidesPerView {v}"
+    if "card_width" in card:
+        return "card_width"
+    return None
 
 
 def load_dashboard(path: str):
@@ -177,15 +371,19 @@ def reaches_inside(card_type: str, css: str) -> bool:
     return False
 
 
-def check_card_mod(card: dict, loc: str, warnings: list[str]):
+def card_mod_reason(card: dict, card_type: str):
+    """Why the card's card_mod isn't drawn natively (a coarse check), or None."""
     cm = card.get("card_mod")
     if not isinstance(cm, dict):
-        return
+        return None
     style = cm.get("style")
-    card_type = str(card.get("type", "")).strip()
     def complex_css(css) -> bool:
-        return (not isinstance(css, str) or "$:" in css or "@keyframes" in css or "::" in css
-                or LEGACY_PSEUDO.search(css) is not None or UNSUPPORTED_AT_RULE.search(QUOTED.sub('""', mask_css(css))) is not None)
+        if not isinstance(css, str):
+            return True
+        # Read without comments and Jinja, as the engine reads the sheet.
+        text = mask_css(css)
+        return ("$:" in text or "@keyframes" in text or "::" in text
+                or LEGACY_PSEUDO.search(text) is not None or UNSUPPORTED_AT_RULE.search(QUOTED.sub('""', text)) is not None)
     def own(css) -> bool:
         return complex_css(css) or (isinstance(css, str) and reaches_inside(card_type, css))
     if isinstance(style, dict):
@@ -194,84 +392,202 @@ def check_card_mod(card: dict, loc: str, warnings: list[str]):
     else:
         unsupported = isinstance(style, str) and own(style)
     if unsupported:
-        warnings.append(f"  WARN  {loc}: complex Shadow-DOM / pseudo / keyframe card_mod (only ha-card container styles mirror natively)")
+        return "complex Shadow-DOM / pseudo / keyframe card_mod (only ha-card container styles mirror natively)"
+    return None
 
 
-def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str], warnings: list[str]):
-    if not isinstance(card, dict):
-        return
-    ctype = str(card.get("type") or "").strip()
-    check_card_mod(card, loc, warnings)
+def card_type_of(card: dict) -> str:
+    """The card's type as the engine parses it: `entities` when it has none."""
+    t = card.get("type")
+    return "entities" if t is None or t == "" else str(t)
 
+
+def option_reasons(card: dict, ctype: str) -> list[str]:
+    """Options Vitro doesn't draw (CardCompat.checkOptions)."""
+    out = []
+    if ctype == "custom:button-card":
+        reason = button_card_reason(card, TEMPLATES)
+        if reason:
+            out.append(f"button-card with {reason}")
+    if ctype == "custom:swipe-card":
+        reason = swipe_card_reason(card)
+        if reason:
+            out.append(f"swipe-card with {reason}")
+    if ctype == "custom:weather-card" and not (isinstance(card.get("entity"), str) and card["entity"]):
+        out.append("weather-card without an entity")
+    objs = lambda v: [x for x in v if isinstance(x, dict)] if isinstance(v, list) else []
     rule = CONFIG_DEPENDENT_TYPES.get(ctype)
     if rule:
         option, default, native = rule
-        raw = card.get(option)
-        value = raw.strip() if isinstance(raw, str) and raw.strip() else default
-        # The engine reads layout-card's `layout_type` with or without `custom:`; Bubble Card's `card_type` as written.
+        value = str(card.get(option) or default)
         if option == "layout_type":
-            value = value.removeprefix("custom:")
+            value = value.removeprefix("custom:") or default
         if value not in native:
-            counts["tier3"] += 1
-            triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='{ctype}' with {option}: {value} (when its script is installed)")
-            return
-
+            out.append(f"{option}: {value} isn't drawn natively")
     if ctype == "tile":
-        for feat in card.get("features") or []:
-            ftype = feat.get("type") if isinstance(feat, dict) else str(feat)
+        for feat in objs(card.get("features")):
+            ftype = str(feat.get("type") or "")
             if ftype and ftype not in SUPPORTED_TILE_FEATURES:
-                warnings.append(f"  WARN  {loc}: tile feature '{ftype}' is not yet rendered natively")
+                out.append(f"tile feature '{ftype}' isn't drawn natively")
+    if ctype == "entities":
+        out += [f"'{k}:' isn't drawn natively" for k in sorted(ENTITIES_UNSUPPORTED_OPTIONS) if card.get(k) is not None]
+    if ctype in ("entities", "entity-filter"):
+        for row in objs(card.get("entities")):
+            rtype = str(row.get("type") or "")
+            if rtype and rtype not in ENTITIES_ROW_TYPES:
+                out.append(f"entities row type '{rtype}' isn't drawn natively")
+    if ctype == "picture-elements":
+        for el in objs(card.get("elements")):
+            etype = str(el.get("type") or "")
+            if etype not in PICTURE_ELEMENT_TYPES:
+                out.append(f"picture-elements element '{etype or '(no type)'}' isn't drawn natively")
+    if ctype == "custom:mushroom-chips-card":
+        for chip in objs(card.get("chips")):
+            ctype_ = str(chip.get("type", "entity"))
+            if ctype_ not in CHIP_TYPES:
+                out.append(f"mushroom chip '{ctype_}' isn't drawn natively")
+            inner = chip.get("chip")
+            if ctype_ == "conditional" and isinstance(inner, dict):
+                itype = str(inner.get("type", "entity"))
+                if itype not in CHIP_TYPES or itype == "conditional":
+                    out.append(f"mushroom chip '{itype}' (in a conditional chip) isn't drawn natively")
+    if ctype == "markdown":
+        for tag in re.findall(r"<([a-zA-Z][a-zA-Z0-9-]*)", str(card.get("content") or "")):
+            if tag.lower() in UNDRAWN_MARKDOWN_TAGS:
+                out.append(f"Markdown <{tag.lower()}> isn't drawn natively")
+    return out
 
-    if ctype in CONTAINER_TYPES:
-        children = card.get("cards") if isinstance(card.get("cards"), list) else []
-        if not children and isinstance(card.get("card"), dict):
-            children = [card["card"]]
-        for i, child in enumerate(children):
-            walk_card(child, f"{loc}.{ctype}[{i}]", counts, triggers, warnings)
+
+def as_list(value) -> list:
+    """A list as the engine reads one (optJSONArray): anything else is no list."""
+    return value if isinstance(value, list) else []
+
+
+def produced_cards(card: dict, ctype: str, per_entity: bool) -> list[tuple[str, int, dict]]:
+    """The cards a card builds one level down (CardRouter.producedCards): a report label, the index, the card."""
+    out = []
+    if ctype in CONTAINER_TYPES and ctype != "conditional":
+        # Each child keeps its index among the parsed cards, also when a layout-break before it isn't built.
+        kids = list(enumerate(c for c in as_list(card.get("cards")) if isinstance(c, dict)))
+        if ctype == "custom:layout-card" and str(card.get("layout_type") or "").removeprefix("custom:") in ("vertical-layout", "vertical"):
+            kids = [(i, c) for i, c in kids if card_type_of(c) != "custom:layout-break"]
+        out = [(f"{ctype}[{i}]", i, c) for i, c in kids]
+    elif ctype == "conditional" and isinstance(card.get("card"), dict):
+        out = [("conditional[0]", 0, card["card"])]
+    if ctype != "custom:auto-entities":
+        return out
+    # As the runtime builds it: a copy, `type: entities` when it names none, without the field `card_param` fills.
+    # Only top-level keys change, so a shallow copy keeps the config (and its YAML aliases) as written.
+    inner = dict(card["card"]) if isinstance(card.get("card"), dict) else {}
+    inner.setdefault("type", "entities")
+    # As the engine reads it (optString): missing or empty is `entities`, anything else as text.
+    raw_param = card.get("card_param")
+    param = raw_param if isinstance(raw_param, str) and raw_param else (
+        "entities" if raw_param in (None, "") else json.dumps(raw_param))
+    inner.pop(param, None)
+    generated = []
+    if param == "cards":
+        for entry in as_list(card.get("entities")):
+            if isinstance(entry, str):
+                generated.append({"type": "tile"})
+            elif isinstance(entry, dict):
+                built = dict({"type": "tile"}, **entry)
+                built.pop("entity", None)
+                generated.append(built)
+        include = (card.get("filter") or {}).get("include") if isinstance(card.get("filter"), dict) else None
+        for rule in include if isinstance(include, list) else []:
+            opts = rule.get("options") if isinstance(rule, dict) else None
+            generated.append(dict({"type": "tile"}, **opts) if isinstance(opts, dict) else {"type": "tile"})
+        inner["cards"] = generated
+    out.append(("card", len(out), inner))
+    if per_entity:
+        out += [(f"entities[{i}]", len(out) + i, g) for i, g in enumerate(generated)]
+    return out
+
+
+def needs_ha_frontend(card: dict) -> bool:
+    """A built-in card, or a card that builds one at any depth: the island would draw those as plain summaries."""
+    ctype = card_type_of(card)
+    return (not ctype.startswith("custom:") or ctype == "custom:stack-in-card"
+            or any(needs_ha_frontend(c) for _, _, c in produced_cards(card, ctype, True)))
+
+
+def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str], warnings: list[str], explicit: int = -1):
+    if not isinstance(card, dict):
+        return
+    ctype = card_type_of(card)
+    if card.get("type") in (None, ""):
+        warnings.append(f"  WARN  {loc}: no type, so Vitro draws it as an entities card")
+
+    if ctype in NATIVE_CORE_TYPES or ctype in NATIVE_HACS_TYPES:
+        reasons = option_reasons(card, ctype)
+        cm = card_mod_reason(card, ctype)
+        if cm:
+            reasons.append(cm)
+    elif ctype.startswith("custom:"):
+        reasons = ["a custom card with no native renderer"]
+    else:
+        reasons = ["not a card type Vitro draws"]
+
+    if reasons and (ctype in NATIVE_CORE_TYPES or (ctype in NATIVE_HACS_TYPES and needs_ha_frontend(card))):
+        # A built-in card stays native (the island can't draw built-in cards), and so does a custom card Vitro
+        # draws with a built-in card inside it.
+        for r in reasons:
+            warnings.append(f"  WARN  {loc}: {r} (stays native: the island can't draw built-in cards)")
+    elif reasons:
+        counts["tier3"] += 1
+        triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='{ctype}': {'; '.join(reasons)}")
         return
 
-    if ctype in NATIVE_CORE_TYPES:
-        counts["tier1"] += 1
-    elif ctype in NATIVE_HACS_TYPES:
-        counts["tier2"] += 1
-        if ctype == "custom:auto-entities":
-            # Its cards are built at runtime: the inner card (entities by default), and with `card_param: cards`
-            # each include rule's `options` card.
-            # As the runtime builds it: a copy, `type: entities` when it names none, and without the list that
-            # `card_param` (default `entities`) is filled in with at runtime.
-            inner = dict(card["card"]) if isinstance(card.get("card"), dict) else {}
-            inner.setdefault("type", "entities")
-            inner.pop(card.get("card_param") or "entities", None)
-            walk_card(inner, f"{loc}.card", counts, triggers, warnings)
-            if card.get("card_param") == "cards":
-                # The explicit entries: a string is a tile; a map keeps its type (tile when none) without `entity`.
-                entries = card.get("entities") or []
-                for i, entry in enumerate(entries if isinstance(entries, list) else []):
-                    if isinstance(entry, str):
-                        walk_card({"type": "tile"}, f"{loc}.entities[{i}]", counts, triggers, warnings)
-                    elif isinstance(entry, dict):
-                        built = dict({"type": "tile"}, **entry)
-                        built.pop("entity", None)
-                        walk_card(built, f"{loc}.entities[{i}]", counts, triggers, warnings)
-                rules = (card.get("filter") or {}).get("include") or []
-                for i, rule in enumerate(rules if isinstance(rules, list) else []):
-                    opts = rule.get("options") if isinstance(rule, dict) else None
-                    if isinstance(opts, dict):
-                        walk_card(dict({"type": "tile"}, **opts), f"{loc}.include[{i}].options", counts, triggers, warnings)
-    else:
-        counts["tier3"] += 1
-        triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='{ctype or '<missing>'}'")
+    children = produced_cards(card, ctype, False)
+    if explicit >= 0 and ctype in CONTAINER_TYPES and ctype != "conditional":
+        # auto-entities' inner card: only its explicit `entities:` entries are known before it runs.
+        for _, i, child in children:
+            if i < explicit:
+                walk_card(child, f"{loc}.entities[{i}]", counts, triggers, warnings)
+        return
+    if ctype == "custom:button-card":
+        expanded = expand_button_card(card, TEMPLATES) or card
+        if expanded.get("styles") or expanded.get("state"):
+            warnings.append(f"  WARN  {loc}: button-card styles are drawn natively only in Vitro's subset (see the site checker)")
+    if not (ctype in CONTAINER_TYPES and children):
+        counts["tier1" if ctype in NATIVE_CORE_TYPES else "tier2"] += 1
+    # Under `card_param: cards`, the inner card's first cards are the explicit `entities:` entries (none without a list).
+    holds = len(as_list(card.get("entities"))) if ctype == "custom:auto-entities" and card.get("card_param") == "cards" else -1
+    for label, _, child in children:
+        walk_card(child, f"{loc}.{label}", counts, triggers, warnings, holds)
+
+
+def view_type(view: dict) -> str:
+    """The view's type as the engine infers it."""
+    sections = [s for s in view.get("sections") or [] if isinstance(s, dict)]
+    # `panel` as org.json's optBoolean reads it: true, or the text "true" in any case.
+    panel = view.get("panel") is True or (isinstance(view.get("panel"), str) and view["panel"].lower() == "true")
+    return view.get("type") or ("panel" if panel else "sections" if sections else "masonry")
+
+
+def view_roots(view: dict, vname: str) -> list[tuple[str, dict]]:
+    """The cards the engine builds for a view: a panel view's first card, a sections view's sections, or its cards."""
+    sections = [s for s in view.get("sections") or [] if isinstance(s, dict)]
+    vtype = view_type(view)
+    cards = view.get("cards") or []
+    objs = [(i, c) for i, c in enumerate(cards) if isinstance(c, dict)]
+    if vtype == "panel" and objs:
+        return [(f"{vname}/card[{objs[0][0]}]", objs[0][1])]
+    if vtype == "sections" and sections:
+        return [(f"{vname}/section[{si}]/card[{ci}]", c) for si, s in enumerate(sections) for ci, c in enumerate(s.get("cards") or [])]
+    return [(f"{vname}/card[{ci}]", c) for ci, c in enumerate(cards)]
 
 
 def audit(data: dict) -> int:
+    global TEMPLATES
+    TEMPLATES = data.get("button_card_templates") if isinstance(data, dict) and isinstance(data.get("button_card_templates"), dict) else {}
     views = data.get("views") if isinstance(data, dict) else None
     if not isinstance(views, list):
         sys.stderr.write("error: expected a Lovelace dashboard with a top-level 'views' list\n")
         return 2
 
     total = {"tier1": 0, "tier2": 0, "tier3": 0}
-    all_triggers: list[str] = []
-    all_warnings: list[str] = []
 
     for vi, view in enumerate(views):
         if not isinstance(view, dict):
@@ -281,23 +597,15 @@ def audit(data: dict) -> int:
         vtriggers: list[str] = []
         vwarnings: list[str] = []
 
-        for si, sec in enumerate(view.get("sections") or []):
-            if not isinstance(sec, dict):
-                continue
-            for ci, card in enumerate(sec.get("cards") or []):
-                walk_card(card, f"{vname}/section[{si}]/card[{ci}]", vcounts, vtriggers, vwarnings)
-
-        for ci, card in enumerate(view.get("cards") or []):
-            walk_card(card, f"{vname}/card[{ci}]", vcounts, vtriggers, vwarnings)
+        for loc, card in view_roots(view, vname):
+            walk_card(card, loc, vcounts, vtriggers, vwarnings)
 
         for k in total:
             total[k] += vcounts[k]
-        all_triggers.extend(vtriggers)
-        all_warnings.extend(vwarnings)
 
         status = "NATIVE" if vcounts["tier3"] == 0 else "BOOTS GECKOVIEW"
         print(
-            f"View '{vname}' ({view.get('type', 'masonry')}): "
+            f"View '{vname}' ({view_type(view)}): "
             f"Tier1={vcounts['tier1']} Tier2={vcounts['tier2']} Tier3={vcounts['tier3']} -> {status}"
         )
         for line in vtriggers:

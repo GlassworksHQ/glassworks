@@ -168,8 +168,11 @@ def dashboards_list():
 
 
 def icons(category, integration=None):
-    """frontend/get_icons: the icon translations HA core sends for its integrations (none yet)."""
-    return {}
+    """frontend/get_icons: HA core's icons.json for the integrations this HA loads, as HA core
+    answers it (haicons.py): the default icon of each entity domain and device class, which the
+    frontend draws on every card that names no icon of its own (#780)."""
+    import haicons
+    return haicons.resources(category, integration, sorted(set(config()["components"]) | {"homeassistant"}))
 
 
 def translations(category):

@@ -9,6 +9,7 @@ import dev.glassworks.engine.vitro.compat.CardRoute
 import dev.glassworks.engine.vitro.compat.CardVerdict
 import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.compat.VitroSupport
+import dev.glassworks.engine.vitro.compat.WebFallback
 import dev.glassworks.engine.vitro.data.EntityState
 import org.json.JSONArray
 import org.json.JSONObject
@@ -40,6 +41,13 @@ data class LovelaceResource(
 data class DashboardConfig(
     val title: String?,
     val views: List<ViewConfig>,
+    /**
+     * The config as Home Assistant sent it (its JSON text), or null when it wasn't parsed from one. Two configs with
+     * the same source draw the same dashboard: a reconnect or `lovelace_updated` that brings it again rebuilds nothing.
+     */
+    val source: String? = null,
+    /** Saved as a `strategy:`: HA's frontend generates the views, so the config has none ([WebFallback]). */
+    val strategy: Boolean = false,
 ) {
     /**
      * The view a path opens, as HA's router picks it: none (or blank) is the first view, then a view's own `path`,
@@ -67,7 +75,12 @@ data class ViewConfig(
     val badges: List<CardConfig>,
     val subview: Boolean = false,
     val backPath: String? = null,
-)
+    /** Saved as a `strategy:`: HA's frontend generates the cards, so the config has none ([WebFallback]). */
+    val strategy: Boolean = false,
+) {
+    /** Why this view goes to HA's own frontend instead of being drawn ([WebFallback.viewReason]), or null. */
+    val webFallbackReason: String? by lazy { WebFallback.viewReason(this) }
+}
 
 data class SectionConfig(
     val type: String, // "grid"
@@ -75,6 +88,8 @@ data class SectionConfig(
     val columnSpan: Int,
     val cards: List<CardConfig>,
     val visibility: List<VisibilityCondition>,
+    /** Saved as a `strategy:`: HA's frontend generates the cards ([WebFallback]). */
+    val strategy: Boolean = false,
 )
 
 data class ActionConfig(
@@ -625,7 +640,7 @@ object CardRouter {
      */
     val CONTAINER_TYPES = setOf(
         "grid", "horizontal-stack", "vertical-stack", "conditional",
-        "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card",
+        "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card", "custom:swipe-card",
     )
 
     /** Cards that pick their entities at runtime from the whole state machine (`auto-entities` filters). */
@@ -799,6 +814,8 @@ object CardRouter {
             // Deep-scan custom cards (e.g. room arrays, sleep/outside/camera objects) so view-scoped
             // subscribe_entities automatically captures every entity without knowing each card's schema.
             if (c.type.startsWith("custom:")) scanJson(c.raw)
+            // weather-card reads `sun.sun` for its night icons and the sunrise and sunset, whatever its config says.
+            if (c.type == "custom:weather-card") out += "sun.sun"
             for (key in EXTRA_ENTITY_KEYS) {
                 c.raw.optString(key, "").takeIf { isEntityId(it) }?.let { out += it }
             }
@@ -825,7 +842,9 @@ object CardRouter {
 
 /** Parses Home Assistant's `lovelace/config` JSON payload into [DashboardConfig]. */
 object LovelaceParser {
-    fun parseDashboard(raw: JSONObject): DashboardConfig {
+    fun parseDashboard(dashboard: JSONObject): DashboardConfig {
+        // button-card's dashboard templates are plain merges: done once here, for the native card and the island alike.
+        val raw = dev.glassworks.engine.vitro.cards.ButtonCardTemplates.expandDashboard(dashboard)
         val title = raw.optString("title", "").ifEmpty { null }
         val viewsArr = raw.optJSONArray("views") ?: JSONArray()
         val views = ArrayList<ViewConfig>(viewsArr.length())
@@ -833,7 +852,7 @@ object LovelaceParser {
             val v = viewsArr.optJSONObject(i) ?: continue
             views += parseView(i, v)
         }
-        return DashboardConfig(title, views)
+        return DashboardConfig(title, views, source = raw.toString(), strategy = hasStrategy(raw))
     }
 
     fun parseView(index: Int, raw: JSONObject): ViewConfig {
@@ -866,8 +885,12 @@ object LovelaceParser {
             badges = badges,
             subview = raw.optBoolean("subview", false),
             backPath = raw.optString("back_path", "").ifEmpty { null },
+            strategy = hasStrategy(raw),
         )
     }
+
+    /** HA's own test: a config with a `strategy` is generated from it, whatever else it holds. */
+    private fun hasStrategy(raw: JSONObject): Boolean = raw.has("strategy") && !raw.isNull("strategy")
 
     private fun parseSection(raw: JSONObject): SectionConfig = SectionConfig(
         type = raw.optString("type", "grid"),
@@ -875,6 +898,7 @@ object LovelaceParser {
         columnSpan = raw.optInt("column_span", 1).coerceIn(1, 4),
         cards = parseCards(raw.optJSONArray("cards")),
         visibility = VisibilityCondition.parseList(raw.optJSONArray("visibility")),
+        strategy = hasStrategy(raw),
     )
 
     fun parseCards(arr: JSONArray?): List<CardConfig> {
@@ -889,6 +913,7 @@ object LovelaceParser {
     /** Card types whose children are their `cards:` list (a conditional's is its `card:`). */
     val CARDS_FIELD_TYPES: Set<String> = setOf(
         "grid", "horizontal-stack", "vertical-stack", "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card",
+        "custom:swipe-card",
     )
 
     fun parseCard(raw: JSONObject): CardConfig {
@@ -988,7 +1013,9 @@ object HaCardSize {
                 val rows = Math.ceil(card.entities().size / raw.optInt("columns", 5).coerceAtLeast(1).toDouble()).toInt()
                 (if (card.title != null) 2 else 0) + lines * rows
             }
-            "button" -> (if (raw.optBoolean("show_icon", true)) 4 else 0) + (if (raw.optBoolean("show_name", true)) 1 else 0)
+            "button", "entity-button" -> (if (raw.optBoolean("show_icon", true)) 4 else 0) + (if (raw.optBoolean("show_name", true)) 1 else 0)
+            // button-card's getCardSize: its `card_size`, 3 by default.
+            "custom:button-card" -> (raw.opt("card_size") as? Number)?.toInt()?.takeIf { it > 0 } ?: 3
             "markdown" -> if (raw.has("card_size")) raw.optInt("card_size", 1)
                 else Math.round(raw.optString("content", "").split("\n").size / 2.0).toInt() + (if (card.title != null) 1 else 0)
             else -> 1

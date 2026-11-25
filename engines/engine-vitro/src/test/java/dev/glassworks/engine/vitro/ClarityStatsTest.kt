@@ -216,6 +216,38 @@ class ClarityStatsTest {
     }
 
     @Test
+    fun aCancelledTapIsNeverEndedByAnotherGesturesUp() {
+        // CodeRabbit on #835: Android's ACTION_CANCEL ends the gesture; a later gesture's up isn't that tap's.
+        val taps = dev.glassworks.engine.vitro.clarity.Taps()
+        taps.start()
+        val cancelled = taps.down(1000.0)!!
+        taps.downDone(cancelled, 1016.0)
+        taps.cancel()
+        taps.stop()
+        assertNull("the next gesture's down isn't counted", taps.down(1500.0))
+        assertNull("and its up ends no tap", taps.up(1600.0))
+        assertTrue("the cancelled tap stays unfinished", taps.unfinished)
+        assertEquals(emptyList<Double>(), taps.times())
+        // A gesture that began before counting stopped, and wasn't cancelled, still takes its late up.
+        taps.start()
+        val late = taps.down(2000.0)!!
+        taps.downDone(late, 2016.0)
+        taps.stop()
+        taps.upDone(taps.up(2400.0)!!, 2420.0)
+        assertEquals(listOf(24.0), taps.times())
+    }
+
+    @Test
+    fun aBlockingSpanWithDroppedFramesIsNotMeasured() {
+        // CodeRabbit on #835: frames dropped to bound the list inside the span would read as one long gap.
+        val frames = listOf(1016.0, 1032.0, 1048.0)
+        assertEquals(0.0, ClarityStats.blocking(frames, null, 1000.0, 1050.0)!!.getDouble("blocking_ms"), 0.0)
+        assertEquals("dropped before the span: measured", 0.0,
+            ClarityStats.blocking(frames, 990.0, 1000.0, 1050.0)!!.getDouble("blocking_ms"), 0.0)
+        assertNull("dropped inside it: not measured", ClarityStats.blocking(listOf(1048.0), 1032.0, 1000.0, 1050.0))
+    }
+
+    @Test
     fun tapsRoundAsEventTimingDoes() {
         assertEquals(16.0, ClarityStats.eventTimingDuration(3.0), 0.0)
         assertEquals(48.0, ClarityStats.eventTimingDuration(45.0), 0.0)

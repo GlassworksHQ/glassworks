@@ -2,19 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SAMPLE_DASHBOARD, VITRO_COMPAT, auditDashboard, parseYaml } from "./vitroCompat";
+import { kotlin, kotlinCardModSheets, kotlinNestedMap, kotlinSet, kotlinSetMap, kotlinStringMap } from "./vitroSupportSource";
 
 const repo = join(import.meta.dirname, "../../..");
-// The engine's supported card types live in compat/VitroSupport.kt since #801; CONTAINER_TYPES stays in the model.
-const vitroDir = join(repo, "engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro");
-const kotlin = readFileSync(join(vitroDir, "compat/VitroSupport.kt"), "utf8") + "\n" + readFileSync(join(vitroDir, "model/LovelaceModel.kt"), "utf8");
 const python = readFileSync(join(repo, ".agents/skills/vitro-native-dashboard/scripts/audit_vitro_dashboard.py"), "utf8");
 const published = JSON.parse(readFileSync(join(import.meta.dirname, "../../public/vitro-compat.json"), "utf8"));
-
-function kotlinSet(name: string): string[] {
-  const body = kotlin.match(new RegExp(`val ${name}(?::[^=]+)? = setOf\\(([\\s\\S]*?)\\)\\n`))?.[1];
-  if (!body) throw new Error(`${name} not found in VitroSupport.kt or LovelaceModel.kt`);
-  return [...body.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-}
 
 function pythonSet(name: string): string[] {
   const body = python.match(new RegExp(`^${name} = \\{([\\s\\S]*?)\\}`, "m"))?.[1];
@@ -25,17 +17,43 @@ function pythonSet(name: string): string[] {
 describe("the published compatibility manifest", () => {
   it("is what the checker uses", () => {
     expect(VITRO_COMPAT).toEqual(published);
-    expect(published.version).toBe("0.0.1");
+    expect(published.version).toBe("0.0.2");
   });
 
-  it("lists the core types the Vitro engine draws natively, verbatim", () => {
+  it("lists the card types the Vitro engine draws natively, verbatim", () => {
     expect(published.nativeCoreTypes).toEqual(kotlinSet("CORE_CARD_TYPES"));
-    expect(published.nativeCoreTypes).toHaveLength(31);
+    expect(published.nativeHacsTypes).toEqual(kotlinSet("HACS_CARD_TYPES"));
+    expect(published.nativeCoreTypes).toHaveLength(32);
+    expect(published.nativeHacsTypes).toHaveLength(30);
   });
 
-  it("lists the HACS cards the Vitro engine draws natively, verbatim", () => {
-    expect(published.nativeHacsTypes).toEqual(kotlinSet("HACS_CARD_TYPES"));
-    expect(published.nativeHacsTypes).toHaveLength(26);
+  // Every list CardCompat routes with, so a card the engine learns to draw (or a new option, sheet or property)
+  // can't reach the panel without reaching the site's checker too.
+  it("holds every list the engine routes a card with, verbatim", () => {
+    expect(new Set(published.supportedTileFeatures)).toEqual(new Set(kotlinSet("TILE_FEATURES")));
+    expect(published.stackTypes).toEqual(kotlinSet("STACK_TYPES"));
+    expect(published.entitiesRowTypes).toEqual(kotlinSet("ENTITIES_ROW_TYPES"));
+    expect(published.pictureElementTypes).toEqual(kotlinSet("PICTURE_ELEMENT_TYPES"));
+    expect(published.chipTypes).toEqual(kotlinSet("CHIP_TYPES"));
+    expect(published.unsupportedOptions).toEqual(kotlinNestedMap("UNSUPPORTED_OPTIONS"));
+    expect(published.autoEntitiesRuleKeys).toEqual(kotlinSet("RULE_KEYS"));
+    expect(published.cardModSheets).toEqual(kotlinCardModSheets());
+    expect(published.cardModOtherKeys).toEqual(kotlinStringMap("CARD_MOD_OTHER_KEYS"));
+    expect(published.cardModNotApplied).toEqual(kotlinStringMap("CARD_MOD_NOT_APPLIED"));
+    expect(published.fontSizeTypes).toEqual(kotlinSet("FONT_SIZE_TYPES"));
+    expect(published.cardProperties).toEqual(kotlinSet("CARD_PROPERTIES"));
+    expect(published.cardFontProperties).toEqual(kotlinSet("CARD_FONT_PROPERTIES"));
+    expect(published.stackProperties).toEqual(kotlinSet("STACK_PROPERTIES"));
+    expect(published.cardVariables).toEqual(kotlinSet("CARD_VARIABLES"));
+    expect(published.cascadeProperties).toEqual(kotlinSet("CASCADE_PROPERTIES"));
+    expect(published.markdownDisplay).toEqual(kotlinSet("MARKDOWN_DISPLAY"));
+    expect(published.pseudoClasses).toEqual(kotlinSet("PSEUDO_CLASSES"));
+    expect(published.benignPseudoClasses).toEqual(kotlinStringMap("BENIGN_PSEUDO_CLASSES"));
+    expect(published.benignPseudoElements).toEqual(kotlinStringMap("BENIGN_PSEUDO_ELEMENTS"));
+    expect(published.benignProperties).toEqual(kotlinStringMap("BENIGN_PROPERTIES"));
+    expect(published.benignValues).toEqual(kotlinSetMap("BENIGN_VALUES"));
+    expect(published.knownGaps).toEqual(kotlinStringMap("KNOWN_GAP_PROPERTIES"));
+    expect(published.undrawnMarkdownTags).toEqual(kotlinStringMap("UNDRAWN_MARKDOWN_TAGS"));
   });
 
   it("matches the audit script's lists", () => {
@@ -43,8 +61,13 @@ describe("the published compatibility manifest", () => {
     expect(new Set(published.nativeHacsTypes)).toEqual(new Set(pythonSet("NATIVE_HACS_TYPES")));
     expect(new Set(published.supportedTileFeatures)).toEqual(new Set(pythonSet("SUPPORTED_TILE_FEATURES")));
     expect(new Set(published.containerTypes)).toEqual(new Set(pythonSet("CONTAINER_TYPES")));
+    expect(new Set(published.entitiesRowTypes)).toEqual(new Set(pythonSet("ENTITIES_ROW_TYPES")));
+    expect(new Set(published.pictureElementTypes)).toEqual(new Set(pythonSet("PICTURE_ELEMENT_TYPES")));
+    expect(new Set(published.chipTypes)).toEqual(new Set(pythonSet("CHIP_TYPES")));
+    expect(new Set(Object.keys(published.undrawnMarkdownTags))).toEqual(new Set(pythonSet("UNDRAWN_MARKDOWN_TAGS")));
+    expect(new Set(Object.keys(published.unsupportedOptions.entities))).toEqual(new Set(pythonSet("ENTITIES_UNSUPPORTED_OPTIONS")));
     expect(published.supportedTileFeatures).toHaveLength(14);
-    expect(published.containerTypes).toHaveLength(7);
+    expect(published.containerTypes).toHaveLength(8);
   });
 
   it("lists the configurations the engine draws natively, as the engine and the audit script do", () => {
@@ -57,9 +80,77 @@ describe("the published compatibility manifest", () => {
     }
   });
 
+  it("lists button-card's native subset and swipe-card's parameters as the engine does", () => {
+    expect(published.buttonCard.layouts).toEqual(kotlinSet("BUTTON_CARD_LAYOUTS"));
+    expect(published.buttonCard.actions).toEqual(kotlinSet("BUTTON_CARD_ACTIONS"));
+    expect(published.buttonCard.styleParts).toEqual(kotlinSet("BUTTON_CARD_STYLE_PARTS"));
+    expect(published.buttonCard.animations).toEqual(kotlinSet("BUTTON_CARD_ANIMATIONS"));
+    expect(published.swipeCardParameters).toEqual(kotlinSet("SWIPE_CARD_PARAMETERS"));
+    expect(new Set(published.buttonCard.unsupportedOptions)).toEqual(new Set(Object.keys(kotlinStringMap("BUTTON_CARD_UNSUPPORTED_OPTIONS"))));
+    expect(new Set(published.buttonCard.unsupportedActionFields)).toEqual(new Set(Object.keys(kotlinStringMap("BUTTON_CARD_UNSUPPORTED_ACTION_FIELDS"))));
+    expect(new Set(published.buttonCard.benignProperties)).toEqual(new Set(Object.keys(kotlinStringMap("BENIGN_PROPERTIES"))));
+    const text = kotlinSet("BUTTON_CARD_TEXT");
+    for (const [part, props] of Object.entries(published.buttonCard.styleProperties) as [string, string[]][]) {
+      const body = kotlin.match(new RegExp(`"${part}" to (BUTTON_CARD_TEXT(?: \\+ setOf\\(([^)]*)\\))?|setOf\\(([\\s\\S]*?)\\),\\n)`));
+      expect(body, part).toBeTruthy();
+      const own = [...(body![2] ?? body![3] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+      expect(new Set(props), part).toEqual(new Set(body![1].startsWith("BUTTON_CARD_TEXT") ? [...text, ...own] : own));
+    }
+    expect(new Set(published.buttonCard.unsupportedOptions)).toEqual(new Set(pythonSet("BUTTON_CARD_UNSUPPORTED_OPTIONS")));
+    expect(new Set(published.buttonCard.actions)).toEqual(new Set(pythonSet("BUTTON_CARD_ACTIONS")));
+    expect(new Set(published.buttonCard.layouts)).toEqual(new Set(pythonSet("BUTTON_CARD_LAYOUTS")));
+  });
+
   it("walks the same containers the engine flattens", () => {
     expect(published.containerTypes).toEqual(kotlinSet("CONTAINER_TYPES"));
+    // The checker reads a container's `cards:` for all but `conditional`, whose child is its `card:`.
+    expect(kotlinSet("CARDS_FIELD_TYPES")).toEqual(published.containerTypes.filter((t: string) => t !== "conditional"));
+    expect(kotlin).toContain('"conditional" -> listOfNotNull(raw.optJSONObject("card")');
     expect(kotlin).toContain("c.type in CONTAINER_TYPES");
+  });
+});
+
+describe("auditDashboard and custom:button-card", () => {
+  const audit = (cards: unknown[], extra: Record<string, unknown> = {}) => auditDashboard(JSON.stringify({ ...extra, views: [{ cards }] }));
+
+  it("draws a button-card without JavaScript natively, and sends JavaScript templates to an island", () => {
+    expect(audit([{ type: "custom:button-card", entity: "light.a", show_state: true, styles: { card: [{ height: "80px" }], name: [{ "font-size": "14px" }] } }]).totals)
+      .toEqual({ tier1: 0, tier2: 1, tier3: 0 });
+    const js = audit([{ type: "custom:button-card", entity: "light.a", name: "[[[ return 'x' ]]]" }]);
+    expect(js.totals.tier3).toBe(1);
+    expect(js.triggers[0].reasons.join()).toMatch(/JavaScript templates/);
+    // Four brackets are an escape for text, not JavaScript.
+    expect(audit([{ type: "custom:button-card", name: "[[[[x]]]]" }]).totals.tier3).toBe(0);
+  });
+
+  it("merges the dashboard's button_card_templates before it checks", () => {
+    const templates = { button_card_templates: { base: { styles: { card: [{ filter: "blur(2px)" }] } }, ok: { color_type: "card" } } };
+    expect(audit([{ type: "custom:button-card", template: "ok" }], templates).totals.tier3).toBe(0);
+    expect(audit([{ type: "custom:button-card", template: "base" }], templates).triggers[0].reasons.join()).toMatch(/filter/);
+    expect(audit([{ type: "custom:button-card", template: "missing" }], templates).triggers[0].reasons.join()).toMatch(/button_card_templates/);
+  });
+
+  it("sends cards in custom_fields, HTML and styles it doesn't draw to an island", () => {
+    expect(audit([{ type: "custom:button-card", custom_fields: { a: { card: { type: "tile" } } } }]).totals.tier3).toBe(1);
+    expect(audit([{ type: "custom:button-card", name: "<b>x</b>" }]).totals.tier3).toBe(1);
+    expect(audit([{ type: "custom:button-card", custom_fields: { a: "22°" } }]).totals.tier3).toBe(0);
+    expect(audit([{ type: "custom:button-card", styles: { card: [{ border: "1px dashed red" }] } }]).totals.tier3).toBe(1);
+    // A value the browser drops (a stray `;`) is dropped natively too.
+    expect(audit([{ type: "custom:button-card", styles: { card: [{ padding: "0;" }] } }]).totals.tier3).toBe(0);
+  });
+
+  it("routes the other fast paths", () => {
+    expect(audit([{ type: "entity-button", entity: "light.a" }]).totals).toEqual({ tier1: 1, tier2: 0, tier3: 0 });
+    expect(audit([{ type: "custom:mushroom-empty-card" }, { type: "custom:weather-card", entity: "weather.home" }]).totals.tier2).toBe(2);
+    expect(audit([{ type: "custom:weather-card" }]).totals.tier3).toBe(1);
+    const swipe = (parameters: unknown, cards: unknown[]) => audit([{ type: "custom:swipe-card", parameters, cards }]).totals;
+    expect(swipe({ pagination: { type: "bullets" }, loop: true }, [{ type: "custom:button-card" }])).toEqual({ tier1: 0, tier2: 1, tier3: 0 });
+    expect(swipe({ effect: "cube" }, [{ type: "custom:button-card" }]).tier3).toBe(1);
+    expect(swipe({ pagination: { type: "progressbar" } }, [{ type: "custom:button-card" }]).tier3).toBe(1);
+    expect(swipe({ slidesPerView: 0 }, [{ type: "custom:button-card" }]).tier3).toBe(1);
+    // A built-in card anywhere inside keeps it native: the island can't draw built-in cards.
+    expect(swipe({ effect: "cube" }, [{ type: "tile" }])).toEqual({ tier1: 1, tier2: 0, tier3: 0 });
+    expect(swipe({ effect: "cube" }, [{ type: "custom:swipe-card", cards: [{ type: "tile" }] }]).tier3).toBe(0);
   });
 });
 
@@ -76,16 +167,17 @@ describe("auditDashboard with JSON", () => {
     expect(r.views[0]).toMatchObject({ name: "Home", type: "masonry", native: true });
   });
 
-  it("flags unknown custom cards with their path", () => {
+  it("flags unknown cards with their path and reason, and reads a card with no type as entities, as the engine does", () => {
     const r = auditDashboard(
-      JSON.stringify({ views: [{ path: "a", sections: [{ cards: [{ type: "tile" }, { type: "custom:button-card" }, {}] }] }] }),
+      JSON.stringify({ views: [{ path: "a", sections: [{ cards: [{ type: "tile" }, { type: "custom:apexcharts-card" }, { type: "map" }, {}] }] }] }),
     );
     expect(r.isFullyNative).toBe(false);
-    expect(r.totals.tier3).toBe(2);
+    expect(r.totals).toEqual({ tier1: 2, tier2: 0, tier3: 2 });
     expect(r.triggers).toEqual([
-      { view: "a", path: "a/section[0]/card[1]", type: "custom:button-card" },
-      { view: "a", path: "a/section[0]/card[2]", type: "<missing>" },
+      { view: "a", path: "a/section[0]/card[1]", type: "custom:apexcharts-card", reasons: ["`custom:apexcharts-card` is a custom card with no native renderer"] },
+      { view: "a", path: "a/section[0]/card[2]", type: "map", reasons: ["`map` isn't a card type Vitro draws"] },
     ]);
+    expect(r.warnings).toEqual(["a/section[0]/card[3]: no `type`, so Vitro draws it as an entities card"]);
   });
 
   it("reads the lovelace/config websocket response and storage files", () => {
@@ -160,7 +252,7 @@ views:
     path: wall
     panel: true
     cards:
-      - type: custom:button-card
+      - type: custom:apexcharts-card
         entity: light.lamp
         card_mod:
           style: |
@@ -172,22 +264,22 @@ views:
   it("audits sections, nested grids, conditionals, and a panel view with a custom card", () => {
     const r = auditDashboard(yaml);
     expect(r.ok).toBe(true);
+    // A panel view builds only its first card, as the engine does.
     expect(r.views.map((v) => [v.name, v.type, v.tier1, v.tier2, v.tier3])).toEqual([
       ["living", "sections", 3, 0, 0],
-      ["wall", "masonry", 1, 1, 1],
+      ["wall", "panel", 0, 0, 1],
     ]);
-    expect(r.totals).toEqual({ tier1: 4, tier2: 1, tier3: 1 });
+    expect(r.totals).toEqual({ tier1: 3, tier2: 0, tier3: 1 });
     expect(r.isFullyNative).toBe(false);
-    expect(r.triggers).toEqual([{ view: "wall", path: "wall/card[0]", type: "custom:button-card" }]);
+    expect(r.triggers).toMatchObject([{ view: "wall", path: "wall/card[0]", type: "custom:apexcharts-card" }]);
   });
 
-  it("warns about unsupported tile features and complex card_mod", () => {
+  it("notes an unsupported tile feature on a built-in card, which stays native, and the cards a panel view skips", () => {
     const r = auditDashboard(yaml);
-    expect(r.warnings).toHaveLength(2);
-    expect(r.warnings[0]).toContain("living/section[0]/card[1].grid[0]");
-    expect(r.warnings[0]).toContain("light-effect-list");
-    expect(r.warnings[1]).toContain("wall/card[0]");
-    expect(r.warnings[1]).toMatch(/card_mod/);
+    expect(r.warnings).toEqual([
+      "living/section[0]/card[1].grid[0]: would fall back for tile feature `light-effect-list` isn't drawn natively, but the island can't draw built-in cards yet",
+      "wall: a panel view shows only its first card, so the other 2 aren't checked",
+    ]);
   });
 
   it("doesn't warn about plain card_mod styles or supported features", () => {
@@ -232,16 +324,17 @@ views:
     // A conditional at-rule isn't evaluated natively, even around the card's own rule.
     expect(map("@media (min-width: 1px) { ha-card { opacity: .5; } }").warnings).toHaveLength(1);
     expect(style("@supports (display: grid) { ha-card { opacity: .5; } }").warnings).toHaveLength(1);
-    // An @ inside a quoted string isn't an at-rule.
-    expect(map('ha-card[data-label="@media"] { opacity: .5; }').warnings).toHaveLength(0);
+    // The engine's at-rule scan (CardCompat.topLevelAtRules) doesn't skip quoted strings yet, so an @ inside an
+    // attribute value reads as an at-rule there, and the checker follows it.
+    expect(map('ha-card[data-label="@media"] { opacity: .5; }').warnings).toHaveLength(1);
   });
 
   it("refuses a key: value pair inside a flow list instead of reading it as text", () => {
-    const r = auditDashboard("views:\n  - cards: [type: custom:button-card]\n");
+    const r = auditDashboard("views:\n  - cards: [type: custom:apexcharts-card]\n");
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/key: value pair/);
     // A quoted string with a colon stays a string; a map in braces is read.
-    expect(auditDashboard('views:\n  - cards: [{type: "custom:button-card"}]\n').triggers).toHaveLength(1);
+    expect(auditDashboard('views:\n  - cards: [{type: "custom:apexcharts-card"}]\n').triggers).toHaveLength(1);
   });
 
   it("reads the sample, which has one custom card on purpose", () => {
@@ -352,11 +445,20 @@ describe("auditDashboard and the cards built from a configuration", () => {
         ] }],
       }),
     );
-    expect(r.triggers.map((t) => t.type)).toEqual([
-      "custom:bubble-card (card_type: pop-up)",
-      "custom:bubble-card (card_type: custom:separator)",
-      "custom:layout-card (layout_type: my-layout)",
+    expect(r.triggers.map((t) => [t.type, t.reasons])).toEqual([
+      ["custom:bubble-card", ["Bubble Card `card_type: pop-up` isn't drawn natively"]],
+      ["custom:bubble-card", ["Bubble Card `card_type: custom:separator` isn't drawn natively"]],
     ]);
+    // An unknown layout with a built-in card inside stays native: the island would draw the tile as a summary.
+    expect(r.warnings).toEqual([
+      "view_0/card[5]: would fall back for layout-card `layout_type: my-layout` isn't drawn natively, but the island can't draw the built-in cards inside it yet",
+    ]);
+    const custom = auditDashboard(
+      JSON.stringify({ views: [{ cards: [{ type: "custom:layout-card", layout_type: "my-layout", cards: [{ type: "custom:mushroom-entity-card" }] }] }] }),
+    );
+    expect(custom.triggers.map((t) => t.type)).toEqual(["custom:layout-card"]);
+    // The island draws the cards inside it, so they aren't listed on their own.
+    expect(custom.totals).toEqual({ tier1: 0, tier2: 0, tier3: 1 });
   });
 
   it("treats a type named like an inherited property as an unknown card", () => {
@@ -367,20 +469,199 @@ describe("auditDashboard and the cards built from a configuration", () => {
 
   it("inspects what auto-entities builds: its inner card and explicit card entries", () => {
     const island = auditDashboard(
-      JSON.stringify({ views: [{ cards: [{ type: "custom:auto-entities", card: { type: "custom:button-card" } }] }] }),
+      JSON.stringify({ views: [{ cards: [{ type: "custom:auto-entities", card: { type: "custom:apexcharts-card" } }] }] }),
     );
     expect(island.isFullyNative).toBe(false);
     const explicit = auditDashboard(
       JSON.stringify({ views: [{ cards: [{
         type: "custom:auto-entities", card_param: "cards", card: { type: "grid" },
-        entities: ["light.kitchen", { entity: "light.lamp", type: "custom:button-card" }],
+        entities: ["light.kitchen", { entity: "light.lamp", type: "custom:apexcharts-card" }],
       }] }] }),
     );
-    expect(explicit.triggers.map((t) => t.path)).toEqual(["view_0/card[0].entities[1]"]);
+    expect(explicit.triggers.map((t) => t.path)).toEqual(["view_0/card[0].card.entities[1]"]);
     // The default inner card (entities) and plain entries stay native.
     const plain = auditDashboard(
       JSON.stringify({ views: [{ cards: [{ type: "custom:auto-entities", filter: { include: [{ domain: "light" }] } }] }] }),
     );
     expect(plain.isFullyNative).toBe(true);
+  });
+});
+
+// The cases of the engine's CompatCheckerTest.kt, card by card: the site's checker must route each one as the engine
+// does. A built-in card stays native (its reason becomes a note); a custom card goes to an island with the reason.
+describe("auditDashboard routes cards as the engine's CompatCheckerTest does", () => {
+  const one = (card: object) => auditDashboard(JSON.stringify({ views: [{ path: "v", cards: [card] }] }));
+  const style = (css: string, type = "tile", extra: object = {}) => ({ type, entity: "light.a", ...extra, card_mod: { style: css } });
+  const native = (card: object) => {
+    const r = one(card);
+    expect(r.ok, r.error).toBe(true);
+    expect(r.triggers, JSON.stringify(r.triggers)).toEqual([]);
+    return r.warnings;
+  };
+  const island = (card: object, part: string) => {
+    const r = one(card);
+    expect(r.triggers).toHaveLength(1);
+    expect(r.triggers[0].reasons.join(" | ")).toContain(part);
+  };
+  const noted = (card: object, part: string) => {
+    const warnings = native(card);
+    expect(warnings.join(" | ")).toContain(part);
+    expect(warnings.join(" | ")).toContain("built-in");
+  };
+
+  it("keeps the Mirror, tablet and S1 idioms native", () => {
+    expect(
+      native({
+        type: "markdown",
+        text_only: true,
+        content: "{{ 'Good morning' }}",
+        card_mod: {
+          style: {
+            ".": "ha-card { background: none; border: none; box-shadow: none; transition: opacity 0.8s; }",
+            "ha-markdown$": "ha-markdown-element { font-size: 16px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.65; }",
+          },
+        },
+      }),
+    ).toEqual([]);
+    native({
+      type: "grid",
+      cards: [{ type: "markdown", content: "x" }],
+      card_mod: { style: ":host { margin: 3px 36px 0; --grid-card-gap: 11.6px; transition: opacity 0.8s; } ha-card { background: none; border: none; box-shadow: none; }" },
+    });
+    native({
+      type: "markdown",
+      content: "**21°**",
+      card_mod: {
+        style: {
+          ".": "ha-card { position: fixed; top: 50%; right: 20px; transform: translateY(-50%); width: 108px; background: rgba(255,255,255,0.05); border-radius: 21.8px; --card-text-align: center; } ha-card ha-markdown { padding: 0 } :host ha-card { height: auto }",
+          "ha-markdown$": "ha-markdown-element p { margin: 0; line-height: 1.2 }",
+        },
+      },
+    });
+    native(
+      style(
+        "{% if is_state(entity, 'on') %}ha-card { background: linear-gradient(150deg, rgba(251,191,36,0.22), rgba(251,191,36,0.05)); }{% else %}ha-card { background: rgba(255,255,255,0.045); }{% endif %} ha-card { border-radius: 24px; padding: 6px 4px; box-shadow: none; }",
+        "custom:mushroom-template-card",
+      ),
+    );
+    native({
+      type: "custom:stack-in-card",
+      cards: [{ type: "custom:mushroom-template-card", primary: "a" }],
+      card_mod: { style: "ha-card { height: 100%; box-sizing: border-box; background: none; border: none; padding: 16px 20px; --vertical-stack-card-gap: 8px; }" },
+    });
+  });
+
+  it("notes the known gaps of a native card without sending it to an island", () => {
+    expect(
+      native({
+        type: "custom:mushroom-chips-card",
+        chips: [{ type: "conditional", conditions: [], chip: { type: "template", content: "Door" } }],
+        card_mod: { style: "ha-card { --chip-background: rgba(255,255,255,0.08); padding: 6px 0 0 8px; }" },
+      }).join(" "),
+    ).toContain("the chips card doesn't apply its card_mod yet");
+    expect(native({ type: "tile", entity: "light.a", features_position: "inline", features: [{ type: "light-brightness" }] }).join(" ")).toContain("features_position");
+    expect(native(style("ha-card { backdrop-filter: blur(12px); }")).join(" ")).toContain("backdrop-filter");
+    // What HA drops, benign properties and interaction states aren't notes at all.
+    expect(native(style("background: red; ha-card { background: none !important; border-radius: 12px !important }"))).toEqual([]);
+    expect(
+      native(
+        style(
+          "ha-card { cursor: pointer; transition: all 0.3s ease; user-select: none; will-change: opacity; outline: none; animation: none } ha-card:hover { background: rgba(255,255,255,0.1) } ha-card:active { opacity: 0.8 } ha-card::-webkit-scrollbar { display: none }",
+        ),
+      ),
+    ).toEqual([]);
+    expect(native(style("ha-card { font-family: Lobster, cursive }"))).toEqual([]);
+  });
+
+  it("falls back for unknown cards and for card_mod Vitro can't draw on a custom card", () => {
+    island({ type: "custom:acme-floorplan-card" }, "custom card with no native renderer");
+    island({ type: "map" }, "isn't a card type Vitro draws");
+    const mushroom = (css: string | object) => ({ type: "custom:mushroom-template-card", card_mod: { style: css } });
+    island(mushroom({ "mushroom-shape-icon$": ".shape { --icon-size: 64px }" }), "card_mod path `mushroom-shape-icon$`");
+    island(mushroom({ ".": { "ha-card$": "x" } }), "nests further");
+    island(mushroom("ha-card .primary { font-size: 20px }"), "reaches inside the card");
+    island(mushroom("ha-card { background: url('/local/wood.jpg') center / cover }"), "background images");
+    island(mushroom("ha-card { background: radial-gradient(circle, #fff, #000) }"), "only linear gradients");
+    island(mushroom("ha-card { transform: scale(0.9) }"), "transform");
+    island(mushroom("ha-card { animation: pulse 2s infinite } @keyframes pulse { 50% { opacity: 0.5 } }"), "animation");
+    island(mushroom("@media (max-width: 600px) { ha-card { padding: 0 } }"), "`@media`");
+    island(mushroom("ha-card { filter: grayscale(1) }"), "filter");
+    island(mushroom("ha-card { border: 2px dashed #fff }"), "only solid borders");
+    island(mushroom("ha-card { height: 120px }"), "height");
+    island(mushroom("ha-card { width: 50% }"), "only applies to pinned");
+    island(mushroom("ha-card { box-shadow: inset 0 0 4px #000 }"), "inset");
+    island(mushroom("ha-card { color: red }"), "`color: red` isn't supported here");
+    island(mushroom("ha-card::before { content: '' }"), "pseudo-element");
+    island(mushroom("ha-card { pointer-events: none }"), "pointer-events");
+    island(mushroom("ha-card { contain: size }"), "contain");
+    island(mushroom("ha-card { background: linear-gradient(red, blue), linear-gradient(blue, red) }"), "layered backgrounds");
+    island(mushroom("ha-card { position: fixed; left: 10px; right: 10px }"), "stretch it between them");
+    // font-size is read on tile and Mushroom cards.
+    native(mushroom("ha-card { font-size: 18px }"));
+    // A pinned card needs a width above zero, as the engine reads it.
+    island(mushroom("ha-card { position: fixed; top: 0; left: 0; width: 0px }"), "a pinned width of zero");
+    native(mushroom("ha-card { position: fixed; top: 0; left: 0; width: 120px }"));
+  });
+
+  it("keeps a built-in card native and notes what it would have fallen back for", () => {
+    noted(style("ha-card .primary { font-size: 20px }"), "reaches inside the card");
+    noted({ type: "tile", entity: "light.a", card_mod: { style: { "ha-tile-icon$": ".container { border-radius: 4px }" } } }, "card_mod path `ha-tile-icon$`");
+    noted({ type: "tile", entity: "climate.a", features: [{ type: "climate-preset-modes" }] }, "tile feature `climate-preset-modes`");
+    noted({ type: "entities", entities: [{ type: "custom:slider-entity-row", entity: "light.a" }] }, "custom:slider-entity-row");
+    noted({ type: "entities", entities: [{ type: "buttons", entities: ["light.a"] }] }, "row type `buttons`");
+    noted({ type: "entities", entities: ["light.a"], footer: { type: "graph", entity: "sensor.a" } }, "`footer:`");
+    noted({ type: "picture-elements", image: "/local/p.png", elements: [{ type: "conditional", conditions: [], elements: [] }] }, "element `conditional`");
+    noted({ type: "markdown", content: '<ha-alert alert-type="warning">Door open</ha-alert>' }, "`<ha-alert>`");
+    noted({ type: "markdown", content: "<details><summary>More</summary>x</details>" }, "`<details>`");
+    noted({ type: "vertical-stack", cards: [], card_mod: { style: "hui-tile-card { margin: 4px }" } }, "reaches inside the stack");
+    // Tags HA's sanitizer escapes show as text there too, so they don't count.
+    expect(native({ type: "markdown", content: '<script>x</script> <iframe src="x"></iframe>' })).toEqual([]);
+    // The same `color` that sends a custom card to an island flows into a Markdown card's text.
+    expect(native({ type: "markdown", content: "x", card_mod: { style: "ha-card { color: red; font-size: 18px }" } })).toEqual([]);
+  });
+
+  it("routes the options of the custom cards Vitro draws", () => {
+    island({ type: "custom:mushroom-chips-card", chips: [{ type: "alarm-control-panel", entity: "alarm_control_panel.a" }] }, "chip `alarm-control-panel`");
+    island({ type: "custom:mushroom-chips-card", chips: [{ type: "conditional", chip: { type: "conditional" } }] }, "in a conditional chip");
+    island({ type: "custom:bubble-card", card_type: "pop-up", hash: "#k" }, "card_type: pop-up");
+    island({ type: "custom:layout-card", layout_type: "custom:foo-layout", cards: [] }, "layout_type: foo-layout");
+    native({ type: "custom:layout-card", layout_type: "custom:vertical-layout", cards: [{ type: "tile" }, { type: "custom:layout-break" }, { type: "tile" }] });
+    expect(
+      native({ type: "custom:auto-entities", filter: { include: [{ domain: "light", area: "kitchen" }], template: "{{ [] }}" } }).join(" "),
+    ).toContain("auto-entities filter `area`, `template` isn't evaluated natively");
+  });
+
+  it("counts a vertical layout's breaks as no card", () => {
+    const r = one({ type: "custom:layout-card", layout_type: "vertical-layout", cards: [{ type: "tile" }, { type: "custom:layout-break" }, { type: "tile" }] });
+    expect(r.totals).toEqual({ tier1: 2, tier2: 0, tier3: 0 });
+  });
+
+  it("takes a panel view's first card among the objects in its cards, as the engine parses them", () => {
+    const r = auditDashboard(JSON.stringify({ views: [{ path: "p", panel: true, cards: ["x", { type: "custom:apexcharts-card" }, { type: "tile" }] }] }));
+    expect(r.triggers.map((t) => t.path)).toEqual(["p/card[1]"]);
+    expect(r.warnings).toEqual(["p: a panel view shows only its first card, so the other 1 aren't checked"]);
+  });
+
+  it("reads `panel` as the engine's optBoolean does, the text \"true\" included", () => {
+    const view = (panel: unknown) => auditDashboard(JSON.stringify({ views: [{ panel, cards: [{ type: "tile" }, { type: "tile" }] }] })).views[0].type;
+    expect(view(true)).toBe("panel");
+    expect(view("True")).toBe("panel");
+    expect(view("false")).toBe("masonry");
+  });
+
+  it("leaves addresses out of the values it shows, as the engine's report does", () => {
+    const r = one({ type: "custom:mushroom-entity-card", card_mod: { style: "ha-card { background: image-set('/api/image/a?token=abc' 1x) }" } });
+    expect(r.triggers[0].reasons.join(" ")).toContain('image-set("…" 1x)');
+    expect(r.triggers[0].reasons.join(" ")).not.toContain("token");
+    const u = one({ type: "custom:mushroom-entity-card", card_mod: { style: "ha-card { background: url('https://example.invalid/a.png?sig=x') }" } });
+    expect(u.triggers[0].reasons.join(" ")).toContain("url(…)");
+  });
+
+  it("walks only the cards a view builds: a sections view's sections, else its cards", () => {
+    const r = auditDashboard(
+      JSON.stringify({ views: [{ path: "s", type: "sections", sections: [{ cards: [{ type: "tile" }] }], cards: [{ type: "custom:apexcharts-card" }] }] }),
+    );
+    expect(r.isFullyNative).toBe(true);
+    expect(r.totals.tier1).toBe(1);
   });
 });
