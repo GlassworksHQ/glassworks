@@ -10,7 +10,7 @@ runner can't read; FAKE_SF_HISTORY: how many frames `--latency` keeps (127, the 
 draws: Vitro's start line instead of GeckoView's pages, the native harness's lines (VitroClarity: CLOCK_MONOTONIC page
 clock, no camera line), the frames on the app's window layer; `--ez vitro` switches it and restarts the app.
 FAKE_NO_ENGINE_LINE: a kiosk that doesn't say its engine with the test hold. FAKE_VITRO_STUCK: one that saves the
-setting but keeps drawing with GeckoView.
+setting but keeps drawing with GeckoView. FAKE_VITRO_NO_RESTORE: one that won't turn Vitro off again.
 
 State lives in $FAKE_ADB_STATE (a directory): the nonce of the page the runner opened, the taps it
 sent, and the time ranges in which the fake screen paints. logcat, SurfaceFlinger and the fake page
@@ -240,7 +240,8 @@ def shell(cmd):
             save("intents.json", state("intents.json", []) + [dict(ez)])
             if ("restart", "true") in ez and os.environ.get("FAKE_HOLD_DIES"):
                 save("test_hold.json", None)
-            keep = {k: v for k, v in ez if k != "restart" and not (k == "voice_enabled" and os.environ.get("FAKE_VOICE_LOST"))}
+            keep = {k: v for k, v in ez if k != "restart" and not (k == "voice_enabled" and os.environ.get("FAKE_VOICE_LOST"))
+                    and not (k == "vitro" and v == "false" and os.environ.get("FAKE_VITRO_NO_RESTORE"))}
             save("settings.json", dict(state("settings.json", {}), **keep))
             if any(k == "vitro" for k, _ in ez):
                 # MainActivity restarts the process for it (logged when a logcat follows): the new one draws with it.

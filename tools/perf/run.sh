@@ -168,7 +168,8 @@ restore_engine() {
     log "COULD NOT put Vitro back; send it yourself: adb shell am start -n $PACKAGE/$ACTIVITY --ez vitro $ENGINE_WAS"
   fi
 }
-trap 'restore_engine; release_hold' EXIT
+# A setting that couldn't be put back fails the run (exit 3), as a dashboard that couldn't be does.
+trap 'restore_engine; release_hold; [ -z "$ENGINE_WAS" ] || exit 3' EXIT
 SAID_ENGINE=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("engine") or "")' "$HOLD_OUT")
 if [ -n "$ENGINE" ] && [ "$ENGINE" != "${SAID_ENGINE:-web}" ]; then
   # The setting as it was, before anything is sent: a switch that fails after the kiosk saved it is put back too.
@@ -276,6 +277,7 @@ cleanup() {
   restore_engine
   release_hold
   restored || exit 3
+  [ -z "$ENGINE_WAS" ] || exit 3     # Vitro's setting wasn't put back (restore_engine said how to)
   exit "$status"
 }
 trap cleanup EXIT

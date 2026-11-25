@@ -2391,6 +2391,19 @@ class VitroSwitchFails(unittest.TestCase):
             self.assertEqual(json.load(f)["vitro"], "false")
 
 
+class VitroRestoreFails(unittest.TestCase):
+    """The setting can't be put back after the run (FAKE_VITRO_NO_RESTORE): the run says how to, and fails (exit 3), as
+    when the dashboard can't be put back."""
+
+    def test_a_setting_left_changed_fails_the_run(self):
+        tmp = tempfile.mkdtemp()
+        proc, state, out, commands, rep = vitro_run(tmp, "--engine", "vitro", "--skip-synthetic", "--skip-real-use",
+                                                    "--skip-reference", FAKE_VITRO="false", FAKE_VITRO_NO_RESTORE="1")
+        self.assertEqual(proc.returncode, 3, proc.stderr[-3000:])
+        self.assertIn("COULD NOT put Vitro back", proc.stderr)
+        self.assertIn("--ez vitro false", proc.stderr)
+
+
 class EngineNotSaid(unittest.TestCase):
     """A kiosk that doesn't say its engine: --engine vitro is refused before anything changes; without --engine the run
     is the web engine's, as before."""
