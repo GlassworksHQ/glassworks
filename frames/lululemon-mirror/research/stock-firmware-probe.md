@@ -252,7 +252,10 @@ outside the repository.
    `stock-surgical-adb.ts --backup` builds `patch-dpmd.sparse` and `restore-dpmd.sparse` for that
    library and does not patch `init.qcom.post_boot.sh`. The module it embeds is the pinned
    `selinux_permissive.ko`, fetched by URL + SHA-256 (`tools/mirror/device-bins.json`); see the
-   device-bins note below. `--backup-module <path>` overrides it with a local `.ko`.
+   device-bins note below. That fetch runs before the device steps and has no offline cache, so the
+   default `--backup` needs the host to have internet access — the Phase 2 SoftAP link to the Mirror
+   is not enough on its own. `--backup-module <path>` is the offline path: it overrides the fetch
+   with a local `.ko` the operator already has.
 
    The constructor was executed off-device on 2026-11-24: the patched payload from the pulled
    lib64 file, with a 256-byte stand-in image in place of a `.ko`, was mapped in
@@ -267,9 +270,12 @@ outside the repository.
    changing the 35-instruction layout.
 
    The module that image embeds is not in this repo. A built `.ko` is a GPL payload (Hard Rule 4), so
-   its source and the hash-pinned binary built from it live in `GlassworksHQ/glassworks-device-bins`
-   (`frames/lululemon-mirror/selinux-permissive/`, GPL-2.0-only), published with their Corresponding
-   Source and consumed here by pinned release URL + SHA-256 (#817). Stock `1.24.0` only loads one
+   its source and the build recipe for the hash-pinned binary live in `GlassworksHQ/glassworks-device-bins`
+   (`frames/lululemon-mirror/selinux-permissive/`, GPL-2.0-only). The `v1` release that serves that
+   binary with its Corresponding Source is pending: it is gated on a real-Mirror load test of the
+   CI-built `.ko` and is not published yet. Once it is, this tool consumes it by pinned release URL +
+   SHA-256 (#817); `device-bins.json` already records the canonical CI SHA-256 so the pin resolves
+   the moment the release goes public. Stock `1.24.0` only loads one
    whose ABI matches its own `pronto_wlan.ko` (**verified** 2026-11-24, pulled file, not committed):
    ```
    vermagic=3.10.49-perf-g4869d64961b SMP preempt mod_unload modversions aarch64

@@ -20,10 +20,12 @@ Exit status is non-zero if anything is inconsistent.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -121,8 +123,28 @@ def verify_release(name: str, pin: dict, problems: list[str]) -> None:
     if asset.get("size") != pin["size"]:
         problems.append(f"device-bins.json:{name}: release {tag} asset is {asset.get('size')} B, pin says {pin['size']}")
     digest = (asset.get("digest") or "").removeprefix("sha256:")
+    if not digest:
+        # GitHub does not always expose a digest; never pass on name + size alone. The asset is tiny,
+        # so download it and hash it rather than skipping the SHA-256 check.
+        digest = _download_sha256(tag, pin, problems)
     if digest and digest != pin["sha256"]:
         problems.append(f"device-bins.json:{name}: release {tag} asset SHA-256 {digest} != pin {pin['sha256']}")
+
+
+def _download_sha256(tag: str, pin: dict, problems: list[str]) -> str:
+    """Download the release asset and return its SHA-256, or "" (recording a problem) on failure."""
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            subprocess.run(
+                ["gh", "release", "download", tag, "--repo", f"{DEVICE_BINS_OWNER}/{DEVICE_BINS_REPO}",
+                 "--pattern", pin["name"], "--dir", td, "--clobber"],
+                capture_output=True, text=True, check=True,
+            )
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            problems.append(f"device-bins.json: release {tag} exposes no digest and asset {pin['name']!r} "
+                            f"could not be downloaded to verify SHA-256")
+            return ""
+        return hashlib.sha256((Path(td) / pin["name"]).read_bytes()).hexdigest()
 
 
 def main() -> int:
