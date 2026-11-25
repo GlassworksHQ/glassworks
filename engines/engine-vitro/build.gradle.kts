@@ -47,6 +47,16 @@ tasks.withType<Test>().configureEach {
             outputs.upToDateWhen { false }
         }
     }
+    // The local-dashboard check (CompatCheckerLocalDashboardsTest) reads VITRO_PARITY_DIR's *-new.json files: the
+    // variable and those files are inputs, so setting it or editing one runs the check again. Unset (CI), nothing.
+    System.getenv("VITRO_PARITY_DIR")?.takeIf { it.isNotBlank() }?.let { d ->
+        inputs.property("vitroParityDir", d)
+        val dir = file(d)
+        if (dir.isDirectory) {
+            inputs.files(fileTree(dir) { include("*-new.json") }).withPropertyName("vitroParityDashboards")
+                .withPathSensitivity(PathSensitivity.RELATIVE)
+        }
+    }
     // Native graphics renders every case at three panel sizes: give it room.
     maxHeapSize = "2g"
 }

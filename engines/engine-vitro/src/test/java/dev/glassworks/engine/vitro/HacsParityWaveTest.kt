@@ -191,6 +191,18 @@ class HacsParityWaveTest {
         card.click("Open"); assertEquals("cover.open_cover", calls.last().service)
         card.click("Stop"); assertEquals("cover.stop_cover", calls.last().service)
         card.click("Close"); assertEquals("cover.close_cover", calls.last().service)
+
+        // Both controls: the buttons first, and a button that switches to the position slider (and back).
+        val both = dev.glassworks.engine.vitro.cards.MushroomCoverCardView(context(st),
+            card("""{"type": "custom:mushroom-cover-card", "entity": "cover.blind", "show_buttons_control": true, "show_position_control": true}"""))
+        idle()
+        fun shown(d: String) = both.all().any { it.contentDescription?.toString() == d && it.visibility == View.VISIBLE }
+        fun sliderShown() = both.all().any { it is dev.glassworks.engine.vitro.cards.HaHorizontalSliderView && it.visibility == View.VISIBLE }
+        assertTrue(shown("Open")); assertFalse(sliderShown())
+        both.click("position_control")
+        assertFalse(shown("Open")); assertTrue(sliderShown())
+        both.click("buttons_control")
+        assertTrue(shown("Open")); assertFalse(sliderShown())
     }
 
     @Test
@@ -258,13 +270,13 @@ class HacsParityWaveTest {
         assertTrue("10" in card.texts())
         card.click("Increase")
         assertEquals("input_number.set_value", calls.last().service)
-        assertEquals(11L, calls.last().data.getLong("value"))
+        assertEquals(11.0, calls.last().data.getDouble("value"), 0.0)
         st.putLocal(entity("input_number.volume", "11", "min" to 0, "max" to 11, "step" to 1))
         idle()
         card.click("Increase")
-        assertEquals(11L, calls.last().data.getLong("value")) // clamped at max
+        assertEquals(11.0, calls.last().data.getDouble("value"), 0.0) // clamped at max
         card.click("Decrease")
-        assertEquals(10L, calls.last().data.getLong("value"))
+        assertEquals(10.0, calls.last().data.getDouble("value"), 0.0)
 
         val num = store(entity("number.fan_speed", "2.5", "min" to 0, "max" to 5, "step" to 0.5))
         val n = MushroomNumberCardView(context(num), card("""{"type": "custom:mushroom-number-card", "entity": "number.fan_speed", "display_mode": "buttons"}"""))
@@ -514,6 +526,39 @@ class HacsParityWaveTest {
         )
         assertNotNull(kept.children[0].background)
         assertEquals(LinearLayout.VERTICAL, (kept.children[0].parent as LinearLayout).orientation)
+    }
+
+    @Test
+    fun aStackInCardKeepsAnAutoEntitiesReplacementSeamless() {
+        val st = store(entity("light.a", "on"))
+        lateinit var auto: AutoEntitiesCardView
+        val inner = builder(st)
+        val build: (CardConfig) -> View = { c ->
+            if (c.type == "custom:auto-entities") AutoEntitiesCardView(context(st), c, inner).also { auto = it } else inner(c)
+        }
+        StackInCardView(context(st), card("""{"type": "custom:stack-in-card", "cards": [
+            {"type": "custom:auto-entities", "card": {"type": "entities"}, "filter": {"include": [{"domain": "light"}]}}]}"""), build)
+        val first = auto.getChildAt(0) as dev.glassworks.engine.vitro.ui.CardSurface
+        assertTrue(first.seamless)
+        // Another light matches: auto-entities builds a new inner card, which shares the stack's surface too.
+        st.putLocal(entity("light.b", "on"))
+        idle()
+        val replacement = auto.getChildAt(0) as dev.glassworks.engine.vitro.ui.CardSurface
+        assertTrue("rebuilt", replacement !== first)
+        assertTrue(replacement.seamless)
+    }
+
+    @Test
+    fun repeatedControlsAreBuiltOnce() {
+        // A repeated entry would attach one icon view to two buttons (Android throws): each control appears once.
+        val st = store(
+            entity("media_player.den", "playing", "supported_features" to 0xFFFF),
+            entity("vacuum.robo", "docked", "supported_features" to 0xFFFF),
+        )
+        MushroomMediaPlayerCardView(context(st), card("""{"type": "custom:mushroom-media-player-card", "entity": "media_player.den",
+            "media_controls": ["play_pause_stop", "play_pause_stop", "next"], "volume_controls": ["volume_mute", "volume_mute"]}"""))
+        MushroomVacuumCardView(context(st), card("""{"type": "custom:mushroom-vacuum-card", "entity": "vacuum.robo",
+            "commands": ["start_pause", "start_pause", "return_home"]}"""))
     }
 
     @Test

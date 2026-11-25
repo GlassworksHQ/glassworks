@@ -292,4 +292,65 @@ class HaGraphTest {
         assertEquals(42L, derived.now())
         assertTrue(derived.subscribeWs === subscribe)
     }
+
+    @Test
+    fun aFooterWithHistoryButNoNumbersSaysSo() {
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        var onEvent: ((JSONObject) -> Unit)? = null
+        val nowMs = 1_800_000_000_000L
+        val ctx = dev.glassworks.engine.vitro.ui.VitroCardContext(
+            context = activity, haBase = "http://192.0.2.1", store = dev.glassworks.engine.vitro.data.EntityStore(),
+            theme = dev.glassworks.engine.vitro.theme.ThemeResolver.resolve(dev.glassworks.engine.vitro.theme.ThemeCatalog(), true),
+            resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            subscribeWs = { _, ev, _ -> onEvent = ev; {} }, now = { nowMs },
+        )
+        val footer = GraphFooterView(ctx, JSONObject().put("type", "graph").put("entity", "sensor.power"))
+        val root = android.widget.FrameLayout(activity)
+        activity.setContentView(root)
+        root.addView(footer, android.widget.FrameLayout.LayoutParams(500, 100))
+        // The recorder answered: only `unavailable`, nothing to plot. Not loading, not an error: HA's info line.
+        onEvent!!(JSONObject().put("states", JSONObject().put("sensor.power", org.json.JSONArray()
+            .put(JSONObject().put("s", "unavailable").put("lu", nowMs / 1000.0 - 600)))))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        footer.measure(android.view.View.MeasureSpec.makeMeasureSpec(500, android.view.View.MeasureSpec.EXACTLY), android.view.View.MeasureSpec.makeMeasureSpec(100, android.view.View.MeasureSpec.EXACTLY))
+        footer.layout(0, 0, 500, 100)
+        footer.draw(android.graphics.Canvas(android.graphics.Bitmap.createBitmap(500, 100, android.graphics.Bitmap.Config.ARGB_8888)))
+        assertEquals(GraphFooterView.NO_HISTORY, footer.contentDescription)
+    }
+
+    @Test
+    fun aMiniGraphBackOnScreenReadsItsHistoryAtOnce() {
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        var reads = 0
+        val ctx = dev.glassworks.engine.vitro.ui.VitroCardContext(
+            context = activity, haBase = "http://192.0.2.1", store = dev.glassworks.engine.vitro.data.EntityStore(),
+            theme = dev.glassworks.engine.vitro.theme.ThemeResolver.resolve(dev.glassworks.engine.vitro.theme.ThemeCatalog(), true),
+            resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> reads++ }, subscribeTemplate = { _, _ -> {} },
+        )
+        val card = dev.glassworks.engine.vitro.cards.SensorGraphCardView(ctx, dev.glassworks.engine.vitro.model.LovelaceParser.parseCard(
+            JSONObject("""{"type": "custom:mini-graph-card", "entities": ["sensor.power"]}"""),
+        ))
+        val root = android.widget.FrameLayout(activity)
+        activity.setContentView(root)
+        root.addView(card)
+        val first = reads
+        assertTrue("the constructor read it", first >= 1)
+        root.removeView(card)
+        root.addView(card)
+        assertEquals("read again on return, not five minutes later", first + 1, reads)
+    }
+
+    @Test
+    fun aPinnedTopKeepsItsTicksInside() {
+        // Pinned just under 0.3: no 0.3 tick past it; the end itself is the last tick.
+        val under = ECharts.valueScale(0.0, 0.29999999999, 0.0, 0.29999999999, 0.0, splitNumber = 3)
+        assertTrue(under.ticks.toString(), under.ticks.all { it <= 0.29999999999 })
+        assertEquals(0.29999999999, under.ticks.last(), 0.0)
+        // Pinned at exactly 0.3: the 0.3 tick stays.
+        val exact = ECharts.valueScale(0.0, 0.3, 0.0, 0.3, 0.0, splitNumber = 3)
+        assertEquals(0.3, exact.ticks.last(), 1e-12)
+        assertEquals(1, exact.ticks.count { kotlin.math.abs(it - 0.3) < 1e-12 })
+    }
 }

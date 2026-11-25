@@ -1,0 +1,10 @@
+{
+  "title": "Statistics graph in a fixed 4-row slot: the chart shrinks so chart and legend fill it",
+  "card": {
+    "type": "statistics-graph",
+    "title": "Temperature",
+    "grid_options": { "columns": 12, "rows": 4 },
+    "entities": [{ "entity": "sensor.living_room_airdot_living_room_temperature", "name": "Living room" }],
+    "days_to_show": 7
+  }
+}

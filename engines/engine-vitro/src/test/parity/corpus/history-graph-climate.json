@@ -1,0 +1,8 @@
+{
+  "title": "History graph: a climate entity's current and target temperature, filled while it heats",
+  "card": {
+    "type": "history-graph",
+    "title": "Air conditioner",
+    "entities": [{ "entity": "climate.ac", "name": "AC" }]
+  }
+}

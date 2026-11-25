@@ -1,6 +1,6 @@
 # Vitro parity harness
 
-The harness checks how closely Vitro draws each card compared with Home Assistant. Home Assistant's own render is the spec (#790), and the harness turns "looks off" into a list (#793). It renders every case in a corpus twice:
+The harness checks how closely Vitro draws each card compared with Home Assistant. Home Assistant's own render is the spec, and the harness turns "looks off" into a list. It renders every case in a corpus twice:
 
 - **Home Assistant:** HA's real frontend in headless Chromium, at the panel's CSS size and density, with card-mod loaded before the dashboard (as `frontend: extra_module_url` does) and the kiosk's header hidden.
 - **Vitro:** `VitroView` under Robolectric's native graphics, at the same size and density, fed the entity states HA's page held when it drew the reference, HA's themes, the templates HA rendered, and the history and statistics HA's graphs got.
@@ -53,7 +53,7 @@ A local corpus (`--local [dir]`, default `~/.t3/glassworks-m1/vitro-parity/harne
 
 ### Cases with their own stylesheets
 
-Home Assistant is read-only for the harness, apart from its own dashboard, so a case that needs a stylesheet (a web font, say) doesn't add a Lovelace resource. It lists the sheet instead: `"resources": [{"type": "css", "url": "/local/vitro-harness-fixtures/fonts/cardmod.css"}]`, with the file in `fixtures/fonts/cardmod.css`. Only `type: css` under that path is accepted. Such a case gets a page of its own in the capture, and the next case a fresh one, because what a sheet declares stays in the page. The font cases (`font-*`) use fonts under the SIL Open Font License; their licences sit next to them.
+Home Assistant is read-only for the harness, apart from its own dashboard, so a case that needs a stylesheet (a web font, say) doesn't add a Lovelace resource. It lists the sheet instead: `"resources": [{"type": "css", "url": "/local/vitro-harness-fixtures/fonts/cardmod.css"}]`, with the file in `fixtures/fonts/cardmod.css`. Only `type: css` under that path is accepted. Such a case gets a page of its own in the capture, and the next case a fresh one, because what a sheet declares stays in the page. The font cases (`font-*`) use fonts under the SIL Open Font License; their licenses sit next to them.
 
 ### Adding a case
 
@@ -63,16 +63,16 @@ Write `corpus/<case>.json`, then run `tools/vitro-parity/run.sh --refresh --case
 
 | Check | Default | What it measures |
 |---|---|---|
-| Pixels | 2% | Share of the crop that differs, at one sample per CSS px (both images box-filtered first, which irons out font antialiasing), with pixelmatch's YIQ colour distance at 0.1. A pixel that matches a neighbour within 1 CSS px counts as a shift, not a difference |
+| Pixels | 2% | Share of the crop that differs, at one sample per CSS px (both images box-filtered first, which irons out font antialiasing), with pixelmatch's YIQ color distance at 0.1. A pixel that matches a neighbour within 1 CSS px counts as a shift, not a difference |
 | Bounds | 2 CSS px | The largest offset of any edge of the card's slot |
 | Font | 1 CSS px | The largest font size difference among the texts found |
 | Texts | 0 missing | HA texts not found in any of Vitro's TextViews. Text Vitro draws straight on a canvas (gauges, the thermostat dial) shows up here as missing. HA text that is visually hidden (a 1×1 or clipped screen-reader label, `.visually-hidden`, `.sr-only`) isn't counted |
 
 A refresh takes new references with live states, so the scores of cases that drift move a little with it. After a refresh with no Vitro change, run `run.sh --update-baseline` and commit the references and the baseline together (the reasons stay).
 
-> **An update records whatever drifts now, regressions included.** `--update-baseline` rewrites the entry of every case it measures: a real regression becomes "known drift", and the next run stops reporting it. Before you commit `baseline.json`, read its diff: every entry that got worse must be a change you mean to accept, not a Vitro bug. Keep the entry of a case with an open regression as it is (run the update with `--cases` for the others); `tile-select` is one today, until exp/vitro's fix for its capitalized option lands, and its entry says so.
+> **An update records whatever drifts now, regressions included.** `--update-baseline` rewrites the entry of every case it measures: a real regression becomes "known drift", and the next run stops reporting it. Before you commit `baseline.json`, read its diff: every entry that got worse must be a change you mean to accept, not a Vitro bug. Keep the entry of a case with an open regression as it is (run the update with `--cases` for the others).
 
-A case over its threshold is a **known drift** if `baseline.json` lists it and it hasn't got worse, with 2% pixels, 1 px bounds and 0.5 px font of slack. Otherwise it's a **regression** and the test fails. A listed case that comes back within its threshold gets a note to drop it from the baseline. The audit (#794) works through the baseline until each case either matches or carries a reason.
+A case over its threshold is a **known drift** if `baseline.json` lists it and it hasn't got worse, with 2% pixels, 1 px bounds and 0.5 px font of slack. Otherwise it's a **regression** and the test fails. A listed case that comes back within its threshold gets a note to drop it from the baseline. The parity audit works through the baseline until each case either matches or carries a reason.
 
 ## Privacy
 

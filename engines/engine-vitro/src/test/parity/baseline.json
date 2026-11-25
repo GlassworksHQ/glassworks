@@ -14,6 +14,13 @@
   "missingText": 0,
   "reason": "the date line and layout match HA (its start cut off at the large size, as HA's marquee rests); what is left is glyph antialiasing on the 64 px digits and 24 px date, just over the 2% line"
  },
+ "mirror/history-graph-rows": {
+  "pixel": 0.0281,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the chart shrinks to its 5-row slot as HA's does (chart and legend at the same heights, bounds 0). Left: the y-axis width drift of history-graph-two (the capture host's Chrome measures the labels in its fallback font, Vitro in Roboto), so every point sits ~2 px left (2026-11-24)"
+ },
  "mirror/history-graph-timeline": {
   "pixel": 0.0544,
   "bounds": 0.7,
@@ -63,6 +70,13 @@
   "missingText": 0,
   "reason": "the date line and layout match HA (its start cut off at the large size, as HA's marquee rests); what is left is glyph antialiasing on the 64 px digits and 24 px date, just over the 2% line"
  },
+ "s1/history-graph-rows": {
+  "pixel": 0.0281,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the chart shrinks to its 5-row slot as HA's does (chart and legend at the same heights, bounds 0). Left: the y-axis width drift of history-graph-two (the capture host's Chrome measures the labels in its fallback font, Vitro in Roboto), so every point sits ~2 px left (2026-11-24)"
+ },
  "s1/history-graph-timeline": {
   "pixel": 0.0545,
   "bounds": 0.7,
@@ -104,6 +118,13 @@
   "font": 0,
   "missingText": 0,
   "reason": "the date line and layout match HA (its start cut off at the large size, as HA's marquee rests); what is left is glyph antialiasing on the 64 px digits and 24 px date, just over the 2% line"
+ },
+ "tablet/history-graph-rows": {
+  "pixel": 0.029,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the chart shrinks to its 5-row slot as HA's does (chart and legend at the same heights, bounds 0). Left: the y-axis width drift of history-graph-two (the capture host's Chrome measures the labels in its fallback font, Vitro in Roboto), so every point sits ~2 px left (2026-11-24)"
  },
  "tablet/history-graph-timeline": {
   "pixel": 0.0271,

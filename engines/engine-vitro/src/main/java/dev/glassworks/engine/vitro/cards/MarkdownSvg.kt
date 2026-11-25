@@ -75,6 +75,8 @@ class MdSvg private constructor(
         val textAlign: Paint.Align,
         val x: Float,
         val y: Float,
+        /** The shape's `opacity` when it has both a fill and a stroke: applied once to the two drawn together. */
+        val groupOpacity: Float = 1f,
     )
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -117,8 +119,14 @@ class MdSvg private constructor(
         shape.style?.let { return it }
         val a = shape.attrs
         val opacity = (a["opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f)
-        val fill = color(a["fill"] ?: "black", opacity * (a["fill-opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f))
-        val stroke = color(a["stroke"] ?: "none", opacity * (a["stroke-opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f))
+        // `opacity` is the element's, over its fill and stroke drawn together: with both, it's one layer (no darker
+        // band where the stroke overlaps the fill); with one, it folds into that paint.
+        val fillOpacity = a["fill-opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f
+        val strokeOpacity = a["stroke-opacity"]?.let { MarkdownInline.parseOpacity(it) } ?: 1f
+        val both = color(a["fill"] ?: "black", 1f) != null && color(a["stroke"] ?: "none", 1f) != null && shape.text == null
+        val each = if (both) 1f else opacity
+        val fill = color(a["fill"] ?: "black", each * fillOpacity)
+        val stroke = color(a["stroke"] ?: "none", each * strokeOpacity)
         val strokeWidth = a["stroke-width"]?.let { num(it) } ?: 1f
         val cap = when (a["stroke-linecap"]) {
             "round" -> Paint.Cap.ROUND
@@ -176,12 +184,14 @@ class MdSvg private constructor(
             },
             x = num(a["x"]),
             y = num(a["y"]),
+            groupOpacity = if (both) opacity else 1f,
         ).also { shape.style = it }
     }
 
     private fun drawShape(canvas: Canvas, shape: Shape, context: Context) {
         val st = styleOf(shape)
-        canvas.save()
+        // Restored to this count at the end: the transform and an opacity layer both go, so no sibling inherits either.
+        val saved = canvas.save()
         shape.matrix?.let { canvas.concat(it) }
         if (shape.text != null) {
             paint.reset()
@@ -200,6 +210,7 @@ class MdSvg private constructor(
             canvas.restore()
             return
         }
+        if (st.groupOpacity < 1f) canvas.saveLayerAlpha(null, (st.groupOpacity * 255f).roundToInt().coerceIn(0, 255))
         // `paint-order: stroke` paints the stroke under the fill.
         if (st.strokeFirst) {
             drawStroke(canvas, path, st)
@@ -208,7 +219,7 @@ class MdSvg private constructor(
             drawFill(canvas, path, st)
             drawStroke(canvas, path, st)
         }
-        canvas.restore()
+        canvas.restoreToCount(saved)
     }
 
     private fun drawFill(canvas: Canvas, path: Path, st: ShapeStyle) {
@@ -306,6 +317,7 @@ class MdSvg private constructor(
             var pos = 0
             var openText: Pair<Map<String, String>, Matrix?>? = null
             val textBuf = StringBuilder()
+            var unrendered = 0
             while (true) {
                 val m = ELEMENT.find(xml, pos) ?: break
                 if (openText != null) textBuf.append(xml, pos, m.range.first)
@@ -313,6 +325,13 @@ class MdSvg private constructor(
                 val closing = m.groupValues[1] == "/"
                 val name = m.groupValues[2].substringAfter(':').lowercase(Locale.ROOT)
                 val selfClose = m.groupValues[4] == "/"
+                // Inside <defs> (and the other never-drawn containers) nothing is drawn directly: only their own
+                // nesting is followed, to know where they end.
+                if (unrendered > 0) {
+                    if (name in UNRENDERED) { if (closing) unrendered-- else if (!selfClose) unrendered++ }
+                    continue
+                }
+                if (!closing && !selfClose && name in UNRENDERED) { unrendered++; continue }
                 if (closing) {
                     when (name) {
                         "g", "svg" -> {
@@ -359,7 +378,11 @@ class MdSvg private constructor(
                         }
                         if (!selfClose) {
                             inherited += own to matrix
-                            layered += false
+                            // The root's (or a nested svg's) opacity applies to everything in it at once, as a group's.
+                            val alpha = own["opacity"]?.let { MarkdownInline.parseOpacity(it) }?.coerceIn(0f, 1f)
+                            val layer = alpha != null && alpha < 1f
+                            if (layer) shapes += Shape(null, emptyMap(), null, layerAlpha = alpha)
+                            layered += layer
                         }
                     }
                     "g" -> if (!selfClose) {
@@ -425,6 +448,9 @@ class MdSvg private constructor(
             val vb = viewBox ?: RectF(0f, 0f, iw ?: 300f, ih ?: 150f)
             return MdSvg(vb, preserve, shapes, iw, ih)
         }
+
+        /** Containers whose content is never drawn where it stands (definitions, references, effects). */
+        private val UNRENDERED = setOf("defs", "symbol", "clippath", "mask", "pattern", "marker", "lineargradient", "radialgradient", "filter")
 
         private val INHERITABLE = setOf(
             "fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "fill-opacity",

@@ -43,11 +43,14 @@ class HaGridLayout(
     private var contentLeft = 0
     private var colWidth = 0f
 
+    /** The gap measuring and placing use: the configured one, or less when the gaps alone outgrow the content. */
+    private var gap = 0f
+
     private fun span(child: View): Int = ((child.layoutParams as? LayoutParams)?.span ?: columns).coerceIn(1, columns)
 
     private fun cellWidth(col: Int, span: Int): Int {
-        val left = (col * (colWidth + colGap)).roundToInt()
-        val right = ((col + span) * (colWidth + colGap) - colGap).roundToInt()
+        val left = (col * (colWidth + gap)).roundToInt()
+        val right = ((col + span) * (colWidth + gap) - gap).roundToInt()
         return (right - left).coerceAtLeast(0)
     }
 
@@ -56,7 +59,8 @@ class HaGridLayout(
         val avail = (width - paddingLeft - paddingRight).coerceAtLeast(0)
         val content = min(avail, maxContentWidth)
         contentLeft = paddingLeft + (avail - content) / 2
-        colWidth = ((content - (columns - 1) * colGap).coerceAtLeast(0)).toFloat() / columns
+        gap = if (columns > 1 && (columns - 1) * colGap > content) content.toFloat() / (columns - 1) else colGap.toFloat()
+        colWidth = (content - (columns - 1) * gap).coerceAtLeast(0f) / columns
         val n = childCount
         rowOf = IntArray(n) { -1 }
         colOf = IntArray(n)
@@ -104,7 +108,7 @@ class HaGridLayout(
         for (i in 0 until childCount) {
             val child = getChildAt(i)
             if (i >= rowOf.size || rowOf[i] < 0 || child.visibility == GONE) continue
-            val x = contentLeft + (colOf[i] * (colWidth + colGap)).roundToInt()
+            val x = contentLeft + (colOf[i] * (colWidth + gap)).roundToInt()
             val y = rowTop[rowOf[i]]
             child.layout(x, y, x + child.measuredWidth, y + child.measuredHeight)
         }
@@ -224,9 +228,11 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                 "tile" -> {
                     val features = raw.optJSONArray("features")?.length() ?: 0
                     val vertical = raw.optBoolean("vertical", false)
-                    // Inline features sit beside the info, so they add no rows (HA shows only the first one).
+                    // Inline, the first feature sits beside the info; the others go below in up to two columns.
                     val inline = features > 0 && !vertical && raw.optString("features_position") == "inline"
-                    HaGridSize(if (inline) 12 else 6, 1 + (if (inline) 0 else features) + if (vertical) 1 else 0)
+                    val below = if (inline) features - 1 else features
+                    val featureRows = if (inline) (below + 1) / 2 else features
+                    HaGridSize(if (inline) 12 else 6, 1 + featureRows + if (vertical) 1 else 0)
                 }
                 // hui-entity-card's (and so hui-sensor-card's) getGridOptions: 6 columns, 2 rows.
                 "entity", "sensor" -> HaGridSize(6, 2)

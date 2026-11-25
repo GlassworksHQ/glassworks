@@ -262,7 +262,8 @@ class CssSelector private constructor(
                     continue
                 }
                 if (c == '>' || c == '+' || c == '~') {
-                    if (parts.isEmpty()) return null
+                    // A second explicit combinator before the next compound (`div > > p`) is invalid CSS.
+                    if (parts.isEmpty() || pendingComb != null && pendingComb != ' ') return null
                     pendingComb = c
                     i++
                     continue
@@ -899,7 +900,16 @@ object MdCascade {
      * Substitutes `var(--name, fallback)` from [custom], then [themeVars], then HA's defaults. Null when a
      * variable is missing and has no fallback: the declaration is then invalid, as in the browser.
      */
-    fun resolveVars(value: String, custom: Map<String, String>, themeVars: Map<String, String>, depth: Int = 0): String? {
+    fun resolveVars(
+        value: String,
+        custom: Map<String, String>,
+        themeVars: Map<String, String>,
+        depth: Int = 0,
+        /** The properties being resolved around this value, outermost first: one met again closes a cycle. */
+        visiting: List<String> = emptyList(),
+        /** Every property found in a cycle so far: all of them are invalid (CSS Variables 1, §2.3). */
+        cycle: MutableSet<String> = HashSet(),
+    ): String? {
         if ("var(" !in value) return value
         if (depth > 8) return null
         val sb = StringBuilder()
@@ -919,12 +929,22 @@ object MdCascade {
             val hasComma = value.substring(m.range.first, m.range.last + 1).contains(',')
             val fallback = if (hasComma) value.substring(fbStart, j.coerceAtMost(value.length)).trim() else null
             val name = m.groupValues[1]
+            // In a cycle, the property is invalid: so is this value, whatever fallback it has here; the reference
+            // outside the cycle takes its own fallback.
+            val at = visiting.indexOf(name)
+            if (at >= 0) {
+                cycle += visiting.subList(at, visiting.size)
+                return null
+            }
             val found = custom[name] ?: themeVars[name] ?: HA_DEFAULT_VARS[name]
-            val sub = when {
-                found != null -> resolveVars(found, custom, themeVars, depth + 1)
-                fallback != null -> resolveVars(fallback, custom, themeVars, depth + 1)
-                else -> null
-            } ?: return null
+            val resolved = found?.let { resolveVars(it, custom, themeVars, depth + 1, visiting + name, cycle) }
+            // Inside a cycle member's own value nothing rescues it: no fallback there.
+            if (resolved == null && visiting.lastOrNull()?.let { it in cycle } == true) return null
+            // A property that exists but is invalid (it needs one defined nowhere, or sits in a cycle) is as good as
+            // missing: the fallback is tried. An empty but valid value stays.
+            val sub = resolved
+                ?: fallback?.let { resolveVars(it, custom, themeVars, depth + 1, visiting, cycle) }
+                ?: return null
             sb.append(sub)
             i = j + 1
         }

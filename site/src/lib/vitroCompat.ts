@@ -179,6 +179,11 @@ function flowScalar(s: string, pos: { i: number }, line: number, isKey: boolean)
   if (/(^|:\s+)\*[^\s,\]}]+(\s|$)/.test(raw.trim())) {
     throw new YamlError(`alias ${raw.trim()} inside a flow collection isn't supported; use a block list`, line);
   }
+  // `[type: custom:button-card]` is a list holding a one-pair map in YAML, not the text "type: …": read as a string
+  // it would hide the card from the audit (a PASS for a custom card), so refuse it.
+  if (!isKey && /:(\s|$)/.test(raw.trim())) {
+    throw new YamlError(`a key: value pair inside [ ] (${raw.trim().split(":")[0]}) isn't supported; write it as {key: value} or a block list`, line);
+  }
   return isKey ? raw.trim() : scalar(raw, line);
 }
 
@@ -477,11 +482,58 @@ function fail(error: string): VitroAuditResult {
   return { ok: false, error, isFullyNative: false, totals: { tier1: 0, tier2: 0, tier3: 0 }, views: [], triggers: [], warnings: [] };
 }
 
+/**
+ * card_mod selector-map keys the renderer reads for a card type (VitroSupport.cardModSheets): the card itself always,
+ * HA's markdown root only on a Markdown card, the digital clock's only on a clock.
+ */
+function supportedStyleKey(type: string, key: string): boolean {
+  if (key === ".") return true;
+  if (key === "ha-markdown$") return type === "markdown";
+  if (key === "hui-clock-card-digital$") return type === "clock";
+  return false;
+}
+
+/** Legacy single-colon pseudo-elements (`ha-card:before`): generated content, which isn't drawn natively either. */
+const LEGACY_PSEUDO = /:(before|after|first-line|first-letter)\b/i;
+
+/**
+ * A selector for the card itself (`ha-card`, `:host`, `:host > ha-card`), compounded with classes, ids, attributes
+ * and pseudo-classes at most (`ha-card.compact`), as the renderer's host check reads it.
+ */
+const OWN_CARD_SELECTOR = /^(?::host(?:\s*>?\s*ha-card)?|ha-card)(?:\.[\w-]+|#[\w-]+|\[[^\]]*\]|:[a-z-]+(?:\([^)]*\))?)*$/i;
+
+/** Jinja (`{{ … }}`, `{% … %}`, `{# … #}`): masked before reading selectors, as the renderer replaces it first. */
+const JINJA = /\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|\{#[\s\S]*?#\}/g;
+
+/**
+ * True when a card's own sheet has a rule for something inside the card (`ha-card .card-header`): the renderer
+ * models no card's inner DOM, so it doesn't apply it. A Markdown or clock card's own sheet reaches into the parts the
+ * renderer draws, so they're left to the native check.
+ */
+function reachesInside(type: string, css: string): boolean {
+  if (type === "markdown" || type === "clock") return false;
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, " ").replace(JINJA, " ");
+  for (const m of text.matchAll(/([^{}]+)\{/g)) {
+    for (const sel of m[1].split(",")) {
+      const t = sel.trim();
+      if (t && !t.startsWith("@") && !OWN_CARD_SELECTOR.test(t)) return true;
+    }
+  }
+  return false;
+}
+
 function cardModWarning(card: Obj, loc: string, out: string[]) {
   const cm = card.card_mod;
   if (!isObj(cm)) return;
   const style = cm.style;
-  if (isObj(style) || (typeof style === "string" && (style.includes("$:") || style.includes("@keyframes") || style.includes("::")))) {
+  const type = typeof card.type === "string" ? card.type.trim() : "";
+  const complex = (css: unknown) =>
+    typeof css !== "string" || css.includes("$:") || css.includes("@keyframes") || css.includes("::") || LEGACY_PSEUDO.test(css);
+  const own = (css: unknown) => complex(css) || (typeof css === "string" && reachesInside(type, css));
+  const unsupported = isObj(style)
+    ? Object.entries(style).some(([k, v]) => !supportedStyleKey(type, k) || (k === "." ? own(v) : complex(v)))
+    : typeof style === "string" && own(style);
+  if (unsupported) {
     out.push(`${loc}: complex Shadow-DOM, pseudo-element, or keyframe card_mod (only ha-card container styles carry over natively)`);
   }
 }
