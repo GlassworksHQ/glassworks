@@ -96,11 +96,14 @@ internal class Lockdown(
         }
     }
 
-    override fun start(dashboard: String?) {
-        if (!policy.start(dashboard)) return
+    override fun start(dashboard: String?, local: String?) {
+        if (!policy.start(dashboard, local)) return
         val origin = policy.origin
         if (origin != null) Log.i(logTag, "Lockdown: pages may load $origin, for this process")
         else Log.w(logTag, "Lockdown: no dashboard address (or one the lockdown can't read), so nothing loads")
+        // The app's own loopback server: its port only. Nothing names an address on loopback but this one.
+        if (policy.local != null) Log.i(logTag, "Lockdown: and the app's own loopback server, each page held to its own origin")
+        else if (local != null) Log.w(logTag, "Lockdown: the app's loopback server isn't 127.0.0.1 with a port, so it doesn't load")
         sendOrigin()
     }
 
@@ -115,7 +118,9 @@ internal class Lockdown(
         return false
     }
 
-    private fun sendOrigin() = policy.origin?.let { send(JSONObject().put("type", "origin").put("origin", it)) }
+    private fun sendOrigin() = policy.origin?.let {
+        send(JSONObject().put("type", "origin").put("origin", it).apply { policy.local?.let { l -> put("local", l) } })
+    }
 
     private fun send(message: JSONObject) {
         runCatching { port?.postMessage(message) }.onFailure { Log.w(logTag, "Lockdown: the extension didn't take a message", it) }

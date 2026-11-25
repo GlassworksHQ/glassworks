@@ -29,15 +29,20 @@ import java.util.concurrent.CopyOnWriteArraySet
  * - `GET /__vitro/island/<id>` serves the ~5 KB Micro-Host HTML (theme CSS vars + custom card JS).
  * - `GET /__vitro/ws/<id>` upgrades to a loopback WebSocket bridging `hass.states` (Proxy-filtered),
  *   `hass.callWS`, `hass.callService`, `hass-more-info`, and auto-resize straight to Kotlin.
- * - Every other path (`/local/...`, `/hacsfiles/...`, `/api/...`) is strictly reverse-proxied to the
- *   panel's single configured Home Assistant ([session]) with the panel's Bearer token injected.
+ * - Every other path the islands load (`/local/...`, `/hacsfiles/...`, `/api/...`, the dashboard's own Lovelace
+ *   resources) is strictly reverse-proxied to the panel's single configured Home Assistant ([session]) with the
+ *   panel's Bearer token injected.
+ *
+ * Only islands use it. Home Assistant's own pages (sign-in, settings, history) load from Home Assistant itself in the
+ * fallback engine, the legacy one too (its lockdown allows Home Assistant's origin and this server's): there the
+ * page's WebSocket and its external auth are Home Assistant's own, and nothing here stands in for them.
  *
  * Loopback is open to every app on the device, so the proxy (which spends the panel's token) answers only a client
- * that holds this server's capability: a random cookie the island page sets, and the entry route sets for the
- * legacy engine's pages in exchange for a one-time code ([entryUrl]). Other apps reach neither (slot ids are
+ * that holds this server's capability: a random cookie the island page sets. Other apps never get it (slot ids are
  * unguessable too). In depth: every request must name this server as its `Host` (a page whose own name resolves to
- * 127.0.0.1, DNS rebinding, is refused); the proxy forwards only the paths HA's page and the islands use; a bridge
- * needs the cookie or this server's own `Origin`. Refusals are logged without queries or tokens.
+ * 127.0.0.1, DNS rebinding, is refused); the proxy forwards only the paths the islands use, never a `.`/`..` segment
+ * or an escaped slash; a bridge needs the cookie or this server's own `Origin`. Refusals are logged without queries
+ * or tokens.
  */
 class VitroIslandServer(
     /**
@@ -46,6 +51,11 @@ class VitroIslandServer(
      */
     private val session: () -> Pair<String?, String?>,
     private val log: (String) -> Unit = {},
+    /**
+     * The URLs of the dashboard's Lovelace resources (`/local/card.js`, `/my_integration/card.js`): integrations serve
+     * their cards at paths of their own, so the proxy also forwards what is under each one's folder ([resourcePaths]).
+     */
+    private val resources: () -> Collection<String> = { emptyList() },
 ) {
     constructor(haBase: () -> String?, accessToken: () -> String?, log: (String) -> Unit = {}) :
         this({ haBase() to accessToken() }, log)
@@ -66,12 +76,6 @@ class VitroIslandServer(
 
     private val capabilityCookie: Map<String, String>
         get() = mapOf("Set-Cookie" to "$CAPABILITY_COOKIE=$capability; Path=/; HttpOnly; SameSite=Strict")
-
-    /** One-time entry codes ([entryUrl]) and when each stops working ([System.nanoTime]). */
-    private val entryCodes = ConcurrentHashMap<String, Long>()
-
-    /** How long an entry code works: the fallback loads it at once. A test shortens it. */
-    internal var entryCodeTtlNs: Long = 30_000_000_000L
 
     /** Guards a slot's removal against a socket of that slot registering at the same time. */
     private val slotLock = Any()
@@ -121,28 +125,6 @@ class VitroIslandServer(
         return id to "$base/__vitro/island/$id"
     }
 
-    /**
-     * The URL a browser loads to open [pathAndQuery] (a path on Home Assistant, `/config`, `/auth/authorize?…`)
-     * through the proxy: it sets the capability cookie and redirects there. Never log it; it carries the capability.
-     */
-    fun entryUrl(pathAndQuery: String): String {
-        val to = if (pathAndQuery.startsWith("/")) pathAndQuery else "/$pathAndQuery"
-        // A code good once and for [entryCodeTtlNs], not the capability: the URL left in the browser's history (or
-        // anywhere it gets copied) is worthless after it has been used.
-        val now = System.nanoTime()
-        entryCodes.entries.removeAll { now - it.value > 0 }
-        val code = hex(ByteArray(16).also(random::nextBytes))
-        entryCodes[code] = now + entryCodeTtlNs
-        return ensureStarted() + ENTRY + "?c=" + code + "&to=" + java.net.URLEncoder.encode(to, "UTF-8")
-    }
-
-    /** Spends entry code [code]: true when it was issued, unused and still in time. */
-    private fun spendEntryCode(code: String): Boolean {
-        if (code.isEmpty()) return false
-        val until = entryCodes.remove(code) ?: return false
-        return System.nanoTime() - until <= 0
-    }
-
     fun unregisterSlot(id: String) {
         val sockets = synchronized(slotLock) {
             slots.remove(id)
@@ -163,16 +145,6 @@ class VitroIslandServer(
             val slot = slots[id] ?: return HttpResponse.text(404, "Unknown island slot")
             // The page's own requests (card scripts, `hass.callApi`) go through the proxy with this cookie.
             return HttpResponse.html(200, slot.html, capabilityCookie)
-        }
-        if (path == ENTRY) {
-            val to = req.query["to"].orEmpty()
-            if (!spendEntryCode(req.query["c"].orEmpty())) {
-                log("refused: an unknown, used or expired entry code")
-                return HttpResponse.text(403, "Not allowed")
-            }
-            // A path on this origin only: `//host` or `/\host` would leave it.
-            if (!to.startsWith("/") || to.startsWith("//") || to.startsWith("/\\")) return HttpResponse.text(400, "Invalid path")
-            return HttpResponse(302, mapOf("Location" to to, "Cache-Control" to "no-store") + capabilityCookie, ByteArray(0))
         }
         if (path.startsWith("/__vitro/icon/")) {
             val iconName = path.removePrefix("/__vitro/icon/")
@@ -272,12 +244,12 @@ class VitroIslandServer(
             log("refused: no capability (${req.method} ${firstSegment(req.path)})")
             return HttpResponse.text(403, "Not allowed")
         }
-        // Only what HA's page and the islands load: anything else isn't forwarded with the panel's token.
-        if (!proxied(req.path)) {
+        // Only what the islands load: anything else isn't forwarded with the panel's token.
+        val (origin, token) = session()
+        if (!proxied(req.path) && !underResource(req.path, origin)) {
             log("refused: not a proxied path (${req.method} ${firstSegment(req.path)})")
             return HttpResponse.text(404, "Not found")
         }
-        val (origin, token) = session()
         val base = origin?.trimEnd('/') ?: return HttpResponse.text(503, "Home Assistant not configured")
         if (!req.path.startsWith("/")) return HttpResponse.text(400, "Invalid path")
         var targetUrl = base + req.target
@@ -331,37 +303,65 @@ class VitroIslandServer(
         }
     }
 
+    /** True when [path] is one of the dashboard's Lovelace resources or under its folder ([resourcePaths]). */
+    private fun underResource(path: String, haOrigin: String?): Boolean {
+        if (!safePath(path)) return false
+        val urls = runCatching { resources() }.getOrNull() ?: return false
+        return resourcePaths(urls, haOrigin).any { if (it.endsWith("/")) path.startsWith(it) else path == it }
+    }
+
     companion object {
         /**
-         * Path prefixes the proxy forwards: HA's API and auth (the legacy engine's sign-in, `callApi`), the card
-         * resources (`/local`, `/hacsfiles`), HA's frontend bundles (modern and legacy builds), static files and media
-         * (`/media/local/…`, signed).
+         * Path prefixes the proxy forwards, what the islands use: HA's API (`callApi`, entity pictures, camera
+         * proxies), the card resources (`/local`, `/hacsfiles`), HA's frontend bundles and static files (a card that
+         * imports HA's own pieces) and media (`/media/local/…`, signed). Not `/auth/` nor HA's pages: those load from
+         * Home Assistant itself.
          */
         private val PROXIED_PREFIXES = listOf(
-            "/api/", "/auth/", "/local/", "/hacsfiles/", "/static/", "/frontend_latest/", "/frontend_es5/", "/media/",
+            "/api/", "/local/", "/hacsfiles/", "/static/", "/frontend_latest/", "/frontend_es5/", "/media/",
         )
 
-        /** Single files HA's page asks for at its root (manifest, service workers, the onboarding page). */
-        private val PROXIED_FILES = setOf(
-            "/manifest.json", "/sw-modern.js", "/sw-legacy.js", "/service_worker.js", "/robots.txt", "/onboarding.html",
-        )
+        /** True when the proxy forwards [path] whatever the dashboard's resources are. */
+        internal fun proxied(path: String): Boolean = safePath(path) && PROXIED_PREFIXES.any { path.startsWith(it) }
 
         /**
-         * HA's own pages (its panels: the legacy engine shows them for what Vitro doesn't draw natively). A dashboard
-         * with its own path always has a `-` in it (HA requires one), so a first segment with one is a page too.
+         * A raw path that stays where it says: no `.` or `..` segment (escaped or not) and no backslash or escaped
+         * slash, which Home Assistant could resolve to a path outside the prefix it was let through for.
          */
-        private val HA_PANELS = setOf(
-            "config", "history", "logbook", "map", "energy", "developer-tools", "profile", "media-browser", "todo",
-            "calendar", "hassio", "lovelace", "home", "light", "climate", "security", "areas", "notifications", "tag",
-            "hacs",
-        )
+        internal fun safePath(path: String): Boolean {
+            if (!path.startsWith("/") || '\\' in path) return false
+            val lower = path.lowercase()
+            if ("%2f" in lower || "%5c" in lower) return false
+            return path.split('/').none { seg -> seg.replace("%2e", ".", ignoreCase = true).let { it == "." || it == ".." } }
+        }
 
-        /** True when the proxy forwards [path]; the root (`/`) is HA's default dashboard page. */
-        internal fun proxied(path: String): Boolean {
-            if (path == "/" || path in PROXIED_FILES) return true
-            if (PROXIED_PREFIXES.any { path.startsWith(it) }) return true
-            val first = path.removePrefix("/").substringBefore('/')
-            return first in HA_PANELS || ('-' in first && first.none { it == '.' })
+        /** First path segments a resource never opens: HA's sign-in and this server's own routes. */
+        private val NEVER_RESOURCE = setOf("", "auth", "__vitro")
+
+        /**
+         * What the proxy forwards for the Lovelace resources [urls] on [haOrigin]: a resource at `/<folder>/…` opens
+         * `/<folder>/` (the card's chunks and assets sit beside it, and an integration serves its card at a folder of
+         * its own); one at the root, `/<file>`, that path alone. Only same-origin resources count (a path, or an
+         * absolute URL on [haOrigin]), never one in `/auth/`, and never a path that leaves its folder.
+         */
+        internal fun resourcePaths(urls: Collection<String>, haOrigin: String?): Set<String> {
+            val out = LinkedHashSet<String>()
+            val home = haOrigin?.trimEnd('/')?.lowercase()
+            for (raw in urls) {
+                val u = raw.trim()
+                val path = when {
+                    u.startsWith("//") -> continue
+                    u.startsWith("/") -> u
+                    home != null && u.lowercase().startsWith("$home/") -> u.substring(home.length)
+                    else -> continue
+                }.substringBefore('#').substringBefore('?')
+                if (!safePath(path)) continue
+                val rest = path.removePrefix("/")
+                val first = rest.substringBefore('/')
+                if (first.lowercase() in NEVER_RESOURCE) continue
+                out += if ('/' in rest) "/$first/" else path
+            }
+            return out
         }
 
         /** The first path segment, for a refusal's log line: never the rest (ids) or the query. */
@@ -370,9 +370,6 @@ class VitroIslandServer(
 
         /** The cookie that carries the proxy's capability. */
         internal const val CAPABILITY_COOKIE = "vitro_cap"
-
-        /** The route that sets the capability cookie and redirects into the proxy ([entryUrl]). */
-        private const val ENTRY = "/__vitro/enter"
 
         private fun hex(b: ByteArray): String = b.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
 

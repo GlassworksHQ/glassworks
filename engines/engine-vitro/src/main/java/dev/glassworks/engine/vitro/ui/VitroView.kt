@@ -231,9 +231,10 @@ class VitroView(
         }
     /**
      * The dashboard's Lovelace resources. Islands load them into their page, and a card-mod-only fallback routes on
-     * whether card-mod is among them, so a change rebuilds the cached views and the current one.
+     * whether card-mod is among them, so a change rebuilds the cached views and the current one. The island server
+     * reads it on its own threads (the folders its proxy forwards).
      */
-    var resourcesList: List<LovelaceResource> = emptyList()
+    @Volatile var resourcesList: List<LovelaceResource> = emptyList()
         set(v) {
             if (field == v) return
             field = v

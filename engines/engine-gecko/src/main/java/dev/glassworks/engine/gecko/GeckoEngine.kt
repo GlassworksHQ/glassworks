@@ -66,7 +66,7 @@ class GeckoEngine(
         val app = context.applicationContext
         val s = settings(app)
         started = s
-        guard?.start(s.dashboard)
+        guard?.start(s.dashboard, s.localOrigin)
         val config = writeConfig(app, s)
         val rs = GeckoRuntimeSettings.Builder()
             .configFilePath(config.absolutePath)
