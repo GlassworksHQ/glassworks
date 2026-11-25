@@ -20,7 +20,7 @@ export {
 } from './bundle';
 export {
   frameWords,
-  type AppPhase, type AppResult, type AppSettings, type AskCopy, type DemoFrame, type FrameCode, type FrameSim, type FrameWords, type KilnFrame, type SilentWords,
+  type AppPhase, type AppResult, type AppSettings, type AskCopy, type DemoFrame, type FrameCode, type FrameSim, type FrameTimes, type FrameWords, type KilnFrame, type SilentWords,
 } from './frame';
 export type { Mm, RecoveryData, Rect, Screw, Shown } from './recovery';
 export {

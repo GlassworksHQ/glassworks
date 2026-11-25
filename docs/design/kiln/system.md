@@ -126,7 +126,8 @@ The one callout: an icon, a short bold line, a sentence, and at most one action.
 A physical procedure: one numbered step per line of the frame's words, each number a button that ticks the step off
 (a mark for the person only; Kiln acts on nothing). The next step to do is highlighted. The frame's lines start with
 the action in bold (`**Switch the Mirror off** with the rocker switch…`). On a computer the drawing (the recovery
-player) sits beside the steps, so both fit the first screen; on a phone it sits above them.
+player) sits beside the steps, so both fit the first screen; on a phone it sits above them. Used by the Mirror's
+fastboot screens and the S1's Connect (its `words.recoverySteps`); a frame without steps shows the drawing alone.
 
 ### BrowserAsk
 
@@ -164,7 +165,9 @@ The in-place install's first screen lists everything that will happen, read from
 ### Time on the choice
 
 Each card on "Choose what to install" says how long that install usually takes ("Usually 20–30 minutes", with a
-clock), read from the frame's `time.total.<recipe id>` word and read out with the card's summary. A recipe whose frame
+clock: Kit's `Usually`), read from the frame's `time.total.<recipe id>` word and read out with the card's summary. The
+S1 has one install and no choice, so its Connect says it under the lede, in the same line ("Usually about 10
+minutes"), from its `words.time.total`; the picker's What you'll need says the same words. A recipe whose frame
 gives no total shows no time: the Mirror's full image has none yet, since its download and system write were never
 timed, and a sum of the parts that were would be a guess.
 
@@ -196,11 +199,13 @@ timed, and a sum of the parts that were would be a guess.
 | Ink for a selection | **Kept** |
 | Should Continue wait for the restore point's copy? | **Yes.** See [the restore point's copy](#the-restore-points-copy) |
 | The rail's "Receive" | **"Copy"**, the step's name wherever a person sees it. The code keeps `receive` |
+| The S1's times and recovery steps (maintainer: "give the S1 the same data, 10 minute install as well") | **From its data**, read generically (`FrameWords` `time`, `recoverySteps`): "Usually about 10 minutes" on Connect, the numbered steps beside the drawing, 1–2 minutes on the restart and the first start. The picker's time line comes from the same word, so the two can't disagree |
 
 ## What a frame gives
 
-The screens read these from `frames/<id>/design/installer.json` `device.words`, where a frame has them; without
-them the screens say less, never something wrong:
+The screens read these from `frames/<id>/design/installer.json` `device.words` (a device frame, like the Mirror), or
+`words` (a frame on the wizard, like the S1), where a frame has them; without them the screens say less, never
+something wrong:
 
 | Word | Used for |
 |---|---|
@@ -209,10 +214,19 @@ them the screens say less, never something wrong:
 | `fastboot.lede` | One line under the fastboot heading on why and how long |
 | `firstStart.note` | What the person sees during the first start |
 | `fastboot.byHandSteps`, `inPlace.fastboot.again` | One step per line, the action in `**bold**` |
+| `words.time.total` (wizard) | How long the install usually takes: Connect's "Usually …" line and the picker's What you'll need |
+| `words.time.steps.<step id>` (wizard) | How long a step of the install flow usually takes. `first-boot`: the Restart row and set-up's first-start Wait |
+| `words.recoverySteps` (wizard) | Connect's numbered steps beside the drawing, one per item, the action in `**bold**` |
+
+A time is only what the frame's docs or measurements say. The S1's come from its README and `docs/install.md`: the
+whole install about 10 minutes, the first boot 1–2 minutes. Its FEL boot, backup, patch and write were never timed
+as steps, so their rows show no time (the bar's estimate still counts down once it has enough to go on).
 
 ## Demos
 
-Every state above has a demo at 1280×800 and 390 wide. New in round two, on `/lululemon-mirror`:
+Every state above has a demo at 1280×800 and 390 wide. On `/aqara-s1-plus`, `?demo=connect` shows the time and the
+numbered steps, `?demo=install` the restart's time, and `?demo=first-boot` (new) the first start's Wait. New in round
+two, on `/lululemon-mirror`:
 
 | Demo | Shows |
 |---|---|
@@ -230,5 +244,6 @@ Every state above has a demo at 1280×800 and 390 wide. New in round two, on `/l
 ## Not done here
 
 - The picker, the choice cards and set-up's forms keep their layout; they take the new type, color and notes.
-- The S1's recovery drawing keeps its own chips; it has no numbered steps in its frame data to tick.
-- Times for the S1 and Android steps: their frames don't give `time.*` words yet.
+- Times for the S1's FEL boot, backup, patch and write: nothing in its docs or research times them as steps. A panel
+  run with timestamps would give them.
+- Times for Android's steps: its frame doesn't give `time.*` words yet.

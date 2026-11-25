@@ -83,6 +83,8 @@ export function Picker() {
             <ul>
               <li>Chrome or Edge on this computer</li>
               {data.picker.needs.map((x) => <li key={x}>{x}</li>)}
+              {/* the install's time, from the frame's words: the same words its first screen says */}
+              {data.words?.time?.total && <li>{data.words.time.total.charAt(0).toUpperCase() + data.words.time.total.slice(1)}</li>}
             </ul>
             <p className="small">{data.picker.wayBack}</p>
           </div>
