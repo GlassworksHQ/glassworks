@@ -9,6 +9,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Fixed
+- **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the
+  dashboard's page to free memory while another app was in front, the page the panel opened in its place kept
+  running as if it were on screen until you came back to the panel. It now waits in the background, as the page did
+  before Android closed it.
 - **Kiln installs the newest S1 release.** A fresh install from Kiln's S1 page now downloads the app from the newest
   release at the moment you install, so a panel no longer starts out one version behind and offers an update right
   away.
