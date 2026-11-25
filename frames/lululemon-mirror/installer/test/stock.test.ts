@@ -329,6 +329,25 @@ describe('patchStockServicesJar', () => {
     expect(Buffer.from(again.patched).equals(Buffer.from(fresh.patched))).toBe(true);
     expect(patchedKeyFingerprint((await zipEntry(re.patched, "classes.dex"))!)).toBe(fresh.fingerprint);
   }, 60_000);
+
+  it.skipIf(!HAS_D8)('reinstalling over an install that left stock\'s hotspot on turns it off, byte for byte as a fresh patch', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const b = fakeAdbKey(0x5b);
+    const fresh = await patchStockServicesJar(jar, b);
+    for (const key of [fakeAdbKey(0x5c), b]) { // another computer's install, then this computer's own
+      const apOn = await patchStockServicesJar(jar, key, { disableStockAp: false });
+      expect(apOn.stockAp).toBeUndefined();
+      const re = await patchStockServicesJar(apOn.patched, b);
+      expect(re.repatched).toEqual({ from: apOn.fingerprint });
+      expect(re.stockAp).toBeDefined();
+      expect(Buffer.from(re.patched).equals(Buffer.from(fresh.patched))).toBe(true);
+    }
+    // asked to leave it on, a reinstall leaves it as it is
+    const apOn = await patchStockServicesJar(jar, b, { disableStockAp: false });
+    const kept = await patchStockServicesJar(apOn.patched, b, { disableStockAp: false });
+    expect(kept.stockAp).toBeUndefined();
+    expect(Buffer.from(kept.patched).equals(Buffer.from(apOn.patched))).toBe(true);
+  }, 60_000);
 });
 
 // ---------------------------------------------------------------------------
