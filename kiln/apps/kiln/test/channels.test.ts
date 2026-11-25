@@ -69,6 +69,10 @@ interface AgentOptions {
   ctrlGate?: (b: Uint8Array) => Promise<void> | void;
   /** Awaited before the GATT connect resolves: a promise that never settles stalls it. */
   connectGate?: () => Promise<void>;
+  /** After INFO and the first chunk of the first 0x01, chunk 0 again every few ms, with no END (a stuck stream). */
+  repeatFirst?: boolean;
+  /** 0x02 is acknowledged and nothing is sent for it. */
+  silentResends?: boolean;
 }
 
 /** A fake agent behind a fake Web Bluetooth: the GATT profile, streaming on a timer like real notifications. */
@@ -92,6 +96,14 @@ function fakeAgent(bundle: Uint8Array, o: AgentOptions = {}) {
   const stream = (indexes: number[], withInfo: boolean, hangAfter?: number) => {
     const b = batch++;
     stopped = false;
+    if (o.repeatFirst && b === 0) {
+      setTimeout(() => {
+        notify(u32(FRAME_INFO, ...(o.info ?? [chunkSize, bundle.length, total])));
+        let n = 0;
+        const t = setInterval(() => { if (stopped || !notifying || ++n > 2500) { clearInterval(t); return; } notify(chunk(0)); }, 2);
+      }, 1);
+      return;
+    }
     setTimeout(() => {
       if (withInfo) notify(u32(FRAME_INFO, ...(o.info ?? [chunkSize, bundle.length, total])));
       let sent = 0;
@@ -128,6 +140,7 @@ function fakeAgent(bundle: Uint8Array, o: AgentOptions = {}) {
         const all = Array.from({ length: total - start }, (_, k) => start + k);
         stream(all, true, batch === 0 ? o.hangAfter : undefined);
       } else if (b[0] === CTRL_RESEND) {
+        if (o.silentResends) return;
         const n = v.getUint16(1, true);
         stream(Array.from({ length: n }, (_, k) => v.getUint32(3 + k * 4, true)), false);
       } else if (b[0] === CTRL_ABORT) {
@@ -579,6 +592,26 @@ describe('Bluetooth', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('repeats of a chunk already in hand don\'t keep a stuck stream alive: the watchdog still ends it', async () => {
+    const bundle = makeBundle(2000);
+    const agent = fakeAgent(bundle, { chunkSize: 100, repeatFirst: true });
+    const conn = await connectBleAgent(BLE, { bluetooth: agent.bluetooth });
+    const t0 = Date.now();
+    // the repeats go on for seconds; the first batch stalls after 40 ms of nothing new, and the tail is asked for again
+    expect(await conn.downloadBundle({ stallTimeoutMs: 40 })).toEqual(bundle);
+    expect(Date.now() - t0).toBeLessThan(1500);
+    expect(cmds(agent.writes, CTRL_START)).toHaveLength(2);
+  });
+
+  it('a device that answers the resends with nothing ends each pass at its first stall', async () => {
+    // the first stream brings INFO and chunk 0 only (with END); resends get no answer
+    const agent = fakeAgent(makeBundle(2000), { chunkSize: 100, drop: (i) => i > 0, silentResends: true });
+    const conn = await connectBleAgent(BLE, { bluetooth: agent.bluetooth });
+    await expect(conn.downloadBundle({ stallTimeoutMs: 30, resendBatch: 2 })).rejects.toThrow(/still missing after 5 resend passes/);
+    // 19 missing in batches of 2 would be 10 waits a pass; each pass stops at its first
+    expect(cmds(agent.writes, CTRL_RESEND).length).toBeLessThanOrEqual(5);
   });
 
   it('encodes a resend of 100 indexes in 403 bytes', () => {

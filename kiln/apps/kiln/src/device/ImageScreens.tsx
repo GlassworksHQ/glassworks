@@ -416,7 +416,8 @@ export function ImageError({ f, s }: P) {
           {s.wifiOnFailed && <button type="button" className="btn ghost" disabled={s.connecting} onClick={() => void f.connectAdb()}>Connect again</button>}
           {!s.wifiOnFailed && !f.inPlace && f.tryAgainLands() !== 'image' && <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to download</button>}
           {/* a stop after the restore point was saved: the way back, from fastboot, next to finishing the install */}
-          {f.inPlace && s.round === 2 && s.restorePoint?.status === 'ready' && s.bundleLost !== 'restore' && <button type="button" className="btn ghost" onClick={() => void f.restoreAfterError()}>Restore the original system</button>}
+          {/* a stop in the app's install after a reload too: the restore point is in this browser, or in the zip */}
+          {f.inPlace && s.round === 2 && (s.restorePoint?.status === 'ready' || s.work?.step === 'app-install') && s.bundleLost !== 'restore' && <button type="button" className="btn ghost" onClick={() => void f.restoreAfterError()}>Restore the original system</button>}
         </span>
         {/* the step that stopped, on its own screen: the first start over adb, a write over fastboot, else the download. A
             bundle lost after a write can't be built from again: the way back, on the restore point saved before it */}
