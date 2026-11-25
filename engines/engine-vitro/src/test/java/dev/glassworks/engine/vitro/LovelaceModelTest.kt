@@ -1315,6 +1315,12 @@ class LovelaceModelTest {
         assertEquals(10.25f, ends.last().first, 0.001f)
         assertEquals(-3f, ends.last().second, 0.001f)
 
+        // An incomplete trailing group draws nothing more (no zero filled in for the missing y).
+        ends.clear()
+        MdiIcons.parseSvgPathInto("M0 0 L10 10 L20", endSink)
+        assertEquals(listOf(0f to 0f, 10f to 10f), ends.toList())
+        assertEquals("mdi:alert-circle-outline", MdiIcons.weatherIcon("exceptional"))
+
         // S and T reflect the previous control point; lower-case forms are relative.
         val smooth = BoundsSink()
         MdiIcons.parseSvgPathInto("M2 12C2 6 8 2 12 2S22 6 22 12s-4 10-10 10Q6 22 4 18T2 12Z", smooth)

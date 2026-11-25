@@ -14,6 +14,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -361,6 +362,40 @@ class ThemeResolverTest {
         val bg = CssBackground.parse("linear-gradient(transparent, #fff) #123456")!!
         assertEquals(1, bg.layers.size)
         assertEquals(argb(0xFF123456), bg.color)
+    }
+
+    @Test
+    fun theBorderShorthandAndItsLonghandsCompeteInCascadeOrder() {
+        val later = ThemeResolver.parseCardMod("ha-card { border-width: 8px; border: 0px solid #123456; }")
+        assertEquals(0f, later.borderWidthDp!!, 0f)
+        val longhand = ThemeResolver.parseCardMod("ha-card { border: 0px solid #123456; border-width: 8px; }")
+        assertEquals(8f, longhand.borderWidthDp!!, 0f)
+        assertEquals(argb(0xFF123456), longhand.borderColor)
+        val important = ThemeResolver.parseCardMod("ha-card { border-color: #ff0000 !important; border: 2px solid #00ff00; }")
+        assertEquals(argb(0xFFFF0000), important.borderColor)
+        assertEquals(2f, important.borderWidthDp!!, 0f)
+    }
+
+    @Test
+    fun aCardVariableThatNeedsAMissingOneTakesTheFallback() {
+        // `--fill` needs `--missing`, defined nowhere: it's invalid, so `var(--fill, …)` takes its fallback.
+        val s = ThemeResolver.parseCardMod("ha-card { --fill: var(--missing); background-color: var(--fill, #123456); }")
+        assertEquals(argb(0xFF123456), s.backgroundColor)
+        // One that the theme defines is fine.
+        val ok = ThemeResolver.parseCardMod("ha-card { --fill: var(--accent); background-color: var(--fill, #123456); }", mapOf("accent" to "#00ff00"))
+        assertEquals(argb(0xFF00FF00), ok.backgroundColor)
+    }
+
+    @Test
+    fun aGradientTheBrowserRejectsIsRejected() {
+        // An invalid stop position, three positions, and a radial edge-offset position: all dropped as declarations.
+        assertNull(CssBackground.parse("linear-gradient(#fff bogus, #000)"))
+        assertNull(CssBackground.parse("linear-gradient(#fff 0% 10% 20%, #000)"))
+        assertNull(CssBackground.parse("radial-gradient(circle at right 20px bottom 30px, #fff, #000)"))
+        // Their valid forms still parse: one or two positions, a one- or two-token place.
+        assertNotNull(CssBackground.parse("linear-gradient(#fff 0% 10%, #000)"))
+        assertNotNull(CssBackground.parse("radial-gradient(circle at right bottom, #fff, #000)"))
+        assertNotNull(CssBackground.parse("radial-gradient(circle at 20px 30%, #fff, #000)"))
     }
 
     @Test

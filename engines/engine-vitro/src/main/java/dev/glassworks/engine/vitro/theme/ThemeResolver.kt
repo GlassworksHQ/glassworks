@@ -502,10 +502,11 @@ object ThemeResolver {
      * The names of [raw] that are invalid at computed-value time: those in a cycle, and (to a fixed point) those whose
      * value uses a missing or invalid name through a `var()` with no fallback (a fallback that does the same counts).
      */
-    internal fun invalidNames(raw: Map<String, String>): Set<String> {
+    internal fun invalidNames(raw: Map<String, String>, outside: Set<String> = emptySet()): Set<String> {
         val invalid = HashSet(cyclicNames(raw))
         while (true) {
-            val scope = raw.keys - invalid
+            // [outside]: names defined around [raw] (the theme's, for a card's own properties), valid as they are.
+            val scope = (raw.keys - invalid).let { if (outside.isEmpty()) it else it + (outside - raw.keys) }
             // A whole stylesheet (`card-mod-card`) isn't one value: a missing reference in one of its declarations
             // empties that reference (resolveValue) and leaves the other declarations as they are.
             val more = raw.filter { (k, v) -> k !in invalid && !k.startsWith("card-mod-") && needsMissing(v, scope) }.keys
@@ -774,9 +775,10 @@ object ThemeResolver {
                 winner.replace(IMPORTANT, "").trim()
             }
         // The card's own custom properties come before the theme's, as they would on its ha-card, and they may refer
-        // to each other (`--inset: var(--spacing)`): resolved against that whole scope. Names in a cycle are invalid:
-        // left out of the scope (the theme's value of that name included), so their `var()` takes its fallback.
-        val cyclic = if (rawCustom.isEmpty()) emptySet() else cyclicNames(rawCustom)
+        // to each other (`--inset: var(--spacing)`): resolved against that whole scope. Names in a cycle, or that need
+        // a name defined nowhere (`--fill: var(--missing)`), are invalid: left out of the scope (the theme's value of
+        // that name included, as it's shadowed), so a `var()` of theirs takes its fallback.
+        val cyclic = if (rawCustom.isEmpty()) emptySet() else invalidNames(rawCustom, vars.keys)
         // (Copies of the theme's map only when needed: `- cyclic` with nothing cyclic would copy it again.)
         val rawScope = if (rawCustom.isEmpty()) vars else (vars + rawCustom).let { if (cyclic.isEmpty()) it else it - cyclic }
         val custom = rawCustom.mapValues { resolveValue(it.value, rawScope, 0) }
@@ -836,17 +838,23 @@ object ThemeResolver {
         val blur = prop("backdrop-filter")?.let { bf ->
             BLUR.find(bf)?.groupValues?.get(1)?.toFloatOrNull()
         }
-        var bw: Float? = null
-        var bc: Int? = null
-        val border = prop("border")
-        if (border != null && (border.equals("none", ignoreCase = true) || border == "0")) {
-            bw = 0f
-        } else if (border != null) {
-            PX_NUMBER.find(border)?.groupValues?.get(1)?.toFloatOrNull()?.let { bw = it }
-            splitTopLevelSpaces(border).lastOrNull()?.let(::parseColor)?.let { bc = it }
+        // The `border` shorthand and each longhand compete in the cascade (`!important`, then the later one), per
+        // component: `border-width: 8px; border: 0px solid` draws no border, `border: 0px; border-width: 8px` does.
+        fun noBorder(v: String) = v.equals("none", ignoreCase = true) || v == "0"
+        val widthWin = winner("border-width", "border")
+        val bw: Float? = when {
+            widthWin == null -> null
+            widthWin.first == "border-width" -> parseDimensionDp(widthWin.second, -1f).takeIf { it >= 0f }
+            noBorder(widthWin.second) -> 0f
+            else -> PX_NUMBER.find(widthWin.second)?.groupValues?.get(1)?.toFloatOrNull()
         }
-        prop("border-width")?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }?.let { bw = it }
-        prop("border-color")?.let(::parseColor)?.let { bc = it }
+        val colorWin = winner("border-color", "border")
+        val bc: Int? = when {
+            colorWin == null -> null
+            colorWin.first == "border-color" -> parseColor(colorWin.second)
+            noBorder(colorWin.second) -> null
+            else -> splitTopLevelSpaces(colorWin.second).lastOrNull()?.let(::parseColor)
+        }
 
         val paddingInsets = parseEdgeInsets(
             shorthand = prop("padding"),

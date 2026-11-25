@@ -525,6 +525,17 @@ class MarkdownEngineTest {
         assertEquals(0, gone.width)
     }
 
+    @Test
+    fun haGridGapsShrinkWhenTheyOutgrowTheContent() {
+        // 12 columns with 8 px gaps in 72 px: the gaps alone would need 88. Two halves still end inside 72.
+        val grid = HaGridLayout(activity, 12, 8, 8, stretch = false)
+        val left = View(activity).also { grid.addView(it, HaGridLayout.LayoutParams(6)) }
+        val right = View(activity).also { grid.addView(it, HaGridLayout.LayoutParams(6)) }
+        measure(grid, 72)
+        assertTrue("${right.right}", right.right <= 72)
+        assertTrue(left.right <= right.left)
+    }
+
     // ---- clock ----
 
     @Test
