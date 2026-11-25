@@ -71,14 +71,14 @@
   "reason": "HA replaces the gauge with a one-line warning card ('Entity is currently unavailable: ...'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
  },
  "mirror/history-graph-rows": {
-  "pixel": 0.0214,
+  "pixel": 0.0216,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
  },
  "mirror/history-graph-two": {
-  "pixel": 0.021,
+  "pixel": 0.0217,
   "bounds": 0.2,
   "font": 0,
   "missingText": 0,
@@ -94,7 +94,7 @@
  "mirror/logbook-user": {
   "pixel": 0.0071,
   "bounds": 0,
-  "font": 3,
+  "font": 0,
   "missingText": 3,
   "reason": "changes made by people: HA shows each user's initial in a round avatar (A, S) from config/auth/list; Vitro shows the light's icon instead, so the three avatars are missing texts. Times, states and the timeline match (2026-11-25, fake HA)"
  },
@@ -120,14 +120,14 @@
   "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
  },
  "mirror/mini-graph-card": {
-  "pixel": 0.2192,
+  "pixel": 0.2173,
   "bounds": 48.2,
   "font": 4.4,
   "missingText": 1,
   "reason": "mini-graph-card 0.13.0: HA draws a 2-hour-smoothed line filled to the bottom, the state at 32 px with its unit, no min/max labels; Vitro draws every point (noisy), a smaller state (21.4 at 26 px), min/max labels and a 48 px shorter graph (2026-11-25, fake HA)"
  },
  "mirror/mini-media-player": {
-  "pixel": 0.2523,
+  "pixel": 0.2561,
   "bounds": 72,
   "font": 2,
   "missingText": 0,
@@ -281,14 +281,14 @@
   "reason": "HA replaces the gauge with a one-line warning card ('Entity is currently unavailable: ...'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
  },
  "s1/history-graph-rows": {
-  "pixel": 0.0215,
+  "pixel": 0.0217,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
  },
  "s1/history-graph-two": {
-  "pixel": 0.021,
+  "pixel": 0.0217,
   "bounds": 0.2,
   "font": 0,
   "missingText": 0,
@@ -311,7 +311,7 @@
  "s1/logbook-user": {
   "pixel": 0.0071,
   "bounds": 0,
-  "font": 3,
+  "font": 0,
   "missingText": 3,
   "reason": "changes made by people: HA shows each user's initial in a round avatar (A, S) from config/auth/list; Vitro shows the light's icon instead, so the three avatars are missing texts. Times, states and the timeline match (2026-11-25, fake HA)"
  },
@@ -337,14 +337,14 @@
   "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
  },
  "s1/mini-graph-card": {
-  "pixel": 0.2192,
+  "pixel": 0.2173,
   "bounds": 48.2,
   "font": 4.4,
   "missingText": 1,
   "reason": "mini-graph-card 0.13.0: HA draws a 2-hour-smoothed line filled to the bottom, the state at 32 px with its unit, no min/max labels; Vitro draws every point (noisy), a smaller state (21.4 at 26 px), min/max labels and a 48 px shorter graph (2026-11-25, fake HA)"
  },
  "s1/mini-media-player": {
-  "pixel": 0.2523,
+  "pixel": 0.2561,
   "bounds": 72,
   "font": 2,
   "missingText": 0,
@@ -500,7 +500,7 @@
  "tablet/logbook-user": {
   "pixel": 0.007,
   "bounds": 0,
-  "font": 3,
+  "font": 0,
   "missingText": 3,
   "reason": "changes made by people: HA shows each user's initial in a round avatar (A, S) from config/auth/list; Vitro shows the light's icon instead, so the three avatars are missing texts. Times, states and the timeline match (2026-11-25, fake HA)"
  },
@@ -512,7 +512,7 @@
   "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
  },
  "tablet/mini-graph-card": {
-  "pixel": 0.214,
+  "pixel": 0.213,
   "bounds": 47.7,
   "font": 4.4,
   "missingText": 1,

@@ -14,7 +14,7 @@
   "states": {
    "climate.heat_pump": {
     "state": "off",
-    "last_changed": "-4h",
+    "last_changed": -14400,
     "attributes": {
      "hvac_modes": [
       "off",
@@ -33,7 +33,7 @@
       "high",
       "auto"
      ],
-     "current_temperature": 18,
+     "current_temperature": 17.5,
      "temperature": null,
      "target_temp_high": null,
      "target_temp_low": null,
@@ -41,7 +41,8 @@
      "hvac_action": "off",
      "friendly_name": "Heat Pump",
      "supported_features": 395
-    }
+    },
+    "last_updated": 0
    }
   },
   "entities": [

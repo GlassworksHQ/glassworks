@@ -46,7 +46,7 @@
    "slot": 0,
    "clipped": false,
    "text": "Heat pump current temperature",
-   "x": 160.73,
+   "x": 155.8,
    "y": 307.59,
    "w": 167.77,
    "h": 14,
@@ -58,10 +58,10 @@
   {
    "slot": 0,
    "clipped": false,
-   "text": "18 °C",
-   "x": 332.5,
+   "text": "17.5 °C",
+   "x": 327.56,
    "y": 307.8,
-   "w": 28.75,
+   "w": 38.64,
    "h": 14,
    "size": 12,
    "weight": 400,
@@ -116,7 +116,7 @@
      "high",
      "auto"
     ],
-    "current_temperature": 18,
+    "current_temperature": 17.5,
     "temperature": null,
     "target_temp_high": null,
     "target_temp_low": null,
@@ -126,7 +126,7 @@
     "supported_features": 395
    },
    "lc": 1794485280,
-   "lu": 1794485280
+   "lu": 1794499680
   }
  },
  "templates": {},
