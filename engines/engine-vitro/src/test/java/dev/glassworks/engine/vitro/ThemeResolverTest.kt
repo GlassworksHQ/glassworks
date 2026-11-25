@@ -402,6 +402,10 @@ class ThemeResolverTest {
         assertEquals(0f, ThemeResolver.parseCardMod(mapOf("card-mod-card" to zero)).borderWidthDp!!, 0f)
         assertEquals(0f, ThemeResolver.parseCardMod(zero).borderWidthDp!!, 0f)
         assertEquals(3f, ThemeResolver.parseCardMod("ha-card { border: 3px solid #123456; border-width: 2; }").borderWidthDp!!, 0f)
+        // A later shorthand with a unitless decimal zero beats an earlier width.
+        val shorthandZero = "ha-card { border-width: 3px; border: 0.0 solid #123456; }"
+        assertEquals(0f, ThemeResolver.parseCardMod(mapOf("card-mod-card" to shorthandZero)).borderWidthDp!!, 0f)
+        assertEquals(0f, ThemeResolver.parseCardMod(shorthandZero).borderWidthDp!!, 0f)
     }
 
     @Test

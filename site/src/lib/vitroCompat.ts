@@ -513,6 +513,9 @@ const JINJA = /\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|\{#[\s\S]*?#\}/g;
 /** [css] without comments and Jinja: what the renderer reads rules from. */
 const maskCss = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, " ").replace(JINJA, " ");
 
+/** Quoted strings emptied: an `@` in one (`[data-label="@media"]`) isn't an at-rule. */
+const QUOTED = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g;
+
 /**
  * True when a card's own sheet has a rule for something inside the card (`ha-card .card-header`): the renderer
  * models no card's inner DOM, so it doesn't apply it. A Markdown or clock card's own sheet reaches into the parts the
@@ -537,7 +540,7 @@ function cardModWarning(card: Obj, loc: string, out: string[]) {
   const type = typeof card.type === "string" ? card.type.trim() : "";
   const complex = (css: unknown) =>
     typeof css !== "string" || css.includes("$:") || css.includes("@keyframes") || css.includes("::") || LEGACY_PSEUDO.test(css) ||
-    UNSUPPORTED_AT_RULE.test(maskCss(css));
+    UNSUPPORTED_AT_RULE.test(maskCss(css).replace(QUOTED, '""'));
   const own = (css: unknown) => complex(css) || (typeof css === "string" && reachesInside(type, css));
   const unsupported = isObj(style)
     ? Object.entries(style).some(([k, v]) => !supportedStyleKey(type, k) || (k === "." ? own(v) : complex(v)))

@@ -748,7 +748,7 @@ object ThemeResolver {
             widthWin == null -> null
             widthWin.first == "border-width" -> parseDimensionDp(widthWin.second, -1f).takeIf { it >= 0f }
             noBorder(widthWin.second) -> 0f
-            else -> PX_NUMBER.find(widthWin.second)?.groupValues?.get(1)?.toFloatOrNull()
+            else -> shorthandWidthDp(widthWin.second)
         }
         val colorWin = winner("border-color", "border")
         val bc: Int? = when {
@@ -794,6 +794,15 @@ object ThemeResolver {
     private val CSS_WIDE_KEYWORDS = setOf("inherit", "initial", "unset", "revert", "revert-layer")
     private val BORDER_WIDTH_KEYWORDS = setOf("thin", "medium", "thick")
     private val BORDER_STYLES = setOf("none", "hidden", "dotted", "dashed", "solid", "double", "groove", "ridge", "inset", "outset")
+    /** The width a `border` shorthand gives: its length token, where a zero may drop its unit (`0.0 solid`). */
+    private fun shorthandWidthDp(value: String): Float? {
+        val token = splitTopLevelSpaces(value.lowercase(Locale.ROOT)).firstOrNull { BORDER_LENGTH.matches(it) }
+        if (token != null && UNITLESS_ZERO.matches(token)) return 0f
+        return PX_NUMBER.find(token ?: value)?.groupValues?.get(1)?.toFloatOrNull()
+    }
+
+    private val UNITLESS_ZERO = Regex("""0*\.?0+""")
+
     /** A length: a zero may drop its unit (`0`, `0.0`, `.0`), any other needs one. */
     private val BORDER_LENGTH = Regex("""0*\.?0+|\d*\.?\d+(?:px|r?em|pt|pc|cm|mm|in|q|vh|vw|vmin|vmax|ch|ex)""")
     private val COLOR_FUNCTION = Regex("""^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix)\(""")
@@ -919,7 +928,7 @@ object ThemeResolver {
             widthWin == null -> null
             widthWin.first == "border-width" -> parseDimensionDp(widthWin.second, -1f).takeIf { it >= 0f }
             noBorder(widthWin.second) -> 0f
-            else -> PX_NUMBER.find(widthWin.second)?.groupValues?.get(1)?.toFloatOrNull()
+            else -> shorthandWidthDp(widthWin.second)
         }
         val colorWin = winner("border-color", "border")
         val bc: Int? = when {

@@ -155,6 +155,10 @@ UNSUPPORTED_AT_RULE = re.compile(r"@(?!(?:-webkit-)?keyframes(?![\w-])|charset(?
 JINJA = re.compile(r"\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|\{#[\s\S]*?#\}")
 
 
+# Quoted strings are emptied before looking for at-rules: an @ in one ([data-label="@media"]) isn't one.
+QUOTED = re.compile(r"\"(?:[^\"\\\n]|\\.)*\"|'(?:[^'\\\n]|\\.)*'")
+
+
 def mask_css(css: str) -> str:
     """The CSS without comments and Jinja: what the renderer reads rules from."""
     return JINJA.sub(" ", re.sub(r"/\*[\s\S]*?\*/", " ", css))
@@ -181,7 +185,7 @@ def check_card_mod(card: dict, loc: str, warnings: list[str]):
     card_type = str(card.get("type", "")).strip()
     def complex_css(css) -> bool:
         return (not isinstance(css, str) or "$:" in css or "@keyframes" in css or "::" in css
-                or LEGACY_PSEUDO.search(css) is not None or UNSUPPORTED_AT_RULE.search(mask_css(css)) is not None)
+                or LEGACY_PSEUDO.search(css) is not None or UNSUPPORTED_AT_RULE.search(QUOTED.sub('""', mask_css(css))) is not None)
     def own(css) -> bool:
         return complex_css(css) or (isinstance(css, str) and reaches_inside(card_type, css))
     if isinstance(style, dict):

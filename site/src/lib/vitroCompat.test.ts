@@ -232,6 +232,8 @@ views:
     // A conditional at-rule isn't evaluated natively, even around the card's own rule.
     expect(map("@media (min-width: 1px) { ha-card { opacity: .5; } }").warnings).toHaveLength(1);
     expect(style("@supports (display: grid) { ha-card { opacity: .5; } }").warnings).toHaveLength(1);
+    // An @ inside a quoted string isn't an at-rule.
+    expect(map('ha-card[data-label="@media"] { opacity: .5; }').warnings).toHaveLength(0);
   });
 
   it("refuses a key: value pair inside a flow list instead of reading it as text", () => {
