@@ -197,11 +197,11 @@ Local release signing reads environment variables (if none are set, Gradle build
 | Assist | Depends on device | Requires a microphone |
 | Timers | Depends on device | Requires Assist |
 | Sendspin | Depends on device | Requires a speaker |
-| Zigbee and Thread radio | Not supported | No supported built-in radio |
+| Zigbee / Thread radio | Not supported | No supported built-in radio |
 | Time zone | Not supported | Aqara S1 Plus only |
-| Diagnostics | Alpha | Included in both builds (no CPU temperature sensor without a frame-defined thermal zone) |
+| Diagnostics | Stable | Included in both builds (no CPU temperature sensor without a frame-defined thermal zone) |
 | Bluetooth proxy | Depends on device | Requires Bluetooth LE; included in both builds |
-| Notifications | Alpha | Included in both builds |
+| Notifications | Beta | Included in both builds |
 | Camera | Depends on device | Requires a camera; included in both builds |
 | Wall base | Not supported | Aqara S1 Plus only |
 

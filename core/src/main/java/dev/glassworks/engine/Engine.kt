@@ -12,9 +12,11 @@ import org.json.JSONObject
  * The web engine that shows the dashboard. One per process: it reads its [EngineSettings] once, at
  * the first [open], so the process must restart to change them.
  *
- * It is a kiosk engine. It allows every permission a page asks for without a prompt, and grants
- * the microphone and the camera to `getUserMedia`. Only Android's own runtime permissions go to the
- * app ([PageHost.onAndroidPermissions]), because only an activity can ask for them.
+ * It is a kiosk engine, with no prompts. A page the app trusts ([PageHost.trusts]: Home Assistant and the
+ * secure-context hosts) gets every permission it asks for and the microphone and the camera for
+ * `getUserMedia`. Any other page gets none of them, and the engine logs the refusal (#847). Only Android's
+ * own runtime permissions go to the app ([PageHost.onAndroidPermissions]), because only an activity can ask
+ * for them.
  */
 interface Engine {
     /** What the engine started with, or null before the first [open]. */
@@ -102,6 +104,13 @@ interface PageHost {
 
     /** The content process crashed, or the system [killed] it. The page shows nothing until [Page.restart]. */
     fun onContentGone(killed: Boolean)
+
+    /**
+     * Whether a page at [url] may have the microphone, the camera and the permissions it asks for, with no prompt
+     * (#847). The engine asks for the top-level page and for the document that asks, and grants only when both are
+     * trusted.
+     */
+    fun trusts(url: String): Boolean
 
     /** The page needs these Android runtime permissions. Call [answer] once: true if all are granted. */
     fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit)

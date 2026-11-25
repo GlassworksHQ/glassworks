@@ -90,7 +90,7 @@
       "value": "none"
     },
     "updates": {
-      "value": "planned"
+      "value": "ha"
     }
   },
   "ratingsNote": "For Glassworks itself, on LineageOS. Putting LineageOS on the tablet first is a separate step that wipes it.",

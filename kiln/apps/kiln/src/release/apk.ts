@@ -29,8 +29,8 @@ export function apkMode(search: string, demosOn: boolean, demos: readonly string
   return open ? { on: true, apk: 'release' } : { on: false };
 }
 
-/** Which APK a page installs: its release line, and the ABI it downloads. */
-export interface ReleaseLine { line: Line; abi: Abi }
+/** Which APK a page installs: its release line, and the ABI it downloads (none: the line's one APK, download()). */
+export interface ReleaseLine { line: Line; abi?: Abi }
 
 /** A release as the route listed it: its tag, version and files. */
 export type ListedRelease = Extract<Release, { state: 'out' }>;
@@ -69,6 +69,11 @@ export interface ReleaseFetch {
   /** Resumes after a dropped or silent connection; default kiln-core's (5). */
   retries?: number;
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Only GitHub's own SHA-256 (Kiln's route, `digests`), never the `.sha256` Refract serves beside the file: a page that
+   * writes a device's boot first takes nothing whose bytes and checksum came from one place. Every release has one.
+   */
+  requireDigest?: boolean;
 }
 
 export const releasePage = (tag: string) => `https://github.com/GlassworksHQ/glassworks/releases/tag/${encodeURIComponent(tag)}`;
@@ -110,13 +115,18 @@ export async function releaseApk(of: ReleaseLine & { from?: ListedRelease }, get
   const { tag } = r;
   const { version, name } = apk;
 
-  let sum: Uint8Array;
-  try {
-    sum = await downloadWhole(`${apk.href}.sha256`, dl);
-  } catch (e) {
-    throw new Error(`Couldn't verify the release checksum for ${version} (${e instanceof ProxyError ? e.message : String(e)})`);
+  // GitHub's own SHA-256 of the file, from Kiln's route, so Refract only carries the bytes; else the release's .sha256
+  let want = r.digests?.[name] ?? '';
+  if (!want && o.requireDigest) throw new Error(`Couldn't verify the release checksum for ${version} (GitHub's list didn't give one)`);
+  if (!want) {
+    let sum: Uint8Array;
+    try {
+      sum = await downloadWhole(`${apk.href}.sha256`, dl);
+    } catch (e) {
+      throw new Error(`Couldn't verify the release checksum for ${version} (${e instanceof ProxyError ? e.message : String(e)})`);
+    }
+    want = new TextDecoder().decode(sum).trim().split(/\s+/)[0]?.toLowerCase() ?? '';
   }
-  const want = new TextDecoder().decode(sum).trim().split(/\s+/)[0]?.toLowerCase() ?? '';
   if (!/^[0-9a-f]{64}$/.test(want)) throw new Error(`The release checksum for ${version} wasn't valid`);
 
   onState({ state: 'downloading', tag, version, name, got: 0 });

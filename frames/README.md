@@ -204,7 +204,7 @@ it, and the plan comes out of it alone: adding a frame needs data here, not a ne
 |---|---|
 | `app` | The app lines its devices run, by name. Several frames can name one line; it is built once |
 | `lines` | Only in the frame whose app module builds the line: `{ "<line>": { title, tag, changelog, build, assets, … } }`. `tag` and `assets` use `{version}` and `{abi}`, and are the names panels and Kiln read, so they never change. `build` is `s1-kiosk` (the S1 app, with its radio bundle) or `gradle` (`task`, `apk`, `package`, `minSdk`, `writeSettings`). `abis: "every-frame"` builds every frame's ABIs; else the frame's own. `latest: true` on the one line whose stable release is `releases/latest` (the S1 app's) |
-| `frame` | Its own frame release, tagged `frames/<id>/v<version>`: `bundle` is `notice` (notes only, no files) or `signed` (a bundle signed with the frame bundle key: `script`, `pubkey`, `assets`), with `title`, `changelog` and an optional `note` for the run's summary |
+| `frame` | Its own frame release, tagged `frames/<id>/v<version>`: `bundle` is `notice` (notes only, no files) or `signed` (a bundle signed with the frame bundle key: `script`, `pubkey`, `assets`), with `title`, `changelog` and an optional `note` for the run's summary. `versionFile`, when the frame's installer writes the frame version into the device: the file that declares it as `{ id: '<frame id>', version: '<version>' }` (the Mirror's `MIRROR_FRAME`). A frame release at another version fails the plan |
 
 | Frame | `app` | `frame` |
 |---|---|---|
@@ -359,13 +359,13 @@ sit beside `run` either. The site's build and Kiln's `frame-designs.test.ts` run
 
 ### Where the frames stand
 
-Worked out from today's data (2026-11-17):
+Worked out from today's data (2026-11-24):
 
 | Frame | Word | Why |
 |---|---|---|
 | `aqara-s1-plus` | Good | Everything that counts is ticked but hardware: the wall base sends no button presses over its UART, and the Ethernet base isn't supported ([base-protocol.md](aqara-s1-plus/research/base-protocol.md)) |
-| `lululemon-mirror` | Not rated yet | Under development, and not in Kiln yet. Its silent updates were seen with the probe app only, and its home screen with Glassworks too (2026-11-17); both stay marked unverified. Nothing records it coming back after a reboot, so that isn't checked |
-| `generic-android` | Not rated yet | Under development, and not in Kiln yet. Silent updates and hardware depend on the device |
+| `lululemon-mirror` | Good | Install, silent updates, kiosk and setup come from the maintainer's end-to-end Kiln install from kiln.glassworks.dev on 2026-11-23 ([image-patch.md](lululemon-mirror/research/image-patch.md)) and the setup hotspot's run that day. Hardware isn't checked on the unit yet (`facts.hardware` is left out). Shown only: lululemon's bootloader logo stays (branding ✗), and no Clarity grade is published (proof ✗) |
+| `generic-android` | Good, unverified | Beta, in Kiln (`/android`). Install needs USB debugging turned on, and silent updates and hardware depend on the device. Its kiosk and setup facts aren't from a real unit yet |
 | `google-pixel-tablet` | Good | The root's run on 2026-11-17 (`run-node.ts --plan`, then `--install`, generic test build 9755076; Home Assistant added it and the QR sign-in loaded the dashboard) gives setup ✓. It installs through Generic Android in Kiln (`/android`), with USB debugging. Its *Silent updates* sensor, hardware and three kiosk checks aren't read yet |
 | `samsung-galaxy-tab-a-10-1-2016` | Good, unverified | Beta. Tested by the community on an unofficial 64-bit LineageOS build (#700), with no recorded run, so every item is what we expect. It installs through Generic Android in Kiln (`/android`), with USB debugging. Samsung's own Android 8.1 on it runs a 32-bit userspace and isn't tested |
 

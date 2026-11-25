@@ -8,8 +8,9 @@ import type { PanelShell } from '@glassworks/adb';
 import { ACT, s1Plus, type AssetName, type Provisioned, type SetUpOptions } from '@glassworks/aqara-s1-plus-installer';
 import type { Fastboot } from '@glassworks/fastboot';
 import type { FelDevice } from '@glassworks/fel';
-import { Assets, toHex, type BackupFile, type BackupMeta, type Recipe } from '@glassworks/kiln-core';
+import { Assets, REFRACT, releaseFileUrl, toHex, type BackupFile, type BackupMeta, type Recipe } from '@glassworks/kiln-core';
 import { frame as s1PlusUi, demoFrame as s1Demo } from '../s1-frame';
+import { frameAssets } from '../../src/wizard/assets';
 import { demoBootImage, simulatedPanel } from '../../src/wizard/demo';
 import { Session } from '../../src/wizard/session';
 import type { Step } from '../../src/wizard/routes';
@@ -19,8 +20,11 @@ import {
 
 const BASE = '/aqara-s1-plus';
 const BLOBS: Partial<Record<AssetName, Uint8Array>> = {
-  'uboot-spl': Uint8Array.of(1, 1), uboot: Uint8Array.of(2, 2), 'kiosk-apk': Uint8Array.of(3, 3),
+  'uboot-spl': Uint8Array.of(1, 1), uboot: Uint8Array.of(2, 2),
 };
+/** The app is not staged: it comes from the line's newest release, through Refract, as on kiln.glassworks.dev (issue 848). */
+const RELEASE = { tag: 'v1.0.0', version: '1.0.0', assets: ['s1-kiosk-1.0.0.apk'] };
+const APK = Uint8Array.of(3, 3);
 
 function world(k: Knobs): World {
   const writes: Write[] = [];
@@ -125,11 +129,15 @@ function world(k: Knobs): World {
     name, path: `${name}.bin`, size: b.length, license: 'MIT', source: 'contract',
     sha256: toHex(await crypto.subtle.digest('SHA-256', b as Uint8Array<ArrayBuffer>)),
   })));
+  const apkSum = crypto.subtle.digest('SHA-256', APK as Uint8Array<ArrayBuffer>).then(toHex);
   const fetch = (async (url: string) => {
     if (url.endsWith('manifest.json')) return new Response(JSON.stringify({ generated: '', assets: await manifest }));
-    const name = url.replace(/^.*\/(.*)\.bin$/, '$1') as AssetName;
-    if (k.stall && !fired.stalled) { fired.stalled = true; return body(BLOBS[name]!, true); }
-    return body(BLOBS[name]!);
+    if (url === `/api/release/${s1PlusUi.apk!.line}/latest`) return Response.json({ release: { ...RELEASE, digests: { [RELEASE.assets[0]!]: await apkSum } } });
+    if (url === releaseFileUrl(REFRACT, RELEASE.tag, `${RELEASE.assets[0]}.sha256`)) return new Response(`${await apkSum}  ${RELEASE.assets[0]}\n`);
+    const bytes = url === releaseFileUrl(REFRACT, RELEASE.tag, RELEASE.assets[0]!) ? APK : BLOBS[url.replace(/^.*\/(.*)\.bin$/, '$1') as AssetName];
+    if (!bytes) return new Response('not found', { status: 404 });
+    if (k.stall && !fired.stalled) { fired.stalled = true; return body(bytes, true); }
+    return body(bytes);
   }) as typeof globalThis.fetch;
 
   let prev: { session: Session; url: Step } | undefined;
@@ -140,7 +148,7 @@ function world(k: Knobs): World {
     vi.resetModules();
     const { registry } = await import('../../src/wizard/registry');
     const routes = await import('../../src/wizard/routes');
-    const assets = new Assets<string>('/assets/', fetch, { stallMs: STALL_MS });
+    const assets = frameAssets(s1PlusUi, new Assets<string>('/assets/', fetch, { stallMs: STALL_MS }), fetch, { stallMs: STALL_MS, sleep: fastSleep });
     const session = new Session({
       recipe, frame: s1PlusUi, simulated: true, sleep: fastSleep,
       devices: {
@@ -151,8 +159,9 @@ function world(k: Knobs): World {
       },
       // the recovery button and the cable: a physical step the frame declares, so the person does it when asked
       requestFel: async () => { mode = 'fel'; return { log: () => {} } as unknown as FelDevice; },
-      asset: (n, p) => assets.get(n, p),
-      hasAsset: (n) => assets.has(n),
+      asset: (n, p) => assets.asset(n, p),
+      hasAsset: (n) => assets.hasAsset(n),
+      fetchAhead: assets.fetchAhead,
       backups: {
         save: async (meta, files) => { saved.push({ meta, files }); },
         original: async () => saved[0]?.meta,

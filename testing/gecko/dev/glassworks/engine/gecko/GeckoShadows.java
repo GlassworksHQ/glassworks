@@ -7,6 +7,7 @@ import org.mozilla.geckoview.GeckoRuntime;
 import org.mozilla.geckoview.GeckoRuntimeSettings;
 import org.mozilla.geckoview.GeckoSession;
 import org.mozilla.geckoview.GeckoView;
+import org.mozilla.geckoview.StorageController;
 import org.mozilla.geckoview.WebExtension;
 import org.mozilla.geckoview.WebExtensionController;
 import org.robolectric.annotation.Implementation;
@@ -29,6 +30,12 @@ public final class GeckoShadows {
     public static final List<GeckoSession> sessions = new ArrayList<>();
     public static GeckoRuntimeSettings runtimeSettings;
     public static WebExtension.MessageDelegate messageDelegate;
+    /** The content permissions Gecko has saved, for {@link ShadowStorageController}. */
+    public static final List<GeckoSession.PermissionDelegate.ContentPermission> savedPermissions = new ArrayList<>();
+    /** What the app set them to: "uri permission value". */
+    public static final List<String> permissionsSet = new ArrayList<>();
+    /** Reads of {@link #savedPermissions} fail while this is above 0, one read each. */
+    public static int permissionReadsFailing;
 
     private static GeckoRuntime runtime;
 
@@ -37,6 +44,9 @@ public final class GeckoShadows {
         sessions.clear();
         runtimeSettings = null;
         messageDelegate = null;
+        savedPermissions.clear();
+        permissionsSet.clear();
+        permissionReadsFailing = 0;
         runtime = null;
         setStatic(GeckoRuntime.class, "sRuntime", null);
     }
@@ -92,6 +102,26 @@ public final class GeckoShadows {
         }
     }
 
+    /** Gecko's saved content permissions: {@link #savedPermissions}, and what the app sets in {@link #permissionsSet}. */
+    @Implements(StorageController.class)
+    public static class ShadowStorageController {
+        @Implementation
+        protected GeckoResult<List<GeckoSession.PermissionDelegate.ContentPermission>> getAllPermissions() {
+            if (permissionReadsFailing > 0) {
+                permissionReadsFailing--;
+                events.add("permissions.read failed");
+                return GeckoResult.fromException(new IllegalStateException("no profile yet"));
+            }
+            events.add("permissions.read");
+            return GeckoResult.fromValue(new ArrayList<>(savedPermissions));
+        }
+
+        @Implementation
+        protected void setPermission(GeckoSession.PermissionDelegate.ContentPermission perm, int value) {
+            permissionsSet.add(perm.uri + " " + perm.permission + " " + value);
+        }
+    }
+
     @Implements(WebExtensionController.class)
     public static class ShadowExtensionController {
         @Implementation
@@ -139,6 +169,9 @@ public final class GeckoShadows {
 
         @Implementation
         protected void goBack() { events.add(name(real) + ".goBack"); }
+
+        @Implementation
+        protected void setActive(boolean active) { events.add(name(real) + ".active " + active); }
     }
 
     @Implements(GeckoView.class)

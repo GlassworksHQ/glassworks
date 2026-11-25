@@ -63,6 +63,14 @@ class PanelAddressTest {
         assertEquals("192.0.2.20", PanelAddress.pick(listOf(ClientNetwork(lan = true, ipv4 = listOf("192.0.2.20")))))
     }
 
+    @Test fun onWifiOnlyEthernetDoesntCount() {
+        // Improv's "already on Wi-Fi": a panel on Ethernet alone hasn't joined the Wi-Fi an installer asked for.
+        val ethernet = ClientNetwork(lan = true, ipv4 = listOf("192.0.2.20"), active = true)
+        val wifi = ClientNetwork(lan = true, ipv4 = listOf("192.0.2.10"), wifi = true)
+        assertNull(PanelAddress.pick(listOf(ethernet), wifiOnly = true))
+        assertEquals("192.0.2.10", PanelAddress.pick(listOf(ethernet, wifi), wifiOnly = true))
+    }
+
     @Test fun theDefaultNetworkGoesFirst() {
         val other = ClientNetwork(lan = true, ipv4 = listOf("192.0.2.20"))
         val default = ClientNetwork(lan = true, ipv4 = listOf("192.0.2.10"), active = true)
@@ -120,6 +128,18 @@ class PanelAddressTest {
         network(ConnectivityManager.TYPE_VPN, "198.51.100.7", NetworkCapabilities.TRANSPORT_VPN, NetworkCapabilities.TRANSPORT_WIFI, active = true)
         network(ConnectivityManager.TYPE_WIFI, "192.0.2.10", NetworkCapabilities.TRANSPORT_WIFI)
         assertEquals("192.0.2.10", PanelAddress.now(app))
+    }
+
+    @Test fun ethernetAloneIsNotOnWifi() {
+        network(ConnectivityManager.TYPE_ETHERNET, "192.0.2.20", NetworkCapabilities.TRANSPORT_ETHERNET, active = true)
+        assertNull(PanelAddress.now(app, wifiOnly = true))
+        network(ConnectivityManager.TYPE_WIFI, "192.0.2.10", NetworkCapabilities.TRANSPORT_WIFI)
+        assertEquals("192.0.2.10", PanelAddress.now(app, wifiOnly = true))
+    }
+
+    @Test fun aVpnOverWifiIsNotItselfOnWifi() {
+        network(ConnectivityManager.TYPE_VPN, "198.51.100.7", NetworkCapabilities.TRANSPORT_VPN, NetworkCapabilities.TRANSPORT_WIFI, active = true)
+        assertNull(PanelAddress.now(app, wifiOnly = true))
     }
 
     @Test fun theDefaultNetworksAddressComesBeforeAnotherLanNetworks() {
