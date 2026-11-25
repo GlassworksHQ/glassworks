@@ -557,6 +557,10 @@ jobs:
       - name: Perf test runner and fakes, end to end (slow set)
         if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
         run: python3 tools/perf/test/parallel.py --set slow
+      # Its device side runs in core-emulators.yml (vitro-camera): here its fake HA's home and its checks, off-device.
+      - name: Vitro camera end-to-end test's home and checks
+        if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
+        run: python3 -m unittest discover -s tools/vitro-camera-e2e/test -v
       - name: APK size tool
         run: python3 -m unittest discover -s tools/size/test -v
       - name: Release scripts and the publish steps' beta path (#605)

@@ -434,6 +434,7 @@ class WebRTC:
             first = {}
 
             def on_frame(n):
+                s["sent"] = n + 1                    # what the fake reports at /clarity/cameras
                 if not first:
                     first["t"] = time.time()
                     self.record({"t": first["t"], "webrtc_sending": entity_id, "session": sid})

@@ -47,7 +47,7 @@ A pattern matches a path and everything under it. `*` stays within one folder, `
 | wake-word | `libs`, `build-logic`, `tools/voice` |
 | web | anything but `**/*.md`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/{*.kt,*.java}`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/{test,androidTest}/**`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/*/res/**`, `!testing/kotlin/dev/glassworks/testing/RepoFiles.kt`, `!core/src/main/res/font/**`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/model/LovelaceModel.kt`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/compat/VitroSupport.kt`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/cards/HacsParityCards.kt` |
 | refract | `kiln/workers` |
-| scripts: Clarity tests (ffmpeg, fast and slow sets) | `tools/perf`, `frames/*/budgets.json`, `frames/*/clarity`, `docs/perf.md` |
+| scripts: Clarity tests (ffmpeg, fast and slow sets) | `tools/perf`, `frames/*/budgets.json`, `frames/*/clarity`, `docs/perf.md`, `tools/vitro-camera-e2e` |
 | perf-webrtc | `tools/perf`, `frames/*/budgets.json`, `frames/*/clarity` |
 | root | `frames/aqara-s1-plus/tools/root`, `frames/aqara-s1-plus/tools/radio` |
 | size | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `frames/*/budgets.json`, `tools/size`, `tools/release/frame-abis.sh`, `frames/aqara-s1-plus/tools/radio`, `kiln/assets.lock.json` |
@@ -85,7 +85,8 @@ Android PR in a shared pool (see above).
 | `conformance (API 23, 26, 29, 34)` | The core's conformance test (`core/src/androidTest`), and on API 23 and 34 the [engine contract](engine-contract.md) (`engines/conformance`) on the same emulator | push to `main` when Android code changes, nightly at 03:17 UTC (`pr.yml`'s time), by hand |
 | `libs-api23` | `esphome-api-android` and `improv` androidTest on Android 6 | the same |
 | `legacy-verify` | The generic app's legacy APK (the Mirror's) installed on Android 6: fails when its verifier rejects a Glassworks class (`tools/legacy/verify-api23.sh`, #435). Before a Mirror flash, run the script on the build you flash | the same |
-| `report` | Opens, updates or closes the red-main issue | after those two, on `main` only |
+| `Vitro cameras on API 23, 29` (`vitro-camera`) | Vitro's camera end-to-end test ([tools/vitro-camera-e2e](../tools/vitro-camera-e2e/README.md)): a live camera card over each transport Vitro plays, against Clarity's fake Home Assistant on the runner, checked on screen | the same |
+| `report` | Opens, updates or closes the red-main issue | after the jobs above, on `main` only |
 
 A PR still gets the fast checks for the same code: the unit tests (`app`), lint's NewApi at minSdk 23
 (`pr.yml`'s `libs-api23` and `api23`). None of the emulator jobs is a required check, so a PR never waits

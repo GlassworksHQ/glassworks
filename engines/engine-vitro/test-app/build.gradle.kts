@@ -42,8 +42,14 @@ androidComponents {
 dependencies {
     implementation(project(":glassworks-core"))
     implementation(project(":engine-vitro"))
+    // WebRTC cameras, as the generic app has them with Vitro on (libwebrtc for all four ABIs: the emulators' x86_64 too).
+    implementation(project(":engine-vitro-webrtc"))
 
     // GPL-2.0 with the Classpath exception, like the JDK it backports (AGENTS.md, rule 4): this debug APK is never
     // released, only a test build's artifact, like the legacy test APK's.
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+
+    // CameraProbeTest: the camera end-to-end test's probe (tools/vitro-camera-e2e).
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.17")
 }

@@ -22,6 +22,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 # The streams in page/tiers.json (CAMERAS): main stream 1280x720 and sub-streams 640x360, 15 fps.
 PROFILES = {
@@ -125,6 +126,55 @@ def access_units(path):
             aus.append(cur)
             cur = b""
     return aus
+
+
+MJPEG_S = 20          # the MJPEG loop: the stream's first seconds, as JPEG pictures (~5 MB at 360p)
+
+
+def mjpeg_args(seconds=MJPEG_S):
+    """The segments (joined, on stdin) decoded to JPEG pictures, one after another, at the stream's rate."""
+    return ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "mp4", "-i", "pipe:0", "-t", str(seconds),
+            "-c:v", "mjpeg", "-q:v", "5", "-threads", "1", "-fflags", "+bitexact", "-flags:v", "+bitexact",
+            "-f", "mjpeg", "pipe:1"]
+
+
+def mjpeg_name(profile):
+    """The MJPEG pictures' file under root()/mjpeg: named by the settings that made them, so changed settings
+    make a new file instead of serving an old one."""
+    return f"{profile}-{hashlib.sha256(json.dumps(mjpeg_args()).encode()).hexdigest()[:8]}.mjpeg"
+
+
+@functools.lru_cache(maxsize=None)
+def mjpeg_frames(profile):
+    """The profile's stream as a list of JPEG pictures (HA's camera_proxy_stream, MJPEG): the same video
+    the segments carry, burnt-in counter and all, decoded once and kept in the cache next to them."""
+    d = os.path.join(root(), "mjpeg")
+    path = os.path.join(d, mjpeg_name(profile))
+    if not os.path.exists(path):
+        src = os.path.join(root(), profile)
+        joined = b""
+        for name in ["init.mp4"] + sorted(f for f in os.listdir(src) if f.endswith(".m4s")):
+            with open(os.path.join(src, name), "rb") as fh:
+                joined += fh.read()
+        out =subprocess.run(mjpeg_args(), input=joined, capture_output=True, check=True).stdout
+        os.makedirs(d, exist_ok=True)
+        # A temporary file of its own per writer: two first requests at once each write theirs, and each replace
+        # puts a whole file in place (the same bytes: the encode is bitexact).
+        fd, tmp = tempfile.mkstemp(dir=d, prefix=f".{profile}-", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(out)
+            os.replace(tmp, path)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+    with open(path, "rb") as f:
+        data = f.read()
+    # One picture ends (EOI) where the next starts (SOI); a JPEG's entropy-coded data never has FFD9 FFD8.
+    parts = data.split(b"\xff\xd9\xff\xd8")
+    frames = [(b"" if i == 0 else b"\xff\xd8") + p + (b"" if i == len(parts) - 1 else b"\xff\xd9") for i, p in enumerate(parts)]
+    return [f for f in frames if f.startswith(b"\xff\xd8") and f.endswith(b"\xff\xd9")]
 
 
 def annexb(profile):

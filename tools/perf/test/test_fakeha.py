@@ -29,6 +29,13 @@ for _prof in ("720p", "360p"):
     for _n in range(120):
         with open(os.path.join(STUB_CAMERA, _prof, f"seg{_n:03d}.m4s"), "wb") as _f:
             _f.write(f"seg{_n:03d}-{_prof}".encode())
+# The MJPEG pictures (camera.mjpeg_frames reads them when they are there): two stub "JPEGs" a profile.
+sys.path.insert(0, os.path.dirname(HERE))
+import camera  # noqa: E402
+os.makedirs(os.path.join(STUB_CAMERA, "mjpeg"))
+for _prof in ("720p", "360p"):
+    with open(os.path.join(STUB_CAMERA, "mjpeg", camera.mjpeg_name(_prof)), "wb") as _f:
+        _f.write(b"\xff\xd8one-" + _prof.encode() + b"\xff\xd9\xff\xd8two-" + _prof.encode() + b"\xff\xd9")
 os.environ["GW_PERF_CAMERA"] = STUB_CAMERA
 sys.path.insert(0, os.path.dirname(HERE))
 import dashboards as D  # noqa: E402
@@ -371,6 +378,69 @@ class FakeHA(unittest.TestCase):
         n = int(re.findall(r"segment/(\d+)\.m4s", live)[-1])
         self.assertGreaterEqual(n, 120)
         self.assertEqual(self.http("GET", f"{base}/segment/{n}.m4s")[2], f"seg{n % 120:03d}-720p".encode())
+
+    def cameras(self):
+        return json.loads(self.http("GET", "/clarity/cameras")[2])
+
+    def test_the_mjpeg_proxy_stream_as_ha_serves_it_and_ends_with_its_client(self):
+        """HA's camera_proxy_stream: multipart JPEG pictures at the stream's rate, looped, for as long as the client
+        reads; /clarity/cameras shows it open and counting, and it is gone soon after the client goes."""
+        self.assertEqual(self.http("GET", "/api/camera_proxy_stream/camera.nope")[0], 404)
+        sock = socket.create_connection(("127.0.0.1", self.port), timeout=10)
+        sock.sendall(b"GET /api/camera_proxy_stream/camera.clarity_cam_1?token=x HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+        self.addCleanup(sock.close)
+        data = b""
+        while data.count(b"--frame") < 4:
+            chunk = sock.recv(4096)
+            self.assertTrue(chunk, f"the stream ended early: {data[:200]!r}")
+            data += chunk
+        head, body = data.split(b"\r\n\r\n", 1)
+        self.assertIn(b" 200 ", head.split(b"\r\n")[0])
+        self.assertIn(b"Content-Type: multipart/x-mixed-replace;boundary=frame", head)
+        parts = re.findall(rb"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: (\d+)\r\n\r\n(\xff\xd8.*?\xff\xd9)\r\n", body, re.S)
+        self.assertEqual([p[1] for p in parts[:3]], [b"\xff\xd8one-360p\xff\xd9", b"\xff\xd8two-360p\xff\xd9", b"\xff\xd8one-360p\xff\xd9"])
+        self.assertTrue(all(int(n) == len(p) for n, p in parts))
+        live = [s for s in self.cameras()["mjpeg"] if s["camera"] == "camera.clarity_cam_1"]
+        self.assertEqual(len(live), 1)
+        self.assertGreaterEqual(live[0]["frames"], 3)
+        sock.shutdown(socket.SHUT_RDWR)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and any(s["camera"] == "camera.clarity_cam_1" for s in self.cameras()["mjpeg"]):
+            time.sleep(0.1)
+        self.assertEqual([s for s in self.cameras()["mjpeg"] if s["camera"] == "camera.clarity_cam_1"], [])
+        # The running total keeps what the closed stream sent.
+        self.assertGreaterEqual(self.cameras()["mjpeg_sent"]["camera.clarity_cam_1"], live[0]["frames"])
+
+    def test_the_cameras_report_counts_each_hls_streams_fetches(self):
+        ws = self.connect()
+        st, _ = ws.call({"type": "camera/stream", "entity_id": "camera.clarity_hls_1"})
+        base = st["result"]["url"].rsplit("/", 1)[0]
+        token = base.rsplit("/", 1)[1]
+        self.http("GET", base + "/playlist.m3u8")
+        self.http("GET", base + "/init.mp4")
+        hls = {s["token"]: s for s in self.cameras()["hls"]}[token]
+        self.assertEqual((hls["camera"], hls["playlists"], hls["segments"]), ("camera.clarity_hls_1", 2, 0))
+        self.assertGreaterEqual(self.cameras()["hls_fetched"]["camera.clarity_hls_1"], 2)       # a running total
+        self.assertLess(hls["idle_s"], 5)
+
+    def test_lovelace_updated_reaches_its_subscribers_only(self):
+        """HA's lovelace_updated, on request: what the camera end-to-end test sends after it changes a dashboard."""
+        ws, other = self.connect(), self.connect()
+        sub, _ = ws.call({"type": "subscribe_events", "event_type": "lovelace_updated"})
+        self.assertTrue(sub["success"])
+        other.call({"type": "subscribe_events", "event_type": "state_changed"})
+        self.assertEqual(self.http("GET", "/clarity/lovelace_updated?url_path=clarity-ref")[0], 204)
+        ev = ws.recv()
+        self.assertEqual((ev["id"], ev["type"]), (sub["id"], "event"))
+        self.assertEqual(ev["event"]["event_type"], "lovelace_updated")
+        self.assertEqual(ev["event"]["data"], {"url_path": "clarity-ref", "mode": "storage"})
+        with self.assertRaises((socket.timeout, TimeoutError)):
+            other.recv(0.5)
+        unsub, _ = ws.call({"type": "unsubscribe_events", "subscription": sub["id"]})
+        self.assertTrue(unsub["success"])
+        self.http("GET", "/clarity/lovelace_updated?url_path=clarity-ref")
+        with self.assertRaises((socket.timeout, TimeoutError)):
+            ws.recv(0.5)
 
     def test_webrtc_signalling_as_ha_answers_it(self):
         """#202, HA core's camera/webrtc.py with go2rtc: get_client_config, then the offer as a
