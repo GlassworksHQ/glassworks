@@ -145,6 +145,55 @@ class FakeHaServer {
     @Volatile var failHistory: Boolean = false
     @Volatile var templateResult: Any = "21.5 °C"
 
+    /**
+     * `auth/current_user`'s answer, the signed-in user: an administrator unless a test says otherwise; null refuses it
+     * (`unknown_command`).
+     */
+    @Volatile var currentUser: JSONObject? = JSONObject("""{"id": "wall-user", "name": "Wall Panel", "is_owner": false, "is_admin": true}""")
+
+    /** `lovelace/dashboards/list` answers with an error. */
+    @Volatile var failDashboardList: Boolean = false
+
+    /**
+     * `frontend/update_panel`'s `require_admin` overrides, by panel: what `get_panels` applies over the dashboard's own
+     * `require_admin` (HA core 2026.11's `websocket_get_panels`), and `lovelace/dashboards/list` doesn't show.
+     */
+    val panelRequireAdmin = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    /** `get_panels` answers with an error. */
+    @Volatile var failPanels: Boolean = false
+
+    /**
+     * `get_panels` as HA core 2026.11 answers it for [currentUser]: the default dashboard (`lovelace`) and every listed
+     * or config-less dashboard, each with its override over its own `require_admin`, an admin-only one only for an
+     * administrator.
+     */
+    fun panels(): JSONObject {
+        val admin = currentUser?.optBoolean("is_admin", false) == true
+        val own = LinkedHashMap<String, Boolean>().apply { put("lovelace", false) }
+        for (i in 0 until dashboards.length()) {
+            val d = dashboards.optJSONObject(i) ?: continue
+            val path = d.optString("url_path", "").ifEmpty { continue }
+            own[path] = d.optBoolean("require_admin", false)
+        }
+        missingDashboards.forEach { own.putIfAbsent(it, false) }
+        val out = JSONObject()
+        for ((path, requireAdmin) in own) {
+            val effective = panelRequireAdmin[path] ?: requireAdmin
+            if (effective && !admin) continue
+            out.put(path, JSONObject().put("component_name", "lovelace").put("url_path", path).put("require_admin", effective))
+        }
+        return out
+    }
+
+    /** HA changed its panels (`frontend/update_panel`, a dashboard added or removed): `panels_updated` on the newest connection. */
+    fun pushPanelsUpdated() {
+        pushEvent(eventSubscriptionId("panels_updated")!!, JSONObject().put("event_type", "panels_updated"))
+    }
+
+    /** `auth/current_user` goes unanswered, for a test to answer it later (on [sockets]). */
+    @Volatile var holdCurrentUser: Boolean = false
+
     /** `config/entity_registry/list_for_display`'s answer; null refuses it (`unknown_command`). */
     @Volatile var entityRegistryDisplay: JSONObject? = null
 
@@ -248,7 +297,9 @@ class FakeHaServer {
             "get_config" -> ok(sock, id, haConfig)
             "frontend/get_themes" -> ok(sock, id, themes)
             "subscribe_events", "unsubscribe_events" -> ok(sock, id, JSONObject.NULL)
-            "lovelace/dashboards/list" -> ok(sock, id, dashboards)
+            "lovelace/dashboards/list" -> if (failDashboardList) fail(sock, id, "unknown_error") else ok(sock, id, dashboards)
+            "get_panels" -> if (failPanels) fail(sock, id, "unknown_error") else ok(sock, id, panels())
+            "auth/current_user" -> if (!holdCurrentUser) currentUser?.let { ok(sock, id, it) } ?: fail(sock, id, "unknown_command")
             "lovelace/resources" -> ok(sock, id, resources)
             "lovelace/config" -> {
                 if (m.optString("url_path") in missingDashboards) fail(sock, id, "config_not_found") else ok(sock, id, dashboardConfig)

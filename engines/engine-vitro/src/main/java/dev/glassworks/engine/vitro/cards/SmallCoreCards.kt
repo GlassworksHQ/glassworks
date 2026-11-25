@@ -18,11 +18,14 @@ import android.widget.TextView
 import dev.glassworks.engine.vitro.compat.ShortcutDefaults
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HaDisplay
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.A11yRole
 import dev.glassworks.engine.vitro.ui.CardSurface
+import dev.glassworks.engine.vitro.ui.HaErrorSeverity
+import dev.glassworks.engine.vitro.ui.errorCardContent
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroAccess
@@ -828,6 +831,12 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
     /** The sensors followed now, with their handles: dropped on detach, made again for the current ones on attach. */
     private val sensorHandles = HashMap<String, () -> Unit>()
 
+    /**
+     * HA's hui-warning, drawn in place of the whole card while its plant is missing. Declared before [init]: the first
+     * [render] runs inside it, and a later initializer would forget the warning it added.
+     */
+    private var missingWarning: View? = null
+
     init {
         addView(root, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         observe(entityId, ::render)
@@ -866,18 +875,34 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
         super.onDetachedFromWindow()
     }
 
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        // Over the card's padding (its border, a card_mod padding set since): the warning is in place of all of it.
+        (missingWarning?.layoutParams as? MarginLayoutParams)?.let { lp ->
+            if (lp.leftMargin != -paddingLeft || lp.topMargin != -paddingTop || lp.rightMargin != -paddingRight || lp.bottomMargin != -paddingBottom) {
+                lp.setMargins(-paddingLeft, -paddingTop, -paddingRight, -paddingBottom)
+            }
+        }
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
+    }
+
     private fun render(s: EntityState?) {
         val k = key(s)
         if (k == builtFor) { if (s != null) { followSensors(s); fillValues(s) }; return }
         builtFor = k
         root.removeAllViews()
         values.clear()
+        missingWarning?.let { removeView(it) }
+        missingWarning = null
+        clipToPadding = s != null
         if (s == null) {
-            root.addView(smallText(ctx, 14f, ctx.theme.primaryTextColor, 700).apply {
-                text = "Entity not found"
-                val p = ctx.px(16f)
-                setPadding(p, p, p, p)
+            // HA's hui-warning in place of the card: "Entity not found" for an administrator, the icon for anyone else.
+            // It covers the card's border too (its margins undo the card's padding): hui-error-card has none.
+            val warning = errorCardContent(ctx, HaErrorSeverity.WARNING, HaText.ui("ui.card.common.entity_not_found"),
+                over = ctx.theme.cardBackgroundColor)
+            addView(warning, LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+                setMargins(-paddingLeft, -paddingTop, -paddingRight, -paddingBottom)
             })
+            missingWarning = warning
             return
         }
         val hasPicture = s.entityPicture != null

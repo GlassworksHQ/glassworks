@@ -1,0 +1,11 @@
+{
+ "title": "Tile: an entity HA doesn't have, for a user who isn't an administrator (hui-warning's icon alone)",
+ "card": {
+  "type": "tile",
+  "entity": "text.missing_night_window"
+ },
+ "fixture": {
+  "states": {},
+  "admin": false
+ }
+}

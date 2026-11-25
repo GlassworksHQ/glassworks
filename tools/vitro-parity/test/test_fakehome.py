@@ -205,6 +205,19 @@ class Home(unittest.TestCase):
         out = call({"type": "frontend/get_translations", "category": "entity_component", "integration": ["weather"], "language": "fr"})
         self.assertEqual(out[0]["result"]["resources"]["component.weather.entity_component._.state.cloudy"], "Nuageux")
 
+    def test_the_signed_in_user_is_an_administrator_unless_the_case_says_not(self):
+        self.case({})
+        me = call({"type": "auth/current_user"})[0]["result"]
+        self.assertTrue(me["is_admin"])
+        self.assertTrue(me["is_owner"])
+        # A case about what HA shows someone who isn't (its error cards' titles): the same user, no administrator.
+        self.case({"admin": False})
+        me = call({"type": "auth/current_user"})[0]["result"]
+        self.assertFalse(me["is_admin"])
+        self.assertFalse(me["is_owner"])
+        listed = call({"type": "config/auth/list"})[0]["result"][0]
+        self.assertEqual((listed["id"], listed["is_admin"], listed["group_ids"]), (me["id"], False, ["system-users"]))
+
     def test_the_cards_subscriptions(self):
         self.case({"todo": {"todo.c": [{"summary": "x", "uid": "item-1", "status": "needs_action", "due": "@D+1"}]},
                    "forecast": {"weather.h": {"daily": [{"datetime": "@D+1 12:00", "condition": "sunny"}]}},
@@ -305,13 +318,14 @@ class Corpus(unittest.TestCase):
                     yield f[:-5], json.load(fh)
 
     def test_every_case_has_a_fixture_with_the_entities_its_card_names(self):
+        # An entity whose object id starts with "missing" is one HA doesn't have, on purpose (HA's "Entity not found").
         missing = []
         for cid, doc in self.cases():
             fx = doc.get("fixture")
             if not isinstance(fx, dict):
                 missing.append(f"{cid}: no fixture")
                 continue
-            named = {m for m in ID.findall(json.dumps(doc.get("card") or doc.get("view_config"))) if m.split(".")[0] in DOMAINS and not m.startswith(("sun.", "sensor.missing"))}
+            named = {m for m in ID.findall(json.dumps(doc.get("card") or doc.get("view_config"))) if m.split(".")[0] in DOMAINS and not m.startswith("sun.") and not m.split(".", 1)[1].startswith("missing")}
             named = {m for m in named if not re.match(r"^(todo|calendar|person)\.(item|event)", m)}
             for e in sorted(named - set(fx.get("states") or {})):
                 missing.append(f"{cid}: {e} has no state")

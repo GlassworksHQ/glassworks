@@ -1056,10 +1056,10 @@ class VitroEngine(
             }
 
             override fun onDashboards(dashboards: List<DashboardSummary>) {
+                // The dashboards HA's frontend lists for this user, as the web engine reports them: the client left out
+                // an admin-only one for anyone but an administrator.
                 val arr = JSONArray()
-                for (d in dashboards) {
-                    arr.put(JSONObject().put("url_path", d.urlPath).put("title", d.title))
-                }
+                for (d in dashboards) arr.put(JSONObject().put("url_path", d.urlPath).put("title", d.title))
                 post {
                     host.onPortMessage(port, JSONObject().put("type", "dashboards").put("json", arr.toString()))
                 }
@@ -1134,6 +1134,21 @@ class VitroEngine(
                     // The view it opens may have gone to the fallback ([VitroView.onWebView]), which signals ready; then
                     // it's no return target, and the native view before it stays the way back.
                     if (nativeActive) readyWhenBuilt("vitro") else lastNativeUrl = previousNative
+                }
+            }
+
+            override fun onDashboardRefused(urlPath: String?) {
+                Log.i(logTag, "Dashboard ${urlPath ?: "(default)"} is admin only and this user isn't an administrator: Home Assistant's frontend decides what it shows")
+                post {
+                    if (urlPath != currentDashboardPath) return@post
+                    // HA's frontend has no panel for it for this user, and routes the URL to the user's default panel
+                    // (their profile's, the system's, or Home). The fallback shows exactly that, and hands the page back
+                    // if it's a dashboard Vitro draws. It's no way back to Vitro, as a dashboard with no config isn't.
+                    val url = currentUrl
+                    webDashboards += currentOrigin to urlPath
+                    leaveNativeDashboard()
+                    forgetDisplayed(urlPath)
+                    url?.let(::openInFallback)
                 }
             }
 

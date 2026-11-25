@@ -20,6 +20,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -394,6 +395,109 @@ class VitroFallbackReturnTest {
         fb.fallbackOpen().host.onLocationChange(living)
         awaitMain("native") { host.messages("ready").isNotEmpty() }
         assertNative(page, fp)
+    }
+
+    // ---- Admin-only dashboards (#887) ----
+
+    private val wallUser = org.json.JSONObject("""{"id": "wall-user", "name": "Wall Panel", "is_owner": false, "is_admin": false}""")
+
+    /**
+     * A user who isn't an administrator opening an admin-only dashboard (a link, a navigate action, Manage's URL): HA's
+     * frontend has no panel for it and routes it to the user's default panel. Vitro draws nothing of it and hands the URL
+     * to HA's frontend, which does just that; the default panel is Vitro's again when it's a dashboard Vitro draws.
+     */
+    @Test fun anAdminOnlyDashboardGoesToHomeAssistantsFrontendForAUserWhoIsntAnAdministrator() {
+        server.currentUser = wallUser
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        val before = host.messages("ready").size
+        page.load("$base/admin-only/secret")
+        awaitMain("fallback") { fb.opens.isNotEmpty() }
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+        assertEquals(listOf("$base/admin-only/secret"), fp.loads.toList())
+        // Nothing of it was drawn: the native view still holds the dashboard before it.
+        assertEquals(listOf("Living", "Wall"), vitroView(page).dashboard!!.views.map { it.title })
+        assertEquals(before, host.messages("ready").size)
+
+        // HA's frontend went to the user's default panel, a dashboard Vitro draws: the page is native again.
+        fb.fallbackOpen().host.onLocationChange(living)
+        awaitMain("native") { host.messages("ready").size > before }
+        assertNative(page, fp)
+
+        // Reload and Back never return to the refused dashboard.
+        page.load("$base/energy")
+        idle()
+        page.reload()
+        idle()
+        assertNative(page, fp)
+        assertEquals(living, host.locations.last())
+    }
+
+    /** HA makes the dashboard on screen admin only (`frontend/update_panel`): it goes, on the same connection. */
+    @Test fun aDashboardMadeAdminOnlyWhileOnScreenGoesToHomeAssistantsFrontend() {
+        server.currentUser = wallUser
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        awaitMain("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
+        server.panelRequireAdmin["wall-test"] = true
+        server.pushPanelsUpdated()
+        awaitMain("fallback") { fb.opens.any { it.background == Color.BLACK } }
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+        assertEquals(listOf(living), fp.loads.toList())
+        assertEquals("no reconnect", 1, server.connectUrls.size)
+    }
+
+    /** Revoked while HA's frontend showed another page: Back to the dashboard from Vitro's cache is refused too. */
+    @Test fun aDashboardRevokedWhileTheFallbackShowedIsRefusedOnTheWayBack() {
+        server.currentUser = wallUser
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        awaitMain("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
+        page.load("$base/energy")
+        idle()
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+        server.panelRequireAdmin["wall-test"] = true
+        server.pushPanelsUpdated()
+        awaitMain("panels asked again") { server.commands("get_panels").size == 2 }
+        // Back: the native view in Vitro's cache, then refused, and HA's frontend takes the URL.
+        page.goBack()
+        awaitMain("handed to HA's frontend") { fp.loads.contains(living) }
+        assertFallback(page, fp)
+        assertEquals(listOf("$base/energy", living), fp.loads.toList())
+    }
+
+    @Test fun startedOnAnAdminOnlyDashboardAUserWhoIsntAnAdministratorGetsHomeAssistantsPage() {
+        server.currentUser = wallUser
+        val fb = RecordingEngine()
+        val page = page(engine(fb, settings.copy(dashboard = "$base/admin-only")))
+        page.load("$base/admin-only")
+        awaitMain("fallback") { fb.opens.isNotEmpty() }
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+        assertTrue("nothing native drawn", vitroView(page).dashboard == null)
+        assertTrue("no ready from Vitro", host.messages("ready").isEmpty())
+    }
+
+    @Test fun anAdministratorGetsTheAdminOnlyDashboardNatively() {
+        val fb = RecordingEngine()
+        val page = page(engine(fb))
+        page.load("$base/admin-only")
+        awaitMain("native") { host.messages("ready").isNotEmpty() }
+        assertTrue("never the fallback", fb.opens.none { it.background == Color.BLACK })
+        assertNotNull(vitroView(page).dashboard)
+    }
+
+    /** The panel's Dashboard select lists what HA's frontend lists for the user, as the web engine reports it. */
+    @Test fun theDashboardListLeavesOutAdminOnlyDashboardsForAUserWhoIsntAnAdministrator() {
+        server.currentUser = wallUser
+        val page = readyPage(RecordingEngine())
+        awaitMain("dashboards") { host.messages("dashboards").isNotEmpty() }
+        val list = org.json.JSONArray(host.messages("dashboards").single().getString("json"))
+        assertEquals(listOf("wall-test"), (0 until list.length()).map { list.getJSONObject(it).getString("url_path") })
+        assertNotNull(page)
     }
 
     // ---- No half-native states ----

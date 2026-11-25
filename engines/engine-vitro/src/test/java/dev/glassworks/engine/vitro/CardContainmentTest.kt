@@ -33,6 +33,7 @@ import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.VitroView
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.roundToInt
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -115,7 +116,7 @@ class CardContainmentTest {
         }
     }
 
-    private fun view(boom: Boom, sections: Boolean = true): VitroView {
+    private fun view(boom: Boom, sections: Boolean = true, admin: Boolean = true): VitroView {
         store.putLocal(EntityState("sensor.boom", "ok", mapOf("friendly_name" to "Boom")))
         store.putLocal(EntityState("light.kitchen", "off", mapOf("friendly_name" to "Kitchen")))
         val vv = VitroView(activity, store, 0xFF000000.toInt())
@@ -124,6 +125,8 @@ class CardContainmentTest {
                 context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = emptyList(),
                 accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
                 fetchHistory = { _, _, done -> done(emptyMap()) }, subscribeTemplate = { _, _ -> {} },
+                // HA's error card shows its title to an administrator.
+                haUser = { JSONObject().put("id", "u1").put("is_admin", admin) },
             )
         }
         vv.testCards = { card, ctx -> if (card.type == BOOM) BoomCard(ctx, boom) else null }
@@ -184,6 +187,27 @@ class CardContainmentTest {
         assertNotNull(lp.fixedHeight)
         assertEquals(listOf("build" to BOOM), contained.map { it.first to it.second })
         assertTileStillUpdates(vv)
+    }
+
+    /**
+     * hui-error-card for a user who isn't an administrator: the same card, its icon alone where it is for an
+     * administrator (16 px in: `no-title` centers nothing in a block ha-card), and TalkBack reads its generic title.
+     */
+    @Test fun aNonAdminSeesTheFailedCardsIconAloneAtTheStart() {
+        val vv = view(Boom.BUILD, admin = false)
+        drawAll(vv)
+        val error = all(vv).filterIsInstance<ErrorCardView>().single()
+        assertTrue("no title for a user who isn't an administrator", texts(error).isEmpty())
+        val icon = all(error).filterIsInstance<dev.glassworks.engine.vitro.ui.MdiIconView>().single()
+        assertEquals("the icon starts 16 px in", (16 * activity.resources.displayMetrics.density).roundToInt(), icon.left)
+        assertEquals(ErrorCardView.TITLE, all(error).firstNotNullOfOrNull { it.contentDescription }?.toString())
+        // A failure after the build turns into the same card.
+        val late = view(Boom.UPDATE, admin = false)
+        drawAll(late)
+        store.putLocal(EntityState("sensor.boom", "boom", emptyMap()))
+        drawAll(late)
+        assertNotNull(boomCard(late).failure)
+        assertTrue(texts(boomCard(late)).isEmpty())
     }
 
     @Test fun aBuildFailureInAMasonryViewIsAnErrorCardToo() {
@@ -339,6 +363,8 @@ class CardContainmentTest {
                 context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = emptyList(),
                 accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
                 fetchHistory = { _, _, done -> done(emptyMap()) }, subscribeTemplate = { _, _ -> {} },
+                // HA's error card shows its title to an administrator.
+                haUser = { JSONObject().put("id", "u1").put("is_admin", true) },
             )
         }
         vv.testCards = testCards
@@ -523,6 +549,7 @@ class CardContainmentTest {
             theme = dev.glassworks.engine.vitro.theme.ThemeResolver.resolve(dev.glassworks.engine.vitro.theme.ThemeCatalog(), true),
             resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
             fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            haUser = { JSONObject().put("is_admin", true) },
             subscribeWs = { _, _, _ ->
                 open++
                 opened++

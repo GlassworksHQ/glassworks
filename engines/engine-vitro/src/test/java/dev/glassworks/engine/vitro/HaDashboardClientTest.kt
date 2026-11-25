@@ -50,6 +50,7 @@ class HaDashboardClientTest {
         val userThemes = CopyOnWriteArrayList<Pair<String?, Boolean?>>()
         val failedConfigs = CopyOnWriteArrayList<Pair<String?, String>>()
         val users = CopyOnWriteArrayList<JSONObject>()
+        val refused = CopyOnWriteArrayList<String?>()
 
         override fun onConnected(haVersion: String) { connected += haVersion }
         override fun onAuthRequired() { authRequired.incrementAndGet() }
@@ -63,6 +64,7 @@ class HaDashboardClientTest {
         val localeChanges = AtomicInteger(0)
         override fun onLocaleChanged() { localeChanges.incrementAndGet() }
         override fun onCurrentUser(user: JSONObject) { users += user }
+        override fun onDashboardRefused(urlPath: String?) { refused += urlPath }
     }
 
     private val server = FakeHaServer()
@@ -155,6 +157,8 @@ class HaDashboardClientTest {
     @Test
     fun startupSendsEachRequestInOrderWithIncreasingIds() {
         connected()
+        // The last startup request: the panels' answer may release the rest before it's written.
+        awaitCondition("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
         val sent = server.received.toList().drop(1) // after `auth`
         // First the user's language and formats (HA's translations-mixin subscribes on connect): the translations
         // asked for later are in that language.
@@ -167,8 +171,11 @@ class HaDashboardClientTest {
         )
         assertEquals("language", sent[0].getString("key"))
         assertEquals((1..9).toList(), sent.take(9).map { it.getInt("id") })
+        // After the user's: their panels (what HA's frontend opens for them), and HA's changes to them.
+        assertEquals(listOf("get_panels", "subscribe_events"), sent.drop(12).take(2).map { it.getString("type") })
+        assertEquals("panels_updated", sent[13].getString("event_type"))
         assertEquals(
-            listOf("themes_updated", "lovelace_updated"),
+            listOf("themes_updated", "lovelace_updated", "panels_updated"),
             server.commands("subscribe_events").map { it.getString("event_type") },
         )
     }
@@ -323,6 +330,269 @@ class HaDashboardClientTest {
             listOf("auth/current_user", "frontend/get_user_data", "frontend/subscribe_user_data"),
             types.drop(9).take(3),
         )
+    }
+
+    // ---- Admin-only dashboards (#887) ----
+
+    private val wallUser = JSONObject("""{"id": "wall-user", "name": "Wall Panel", "is_owner": false, "is_admin": false}""")
+
+    private fun started(path: String?): HaDashboardClient = newClient().also {
+        it.subscribeViewEntities(emptySet())
+        it.start(path)
+    }
+
+    @Test
+    fun anAdminOnlyDashboardIsRefusedForAUserWhoIsntAnAdministrator() {
+        server.currentUser = wallUser
+        val c = started("admin-only")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        // HA answered its config (it does for anyone): its frontend is what refuses it, and so does Vitro.
+        assertEquals("admin-only", server.commands("lovelace/config").single().getString("url_path"))
+        assertEquals(listOf<String?>("admin-only"), listener.refused.toList())
+        assertTrue(listener.configs.isEmpty())
+        assertTrue(listener.failedConfigs.isEmpty())
+        assertFalse(c.mayOpen("admin-only"))
+        assertTrue(c.mayOpen("wall-test"))
+        assertTrue("the default dashboard is never admin only", c.mayOpen(null))
+        // A path that is none of the user's panels: HA's frontend routes it to the user's default panel.
+        assertFalse(c.mayOpen("not-listed"))
+        // The user's list leaves the admin-only dashboard out, as HA's frontend does.
+        awaitCondition("dashboards") { listener.dashboards.isNotEmpty() }
+        assertEquals(listOf("wall-test"), listener.dashboards.single().map { it.urlPath })
+        // Another dashboard on the same connection is drawn.
+        c.fetchDashboard("wall-test")
+        awaitCondition("wall-test") { listener.configs.isNotEmpty() }
+        assertEquals("wall-test", listener.configs.single().first)
+        assertEquals(1, listener.refused.size)
+    }
+
+    @Test
+    fun anAdministratorOpensAnAdminOnlyDashboard() {
+        val c = started("admin-only")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        assertEquals("admin-only", listener.configs.single().first)
+        assertTrue(listener.refused.isEmpty())
+        assertTrue(c.mayOpen("admin-only"))
+    }
+
+    @Test
+    fun aUserHomeAssistantWontNameIsNoAdministrator() {
+        // auth/current_user refused: HA's frontend has no hass.user, so no administrator.
+        server.currentUser = null
+        val c = started("admin-only")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertTrue(listener.configs.isEmpty())
+        assertFalse(c.mayOpen("admin-only"))
+    }
+
+    @Test
+    fun noConfigOrDashboardListIsHandedOnBeforeTheUserIsKnown() {
+        server.holdCurrentUser = true
+        val c = started("wall-test")
+        // The entity snapshot comes after the config's answer on the wire: by then the config has been read and held.
+        awaitCondition("config answered, user not") {
+            server.commands("auth/current_user").isNotEmpty() && store["sensor.kitchen_temp"] != null
+        }
+        assertTrue("no config before the user", listener.configs.isEmpty())
+        assertTrue("no dashboard list before the user", listener.dashboards.isEmpty())
+        val id = server.commands("auth/current_user").single().getInt("id")
+        server.sockets.last().push(JSONObject().put("id", id).put("type", "result").put("success", true).put("result", wallUser))
+        awaitCondition("config") { listener.configs.isNotEmpty() && listener.dashboards.isNotEmpty() }
+        assertEquals("wall-test", listener.configs.single().first)
+        assertEquals("wall-user", c.currentUser.getString("id"))
+    }
+
+    @Test
+    fun aReconnectAsksAgainWhoTheUserIsBeforeHandingOnAConfig() {
+        // An administrator first: the admin-only dashboard is drawn.
+        started("admin-only")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        // The user loses the role in HA; the connection drops. The new one's config may answer before the user does.
+        server.currentUser = wallUser
+        server.holdCurrentUser = true
+        server.dropConnection()
+        awaitCondition("config asked again, user not answered") {
+            server.commands("auth/current_user").size == 2 && server.commands("subscribe_entities").size == 2
+        }
+        assertEquals("nothing handed on with the last connection's user", 1, listener.configs.size)
+        val id = server.commands("auth/current_user").last().getInt("id")
+        server.sockets.last().push(JSONObject().put("id", id).put("type", "result").put("success", true).put("result", wallUser))
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertEquals(1, listener.configs.size)
+    }
+
+    @Test
+    fun aRefusedUserLookupAfterAnAdministratorsIsNoAdministrator() {
+        val c = started("admin-only")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        assertTrue(c.currentUser.getBoolean("is_admin"))
+        server.currentUser = null
+        server.dropConnection()
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertFalse("the last user isn't kept", c.currentUser.has("is_admin"))
+        assertFalse(c.mayOpen("admin-only"))
+    }
+
+    @Test
+    fun withNoPanelsOnlyTheDefaultDashboardIsDrawnForANonAdmin() {
+        // HA refused get_panels: which panels the user has is unknown.
+        server.failPanels = true
+        server.currentUser = wallUser
+        val c = started("wall-test")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        // HA's frontend decides any named dashboard for a user who isn't an administrator.
+        assertTrue(listener.configs.isEmpty())
+        assertFalse(c.mayOpen("wall-test"))
+        assertTrue(c.mayOpen(null))
+        c.fetchDashboard(null)
+        awaitCondition("default dashboard") { listener.configs.isNotEmpty() }
+    }
+
+    @Test
+    fun withNoPanelsAnAdministratorOpensAnyDashboard() {
+        server.failPanels = true
+        val c = started("admin-only")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        assertTrue(listener.refused.isEmpty())
+        assertTrue(c.mayOpen("admin-only"))
+    }
+
+    @Test
+    fun aPanelOverrideMakesADashboardAdminOnlyThoughItsOwnConfigSaysNot() {
+        // frontend/update_panel stored require_admin over wall-test, whose dashboard config says false: get_panels
+        // leaves it out for a non-admin, and so does Vitro, its list included.
+        server.panelRequireAdmin["wall-test"] = true
+        server.currentUser = wallUser
+        val c = started("wall-test")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertTrue(listener.configs.isEmpty())
+        assertFalse(c.mayOpen("wall-test"))
+        awaitCondition("dashboards") { listener.dashboards.isNotEmpty() }
+        assertEquals(emptyList<String>(), listener.dashboards.single().map { it.urlPath })
+        // The other way round: an admin-only dashboard opened to everyone.
+        listener.refused.clear()
+        server.panelRequireAdmin["admin-only"] = false
+        awaitCondition("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
+        server.pushPanelsUpdated()
+        c.fetchDashboard("admin-only")
+        awaitCondition("admin-only, overridden open") { listener.configs.isNotEmpty() }
+        assertEquals("admin-only", listener.configs.single().first)
+    }
+
+    @Test
+    fun aDashboardMadeAdminOnlyWhileOnScreenIsRefusedWithoutAReconnect() {
+        server.currentUser = wallUser
+        val c = started("wall-test")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        assertTrue(listener.refused.isEmpty())
+        awaitCondition("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
+        // An administrator makes it admin only in HA: HA fires panels_updated, and the dashboard on screen goes.
+        server.panelRequireAdmin["wall-test"] = true
+        server.pushPanelsUpdated()
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertEquals(listOf<String?>("wall-test"), listener.refused.toList())
+        assertEquals("the same connection", 1, server.connectUrls.size)
+        assertEquals(2, server.commands("get_panels").size)
+        assertFalse(c.mayOpen("wall-test"))
+        // The Dashboard select is told too.
+        awaitCondition("dashboards again") { listener.dashboards.size == 2 }
+        assertEquals(emptyList<String>(), listener.dashboards.last().map { it.urlPath })
+    }
+
+    @Test
+    fun aDashboardRevokedWhileTheFallbackShowedIsRefusedOnItsCachedReturn() {
+        server.currentUser = wallUser
+        val c = started("wall-test")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        awaitCondition("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
+        // The page leaves for HA's frontend; meanwhile wall-test becomes admin only.
+        c.releaseDashboard()
+        server.panelRequireAdmin["wall-test"] = true
+        server.pushPanelsUpdated()
+        awaitCondition("panels asked again") { server.commands("get_panels").size == 2 }
+        awaitCondition("dashboards again") { listener.dashboards.size == 2 }
+        assertTrue("nothing on screen to refuse yet", listener.refused.isEmpty())
+        // Back to it from the page's cache, no fetch: still checked, and refused.
+        c.claimDashboard("wall-test")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertEquals(listOf<String?>("wall-test"), listener.refused.toList())
+        assertEquals("no new config asked", 1, server.commands("lovelace/config").size)
+        // A dashboard the user may still open comes back as it was.
+        listener.refused.clear()
+        c.claimDashboard(null)
+        Thread.sleep(200)
+        assertTrue(listener.refused.isEmpty())
+    }
+
+    @Test
+    fun aStaleAnswerLeavesTheNewerClaimToBeChecked() {
+        // wall-test's config answers, but waits for the user; meanwhile the page claims the default dashboard back.
+        server.currentUser = wallUser
+        server.holdCurrentUser = true
+        val c = started("wall-test")
+        awaitCondition("config answered, user not") {
+            server.commands("auth/current_user").isNotEmpty() && store["sensor.kitchen_temp"] != null
+        }
+        c.claimDashboard(null)
+        val id = server.commands("auth/current_user").single().getInt("id")
+        server.sockets.last().push(JSONObject().put("id", id).put("type", "result").put("success", true).put("result", wallUser))
+        awaitCondition("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
+        awaitCondition("dashboards") { listener.dashboards.isNotEmpty() }
+        // The stale wall-test answer is neither handed on nor taken as the claim.
+        assertTrue(listener.configs.isEmpty())
+        assertTrue(listener.refused.isEmpty())
+        // The default dashboard is the claim: made admin only, it's refused.
+        server.panelRequireAdmin["lovelace"] = true
+        server.pushPanelsUpdated()
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertEquals(listOf<String?>(null), listener.refused.toList())
+    }
+
+    @Test
+    fun aConfigWaitsForThePanelsAHaChangeAsksForAgain() {
+        server.currentUser = wallUser
+        val c = started("wall-test")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        awaitCondition("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
+        // HA's panels change; the panels and the config are asked again, and HA now refuses the user wall-test.
+        server.panelRequireAdmin["wall-test"] = true
+        server.pushPanelsUpdated()
+        c.fetchDashboard("wall-test")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertEquals("the second config isn't handed on with the old panels", 1, listener.configs.size)
+    }
+
+    @Test
+    fun aRefusedDashboardListLeavesAccessToThePanels() {
+        // lovelace/dashboards/list only feeds the Dashboard select: its error changes nothing of who opens what.
+        server.failDashboardList = true
+        server.currentUser = wallUser
+        val c = started("wall-test")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        assertTrue(c.mayOpen("wall-test"))
+        assertFalse(c.mayOpen("admin-only"))
+        assertTrue("no list to report", listener.dashboards.isEmpty())
+    }
+
+    @Test
+    fun theDefaultDashboardIsTheLovelacePanel() {
+        // get_panels is the rule for the default dashboard too: an override can make it admin only.
+        server.panelRequireAdmin["lovelace"] = true
+        server.currentUser = wallUser
+        val c = started(null)
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertEquals(listOf<String?>(null), listener.refused.toList())
+        assertFalse(c.mayOpen(null))
+    }
+
+    @Test
+    fun aRefusedDashboardThatHaHasNoConfigForIsStillRefused() {
+        // HA's frontend never asks for it: no panel. Its missing config doesn't make it HA's frontend's to auto-generate.
+        server.currentUser = wallUser
+        server.missingDashboards = setOf("admin-only")
+        started("admin-only")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertTrue(listener.failedConfigs.isEmpty())
     }
 
     // ---- Lovelace config ----
@@ -677,7 +947,8 @@ class HaDashboardClientTest {
         val c = connected(connect = { url ->
             SpySocket(server.connect(url), before = { msg -> writers += msg.optString("type") to Thread.currentThread().name })
         })
-        awaitCondition("startup writes") { writers.size >= 13 } // auth + 9 startup requests + 3 user-data requests
+        // auth + 9 startup requests + 3 user-data requests + the panels and their subscription
+        awaitCondition("startup writes") { writers.size >= 15 }
         val caller = Thread.currentThread()
 
         c.callService("light", "turn_on")
@@ -697,7 +968,7 @@ class HaDashboardClientTest {
         assertEquals(ids.sorted(), ids)
         // Display data (registry, icons, translations) can interleave: it isn't what this test orders.
         val display = setOf("config/entity_registry/list_for_display", "config/device_registry/list", "config/area_registry/list", "frontend/get_icons", "frontend/get_translations")
-        val after = server.received.drop(1).filter { it.getInt("id") > 12 && it.getString("type") !in display }.map {
+        val after = server.received.drop(1).filter { it.getInt("id") > 14 && it.getString("type") !in display }.map {
             if (it.getString("type") == "call_service") it.getString("service") else it.getString("type")
         }
         assertEquals(listOf("turn_on", "turn_off", "history/history_during_period", "toggle"), after.take(4))

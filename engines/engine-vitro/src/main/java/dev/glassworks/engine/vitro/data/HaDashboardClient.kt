@@ -75,6 +75,10 @@ class HaDashboardClient(
     interface Listener {
         fun onConnected(haVersion: String) {}
         fun onAuthRequired() {}
+        /**
+         * The dashboards HA's frontend lists for the signed-in user ([mayOpen], decided as the list arrives): once the
+         * user and their panels are known too, and again when HA's panels change (`panels_updated`).
+         */
         fun onDashboards(dashboards: List<DashboardSummary>) {}
         fun onResources(resources: List<LovelaceResource>) {}
         fun onThemes(catalog: ThemeCatalog) {}
@@ -85,6 +89,15 @@ class HaDashboardClient(
          * a dashboard with no saved config, which HA's frontend auto-generates). Only for the dashboard still requested.
          */
         fun onDashboardConfigFailed(urlPath: String?, code: String) {}
+
+        /**
+         * HA's frontend wouldn't open the dashboard at [urlPath] for the signed-in user: its panel isn't among the
+         * user's (`get_panels`, which leaves an admin-only one out for anyone but an administrator). Home Assistant
+         * answers its `lovelace/config` all the same; its frontend is what refuses it, routing the URL to the user's
+         * default panel instead. Only for the dashboard still requested: in place of [onDashboardConfig] or
+         * [onDashboardConfigFailed], or after a config was handed on, when HA's panels change and it no longer is one.
+         */
+        fun onDashboardRefused(urlPath: String?) {}
 
         /**
          * The theme this user picked in HA's profile (`core` user data `selectedTheme`), or `null` to follow the
@@ -149,6 +162,154 @@ class HaDashboardClient(
     @Volatile var currentUser: JSONObject = JSONObject()
         private set
 
+    /**
+     * True once `auth/current_user` has answered on this connection: with the user, or with an error, which leaves no
+     * user and so no administrator (as HA's frontend has `hass.user` undefined). Each connection asks again: the user
+     * may have changed since (another sign-in, a role changed in HA).
+     */
+    @Volatile private var userKnown = false
+
+    /**
+     * `lovelace/dashboards/list` as Home Assistant last answered it on this connection, for the panel's Dashboard select
+     * ([Listener.onDashboards]); null until it has, or when it refused. Who may open which is [mayOpen]'s.
+     */
+    @Volatile var dashboards: List<DashboardSummary>? = null
+        private set
+
+    /**
+     * The url paths of the panels HA's frontend may route to for this user, from `get_panels` on this connection: HA
+     * itself leaves out an admin-only one for anyone but an administrator, with `frontend/update_panel`'s
+     * `require_admin` override applied, which `lovelace/dashboards/list` doesn't see. Null until it has answered, or
+     * when it refused.
+     */
+    @Volatile private var panels: Set<String>? = null
+
+    /**
+     * True once the latest `get_panels` has answered, with the panels or with an error. False again while HA's panels
+     * changed (`panels_updated`) and the new answer is on its way: nothing is handed on with the old one.
+     */
+    @Volatile private var panelsAnswered = false
+
+    /** Bumped for every `get_panels` asked: only the latest answer counts. */
+    private val panelsGeneration = AtomicInteger(0)
+
+    /**
+     * The dashboard whose config was last handed on ([hasDelivered]): checked again when HA's panels change. The path
+     * state (this, [requestedDashboardPath], [dashboardActive], [missedRefetch]) is written under [pathLock], and every
+     * check whose result decides a write sits in the same section as that write; listeners are called after it.
+     */
+    @Volatile private var deliveredDashboard: String? = null
+    @Volatile private var hasDelivered = false
+
+    /** Guards [heldForAccess]; never held while a held answer runs. */
+    private val accessLock = Any()
+
+    /** Answers that wait for HA to say who the user is and which panels they have ([afterAccessKnown]). */
+    private val heldForAccess = ArrayList<() -> Unit>()
+
+    private fun accessKnown(): Boolean = userKnown && panelsAnswered
+
+    /**
+     * Runs [block] once Home Assistant has said who the user is and which panels they have, now if it has: a dashboard
+     * config isn't handed on before Vitro knows whether HA's frontend would show it to this user, and every card is
+     * built knowing whether the user is an administrator (HA's error cards show them more).
+     */
+    private fun afterAccessKnown(block: () -> Unit) {
+        synchronized(accessLock) {
+            if (!accessKnown()) {
+                heldForAccess += block
+                return
+            }
+        }
+        block()
+    }
+
+    /** Runs what [afterAccessKnown] held, once both answers are in. */
+    private fun releaseHeldForAccess() {
+        val ready = synchronized(accessLock) {
+            if (!accessKnown()) return
+            ArrayList(heldForAccess).also { heldForAccess.clear() }
+        }
+        ready.forEach { it() }
+    }
+
+    /**
+     * Whether HA's frontend opens the dashboard at [urlPath] (the default one, `lovelace`, for none) for the signed-in
+     * user: its router (`partial-panel-resolver`) routes only to the user's panels, `get_panels`, and sends any other
+     * URL to the user's default panel. An administrator has every panel there is: a path that is none is HA's to answer
+     * as not found. With no panels (HA refused them), Vitro can't tell for anyone else: the default dashboard opens,
+     * and HA's frontend decides for any other.
+     */
+    fun mayOpen(urlPath: String?): Boolean {
+        if (currentUser.optBoolean("is_admin", false)) return true
+        val panel = urlPath?.takeIf { it.isNotEmpty() } ?: DEFAULT_DASHBOARD_PANEL
+        val known = panels ?: return panel == DEFAULT_DASHBOARD_PANEL
+        return panel in known
+    }
+
+    /**
+     * Asks HA for this user's panels (`get_panels`, as HA's frontend does on connect and on every `panels_updated`).
+     * Until the answer, configs wait ([afterAccessKnown]); then the dashboard already handed on is checked again.
+     */
+    private fun fetchPanels() {
+        val generation = synchronized(accessLock) {
+            panelsAnswered = false
+            panelsGeneration.incrementAndGet()
+        }
+        request(JSONObject().put("type", "get_panels")) { res ->
+            // A dropped connection asks again on the reconnect.
+            if (isTransportError(res)) return@request
+            val result = res.optJSONObject("result")
+            val got = if (res.optBoolean("success", false) && result != null) result.keys().asSequence().toSet() else null
+            synchronized(accessLock) {
+                if (generation != panelsGeneration.get()) return@request
+                panels = got
+                panelsAnswered = true
+            }
+            releaseHeldForAccess()
+            recheckDelivered()
+        }
+    }
+
+    /**
+     * The dashboard on screen, checked again against the user's panels as they are now: one HA's frontend no longer
+     * routes to for this user (it became admin only, or was removed) is refused ([Listener.onDashboardRefused]).
+     */
+    private fun recheckDelivered() = afterAccessKnown {
+        // Read, check and clear as one, under [pathLock] like every write of the claim: a [claimDashboard] on the main
+        // thread can't land between them and have its claim cleared. The listener is called after, outside the lock.
+        val refused = synchronized(pathLock) {
+            if (closed.get() || !dashboardActive || !hasDelivered) return@afterAccessKnown
+            val path = deliveredDashboard
+            if (path != requestedDashboardPath || mayOpen(path)) return@afterAccessKnown
+            hasDelivered = false
+            path
+        }
+        listener.onDashboardRefused(refused)
+    }
+
+    /** `lovelace/dashboards/list`, for the panel's Dashboard select: the user's dashboards, once their panels are known. */
+    private fun fetchDashboardList() {
+        request(JSONObject().put("type", "lovelace/dashboards/list")) { res ->
+            if (!res.optBoolean("success", false)) return@request
+            val arr = res.optJSONArray("result") ?: JSONArray()
+            val out = ArrayList<DashboardSummary>(arr.length())
+            for (i in 0 until arr.length()) {
+                val d = arr.optJSONObject(i) ?: continue
+                val path = d.optString("url_path", "").ifEmpty { continue }
+                out += DashboardSummary(
+                    urlPath = path,
+                    title = d.optString("title", path),
+                    icon = d.optString("icon", "").ifEmpty { null },
+                    requireAdmin = d.optBoolean("require_admin", false),
+                )
+            }
+            dashboards = out
+            // Filtered as it's handed on, under the panels known then: the user's list, as HA's frontend has it.
+            afterAccessKnown { listener.onDashboards(out.filter { mayOpen(it.urlPath) }) }
+        }
+    }
+
     /** Sends an arbitrary HA WebSocket command (used by Tier 3 custom card `hass.callWS` bridge). */
     fun callWs(msg: JSONObject, done: (success: Boolean, result: Any?, error: JSONObject?) -> Unit) {
         val copy = JSONObject(msg.toString())
@@ -163,7 +324,7 @@ class HaDashboardClient(
     }
 
     fun start(dashboardUrlPath: String?) {
-        requestedDashboardPath = dashboardUrlPath
+        synchronized(pathLock) { requestedDashboardPath = dashboardUrlPath }
         if (closed.get()) return
         // A new client may be another Home Assistant, or another user: back to the browser's language and formats
         // until this one's profile answers. A reconnect of this client keeps them, as HA's page does.
@@ -208,12 +369,21 @@ class HaDashboardClient(
      */
     private val pathLock = Any()
 
-    /** The page shows [urlPath] again without asking: an answer still on its way for another path is dropped. */
-    fun claimDashboard(urlPath: String?) = synchronized(pathLock) {
-        requestedDashboardPath = urlPath
-        dashboardActive = true
-        // A lovelace_updated or reconnect skipped while the fallback showed: the dashboard may have changed.
-        if (missedRefetch) fetchDashboard(urlPath)
+    /**
+     * The page shows [urlPath] again without asking: an answer still on its way for another path is dropped. The
+     * config on screen stays, but whether the user may still open it is checked again ([recheckDelivered]): HA's panels
+     * may have changed while the fallback showed, and a check waits for panels being asked for again.
+     */
+    fun claimDashboard(urlPath: String?) {
+        synchronized(pathLock) {
+            requestedDashboardPath = urlPath
+            dashboardActive = true
+            deliveredDashboard = urlPath
+            hasDelivered = true
+            // A lovelace_updated or reconnect skipped while the fallback showed: the dashboard may have changed.
+            if (missedRefetch) fetchDashboard(urlPath)
+        }
+        recheckDelivered()
     }
 
     /**
@@ -223,13 +393,14 @@ class HaDashboardClient(
     @Volatile private var missedRefetch = false
 
     /** The page put the config it got on screen: nothing skipped is owed any more. */
-    fun dashboardShown() {
+    fun dashboardShown() = synchronized(pathLock) {
         missedRefetch = false
     }
 
     /** The page left the dashboards for the fallback; the next [fetchDashboard] or [claimDashboard] takes them back. */
-    fun releaseDashboard() {
+    fun releaseDashboard() = synchronized(pathLock) {
         dashboardActive = false
+        hasDelivered = false
     }
 
     /** Fetches the requested dashboard again (reconnect, `lovelace_updated`), unless the page has left the dashboards. */
@@ -244,16 +415,31 @@ class HaDashboardClient(
         val msg = JSONObject().put("type", "lovelace/config")
         if (!urlPath.isNullOrEmpty()) msg.put("url_path", urlPath)
         request(msg) { res ->
-            // An answer for a dashboard the page has since moved away from must not replace the current one.
-            if (closed.get() || !dashboardActive || urlPath != requestedDashboardPath) return@request
             // The connection, not Home Assistant, failed: the reconnect asks again (onAuthenticated). Reporting it
             // would send a dashboard that exists to the fallback as "not found".
             if (isTransportError(res)) return@request
-            if (res.optBoolean("success", false)) {
-                val cfgObj = res.optJSONObject("result") ?: JSONObject()
-                listener.onDashboardConfig(urlPath, LovelaceParser.parseDashboard(cfgObj))
-            } else {
-                listener.onDashboardConfigFailed(urlPath, res.optJSONObject("error")?.optString("code", "").orEmpty())
+            // Nothing is handed on before HA has said whether this user may see the dashboard.
+            afterAccessKnown {
+                val ok = res.optBoolean("success", false)
+                // Whether the answer is still the page's, whether the user may open it, and the claim it makes are one
+                // decision under [pathLock]: a [claimDashboard] or [fetchDashboard] for another path on the main thread
+                // can't land between them and have its claim overwritten by this stale answer. Listeners run after.
+                val allowed = synchronized(pathLock) {
+                    // An answer for a dashboard the page has since moved away from must not replace the current one.
+                    if (closed.get() || !dashboardActive || urlPath != requestedDashboardPath) return@afterAccessKnown
+                    val allowed = mayOpen(urlPath)
+                    deliveredDashboard = urlPath
+                    hasDelivered = allowed && ok
+                    allowed
+                }
+                if (!allowed) {
+                    listener.onDashboardRefused(urlPath)
+                } else if (ok) {
+                    val cfgObj = res.optJSONObject("result") ?: JSONObject()
+                    listener.onDashboardConfig(urlPath, LovelaceParser.parseDashboard(cfgObj))
+                } else {
+                    listener.onDashboardConfigFailed(urlPath, res.optJSONObject("error")?.optString("code", "").orEmpty())
+                }
             }
         }
     }
@@ -701,6 +887,15 @@ class HaDashboardClient(
     private fun displayIds(): Collection<String> = activeEntityFilter.ifEmpty { store.all().keys }
 
     private fun onAuthenticated() {
+        // Who the user is and which panels they have are this connection's to say: nothing is handed on with the last
+        // one's answers. What a dropped connection held goes too: this one asks for it again, and decides afresh.
+        synchronized(accessLock) {
+            heldForAccess.clear()
+            userKnown = false
+            panels = null
+            panelsAnswered = false
+        }
+        synchronized(pathLock) { hasDelivered = false }
         displayRequested.clear()
         displayPending.set(0)
         // Icons and state labels are this Home Assistant's: a new connection loads them again.
@@ -735,23 +930,7 @@ class HaDashboardClient(
             }
         }
         // 2. Dashboard list (for ESPHome Dashboard select)
-        request(JSONObject().put("type", "lovelace/dashboards/list")) { res ->
-            if (res.optBoolean("success", false)) {
-                val arr = res.optJSONArray("result") ?: JSONArray()
-                val out = ArrayList<DashboardSummary>(arr.length())
-                for (i in 0 until arr.length()) {
-                    val d = arr.optJSONObject(i) ?: continue
-                    val path = d.optString("url_path", "").ifEmpty { continue }
-                    out += DashboardSummary(
-                        urlPath = path,
-                        title = d.optString("title", path),
-                        icon = d.optString("icon", "").ifEmpty { null },
-                        requireAdmin = d.optBoolean("require_admin", false),
-                    )
-                }
-                listener.onDashboards(out)
-            }
-        }
+        fetchDashboardList()
         // 3. Lovelace custom card resources (for Tier 3 Micro-Web Islands)
         request(JSONObject().put("type", "lovelace/resources")) { res ->
             if (res.optBoolean("success", false)) {
@@ -774,12 +953,18 @@ class HaDashboardClient(
         if (scopeSelected) resubscribeEntities()
         // 6. The signed-in user and the theme they picked in their HA profile (kept after the steps above)
         request(JSONObject().put("type", "auth/current_user")) { res ->
+            // A dropped connection asks again on the reconnect.
+            if (isTransportError(res)) return@request
+            // A refusal leaves no user, not the last one: no administrator.
+            if (!res.optBoolean("success", false) || res.optJSONObject("result") == null) currentUser = JSONObject()
             if (res.optBoolean("success", false)) {
                 res.optJSONObject("result")?.let {
                     currentUser = it
                     listener.onCurrentUser(it)
                 }
             }
+            userKnown = true
+            releaseHeldForAccess()
         }
         request(JSONObject().put("type", "frontend/get_user_data").put("key", "core")) { res ->
             if (res.optBoolean("success", false)) {
@@ -788,6 +973,13 @@ class HaDashboardClient(
         }
         subscribe(JSONObject().put("type", "frontend/subscribe_user_data").put("key", "core")) { ev ->
             dispatchUserTheme(ev.optJSONObject("value"))
+        }
+        // The user's panels, which decide what HA's frontend opens for them ([mayOpen]), again whenever HA changes its
+        // panels (a dashboard added, removed, or made admin only), as HA's frontend's panel collection does.
+        fetchPanels()
+        subscribe(JSONObject().put("type", "subscribe_events").put("event_type", "panels_updated")) {
+            fetchPanels()
+            fetchDashboardList()
         }
         // 7. Display data, after everything the first paint needs: the entity registry, then the icons and state
         // translations for the view's entities.
@@ -984,6 +1176,9 @@ class HaDashboardClient(
     companion object {
         /** Error codes this client makes up when the connection fails (HA never sent them). */
         const val DISCONNECTED = "disconnected"
+
+        /** The default dashboard's panel (`lovelace`), the one a request with no url path opens. */
+        const val DEFAULT_DASHBOARD_PANEL = "lovelace"
         const val SEND_FAILED = "send_failed"
 
         /** A result the client made up for a failed connection, not an answer from Home Assistant. */

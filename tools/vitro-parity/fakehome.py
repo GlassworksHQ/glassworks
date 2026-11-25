@@ -236,8 +236,11 @@ def lovelace(url_path):
 
 
 def user():
+    """auth/current_user: the home's signed-in user, the owner and an administrator, unless the case's fixture says
+    `"admin": false`: then a user who isn't (HA's error and warning cards show such a user less)."""
     u = HOME["user"]
-    return {"id": u["id"], "name": u["name"], "is_owner": True, "is_admin": True,
+    admin = fixture().get("admin", True) is not False
+    return {"id": u["id"], "name": u["name"], "is_owner": admin, "is_admin": admin,
             "credentials": [{"auth_provider_type": "homeassistant", "auth_provider_id": None}], "mfa_modules": []}
 
 
@@ -282,8 +285,9 @@ def areas():
 
 def users():
     """config/auth/list: the home's user and the fixture's (a logbook entry's `context_user_id` names one)."""
-    out = [dict(user(), system_generated=False, group_ids=["system-admin"], username="parity", is_active=True,
-                local_only=False)]
+    me = user()
+    out = [dict(me, system_generated=False, group_ids=["system-admin" if me["is_admin"] else "system-users"],
+                username="parity", is_active=True, local_only=False)]
     for u in fixture().get("users") or []:
         out.append(dict({"is_owner": False, "is_admin": False, "system_generated": False, "group_ids": ["system-users"],
                          "credentials": [], "username": None, "is_active": True, "local_only": False}, **u))
