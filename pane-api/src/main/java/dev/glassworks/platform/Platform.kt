@@ -124,6 +124,12 @@ open class PlatformApi(
      */
     val hasFocusableAuto: Boolean get() = apiLevel >= 26
 
+    /**
+     * Hardware drawing tells each parent which view below it changed (`ViewParent.onDescendantInvalidated`,
+     * Android 8). Below it, the change climbs through `invalidateChildInParent` instead.
+     */
+    val hasDescendantInvalidated: Boolean get() = apiLevel >= 26
+
     /** `View.setAccessibilityPaneTitle`, which TalkBack announces a sheet by, exists (Android 9). */
     val hasAccessibilityPaneTitle: Boolean get() = apiLevel >= 28
 

@@ -15,6 +15,7 @@ import android.view.ViewParent
 import android.widget.FrameLayout
 import dev.glassworks.engine.vitro.VitroFailures
 import dev.glassworks.engine.vitro.cards.IslandCard
+import dev.glassworks.platform.Platform
 
 /**
  * The guard round a card that isn't a [CardSurface] (a heading, Mushroom's chips and title, a stack, layout-card,
@@ -145,7 +146,7 @@ class ContainedCard(
     /** As [onDescendantInvalidated], on Android 6 and 7, where hardware drawing finds the changed view this way. */
     @Deprecated("ViewGroup's, deprecated in API 26, where onDescendantInvalidated takes over")
     override fun invalidateChildInParent(location: IntArray, dirty: Rect): ViewParent? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O && isHardwareAccelerated) redrawThroughGuard()
+        if (!Platform.hasDescendantInvalidated && isHardwareAccelerated) redrawThroughGuard()
         @Suppress("DEPRECATION")
         return super.invalidateChildInParent(location, dirty)
     }

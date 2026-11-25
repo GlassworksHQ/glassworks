@@ -47,6 +47,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowLooper
 
@@ -469,18 +470,55 @@ class CardContainmentTest {
         assertTrue(contained.isEmpty())
     }
 
-    @Test fun aChangeInsideAGuardedCardRecordsTheGuardAgain() {
-        // With hardware drawing, Android rebuilds only the changed view's display list, from its parent's, unless the
-        // parent is re-recorded: the guard asks to be, so the card's draw runs inside its drawChild and stays contained.
-        val vv = dashboard(JSONArray().put(JSONObject().put("type", "heading").put("heading", "Living room")).put(tile())) { _, _ -> null }
-        val heading = all(vv).filterIsInstance<HeadingCardView>().single()
-        val guard = heading.parent as ContainedCard
+    /**
+     * One hardware frame, as Android's renderer draws it: the root records again only if it was invalidated itself;
+     * otherwise each parent rebuilds just the display lists of the views that changed below it, straight from its
+     * own list, without running its draw or [ViewGroup.drawChild]. A throw comes out as it would on a panel.
+     */
+    private fun hardwareFrame(v: View) {
+        ShadowLooper.idleMainLooper()
+        val root = v.rootView
         val flags = View::class.java.getDeclaredField("mPrivateFlags").apply { isAccessible = true }
         val invalidated = View::class.java.getDeclaredField("PFLAG_INVALIDATED").apply { isAccessible = true }.getInt(null)
-        // What a hardware frame leaves behind (a software draw, as here, never clears it): the guard's list recorded.
-        flags.setInt(guard, flags.getInt(guard) and invalidated.inv())
-        guard.onDescendantInvalidated(heading, heading)
-        assertEquals("the guard records itself again", invalidated, flags.getInt(guard) and invalidated)
+        val recreate = View::class.java.getDeclaredField("mRecreateDisplayList").apply { isAccessible = true }
+        recreate.setBoolean(root, flags.getInt(root) and invalidated != 0)
+        flags.setInt(root, flags.getInt(root) and invalidated.inv())
+        try {
+            View::class.java.getDeclaredMethod("updateDisplayListIfDirty").apply { isAccessible = true }.invoke(root)
+        } catch (e: java.lang.reflect.InvocationTargetException) {
+            throw e.cause ?: e
+        } finally {
+            recreate.setBoolean(root, false)
+        }
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun aThrowWhenHardwareRedrawsOneViewInsideAGuardedCardIsContained() {
+        var armed = false
+        var boom: View? = null
+        val vv = dashboard(JSONArray().put(JSONObject().put("type", "heading").put("heading", "Living room")).put(tile())) { card, ctx ->
+            if (card.type != "heading") return@dashboard null
+            HeadingCardView(ctx, card).apply {
+                addView(object : View(ctx.context) {
+                    override fun onDraw(canvas: Canvas) {
+                        if (armed) throw IllegalStateException("heading redraw boom")
+                    }
+                }.also { boom = it }, android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctx.px(8f)))
+            }
+        }
+        val guard = all(vv).filterIsInstance<HeadingCardView>().single().parent as ContainedCard
+        vv.rootView.invalidate()
+        hardwareFrame(vv)
+        // Only the view inside changes: Android would rebuild its list alone, from the heading's, past the guard.
+        armed = true
+        boom!!.invalidate()
+        hardwareFrame(vv)
+        assertEquals(listOf("draw" to "heading"), contained.map { it.first to it.second })
+        hardwareFrame(vv)
+        assertGuardShowsErrorCard(vv, guard)
+        hardwareFrame(vv)
+        assertEquals(1, contained.size)
+        assertTileStillUpdates(vv)
     }
 
     @Test fun anUpdateOnTheCardsHandlerThatThrowsIsDroppedAndLogged() {
