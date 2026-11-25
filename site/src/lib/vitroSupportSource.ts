@@ -101,7 +101,9 @@ export function kotlinNestedMap(name: string): Record<string, Record<string, str
 export function kotlinCardModSheets(): Record<string, string[]> {
   const fn = kotlin.match(/fun cardModSheets\(type: String\): Set<String> = when \(type\) \{([\s\S]*?)\n {4}\}/)?.[1];
   if (!fn) throw new Error("cardModSheets not found in VitroSupport.kt");
-  return Object.fromEntries(
-    [...fn.matchAll(/^\s*("[^"]+"|else) -> setOf\(([^)]*)\)/gm)].map((m) => [m[1] === "else" ? "*" : m[1].slice(1, -1), strings(m[2])]),
-  );
+  const branches = [...fn.matchAll(/^\s*("[^"]+"|else) -> setOf\(([^)]*)\)\s*$/gm)];
+  // Every branch must be one this reads: a new form (several types, a block) fails the test instead of going missing.
+  const arrows = fn.match(/->/g)?.length ?? 0;
+  if (branches.length !== arrows) throw new Error(`cardModSheets has ${arrows} branches, ${branches.length} of them readable: update kotlinCardModSheets`);
+  return Object.fromEntries(branches.map((m) => [m[1] === "else" ? "*" : m[1].slice(1, -1), strings(m[2])]));
 }

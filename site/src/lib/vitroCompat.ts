@@ -571,7 +571,8 @@ function producedCards(card: Obj, perEntity: boolean): [number, Obj][] {
   const type = cardType(card);
   const out = builtChildren(card, type);
   if (type !== "custom:auto-entities") return out;
-  const inner: Obj = isObj(card.card) ? JSON.parse(JSON.stringify(card.card)) : {};
+  // Only top-level fields change, so a shallow copy keeps the config as written.
+  const inner: Obj = isObj(card.card) ? { ...card.card } : {};
   if (!("type" in inner)) inner.type = "entities";
   const param = optString(card, "card_param", "entities") || "entities";
   // auto-entities replaces this field with what it matched, so what the config wrote there never shows.
@@ -1116,7 +1117,9 @@ function checkCardValue(name: string, value: string, pinned: boolean, position: 
       if (["auto", "100%", "initial", "unset"].includes(value)) return null;
       if (!pinned) return "only applies to pinned (`position: fixed`) cards";
       if (!PINNED_SIZE.test(value)) return "isn't drawn natively (a pinned width is px, rem or %)";
-      return (Number(value.replace(/[a-z%]+$/, "")) || 1) <= 0 ? "isn't drawn natively (a pinned width of zero)" : null;
+      // As the engine reads it: a number that doesn't parse counts as positive, and zero or less is refused.
+      const n = Number(value.replace(/[a-z%]+$/, ""));
+      return (Number.isNaN(n) ? 1 : n) <= 0 ? "isn't drawn natively (a pinned width of zero)" : null;
     case "height":
       return ["auto", "100%", "initial", "unset", "inherit", "fit-content"].includes(value) ? null : "isn't drawn natively (only `auto` and `100%`)";
     case "transform":
@@ -1294,9 +1297,14 @@ export function auditDashboard(input: string): VitroAuditResult {
     // The cards the engine builds for a view: a panel view's first card, a sections view's section cards, or else the
     // view's own cards.
     const cards = Array.isArray(v.cards) ? v.cards : [];
-    if (type === "panel" && cards.length > 0) {
-      each(cards.slice(0, 1), (i) => `${name}/card[${i}]`);
-      if (cards.length > 1) view.warnings.push(`${name}: a panel view shows only its first card, so the other ${cards.length - 1} aren't checked`);
+    const cardObjects = cards.filter(isObj);
+    if (type === "panel" && cardObjects.length > 0) {
+      // The engine parses only the objects in `cards:`, so a panel view's card is the first of those.
+      const first = cards.indexOf(cardObjects[0]);
+      walkCard(cardObjects[0], `${name}/card[${first}]`, view);
+      if (cardObjects.length > 1) {
+        view.warnings.push(`${name}: a panel view shows only its first card, so the other ${cardObjects.length - 1} aren't checked`);
+      }
     } else if (type === "sections" && sections.length > 0) {
       sections.forEach((sec, si) => each(sec.cards, (ci) => `${name}/section[${si}]/card[${ci}]`));
     } else {

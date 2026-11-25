@@ -295,9 +295,13 @@ def produced_cards(card: dict, ctype: str, per_entity: bool) -> list[tuple[str, 
     if ctype != "custom:auto-entities":
         return out
     # As the runtime builds it: a copy, `type: entities` when it names none, without the field `card_param` fills.
-    inner = json.loads(json.dumps(card["card"])) if isinstance(card.get("card"), dict) else {}
+    # Only top-level keys change, so a shallow copy keeps the config (and its YAML aliases) as written.
+    inner = dict(card["card"]) if isinstance(card.get("card"), dict) else {}
     inner.setdefault("type", "entities")
-    param = card.get("card_param") or "entities"
+    # As the engine reads it (optString): missing or empty is `entities`, anything else as text.
+    raw_param = card.get("card_param")
+    param = raw_param if isinstance(raw_param, str) and raw_param else (
+        "entities" if raw_param in (None, "") else json.dumps(raw_param))
     inner.pop(param, None)
     generated = []
     if param == "cards":
@@ -361,7 +365,8 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
         return
     if not (ctype in CONTAINER_TYPES and children):
         counts["tier1" if ctype in NATIVE_CORE_TYPES else "tier2"] += 1
-    holds = len(card.get("entities") or []) if ctype == "custom:auto-entities" and card.get("card_param") == "cards" else -1
+    entities = card.get("entities")
+    holds = len(entities) if ctype == "custom:auto-entities" and card.get("card_param") == "cards" and isinstance(entities, list) else -1
     for label, child in children:
         walk_card(child, f"{loc}.{label}", counts, triggers, warnings, holds)
 
@@ -377,8 +382,9 @@ def view_roots(view: dict, vname: str) -> list[tuple[str, dict]]:
     sections = [s for s in view.get("sections") or [] if isinstance(s, dict)]
     vtype = view_type(view)
     cards = view.get("cards") or []
-    if vtype == "panel" and cards:
-        return [(f"{vname}/card[0]", cards[0])]
+    objs = [(i, c) for i, c in enumerate(cards) if isinstance(c, dict)]
+    if vtype == "panel" and objs:
+        return [(f"{vname}/card[{objs[0][0]}]", objs[0][1])]
     if vtype == "sections" and sections:
         return [(f"{vname}/section[{si}]/card[{ci}]", c) for si, s in enumerate(sections) for ci, c in enumerate(s.get("cards") or [])]
     return [(f"{vname}/card[{ci}]", c) for ci, c in enumerate(cards)]

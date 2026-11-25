@@ -258,7 +258,7 @@ Islands load from a small web server inside the app, `VitroIslandServer`. It is 
 
 - **Vitro is experimental.** Turn it off under **Settings → Labs** whenever something looks wrong; the app goes back to GeckoView alone.
 - **Islands need GeckoView.** The standalone `:vitro-test` app has no GeckoView, so it shows a placeholder for every island.
-- **A built-in card can't use an island.** When a built-in card has something Vitro doesn't draw, Vitro draws the rest of the card and leaves that part out, since the island would only show a summary. The compatibility checker lists each one as a note.
+- **A built-in card Vitro draws can't fall back to an island.** When it has something Vitro doesn't draw, Vitro draws the rest of the card and leaves that part out, since the island would only show a summary. The compatibility checker lists each one as a note.
 - **Cards not yet compared with Home Assistant** (listed under [What works](#what-works)) may differ from Home Assistant's look.
 - **Small differences remain on 1.5x screens,** such as the S1 and the Mirror: some text and chart labels sit a fraction of a pixel off.
 - **The legacy build's Home Assistant pages** don't load with Vitro on yet (see [The legacy build](#the-legacy-build-android-6)).

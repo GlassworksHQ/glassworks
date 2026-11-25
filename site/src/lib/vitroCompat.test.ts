@@ -429,6 +429,7 @@ describe("auditDashboard routes cards as the engine's CompatCheckerTest does", (
   const style = (css: string, type = "tile", extra: object = {}) => ({ type, entity: "light.a", ...extra, card_mod: { style: css } });
   const native = (card: object) => {
     const r = one(card);
+    expect(r.ok, r.error).toBe(true);
     expect(r.triggers, JSON.stringify(r.triggers)).toEqual([]);
     return r.warnings;
   };
@@ -531,7 +532,10 @@ describe("auditDashboard routes cards as the engine's CompatCheckerTest does", (
     island(mushroom("ha-card { background: linear-gradient(red, blue), linear-gradient(blue, red) }"), "layered backgrounds");
     island(mushroom("ha-card { position: fixed; left: 10px; right: 10px }"), "stretch it between them");
     // font-size is read on tile and Mushroom cards.
-    expect(one(mushroom("ha-card { font-size: 18px }")).triggers).toEqual([]);
+    native(mushroom("ha-card { font-size: 18px }"));
+    // A pinned card needs a width above zero, as the engine reads it.
+    island(mushroom("ha-card { position: fixed; top: 0; left: 0; width: 0px }"), "a pinned width of zero");
+    native(mushroom("ha-card { position: fixed; top: 0; left: 0; width: 120px }"));
   });
 
   it("keeps a built-in card native and notes what it would have fallen back for", () => {
@@ -565,6 +569,12 @@ describe("auditDashboard routes cards as the engine's CompatCheckerTest does", (
   it("counts a vertical layout's breaks as no card", () => {
     const r = one({ type: "custom:layout-card", layout_type: "vertical-layout", cards: [{ type: "tile" }, { type: "custom:layout-break" }, { type: "tile" }] });
     expect(r.totals).toEqual({ tier1: 2, tier2: 0, tier3: 0 });
+  });
+
+  it("takes a panel view's first card among the objects in its cards, as the engine parses them", () => {
+    const r = auditDashboard(JSON.stringify({ views: [{ path: "p", panel: true, cards: ["x", { type: "custom:button-card" }, { type: "tile" }] }] }));
+    expect(r.triggers.map((t) => t.path)).toEqual(["p/card[1]"]);
+    expect(r.warnings).toEqual(["p: a panel view shows only its first card, so the other 1 aren't checked"]);
   });
 
   it("walks only the cards a view builds: a sections view's sections, else its cards", () => {
