@@ -280,6 +280,8 @@ class RecordingHost : PageHost {
 class RecordingEngine(
     override val name: String = "FakeGecko 1.0",
     override val lockedDown: Boolean = false,
+    /** Each page's view holds a [android.view.SurfaceView], as a GeckoView does. */
+    private val surfaces: Boolean = false,
 ) : Engine {
     class Opened(val activity: Activity, val host: PageHost, val background: Int)
 
@@ -290,7 +292,10 @@ class RecordingEngine(
     override fun open(activity: Activity, host: PageHost, background: Int): Page {
         started = EngineSettings(secureHosts = listOf("192.0.2.10"), zoom = 1f, remoteDebugging = false)
         opens += Opened(activity, host, background)
-        return RecordingPage(activity).also { pages += it }
+        return RecordingPage(activity).also { page ->
+            if (surfaces) (page.view as FrameLayout).addView(android.view.SurfaceView(activity))
+            pages += page
+        }
     }
 
     override fun isContentProcess(processName: String): Boolean = processName.endsWith(":tab")
@@ -303,6 +308,7 @@ class RecordingPage(activity: Activity) : Page {
     var reloads = 0
     var backs = 0
     var restarts = 0
+    override var canGoBack = false
 
     override fun load(url: String) { loads += url }
     override fun reload() { reloads++ }

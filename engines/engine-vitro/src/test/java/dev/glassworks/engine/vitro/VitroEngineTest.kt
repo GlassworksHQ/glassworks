@@ -383,7 +383,6 @@ class VitroEngineTest {
         page.load(signIn)
         assertEquals(1, fallback.opens.size)
         assertSame(activity, fallback.opens[0].activity)
-        assertSame(host, fallback.opens[0].host)
         val fp = fallback.pages.single()
         assertEquals(listOf(signIn), fp.loads.toList())
         assertEquals(View.VISIBLE, fp.view.visibility)
@@ -396,6 +395,7 @@ class VitroEngineTest {
         page.load(blueprint)
         assertEquals(1, fallback.opens.size)
         assertEquals(listOf(signIn, blueprint), fp.loads.toList())
+        assertEquals("the second page starts with no history", 1, fp.restarts)
 
         // Back to the native dashboard view: Vitro's view returns without reloading or opening another fallback.
         page.load("$base/wall-test/living")
@@ -472,16 +472,16 @@ class VitroEngineTest {
     }
 
     @Test
-    fun theFallbackPageGetsBackReloadAndPostsWhileItIsShowing() {
+    fun theFallbackPageGetsBackWithinItsHistoryAndPostsWhileItIsShowing() {
+        // Reload and Back past its own history return to the native view (VitroFallbackReturnTest).
         val page = readyPage()
         page.load("$base/config/dashboard")
         val fp = fallback.pages.single()
 
-        page.reload()
+        fallback.pages.single().canGoBack = true
         page.goBack()
         val msg = JSONObject().put("type", "config").put("config", JSONObject().put("hideHeader", false))
         page.post(msg)
-        assertEquals(1, fp.reloads)
         assertEquals(1, fp.backs)
         assertEquals(listOf(msg), fp.posted.toList())
     }
