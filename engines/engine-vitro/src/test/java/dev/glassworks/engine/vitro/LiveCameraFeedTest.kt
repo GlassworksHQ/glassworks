@@ -269,6 +269,100 @@ class LiveCameraFeedTest {
     }
 
     @Test
+    fun aFailedCapabilitiesRequestIsAskedAgainNotKept() {
+        capabilitiesOk = false
+        val f = feed(context(store(), kinds = setOf(HLS, MJPEG)))
+        f.start()
+        idle()
+        // MJPEG at once, as before.
+        assertEquals(listOf(MJPEG), f.runningKinds)
+        live(MJPEG).frame()
+        idle()
+        val asks = { wsCalls.count { it.optString("type") == "camera/capabilities" } }
+        assertEquals(1, asks())
+        // HA answers the next request (the connection came back): the camera takes up HLS.
+        capabilitiesOk = true
+        capabilities = JSONObject().put("frontend_stream_types", JSONArray().put("hls"))
+        ShadowLooper.idleMainLooper(LiveCameraFeed.CAPABILITIES_RETRY_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(2, asks())
+        // MJPEG stays on screen until HLS draws (no blank meanwhile), then goes.
+        assertEquals(listOf(MJPEG, HLS), f.runningKinds)
+        assertEquals(MJPEG, f.shownKind)
+        live(HLS).frame()
+        idle()
+        assertEquals(listOf(HLS), f.runningKinds)
+        assertEquals(HLS, f.shownKind)
+        // HA's answer is kept now: started again, the camera doesn't ask.
+        f.stop()
+        f.start()
+        idle()
+        assertEquals(2, asks())
+    }
+
+    @Test
+    fun failedCapabilitiesAreAskedAgainLessOftenAndNotWhileHidden() {
+        capabilitiesOk = false
+        val f = feed(context(store(), kinds = setOf(HLS, MJPEG)))
+        f.start()
+        idle()
+        val asks = { wsCalls.count { it.optString("type") == "camera/capabilities" } }
+        ShadowLooper.idleMainLooper(LiveCameraFeed.CAPABILITIES_RETRY_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(2, asks())
+        // The wait doubles: nothing more after another 10 s, the next ask after 20 s.
+        ShadowLooper.idleMainLooper(LiveCameraFeed.CAPABILITIES_RETRY_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(2, asks())
+        ShadowLooper.idleMainLooper(LiveCameraFeed.CAPABILITIES_RETRY_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(3, asks())
+        // Hidden: no asking. Shown again: it asks at once.
+        f.setActive(false)
+        ShadowLooper.idleMainLooper(LiveCameraFeed.CAPABILITIES_RETRY_MAX_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(3, asks())
+        f.setActive(true)
+        idle()
+        assertEquals(4, asks())
+    }
+
+    @Test
+    fun anEmptyAnswerIsKeptAndPlaysMjpegWithoutAskingAgain() {
+        capabilities = JSONObject().put("frontend_stream_types", JSONArray())
+        val f = feed(context(store(), kinds = setOf(HLS, MJPEG)))
+        f.start()
+        idle()
+        assertEquals(listOf(MJPEG), f.runningKinds)
+        ShadowLooper.idleMainLooper(LiveCameraFeed.CAPABILITIES_RETRY_MAX_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        f.stop()
+        f.start()
+        idle()
+        assertEquals(1, wsCalls.count { it.optString("type") == "camera/capabilities" })
+    }
+
+    @Test
+    fun aCappedCameraKeepsItsMjpegOnScreenUntilTheVideoDraws() {
+        CameraVideoBudget.max = 1
+        val ctx = context(store(), kinds = setOf(HLS, MJPEG))
+        val first = feed(ctx)
+        val second = feed(ctx)
+        first.start()
+        second.start()
+        idle()
+        val mjpeg = live(MJPEG)
+        mjpeg.frame()
+        idle()
+        assertEquals(MJPEG, second.shownKind)
+        // A slot frees: HLS starts, and MJPEG stays on screen meanwhile.
+        first.stop()
+        idle()
+        assertEquals(listOf(MJPEG, HLS), second.runningKinds)
+        assertEquals(MJPEG, second.shownKind)
+        assertFalse(mjpeg.closed)
+        live(HLS).frame()
+        idle()
+        assertTrue(mjpeg.closed)
+        assertEquals(listOf(HLS), second.runningKinds)
+        assertEquals(HLS, second.shownKind)
+    }
+
+    @Test
     fun theVideoCapPlaysMjpegUntilASlotFrees() {
         CameraVideoBudget.max = 1
         val ctx = context(store(), kinds = setOf(HLS, MJPEG))

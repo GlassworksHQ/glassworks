@@ -245,6 +245,7 @@ class MjpegStreamPlayerTest {
         store.putLocal(EntityState("camera.porch", "streaming", mapOf("entity_picture" to "/api/camera_proxy/camera.porch?token=t1")))
         var pushFrame: ((Bitmap) -> Unit)? = null
         var asked: String? = null
+        var started = 0
         var stopped = 0
         val mjpeg = object : CameraStreamFactory {
             override fun create(entityId: String, kind: CameraStreamKind): CameraStream {
@@ -253,7 +254,7 @@ class MjpegStreamPlayerTest {
                     asked = u
                     pushFrame = onFrame
                     object : MjpegCameraStream.Player {
-                        override fun start() = Unit
+                        override fun start() { started++ }
                         override fun stop() { stopped++ }
                     }
                 }
@@ -266,6 +267,7 @@ class MjpegStreamPlayerTest {
         attach(card)
         // A camera without HA's STREAM feature plays MJPEG straight away, with the entity's signed token.
         assertEquals("$base/api/camera_proxy_stream/camera.porch?token=t1", asked)
+        assertEquals(1, started)
 
         val frame = Bitmap.createBitmap(4, 4, Bitmap.Config.RGB_565)
         pushFrame!!(frame)
