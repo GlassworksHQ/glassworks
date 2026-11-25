@@ -53,6 +53,21 @@ internal class MoreInfoHistoryView(
     private var prepareGeneration = 0
     private var started = false
 
+    /** The first statistics attempt's deadline ([fetchStatistics]), until it settles. */
+    private var pendingDeadline: Runnable? = null
+
+    /**
+     * The connection came back while this shows: a state history's subscription went with the old connection (the
+     * client drops it without an error), so it starts again. Statistics are plain requests: the next tick fetches them.
+     */
+    fun reconnected() {
+        if (!started || stream == null) return
+        unsubscribe?.invoke()
+        unsubscribe = null
+        stream = null
+        subscribeHistory(generation)
+    }
+
     /** `_setUpdateTimer`: statistics are fetched again, a state history's window follows the clock. */
     private val tick: Runnable = object : Runnable {
         override fun run() {
@@ -116,6 +131,8 @@ internal class MoreInfoHistoryView(
         generation++
         prepareGeneration++
         ctx.main.removeCallbacks(tick)
+        pendingDeadline?.let(ctx.main::removeCallbacks)
+        pendingDeadline = null
         unsubscribe?.invoke()
         unsubscribe = null
         stream = null
@@ -144,8 +161,22 @@ internal class MoreInfoHistoryView(
         var meta: Any? = null
         var stats: JSONObject? = null
         var answers = 0
+        var settled = false
+        // The first attempt always ends: without both answers in time, the state history is drawn instead (a later
+        // answer to this attempt is ignored). A refresh keeps the chart it has.
+        val deadline = Runnable {
+            if (settled || gen != generation) return@Runnable
+            settled = true
+            if (first) subscribeHistory(gen)
+        }
+        if (first) {
+            pendingDeadline = deadline
+            ctx.main.postDelayed(deadline, FIRST_ANSWER_MS)
+        }
         val done = {
-            if (++answers == 2 && gen == generation) {
+            if (++answers == 2 && gen == generation && !settled) {
+                settled = true
+                ctx.main.removeCallbacks(deadline)
                 val m = (meta as? JSONArray)?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) } }.orEmpty()
                 val s = stats
                 if (m.isNotEmpty() && s != null) {
@@ -308,6 +339,9 @@ internal class MoreInfoHistoryView(
         /** HA's `statTypes` for the dialog's statistics chart. */
         val STAT_TYPES = listOf("state", "min", "mean", "max")
         const val HOURS = 24.0
+
+        /** How long the first statistics attempt may take before the state history is drawn instead. */
+        const val FIRST_ANSWER_MS = 8_000L
         const val MINUTE_MS = 60_000L
         const val DAY_MS = 24 * 3_600_000L
 

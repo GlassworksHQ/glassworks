@@ -132,7 +132,7 @@ class MoreInfoSensorTest {
 
     @Test
     fun theTitleNamesTheAreaAndDeviceOverTheEntitysOwnName() {
-        HaDisplay.applyRegistry(JSONObject().put("entities", JSONArray().put(JSONObject().put("ei", SENSOR).put("di", "d1").put("en", "Illuminance"))))
+        HaDisplay.applyRegistry(JSONObject().put("entities", JSONArray().put(JSONObject().put("ei", SENSOR).put("di", "d1").put("en", "Illuminance").put("np", "device"))))
         HaDisplay.applyDevices(JSONArray().put(JSONObject().put("id", "d1").put("name", "Study Desk Sensor").put("area_id", "study")))
         HaDisplay.applyAreas(JSONArray().put(JSONObject().put("area_id", "study").put("name", "Study")))
         val shown = texts(open(sensor(emptyMap())))
@@ -140,6 +140,64 @@ class MoreInfoSensorTest {
         // The header's main line and the state row both name the entity by its own name.
         assertEquals(shown.toString(), 2, shown.count { it == "Illuminance" })
         assertFalse(shown.toString(), shown.any { it.contains("Study Desk Sensor Illuminance") })
+    }
+
+    @Test
+    fun aNameThatDoesntReachItsDeviceLeavesTheDeviceOut() {
+        // HA's computeEntityEntryNameParts: a named entity without next_name_part "device" is named by its area and itself.
+        HaDisplay.applyRegistry(JSONObject().put("entities", JSONArray().put(JSONObject().put("ei", SENSOR).put("di", "d1").put("en", "Illuminance"))))
+        HaDisplay.applyDevices(JSONArray().put(JSONObject().put("id", "d1").put("name", "Study Desk Sensor").put("area_id", "study")))
+        HaDisplay.applyAreas(JSONArray().put(JSONObject().put("area_id", "study").put("name", "Study")))
+        assertEquals(HaDisplay.NameParts("Study", null, "Illuminance"), HaDisplay.nameParts(SENSOR, "x"))
+        val shown = texts(open(sensor(emptyMap())))
+        assertTrue(shown.toString(), "Study" in shown)
+        assertFalse(shown.toString(), shown.any { "Study Desk Sensor" in it })
+    }
+
+    @Test
+    fun noLastChangeShowsNoAge() {
+        val store = EntityStore().apply { putLocal(EntityState(SENSOR, "792", mapOf("unit_of_measurement" to "lx"))) }
+        val shown = texts(open(store))
+        assertFalse(shown.toString(), shown.any { it.endsWith(" ago") })
+    }
+
+    @Test
+    fun withoutHasHistoryIntegrationThereIsNoHistorySection() {
+        val store = sensor(mapOf("state_class" to "measurement"))
+        val ctx = VitroCardContext(
+            context = activity, haBase = FakeHaServer.BASE, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
+            accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            haConfig = { JSONObject().put("components", JSONArray(listOf("sensor", "recorder"))) },
+            callWs = { msg, done -> calls += msg; answers += msg to done }, subscribeWs = { msg, _, _ -> subscriptions += msg; {} }, now = { now },
+        )
+        val sheet = MoreInfoSheet(ctx) {}
+        activity.setContentView(sheet)
+        sheet.show(SENSOR)
+        idle()
+        assertFalse(texts(sheet).toString(), "History" in texts(sheet))
+        assertTrue("nothing asked for", calls.isEmpty() && subscriptions.isEmpty())
+    }
+
+    @Test
+    fun aFirstStatisticsAttemptLeftUnansweredFallsBackToTheStateHistory() {
+        open(sensor(mapOf("state_class" to "measurement")))
+        assertTrue(subscriptions.isEmpty())
+        ShadowLooper.idleMainLooper(MoreInfoHistoryView.FIRST_ANSWER_MS + 1, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(listOf("history/stream"), subscriptions.map { it.getString("type") })
+        // A late answer to that attempt changes nothing.
+        answers.forEach { (msg, done) -> done(true, if (msg.getString("type") == "recorder/get_statistics_metadata") JSONArray().put(JSONObject().put("statistic_id", SENSOR)) else JSONObject(), null) }
+        idle()
+        assertEquals(1, subscriptions.size)
+    }
+
+    @Test
+    fun aReconnectRenewsTheStateHistoryStream() {
+        val sheet = open(sensor(emptyMap()))
+        assertEquals(1, subscriptions.size)
+        sheet.reconnected()
+        idle()
+        assertEquals(2, subscriptions.size)
     }
 
     @Test

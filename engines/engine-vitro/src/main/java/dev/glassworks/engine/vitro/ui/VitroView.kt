@@ -590,6 +590,11 @@ class VitroView(
         }
     }
 
+    /** The connection to Home Assistant is up again: an open More Info sheet renews what it streams. */
+    fun connectionRestored() {
+        moreInfo?.takeIf { !it.isDismissed }?.reconnected()
+    }
+
     fun closeMoreInfo(): Boolean {
         val sheet = moreInfo ?: return false
         moreInfo = null
@@ -608,7 +613,8 @@ class VitroView(
         moreInfoEntityId = entityId
         // HA's dialogs live outside the view: a view's `theme` never reaches them, the user's theme does (#885).
         val theme = ThemeResolver.resolve(themeCatalog, darkMode, userThemeName)
-        val cardCtx = contextFactory?.invoke(theme) ?: return
+        // Its fonts are the user theme's too, as a view's cards get their own theme's.
+        val cardCtx = contextFactory?.invoke(theme)?.withFontFamily(VitroFonts.familyFor(theme)) ?: return
         var sheetRef: MoreInfoSheet? = null
         val sheet = MoreInfoSheet(cardCtx) {
             sheetRef?.let {

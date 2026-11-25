@@ -3,7 +3,7 @@
 // Touches: nothing (pure functions); capture.mjs fetches the inputs and writes the result through the scrubber.
 
 /** The list_for_display fields HaDisplay.applyRegistry reads (`ai`: an alert card names the area). Labels etc. stay out. */
-const ENTRY_KEYS = ['ei', 'pl', 'tk', 'dp', 'ic', 'di', 'en', 'ai'];
+const ENTRY_KEYS = ['ei', 'pl', 'tk', 'dp', 'ic', 'di', 'en', 'ai', 'np'];
 
 /**
  * The fixture's `display` block for [ids]: their registry entries, their devices' names (the one HA shows,

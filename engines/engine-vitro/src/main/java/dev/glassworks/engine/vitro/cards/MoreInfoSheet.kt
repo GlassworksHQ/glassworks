@@ -233,7 +233,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         showingHistory = false
         dismissed = false
         val domain = entityId.substringBefore('.')
-        historyButton.visibility = if (domain in HISTORY_TOGGLE_DOMAINS) VISIBLE else GONE
+        historyButton.visibility = if (domain in HISTORY_TOGGLE_DOMAINS && historyLoaded()) VISIBLE else GONE
         buildBody()
         unsub = ctx.store.subscribe(entityId) { s -> ctx.main.post { if (!dismissed) updater?.invoke(s) } }
         ctx.main.removeCallbacks(clockTick)
@@ -445,7 +445,11 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         }
         // TalkBack names the sheet by the whole name, as HA's dialog is labelled by its title.
         val full = crumbs.joinToString(" ")
-        if (dev.glassworks.platform.Platform.hasAccessibilityPaneTitle && panel.accessibilityPaneTitle?.toString() != full) panel.accessibilityPaneTitle = full
+        // The title last set is kept here: View's getter is API 28, and the setter runs only where it exists.
+        if (full != paneTitle) {
+            paneTitle = full
+            if (dev.glassworks.platform.Platform.hasAccessibilityPaneTitle) panel.accessibilityPaneTitle = full
+        }
     }
 
     // ---- Domain views ----
@@ -1433,28 +1437,55 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             body.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f)).apply {
                 marginStart = side
                 marginEnd = side
-                bottomMargin = ctx.px(16f)
+                if (historyLoaded()) bottomMargin = ctx.px(16f)
             })
             update = { s ->
                 icon.setIcon(MdiIcons.resolveIconName(null, s), theme.stateIconColor)
                 // formatEntityName(stateObj, { type: "entity" }): the entity's own name, else its device's.
                 val parts = HaDisplay.nameParts(id, s?.friendlyName ?: id)
                 name.text = parts.entity ?: parts.device ?: s?.friendlyName ?: id
-                time.text = s?.let { HaFormat.relativeTime((it.lastChanged * 1000).toLong(), ctx.now()) }.orEmpty()
+                // No age without a last change (0: HA never sent one), as ha-relative-time shows nothing then.
+                time.text = s?.takeIf { it.lastChanged > 0.0 }?.let { HaFormat.relativeTime((it.lastChanged * 1000).toLong(), ctx.now()) }.orEmpty()
                 value.text = s?.formattedState() ?: HaText.ui("state.default.unknown")
             }
         }
+        // computeShowHistoryComponent: no history section when HA runs without its `history` integration.
+        if (!historyLoaded()) return update
         val history = MoreInfoHistoryView(ctx, id, onShowMore = { href ->
             // HA's link: the dialog closes as the page moves to /history (HA's frontend, with the way back of #863).
             dismiss()
             ctx.navigate(href)
         }, onGraph = { trace?.graph(it) })
-        releasers += { history.stop() }
+        historyView = history
+        releasers += {
+            history.stop()
+            if (historyView === history) historyView = null
+        }
         body.addView(history, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (stateRow) bottomMargin = ctx.px(16f) })
         return update
     }
 
     // ---- Shared pieces ----
+
+    /** The pane title TalkBack names the sheet by, as last set. */
+    private var paneTitle: String? = null
+
+    /** The history section showing, for [reconnected]. */
+    private var historyView: MoreInfoHistoryView? = null
+
+    /** The connection to HA came back: a state history's subscription starts again (MoreInfoHistoryView). */
+    fun reconnected() {
+        historyView?.reconnected()
+    }
+
+    /**
+     * HA's `isComponentLoaded(hass.config, "history")`, from HA's config's `components`. A config that doesn't list
+     * them (a test's) counts as one with history.
+     */
+    private fun historyLoaded(): Boolean {
+        val components = ctx.haConfig().optJSONArray("components") ?: return true
+        return (0 until components.length()).any { components.optString(it) == "history" }
+    }
 
     /** "5 minutes ago" at the card context's clock. */
     private fun relativeTime(s: EntityState?): String = relativeTime(s?.lastChanged ?: 0.0, ctx.now())
@@ -1758,7 +1789,8 @@ internal class DialogSurface(context: Context, private val wide: Boolean, privat
             super.onMeasure(widthMeasureSpec, heightMeasureSpec)
             return
         }
-        val spec = if (wide) MeasureSpec.makeMeasureSpec((offered - Math.round(80f * dp)).coerceAtLeast(0), MeasureSpec.AT_MOST)
+        // Dialog: the window less 80 px; its 40 px top margin is already out of what the parent offers.
+        val spec = if (wide) MeasureSpec.makeMeasureSpec((offered - Math.round(40f * dp)).coerceAtLeast(0), MeasureSpec.AT_MOST)
         else MeasureSpec.makeMeasureSpec((offered - Math.round(48f * dp)).coerceAtLeast(0), MeasureSpec.EXACTLY)
         super.onMeasure(widthMeasureSpec, spec)
     }

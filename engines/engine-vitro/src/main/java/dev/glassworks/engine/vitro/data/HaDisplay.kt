@@ -32,6 +32,8 @@ object HaDisplay {
         val categorized: Boolean = false,
         /** True for an entity hidden in HA (`hb`). */
         val hidden: Boolean = false,
+        /** `np`, HA's `next_name_part`: "device" when the device's name comes before the entity's own. */
+        val nextNamePart: String? = null,
     )
 
     /** One area of `config/area_registry/list`: what HA's area card draws. */
@@ -104,6 +106,7 @@ object HaDisplay {
                 areaId = if (e.isNull("ai")) null else e.optString("ai").ifEmpty { null },
                 categorized = e.has("ec") && !e.isNull("ec"),
                 hidden = e.optBoolean("hb", false),
+                nextNamePart = if (e.isNull("np")) null else e.optString("np").ifEmpty { null },
             )
         }
         registry = out
@@ -176,14 +179,16 @@ object HaDisplay {
     data class NameParts(val area: String?, val device: String?, val entity: String?)
 
     /**
-     * HA's `computeEntityNameParts` (#885): the entity's area (its own, else its device's), its device's name and its
-     * own name (null for a device's main entity). Without a registry entry, [friendlyName] alone. Like
-     * [deviceEntityName], the device always takes part (HA's `next_name_part` isn't read).
+     * HA's `computeEntityEntryNameParts` (#885): the entity's area (its own, else its device's), its device's name and
+     * its own name (null for a device's main entity). The device takes part when the entity has no name of its own or
+     * its `next_name_part` is "device", as in HA; otherwise the name stops at the entity. Without a registry entry,
+     * [friendlyName] alone.
      */
     fun nameParts(entityId: String, friendlyName: String): NameParts {
         val entry = registry[entityId] ?: return NameParts(null, null, friendlyName)
-        val device = entry.deviceId?.let { devices[it] }
-        val own = entry.name?.trim()?.takeIf { it.isNotEmpty() } ?: if (device == null) friendlyName else null
+        val ownName = entry.name?.trim()?.takeIf { it.isNotEmpty() }
+        val device = entry.deviceId?.let { devices[it] }?.takeIf { ownName == null || entry.nextNamePart == "device" }
+        val own = ownName ?: if (device == null) friendlyName else null
         return NameParts(areaOf(entityId)?.let { areas[it]?.name }, device, own)
     }
 

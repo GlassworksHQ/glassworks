@@ -157,7 +157,8 @@
     "pl": "esphome",
     "dp": 0,
     "di": "device-1",
-    "en": "Illuminance"
+    "en": "Illuminance",
+    "np": "device"
    }
   ],
   "devices": [

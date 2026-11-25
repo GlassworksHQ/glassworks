@@ -991,7 +991,10 @@ class VitroEngine(
 
             override fun onConnected(haVersion: String) {
                 Log.i(logTag, "Connected to Home Assistant $haVersion over native WebSocket")
-                post { vitroView.setConnectionBanner(null) }
+                post {
+                    vitroView.setConnectionBanner(null)
+                    vitroView.connectionRestored()
+                }
             }
 
             override fun onAuthRequired() {

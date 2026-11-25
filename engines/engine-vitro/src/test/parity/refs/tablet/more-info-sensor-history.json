@@ -129,7 +129,8 @@
     "ei": "sensor.hallway_display_backlight",
     "pl": "esphome",
     "dp": 0,
-    "di": "device-1"
+    "di": "device-1",
+    "np": "device"
    }
   ],
   "devices": [
