@@ -3,6 +3,10 @@ pluginManagement {
     includeBuild("build-logic")
     repositories {
         google()
+        // Google's mirror of Maven Central first, Central itself after it: Central answers bursts with 429 (too many
+        // requests), which failed CI's downloads. Gradle moves on to Central only when the mirror doesn't have a file
+        // (a 404); any other error from the mirror fails the build (docs/ci.md, Caches).
+        maven("https://maven-central.storage-download.googleapis.com/maven2/")
         mavenCentral()
         gradlePluginPortal()
     }
@@ -12,6 +16,8 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
+        // Google's mirror of Maven Central first, then Central (why: the comment in pluginManagement above).
+        maven("https://maven-central.storage-download.googleapis.com/maven2/")
         mavenCentral()
         // GeckoView comes from Mozilla's repository only. Without exclusiveContent Gradle asks Google and Maven
         // Central for it first, and any error there other than a 404 drops GeckoView from the build (2026-11-17).

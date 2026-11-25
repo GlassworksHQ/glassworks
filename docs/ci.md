@@ -134,6 +134,22 @@ failed, and its rerun failed the same way. So `pr.yml` and `core-emulators.yml` 
 twice as long each time (`GRADLE_OPTS` at the top of each), and a burst waits out the limit instead.
 `tools/ci/test/test_changes.py` checks that every workflow restoring Gradle's home sets it.
 
+The waits weren't enough. On 2026-11-24 Central's 429s still hit lint's own jars (groovy, kotlin-reflect,
+kotlin-stdlib, httpclient) in `extractReleaseAnnotations` and `generateDebugUnitTestLintModel`, and Robolectric's
+fetch of its Android jars in the middle of a test run. So every build asks Google's mirror of Maven Central,
+`https://maven-central.storage-download.googleapis.com/maven2/`, before Central itself:
+
+| Who downloads | Where it's set | When the mirror can't help |
+|---|---|---|
+| Gradle: dependencies and plugins | Every `repositories` block (`settings.gradle.kts`, `build-logic/settings.gradle.kts`, `tools/mirror/probe-app/settings.gradle.kts`): `google()`, then the mirror, then `mavenCentral()` | Gradle asks Central only for a file the mirror doesn't have (a 404, such as a release the mirror hasn't copied yet). Any other error from the mirror fails the build, after the tries above, as it would from Central |
+| Robolectric: its Android jars | `robolectric.dependency.repo.url` on every `Test` task, in `glassworks.android` | Robolectric 4.17 takes one repository, so it never falls back to Central. The jars are old releases the mirror has, and a job with the `robolectric-…` cache below doesn't fetch them at all |
+
+The mirror serves Central's files byte for byte, with the same checksum files, so Gradle's and Robolectric's
+checksum checks pass the same. The repo has no `gradle/verification-metadata.xml`. Gradle keeps its dependency
+metadata per repository, so until a run on `main` saves Gradle's home again, a run asks the mirror about each file
+it already has (the files themselves stay, and Central isn't asked). `tools/ci/test/test_changes.py` checks that every `mavenCentral()` follows the mirror
+and that the convention plugin sets Robolectric's.
+
 To clear a bad entry by hand, delete that job's `gradle-home-v2|Linux-X64|<job>[…]` entries on `main`
 (`gh cache list --ref refs/heads/main`, then `gh cache delete <id>`). The next run starts from another
 job's entry and saves a clean one.
