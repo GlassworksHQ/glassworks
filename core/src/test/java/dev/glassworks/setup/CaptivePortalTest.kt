@@ -102,8 +102,8 @@ class CaptivePortalTest {
         val dns = freeUdpPort()
         val web = freePort()
         val portal = CaptivePortal({ "http://$it:8099/setup" }, dnsPort = dns, httpPort = web)
-        assertTrue("DNS and the web redirect up", portal.start(PortalAddresses(lo)))
-        try {
+        try { // the check inside: a start that fails still stops what did come up
+            assertTrue("DNS and the web redirect up", portal.start(PortalAddresses(lo)))
             DatagramSocket(InetSocketAddress(lo, 0)).use { s -> // on loopback: see freeUdpPort
                 s.soTimeout = 5_000
                 val q = query("captive.apple.com")
@@ -140,8 +140,8 @@ class CaptivePortalTest {
         val dns = freeUdpPort()
         val web = freePort()
         val portal = CaptivePortal({ "http://$it:8099/setup" }, dnsPort = dns, httpPort = web)
-        assertTrue("DNS and the web redirect up", portal.start(PortalAddresses(lo)))
-        try {
+        try { // the check inside: a start that fails still stops what did come up
+            assertTrue("DNS and the web redirect up", portal.start(PortalAddresses(lo)))
             repeat(3) { // what PortalHotspot does when the IPv6 address comes
                 assertTrue("DNS bound again on its port", portal.start(PortalAddresses(lo)))
             }
