@@ -6,7 +6,7 @@ Cards marked *(not yet compared with HA)* draw natively but haven't been checked
 
 ## Tier 1: Native Core Lovelace Cards (31)
 
-- **Controls & summaries:** `tile`, `entities` (plain rows, `divider` and `section` rows; no header or footer), `glance`, `button`, `entity`, `light`, `thermostat` (a heat/cool range shows both targets, as in HA), `humidifier` *(not yet compared with HA)*, `alarm-panel`, `media-control`, `todo-list`, `area`
+- **Controls & summaries:** `tile`, `entities` (plain rows, `divider` and `section` rows; no header or footer), `glance`, `button` (and `entity-button`, its old name), `entity`, `light`, `thermostat` (a heat/cool range shows both targets, as in HA), `humidifier` *(not yet compared with HA)*, `alarm-panel`, `media-control`, `todo-list`, `area`
 - **Information & media:** `heading`, `clock`, `sensor`, `gauge` (severity, `segments`, `needle`), `weather-forecast` (daily, hourly and twice-daily), `history-graph`, `statistics-graph`, `calendar` (month grid and list views), `logbook`, `markdown` (rendered natively: headings, tables, lists, quotes, rules, `<font color>`, `<center>` and inline `<ha-icon>`, with HA server-side Jinja2 templates via `render_template`; `<ha-alert>`, `<ha-qr-code>`, `<details>`, `<audio>`, `<video>` and checkboxes draw nothing)
 - **Images & floorplans:** `picture`, `picture-entity`, `picture-glance`, `picture-elements` (`state-icon`, `state-label`, `state-badge`, `icon`, `service-button`; `conditional` and `image` elements are left out)
 - **Layout & filtering:** `grid`, `horizontal-stack`, `vertical-stack`, `conditional`, `entity-filter` (plus the Tier 2 containers `custom:stack-in-card`, `custom:vertical-stack-in-card` and `custom:layout-card`, whose children are audited like any stack's)
@@ -62,6 +62,10 @@ Cards marked *(not yet compared with HA)* draw natively but haven't been checked
 - `custom:auto-entities` (`filter.include` / `exclude` on `domain`, `entity_id`, `state`, `name`, `attributes`, `group`, `not`/`or`/`and`; globs, `/regex/`, `< > <= >= != ==`; `sort`; `card`, `card_param`, `show_empty`, `unique`). Other filter keys (`area`, `device`, `integration`, `label`, `template`, ...) match nothing natively: list those entities explicitly instead
 - `custom:stack-in-card` (`mode: vertical | horizontal`, `title`, `keep: {background, border_radius, margin}`)
 - `custom:vertical-stack-in-card` *(not yet compared with HA)* (`title`, `horizontal`)
+- `custom:button-card` *(not yet compared with HA)* without JavaScript templates (`[[[ ]]]`): layouts, `state:` rules, `color` / `color_type`, `size`, `aspect_ratio`, `show_*`, labels, `lock`, plain-text `custom_fields`, tap/hold/double-tap actions, and `styles` for card, icon, img_cell, name, state, label, grid and custom fields. `button_card_templates` are merged first. JavaScript, cards or HTML in it, `extra_styles`, the spinner, live streams, protected or icon actions and styles outside the subset send it to an island
+- `custom:swipe-card` *(not yet compared with HA)* (`pagination` bullets or fraction, `slidesPerView`, `spaceBetween`, `centeredSlides`, `loop`, `autoplay`, `start_card`, `reset_after`). Other Swiper parameters send it to an island unless a built-in card sits inside it
+- `custom:weather-card` *(not yet compared with HA)* (bramkragten's: current conditions and details; needs `entity`)
+- `custom:mushroom-empty-card` (a spacer)
 - `custom:layout-card` (`custom:masonry-layout`, the default; `custom:grid-layout` with `grid-template-columns`, `grid-gap`, `mediaquery`, `view_layout.grid-column`; `custom:horizontal-layout` with `max_cols` / `width`; `custom:vertical-layout` with `column_break` and `custom:layout-break`). Any other `layout_type` sends it to an island unless a built-in card sits inside it
 
 ## Tier 3 → Native Migration Map
@@ -69,7 +73,7 @@ Cards marked *(not yet compared with HA)* draw natively but haven't been checked
 | Tier 3 card (triggers GeckoView) | Vitro-native replacement | Notes |
 |---|---|---|
 | Full-screen custom JS panel (`custom:mirror-home-card`, `custom:tablet-home-card`) | `type: sections` + `clock`, `weather-forecast`, `tile`, `media-control`, `calendar`, `todo-list`, `markdown`, `custom:mushroom-chips-card` + YAML theme | Use `visibility:` conditions for presence-driven layout switching |
-| `custom:button-card` | `tile`, `button`, `custom:mushroom-entity-card`, `custom:mushroom-template-card`, or `custom:bubble-card` | Use `custom:mushroom-template-card` or `markdown` for Jinja2 labels/icons |
+| `custom:button-card` with JavaScript templates (`[[[ ]]]`) | The same button-card without JavaScript (drawn natively), or `tile`, `button`, `custom:mushroom-template-card` | Move `[[[ ]]]` logic to `state:` rules, or to `custom:mushroom-template-card` / `markdown` for Jinja2 labels and icons |
 | `custom:apexcharts-card` | `custom:mini-graph-card`, `history-graph`, or `statistics-graph` | All three render natively on Android Canvas |
 | `custom:mod-card` / Shadow-DOM `card-mod` | HA YAML theme + card-level `card-mod` | Vitro natively applies backgrounds (colors, linear gradients), solid borders, `border-radius`, `box-shadow`, `opacity`, `padding`, `margin`, `font-family` and a pinned `position: fixed` on `ha-card`; `font-size` on tile and Mushroom cards |
 | `map`, `iframe`, `energy-*` and other built-in cards Vitro doesn't draw | `picture-elements`, `picture-entity`, `tile`, `history-graph` or `statistics-graph` | The island shows only a summary of a built-in card, so replace it rather than keep it |

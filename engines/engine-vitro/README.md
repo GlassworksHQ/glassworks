@@ -94,6 +94,7 @@ The island server only serves islands. Its proxy forwards what a card loads (`/a
 | `tile` | Yes | 14 tile features draw natively (listed under [What Vitro draws natively](#what-vitro-draws-natively)). Any other feature is left out of the tile. With `features_position: inline`, the features sit under the tile instead of beside it |
 | `entities`, `entity-filter` | Yes | Plain entity rows, `divider` and `section` rows. Other row types (`buttons`, `attribute`, custom rows) and the card's header and footer are left out |
 | `button`, `entity`, `glance`, `heading`, `light`, `area`, `alarm-panel` | Yes | |
+| `entity-button` | Yes | Home Assistant's old name for `button`, drawn by the same card. Without an `entity`, it shows Home Assistant's error card, as Home Assistant does |
 | `thermostat` | Yes | A heat/cool range shows both targets, as Home Assistant does |
 | `humidifier` | Not yet | The reference Home Assistant has no humidifier to compare against |
 | `gauge` | Yes | Severity colors, `segments` and `needle: true` |
@@ -119,6 +120,10 @@ The island server only serves islands. Its proxy forwards what a card loads (`/a
 | auto-entities | Yes | Filters by domain, entity id, state, name, attributes and group, with `not`, `or`, `and` and `sort`. Other filter keys, such as `area` or `template`, match nothing yet |
 | stack-in-card, layout-card | Yes | layout-card's masonry, horizontal, vertical and grid layouts. Any other layout goes to an island, unless a built-in card sits inside it |
 | vertical-stack-in-card | Not yet | Not installed on the reference Home Assistant |
+| button-card | Not yet | Drawn natively without JavaScript templates (`[[[ … ]]]`): its layouts, `state:` rules, colors, styles, actions and lock, with the dashboard's `button_card_templates` merged in. A config with JavaScript, a card or HTML in it, or a style outside the subset goes to an island (see [What Vitro draws natively](#what-vitro-draws-natively)) |
+| swipe-card | Not yet | Its cards as swipeable pages with bullets or `1 / 3` pagination. Swiper effects, arrows and the scrollbar go to an island, unless a built-in card sits inside it |
+| weather-card (bramkragten) | Not yet | The current conditions and the details. Its forecast reads an attribute Home Assistant no longer sets, so there's none, as in Home Assistant |
+| Mushroom empty card | Not yet | Draws nothing and keeps its place in the grid |
 | Any other custom card | — | Goes to an island, drawn by its own script |
 
 To check a dashboard before you turn Vitro on, paste it into the [compatibility check on glassworks.dev](https://www.glassworks.dev/blueprints#vitro-check). It routes every card with the same rules as the panel.
