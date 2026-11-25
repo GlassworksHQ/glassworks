@@ -2255,9 +2255,9 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 // ha-entity-toggle's label: "Toggle Desk lamp".
                 if (isSwitchable) switchView.contentDescription = "Toggle ${nameView.text}"
                 secondaryView?.text = if (rowCfg.secondaryInfo == "last-updated") {
-                    s?.copy(lastChanged = s.lastUpdated.takeIf { it > 0.0 } ?: s.lastChanged)?.relativeLastChanged()
+                    s?.copy(lastChanged = s.lastUpdated.takeIf { it > 0.0 } ?: s.lastChanged)?.relativeLastChanged(ctx.now() / 1000.0)
                 } else {
-                    s?.relativeLastChanged()
+                    s?.relativeLastChanged(ctx.now() / 1000.0)
                 }.orEmpty()
                 when {
                     isSwitchable -> {
@@ -3336,7 +3336,7 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
                         setLabel(
                             when (c.optString("content_info", "state")) {
                                 "name" -> c.optString("name", "").ifEmpty { s?.friendlyName ?: eid }
-                                "last-changed", "last-updated" -> s?.relativeLastChanged().orEmpty()
+                                "last-changed", "last-updated" -> s?.relativeLastChanged(ctx.now() / 1000.0).orEmpty()
                                 "none" -> ""
                                 else -> s?.formattedState() ?: "…"
                             },

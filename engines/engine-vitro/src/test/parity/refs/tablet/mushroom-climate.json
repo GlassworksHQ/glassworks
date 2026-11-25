@@ -2,12 +2,13 @@
  "case": "mushroom-climate",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
   "height": 800,
-  "density": 2
+  "density": 2,
+  "touch": true
  },
  "clip": {
   "x": 382,
@@ -31,10 +32,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "AC",
+   "clipped": false,
+   "text": "Heat Pump",
    "x": 56,
    "y": 17,
-   "w": 18.52,
+   "w": 70.88,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -43,6 +45,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Heat ⸱ 19.5 °C",
    "x": 56,
    "y": 36,
@@ -55,6 +58,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "22.0",
    "x": 81.91,
    "y": 78.8,
@@ -67,7 +71,7 @@
   }
  ],
  "states": {
-  "climate.ac": {
+  "climate.heat_pump": {
    "s": "heat",
    "a": {
     "hvac_modes": [
@@ -88,44 +92,38 @@
      "auto"
     ],
     "current_temperature": 19.5,
-    "temperature_unit": "°C",
     "temperature": 22,
     "target_temp_high": null,
     "target_temp_low": null,
     "fan_mode": "auto",
     "hvac_action": "heating",
-    "unit_state": "normal",
-    "mode_conflict": false,
-    "friendly_name": "AC",
+    "friendly_name": "Heat Pump",
     "supported_features": 395
    },
-   "lc": 1795543398.341556,
-   "lu": 1795544828.1944137
+   "lc": 1794482160,
+   "lu": 1794482160
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "climate.ac",
-    "pl": "mitsubishi_matouch",
-    "tk": "matouch",
+    "ei": "climate.heat_pump",
+    "pl": "demo",
     "di": "device-1"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "AC"
+    "name": "Heat Pump"
    }
   ],
   "requested": {
    "domains": [
     "climate"
    ],
-   "platforms": [
-    "mitsubishi_matouch"
-   ]
+   "platforms": []
   },
   "icons": {
    "entity_component": {
@@ -193,38 +191,7 @@
      }
     }
    },
-   "entity": {
-    "mitsubishi_matouch": {
-     "climate": {
-      "matouch": {
-       "state_attributes": {
-        "swing_mode": {
-         "state": {
-          "auto": "mdi:autorenew",
-          "flat": "mdi:arrow-right",
-          "down_20": "mdi:arrow-bottom-right",
-          "down_60": "mdi:arrow-bottom-right",
-          "down_80": "mdi:arrow-down",
-          "down_100": "mdi:arrow-down-bold",
-          "swing": "mdi:swap-vertical"
-         }
-        },
-        "swing_horizontal_mode": {
-         "state": {
-          "rl_auto": "mdi:autorenew",
-          "rl_left": "mdi:arrow-left",
-          "rl_left_center": "mdi:chevron-left",
-          "rl_center": "mdi:arrow-up",
-          "rl_right_center": "mdi:chevron-right",
-          "rl_right": "mdi:arrow-right",
-          "rl_swing": "mdi:swap-horizontal"
-         }
-        }
-       }
-      }
-     }
-    }
-   }
+   "entity": {}
   },
   "translations": {
    "entity_component": {

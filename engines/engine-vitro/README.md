@@ -79,6 +79,16 @@ Some dashboards and views go to that fallback too, so the panel shows them as Ho
 
 The other views of the dashboard stay native, and a navigation back to one of them, such as the panel returning to its home view, draws it natively again.
 
+The way back from such a page always leads to the native dashboard:
+
+| On a Home Assistant page | What happens |
+|---|---|
+| Back | Goes back within that page first, for example from `/config/energy` to `/energy`. After that, it returns to the dashboard view you came from |
+| Reload dashboard (the panel menu, the Manage page or Home Assistant's button) | Returns to the dashboard view the panel last showed, or to the dashboard it's set to |
+| A tap in Home Assistant's sidebar or a link to a dashboard | Vitro draws that dashboard natively. A dashboard with no saved config stays in Home Assistant's own frontend, which is the one that draws it |
+
+Each page Vitro opens this way starts with no history of its own, and Home Assistant's frontend stops once the panel is back on the native view. While a page is open, the dashboard's islands stay hidden behind it.
+
 The island server only serves islands. Its proxy forwards what a card loads (`/api/`, `/local/`, `/hacsfiles/`, Home Assistant's static files and media, and the folders of the dashboard's own Lovelace resources), and only to a page that holds the cookie its island page sets, so other apps on the device can't use it. On the legacy engine, which loads only the dashboard's origin, the island server's loopback address is the one other origin it allows, and each page stays on its own origin: Home Assistant's pages never reach the island server, and islands never reach Home Assistant except through it.
 
 ## More-Info dialogs

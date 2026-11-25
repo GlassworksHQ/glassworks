@@ -306,7 +306,7 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
         var position = (s.attributes["media_position"] as? Number)?.toDouble() ?: 0.0
         if (s.state == "playing") {
             val updated = EntityStore.parseTimestamp(s.attributes["media_position_updated_at"])
-            if (updated > 0.0) position += (System.currentTimeMillis() / 1000.0 - updated).coerceAtLeast(0.0)
+            if (updated > 0.0) position += (ctx.now() / 1000.0 - updated).coerceAtLeast(0.0)
         }
         // Not under a finger: the drag shows where it will seek to.
         if (!progress.dragging) progress.fraction = if (duration > 0.0) (position / duration).toFloat().coerceIn(0f, 1f) else 0f

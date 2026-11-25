@@ -1,101 +1,605 @@
 {
  "_comment": "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: 2.0% pixels, 1.0 px bounds, 0.5 px font). Regenerate with -PvitroParityUpdateBaseline=true; keep or write each \"reason\". An update records regressions too: read the diff before committing it, and keep the entries of cases with an open regression. #794 empties this file.",
- "mirror/clock-date": {
-  "pixel": 0.0257,
+ "mirror/bar-card": {
+  "pixel": 0.4149,
+  "bounds": 44.1,
+  "font": 8,
+  "missingText": 0,
+  "reason": "Vitro's bar-card isn't bar-card 3.2.0's look: HA draws a 20 px title row, square-ended 50 px bars with the name and value inside and a tinted unfilled part, and a white drop icon; Vitro draws rounded 40 px bars, the icon in the severity color, a smaller title, so the card is ~45 px shorter (2026-11-25, fake HA)"
+ },
+ "mirror/bubble-card-button": {
+  "pixel": 0.4672,
+  "bounds": 4,
+  "font": 1,
+  "missingText": 0,
+  "reason": "Bubble Card 3.4.3's slider button: HA fills the whole pill as the slider (65% grey-beige fill, name inside, no state line); Vitro draws a plain button with the name and '65%' on two lines and no fill (2026-11-25, fake HA)"
+ },
+ "mirror/bubble-card-separator": {
+  "pixel": 0.0256,
+  "bounds": 9.2,
+  "font": 2,
+  "missingText": 0,
+  "reason": "Bubble Card's separator: HA's icon and name are larger (24 px icon, 18 px semi-bold name) and its line sits lower and thicker; Vitro's are 4 px smaller and its card ~9 px shorter (2026-11-25, fake HA)"
+ },
+ "mirror/calendar-day": {
+  "pixel": 0.1138,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "the day view: HA's header is one row 'THURSDAY 12' (FullCalendar dayGridDay) and the all-day event sits right under it; Vitro draws the weekday with a round date badge below (the month grid's today marker), so the event bar is ~28 px lower (2026-11-25, fake HA)"
+ },
+ "mirror/calendar-list": {
+  "pixel": 0.0378,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
-  "reason": "the layout follows HA line by line (Blink's line boxes put the AM exactly on HA's; the tablet matches). Left at 1.5x: whole-pixel text boxes. The digits, the AM and the date are TextViews as wide as their text rounded up, so the AM sits 1.5 device px right and the resting date ~1.8 px right; the date is 1 px low because Vitro boxes it at the font's normal height (28.67 px) where ha-marquee-text's middle-aligned inline-block makes 27.84. Boxing it that way was tried (2026-11-24): the column, 1 px shorter, moved the clock's whole-pixel centering a pixel the wrong way, 3.65 %"
+  "reason": "timed events in the list view: HA wraps '9:30 AM - 10:15 AM' to two lines in its 150 px time column; Vitro cuts the end ('9:30 AM - 10:15', '7:00 PM - 9:00', 'AM'/'PM' lost), so the rows below sit up to 24 px higher. All-day rows, headers and dates match (2026-11-25, fake HA)"
+ },
+ "mirror/calendar-month-bars": {
+  "pixel": 0.0431,
+  "bounds": 0,
+  "font": 1,
+  "missingText": 2,
+  "reason": "the tall month grid: HA puts the toolbar on one row (Today, arrows, title, view buttons) and draws timed events as a dot, time and title, all-day and multi-day ones as bars (School holiday spans 25-27); Vitro keeps the two-row toolbar, draws timed events as bars without their time, and splits the multi-day event per day with '+2 more' on the 26th (2026-11-25, fake HA)"
+ },
+ "mirror/clock-date": {
+  "pixel": 0.0207,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "at 1.5x only (the tablet matches): the 112 px digits' and the date line's glyph edges (both cut the weekday at the card's edge, as HA does), 2.1% against the 2.0% slack (2026-11-25, fake HA, after #822)"
+ },
+ "mirror/clock-weather-card": {
+  "pixel": 0.1819,
+  "bounds": 107,
+  "font": 10,
+  "missingText": 13,
+  "reason": "clock-weather-card 3.1.0 isn't drawn: Vitro renders it as HA's weather-forecast card (condition, 0.4 mm, five day columns), without the big clock, the date or the per-day temperature bars, so the card is ~107 px shorter (2026-11-25, fake HA)"
+ },
+ "mirror/gauge-non-numeric": {
+  "pixel": 0.1389,
+  "bounds": 141.7,
+  "font": 0,
+  "missingText": 1,
+  "reason": "HA replaces the gauge with a one-line warning card ('Entity is non-numeric: sensor.printer_black_ink'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
+ },
+ "mirror/gauge-unavailable": {
+  "pixel": 0.1505,
+  "bounds": 141.7,
+  "font": 0,
+  "missingText": 1,
+  "reason": "HA replaces the gauge with a one-line warning card ('Entity is currently unavailable: ...'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
  },
  "mirror/history-graph-legend-expanded": {
-  "pixel": 0.0458,
-  "bounds": 31.8,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the legend expands as HA's (every entry, the 300 px cap ellipsizing the long name, the Less chip). Left: Vitro's entries come out ~4 px narrower than the capture host's (Android draws the name separator '▸' narrower than Chrome's fallback glyph there), so Apollo and Fridge (469.9 px in HA) sit right at the 466 px row; at density 1.5 they still fit and share row 4, one row (32 px) shorter than HA (2026-11-25)"
- },
- "mirror/history-graph-legend-more": {
-  "pixel": 0.0241,
+  "pixel": 0.0202,
   "bounds": 0.2,
   "font": 0,
   "missingText": 0,
-  "reason": "legend, More/Less chip and rows match HA's (the tablet matches). Left at 1.5x, as in history-graph-two: the chart's canvas, which HA composites half a pixel off the grid, so its axis labels and its flat series (the 0 and -18 °C lines here) come out blended across two rows, where Skia draws them on whole rows in Vitro (2026-11-25)"
+  "reason": "the expanded six-entry legend at 1.5x: rows, chips, Less button and the chart match; the legend's '▸' separators are a glyph smaller in Vitro and the dense lines' antialiasing differs, 2.02% against the 2.0% slack (s1 and tablet match) (2026-11-25, fake HA, after #821/#824)"
  },
  "mirror/history-graph-rows": {
-  "pixel": 0.0227,
+  "pixel": 0.0214,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
-  "reason": "the chart shrinks to its 5-row slot as HA's does (chart and legend at the same heights, bounds 0; ECharts 6's outer bounds as in history-graph-two; the tablet matches). Left at 1.5x: ECharts' canvas text, blended across two rows in HA's half-pixel-off canvas and snapped to whole rows by Skia in Vitro, as in history-graph-two (2026-11-24)"
- },
- "mirror/history-graph-timeline": {
-  "pixel": 0.0204,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the bars match HA's half-covered edges (the chart is drawn half a pixel off the grid as HA's canvas is composited; the tablet matches). Left at 1.5x: the name and time labels, ECharts' canvas text, blended across two rows in HA and snapped to whole rows by Skia in Vitro (1 px low or right), as in history-graph-two: 2.04 % against the 2 % line (2026-11-24)"
+  "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
  },
  "mirror/history-graph-two": {
-  "pixel": 0.0228,
+  "pixel": 0.021,
   "bounds": 0.2,
   "font": 0,
   "missingText": 0,
-  "reason": "the chart's geometry matches HA's at every density (ECharts 6's outer bounds, Blink's header and legend lines; the tablet matches). Left at 1.5x: ECharts' canvas text. HA composites the chart's canvas where its box falls (17, 57.8 CSS px: a fraction of a device pixel off the grid), so its axis labels come out blended across two rows; Vitro draws the chart half a pixel off too (CardSurface.contentSubpixel) but Skia snaps the glyphs to whole rows, and the value and time labels sit 1 px right or low. Placing the canvas at its exact HA origin didn't help, and made the tablet worse (2026-11-24)"
+  "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
+ },
+ "mirror/humidifier": {
+  "pixel": 0.1146,
+  "bounds": 20,
+  "font": 0,
+  "missingText": 0,
+  "reason": "HA 2026's humidifier card: a 270-degree arc with the target in blue, 'Humidifying' and the current humidity under the number, and +/- buttons; Vitro draws a smaller arc with 'Currently 41%', and adds a power/mode row ('Normal') HA no longer shows, so the card is ~20 px taller (2026-11-25, fake HA)"
+ },
+ "mirror/logbook-user": {
+  "pixel": 0.0071,
+  "bounds": 0,
+  "font": 3,
+  "missingText": 3,
+  "reason": "changes made by people: HA shows each user's initial in a round avatar (A, S) from config/auth/list; Vitro shows the light's icon instead, so the three avatars are missing texts. Times, states and the timeline match (2026-11-25, fake HA)"
  },
  "mirror/markdown-cardmod-has": {
   "pixel": 0.0204,
   "bounds": 0.5,
   "font": 0.3,
   "missingText": 0,
-  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph; the tablet matches). Left at 1.5x: whole device px. Each Markdown block is a TextView whose line box rounds on its own (the h3's 28.5 px to 29, the paragraphs' 43.2 to 43 and 33.6 to 34), where Chrome rounds positions, so the card comes out 0.5 CSS px taller and its 2 px bottom border a row lower, and the 16.38 px h3 draws at 16.67 (AbsoluteSizeSpan; fractional sizes tried earlier: no pixel gain). The report's +5.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it (2026-11-24)"
+  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph); left at 1.5x: Vitro's Markdown runs in whole device px, so the 18 px line sits ~1 px lower (2.0%) (2026-11-25, fake HA, after #822)"
+ },
+ "mirror/media-control": {
+  "pixel": 0.0202,
+  "bounds": 0.3,
+  "font": 0,
+  "missingText": 0,
+  "reason": "at 1.5x: the 1 px border and the controls' icon edges (2.0%); the idle card's layout, colors and artwork placeholder match (the tablet matches) (2026-11-25, fake HA, after #822)"
+ },
+ "mirror/media-control-playing": {
+  "pixel": 0.0395,
+  "bounds": 0.8,
+  "font": 0,
+  "missingText": 0,
+  "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
+ },
+ "mirror/mini-graph-card": {
+  "pixel": 0.2192,
+  "bounds": 48.2,
+  "font": 4.4,
+  "missingText": 1,
+  "reason": "mini-graph-card 0.13.0: HA draws a 2-hour-smoothed line filled to the bottom, the state at 32 px with its unit, no min/max labels; Vitro draws every point (noisy), a smaller state (21.4 at 26 px), min/max labels and a 48 px shorter graph (2026-11-25, fake HA)"
+ },
+ "mirror/mini-media-player": {
+  "pixel": 0.2523,
+  "bounds": 72,
+  "font": 2,
+  "missingText": 0,
+  "reason": "mini-media-player 1.16.12 with cover artwork: HA shows a volume slider with a knob and the progress bar along the bottom; Vitro shows a filled seek bar in the middle and no progress line, the cover art is placed ~70 px off (2026-11-25, fake HA)"
+ },
+ "mirror/modern-circular-gauge": {
+  "pixel": 0.1073,
+  "bounds": 254,
+  "font": 0,
+  "missingText": 2,
+  "reason": "modern-circular-gauge 0.15.0 fills its grid slot (a ~490 px square ring, 47 % at 90 px, the drop icon and the name below); Vitro's view lays it out at its own small size, cut by the card at the right (bounds off by 254 px) (2026-11-25, fake HA)"
+ },
+ "mirror/mushroom-humidifier": {
+  "pixel": 0.111,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "Mushroom's humidifier card: HA shows 'On · 41%' and a purple humidity bar without a knob, the icon badge purple; Vitro adds '· Target 45%' and draws a blue slider with a knob (2026-11-25, fake HA)"
+ },
+ "mirror/mushroom-lock": {
+  "pixel": 0.0208,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "Mushroom 5.3's lock card, locked: HA shows one unlock button across the row; Vitro shows two (unlock and open). Name, state and icon match (2026-11-25, fake HA)"
+ },
+ "mirror/mushroom-media-playing": {
+  "pixel": 0.1641,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 2,
+  "reason": "Mushroom's media card while playing with use_media_info: HA shows the title, artist and volume, the controls in one row with a volume button; Vitro drops the info row and draws the controls as three big buttons over a volume slider (2026-11-25, fake HA)"
+ },
+ "mirror/mushroom-person": {
+  "pixel": 0.0664,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "Mushroom's person card with use_entity_picture: HA draws the person's picture in the icon circle with the home badge; Vitro draws the plain account icon (the picture isn't loaded) (2026-11-25, fake HA)"
+ },
+ "mirror/thermostat-heat-cool": {
+  "pixel": 0.0892,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "heat/cool with a range: since #821 Vitro draws both targets (20 and 24 °C, two handles, Idle) as HA does; left: Vitro's arcs are lighter and stop higher, its numbers and 'Idle' are ~20% smaller, and its +/- buttons smaller and lower (2026-11-25, fake HA, after #821/#824)"
+ },
+ "mirror/thermostat-water-heater": {
+  "pixel": 0.0485,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 3,
+  "reason": "water heater on the thermostat card: HA labels the target 'Target' and 'Currently 48 °C' in green; Vitro shows the mode 'Eco' and '48.0 °C' in grey, and its handle and arc in grey (2026-11-25, fake HA)"
+ },
+ "mirror/tile-light": {
+  "pixel": 0.022,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the long name 'Hallway Ceiling Light Hallway Ceiling Ring' cut by an ellipsis in both; Vitro's text run sits 1 px higher and its cut lands 2 px earlier (s1/Mirror at 1.5x; the tablet matches) (2026-11-25, fake HA)"
+ },
+ "mirror/tile-water-heater": {
+  "pixel": 0.1028,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the tile's water-heater-operation-modes feature isn't drawn in Vitro (eco, electric, performance, off buttons); name and state match, the card is a feature row shorter (2026-11-25, fake HA)"
+ },
+ "mirror/vertical-stack-in-card": {
+  "pixel": 0.0603,
+  "bounds": 24.1,
+  "font": 8,
+  "missingText": 0,
+  "reason": "vertical-stack-in-card 1.1.4: HA's title is a 24 px card header with padding and the rows sit without dividers; Vitro's title is 16 px and it draws dividers between the tiles, so the card is ~24 px shorter (2026-11-25, fake HA)"
+ },
+ "mirror/weather-forecast": {
+  "pixel": 0.0126,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 3,
+  "reason": "HA shows today's high/low ('14.7 °C / 9.1 °C') under the temperature when the forecast holds today; Vitro shows the precipitation ('0.4 mm') there. The rest of the card matches (2026-11-25, fake HA)"
+ },
+ "s1/bar-card": {
+  "pixel": 0.4149,
+  "bounds": 44.1,
+  "font": 8,
+  "missingText": 0,
+  "reason": "Vitro's bar-card isn't bar-card 3.2.0's look: HA draws a 20 px title row, square-ended 50 px bars with the name and value inside and a tinted unfilled part, and a white drop icon; Vitro draws rounded 40 px bars, the icon in the severity color, a smaller title, so the card is ~45 px shorter (2026-11-25, fake HA)"
+ },
+ "s1/bubble-card-button": {
+  "pixel": 0.4672,
+  "bounds": 4,
+  "font": 1,
+  "missingText": 0,
+  "reason": "Bubble Card 3.4.3's slider button: HA fills the whole pill as the slider (65% grey-beige fill, name inside, no state line); Vitro draws a plain button with the name and '65%' on two lines and no fill (2026-11-25, fake HA)"
+ },
+ "s1/bubble-card-separator": {
+  "pixel": 0.0256,
+  "bounds": 9.2,
+  "font": 2,
+  "missingText": 0,
+  "reason": "Bubble Card's separator: HA's icon and name are larger (24 px icon, 18 px semi-bold name) and its line sits lower and thicker; Vitro's are 4 px smaller and its card ~9 px shorter (2026-11-25, fake HA)"
+ },
+ "s1/calendar-day": {
+  "pixel": 0.1138,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "the day view: HA's header is one row 'THURSDAY 12' (FullCalendar dayGridDay) and the all-day event sits right under it; Vitro draws the weekday with a round date badge below (the month grid's today marker), so the event bar is ~28 px lower (2026-11-25, fake HA)"
+ },
+ "s1/calendar-list": {
+  "pixel": 0.0378,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "timed events in the list view: HA wraps '9:30 AM - 10:15 AM' to two lines in its 150 px time column; Vitro cuts the end ('9:30 AM - 10:15', '7:00 PM - 9:00', 'AM'/'PM' lost), so the rows below sit up to 24 px higher. All-day rows, headers and dates match (2026-11-25, fake HA)"
+ },
+ "s1/calendar-month-bars": {
+  "pixel": 0.0987,
+  "bounds": 0,
+  "font": 1,
+  "missingText": 5,
+  "reason": "the tall month grid: HA puts the toolbar on one row (Today, arrows, title, view buttons) and draws timed events as a dot, time and title, all-day and multi-day ones as bars (School holiday spans 25-27); Vitro keeps the two-row toolbar, draws timed events as bars without their time, and splits the multi-day event per day with '+2 more' on the 26th (2026-11-25, fake HA)"
  },
  "s1/clock-date": {
-  "pixel": 0.0257,
+  "pixel": 0.0207,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
-  "reason": "the layout follows HA line by line (Blink's line boxes put the AM exactly on HA's; the tablet matches). Left at 1.5x: whole-pixel text boxes. The digits, the AM and the date are TextViews as wide as their text rounded up, so the AM sits 1.5 device px right and the resting date ~1.8 px right; the date is 1 px low because Vitro boxes it at the font's normal height (28.67 px) where ha-marquee-text's middle-aligned inline-block makes 27.84. Boxing it that way was tried (2026-11-24): the column, 1 px shorter, moved the clock's whole-pixel centering a pixel the wrong way, 3.65 %"
+  "reason": "at 1.5x only (the tablet matches): the 112 px digits' and the date line's glyph edges (both cut the weekday at the card's edge, as HA does), 2.1% against the 2.0% slack (2026-11-25, fake HA, after #822)"
  },
- "s1/history-graph-legend-expanded": {
-  "pixel": 0.0208,
-  "bounds": 0.2,
-  "font": 0,
-  "missingText": 0,
-  "reason": "legend, More/Less chip and rows match HA's (the tablet matches). Left at 1.5x, as in history-graph-two: the chart's canvas, which HA composites half a pixel off the grid, so its axis labels and its flat series (the 0 and -18 °C lines here) come out blended across two rows, where Skia draws them on whole rows in Vitro (2026-11-25)"
+ "s1/clock-weather-card": {
+  "pixel": 0.1818,
+  "bounds": 107,
+  "font": 10,
+  "missingText": 13,
+  "reason": "clock-weather-card 3.1.0 isn't drawn: Vitro renders it as HA's weather-forecast card (condition, 0.4 mm, five day columns), without the big clock, the date or the per-day temperature bars, so the card is ~107 px shorter (2026-11-25, fake HA)"
  },
- "s1/history-graph-legend-more": {
-  "pixel": 0.0224,
-  "bounds": 0.2,
+ "s1/gauge-non-numeric": {
+  "pixel": 0.1389,
+  "bounds": 141.7,
   "font": 0,
-  "missingText": 0,
-  "reason": "legend, More/Less chip and rows match HA's (the tablet matches). Left at 1.5x, as in history-graph-two: the chart's canvas, which HA composites half a pixel off the grid, so its axis labels and its flat series (the 0 and -18 °C lines here) come out blended across two rows, where Skia draws them on whole rows in Vitro (2026-11-25)"
+  "missingText": 1,
+  "reason": "HA replaces the gauge with a one-line warning card ('Entity is non-numeric: sensor.printer_black_ink'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
+ },
+ "s1/gauge-unavailable": {
+  "pixel": 0.1505,
+  "bounds": 141.7,
+  "font": 0,
+  "missingText": 1,
+  "reason": "HA replaces the gauge with a one-line warning card ('Entity is currently unavailable: ...'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
  },
  "s1/history-graph-rows": {
-  "pixel": 0.0229,
+  "pixel": 0.0208,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
-  "reason": "the chart shrinks to its 5-row slot as HA's does (chart and legend at the same heights, bounds 0; ECharts 6's outer bounds as in history-graph-two; the tablet matches). Left at 1.5x: ECharts' canvas text, blended across two rows in HA's half-pixel-off canvas and snapped to whole rows by Skia in Vitro, as in history-graph-two (2026-11-24)"
- },
- "s1/history-graph-timeline": {
-  "pixel": 0.0204,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the bars match HA's half-covered edges (the chart is drawn half a pixel off the grid as HA's canvas is composited; the tablet matches). Left at 1.5x: the name and time labels, ECharts' canvas text, blended across two rows in HA and snapped to whole rows by Skia in Vitro (1 px low or right), as in history-graph-two: 2.04 % against the 2 % line (2026-11-24)"
+  "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
  },
  "s1/history-graph-two": {
-  "pixel": 0.0218,
+  "pixel": 0.0203,
   "bounds": 0.2,
   "font": 0,
   "missingText": 0,
-  "reason": "the chart's geometry matches HA's at every density (ECharts 6's outer bounds, Blink's header and legend lines; the tablet matches). Left at 1.5x: ECharts' canvas text. HA composites the chart's canvas where its box falls (17, 57.8 CSS px: a fraction of a device pixel off the grid), so its axis labels come out blended across two rows; Vitro draws the chart half a pixel off too (CardSurface.contentSubpixel) but Skia snaps the glyphs to whole rows, and the value and time labels sit 1 px right or low. Placing the canvas at its exact HA origin didn't help, and made the tablet worse (2026-11-24)"
+  "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
+ },
+ "s1/humidifier": {
+  "pixel": 0.1147,
+  "bounds": 20,
+  "font": 0,
+  "missingText": 0,
+  "reason": "HA 2026's humidifier card: a 270-degree arc with the target in blue, 'Humidifying' and the current humidity under the number, and +/- buttons; Vitro draws a smaller arc with 'Currently 41%', and adds a power/mode row ('Normal') HA no longer shows, so the card is ~20 px taller (2026-11-25, fake HA)"
+ },
+ "s1/layout-card": {
+  "pixel": 0.0239,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "s1 only: Vitro ends 'Reading Lamp Reading' with an ellipsis in the 2-column tile where HA's 146 CSS px run just fits; one name, the rest matches (2026-11-25, fake HA)"
+ },
+ "s1/logbook-user": {
+  "pixel": 0.0071,
+  "bounds": 0,
+  "font": 3,
+  "missingText": 3,
+  "reason": "changes made by people: HA shows each user's initial in a round avatar (A, S) from config/auth/list; Vitro shows the light's icon instead, so the three avatars are missing texts. Times, states and the timeline match (2026-11-25, fake HA)"
  },
  "s1/markdown-cardmod-has": {
   "pixel": 0.0204,
   "bounds": 0.5,
   "font": 0.3,
   "missingText": 0,
-  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph; the tablet matches). Left at 1.5x: whole device px. Each Markdown block is a TextView whose line box rounds on its own (the h3's 28.5 px to 29, the paragraphs' 43.2 to 43 and 33.6 to 34), where Chrome rounds positions, so the card comes out 0.5 CSS px taller and its 2 px bottom border a row lower, and the 16.38 px h3 draws at 16.67 (AbsoluteSizeSpan; fractional sizes tried earlier: no pixel gain). The report's +5.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it (2026-11-24)"
+  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph); left at 1.5x: Vitro's Markdown runs in whole device px, so the 18 px line sits ~1 px lower (2.0%) (2026-11-25, fake HA, after #822)"
+ },
+ "s1/media-control": {
+  "pixel": 0.0202,
+  "bounds": 0.3,
+  "font": 0,
+  "missingText": 0,
+  "reason": "at 1.5x: the 1 px border and the controls' icon edges (2.0%); the idle card's layout, colors and artwork placeholder match (the tablet matches) (2026-11-25, fake HA, after #822)"
+ },
+ "s1/media-control-playing": {
+  "pixel": 0.0395,
+  "bounds": 0.8,
+  "font": 0,
+  "missingText": 0,
+  "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
+ },
+ "s1/mini-graph-card": {
+  "pixel": 0.2192,
+  "bounds": 48.2,
+  "font": 4.4,
+  "missingText": 1,
+  "reason": "mini-graph-card 0.13.0: HA draws a 2-hour-smoothed line filled to the bottom, the state at 32 px with its unit, no min/max labels; Vitro draws every point (noisy), a smaller state (21.4 at 26 px), min/max labels and a 48 px shorter graph (2026-11-25, fake HA)"
+ },
+ "s1/mini-media-player": {
+  "pixel": 0.2523,
+  "bounds": 72,
+  "font": 2,
+  "missingText": 0,
+  "reason": "mini-media-player 1.16.12 with cover artwork: HA shows a volume slider with a knob and the progress bar along the bottom; Vitro shows a filled seek bar in the middle and no progress line, the cover art is placed ~70 px off (2026-11-25, fake HA)"
+ },
+ "s1/modern-circular-gauge": {
+  "pixel": 0.1074,
+  "bounds": 254,
+  "font": 0,
+  "missingText": 2,
+  "reason": "modern-circular-gauge 0.15.0 fills its grid slot (a ~490 px square ring, 47 % at 90 px, the drop icon and the name below); Vitro's view lays it out at its own small size, cut by the card at the right (bounds off by 254 px) (2026-11-25, fake HA)"
+ },
+ "s1/mushroom-humidifier": {
+  "pixel": 0.111,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "Mushroom's humidifier card: HA shows 'On · 41%' and a purple humidity bar without a knob, the icon badge purple; Vitro adds '· Target 45%' and draws a blue slider with a knob (2026-11-25, fake HA)"
+ },
+ "s1/mushroom-lock": {
+  "pixel": 0.0208,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "Mushroom 5.3's lock card, locked: HA shows one unlock button across the row; Vitro shows two (unlock and open). Name, state and icon match (2026-11-25, fake HA)"
+ },
+ "s1/mushroom-media-playing": {
+  "pixel": 0.1641,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 2,
+  "reason": "Mushroom's media card while playing with use_media_info: HA shows the title, artist and volume, the controls in one row with a volume button; Vitro drops the info row and draws the controls as three big buttons over a volume slider (2026-11-25, fake HA)"
+ },
+ "s1/mushroom-person": {
+  "pixel": 0.0664,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "Mushroom's person card with use_entity_picture: HA draws the person's picture in the icon circle with the home badge; Vitro draws the plain account icon (the picture isn't loaded) (2026-11-25, fake HA)"
+ },
+ "s1/thermostat-heat-cool": {
+  "pixel": 0.0892,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "heat/cool with a range: since #821 Vitro draws both targets (20 and 24 °C, two handles, Idle) as HA does; left: Vitro's arcs are lighter and stop higher, its numbers and 'Idle' are ~20% smaller, and its +/- buttons smaller and lower (2026-11-25, fake HA, after #821/#824)"
+ },
+ "s1/thermostat-water-heater": {
+  "pixel": 0.0485,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 3,
+  "reason": "water heater on the thermostat card: HA labels the target 'Target' and 'Currently 48 °C' in green; Vitro shows the mode 'Eco' and '48.0 °C' in grey, and its handle and arc in grey (2026-11-25, fake HA)"
+ },
+ "s1/tile-light": {
+  "pixel": 0.022,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the long name 'Hallway Ceiling Light Hallway Ceiling Ring' cut by an ellipsis in both; Vitro's text run sits 1 px higher and its cut lands 2 px earlier (s1/Mirror at 1.5x; the tablet matches) (2026-11-25, fake HA)"
+ },
+ "s1/tile-water-heater": {
+  "pixel": 0.1028,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the tile's water-heater-operation-modes feature isn't drawn in Vitro (eco, electric, performance, off buttons); name and state match, the card is a feature row shorter (2026-11-25, fake HA)"
+ },
+ "s1/vertical-stack-in-card": {
+  "pixel": 0.0603,
+  "bounds": 24.1,
+  "font": 8,
+  "missingText": 0,
+  "reason": "vertical-stack-in-card 1.1.4: HA's title is a 24 px card header with padding and the rows sit without dividers; Vitro's title is 16 px and it draws dividers between the tiles, so the card is ~24 px shorter (2026-11-25, fake HA)"
+ },
+ "s1/weather-forecast": {
+  "pixel": 0.0126,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 3,
+  "reason": "HA shows today's high/low ('14.7 °C / 9.1 °C') under the temperature when the forecast holds today; Vitro shows the precipitation ('0.4 mm') there. The rest of the card matches (2026-11-25, fake HA)"
+ },
+ "tablet/bar-card": {
+  "pixel": 0.4161,
+  "bounds": 43.8,
+  "font": 8,
+  "missingText": 0,
+  "reason": "Vitro's bar-card isn't bar-card 3.2.0's look: HA draws a 20 px title row, square-ended 50 px bars with the name and value inside and a tinted unfilled part, and a white drop icon; Vitro draws rounded 40 px bars, the icon in the severity color, a smaller title, so the card is ~45 px shorter (2026-11-25, fake HA)"
+ },
+ "tablet/bubble-card-button": {
+  "pixel": 0.4798,
+  "bounds": 4,
+  "font": 1,
+  "missingText": 0,
+  "reason": "Bubble Card 3.4.3's slider button: HA fills the whole pill as the slider (65% grey-beige fill, name inside, no state line); Vitro draws a plain button with the name and '65%' on two lines and no fill (2026-11-25, fake HA)"
+ },
+ "tablet/bubble-card-separator": {
+  "pixel": 0.0226,
+  "bounds": 9.2,
+  "font": 2,
+  "missingText": 0,
+  "reason": "Bubble Card's separator: HA's icon and name are larger (24 px icon, 18 px semi-bold name) and its line sits lower and thicker; Vitro's are 4 px smaller and its card ~9 px shorter (2026-11-25, fake HA)"
+ },
+ "tablet/calendar-day": {
+  "pixel": 0.1131,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "the day view: HA's header is one row 'THURSDAY 12' (FullCalendar dayGridDay) and the all-day event sits right under it; Vitro draws the weekday with a round date badge below (the month grid's today marker), so the event bar is ~28 px lower (2026-11-25, fake HA)"
+ },
+ "tablet/calendar-list": {
+  "pixel": 0.0303,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "timed events in the list view: HA wraps '9:30 AM - 10:15 AM' to two lines in its 150 px time column; Vitro cuts the end ('9:30 AM - 10:15', '7:00 PM - 9:00', 'AM'/'PM' lost), so the rows below sit up to 24 px higher. All-day rows, headers and dates match (2026-11-25, fake HA)"
+ },
+ "tablet/calendar-month-bars": {
+  "pixel": 0.0926,
+  "bounds": 0,
+  "font": 1,
+  "missingText": 5,
+  "reason": "the tall month grid: HA puts the toolbar on one row (Today, arrows, title, view buttons) and draws timed events as a dot, time and title, all-day and multi-day ones as bars (School holiday spans 25-27); Vitro keeps the two-row toolbar, draws timed events as bars without their time, and splits the multi-day event per day with '+2 more' on the 26th (2026-11-25, fake HA)"
+ },
+ "tablet/clock-weather-card": {
+  "pixel": 0.1783,
+  "bounds": 106.5,
+  "font": 10,
+  "missingText": 13,
+  "reason": "clock-weather-card 3.1.0 isn't drawn: Vitro renders it as HA's weather-forecast card (condition, 0.4 mm, five day columns), without the big clock, the date or the per-day temperature bars, so the card is ~107 px shorter (2026-11-25, fake HA)"
+ },
+ "tablet/gauge-non-numeric": {
+  "pixel": 0.1353,
+  "bounds": 141.7,
+  "font": 0,
+  "missingText": 1,
+  "reason": "HA replaces the gauge with a one-line warning card ('Entity is non-numeric: sensor.printer_black_ink'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
+ },
+ "tablet/gauge-unavailable": {
+  "pixel": 0.1452,
+  "bounds": 141.7,
+  "font": 0,
+  "missingText": 1,
+  "reason": "HA replaces the gauge with a one-line warning card ('Entity is currently unavailable: ...'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
+ },
+ "tablet/humidifier": {
+  "pixel": 0.1114,
+  "bounds": 20,
+  "font": 0,
+  "missingText": 0,
+  "reason": "HA 2026's humidifier card: a 270-degree arc with the target in blue, 'Humidifying' and the current humidity under the number, and +/- buttons; Vitro draws a smaller arc with 'Currently 41%', and adds a power/mode row ('Normal') HA no longer shows, so the card is ~20 px taller (2026-11-25, fake HA)"
+ },
+ "tablet/logbook-user": {
+  "pixel": 0.007,
+  "bounds": 0,
+  "font": 3,
+  "missingText": 3,
+  "reason": "changes made by people: HA shows each user's initial in a round avatar (A, S) from config/auth/list; Vitro shows the light's icon instead, so the three avatars are missing texts. Times, states and the timeline match (2026-11-25, fake HA)"
+ },
+ "tablet/media-control-playing": {
+  "pixel": 0.0297,
+  "bounds": 0.2,
+  "font": 0,
+  "missingText": 0,
+  "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
+ },
+ "tablet/mini-graph-card": {
+  "pixel": 0.214,
+  "bounds": 47.7,
+  "font": 4.4,
+  "missingText": 1,
+  "reason": "mini-graph-card 0.13.0: HA draws a 2-hour-smoothed line filled to the bottom, the state at 32 px with its unit, no min/max labels; Vitro draws every point (noisy), a smaller state (21.4 at 26 px), min/max labels and a 48 px shorter graph (2026-11-25, fake HA)"
+ },
+ "tablet/mini-media-player": {
+  "pixel": 0.2755,
+  "bounds": 22,
+  "font": 2,
+  "missingText": 0,
+  "reason": "mini-media-player 1.16.12 with cover artwork: HA shows a volume slider with a knob and the progress bar along the bottom; Vitro shows a filled seek bar in the middle and no progress line, the cover art is placed ~70 px off (2026-11-25, fake HA)"
+ },
+ "tablet/modern-circular-gauge": {
+  "pixel": 0.1037,
+  "bounds": 254,
+  "font": 0,
+  "missingText": 2,
+  "reason": "modern-circular-gauge 0.15.0 fills its grid slot (a ~490 px square ring, 47 % at 90 px, the drop icon and the name below); Vitro's view lays it out at its own small size, cut by the card at the right (bounds off by 254 px) (2026-11-25, fake HA)"
+ },
+ "tablet/mushroom-humidifier": {
+  "pixel": 0.1084,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 1,
+  "reason": "Mushroom's humidifier card: HA shows 'On · 41%' and a purple humidity bar without a knob, the icon badge purple; Vitro adds '· Target 45%' and draws a blue slider with a knob (2026-11-25, fake HA)"
+ },
+ "tablet/mushroom-lock": {
+  "pixel": 0.0207,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "Mushroom 5.3's lock card, locked: HA shows one unlock button across the row; Vitro shows two (unlock and open). Name, state and icon match (2026-11-25, fake HA)"
+ },
+ "tablet/mushroom-media-playing": {
+  "pixel": 0.1591,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 2,
+  "reason": "Mushroom's media card while playing with use_media_info: HA shows the title, artist and volume, the controls in one row with a volume button; Vitro drops the info row and draws the controls as three big buttons over a volume slider (2026-11-25, fake HA)"
+ },
+ "tablet/mushroom-person": {
+  "pixel": 0.0657,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "Mushroom's person card with use_entity_picture: HA draws the person's picture in the icon circle with the home badge; Vitro draws the plain account icon (the picture isn't loaded) (2026-11-25, fake HA)"
+ },
+ "tablet/thermostat-heat-cool": {
+  "pixel": 0.0883,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "heat/cool with a range: since #821 Vitro draws both targets (20 and 24 °C, two handles, Idle) as HA does; left: Vitro's arcs are lighter and stop higher, its numbers and 'Idle' are ~20% smaller, and its +/- buttons smaller and lower (2026-11-25, fake HA, after #821/#824)"
+ },
+ "tablet/thermostat-water-heater": {
+  "pixel": 0.0479,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 3,
+  "reason": "water heater on the thermostat card: HA labels the target 'Target' and 'Currently 48 °C' in green; Vitro shows the mode 'Eco' and '48.0 °C' in grey, and its handle and arc in grey (2026-11-25, fake HA)"
+ },
+ "tablet/tile-water-heater": {
+  "pixel": 0.0985,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the tile's water-heater-operation-modes feature isn't drawn in Vitro (eco, electric, performance, off buttons); name and state match, the card is a feature row shorter (2026-11-25, fake HA)"
+ },
+ "tablet/vertical-stack-in-card": {
+  "pixel": 0.0614,
+  "bounds": 23.8,
+  "font": 8,
+  "missingText": 0,
+  "reason": "vertical-stack-in-card 1.1.4: HA's title is a 24 px card header with padding and the rows sit without dividers; Vitro's title is 16 px and it draws dividers between the tiles, so the card is ~24 px shorter (2026-11-25, fake HA)"
+ },
+ "tablet/weather-forecast": {
+  "pixel": 0.0137,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 3,
+  "reason": "HA shows today's high/low ('14.7 °C / 9.1 °C') under the temperature when the forecast holds today; Vitro shows the precipitation ('0.4 mm') there. The rest of the card matches (2026-11-25, fake HA)"
  }
 }

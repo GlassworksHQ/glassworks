@@ -5,15 +5,18 @@
 # What it touches:
 #   - Without --refresh: nothing outside the repo's build output. Runs VitroParityHarnessTest (Robolectric) against
 #     the committed references; needs no device and no Home Assistant. This is what CI runs.
-#   - With --refresh: Home Assistant, through capture.mjs (writes ONLY the `vitro-harness` dashboard; reads states,
-#     themes and config; renders templates), and the corpus's refs/ and assets/ folders, which it rewrites.
-#     Needs the credentials file (VITRO_PARITY_HA, default ~/.t3/glassworks-m1/vitro-parity/ha.json), Node 22+
-#     and Chromium or Google Chrome. Never touches a panel; no adb.
-#   - --local: the same against a local corpus of real dashboards (default
-#     ~/.t3/glassworks-m1/vitro-parity/harness-local), which never enters the repo.
+#   - With --refresh: the corpus's refs/ and assets/ folders, which capture.mjs rewrites. The committed corpus is
+#     captured from the fake Home Assistant (tools/perf/fakeha.py + fakehome.py on 127.0.0.1, fed each case's own
+#     fixture): no real HA, no credentials. Needs python3 with jinja2, Node 22+ and Chromium or Google Chrome; the
+#     first run downloads HA's pinned frontend and the pinned community cards into ~/.cache/glassworks-perf.
+#     Never touches a panel; no adb.
+#   - --local: a local corpus of real dashboards (default ~/.t3/glassworks-m1/vitro-parity/harness-local), which never
+#     enters the repo, captured from the real Home Assistant in the credentials file (VITRO_PARITY_HA, default
+#     ~/.t3/glassworks-m1/vitro-parity/ha.json): writes ONLY its `vitro-harness` dashboard; reads states, themes and
+#     config; renders templates.
 #
 #   tools/vitro-parity/run.sh                          compare with the committed references (CI-safe)
-#   tools/vitro-parity/run.sh --refresh                capture new references from HA, then compare
+#   tools/vitro-parity/run.sh --refresh                capture new references from the fake HA, then compare
 #   tools/vitro-parity/run.sh --local [--refresh]      the local corpus of real dashboards
 #   options: --frames s1,tablet  --cases tile-light,clock  --update-baseline  --out <dir>
 #
@@ -72,7 +75,7 @@ harness() {
 
 if [ "$refresh" = 1 ]; then
   [ -d "$HERE/node_modules/playwright-core" ] || (cd "$HERE" && npm ci --no-audit --no-fund)
-  echo "== 1/4 save the vitro-harness dashboard (and a local corpus's dashboard configs)"
+  echo "== 1/4 save the vitro-harness dashboard (real HA only: the fake serves it from the corpus)"
   node "$HERE/capture.mjs" prepare ${node_args[@]+"${node_args[@]}"}
   echo "== 2/4 Vitro: which templates do the cases ask Home Assistant for"
   harness -PvitroParityCollect=true -q
