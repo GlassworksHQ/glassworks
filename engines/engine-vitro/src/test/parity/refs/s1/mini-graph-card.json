@@ -7,7 +7,8 @@
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
@@ -45,7 +46,7 @@
   {
    "slot": 0,
    "clipped": false,
-   "text": "19.72",
+   "text": "21.42",
    "x": 17,
    "y": 57.3,
    "w": 82.48,
@@ -71,15 +72,15 @@
  ],
  "states": {
   "sensor.living_room_temperature": {
-   "s": "19.72",
+   "s": "21.42",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
     "friendly_name": "Living Room Sensor Temperature"
    },
-   "lc": 1794499200,
-   "lu": 1794499200
+   "lc": 1794499320,
+   "lu": 1794499320
   }
  },
  "templates": {},
@@ -145,7 +146,7 @@
     [
      {
       "entity_id": "sensor.living_room_temperature",
-      "state": "20.15",
+      "state": "20.13",
       "attributes": {},
       "last_changed": "2026-11-11T16:08:00+00:00",
       "last_updated": "2026-11-11T16:08:00+00:00"
@@ -709,6 +710,10 @@
      {
       "state": "19.72",
       "last_changed": "2026-11-12T16:00:00+00:00"
+     },
+     {
+      "state": "21.42",
+      "last_changed": "2026-11-12T16:02:00+00:00"
      }
     ]
    ]

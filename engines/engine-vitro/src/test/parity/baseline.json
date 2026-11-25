@@ -70,15 +70,22 @@
   "missingText": 1,
   "reason": "HA replaces the gauge with a one-line warning card ('Entity is currently unavailable: ...'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
  },
+ "mirror/history-graph-legend-expanded": {
+  "pixel": 0.0202,
+  "bounds": 0.2,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the expanded six-entry legend at 1.5x: rows, chips, Less button and the chart match; the legend's '▸' separators are a glyph smaller in Vitro and the dense lines' antialiasing differs, 2.02% against the 2.0% slack (s1 and tablet match) (2026-11-25, fake HA, after #821/#824)"
+ },
  "mirror/history-graph-rows": {
-  "pixel": 0.0216,
+  "pixel": 0.0214,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
  },
  "mirror/history-graph-two": {
-  "pixel": 0.0217,
+  "pixel": 0.021,
   "bounds": 0.2,
   "font": 0,
   "missingText": 0,
@@ -94,7 +101,7 @@
  "mirror/logbook-user": {
   "pixel": 0.0071,
   "bounds": 0,
-  "font": 0,
+  "font": 3,
   "missingText": 3,
   "reason": "changes made by people: HA shows each user's initial in a round avatar (A, S) from config/auth/list; Vitro shows the light's icon instead, so the three avatars are missing texts. Times, states and the timeline match (2026-11-25, fake HA)"
  },
@@ -120,14 +127,14 @@
   "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
  },
  "mirror/mini-graph-card": {
-  "pixel": 0.2173,
+  "pixel": 0.2192,
   "bounds": 48.2,
   "font": 4.4,
   "missingText": 1,
   "reason": "mini-graph-card 0.13.0: HA draws a 2-hour-smoothed line filled to the bottom, the state at 32 px with its unit, no min/max labels; Vitro draws every point (noisy), a smaller state (21.4 at 26 px), min/max labels and a 48 px shorter graph (2026-11-25, fake HA)"
  },
  "mirror/mini-media-player": {
-  "pixel": 0.2561,
+  "pixel": 0.2523,
   "bounds": 72,
   "font": 2,
   "missingText": 0,
@@ -169,11 +176,11 @@
   "reason": "Mushroom's person card with use_entity_picture: HA draws the person's picture in the icon circle with the home badge; Vitro draws the plain account icon (the picture isn't loaded) (2026-11-25, fake HA)"
  },
  "mirror/thermostat-heat-cool": {
-  "pixel": 0.0983,
+  "pixel": 0.0892,
   "bounds": 0,
   "font": 0,
-  "missingText": 5,
-  "reason": "heat_cool with a range: HA draws two targets (20 and 24 °C, orange and blue arcs, two handles, Idle); Vitro draws one yellow arc labelled 'Heat/Cool' without the low and high targets or their +/- buttons (2026-11-25, fake HA)"
+  "missingText": 0,
+  "reason": "heat/cool with a range: since #821 Vitro draws both targets (20 and 24 °C, two handles, Idle) as HA does; left: Vitro's arcs are lighter and stop higher, its numbers and 'Idle' are ~20% smaller, and its +/- buttons smaller and lower (2026-11-25, fake HA, after #821/#824)"
  },
  "mirror/thermostat-water-heater": {
   "pixel": 0.0485,
@@ -281,14 +288,14 @@
   "reason": "HA replaces the gauge with a one-line warning card ('Entity is currently unavailable: ...'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
  },
  "s1/history-graph-rows": {
-  "pixel": 0.0217,
+  "pixel": 0.0208,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
  },
  "s1/history-graph-two": {
-  "pixel": 0.0217,
+  "pixel": 0.0203,
   "bounds": 0.2,
   "font": 0,
   "missingText": 0,
@@ -311,7 +318,7 @@
  "s1/logbook-user": {
   "pixel": 0.0071,
   "bounds": 0,
-  "font": 0,
+  "font": 3,
   "missingText": 3,
   "reason": "changes made by people: HA shows each user's initial in a round avatar (A, S) from config/auth/list; Vitro shows the light's icon instead, so the three avatars are missing texts. Times, states and the timeline match (2026-11-25, fake HA)"
  },
@@ -337,14 +344,14 @@
   "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
  },
  "s1/mini-graph-card": {
-  "pixel": 0.2173,
+  "pixel": 0.2192,
   "bounds": 48.2,
   "font": 4.4,
   "missingText": 1,
   "reason": "mini-graph-card 0.13.0: HA draws a 2-hour-smoothed line filled to the bottom, the state at 32 px with its unit, no min/max labels; Vitro draws every point (noisy), a smaller state (21.4 at 26 px), min/max labels and a 48 px shorter graph (2026-11-25, fake HA)"
  },
  "s1/mini-media-player": {
-  "pixel": 0.2561,
+  "pixel": 0.2523,
   "bounds": 72,
   "font": 2,
   "missingText": 0,
@@ -386,11 +393,11 @@
   "reason": "Mushroom's person card with use_entity_picture: HA draws the person's picture in the icon circle with the home badge; Vitro draws the plain account icon (the picture isn't loaded) (2026-11-25, fake HA)"
  },
  "s1/thermostat-heat-cool": {
-  "pixel": 0.0983,
+  "pixel": 0.0892,
   "bounds": 0,
   "font": 0,
-  "missingText": 5,
-  "reason": "heat_cool with a range: HA draws two targets (20 and 24 °C, orange and blue arcs, two handles, Idle); Vitro draws one yellow arc labelled 'Heat/Cool' without the low and high targets or their +/- buttons (2026-11-25, fake HA)"
+  "missingText": 0,
+  "reason": "heat/cool with a range: since #821 Vitro draws both targets (20 and 24 °C, two handles, Idle) as HA does; left: Vitro's arcs are lighter and stop higher, its numbers and 'Idle' are ~20% smaller, and its +/- buttons smaller and lower (2026-11-25, fake HA, after #821/#824)"
  },
  "s1/thermostat-water-heater": {
   "pixel": 0.0485,
@@ -470,7 +477,7 @@
   "reason": "the tall month grid: HA puts the toolbar on one row (Today, arrows, title, view buttons) and draws timed events as a dot, time and title, all-day and multi-day ones as bars (School holiday spans 25-27); Vitro keeps the two-row toolbar, draws timed events as bars without their time, and splits the multi-day event per day with '+2 more' on the 26th (2026-11-25, fake HA)"
  },
  "tablet/clock-weather-card": {
-  "pixel": 0.1779,
+  "pixel": 0.1783,
   "bounds": 106.5,
   "font": 10,
   "missingText": 13,
@@ -500,7 +507,7 @@
  "tablet/logbook-user": {
   "pixel": 0.007,
   "bounds": 0,
-  "font": 0,
+  "font": 3,
   "missingText": 3,
   "reason": "changes made by people: HA shows each user's initial in a round avatar (A, S) from config/auth/list; Vitro shows the light's icon instead, so the three avatars are missing texts. Times, states and the timeline match (2026-11-25, fake HA)"
  },
@@ -512,7 +519,7 @@
   "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
  },
  "tablet/mini-graph-card": {
-  "pixel": 0.213,
+  "pixel": 0.214,
   "bounds": 47.7,
   "font": 4.4,
   "missingText": 1,
@@ -561,11 +568,11 @@
   "reason": "Mushroom's person card with use_entity_picture: HA draws the person's picture in the icon circle with the home badge; Vitro draws the plain account icon (the picture isn't loaded) (2026-11-25, fake HA)"
  },
  "tablet/thermostat-heat-cool": {
-  "pixel": 0.0963,
+  "pixel": 0.0883,
   "bounds": 0,
   "font": 0,
-  "missingText": 5,
-  "reason": "heat_cool with a range: HA draws two targets (20 and 24 °C, orange and blue arcs, two handles, Idle); Vitro draws one yellow arc labelled 'Heat/Cool' without the low and high targets or their +/- buttons (2026-11-25, fake HA)"
+  "missingText": 0,
+  "reason": "heat/cool with a range: since #821 Vitro draws both targets (20 and 24 °C, two handles, Idle) as HA does; left: Vitro's arcs are lighter and stop higher, its numbers and 'Idle' are ~20% smaller, and its +/- buttons smaller and lower (2026-11-25, fake HA, after #821/#824)"
  },
  "tablet/thermostat-water-heater": {
   "pixel": 0.0479,

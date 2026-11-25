@@ -7,13 +7,14 @@
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
   "y": 16,
   "width": 516,
-  "height": 384
+  "height": 408
  },
  "docSize": {
   "width": 960,
@@ -24,7 +25,7 @@
    "x": 230,
    "y": 24,
    "w": 500,
-   "h": 367.8,
+   "h": 391.8,
    "type": "hui-history-graph-card"
   }
  ],
@@ -46,8 +47,8 @@
    "slot": 0,
    "clipped": false,
    "text": "Heat pump current temperature",
-   "x": 155.8,
-   "y": 307.59,
+   "x": 166.23,
+   "y": 315.59,
    "w": 167.77,
    "h": 14,
    "size": 12,
@@ -58,10 +59,10 @@
   {
    "slot": 0,
    "clipped": false,
-   "text": "17.5 °C",
-   "x": 327.56,
-   "y": 307.8,
-   "w": 38.64,
+   "text": "18 °C",
+   "x": 338,
+   "y": 315.8,
+   "w": 28.75,
    "h": 14,
    "size": 12,
    "weight": 400,
@@ -72,8 +73,8 @@
    "slot": 0,
    "clipped": false,
    "text": "Heat pump target temperature",
-   "x": 153.52,
-   "y": 339.59,
+   "x": 159.02,
+   "y": 355.59,
    "w": 161.36,
    "h": 14,
    "size": 12,
@@ -85,8 +86,8 @@
    "slot": 0,
    "clipped": false,
    "text": "Unknown",
-   "x": 318.88,
-   "y": 339.8,
+   "x": 324.38,
+   "y": 355.8,
    "w": 49.59,
    "h": 14,
    "size": 12,
@@ -116,7 +117,7 @@
      "high",
      "auto"
     ],
-    "current_temperature": 17.5,
+    "current_temperature": 18,
     "temperature": null,
     "target_temp_high": null,
     "target_temp_low": null,
@@ -126,7 +127,7 @@
     "supported_features": 395
    },
    "lc": 1794485280,
-   "lu": 1794499680
+   "lu": 1794485280
   }
  },
  "templates": {},

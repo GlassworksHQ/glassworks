@@ -93,7 +93,7 @@ I'd love to hear from you as people start running 1.0 on real walls:
 
 I want the community to shape what comes next. I'd love to collaborate with hardware makers and maintainers who already have custom device images but don't have a great Home Assistant panel app to run on them—and I'm happy to host community images right in Kiln so people can install whatever they want cleanly from the browser.
 
-Join us on [Discord](https://discord.gg/BTn9NstFM), drop ideas in [GitHub Discussions](https://github.com/GlassworksHQ/glassworks/discussions), or open a [feature request](https://github.com/GlassworksHQ/glassworks/issues/new?template=feature.yml).
+Join us on [Discord](https://discord.gg/hHpf77fBMj), drop ideas in [GitHub Discussions](https://github.com/GlassworksHQ/glassworks/discussions), or open a [feature request](https://github.com/GlassworksHQ/glassworks/issues/new?template=feature.yml).
 
 And if you enjoy cracking open hardware and want to bring up a new device, come build a frame with us. The core app, panes, Kiln engine, and research templates are already there—check out [how frames work](../../../frames/README.md) and [CONTRIBUTING.md](../../../CONTRIBUTING.md) to get started. Or if you want to take Glassworks and build your own custom hardware or product around it, go for it—I'd love to see what you build.
 

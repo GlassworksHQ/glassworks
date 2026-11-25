@@ -53,6 +53,13 @@ data class EngineSettings(
      * settings it can't change in this process, so a new dashboard address needs a process restart.
      */
     val dashboard: String? = null,
+    /**
+     * The app's own loopback server (`http://127.0.0.1:<port>`, Vitro's island server), or null. An engine that holds
+     * pages to the dashboard's origin also lets pages of exactly this origin load, each page held to its own origin:
+     * Home Assistant's pages fetch only from Home Assistant, the server's only from the server. Set once, like
+     * [dashboard].
+     */
+    val localOrigin: String? = null,
 )
 
 /** A page in one activity. Call it on the main thread. */
@@ -65,7 +72,16 @@ interface Page {
     /** Goes back one page, if the page has history. */
     fun goBack()
 
-    /** Replaces the page with a new, empty one in the same view, after [PageHost.onContentGone]. */
+    /**
+     * True when [goBack] has a page of the page's own history to go back to. False when the engine can't tell: a page
+     * that wraps this one (Vitro's fallback) then takes Back for itself.
+     */
+    val canGoBack: Boolean get() = false
+
+    /**
+     * Replaces the page with a new, empty one in the same view, with no history: after [PageHost.onContentGone], or
+     * when a page that wraps this one starts it over.
+     */
     fun restart()
 
     /** Sends [message] to every connected [PagePort]. A port that fails is skipped. */

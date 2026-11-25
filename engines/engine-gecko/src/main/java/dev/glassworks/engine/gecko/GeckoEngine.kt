@@ -66,7 +66,7 @@ class GeckoEngine(
         val app = context.applicationContext
         val s = settings(app)
         started = s
-        guard?.start(s.dashboard)
+        guard?.start(s.dashboard, s.localOrigin)
         val config = writeConfig(app, s)
         val rs = GeckoRuntimeSettings.Builder()
             .configFilePath(config.absolutePath)
@@ -149,7 +149,8 @@ class GeckoEngine(
         override val view = GeckoView(activity)
         private val main = Handler(Looper.getMainLooper())
         private var session: GeckoSession? = null
-        private var canGoBack = false
+        override var canGoBack = false
+            private set
         private val ports = mutableSetOf<Port>()
 
         fun start() {
@@ -170,6 +171,12 @@ class GeckoEngine(
             helper(activity).accept({ ext ->
                 if (ext != null) s.webExtensionController.setMessageDelegate(ext, messageDelegate, extension.nativeApp)
             }, { e -> Log.e(logTag, "helper extension failed", e) })
+            // A new session starts out active (shown). GeckoView makes it active when the view has a surface
+            // (setSession, and each new surface) and inactive when the surface goes, but setSession without a
+            // surface leaves it as it is. So a session opened while the app is in the background (the content
+            // process was killed there and restart() runs) would stay "shown" until the app comes back: the page
+            // keeps drawing for nobody, and Home Assistant never sees it hidden. Start it hidden; a surface shows it.
+            s.setActive(false)
             view.setSession(s)
             view.coverUntilFirstPaint(background)
             session = s
@@ -182,6 +189,7 @@ class GeckoEngine(
             }
             session = null
             shown = null // the new session is empty until it reports a location
+            canGoBack = false // and has no history
             start()
         }
 

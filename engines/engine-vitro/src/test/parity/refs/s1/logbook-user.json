@@ -7,7 +7,8 @@
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
@@ -260,48 +261,6 @@
   }
  },
  "ws": [
-  {
-   "request": {
-    "type": "config/auth/list"
-   },
-   "events": [],
-   "result": [
-    {
-     "id": "parity-user",
-     "name": "Sam",
-     "is_owner": true,
-     "is_admin": true,
-     "credentials": [
-      {
-       "auth_provider_type": "homeassistant",
-       "auth_provider_id": null
-      }
-     ],
-     "mfa_modules": [],
-     "system_generated": false,
-     "group_ids": [
-      "system-admin"
-     ],
-     "username": "parity",
-     "is_active": true,
-     "local_only": false
-    },
-    {
-     "is_owner": false,
-     "is_admin": false,
-     "system_generated": false,
-     "group_ids": [
-      "system-users"
-     ],
-     "credentials": [],
-     "username": null,
-     "is_active": true,
-     "local_only": false,
-     "id": "user-alex",
-     "name": "Alex"
-    }
-   ]
-  },
   {
    "request": {
     "type": "logbook/event_stream",

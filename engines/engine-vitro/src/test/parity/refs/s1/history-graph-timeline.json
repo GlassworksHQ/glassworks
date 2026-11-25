@@ -7,7 +7,8 @@
  "viewport": {
   "width": 960,
   "height": 480,
-  "density": 1.5
+  "density": 1.5,
+  "touch": true
  },
  "clip": {
   "x": 222,
@@ -35,8 +36,8 @@
    "a": {
     "friendly_name": "Office Occupancy"
    },
-   "lc": 1794497280,
-   "lu": 1794497280
+   "lc": 1794497760,
+   "lu": 1794497760
   }
  },
  "templates": {},

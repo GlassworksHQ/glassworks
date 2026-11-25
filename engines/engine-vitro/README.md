@@ -62,11 +62,25 @@ Vitro moves the Home Assistant data plane out of the browser into Kotlin (`HaDas
 |---|---|---|
 | **Tier 1: Native core** | Layouts (`sections`, `masonry`, `panel`, `grid`, stacks, `visibility`) and 31 built-in Home Assistant cards, from `tile`, `entities`, `glance` and `button` to `thermostat`, `humidifier`, `calendar`, `logbook`, `picture-elements`, `history-graph` and `media-control` | Native Android views and Canvas drawing: no JavaScript and no browser process |
 | **Tier 2: Native HACS fast-paths** | 26 popular HACS cards: the whole Mushroom suite (entity, light, fan, cover, climate, person, template, title, chips, media player, lock, alarm, vacuum, humidifier, number and select), Bubble Card with its sub-buttons, mini-graph-card, mini-media-player, clock-weather-card, modern-circular-gauge, bar-card, auto-entities, and the seamless stack-in-card, vertical-stack-in-card and layout-card containers | Native Kotlin renderers, with Home Assistant `render_template` subscriptions for Jinja2 templates |
-| **Tier 3: Micro-Islands** | Any other `custom:*` card, and any custom card that uses something Vitro can't draw faithfully (see [What Vitro draws natively](#what-vitro-draws-natively)), including full-screen `type: panel` cards and wrapper cards that build their inner cards with `loadCardHelpers` | A small inline Lovelace shim (`hass.callWS`, `hass.callService`, `hass.callApi`, `hass.localize`, `hass.formatEntityState`, `hass.config`, `<ha-icon>`, and a `hass` proxy that tracks which entities a card reads) with the resolved theme variables, in GeckoView only |
+| **Tier 3: Micro-Islands** | Any other `custom:*` card, and any custom card that uses something Vitro can't draw faithfully (see [What Vitro draws natively](#what-vitro-draws-natively)), including full-screen `type: panel` cards and wrapper cards that build their inner cards with `loadCardHelpers` | A small inline Lovelace shim (`hass.callWS`, `hass.callService`, `hass.callApi`, `hass.localize`, `hass.formatEntityState`, `hass.config`, `<ha-icon>`, HA's entity, device, area and floor registries, and a `hass.states` proxy that tracks which entities a card reads) with the resolved theme variables, in GeckoView only |
+
+An island's `hass` has what HA's frontend gives a card, but it only costs what the card reads. The registries (`hass.entities`, `hass.devices`, `hass.areas`, `hass.floors`) are fetched when a card first reads one. Every island shares that one feed, which follows HA's registry updates and stops when the last island goes. A card that walks `hass.states` (`Object.values`, `for…in`), as a to-do summary or an auto-entities-style filter does, makes its view follow every entity. A card that only looks entities up by id keeps the view's own short list. An island also sees a header height of 0, as HA's kiosk view does with its header hidden, so a panel card sized to `calc(100vh - var(--header-height))` fills the screen.
 
 Tier 3 never uses `android.webkit.WebView`. Each island is served from `VitroIslandServer`, a tiny HTTP server bound to IPv4 loopback (`127.0.0.1`), and loaded into GeckoView, so the Android system WebView, which is missing or too old on some of these panels, is not a dependency. A dashboard that stays in Tier 1 and Tier 2 never starts GeckoView at all.
 
-Non-dashboard pages, such as `/auth/authorize` for panel sign-in or the Blueprint import dialog, are handed to the wrapped fallback `Engine`.
+Non-dashboard pages, such as `/auth/authorize` for panel sign-in, history, settings or the Blueprint import dialog, are handed to the wrapped fallback `Engine`, which loads them from Home Assistant itself. Their WebSocket and sign-in work as they do with Vitro off.
+
+The way back from such a page always leads to the native dashboard:
+
+| On a Home Assistant page | What happens |
+|---|---|
+| Back | Goes back within that page first, for example from `/config/energy` to `/energy`. After that, it returns to the dashboard view you came from |
+| Reload dashboard (the panel menu, the Manage page or Home Assistant's button) | Returns to the dashboard view the panel last showed, or to the dashboard it's set to |
+| A tap in Home Assistant's sidebar or a link to a dashboard | Vitro draws that dashboard natively. A dashboard with no saved config stays in Home Assistant's own frontend, which is the one that draws it |
+
+Each page Vitro opens this way starts with no history of its own, and Home Assistant's frontend stops once the panel is back on the native view. While a page is open, the dashboard's islands stay hidden behind it.
+
+The island server only serves islands. Its proxy forwards what a card loads (`/api/`, `/local/`, `/hacsfiles/`, Home Assistant's static files and media, and the folders of the dashboard's own Lovelace resources), and only to a page that holds the cookie its island page sets, so other apps on the device can't use it. On the legacy engine, which loads only the dashboard's origin, the island server's loopback address is the one other origin it allows, and each page stays on its own origin: Home Assistant's pages never reach the island server, and islands never reach Home Assistant except through it.
 
 ## More-Info dialogs
 
@@ -75,7 +89,7 @@ Tapping or holding a tile opens a native More-Info dialog styled after Home Assi
 | Entity | Dialog |
 |---|---|
 | Light | Brightness dimmer, an HSV color wheel, a Kelvin color-temperature picker, and color swatches |
-| Climate | A circular thermostat dial with mode buttons |
+| Climate | A circular thermostat dial with mode buttons, and two thumbs for a heat/cool range |
 | Cover | A top-down position slider |
 | Sensor | A 24-hour stepped history graph |
 | Camera | A live stream |
@@ -83,6 +97,28 @@ Tapping or holding a tile opens a native More-Info dialog styled after Home Assi
 | Alarm panel | A PIN pad |
 
 Tiles can also carry the inline features Home Assistant adds under the card: `climate-hvac-modes`, `target-temperature`, `fan-speed`, `cover-position`, `light-color-temp`, `media-player-volume-slider`, `toggle`, `media-player-playback`, `light-color-favorites`, `numeric-input` and `vacuum-commands`, next to the brightness, select and open/close controls.
+
+A thermostat in `heat_cool` or `auto` with a low and a high target shows both, as Home Assistant does: on the
+thermostat card and in More-Info, the dial gets two thumbs, and the − and + move whichever target you pick in the
+middle of the dial. As in Home Assistant, that takes an entity that supports a target range (its
+`TARGET_TEMPERATURE_RANGE` feature) and reports no single `temperature`; one that reports a single target too gets the
+single control. The tile's `target-temperature` feature and Mushroom's climate card show a pair of steppers
+instead. The low target can't go above the high one.
+
+## Accessibility
+
+Vitro's controls work with TalkBack and with a keyboard or D-pad, the way Home Assistant's page works with a screen
+reader:
+
+- Controls are named after what they act on, and have the role Home Assistant gives them: a button, a switch (entity
+  toggles), a check box (to-do items), a choice (HVAC modes, the tile's toggle), or a pressed button (the light's
+  modes, the calendar's views).
+- The thermostat dial and More-Info's brightness, speed, color temperature and position sliders read their value, and
+  TalkBack's swipe up and down change it.
+- With a keyboard or D-pad, Tab and the arrows move between controls and Enter presses them. On those dials and
+  sliders, the left and right arrows change the value instead (page keys by a tenth, Home and End to the ends), and
+  Enter switches between the two ends of a heat/cool range. Back or Escape closes More-Info, and focus stays in it
+  while it's open.
 
 ## Themes
 
@@ -131,7 +167,7 @@ Vitro follows Home Assistant's own rules, so a dashboard never looks right only 
 | HTML tables | `<table role="presentation">` rows and proportional bars: `<td width="N%" align valign>`, `border-spacing`, `table-layout: fixed`, cell backgrounds, and a rounded `overflow: hidden` table. |
 | Images | `<img width height>`, block images (`display: block`, `width: 100%`), and `data:image/svg+xml` images built with Jinja, drawn natively from a small SVG subset. |
 | Sections | HA's grid: the `--ha-view-sections-*` gaps and column widths, 12 columns per section with `--ha-section-grid-*` gaps, and each card's `grid_options` (or the size its type reports, such as a large clock's 6 x 2). Hidden cards and sections leave no gap. |
-| Graphs | The sensor card, the history graph and the statistics graph ask Home Assistant for the same history and statistics its frontend does and draw them its way: the sensor card's hourly averages as a smooth line along the bottom, and full charts for the other two, with time and value axes, gridlines, a legend, timeline bars for entities without a unit, and the statistics' min-to-max band. A thermostat, water heater or humidifier draws its current and target temperature or humidity, shaded while it heats, cools, dries or humidifies. In a fixed `grid_options.rows` slot the chart shrinks so the chart and its legend fill it, as in HA. A long statistics window (`period: 5minute` over weeks) is thinned out the way HA's chart thins it, off the main thread, keeping its gaps and the band's edges. The paths are built when the data or the size changes, never while drawing. |
+| Graphs | The sensor card, the history graph and the statistics graph ask Home Assistant for the same history and statistics its frontend does and draw them its way: the sensor card's hourly averages as a smooth line along the bottom, and full charts for the other two, with time and value axes, gridlines, a legend, timeline bars for entities without a unit, and the statistics' min-to-max band. A thermostat, water heater or humidifier draws its current and target temperature or humidity, shaded while it heats, cools, dries or humidifies. A legend longer than two rows ends in HA's "More" chip, which expands it (or starts expanded with `expand_legend`). On a touch screen the legend has the taller rows HA gives a finger; on a panel without one, such as the Mirror, it keeps the compact ones. In a fixed `grid_options.rows` slot the chart shrinks so the chart and its legend fill it, as in HA. A long statistics window (`period: 5minute` over weeks) is thinned out the way HA's chart thins it, off the main thread, keeping its gaps and the band's edges. The paths are built when the data or the size changes, never while drawing. |
 | Cards | The clock reads `clock_size`, `time_format`, `time_zone`, `no_background` and the `--ha-clock-card-digital-font-size-*` variables. Mushroom chips honor `conditional` chips and ignore a chip's own `visibility` and `card_mod`, like Mushroom does. stack-in-card follows version 0.2.0. A card's `margin` insets it in its slot. |
 
 ## What Vitro draws natively

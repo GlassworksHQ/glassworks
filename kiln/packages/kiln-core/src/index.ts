@@ -2,7 +2,7 @@ export { Assets, STALL_MS, type AssetEntry, type Manifest } from './assets';
 export { webUsbDevices } from './devices';
 export { MAX_RETRY_AFTER_MS, REFRACT, downloadWhole, releaseFileUrl, resumableBody, retryAfterMs, type ResumeOptions } from './download';
 export {
-  BackupStore, backupFile, backupId, backupZip, readBackupZip, sha256sums, toHex, type BackupFile, type BackupMeta,
+  BackupStore, backupFile, backupId, backupZip, namedBackupZip, readBackupZip, sha256sums, toHex, type BackupFile, type BackupMeta, type NamedPart,
 } from './backup';
 export {
   BackupRefused, InstallFlow, checkRestorable, fmtSize, restoreFromBackup,
@@ -10,18 +10,23 @@ export {
 } from './flow';
 export type { BackupPlan, FlashStep, PatchContext, Recipe, SetUpContext, StepCredits } from './recipe';
 export {
-  SAFETY_STEPS, STEP_LIBRARY, adbKeyStep, assertImages, imageFromLink, plan, sourceFile, systemKeyStep, validateImage, wifiStep, writtenAsIs,
-  type FrameAccess, type ImageFile, type ImageLink, type ImageRecipe, type ImageStep, type PlannedStep, type SafetyStep, type StepKind,
+  BUNDLE_CHANNELS, SAFETY_STEPS, STEP_LIBRARY, adbKeyStep, assertImages, imageFromLink, plan, sourceFile, systemKeyStep, validateImage, wifiStep, writtenAsIs,
+  type FrameAccess, type ImageFile, type ImageLink, type ImageRecipe, type ImageStep, type PlannedStep, type RestorePoint, type SafetyStep, type StepKind,
 } from './images';
+export { checkInPlace, mergeRanges, parseSparseWriteRanges, parseSparseWrites, type ByteRange, type InPlaceCheckInput, type SparseWrites } from './inplace';
+export {
+  IdbBundleCache, hmacSha256Hex, memoryBundleCache, parseGwsbBundle, sha256Hex, verifyGwsbBundle,
+  type BundleCache, type BundleChannel, type BundleChannelKind, type ParsedGwsbBundle, type VerifyGwsbOptions,
+} from './bundle';
 export {
   frameWords,
   type AppPhase, type AppResult, type AppSettings, type AskCopy, type DemoFrame, type FrameCode, type FrameSim, type FrameWords, type KilnFrame, type SilentWords,
 } from './frame';
 export type { Mm, RecoveryData, Rect, Screw, Shown } from './recovery';
 export {
-  DEVICE_WORDS, ProxyError, WrongImage, cap, pickInList, deviceWords,
+  DEVICE_WORDS, IN_PLACE_WORDS, ProxyError, WrongImage, cap, pickInList, deviceWords, inPlaceWords,
   type AppOverAdb, type AppVersion, type DeviceCheck, type DeviceEntry, type DeviceFrame, type KilnEntry, type DevicePhase, type DeviceReport, type DeviceSim, type DeviceWord,
-  type FastbootLike, type FastbootReport, type FirstStart, type HomeCheck, type ImageMaker, type ImageOverFastboot, type Installed, type PrepareStep, type Removed,
+  type FastbootLike, type FastbootReport, type FirstStart, type HomeCheck, type ImageMaker, type InPlaceCode, type InPlaceWord, type ImageOverFastboot, type Installed, type PrepareStep, type Removed,
 } from './device';
 export {
   OwnFrameRefused, Refused,

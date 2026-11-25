@@ -76,6 +76,20 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
         setOnClickListener { entityId?.let(ctx.openMoreInfo) }
     }
 
+    /**
+     * For TalkBack: a button that opens the entity's More Info, named after its history ("Kitchen temperature
+     * history") unless the graph shows a message instead. The name stays in the node, not in `contentDescription`,
+     * which holds only the texts the graph draws.
+     */
+    override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        info.className = "android.widget.Button"
+        if (contentDescription.isNullOrBlank()) {
+            val name = entityId?.let { ctx.store[it]?.displayName ?: it }
+            if (name != null) info.contentDescription = "$name history"
+        }
+    }
+
     /** CSS px: the footer's height is a fifth of its width (`hui-graph-base`'s `width / 5`). */
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
