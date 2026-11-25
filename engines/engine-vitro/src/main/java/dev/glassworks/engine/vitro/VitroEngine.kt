@@ -173,7 +173,10 @@ class VitroEngine(
             }
         }
 
-        /** The last native dashboard view the page showed: where Back and Reload dashboard return from the fallback. */
+        /**
+         * The last native dashboard view the page showed, set once its config is on screen (a dashboard HA has no
+         * config for never is): where Back and Reload dashboard return from the fallback.
+         */
         private var lastNativeUrl: String? = null
 
         /** Dashboards (origin and path) whose config Home Assistant didn't have: its frontend draws them, not Vitro. */
@@ -194,12 +197,16 @@ class VitroEngine(
             if (!LovelaceParser.isDashboardUrl(url)) return false
             val query = runCatching { java.net.URI(url).rawQuery }.getOrNull().orEmpty()
             if ("auth_callback" in query || "edit=" in query) return false
-            return (origin to LovelaceParser.parseRoute(url).first) !in webDashboards
+            return !isWebDashboard(url)
         }
+
+        /** True when [url] is a dashboard HA had no config for: its frontend draws it, so it's no way back to Vitro. */
+        private fun isWebDashboard(url: String): Boolean =
+            (OAuth.origin(url) to LovelaceParser.parseRoute(url).first) in webDashboards
 
         /** The dashboard the panel is set to, when it's one Vitro draws. */
         private fun configuredDashboard(): String? =
-            settings(activity.applicationContext).dashboard?.takeIf(LovelaceParser::isDashboardUrl)
+            settings(activity.applicationContext).dashboard?.takeIf { LovelaceParser.isDashboardUrl(it) && !isWebDashboard(it) }
         private var currentUrl: String? = null
         @Volatile var currentOrigin: String? = null
         private var currentDashboardPath: String? = null
@@ -431,7 +438,6 @@ class VitroEngine(
                 return
             }
             nativeActive = true
-            lastNativeUrl = url
             val (dashPath, viewPath) = LovelaceParser.parseRoute(url)
             pendingViewPath = viewPath
             host.onPageStart(url)
@@ -442,6 +448,7 @@ class VitroEngine(
             if (origin == currentOrigin && displayedDashboard == (origin to dashPath) && vitroView.dashboard != null && client != null) {
                 // Back to the dashboard on screen: a request for another one still on its way no longer owns the page.
                 currentDashboardPath = dashPath
+                lastNativeUrl = url // its config is on screen already
                 client?.claimDashboard(dashPath)
                 vitroView.navigateToView(viewPath)
                 readyWhenBuilt("view")
@@ -555,7 +562,7 @@ class VitroEngine(
         }
 
         /** The native dashboard a fallback page returns to with no history to go back through. */
-        private fun returnTarget(): String? = lastNativeUrl ?: configuredDashboard()
+        private fun returnTarget(): String? = lastNativeUrl?.takeUnless(::isWebDashboard) ?: configuredDashboard()
 
         /** Loads the previous entry of the page's history; false when there is none. */
         private fun backInHistory(): Boolean {
@@ -791,6 +798,8 @@ class VitroEngine(
                     // An older request's answer for a dashboard the page has left must not replace the current one.
                     if (urlPath != currentDashboardPath) return@post
                     displayedDashboard = currentOrigin to urlPath
+                    // Shown natively: a return target now (onViewSelected then narrows it to the view on screen).
+                    currentUrl?.let { lastNativeUrl = it }
                     // A new config builds new islands; they ask again for what they read.
                     runtimeEntities.clear()
                     vitroView.setConnectionBanner(null)

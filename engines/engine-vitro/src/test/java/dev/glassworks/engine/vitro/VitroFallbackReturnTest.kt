@@ -226,6 +226,46 @@ class VitroFallbackReturnTest {
         assertEquals(0, fp.reloads)
     }
 
+    @Test fun aDashboardHomeAssistantHasNoConfigForIsNoReturnTarget() {
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        page.load("$base/missing")
+        awaitMain("fallback") { fb.opens.isNotEmpty() }
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+
+        // Reload goes to the dashboard last on screen, not to the one HA's frontend draws.
+        page.reload()
+        idle()
+        assertNative(page, fp)
+        assertEquals(living, host.locations.last())
+        assertEquals(listOf("$base/missing"), fp.loads.toList())
+    }
+
+    @Test fun startedOnADashboardWithNoConfigBackGoesToTheDashboardThePanelIsSetTo() {
+        val fb = RecordingEngine()
+        val page = page(engine(fb))
+        page.load("$base/missing")
+        awaitMain("fallback") { fb.opens.isNotEmpty() }
+        val fp = fb.fallbackPage()
+        page.goBack()
+        awaitMain("native") { host.messages("ready").isNotEmpty() }
+        assertNative(page, fp)
+        assertEquals(living, host.locations.last())
+    }
+
+    @Test fun setToADashboardWithNoConfigReloadReloadsHomeAssistantsPage() {
+        val fb = RecordingEngine()
+        val page = page(engine(fb, settings.copy(dashboard = "$base/missing")))
+        page.load("$base/missing")
+        awaitMain("fallback") { fb.opens.isNotEmpty() }
+        val fp = fb.fallbackPage()
+        page.reload()
+        idle()
+        assertEquals("nothing native to go to", 1, fp.reloads)
+        assertFallback(page, fp)
+    }
+
     @Test fun withNoDashboardToGoToReloadReloadsTheFallbackPage() {
         val fb = RecordingEngine()
         val page = page(engine(fb, settings.copy(dashboard = null)))
