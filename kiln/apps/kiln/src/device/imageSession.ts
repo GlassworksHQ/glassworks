@@ -121,7 +121,7 @@ export interface ImageDeps {
  * until the bundle is in, and the device's `serial`); `received`, the bundle is in this browser (`serial`, `digest`),
  * and `wrote`, the files of its second fastboot session already written, so a reload doesn't write them again.
  */
-export type ProgressMark = { at: 'written' | 'flashed' | 'staged' | 'received'; image?: string; secret?: string; serial?: string; digest?: string; wrote?: string[] };
+export type ProgressMark = { at: 'written' | 'flashed' | 'staged' | 'received'; image?: string; secret?: string; serial?: string; digest?: string; wrote?: string[]; started?: string[] };
 const MARKS: readonly ProgressMark['at'][] = ['written', 'flashed', 'staged', 'received'];
 export interface DeviceProgress { get(): ProgressMark | undefined; set(m: ProgressMark | undefined): void }
 
@@ -250,6 +250,8 @@ export interface ImageState {
   leftHotspot?: boolean;
   restorePoint?: RestoreView;
   undo?: UndoView;
+  /** An in-place install's Start over, asked: the screen shows what it resets before it does (startOver). */
+  startingOver?: boolean;
   error?: string;
   log: string[];
 }
@@ -320,6 +322,8 @@ export class ImageSession {
   private restore?: { files: NamedPart[]; partition: string; sparse: string };
   /** An in-place run's second-session files written so far (the `received` mark's `wrote`): a resume skips them. */
   private wrote = new Set<string>();
+  /** The second session's writes that began (wrote: that finished): once one has, Start over isn't honest. */
+  private started = new Set<string>();
   /** The planned step that stopped with an error: Try again runs it again, not the one after it. */
   private stoppedAt?: number;
   /** The receive attempt running now: Cancel, or a newer attempt, aborts it, and nothing it finishes counts after that. */
@@ -360,6 +364,7 @@ export class ImageSession {
       this.serial = mark.serial;
       this.bundle = { digest: mark.digest };
       this.wrote = new Set(Array.isArray(mark.wrote) ? mark.wrote.filter((x): x is string => typeof x === 'string') : []);
+      this.started = new Set(Array.isArray(mark.started) ? mark.started.filter((x): x is string => typeof x === 'string') : []);
       this.state = { ...this.state, screen: 'fastboot', picked: wrote.id, files: waiting(wrote), changed: true, round: 2 };
       this.cursor = this.indexOf(wrote, 'fastboot');
     } else if (mark?.at === 'flashed' && wrote) {
@@ -835,11 +840,17 @@ export class ImageSession {
             this.log(`Flashing ${step.partition}${step.partition === this.restore?.partition ? ' (only the blocks the restore point covers)' : ''}`);
             this.set({ flashFailed: true, screen: 'working' });
             work(id, 0);
+            // a write that stops partway leaves the partition changed: from its first byte on, Start over isn't offered,
+            // after a reload too (the mark says so)
+            if (checkpointed && this.serial && this.bundle) {
+              this.started.add(step.file);
+              this.d.progress?.set({ at: 'received', image: r.id, serial: this.serial, digest: this.bundle.digest, wrote: [...this.wrote], started: [...this.started] });
+            }
             await fb.flashBlob(step.partition, blob, (x) => work(id, x));
             this.log('', `${step.partition}: ${(blob.size / 2 ** 20).toFixed(1)} MiB written`);
             if (checkpointed && this.serial && this.bundle) {
               this.wrote.add(step.file);
-              this.d.progress?.set({ at: 'received', image: r.id, serial: this.serial, digest: this.bundle.digest, wrote: [...this.wrote] });
+              this.d.progress?.set({ at: 'received', image: r.id, serial: this.serial, digest: this.bundle.digest, wrote: [...this.wrote], started: [...this.started] });
             }
             break;
           }
@@ -1739,6 +1750,52 @@ export class ImageSession {
   }
 
   /** From an error: back to the image's first screen, keeping what checked out (a fetched image builds again). */
+  /**
+   * Whether an in-place install can start over honestly from here: nothing running, and nothing written to the system
+   * yet (the stage changed only the device's app data). On the receive and second fastboot screens, the restore point,
+   * and an error before the second session's first write. Not once a system write began, nor after the restart into
+   * what was written: the way back from there is the restore point.
+   */
+  canStartOver(): boolean {
+    if (!this.inPlace || this.busy() || this.state.connecting || this.started.size || this.wrote.size) return false;
+    const s = this.state.screen;
+    if (s === 'receive' || s === 'restore-point') return true;
+    if (s === 'fastboot') return this.state.round === 2;
+    if (s === 'error') return !!this.state.round && this.tryAgainLands() === 'fastboot' && this.state.work?.step !== 'restart';
+    return false;
+  }
+
+  askStartOver(ask = true) { if (this.canStartOver()) this.set({ startingOver: ask }); else if (this.state.startingOver) this.set({ startingOver: false }); }
+
+  /**
+   * Start over, once asked: the run's agent secret, serial, bundle and restore point go, and so does the mark a reload
+   * resumes from, and the install opens on its first screen. What the person gave stays (the Wi-Fi, the APK), and the
+   * bundle this browser kept stays too: a new run that finds the same blocks takes it again.
+   */
+  startOver(): void {
+    // only once asked (askStartOver): the screen has said what it resets
+    if (!this.state.startingOver || !this.canStartOver()) return;
+    this.receiving?.abort();
+    this.receiving = undefined;
+    this.watching?.abort();
+    this.watching = undefined;
+    void this.receiver?.cancel().catch(() => {});
+    this.receiver = undefined;
+    this.secret = undefined;
+    this.serial = undefined;
+    this.bundle = undefined;
+    this.restore = undefined;
+    this.wrote = new Set();
+    this.started = new Set();
+    this.made = Object.create(null);
+    this.cursor = undefined;
+    this.fb = undefined;
+    this.d.progress?.set(undefined);
+    this.log('Started over', 'the setup agent stays in the app data until the next run writes it again');
+    this.set({ startingOver: false, round: undefined, receive: undefined, restorePoint: undefined, leftHotspot: undefined, changed: true, connectError: undefined });
+    this.retry();
+  }
+
   retry() {
     this.stoppedAt = undefined;
     this.set({ wifiOnFailed: false, screen: this.recipe.community ? 'download' : 'image', error: undefined, work: undefined, fastboot: undefined, understood: false, flashFailed: false });

@@ -4,7 +4,7 @@
 // point in this browser. Same design as ImageScreens (docs/design/kiln): one idea per screen, one ember button, a way
 // out on every screen. Nothing here names a frame: what the device is called and what only it needs said come in
 // `words`, from the frame's data.
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 /**
  * Copy a frame may supply (installer.json `words`). Every key is optional: the screens fall back to plain, neutral
@@ -50,6 +50,8 @@ export interface ReceiveScreenProps {
   onPickFile(file: File): void;
   onCancel?: () => void;
   onRetry?: () => void;
+  /** Start over (StartOver), shown above the buttons where the install can still begin again. */
+  startOver?: ReactNode;
   /** Continue anyway, on the signature warning. */
   onContinueUnverified?: () => void;
   /**
@@ -103,9 +105,10 @@ function JoinWifi(p: ReceiveScreenProps & { network: string }) {
           ? <p className="live ok" role="status"><span className="tick" aria-hidden="true">✓</span>{`This computer is on ${the}’s Wi-Fi, and its setup agent answered.`}</p>
           : <p className="live" role="status"><span className="pulse" />Waiting for this computer to join…</p>}
       {p.words.coverNote && <p className="small">{p.words.coverNote}</p>}
+      {p.startOver}
       <div className="foot">
         <span className="links">
-          {p.onCancel && <><button type="button" className="link" onClick={p.onCancel}>Cancel</button>{p.bluetoothAvailable && <span aria-hidden="true">·</span>}</>}
+          {p.onCancel && <><button type="button" className="link" onClick={p.onCancel}>Stop</button>{p.bluetoothAvailable && <span aria-hidden="true">·</span>}</>}
           {p.bluetoothAvailable && !connecting && <button type="button" className="link" onClick={() => p.onConnectBluetooth()}>Use Bluetooth instead</button>}
         </span>
         {!connecting && <button type="button" className={`btn ${p.joined ? 'ember pulsing' : 'ghost'}`} onClick={() => p.onContinueWifi?.()}>Continue</button>}
@@ -138,9 +141,10 @@ function WifiUnreachable(p: ReceiveScreenProps & { network: string }) {
           <button type="button" className="btn ghost sm" onClick={() => p.onContinueWifi?.()}>Try again</button>
         </div>
       </div>
+      {p.startOver}
       <div className="foot">
         <span className="links">
-          {p.onCancel && <><button type="button" className="link" onClick={p.onCancel}>Cancel</button><span aria-hidden="true">·</span></>}
+          {p.onCancel && <><button type="button" className="link" onClick={p.onCancel}>Stop</button><span aria-hidden="true">·</span></>}
           <button type="button" className="link" onClick={() => p.onByHand?.()}>Download it by hand instead</button>
         </span>
       </div>
@@ -201,8 +205,9 @@ function ByHand({ url, words, onPickFile }: { url: string | null; words: InPlace
   );
 }
 
+/** Stops the transfer in flight; the agent keeps running, so the install goes on from here. */
 function Cancel({ onCancel }: { onCancel?: () => void }) {
-  return <span className="links">{onCancel && <button type="button" className="link" onClick={onCancel}>Cancel</button>}</span>;
+  return <span className="links">{onCancel && <button type="button" className="link" onClick={onCancel}>Stop transfer</button>}</span>;
 }
 
 function NoBluetooth() {
@@ -222,10 +227,11 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
     return (
       <section className="card err" aria-labelledby="h">
         <h2 id="h">The transfer didn&apos;t finish</h2>
-        <p className="lede">{`Nothing has been written to ${the} yet. Check the details below and try again when you’re ready.`}</p>
+        <p className="lede">{`${capital(the)}’s system hasn’t changed. Check the details below and try again when you’re ready.`}</p>
         {p.errorMessage && <pre className="raw">{p.errorMessage}</pre>}
         <p className="small">Or download the bundle by hand:</p><ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} />
-        <div className="foot">
+        {p.startOver}
+      <div className="foot">
           <Cancel onCancel={p.onCancel} />
           {p.onRetry && <button type="button" className="btn ember" onClick={p.onRetry}>Try again</button>}
         </div>
@@ -238,8 +244,9 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
       <section className="card" aria-labelledby="h">
         <h2 id="h">Kiln can’t confirm this bundle</h2>
         <p className="lede">{`It comes from ${the} and arrived whole, but its signature doesn’t match the setup agent this browser started. That happens when the install began in another browser, or this browser’s data was cleared since.`}</p>
-        <p className="small">{`Go on only if you just took it from ${the} yourself. Nothing has been written yet, and Kiln saves a restore point before it changes anything.`}</p>
-        <div className="foot">
+        <p className="small">{`Go on only if you just took it from ${the} yourself. Its system hasn’t changed, and Kiln saves a restore point before it changes anything.`}</p>
+        {p.startOver}
+      <div className="foot">
           <span className="links">{p.onRetry && <button type="button" className="link" onClick={p.onRetry}>Back</button>}</span>
           {p.onContinueUnverified && <button type="button" className="btn ember" onClick={p.onContinueUnverified}>Continue anyway</button>}
         </div>
@@ -254,9 +261,10 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
         <p className="lede">{`Chrome asked whether Kiln may reach devices on your network, and it was blocked. Bluetooth works without it and doesn’t need Wi-Fi, or you can allow it and try again.`}</p>
         {!p.bluetoothAvailable && <NoBluetooth />}
         <ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} />
-        <div className="foot">
+        {p.startOver}
+      <div className="foot">
           <span className="links">
-            {p.onCancel && <><button type="button" className="link" onClick={p.onCancel}>Cancel</button><span aria-hidden="true">·</span></>}
+            {p.onCancel && <><button type="button" className="link" onClick={p.onCancel}>Stop</button><span aria-hidden="true">·</span></>}
             {p.onRetryLan && <button type="button" className="link" onClick={p.onRetryLan}>Allow local network</button>}
             {p.agentPageUrl && <><span aria-hidden="true">·</span><a className="link" href={p.agentPageUrl} target="_blank" rel="noopener noreferrer">Open device page</a></>}
           </span>
@@ -272,7 +280,8 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
         <h2 id="h">Download the bundle by hand</h2>
         <p className="lede">{`${capital(the)} serves the bundle on its own page. Save it to this computer, then pick it here.`}</p>
         <ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} />
-        <div className="foot">
+        {p.startOver}
+      <div className="foot">
           <Cancel onCancel={p.onCancel} />
           {p.bluetoothAvailable && bt(false, 'Use Bluetooth instead')}
         </div>
@@ -326,7 +335,8 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
         )}
         {(pr?.resendPass ?? 0) > 0 && <p className="status work" role="status">Checking missing pieces…</p>}
         {manual && <ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} />}
-        <div className="foot">
+        {p.startOver}
+      <div className="foot">
           <Cancel onCancel={p.onCancel} />
           {p.agentPageUrl && !manual && <button type="button" className="link" onClick={() => setManual(true)}>Use manual download instead</button>}
         </div>
@@ -349,9 +359,10 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
       {connecting && <><p className="status work" role="status">Connecting…</p><div className="bar wait"><i /></div></>}
       {!p.bluetoothAvailable && <><NoBluetooth /><ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} /></>}
       {p.bluetoothAvailable && manual && <ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} />}
+      {p.startOver}
       <div className="foot">
         <span className="links">
-          {p.onCancel && <button type="button" className="link" onClick={p.onCancel}>Cancel</button>}
+          {p.onCancel && <button type="button" className="link" onClick={p.onCancel}>Stop</button>}
           {/* Bluetooth can be there and still find nothing (the device's radio off, the browser not allowed to scan) */}
           {!waiting && p.bluetoothAvailable && !manual && <>{p.onCancel && <span aria-hidden="true">·</span>}<button type="button" className="link" onClick={() => setManual(true)}>Download it by hand instead</button></>}
         </span>
@@ -362,13 +373,14 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
 }
 
 /** What an in-place install changes, and anything the person must keep doing through it (the frame's `coverNote`). */
-export function InPlaceNotice({ words }: { words: InPlaceWords }) {
+/** What an in-place install changes. `cover`: with the cover note, between the two fastboot sessions only (it asks for VOL− once more). */
+export function InPlaceNotice({ words, cover = false }: { words: InPlaceWords; cover?: boolean }) {
   return (
     <div className="well" role="note">
       <div className="grow">
         <span className="status">What changes</span>
         <span className="small">{words.changes ?? 'The app data starts fresh, while the original system stays in place, so you can go back to it whenever you like.'}</span>
-        {words.coverNote && <span className="small">{words.coverNote}</span>}
+        {cover && words.coverNote && <span className="small">{words.coverNote}</span>}
       </div>
     </div>
   );
@@ -385,6 +397,9 @@ export interface RestorePointScreenProps {
   onDownload(): void;
   onContinue(): void;
   onRetry?: () => void;
+  startOver?: ReactNode;
+  /** Why the copy didn't download, when it didn't. */
+  downloadError?: string | null;
 }
 
 /** The restore point: saved in this browser and read back before anything is written. Continue waits for it. */
@@ -395,9 +410,10 @@ export function RestorePointScreen(p: RestorePointScreenProps) {
     return (
       <section className="card err" aria-labelledby="h">
         <h2 id="h">The restore point couldn&apos;t be saved</h2>
-        <p className="lede">{`This browser couldn’t store it, so nothing on ${the} has changed yet. Free some space or allow storage for this site, then try again.`}</p>
+        <p className="lede">{`This browser couldn’t store it, so ${the}’s system hasn’t changed. Free some space or allow storage for this site, then try again.`}</p>
         {p.errorMessage && <pre className="raw">{p.errorMessage}</pre>}
-        <div className="foot">
+        {p.startOver}
+      <div className="foot">
           <span className="links" />
           {p.onRetry && <button type="button" className="btn ember" onClick={p.onRetry}>Try again</button>}
         </div>
@@ -417,16 +433,44 @@ export function RestorePointScreen(p: RestorePointScreenProps) {
           <div className="grow">
             <span className="status ok" role="status">✓ Saved in this browser</span>
             {digest && <span className="small">Checked, SHA-256 <code title={digest}>{digest.slice(0, 12)}</code></span>}
-            <span className="small">{`Keep a copy on your computer too, as ${p.restoreFilename}, in case this browser’s storage is cleared.`}</span>
+            <span className="small">Keep a copy on your computer too, in case this browser’s storage is cleared. It downloads as a .zip, which the way back can open.</span>
+            {p.downloadError && <span className="status err" role="alert">{`The copy didn’t download: ${p.downloadError}`}</span>}
           </div>
           <button type="button" className="btn ghost" onClick={() => p.onDownload()}>{p.downloaded ? 'Downloaded ✓' : 'Download a copy'}</button>
         </div>
       )}
       <InPlaceNotice words={words} />
+      {p.startOver}
       <div className="foot">
         <span className="links">{!ready && <span className="small">Continue opens once the restore point is saved and checked.</span>}</span>
         <button type="button" className="btn ember" disabled={!ready} onClick={() => { if (ready) p.onContinue(); }}>Continue</button>
       </div>
     </section>
+  );
+}
+
+/** What Start over needs from the session (ImageSession). */
+export interface StartOverHost { canStartOver(): boolean; askStartOver(ask?: boolean): void; startOver(): void }
+
+/**
+ * Start over, where an in-place install can still begin again (ImageSession.canStartOver): a link, then, once asked,
+ * what it resets and the button that does it. `what`: the frame's words for what starting over changes.
+ */
+export function StartOver({ f, asking, what }: { f: StartOverHost; asking: boolean; what: string }) {
+  if (!f.canStartOver()) return null;
+  if (!asking) {
+    return <p className="small startover">Want to begin again? <button type="button" className="link" onClick={() => f.askStartOver()}>Start over</button></p>;
+  }
+  return (
+    <div className="well startover" role="group" aria-labelledby="startover-h">
+      <div className="grow">
+        <span id="startover-h"><b>Start over?</b></span>
+        <span className="small">{what}</span>
+      </div>
+      <span className="links">
+        <button type="button" className="link" onClick={() => f.askStartOver(false)}>Keep going</button>
+        <button type="button" className="btn ghost sm" onClick={() => f.startOver()}>Start over</button>
+      </span>
+    </div>
   );
 }

@@ -158,8 +158,8 @@ describe('the picker, calm for a first visit and a returning one (#672)', () => 
     expect(screen.getByRole('link', { name: 'Undo an install' }).getAttribute('href')).toBe('/aqara-s1-plus/undo');
     fireEvent.click(screen.getByRole('radio', { name: /^lululemon Studio Mirror/ }));
     expect(screen.getByRole('link', { name: 'Finish setting up' }).getAttribute('href')).toBe('/lululemon-mirror/set-up');
-    // the Mirror's way back is its own image, on its own screens: no undo routes to send anyone to
-    expect(screen.queryByRole('link', { name: 'Undo an install' })).toBeNull();
+    // the Mirror's in-place install keeps a restore point, with routes of its own: someone back on another day finds it
+    expect(screen.getByRole('link', { name: 'Undo an install' }).getAttribute('href')).toBe('/lululemon-mirror/undo');
     expect(within(group('needs')).getByText('A micro-USB data cable')).toBeTruthy();
   });
 

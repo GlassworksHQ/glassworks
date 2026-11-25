@@ -275,7 +275,7 @@ export function deviceWords(w: Record<string, unknown>): Record<DeviceWord, stri
 export const IN_PLACE_WORDS = [
   'inPlace.stage.lede', 'inPlace.receive.lede', 'inPlace.receive.waiting', 'inPlace.receive.lan', 'inPlace.receive.ble',
   'inPlace.receive.file', 'inPlace.restorePoint.lede', 'inPlace.confirm.lede', 'inPlace.appInstall.lede', 'inPlace.wayBack',
-  'inPlace.fastboot.again', 'inPlace.coverNote', 'inPlace.changes',
+  'inPlace.fastboot.again', 'inPlace.coverNote', 'inPlace.changes', 'inPlace.startOver',
 ] as const;
 export type InPlaceWord = (typeof IN_PLACE_WORDS)[number];
 

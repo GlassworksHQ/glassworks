@@ -299,6 +299,81 @@ describe('Glassworks on the stock software', () => {
   });
 });
 
+describe('Start over', () => {
+  it('on receive: asks first, then forgets the run (its mark too) and opens the first screen, where a new run starts clean', async () => {
+    const r = rig();
+    await toReceive(r);
+    expect(r.image.canStartOver()).toBe(true);
+    r.image.startOver(); // not asked yet: nothing happens
+    r.image.askStartOver();
+    expect(r.image.state.startingOver).toBe(true);
+    r.image.startOver();
+    expect(r.image.state).toMatchObject({ screen: 'image', changed: true, startingOver: false });
+    expect(r.image.state.round).toBeUndefined();
+    expect(r.progress.mark).toBeUndefined();
+    // a reload now opens the first screen, not receive
+    expect(rig({ dev: r.dev, store: r.store, progress: r.progress }).image.state.screen).not.toBe('receive');
+    // and a new run goes through its stage again
+    await toReceive(r);
+  });
+
+  it('on the second fastboot and the restore point, before any system write', async () => {
+    const r = rig();
+    await toReceive(r);
+    await r.image.receiveWifi();
+    expect(r.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
+    expect(r.image.canStartOver()).toBe(true);
+    await r.image.connectFastboot();
+    for (let i = 0; i < 200 && r.image.state.restorePoint?.status !== 'ready'; i++) await new Promise((x) => setTimeout(x, 5));
+    expect(r.image.state.screen).toBe('restore-point');
+    expect(r.image.canStartOver()).toBe(true);
+    r.image.askStartOver();
+    r.image.startOver();
+    expect(r.image.state.screen).toBe('image');
+    expect(r.flashed).toEqual(['userdata']); // the stage alone: the system was never written
+  });
+
+  it('not once a system write began: its error, and a reload after it, offer the restore point instead', async () => {
+    const r = rig({ fail: (what, n) => what === 'flash system' && n === 0 });
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    expect(r.image.state.screen).toBe('error');
+    expect(r.image.canStartOver()).toBe(false);
+    expect(r.progress.mark?.started).toContain('system-in-place');
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress });
+    expect(b.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
+    expect(b.image.canStartOver()).toBe(false);
+  });
+
+  it('not after the install restarted into what it wrote: One last click offers the restore point', async () => {
+    const r = rig();
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    await vi.waitFor(() => expect(r.image.state.screen).toBe('adb'));
+    expect(r.image.canStartOver()).toBe(false);
+    render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    expect(screen.queryByRole('button', { name: 'Start over' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Restore the original system instead' })).toBeTruthy();
+  });
+
+  it('the second fastboot screen has no silent Back: Start over says what it resets before it does', async () => {
+    const r = rig();
+    await toReceive(r);
+    await r.image.receiveWifi();
+    render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
+    expect(screen.getByText(frame.imageFlow.inPlace!.words['inPlace.startOver'])).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep going' }));
+    expect(r.image.state).toMatchObject({ screen: 'fastboot', round: 2, startingOver: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
+    act(() => { fireEvent.click(screen.getAllByRole('button', { name: 'Start over' }).at(-1)!); });
+    expect(r.image.state.screen).toBe('image');
+  });
+});
+
 describe('a reload', () => {
   it('after the stage resumes on receive, and after the bundle on the second fastboot, from this browser\'s copy', async () => {
     const dev = sim.device({});

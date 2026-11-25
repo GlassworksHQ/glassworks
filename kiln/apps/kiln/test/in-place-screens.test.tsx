@@ -46,7 +46,7 @@ describe('ReceiveScreen', () => {
     expect(screen.getByText('Keep the back cover off.')).toBeTruthy();
     fireEvent.click(button('Connect over Bluetooth'));
     expect(p.onConnectBluetooth).toHaveBeenCalledOnce();
-    fireEvent.click(button('Cancel'));
+    fireEvent.click(button('Stop')); // it stops what's running, never the install
     expect(p.onCancel).toHaveBeenCalledOnce();
   });
 
@@ -184,7 +184,8 @@ describe('RestorePointScreen', () => {
     fireEvent.click(c);
     expect(p.onContinue).toHaveBeenCalledOnce();
     expect(screen.getByText(/go back to it at any time/)).toBeTruthy();
-    expect(screen.getByText('Keep the back cover off.')).toBeTruthy();
+    // after the last VOL−: the cover note would ask for it once more
+    expect(screen.queryByText('Keep the back cover off.')).toBeNull();
   });
 
   it('ready and downloaded: says so', () => {
@@ -195,7 +196,7 @@ describe('RestorePointScreen', () => {
   it('error: nothing changed yet, Try again, no Continue', () => {
     const p = restore({ status: 'error', errorMessage: 'QuotaExceededError' });
     expect(document.querySelector('.card.err')).not.toBeNull();
-    expect(screen.getByText(/nothing on the device has changed yet/)).toBeTruthy();
+    expect(screen.getByText(/the device’s system hasn’t changed/)).toBeTruthy();
     expect(screen.getByText('QuotaExceededError')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
     fireEvent.click(button('Try again'));
@@ -204,10 +205,13 @@ describe('RestorePointScreen', () => {
 });
 
 describe('InPlaceNotice', () => {
-  it('says what changes, with the frame\'s note', () => {
-    render(<InPlaceNotice words={{ coverNote: 'Keep the back cover off.' }} />);
+  it('says what changes, with the frame\'s cover note only between the two fastboot sessions', () => {
+    const { unmount } = render(<InPlaceNotice words={{ coverNote: 'Keep the back cover off.' }} cover />);
     expect(screen.getByText(/app data starts fresh/)).toBeTruthy();
     expect(screen.getByText('Keep the back cover off.')).toBeTruthy();
+    unmount();
+    render(<InPlaceNotice words={{ coverNote: 'Keep the back cover off.' }} />);
+    expect(screen.queryByText('Keep the back cover off.')).toBeNull();
   });
 });
 

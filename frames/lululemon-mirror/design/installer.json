@@ -100,7 +100,8 @@
       "inPlace.wayBack": "To go back, Kiln writes the restore point over the parts it changed, putting lululemon's system back as it was. The Mirror's app data starts fresh either way.",
       "inPlace.fastboot.again": "Put the Mirror in fastboot mode once more: switch it off with the rocker switch, press and hold VOL− (SW3) on the small green board, and keep holding while you switch it on, then for about 5 seconds more. Keep the back cover off until the install is done.",
       "inPlace.coverNote": "Keep the back cover off until the install is done: you'll need VOL− once more.",
-      "inPlace.changes": "The Mirror's app data starts fresh, while lululemon's system stays in place. Only the parts Kiln saved in the restore point change, so you can always go back."
+      "inPlace.changes": "The Mirror's app data starts fresh, while lululemon's system stays in place. Only the parts Kiln saved in the restore point change, so you can always go back.",
+      "inPlace.startOver": "Kiln adds the setup agent again, and the Mirror's app data starts fresh again. lululemon's system stays as it is."
     },
     "silent": {
       "on": {
