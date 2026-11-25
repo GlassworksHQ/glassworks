@@ -10,8 +10,9 @@
  },
  "engines": {
   "_why": "Engines an app ships beside GeckoView, each its own row (Engine (<id>)).",
-  "vitro": {"dex": ["dev.glassworks.engine.vitro."], "assets": ["assets/vitro-mdi.tsv"],
-            "_why": "Vitro, the native Lovelace renderer, and its bundled Material Design icon table (vitro-mdi.tsv.gz, which the build stores decompressed)"}
+  "vitro": {"dex": ["dev.glassworks.engine.vitro.", "dev.glassworks.hawebrtc.", "livekit.org."], "assets": ["assets/vitro-mdi.tsv"],
+            "native": ["liblkjingle_peerconnection_so.so"],
+            "_why": "Vitro, the native Lovelace renderer, and its bundled Material Design icon table (vitro-mdi.tsv.gz, which the build stores decompressed); and its WebRTC cameras in the apps that register them (engines/engine-vitro-webrtc), with libs/ha-webrtc and libwebrtc (webrtc-sdk's prefixed build: livekit.org.webrtc, liblkjingle_peerconnection_so.so)"}
  },
  "core_assets": ["assets/extension/", "assets/dexopt/", "assets/licenses/", "assets/blueprints.json", "assets/setup/", "assets/manage/"],
  "libraries": {

@@ -65,6 +65,9 @@ include(":engine-gecko-legacy")
 project(":engine-gecko-legacy").projectDir = file("engines/engine-gecko-legacy")
 include(":engine-vitro")
 project(":engine-vitro").projectDir = file("engines/engine-vitro")
+// Vitro's WebRTC cameras on libs/ha-webrtc, for the apps that register them (libwebrtc is big).
+include(":engine-vitro-webrtc")
+project(":engine-vitro-webrtc").projectDir = file("engines/engine-vitro-webrtc")
 // The engine contract on emulators (docs/engine-contract.md): test code only, nothing ships.
 include(":engine-conformance")
 project(":engine-conformance").projectDir = file("engines/conformance")
