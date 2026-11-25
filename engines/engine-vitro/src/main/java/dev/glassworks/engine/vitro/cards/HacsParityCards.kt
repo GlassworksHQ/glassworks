@@ -22,6 +22,7 @@ import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.CardRouter
+import dev.glassworks.engine.vitro.model.HaCardSize
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.MdiIconView
@@ -34,6 +35,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 // Tier 2 HACS parity wave: the rest of the Mushroom suite, mini-media-player, auto-entities, the seamless stack
@@ -1831,9 +1833,9 @@ class VerticalStackInCardView(ctx: VitroCardContext, config: CardConfig, build: 
 
 /**
  * Native `custom:layout-card`. `layout_type: custom:grid-layout` (or `grid`) reads `layout: { grid-template-columns,
- * grid-gap / gap, mediaquery }` and each card's `view_layout: { grid-column }`; `custom:horizontal-layout` deals
- * the cards into up to `max_cols` columns of at least `width` px; `custom:vertical-layout` stacks them, starting a
- * new column at each `view_layout: { column_break: true }`. The children keep their own surfaces, as in HA.
+ * grid-gap / gap, mediaquery }` and each card's `view_layout: { grid-column }`; the column layouts (masonry,
+ * horizontal, vertical) place the cards into columns as layout-card does ([placeColumns]). The children keep their
+ * own surfaces, as in HA.
  */
 class LayoutCardView(
     private val ctx: VitroCardContext,
@@ -1854,6 +1856,19 @@ class LayoutCardView(
     private var gridCols = 0
     private val placed = ArrayList<Triple<View, Int, Int>>()
     private var resolvedAtDp = -1
+
+    /** A column layout's mode ("masonry", "horizontal", "vertical"), or null for the grid. */
+    private var columnMode: String? = null
+    private var columnMargin = floatArrayOf(4f, 4f, 8f, 4f)
+    private var columnWidthDp = 300f
+    private var columnMaxDp = 500f
+    private var maxCols = 4
+    private var minHeight = 5
+    /** The column layout's cards (a break as null), in order, built once. */
+    private val columnCards = ArrayList<Pair<CardConfig, View?>>()
+    private var columnRow: LinearLayout? = null
+    private var placedCols = -1
+    private var placedAtPx = -1
 
     /** The grid's card margin (top, right, bottom, left, dp), inside each track; none for the column layouts. */
     private var cardMargin = floatArrayOf(0f, 0f, 0f, 0f)
@@ -1882,15 +1897,28 @@ class LayoutCardView(
                 cardMargin = MushroomTitleCardView.paddingDp(ctx.theme.vars["masonry-view-card-margin"]) ?: floatArrayOf(4f, 4f, 8f, 4f)
                 buildGrid(layout, parseGap(layout) ?: 0f, widthDp)
             }
-            "vertical-layout", "vertical" -> buildColumns(splitAtBreaks(), gap)
             else -> {
-                // horizontal-layout and masonry-layout: deal the cards into columns, left to right.
-                val minWidth = layout.optInt("width", config.raw.optInt("width", 300)).coerceAtLeast(50)
-                val maxCols = layout.optInt("max_cols", config.raw.optInt("max_cols", 4)).coerceIn(1, 12)
-                val cols = (widthDp / minWidth).coerceIn(1, maxCols).coerceAtMost(config.childCards.size.coerceAtLeast(1))
-                val columns = List(cols) { ArrayList<CardConfig>() }
-                config.childCards.forEachIndexed { i, c -> columns[i % cols] += c }
-                buildColumns(columns, gap)
+                // The column layouts (masonry, horizontal, vertical): the cards are built now and placed into columns
+                // once the card knows its width ([placeColumns]).
+                columnMode = when (layoutType) {
+                    "vertical-layout", "vertical" -> "vertical"
+                    "horizontal-layout", "horizontal" -> "horizontal"
+                    else -> "masonry"
+                }
+                val m = MushroomTitleCardView.paddingDp(layout.optString("margin", "").ifEmpty { null }) ?: floatArrayOf(0f, 4f, 0f, 4f)
+                val p = MushroomTitleCardView.paddingDp(layout.optString("padding", "").ifEmpty { null }) ?: floatArrayOf(4f, 0f, 4f, 0f)
+                setPadding(ctx.px(m[3] + p[3]), ctx.px(m[0] + p[0]), ctx.px(m[1] + p[1]), ctx.px(m[2] + p[2]))
+                columnMargin = MushroomTitleCardView.paddingDp(layout.optString("card_margin", "").ifEmpty { null })
+                    ?: MushroomTitleCardView.paddingDp(ctx.theme.vars["masonry-view-card-margin"]) ?: floatArrayOf(4f, 4f, 8f, 4f)
+                // `--column-width` (layout.width, 300) and `--column-max-width` (max_width, else 1.5 x width, else 500).
+                columnWidthDp = layout.optDouble("width", Double.NaN).takeIf { !it.isNaN() && it > 0 }?.toFloat() ?: 300f
+                columnMaxDp = layout.optDouble("max_width", Double.NaN).takeIf { !it.isNaN() && it > 0 }?.toFloat()
+                    ?: if (layout.has("width")) kotlin.math.ceil(1.5f * columnWidthDp) else 500f
+                maxCols = layout.optInt("max_cols", 4).coerceIn(1, 12)
+                minHeight = layout.optInt("min_height", 5)
+                for (c in config.childCards) columnCards += c to (if (isBreak(c)) null else build(c))
+                columnRow = LinearLayout(ctx.context).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER_HORIZONTAL }
+                addView(columnRow, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             }
         }
     }
@@ -1915,26 +1943,72 @@ class LayoutCardView(
         return Regex("""(\d+(?:\.\d+)?)px""").find(raw)?.groupValues?.get(1)?.toFloatOrNull()
     }
 
-    private fun splitAtBreaks(): List<List<CardConfig>> {
-        val out = ArrayList<ArrayList<CardConfig>>().apply { add(ArrayList()) }
-        for (c in config.childCards) {
-            if (c.raw.optJSONObject("view_layout")?.optBoolean("column_break", false) == true && out.last().isNotEmpty()) out.add(ArrayList())
-            if (c.type != CardRouter.LAYOUT_BREAK) out.last() += c
-        }
-        return out.filter { it.isNotEmpty() }
-    }
+    private fun isBreak(c: CardConfig) = c.type == CardRouter.LAYOUT_BREAK || c.type == "custom:layout-break"
 
-    private fun buildColumns(columns: List<List<CardConfig>>, gap: Float) {
-        val row = LinearLayout(ctx.context).apply { orientation = HORIZONTAL }
-        columns.forEachIndexed { ci, cards ->
+    /**
+     * layout-card's column layouts at [widthPx]: `floor(width / column width)` columns, at most `max_cols` (4), the
+     * cards dealt by the mode (masonry: into the first column under `min_height` card-size units, else the shortest;
+     * horizontal: round robin, `view_layout.column` and breaks restart it; vertical: one column until each break),
+     * empty columns dropped, the rest `minmax(width, max_width)` wide and centered. In a column the cards' margins
+     * collapse as blocks: `--card-margin` around each, the larger of the bottom and top margins between two.
+     */
+    private fun placeColumns(widthPx: Int) {
+        val row = columnRow ?: return
+        val w = widthPx / ctx.dp
+        val n = floor(w / columnWidthDp).toInt().coerceIn(1, maxCols)
+        if (n == placedCols && widthPx == placedAtPx) return
+        val cols = List(n) { ArrayList<View>() }
+        when (columnMode) {
+            "vertical" -> {
+                var r = 1
+                for ((c, v) in columnCards) {
+                    c.raw.optJSONObject("view_layout")?.optInt("column", 0)?.takeIf { it > 0 }?.let { r = it }
+                    if (v != null) cols[(r - 1) % n] += v
+                    if (v == null) r += 1
+                }
+            }
+            "horizontal" -> {
+                var o = 0
+                for ((c, v) in columnCards) {
+                    o += 1
+                    c.raw.optJSONObject("view_layout")?.optInt("column", 0)?.takeIf { it > 0 }?.let { o = it }
+                    if (v != null) cols[(o - 1) % n] += v else o = 0
+                }
+            }
+            else -> {
+                val length = IntArray(n)
+                for ((c, v) in columnCards) {
+                    if (v == null) continue
+                    var pick = 0
+                    for (k in 0 until n) {
+                        if (length[k] in 1 until minHeight) { pick = k; break }
+                        if (length[k] < length[pick]) pick = k
+                    }
+                    cols[pick] += v
+                    length[pick] += HaCardSize.of(c)
+                }
+            }
+        }
+        val used = cols.filter { it.isNotEmpty() }
+        val inner = w - (paddingLeft + paddingRight) / ctx.dp
+        val colW = (inner / used.size.coerceAtLeast(1)).coerceIn(columnWidthDp, columnMaxDp)
+        row.removeAllViews()
+        tracks.clear()
+        for (views in used) {
             val col = LinearLayout(ctx.context).apply { orientation = VERTICAL }
-            cards.forEachIndexed { i, c ->
-                col.addView(build(c), LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (i > 0) topMargin = ctx.px(gap) })
+            views.forEachIndexed { k, v ->
+                (v.parent as? ViewGroup)?.removeView(v)
+                col.addView(v, LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+                    leftMargin = ctx.px(columnMargin[3]); rightMargin = ctx.px(columnMargin[1])
+                    topMargin = ctx.px(if (k == 0) columnMargin[0] else kotlin.math.max(0f, columnMargin[0] - columnMargin[2]))
+                    bottomMargin = ctx.px(columnMargin[2])
+                })
             }
             tracks += col
-            row.addView(col, LayoutParams(0, WRAP_CONTENT, 1f).apply { if (ci > 0) marginStart = ctx.px(gap) })
+            row.addView(col, LayoutParams(ctx.px(colW), WRAP_CONTENT))
         }
-        addView(row, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        placedCols = n
+        placedAtPx = widthPx
     }
 
     /** One grid track: a share of the free width ([fr]) or a fixed width in dp, at least [minDp] wide when auto-filled. */
@@ -1994,6 +2068,9 @@ class LayoutCardView(
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (columnMode != null && MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            placeColumns(MeasureSpec.getSize(widthMeasureSpec))
+        }
         val template = percentTemplate
         if (template != null && MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
             // Percentages are of this grid's width (a card in a half-width column), not the display's.
