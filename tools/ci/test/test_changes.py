@@ -201,6 +201,15 @@ class MavenCentralMirror(unittest.TestCase):
                     self.fail(f'{name}:{i + 1}: Maven Central declared another way: {line}')
         self.assertGreaterEqual(centrals, 4)  # two in the root settings, two in build-logic's
 
+    def test_build_logic_asks_only_the_plugin_portal_for_kotlin_dsl(self):
+        """With Central in its plugin repositories, a 429 from Central for kotlin-dsl's marker lost the plugin on a
+        clean runner (#868). tools/ci/gradle-without-central.sh is the check that runs it."""
+        settings = (ROOT / 'build-logic/settings.gradle.kts').read_text()
+        plugins = settings.split('pluginManagement {', 1)[1].split('\n}\n', 1)[0]
+        self.assertIn('exclusiveContent {\n            forRepository { gradlePluginPortal() }\n            filter {\n'
+                      '                includeGroup("org.gradle.kotlin")\n'
+                      '                includeGroup("org.gradle.kotlin.kotlin-dsl")\n', plugins)
+
     def test_robolectric_fetches_its_jars_from_the_mirror(self):
         plugin = (ROOT / 'build-logic/src/main/kotlin/glassworks.android.gradle.kts').read_text()
         self.assertIn(f'tasks.withType<Test>().configureEach {{\n    systemProperty("robolectric.dependency.repo.url", '

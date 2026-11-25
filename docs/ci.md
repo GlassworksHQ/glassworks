@@ -150,6 +150,14 @@ metadata per repository, so until a run on `main` saves Gradle's home again, a r
 it already has (the files themselves stay, and Central isn't asked). `tools/ci/test/test_changes.py` checks that every `mavenCentral()` follows the mirror
 and that the convention plugin sets Robolectric's.
 
+Gradle asks the repositories in a list in turn until one has the module, and any answer but a 404 ends the search.
+So a repository in front of the one that hosts a module can lose it for the build, which is why a plugin that only
+the plugin portal hosts goes to the portal alone. On #868's first run, build-logic's `kotlin-dsl` plugin was asked of Google, the mirror and then Central before the
+portal. On a clean runner Central's answer wasn't a 404, and the build lost the plugin. build-logic now sends the
+`org.gradle.kotlin` groups to the portal only (`exclusiveContent`). To check a change like this before CI,
+`tools/ci/gradle-without-central.sh` runs `./gradlew help` (or the tasks you name) the way a clean runner does, with
+an empty Gradle home, and Central refuses every request. The build must pass without it.
+
 To clear a bad entry by hand, delete that job's `gradle-home-v2|Linux-X64|<job>[…]` entries on `main`
 (`gh cache list --ref refs/heads/main`, then `gh cache delete <id>`). The next run starts from another
 job's entry and saves a clean one.
