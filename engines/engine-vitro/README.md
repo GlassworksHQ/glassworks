@@ -70,15 +70,6 @@ Tier 3 never uses `android.webkit.WebView`. Each island is served from `VitroIsl
 
 Non-dashboard pages, such as `/auth/authorize` for panel sign-in, history, settings or the Blueprint import dialog, are handed to the wrapped fallback `Engine`, which loads them from Home Assistant itself. Their WebSocket and sign-in work as they do with Vitro off.
 
-Some dashboards and views go to that fallback too, so the panel shows them as Home Assistant draws them instead of an empty page:
-
-- **Dashboards, views and sections made from a strategy**, such as the Areas or Map dashboards, or a custom strategy. Home Assistant's frontend builds their cards in JavaScript, and Home Assistant has no API that returns what it builds, so Vitro has no cards to draw. A strategy on the dashboard sends the whole dashboard; a strategy on a view or a section sends only that view.
-- **Views with a built-in card Vitro doesn't draw yet**, such as `map` or the energy cards. Islands can't draw Home Assistant's built-in cards, so the view opens in Home Assistant's frontend, which draws all of it with one browser session. So does a view with a `shortcut` card that has no `label` or `icon` of its own and opens a dashboard, a view or a panel, or runs an action: Home Assistant names it after that page or action, which only its frontend knows. A `statistic` card that follows the energy dashboard's date picker goes there too.
-- **Views with an `entities` row Vitro doesn't draw yet**: `attribute` and `cast` rows, a `conditional` row's own included.
-- **Views with a layout Vitro doesn't draw**: any view `type` other than the ones in Tier 1, such as another custom layout. Vitro never guesses masonry for one.
-
-The other views of the dashboard stay native, and a navigation back to one of them, such as the panel returning to its home view, draws it natively again.
-
 The way back from such a page always leads to the native dashboard:
 
 | On a Home Assistant page | What happens |
@@ -88,6 +79,15 @@ The way back from such a page always leads to the native dashboard:
 | A tap in Home Assistant's sidebar or a link to a dashboard | Vitro draws that dashboard natively. A dashboard with no saved config stays in Home Assistant's own frontend, which is the one that draws it |
 
 Each page Vitro opens this way starts with no history of its own, and Home Assistant's frontend stops once the panel is back on the native view. While a page is open, the dashboard's islands stay hidden behind it.
+
+Some dashboards and views go to that fallback too, so the panel shows them as Home Assistant draws them instead of an empty page:
+
+- **Dashboards, views and sections made from a strategy**, such as the Areas or Map dashboards, or a custom strategy. Home Assistant's frontend builds their cards in JavaScript, and Home Assistant has no API that returns what it builds, so Vitro has no cards to draw. A strategy on the dashboard sends the whole dashboard; a strategy on a view or a section sends only that view.
+- **Views with a built-in card Vitro doesn't draw yet**, such as `map` or the energy cards. Islands can't draw Home Assistant's built-in cards, so the view opens in Home Assistant's frontend, which draws all of it with one browser session. So does a view with a `shortcut` card that has no `label` or `icon` of its own and opens a dashboard, a view or a panel, or runs an action: Home Assistant names it after that page or action, which only its frontend knows. A `statistic` card that follows the energy dashboard's date picker goes there too.
+- **Views with an `entities` row Vitro doesn't draw yet**: `attribute` and `cast` rows, a `conditional` row's own included.
+- **Views with a layout Vitro doesn't draw**: any view `type` other than the ones in Tier 1, such as another custom layout. Vitro never guesses masonry for one.
+
+The other views of the dashboard stay native. The way back from one of these pages works as from any other Home Assistant page: Back, Reload dashboard and a tap on a dashboard return to the native view.
 
 The island server only serves islands. Its proxy forwards what a card loads (`/api/`, `/local/`, `/hacsfiles/`, Home Assistant's static files and media, and the folders of the dashboard's own Lovelace resources), and only to a page that holds the cookie its island page sets, so other apps on the device can't use it. On the legacy engine, which loads only the dashboard's origin, the island server's loopback address is the one other origin it allows, and each page stays on its own origin: Home Assistant's pages never reach the island server, and islands never reach Home Assistant except through it.
 

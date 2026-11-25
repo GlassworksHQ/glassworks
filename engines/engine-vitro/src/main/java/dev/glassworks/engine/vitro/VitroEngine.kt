@@ -213,7 +213,19 @@ class VitroEngine(
 
         /** True when [url] is a dashboard HA had no config for: its frontend draws it, so it's no way back to Vitro. */
         private fun isWebDashboard(url: String): Boolean =
-            (OAuth.origin(url) to LovelaceParser.parseRoute(url).first) in webDashboards
+            (OAuth.origin(url) to LovelaceParser.parseRoute(url).first) in webDashboards || isWebView(url)
+
+        /**
+         * True when [url] opens a view of the dashboard on screen that Vitro sends to HA's frontend (a strategy, a card
+         * or row it doesn't draw: [WebFallback]). Like a dashboard with no config, it's no way back to Vitro: handing it
+         * back would only send it to the fallback again.
+         */
+        private fun isWebView(url: String): Boolean {
+            val (dash, view) = LovelaceParser.parseRoute(url)
+            if (displayedDashboard != (OAuth.origin(url) to dash)) return false
+            val d = vitroView.dashboard ?: return false
+            return d.views.getOrNull(d.viewIndex(view))?.webFallbackReason != null
+        }
 
         /** The dashboard the panel is set to, when it's one Vitro draws. */
         private fun configuredDashboard(): String? =
@@ -545,11 +557,13 @@ class VitroEngine(
             if (origin == currentOrigin && displayedDashboard == (origin to dashPath) && vitroView.dashboard != null && client != null) {
                 // Back to the dashboard on screen: a request for another one still on its way no longer owns the page.
                 currentDashboardPath = dashPath
+                val previousNative = lastNativeUrl
                 lastNativeUrl = url // its config is on screen already
                 client?.claimDashboard(dashPath)
                 vitroView.navigateToView(viewPath)
-                // A view Vitro doesn't draw left for the fallback, which signals ready itself.
-                if (nativeActive) readyWhenBuilt("view")
+                // A view Vitro doesn't draw left for the fallback, which signals ready itself. It's no return target:
+                // the way back from it is the native view before it.
+                if (nativeActive) readyWhenBuilt("view") else lastNativeUrl = previousNative
                 return
             }
 
@@ -753,6 +767,15 @@ class VitroEngine(
             client?.releaseDashboard()
         }
 
+        /**
+         * The dashboard at [urlPath] has no native views any more (a live refresh made it a strategy, or HA has no
+         * config for it): if it's the one on screen, its old views are stale, and a later load fetches it again
+         * instead of switching to them. A view-level handoff ([VitroView.onWebView]) keeps them: the config is current.
+         */
+        private fun forgetDisplayed(urlPath: String?) {
+            if (displayedDashboard == (currentOrigin to urlPath)) displayedDashboard = null
+        }
+
         private fun showVitroLayer() {
             val left = fallbackInFront()
             vitroView.visibility = View.VISIBLE
@@ -909,7 +932,10 @@ class VitroEngine(
                     WebFallback.dashboardReason(config)?.let { reason ->
                         Log.i(logTag, "Vitro doesn't draw $reason; Home Assistant's frontend shows it")
                         val url = currentUrl
+                        // Like a dashboard with no config: HA's frontend draws it, so it's no way back to Vitro.
+                        webDashboards += currentOrigin to urlPath
                         leaveNativeDashboard()
+                        forgetDisplayed(urlPath)
                         url?.let(::openInFallback)
                         return@post
                     }
@@ -917,6 +943,7 @@ class VitroEngine(
                     // It has a config now (made in HA since it failed): Vitro's to draw again.
                     webDashboards -= currentOrigin to urlPath
                     // Shown natively: a return target now (onViewSelected then narrows it to the view on screen).
+                    val previousNative = lastNativeUrl
                     currentUrl?.let { lastNativeUrl = it }
                     // A new config builds new islands; they ask again for what they read.
                     runtimeEntities.clear()
@@ -925,8 +952,9 @@ class VitroEngine(
                     vitroView.setConnectionBanner(null)
                     vitroView.setDashboard(config, pendingViewPath)
                     client?.dashboardShown()
-                    // The view it opens may have gone to the fallback ([VitroView.onWebView]), which signals ready.
-                    if (nativeActive) readyWhenBuilt("vitro")
+                    // The view it opens may have gone to the fallback ([VitroView.onWebView]), which signals ready; then
+                    // it's no return target, and the native view before it stays the way back.
+                    if (nativeActive) readyWhenBuilt("vitro") else lastNativeUrl = previousNative
                 }
             }
 
@@ -941,6 +969,7 @@ class VitroEngine(
                     val url = currentUrl
                     webDashboards += currentOrigin to urlPath
                     leaveNativeDashboard()
+                    forgetDisplayed(urlPath)
                     url?.let(::openInFallback)
                 }
             }
