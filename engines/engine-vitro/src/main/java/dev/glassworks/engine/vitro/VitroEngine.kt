@@ -141,6 +141,36 @@ class VitroEngine(
         private var clientGeneration = 0
         private var disposed = false
 
+        /** True while a native dashboard owns the page; false once the fallback took it over. */
+        private var nativeActive = false
+
+        /** The selected view's own entities, and whether it follows every entity (an empty filter). */
+        private var selectedRefs: Set<String> = emptySet()
+        private var selectedFollowsAll = false
+
+        /**
+         * Entities a web island of the shown dashboard looked up at runtime (`hass.states[id]`), beyond what its
+         * config names: subscribed with the selected view, so their changes reach the island. Bounded; cleared with
+         * the dashboard.
+         */
+        private val runtimeEntities = LinkedHashSet<String>()
+        private var runtimeResubscribe = false
+
+        private fun subscribeSelectedView() {
+            client?.subscribeViewEntities(if (selectedFollowsAll) emptySet() else selectedRefs + runtimeEntities)
+        }
+
+        private fun watchRuntimeEntity(id: String) {
+            if (disposed || selectedFollowsAll || id in selectedRefs || runtimeEntities.size >= MAX_RUNTIME_ENTITIES) return
+            if (!runtimeEntities.add(id) || runtimeResubscribe) return
+            // A card reading several at once costs one resubscription.
+            runtimeResubscribe = true
+            main.postDelayed({
+                runtimeResubscribe = false
+                if (!disposed) subscribeSelectedView()
+            }, RUNTIME_RESUBSCRIBE_MS)
+        }
+
         /** The Home Assistant origin the app is set to (the settings' dashboard), the only one its token is for. */
         private fun configuredOrigin(): String? = settings(activity.applicationContext).dashboard?.let(OAuth::origin)
 
@@ -161,6 +191,7 @@ class VitroEngine(
         fun dispose() {
             if (disposed) return
             disposed = true
+            readyOnBuild = null
             activity.application.unregisterActivityLifecycleCallbacks(lifecycle)
             clientGeneration++
             client?.close()
@@ -205,11 +236,23 @@ class VitroEngine(
         init {
             activity.application.registerActivityLifecycleCallbacks(lifecycle)
             container.addView(vitroView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-            vitroView.onMetrics = { m -> lastMetrics = m }
+            vitroView.onMetrics = { m ->
+                lastMetrics = m
+                // The view waited for its states: it's on screen now. Only while the native dashboard still owns the
+                // page: leaving it for the fallback or disposing drops the pending readiness.
+                readyOnBuild?.let { why ->
+                    readyOnBuild = null
+                    if (nativeActive && !disposed) signalReady(why)
+                }
+            }
+            // A view's first build waits (up to a second) for its states, as HA's frontend does: no wrong layout first,
+            // and no second build once they land.
+            vitroView.holdFirstBuildForStatesMs = FIRST_STATES_WAIT_MS
             vitroView.onViewSelected = { v ->
                 // An empty filter subscribes to every entity, which auto-entities' runtime filters need.
-                val refs = if (CardRouter.followsAllEntities(v)) emptySet() else CardRouter.referencedEntities(v)
-                client?.subscribeViewEntities(refs)
+                selectedFollowsAll = CardRouter.followsAllEntities(v)
+                selectedRefs = if (selectedFollowsAll) emptySet() else CardRouter.referencedEntities(v)
+                subscribeSelectedView()
                 // Only the dashboard that owns the route reports a location: one still on screen while another loads
                 // (a theme rebuild) would pair its view with the other's path.
                 // Origin and path: before the new dashboard is on screen (displayedDashboard null) nothing is reported,
@@ -243,6 +286,7 @@ class VitroEngine(
                     callService = { domain, service, data, target ->
                         client?.callService(domain, service, data, target)
                     },
+                    watchEntity = { id -> main.post { watchRuntimeEntity(id) } },
                     callServiceThen = { domain, service, data, target, done ->
                         val c = client
                         if (c != null) c.callService(domain, service, data, target, done) else done(false)
@@ -285,6 +329,8 @@ class VitroEngine(
         }
 
         override fun load(url: String) {
+            // A navigation queued before the activity went away: a new client here would outlive the page.
+            if (disposed) return
             val redirected = host.redirect(url)
             if (redirected != null) {
                 if (redirected == "about:blank") return
@@ -306,6 +352,7 @@ class VitroEngine(
                 openInFallback(url)
                 return
             }
+            nativeActive = true
             val (dashPath, viewPath) = LovelaceParser.parseRoute(url)
             pendingViewPath = viewPath
             host.onPageStart(url)
@@ -318,7 +365,7 @@ class VitroEngine(
                 currentDashboardPath = dashPath
                 client?.claimDashboard(dashPath)
                 vitroView.navigateToView(viewPath)
-                signalReady("view")
+                readyWhenBuilt("view")
                 return
             }
 
@@ -480,6 +527,8 @@ class VitroEngine(
          * the page (it would render, report its location and signal ready behind the fallback).
          */
         private fun leaveNativeDashboard() {
+            nativeActive = false
+            readyOnBuild = null
             currentDashboardPath = NO_DASHBOARD
             client?.releaseDashboard()
         }
@@ -513,6 +562,19 @@ class VitroEngine(
             val afterScheme = url.trim().substringAfter("://")
             val rest = afterScheme.indexOfFirst { it == '/' || it == '?' || it == '#' }.let { if (it < 0) "" else afterScheme.substring(it) }
             return islandServer.entryUrl(if (rest.startsWith("/")) rest else "/$rest")
+        }
+
+        /** Why the page signals ready once the current view is built (it waits for its first states), or null. */
+        private var readyOnBuild: String? = null
+
+        /** Ready now if the view on screen is built, else when it is ([VitroView.holdFirstBuildForStatesMs]). */
+        private fun readyWhenBuilt(why: String) {
+            if (vitroView.currentViewBuilt) {
+                readyOnBuild = null
+                signalReady(why)
+            } else {
+                readyOnBuild = why
+            }
         }
 
         private fun signalReady(why: String) {
@@ -589,10 +651,12 @@ class VitroEngine(
                     // An older request's answer for a dashboard the page has left must not replace the current one.
                     if (urlPath != currentDashboardPath) return@post
                     displayedDashboard = currentOrigin to urlPath
+                    // A new config builds new islands; they ask again for what they read.
+                    runtimeEntities.clear()
                     vitroView.setConnectionBanner(null)
                     vitroView.setDashboard(config, pendingViewPath)
                     client?.dashboardShown()
-                    signalReady("vitro")
+                    readyWhenBuilt("vitro")
                 }
             }
 
@@ -615,7 +679,9 @@ class VitroEngine(
                 post {
                     if (firstPaintReported) {
                         vitroView.setConnectionBanner("Connection lost. Reconnecting…")
-                    } else {
+                    } else if (nativeActive) {
+                        // Only the native dashboard's own load fails: the host is shared with the fallback page,
+                        // which may have loaded (or be loading) normally.
                         host.onPageStop(false)
                     }
                 }
@@ -626,18 +692,33 @@ class VitroEngine(
     companion object {
         const val VERSION_NAME = "Vitro 0.0.1 (experimental)"
 
+        /** How long a view's first build waits for its first states. */
+        private const val FIRST_STATES_WAIT_MS = 1_000L
+
+        /** Entities islands may add to a view's subscription at runtime, and how long their lookups are batched. */
+        private const val MAX_RUNTIME_ENTITIES = 256
+        private const val RUNTIME_RESUBSCRIBE_MS = 150L
+
         /** The dashboard path while the fallback shows a non-dashboard page: no real path equals it. */
         private const val NO_DASHBOARD = "\u0000fallback"
 
         private val LOG_QUERY = Regex("""[?#][^\s"'<>]*""")
         private val LOG_PROXIED = Regex("""/(api|local|hacsfiles|static|auth|__vitro/island|__vitro/ws|__vitro/enter)/[^\s?#"'<>]*""")
 
+        private val LOG_AUTHORITY = Regex("""\b([a-z][a-z0-9+.-]*://)[^/\s?#"'<>]+""", RegexOption.IGNORE_CASE)
+        private val LOG_IPV4 = Regex("""(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?(?![\d.])""")
+        private val LOG_IPV6 = Regex("""(?<![0-9a-z:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?![0-9a-z:])""", RegexOption.IGNORE_CASE)
+        private val LOG_HOST = Regex("""(?<![\w.-])(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*(?::\d+)?(?![\w.-])""", RegexOption.IGNORE_CASE)
+
         /**
          * [text] as it may go to logcat: no query or fragment (an OAuth `state`, a camera token, the proxy's
-         * capability), and no path below the proxied prefixes (entity ids, slot ids, resource names).
+         * capability), no path below the proxied prefixes (entity ids, slot ids, resource names), and no Home
+         * Assistant address (an origin, a host name or an IP a connection error names).
          */
         internal fun forLog(text: String): String =
             text.replace(LOG_QUERY, "?…").replace(LOG_PROXIED) { "/${it.groupValues[1]}/…" }
+                .replace(LOG_AUTHORITY) { "${it.groupValues[1]}…" }
+                .replace(LOG_IPV4, "…").replace(LOG_IPV6, "…").replace(LOG_HOST, "…")
 
         /** Back steps a page keeps. */
         private const val MAX_HISTORY = 50

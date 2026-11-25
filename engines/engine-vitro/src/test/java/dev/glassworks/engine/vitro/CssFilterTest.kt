@@ -33,6 +33,9 @@ class CssFilterTest {
         assertEquals(50f, apply("brightness(50%)", 100f, 0f, 0f)[0], 0.5f)
         // Functions compose left to right.
         assertEquals(apply("grayscale(1) brightness(0.5)", 24f, 188f, 242f)[0], grey[0] / 2f, 1f)
+        // Order matters where the functions don't commute: invert then halve is 77.5, halve then invert 205.
+        assertEquals(77.5f, apply("invert(100%) brightness(50%)", 100f, 0f, 0f)[0], 1f)
+        assertEquals(205f, apply("brightness(50%) invert(100%)", 100f, 0f, 0f)[0], 1f)
         assertNull(CssFilter.matrix("none"))
         assertNull(CssFilter.matrix("blur(2px)"))
     }

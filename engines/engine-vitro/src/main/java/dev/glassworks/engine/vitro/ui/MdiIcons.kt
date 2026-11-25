@@ -304,6 +304,8 @@ object MdiIcons {
         "rainy", "pouring" -> "mdi:weather-rainy"
         "snowy", "snowy-rainy", "hail" -> "mdi:snowflake"
         "lightning", "lightning-rainy" -> "mdi:flash"
+        // HA's weatherIcons: no weather glyph for it, the alert one.
+        "exceptional" -> "mdi:alert-circle-outline"
         else -> "mdi:weather-cloudy"
     }
 
@@ -410,7 +412,10 @@ object MdiIcons {
         var lastWasQuad = false
 
         fun nextF(): Float = if (i < tokens.size) tokens[i++].toFloatOrNull() ?: 0f else 0f
-        fun hasNum(): Boolean = i < tokens.size && tokens[i].firstOrNull()?.let { it.isDigit() || it == '-' || it == '.' || it == '+' } == true
+        fun isNum(t: String): Boolean = t.firstOrNull()?.let { it.isDigit() || it == '-' || it == '.' || it == '+' } == true
+        fun hasNum(): Boolean = i < tokens.size && isNum(tokens[i])
+        // A whole parameter group is there: SVG stops at an incomplete one instead of filling in zeros.
+        fun hasNums(n: Int): Boolean = (0 until n).all { k -> i + k < tokens.size && isNum(tokens[i + k]) }
         // Arc flags may be packed against the next number ("0 01 1" = 0, 0, 1, 1); take one digit.
         fun nextFlag(): Boolean {
             if (i >= tokens.size) return false
@@ -440,6 +445,14 @@ object MdiIcons {
             }
             var cubic = false
             var quad = false
+            val need = when (cmd) {
+                'M', 'm', 'L', 'l', 'T', 't' -> 2
+                'H', 'h', 'V', 'v' -> 1
+                'C', 'c' -> 6
+                'S', 's', 'Q', 'q' -> 4
+                else -> 0
+            }
+            if (need > 0 && !hasNums(need)) break
             when (cmd) {
                 'M', 'm' -> {
                     val x = nextF(); val y = nextF()

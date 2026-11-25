@@ -75,7 +75,8 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
 
     private val tick = object : Runnable {
         override fun run() {
-            if (!running) return
+            // Attached but hidden (a cached tab behind another): no ticking; showing it again resumes.
+            if (!running || !isShown) return
             render(Date())
             ctx.main.postDelayed(this, if (showSeconds) 1_000L else 5_000L)
         }
@@ -303,6 +304,14 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         running = false
         ctx.main.removeCallbacks(tick)
         super.onDetachedFromWindow()
+    }
+
+    /** Hidden: the timer stops. Shown again: the current time at once, then the timer. */
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (!running) return
+        ctx.main.removeCallbacks(tick)
+        if (isShown) tick.run()
     }
 
     internal val renderedTime: String get() = "${hourView.text}:${minuteView.text}"

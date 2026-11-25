@@ -8,8 +8,8 @@
 //   HA_URL=http://homeassistant.local:8123 HA_TOKEN=<long-lived token> node tools/vitro-census/ha-dashboards.mjs list
 //   HA_URL=... HA_TOKEN=... node tools/vitro-census/ha-dashboards.mjs get <url_path>   # "lovelace" for the default one
 //
-// Needs Node 22+ (built-in WebSocket). With an http:// HA_URL the token crosses the network unencrypted, as any
-// plain-HTTP Home Assistant client's does; use https:// (wss://) when Home Assistant serves HTTPS.
+// Needs Node 22+ (built-in WebSocket). The token goes only over wss:// or to this computer (loopback): to another
+// host over plain http:// it would cross the network unencrypted, so that takes HA_ALLOW_INSECURE=1.
 const [, , cmd, urlPath] = process.argv;
 const { HA_URL, HA_TOKEN } = process.env;
 if (!HA_URL || !HA_TOKEN || !['list', 'get'].includes(cmd) || (cmd === 'get' && !urlPath)) {
@@ -21,7 +21,15 @@ const msg = cmd === 'list'
   : { type: 'lovelace/config', url_path: urlPath === 'lovelace' ? null : urlPath, force: true };
 const wsUrl = HA_URL.replace(/^http/i, 'ws').replace(/\/$/, '') + '/api/websocket';
 if (!/^wss:/i.test(wsUrl)) {
-  console.error('warning: the connection is not wss://, so the token is sent unencrypted; use https:// when Home Assistant serves it');
+  // The host the WebSocket will reach, as it parses the URL: never a prefix of the text (`localhost:x@other-host`).
+  let host = '';
+  try { host = new URL(wsUrl).hostname.toLowerCase(); } catch { host = ''; }
+  const loopback = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+  if (!loopback && process.env.HA_ALLOW_INSECURE !== '1') {
+    console.error('refusing to send the token over ws:// to another host: use https://, or set HA_ALLOW_INSECURE=1 to accept that');
+    process.exit(2);
+  }
+  if (!loopback) console.error('warning: the connection is not wss://, so the token is sent unencrypted');
 }
 const ws = new WebSocket(wsUrl);
 let done = false;

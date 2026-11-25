@@ -4,6 +4,7 @@
 
 package dev.glassworks.web
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.InetAddress
@@ -62,12 +63,30 @@ class HttpServerTest {
         )
     }
 
+    @Test fun aResponsesOnDoneRunsOnceItIsWritten() {
+        val done = java.util.concurrent.atomic.AtomicInteger(0)
+        val server = HttpServer(0, { HttpResponse(200, mapOf("Content-Type" to "text/plain"), "hello".toByteArray(), onDone = { done.incrementAndGet() }) },
+            bindAddress = loopback, workers = 1)
+        server.start()
+        try {
+            val s = open(server.localPort)
+            assertTrue(s.getInputStream().readBytes().toString(Charsets.UTF_8).endsWith("hello"))
+            s.close()
+            val deadline = System.nanoTime() + 3_000_000_000L
+            while (done.get() == 0 && System.nanoTime() < deadline) Thread.sleep(10)
+            assertEquals(1, done.get())
+        } finally {
+            server.stop()
+        }
+    }
+
     @Test fun upgradedConnectionsRunOffTheWorkersUpToTheirOwnLimit() {
         val release = CountDownLatch(1)
         val running = CountDownLatch(1)
         val server = HttpServer(0, { req ->
             if (req.path == "/ws") {
-                HttpResponse.webSocket(req.headers["sec-websocket-key"]!!, 5_000) { running.countDown(); release.await(5, TimeUnit.SECONDS) }
+                // Held until the test releases it (the finally does too): a slow runner can't free the slot early.
+                HttpResponse.webSocket(req.headers["sec-websocket-key"]!!, 5_000) { running.countDown(); release.await() }
             } else {
                 HttpResponse.text(200, "ok")
             }
