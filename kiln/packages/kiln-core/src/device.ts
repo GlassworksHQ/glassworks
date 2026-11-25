@@ -103,6 +103,16 @@ export interface AppOverAdb {
  * blocks the device's own agent reads back are written. Kiln runs the steps and checks every image this builds
  * (inplace.ts `checkInPlace`) before it is written.
  */
+/** A file an in-place write changed, as Kiln reads it back over adb after the restart (InPlaceCode `build`'s `readBack`). */
+export interface ReadBackFile {
+  /** Its path on the running device, e.g. `/system/framework/services.jar`. */
+  path: string;
+  /** The SHA-256 (hex) of the bytes the write put there. */
+  sha256: string;
+  /** Its size in bytes, when known: a read that brings more is cut off there and doesn't match. */
+  size?: number;
+}
+
 export interface InPlaceCode {
   /**
    * The `stage` step: a small userdata image, sized for the partition, that starts the frame's agent on the stock
@@ -142,6 +152,13 @@ export interface InPlaceCode {
     restore: Blob;
     manifest?: Record<string, unknown>;
     files?: Record<string, Uint8Array>;
+    /**
+     * The files the writes change, as the running system shows them, each with the SHA-256 it must have. Fastboot
+     * can't read a write back on every device, so Kiln checks it the next place it can: once the device has started
+     * into what was written and lets this browser in over adb, Kiln reads each file back (adb's sync, hashed in the
+     * browser) before the app's install, and stops there on a mismatch, with the way back. None: nothing to read back.
+     */
+    readBack?: readonly ReadBackFile[];
   }>;
   /**
    * The `app-install` step, over adb with this browser's key after the restart into what was written: the app
@@ -323,9 +340,12 @@ export interface InPlaceSim {
    * One simulated device: its fastboot (`fastboot()` is the session connected now; after a restart the next
    * `fastboot()` is the next session), its agent on the network and over Bluetooth once the stage is written, and adb
    * after the install. `lan`: how the network behaves; `bluetooth: false`, no Bluetooth; `refusedBuild`: a build the frame's code refuses before any write;
-   * `tampered`: a bundle whose signature doesn't match.
+   * `tampered`: a bundle whose signature doesn't match. `systemNotTaken`: fastboot says the second session's system
+   * write is done, but the running system still has the old file (Kiln's read back over adb catches it);
+   * `unreadable`: adb can't read the files back.
    */
   device(o: { lan?: 'ok' | 'lna-denied' | 'drop-midway' | 'offline'; bluetooth?: boolean; refusedBuild?: boolean; tampered?: boolean; tick?: Sleep;
+    systemNotTaken?: boolean; unreadable?: boolean;
     /** time between Bluetooth notifications, so a demo's transfer stays on screen */
     bleFrameDelayMs?: number }): InPlaceSimDevice;
 }

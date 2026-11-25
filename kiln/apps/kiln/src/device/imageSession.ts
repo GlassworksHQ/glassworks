@@ -12,7 +12,7 @@ import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@gl
 import { askAdb, nothingPicked } from './adbAsk';
 import {
   ProxyError, WrongImage, adbKeyStep, cap, checkInPlace, imageFromLink, parseSparseWrites, pickInList, plan, readNamedBackupZip, sha256Hex, sourceFile, systemKeyStep, wifiStep,
-  type DeviceFrame, type FastbootLike, type FastbootReport, type FirstStart, type ImageFile, type ImageMaker, type ImageRecipe, type InPlaceCode, type NamedPart,
+  type DeviceFrame, type FastbootLike, type FastbootReport, type FirstStart, type ImageFile, type ImageMaker, type ImageRecipe, type InPlaceCode, type NamedPart, type ReadBackFile,
   type PlannedStep, type PrepareStep,
 } from '@glassworks/kiln-core';
 import type { BluetoothLike } from './channels';
@@ -121,13 +121,15 @@ export interface ImageDeps {
  * the SHA-256 of the whole bundle those writes were built from, so a resume builds the rest from the same blocks;
  * `began`, the writes started (finished or not), so a lost bundle after one of them offers the way back. `staged` is set
  * once the stage's write is done, before its restart. `flashed` keeps the `serial` and the bundle's `digest`, so the app
- * installs on the device that was written and its way back finds this run's restore point. `undo`: its way back has
+ * installs on the device that was written and its way back finds this run's restore point, and `readBack`, the files
+ * the writes changed (the frame's build said), which Kiln reads back over adb before the app's install, after a reload
+ * too. `undo`: its way back has
  * started writing (`serial`, the device it writes; `digest`, the restore image's SHA-256; `restore`, where this browser
  * keeps that restore point; `wrote`, the partitions written so far), so a reload or a retry goes on with the same way
  * back on the same device, never with the install it is undoing.
  */
 export type ProgressMark = { at: 'written' | 'flashed' | 'staged' | 'received' | 'undo'; image?: string; secret?: string; serial?: string; digest?: string; bundle?: string;
-  wrote?: string[]; began?: string[]; restore?: { serial: string; digest: string } };
+  wrote?: string[]; began?: string[]; restore?: { serial: string; digest: string }; readBack?: ReadBackFile[] };
 const MARKS: readonly ProgressMark['at'][] = ['written', 'flashed', 'staged', 'received', 'undo'];
 export interface DeviceProgress { get(): ProgressMark | undefined; set(m: ProgressMark | undefined): void }
 
@@ -253,12 +255,34 @@ export interface ImageState {
    * session is written (Try again starts the install over), `restore` once something is (the way back, on the restore point).
    */
   bundleLost?: 'restart' | 'restore';
+  /**
+   * An in-place install's read back after its restart found a file that isn't what Kiln wrote: the system didn't take
+   * the change. Nothing was installed; the way back is the one way on.
+   */
+  notTaken?: boolean;
   error?: string;
   log: string[];
 }
 
 /** The person went on to fastboot by hand while the keep step's read ran. */
 class Skipped extends Error {}
+/** An in-place install's read back after its restart: a file isn't what Kiln wrote. */
+class NotTaken extends Error {}
+
+/** How long one file's read back over adb may take before Kiln counts it unreadable (a 2.4 MB file takes about a second). */
+const READ_BACK_MS = 60_000;
+
+/** `p.pull(path)` with a deadline: a device that stops answering is an error after `ms`, not a wait forever. */
+async function pullWithin(p: PanelShell, path: string, size: number | undefined, ms: number): Promise<Uint8Array> {
+  const c = new AbortController();
+  const stalled = new Promise<never>((_, reject) => c.signal.addEventListener('abort', () => reject(c.signal.reason), { once: true }));
+  const t = setTimeout(() => c.abort(new Error(`no answer in ${Math.round(ms / 1000)} s`)), ms);
+  try {
+    return await Promise.race([p.pull!(path, { signal: c.signal, ...(size !== undefined ? { maxBytes: size } : {}) }), stalled]);
+  } finally {
+    clearTimeout(t);
+  }
+}
 /** An in-place install's bundle that this browser no longer has (or no longer the same one): it can't be built from again. */
 class BundleLost extends Error {}
 
@@ -338,6 +362,8 @@ export class ImageSession {
   private undoKey?: { serial: string; digest: string };
   /** An in-place run's second-session writes started so far, finished or not (the `received` mark's `began`). */
   private began = new Set<string>();
+  /** The files an in-place run's writes changed, as its build said: read back over adb before the app's install (the `flashed` mark's `readBack`). */
+  private readBack?: ReadBackFile[];
 
   /** The frame this session installs. */
   get frame() { return this.d.frame; }
@@ -376,6 +402,7 @@ export class ImageSession {
         this.cursor = this.indexOf(wrote, 'app-install');
         if (mark.serial) this.serial = mark.serial;
         if (mark.digest) this.bundle = { digest: mark.digest }; // only to find this run's restore point for its way back
+        if (Array.isArray(mark.readBack)) this.readBack = mark.readBack.filter((x): x is ReadBackFile => typeof x?.path === 'string' && typeof x?.sha256 === 'string');
       }
     } else if (inPlace && mark?.at === 'undo') {
       // the way back had started writing: it opens again, on the restore point this browser kept; what it wrote already
@@ -843,7 +870,8 @@ export class ImageSession {
               this.wrote = new Set();
               this.began = new Set();
               this.d.flashedHere?.set(); // this browser's key is in what it wrote: the keep step can read it next time
-              this.d.progress?.set({ at: 'flashed', image: r.id, ...(this.serial ? { serial: this.serial } : {}), ...(this.bundle ? { digest: this.bundle.digest } : {}) });
+              this.d.progress?.set({ at: 'flashed', image: r.id, ...(this.serial ? { serial: this.serial } : {}), ...(this.bundle ? { digest: this.bundle.digest } : {}),
+                ...(this.readBack ? { readBack: this.readBack } : {}) });
             }
             break;
           }
@@ -868,6 +896,7 @@ export class ImageSession {
             for (const x of flashes) partitionBytes[x.partition] ??= await fb.partitionSize(x.partition);
             const built = await this.code().build(bundle.bytes, { adbKey, userdataBytes: this.state.fastboot?.userdataBytes ?? partitionBytes.userdata ?? 0, partitionBytes, serial: this.serial, ...(network ? { wifi: network } : {}) });
             for (const m of step.makes) if (!built.writes[m]) throw new Error(`the frame's build made no ${m}`);
+            this.readBack = built.readBack?.map((x) => ({ path: x.path, sha256: x.sha256.toLowerCase(), ...(x.size !== undefined ? { size: x.size } : {}) })) ?? [];
             // Kiln's own check before any byte is written: the surgical write (the first one after the restore point) changes
             // only the blocks the bundle names, and the restore puts back exactly those
             const surgical = flashes.find((x) => step.makes.includes(x.file))!;
@@ -1147,7 +1176,7 @@ export class ImageSession {
     if (in_ && in_.id !== this.state.picked) { void this.forget(); this.set({ picked: in_.id, files: waiting(in_) }); }
     this.undoFiles = undefined;
     this.undoKey = undefined;
-    this.set({ screen: 'undo', undo: { at: 'start' }, error: undefined, bundleLost: undefined });
+    this.set({ screen: 'undo', undo: { at: 'start' }, error: undefined, bundleLost: undefined, notTaken: undefined });
     await this.loadKeptRestore();
   }
 
@@ -1185,7 +1214,7 @@ export class ImageSession {
     if (rp && this.state.restorePoint?.status === 'ready') {
       try {
         this.takeRestore(rp.files, this.serial && this.bundle ? { serial: this.serial, digest: this.bundle.digest } : undefined);
-        this.set({ screen: 'undo', undo: { at: 'fastboot', source: 'browser', restarted: false }, error: undefined, connectError: undefined, bundleLost: undefined });
+        this.set({ screen: 'undo', undo: { at: 'fastboot', source: 'browser', restarted: false }, error: undefined, connectError: undefined, bundleLost: undefined, notTaken: undefined });
       } catch (e) {
         this.set({ screen: 'undo', undo: { at: 'start', error: (e as Error).message } });
       }
@@ -1199,7 +1228,7 @@ export class ImageSession {
     const inFastboot = step !== 'app-install' && step !== 'first-boot' && step !== 'hand-back';
     this.undoFiles = undefined;
     this.undoKey = undefined;
-    this.set({ screen: 'undo', undo: { at: 'start' }, error: undefined, connectError: undefined, bundleLost: undefined });
+    this.set({ screen: 'undo', undo: { at: 'start' }, error: undefined, connectError: undefined, bundleLost: undefined, notTaken: undefined });
     const found = this.serial && this.bundle ? await this.loadRestore({ serial: this.serial, digest: this.bundle.digest }) : false;
     // still in fastboot (a stop before the restart): no restart over adb to ask for
     if (found && inFastboot) this.set({ undo: { ...this.state.undo!, at: 'fastboot', restarted: false } });
@@ -1547,7 +1576,7 @@ export class ImageSession {
     const stale = this.panel;
     this.panel = undefined;
     void stale?.close?.().catch(() => {});
-    this.set({ screen: 'adb', error: undefined, connectError: undefined, adbWaiting: false, work: undefined, flashFailed: false, firstBoot: undefined });
+    this.set({ screen: 'adb', error: undefined, connectError: undefined, adbWaiting: false, work: undefined, flashFailed: false, firstBoot: undefined, notTaken: undefined });
   }
 
   /**
@@ -1614,6 +1643,7 @@ export class ImageSession {
         const apk = this.d.apk();
         if (!apk) throw new Error(this.d.apkBlocked?.() ?? 'Kiln has no Glassworks APK to install. Pick it again, then Connect.');
         this.set({ work: { step: 'app-install', x: 0 } });
+        await this.checkReadBack(p);
         this.log(`Installing ${this.d.frame.app.name}`);
         fb = await this.code().appInstall(p, { apk, onStep, sleep });
       } else fb = await this.d.frame.imageFlow.firstBoot(p, { onStep, sleep, ...(this.apiKey ? { apiKey: this.apiKey } : {}) });
@@ -1627,7 +1657,43 @@ export class ImageSession {
       this.d.handOver?.(p);
     } catch (e) {
       this.log('Stopped', (e as Error).message);
-      this.set({ screen: 'error', error: (e as Error).message });
+      this.set({ screen: 'error', error: (e as Error).message, ...(e instanceof NotTaken ? { notTaken: true } : {}) });
+    }
+  }
+
+  /**
+   * An in-place install's writes, read back where Kiln can: fastboot can't read them back on every device, so once the
+   * device has started into them and lets this browser in, each file the frame's build named (`readBack`) comes back
+   * over adb's sync and is hashed here. A file that isn't what Kiln wrote stops the install before the app goes on
+   * (NotTaken), with the way back. A file Kiln can't read is said plainly and the install goes on: the write was checked
+   * before it was sent and the device started on it, so a read that fails is no sign the write did, and the way back
+   * stays there either way.
+   */
+  private async checkReadBack(p: PanelShell): Promise<void> {
+    const the = this.d.frame.the;
+    const files = this.readBack;
+    if (!files) {
+      this.log(`Not read back: what Kiln wrote`);
+      this.log('', `this page has no record of which files the install changed, so Kiln can't read them back from ${the}. It goes on with the app.`);
+      return;
+    }
+    if (!files.length) return;
+    this.log(`Reading back what Kiln wrote, now that ${the} has started`);
+    for (const f of files) {
+      const name = f.path.slice(f.path.lastIndexOf('/') + 1) || f.path;
+      let bytes: Uint8Array;
+      try {
+        if (!p.pull) throw new Error('this connection can\'t read files');
+        bytes = await pullWithin(p, f.path, f.size, READ_BACK_MS);
+      } catch (e) {
+        this.log(`Not read back: ${name}`);
+        this.log('', `Kiln couldn't read ${f.path} back from ${the} (${(e as Error).message}), so this write is unchecked. Kiln goes on with the app; if ${the} doesn't start it, the way back puts the original system back.`);
+        continue;
+      }
+      if (await sha256Hex(bytes) !== f.sha256.toLowerCase()) {
+        throw new NotTaken(`${name} on ${the} isn't what Kiln wrote, so ${the}'s system didn't take the change. Nothing was installed. Restore the original system with the restore point Kiln saved before the write.`);
+      }
+      this.log('', `${name} on ${the} matches what Kiln wrote`);
     }
   }
 
@@ -1709,7 +1775,7 @@ export class ImageSession {
   /** From an error: back to the image's first screen, keeping what checked out (a fetched image builds again). */
   retry() {
     this.stoppedAt = undefined;
-    this.set({ bundleLost: undefined, wifiOnFailed: false, screen: this.recipe.community ? 'download' : 'image', error: undefined, work: undefined, fastboot: undefined, understood: false, flashFailed: false });
+    this.set({ bundleLost: undefined, notTaken: undefined, wifiOnFailed: false, screen: this.recipe.community ? 'download' : 'image', error: undefined, work: undefined, fastboot: undefined, understood: false, flashFailed: false });
   }
 
   /**
