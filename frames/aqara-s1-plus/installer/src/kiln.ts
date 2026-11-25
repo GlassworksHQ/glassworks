@@ -43,5 +43,6 @@ export const kilnFrame: KilnFrame = {
   // Next gives a static image as { src, width, height }; Vite (the tests) as its URL
   photo: photo as unknown as KilnFrame['photo'],
   credits,
+  apk: { line: installer.apk.line, asset: installer.apk.asset },
   ...code,
 };

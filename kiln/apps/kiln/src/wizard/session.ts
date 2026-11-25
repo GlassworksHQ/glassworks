@@ -24,6 +24,8 @@ export interface SessionDeps {
   requestFel(): Promise<FelDevice>;
   asset(name: string, onProgress?: (done: number, total: number) => void): Promise<Uint8Array>;
   hasAsset(name: string): Promise<boolean>;
+  /** The app from its release, fetched during the backup and checked before the first write (kiln-core FlowDeps). */
+  fetchAhead?: () => Promise<unknown>;
   backups: Pick<BackupStore, 'save' | 'original' | 'files'>;
   loadKey(): Promise<AdbKey>;
   sleep?: (ms: number) => Promise<void>;
@@ -53,6 +55,7 @@ export class Session extends StandardSession {
     this.flow ??= new InstallFlow<string, unknown, AppResult>(this.d.recipe, {
       asset: (n, p) => this.d.asset(n, p),
       hasAsset: (n) => this.d.hasAsset(n),
+      fetchAhead: this.d.fetchAhead,
       backups: {
         // safe in this browser from here on: the tab's record, so any later Done offers it
         save: async (meta, files) => {

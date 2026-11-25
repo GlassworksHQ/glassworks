@@ -210,12 +210,22 @@ export const restoresBlocks = (id: string) => Object.values(INSTALLERS[id]?.flow
 export function inPlaceStep(s: ImageState, ids: readonly string[]): string {
   const [first, fastboot, stage, receive, install, appInstall] = ids;
   const step = s.work?.step;
-  if (s.screen === 'adb' || step === 'app-install') return appInstall ?? '';
+  // the app's install while it runs or stopped; a session that left it (back on the choice, say) is on that screen's step
+  if (s.screen === 'adb' || (step === 'app-install' && (s.screen === 'working' || s.screen === 'error'))) return appInstall ?? '';
   if (s.screen === 'receive') return receive ?? '';
   if (s.round === 2 && (s.screen === 'fastboot' || s.screen === 'restore-point' || s.screen === 'working' || s.screen === 'error')) return install ?? '';
   if (s.screen === 'working' || (s.screen === 'error' && s.work)) return stage ?? '';
   if (s.screen === 'fastboot' || s.screen === 'confirm') return fastboot ?? '';
   return first ?? '';
+}
+
+/**
+ * A session still on the choice, opened on an in-place route: the in-place recipe, picked. Its route is the first one
+ * that has nothing to resume (the flow's first screen, where its inputs are); a session past the choice stays as it is.
+ */
+function pickInPlace(image: ImageSession) {
+  const r = image.recipes.find((x) => x.mode === 'in-place');
+  if (r && image.state.screen === 'choose') image.pick(r.id);
 }
 
 /** The ids of a frame's in-place flow's steps, in order. */
@@ -505,11 +515,14 @@ export function DevicePage({ frame, demo: sim, base }: { frame: DeviceFrame; dem
     // undo's routes, for a frame whose way back is its restore point: the image session's way back
     const undo = restoresBlocks(frame.id) && /^undo(\/|$)/.test(sub);
     const imageFirst = m.demo ? isImageDemo(m.demo) : undo || (!appRoute && new URLSearchParams(location.search).get('mode') !== 'app');
+    // the in-place flow's routes (a link to them, a reload there with nothing to resume): its recipe, picked on the choice
+    const inPlaceRoute = !!sub && Object.values(routes.inPlace).includes(sub);
+    const onInPlace = <T extends { image: ImageSession }>(x: T): T => { if (inPlaceRoute) pickInPlace(x.image); return x; };
     if (m.demo) return { m, imageFirst, search: location.search, undo };
     // the sessions live in Kiln's registry, not in this component: a running install outlives the picker
     const earlier = registry.activity(base);
-    if (!m.on && !earlier) return { m, imageFirst, search: location.search, real: realSessions(frame, false), undo };
-    const kept = keptDevice(base, frame.name, () => realSessions(frame, true, m.apk, handOver, base), imageFirst);
+    if (!m.on && !earlier) return { m, imageFirst, search: location.search, real: onInPlace(realSessions(frame, false)), undo };
+    const kept = keptDevice(base, frame.name, () => onInPlace(realSessions(frame, true, m.apk, handOver, base)), imageFirst);
     // back to a running install (or from a link without ?apk=…): as it was; otherwise the address's path
     if (kept === earlier && m.on && !kept.running()) {
       kept.imageMode = imageFirst;

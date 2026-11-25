@@ -2,7 +2,7 @@
 // own page and picks it here.
 //
 // A bundle: "GWSB", uint32 LE metadata length, uint32 LE payload length, the metadata (UTF-8 JSON), the payload.
-import { findDigest, type AgentMeta, type TransferProgress } from './types';
+import { abortError, findDigest, type AgentMeta, type TransferProgress } from './types';
 
 export const BUNDLE_MAGIC = 'GWSB';
 export const BUNDLE_HEADER_BYTES = 12;
@@ -70,7 +70,9 @@ export function buildAgentPageUrl(lanIp: string, port: number, pagePath = '/'): 
 }
 
 /** Reads a bundle the user picked, checking early that it is one, with progress for big files. */
-export async function readBundleFromFile(file: Blob, onProgress?: (p: TransferProgress) => void): Promise<Uint8Array> {
+export async function readBundleFromFile(file: Blob, onProgress?: (p: TransferProgress) => void, signal?: AbortSignal): Promise<Uint8Array> {
+  const check = () => { if (signal?.aborted) throw abortError(); };
+  check();
   if (file.size === 0) throw new BundleFormatError('This file is empty. Download the bundle again from the device\'s page.');
   const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
   if (!hasBundleMagic(head)) throw new BundleFormatError('This isn\'t a device bundle. Download it again from the device\'s page and pick that file.');
@@ -88,18 +90,30 @@ export async function readBundleFromFile(file: Blob, onProgress?: (p: TransferPr
   if (typeof file.stream === 'function') {
     bytes = new Uint8Array(total);
     const reader = file.stream().getReader();
+    // a cancel stops the read where it is, so a cancelled read doesn't go on to the end of a large file
+    const onAbort = () => { reader.cancel().catch(() => {}); };
+    signal?.addEventListener('abort', onAbort, { once: true });
     let at = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (at + value.length > total) throw new BundleFormatError('The file changed while it was read. Pick it again.');
-      bytes.set(value, at);
-      at += value.length;
-      report(at);
+    try {
+      for (;;) {
+        check();
+        const { done, value } = await reader.read();
+        check();
+        if (done) break;
+        if (at + value.length > total) throw new BundleFormatError('The file changed while it was read. Pick it again.');
+        bytes.set(value, at);
+        at += value.length;
+        report(at);
+      }
+    } finally {
+      signal?.removeEventListener('abort', onAbort);
+      if (signal?.aborted) await reader.cancel().catch(() => {});
+      reader.releaseLock();
     }
     if (at !== total) throw new BundleFormatError('The file changed while it was read. Pick it again.');
   } else {
     bytes = new Uint8Array(await file.arrayBuffer());
+    check();
     report(bytes.length);
   }
   parseBundleHeader(bytes);

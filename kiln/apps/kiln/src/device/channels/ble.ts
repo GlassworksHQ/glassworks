@@ -188,7 +188,15 @@ export async function connectBleAgent(config: BleChannelConfig, opts: BleConnect
   const step = <T>(p: Promise<T>) => within(p, META_TIMEOUT_MS).catch((e: unknown) => {
     throw e instanceof Stalled ? new BleTransferError('The device didn\'t answer over Bluetooth. Keep this computer near it and try again.') : e;
   });
-  const server = await step(device.gatt.connect());
+  const gattServer = device.gatt;
+  let server: BleServerLike;
+  try {
+    server = await step(gattServer.connect());
+  } catch (e) {
+    // a connect that timed out may still finish later: disconnecting aborts it (Web Bluetooth), so nothing is left open
+    try { gattServer.disconnect?.(); } catch { /* nothing to close */ }
+    throw e;
+  }
   try {
     check();
     const service = await step(server.getPrimaryService(uuid(config.service)));
@@ -226,8 +234,11 @@ export function createBleAgentConnection(
   };
   device.addEventListener?.('gattserverdisconnected', onDisconnected);
   /** A GATT operation that never settled: the link is given up, so the next try connects afresh. */
+  let closed = false;
   const close = () => {
     lost = true;
+    if (closed) return;
+    closed = true;
     try { server.disconnect(); } catch { /* gone already */ }
   };
 
@@ -247,6 +258,8 @@ export function createBleAgentConnection(
     const poke = () => { const w = wake; wake = null; w?.(); };
     /** GATT waits in flight: a failure or a cancel releases them at once (their promises take no signal). */
     const waiting = new Set<(e: Error) => void>();
+    /** GATT operations started and not settled yet, released or not: the link can't be handed on while one runs. */
+    const unsettled = new Set<Promise<unknown>>();
     const fail = (e: Error) => { failure ??= e; poke(); for (const r of [...waiting]) r(failure); };
     // the connection is this download's from here, before the first await: a second call is turned away, and a drop or
     // a cancel reaches this one through every wait below
@@ -265,7 +278,10 @@ export function createBleAgentConnection(
         fail(new BleTransferError(`The device stopped answering over Bluetooth (${what}). Keep this computer near it and try again.`));
       }, stallMs);
       waiting.add(release);
-      op().then((v) => { clearTimeout(timer); waiting.delete(release); resolve(v); }, (e: unknown) => release(e instanceof Error ? e : new BleTransferError(String(e))));
+      const running = op();
+      unsettled.add(running);
+      running.then(() => unsettled.delete(running), () => unsettled.delete(running));
+      running.then((v) => { clearTimeout(timer); waiting.delete(release); resolve(v); }, (e: unknown) => release(e instanceof Error ? e : new BleTransferError(String(e))));
     });
 
     let chunkSize = 0;
@@ -430,6 +446,9 @@ export function createBleAgentConnection(
       if (store) await store.s.clear(store.digest).catch(() => {});
       return buf!;
     } catch (e) {
+      // a GATT operation the cancel left running (its promise takes no signal) gives the link up: it may still turn
+      // notifications on after a stop, and the next download would read this one's frames
+      if (unsettled.size) close();
       if (isAbortError(e) || o.signal?.aborted) {
         if (!lost) await within(ctrlWrite(encodeAbort()), stallMs).catch((x: unknown) => { if (x instanceof Stalled) close(); });
         throw isAbortError(e) ? e : abortError();

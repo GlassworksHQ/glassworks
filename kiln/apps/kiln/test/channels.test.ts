@@ -67,6 +67,8 @@ interface AgentOptions {
   stopNotifications?: () => Promise<void>;
   /** Called with each CTRL write before the agent acts on it; a promise that never settles stalls the write. */
   ctrlGate?: (b: Uint8Array) => Promise<void> | void;
+  /** Awaited before the GATT connect resolves: a promise that never settles stalls it. */
+  connectGate?: () => Promise<void>;
 }
 
 /** A fake agent behind a fake Web Bluetooth: the GATT profile, streaming on a timer like real notifications. */
@@ -140,14 +142,15 @@ function fakeAgent(bundle: Uint8Array, o: AgentOptions = {}) {
   const metaChar: BleCharacteristicLike = { ...ctrl, readValue: async () => view(metaBytes) };
   const chars: Record<string, BleCharacteristicLike> = { [BLE.meta]: metaChar, [BLE.ctrl]: ctrl, [BLE.data]: data };
   const requests: unknown[] = [];
-  const disconnects = { n: 0 };
+  const disconnects = { n: 0, gatt: 0 };
   const bluetooth: BluetoothLike = {
     getAvailability: async () => true,
     requestDevice: async (opts) => {
       requests.push(opts);
       return {
         gatt: {
-          connect: async () => ({
+          disconnect: () => { disconnects.gatt++; },
+          connect: async () => (await o.connectGate?.(), {
             connected: true,
             disconnect: () => { disconnects.n++; },
             getPrimaryService: async (uuid: string) => {
@@ -548,6 +551,36 @@ describe('Bluetooth', () => {
     await expect(p).rejects.toMatchObject({ name: 'AbortError' });
   });
 
+  it('a cancel that leaves notifications turning on gives the link up: the next download reads nothing of this one', async () => {
+    let started!: () => void;
+    const agent = fakeAgent(makeBundle(2000), { chunkSize: 100, startNotifications: () => new Promise<void>((r) => { started = r; }) });
+    const conn = await connectBleAgent(BLE, { bluetooth: agent.bluetooth });
+    const ctl = new AbortController();
+    const p = conn.downloadBundle({ signal: ctl.signal, stallTimeoutMs: 60_000 });
+    await vi.waitFor(() => expect(started).toBeTypeOf('function'));
+    ctl.abort();
+    await expect(p).rejects.toMatchObject({ name: 'AbortError' });
+    expect(agent.disconnects.n).toBe(1);
+    expect(conn.connected).toBe(false);
+    started(); // the start settles after the stop: the link is gone, so its frames reach no one
+    await expect(conn.downloadBundle({ stallTimeoutMs: 50 })).rejects.toThrow(/dropped/);
+    expect(cmds(agent.writes, CTRL_START)).toHaveLength(0);
+  });
+
+  it('a connect that times out is called off, so it can\'t finish behind the failure', async () => {
+    vi.useFakeTimers();
+    try {
+      const agent = fakeAgent(makeBundle(2000), { connectGate: () => new Promise<void>(() => {}) });
+      const p = connectBleAgent(BLE, { bluetooth: agent.bluetooth });
+      const done = expect(p).rejects.toThrow(/didn't answer over Bluetooth/);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await done;
+      expect(agent.disconnects.gatt).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('encodes a resend of 100 indexes in 403 bytes', () => {
     expect(encodeResend(Array.from({ length: 100 }, (_, i) => i)).length).toBe(403);
   });
@@ -572,6 +605,29 @@ describe('the file fallback', () => {
     await expect(readBundleFromFile(new Blob([new TextEncoder().encode('PK\u0003\u0004 not a bundle')]))).rejects.toThrow(/isn't a device bundle/);
     await expect(readBundleFromFile(new Blob([]))).rejects.toThrow(/empty/);
     await expect(readBundleFromFile(new Blob([makeBundle(100).slice(0, 50)]))).rejects.toThrow(/cut short/);
+  });
+
+  it('stops reading at a cancel, and lets the file go', async () => {
+    const bundle = makeBundle(9000);
+    const pulls = { n: 0, cancelled: false };
+    const ctl = new AbortController();
+    // a file read in pieces; the cancel comes after the second
+    const file = {
+      size: bundle.length,
+      slice: (a: number, b: number) => new Blob([bundle.slice(a, b)]),
+      stream: () => new ReadableStream<Uint8Array>({
+        pull(c) {
+          pulls.n++;
+          if (pulls.n === 2) ctl.abort();
+          c.enqueue(bundle.slice((pulls.n - 1) * 1000, pulls.n * 1000));
+          if (pulls.n * 1000 >= bundle.length) c.close();
+        },
+        cancel() { pulls.cancelled = true; },
+      }, { highWaterMark: 0 }),
+    } as unknown as Blob;
+    await expect(readBundleFromFile(file, undefined, ctl.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    expect(pulls.cancelled).toBe(true);
+    expect(pulls.n).toBeLessThan(9);
   });
 
   it('builds the agent\'s page URL', () => {

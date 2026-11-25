@@ -87,6 +87,9 @@ class EngineCheckActivity : Activity() {
         override fun onFirstPaint() = show("painted")
         override fun onLocationChange(url: String?) { lastUrl = url.orEmpty(); show("at") }
         override fun redirect(url: String): String? = null
+        // The page this check opened, as the app trusts its Home Assistant (#847).
+        override fun trusts(url: String): Boolean =
+            dev.glassworks.engine.TrustedPages.trusts(url, null, listOfNotNull(target?.let { android.net.Uri.parse(it).host }))
         override fun onContentGone(killed: Boolean) {
             show(if (killed) "content process killed" else "content process crashed")
             page?.restart()

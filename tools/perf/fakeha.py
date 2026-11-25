@@ -34,6 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import camera  # noqa: E402
 import dashboards as D  # noqa: E402
 CLARITY = D
+import haicons  # noqa: E402
 import hafrontend  # noqa: E402
 import webrtc  # noqa: E402
 
@@ -437,6 +438,16 @@ def _webrtc_candidate(c, m):
     c.result(m["id"])
 
 
+def _get_icons(c, m):
+    """frontend/get_icons (frontend/__init__.py websocket_get_icons at the pinned release): HA
+    refuses a category it doesn't know as an invalid format, and answers the rest from the home."""
+    if m.get("category") not in haicons.CATEGORIES:
+        return c.result(m["id"], None, success=False, error={
+            "code": "invalid_format", "message": f"Message format incorrect: value must be one of "
+                                                 f"{sorted(haicons.CATEGORIES)} for dictionary value @ data['category']"})
+    c.result(m["id"], {"resources": D.icons(m["category"], m.get("integration"))})
+
+
 def _const(value):
     return lambda c, m: c.result(m["id"], value() if callable(value) else value)
 
@@ -495,7 +506,7 @@ HANDLERS = {
                              "thread_running": True}),
     "brands/access_token": _const({"token": "clarity"}),
     "lovelace/info": _const({"resource_mode": "storage"}),
-    "frontend/get_icons": lambda c, m: c.result(m["id"], {"resources": D.icons(m.get("category"), m.get("integration"))}),
+    "frontend/get_icons": _get_icons,
     "persistent_notification/subscribe": lambda c, m: (c.result(m["id"]),
                                                        c.event(m["id"], {"type": "current", "notifications": {}})),
     "labs/subscribe": lambda c, m: (c.result(m["id"]), c.event(m["id"], {

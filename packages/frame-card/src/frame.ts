@@ -183,7 +183,7 @@ export interface FrameRelease {
     abis?: 'every-frame'; latest?: boolean; task?: string; apk?: string; package?: string; minSdk?: number; writeSettings?: boolean;
   }>;
   app?: string[];
-  frame?: { bundle: 'signed' | 'notice'; title: string; changelog: string; script?: string; pubkey?: string; assets?: string[]; note?: string };
+  frame?: { bundle: 'signed' | 'notice'; title: string; changelog: string; script?: string; pubkey?: string; assets?: string[]; note?: string; versionFile?: string };
 }
 
 /** One piece of outside work a frame relies on, and who made it. */

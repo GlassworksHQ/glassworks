@@ -234,9 +234,10 @@ section, else the run fails: a line you name must be due), or `aqara-s1-plus:app
 warns in the summary.
 
 Panels see a release within 24 hours. To check right away, call `homeassistant.update_entity` on the update
-entity (`update.s1_panel_app_update` on an old S1): HA sends the entity's "check" command. Kiln
-(kiln.glassworks.dev) reads the releases at run time (`/api/release/<line>/latest`) and downloads the APKs through Refract
-(refract.glassworks.dev), so a release needs no Kiln or Refract deploy. A new release line does: see below.
+entity (`update.s1_panel_app_update` on an old S1): HA sends the entity's "check" command. Every Kiln page
+(kiln.glassworks.dev), the S1's included, reads the releases when someone installs (`/api/release/<line>/latest`) and
+downloads the APK through Refract (refract.glassworks.dev), so a release needs no Kiln or Refract deploy. A new release
+line does: see below.
 s1.edm.sh, the first installer's address, redirects to Kiln's S1 page (`kiln/s1-redirect`).
 
 ### The plan
@@ -255,8 +256,9 @@ For 1.0.0, once every changelog has its `[1.0.0]` section:
 | `aqara-s1-plus` | frame release (signed) | 1.0.0 | `frames/aqara-s1-plus/v1.0.0` | **build, check, sign the bundle; publish** |
 | `lululemon-mirror` | frame release (notice) | 1.0.0 | `frames/lululemon-mirror/v1.0.0` | **notes only; publish** |
 
-The S1 frame's row carries a note: panels don't install the frame bundle zip yet. The Frame update card only says
-how to update until it installs bundles; the boot writer in the S1 app's radio bundle is what reaches panels today.
+The S1 frame's row carries a note: panels with the frame loader install the frame bundle zip from Home Assistant's
+Frame update card and restart once. A 0.4.x panel gets the loader first, from the S1 app's radio bundle (the boot
+writer).
 
 ### Dry run
 
@@ -441,8 +443,10 @@ versioning from 1.0.0 (each part 0–999), by the same button: `what: aqara-s1-p
   `--latest=false`, with notes from that version's section of `frames/aqara-s1-plus/FRAME-CHANGELOG.md`. The frame
   bundle's version only goes up: panels refuse a lower one for good, and the plan refuses a version that isn't
   higher than the last frame release.
-- **Not installed yet.** The Frame update card says how to update and installs nothing; the zip waits for its
-  installer (the plan's summary says so). The boot writer in the S1 app's radio bundle is what reaches panels.
+- **How panels install it.** On a panel with the frame loader, Install on the Frame update card (or on the Device
+  page) downloads the zip, checks its SHA-256 and signature, stages it and restarts the panel once to load it. A
+  bundle the panel refuses is shown on the Device page, on Manage and in Home Assistant. A 0.4.x panel has no
+  loader yet: the boot writer in the S1 app's radio bundle puts it into the panel's boot image first.
 
 The manifest's "created" is the commit's time, so a rebuild gives the same bytes but for `hotspot-name.apk`, which
 `hotspot-name/build.sh` signs with a key made for each build ([If a run fails](#if-a-run-fails)).
@@ -547,11 +551,18 @@ release lines and `stage-assets.mjs` all skip it, and `FrameUpdateTest` checks t
 - **The notes are the update card.** Home Assistant shows how to install it first, then the notes' first
   paragraph, headings and bullets, up to 255 characters (`Releases.summary`). Start them with a one-line summary.
 - **The Mirror's notice** comes from `frames/lululemon-mirror/FRAME-CHANGELOG.md`, released with
-  `what: lululemon-mirror:frame` or `all`. Before the Mirror frame 1.0.0 goes out, Kiln's `MIRROR_FRAME.version` must
-  be `1.0.0` too, so freshly flashed Mirrors say the version the release names.
+  `what: lululemon-mirror:frame` or `all`. Kiln's `MIRROR_FRAME.version` must be the release's version, so freshly
+  flashed Mirrors say the version the release names: bump it in the change that cuts the section. The plan fails a
+  Mirror frame release at any other version (`versionFile` in its frame's data); a dry run on the Unreleased notes
+  only warns.
 
 Panels see it within 24 hours, or at once through `homeassistant.update_entity` on the Frame update entity. No
 frame release exists before 1.0.0, so until then every device shows its frame version and no update.
+
+A local clone may still have a `frames/aqara-s1-plus/v0.5.0` tag. It belongs to a temporary 0.5.0 release made to
+test Frame update on the dev S1 (2026-11-21); that release and its tag on GitHub were deleted after the run, so
+GitHub has neither. The Release workflow reads GitHub's tags and releases, so a stale local tag changes nothing.
+To drop it from a clone: `git tag -d frames/aqara-s1-plus/v0.5.0`.
 
 ## Settings for the button (admin, once)
 

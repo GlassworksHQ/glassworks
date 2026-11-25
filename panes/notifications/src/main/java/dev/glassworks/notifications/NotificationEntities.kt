@@ -41,6 +41,10 @@ class NotificationEntities(
     ) { call ->
         onNotify(call.string("message"), call.string("title"), call.string("data"))
         null
+    }.apply {
+        // What shows on the screen comes from Home Assistant with the key only (#847): a plaintext client could be
+        // anyone on the LAN, and a notification can carry buttons and an image. The call fails with the reason.
+        authOnly = true
     }
 
     val doNotDisturb = SwitchEntity(

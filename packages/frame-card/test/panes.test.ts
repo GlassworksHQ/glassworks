@@ -152,7 +152,7 @@ describe('the real frames', () => {
       diagnostics: ['alpha', false], 'time-zone': ['no', true], 'wall-base': ['no', false], 'bluetooth-proxy': ['alpha', false], camera: ['alpha', false],
     });
     expect(support('generic-android')).toMatchObject({
-      notifications: ['alpha', false], diagnostics: ['alpha', false], 'time-zone': ['no', true], 'wall-base': ['no', false],
+      notifications: ['beta', true], diagnostics: ['stable', true], 'time-zone': ['no', true], 'wall-base': ['no', false],
       'bluetooth-proxy': ['depends', false], camera: ['depends', false],
     });
   });
