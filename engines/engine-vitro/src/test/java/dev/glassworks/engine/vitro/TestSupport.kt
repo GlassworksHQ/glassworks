@@ -107,6 +107,9 @@ class FakeHaServer {
             {"type": "module"}]""",
     )
     @Volatile var dashboardConfig: JSONObject = JSONObject(DASHBOARD_JSON)
+
+    /** Dashboards HA has no saved config for: `lovelace/config` answers `config_not_found`. */
+    @Volatile var missingDashboards: Set<String> = setOf("missing")
     @Volatile var initialEntities: JSONObject = JSONObject(ENTITIES_JSON)
     @Volatile var history: JSONObject = JSONObject("""{"states": {}}""")
     /** `history/history_during_period` answers with an error. */
@@ -219,7 +222,7 @@ class FakeHaServer {
             "lovelace/dashboards/list" -> ok(sock, id, dashboards)
             "lovelace/resources" -> ok(sock, id, resources)
             "lovelace/config" -> {
-                if (m.optString("url_path") == "missing") fail(sock, id, "config_not_found") else ok(sock, id, dashboardConfig)
+                if (m.optString("url_path") in missingDashboards) fail(sock, id, "config_not_found") else ok(sock, id, dashboardConfig)
             }
             "subscribe_entities" -> {
                 ok(sock, id, JSONObject.NULL)

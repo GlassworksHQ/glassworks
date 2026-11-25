@@ -158,9 +158,16 @@ class VitroEngine(
                 if (!fallbackInFront()) return
                 if (url != null && handsBack(url)) {
                     Log.i(logTag, "Home Assistant's frontend went to a dashboard Vitro draws: ${forLog(url)}")
-                    main.post { if (!disposed && fallbackInFront()) load(url) }
+                    pendingHandBack = url
+                    main.post {
+                        // Only if the page is still there: a newer location (edit mode, a sign-in) supersedes it.
+                        if (pendingHandBack != url) return@post
+                        pendingHandBack = null
+                        if (!disposed && fallbackInFront()) load(url)
+                    }
                     return
                 }
+                pendingHandBack = null
                 host.onLocationChange(url)
             }
             override fun redirect(url: String): String? = host.redirect(url)
@@ -178,6 +185,9 @@ class VitroEngine(
          * config for never is): where Back and Reload dashboard return from the fallback.
          */
         private var lastNativeUrl: String? = null
+
+        /** A dashboard HA's frontend went to, queued to load natively; null once a newer location supersedes it. */
+        private var pendingHandBack: String? = null
 
         /** Dashboards (origin and path) whose config Home Assistant didn't have: its frontend draws them, not Vitro. */
         private val webDashboards = HashSet<Pair<String?, String?>>()
@@ -875,6 +885,8 @@ class VitroEngine(
                     // An older request's answer for a dashboard the page has left must not replace the current one.
                     if (urlPath != currentDashboardPath) return@post
                     displayedDashboard = currentOrigin to urlPath
+                    // It has a config now (made in HA since it failed): Vitro's to draw again.
+                    webDashboards -= currentOrigin to urlPath
                     // Shown natively: a return target now (onViewSelected then narrows it to the view on screen).
                     currentUrl?.let { lastNativeUrl = it }
                     // A new config builds new islands; they ask again for what they read.

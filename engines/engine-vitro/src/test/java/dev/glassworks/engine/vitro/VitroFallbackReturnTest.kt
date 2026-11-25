@@ -266,6 +266,25 @@ class VitroFallbackReturnTest {
         assertFallback(page, fp)
     }
 
+    @Test fun aDashboardGivenAConfigLaterIsAReturnTargetAgain() {
+        val fb = RecordingEngine()
+        val page = page(engine(fb, settings.copy(dashboard = "$base/missing")))
+        page.load("$base/missing")
+        awaitMain("fallback") { fb.opens.isNotEmpty() }
+        // Someone takes control of it in HA: the next load draws it natively.
+        server.missingDashboards = emptySet()
+        page.load("$base/missing")
+        awaitMain("native") { host.messages("ready").isNotEmpty() }
+        page.load("$base/energy")
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+
+        page.reload()
+        idle()
+        assertEquals("back to it, not a reload of HA's page", 0, fp.reloads)
+        assertNative(page, fp)
+    }
+
     @Test fun withNoDashboardToGoToReloadReloadsTheFallbackPage() {
         val fb = RecordingEngine()
         val page = page(engine(fb, settings.copy(dashboard = null)))
@@ -333,6 +352,20 @@ class VitroFallbackReturnTest {
         ).forEach { fpHost.onLocationChange(it); idle() }
         assertFallback(page, fp)
         assertEquals(1, fp.loads.size)
+    }
+
+    @Test fun aNewerLocationCancelsAQueuedHandBack() {
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        page.load("$base/energy")
+        val fpHost = fb.fallbackOpen().host
+        val fp = fb.fallbackPage()
+        // HA's frontend passes through the dashboard on its way to edit mode, before the hand-back runs.
+        fpHost.onLocationChange(wall)
+        fpHost.onLocationChange("$wall?edit=1")
+        idle()
+        assertFallback(page, fp)
+        assertEquals("$wall?edit=1", host.locations.last())
     }
 
     @Test fun aDashboardHomeAssistantsFrontendDrawsIsNotHandedBackInALoop() {
