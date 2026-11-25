@@ -103,6 +103,11 @@ class VitroIslandServerTest {
             // A redirect to a path the proxy would refuse on a direct request.
             req.path == "/local/away" -> HttpResponse(302, mapOf("Location" to "/some/other/thing"), ByteArray(0))
             req.path == "/local/to-resource" -> HttpResponse(302, mapOf("Location" to "/my_integration_card/chunk.js"), ByteArray(0))
+            // An integration's own frontend (a StaticPathConfig at /<domain>/), served as a module (#840).
+            req.path == "/dreame_vacuum/frontend.js" ->
+                HttpResponse(200, mapOf("Content-Type" to "text/javascript"), "import './cards/map.js';".toByteArray())
+            req.path == "/dreame_vacuum/cards/map.js" ->
+                HttpResponse(200, mapOf("Content-Type" to "text/javascript"), "export {};".toByteArray())
             req.path == "/my_integration_card/chunk.js" ->
                 HttpResponse(200, mapOf("Content-Type" to "application/javascript"), "export {};".toByteArray())
             // A public path that redirects to a token-bearing one.
@@ -552,6 +557,30 @@ class VitroIslandServerTest {
                 assertEquals(p, 404, status(p))
             }
             assertTrue("Home Assistant heard none of those", haSeen.isEmpty())
+        } finally {
+            withResources.stop()
+        }
+    }
+
+    /**
+     * #840: a registered resource at an integration's own path, with HA's cache-busting query, loads as a module, and so
+     * does what it imports beside it. Another integration's folder, one no resource names, stays refused.
+     */
+    @Test
+    fun aRegisteredResourceAtAnIntegrationsOwnPathLoads() {
+        val withResources = VitroIslandServer(session = { haBase to token }, resources = { listOf("/dreame_vacuum/frontend.js?v=1.0.0") })
+        try {
+            val b = withResources.ensureStarted()
+            val cookie = get(withResources.registerSlot(RecordingSlot()).second, capability = false).setCookie!!.substringBefore(';')
+            fun fetch(path: String) = get("$b$path", headers = mapOf("Cookie" to cookie), capability = false)
+            val module = fetch("/dreame_vacuum/frontend.js?v=1.0.0")
+            assertEquals(200, module.code)
+            assertEquals("text/javascript", module.contentType)
+            assertEquals(200, fetch("/dreame_vacuum/cards/map.js").code)
+            assertEquals(listOf("/dreame_vacuum/frontend.js?v=1.0.0", "/dreame_vacuum/cards/map.js"), haSeen.map { it.target })
+            haSeen.clear()
+            assertEquals(404, fetch("/other_vacuum/frontend.js").code)
+            assertTrue("Home Assistant heard nothing", haSeen.isEmpty())
         } finally {
             withResources.stop()
         }

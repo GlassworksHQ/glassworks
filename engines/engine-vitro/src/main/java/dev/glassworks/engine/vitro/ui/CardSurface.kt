@@ -90,6 +90,17 @@ class VitroCardContext(
      */
     val watchEntity: (entityId: String) -> Unit = {},
     /**
+     * A web island walked `hass.states` (`Object.values`, `for…in`): HA's frontend hands a card every state, so the
+     * view it sits on follows every entity from now on. Any thread. The default (tests, no engine) does nothing.
+     */
+    val watchAllEntities: () -> Unit = {},
+    /**
+     * HA's registries for a web island's `hass` ([dev.glassworks.engine.vitro.data.HassRegistries]), shared by every
+     * island: `onChange` gets the whole set (now when one is known, again on each change) on any thread until the
+     * returned handle is called. Any thread. The default (tests, no engine) never delivers.
+     */
+    val watchRegistries: (onChange: (JSONObject) -> Unit) -> () -> Unit = { { } },
+    /**
      * Whether the screen takes a tap (the frame's `input`), which is what HA's page reads as `(pointer: coarse)` in
      * the browser on that device. False on a frame without touch (the Mirror): HA there styles for a fine pointer.
      */
@@ -141,6 +152,8 @@ class VitroCardContext(
         subscribeWs = subscribeWs,
         now = now,
         watchEntity = watchEntity,
+        watchAllEntities = watchAllEntities,
+        watchRegistries = watchRegistries,
         touch = touch,
     ).also {
         it.cardVars = cardVars
