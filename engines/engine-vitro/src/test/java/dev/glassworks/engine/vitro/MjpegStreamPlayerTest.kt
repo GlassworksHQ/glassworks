@@ -222,12 +222,12 @@ class MjpegStreamPlayerTest {
 
         val icons = card.find(MdiIconView::class.java)
         assertEquals(2, icons.size)
-        assertEquals(0xCCFFFFFF.toInt(), icons[0].tintColor) // off: white
+        assertEquals(0xFFA9A9A9.toInt(), icons[0].tintColor) // off: HA's #a9a9a9
         (icons[0].parent as View).performClick()
         assertEquals("light.toggle light.porch", calls.single())
         ShadowLooper.idleMainLooper()
-        // The optimistic flip tints it with the light's active color.
-        assertTrue(icons[0].tintColor != 0xCCFFFFFF.toInt())
+        // The optimistic flip turns it white, HA's on color for a picture-glance icon.
+        assertEquals(android.graphics.Color.WHITE, icons[0].tintColor)
 
         (icons[1].parent as View).performClick()
         assertEquals("more-info sensor.porch_temp", calls.last())

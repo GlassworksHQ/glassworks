@@ -140,8 +140,13 @@ internal class LiveCameraFeed(
             ctx.main.removeCallbacks(retry)
             ctx.main.removeCallbacks(recomputeTask)
             recomputePosted = false
-            for ((kind, slot) in slots.entries.toList()) guard(kind) { slot.stream.setActive(false) }
+            // A player that can't pause is closed: it never keeps decoding once its slot goes back. (Not a failure of
+            // the kind: a failed MJPEG would start polling, and nothing polls while the camera is hidden.)
+            for (kind in slots.keys.toList()) {
+                if (guard(kind) { slots[kind]?.stream?.setActive(false) } == null) closeSlot(kind)
+            }
             releaseSlot()
+            capped = false
             return
         }
         if (!stream) {
@@ -149,11 +154,18 @@ internal class LiveCameraFeed(
             startPolling()
             return
         }
-        // A video camera takes its slot again first; without one it goes to MJPEG (recompute closes the rest).
+        // A video camera takes its slot again first; without one it goes to MJPEG (recompute closes the rest). A camera
+        // that was capped before it hid starts over too: recompute asks for a slot, or waits for one, from its plan now.
+        capped = false
         if (slots.keys.any { it != CameraStreamKind.MJPEG } && !acquireSlot()) capped = true
-        for ((kind, slot) in slots.entries.toList()) {
+        for (kind in slots.keys.toList()) {
             if (capped && kind != CameraStreamKind.MJPEG) continue
-            guard(kind) { slot.stream.setActive(true) }
+            val slot = slots[kind] ?: continue
+            // A player that can't resume has failed, as one that can't start.
+            if (guard(kind) { slot.stream.setActive(true) } == null) {
+                closeSlot(kind)
+                failed(kind)
+            }
         }
         if (mjpegDown) {
             startPolling()

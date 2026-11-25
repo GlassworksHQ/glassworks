@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.camera
 
+import dev.glassworks.engine.vitro.clarity.ClarityCameras
 import dev.glassworks.engine.vitro.net.MjpegStreamPlayer
 
 /**
@@ -41,11 +42,8 @@ class CameraPlayers(private val factories: Map<CameraStreamKind, CameraStreamFac
             return CameraPlayers(out)
         }
 
-        /**
-         * Where every kind's factory is wrapped for Clarity's camera task (`ClarityCameras.measured`, #888): the
-         * same factory until that lands.
-         */
-        private fun measured(factory: CameraStreamFactory): CameraStreamFactory = factory
+        /** Every kind's factory reports its streams to Clarity's camera task while a run measures. */
+        private fun measured(factory: CameraStreamFactory): CameraStreamFactory = ClarityCameras.measured(factory)
     }
 }
 
@@ -53,7 +51,7 @@ class CameraPlayers(private val factories: Map<CameraStreamKind, CameraStreamFac
  * How many cameras play video (HLS or WebRTC, which take a hardware decoder each) at once on this panel. HA's
  * frontend has no such cap: a browser on a desktop has decoders to spare, a wall panel's SoC has a few. Past it a
  * camera plays HA's MJPEG stream instead (decoded as JPEGs, as every camera did before HLS), and takes up video as
- * soon as a slot frees. A camera that loads HLS and WebRTC side by side, as HA does, holds one slot.
+ * soon as a slot frees (every waiting camera is told and asks again). A camera that loads HLS and WebRTC side by side, as HA does, holds one slot.
  *
  * Four, the most Clarity's camera views show at once (four `clarity_cam_*` cards). Only active cameras count: one
  * in a hidden view, or behind HA's own page, gives its slot back. Main thread only.
@@ -81,13 +79,17 @@ object CameraVideoBudget {
         return false
     }
 
-    /** [owner] gives its slot back (or stops waiting for one); the longest waiter is told. */
+    /**
+     * [owner] gives its slot back (or stops waiting for one). Every waiter is told, longest first: each asks again
+     * ([acquire] keeps the cap, and waits again when the slot is gone), so one that no longer wants a slot (hidden
+     * meanwhile) never keeps it from the others.
+     */
     fun release(owner: Any) {
         waiters.remove(owner)
         if (!holders.remove(owner)) return
-        val next = waiters.entries.firstOrNull() ?: return
-        waiters.remove(next.key)
-        next.value()
+        val told = waiters.values.toList()
+        waiters.clear()
+        for (onFree in told) onFree()
     }
 
     /** Tests: no camera holds or waits for a slot, and the cap is back to its default. */

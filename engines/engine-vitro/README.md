@@ -61,11 +61,12 @@ A card that Vitro can't build shows Home Assistant's own error card in its place
 its icon, and "Configuration error" for an administrator. The other cards keep working, and the log gets one line for
 each kind of failure rather than one per update.
 
-Most cards are drawn on Vitro's card surface, and for those the same goes for a card that throws while it updates,
-measures, lays out, draws or handles a touch. A few card types draw without that surface: a heading, Mushroom's chips
-and title, and the layout-card and auto-entities containers. In a sections view, the grid catches their measure, layout
-and draw failures and shows the error card. In a masonry view or inside a stack, nothing catches those failures card by
-card: the app stops, and that counts toward the fallback below.
+The same goes for a card that throws while it measures, lays out, draws or handles a touch, whatever kind of card it is
+and wherever it sits: in a sections, masonry or sidebar view, inside a stack, a layout-card or a swipe-card, or among
+the cards auto-entities builds. Most cards are drawn on Vitro's card surface, which also catches a card that throws
+while it updates. The few that draw without it (a heading, Mushroom's chips and title, and the stack, layout-card,
+auto-entities and swipe-card containers) each sit inside a small guard that catches those failures and shows the error
+card in their place. When one of those throws while it updates, the update is logged and skipped.
 
 If something still gets past the cards and the app stops twice in a row within a minute of starting, the app turns
 Vitro off for the next start, which runs on the browser engine. The panel says so once when it starts, the Labs page
