@@ -313,9 +313,10 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
     private fun renderWithDisplay(case: ParityCase, ref: ParityReference?): VitroRender {
         val store = EntityStore()
         ref?.states?.let { if (it.length() > 0) store.applyCompressedEvent(JSONObject().put("a", it)) }
-        // The states are every one HA's page held for the case's entities: one it had none for doesn't exist in HA,
-        // as the first event of the view's subscription tells Vitro on a panel (a tile's "Entity not found").
-        store.markSnapshot(emptySet())
+        // A reference's states are every one HA's page held for the case's entities: one it had none for doesn't exist
+        // in HA, as the first event of the view's subscription tells Vitro on a panel (a tile's "Entity not found").
+        // Without a reference nothing is known, and nothing is missing.
+        if (ref != null) store.markSnapshot(emptySet())
         val templates = ref?.templates.orEmpty()
         val asked = CopyOnWriteArrayList<String>()
         val missing = CopyOnWriteArrayList<String>()

@@ -397,6 +397,37 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun aReconnectAsksAgainWhoTheUserIsBeforeHandingOnAConfig() {
+        // An administrator first: the admin-only dashboard is drawn.
+        started("admin-only")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        // The user loses the role in HA; the connection drops. The new one's config may answer before the user does.
+        server.currentUser = wallUser
+        server.holdCurrentUser = true
+        server.dropConnection()
+        awaitCondition("config asked again, user not answered") {
+            server.commands("auth/current_user").size == 2 && server.commands("subscribe_entities").size == 2
+        }
+        assertEquals("nothing handed on with the last connection's user", 1, listener.configs.size)
+        val id = server.commands("auth/current_user").last().getInt("id")
+        server.sockets.last().push(JSONObject().put("id", id).put("type", "result").put("success", true).put("result", wallUser))
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertEquals(1, listener.configs.size)
+    }
+
+    @Test
+    fun aRefusedUserLookupAfterAnAdministratorsIsNoAdministrator() {
+        val c = started("admin-only")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        assertTrue(c.currentUser.getBoolean("is_admin"))
+        server.currentUser = null
+        server.dropConnection()
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertFalse("the last user isn't kept", c.currentUser.has("is_admin"))
+        assertFalse(c.mayOpen("admin-only"))
+    }
+
+    @Test
     fun aRefusedDashboardThatHaHasNoConfigForIsStillRefused() {
         // HA's frontend never asks for it: no panel. Its missing config doesn't make it HA's frontend's to auto-generate.
         server.currentUser = wallUser

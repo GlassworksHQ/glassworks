@@ -159,14 +159,15 @@ class HaDashboardClient(
         private set
 
     /**
-     * True once `auth/current_user` has answered: with the user, or with an error, which leaves no user and so no
-     * administrator (as HA's frontend has `hass.user` undefined). Kept across reconnects, as [currentUser] is.
+     * True once `auth/current_user` has answered on this connection: with the user, or with an error, which leaves no
+     * user and so no administrator (as HA's frontend has `hass.user` undefined). Each connection asks again: the user
+     * may have changed since (another sign-in, a role changed in HA).
      */
     @Volatile private var userKnown = false
 
     /**
-     * `lovelace/dashboards/list` as Home Assistant last answered it, every dashboard with its `require_admin`; null until
-     * it has, and empty if it refused. Kept across reconnects until the new answer.
+     * `lovelace/dashboards/list` as Home Assistant answered it on this connection, every dashboard with its
+     * `require_admin`; null until it has, and empty if it refused.
      */
     @Volatile var dashboards: List<DashboardSummary>? = null
         private set
@@ -772,8 +773,13 @@ class HaDashboardClient(
     private fun displayIds(): Collection<String> = activeEntityFilter.ifEmpty { store.all().keys }
 
     private fun onAuthenticated() {
-        // Answers a dropped connection held for the user: this connection asks for them again.
-        synchronized(accessLock) { heldForAccess.clear() }
+        // Who the user is and which dashboards are admin only are this connection's to say: nothing is handed on with
+        // the last one's answers. What a dropped connection held goes too: this one asks for it again.
+        synchronized(accessLock) {
+            heldForAccess.clear()
+            userKnown = false
+            dashboards = null
+        }
         displayRequested.clear()
         displayPending.set(0)
         // Icons and state labels are this Home Assistant's: a new connection loads them again.
@@ -857,6 +863,8 @@ class HaDashboardClient(
         request(JSONObject().put("type", "auth/current_user")) { res ->
             // A dropped connection asks again on the reconnect.
             if (isTransportError(res)) return@request
+            // A refusal leaves no user, not the last one: no administrator.
+            if (!res.optBoolean("success", false) || res.optJSONObject("result") == null) currentUser = JSONObject()
             if (res.optBoolean("success", false)) {
                 res.optJSONObject("result")?.let {
                     currentUser = it

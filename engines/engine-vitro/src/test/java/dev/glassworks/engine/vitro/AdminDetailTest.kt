@@ -163,6 +163,17 @@ class AdminDetailTest {
         }
     }
 
+    @Test fun thePlantCardsWarningGoesWhenThePlantArrives() {
+        val v = PlantStatusCardView(ctx(admin), card("""{"type": "plant-status", "entity": "plant.gone"}"""))
+        idle()
+        assertEquals(listOf("Entity not found"), texts(v))
+        store.putLocal(EntityState("plant.gone", "ok", mapOf("friendly_name" to "Fern", "moisture" to 40, "problem" to "none")))
+        idle()
+        assertTrue("the warning is gone: ${texts(v)}", "Entity not found" !in texts(v))
+        assertTrue(texts(v).contains("Fern"))
+        assertTrue("no warning icon left", icons(v).none { it.icon == "mdi:alert-outline" })
+    }
+
     // ---- hui-error-card: a config HA's card rejects, and a card that fails ----
 
     @Test fun aRejectedConfigIsTitledConfigurationErrorForAnAdministratorOnly() {

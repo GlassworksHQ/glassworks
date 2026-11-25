@@ -831,6 +831,12 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
     /** The sensors followed now, with their handles: dropped on detach, made again for the current ones on attach. */
     private val sensorHandles = HashMap<String, () -> Unit>()
 
+    /**
+     * HA's hui-warning, drawn in place of the whole card while its plant is missing. Declared before [init]: the first
+     * [render] runs inside it, and a later initializer would forget the warning it added.
+     */
+    private var missingWarning: View? = null
+
     init {
         addView(root, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         observe(entityId, ::render)
@@ -868,9 +874,6 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
         sensorHandles.clear()
         super.onDetachedFromWindow()
     }
-
-    /** HA's hui-warning, drawn in place of the whole card while its plant is missing. */
-    private var missingWarning: View? = null
 
     override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         // Over the card's padding (its border, a card_mod padding set since): the warning is in place of all of it.
