@@ -56,7 +56,7 @@ A pattern matches a path and everything under it. `*` stays within one folder, `
 | site | `site`, `packages`, `frames`, `docs`, `tools/perf/grade.ts`, `tools/perf/page/rubric.json`, `**/*.md`, `libs/*/build.gradle.kts`, `libs/*/gradle.properties`; or deletes or renames any file |
 <!-- end -->
 
-`scripts` always runs: its install script tests, tool tests, this selector's tests and the docs' link check take seconds. Its
+`scripts` always runs: its install script tests, tool tests, this selector's tests, the docs' link check and the status-label check take seconds. Its
 Clarity tests (ffmpeg, the fast and slow sets) run only on their row.
 
 Some rows need explaining.

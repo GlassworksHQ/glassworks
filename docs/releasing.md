@@ -255,8 +255,9 @@ For 1.0.0, once every changelog has its `[1.0.0]` section:
 | `aqara-s1-plus` | frame release (signed) | 1.0.0 | `frames/aqara-s1-plus/v1.0.0` | **build, check, sign the bundle; publish** |
 | `lululemon-mirror` | frame release (notice) | 1.0.0 | `frames/lululemon-mirror/v1.0.0` | **notes only; publish** |
 
-The S1 frame's row carries a note: panels don't install the frame bundle zip yet. The Frame update card only says
-how to update until it installs bundles; the boot writer in the S1 app's radio bundle is what reaches panels today.
+The S1 frame's row carries a note: panels with the frame loader install the frame bundle zip from Home Assistant's
+Frame update card and restart once. A 0.4.x panel gets the loader first, from the S1 app's radio bundle (the boot
+writer).
 
 ### Dry run
 
@@ -441,8 +442,10 @@ versioning from 1.0.0 (each part 0–999), by the same button: `what: aqara-s1-p
   `--latest=false`, with notes from that version's section of `frames/aqara-s1-plus/FRAME-CHANGELOG.md`. The frame
   bundle's version only goes up: panels refuse a lower one for good, and the plan refuses a version that isn't
   higher than the last frame release.
-- **Not installed yet.** The Frame update card says how to update and installs nothing; the zip waits for its
-  installer (the plan's summary says so). The boot writer in the S1 app's radio bundle is what reaches panels.
+- **How panels install it.** On a panel with the frame loader, Install on the Frame update card (or on the Device
+  page) downloads the zip, checks its SHA-256 and signature, stages it and restarts the panel once to load it. A
+  bundle the panel refuses is shown on the Device page, on Manage and in Home Assistant. A 0.4.x panel has no
+  loader yet: the boot writer in the S1 app's radio bundle puts it into the panel's boot image first.
 
 The manifest's "created" is the commit's time, so a rebuild gives the same bytes but for `hotspot-name.apk`, which
 `hotspot-name/build.sh` signs with a key made for each build ([If a run fails](#if-a-run-fails)).
@@ -552,6 +555,11 @@ release lines and `stage-assets.mjs` all skip it, and `FrameUpdateTest` checks t
 
 Panels see it within 24 hours, or at once through `homeassistant.update_entity` on the Frame update entity. No
 frame release exists before 1.0.0, so until then every device shows its frame version and no update.
+
+A local clone may still have a `frames/aqara-s1-plus/v0.5.0` tag. It belongs to a temporary 0.5.0 release made to
+test Frame update on the dev S1 (2026-11-21); that release and its tag on GitHub were deleted after the run, so
+GitHub has neither. The Release workflow reads GitHub's tags and releases, so a stale local tag changes nothing.
+To drop it from a clone: `git fetch --prune --prune-tags origin`, or `git tag -d frames/aqara-s1-plus/v0.5.0`.
 
 ## Settings for the button (admin, once)
 

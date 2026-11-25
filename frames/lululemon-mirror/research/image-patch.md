@@ -5,7 +5,7 @@ evidence: verified
 
 # Mirror images: what Kiln changes in the community system image, and what a fresh userdata needs
 
-**Status (2026-11-17): flashed on a real Mirror end to end, with image 1 (2026-11-16) and image 2 (2026-11-17).**
+**Status (2026-11-23): flashed on a real Mirror end to end, with image 1 (2026-11-16), image 2 (2026-11-17) and image 3 from kiln.glassworks.dev (2026-11-23).**
 Image 2's fully dark sleep is still to check. Kiln patches the Glass Panes
 `system.img` and builds a new `userdata` (`frames/lululemon-mirror/installer/src/image.ts`). The
 root's first real flash (below) booted it. Its adb came up, but **not through the key Kiln wrote**: the
@@ -23,11 +23,19 @@ Glassworks for generic Android instead ([The app](#the-app-the-legacy-build-of-g
 the only home screen, upright, with no crashes (2026-11-17, #443's run).
 
 **2026-11-22: Kiln pins image 3 (`mirror-android-3`)** ([Image 3](#image-3-mirror-android-3-2026-11-22)).
-Read from its files and checked offline against the real image; **untested on a unit**.
+Read from its files and checked offline against the real image.
+
+**2026-11-23: image 3 installed end to end on the Mirror from kiln.glassworks.dev (verified; the maintainer's
+run, reported in the V1 status pass).** The deployed Kiln (main) took the Mirror through the whole install and the
+standard setup to Done, with nothing done on the Mirror's own screen. Seen with Glassworks after it: the Glassworks
+boot animation (after lululemon's bootloader logo, which stays), Glassworks as the only home screen with no vendor
+screens, back after a reboot, the screen sleeping and waking, and an app update installed from Home Assistant with
+no click on the Mirror. The setup hotspot had passed on the same unit that day (#197 part M). The run's step-by-step
+log wasn't recorded here; `frame.json`'s `facts` now come from it (`panelRuns`, nothing `unverified`).
 
 Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (the real flash
 below), and since 2026-11-16 `mirror-android-2` (below; on the unit since 2026-11-17), and since
-2026-11-22 `mirror-android-3` in Kiln (below; not on a unit yet) (Android 6.0.1,
+2026-11-22 `mirror-android-3` in Kiln (below; flashed on the unit from Kiln on 2026-11-23) (Android 6.0.1,
 `userdebug`, `test-keys`), stock signed `boot` (`IFC-6309-2.0-MIR.S22Q401`). Tools:
 `@glassworks/ext4` (#353), e2fsprogs 1.47.4.
 

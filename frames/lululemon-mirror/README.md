@@ -106,7 +106,7 @@ A Mirror running Glassworks gets the same: your browser's key in place of the bu
 
 ### Installing over adb on an existing Glass Panes Mirror
 
-If your Mirror already runs the Glass Panes image and you only want to install the Glassworks app without reflashing, open `kiln.glassworks.dev/lululemon-mirror?mode=app`. Kiln installs the legacy APK, locks portrait rotation, sets Glassworks as the home screen without requiring any screen taps, and launches network setup. On Glass Panes' newest image, their kiosk app is part of the system and keeps running next to Glassworks, so a full install from Kiln works better there. Using **Undo** removes Glassworks and restores your previous launcher.
+If your Mirror already runs the Glass Panes image and you only want to install the Glassworks app without reflashing, open `kiln.glassworks.dev/lululemon-mirror?mode=app`. Kiln installs the legacy APK, locks portrait rotation, sets Glassworks as the home screen, and launches network setup. First, the Mirror has to let your computer in: unless Kiln flashed it from this browser, choose **Allow** on the Mirror's prompt with a USB mouse, since it has no touchscreen. Without a mouse, use the full install above instead, which needs nothing on the Mirror's screen. On Glass Panes' newest image, their kiosk app is part of the system and keeps running next to Glassworks, so a full install from Kiln works better there. Using **Undo** removes Glassworks and restores your previous launcher.
 
 ## Panes
 
@@ -119,9 +119,9 @@ If your Mirror already runs the Glass Panes image and you only want to install t
 | **Camera** | Alpha | Uses the 5 MP front camera for local motion presence (no images leave the Mirror in *Presence only* mode). Starts off until enabled in Home Assistant. |
 | **Bluetooth proxy** | Alpha | Uses the built-in Bluetooth LE radio once location permission is granted. |
 | **Diagnostics** | Alpha | Reports uptime and memory (no CPU temperature sensor on this board). |
-| **Zigbee and Thread radio** | No | No 802.15.4 radio hardware. |
-| **Time zone** | No | Aqara S1 Plus only. |
-| **Wall base** | No | Aqara S1 Plus only. |
+| **Zigbee / Thread radio** | Not supported | No 802.15.4 radio hardware. |
+| **Time zone** | Not supported | Aqara S1 Plus only. |
+| **Wall base** | Not supported | Aqara S1 Plus only. |
 
 ## Research notes
 

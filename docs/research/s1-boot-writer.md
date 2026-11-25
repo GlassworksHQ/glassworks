@@ -5,10 +5,15 @@ evidence: verified
 
 # S1 boot writer: putting the frame loader into a 0.4.3 panel's boot image over the air
 
-**Status (2026-11-19): built, verified off the panel; untested on a panel.** The shared patch gives byte-identical
-images whether the CLI's container or the panel's settings run it (verified on a host, four cases). The writer's
-flow and every refusal pass the off-device shell tests. Nothing has run on an S1 yet: the dev S1 run is the next step
-(hard rule 5), before #549 merges.
+**Status (2026-11-21): verified on the dev S1.** The shared patch gives byte-identical images whether the CLI's
+container or the panel's settings run it (verified on a host, four cases), and the writer's flow and every refusal
+pass the off-device shell tests. The hard rule 5 run on the dev S1 passed on 2026-11-19 (#651
+issuecomment-7024290415): from 0.4.3's dev boot image and radio mode `thread_router`, the app downloaded Magisk
+v31.1 and checked it, the writer patched `boot` in 31 s, a forced readback mismatch wrote the backup back with no
+restart, the real write restarted the panel once, the loader ran (`ro.glassworks.frame.id` = `aqara-s1-plus`),
+`thread_router` was kept, and the undo put the dev boot back, read back equal. On 2026-11-21 the dev S1 got the
+loader the same way from main (`f95de89a6`) before #744's Frame update run (#744 issuecomment-7059817374): one
+restart, `boot: done: frame 1.0.0, bundle none` in 0.47 s, radio mode kept (verified).
 
 Device: Aqara S1 Plus, firmware 4.5.80, S1 Kiosk 0.4.3 boot image. Tools: Magisk v31.1 (`boot_patch.sh`,
 `util_functions.sh`, `magiskboot`), Android 10 toybox, the repo's `patch-boot-magisk.sh` and `patch-ramdisk.sh`.
@@ -109,8 +114,9 @@ own `s1kiosk_verify` (the pinned build), and otbr-agent and ot-ctl come from the
 
 ## Open questions
 
-- Whether `/acct/cgroup.procs` takes the writer out of reach of init's process-group kill on this firmware (the panel
-  plan checks it before the write step).
-- How long the patch takes on the A133 under busybox (estimate: under a minute; the panel plan times it).
+- ~~Whether `/acct/cgroup.procs` takes the writer out of reach of init's process-group kill on this firmware.~~
+  It does: `cpuacct:/` before and after the write to `/acct/cgroup.procs` (verified on the dev S1, 2026-11-19).
+- ~~How long the patch takes on the A133 under busybox.~~ 31 s, and 70 s for the whole forced-mismatch round
+  (verified on the dev S1, 2026-11-19).
 - A power cut during the roughly 2 s of `dd` leaves a torn `boot`: recovery is FEL, as for any boot change. Nothing
   here shortens that window further.
