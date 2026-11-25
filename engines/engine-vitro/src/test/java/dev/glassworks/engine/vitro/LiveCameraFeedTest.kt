@@ -53,6 +53,9 @@ class LiveCameraFeedTest {
         var closed = false
         var throwOnStart = false
 
+        /** setActive with this value throws. */
+        var throwOnActive: Boolean? = null
+
         override fun start() {
             calls += "start"
             if (throwOnStart) throw IllegalStateException("player broke")
@@ -60,6 +63,7 @@ class LiveCameraFeedTest {
 
         override fun setActive(active: Boolean) {
             calls += "active $active"
+            if (throwOnActive == active) throw IllegalStateException("player broke")
         }
 
         override fun close() {
@@ -292,6 +296,93 @@ class LiveCameraFeedTest {
     }
 
     @Test
+    fun aPlayerThatCantResumeHasFailedAndOneThatCantPauseIsClosed() {
+        val f = feed(context(store(), kinds = setOf(HLS, MJPEG)))
+        f.start()
+        idle()
+        val hls = live(HLS)
+        f.setActive(false)
+        hls.throwOnActive = true
+        f.setActive(true)
+        idle()
+        // HLS failed to resume: closed, and the choice fell back to MJPEG.
+        assertTrue(hls.closed)
+        assertEquals(listOf(MJPEG), f.runningKinds)
+        val mjpeg = live(MJPEG)
+        mjpeg.throwOnActive = false
+        f.setActive(false)
+        idle()
+        // MJPEG couldn't pause: closed, its slot gone, and nothing polls while the camera is hidden.
+        assertTrue(mjpeg.closed)
+        assertEquals(emptyList<CameraStreamKind>(), f.runningKinds)
+        assertFalse(f.isPolling)
+        assertEquals(0, CameraVideoBudget.inUse)
+    }
+
+    @Test
+    fun aCappedCameraHiddenAndShownAgainStillGetsTheNextSlot() {
+        CameraVideoBudget.max = 1
+        val ctx = context(store(), kinds = setOf(HLS, MJPEG))
+        val first = feed(ctx)
+        val second = feed(ctx)
+        first.start()
+        second.start()
+        idle()
+        assertEquals(listOf(MJPEG), second.runningKinds)
+        second.setActive(false)
+        second.setActive(true)
+        idle()
+        assertEquals(listOf(MJPEG), second.runningKinds)
+        first.stop()
+        idle()
+        assertEquals(listOf(HLS), second.runningKinds)
+    }
+
+    @Test
+    fun aFreedSlotReachesEveryWaitingCameraNotOnlyTheFirst() {
+        CameraVideoBudget.max = 1
+        val ctx = context(store(), kinds = setOf(HLS, MJPEG))
+        val holder = feed(ctx)
+        val first = feed(ctx)
+        val second = feed(ctx)
+        holder.start()
+        first.start()
+        second.start()
+        idle()
+        assertEquals(listOf(MJPEG), first.runningKinds)
+        assertEquals(listOf(MJPEG), second.runningKinds)
+        // The slot frees, and the longest waiter hides before it takes it up: the next one gets it.
+        holder.stop()
+        first.setActive(false)
+        idle()
+        assertEquals(listOf(HLS), second.runningKinds)
+        assertEquals(1, CameraVideoBudget.inUse)
+        // The cap holds: the first, shown again, waits.
+        first.setActive(true)
+        idle()
+        assertEquals(listOf(MJPEG), first.runningKinds)
+    }
+
+    @Test
+    fun theMoreInfoCameraPausesWhileItsWindowIsHidden() {
+        val st = store()
+        val sheet = dev.glassworks.engine.vitro.cards.MoreInfoSheet(context(st, kinds = setOf(HLS, MJPEG))) {}
+        activity.setContentView(sheet)
+        sheet.show("camera.porch")
+        idle()
+        idle()
+        val hls = live(HLS)
+        assertEquals(listOf("start"), hls.calls)
+        // The screen goes off (or the app to the background), then comes back.
+        sheet.dispatchWindowVisibilityChanged(View.GONE)
+        idle()
+        assertEquals("active false", hls.calls.last())
+        sheet.dispatchWindowVisibilityChanged(View.VISIBLE)
+        idle()
+        assertEquals("active true", hls.calls.last())
+    }
+
+    @Test
     fun theVisibleVideosSizeReachesTheCard() {
         var size: Pair<Int, Int>? = null
         val f = feed(context(store(), kinds = setOf(HLS, MJPEG)), onSize = { w, h -> size = w to h })
@@ -350,11 +441,14 @@ class LiveCameraFeedTest {
         activity.setContentView(parent)
         idle()
         c.measure(View.MeasureSpec.makeMeasureSpec(720, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-        assertEquals(405, c.measuredHeight) // 16:9 until the picture is known
+        // hui-image's width is the card's inside its border: the picture's height comes from that, then the border.
+        val border = c.paddingTop + c.paddingBottom
+        val inner = 720 - c.paddingLeft - c.paddingRight
+        assertEquals(Math.round(inner / (16f / 9f)) + border, c.measuredHeight) // 16:9 until the picture is known
         live(HLS).frame(640, 480)
         idle()
         c.measure(View.MeasureSpec.makeMeasureSpec(720, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-        assertEquals(540, c.measuredHeight) // 4:3
+        assertEquals(Math.round(inner / (4f / 3f)) + border, c.measuredHeight) // 4:3
         val frame = live(HLS).view.parent as CameraFitFrame
         assertEquals(CameraFitFrame.CONTAIN, frame.fit)
     }

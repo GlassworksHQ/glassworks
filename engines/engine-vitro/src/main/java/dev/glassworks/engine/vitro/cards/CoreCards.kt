@@ -3047,7 +3047,8 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             observe(entry.entity) { s ->
                 val name = s?.friendlyName ?: entry.entity
                 target.contentDescription = entry.name ?: name
-                val tint = if (s != null && s.isActive) ctx.theme.activeColor(s.domain) else GLANCE_INACTIVE
+                // hui-picture-glance-card: `--ha-picture-icon-button-color` (#a9a9a9), white when the entity is on.
+                val tint = if (s != null && s.isActive) GLANCE_ACTIVE else GLANCE_INACTIVE
                 icon.setIcon(MdiIcons.resolveIconName(entry.icon, s), tint)
             }
         }
@@ -3060,7 +3061,9 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             super.measureCard(widthMeasureSpec, heightMeasureSpec)
             return
         }
-        val height = (width / (imageAspect ?: aspect)).toInt().coerceAtLeast(1)
+        // hui-image takes the card's width inside its border: the picture's height comes from that, then the border.
+        val inner = (width - paddingLeft - paddingRight).coerceAtLeast(1)
+        val height = (Math.round(inner / (imageAspect ?: aspect)) + paddingTop + paddingBottom).coerceAtLeast(1)
         super.measureCard(widthMeasureSpec, MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
     }
 
@@ -3110,7 +3113,8 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     }
 
     internal companion object {
-        private const val GLANCE_INACTIVE = 0xCCFFFFFF.toInt()
+        private const val GLANCE_INACTIVE = 0xFFA9A9A9.toInt()
+        private const val GLANCE_ACTIVE = Color.WHITE
         private val GLANCE_TOGGLE_DOMAINS = setOf("light", "switch", "fan", "cover", "lock", "input_boolean", "media_player")
 
         /** picture-glance's per-icon `tap_action`: the configured one, else `toggle` for switchable domains. */
