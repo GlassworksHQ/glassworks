@@ -78,9 +78,15 @@ class VitroSentinel(
         true
     }.getOrDefault(false)
 
-    /** This start stayed up through the window: the crashes before it weren't a loop. */
+    /**
+     * This start stayed up through the window: the crashes before it weren't a loop. Under [lock], and not once this
+     * process has counted a crash: a crash just inside the window, recorded on another thread as the mark runs, keeps
+     * its strike.
+     */
     fun onStable() {
-        if (prefs.vitroEnabled && prefs.vitroCrashStrikes != 0) prefs.vitroCrashStrikes = 0
+        synchronized(lock) {
+            if (!counted && prefs.vitroEnabled && prefs.vitroCrashStrikes != 0) prefs.vitroCrashStrikes = 0
+        }
     }
 
     /**

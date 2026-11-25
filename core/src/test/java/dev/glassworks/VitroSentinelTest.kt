@@ -142,15 +142,34 @@ class VitroSentinelTest {
         })
         slow.start()
         val first = Thread({ slow.onCrash(vitroCrash()) }, "first").apply { start() }
-        inFirst.await()
-        var secondDone = false
-        val second = Thread({ slow.onCrash(vitroCrash()); secondDone = true }, "second").apply { start() }
-        second.join(200)
-        assertFalse("the second thread waits for the first record", secondDone)
-        release.countDown()
-        first.join(); second.join()
-        assertTrue(secondDone)
+        val secondDone = java.util.concurrent.atomic.AtomicBoolean(false)
+        var second: Thread? = null
+        try {
+            inFirst.await()
+            second = Thread({ slow.onCrash(vitroCrash()); secondDone.set(true) }, "second").apply { start() }
+            second.join(200)
+            assertFalse("the second thread waits for the first record", secondDone.get())
+        } finally {
+            release.countDown() // never leave the first thread blocked, whatever failed above
+        }
+        first.join(); second?.join()
+        assertTrue(secondDone.get())
         assertEquals("one strike for the one process end", 1, prefs().vitroCrashStrikes)
+    }
+
+    @Test fun theStableMarkKeepsAStrikeThisProcessCounted() {
+        // A crash just inside the window, recorded on another thread, then the stable mark runs on the main thread.
+        prefs().vitroEnabled = true
+        val (s, _) = start()
+        now += VitroSentinel.WINDOW_MS - 10
+        assertFalse(s.onCrash(vitroCrash()))
+        s.onStable()
+        assertEquals("the counted crash keeps its strike", 1, prefs().vitroCrashStrikes)
+        // The next start crashes early too: two in a row, Vitro is off.
+        val (next, _) = start()
+        now += 1_000L
+        assertTrue(next.onCrash(vitroCrash()))
+        assertFalse(prefs().vitroEnabled)
     }
 
     @Test fun aCrashAfterTheWindowClearsTheStrikesBeforeIt() {
