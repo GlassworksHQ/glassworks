@@ -48,10 +48,11 @@ class CameraPlayers(private val factories: Map<CameraStreamKind, CameraStreamFac
 }
 
 /**
- * How many cameras play video (HLS or WebRTC, which take a hardware decoder each) at once on this panel. HA's
+ * How many video players (HLS or WebRTC, which take a hardware decoder each) run at once on this panel. HA's
  * frontend has no such cap: a browser on a desktop has decoders to spare, a wall panel's SoC has a few. Past it a
  * camera plays HA's MJPEG stream instead (decoded as JPEGs, as every camera did before HLS), and takes up video as
- * soon as a slot frees (every waiting camera is told and asks again). A camera that loads HLS and WebRTC side by side, as HA does, holds one slot.
+ * soon as a slot frees (every waiting camera is told and asks again). A slot is a video player, not a camera: one
+ * that loads HLS and WebRTC side by side, as HA does, holds two, and starts the second only when a second slot is free.
  *
  * Four, the most Clarity's camera views show at once (four `clarity_cam_*` cards). Only active cameras count: one
  * in a hidden view, or behind HA's own page, gives its slot back. Main thread only.

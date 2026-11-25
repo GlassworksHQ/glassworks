@@ -7,6 +7,7 @@ import dev.glassworks.engine.Engine
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.gecko.GeckoEngine
 import dev.glassworks.engine.vitro.VitroEngine
+import dev.glassworks.engine.vitro.webrtc.VitroWebRtc
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.platform.AppBuild
@@ -64,6 +65,8 @@ class KioskApp : Application(), GlassworksApp {
                 generatedBy = build.product,
             )
             if (!vitro) return gecko
+            // Its cameras play over WebRTC first, as HA's frontend does, then HLS and MJPEG.
+            VitroWebRtc.register()
             return VitroEngine(
                 fallback = gecko,
                 settings = { context -> engineSettings(context, build) },

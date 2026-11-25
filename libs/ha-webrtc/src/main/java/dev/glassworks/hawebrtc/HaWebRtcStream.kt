@@ -266,8 +266,9 @@ public class HaWebRtcStream(
         a.timeout = null
         a.disconnected = null
         a.early.clear()
-        a.signaling?.close()
-        a.peer?.close()
+        // Each step whatever the one before did: a channel whose unsubscribe throws still leaves the peer closed.
+        runCatching { a.signaling?.close() }
+        runCatching { a.peer?.close() }
     }
 
     private fun startFailed(error: HaError) = HaError(START_FAILED, listOf(error.code, error.message).filter { it.isNotEmpty() }.joinToString(": "))
