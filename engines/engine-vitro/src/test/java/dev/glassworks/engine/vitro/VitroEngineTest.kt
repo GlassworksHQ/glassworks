@@ -274,6 +274,28 @@ class VitroEngineTest {
         )
     }
 
+    /** A plant card's sensors join its view's subscription: the view names only the plant. */
+    @Test
+    fun aPlantCardsSensorsJoinTheViewsSubscription() {
+        server.dashboardConfig = JSONObject("""{"views": [{"title": "Living", "path": "living", "cards": [
+            {"type": "plant-status", "entity": "plant.fern"}]}]}""")
+        server.initialEntities = JSONObject(FakeHaServer.ENTITIES_JSON)
+            .put("plant.fern", JSONObject("""{"s": "ok", "a": {"friendly_name": "Fern", "moisture": 40, "problem": "none",
+                "sensors": {"moisture": "sensor.fern_moisture"}}, "lc": 1700000000.0, "lu": 1700000000.0}"""))
+            .put("sensor.fern_moisture", JSONObject("""{"s": "35", "a": {"friendly_name": "Fern moisture", "unit_of_measurement": "%"},
+                "lc": 1700000000.0, "lu": 1700000000.0}"""))
+        readyPage()
+        awaitMain("view-scoped subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300))
+        awaitMain("resubscribed with the plant's sensor") {
+            server.commands("subscribe_entities").last().let { m ->
+                m.optJSONArray("entity_ids")?.let { arr -> (0 until arr.length()).any { arr.getString(it) == "sensor.fern_moisture" } } == true
+            }
+        }
+        val ids = server.commands("subscribe_entities").last().getJSONArray("entity_ids")
+        assertEquals(setOf("plant.fern", "sensor.fern_moisture"), (0 until ids.length()).map { ids.getString(it) }.toSet())
+    }
+
     /** #838: an island that walked `hass.states` makes its view follow every entity, when shown again from the cache too. */
     @Test
     fun aViewWhoseIslandWalksTheStatesFollowsEveryEntity() {

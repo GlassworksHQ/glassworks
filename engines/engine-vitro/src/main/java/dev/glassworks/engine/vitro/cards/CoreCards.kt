@@ -2303,7 +2303,9 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 else -> SpecialRows.build(ctx, inner) { id, cb -> observe(id, cb) }
             } ?: return null
             gapRows -= built
-            // hui-conditional-row: HA's visibility conditions, checked again as their entities change.
+            // hui-conditional-row: HA's visibility conditions, checked again as their entities change. A hidden inner
+            // conditional leaves its outer one's holder shown at zero height, taking the gap, as HA's wrapper div does
+            // (the card hides `row.parentElement`, the outer row): parity case entities-nested-conditional.
             val holder = FrameLayout(ctx.context).apply { addView(built, LayoutParams(MATCH_PARENT, WRAP_CONTENT)) }
             val widthDp = (ctx.context.resources.displayMetrics.widthPixels / ctx.dp).toInt()
             val update = {
