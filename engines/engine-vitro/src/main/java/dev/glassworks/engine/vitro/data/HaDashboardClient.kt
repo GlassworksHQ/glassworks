@@ -194,8 +194,9 @@ class HaDashboardClient(
     private val panelsGeneration = AtomicInteger(0)
 
     /**
-     * The dashboard whose config was last handed on ([hasDelivered]): checked again when HA's panels change. Both are
-     * written under [pathLock], and [recheckDelivered] reads, checks and clears them under it.
+     * The dashboard whose config was last handed on ([hasDelivered]): checked again when HA's panels change. The path
+     * state (this, [requestedDashboardPath], [dashboardActive], [missedRefetch]) is written under [pathLock], and every
+     * check whose result decides a write sits in the same section as that write; listeners are called after it.
      */
     @Volatile private var deliveredDashboard: String? = null
     @Volatile private var hasDelivered = false
@@ -323,7 +324,7 @@ class HaDashboardClient(
     }
 
     fun start(dashboardUrlPath: String?) {
-        requestedDashboardPath = dashboardUrlPath
+        synchronized(pathLock) { requestedDashboardPath = dashboardUrlPath }
         if (closed.get()) return
         // A new client may be another Home Assistant, or another user: back to the browser's language and formats
         // until this one's profile answers. A reconnect of this client keeps them, as HA's page does.
@@ -392,7 +393,7 @@ class HaDashboardClient(
     @Volatile private var missedRefetch = false
 
     /** The page put the config it got on screen: nothing skipped is owed any more. */
-    fun dashboardShown() {
+    fun dashboardShown() = synchronized(pathLock) {
         missedRefetch = false
     }
 
@@ -419,13 +420,17 @@ class HaDashboardClient(
             if (isTransportError(res)) return@request
             // Nothing is handed on before HA has said whether this user may see the dashboard.
             afterAccessKnown {
-                // An answer for a dashboard the page has since moved away from must not replace the current one.
-                if (closed.get() || !dashboardActive || urlPath != requestedDashboardPath) return@afterAccessKnown
-                val allowed = mayOpen(urlPath)
                 val ok = res.optBoolean("success", false)
-                synchronized(pathLock) {
+                // Whether the answer is still the page's, whether the user may open it, and the claim it makes are one
+                // decision under [pathLock]: a [claimDashboard] or [fetchDashboard] for another path on the main thread
+                // can't land between them and have its claim overwritten by this stale answer. Listeners run after.
+                val allowed = synchronized(pathLock) {
+                    // An answer for a dashboard the page has since moved away from must not replace the current one.
+                    if (closed.get() || !dashboardActive || urlPath != requestedDashboardPath) return@afterAccessKnown
+                    val allowed = mayOpen(urlPath)
                     deliveredDashboard = urlPath
                     hasDelivered = allowed && ok
+                    allowed
                 }
                 if (!allowed) {
                     listener.onDashboardRefused(urlPath)

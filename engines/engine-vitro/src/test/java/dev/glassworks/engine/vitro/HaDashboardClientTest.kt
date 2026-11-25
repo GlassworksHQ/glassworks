@@ -525,6 +525,30 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun aStaleAnswerLeavesTheNewerClaimToBeChecked() {
+        // wall-test's config answers, but waits for the user; meanwhile the page claims the default dashboard back.
+        server.currentUser = wallUser
+        server.holdCurrentUser = true
+        val c = started("wall-test")
+        awaitCondition("config answered, user not") {
+            server.commands("auth/current_user").isNotEmpty() && store["sensor.kitchen_temp"] != null
+        }
+        c.claimDashboard(null)
+        val id = server.commands("auth/current_user").single().getInt("id")
+        server.sockets.last().push(JSONObject().put("id", id).put("type", "result").put("success", true).put("result", wallUser))
+        awaitCondition("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
+        awaitCondition("dashboards") { listener.dashboards.isNotEmpty() }
+        // The stale wall-test answer is neither handed on nor taken as the claim.
+        assertTrue(listener.configs.isEmpty())
+        assertTrue(listener.refused.isEmpty())
+        // The default dashboard is the claim: made admin only, it's refused.
+        server.panelRequireAdmin["lovelace"] = true
+        server.pushPanelsUpdated()
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertEquals(listOf<String?>(null), listener.refused.toList())
+    }
+
+    @Test
     fun aConfigWaitsForThePanelsAHaChangeAsksForAgain() {
         server.currentUser = wallUser
         val c = started("wall-test")
