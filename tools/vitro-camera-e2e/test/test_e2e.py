@@ -208,26 +208,23 @@ class Probe(unittest.TestCase):
 class Pause(unittest.TestCase):
     CAM = "camera.vitro_e2e_mjpeg"
 
-    def test_mjpeg_frames_that_stop_are_a_pause(self):
-        b = {"mjpeg": [{"stream": 1, "camera": self.CAM, "frames": 100}], "hls": [], "webrtc": []}
-        a = {"mjpeg": [{"stream": 1, "camera": self.CAM, "frames": 104}], "hls": [], "webrtc": []}
-        self.assertEqual(e2e.check_paused("mjpeg", self.CAM, {"before": b, "after": a})["mjpeg_frames_sent_while_hidden"], 4)
-        a["mjpeg"][0]["frames"] = 145
-        with self.assertRaises(e2e.Fail):
-            e2e.check_paused("mjpeg", self.CAM, {"before": b, "after": a})
+    @staticmethod
+    def cams(sent, live=()):
+        return {"mjpeg": [{"stream": n, "camera": Pause.CAM, "frames": f} for n, f in live],
+                "mjpeg_sent": {Pause.CAM: sent}, "hls": [], "webrtc": []}
 
-    def test_a_stream_opened_while_hidden_counts_from_zero(self):
-        b = {"mjpeg": [{"stream": 1, "camera": self.CAM, "frames": 100}], "hls": [], "webrtc": []}
-        a = {"mjpeg": [{"stream": 1, "camera": self.CAM, "frames": 104},
-                       {"stream": 2, "camera": self.CAM, "frames": 45}], "hls": [], "webrtc": []}
+    def test_mjpeg_frames_that_stop_are_a_pause(self):
+        b, a = self.cams(100, [(1, 100)]), self.cams(104, [(1, 104)])
+        self.assertEqual(e2e.check_paused("mjpeg", self.CAM, {"before": b, "after": a}),
+                         {"mjpeg_frames_sent_while_hidden": 4, "open": 1})
+        with self.assertRaises(e2e.Fail):
+            e2e.check_paused("mjpeg", self.CAM, {"before": b, "after": self.cams(145, [(1, 145)])})
+
+    def test_streams_opened_or_closed_while_hidden_count(self):
+        # Stream 1 sent 45 and closed; stream 2 opened and sent 4: the running total has both.
+        b, a = self.cams(100, [(1, 100)]), self.cams(149, [(2, 4)])
         with self.assertRaisesRegex(e2e.Fail, "49 frames"):
             e2e.check_paused("mjpeg", self.CAM, {"before": b, "after": a})
-
-    def test_another_clients_stream_is_seen(self):
-        cams = {"mjpeg": [], "webrtc": [{"session": "s", "camera": "camera.x", "sent": 3}],
-                "hls": [{"token": "t", "camera": "camera.y", "playlists": 1, "segments": 0, "idle_s": 1.0},
-                        {"token": "u", "camera": "camera.z", "playlists": 9, "segments": 8, "idle_s": 40.0}]}
-        self.assertEqual(e2e.live_streams(cams), [("hls", "camera.y"), ("webrtc", "camera.x")])
 
     def test_hls_fetches_while_hidden_fail(self):
         cam = "camera.clarity_hls_1"
@@ -237,6 +234,12 @@ class Pause(unittest.TestCase):
         a["hls"][0]["segments"] = 7
         with self.assertRaises(e2e.Fail):
             e2e.check_paused("hls", cam, {"before": b, "after": a})
+
+    def test_another_clients_stream_is_seen(self):
+        cams = {"mjpeg": [], "webrtc": [{"session": "s", "camera": "camera.x", "sent": 3}],
+                "hls": [{"token": "t", "camera": "camera.y", "playlists": 1, "segments": 0, "idle_s": 1.0},
+                        {"token": "u", "camera": "camera.z", "playlists": 9, "segments": 8, "idle_s": 40.0}]}
+        self.assertEqual(e2e.live_streams(cams), [("hls", "camera.y"), ("webrtc", "camera.x")])
 
 
 if __name__ == "__main__":

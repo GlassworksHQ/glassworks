@@ -389,6 +389,8 @@ class FakeHA(unittest.TestCase):
         while time.monotonic() < deadline and any(s["camera"] == "camera.clarity_cam_1" for s in self.cameras()["mjpeg"]):
             time.sleep(0.1)
         self.assertEqual([s for s in self.cameras()["mjpeg"] if s["camera"] == "camera.clarity_cam_1"], [])
+        # The running total keeps what the closed stream sent.
+        self.assertGreaterEqual(self.cameras()["mjpeg_sent"]["camera.clarity_cam_1"], live[0]["frames"])
 
     def test_the_cameras_report_counts_each_hls_streams_fetches(self):
         ws = self.connect()

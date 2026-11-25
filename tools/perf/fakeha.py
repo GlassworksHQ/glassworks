@@ -121,6 +121,8 @@ class Hub:
         # What the cameras serve right now (/clarity/cameras): open MJPEG streams and each HLS
         # stream's fetches, so a test sees a stream pause (no more frames or fetches) or close.
         self.cam_lock, self.mjpeg_live, self.mjpeg_n, self.hls_fetches = threading.Lock(), {}, 0, {}
+        # Every MJPEG frame sent per camera, closed streams' too: a stream that ends between two reads still counts.
+        self.mjpeg_sent = {}
 
     def mjpeg_open(self, cam):
         with self.cam_lock:
@@ -136,6 +138,7 @@ class Hub:
             if s:
                 s["frames"] += 1
                 s["last"] = time.monotonic()
+                self.mjpeg_sent[s["camera"]] = self.mjpeg_sent.get(s["camera"], 0) + 1
 
     def mjpeg_close(self, n):
         with self.cam_lock:
@@ -161,10 +164,11 @@ class Hub:
                      for n, s in self.mjpeg_live.items()]
             hls = [{"token": t, "camera": f["camera"], "playlists": f["playlists"], "segments": f["segments"],
                     "idle_s": round(now - f["last"], 2)} for t, f in self.hls_fetches.items()]
+            sent = dict(self.mjpeg_sent)
         w = self.webrtc
         rtc = [{"session": sid, "camera": s.get("entity_id"), "sent": s.get("sent", 0)}
                for sid, s in list(w.sessions.items())] if w else []
-        return {"mjpeg": mjpeg, "hls": hls, "webrtc": rtc, "webrtc_available": w is not None}
+        return {"mjpeg": mjpeg, "mjpeg_sent": sent, "hls": hls, "webrtc": rtc, "webrtc_available": w is not None}
 
     def fire(self, event_type, data):
         """An HA bus event to every frontend subscribed to its type (subscribe_events)."""

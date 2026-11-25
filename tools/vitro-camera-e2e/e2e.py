@@ -409,11 +409,9 @@ def check_paused(name, cam, pause):
     b, a = pause["before"], pause["after"]
     out = {}
     if name == "mjpeg":
-        before = {s["stream"]: s["frames"] for s in b["mjpeg"] if s["camera"] == cam}
-        after = {s["stream"]: s["frames"] for s in a["mjpeg"] if s["camera"] == cam}
-        # A stream opened while hidden counts from zero.
-        sent = sum(n - before.get(k, 0) for k, n in after.items())
-        out = {"mjpeg_frames_sent_while_hidden": sent, "open": len(after)}
+        # The fake's running total per camera: streams opened or closed while hidden count as well.
+        sent = a["mjpeg_sent"].get(cam, 0) - b["mjpeg_sent"].get(cam, 0)
+        out = {"mjpeg_frames_sent_while_hidden": sent, "open": len([s for s in a["mjpeg"] if s["camera"] == cam])}
         # A paused reader stops reading; TCP buffers still take a few frames before the fake's writes block.
         if sent > 10:
             raise Fail(f"mjpeg: the fake sent {sent} frames in 3 s while the app was hidden")
