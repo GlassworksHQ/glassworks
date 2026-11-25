@@ -281,6 +281,20 @@ describe('renderPayload', () => {
     // movn x0, #99 -> x0 = -100 (AT_FDCWD)
     expect(w.filter((x) => ((x & 0xff80001f) >>> 0) === 0x92800000 && ((x >>> 5) & 0xffff) === 99)).toHaveLength(2);
   });
+
+  it('passes an empty NUL-terminated string for init_module uargs, not NULL', () => {
+    const w = words();
+    const uargsInsn = w[7]!;
+    // ADR x2, <imm21>: op=0 (bit 31), bits[28:24]=0b10000, rd=2
+    expect((uargsInsn & 0x9f00001f) >>> 0).toBe(0x10000002);
+    const immlo = (uargsInsn >>> 29) & 0x3;
+    const immhi = (uargsInsn >>> 5) & 0x7ffff;
+    let imm21 = (immhi << 2) | immlo;
+    if (imm21 & (1 << 20)) imm21 -= 1 << 21;
+    const targetOffset = 8 + 7 * 4 + imm21;
+    expect(targetOffset).toBe(0);
+    expect(payload[targetOffset]).toBe(0);
+  });
 });
 
 describe('buildDpmdHook', () => {

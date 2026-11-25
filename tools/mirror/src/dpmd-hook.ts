@@ -410,7 +410,7 @@ export function renderPayload(plan: DpmdHookPlan, module: Uint8Array): Uint8Arra
  *   sub  x16, x16, x17        ; x16 = load bias
  *   adr  x0, module
  *   mov  x1, moduleBytes
- *   mov  x2, xzr              ; uargs = NULL
+ *   adr  x2, 0                ; uargs = "" (payload starts with NUL bytes; NULL fails with -EFAULT)
  *   mov  x8, __NR_init_module
  *   svc  #0
  *   (twice) movn x0, #99      ; AT_FDCWD = -100
@@ -456,7 +456,7 @@ function hookCode(plan: DpmdHookPlan): Uint8Array {
 
   emitAdr(0, moduleAt);
   emitConst(1, plan.moduleBytes);
-  words.push(movFromXzr(2, 31));
+  emitAdr(2, 0); // uargs = "" (payload offset 0 is the zeroed terminator; NULL fails strndup_user with -EFAULT)
   emitConst(8, SYS_INIT_MODULE);
   words.push(SVC);
 

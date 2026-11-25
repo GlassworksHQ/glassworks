@@ -27,6 +27,7 @@ const RUN = process.env.MIRROR_DPMD_HOOK_RUN === '1';
 const haveArtifacts = Boolean(STOCK_SO && BACKUP_KO && existsSync(STOCK_SO) && existsSync(BACKUP_KO));
 
 describe.skipIf(!haveArtifacts)('dpmd hook against stock 1.24.0', () => {
+  if (!haveArtifacts) return;
   const so = new Uint8Array(readFileSync(STOCK_SO!));
   const ko = new Uint8Array(readFileSync(BACKUP_KO!));
   const { bytes, plan } = buildDpmdHook(so, ko);
@@ -131,8 +132,8 @@ cat /w/trace
 
       const expectedModule = 0x20100000 + (plan.moduleOffset - plan.payloadOffset);
       expect(out).toContain(`harness: payload=0x20100000 len=${plan.payloadBytes}`);
-      // init_module takes the embedded module, of the module's real length
-      expect(out).toMatch(new RegExp(`init_module\\(0x${expectedModule.toString(16)}, ${ko.length},`));
+      // init_module takes the embedded module, of the module's real length, and "" (not NULL)
+      expect(out).toMatch(new RegExp(`init_module\\(0x${expectedModule.toString(16)}, ${ko.length}, ""\\)`));
       // both nodes, mode 0444, through fchmodat (53) and not fchownat (54)
       for (const node of HOOK_BLOCK_NODES) {
         expect(out).toContain(`fchmodat(AT_FDCWD, "${node}", 0444)`);
