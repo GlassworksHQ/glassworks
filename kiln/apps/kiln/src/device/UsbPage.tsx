@@ -20,6 +20,7 @@ import { standardData, type StandardFrame } from '../standard/frame';
 import { StandardSession } from '../standard/session';
 import { StandardRoutes } from '../standard/StandardWizard';
 import { status, stepOf, type Step } from '../wizard/routes';
+import { Browser } from '../wizard/screens';
 import type { Entry } from '../wizard/registry';
 import { Shell, useBrowserChip } from '../components/Shell';
 import { SilentUpdates } from '../components/SilentUpdates';
@@ -532,7 +533,8 @@ export function Screens({ session, base }: { session: UsbSession; base?: string 
   return (
     <UsbFrameContext.Provider value={dev}>
       <Shell steps={rail(s)} level={level(s)} error={s.screen === 'error'} chip={chip}>
-        {s.screen === 'off' ? <Off />
+        {chip?.kind === 'bad' ? <Browser />
+          : s.screen === 'off' ? <Off />
           : s.screen === 'find' ? <Find {...p} />
           : s.screen === 'named' ? <Named {...p} />
           : s.screen === 'brand' ? <Brand {...p} />

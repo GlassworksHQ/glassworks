@@ -14,7 +14,14 @@ export { IMAGE_PROXY, MAX_RETRY_AFTER_MS, ProxyError, resumableBody, retryAfterM
 export { ADB_KEY_LINE, GLASS_PANES_KEY_FINGERPRINT, IMAGE_OWNER_FINGERPRINT, SERVICES_JAR, adbFingerprint, adbKeyLines, md5, replaceDexString, trustAdbKey, trustFingerprint } from './services';
 export { KEPT_APPS, UNUSED_APPS, type UnusedApp } from './unused';
 export { APP_DIRS, GLASSWORKS, MIRROR_PROBE, PRIVILEGED, type MirrorApp } from './app';
-export { describeMirrorUpdates, parseMirrorUpdates, readMirrorUpdates, type MirrorUpdates } from './updates';
+export { describeMirrorUpdates, isDeviceOwner, parseMirrorUpdates, readMirrorUpdates, type MirrorUpdates } from './updates';
 export { GLASSWORKS_IMAGE, GLASS_PANES_IMAGE, MIRROR_ACCESS, MIRROR_IMAGES } from './choices';
 export { ADB_KEYS, WIFI_CONF, WIFI_TEMPLATE, saveWifi, setAdbKeys, setImageKey } from './image';
 export { systemWithKey, userdataWithKey, userdataWithWifi, wifiOn, wifiTemplate, within } from './wifi';
+export {
+  MAX_RAW_CHUNK_BLOCKS, SPARSE_BLOCK_SIZE, START_CONFIRMATION_LOG_STRING, STOCK_BLOAT_PACKAGES, STOCK_BUNDLE_MAGIC,
+  STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES, buildSurgicalSparseImage, decodeStockBundle, encodeStockBundle,
+  hideStockBloat, patchStockServicesJar, unhideStockBloat,
+  type DecodedStockBundle, type DeviceOwnerPatch, type FiemapExtent, type PatchStockServicesJarOptions,
+  type PatchedServicesJar, type StockBloatChange, type StockBundleMeta,
+} from './stock';
