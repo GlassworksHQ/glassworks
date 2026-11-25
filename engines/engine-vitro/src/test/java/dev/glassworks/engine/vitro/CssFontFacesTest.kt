@@ -195,6 +195,9 @@ class CssFontFacesTest {
         assertEquals("brand sans", face.family)
         assertEquals(listOf("Brand Sans", "serif"), CssFontFaces.families("Brand   Sans, serif"))
         assertEquals(listOf("Brand   Sans"), CssFontFaces.families("\"Brand   Sans\""))
+        // A hex escape's terminating space isn't a separator: `Brand\26  Sans` is "Brand& Sans".
+        assertEquals(listOf("Brand& Sans"), CssFontFaces.families("Brand\\26  Sans"))
+        assertEquals(listOf("Brand& Sans"), CssFontFaces.families("Brand\\26     Sans"))
     }
 
     @Test

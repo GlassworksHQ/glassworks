@@ -289,6 +289,8 @@ class VitroIslandServer(
         if (!req.path.startsWith("/")) return HttpResponse.text(400, "Invalid path")
         var targetUrl = base + req.target
         val held = IntArray(1)
+        // Set once a response carries the permits: the server releases them after writing it (its onDone).
+        var handedOff = false
         return try { runCatching {
             var hops = 0
             while (true) {
@@ -336,7 +338,11 @@ class VitroIslandServer(
                     val bytes = stream?.use { readCapped(it, MAX_PROXY_BODY, proxyBudget, held) }
                         ?: ByteArray(0)
                     headers["Content-Type"] = conn.contentType ?: guessMime(req.path)
-                    return@runCatching HttpResponse(code, headers, bytes)
+                    // The body stays in memory until it's written: its share of the budget goes with it, released by
+                    // the server once the write ends (or fails), not when this returns.
+                    val permits = held[0]
+                    handedOff = true
+                    return@runCatching HttpResponse(code, headers, bytes, onDone = { if (permits > 0) proxyBudget.release(permits) })
                 } finally {
                     conn.disconnect()
                 }
@@ -346,7 +352,7 @@ class VitroIslandServer(
         }.getOrElse { e ->
             HttpResponse.text(502, "Proxy error: ${e.message}")
         } } finally {
-            if (held[0] > 0) proxyBudget.release(held[0])
+            if (!handedOff && held[0] > 0) proxyBudget.release(held[0])
         }
     }
 
@@ -455,13 +461,19 @@ class VitroIslandServer(
         ): ByteArray {
             val out = ByteArrayOutputStream()
             val buf = ByteArray(16 * 1024)
+            // KiB taken from the budget so far: what the bytes buffered need, however the reads come in.
+            var charged = 0
             while (true) {
                 val n = input.read(buf)
                 if (n < 0) return out.toByteArray()
                 if (out.size() + n > max) throw IOException("response over ${max shr 20} MiB")
                 if (budget != null) {
-                    if (!budget.tryAcquire(16, waitMs, java.util.concurrent.TimeUnit.MILLISECONDS)) throw IOException("proxy busy")
-                    held?.let { it[0] += 16 }
+                    val need = ((out.size().toLong() + n + 1023) / 1024).toInt() - charged
+                    if (need > 0) {
+                        if (!budget.tryAcquire(need, waitMs, java.util.concurrent.TimeUnit.MILLISECONDS)) throw IOException("proxy busy")
+                        charged += need
+                        held?.let { it[0] += need }
+                    }
                 }
                 out.write(buf, 0, n)
             }

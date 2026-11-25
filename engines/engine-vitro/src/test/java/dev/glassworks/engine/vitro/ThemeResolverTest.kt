@@ -387,10 +387,12 @@ class ThemeResolverTest {
     }
 
     @Test
-    fun aGradientTheBrowserRejectsIsRejected() {
-        // An invalid stop position, three positions, and a radial edge-offset position: all dropped as declarations.
+    fun aGradientThatIsInvalidOrUnsupportedIsRejected() {
+        // Invalid CSS, which the browser drops too: an invalid stop position, three positions.
         assertNull(CssBackground.parse("linear-gradient(#fff bogus, #000)"))
         assertNull(CssBackground.parse("linear-gradient(#fff 0% 10% 20%, #000)"))
+        // Valid CSS that Vitro doesn't place yet (the four-value edge-offset position): rejected rather than drawn in
+        // the wrong place, so an earlier valid background stays.
         assertNull(CssBackground.parse("radial-gradient(circle at right 20px bottom 30px, #fff, #000)"))
         // Their valid forms still parse: one or two positions, a one- or two-token place.
         assertNotNull(CssBackground.parse("linear-gradient(#fff 0% 10%, #000)"))

@@ -885,19 +885,48 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         val eid = config.entity ?: return
-        observe(eid) { s -> applyFeatures(s) }
-        // HA's card keeps one `todo/item/subscribe` while it shows: every event is the whole list, so a rename (which
-        // leaves the entity's count alone) shows too. A rejected subscription falls back to one read.
-        track(ctx.subscribeWs(JSONObject().put("type", "todo/item/subscribe").put("entity_id", eid), { ev ->
+        // While the item subscription is down, an entity change reads the list again (the old path).
+        observe(eid) { s ->
+            applyFeatures(s)
+            if (!itemsLive) fetch(eid)
+        }
+        subscribeItems(eid)
+        track { itemsSub?.invoke(); itemsSub = null; ctx.main.removeCallbacks(resubscribe) }
+    }
+
+    /** The item subscription now; null while it's down or the card is off screen. */
+    private var itemsSub: (() -> Unit)? = null
+
+    /** True while the item subscription is up: it brings every change, renames included. */
+    private var itemsLive = true
+
+    private val resubscribe = Runnable { config.entity?.let { if (isAttachedToWindow && itemsSub == null) subscribeItems(it) } }
+
+    /**
+     * HA's card keeps one `todo/item/subscribe` while it shows: every event is the whole list, so a rename (which
+     * leaves the entity's count alone) shows too. Rejected, it falls back to a read (and reads on entity changes)
+     * and tries again later.
+     */
+    private fun subscribeItems(eid: String) {
+        itemsSub = ctx.subscribeWs(JSONObject().put("type", "todo/item/subscribe").put("entity_id", eid), { ev ->
             val parsed = parseItems(ev)
             ctx.main.post {
                 if (!isAttachedToWindow) return@post
+                itemsLive = true
                 // Newer than any one-shot read still on its way.
                 fetchGeneration++
                 items = parsed
                 renderItems()
             }
-        }, { _ -> ctx.main.post { if (isAttachedToWindow) fetch(eid) } }))
+        }, { _ ->
+            ctx.main.post {
+                itemsSub = null
+                if (!isAttachedToWindow) return@post
+                itemsLive = false
+                fetch(eid)
+                ctx.main.postDelayed(resubscribe, RESUBSCRIBE_MS)
+            }
+        })
     }
 
     /**
@@ -1120,6 +1149,9 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
 
         /** The wait before a failed list read is tried again (once). */
         private const val RETRY_MS = 2_000L
+
+        /** How long a rejected item subscription waits before it's asked for again. */
+        private const val RESUBSCRIBE_MS = 30_000L
         /** HA's checked checkbox: its brand fill (#009ac7, measured). */
         private const val CHECKED = 0xFF009AC7.toInt()
         private const val WARNING = 0xFFFFA600.toInt()
@@ -1348,7 +1380,12 @@ class AreaCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 headerIcon.visibility = GONE
                 header.background = null
             } else {
-                // Failed: forget it was asked for, so the next render of the same picture tries again.
+                // Failed: no older picture stays on screen, the fallback look comes back, and the next render of the
+                // same picture tries again.
+                picture.setImageDrawable(null)
+                picture.visibility = GONE
+                headerIcon.visibility = if (HaDisplay.areas[areaId]?.icon != null) VISIBLE else GONE
+                header.setBackgroundColor(CardSurface.withAlpha(tileColor, 0.12f))
                 pictureUrl = null
             }
         }

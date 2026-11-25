@@ -443,7 +443,17 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
 
         @android.annotation.SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean {
-            if (duration <= 0.0) return super.onTouchEvent(event)
+            if (duration <= 0.0) {
+                // No longer seekable mid-drag (HA dropped SEEK, or the duration): end the drag, send nothing, and
+                // show the playback position again.
+                if (dragging && (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL)) {
+                    dragging = false
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                    updateProgress(last)
+                    return true
+                }
+                return super.onTouchEvent(event)
+            }
             val w = width.toFloat().coerceAtLeast(1f)
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {

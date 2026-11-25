@@ -482,16 +482,29 @@ function fail(error: string): VitroAuditResult {
   return { ok: false, error, isFullyNative: false, totals: { tier1: 0, tier2: 0, tier3: 0 }, views: [], triggers: [], warnings: [] };
 }
 
-/** card_mod selector-map keys the renderer reads (ThemeResolver.cardModStyleString): the card, HA's markdown and clock roots. */
-const SUPPORTED_STYLE_KEYS = new Set([".", "ha-markdown$", "hui-clock-card-digital$"]);
+/**
+ * card_mod selector-map keys the renderer reads for a card type (VitroSupport.cardModSheets): the card itself always,
+ * HA's markdown root only on a Markdown card, the digital clock's only on a clock.
+ */
+function supportedStyleKey(type: string, key: string): boolean {
+  if (key === ".") return true;
+  if (key === "ha-markdown$") return type === "markdown";
+  if (key === "hui-clock-card-digital$") return type === "clock";
+  return false;
+}
+
+/** Legacy single-colon pseudo-elements (`ha-card:before`): generated content, which isn't drawn natively either. */
+const LEGACY_PSEUDO = /:(before|after|first-line|first-letter)\b/i;
 
 function cardModWarning(card: Obj, loc: string, out: string[]) {
   const cm = card.card_mod;
   if (!isObj(cm)) return;
   const style = cm.style;
-  const complex = (css: unknown) => typeof css !== "string" || css.includes("$:") || css.includes("@keyframes") || css.includes("::");
+  const type = typeof card.type === "string" ? card.type.trim() : "";
+  const complex = (css: unknown) =>
+    typeof css !== "string" || css.includes("$:") || css.includes("@keyframes") || css.includes("::") || LEGACY_PSEUDO.test(css);
   const unsupported = isObj(style)
-    ? Object.entries(style).some(([k, v]) => !SUPPORTED_STYLE_KEYS.has(k) || complex(v))
+    ? Object.entries(style).some(([k, v]) => !supportedStyleKey(type, k) || complex(v))
     : typeof style === "string" && complex(style);
   if (unsupported) {
     out.push(`${loc}: complex Shadow-DOM, pseudo-element, or keyframe card_mod (only ha-card container styles carry over natively)`);

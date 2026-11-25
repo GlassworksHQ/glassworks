@@ -4,6 +4,7 @@
 
 package dev.glassworks.web
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.InetAddress
@@ -60,6 +61,23 @@ class HttpServerTest {
             ("GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
                 "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").toByteArray(),
         )
+    }
+
+    @Test fun aResponsesOnDoneRunsOnceItIsWritten() {
+        val done = java.util.concurrent.atomic.AtomicInteger(0)
+        val server = HttpServer(0, { HttpResponse(200, mapOf("Content-Type" to "text/plain"), "hello".toByteArray(), onDone = { done.incrementAndGet() }) },
+            bindAddress = loopback, workers = 1)
+        server.start()
+        try {
+            val s = open(server.localPort)
+            assertTrue(s.getInputStream().readBytes().toString(Charsets.UTF_8).endsWith("hello"))
+            s.close()
+            val deadline = System.nanoTime() + 3_000_000_000L
+            while (done.get() == 0 && System.nanoTime() < deadline) Thread.sleep(10)
+            assertEquals(1, done.get())
+        } finally {
+            server.stop()
+        }
     }
 
     @Test fun upgradedConnectionsRunOffTheWorkersUpToTheirOwnLimit() {

@@ -685,4 +685,28 @@ class CardModAndOverlayTest {
         assertEquals(View.GONE, picture.visibility)
         assertTrue(tile.all().any { it is dev.glassworks.engine.vitro.ui.MdiIconView && it.visibility == View.VISIBLE })
     }
+
+    @Test
+    fun aMushroomCardBuiltBeforeItsStateIsBuiltAgainWhenItLands() {
+        // The view opens before its entities' states arrive: the build guesses (controls assumed). When the states
+        // land, the view is built again from them, as HA re-renders on a hass update.
+        val store = EntityStore()
+        val vv = vitroView(store, """{"views": [{"title": "Home", "type": "sections", "sections": [{"type": "grid", "cards": [
+            {"type": "custom:mushroom-light-card", "entity": "light.switch_only", "show_brightness_control": true},
+            {"type": "custom:mushroom-light-card", "entity": "light.dimmer", "show_brightness_control": true}]}]}]}""")
+        activity.setContentView(vv)
+        fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+        fun mushrooms() = all(vv).count { it is dev.glassworks.engine.vitro.cards.MushroomLightCardView && it.isShown }
+        assertEquals("guessed without states", 2, mushrooms())
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("light.switch_only", "on", mapOf("supported_color_modes" to listOf("onoff"))))
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("light.dimmer", "on", mapOf("supported_color_modes" to listOf("brightness"), "brightness" to 128)))
+        ShadowLooper.idleMainLooper()
+        // On/off only: the tile (one row). The dimmer keeps Mushroom's controls row (two rows).
+        assertEquals(1, mushrooms())
+        val dimmer = all(vv).single { it is dev.glassworks.engine.vitro.cards.MushroomLightCardView && it.isShown }
+        val lp = (generateSequence(dimmer) { it.parent as? View }.first { it.layoutParams is dev.glassworks.engine.vitro.ui.HaGridLayout.LayoutParams }.layoutParams
+            as dev.glassworks.engine.vitro.ui.HaGridLayout.LayoutParams)
+        val oneRow = lp.fixedHeight!!
+        assertTrue("two rows: $oneRow", oneRow > (100 * activity.resources.displayMetrics.density).toInt())
+    }
 }

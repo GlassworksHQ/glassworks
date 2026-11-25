@@ -222,7 +222,8 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
                 "right", "bottom" -> Length(100f, true)
                 else -> LEN.matchEntire(t)?.let { m -> m.groupValues[1].toFloatOrNull()?.let { Length(it, m.groupValues[2] == "%") } }
             }
-            // The edge-offset forms (`right 20px bottom 30px`) aren't read: the gradient is rejected, not misplaced.
+            // The edge-offset forms (`right 20px bottom 30px`, valid CSS) aren't placed yet: the gradient is rejected,
+            // not misplaced.
             if (toks.size > 2) return null
             if (toks.size == 1) {
                 val t = toks[0]

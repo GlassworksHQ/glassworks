@@ -1237,10 +1237,14 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             picture.setImageDrawable(null)
             refreshAvatar()
             if (v.isNotBlank()) ctx.loadImage(v, this) { bmp ->
-                if (bmp != null && pictureUrl == v) {
+                if (pictureUrl != v) return@loadImage
+                if (bmp != null) {
                     picture.setImageDrawable(CircleCropDrawable(bmp))
                     pictureLoaded = true
                     refreshAvatar()
+                } else {
+                    // Failed: the icon stays, and the next delivery of the same picture asks again.
+                    pictureUrl = ""
                 }
             }
         }

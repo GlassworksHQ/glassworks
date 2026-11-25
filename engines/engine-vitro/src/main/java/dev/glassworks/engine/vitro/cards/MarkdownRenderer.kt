@@ -1455,9 +1455,12 @@ internal class MdLinkSpan(val href: String, private val navigate: (String) -> Un
                         val s = maxOf(text.getSpanStart(span), lineStart)
                         val e = minOf(text.getSpanEnd(span), lineEnd)
                         if (s >= e) return@firstOrNull false
-                        val a = layout.getPrimaryHorizontal(s)
-                        val b = if (e == lineEnd) layout.getLineRight(line) else layout.getPrimaryHorizontal(e)
-                        lx >= minOf(a, b) && lx <= maxOf(a, b)
+                        // Its drawn extent as the selection would highlight it: right for either direction (an RTL
+                        // link's logical end is its left edge).
+                        val outline = android.graphics.Path()
+                        layout.getSelectionPath(s, e, outline)
+                        val box = android.graphics.RectF().also { outline.computeBounds(it, true) }
+                        lx >= box.left && lx <= box.right
                     }
             }
             return when (ev.actionMasked) {

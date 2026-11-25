@@ -474,6 +474,19 @@ class VitroIslandServerTest {
         val held2 = IntArray(1)
         assertEquals(64 * 1024, VitroIslandServer.readCapped(java.io.ByteArrayInputStream(ByteArray(64 * 1024)), 1 shl 20, roomy, held2).size)
         assertEquals(64, held2[0])
+        // Short reads are charged for the bytes they bring, not a whole buffer each: 6 KiB in 1 KiB reads fit in 8.
+        val trickle = object : java.io.InputStream() {
+            var left = 6 * 1024
+            override fun read(): Int = if (left-- > 0) 0 else -1
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (left <= 0) return -1
+                val n = minOf(1024, len, left); left -= n; return n
+            }
+        }
+        val small = java.util.concurrent.Semaphore(8)
+        val held3 = IntArray(1)
+        assertEquals(6 * 1024, VitroIslandServer.readCapped(trickle, 1 shl 20, small, held3, waitMs = 50).size)
+        assertEquals(6, held3[0])
     }
 
     @Test

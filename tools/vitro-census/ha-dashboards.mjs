@@ -21,7 +21,10 @@ const msg = cmd === 'list'
   : { type: 'lovelace/config', url_path: urlPath === 'lovelace' ? null : urlPath, force: true };
 const wsUrl = HA_URL.replace(/^http/i, 'ws').replace(/\/$/, '') + '/api/websocket';
 if (!/^wss:/i.test(wsUrl)) {
-  const loopback = /^ws:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/i.test(wsUrl);
+  // The host the WebSocket will reach, as it parses the URL: never a prefix of the text (`localhost:x@other-host`).
+  let host = '';
+  try { host = new URL(wsUrl).hostname.toLowerCase(); } catch { host = ''; }
+  const loopback = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
   if (!loopback && process.env.HA_ALLOW_INSECURE !== '1') {
     console.error('refusing to send the token over ws:// to another host: use https://, or set HA_ALLOW_INSECURE=1 to accept that');
     process.exit(2);

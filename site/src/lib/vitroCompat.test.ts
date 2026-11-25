@@ -205,6 +205,14 @@ views:
     expect(deep.warnings).toHaveLength(1);
     const pseudo = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            .: |\n              ha-card::before { content: 'x'; }\n");
     expect(pseudo.warnings).toHaveLength(1);
+    // The single-colon form is a pseudo-element too.
+    const legacy = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            .: |\n              ha-card:before { content: 'x'; }\n");
+    expect(legacy.warnings).toHaveLength(1);
+    // A root key counts only on its own card type: ha-markdown$ on a tile isn't read.
+    const wrongRoot = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            ha-markdown$: |\n              p { color: red; }\n");
+    expect(wrongRoot.warnings).toHaveLength(1);
+    const rightRoot = auditDashboard("views:\n  - cards:\n      - type: markdown\n        content: x\n        card_mod:\n          style:\n            ha-markdown$: |\n              p { color: red; }\n");
+    expect(rightRoot.warnings).toHaveLength(0);
   });
 
   it("refuses a key: value pair inside a flow list instead of reading it as text", () => {

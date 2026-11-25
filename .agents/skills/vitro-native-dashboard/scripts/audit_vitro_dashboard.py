@@ -6,6 +6,7 @@ or exits 1 if any card would boot GeckoView.
 """
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -126,7 +127,19 @@ def load_dashboard(path: str):
     return data
 
 
-SUPPORTED_STYLE_KEYS = {".", "ha-markdown$", "hui-clock-card-digital$"}
+def supported_style_key(card_type: str, key: str) -> bool:
+    """Selector-map keys Vitro reads per card type (VitroSupport.cardModSheets): "." always, the roots on their cards."""
+    if key == ".":
+        return True
+    if key == "ha-markdown$":
+        return card_type == "markdown"
+    if key == "hui-clock-card-digital$":
+        return card_type == "clock"
+    return False
+
+
+# Legacy single-colon pseudo-elements (ha-card:before): generated content, not drawn natively either.
+LEGACY_PSEUDO = re.compile(r":(before|after|first-line|first-letter)\b", re.I)
 
 
 def check_card_mod(card: dict, loc: str, warnings: list[str]):
@@ -134,11 +147,12 @@ def check_card_mod(card: dict, loc: str, warnings: list[str]):
     if not isinstance(cm, dict):
         return
     style = cm.get("style")
+    card_type = str(card.get("type", "")).strip()
     def complex_css(css) -> bool:
-        return not isinstance(css, str) or "$:" in css or "@keyframes" in css or "::" in css
-    # Selector maps Vitro reads (ThemeResolver.cardModStyleString): "." for the card, and HA's markdown and clock roots.
+        return (not isinstance(css, str) or "$:" in css or "@keyframes" in css or "::" in css
+                or LEGACY_PSEUDO.search(css) is not None)
     if isinstance(style, dict):
-        unsupported = any(k not in SUPPORTED_STYLE_KEYS or complex_css(v) for k, v in style.items())
+        unsupported = any(not supported_style_key(card_type, k) or complex_css(v) for k, v in style.items())
     else:
         unsupported = isinstance(style, str) and complex_css(style)
     if unsupported:

@@ -228,11 +228,44 @@ object CssFontFaces {
     private fun unquote(v: String): String {
         val t = v.trim()
         val quoted = t.length >= 2 && (t[0] == '"' || t[0] == '\'') && t.last() == t[0]
-        val inner = if (quoted) t.substring(1, t.length - 1) else UNESCAPED_SPACES.replace(t, " ")
+        val inner = if (quoted) t.substring(1, t.length - 1) else joinIdentifiers(t)
         return decodeEscapes(inner).trim()
     }
 
-    private val UNESCAPED_SPACES = Regex("""(?<!\\)\s+""")
+    /**
+     * Unquoted identifiers joined by one space, escape-aware: a hex escape keeps the one whitespace that ends it
+     * (`Brand\26  Sans` is `Brand\26 ` then ` Sans`, so "Brand& Sans"), and an escaped character stays as it is.
+     */
+    private fun joinIdentifiers(t: String): String {
+        val sb = StringBuilder(t.length)
+        var space = false
+        var i = 0
+        fun flush() { if (space && sb.isNotEmpty()) sb.append(' '); space = false }
+        while (i < t.length) {
+            val c = t[i]
+            if (c == '\\' && i + 1 < t.length) {
+                flush()
+                var j = i + 1
+                while (j < t.length && j - i <= 6 && t[j].isHexDigitChar()) j++
+                if (j > i + 1) {
+                    sb.append(t, i, j)
+                    if (j < t.length && t[j].isWhitespace()) { sb.append(t[j]); j++ }
+                    i = j
+                } else {
+                    sb.append(c).append(t[i + 1])
+                    i += 2
+                }
+                continue
+            }
+            if (c.isWhitespace()) { space = true; i++; continue }
+            flush()
+            sb.append(c)
+            i++
+        }
+        return sb.toString()
+    }
+
+    private fun Char.isHexDigitChar(): Boolean = this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
 
     /** CSS escapes decoded (`\20 ` a space, `\"` a quote); everything else, percent-encoding included, as it is. */
     private fun decodeEscapes(inner: String): String =

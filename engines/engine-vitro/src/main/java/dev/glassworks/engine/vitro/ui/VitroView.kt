@@ -368,6 +368,8 @@ class VitroView(
      * rebuilt with the new server's resources before the new dashboard arrives.
      */
     fun resetForServer() {
+        stateRebuilds.values.forEach { it() }
+        stateRebuilds.clear()
         closeMoreInfo()
         dashboard = null
         viewBackStack.clear()
@@ -411,6 +413,8 @@ class VitroView(
     }
 
     fun setDashboard(config: DashboardConfig, initialViewPath: String?) {
+        stateRebuilds.values.forEach { it() }
+        stateRebuilds.clear()
         dashboard = config
         viewBackStack.clear()
         viewCache.clear()
@@ -518,6 +522,47 @@ class VitroView(
         }
     }
 
+    /** Entities a build chose a card's class or size for without their state (it hadn't arrived yet). */
+    private val guessedStates = HashSet<String>()
+
+    /** The build's look at [card]'s state; a missing one is noted, so the view is built again when it lands. */
+    private fun stateForBuild(card: CardConfig): EntityState? {
+        val id = card.entity ?: return null
+        return store[id] ?: run { guessedStates += id; null }
+    }
+
+    /** Per view index: the listener waiting for the states its build guessed at. */
+    private val stateRebuilds = HashMap<Int, () -> Unit>()
+
+    /**
+     * HA re-renders when hass updates; a Mushroom card's class and grid rows follow its entity's features, which a
+     * view's first build can come before (its entities are subscribed as it opens). When any of [ids] lands, the
+     * view [index] is built again, once: now if it's on screen, else its cached tree is dropped for the next visit.
+     */
+    private fun rebuildWhenStatesLand(index: Int, ids: Set<String>) {
+        stateRebuilds.remove(index)?.invoke()
+        if (ids.isEmpty()) return
+        val config = dashboard
+        var unsub: (() -> Unit)? = null
+        unsub = store.subscribeAny { changed ->
+            if (changed.none { it in ids }) return@subscribeAny
+            post {
+                val mine = unsub ?: return@post
+                if (stateRebuilds[index] !== mine) return@post
+                stateRebuilds.remove(index)
+                mine()
+                if (dashboard !== config) return@post
+                if (currentViewIndex == index) {
+                    renderView(index, forceRebuild = true, pushHistory = false)
+                } else {
+                    viewCache.remove(index)?.let { contentHost.removeView(it) }
+                    overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
+                }
+            }
+        }
+        stateRebuilds[index] = unsub
+    }
+
     private fun renderView(index: Int, forceRebuild: Boolean, pushHistory: Boolean = true) {
         val cfg = dashboard ?: return
         val viewCfg = cfg.views.getOrNull(index) ?: return
@@ -549,11 +594,13 @@ class VitroView(
             fontsFor = cardCtx.haBase to cardCtx.resources
             val pinned = ArrayList<Pair<View, FrameLayout.LayoutParams>>()
             pendingPinned = pinned
+            guessedStates.clear()
             val built = try {
                 buildViewTree(viewCfg, cardCtx)
             } finally {
                 pendingPinned = null
             }
+            rebuildWhenStatesLand(index, guessedStates.toSet())
             viewCache.remove(index)?.let { contentHost.removeView(it) }
             overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
             viewCache[index] = built
@@ -951,7 +998,7 @@ class VitroView(
                 grid.addView(wrapVisibility(card, View(context), ctx), HaGridLayout.LayoutParams(columns))
                 continue
             }
-            val size = HaGridSize.of(card, card.entity?.let { store[it] })
+            val size = HaGridSize.of(card, stateForBuild(card))
             val cardView = wrapVisibility(card, buildCard(card, ctx, fillViewport = false, layout = "grid"), ctx)
             cacheCardAsLayer(cardView, ctx)
             val fixed = size.rows?.let { r -> px(r * (rowHeight + rowGap) - rowGap) }
@@ -1219,9 +1266,9 @@ class VitroView(
             "logbook" -> LogbookCardView(ctx, card)
             // Tier 2: Popular HACS Fast-Paths
             // Mushroom's light, fan and cover cards with their controls row; without one, the tile draws them.
-            "custom:mushroom-light-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, card.entity?.let { store[it] })) MushroomLightCardView(ctx, card) else TileCardView(ctx, card)
-            "custom:mushroom-fan-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, card.entity?.let { store[it] })) MushroomFanCardView(ctx, card) else TileCardView(ctx, card)
-            "custom:mushroom-cover-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, card.entity?.let { store[it] })) MushroomCoverCardView(ctx, card) else TileCardView(ctx, card)
+            "custom:mushroom-light-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, stateForBuild(card))) MushroomLightCardView(ctx, card) else TileCardView(ctx, card)
+            "custom:mushroom-fan-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, stateForBuild(card))) MushroomFanCardView(ctx, card) else TileCardView(ctx, card)
+            "custom:mushroom-cover-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, stateForBuild(card))) MushroomCoverCardView(ctx, card) else TileCardView(ctx, card)
             "custom:mushroom-entity-card",
             "custom:mushroom-person-card",
             "custom:mushroom-template-card" -> TileCardView(ctx, card)

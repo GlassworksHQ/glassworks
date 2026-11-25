@@ -63,6 +63,16 @@ class MarkdownSvgDrawTest {
     }
 
     @Test
+    fun aTranslatedHalfOpaqueShapeDoesNotMoveItsSibling() {
+        // The first rect (fill, stroke, opacity, translated) mustn't leave its translation on the second.
+        val bmp = draw("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>" +
+            "<rect width='10' height='10' fill='#000' stroke='#000' opacity='0.5' transform='translate(50 0)'/>" +
+            "<rect x='0' y='60' width='20' height='20' fill='#000'/></svg>")
+        assertTrue("the sibling sits where it says", Color.red(bmp.getPixel(10, 70)) < 10)
+        assertTrue("not moved", Color.red(bmp.getPixel(60, 70)) > 250)
+    }
+
+    @Test
     fun definitionsAreNotDrawnAndTheRootsOpacityCoversTheImage() {
         val defs = draw("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><rect width='100' height='100' fill='#000'/></defs>" +
             "<rect x='60' width='40' height='100' fill='#000'/></svg>")

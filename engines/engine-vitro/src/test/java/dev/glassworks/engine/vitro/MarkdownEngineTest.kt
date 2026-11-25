@@ -113,6 +113,9 @@ class MarkdownEngineTest {
         // `--size` needs `--missing`: var(--size, 24px) takes 24px; an empty but valid value stays empty.
         assertEquals("24px", MdCascade.resolveVars("var(--size, 24px)", mapOf("size" to "var(--missing)"), emptyMap()))
         assertEquals("", MdCascade.resolveVars("var(--empty, 24px)", mapOf("empty" to ""), emptyMap()))
+        // A cycle makes the property invalid: the fallback outside it wins, not one inside the cycle.
+        assertEquals("24px", MdCascade.resolveVars("var(--size, 24px)", emptyMap(), mapOf("size" to "var(--size, 12px)")))
+        assertEquals("24px", MdCascade.resolveVars("var(--a, 24px)", mapOf("a" to "var(--b, 1px)", "b" to "var(--a, 2px)"), emptyMap()))
     }
 
     @Test

@@ -190,7 +190,8 @@ class MdSvg private constructor(
 
     private fun drawShape(canvas: Canvas, shape: Shape, context: Context) {
         val st = styleOf(shape)
-        canvas.save()
+        // Restored to this count at the end: the transform and an opacity layer both go, so no sibling inherits either.
+        val saved = canvas.save()
         shape.matrix?.let { canvas.concat(it) }
         if (shape.text != null) {
             paint.reset()
@@ -218,7 +219,7 @@ class MdSvg private constructor(
             drawFill(canvas, path, st)
             drawStroke(canvas, path, st)
         }
-        canvas.restore()
+        canvas.restoreToCount(saved)
     }
 
     private fun drawFill(canvas: Canvas, path: Path, st: ShapeStyle) {
