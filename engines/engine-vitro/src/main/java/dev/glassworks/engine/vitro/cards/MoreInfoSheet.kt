@@ -32,6 +32,7 @@ import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 import dev.glassworks.engine.vitro.data.EntityState
+import dev.glassworks.engine.vitro.data.HaDashboardClient
 import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.data.LightColor
 import dev.glassworks.engine.vitro.theme.ResolvedTheme
@@ -647,12 +648,14 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val pill = VerticalTogglePillView(ctx.context, theme.activeColor("lock"), theme.dark).apply {
             onToggle = toggle@{ locked ->
                 val reset = { setOn(ctx.store[id]?.state.let { it == "locked" || it == "locking" }) }
-                if (id in PENDING_LOCK_WRITES) {
+                if (PENDING_LOCK_WRITES.containsKey(id)) {
                     reset()
                     return@toggle
                 }
                 val send = { code: String? ->
-                    PENDING_LOCK_WRITES += id
+                    // This write's own token: a late answer settles it alone, never a newer write for the lock.
+                    val write = Any()
+                    PENDING_LOCK_WRITES[id] = write
                     val before = ctx.store[id]
                     val optimistic = before?.copy(state = if (locked) "locked" else "unlocked")
                     optimistic?.let { ctx.store.putLocal(it) }
@@ -660,14 +663,24 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                     if (!code.isNullOrEmpty()) data.put("code", code)
                     val msg = JSONObject().put("type", "call_service").put("domain", "lock")
                         .put("service", if (locked) "lock" else "unlock").put("service_data", data)
-                    // HA turned it down: put back the state from before the optimistic flip, unless a newer state from
-                    // HA has replaced the flip meanwhile (that one is the truth).
-                    ctx.callWs(msg) { ok, _, _ ->
-                        ctx.main.post {
-                            PENDING_LOCK_WRITES -= id
-                            if (!ok && before != null && ctx.store[id] === optimistic) ctx.store.putLocal(before)
-                        }
+                    // Settled once: by HA's answer or, without one, after LOCK_WRITE_TIMEOUT_MS.
+                    fun settle(rollBack: Boolean) {
+                        if (PENDING_LOCK_WRITES[id] !== write) return
+                        PENDING_LOCK_WRITES.remove(id)
+                        // Put back the state from before the optimistic flip, unless a newer state from HA has
+                        // replaced the flip meanwhile (that one is the truth).
+                        if (rollBack && before != null && ctx.store[id] === optimistic) ctx.store.putLocal(before)
                     }
+                    ctx.callWs(msg) { ok, _, error ->
+                        // A lost connection says nothing about the lock (HA may have run it): the flip stays until
+                        // the reconnect's snapshot brings the real state. Only a refusal rolls back.
+                        val code = error?.optString("code")
+                        val unknown = code == HaDashboardClient.DISCONNECTED
+                        ctx.main.post { settle(rollBack = !ok && !unknown) }
+                    }
+                    // No answer while connected: HA would have reported a change by now, so the lock is as it was.
+                    ctx.main.postDelayed({ settle(rollBack = true) }, LOCK_WRITE_TIMEOUT_MS)
+                    Unit
                 }
                 // A lock with a `code_format` asks for its code first, as HA's more-info does. Cancelled, the pill
                 // (which already moved) goes back to the lock's state.
@@ -705,7 +718,12 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val timeLabel = timeLabel()
         addCentered(stateLabel)
         addCentered(timeLabel, topDp = 4f)
-        val hasPosition = initial?.attributes?.get("current_position") != null
+        // HA's capabilities decide what the sheet offers: SET_POSITION the slider and presets, OPEN / CLOSE / STOP
+        // their buttons. Without `supported_features` (older fixtures), the reported position and all three buttons.
+        val features = (initial?.attributes?.get("supported_features") as? Number)?.toInt()
+        val hasPosition = if (features != null) features and COVER_SET_POSITION != 0
+        else initial?.attributes?.get("current_position") != null
+        val actions = COVER_ACTIONS.filter { (_, service) -> features == null || features and (COVER_ACTION_BITS[service] ?: 0) != 0 }
 
         fun setPosition(pos: Int) {
             val next = ctx.store[id]?.let { cur ->
@@ -718,7 +736,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
-        COVER_ACTIONS.forEachIndexed { i, (icon, service) ->
+        actions.forEachIndexed { i, (icon, service) ->
             val b = roundedButton(icon) { ctx.callService("cover", service, JSONObject().put("entity_id", id), null) }
             b.contentDescription = service.substringBefore('_').replaceFirstChar { it.titlecase(Locale.ROOT) }
             // Compact: three buttons and two gaps fit the slider's height (3 x 56 + 2 x 12 <= 196).
@@ -800,6 +818,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         switcher.addView(buttonsBtn, LinearLayout.LayoutParams(ctx.px(44f), ctx.px(44f)).apply { marginStart = ctx.px(4f) })
         showSlider(true)
         addCentered(switcher, topDp = dockGap)
+        // Nothing to switch to: a cover that only sets a position.
+        if (actions.isEmpty()) switcher.visibility = GONE
 
         val presets = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
         COVER_PRESETS.forEachIndexed { i, p ->
@@ -1447,7 +1467,10 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
     private companion object {
         /** Locks with a write out, by entity id (main thread only): see buildLock. */
-        val PENDING_LOCK_WRITES = HashSet<String>()
+        val PENDING_LOCK_WRITES = HashMap<String, Any>()
+
+        /** How long a lock write may go unanswered before its guard is released and its flip given up. */
+        const val LOCK_WRITE_TIMEOUT_MS = 30_000L
 
         const val WIDE_DP = 600
 
@@ -1491,6 +1514,10 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             Favorite("Coral", LightColor.pack(255, 110, 84)),
         )
         val COVER_ACTIONS = listOf("mdi:arrow-up" to "open_cover", "mdi:stop" to "stop_cover", "mdi:arrow-down" to "close_cover")
+
+        /** HA's `CoverEntityFeature` bits for the buttons, and for setting a position. */
+        val COVER_ACTION_BITS = mapOf("open_cover" to 1, "close_cover" to 2, "stop_cover" to 8)
+        const val COVER_SET_POSITION = 4
         val COVER_PRESETS = listOf(0, 25, 75, 100)
 
         fun listAttr(s: EntityState?, key: String): List<String> = when (val v = s?.attributes?.get(key)) {
