@@ -6,6 +6,7 @@ package dev.glassworks.notifications
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import dev.glassworks.esphome.ActionArg
 import dev.glassworks.esphome.ActionArgType
@@ -23,6 +24,8 @@ class NotificationEntitiesTest {
             e.notify.args,
         )
         assertEquals("mistakes come back to the script", ActionResponse.STATUS, e.notify.supportsResponse)
+        assertTrue("only Home Assistant with the key puts something on the screen (#847)", e.notify.authOnly)
+        assertFalse(e.doNotDisturb.authOnly)
         assertEquals("do_not_disturb", e.doNotDisturb.objectId)
         assertEquals(EntityCategory.CONFIG, e.doNotDisturb.category)
         assertFalse("people automate it, so it's on in HA", e.doNotDisturb.disabledByDefault)
