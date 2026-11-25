@@ -238,7 +238,8 @@
   },
   "boot": {
     "androidApi": 23,
-    "rotate": 90
+    "rotate": 90,
+    "compactBudget": 22901
   },
   "abis": ["arm64-v8a", "armeabi-v7a"],
   "app": {

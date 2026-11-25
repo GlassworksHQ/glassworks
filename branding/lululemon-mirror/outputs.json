@@ -7,17 +7,20 @@
     "android_api": 23,
     "splash": null,
     "zip_budget": null,
-    "rotate": 90
+    "rotate": 90,
+    "compact_budget": 22901
   },
   "inputs": {
-    "branding/boot/generate.py": "57c584f8d0d5187071216100591c99559b1cc03729aadea46252d6859da19759",
+    "branding/boot/generate.py": "3cdd563cf469909130c2759f7b9e8f49f46f961e8baa3237937037fd1e62f214",
     "branding/boot/stack.py": "9fb0bc0c19541b111d1a00c3333819830e0ac10e40f19d6230dba918f1818e17",
-    "branding/boot/formats.py": "2b1c2e77aff739ec752bf62f2745617d735c3f16f433062d931a0364e0d6522e",
-    "branding/boot/target.py": "9e53dc09bf34d50938e8bd1d786754221b92f5a38c90615aaef811de7fa41015",
+    "branding/boot/formats.py": "6d817072684abeacbe0a5a0fa822031ff1dfea2e798c7f69961073e4bf52b69d",
+    "branding/boot/target.py": "c98b896c1409ad84f60257740f4cfbe80e910a2842430af219fa47c30f064cbf",
+    "branding/boot/compact.py": "47ca808ea84209e538bbfd1c618f3a59ef88ee5b8b049c40f928aa81a259c6e1",
     "Inter": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031"
   },
   "outputs": {
     "bootanimation.zip": "0ccf10d5f149bfaad78a2f9600fb8830fbb55f5ec1ec1dbf1d0844219db967cc",
+    "bootanimation-compact.zip": "14abf995785172cdeb4fb6d745f6edd5255ee8d009e6eeabf5535855a0f678c4",
     "splash-landscape.png": "a234430cad7bf8e2dcbacac5ad5d399d4be6b8275d3386c6cf9a835d2a42899f",
     "preview.webp": "cf7e0517dd1eccd9918aacf377744d27706d8d986de69321330bea28424ab378"
   },
