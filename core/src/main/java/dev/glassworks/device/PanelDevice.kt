@@ -27,7 +27,6 @@ import dev.glassworks.pane.forEachPane
 import dev.glassworks.pane.stopAll
 import dev.glassworks.screen.ScreenHardware
 import java.io.IOException
-import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.net.URI
 import java.security.SecureRandom
@@ -842,15 +841,8 @@ class PanelDevice(
         Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, name) as? String ?: ""
     } catch (_: Exception) { "" }
 
-    private fun ipAddress(): String? = try {
-        NetworkInterface.getNetworkInterfaces().toList()
-            .filter { it.isUp && !it.isLoopback }
-            .sortedByDescending { it.name == "wlan0" }
-            .flatMap { it.inetAddresses.toList() }
-            .firstOrNull { it is Inet4Address }?.hostAddress
-    } catch (_: Exception) {
-        null
-    }
+    /** The panel's LAN address ([dev.glassworks.platform.PanelAddress]): never an access point's, nor link-local. */
+    private fun ipAddress(): String? = dev.glassworks.platform.PanelAddress.now(ctx)
 
     @SuppressLint("WakelockTimeout")
     private fun acquireLocks() {
