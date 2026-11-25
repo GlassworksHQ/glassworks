@@ -396,6 +396,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         // The three center controls share one frame; the dock below switches between them.
         val center = FrameLayout(ctx.context)
         val slider = VerticalSliderPillView(ctx.context, initial?.lightTintColor() ?: fallback).apply {
+            // Named for TalkBack, as HA names the slider (the attribute it sets).
+            contentDescription = "Brightness"
             onChange = { pct -> stateLabel.text = if (pct <= 0) "Off" else "$pct%" }
             onRelease = { pct ->
                 val data = JSONObject().put("entity_id", id)
@@ -420,6 +422,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val maxK = (initial?.attributes?.get("max_color_temp_kelvin") as? Number)?.toInt() ?: ColorTempSliderView.DEFAULT_MAX_K
         val temp = if (caps.colorTemp) {
             ColorTempSliderView(ctx.context, minK, maxK).apply {
+                // Named for TalkBack, as HA names the slider (the attribute it sets).
+                contentDescription = "Color temperature"
                 onChange = { k -> stateLabel.text = "$k K" }
                 onRelease = { k -> setLightColor(id, LightColor.kelvinToArgb(k), k) }
                 center.addView(this, LayoutParams(ctx.px(pillW), ctx.px(pillH), Gravity.CENTER))
@@ -628,6 +632,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         addCentered(stateLabel)
         addCentered(timeLabel, topDp = 4f)
         val slider = VerticalSliderPillView(ctx.context, theme.activeColor("fan")).apply {
+            // Named for TalkBack, as HA names the slider (the attribute it sets).
+            contentDescription = "Speed"
             onChange = { pct -> stateLabel.text = if (pct <= 0) "Off" else "$pct%" }
             onRelease = { pct ->
                 ctx.callService("fan", "set_percentage", JSONObject().put("entity_id", id).put("percentage", pct), null)
@@ -790,6 +796,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
         val center = FrameLayout(ctx.context)
         val slider = VerticalCoverSliderView(ctx.context).apply {
+            // Named for TalkBack, as HA names the slider (the attribute it sets).
+            contentDescription = "Position"
             onChange = { pct -> stateLabel.text = VerticalCoverSliderView.stateText(pct) }
             onRelease = { pct -> setPosition(pct) }
         }
@@ -886,8 +894,12 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             onCommit = { t ->
                 ctx.callOptimistic(ClimateTargets.withValue(ctx.store[id], t), "climate", "set_temperature", JSONObject().put("entity_id", id).put("temperature", t))
             }
-            onRangeCommit = { low, high ->
-                ctx.callOptimistic(ClimateTargets.withRange(ctx.store[id], low, high), "climate", "set_temperature", ClimateTargets.rangeData(id, low, high))
+            onRangeCommit = { handle, low, high ->
+                // Finished against the entity as the store holds it now: HA's newer other end wins.
+                val s = ctx.store[id]
+                ClimateTargets.rangeToSend(handle, low, high, s)?.let { (lo, hi) ->
+                    ctx.callOptimistic(ClimateTargets.withRange(s, lo, hi), "climate", "set_temperature", ClimateTargets.rangeData(id, lo, hi))
+                }
             }
         }
         val dialFrame = FrameLayout(ctx.context)
@@ -1685,6 +1697,7 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
             onChange?.invoke(v)
         },
         commit = { v -> onRelease?.invoke(v) },
+        restore = { bound?.let(::setPercent) },
     )
 
     init {
@@ -1728,7 +1741,8 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
 
     fun setPercent(value: Int) {
         bound = value
-        if (dragging) return
+        // A drag or a key edit keeps what it shows until it ends.
+        if (dragging || access.editing) return
         val p = value.coerceIn(0, 100).toFloat()
         if (p == targetPct) return
         targetPct = p
@@ -2283,6 +2297,7 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
             onChange?.invoke(k)
         },
         commit = { k -> onRelease?.invoke(k) },
+        restore = { bound?.let(::setKelvin) },
     )
 
     init {
@@ -2314,7 +2329,8 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
 
     fun setKelvin(k: Int) {
         bound = k
-        if (dragging) return
+        // A drag or a key edit keeps what it shows until it ends.
+        if (dragging || access.editing) return
         val c = k.coerceIn(minOf(minK, maxK), maxOf(minK, maxK))
         if (c == kelvin) return
         kelvin = c
@@ -2450,6 +2466,7 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
             onChange?.invoke(v)
         },
         commit = { v -> onRelease?.invoke(v) },
+        restore = { bound?.let(::setPercent) },
     )
 
     init {
@@ -2481,7 +2498,8 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
 
     fun setPercent(value: Int) {
         bound = value
-        if (dragging) return
+        // A drag or a key edit keeps what it shows until it ends.
+        if (dragging || access.editing) return
         val p = value.coerceIn(0, 100)
         if (p == pct) return
         pct = p

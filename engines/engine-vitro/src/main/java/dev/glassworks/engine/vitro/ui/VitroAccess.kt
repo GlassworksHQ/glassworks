@@ -184,8 +184,16 @@ internal class AdjustableAccess(
     private val value: () -> Int,
     private val preview: (Int) -> Unit,
     private val commit: (Int) -> Unit,
+    /** An edit dropped (a cancelled key, focus gone): show HA's value again. */
+    private val restore: () -> Unit = {},
 ) {
     private var pending = false
+
+    /** The key whose release ends the edit (a Shift let go meanwhile doesn't). */
+    private var pendingKey = 0
+
+    /** A key edit is showing: a value bound from HA waits until its key comes up. */
+    val editing: Boolean get() = pending
 
     private val tenth: Int get() = maxOf(step, (max() - min()) / 10)
 
@@ -228,20 +236,23 @@ internal class AdjustableAccess(
         if (next == v) return false
         preview(next)
         pending = true
+        pendingKey = keyCode
         return true
     }
 
     /** The release of a key that moved the value: sends it (a cancelled one doesn't). */
     fun keyUp(event: KeyEvent): Boolean {
-        if (!pending) return false
+        if (!pending || event.keyCode != pendingKey) return false
         pending = false
-        if (!event.isCanceled) commit(value())
+        if (event.isCanceled) restore() else commit(value())
         return true
     }
 
     /** Focus left mid-edit: the edit is dropped, nothing is sent. */
     fun cancel() {
+        if (!pending) return
         pending = false
+        restore()
     }
 }
 

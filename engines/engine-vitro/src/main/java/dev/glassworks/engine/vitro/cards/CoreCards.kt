@@ -523,6 +523,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             }
         } else {
             titleView.text = config.name ?: config.title ?: "Tile"
+            // No entity: the icon's action still needs a name, the tile's own or what it does.
+            if (iconInteractive) iconWrap.contentDescription = config.name ?: config.title
+                ?: ActionConfig.parse(config.raw.optJSONObject("icon_tap_action"), "none").action.replace('-', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
             stateView.visibility = GONE
             updateBadge(null, active = false)
         }
@@ -653,7 +656,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         // once, the next press steps from it, and a refusal puts HA's value back everywhere.
                         if (handle == null) {
                             val cur = t.value ?: return
-                            val next = ClimateTargets.roundToStep((Math.round((cur + sign * stepSize) / stepSize) * stepSize).coerceIn(min, max), stepSize)
+                            // Rounded to the step's decimals, then kept within the device's limits.
+                            val next = ClimateTargets.roundToStep(Math.round((cur + sign * stepSize) / stepSize) * stepSize, stepSize).coerceIn(min, max)
                             if (next == cur) return
                             ctx.callOptimistic(ClimateTargets.withValue(st, next), "climate", "set_temperature", data().put("temperature", next))
                         } else {

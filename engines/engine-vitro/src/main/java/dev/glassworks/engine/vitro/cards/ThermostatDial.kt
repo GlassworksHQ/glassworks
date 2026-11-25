@@ -95,6 +95,24 @@ internal data class ClimateTargets(val value: Double?, val low: Double?, val hig
             return if (handle == ClimateHandle.LOW) next to high else low to next
         }
 
+        /**
+         * The range to send for an edit of [handle] that proposes [low] / [high]: the edited end, bounded against the
+         * other end as the entity reports it now ([s], newer than what a control last showed), so a change HA made to
+         * the other end meanwhile isn't overwritten. Null when [s] no longer has a range (the mode changed). With no
+         * state at all, the proposal as it is.
+         */
+        fun rangeToSend(handle: ClimateHandle, low: Double, high: Double, s: EntityState?): Pair<Double, Double>? {
+            val attrs = s?.attributes ?: return low to high
+            val now = of(attrs)
+            val nl = now.low
+            val nh = now.high
+            if (!now.isRange || nl == null || nh == null) return null
+            val min = (attrs["min_temp"] as? Number)?.toDouble() ?: Double.NEGATIVE_INFINITY
+            val max = (attrs["max_temp"] as? Number)?.toDouble() ?: Double.POSITIVE_INFINITY
+            return if (handle == ClimateHandle.LOW) bound(ClimateHandle.LOW, low, nl, nh, min, max) to nh
+            else nl to bound(ClimateHandle.HIGH, high, nl, nh, min, max)
+        }
+
         /** `climate.set_temperature` for a range, as HA sends it: both ends, always. */
         fun rangeData(entityId: String, low: Double, high: Double): JSONObject =
             JSONObject().put("entity_id", entityId).put("target_temp_low", low).put("target_temp_high", high)
@@ -297,6 +315,10 @@ internal class ThermostatDialView(
     /** A key moved a target: its release commits it, as HA's `keyup` does. */
     private var keyPending = false
 
+    /** The key whose release ends the edit, and the end of a range it moves. */
+    private var keyCodePending = 0
+    private var keyHandle = ClimateHandle.LOW
+
     /** The virtual node (a range end) TalkBack's focus is on, or [NO_NODE]. */
     private var a11yFocused = NO_NODE
 
@@ -309,8 +331,12 @@ internal class ThermostatDialView(
 
     var onCommit: (Double) -> Unit = {}
 
-    /** A range was set: the low and high ends, both sent together as HA's `set_temperature` takes them. */
-    var onRangeCommit: (Double, Double) -> Unit = { _, _ -> }
+    /**
+     * A range was set: the end that moved, and the low and high ends as the dial proposes them. The card finishes it
+     * against the entity's current state ([ClimateTargets.rangeToSend]) and sends both ends together, as HA's
+     * `set_temperature` takes them.
+     */
+    var onRangeCommit: (ClimateHandle, Double, Double) -> Unit = { _, _, _ -> }
 
     /** The selected end changed (the card colors its − and + after it). */
     var onSelect: (ClimateHandle) -> Unit = {}
@@ -363,7 +389,12 @@ internal class ThermostatDialView(
         this.mode = mode
         this.action = action
         describe()
-        if (wasRange != isRange) notifyA11y()
+        if (wasRange != isRange) {
+            // The virtual sliders went (or came): no stale accessibility focus or hover on them.
+            a11yFocused = NO_NODE
+            hovered = NO_NODE
+            notifyA11y()
+        }
         invalidate()
     }
 
@@ -378,7 +409,7 @@ internal class ThermostatDialView(
             low = lo
             high = hi
             afterRangeMove()
-            onRangeCommit(lo, hi)
+            onRangeCommit(selected, lo, hi)
             return
         }
         val t = target ?: return
@@ -450,7 +481,8 @@ internal class ThermostatDialView(
 
     private fun snap(v: Double): Double {
         val snapped = min + Math.round((v - min) / step) * step
-        return ClimateTargets.roundToStep(snapped.coerceIn(min, max), step)
+        // Rounded to the step's decimals, then kept within the device's limits (a 30.25 maximum stays 30.25).
+        return ClimateTargets.roundToStep(snapped, step).coerceIn(min, max)
     }
 
     /** The heat, cool or auto/heat_cool accent this thermostat uses, or null when off. */
@@ -800,7 +832,8 @@ internal class ThermostatDialView(
                 parent?.requestDisallowInterceptTouchEvent(false)
                 dragTarget(valueAt(event.x, event.y))
                 invalidate()
-                target?.let(onCommit)
+                // HA reports a range now (the mode changed mid-drag): nothing is sent, its range shows.
+                if (boundTarget == null) dropEdit() else target?.let(onCommit)
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -825,30 +858,30 @@ internal class ThermostatDialView(
      * meanwhile isn't overwritten), bounded so the two don't cross. If HA no longer reports a range (the mode changed),
      * the edit is dropped.
      */
-    private fun commitRange(handle: ClimateHandle) {
-        val lo = low
-        val hi = high
+    private fun commitRange(handle: ClimateHandle, proposed: Double) {
         val bl = boundLow
         val bh = boundHigh
-        if (lo == null || hi == null || bl == null || bh == null || boundTarget != null) {
+        if (low == null || high == null || bl == null || bh == null || boundTarget != null) {
             dropEdit()
             return
         }
+        // The proposal is bounded here, against the latest reported other end, not the one shown when it started.
         val (cl, ch) = if (handle == ClimateHandle.LOW) {
-            ClimateTargets.bound(ClimateHandle.LOW, lo, bl, bh, min, max) to bh
+            ClimateTargets.bound(ClimateHandle.LOW, proposed, bl, bh, min, max) to bh
         } else {
-            bl to ClimateTargets.bound(ClimateHandle.HIGH, hi, bl, bh, min, max)
+            bl to ClimateTargets.bound(ClimateHandle.HIGH, proposed, bl, bh, min, max)
         }
         low = cl
         high = ch
         describe()
         invalidate()
-        if (cl != bl || ch != bh) onRangeCommit(cl, ch)
+        if (cl != bl || ch != bh) onRangeCommit(handle, cl, ch)
     }
 
     /** An edit nothing was sent for: back to what Home Assistant reported last. */
     private fun dropEdit() {
         keyPending = false
+        keyCodePending = 0
         setTarget(boundTarget)
         low = boundLow
         high = boundHigh
@@ -896,9 +929,8 @@ internal class ThermostatDialView(
                 val handle = activeHandle ?: return false
                 activeHandle = null
                 parent?.requestDisallowInterceptTouchEvent(false)
-                moveHandle(handle, valueAt(event.x, event.y))
                 dragging = false
-                commitRange(handle)
+                commitRange(handle, valueAt(event.x, event.y))
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -941,12 +973,16 @@ internal class ThermostatDialView(
                 select(if (selected == ClimateHandle.LOW) ClimateHandle.HIGH else ClimateHandle.LOW)
                 return true
             }
-            val from = (if (selected == ClimateHandle.LOW) low else high) ?: return super.onKeyDown(keyCode, event)
+            // A key already moving one end keeps moving it, whichever end Enter selected since.
+            val handle = if (keyPending) keyHandle else selected
+            val from = (if (handle == ClimateHandle.LOW) low else high) ?: return super.onKeyDown(keyCode, event)
             val next = keyValue(keyCode, from) ?: return super.onKeyDown(keyCode, event)
-            moveHandle(selected, snap(next))
+            moveHandle(handle, snap(next))
             // At an end (or against the other thumb) the key moves focus on instead, as SeekBar's does.
-            if ((if (selected == ClimateHandle.LOW) low else high) == from) return super.onKeyDown(keyCode, event)
+            if ((if (handle == ClimateHandle.LOW) low else high) == from) return super.onKeyDown(keyCode, event)
             keyPending = true
+            keyHandle = handle
+            keyCodePending = keyCode
             invalidate()
             return true
         }
@@ -955,20 +991,24 @@ internal class ThermostatDialView(
         if (next == t) return super.onKeyDown(keyCode, event)
         dragTarget(next)
         keyPending = true
+        keyCodePending = keyCode
         invalidate()
         return true
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        if (!keyPending || keyValue(keyCode, 0.0) == null) return super.onKeyUp(keyCode, event)
+        // Only the release of the key that made the edit ends it (not a Shift let go meanwhile).
+        if (!keyPending || keyCode != keyCodePending) return super.onKeyUp(keyCode, event)
         // A cancelled release sends nothing.
         if (event.isCanceled) {
             dropEdit()
             return true
         }
         keyPending = false
-        if (low != null && high != null && target == null) {
-            commitRange(selected)
+        keyCodePending = 0
+        val edited = if (keyHandle == ClimateHandle.LOW) low else high
+        if (low != null && high != null && target == null && edited != null) {
+            commitRange(keyHandle, edited)
         } else if (boundTarget != null) {
             target?.takeIf { it != boundTarget }?.let(onCommit)
         } else {

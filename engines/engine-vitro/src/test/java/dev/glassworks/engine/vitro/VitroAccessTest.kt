@@ -135,6 +135,47 @@ class VitroAccessTest {
     }
 
     @Test
+    fun moreInfoIsModalForTalkBackAndKeys() {
+        val store = EntityStore()
+        store.putLocal(EntityState("light.desk", "on", mapOf("friendly_name" to "Desk lamp", "supported_color_modes" to listOf("onoff"))))
+        val view = dev.glassworks.engine.vitro.ui.VitroView(activity, store, android.graphics.Color.BLACK)
+        view.contextFactory = { theme ->
+            VitroCardContext(
+                context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = emptyList(),
+                accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+                fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            )
+        }
+        activity.setContentView(view)
+        view.openMoreInfo("light.desk")
+        ShadowLooper.idleMainLooper()
+        // The dashboard behind the sheet is hidden from TalkBack and takes no focus, as behind HA's dialog.
+        assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS, view.overlayLayer.importantForAccessibility)
+        assertEquals(ViewGroup.FOCUS_BLOCK_DESCENDANTS, view.overlayLayer.descendantFocusability)
+        view.closeMoreInfo()
+        ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO, view.overlayLayer.importantForAccessibility)
+        assertEquals(ViewGroup.FOCUS_AFTER_DESCENDANTS, view.overlayLayer.descendantFocusability)
+    }
+
+    @Test
+    fun aKeyEditKeepsItsValueUntilItsKeyComesUp() {
+        val released = ArrayList<Int>()
+        val pill = dev.glassworks.engine.vitro.cards.VerticalSliderPillView(activity, 0xFFFFA000.toInt()).apply {
+            onRelease = { released += it }
+            setPercent(40)
+        }
+        activity.setContentView(pill)
+        pill.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
+        // HA's value arrives mid-edit, and a Shift is let go: the edit holds.
+        pill.setPercent(40)
+        pill.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SHIFT_LEFT))
+        assertTrue(released.isEmpty())
+        pill.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT))
+        assertEquals(listOf(41), released)
+    }
+
+    @Test
     fun backAndEscapeCloseMoreInfo() {
         val store = EntityStore()
         store.putLocal(EntityState("light.desk", "on", mapOf("friendly_name" to "Desk lamp", "supported_color_modes" to listOf("onoff"))))

@@ -134,6 +134,11 @@ class ClimateRangeTest {
         assertEquals("20" to ".25", ThermostatDialView.splitTemp(20.25, 0.25))
         assertEquals("21" to "", ThermostatDialView.splitTemp(21.0, 1.0))
         assertEquals(20.2, ClimateTargets.roundToStep(20.0 + 0.1 + 0.1, 0.1), 0.0)
+        // A release is finished against the entity as the store holds it now: HA's newer other end wins, and an
+        // entity that no longer has a range gets nothing.
+        assertEquals(21.0 to 26.0, ClimateTargets.rangeToSend(ClimateHandle.LOW, 21.0, 24.0, heatCool("target_temp_high" to 26.0)))
+        assertEquals(26.0 to 26.0, ClimateTargets.rangeToSend(ClimateHandle.LOW, 27.0, 24.0, heatCool("target_temp_high" to 26.0)))
+        assertNull(ClimateTargets.rangeToSend(ClimateHandle.LOW, 21.0, 24.0, heatCool("temperature" to 22.0)))
         // °F steps by one when the entity doesn't say.
         assertEquals(1.0, ClimateTargets.stepOf(emptyMap(), "°F"), 0.0)
         assertEquals(0.5, ClimateTargets.stepOf(emptyMap(), "°C"), 0.0)
@@ -144,7 +149,7 @@ class ClimateRangeTest {
     private fun rangeDial(showCurrent: Boolean = true): Pair<ThermostatDialView, MutableList<Pair<Double, Double>>> {
         val commits = ArrayList<Pair<Double, Double>>()
         val dial = ThermostatDialView(context(), "°C", showCurrent)
-        dial.onRangeCommit = { lo, hi -> commits += lo to hi }
+        dial.onRangeCommit = { _, lo, hi -> commits += lo to hi }
         dial.bind(10.0, 30.0, 0.5, current = 22.0, target = null, mode = "heat_cool", action = "idle", stateLabel = "Heat/Cool", low = 20.0, high = 24.0)
         dial.measure(View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY))
         dial.layout(0, 0, 320, 320)
@@ -205,6 +210,13 @@ class ClimateRangeTest {
         touch(dial, MotionEvent.ACTION_UP, 19.0)
         assertEquals(19.0 to 26.0, commits.last())
         assertEquals(3, commits.size)
+        // HA raises the high end mid-drag: the release is bounded by HA's new end, not the one shown at the start.
+        dial.bind(10.0, 30.0, 0.5, 22.0, null, "heat_cool", "idle", "Heat/Cool", low = 20.0, high = 24.0)
+        touch(dial, MotionEvent.ACTION_DOWN, 18.0)
+        dial.bind(10.0, 30.0, 0.5, 22.0, null, "heat_cool", "idle", "Heat/Cool", low = 20.0, high = 26.0)
+        touch(dial, MotionEvent.ACTION_UP, 25.5)
+        assertEquals(25.5 to 26.0, commits.last())
+        commits.removeAt(commits.lastIndex)
         // A mode change to a single target mid-drag: the range edit is dropped.
         dial.bind(10.0, 30.0, 0.5, 22.0, null, "heat_cool", "idle", "Heat/Cool", low = 20.0, high = 26.0)
         touch(dial, MotionEvent.ACTION_DOWN, 18.0)
@@ -238,6 +250,18 @@ class ClimateRangeTest {
         assertEquals(ClimateHandle.HIGH, dial.selected)
         key(KeyEvent.KEYCODE_MOVE_END)
         assertEquals(20.5 to 30.0, commits.last())
+        // Only the key that made the edit ends it: a Shift let go meanwhile sends nothing. And Enter mid-edit doesn't
+        // move the edit to the other end.
+        dial.bind(10.0, 30.0, 0.5, 22.0, null, "heat_cool", "idle", "Heat/Cool", low = 20.5, high = 30.0)
+        dial.select(ClimateHandle.LOW)
+        val n = commits.size
+        dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
+        dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SHIFT_LEFT))
+        assertEquals(n, commits.size)
+        dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+        dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT))
+        assertEquals(21.0 to 30.0, commits.last())
+        dial.select(ClimateHandle.HIGH)
         // At an end the arrow isn't taken, so a D-pad moves on to the next control.
         dial.bind(10.0, 30.0, 0.5, 22.0, null, "heat_cool", "idle", "Heat/Cool", low = 20.5, high = 30.0)
         assertFalse(dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT)))
@@ -247,6 +271,17 @@ class ClimateRangeTest {
         dial.dispatchKeyEvent(KeyEvent.changeFlags(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_LEFT), KeyEvent.FLAG_CANCELED))
         assertEquals(before, commits.size)
         assertTrue(dial.contentDescription.toString(), "20.5 °C, 30.0 °C" in dial.contentDescription.toString())
+    }
+
+    @Test
+    fun roundedTargetsStayWithinTheDevicesLimits() {
+        // A 30.25 maximum with a 0.5 step: End sends 30.25, not 30.3.
+        val sent = ArrayList<Double>()
+        val dial = ThermostatDialView(context(), "°C").apply { onCommit = { sent += it } }
+        dial.bind(10.25, 30.25, 0.5, 22.0, 21.25, "heat", "idle")
+        dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_END))
+        dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MOVE_END))
+        assertEquals(listOf(30.25), sent)
     }
 
     @Test

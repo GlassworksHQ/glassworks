@@ -86,7 +86,9 @@ Tiles can also carry the inline features Home Assistant adds under the card: `cl
 
 A thermostat in `heat_cool` or `auto` with a low and a high target shows both, as Home Assistant does: on the
 thermostat card and in More-Info, the dial gets two thumbs, and the − and + move whichever target you pick in the
-middle of the dial. The tile's `target-temperature` feature and Mushroom's climate card show a pair of steppers
+middle of the dial. As in Home Assistant, that takes an entity that supports a target range (its
+`TARGET_TEMPERATURE_RANGE` feature) and reports no single `temperature`; one that reports a single target too gets the
+single control. The tile's `target-temperature` feature and Mushroom's climate card show a pair of steppers
 instead. The low target can't go above the high one.
 
 ## Accessibility
@@ -94,9 +96,9 @@ instead. The low target can't go above the high one.
 Vitro's controls work with TalkBack and with a keyboard or D-pad, the way Home Assistant's page works with a screen
 reader:
 
-- Every control has a name, and the role Home Assistant gives it: a button, a switch (entity toggles), a check box
-  (to-do items), a choice (HVAC modes, the tile's toggle), or a pressed button (the light's modes, the calendar's
-  views).
+- Controls are named after what they act on, and have the role Home Assistant gives them: a button, a switch (entity
+  toggles), a check box (to-do items), a choice (HVAC modes, the tile's toggle), or a pressed button (the light's
+  modes, the calendar's views).
 - The thermostat dial and More-Info's brightness, speed, color temperature and position sliders read their value, and
   TalkBack's swipe up and down change it.
 - With a keyboard or D-pad, Tab and the arrows move between controls and Enter presses them. On those dials and

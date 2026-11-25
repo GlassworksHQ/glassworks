@@ -825,9 +825,12 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                 ctx.callOptimistic(ClimateTargets.withValue(ctx.store[eid], target), domain, "set_temperature",
                     JSONObject().put("entity_id", eid).put("temperature", target))
             }
-            dial.onRangeCommit = { low, high ->
-                ctx.callOptimistic(ClimateTargets.withRange(ctx.store[eid], low, high), "climate", "set_temperature",
-                    ClimateTargets.rangeData(eid, low, high))
+            dial.onRangeCommit = { handle, low, high ->
+                // Finished against the entity as the store holds it now: HA's newer other end wins.
+                val s = ctx.store[eid]
+                ClimateTargets.rangeToSend(handle, low, high, s)?.let { (lo, hi) ->
+                    ctx.callOptimistic(ClimateTargets.withRange(s, lo, hi), "climate", "set_temperature", ClimateTargets.rangeData(eid, lo, hi))
+                }
             }
             dial.onSelect = { styleSteppers() }
             observe(eid) { s ->

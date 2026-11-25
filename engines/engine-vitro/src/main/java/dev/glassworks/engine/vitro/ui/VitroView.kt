@@ -441,11 +441,17 @@ class VitroView(
         return true
     }
 
-    /** Keeps keyboard focus out of the dashboard (tabs, cards, pinned cards) while More Info is over it. */
+    /**
+     * Makes More Info modal, as HA's dialog is: while it's open, the dashboard (tabs, cards, pinned cards) takes no
+     * keyboard focus and is hidden from TalkBack, and both come back when it closes.
+     */
     private fun blockDashboardFocus(block: Boolean) {
         val mode = if (block) FOCUS_BLOCK_DESCENDANTS else FOCUS_AFTER_DESCENDANTS
-        shell.descendantFocusability = mode
-        overlayLayer.descendantFocusability = mode
+        val a11y = if (block) IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        for (v in listOf(shell, overlayLayer)) {
+            v.descendantFocusability = mode
+            v.importantForAccessibility = a11y
+        }
     }
 
     fun closeMoreInfo(): Boolean {
@@ -1004,6 +1010,8 @@ class VitroView(
             stateView.text = state ?: name.orEmpty()
             // Neither line asked for: no text slot at all.
             texts.visibility = if (name == null && state == null) GONE else VISIBLE
+            // An icon-only badge is still a button: named after its entity for TalkBack.
+            pill.contentDescription = if (name == null && state == null) s?.displayName ?: eid else null
             if (showIcon) icon.setIcon(MdiIcons.resolveIconName(badge.icon, s), badgeIconColor(theme, s))
         }
         render(store[eid])
