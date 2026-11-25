@@ -3,13 +3,19 @@
 bootanimation.zip in its own blocks (the lululemon Mirror's Stock-in-place: 22,901 bytes, so the full
 animation can't fit).
 
-    still.py --zip branding/lululemon-mirror/bootanimation.zip --out branding/lululemon-mirror
+    still.py --zip branding/lululemon-mirror/bootanimation.zip --out branding/lululemon-mirror --turn-back 90
 
 Reads the zip generate.py wrote (it is not regenerated), takes the last frame of its last part (the
-still the animation ends on, already turned into the panel's framebuffer), and crops it to a box
-centered on the screen around everything that isn't the background. Android 6 draws a frame at the
-top-left of a rectangle the size desc.txt names, centered on the screen, so a centered box with that
-size keeps the still exactly where the full animation leaves it. Quantized to 256 colors.
+still the animation ends on), and crops it to a box centered on the screen around everything that
+isn't the background. Android 6 draws a frame at the top-left of a rectangle the size desc.txt names,
+centered on the screen, so a centered box with that size keeps the still exactly where the full
+animation leaves it. Quantized to 256 colors.
+
+--turn-back undoes generate.py's --rotate (the frame's `rotate` in design/frame.json): the still is for
+the device's stock software, whose display turns everything it draws upright itself (the Mirror's
+stock 1.24.0 sets persist.panel.orientation=270 and ships a 1080x1920 portrait animation), where the
+full animation is turned for a community image whose framebuffer doesn't. Turned back, the box stays
+centered.
 
 Writes into <dir>: bootanimation-still.png and still.json (the source zip's SHA-256, the box, the
 background, the output's SHA-256 and the tools). Read-only on everything else. Needs Pillow and numpy.
@@ -51,6 +57,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--zip", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--turn-back", type=int, choices=(0, 90, 270), default=0,
+                    help="degrees generate.py turned each frame counter-clockwise (--rotate); the still is turned back upright")
     a = ap.parse_args()
 
     raw = open(a.zip, "rb").read()
@@ -70,7 +78,10 @@ def main():
     hh = int(max(h / 2 - ys.min(), ys.max() + 1 - h / 2)) + MARGIN
     hw, hh = min(hw, w // 2), min(hh, h // 2)
     box = (w // 2 - hw, h // 2 - hh, w // 2 + hw, h // 2 + hh)
-    still = im.crop(box).quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    upright = im.crop(box)
+    if a.turn_back:
+        upright = upright.rotate(-a.turn_back, expand=True)  # clockwise, undoing generate.py's counter-clockwise turn
+    still = upright.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     buf = io.BytesIO()
     still.save(buf, "PNG", optimize=True)
     png = buf.getvalue()
@@ -81,9 +92,11 @@ def main():
     manifest = {
         "about": "What branding/boot/still.py last wrote here, from the boot animation's last frame. Kiln wraps it in a one-frame bootanimation.zip the size of a stock one it overwrites in place.",
         "source": {"zip": os.path.basename(a.zip), "sha256": hashlib.sha256(raw).hexdigest(), "frame": name},
-        "screen": [w, h],
+        "framebuffer": [w, h],
         "box": list(box),
-        "size": [box[2] - box[0], box[3] - box[1]],
+        "turnedBack": a.turn_back,
+        "screen": [h, w] if a.turn_back in (90, 270) else [w, h],
+        "size": list(still.size),
         "background": color.lower(),
         "output": {"bootanimation-still.png": hashlib.sha256(png).hexdigest(), "bytes": len(png)},
         "tools": {"pillow": Image.__version__, "numpy": np.__version__},
@@ -91,7 +104,7 @@ def main():
     with open(os.path.join(a.out, "still.json"), "w") as f:
         json.dump(manifest, f, indent=2)
         f.write("\n")
-    print(f"{name} -> bootanimation-still.png {box[2] - box[0]}x{box[3] - box[1]}, {len(png)} bytes")
+    print(f"{name} -> bootanimation-still.png {still.size[0]}x{still.size[1]}, {len(png)} bytes")
     return 0
 
 

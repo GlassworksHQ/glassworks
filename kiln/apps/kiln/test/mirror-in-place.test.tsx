@@ -619,6 +619,19 @@ describe('routes and screens', () => {
     expect(document.body.textContent).not.toContain(FAKE_SERIAL);
   }, 20_000);
 
+  it('the wait for the first start stays on the restart row, not back on the first one', async () => {
+    const h = handTo();
+    const { image, app } = await imageDemo(mirrorEntry, 'place-working', true, {}, h.handOver);
+    render(<ImageFlow image={image} app={app} />);
+    const cur = () => document.querySelector('.join li.cur')?.textContent;
+    await act(async () => { (image as unknown as { set(p: object): void }).set({ screen: 'working', round: 2, work: { step: 'restart', x: 0 } }); });
+    expect(cur()).toBe('Restart the Mirror');
+    await act(async () => { (image as unknown as { set(p: object): void }).set({ work: { step: 'first-boot', x: 0 } }); });
+    expect(cur()).toBe('Restart the Mirror');
+    await act(async () => { (image as unknown as { set(p: object): void }).set({ work: { step: 'app-install', x: 0 } }); });
+    expect(cur()).toBe('Install Glassworks and hide the stock apps');
+  }, 20_000);
+
   it('the way back has its own rail, not the install\'s', () => {
     const at = (undo: { at: 'start' | 'fastboot' | 'working' | 'error' | 'done' }) =>
       imageRail({ screen: 'undo', undo, picked: RECIPE.id, files: [], wifi: { ssid: '', password: '' }, understood: false, log: [] } as never, mirrorFrame, false, true);

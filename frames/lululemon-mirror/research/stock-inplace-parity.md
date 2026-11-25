@@ -89,6 +89,11 @@ change to an existing file at the same size, or a change outside `/system`.
    $ python3 branding/boot/still.py --zip branding/lululemon-mirror/bootanimation.zip --out branding/lululemon-mirror
    part2/frame_0000.png -> bootanimation-still.png 1858x262, 14067 bytes
    ```
+   This kept the framebuffer's turn; attempt 7 found it sideways on stock. The upright one:
+   ```
+   $ python3 branding/boot/still.py --zip branding/lululemon-mirror/bootanimation.zip --out branding/lululemon-mirror --turn-back 90
+   part2/frame_0000.png -> bootanimation-still.png 262x1858, 12698 bytes
+   ```
    Side by side with the original, the 256-color still looks the same. 64 colors would be 9,519 bytes, but there's no
    need.
 
@@ -120,12 +125,29 @@ change to an existing file at the same size, or a change outside `/system`.
    - Android 6 resets USB partway through its start, so the poll for `sys.boot_completed` loses the device.
    - Kiln now connects again on its own when that poll fails, with no list, within the same 6 minutes.
 
+7. **The still on the glass came up sideways** (2026-11-25, verified on the unit, the maintainer's run). The in-place
+   write changed 2,437,120 bytes of `system`: 589 blocks of `services.jar` and 6 of `bootanimation.zip`, so the still
+   was written. On the next start the maintainer saw it on its side. Stock's own animation says why, read from the
+   stock system image (scratch, not in the repo):
+   ```
+   $ debugfs -R "dump /media/bootanimation.zip stock-bootanimation.zip" system-stock.raw.img
+   $ unzip -p stock-bootanimation.zip desc.txt
+   1080 1920 10
+   c 0 0 part0
+   $ debugfs -R "cat /build.prop" system-stock.raw.img | grep orientation
+   persist.panel.orientation=270
+   ```
+   Stock's animation is upright portrait, 1080×1920, because stock's display turns everything it draws. The full
+   Glassworks animation is turned 90° counter-clockwise into the framebuffer (`rotate` in `design/frame.json`), for the
+   community image, whose framebuffer doesn't turn. Attempt 3 kept that turn, so on stock the still was turned twice.
+   `still.py --turn-back 90` now turns it back: 262×1858, upright, still centered.
+
 ## Result
 
 | What the image gives | How Stock-in-place gives it now | How sure |
 |---|---|---|
 | The Manage page lets in other computers over USB | `services.jar`: `UsbService.allowUsbDebugging` checks `WRITE_SECURE_SETTINGS` (`patchUsbAllow`, `installer/src/stock.ts`). The install grants it and `READ_LOGS` over adb, and sets `glassworks_usb_allow_permission`, which the app's `UsbDebugging.available` reads | Read and checked off-device against the real jar. Untested on a Mirror |
-| Glassworks' boot animation | The agent sends stock's `bootanimation.zip` (bytes, SHA-256, FIEMAP) in its signed metadata. Kiln writes a one-frame animation of the still (`bootStillZip`, `installer/src/bootstill.ts`), exactly stock's size, in its blocks. The restore point keeps lululemon's | Checked off-device (two zip readers, the build's sparse write and restore). Untested on a Mirror: how Android 6 draws the 1858×262 frame is read, not seen |
+| Glassworks' boot animation | The agent sends stock's `bootanimation.zip` (bytes, SHA-256, FIEMAP) in its signed metadata. Kiln writes a one-frame animation of the still (`bootStillZip`, `installer/src/bootstill.ts`), exactly stock's size, in its blocks. The restore point keeps lululemon's | Checked off-device (two zip readers, the build's sparse write and restore). Written on the Mirror on 2026-11-25 and seen sideways (attempt 7); the upright still (262×1858) is untested on the glass |
 | One Home Assistant device across reinstalls | Kiln writes `glassworks_device_mac` (the serial's MAC, the image's formula) before the app's first start. The app reads it as it reads `ro.glassworks.device.mac` (`PanelDevice.INSTALLER_MAC_SETTING`) | Off-device tests. Untested on a Mirror |
 | The overlay's display and Wi-Fi defaults | `screen_off_timeout` 2147483647, `stay_on_while_plugged_in` 7, `svc wifi enable` over adb. Rotation already goes through `setPortrait` | Off-device tests. The lock screen is left as stock has it: Android 6 moves that setting into LockSettings on the first boot, out of adb's reach. Stock showed none on the 2026-11-25 run |
 
@@ -142,8 +164,9 @@ change to an existing file at the same size, or a change outside `/system`.
 
 ## Open questions
 
-- Does the still show centered and upright on the glass? It's turned the way the full animation is, which was verified
-  upright on 2026-11-16.
+- Does the upright still (attempt 7) show centered on the glass? Stock's own animation is the model for it.
+- A still that sits for the whole 4–5 minute first start reads as frozen. The 22,901 bytes leave room for a small
+  looping part.
 - Does the Manage page's Allow work end to end on stock? The next test: plug in a second computer, Allow it from Manage,
   and run `adb devices` from that computer.
 - The API key isn't carried over an in-place reinstall yet, as the image's flash carries it

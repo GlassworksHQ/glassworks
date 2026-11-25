@@ -914,11 +914,14 @@ async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp
   const loads = op === 0x001a ? dv.getUint16(codeOff + 18, true) === fpStrIdx
     : op === 0x001b ? (dv.getUint16(codeOff + 18, true) | (dv.getUint16(codeOff + 20, true) << 16)) === fpStrIdx : false;
   if (!loads) throw new Error(`${what} its startConfirmation isn't the code Kiln writes. Kiln doesn't know this jar`);
+  // An install that left stock's hotspot on (disableStockAp: false): turn it off now, with patchStockAp's own checks
+  // (the same bytes a fresh patch writes). One that has it off: keep it.
   let stockAp: StockApPatch | undefined;
+  let addedStockAp = false;
   if (disableStockAp) {
     const ap = lookup.findCodeItem(MIRROR_AP_SERVICE, lookup.findMethod(MIRROR_AP_SERVICE, 'systemReady', '()V'));
-    if (dv.getUint16(ap + 16, true) !== 0x000e) throw new Error(`${what} its MirrorApService.systemReady() still runs. Kiln doesn't know this jar`);
-    stockAp = { codeOff: ap, insnsSize: dv.getUint32(ap + 12, true) };
+    if (dv.getUint16(ap + 16, true) === 0x000e) stockAp = { codeOff: ap, insnsSize: dv.getUint32(ap + 12, true) };
+    else { stockAp = patchStockAp(dex, dv, lookup, strings); addedStockAp = true; }
   }
   // An install from before the USB-debugging patch: add it now (the same bytes a fresh patch writes). One that has it: keep it.
   let usbAllow: UsbAllowPatch | undefined;
@@ -929,7 +932,7 @@ async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp
   }
   let out = jar;
   let padBytes = 0;
-  if (earlier !== fp || addedUsbAllow) {
+  if (earlier !== fp || addedUsbAllow || addedStockAp) {
     dex.set(sha1Bytes(dex.subarray(32)), 12);
     dv.setUint32(8, adler32(dex.subarray(12)), true);
     ({ out, padBytes } = await replaceJarDexExactSize(jar, dex));
