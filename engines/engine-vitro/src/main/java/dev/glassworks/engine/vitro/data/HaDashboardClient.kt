@@ -75,7 +75,10 @@ class HaDashboardClient(
     interface Listener {
         fun onConnected(haVersion: String) {}
         fun onAuthRequired() {}
-        /** HA's dashboards, every one, admin-only ones included: once the user is known too ([mayOpen] tells which). */
+        /**
+         * The dashboards HA's frontend lists for the signed-in user: an admin-only one only for an administrator
+         * ([mayOpen], decided as the list arrives). Once the user is known too.
+         */
         fun onDashboards(dashboards: List<DashboardSummary>) {}
         fun onResources(resources: List<LovelaceResource>) {}
         fun onThemes(catalog: ThemeCatalog) {}
@@ -167,10 +170,13 @@ class HaDashboardClient(
 
     /**
      * `lovelace/dashboards/list` as Home Assistant answered it on this connection, every dashboard with its
-     * `require_admin`; null until it has, and empty if it refused.
+     * `require_admin`; null until it has, or when it refused ([dashboardsAnswered] tells which).
      */
     @Volatile var dashboards: List<DashboardSummary>? = null
         private set
+
+    /** True once `lovelace/dashboards/list` has answered on this connection, with the list or with an error. */
+    @Volatile private var dashboardsAnswered = false
 
     /** Guards [heldForAccess]; never held while a held answer runs. */
     private val accessLock = Any()
@@ -178,7 +184,7 @@ class HaDashboardClient(
     /** Answers that wait for HA to say who the user is and which dashboards are admin only ([afterAccessKnown]). */
     private val heldForAccess = ArrayList<() -> Unit>()
 
-    private fun accessKnown(): Boolean = userKnown && dashboards != null
+    private fun accessKnown(): Boolean = userKnown && dashboardsAnswered
 
     /**
      * Runs [block] once Home Assistant has said who the user is and which dashboards are admin only, now if it has: a
@@ -209,11 +215,12 @@ class HaDashboardClient(
      * (`require_admin`) and the user isn't an administrator (`is_admin`). HA's own `get_panels` leaves such a dashboard
      * out for that user, and the frontend routes a URL with no panel to the user's default one. The default dashboard
      * (no path) is never admin only, and a path the list doesn't name isn't refused here: HA answers it as not found.
+     * With no list (HA refused it), Vitro can't tell for a user who isn't an administrator: HA's frontend decides.
      */
     fun mayOpen(urlPath: String?): Boolean {
-        if (urlPath.isNullOrEmpty()) return true
-        val d = dashboards?.firstOrNull { it.urlPath == urlPath } ?: return true
-        return !d.requireAdmin || currentUser.optBoolean("is_admin", false)
+        if (urlPath.isNullOrEmpty() || currentUser.optBoolean("is_admin", false)) return true
+        val list = dashboards ?: return false
+        return list.firstOrNull { it.urlPath == urlPath }?.requireAdmin != true
     }
 
     /** Sends an arbitrary HA WebSocket command (used by Tier 3 custom card `hass.callWS` bridge). */
@@ -779,6 +786,7 @@ class HaDashboardClient(
             heldForAccess.clear()
             userKnown = false
             dashboards = null
+            dashboardsAnswered = false
         }
         displayRequested.clear()
         displayPending.set(0)
@@ -818,8 +826,10 @@ class HaDashboardClient(
             // A dropped connection asks again on the reconnect.
             if (isTransportError(res)) return@request
             if (!res.optBoolean("success", false)) {
-                // No list: no dashboard is known to be admin only, and HA's own answers decide.
-                if (dashboards == null) dashboards = emptyList()
+                // No list: which dashboards are admin only is unknown, and for anyone but an administrator HA's frontend
+                // decides ([mayOpen]).
+                dashboards = null
+                dashboardsAnswered = true
                 releaseHeldForAccess()
             } else {
                 val arr = res.optJSONArray("result") ?: JSONArray()
@@ -835,7 +845,9 @@ class HaDashboardClient(
                     )
                 }
                 dashboards = out
-                afterAccessKnown { listener.onDashboards(out) }
+                dashboardsAnswered = true
+                // Filtered as it's handed on, under this connection's answers: the user's list, as HA's frontend has it.
+                afterAccessKnown { listener.onDashboards(out.filter { mayOpen(it.urlPath) }) }
                 releaseHeldForAccess()
             }
         }

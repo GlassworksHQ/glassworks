@@ -1011,14 +1011,11 @@ class VitroEngine(
             }
 
             override fun onDashboards(dashboards: List<DashboardSummary>) {
+                // The dashboards HA's frontend lists for this user, as the web engine reports them: the client left out
+                // an admin-only one for anyone but an administrator.
+                val arr = JSONArray()
+                for (d in dashboards) arr.put(JSONObject().put("url_path", d.urlPath).put("title", d.title))
                 post {
-                    // The dashboards HA's frontend lists for this user, as the web engine reports them: an admin-only
-                    // one only to an administrator.
-                    val c = client ?: return@post
-                    val arr = JSONArray()
-                    for (d in dashboards) {
-                        if (c.mayOpen(d.urlPath)) arr.put(JSONObject().put("url_path", d.urlPath).put("title", d.title))
-                    }
                     host.onPortMessage(port, JSONObject().put("type", "dashboards").put("json", arr.toString()))
                 }
             }

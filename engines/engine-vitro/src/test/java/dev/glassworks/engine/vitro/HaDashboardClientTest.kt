@@ -350,9 +350,9 @@ class HaDashboardClientTest {
         assertTrue(c.mayOpen("wall-test"))
         assertTrue("the default dashboard is never admin only", c.mayOpen(null))
         assertTrue("a path the list doesn't name is HA's to answer", c.mayOpen("not-listed"))
-        // The list still names every dashboard, with its require_admin.
+        // The user's list leaves the admin-only dashboard out, as HA's frontend does.
         awaitCondition("dashboards") { listener.dashboards.isNotEmpty() }
-        assertEquals(listOf(false, true), listener.dashboards.single().map { it.requireAdmin })
+        assertEquals(listOf("wall-test"), listener.dashboards.single().map { it.urlPath })
         // Another dashboard on the same connection is drawn.
         c.fetchDashboard("wall-test")
         awaitCondition("wall-test") { listener.configs.isNotEmpty() }
@@ -425,6 +425,30 @@ class HaDashboardClientTest {
         awaitCondition("refused") { listener.refused.isNotEmpty() }
         assertFalse("the last user isn't kept", c.currentUser.has("is_admin"))
         assertFalse(c.mayOpen("admin-only"))
+    }
+
+    @Test
+    fun withNoDashboardListOnlyAnAdministratorIsDrawnANamedDashboard() {
+        // HA refused lovelace/dashboards/list: which dashboards are admin only is unknown.
+        server.failDashboardList = true
+        server.currentUser = wallUser
+        val c = started("wall-test")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        // HA's frontend decides for a user who isn't an administrator; the default dashboard is never admin only.
+        assertTrue(listener.configs.isEmpty())
+        assertFalse(c.mayOpen("wall-test"))
+        assertTrue(c.mayOpen(null))
+        c.fetchDashboard(null)
+        awaitCondition("default dashboard") { listener.configs.isNotEmpty() }
+    }
+
+    @Test
+    fun withNoDashboardListAnAdministratorOpensAnyDashboard() {
+        server.failDashboardList = true
+        val c = started("admin-only")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        assertTrue(listener.refused.isEmpty())
+        assertTrue(c.mayOpen("admin-only"))
     }
 
     @Test

@@ -122,6 +122,9 @@ class FakeHaServer {
      */
     @Volatile var currentUser: JSONObject? = JSONObject("""{"id": "wall-user", "name": "Wall Panel", "is_owner": false, "is_admin": true}""")
 
+    /** `lovelace/dashboards/list` answers with an error. */
+    @Volatile var failDashboardList: Boolean = false
+
     /** `auth/current_user` goes unanswered, for a test to answer it later (on [sockets]). */
     @Volatile var holdCurrentUser: Boolean = false
 
@@ -228,7 +231,7 @@ class FakeHaServer {
             "get_config" -> ok(sock, id, haConfig)
             "frontend/get_themes" -> ok(sock, id, themes)
             "subscribe_events", "unsubscribe_events" -> ok(sock, id, JSONObject.NULL)
-            "lovelace/dashboards/list" -> ok(sock, id, dashboards)
+            "lovelace/dashboards/list" -> if (failDashboardList) fail(sock, id, "unknown_error") else ok(sock, id, dashboards)
             "auth/current_user" -> if (!holdCurrentUser) currentUser?.let { ok(sock, id, it) } ?: fail(sock, id, "unknown_command")
             "lovelace/resources" -> ok(sock, id, resources)
             "lovelace/config" -> {
