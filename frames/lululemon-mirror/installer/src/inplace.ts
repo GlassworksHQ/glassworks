@@ -166,6 +166,11 @@ export async function installInPlace(p: PanelShell, o: { apk: Uint8Array; onStep
   }
   await grantPermissions(r, ours);
   for (const perm of ['ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION']) await r.try(`pm grant ${ours.package} android.permission.${perm}`);
+  // Android 6 checks WRITE_SETTINGS before an app opens a Wi-Fi hotspot (no carrier provisioning app on the Mirror;
+  // research/privileged-app.md). On the Glass Panes image Glassworks is a system app and has it; on stock it's a plain
+  // install, so its setup hotspot needs the app-op (verified 2026-11-25: refused without it, `appops get` rejectTime).
+  const ws = await p.run(`appops set ${ours.package} WRITE_SETTINGS allow`);
+  r.detail(ws.code === 0 ? 'Setup Wi-Fi: allowed' : `Setup Wi-Fi: not allowed (${ws.out.trim().split('\n')[0] || `exit ${ws.code}`})`);
 
   r.step('Hide the stock apps');
   const bloat = await hideStockBloat(p);

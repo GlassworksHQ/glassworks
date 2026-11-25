@@ -161,6 +161,7 @@ describe('the app\'s install', () => {
     const r = await installInPlace(m, { apk: fakeMirrorApk(), onStep: (s, d) => lines.push(s || `  ${d}`), sleep: async () => {} });
     expect(m.owner).toBe(GLASSWORKS.admin);
     expect(m.cmds).toContain(`dpm set-device-owner ${GLASSWORKS.admin}`);
+    expect(m.cmds).toContain(`appops set ${GLASSWORKS.package} WRITE_SETTINGS allow`); // the setup hotspot on stock
     expect(m.cmds.filter((c) => c.startsWith('pm hide co.mirror') || c.startsWith('pm hide com.mirror'))).toHaveLength(8);
     expect(r.updates.state).toBe('on');
     expect(lines.join('\n')).toContain('Device Owner: set');
