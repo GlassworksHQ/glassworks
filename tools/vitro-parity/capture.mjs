@@ -7,7 +7,8 @@
 //   - Home Assistant, through the credentials in ha.json (VITRO_PARITY_HA, default
 //     ~/.t3/glassworks-m1/vitro-parity/ha.json). It WRITES ONE DASHBOARD ONLY: `vitro-harness` (admin-only,
 //     not in the sidebar), created if missing and overwritten on every run. It never changes an entity
-//     state or any other dashboard; everything else is read-only (states, themes, config, render_template).
+//     state or any other dashboard; everything else is read-only (states, themes, config, render_template, and
+//     HA's own Roboto from /static, which every captured page gets as a font from its start, kept in memory).
 //   - A case's own stylesheets and fonts (`resources`, #811): served to HA's page from the corpus's fixtures/ folder
 //     at /local/vitro-harness-fixtures/ (a route in the browser; the request never reaches HA) and put in the page
 //     as HA's loadCSS does. Nothing is added to HA's Lovelace resources.
@@ -448,13 +449,39 @@ async function saveDrawnImages(loaded, drawn) {
   }
 }
 
-async function newPage(browser, frame, dark, now, cardModUrl, tz) {
+/**
+ * Roboto as the panels have it: a font the page can use from its first script. HA's `@font-face` asks for
+ * `local("Roboto")` before its own woff2, and a panel (Android) has Roboto as a system font. A capture host without
+ * it gets the woff2, which loads only once something asks for it, so HA's charts measure their axis labels
+ * (measureTextWidth, on a canvas) in the fallback font, then draw them in Roboto: the axis came out ~2 px wider
+ * than on a panel. HA's own files, from its `/static`, added to each page before HA's code runs; kept in memory.
+ */
+const ROBOTO_FACES = [['Light', '300'], ['Regular', '400'], ['Medium', '500'], ['Bold', '700']];
+async function robotoFaces() {
+  const faces = [];
+  for (const [name, weight] of ROBOTO_FACES) {
+    const res = await fetch(`${creds.origin}/static/fonts/roboto/Roboto-${name}.woff2`);
+    if (!res.ok) fail(`HA's Roboto ${name}: HTTP ${res.status}`);
+    faces.push({ weight, data: Buffer.from(await res.arrayBuffer()).toString('base64') });
+  }
+  return faces;
+}
+
+async function newPage(browser, frame, dark, now, cardModUrl, tz, roboto) {
   const ctx = await browser.newContext({
     viewport: { width: frame.width, height: frame.height }, deviceScaleFactor: frame.density,
     // A touch frame's browser has a coarse pointer, which HA's chart legend styles for (40 px rows).
     hasTouch: frame.input === 'touch',
     colorScheme: dark ? 'dark' : 'light', timezoneId: tz, locale: 'en-US', reducedMotion: 'reduce',
   });
+  // Before anything else in the page (see robotoFaces). A face added from bytes is ready without a request.
+  await ctx.addInitScript((faces) => {
+    for (const f of faces) {
+      const bytes = Uint8Array.from(atob(f.data), (ch) => ch.charCodeAt(0));
+      const face = new FontFace('Roboto', bytes, { weight: f.weight, style: 'normal' });
+      document.fonts.add(face);
+    }
+  }, roboto);
   await ctx.addInitScript(([origin, token, dark, now, cardModUrl, css]) => {
     // Vitro's clock gets the same instant (refs/*.json "now"): the page's clock stands still.
     const RealDate = Date;
@@ -711,6 +738,7 @@ async function capture() {
     fail('HA\'s shared inputs (version, config or themes) changed since the references were taken: run a full --refresh, without --cases or --frames');
   }
 
+  const roboto = await robotoFaces();
   const browser = await launch();
   const now = pinnedNow(haConfig.time_zone);
   let failures = 0;
@@ -719,7 +747,7 @@ async function capture() {
     for (const dark of [true, false]) {
       const group = mine.filter((c) => (c.dark ?? true) === dark);
       if (!group.length) continue;
-      const { ctx, page, states, images, graphs } = await newPage(browser, frame, dark, now, cardModUrl, haConfig.time_zone);
+      const { ctx, page, states, images, graphs } = await newPage(browser, frame, dark, now, cardModUrl, haConfig.time_zone, roboto);
       let loaded = false;
       for (const c of group) {
         const t0 = Date.now();
