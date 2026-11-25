@@ -95,7 +95,7 @@ export function StartOverDialog({ open, onOpenChange, onConfirm, resets, keeps, 
           </div>
           <div className="dlg-foot">
             <Dialog.Close className="btn ghost">Keep going</Dialog.Close>
-            <button type="button" className="btn danger" onClick={onConfirm}>Start over</button>
+            <button type="button" className="btn strong" onClick={onConfirm}>Start over</button>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

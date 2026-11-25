@@ -1,11 +1,13 @@
 'use client';
 // The frame around every screen (docs/design/kiln): the header with Kiln's mark and the browser chip, the rail with the
 // steps and the stack, and on a phone a slim step bar whose Steps sheet holds the same rail. The rail is the map
-// (docs/design/kiln/navigation.md): a done step the flow lets you return to is a link, one behind a write shows a lock
-// and the rail says why, and every screen's Back is the rail's step before this one (NavContext, read by Foot).
+// (docs/design/kiln/navigation.md): a done step the flow lets you return to is a link, and when the steps behind you are
+// locked by a write the rail says why once, in one note under it (docs/design/kiln/system.md: one note, not a lock per
+// step). Every screen's Back is the rail's step before this one (NavContext, read by Foot). When a screen changes under
+// the person's click, focus goes to its heading, so a screen reader and the keyboard start from the new screen.
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Mark } from './Mark';
 import { Stack } from './Stack';
 import { FlowAction, GoControl, LinkContext, LockGlyph, NavContext, type Go, type NavValue } from './Nav';
@@ -30,6 +32,20 @@ export function useBrowserChip(): Chip | undefined {
     setChip(usb && isSecureContext ? { kind: 'ok', text: 'Ready' } : { kind: 'bad', text: usb ? 'Needs HTTPS' : 'Use Chrome or Edge' });
   }, []);
   return chip;
+}
+
+/** Whether the page is at phone width (the stylesheet's 760px), following it as the window changes. False without matchMedia. */
+export function usePhone(): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const q = window.matchMedia('(max-width: 760px)');
+    const set = () => setOn(q.matches);
+    set();
+    q.addEventListener?.('change', set);
+    return () => q.removeEventListener?.('change', set);
+  }, []);
+  return on;
 }
 
 type SubRoute = NonNullable<RailStep['sub']>[number]['route'];
@@ -64,7 +80,6 @@ function Rail({ steps, onGo }: { steps: RailStep[]; onGo?: () => void }) {
           {s.mark === 'done' && s.go
             ? <GoControl go={s.go} className="step-go" onDone={onGo} aria-label={`Back to ${s.name}`}>{s.name}</GoControl>
             : <span className="step-name">{s.name}</span>}
-          {s.mark === 'done' && s.lock && <span className="step-lock" title="Written to the device"><LockGlyph /></span>}
           {s.sub && (
             <ol className="sub">
               {s.sub.map((x) => (
@@ -80,13 +95,13 @@ function Rail({ steps, onGo }: { steps: RailStep[]; onGo?: () => void }) {
   );
 }
 
-/** What the rail says under its steps: why the locked ones can't be returned to, then the flow's own actions. */
+/** What the rail says under its steps: once, why the done ones can't be returned to, then the flow's own actions. */
 function RailFoot({ steps, lock, actions, run = (a) => a.run() }: { steps: RailStep[]; lock?: string; actions?: readonly FlowActionSpec[]; run?: (a: FlowActionSpec) => void }) {
   const locked = !!lock && steps.some((s) => s.mark === 'done' && s.lock);
   if (!locked && !actions?.length) return null;
   return (
     <div className="rail-foot">
-      {locked && <p className="rail-note"><LockGlyph />{lock}</p>}
+      {locked && <p className="rail-note"><LockGlyph /><span>{`${lock}, so the steps before this one are done for good.`}</span></p>}
       {!!actions?.length && <div className="rail-actions">{actions.map((a) => <FlowAction key={a.label} icon={a.icon} onClick={() => run(a)}>{a.label}</FlowAction>)}</div>}
     </div>
   );
@@ -122,6 +137,24 @@ export function Shell({ steps: given, level, error, chip, href, lock, actions, b
     after.current = undefined;
     a.run();
   }, [sheet]);
+  const phone = usePhone();
+  // a new screen under a click: the button that was clicked is gone, so focus goes to the new heading (not on first load)
+  const main = useRef<HTMLElement>(null);
+  const heading = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    const h = main.current?.querySelector('h2');
+    const text = h?.textContent ?? '';
+    if (!h || text === heading.current) return;
+    const first = heading.current === undefined;
+    heading.current = text;
+    if (first) return;
+    const a = document.activeElement;
+    if (a && a !== document.body && document.contains(a) && !main.current?.contains(a)) return; // the person is elsewhere (the rail, a dialog)
+    if (a && a !== document.body && main.current?.contains(a)) return; // their control is still there
+    if (!h.hasAttribute('tabindex')) h.setAttribute('tabindex', '-1');
+    h.focus({ preventScroll: true });
+    if (typeof h.scrollIntoView === 'function' && h.getBoundingClientRect().top < 0) h.scrollIntoView({ block: 'start' });
+  });
   const nav = useMemo<NavValue>(() => {
     if (back === null) return {};
     if (back) return { back };
@@ -169,7 +202,15 @@ export function Shell({ steps: given, level, error, chip, href, lock, actions, b
             </Dialog.Portal>
           </Dialog.Root>
         </div>
-        <main className="main"><NavContext.Provider value={nav}>{children}</NavContext.Provider></main>
+        <main className="main" ref={main}>
+          <NavContext.Provider value={nav}>{children}</NavContext.Provider>
+          {/* a phone: the flow's ways out stay one tap away, under the card, not only in the Steps sheet */}
+          {phone && !!actions?.length && (
+            <div className="flow-under">
+              {actions.map((a) => <FlowAction key={a.label} icon={a.icon} onClick={() => a.run()}>{a.label}</FlowAction>)}
+            </div>
+          )}
+        </main>
       </div>
     </div>
     </LinkContext.Provider>

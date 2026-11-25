@@ -33,9 +33,10 @@ afterEach(() => { cleanup(); registry.clear(); for (const s of open.splice(0)) s
 const foot = () => document.querySelector('main .foot') as HTMLElement;
 const back = () => (foot() ? within(foot()).queryByRole('button', { name: /^Back/ }) ?? within(foot()).queryByRole('link', { name: /^Back/ }) : null);
 /** What the resume screen says the device has now. */
-const now = () => document.querySelector('.resume-now .t')!.textContent;
+const now = () => document.querySelector('main .note b')!.textContent;
 const railLinks = () => [...document.querySelectorAll('.rail .steps > li.can-go')].map((li) => li.querySelector('.step-name, .step-go')!.textContent);
-const locked = () => [...document.querySelectorAll('.rail .steps > li')].filter((li) => li.querySelector('.step-lock')).map((li) => li.textContent);
+/** Steps with a lock of their own: none, since the rail says why once, in its note (docs/design/kiln/system.md). */
+const locked = () => [...document.querySelectorAll('.rail .steps > li')].filter((li) => li.querySelector('.lock-glyph')).map((li) => li.textContent);
 
 describe('Back, from the rail', () => {
   const run = vi.fn();
@@ -82,15 +83,30 @@ describe('the image flow', () => {
     expect(image.state.screen).toBe('choose');
   });
 
-  it('after the write: no Back, the steps before are locked, and the foot says why', async () => {
+  it('after the write: no Back, one note on the rail says why the steps before are done, and the foot says it on a phone', async () => {
     await showImage('flash-adb');
     expect(back()).toBeNull();
     expect(railLinks()).toEqual([]);
-    expect(locked().length).toBeGreaterThan(0);
+    expect(locked()).toEqual([]); // one note, not a lock on every step
     expect(foot().querySelector('.foot-lock')!.textContent).toBe('Glassworks is written to the Mirror');
-    expect(document.querySelector('.rail-note')!.textContent).toBe('Glassworks is written to the Mirror');
+    expect(document.querySelector('.rail-note')!.textContent).toBe('Glassworks is written to the Mirror, so the steps before this one are done for good.');
     // writing it again is a real button, not a sentence with a link
     expect(within(foot()).getByRole('button', { name: 'Write the image again' }).className).toMatch(/btn ghost/);
+  });
+
+  it('in place, the first fastboot and its warning: nothing is written yet, so Back goes to the first screen and nothing is locked', async () => {
+    for (const d of ['place-fastboot', 'place-confirm'] as const) {
+      const { image } = await showImage(d);
+      expect(image.written()).toBe('none');
+      expect(document.querySelector('.rail-note')).toBeNull();
+      expect(railLinks()).toEqual(['Mirror', 'Choose', 'Prepare']);
+      fireEvent.click(back()!);
+      expect(image.state.screen).toBe('image');
+      cleanup();
+    }
+    // once the helper is written, the rail says so
+    await showImage('place-join-wifi');
+    expect(document.querySelector('.rail-note')!.textContent).toMatch(/^The setup helper is on the Mirror/);
   });
 
   it('while it writes: no Back, no rail links, no Start over', async () => {
@@ -106,10 +122,10 @@ describe('Start over', () => {
     const { image } = await showImage('place-restore-point');
     fireEvent.click(within(document.querySelector('.rail') as HTMLElement).getByRole('button', { name: 'Start over' }));
     const dlg = screen.getByRole('dialog', { name: 'Start over?' });
-    expect(dlg.textContent).toMatch(/Starts again.*setup agent again.*Where this install got to/);
-    expect(dlg.textContent).toMatch(/Stays.*Your Wi-Fi and the app you picked.*bundle saved in this browser/);
-    // the confirm throws work away: the problem color, never ember
-    expect(within(dlg).getByRole('button', { name: 'Start over' }).className).toMatch(/danger/);
+    expect(dlg.textContent).toMatch(/Starts again.*setup helper again.*Where this install got to/);
+    expect(dlg.textContent).toMatch(/Stays.*Your Wi-Fi and the app you picked.*What Kiln copied from the Mirror, saved in this browser/);
+    // the confirm throws work away: solid ink, never ember (that invites) and never rose (that means a problem)
+    expect(within(dlg).getByRole('button', { name: 'Start over' }).className).toMatch(/strong/);
     expect(dlg.querySelector('.btn.ember')).toBeNull();
     fireEvent.click(within(dlg).getByRole('button', { name: 'Keep going' }));
     expect(image.state).toMatchObject({ screen: 'restore-point', startingOver: false });
@@ -123,18 +139,20 @@ describe('resume', () => {
   it('opens on where the install stopped: what is done, what the device has now, Continue and Start over', async () => {
     const { image } = await showImage('place-resume');
     expect(screen.getByRole('heading', { name: 'Pick up where you left off' })).toBeTruthy();
-    expect(screen.getByRole('list', { name: 'Done so far' }).textContent).toMatch(/Choose.*Prepare.*Fastboot.*Receive.*Next: Install/);
-    expect(now()).toBe('The bundle is saved in this browser');
+    const so = screen.getByRole('list', { name: 'Your install so far' });
+    expect([...so.querySelectorAll('.prow')].map((x) => `${x.querySelector('.plabel')!.textContent} ${x.querySelector('.pmeta')!.textContent}`))
+      .toEqual(['Choose Done', 'Prepare Done', 'Fastboot Done', 'Receive Done', 'Install Your turn']);
+    expect(now()).toBe('Kiln has what it needs from the Mirror');
     expect(back()).toBeNull(); // resume has no Back: Continue, or a way out
     expect([...foot().querySelectorAll('.btn')].map((b) => b.textContent)).toEqual(['Start over', 'Continue']);
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(image.state).toMatchObject({ screen: 'fastboot', round: 2, resumed: undefined });
-    expect(screen.getByRole('heading', { name: 'Put the Mirror in fastboot mode' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Fastboot mode once more' })).toBeTruthy();
   });
 
   it('with only the setup agent on the device: Start over from the resume screen asks first', async () => {
     const { image } = await showImage('place-resume-staged');
-    expect(now()).toBe('The setup agent is on the Mirror');
+    expect(now()).toBe('The setup helper is on the Mirror');
     fireEvent.click(within(foot()).getByRole('button', { name: 'Start over' }));
     expect(screen.getByRole('dialog', { name: 'Start over?' })).toBeTruthy();
     act(() => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Start over' })); });
@@ -150,7 +168,7 @@ describe('on a phone', () => {
     fireEvent.click(within(bar).getByRole('button', { name: 'Steps' }));
     const sheet = screen.getByRole('dialog', { name: 'Steps' });
     expect(within(sheet).getByRole('button', { name: 'Start over' })).toBeTruthy();
-    expect(sheet.querySelector('.rail-note')!.textContent).toBe('The setup agent is on the Mirror');
+    expect(sheet.querySelector('.rail-note')!.textContent).toBe('The setup helper is on the Mirror, so the steps before this one are done for good.');
     fireEvent.click(within(sheet).getByRole('button', { name: 'Start over' }));
     expect(screen.queryByRole('dialog', { name: 'Steps' })).toBeNull(); // the sheet goes; Start over's dialog opens
     expect(screen.getByRole('dialog', { name: 'Start over?' })).toBeTruthy();
