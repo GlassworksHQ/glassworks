@@ -188,6 +188,29 @@ def button_card_reason(card: dict, templates: dict) -> str | None:
 
     if js(cfg):
         return "JavaScript templates ([[[ ]]])"
+    # Options and actions the engine's ButtonCardCompat doesn't run natively (VitroSupport's button-card lists).
+    for key in BUTTON_CARD_UNSUPPORTED_OPTIONS:
+        if key not in cfg:
+            continue
+        v = cfg[key]
+        on = (isinstance(v, dict) and v.get("action") not in (None, "", "none")) or (isinstance(v, str) and v != "") \
+            if key.endswith("_action") else bool(v)
+        if on:
+            return f"{key}:"
+    for key in ("tap_action", "hold_action", "double_tap_action"):
+        a = cfg.get(key)
+        if not isinstance(a, dict) or a.get("action") in (None, "", "none"):
+            continue
+        if a.get("action") not in BUTTON_CARD_ACTIONS:
+            return f"a {key} type it doesn't run natively"
+        if any(a.get(f) for f in ("repeat", "repeat_limit", "sound", "protect")):
+            return f"a {key} it doesn't run natively"
+        if isinstance(a.get("confirmation"), dict) and "exemptions" in a["confirmation"]:
+            return f"{key} confirmation exemptions"
+    if isinstance(cfg.get("confirmation"), dict) and "exemptions" in cfg["confirmation"]:
+        return "confirmation exemptions"
+    if cfg.get("layout") is not None and cfg.get("layout") not in BUTTON_CARD_LAYOUTS:
+        return "a layout it doesn't draw natively"
     # button-card evaluates a `force_eval` variable on every render, JavaScript or not (the engine sends it to an island).
     variables = cfg.get("variables") if isinstance(cfg.get("variables"), dict) else {}
     if any(isinstance(v, dict) and v.get("force_eval") is True for v in variables.values()):
@@ -204,6 +227,18 @@ def button_card_reason(card: dict, templates: dict) -> str | None:
 
 
 TEMPLATES: dict = {}
+
+# VitroSupport.BUTTON_CARD_UNSUPPORTED_OPTIONS, BUTTON_CARD_ACTIONS and BUTTON_CARD_LAYOUTS (buttonCard in
+# site/public/vitro-compat.json).
+BUTTON_CARD_UNSUPPORTED_OPTIONS = {
+    "show_live_stream", "spinner", "protect", "extra_styles", "press_action", "release_action", "icon_tap_action",
+    "icon_hold_action", "icon_double_tap_action", "icon_press_action", "icon_release_action",
+}
+BUTTON_CARD_ACTIONS = {"none", "toggle", "more-info", "navigate", "url", "call-service", "perform-action"}
+BUTTON_CARD_LAYOUTS = {
+    "vertical", "icon_name_state", "name_state", "icon_name", "icon_state", "icon_name_state2nd",
+    "icon_state_name2nd", "icon_label",
+}
 
 # Swiper parameters Vitro's native swipe-card reads (VitroSupport.SWIPE_CARD_PARAMETERS, swipeCardParameters in
 # site/public/vitro-compat.json).

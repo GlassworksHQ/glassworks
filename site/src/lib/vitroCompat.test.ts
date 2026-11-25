@@ -38,6 +38,12 @@ describe("the published compatibility manifest", () => {
     expect(published.nativeHacsTypes).toHaveLength(30);
   });
 
+  it("matches the audit script's button-card lists", () => {
+    expect(new Set(published.buttonCard.unsupportedOptions)).toEqual(new Set(pythonSet("BUTTON_CARD_UNSUPPORTED_OPTIONS")));
+    expect(new Set(published.buttonCard.actions)).toEqual(new Set(pythonSet("BUTTON_CARD_ACTIONS")));
+    expect(new Set(published.buttonCard.layouts)).toEqual(new Set(pythonSet("BUTTON_CARD_LAYOUTS")));
+  });
+
   it("matches the audit script's lists", () => {
     expect(new Set(published.nativeCoreTypes)).toEqual(new Set(pythonSet("NATIVE_CORE_TYPES")));
     expect(new Set(published.nativeHacsTypes)).toEqual(new Set(pythonSet("NATIVE_HACS_TYPES")));

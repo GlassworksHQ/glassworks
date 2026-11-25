@@ -633,6 +633,9 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
             if (ev.actionMasked == MotionEvent.ACTION_CANCEL) touchHandled = false
             // The ripple, and the click on release.
             v.onTouchEvent(ev)
+            // The suppression covers only the click this touch's release posts (View posts it before this runs). A
+            // release that posts none (outside the card, past the touch slop) leaves nothing to swallow, so clear it.
+            if (ev.actionMasked == MotionEvent.ACTION_UP) v.post { touchHandled = false }
             true
         }
     }

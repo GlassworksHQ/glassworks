@@ -235,6 +235,25 @@ class ButtonCardViewTest {
     }
 
     @Test
+    fun aReleaseOutsideTheCardDoesNotSwallowTheNextClick() {
+        put("light.desk_lamp", "on", "friendly_name" to "Desk lamp")
+        val card = button("""{"type": "custom:button-card", "entity": "light.desk_lamp",
+            "tap_action": {"action": "call-service", "service": "light.turn_off"}, "double_tap_action": {"action": "more-info"}}""")
+        val surface = card.getChildAt(0)
+        // A touch that slides off the card and lets go there: no click, no action.
+        surface.dispatchTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, 10f, 10f, 0))
+        surface.dispatchTouchEvent(android.view.MotionEvent.obtain(0, 20, android.view.MotionEvent.ACTION_MOVE, -500f, -500f, 0))
+        surface.dispatchTouchEvent(android.view.MotionEvent.obtain(0, 40, android.view.MotionEvent.ACTION_UP, -500f, -500f, 0))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(calls.toString(), calls.isEmpty())
+        // The next keyboard or accessibility click still runs the tap, once.
+        surface.performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(calls.toString(), 1, calls.size)
+        assertTrue(calls.toString(), calls.single().startsWith("light.turn_off"))
+    }
+
+    @Test
     fun entityButtonWithoutAnEntityIsHasErrorCard() {
         val err = HaErrorCardView(ctx(), "Entity must be specified")
         layout(err, 300)
