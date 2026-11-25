@@ -578,6 +578,17 @@ class VitroView(
     /** True when the view on screen has been built (not waiting for its first states). */
     val currentViewBuilt: Boolean get() = viewCache[currentViewIndex] != null
 
+    /**
+     * The page is gone: a view waiting for its first states isn't built later (a late build would make cards, and
+     * islands, nothing shows), and no guessed view is built again.
+     */
+    fun cancelPendingBuilds() {
+        holding?.cancel?.invoke()
+        holding = null
+        stateRebuilds.values.forEach { it() }
+        stateRebuilds.clear()
+    }
+
     /** Views of this dashboard that have waited once: past the wait (states or not), they build. */
     private val waited = HashSet<Int>()
 
