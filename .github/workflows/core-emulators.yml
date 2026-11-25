@@ -9,7 +9,11 @@
 #            hidden, secrets survive in Android's Keystore, the screen follows the frame's sensors, and the ESPHome
 #            device serves Home Assistant with the frame's panes. API 23 is the legacy build's floor (#198): that
 #            job builds the test APK at minSdk 23 with core library desugaring, as the legacy build runs the core
-#            (tools/legacy/api23-emulator.gradle, a Gradle init script)
+#            (tools/legacy/api23-emulator.gradle, a Gradle init script). On API 23 and 34 the same emulator then runs
+#            the engine contract (engines/conformance, docs/engine-contract.md): every engine the core runs on, against
+#            a fake Home Assistant on the device. API 34 tests GeckoView 159 and Vitro over it, API 23 the legacy
+#            GeckoView 144 and Vitro over it on Android 6's runtime. GeckoView's x86_64 build stands in for the frames'
+#            arm builds there (same version, same engine code)
 #   libs-api23  the libraries' androidTest checks on an API 23 emulator: esphome-api-android and improv run on
 #            Android 6 (#151). Their lint (NewApi at minSdk 23) stays on every PR, in pr.yml's libs-api23
 #   legacy-verify  the generic app's legacy APK (the Mirror's, R8 and all) installed on an API 23 emulator: it fails
@@ -19,9 +23,10 @@
 #   report   opens, updates or closes the issue for a red main
 #
 # Cost: six jobs in parallel, each about 10 minutes (the androidTest APK build, an emulator boot, under a minute
+# of tests); the engine contract adds about 4 minutes to the API 23 and 34 jobs (its APK build, GeckoView, a minute
 # of tests). On main only when Android code or this file changes; the nightly run and a manual run always. No
-# secrets; GeckoView isn't in it (the runners' emulators are x86_64, and no frame builds an x86 GeckoView), so
-# the engine is a fake.
+# secrets. The core's conformance test uses a fake engine; the engine contract downloads GeckoView's x86_64 build
+# for the runners' x86_64 emulators.
 name: Emulator tests
 
 on:
@@ -63,7 +68,7 @@ env:
 jobs:
   conformance:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
@@ -71,6 +76,11 @@ jobs:
           - api: 23
             target: default
             init: --init-script tools/legacy/api23-emulator.gradle
+            # The engine contract's Gecko engine (engines/conformance): the legacy one runs from Android 6.
+            gecko: legacy
+            # Its test APK (about 195 MB, GeckoView's native libraries) doesn't fit this image's default data
+            # partition: INSTALL_FAILED_INSUFFICIENT_STORAGE (run 45547890720).
+            disk: 4096M
           - api: 26
             target: default
           - api: 29
@@ -80,6 +90,7 @@ jobs:
             # swiftshader_indirect crashes this image's emulator (qemu SIGSEGV) when an app window draws.
             # Probe on 2026-11-17: 11 of 12 copies passed with it, 7 of 7 with swangle_indirect.
             gpu: swangle_indirect
+            gecko: current
     name: conformance (API ${{ matrix.api }})
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -100,7 +111,9 @@ jobs:
         run: sdkmanager --install "platforms;android-37.2"
 
       - name: Build the conformance test APK
-        run: ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:assembleDebugAndroidTest
+        run: >-
+          ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:assembleDebugAndroidTest
+          ${{ matrix.gecko && format(':engine-conformance:assembleDebugAndroidTest -PengineConformanceGecko={0}', matrix.gecko) || '' }}
 
       - name: Enable KVM
         run: |
@@ -115,15 +128,20 @@ jobs:
           arch: x86_64
           target: ${{ matrix.target }}
           disable-animations: true
+          disk-size: ${{ matrix.disk || '' }}
           emulator-options: -no-window -gpu ${{ matrix.gpu || 'swiftshader_indirect' }} -no-snapshot -noaudio -no-boot-anim
-          script: ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:connectedDebugAndroidTest
+          # One line: the action runs each line of a script on its own.
+          script: ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:connectedDebugAndroidTest ${{ matrix.gecko && format(':engine-conformance:connectedDebugAndroidTest -PengineConformanceGecko={0}', matrix.gecko) || '' }}
 
       - name: Test report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: core-conformance-api${{ matrix.api }}
-          path: core/build/reports/androidTests/connected/
+          path: |
+            core/build/reports/androidTests/connected/
+            engines/conformance/build/reports/androidTests/connected/
+            engines/conformance/build/outputs/androidTest-results/connected/
           retention-days: 7
           if-no-files-found: ignore
 
