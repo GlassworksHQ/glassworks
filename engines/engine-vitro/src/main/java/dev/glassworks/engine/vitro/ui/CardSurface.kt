@@ -363,6 +363,38 @@ class VitroCardContext(
         }
     }
 
+    /**
+     * Loads an SVG image (weather-card's icons, from its `icons:` folder or its CDN, as the browser would) and parses it
+     * with [dev.glassworks.engine.vitro.cards.MdSvg]'s subset, delivering on the main thread: null when it can't be
+     * fetched, is over 512 KB or isn't an SVG Vitro reads. Parsed images are kept, so a dashboard reads each once.
+     * Only Home Assistant's own origin gets the panel's token.
+     */
+    fun loadSvg(rawUrl: String, done: (dev.glassworks.engine.vitro.cards.MdSvg?) -> Unit) {
+        val fullUrl = absoluteUrl(rawUrl)
+        synchronized(SVG_CACHE) { SVG_CACHE[fullUrl] }?.let { hit -> done(hit); return }
+        pendingImageLoads.incrementAndGet()
+        IMAGE_POOL.execute {
+            val svg = runCatching {
+                val conn = (URL(fullUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 5_000
+                    readTimeout = 8_000
+                    haToken(fullUrl)?.let { setRequestProperty("Authorization", "Bearer $it") }
+                }
+                try {
+                    if (conn.responseCode in 200..299) {
+                        dev.glassworks.engine.vitro.cards.MdSvg.parse(String(conn.inputStream.use { VitroIslandServer.readCapped(it, MAX_SVG_BYTES) }, Charsets.UTF_8))
+                    } else {
+                        null
+                    }
+                } finally {
+                    conn.disconnect()
+                }
+            }.getOrNull()
+            if (svg != null) synchronized(SVG_CACHE) { SVG_CACHE[fullUrl] = svg }
+            main.post { try { done(svg) } finally { pendingImageLoads.decrementAndGet() } }
+        }
+    }
+
     /** An embedded picture: the decoded [bitmap] (maybe sampled down) and the image's own [width] and [height]. */
     class Embedded(val bitmap: Bitmap, val width: Int, val height: Int)
 
@@ -435,6 +467,14 @@ class VitroCardContext(
         )
 
         fun isToggleable(entityId: String?): Boolean = entityId != null && entityId.substringBefore('.') in TOGGLE_DOMAINS
+
+        /** SVGs [loadSvg] parsed, by address (a few weather icons). */
+        private val SVG_CACHE = object : LinkedHashMap<String, dev.glassworks.engine.vitro.cards.MdSvg>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, dev.glassworks.engine.vitro.cards.MdSvg>?) = size > 32
+        }
+
+        /** The largest SVG [loadSvg] reads. */
+        private const val MAX_SVG_BYTES = 512 shl 10
 
         /** The largest encoded image [loadImage] reads; past it the load fails (null). */
         private const val MAX_IMAGE_BYTES = 12 shl 20

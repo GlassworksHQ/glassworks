@@ -272,6 +272,26 @@ object CardCompat {
                 val t = raw.optString("layout_type", "masonry-layout").removePrefix("custom:").ifEmpty { "masonry-layout" }
                 if (t !in VitroSupport.LAYOUT_CARD_TYPES) reasons += "layout-card `layout_type: $t` isn't drawn natively"
             }
+            "custom:button-card" -> ButtonCardCompat.check(raw, reasons, notes)
+            "custom:swipe-card" -> {
+                val params = raw.optJSONObject("parameters") ?: JSONObject()
+                for (k in params.keys()) {
+                    if (k !in VitroSupport.SWIPE_CARD_PARAMETERS) reasons += "swipe-card parameter `$k` isn't drawn natively"
+                }
+                params.opt("pagination")?.let { p ->
+                    val type = (p as? JSONObject)?.optString("type", "bullets")?.ifEmpty { "bullets" } ?: "bullets"
+                    if (type !in setOf("bullets", "fraction")) reasons += "swipe-card pagination `type: $type` isn't drawn natively"
+                    if ((p as? JSONObject)?.optBoolean("dynamicBullets") == true) reasons += "swipe-card `dynamicBullets` isn't drawn natively"
+                }
+                params.opt("slidesPerView")?.let { v ->
+                    if (v != "auto" && (v as? Number)?.toDouble()?.takeIf { it > 0 } == null) reasons += "swipe-card `slidesPerView: $v` isn't drawn natively"
+                }
+                if (raw.has("card_width")) reasons += "swipe-card `card_width` isn't drawn natively"
+            }
+            "custom:weather-card" -> {
+                // The forecast comes from the entity's `forecast` attribute, which HA no longer sets: Vitro draws what HA draws.
+                if (raw.optString("entity").isEmpty()) reasons += "weather-card needs an `entity` (HA shows an error)"
+            }
         }
     }
 

@@ -3,6 +3,7 @@
 // public/vitro-compat.json (also served at /vitro-compat.json), which a test keeps equal to
 // LovelaceModel.kt in the Vitro engine and to the audit script's lists.
 import manifest from "../../public/vitro-compat.json";
+import { buttonCardReasons } from "./vitroButtonCard";
 
 export const VITRO_COMPAT = manifest;
 
@@ -12,6 +13,9 @@ const CONTAINERS = new Set<string>(manifest.containerTypes);
 const TILE_FEATURES = new Set<string>(manifest.supportedTileFeatures);
 /** Cards drawn natively only in some configurations: `option` (or its `default`) must be one of `native`. */
 const CONFIG_DEPENDENT: Record<string, { option: string; default: string; native: string[] }> = manifest.configDependentTypes;
+const SWIPE_PARAMETERS = new Set<string>(manifest.swipeCardParameters);
+/** The dashboard's `button_card_templates`, for the button-cards in it (set by auditDashboard). */
+let buttonCardTemplates: Record<string, unknown> = {};
 
 // ---------------------------------------------------------------------------------------------
 // A small YAML reader for Lovelace: block maps and lists, flow [..] and {..}, plain and quoted
@@ -574,6 +578,32 @@ function walkCard(card: unknown, loc: string, view: ViewAudit) {
     }
   }
 
+  // button-card is native without JavaScript templates and with the styles Vitro draws (vitroButtonCard.ts).
+  if (type === "custom:button-card") {
+    const reasons = buttonCardReasons(card, buttonCardTemplates);
+    if (reasons.length) {
+      view.tier3++;
+      view.triggers.push({ view: view.name, path: loc, type: `${type} (${reasons[0]})` });
+    } else view.tier2++;
+    return;
+  }
+  // HA's weather-card needs an entity; without one it shows an error, from its script.
+  if (type === "custom:weather-card" && !(typeof card.entity === "string" && card.entity)) {
+    view.tier3++;
+    view.triggers.push({ view: view.name, path: loc, type: `${type} (no entity)` });
+    return;
+  }
+  // swipe-card with Swiper parameters Vitro doesn't run is a web card, unless a built-in card inside keeps it native.
+  if (type === "custom:swipe-card" && isObj(card.parameters)) {
+    const unknown = Object.keys(card.parameters).filter((k) => !SWIPE_PARAMETERS.has(k));
+    const builtIn = Array.isArray(card.cards) && card.cards.some((c) => isObj(c) && typeof c.type === "string" && !c.type.startsWith("custom:"));
+    if (unknown.length && !builtIn) {
+      view.tier3++;
+      view.triggers.push({ view: view.name, path: loc, type: `${type} (parameter ${unknown[0]})` });
+      return;
+    }
+  }
+
   if (type === "tile" && Array.isArray(card.features)) {
     for (const f of card.features) {
       const ft = isObj(f) ? (typeof f.type === "string" ? f.type : "") : String(f);
@@ -654,6 +684,7 @@ export function auditDashboard(input: string): VitroAuditResult {
     );
   }
 
+  buttonCardTemplates = isObj(data.button_card_templates) ? data.button_card_templates : {};
   const views: ViewAudit[] = [];
   data.views.forEach((v, vi) => {
     if (!isObj(v)) return;
@@ -720,8 +751,9 @@ views:
     path: wall
     panel: true
     cards:
-      - type: custom:button-card # Tier 3: boots GeckoView
+      - type: custom:button-card # Tier 3: its JavaScript template boots GeckoView
         entity: light.lamp
+        name: "[[[ return entity.state === 'on' ? 'Lamp on' : 'Lamp off' ]]]"
         card_mod:
           style: |
             ha-card::before { content: ""; }

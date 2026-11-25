@@ -30,12 +30,12 @@ describe("the published compatibility manifest", () => {
 
   it("lists the core types the Vitro engine draws natively, verbatim", () => {
     expect(published.nativeCoreTypes).toEqual(kotlinSet("CORE_CARD_TYPES"));
-    expect(published.nativeCoreTypes).toHaveLength(31);
+    expect(published.nativeCoreTypes).toHaveLength(32);
   });
 
   it("lists the HACS cards the Vitro engine draws natively, verbatim", () => {
     expect(published.nativeHacsTypes).toEqual(kotlinSet("HACS_CARD_TYPES"));
-    expect(published.nativeHacsTypes).toHaveLength(26);
+    expect(published.nativeHacsTypes).toHaveLength(30);
   });
 
   it("matches the audit script's lists", () => {
@@ -44,7 +44,7 @@ describe("the published compatibility manifest", () => {
     expect(new Set(published.supportedTileFeatures)).toEqual(new Set(pythonSet("SUPPORTED_TILE_FEATURES")));
     expect(new Set(published.containerTypes)).toEqual(new Set(pythonSet("CONTAINER_TYPES")));
     expect(published.supportedTileFeatures).toHaveLength(14);
-    expect(published.containerTypes).toHaveLength(7);
+    expect(published.containerTypes).toHaveLength(8);
   });
 
   it("lists the configurations the engine draws natively, as the engine and the audit script do", () => {
@@ -54,6 +54,29 @@ describe("the published compatibility manifest", () => {
       const line = python.match(new RegExp(`"${type}": \\("${rule.option}", "${rule.default}", \\{([^}]*)\\}\\)`))?.[1];
       expect(line, `${type} in audit_vitro_dashboard.py`).toBeDefined();
       expect(new Set([...line!.matchAll(/"([^"]+)"/g)].map((m) => m[1]))).toEqual(new Set(rule.native));
+    }
+  });
+
+  it("lists button-card's native subset as the engine does", () => {
+    expect(published.buttonCard.layouts).toEqual(kotlinSet("BUTTON_CARD_LAYOUTS"));
+    expect(published.buttonCard.actions).toEqual(kotlinSet("BUTTON_CARD_ACTIONS"));
+    expect(published.buttonCard.styleParts).toEqual(kotlinSet("BUTTON_CARD_STYLE_PARTS"));
+    expect(published.buttonCard.animations).toEqual(kotlinSet("BUTTON_CARD_ANIMATIONS"));
+    expect(published.swipeCardParameters).toEqual(kotlinSet("SWIPE_CARD_PARAMETERS"));
+    const support = readFileSync(join(vitroDir, "compat/VitroSupport.kt"), "utf8");
+    const mapKeys = (name: string) => {
+      const body = support.match(new RegExp(`val ${name}: Map<[^>]+> = mapOf\\(([\\s\\S]*?)\\n    \\)\\n`))?.[1] ?? "";
+      return new Set([...body.matchAll(/"([^"]+)" to/g)].map((m) => m[1]));
+    };
+    expect(new Set(published.buttonCard.unsupportedOptions)).toEqual(mapKeys("BUTTON_CARD_UNSUPPORTED_OPTIONS"));
+    expect(new Set(published.buttonCard.unsupportedActionFields)).toEqual(mapKeys("BUTTON_CARD_UNSUPPORTED_ACTION_FIELDS"));
+    expect(new Set(published.buttonCard.benignProperties)).toEqual(mapKeys("BENIGN_PROPERTIES"));
+    const text = kotlinSet("BUTTON_CARD_TEXT");
+    for (const [part, props] of Object.entries(published.buttonCard.styleProperties) as [string, string[]][]) {
+      const body = support.match(new RegExp(`"${part}" to (BUTTON_CARD_TEXT(?: \\+ setOf\\(([^)]*)\\))?|setOf\\(([\\s\\S]*?)\\),\\n)`));
+      expect(body, part).toBeTruthy();
+      const own = [...(body![2] ?? body![3] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+      expect(new Set(props), part).toEqual(new Set(body![1].startsWith("BUTTON_CARD_TEXT") ? [...text, ...own] : own));
     }
   });
 
@@ -78,12 +101,12 @@ describe("auditDashboard with JSON", () => {
 
   it("flags unknown custom cards with their path", () => {
     const r = auditDashboard(
-      JSON.stringify({ views: [{ path: "a", sections: [{ cards: [{ type: "tile" }, { type: "custom:button-card" }, {}] }] }] }),
+      JSON.stringify({ views: [{ path: "a", sections: [{ cards: [{ type: "tile" }, { type: "custom:apexcharts-card" }, {}] }] }] }),
     );
     expect(r.isFullyNative).toBe(false);
     expect(r.totals.tier3).toBe(2);
     expect(r.triggers).toEqual([
-      { view: "a", path: "a/section[0]/card[1]", type: "custom:button-card" },
+      { view: "a", path: "a/section[0]/card[1]", type: "custom:apexcharts-card" },
       { view: "a", path: "a/section[0]/card[2]", type: "<missing>" },
     ]);
   });
@@ -160,7 +183,7 @@ views:
     path: wall
     panel: true
     cards:
-      - type: custom:button-card
+      - type: custom:apexcharts-card
         entity: light.lamp
         card_mod:
           style: |
@@ -178,7 +201,7 @@ views:
     ]);
     expect(r.totals).toEqual({ tier1: 4, tier2: 1, tier3: 1 });
     expect(r.isFullyNative).toBe(false);
-    expect(r.triggers).toEqual([{ view: "wall", path: "wall/card[0]", type: "custom:button-card" }]);
+    expect(r.triggers).toEqual([{ view: "wall", path: "wall/card[0]", type: "custom:apexcharts-card" }]);
   });
 
   it("warns about unsupported tile features and complex card_mod", () => {
@@ -241,7 +264,7 @@ views:
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/key: value pair/);
     // A quoted string with a colon stays a string; a map in braces is read.
-    expect(auditDashboard('views:\n  - cards: [{type: "custom:button-card"}]\n').triggers).toHaveLength(1);
+    expect(auditDashboard('views:\n  - cards: [{type: "custom:apexcharts-card"}]\n').triggers).toHaveLength(1);
   });
 
   it("reads the sample, which has one custom card on purpose", () => {
@@ -338,6 +361,47 @@ describe("parseYaml", () => {
   });
 });
 
+describe("auditDashboard and custom:button-card", () => {
+  const audit = (cards: unknown[], extra: Record<string, unknown> = {}) => auditDashboard(JSON.stringify({ ...extra, views: [{ cards }] }));
+
+  it("draws a button-card without JavaScript natively, and sends JavaScript templates to an island", () => {
+    expect(audit([{ type: "custom:button-card", entity: "light.a", show_state: true, styles: { card: [{ height: "80px" }], name: [{ "font-size": "14px" }] } }]).totals)
+      .toEqual({ tier1: 0, tier2: 1, tier3: 0 });
+    const js = audit([{ type: "custom:button-card", entity: "light.a", name: "[[[ return 'x' ]]]" }]);
+    expect(js.totals.tier3).toBe(1);
+    expect(js.triggers[0].type).toMatch(/JavaScript templates/);
+    // Four brackets are an escape for text, not JavaScript.
+    expect(audit([{ type: "custom:button-card", name: "[[[[x]]]]" }]).totals.tier3).toBe(0);
+  });
+
+  it("merges the dashboard's button_card_templates before it checks", () => {
+    const templates = { button_card_templates: { base: { styles: { card: [{ filter: "blur(2px)" }] } }, ok: { color_type: "card" } } };
+    expect(audit([{ type: "custom:button-card", template: "ok" }], templates).totals.tier3).toBe(0);
+    expect(audit([{ type: "custom:button-card", template: "base" }], templates).triggers[0].type).toMatch(/filter/);
+    expect(audit([{ type: "custom:button-card", template: "missing" }], templates).triggers[0].type).toMatch(/button_card_templates/);
+  });
+
+  it("sends cards in custom_fields, HTML and styles it doesn't draw to an island", () => {
+    expect(audit([{ type: "custom:button-card", custom_fields: { a: { card: { type: "tile" } } } }]).totals.tier3).toBe(1);
+    expect(audit([{ type: "custom:button-card", name: "<b>x</b>" }]).totals.tier3).toBe(1);
+    expect(audit([{ type: "custom:button-card", custom_fields: { a: "22°" } }]).totals.tier3).toBe(0);
+    expect(audit([{ type: "custom:button-card", styles: { card: [{ border: "1px dashed red" }] } }]).totals.tier3).toBe(1);
+    // A value the browser drops (a stray `;`) is dropped natively too.
+    expect(audit([{ type: "custom:button-card", styles: { card: [{ padding: "0;" }] } }]).totals.tier3).toBe(0);
+  });
+
+  it("routes the other fast paths", () => {
+    expect(audit([{ type: "entity-button", entity: "light.a" }]).totals).toEqual({ tier1: 1, tier2: 0, tier3: 0 });
+    expect(audit([{ type: "custom:mushroom-empty-card" }, { type: "custom:weather-card", entity: "weather.home" }]).totals.tier2).toBe(2);
+    expect(audit([{ type: "custom:weather-card" }]).totals.tier3).toBe(1);
+    const swipe = (parameters: unknown, cards: unknown[]) => audit([{ type: "custom:swipe-card", parameters, cards }]).totals;
+    expect(swipe({ pagination: { type: "bullets" }, loop: true }, [{ type: "custom:button-card" }])).toEqual({ tier1: 0, tier2: 1, tier3: 0 });
+    expect(swipe({ effect: "cube" }, [{ type: "custom:button-card" }]).tier3).toBe(1);
+    // A built-in card inside keeps it native: the island can't draw built-in cards.
+    expect(swipe({ effect: "cube" }, [{ type: "tile" }])).toEqual({ tier1: 1, tier2: 0, tier3: 0 });
+  });
+});
+
 describe("auditDashboard and the cards built from a configuration", () => {
   it("flags a Bubble Card pop-up and an unknown layout, and passes the native variants", () => {
     const r = auditDashboard(
@@ -367,13 +431,13 @@ describe("auditDashboard and the cards built from a configuration", () => {
 
   it("inspects what auto-entities builds: its inner card and explicit card entries", () => {
     const island = auditDashboard(
-      JSON.stringify({ views: [{ cards: [{ type: "custom:auto-entities", card: { type: "custom:button-card" } }] }] }),
+      JSON.stringify({ views: [{ cards: [{ type: "custom:auto-entities", card: { type: "custom:apexcharts-card" } }] }] }),
     );
     expect(island.isFullyNative).toBe(false);
     const explicit = auditDashboard(
       JSON.stringify({ views: [{ cards: [{
         type: "custom:auto-entities", card_param: "cards", card: { type: "grid" },
-        entities: ["light.kitchen", { entity: "light.lamp", type: "custom:button-card" }],
+        entities: ["light.kitchen", { entity: "light.lamp", type: "custom:apexcharts-card" }],
       }] }] }),
     );
     expect(explicit.triggers.map((t) => t.path)).toEqual(["view_0/card[0].entities[1]"]);

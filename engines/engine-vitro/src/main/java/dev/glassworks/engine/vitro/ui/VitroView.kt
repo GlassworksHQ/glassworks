@@ -22,6 +22,10 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.AlarmPanelCardView
+import dev.glassworks.engine.vitro.cards.CustomButtonCardView
+import dev.glassworks.engine.vitro.cards.HaErrorCardView
+import dev.glassworks.engine.vitro.cards.LegacyWeatherCardView
+import dev.glassworks.engine.vitro.cards.SwipeCardView
 import dev.glassworks.engine.vitro.cards.AreaCardView
 import dev.glassworks.engine.vitro.cards.AutoEntitiesCardView
 import dev.glassworks.engine.vitro.cards.CardBuilder
@@ -1331,6 +1335,8 @@ class VitroView(
             "entity-filter" -> EntitiesCardView(ctx, EntityFilterConfig.innerCard(card))
             "glance" -> GlanceCardView(ctx, card)
             "button" -> ButtonCardView(ctx, card)
+            // HA's legacy alias: `hui-entity-button-card` is the button card, and without an entity HA shows its error.
+            "entity-button" -> if (card.entity != null) ButtonCardView(ctx, card) else HaErrorCardView(ctx, "Entity must be specified")
             "heading" -> HeadingCardView(ctx, card)
             "clock" -> ClockCardView(ctx, card)
             "sensor" -> EntityCardView(ctx, card)
@@ -1379,6 +1385,11 @@ class VitroView(
             "custom:stack-in-card" -> StackInCardView(ctx, card, childBuilder)
             "custom:vertical-stack-in-card" -> VerticalStackInCardView(ctx, card, childBuilder)
             "custom:layout-card" -> LayoutCardView(ctx, card, childBuilder)
+            "custom:button-card" -> CustomButtonCardView(ctx, card)
+            // Mushroom's empty card draws nothing outside the editor; it only holds its grid slot.
+            "custom:mushroom-empty-card" -> View(context)
+            "custom:swipe-card" -> SwipeCardView(ctx, card, childBuilder)
+            "custom:weather-card" -> LegacyWeatherCardView(ctx, card)
             // Tier 3: Arbitrary unrecognized custom cards -> stripped Micro-Web Island
             else -> WebIslandCardView(ctx, card, fillViewport = fillViewport)
         }

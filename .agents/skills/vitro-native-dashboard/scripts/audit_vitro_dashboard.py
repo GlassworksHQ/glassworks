@@ -42,6 +42,7 @@ NATIVE_CORE_TYPES = {
     "humidifier",
     "calendar",
     "logbook",
+    "entity-button",
 }
 
 NATIVE_HACS_TYPES = {
@@ -71,6 +72,10 @@ NATIVE_HACS_TYPES = {
     "custom:stack-in-card",
     "custom:vertical-stack-in-card",
     "custom:layout-card",
+    "custom:button-card",
+    "custom:mushroom-empty-card",
+    "custom:swipe-card",
+    "custom:weather-card",
 }
 
 SUPPORTED_TILE_FEATURES = {
@@ -106,7 +111,66 @@ CONTAINER_TYPES = {
     "custom:stack-in-card",
     "custom:vertical-stack-in-card",
     "custom:layout-card",
+    "custom:swipe-card",
 }
+
+# custom:button-card is native unless it runs JavaScript (`[[[ ]]]`) or holds cards or HTML. The engine and the site
+# checker (site/src/lib/vitroButtonCard.ts) also check its styles; this script only reports those as a warning.
+BUTTON_CARD_JS = re.compile(r"^\[\[\[(?!\[).*(?<!\])\]\]\]$", re.S)
+
+
+def button_card_reason(card: dict, templates: dict) -> str | None:
+    def merge(prev, obj):
+        out = dict(prev)
+        for k, o in obj.items():
+            p = out.get(k)
+            if isinstance(p, list) and isinstance(o, list):
+                out[k] = p + [y for x in o for y in (x if isinstance(x, list) else [x])]
+            elif isinstance(p, dict) and isinstance(o, dict):
+                out[k] = merge(p, o)
+            else:
+                out[k] = o
+        return out
+
+    def expand(c, depth=0):
+        tpl = c.get("template")
+        if not tpl:
+            return c
+        if depth > 32:
+            return None
+        result = {}
+        for name in tpl if isinstance(tpl, list) else [tpl]:
+            t = templates.get(name) if isinstance(name, str) else None
+            res = expand(t, depth + 1) if isinstance(t, dict) else None
+            if res is None:
+                return None
+            result = merge(result, res)
+        return merge(result, {k: v for k, v in c.items() if k != "template"})
+
+    cfg = expand(card)
+    if cfg is None:
+        return "a template that isn't in button_card_templates"
+
+    def js(v, top=True):
+        if isinstance(v, str):
+            return bool(BUTTON_CARD_JS.match(v.strip()))
+        if isinstance(v, dict):
+            return any(js(x, False) for k, x in v.items() if not (top and k == "variables"))
+        if isinstance(v, list):
+            return any(js(x, False) for x in v)
+        return False
+
+    if js(cfg):
+        return "JavaScript templates ([[[ ]]])"
+    fields = cfg.get("custom_fields") if isinstance(cfg.get("custom_fields"), dict) else {}
+    if any(isinstance(v, dict) and "card" in v for v in fields.values()):
+        return "a card in custom_fields"
+    if any(isinstance(cfg.get(k), str) and re.search(r"<[a-zA-Z/!]", cfg[k]) for k in ("name", "label", "state_display")):
+        return "HTML in its texts"
+    return None
+
+
+TEMPLATES: dict = {}
 
 
 def load_dashboard(path: str):
@@ -216,6 +280,15 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
             triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='{ctype}' with {option}: {value} (when its script is installed)")
             return
 
+    if ctype == "custom:button-card":
+        reason = button_card_reason(card, TEMPLATES)
+        if reason:
+            counts["tier3"] += 1
+            triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='{ctype}' with {reason}")
+            return
+        if card.get("styles") or card.get("state"):
+            warnings.append(f"  WARN  {loc}: button-card styles are drawn natively only in Vitro's subset (see the site checker)")
+
     if ctype == "tile":
         for feat in card.get("features") or []:
             ftype = feat.get("type") if isinstance(feat, dict) else str(feat)
@@ -264,6 +337,8 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
 
 
 def audit(data: dict) -> int:
+    global TEMPLATES
+    TEMPLATES = data.get("button_card_templates") if isinstance(data, dict) and isinstance(data.get("button_card_templates"), dict) else {}
     views = data.get("views") if isinstance(data, dict) else None
     if not isinstance(views, list):
         sys.stderr.write("error: expected a Lovelace dashboard with a top-level 'views' list\n")
