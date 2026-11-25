@@ -357,6 +357,21 @@ class ClarityCamerasTest {
     }
 
     @Test
+    fun aSecondFirstFrameAfterTheWindowChangesNothingInIt() {
+        // One stream: its first picture 640 ms after it started, then (paused and resumed after the window) another
+        // first picture 90 ms after the resume. The window keeps the first one's own time.
+        val s = open("camera.clarity_cam_0", WEB_RTC, 1100.0)
+        val l = inner(s).listener!!
+        t = 1740.0
+        l.onFirstFrame(640)
+        t = 40_090.0
+        l.onFirstFrame(90)
+        val x = stream(window(listOf("camera.clarity_cam_0"), 1, WEB_RTC, 1000.0, 4000.0, 34_000.0))
+        assertEquals(740.0, x.getDouble("first_frame_ms"), 0.01)
+        assertEquals(640L, x.getLong("first_frame_since_start_ms"))
+    }
+
+    @Test
     fun aStreamInAGridCardBelongsToTheGridItSitsIn() {
         val grid = FrameLayout(ctx)
         views.getOrPut(VIEW) { ArrayList() } += grid

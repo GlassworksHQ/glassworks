@@ -32,8 +32,8 @@ internal class ClarityCameras(private val now: () -> Double) {
         var startedAt: Double? = null
         /** Each [CameraStream.Listener.onFirstFrame] (once per start or resume): a picture on screen. */
         val firstFrames = ArrayList<Double>()
-        /** The stream's own time from its start to that first picture (its last [CameraStream.Listener.onFirstFrame]). */
-        var sinceStartMs: Long? = null
+        /** The stream's own time from its start to each of those first pictures, with when it came (its [firstFrames] time). */
+        val sinceStart = ArrayList<Pair<Double, Long>>()
         /** Every picture drawn: each first frame and each [CameraStream.Listener.onFrameRendered]. */
         val frames = ArrayList<Double>()
         /** Each error it reported, with when (so a window counts only its own). */
@@ -94,7 +94,7 @@ internal class ClarityCameras(private val now: () -> Double) {
         val r = rec(s)
         val t = now()
         r.firstFrames += t
-        r.sinceStartMs = sinceStartMs
+        r.sinceStart += t to sinceStartMs
         frame(r, t)
         viewOf(r)
     }
@@ -178,7 +178,9 @@ internal class ClarityCameras(private val now: () -> Double) {
                 val frames = times.count { it in t0..t1 }
                 out.put("found", true)
                     .put("first_frame_ms", ClarityStats.round1(first - nav))
-                    .put("first_frame_since_start_ms", graded.mapNotNull { it.sinceStartMs }.lastOrNull() ?: JSONObject.NULL)
+                    // The stream's own time to that same first picture (one at or before t1, whatever came after).
+                    .put("first_frame_since_start_ms", graded.flatMap { it.sinceStart }.firstOrNull { it.first == first }?.second
+                        ?: JSONObject.NULL)
                     .put("frames", frames)
                     .put("shown_pct", ClarityStats.round1(min(100.0, 100.0 * frames / (fps * dur / 1000))))
                     .put("max_gap_ms", ClarityStats.round1(gaps.maxGapMs))
