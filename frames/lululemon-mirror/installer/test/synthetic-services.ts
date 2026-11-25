@@ -146,6 +146,24 @@ public class UsbService {
 }
 `);
     }
+    // AOSP 6.0.1's AlarmManagerService: its binder is the class's second anonymous class, and setTimeZone checks
+    // SET_TIME_ZONE first (stock 1.24.0's AlarmManagerService$2, read with jadx 2026-11-25).
+    write('com/android/server/AlarmManagerService.java', `package com.android.server;
+import android.content.Context;
+public class AlarmManagerService {
+  private final Context mContext;
+  private String mZone;
+  private final Runnable mTick = new Runnable() { public void run() {} };
+  final Object mService = new Object() {
+    public void setTimeZone(String tz) {
+      mContext.enforceCallingOrSelfPermission("android.permission.SET_TIME_ZONE", "setTimeZone");
+      setTimeZoneImpl(tz);
+    }
+  };
+  public AlarmManagerService(Context context) { mContext = context; }
+  void setTimeZoneImpl(String tz) { mZone = tz; }
+}
+`);
     write('com/android/server/SecureSettings.java', `package com.android.server;
 import android.content.Context;
 public class SecureSettings {
@@ -183,7 +201,7 @@ public class MirrorApService {
       'com/android/server/devicepolicy/DevicePolicyManagerService.java',
       ...(mirrorAp !== 'none' ? ['com/android/server/MirrorApService.java'] : []),
       ...(usbService !== 'none' ? ['com/android/server/usb/UsbService.java'] : []),
-      'com/android/server/SecureSettings.java',
+      'com/android/server/SecureSettings.java', 'com/android/server/AlarmManagerService.java',
     ].map((r) => join(dir, 'src', r));
     const clsDir = join(dir, 'classes');
     execFileSync('mkdir', ['-p', clsDir]);

@@ -633,6 +633,25 @@ const MANAGE_USB = 'android.permission.MANAGE_USB';
  */
 export const USB_ALLOW_PERMISSION = 'android.permission.WRITE_SECURE_SETTINGS';
 
+/** `AlarmManagerService`'s binder (`IAlarmManager.Stub`, the class's second anonymous class on stock 1.24.0). */
+const ALARM_SERVICE_STUB = 'Lcom/android/server/AlarmManagerService$2;';
+const SET_TIME_ZONE = 'android.permission.SET_TIME_ZONE';
+/**
+ * The permission `IAlarmManager.setTimeZone` checks after the patch. On stock, only the system holds SET_TIME_ZONE
+ * (Android 6: signature|privileged), so adb's shell can't set the time zone (`service call alarm 3` is refused) and an
+ * app adb installs can't either. adb's shell holds this one, and the install grants it to Glassworks. Whoever holds it
+ * can already change every global setting, the automatic time zone among them.
+ */
+export const TIME_ZONE_PERMISSION = 'android.permission.WRITE_SECURE_SETTINGS';
+
+/** What the time zone patch changed: the permission `IAlarmManager.setTimeZone` checks. */
+export interface TimeZonePatch {
+  /** File offset of `setTimeZone`'s code_item in `classes.dex`. */
+  codeOff: number;
+  /** Code-unit offset (in its insns) of the `const-string` whose string index changed. */
+  pc: number;
+}
+
 /** What the USB-debugging patch changed: the permission `UsbService.allowUsbDebugging` checks. */
 export interface UsbAllowPatch {
   /** File offset of `allowUsbDebugging`'s code_item in `classes.dex`. */
@@ -655,6 +674,8 @@ export interface PatchedServicesJar {
   stockAp?: StockApPatch;
   /** Present only when `appApprovesUsbDebugging` was applied (or found in place by a repatch). */
   usbAllow?: UsbAllowPatch;
+  /** Present only when `adbSetsTimeZone` was applied (or found in place by a repatch). */
+  timeZone?: TimeZonePatch;
   /**
    * The jar already carried this patch, from an earlier install (Kiln reinstalling over itself): only the key it trusts
    * changed, from `from` (the earlier computer's fingerprint) to `fingerprint`; the rest was checked to be in place.
@@ -701,6 +722,12 @@ export interface PatchStockServicesJarOptions {
    * Default `true`; the Node surgical-ADB tool passes `false`.
    */
   appApprovesUsbDebugging?: boolean;
+  /**
+   * Also let a caller holding `TIME_ZONE_PERMISSION` set the time zone (`IAlarmManager.setTimeZone` checks it in place
+   * of SET_TIME_ZONE): adb's shell, for Kiln's App step, and Glassworks. Without it the person's time zone never takes
+   * on stock and the Mirror stays on GMT. Default `true`; the Node surgical-ADB tool passes `false`.
+   */
+  adbSetsTimeZone?: boolean;
   /** MD5 fingerprint to refuse (defaults to `GLASS_PANES_KEY_FINGERPRINT`). */
   forbiddenFingerprint?: string;
 }
@@ -738,6 +765,7 @@ export async function patchStockServicesJar(
   const enableDeviceOwner = options.enableDeviceOwner ?? true;
   const disableStockAp = options.disableStockAp ?? true;
   const appApprovesUsbDebugging = options.appApprovesUsbDebugging ?? true;
+  const adbSetsTimeZone = options.adbSetsTimeZone ?? true;
   const fp = stockKeyFingerprint(adbKey, options.forbiddenFingerprint);
 
   const { list } = parseZipEntries(jar);
@@ -765,7 +793,7 @@ export async function patchStockServicesJar(
 
   // An earlier install already changed this jar: trust this key instead of that one, and check the rest is in place.
   const earlier = patchedKeyFingerprint(origDex);
-  if (earlier) return repatch(jar, origDex, earlier, fp, paddedFp, disableStockAp, appApprovesUsbDebugging);
+  if (earlier) return repatch(jar, origDex, earlier, fp, paddedFp, disableStockAp, appApprovesUsbDebugging, adbSetsTimeZone);
 
   // Step 1: swap the single-use 71-byte log string inside startConfirmation with our padded MD5.
   // replaceDexString re-sorts string_ids, renumbers every reference, and validates the whole DEX.
@@ -861,6 +889,12 @@ export async function patchStockServicesJar(
     usbAllow = patchUsbAllow(dex, dv, lookup, strings);
   }
 
+  // Step 4d (optional): adb and the app may set the time zone.
+  let timeZone: TimeZonePatch | undefined;
+  if (adbSetsTimeZone) {
+    timeZone = patchTimeZone(dex, dv, lookup, strings);
+  }
+
   // Recompute DEX SHA-1 (over bytes 32..end) and Adler-32 (over bytes 12..end), both pure TS.
   dex.set(sha1Bytes(dex.subarray(32)), 12);
   dv.setUint32(8, adler32(dex.subarray(12)), true);
@@ -888,6 +922,7 @@ export async function patchStockServicesJar(
     ...(deviceOwner ? { deviceOwner } : {}),
     ...(stockAp ? { stockAp } : {}),
     ...(usbAllow ? { usbAllow } : {}),
+    ...(timeZone ? { timeZone } : {}),
   };
 }
 
@@ -898,7 +933,7 @@ export async function patchStockServicesJar(
  * (the code this patch writes), and with `disableStockAp`, `MirrorApService.systemReady()` is one `return-void`.
  * Anything else is a jar Kiln doesn't know, and is refused.
  */
-async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp: string, paddedFp: string, disableStockAp: boolean, appApprovesUsbDebugging: boolean): Promise<PatchedServicesJar> {
+async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp: string, paddedFp: string, disableStockAp: boolean, appApprovesUsbDebugging: boolean, adbSetsTimeZone: boolean): Promise<PatchedServicesJar> {
   const what = 'services.jar already carries Glassworks\' changes, but';
   const prefix = 'unable to start ';
   const oldPadded = prefix + earlier + ' '.repeat(START_CONFIRMATION_LOG_STRING.length - prefix.length - earlier.length);
@@ -930,9 +965,16 @@ async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp
     usbAllow = findUsbAllow(dex, dv, lookup, strings, USB_ALLOW_PERMISSION);
     if (!usbAllow) { usbAllow = patchUsbAllow(dex, dv, lookup, strings); addedUsbAllow = true; }
   }
+  // An install from before the time zone patch: add it now. One that has it: keep it.
+  let timeZone: TimeZonePatch | undefined;
+  let addedTimeZone = false;
+  if (adbSetsTimeZone) {
+    timeZone = findTimeZone(dex, dv, lookup, strings, TIME_ZONE_PERMISSION);
+    if (!timeZone) { timeZone = patchTimeZone(dex, dv, lookup, strings); addedTimeZone = true; }
+  }
   let out = jar;
   let padBytes = 0;
-  if (earlier !== fp || addedUsbAllow || addedStockAp) {
+  if (earlier !== fp || addedUsbAllow || addedStockAp || addedTimeZone) {
     dex.set(sha1Bytes(dex.subarray(32)), 12);
     dv.setUint32(8, adler32(dex.subarray(12)), true);
     ({ out, padBytes } = await replaceJarDexExactSize(jar, dex));
@@ -950,54 +992,74 @@ async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp
     patchedCodeUnits: 0,
     ...(stockAp ? { stockAp } : {}),
     ...(usbAllow ? { usbAllow } : {}),
+    ...(timeZone ? { timeZone } : {}),
     repatched: { from: earlier },
   };
 }
 
+/** One method whose permission check a patch swaps: where it is, and the two permissions it may load. */
+interface PermissionCheck { what: string; cls: string; name: string; sig: string; stock: string; ours: string }
+
+const USB_ALLOW: PermissionCheck = { what: 'USB debugging patch', cls: USB_SERVICE, name: 'allowUsbDebugging', sig: '(ZLjava/lang/String;)V', stock: MANAGE_USB, ours: USB_ALLOW_PERMISSION };
+const TIME_ZONE: PermissionCheck = { what: 'time zone patch', cls: ALARM_SERVICE_STUB, name: 'setTimeZone', sig: '(Ljava/lang/String;)V', stock: SET_TIME_ZONE, ours: TIME_ZONE_PERMISSION };
+
 /**
- * The `const-string` in `UsbService.allowUsbDebugging(ZLjava/lang/String;)V` that loads `permission`, for the check
- * `enforceCallingOrSelfPermission(permission, null)`; undefined when it loads another. Exactly one load of a
- * permission string is the body we read (stock 1.24.0): anything else refuses.
+ * The `const-string` in `c`'s method that loads `permission`, for its `enforceCallingOrSelfPermission(permission, …)`;
+ * undefined when it loads the other. Exactly one load of either permission string is the body we read (stock
+ * 1.24.0): anything else refuses.
  */
-function findUsbAllow(dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[], permission: string): UsbAllowPatch | undefined {
-  const what = 'USB debugging patch';
+function findPermissionLoad(dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[], c: PermissionCheck, permission: string): { codeOff: number; pc: number } | undefined {
+  const where = `${c.cls}.${c.name}${c.sig}`;
+  const short = `${c.cls.slice(c.cls.lastIndexOf('/') + 1, -1)}.${c.name}`;
   let codeOff: number;
   try {
-    codeOff = lookup.findCodeItem(USB_SERVICE, lookup.findMethod(USB_SERVICE, 'allowUsbDebugging', '(ZLjava/lang/String;)V'));
+    codeOff = lookup.findCodeItem(c.cls, lookup.findMethod(c.cls, c.name, c.sig));
   } catch (e) {
-    throw new Error(`${what}: services.jar has no ${USB_SERVICE}.allowUsbDebugging(ZLjava/lang/String;)V (${(e as Error).message})`);
+    throw new Error(`${c.what}: services.jar has no ${where} (${(e as Error).message})`);
   }
-  if (codeOff === 0 || codeOff + 16 > dex.length) throw new Error(`${what}: invalid code_item offset 0x${codeOff.toString(16)} for UsbService.allowUsbDebugging`);
-  const perms = new Map([MANAGE_USB, USB_ALLOW_PERMISSION].map((x) => [strings.indexOf(x), x] as const));
+  if (codeOff === 0 || codeOff + 16 > dex.length) throw new Error(`${c.what}: invalid code_item offset 0x${codeOff.toString(16)} for ${where}`);
+  const perms = new Map([c.stock, c.ours].map((x) => [strings.indexOf(x), x] as const));
   const insnsOff = codeOff + 16;
   const loads: { pc: number; name: string }[] = [];
   for (const insn of walkInsns(dex, codeOff)) {
     if (insn.op === 0x1b) {
       const name = perms.get(dv.getUint32(insnsOff + (insn.pc + 1) * 2, true));
-      if (name) throw new Error(`${what}: UsbService.allowUsbDebugging loads ${name} with const-string/jumbo, which Kiln doesn't change`);
+      if (name) throw new Error(`${c.what}: ${short} loads ${name} with const-string/jumbo, which Kiln doesn't change`);
     }
     if (insn.op !== 0x1a) continue;
     const name = perms.get(dv.getUint16(insnsOff + (insn.pc + 1) * 2, true));
     if (name) loads.push({ pc: insn.pc, name });
   }
-  if (loads.length !== 1) throw new Error(`${what}: UsbService.allowUsbDebugging loads ${loads.length} permission strings, not the one Kiln read`);
+  if (loads.length !== 1) throw new Error(`${c.what}: ${short} loads ${loads.length} permission strings, not the one Kiln read`);
   return loads[0]!.name === permission ? { codeOff, pc: loads[0]!.pc } : undefined;
 }
 
 /**
- * Makes `UsbService.allowUsbDebugging` check `USB_ALLOW_PERMISSION` in place of MANAGE_USB, in place on `dex`
- * (SHA-1/Adler recomputed by the caller): one `const-string` operand, the same 2 code units, nothing else moved.
+ * Makes `c`'s method check `c.ours` in place of `c.stock`, in place on `dex` (SHA-1/Adler recomputed by the caller):
+ * one `const-string` operand, the same 2 code units, nothing else moved.
  */
-function patchUsbAllow(dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[]): UsbAllowPatch {
-  const what = 'USB debugging patch';
-  const to = strings.indexOf(USB_ALLOW_PERMISSION);
-  if (to < 0) throw new Error(`${what}: "${USB_ALLOW_PERMISSION}" string not in classes.dex`);
-  if (to > 0xffff) throw new Error(`${what}: "${USB_ALLOW_PERMISSION}" is string ${to}, past what const-string holds`);
-  const at = findUsbAllow(dex, dv, lookup, strings, MANAGE_USB);
-  if (!at) throw new Error(`${what}: UsbService.allowUsbDebugging doesn't check ${MANAGE_USB} (already patched, or not stock)`);
+function patchPermissionLoad(dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[], c: PermissionCheck): { codeOff: number; pc: number } {
+  const to = strings.indexOf(c.ours);
+  if (to < 0) throw new Error(`${c.what}: "${c.ours}" string not in classes.dex`);
+  if (to > 0xffff) throw new Error(`${c.what}: "${c.ours}" is string ${to}, past what const-string holds`);
+  const at = findPermissionLoad(dex, dv, lookup, strings, c, c.stock);
+  if (!at) throw new Error(`${c.what}: ${c.cls.slice(c.cls.lastIndexOf('/') + 1, -1)}.${c.name} doesn't check ${c.stock} (already patched, or not stock)`);
   dv.setUint16(at.codeOff + 16 + (at.pc + 1) * 2, to, true);
   return at;
 }
+
+/** `UsbService.allowUsbDebugging`'s permission load, when it is `permission`. */
+const findUsbAllow = (dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[], permission: string): UsbAllowPatch | undefined =>
+  findPermissionLoad(dex, dv, lookup, strings, USB_ALLOW, permission);
+/** `UsbService.allowUsbDebugging` checks `USB_ALLOW_PERMISSION` in place of MANAGE_USB. */
+const patchUsbAllow = (dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[]): UsbAllowPatch =>
+  patchPermissionLoad(dex, dv, lookup, strings, USB_ALLOW);
+/** `IAlarmManager.setTimeZone`'s permission load, when it is `permission`. */
+const findTimeZone = (dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[], permission: string): TimeZonePatch | undefined =>
+  findPermissionLoad(dex, dv, lookup, strings, TIME_ZONE, permission);
+/** `IAlarmManager.setTimeZone` checks `TIME_ZONE_PERMISSION` in place of SET_TIME_ZONE. */
+const patchTimeZone = (dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[]): TimeZonePatch =>
+  patchPermissionLoad(dex, dv, lookup, strings, TIME_ZONE);
 
 /**
  * Empties `MirrorApService.systemReady()V` in place on `dex` (SHA-1/Adler recomputed by the caller):
