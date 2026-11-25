@@ -1,5 +1,12 @@
 {
  "_comment": "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: 2.0% pixels, 1.0 px bounds, 0.5 px font). Regenerate with -PvitroParityUpdateBaseline=true; keep or write each \"reason\". An update records regressions too: read the diff before committing it, and keep the entries of cases with an open regression. #794 empties this file.",
+ "mirror/calendar-list": {
+  "pixel": 0.0201,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "at 1.5x every text sits 0.6-0.9 px above HA's (the header's 61 and 37 px rows and the list's 39.8 and 44 px rows round to device pixels) and the right-aligned dates 1.4 px off; the layout, sizes and colors match (the tablet case matches at 1.3%), the diff is text edges and the emoji's antialiasing: 2.01% against the 2.0% slack (2026-11-24)"
+ },
  "mirror/clock-date": {
   "pixel": 0.0233,
   "bounds": 0,
@@ -41,6 +48,13 @@
   "font": 0,
   "missingText": 0,
   "reason": "at 1.5x HA's border is 1.5 px and Vitro's 1 px (every card's), so the blue inside is 2 device px wider (748 vs 746) and each white icon and the name sit half a pixel off; the diff is their edges and the border line, 2.3% on this small high-contrast card. The layout, colors and sizes match (the tablet case matches; 2026-11-24)"
+ },
+ "s1/calendar-list": {
+  "pixel": 0.0201,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "at 1.5x every text sits 0.6-0.9 px above HA's (the header's 61 and 37 px rows and the list's 39.8 and 44 px rows round to device pixels) and the right-aligned dates 1.4 px off; the layout, sizes and colors match (the tablet case matches at 1.3%), the diff is text edges and the emoji's antialiasing: 2.01% against the 2.0% slack (2026-11-24)"
  },
  "s1/clock-date": {
   "pixel": 0.0233,

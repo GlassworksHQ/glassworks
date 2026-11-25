@@ -1,0 +1,240 @@
+{
+ "case": "calendar-list",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1795543680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 392
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 376,
+   "type": "hui-calendar-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Nov 24 – 30, 2026",
+   "x": 17,
+   "y": 17.08,
+   "w": 192.2,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Today",
+   "x": 30,
+   "y": 69.95,
+   "w": 37.25,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Tuesday",
+   "x": 21,
+   "y": 116.95,
+   "w": 59.53,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "November 24, 2026",
+   "x": 340.59,
+   "y": 116.95,
+   "w": 138.41,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "All-day",
+   "x": 21,
+   "y": 160.8,
+   "w": 41.83,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "🔴 Oil Boards (Wood Cutting Boards)",
+   "x": 169.5,
+   "y": 160.8,
+   "w": 230.63,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Thursday",
+   "x": 21,
+   "y": 200.8,
+   "w": 66.03,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "November 26, 2026",
+   "x": 340.59,
+   "y": 200.8,
+   "w": 138.41,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "All-day",
+   "x": 21,
+   "y": 244.64,
+   "w": 41.83,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "🟡 Pre Filter Clean (Air Purifier)",
+   "x": 169.5,
+   "y": 244.64,
+   "w": 194.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "calendar.maintenance_schedule": {
+   "s": "on",
+   "a": {
+    "message": "🔴 Oil Boards (Wood Cutting Boards)",
+    "all_day": true,
+    "start_time": "2026-11-24 00:00:00",
+    "end_time": "2026-11-25 00:00:00",
+    "location": "",
+    "description": "Due: 2026-11-19\nType: Service\nInterval: 31 days\nLast performed: 2026-10-19",
+    "friendly_name": "Maintenance Schedule"
+   },
+   "lc": 1795507310.7685673
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "calendar.maintenance_schedule",
+    "pl": "maintenance_supporter",
+    "tk": "maintenance_schedule",
+    "en": "Maintenance Schedule"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "calendar"
+   ],
+   "platforms": [
+    "maintenance_supporter"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "calendar": {
+     "_": {
+      "default": "mdi:calendar",
+      "state": {
+       "off": "mdi:calendar-blank",
+       "on": "mdi:calendar-check"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.calendar.entity_component._.state.off": "Off",
+    "component.calendar.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "calendar/event/subscribe",
+    "entity_id": "calendar.maintenance_schedule",
+    "start": "2026-11-24T08:00:00.000Z",
+    "end": "2026-12-01T08:00:00.000Z"
+   },
+   "events": [
+    {
+     "events": [
+      {
+       "start": "2026-11-26",
+       "end": "2026-11-27",
+       "summary": "🟡 Pre Filter Clean (Air Purifier)",
+       "description": "Type: Cleaning\nInterval: 21 days\nLast performed: 2026-11-05",
+       "all_day": true
+      },
+      {
+       "start": "2026-11-24",
+       "end": "2026-11-25",
+       "summary": "🔴 Oil Boards (Wood Cutting Boards)",
+       "description": "Due: 2026-11-19\nType: Service\nInterval: 31 days\nLast performed: 2026-10-19",
+       "all_day": true
+      }
+     ]
+    }
+   ],
+   "result": null
+  }
+ ]
+}

@@ -1,0 +1,4 @@
+{
+  "title": "Calendar: one calendar in the list (agenda) view",
+  "card": { "type": "calendar", "entities": ["calendar.maintenance_schedule"], "initial_view": "listWeek" }
+}

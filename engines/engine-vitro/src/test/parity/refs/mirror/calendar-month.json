@@ -1,0 +1,756 @@
+{
+ "case": "calendar-month",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1795543680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 392
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 376,
+   "type": "hui-calendar-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "November 2026",
+   "x": 17,
+   "y": 17.08,
+   "w": 170,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Today",
+   "x": 30,
+   "y": 69.95,
+   "w": 37.25,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "Sun",
+   "x": 33.95,
+   "y": 108.95,
+   "w": 19.8,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "text": "Mon",
+   "x": 101.2,
+   "y": 108.95,
+   "w": 22.73,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "text": "Tue",
+   "x": 172.09,
+   "y": 108.95,
+   "w": 18.41,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "text": "Wed",
+   "x": 239.58,
+   "y": 108.95,
+   "w": 20.88,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "text": "Thu",
+   "x": 308.81,
+   "y": 108.95,
+   "w": 19.84,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "text": "Fri",
+   "x": 380.06,
+   "y": 108.95,
+   "w": 14.78,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "text": "Sat",
+   "x": 446.92,
+   "y": 108.95,
+   "w": 18.48,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "text": "1",
+   "x": 40.48,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "2",
+   "x": 109.2,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "3",
+   "x": 177.92,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "4",
+   "x": 246.64,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "5",
+   "x": 315.36,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "6",
+   "x": 384.08,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "7",
+   "x": 452.8,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "8",
+   "x": 40.48,
+   "y": 174.39,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "9",
+   "x": 109.2,
+   "y": 174.39,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "10",
+   "x": 174.55,
+   "y": 174.39,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "11",
+   "x": 243.27,
+   "y": 174.39,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "12",
+   "x": 311.98,
+   "y": 174.39,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "13",
+   "x": 380.7,
+   "y": 174.39,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "14",
+   "x": 449.42,
+   "y": 174.39,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "15",
+   "x": 37.11,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "16",
+   "x": 105.83,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "17",
+   "x": 174.55,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "18",
+   "x": 243.27,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "19",
+   "x": 311.98,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "20",
+   "x": 380.7,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "21",
+   "x": 449.42,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "22",
+   "x": 37.11,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "23",
+   "x": 105.83,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "24",
+   "x": 174.55,
+   "y": 255.86,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(255, 255, 255)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "+1 more",
+   "x": 161.05,
+   "y": 287.45,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "25",
+   "x": 243.27,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "26",
+   "x": 311.98,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "+1 more",
+   "x": 298.48,
+   "y": 287.45,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "27",
+   "x": 380.7,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "28",
+   "x": 449.42,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "29",
+   "x": 37.11,
+   "y": 295.98,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "30",
+   "x": 105.83,
+   "y": 295.98,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "1",
+   "x": 177.92,
+   "y": 295.98,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "2",
+   "x": 246.64,
+   "y": 295.98,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "3",
+   "x": 315.36,
+   "y": 295.98,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "4",
+   "x": 384.08,
+   "y": 295.98,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "5",
+   "x": 452.8,
+   "y": 295.98,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "6",
+   "x": 40.48,
+   "y": 336.52,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "7",
+   "x": 109.2,
+   "y": 336.52,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "8",
+   "x": 177.92,
+   "y": 336.52,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "9",
+   "x": 246.64,
+   "y": 336.52,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "10",
+   "x": 311.98,
+   "y": 336.52,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "11",
+   "x": 380.7,
+   "y": 336.52,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "12",
+   "x": 449.42,
+   "y": 336.52,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "calendar.maintenance_schedule": {
+   "s": "on",
+   "a": {
+    "message": "🔴 Oil Boards (Wood Cutting Boards)",
+    "all_day": true,
+    "start_time": "2026-11-24 00:00:00",
+    "end_time": "2026-11-25 00:00:00",
+    "location": "",
+    "description": "Due: 2026-11-19\nType: Service\nInterval: 31 days\nLast performed: 2026-10-19",
+    "friendly_name": "Maintenance Schedule"
+   },
+   "lc": 1795507310.7685673
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "calendar.maintenance_schedule",
+    "pl": "maintenance_supporter",
+    "tk": "maintenance_schedule",
+    "en": "Maintenance Schedule"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "calendar"
+   ],
+   "platforms": [
+    "maintenance_supporter"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "calendar": {
+     "_": {
+      "default": "mdi:calendar",
+      "state": {
+       "off": "mdi:calendar-blank",
+       "on": "mdi:calendar-check"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.calendar.entity_component._.state.off": "Off",
+    "component.calendar.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "calendar/event/subscribe",
+    "entity_id": "calendar.maintenance_schedule",
+    "start": "2026-11-01T07:00:00.000Z",
+    "end": "2026-12-13T08:00:00.000Z"
+   },
+   "events": [
+    {
+     "events": [
+      {
+       "start": "2026-11-26",
+       "end": "2026-11-27",
+       "summary": "🟡 Pre Filter Clean (Air Purifier)",
+       "description": "Type: Cleaning\nInterval: 21 days\nLast performed: 2026-11-05",
+       "all_day": true
+      },
+      {
+       "start": "2026-11-24",
+       "end": "2026-11-25",
+       "summary": "🔴 Oil Boards (Wood Cutting Boards)",
+       "description": "Due: 2026-11-19\nType: Service\nInterval: 31 days\nLast performed: 2026-10-19",
+       "all_day": true
+      }
+     ]
+    }
+   ],
+   "result": null
+  }
+ ]
+}
