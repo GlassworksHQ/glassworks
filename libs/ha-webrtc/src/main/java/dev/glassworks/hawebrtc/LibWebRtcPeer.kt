@@ -55,17 +55,22 @@ internal class LibWebRtcPeer(
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_ONCE
         }
         pc = factory.createPeerConnection(rtc, Observer()) ?: throw IllegalStateException("libwebrtc could not create a peer connection")
+        // Owned here until the peer is made: on a failure part-way, both native references go before the throw.
+        var channel: DataChannel? = null
         try {
-            dataChannel = config.dataChannel?.let { pc.createDataChannel(it, DataChannel.Init()) }
+            channel = config.dataChannel?.let { pc.createDataChannel(it, DataChannel.Init()) }
             val recvonly = RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
             if (audio) pc.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO, recvonly)
             val transceiver = pc.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO, recvonly)
             video = transceiver.receiver.track() as? VideoTrack
             video?.addSink(frames)
-        } catch (e: RuntimeException) {
+        } catch (e: Throwable) {
+            closed.set(true)
+            channel?.let { runCatching { it.dispose() } }
             pc.dispose()
             throw e
         }
+        dataChannel = channel
     }
 
     override fun createOffer(onSdp: (sdp: String) -> Unit, onError: (reason: String) -> Unit) {
@@ -139,7 +144,11 @@ internal class LibWebRtcPeer(
         override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) {}
         override fun onAddStream(stream: MediaStream) {}
         override fun onRemoveStream(stream: MediaStream) {}
-        override fun onDataChannel(channel: DataChannel) {}
+        // A channel the camera opens isn't used. Its Java wrapper holds a native reference of its own: let it go now
+        // (the connection keeps the channel itself).
+        override fun onDataChannel(channel: DataChannel) {
+            runCatching { channel.dispose() }
+        }
         // The offer is made once the transceivers are in; later renegotiation isn't needed for receiving.
         override fun onRenegotiationNeeded() {}
         override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) {}

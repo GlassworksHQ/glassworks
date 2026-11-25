@@ -85,6 +85,8 @@ commands with callbacks and runs subscriptions, it takes a few lines:
 ```kotlin
 class ClientChannel(private val client: MyHaClient) : HaCommandChannel {
     override fun call(command: JSONObject, onResult: (Any?) -> Unit, onError: (HaError) -> Unit) {
+        // The client must answer every command once, also when the connection drops: a lost connection answers
+        // with success false and no error, which HaError.fromJson reads as HaError.NOT_CONNECTED.
         client.send(command) { answer ->
             if (answer.optBoolean("success")) onResult(answer.opt("result"))
             else onError(HaError.fromJson(answer.optJSONObject("error")))
@@ -98,7 +100,9 @@ class ClientChannel(private val client: MyHaClient) : HaCommandChannel {
 }
 ```
 
-The channel numbers the commands. Callbacks may come on any thread.
+The channel numbers the commands. Callbacks may come on any thread. Every command must be answered exactly once,
+even when the connection drops before Home Assistant replies: otherwise the stream waits for an answer that never
+comes, until its timeout.
 
 ## Signaling only
 

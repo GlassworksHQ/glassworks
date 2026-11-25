@@ -222,4 +222,100 @@ class HaWebRtcSignalingTest {
         channel.subs.single().event(JSONObject().put("type", "answer"))
         assertEquals(listOf("error ${HaError.BAD_ANSWER} answer event without answer"), events)
     }
+
+    @Test
+    fun `a listener that closes in onSession stops the held candidates`() {
+        val s = HaWebRtcSignaling(channel, "camera.x", object : HaWebRtcSignaling.Listener by listener {
+            override fun onSession(sessionId: String) {
+                events += "session $sessionId"
+                closeRef[0]!!.close()
+            }
+        })
+        closeRef[0] = s
+        s.offer("v=0")
+        s.addLocalCandidate(local(1))
+        s.addLocalCandidate(local(2))
+        channel.subs.single().session("01JS")
+        assertEquals(listOf("session 01JS"), events)
+        assertTrue(channel.callsOf(HaWebRtcSignaling.TYPE_CANDIDATE).isEmpty())
+        assertTrue(channel.subs.single().cancelled)
+    }
+
+    @Test
+    fun `an error HA sends while subscribe is still running is reported after the subscription is cancelled`() {
+        var cancelledAtError: Boolean? = null
+        val sync = object : HaCommandChannel by channel {
+            override fun subscribe(command: JSONObject, onEvent: (JSONObject) -> Unit, onError: (HaError) -> Unit): HaCommandChannel.Subscription {
+                val sub = channel.subscribe(command, onEvent, onError)
+                // HA accepted it and failed at once, before subscribe returned.
+                onEvent(JSONObject().put("type", "error").put("code", "webrtc_offer_failed").put("message", "offline"))
+                return sub
+            }
+        }
+        val s = HaWebRtcSignaling(sync, "camera.x", object : HaWebRtcSignaling.Listener by listener {
+            override fun onError(error: HaError) {
+                cancelledAtError = channel.subs.single().cancelled
+                events += "error ${error.code}"
+            }
+        })
+        s.offer("v=0")
+        assertEquals(listOf("error webrtc_offer_failed"), events)
+        assertEquals(true, cancelledAtError)
+    }
+
+    @Test
+    fun `close during a deferred error means it is never reported`() {
+        val sync = object : HaCommandChannel by channel {
+            lateinit var s: HaWebRtcSignaling
+            override fun subscribe(command: JSONObject, onEvent: (JSONObject) -> Unit, onError: (HaError) -> Unit): HaCommandChannel.Subscription {
+                val sub = channel.subscribe(command, onEvent, onError)
+                onEvent(JSONObject().put("type", "error").put("code", "x").put("message", ""))
+                s.close()
+                return sub
+            }
+        }
+        val s = HaWebRtcSignaling(sync, "camera.x", listener)
+        sync.s = s
+        s.offer("v=0")
+        assertEquals(emptyList<String>(), events)
+        assertTrue(channel.subs.single().cancelled)
+    }
+
+    @Test
+    fun `no listener call starts once close has returned on another thread`() {
+        // A channel thread is inside onAnswer when another thread closes: close waits for it, and nothing starts after.
+        val inListener = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val after = java.util.concurrent.atomic.AtomicInteger()
+        val closed = java.util.concurrent.atomic.AtomicBoolean(false)
+        val s = HaWebRtcSignaling(channel, "camera.x", object : HaWebRtcSignaling.Listener by listener {
+            override fun onAnswer(sdp: String) {
+                if (closed.get()) after.incrementAndGet()
+                inListener.countDown()
+                release.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            }
+            override fun onRemoteCandidate(candidate: IceCandidateInit) {
+                if (closed.get()) after.incrementAndGet()
+            }
+        })
+        s.offer("v=0")
+        val sub = channel.subs.single()
+        val channelThread = Thread {
+            sub.answer("v=0 answer")
+            // Straight to the signaling, as a channel that doesn't drop events after unsubscribe would.
+            sub.onEvent(JSONObject().put("type", "candidate").put("candidate", JSONObject().put("candidate", "candidate:1 1 udp 1 192.0.2.1 1 typ host")))
+        }
+        channelThread.start()
+        inListener.await(5, java.util.concurrent.TimeUnit.SECONDS)
+        val closer = Thread { s.close(); closed.set(true) }
+        closer.start()
+        Thread.sleep(50)
+        assertTrue("close waits for the listener call in progress", closer.isAlive)
+        release.countDown()
+        closer.join(5_000)
+        channelThread.join(5_000)
+        assertEquals(0, after.get())
+    }
+
+    private val closeRef = arrayOfNulls<HaWebRtcSignaling>(1)
 }
