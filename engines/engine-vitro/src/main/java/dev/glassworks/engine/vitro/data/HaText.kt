@@ -4,28 +4,18 @@
 
 package dev.glassworks.engine.vitro.data
 
-import org.json.JSONObject
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * HA's frontend UI strings (`hass.localize` for `ui.*`, `state.default.*`, `state_badge.*`), in the user's language
  * ([HaLocale]), from the pinned frontend's own translation files. `tools/vitro-parity/locale-data.mjs` copies every
- * key Vitro's code passes to [ui] into `resources/dev/glassworks/engine/vitro/locale/strings/<language>.json`; a key a
- * language lacks is English's, as the frontend's build fills it.
+ * key Vitro's code names into each language's `resources/dev/glassworks/engine/vitro/locale/<language>.json`
+ * (`strings`, only where it differs from English); a key a language lacks is English's, as the frontend's build fills it.
  *
  * Placeholders are HA's message-format arguments: `{name}` is replaced with [ui]'s argument of that name, and a
  * `{count, plural, one {…} other {…}}` block picks its branch by the language's plural rules, with `#` the count.
  */
 object HaText {
-    private const val ROOT = "/dev/glassworks/engine/vitro/locale/strings"
-    private val cache = ConcurrentHashMap<String, Map<String, String>>()
-
-    private fun table(language: String): Map<String, String> = cache.getOrPut(language) {
-        val json = HaIntl.readJson("$ROOT/$language.json") ?: JSONObject()
-        val out = HashMap<String, String>(json.length() * 2)
-        for (k in json.keys()) out[k] = json.optString(k)
-        out
-    }
+    private fun table(language: String): Map<String, String> = HaIntl.of(language).strings
 
     /** True when English has [key]: every key Vitro uses does (a test checks it). */
     fun has(key: String): Boolean = key in table("en")

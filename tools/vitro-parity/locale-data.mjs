@@ -20,7 +20,8 @@
 // Touches: reads the pinned frontend (tools/perf/hafrontend.py fetches it into ~/.cache/glassworks-perf on first
 // use), reads engines/engine-vitro's Kotlin sources, launches headless Chromium (playwright-core; CHROME=<path>, or
 // Google Chrome) on about:blank with no network, and writes
-// engines/engine-vitro/src/main/resources/dev/glassworks/engine/vitro/locale/. No Home Assistant, no device.
+// engines/engine-vitro/src/main/resources/dev/glassworks/engine/vitro/locale/ (one <tag>.json per locale, its strings
+// included, and languages.json). No Home Assistant, no device.
 //
 //   node tools/vitro-parity/locale-data.mjs
 import { chromium } from 'playwright-core';
@@ -254,13 +255,10 @@ const languages = Object.keys(core).sort();
 const tags = [...new Set([...languages, ...NUMBER_TAGS])].sort();
 
 rmSync(OUT, { recursive: true, force: true });
-mkdirSync(join(OUT, 'intl'), { recursive: true });
-mkdirSync(join(OUT, 'strings'), { recursive: true });
+mkdirSync(OUT, { recursive: true });
 
-for (const tag of tags) {
-  const data = await page.evaluate(capture, tag);
-  writeFileSync(join(OUT, 'intl', `${tag}.json`), JSON.stringify(data) + '\n');
-}
+const tables = {};
+for (const tag of tags) tables[tag] = await page.evaluate(capture, tag);
 
 const keys = usedKeys();
 const missing = new Set(keys);
@@ -276,8 +274,9 @@ for (const lang of languages) {
   if (lang === 'en') Object.assign(english, strings);
   // Only what differs from English: the runtime falls back to English per key, as the frontend's build did.
   const own = lang === 'en' ? strings : Object.fromEntries(Object.entries(strings).filter(([k, v]) => english[k] !== v));
-  writeFileSync(join(OUT, 'strings', `${lang}.json`), JSON.stringify(own, Object.keys(own).sort(), 0) + '\n');
+  tables[lang].strings = Object.fromEntries(Object.keys(own).sort().map((k) => [k, own[k]]));
 }
+for (const tag of tags) writeFileSync(join(OUT, `${tag}.json`), JSON.stringify(tables[tag]) + '\n');
 if (missing.size) {
   console.error(`keys Vitro uses that HA's frontend ${FRONTEND_VERSION} doesn't have:\n  ${[...missing].join('\n  ')}`);
   process.exitCode = 1;

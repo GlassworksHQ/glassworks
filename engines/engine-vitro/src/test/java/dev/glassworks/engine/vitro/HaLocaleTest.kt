@@ -243,7 +243,7 @@ class HaLocaleTest {
         val used = src.walkTopDown().filter { it.extension == "kt" }.flatMap { f -> key.findAll(f.readText()).map { it.groupValues[1] } }.toSet()
         assertTrue("the scan found keys", used.size > 20)
         val missing = used.filterNot(HaText::has)
-        assertTrue("keys missing from strings/en.json (rerun tools/vitro-parity/locale-data.mjs): $missing", missing.isEmpty())
+        assertTrue("keys missing from locale/en.json (rerun tools/vitro-parity/locale-data.mjs): $missing", missing.isEmpty())
     }
 
     @Test

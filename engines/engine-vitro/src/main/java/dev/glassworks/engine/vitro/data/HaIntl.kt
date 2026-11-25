@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * The browser's `Intl`, as HA's frontend uses it, for the languages the pinned frontend ships. Vitro has no browser,
  * so `tools/vitro-parity/locale-data.mjs` asks the Chromium the parity harness renders HA with for the answers and
- * writes them to `resources/dev/glassworks/engine/vitro/locale/intl/<tag>.json`: number symbols and grouping, plural
+ * writes them to `resources/dev/glassworks/engine/vitro/locale/<tag>.json`: number symbols and grouping, plural
  * categories, relative-time phrases, and a template per `Intl.DateTimeFormat` option set HA's datetime functions use.
  * This class reads those tables and formats with them; [HaFormat] is HA's functions on top.
  *
@@ -40,7 +40,7 @@ object HaIntl {
     /** The table for [tag], or the nearest one `Intl` would use: the tag, its language, English. */
     fun of(tag: String?): Data {
         val t = resolve(tag)
-        return cache.getOrPut(t) { Data(readJson("$ROOT/intl/$t.json") ?: JSONObject()) }
+        return cache.getOrPut(t) { Data(readJson("$ROOT/$t.json") ?: JSONObject()) }
     }
 
     /** The table [tag] uses: the tag itself, then shorter tags, then English (`Intl`'s lookup). */
@@ -74,6 +74,10 @@ object HaIntl {
         private val unit = json.optJSONObject("unit") ?: JSONObject()
         private val date = json.optJSONObject("date") ?: JSONObject()
         val amPm: Boolean = json.optBoolean("amPm", false)
+        /** The frontend's UI strings for this language that differ from English ([HaText]). */
+        val strings: Map<String, String> = json.optJSONObject("strings")?.let { o ->
+            HashMap<String, String>(o.length() * 2).apply { for (k in o.keys()) put(k, o.optString(k)) }
+        }.orEmpty()
         /** `Intl.Locale(...).weekInfo.firstDay % 7`: 0 is Sunday. */
         val firstDay: Int = json.optInt("firstDay", 1)
         private val buddhist = json.optString("calendar") == "buddhist"
