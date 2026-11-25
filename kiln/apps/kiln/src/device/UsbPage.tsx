@@ -23,6 +23,7 @@ import { status, stepOf, type Step } from '../wizard/routes';
 import { Browser } from '../wizard/screens';
 import type { Entry } from '../wizard/registry';
 import { Shell, useBrowserChip } from '../components/Shell';
+import { Foot } from '../components/Nav';
 import { SilentUpdates } from '../components/SilentUpdates';
 import { FRAMES, MEASURED, RENDERS } from '../frames/catalog';
 import { adbKeyHolder, webUsbAdb } from './DevicePage';
@@ -118,10 +119,10 @@ function Off() {
     <section className="card" aria-labelledby="h">
       <h2 id="h">{dev.off.title}</h2>
       <p className="lede">Its installer is still being tested. Follow it on GitHub, or pick another panel.</p>
-      <div className="foot">
-        <a className="link" href={dev.off.follow}>Follow it on GitHub</a>
+      <Foot back={null}>
+        <a className="btn ghost" href={dev.off.follow}>Follow it on GitHub</a>
         <Link className="btn ghost" href="/">Pick a panel</Link>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -171,16 +172,15 @@ function Find({ s, session }: { s: UsbState; session: UsbSession }) {
       {s.changed && <p className="small">{`An earlier attempt already changed ${dev.the}.`}</p>}
       {s.finding && <p className="status work" role="status">{`Pick ${dev.the} in the browser list…`}</p>}
       {s.findError && <p className="status err" role="alert">{s.findError}</p>}
-      <div className="foot">
+      <Foot back={{ href: '/' }} busy={s.finding}>
         <span className="links">
-          <button type="button" className="link" onClick={() => session.brands()}>Not in the list? Pick your brand</button>
-          <span aria-hidden="true">·</span>
+          <button type="button" className="btn ghost" onClick={() => session.brands()}>Not in the list? Pick your brand</button>
           {s.flow === 'install'
-            ? <button type="button" className="link" onClick={() => session.setFlow('undo')}>Undo an install</button>
-            : <button type="button" className="link" onClick={() => session.setFlow('install')}>Install instead</button>}
+            ? <button type="button" className="btn ghost" onClick={() => session.setFlow('undo')}>Undo an install</button>
+            : <button type="button" className="btn ghost" onClick={() => session.setFlow('install')}>Install instead</button>}
         </span>
         <button type="button" className="btn ember" disabled={s.finding} onClick={() => void session.find()}>Find device</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -208,14 +208,10 @@ function Named({ s, session }: { s: UsbState; session: UsbSession }) {
       </div>
       <ApkField s={s} session={session} />
       {blocked && s.apk && <p className="status err" role="alert">{blocked}</p>}
-      <div className="foot">
-        <span className="links">
-          <button type="button" className="link" onClick={() => session.restart()}>Back</button>
-          <span aria-hidden="true">·</span>
-          <button type="button" className="link" onClick={() => session.brands()}>Not right? Pick your brand</button>
-        </span>
+      <Foot back={{ run: () => session.restart() }}>
+        <button type="button" className="btn ghost" onClick={() => session.brands()}>Not right? Pick your brand</button>
         <button type="button" className="btn ember" disabled={!!blocked} onClick={() => session.toSteps()}>Continue</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -236,10 +232,10 @@ function Brand({ s, session }: { s: UsbState; session: UsbSession }) {
       </RadioGroup.Root>
       <ApkField s={s} session={session} />
       {blocked && s.apk && <p className="status err" role="alert">{blocked}</p>}
-      <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={() => session.back()}>Back</button><span aria-hidden="true">·</span>Pick one to see its steps.</span>
+      {!s.brand && <p className="small">Pick one to see its steps.</p>}
+      <Foot back={{ run: () => session.back() }}>
         <button type="button" className="btn ember" disabled={!s.brand || !!blocked} onClick={() => session.chooseBrand()}>Continue</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -278,14 +274,13 @@ function Debug({ s, session }: { s: UsbState; session: UsbSession }) {
         </li>
       </ol>
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
-      <div className="foot">
-        <span className="small">
-          Steps from {st.sources.map((src, i) => <span key={src.href}>{i > 0 && ' and '}<a className="link" href={src.href} target="_blank" rel="noreferrer">{src.title.split(':')[0]}</a></span>)}
-          {' · '}<button type="button" className="link" onClick={() => session.brands()}>Different on yours?</button>
-          {' · '}<button type="button" className="link" onClick={() => session.backFromSteps()}>Back</button>
-        </span>
+      <p className="small">
+        Steps from {st.sources.map((src, i) => <span key={src.href}>{i > 0 && ' and '}<a className="link" href={src.href} target="_blank" rel="noreferrer">{src.title.split(':')[0]}</a></span>)}
+      </p>
+      <Foot back={{ run: () => session.backFromSteps() }}>
+        <button type="button" className="btn ghost" onClick={() => session.brands()}>Different on yours?</button>
         <button type="button" className="btn ember" onClick={() => void session.connect()}>USB debugging is on</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -316,12 +311,13 @@ function Allow({ s, session }: { s: UsbState; session: UsbSession }) {
             <li>{`Another tool on this computer may be using ${dev.the}: close other Kiln tabs or Android tools, or run `}<code>adb kill-server</code>.</li>
           </ul>
         </Collapsible.Content>
-        <div className="foot">
+        {/* Back to the steps once the ask has stopped (a refusal, nothing picked): not while it still waits for the tap */}
+        <Foot back={s.connectError ? { run: () => session.backToSteps() } : null} backLabel="Back to the steps">
+          <Collapsible.Trigger className="btn ghost">Nothing on the screen?</Collapsible.Trigger>
           {s.connectError
-            ? <span className="links"><button type="button" className="link" onClick={() => session.backToSteps()}>Back to the steps</button><button type="button" className="btn ember" onClick={() => void session.connect()}>Try again</button></span>
+            ? <button type="button" className="btn ember" onClick={() => void session.connect()}>Try again</button>
             : <span className="chip inline"><span className="pulse" />{`Waiting for ${dev.the}`}</span>}
-          <Collapsible.Trigger className="link">Nothing on the screen?</Collapsible.Trigger>
-        </div>
+        </Foot>
       </Collapsible.Root>
     </section>
   );
@@ -386,7 +382,8 @@ function Working({ s }: { s: UsbState }) {
         <h2 id="h" className="huge">Keep it plugged in</h2>
         <p className="lede">Kiln removes Glassworks&apos; screen-lock permission and uninstalls the app.</p>
         <div className="bar wait"><i /></div>
-        <div className="foot"><span className="small">{`Nothing else on ${dev.the} changes.`}</span><Log s={s} /></div>
+        <p className="small">{`Nothing else on ${dev.the} changes.`}</p>
+        <Log s={s} />
       </section>
     );
   }
@@ -414,10 +411,8 @@ function Working({ s }: { s: UsbState }) {
       </>}
       {grants && <GrantList grants={grants} updates={s.granted?.silentUpdates} />}
       {grants && <Refusals grants={grants} updates={s.granted?.silentUpdates} />}
-      <div className="foot">
-        {pick ? <span className="chip inline"><span className="pulse" />Waiting for your tap</span> : <span className="small">{`Nothing else on ${dev.the} changes.`}</span>}
-        <Log s={s} />
-      </div>
+      {pick ? <span className="chip inline"><span className="pulse" />Waiting for your tap</span> : <p className="small">{`Nothing else on ${dev.the} changes.`}</p>}
+      <Log s={s} />
     </section>
   );
 }
@@ -431,7 +426,8 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
         <span className="okmark" aria-hidden="true">✓</span>
         <h2 id="h">{r.removed.length ? `Glassworks is off ${dev.the}` : `Glassworks wasn't on ${dev.the}`}</h2>
         <p className="lede">{r.removed.length ? 'Android opens the home screen it had, or asks which one to use.' : 'Nothing was changed.'} Unplug it when you like.</p>
-        <div className="foot"><Log s={s} /><Link className="btn ghost" href="/">Back to Kiln</Link></div>
+        <Foot back={null}><Link className="btn ghost" href="/">Back to Kiln</Link></Foot>
+        <Log s={s} />
       </section>
     );
   }
@@ -471,10 +467,11 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
       </> : (
         <p className="small">{installed.handoff.why}{` Finish setting up on ${dev.the}: Glassworks shows its setup screen.`}</p>
       )}
-      <div className="foot">
-        <button type="button" className="link" onClick={() => void session.undoFromDone()}>Undo</button>
-        <Log s={s} />
-      </div>
+      <Foot back={null}>
+        <button type="button" className="btn ghost" onClick={() => void session.undoFromDone()}>Undo</button>
+        <span />
+      </Foot>
+      <Log s={s} />
     </section>
   );
 }
@@ -486,10 +483,10 @@ function Failed({ s, session }: { s: UsbState; session: UsbSession }) {
       <section className="card err" aria-labelledby="h">
         <h2 id="h">This is {article} {s.own.name}</h2>
         <p className="lede">It has its own dedicated installer in Kiln. Installing Glassworks for Android here would replace its built-in app, so Kiln stopped before changing anything.</p>
-        <div className="foot">
-          <Log s={s} />
+        <Foot back={null}>
           <Link className="btn ember" href={s.own.route}>Go to the {s.own.name}</Link>
-        </div>
+        </Foot>
+        <Log s={s} />
       </section>
     );
   }
@@ -509,14 +506,14 @@ function Stopped({ s, session }: { s: UsbState; session: UsbSession }) {
       <pre className="raw">{s.error}</pre>
       {repick && <ApkField s={s} session={session} />}
       {repick && blocked && s.apk && <p className="status err" role="alert">{blocked}</p>}
-      <div className="foot">
-        <Log s={s} />
-        <span className="row">
+      <Foot back={null}>
+        <span className="links">
           {s.flow === 'install' && <ReportButton prefill={usbPrefill(dev, s, 'stopped')}>Tell us what happened</ReportButton>}
-          {s.flow === 'install' && !s.release && !repick && <button type="button" className="link" onClick={() => setRepick(true)}>Pick another APK</button>}
-          <button type="button" className="btn ember" disabled={!!blocked} onClick={() => void session.connect()}>Try again</button>
+          {s.flow === 'install' && !s.release && !repick && <button type="button" className="btn ghost" onClick={() => setRepick(true)}>Pick another APK</button>}
         </span>
-      </div>
+        <button type="button" className="btn ember" disabled={!!blocked} onClick={() => void session.connect()}>Try again</button>
+      </Foot>
+      <Log s={s} />
     </section>
   );
 }

@@ -356,7 +356,10 @@ describe('Start over', () => {
     expect(r.image.canStartOver()).toBe(false);
     render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
     expect(screen.queryByRole('button', { name: 'Start over' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Restore the original system instead' })).toBeTruthy();
+    // the way out is the rail's: the restore point, never a silent Back
+    expect(screen.getByRole('button', { name: 'Restore the original system' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    expect(document.querySelector('.foot-lock')!.textContent).toBe('The Mirror’s system is changed');
   });
 
   it('the second fastboot screen has no silent Back: Start over says what it resets before it does', async () => {
@@ -536,6 +539,10 @@ describe('the app\'s install after a reload', () => {
     await app.pickApk('not-an-apk.apk', new Uint8Array([1, 2, 3]));
     expect(app.state.apk?.error).toBeTruthy();
     render(<ImageFlow image={r.image} app={app} />);
+    // the resume screen first, with the restore point beside Continue
+    expect(screen.getByRole('heading', { name: 'Pick up where you left off' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Restore the original system' }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     const picker = () => document.querySelector('input[type=file][accept*=".apk"]');
     expect(picker()).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Connect' }).hasAttribute('disabled')).toBe(true);

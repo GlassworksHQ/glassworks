@@ -129,7 +129,7 @@ describe('the test install', () => {
     const s = await appDemo(mirrorEntry, 'undo-pending', true);
     expect(s.state).toMatchObject({ screen: 'checks', report: { pendingHome: MIRROR_KIOSK } });
     render(<AppFlow session={s} />);
-    expect(screen.getByText('Undo: give the home screen back')).toBeTruthy();
+    expect(screen.getByText('Give the home screen back')).toBeTruthy();
   });
 
   it('Connect asks for the device inside the click, before anything is awaited', () => {

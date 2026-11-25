@@ -60,7 +60,7 @@ code { font: 500 0.82em var(--f-mono); background: var(--well); padding: 2px 6px
 .chip.bad .dot { background: var(--rose); }
 .body { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 22px; align-items: start; }
 .rail { display: grid; gap: 14px; position: sticky; top: 16px; }
-.phone-stack { display: none; }
+.stepbar { display: none; }
 .main { min-width: 0; }
 
 .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
@@ -88,6 +88,23 @@ code { font: 500 0.82em var(--f-mono); background: var(--well); padding: 2px 6px
 .sub a { color: inherit; text-decoration: none; }
 .sub a:hover { color: var(--fg); text-decoration: underline; }
 .rail-stack { margin-top: 18px; }
+/* a done step you can go back to: a link, with "Back" on hover (docs/design/kiln/navigation.md) */
+.step-name { min-width: 0; }
+.step-go { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; text-decoration: none; cursor: pointer; }
+.step-go::after { content: "Back"; font-size: 12px; color: var(--link); opacity: 0; transition: opacity 0.15s; }
+.steps li.can-go { cursor: pointer; }
+.steps li.can-go .step-go { color: var(--link); }
+.steps li.can-go:hover, .steps li.can-go:focus-within { color: var(--fg); background: var(--well); border-color: var(--edge); }
+.steps li.can-go:hover .step-go::after, .steps li.can-go:focus-within .step-go::after { opacity: 1; }
+.steps li.can-go .step-go:focus-visible { outline: none; }
+.steps li.can-go:focus-within { outline: 2px solid var(--sky); outline-offset: 2px; }
+.step-lock { margin-left: auto; display: grid; color: var(--faint); }
+.lock-glyph { flex: none; }
+.rail-foot { display: grid; gap: 10px; padding: 12px 10px 0; border-top: 1px solid var(--edge); }
+.rail-note { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 1.45; color: var(--faint); }
+.rail-note .lock-glyph { margin-top: 2px; }
+.rail-actions { display: grid; gap: 8px; }
+.btn.flow-action { justify-content: flex-start; width: 100%; padding: 9px 14px; font-size: 14px; }
 
 /* ---- the stack ---- */
 .stack { display: block; overflow: visible; max-width: 100%; height: auto; }
@@ -145,7 +162,14 @@ h2.huge { font-size: 44px; font-weight: 200; }
 .small { font-size: 13px; color: var(--faint); }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .spread { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
-.foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 4px; }
+.foot { display: flex; align-items: center; gap: 12px; padding-top: 4px; }
+/* the screen's actions after Back: anything else as ghost buttons, the one ember button last, on the right */
+.foot-main { flex: 1; min-width: 0; display: flex; justify-content: space-between; align-items: center; gap: 10px 12px; flex-wrap: wrap; }
+.foot-main > :last-child { margin-left: auto; }
+.foot-main > .links:last-child { margin-left: 0; }
+/* a foot not yet on Foot (the device's own browser page): its two ends apart, as before */
+.foot:not(:has(> .foot-main)) { justify-content: space-between; flex-wrap: wrap; }
+.foot-lock { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--faint); max-width: 22ch; line-height: 1.35; }
 .links { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 14px; color: var(--faint); }
 
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 999px; padding: 11px 20px; font-weight: 500; font-size: 15px; border: 1px solid transparent; cursor: pointer; text-decoration: none; background: none; }
@@ -154,6 +178,12 @@ h2.huge { font-size: 44px; font-weight: 200; }
    far end under it at both ends of the pill */
 .btn.ember { background: var(--ember-gradient) border-box; color: var(--on-ember); box-shadow: 0 8px 30px -10px color-mix(in srgb, var(--ember-b) 70%, transparent); }
 .btn.ghost { border-color: var(--edge); color: var(--fg); background: var(--glass); }
+.btn.ghost:hover:not(:disabled), .btn.back:hover:not(:disabled) { border-color: color-mix(in srgb, var(--fg) 30%, transparent); }
+/* Back: the same pill as a ghost button, its chevron leading, always first in the foot */
+.btn.back { border-color: var(--edge); color: var(--fg); background: var(--glass); padding-left: 12px; gap: 4px; flex: none; }
+/* a confirm that throws work away (Start over): the problem color, never ember */
+.btn.danger { color: var(--problem-ink); border-color: color-mix(in srgb, var(--problem) 55%, transparent); background: color-mix(in srgb, var(--problem) 12%, transparent); }
+.btn.danger:hover { background: color-mix(in srgb, var(--problem) 20%, transparent); }
 .btn.pulsing { animation: glowp 1.8s ease-in-out infinite; }
 @keyframes glowp { 50% { box-shadow: 0 8px 40px -6px color-mix(in srgb, var(--ember-b) 95%, transparent); } }
 .link { color: var(--link); background: none; border: 0; padding: 0; cursor: pointer; font-size: 14px; text-decoration: none; }
@@ -291,6 +321,31 @@ h2.huge { font-size: 44px; font-weight: 200; }
 .sheet p { color: var(--muted); font-size: 14px; }
 .sheet .btn { justify-self: start; margin-top: 4px; }
 .photo { display: block; width: 100%; height: auto; border-radius: 12px; }
+/* a decision, not the device's turn: the sheet without the turn color (Start over, the phone's Steps) */
+.sheet.dialog, .sheet.steps-sheet { border-color: var(--edge); }
+.sheet.dialog { width: min(500px, calc(100vw - 32px)); gap: 14px; padding: 24px; }
+.dlg-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.dlg-cols > div { display: grid; gap: 8px; align-content: start; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--edge); background: var(--well); }
+.dlg-h { font: 500 10.5px/1 var(--f-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+.dlg-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13.5px; color: var(--muted); }
+.dlg-list li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 6px; }
+.dlg-list.reset li::before { content: "↺"; color: var(--problem-ink); }
+.dlg-list.keep li::before { content: "✓"; color: var(--ok-ink); }
+.dlg-foot { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.sheet .dlg-foot .btn { margin-top: 0; }
+.sheet.steps-sheet { width: min(360px, calc(100vw - 32px)); gap: 14px; }
+.steps-sheet .rail-foot { padding: 12px 0 0; }
+
+/* ---- resume: where an install stopped, before going on (navigation.md) ---- */
+.resume-done { list-style: none; margin: 0; padding: 12px 14px; display: grid; gap: 6px; border: 1px solid var(--edge); border-radius: 14px; background: var(--well); font-size: 14px; color: var(--muted); }
+.resume-done li { display: flex; gap: 10px; align-items: center; }
+.resume-done li::before { content: "✓"; color: var(--ok-ink); width: 14px; }
+.resume-done li.next { color: var(--fg); }
+.resume-done li.next::before { content: "→"; color: var(--ember-b); }
+.resume-now { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 14px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--turn) 35%, transparent); background: color-mix(in srgb, var(--turn) 6%, transparent); }
+.resume-now .ico { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: color-mix(in srgb, var(--turn) 16%, transparent); color: var(--turn-ink); }
+.resume-now .t { font-weight: 500; }
+.resume-now .d { font-size: 13.5px; color: var(--muted); }
 
 details > summary, .disclose { cursor: pointer; }
 .more { display: grid; gap: 12px; border-top: 1px solid var(--edge); padding-top: 14px; }
@@ -303,14 +358,32 @@ details > summary, .disclose { cursor: pointer; }
   .wide, .chip, .rail { display: none; }
   .narrow { display: inline; }
   .brand { font-size: 16px; }
-  .body { grid-template-columns: minmax(0, 1fr); gap: 14px; }
-  .phone-stack { display: flex; justify-content: center; }
+  .top { padding: 14px 0 8px; }
+  .body { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  /* the rail as a slim bar: the stack small, the step and its place, the whole rail behind Steps */
+  .stepbar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 14px; border: 1px solid var(--edge); background: var(--glass); }
+  .sb-stack { display: grid; width: 46px; flex: none; }
+  .sb-t { display: grid; flex: 1; min-width: 0; line-height: 1.3; }
+  .sb-n { font-size: 12px; color: var(--faint); }
+  .sb-t b { font-weight: 500; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card { padding: 18px; border-radius: 18px; gap: 14px; }
   h2 { font-size: 26px; }
   h2.huge { font-size: 30px; }
-  .grid3, .fields, .frames { grid-template-columns: minmax(0, 1fr); }
-  .foot { flex-direction: column-reverse; align-items: stretch; }
-  .foot .btn { width: 100%; }
+  .grid3, .fields, .frames, .dlg-cols { grid-template-columns: minmax(0, 1fr); }
+  /* the foot stays in reach: stuck to the bottom of the screen, Back beside the main button, the rest above them */
+  /* the foot stays in reach, stuck to the bottom of the screen: why there's no way back (if so), the other actions one
+     per row, then Back beside the main button */
+  .foot { position: sticky; bottom: 0; z-index: 1; flex-wrap: wrap; align-items: stretch; gap: 8px 10px; margin: 0 -18px -18px; padding: 12px 18px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--edge); border-radius: 0 0 18px 18px; background: var(--bg-2); }
+  .foot-main { display: contents; }
+  .foot-main > * { order: 1; flex: 1 1 100%; margin-left: 0; }
+  .foot > .btn.back { order: 2; flex: none; }
+  .foot-main > :last-child { order: 3; flex: 1 1 0; margin-left: 0; }
+  .foot-lock { flex: 1 1 100%; max-width: none; font-size: 12.5px; }
+  .foot-main > .links { display: grid; gap: 8px; }
+  .foot-main > .links > .btn, .foot-main > .btn { width: 100%; }
+  .foot-main > span:empty, .foot-main > .links:empty { display: none; }
+  .foot:not(:has(> .foot-main)) { display: flex; flex-direction: column-reverse; align-items: stretch; }
+  .foot:not(:has(> .foot-main)) .btn { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -347,6 +420,4 @@ details > summary, .disclose { cursor: pointer; }
 .pw .input { padding-right: 60px; }
 .pw .eye { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 13px; }
 @media (max-width: 760px) { .route { grid-template-columns: auto minmax(0, 1fr); } .route .btn { grid-column: 1 / -1; } }
-.startover { margin: 4px 0 0; }
-.well.startover { align-items: center; gap: 14px; }
-.well.startover .links { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+

@@ -252,6 +252,11 @@ export interface ImageState {
   undo?: UndoView;
   /** An in-place install's Start over, asked: the screen shows what it resets before it does (startOver). */
   startingOver?: boolean;
+  /**
+   * This page load opened on an earlier one's mark (a reload, the tab reopened): the resume screen shows over the step
+   * it resumes on, until Continue or another screen (docs/design/kiln/navigation.md).
+   */
+  resumed?: ProgressMark['at'];
   error?: string;
   log: string[];
 }
@@ -357,7 +362,7 @@ export class ImageSession {
     if (inPlace && mark?.at === 'staged' && secret && mark.serial) {
       this.secret = secret;
       this.serial = mark.serial;
-      this.state = { ...this.state, screen: 'receive', picked: wrote.id, files: waiting(wrote), changed: true, round: 1, receive: this.receiveView('ready') };
+      this.state = { ...this.state, screen: 'receive', picked: wrote.id, files: waiting(wrote), changed: true, round: 1, receive: this.receiveView('ready'), resumed: 'staged' };
       this.cursor = this.indexOf(wrote, 'receive');
       setTimeout(() => this.watchHotspot(), 0);
     } else if (inPlace && mark?.at === 'received' && mark.serial && mark.digest) {
@@ -365,12 +370,12 @@ export class ImageSession {
       this.bundle = { digest: mark.digest };
       this.wrote = new Set(Array.isArray(mark.wrote) ? mark.wrote.filter((x): x is string => typeof x === 'string') : []);
       this.started = new Set(Array.isArray(mark.started) ? mark.started.filter((x): x is string => typeof x === 'string') : []);
-      this.state = { ...this.state, screen: 'fastboot', picked: wrote.id, files: waiting(wrote), changed: true, round: 2 };
+      this.state = { ...this.state, screen: 'fastboot', picked: wrote.id, files: waiting(wrote), changed: true, round: 2, resumed: 'received' };
       this.cursor = this.indexOf(wrote, 'fastboot');
     } else if (mark?.at === 'flashed' && wrote) {
-      this.state = { ...this.state, screen: 'adb', picked: wrote.id, open: wrote.community, files: waiting(wrote), changed: true, ...(inPlace ? { round: 2 as const } : {}) };
+      this.state = { ...this.state, screen: 'adb', picked: wrote.id, open: wrote.community, files: waiting(wrote), changed: true, resumed: 'flashed', ...(inPlace ? { round: 2 as const } : {}) };
       if (inPlace) this.cursor = this.indexOf(wrote, 'app-install');
-    } else if (mark) this.state = { ...this.state, changed: true };
+    } else if (mark) this.state = { ...this.state, changed: true, resumed: 'written' };
   }
 
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
@@ -381,7 +386,11 @@ export class ImageSession {
   /** Connections asked for so far (a restart, a key read, fastboot, adb): a restart changes the state only while it is the latest. */
   private connects = 0;
   private set(patch: Partial<ImageState>) {
-    if (patch.screen !== undefined && patch.screen !== this.state.screen) this.visits++;
+    if (patch.screen !== undefined && patch.screen !== this.state.screen) {
+      this.visits++;
+      // another screen: the resume screen has done its job
+      if (this.state.resumed && !('resumed' in patch)) patch = { ...patch, resumed: undefined };
+    }
     this.state = { ...this.state, ...patch };
     const held = this.holdsKey();
     if (held !== this.held) { this.held = held; this.d.holdingKey?.(held); }
@@ -1764,6 +1773,26 @@ export class ImageSession {
     if (s === 'error') return !!this.state.round && this.tryAgainLands() === 'fastboot' && this.state.work?.step !== 'restart';
     return false;
   }
+
+  /** Continue, on the resume screen: the step the mark resumed on, as it was. */
+  continueResume() { if (this.state.resumed) this.set({ resumed: undefined }); }
+
+  /**
+   * What this install has written to the device so far, for the rail's locks and the resume screen: nothing; an
+   * in-place install's stage (the setup agent, in the app data: Start over can still begin again); or the system.
+   */
+  written(): 'none' | 'stage' | 'system' {
+    const s = this.state;
+    if (this.inPlace) {
+      if (this.started.size || this.wrote.size || s.screen === 'adb' || s.work?.step === 'app-install') return 'system';
+      return s.round || s.resumed ? 'stage' : 'none';
+    }
+    if (s.screen === 'working' || s.screen === 'adb' || (s.screen === 'error' && s.work) || s.resumed === 'flashed') return 'system';
+    return 'none';
+  }
+
+  /** Whether the session is busy (a write, a connection, a transfer): no way back is offered meanwhile. */
+  idle(): boolean { return !this.busy(); }
 
   askStartOver(ask = true) { if (this.canStartOver()) this.set({ startingOver: ask }); else if (this.state.startingOver) this.set({ startingOver: false }); }
 

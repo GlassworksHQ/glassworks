@@ -3,7 +3,7 @@
 // built or downloaded (a stand-in reports progress); the fastboot and first-start answers are the frame's fakes.
 // `flash-…`: Glassworks; `image-…`: the choice and the frame's community image (issue 579).
 import { ProxyError, WrongImage, type DeviceEntry, type ImageMaker } from '@glassworks/kiln-core';
-import { ImageSession, type ImageDeps } from './imageSession';
+import { ImageSession, type DeviceProgress, type ImageDeps, type ProgressMark } from './imageSession';
 import { fakeReleaseRoute, type FakeRelease } from '../release/demo';
 import { AppSession, releaseLine } from './appSession';
 import type { PanelShell } from '@glassworks/adb';
@@ -19,7 +19,7 @@ export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downl
   'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes',
   'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed',
   ...['place-choose', 'place-stage', 'place-join-wifi', 'place-joined', 'place-wifi-unreachable', 'place-receive-lan', 'place-receive-ble', 'place-lna-denied', 'place-receive-file', 'place-restore-point',
-    'place-fastboot-again', 'place-working', 'place-error-bundle', 'place-undo', 'place-run'] as const] as const;
+    'place-fastboot-again', 'place-working', 'place-error-bundle', 'place-undo', 'place-run', 'place-resume', 'place-resume-staged'] as const] as const;
 export type ImageDemo = (typeof IMAGE_DEMOS)[number];
 
 const REFRACT_DOWN = 'the download proxy answered 502: GitHub answered 503';
@@ -226,7 +226,12 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
   };
   const frameWithStandIn = { ...frame, imageFlow: { ...frame.imageFlow, inPlace: name === 'place-stage' ? { ...ip.code, stage: () => held<Blob>() } : ip.code } };
   const app = new AppSession({ frame, connect: async () => { throw new Error('not in this demo'); } }, true);
-  const image = new ImageSession({
+  // place-resume…: the tab's mark, kept in memory, and the browser's bundles and restore points, shared by the run and
+  // the page load that opens on its mark (a reload)
+  let mark: ProgressMark | undefined;
+  const progress: DeviceProgress | undefined = name.startsWith('place-resume') ? { get: () => mark, set: (m) => { mark = m; } } : undefined;
+  const store = memoryInPlaceStore();
+  const make = () => new ImageSession({
     frame: frameWithStandIn,
     images: { fetch: async () => {}, download: async () => {}, file: async () => new Blob([]), check: async () => {}, build: async () => { throw new Error('not in this demo'); },
       wifi: async () => new Blob([]), adbKey: async () => new Blob([]), systemKey: async () => new Blob([]), discard: async () => {} },
@@ -240,7 +245,8 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
     apk: () => app.apkBytes(),
     simulated: true,
     sleep: (ms) => tick(ms / 20),
-    inPlaceStore: memoryInPlaceStore(),
+    inPlaceStore: store,
+    ...(progress ? { progress } : {}),
     bluetooth: device.bluetooth as BluetoothLike,
     agentFetch: name === 'place-receive-lan' ? heldFetch(device.fetch) : device.fetch,
     localNetworkPermission: async () => (name === 'place-lna-denied' ? 'denied' : 'granted'),
@@ -248,7 +254,10 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
     hotspotPollMs: fast ? 5 : 1500,
     ...deps,
   });
+  const image = make();
   const done = { image, app, standard: () => standard };
+  /** The page load after a reload: a new session that opens on the run's mark. */
+  const reloaded = () => ({ ...done, image: make() });
   image.pick(recipe.id);
   if (name === 'place-choose') return done;
   image.choose();
@@ -260,6 +269,7 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
   const staging = image.flash();
   if (name === 'place-stage') { await new Promise((r) => setTimeout(r, 0)); return done; }
   await staging;
+  if (name === 'place-resume-staged') return reloaded();
   if (name === 'place-receive-file') { image.receiveByHand(); return done; }
   // the device's own Wi-Fi: before and after this computer joins it, and a Continue that finds nothing there
   if (name === 'place-join-wifi') return done;
@@ -269,6 +279,7 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
   if (name === 'place-receive-lan' || name === 'place-receive-ble') { void receiving; return done; }
   await receiving;
   if (name === 'place-error-bundle' || name === 'place-fastboot-again') return done;
+  if (name === 'place-resume') return reloaded();
   const second = image.connectFastboot();
   if (name === 'place-working') { await new Promise((r) => setTimeout(r, fast ? 0 : 50)); }
   await waitFor(() => image.state.screen === 'restore-point' && image.state.restorePoint?.status === 'ready' || name === 'place-working' && image.state.work?.step === 'flash-system');

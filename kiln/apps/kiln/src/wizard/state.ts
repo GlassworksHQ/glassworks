@@ -3,6 +3,7 @@
 // derived from it by the selectors below, so a screen never keeps its own copy.
 import type { AskKind, BackupMeta, PartState, Phase, Progress } from '@glassworks/kiln-core';
 import type { SetupState } from '@glassworks/setup-channel';
+import type { Go } from '../components/Nav';
 import { SET_UP, type SetUpStep } from './routes';
 import type { SilentWords } from '../components/SilentUpdates';
 import type { AppPhase, AppSettings } from '@glassworks/kiln-core';
@@ -275,7 +276,11 @@ export interface RailStep {
   name: string;
   mark: RailMark;
   /** during set-up, its own steps; `route` is the step's (routes.ts), for going back to it */
-  sub?: { name: string; mark: RailMark; route: (typeof SET_UP)[number] }[];
+  sub?: { name: string; mark: RailMark; route: (typeof SET_UP)[number]; go?: Go }[];
+  /** A done step the person can return to, and how (docs/design/kiln/navigation.md). Only while nothing runs. */
+  go?: Go;
+  /** A done step behind a write: no way back to it (the shell's `lock` says why). */
+  lock?: boolean;
 }
 
 /**

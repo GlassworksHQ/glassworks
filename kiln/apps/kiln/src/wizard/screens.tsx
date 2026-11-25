@@ -19,6 +19,7 @@ import type { Session } from './session';
 import { HomeAssistant, Panes, Radio, RadioNext, Wifi } from '../setup/steps';
 import { eta, milestones, type Setup, type WizardState } from './state';
 import x from './screens.module.css';
+import { Foot } from '../components/Nav';
 
 type P = { s: WizardState; session: Session; frame: KilnFrame };
 /** The standard flow's screens (every frame's steps after its install): any frame's session, the frame as the flow reads it. */
@@ -43,10 +44,10 @@ export function Connect({ s, session, frame }: P) {
       {driver && <p className="small">{driver} <a className="link" href={frame.help.drivers} target="_blank" rel="noopener">Setup guide</a></p>}
       <LastRun />
       <BuiltOn credits={stepCredits(frame.id, frame.credits, s.flow === 'undo' ? ['boot'] : undefined)} />
-      <div className="foot">
+      <Foot busy={!!s.busy}>
         <span className="links">
           <Dialog.Root>
-            <Dialog.Trigger className="link">Show me a photo</Dialog.Trigger>
+            <Dialog.Trigger className="btn ghost">Show me a photo</Dialog.Trigger>
             <Dialog.Portal>
               <Dialog.Overlay className="overlay" />
               <Dialog.Content className="sheet" style={{ width: 'min(640px, calc(100vw - 32px))' }}>
@@ -57,12 +58,11 @@ export function Connect({ s, session, frame }: P) {
               </Dialog.Content>
             </Dialog.Portal>
           </Dialog.Root>
-          {s.flow === 'undo' && <><span aria-hidden="true">·</span><button type="button" className="link" disabled={!!s.busy} onClick={() => void session.click('undo', () => session.openUndo())}>Back</button></>}
           {/* an earlier attempt changed the panel (a reload mid-write): going back is as near as installing again */}
-          {s.flow === 'install' && s.changed && s.changed !== 'unknown' && <><span aria-hidden="true">·</span><button type="button" className="link" disabled={!!s.busy} onClick={() => void session.click('undo', () => session.openUndo())}>Undo with your backup</button></>}
+          {s.flow === 'install' && s.changed && s.changed !== 'unknown' && <button type="button" className="btn ghost" disabled={!!s.busy} onClick={() => void session.click('undo', () => session.openUndo())}>Undo with your backup</button>}
         </span>
         <button type="button" className="btn ember" disabled={!!s.busy} onClick={() => void session.click('connect', () => session.connectFel())}>Connect</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -137,10 +137,7 @@ export function Firing({ s, frame }: P) {
         : s.progress.phase === 'boot' || s.progress.phase === 'backup' ? `Kiln backs up the ${frame.short} before it writes anything.`
         : 'Your backup is saved in this browser. Kiln reads every write back to check it.'}</p>
       <BuiltOn credits={stepCredits(frame.id, frame.credits, s.flow === 'undo' ? ['boot'] : undefined)} />
-      <div className="foot">
-        <span />
-        <TechLog s={s} />
-      </div>
+      <TechLog s={s} />
     </section>
   );
 }
@@ -263,13 +260,13 @@ function Settings({ s, session, frame, setup }: SP & { setup: Extract<Setup, { p
         {frame.touch && !setup.apply && <label className="check"><input type="checkbox" checked={keyboard} onChange={(e) => setKeyboard(e.target.checked)} disabled={busy} /> On-screen keyboard</label>}
       </div>
       {setup.error && <p className="status err" role="alert">{setup.error}</p>}
-      <div className="foot">
+      <Foot>
         {setup.apply ? <span /> : <span className="small">Takes about a minute.</span>}
         <button type="button" className="btn ember" disabled={busy || !!s.busy}
           onClick={() => void session.click('install-app', () => session.installApp({ locale: locale || undefined, timezone: tz || undefined, clock24: clock === '24', keyboard }))}>
           {setup.apply ? 'Continue' : setup.update ? 'Update and continue' : `Install ${frame.app}`}
         </button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -344,10 +341,10 @@ export function Done({ s, session, frame, children }: SP & { children?: ReactNod
       {children}
       {d.managePage && <ManagePageRow href={d.managePage} the={`the ${frame.short}`} />}
       {s.flow === 'install' && <BuiltOn credits={stepCredits(frame.id, frame.credits)} />}
-      <div className="foot">
-        {s.flow === 'install' && session.canUndo ? <button type="button" className="link" onClick={() => void session.undo()}>Undo</button> : <span />}
+      <Foot back={null}>
+        {s.flow === 'install' && session.canUndo ? <button type="button" className="btn ghost" onClick={() => void session.undo()}>Undo</button> : <span />}
         <Link className={`btn ${d.backup ? 'ghost' : 'ember'}`} href="/">Back to Kiln</Link>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -374,18 +371,16 @@ export function Undo({ s, session, frame }: P) {
         </div>
       )}
       <input ref={file} type="file" accept=".zip" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.undoFromFile(f); }} />
-      <div className="foot">
+      {u.source !== 'browser' && <p className="small">{u.file ?? 'No backup saved in this browser — choose a backup .zip file to continue.'}</p>}
+      <Foot back={{ href: '/' }} busy={!!s.busy}>
         <span className="links">
-          <Link className="link" href="/">Back</Link>
-          <span aria-hidden="true">·</span>
-          {u.source !== 'browser' && <><span>{u.file ?? 'No backup saved in this browser — choose a backup .zip file to continue.'}</span><span aria-hidden="true">·</span></>}
-          {u.source === 'file' && u.inBrowser && <><button type="button" className="link" disabled={u.checking || u.locked || !!s.busy} onClick={() => void session.undoFromBrowser()}>Use saved backup</button><span aria-hidden="true">·</span></>}
-          <button type="button" className="link" disabled={u.checking || u.locked || !!s.busy} onClick={() => file.current?.click()}>{u.source === 'file' ? 'Choose a different file' : 'Use a backup file'}</button>
+          {u.source === 'file' && u.inBrowser && <button type="button" className="btn ghost" disabled={u.checking || u.locked || !!s.busy} onClick={() => void session.undoFromBrowser()}>Use saved backup</button>}
+          <button type="button" className="btn ghost" disabled={u.checking || u.locked || !!s.busy} onClick={() => file.current?.click()}>{u.source === 'file' ? 'Choose a different file' : 'Use a backup file'}</button>
         </span>
         <button type="button" className="btn ember" disabled={!u.ready || !!s.busy} onClick={() => void session.click('undo-continue', () => session.undoContinue())}>
           {keep && !u.appsBack ? frame.undo.keep.button : 'Continue'}
         </button>
-      </div>
+      </Foot>
       <p className="small">Prefer the command line? <code>{frame.help.undoCli}</code></p>
     </section>
   );
@@ -411,15 +406,15 @@ export function Failure({ s, session, help }: { s: WizardState; session: Standar
         </div>
       </> : <p className="lede">{f.body}</p>}
       <Collapsible.Root open={open} onOpenChange={setOpen} className="tech">
-        <div className="foot">
+        <Foot back={null}>
           <span className="links">
-            <Collapsible.Trigger className="link">{open ? 'Hide help' : 'More help'}</Collapsible.Trigger>
-            {f.wrote && <><span aria-hidden="true">·</span><button type="button" className="link" onClick={retry}>Try again</button></>}
+            <Collapsible.Trigger className="btn ghost">{open ? 'Hide help' : 'More help'}</Collapsible.Trigger>
+            {f.wrote && <button type="button" className="btn ghost" onClick={retry}>Try again</button>}
           </span>
           {f.wrote
             ? <button type="button" className="btn ember" onClick={() => void session.undo()}>Undo with your backup</button>
             : <button type="button" className="btn ember" onClick={retry}>Try again</button>}
-        </div>
+        </Foot>
         <Collapsible.Content className="more">
           <ol className="tips">{f.tips.map(([b, t]) => <li key={b}><b>{b}</b> {t}</li>)}</ol>
           {f.raw && <pre className="raw">{f.raw}</pre>}

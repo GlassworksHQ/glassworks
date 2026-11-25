@@ -17,7 +17,9 @@ import type { AppSession, AppState } from './appSession';
 import { SilentUpdates } from '../components/SilentUpdates';
 import { ImageKeep, KeyOutcome, keyHeld } from './KeepScreens';
 import { lines, rich } from './rich';
-import { InPlaceNotice, ReceiveScreen, RestorePointScreen, StartOver, type InPlaceWords } from './InPlaceScreens';
+import { InPlaceNotice, ReceiveScreen, RestorePointScreen, type InPlaceWords } from './InPlaceScreens';
+import { Foot, StartOverDialog } from '../components/Nav';
+import type { FlowActionSpec } from '../components/Shell';
 import { ManagePageRow } from '../wizard/screens';
 
 type P = { f: ImageSession; s: ImageState; m: AppSession; ms: AppState };
@@ -169,10 +171,9 @@ export function InPlaceStart({ f, s, m, ms }: P) {
       <YourWifi f={f} s={s} />
       <ApkInput d={d} m={m} ms={ms} />
       {blocked && <p className="status err" role="alert">{blocked}</p>}
-      <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={() => f.backToChoice()}>Back</button></span>
+      <Foot>
         <button type="button" className="btn ember" disabled={!!blocked} onClick={() => f.toFastboot()}>Continue</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -203,12 +204,11 @@ export function ImageImage({ f, s, m, ms }: P) {
       )}
       {ms.apk && (!ms.release || ms.apk.error) && <p className={`small${ms.apk.error ? ' status err' : ''}`}>{ms.apk.name}: {ms.apk.error ?? `${ms.apk.package}, ${fmtSize(ms.apk.size)}`}</p>}
       {blocked && ready && <p className="status err" role="alert">{blocked}</p>}
-      <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={() => f.backToChoice()}>Back</button></span>
-        <DownloadButton f={f} s={s} label="Download the system image" />
-      </div>
       {/* the flashed device is fine and keeps this browser's key: only the first start over adb is left (a real run, 2026-11-19) */}
-      <p className="small">{`Already wrote the system image, but first-time setup didn't finish? `}<button type="button" className="link" onClick={() => f.finishFirstStart()}>Finish first-time setup</button>.</p>
+      <p className="small">{`Already wrote the system image, but first-time setup didn't finish? `}<button type="button" className="link" onClick={() => f.finishFirstStart()}>Finish first-time setup</button></p>
+      <Foot>
+        <DownloadButton f={f} s={s} label="Download the system image" />
+      </Foot>
     </section>
   );
 }
@@ -241,16 +241,12 @@ export function ImageFastboot({ f, s }: P) {
       )}
       {s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
-      <InPlaceStartOver f={f} s={s} />
-      <div className="foot">
-        <span className="links">
-          {/* the second fastboot: Back would start the install over with no word; Start over above says what it resets */}
-          {!(f.inPlace && s.round === 2) && <button type="button" className="link" onClick={() => f.retry()}>Back</button>}
-          {/* Glassworks goes through the keep step, which reads Home Assistant's key and then restarts the device (PR 603) */}
-          {!s.restarted && !f.inPlace && <><span aria-hidden="true">·</span><button type="button" className="link" disabled={s.connecting} onClick={() => (f.recipe.community ? void f.restartToFastboot() : f.toKeep())}>{d.words['fastboot.overUsb']}</button></>}
-        </span>
+      {/* the second fastboot has no Back: the rail's Start over says what it resets before it does */}
+      <Foot busy={s.connecting}>
+        {/* Glassworks goes through the keep step, which reads Home Assistant's key and then restarts the device (PR 603) */}
+        {!s.restarted && !f.inPlace ? <button type="button" className="btn ghost" disabled={s.connecting} onClick={() => (f.recipe.community ? void f.restartToFastboot() : f.toKeep())}>{d.words['fastboot.overUsb']}</button> : <span />}
         <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void f.connectFastboot()}>Connect</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -271,10 +267,9 @@ export function ImageConfirm(p: P) {
         <p className="lede">{d.imageFlow.inPlace?.words['inPlace.confirm.lede']}</p>
         <InPlaceNotice words={inPlaceWordsOf(d)} cover />
         <label className="check"><input type="checkbox" checked={s.understood} onChange={(e) => f.understand(e.target.checked)} />{` I understand ${d.the}'s app data starts fresh.`}</label>
-        <div className="foot">
-          <span className="links"><button type="button" className="link" onClick={() => f.retry()}>Back</button></span>
+        <Foot>
           <button type="button" className="btn ember" disabled={!s.understood} onClick={() => void f.flash()}>Continue</button>
-        </div>
+        </Foot>
       </section>
     );
   }
@@ -287,10 +282,9 @@ export function ImageConfirm(p: P) {
       <p className="lede">{d.words['confirm.lede']}</p>
       {rev && <p className="small">{rev}.</p>}
       <label className="check"><input type="checkbox" checked={s.understood} onChange={(e) => f.understand(e.target.checked)} />{` ${d.words['confirm.understand']}`}</label>
-      <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={() => f.retry()}>Back</button></span>
+      <Foot>
         <button type="button" className="btn ember" disabled={!s.understood} onClick={() => void f.flash()}>Install Glassworks</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -364,16 +358,12 @@ export function ImageAdb({ f, s, m, ms }: P) {
       {s.connecting && !s.adbWaiting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.adbWaiting && <><p className="status work" role="status">{`Waiting for ${d.the} to finish starting…`}</p><div className="bar wait"><i /></div></>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
-      <div className="foot">
-        <Log s={s} />
-        <span className="links">
-          {/* the system is written: no Start over. The honest ways out are the restore point, or writing the image again */}
-          {!s.connecting && !r.community && (f.inPlace
-            ? <button type="button" className="link" onClick={() => void f.startUndo()}>Restore the original system instead</button>
-            : <button type="button" className="link" onClick={() => f.retry()}>Write the image again</button>)}
-        </span>
+      {/* the system is written: no Start over. The honest ways out are the restore point (the rail's), or writing the image again */}
+      <Foot>
+        {!s.connecting && !r.community && !f.inPlace ? <button type="button" className="btn ghost" onClick={() => f.retry()}>Write the image again</button> : <span />}
         <button type="button" className="btn ember pulsing" disabled={s.connecting || (f.inPlace && !m.apkBytes())} onClick={() => void f.connectAdb()}>Connect</button>
-      </div>
+      </Foot>
+      <Log s={s} />
     </section>
   );
 }
@@ -451,21 +441,18 @@ export function ImageError({ f, s }: P) {
       {s.flashFailed && !f.recipe.community && !f.inPlace && !s.noFill && (
         <p className="small">{d.words['error.noFill']}</p>
       )}
-      <InPlaceStartOver f={f} s={s} />
-      <div className="foot">
-        <Log s={s} />
+      {s.wifiOnFailed && s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
+      {s.wifiOnFailed && s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
+      {/* Back to the download, when the step that stopped can start over from it; Start over and the restore point are the rail's */}
+      <Foot back={!s.wifiOnFailed && !f.inPlace && f.tryAgainLands() !== 'image' ? { run: () => f.retry() } : undefined} backLabel="Back to download">
         <span className="links">
           {s.flashFailed && !f.recipe.community && !f.inPlace && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try compatibility write mode</button>}
-          {s.wifiOnFailed && s.connecting && <span className="status work" role="status">{`${cap(pickInList(d))}…`}</span>}
-          {s.wifiOnFailed && s.connectError && <span className="status err" role="alert">{s.connectError}</span>}
           {s.wifiOnFailed && <button type="button" className="btn ghost" disabled={s.connecting} onClick={() => void f.connectAdb()}>Connect again</button>}
-          {!s.wifiOnFailed && !f.inPlace && f.tryAgainLands() !== 'image' && <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to download</button>}
-          {/* a stop after the restore point was saved: the way back, from fastboot, next to finishing the install */}
-          {f.inPlace && s.round === 2 && s.restorePoint?.status === 'ready' && <button type="button" className="btn ghost" onClick={() => f.restoreAfterError()}>Restore the original system</button>}
         </span>
         {/* the step that stopped, on its own screen: the first start over adb, a write over fastboot, else the download */}
         {!s.wifiOnFailed && <button type="button" className="btn ember" onClick={() => f.tryAgain()}>Try again</button>}
-      </div>
+      </Foot>
+      <Log s={s} />
     </section>
   );
 }
@@ -492,8 +479,7 @@ export function InPlaceReceive({ f, s }: P) {
         onConnectBluetooth={() => void f.receive()} onRetryLan={() => void f.receive()} onPickFile={(x) => void f.receiveFile(x)}
         onCancel={r.stage === 'transferring' || r.stage === 'connecting' ? () => void f.cancelReceive() : undefined}
         onRetry={() => f.receiveAgain()} onContinueUnverified={() => void f.receiveUnverified()}
-        network={r.network} joined={r.joined} wifiFailed={r.wifiFailed} onContinueWifi={() => void f.receiveWifi()} onByHand={() => f.receiveByHand()}
-        startOver={<InPlaceStartOver f={f} s={s} />} />
+        network={r.network} joined={r.joined} wifiFailed={r.wifiFailed} onContinueWifi={() => void f.receiveWifi()} onByHand={() => f.receiveByHand()} />
       <Log s={s} />
     </>
   );
@@ -508,8 +494,7 @@ export function InPlaceRestorePoint({ f, s }: P) {
       <RestorePointScreen status={r.status} verifiedDigest={r.digest} downloaded={r.downloaded} restoreFilename={r.filename} errorMessage={r.error}
         words={inPlaceWordsOf(f.frame)} downloadError={failed}
         onDownload={() => { setFailed(null); void f.restoreZip().then(({ blob, name }) => saveFile(blob, name)).catch((e: Error) => setFailed(e.message)); }}
-        onContinue={() => void f.continueInstall()} onRetry={() => f.retryRestorePoint()}
-        startOver={<InPlaceStartOver f={f} s={s} />} />
+        onContinue={() => void f.continueInstall()} onRetry={() => f.retryRestorePoint()} />
       <Log s={s} />
     </>
   );
@@ -526,14 +511,11 @@ export function InPlaceUndo({ f, s }: P) {
         <span className="okmark" aria-hidden="true">✓</span>
         <h2 id="h">{`${cap(d.the)} is back on its original system`}</h2>
         <p className="lede">{`Kiln wrote the restore point over every block it had changed, and ${d.the} is restarting.`}</p>
-        <div className="foot">
-          <Log s={s} />
-          <span className="links">
-            <a className="link" href="/">Back to Kiln</a>
-            <span aria-hidden="true">·</span>
-            <button type="button" className="link" onClick={() => f.backToChoice()}>Install Glassworks again</button>
-          </span>
-        </div>
+        <Foot back={null}>
+          <button type="button" className="btn ghost" onClick={() => f.backToChoice()}>Install Glassworks again</button>
+          <a className="btn ember" href="/">Back to Kiln</a>
+        </Foot>
+        <Log s={s} />
       </section>
     );
   }
@@ -544,10 +526,8 @@ export function InPlaceUndo({ f, s }: P) {
         {u.at === 'working' && <div className="bar" role="progressbar" aria-label="Writing the restore point" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor((u.x ?? 0) * 100)}><i style={{ width: `${Math.max(2, (u.x ?? 0) * 100)}%` }} /></div>}
         {u.error && <pre className="raw">{u.error}</pre>}
         {u.at === 'error' && <p className="small">{`${cap(d.the)} stays in fastboot mode, so leave it plugged in. You can run the restore again any time, from this browser or the .zip you downloaded.`}</p>}
-        <div className="foot">
-          <Log s={s} />
-          {u.at === 'error' && <button type="button" className="btn ember" onClick={() => void f.undoFlash()}>Try again</button>}
-        </div>
+        {u.at === 'error' && <Foot back={null}><button type="button" className="btn ember" onClick={() => void f.undoFlash()}>Try again</button></Foot>}
+        <Log s={s} />
       </section>
     );
   }
@@ -562,10 +542,9 @@ export function InPlaceUndo({ f, s }: P) {
         </>}
         {u.error && <p className="status err" role="alert">{u.error}</p>}
         {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
-        <div className="foot">
-          <span className="links"><button type="button" className="link" onClick={() => void f.startUndo()}>Back</button></span>
+        <Foot busy={s.connecting}>
           <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void f.undoFlash()}>Connect and restore</button>
-        </div>
+        </Foot>
       </section>
     );
   }
@@ -584,21 +563,18 @@ export function InPlaceUndo({ f, s }: P) {
       {u.error && <p className="status err" role="alert">{u.error}</p>}
       {s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
-      <div className="foot">
-        <span className="links">
-          <button type="button" className="link" disabled={s.connecting} onClick={() => f.backToChoice()}>Back</button>
-          <span aria-hidden="true">·</span>
-          <button type="button" className="link" disabled={!u.source} onClick={() => f.undoByHand()}>Fastboot by hand</button>
-        </span>
+      <Foot back={{ run: () => f.backToChoice() }} busy={s.connecting}>
+        <button type="button" className="btn ghost" disabled={!u.source || s.connecting} onClick={() => f.undoByHand()}>Fastboot by hand</button>
         <button type="button" className="btn ember" disabled={!u.source || s.connecting} onClick={() => void f.undoRestart()}>Restart over USB</button>
-      </div>
+      </Foot>
     </section>
   );
 }
 
 export function ImageScreens(p: P) {
   const { s } = p;
-  return s.screen === 'receive' ? <InPlaceReceive {...p} />
+  return s.resumed ? <ImageResume {...p} />
+    : s.screen === 'receive' ? <InPlaceReceive {...p} />
     : s.screen === 'restore-point' ? <InPlaceRestorePoint {...p} />
     : s.screen === 'undo' ? <InPlaceUndo {...p} />
     : s.screen === 'choose' ? <Choose f={p.f} s={s} />
@@ -613,9 +589,117 @@ export function ImageScreens(p: P) {
     : <ImageError {...p} />;
 }
 
-/** Start over on an in-place install's screens, while it can still begin again (ImageSession.canStartOver). */
-function InPlaceStartOver({ f, s }: Pick<P, 'f' | 's'>) {
-  const what = f.inPlace ? f.frame.imageFlow.inPlace?.words['inPlace.startOver'] : undefined;
+/** Start over's dialog, while the session asks it (`startingOver`): what starts again, what stays, then the confirm. */
+export function ImageStartOver({ f, s }: Pick<P, 'f' | 's'>) {
+  const d = f.frame;
+  const what = f.inPlace ? d.imageFlow.inPlace?.words['inPlace.startOver'] : undefined;
   if (!what) return null;
-  return <StartOver f={f} asking={!!s.startingOver} what={what} />;
+  return (
+    <StartOverDialog open={!!s.startingOver} onOpenChange={(o) => f.askStartOver(o)} onConfirm={() => f.startOver()} the={d.the}
+      resets={[what, 'Where this install got to']}
+      keeps={['Your Wi-Fi and the app you picked', 'The bundle saved in this browser']} />
+  );
+}
+
+/** The image flow's ways out, under the rail: Start over while it is honest, else the restore point once the system is changed. */
+export function imageActions({ f, s }: Pick<P, 'f' | 's'>): FlowActionSpec[] {
+  if (s.screen === 'undo' || !f.idle()) return [];
+  if (f.canStartOver() && f.frame.imageFlow.inPlace?.words['inPlace.startOver']) return [{ label: 'Start over', run: () => f.askStartOver() }];
+  if (f.inPlace && f.written() === 'system') {
+    // a stop in the second fastboot session: the restore point from fastboot, where the device still is
+    const fromError = s.screen === 'error' && s.round === 2 && s.restorePoint?.status === 'ready';
+    return [{ label: 'Restore the original system', icon: 'restore', run: () => (fromError ? f.restoreAfterError() : void f.startUndo()) }];
+  }
+  return [];
+}
+
+/** Why the steps behind a write can't be returned to: what is on the device now. */
+export function imageLock(f: ImageSession): string | undefined {
+  const d = f.frame;
+  const w = f.written();
+  if (w === 'none') return undefined;
+  if (f.inPlace) return w === 'stage' ? `The setup agent is on ${d.the}` : `${cap(d.the)}’s system is changed`;
+  return f.state.screen === 'error' ? `The write to ${d.the} didn’t finish` : `${f.recipe.name} is written to ${d.the}`;
+}
+
+/**
+ * The rail with the way back to each done step (docs/design/kiln/navigation.md): the device picker, the choice and the
+ * download, while nothing runs and nothing is written. Behind a write a step is locked, and `imageLock` says why.
+ */
+export function imageNav(f: ImageSession, s: ImageState): RailStep[] {
+  const d = f.frame;
+  const steps = imageRail(s, d, f.recipe.community, f.inPlace);
+  const idle = f.idle() && !s.resumed;
+  if (s.screen === 'undo') {
+    // the way back's own rail: from its fastboot step, back to the restore point
+    return steps.map((x, i) => (i === 0 && x.mark === 'done' && idle && s.undo?.at === 'fastboot' ? { ...x, go: { run: () => void f.startUndo() } } : x));
+  }
+  const written = f.written() !== 'none';
+  const before = ['image', 'download', 'keep', 'fastboot', 'confirm'].includes(s.screen) && !(f.inPlace && s.round === 2);
+  const go = (name: string): RailStep['go'] => {
+    if (!idle || written || !before) return undefined;
+    if (name === d.short) return { href: '/' };
+    if (name === 'Choose' && !s.link && s.screen !== 'choose') return { run: () => f.backToChoice() };
+    if ((name === 'Download' || name === 'Prepare') && ['keep', 'fastboot', 'confirm'].includes(s.screen)) return { run: () => f.retry() };
+    return undefined;
+  };
+  // a write that stopped, on a device still in fastboot: its download is one step back (the error's Back to download)
+  const redo = s.screen === 'error' && idle && !f.inPlace && !s.wifiOnFailed && f.tryAgainLands() !== 'image';
+  return steps.map((x) => {
+    if (x.mark !== 'done') return x;
+    const to = s.screen === 'choose' && x.name === d.short && idle ? { href: '/' }
+      : redo && x.name === 'Download' ? { run: () => f.retry() }
+      : go(x.name);
+    return to ? { ...x, go: to } : written ? { ...x, lock: true } : x;
+  });
+}
+
+/** What the resume screen says the device has now, by the mark it opened on. */
+function resumeNow(f: ImageSession, s: ImageState): { t: string; d: string } {
+  const d = f.frame;
+  const the = d.the;
+  switch (s.resumed) {
+    case 'staged': return { t: `The setup agent is on ${the}`, d: `${cap(the)}’s system hasn’t changed. Next, get the bundle from it.` };
+    case 'received': return f.written() === 'system'
+      ? { t: 'The new system was partly written', d: 'Finish the install, or restore the original system from the restore point.' }
+      : { t: 'The bundle is saved in this browser', d: `${cap(the)}’s system hasn’t changed yet. Next, fastboot once more for the install.` };
+    case 'flashed': return { t: `${f.recipe.name} is written to ${the}`, d: 'Only its first start is left.' };
+    default: return { t: `A write to ${the} didn’t finish`, d: `Install again to put ${the} right.` };
+  }
+}
+
+/**
+ * Where an install stopped, when this page load opens on an earlier one's mark: what's done, what the device has now,
+ * and Continue, with the ways out beside it. Continue lands on the same step the mark resumed on before.
+ */
+export function ImageResume({ f, s }: P) {
+  const d = f.frame;
+  const rail = imageRail({ ...s, resumed: undefined }, d, f.recipe.community, f.inPlace);
+  const done = rail.slice(1).filter((x) => x.mark === 'done').map((x) => x.name);
+  const next = rail.find((x) => x.mark !== 'done')?.name;
+  const now = resumeNow(f, s);
+  const restore = f.inPlace && (s.resumed === 'flashed' || f.written() === 'system');
+  return (
+    <section className="card" aria-labelledby="h">
+      <h2 id="h">Pick up where you left off</h2>
+      <p className="lede">{`Your install of ${f.recipe.name} is partway done.`}</p>
+      <ol className="resume-done" aria-label="Done so far">
+        {done.map((x) => <li key={x}>{x}</li>)}
+        {next && <li className="next">{`Next: ${next}`}</li>}
+      </ol>
+      <div className="resume-now" role="note">
+        <span className="ico" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+        </span>
+        <span><span className="t">{now.t}</span><br /><span className="d">{now.d}</span></span>
+      </div>
+      <Foot back={null}>
+        <span className="links">
+          {f.canStartOver() && f.frame.imageFlow.inPlace?.words['inPlace.startOver'] && <button type="button" className="btn ghost" onClick={() => f.askStartOver()}>Start over</button>}
+          {restore && <button type="button" className="btn ghost" onClick={() => void f.startUndo()}>Restore the original system</button>}
+        </span>
+        <button type="button" className="btn ember" onClick={() => f.continueResume()}>Continue</button>
+      </Foot>
+    </section>
+  );
 }

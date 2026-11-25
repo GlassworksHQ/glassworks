@@ -3,10 +3,15 @@
 .cards.one { grid-template-columns: minmax(0, 1fr); }
 .more { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .card {
-  display: grid; gap: 10px; align-content: start; text-align: left; cursor: pointer;
+  position: relative; display: grid; gap: 10px; align-content: start; text-align: left; cursor: pointer;
   padding: 16px; border-radius: 16px; border: 1px solid var(--edge); background: var(--well); color: inherit; font: inherit;
 }
 .card:hover { border-color: color-mix(in srgb, var(--fg) 24%, transparent); }
+/* the radio covers the whole card; the project link sits above it */
+.pick { position: absolute; inset: 0; z-index: 0; border: 0; padding: 0; margin: 0; background: none; border-radius: inherit; cursor: pointer; }
+.pick:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
+.card > :not(.pick) { pointer-events: none; }
+.above { position: relative; z-index: 1; pointer-events: auto; }
 .card[data-state="checked"] {
   border-color: color-mix(in srgb, var(--ember-b) 55%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--ember-b) 35%, transparent), 0 14px 40px -24px color-mix(in srgb, var(--ember-b) 80%, transparent);

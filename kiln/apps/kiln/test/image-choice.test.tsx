@@ -37,7 +37,10 @@ const IMAGE_DEMOS = ALL_DEMOS.filter((d) => d.startsWith('image-'));
 const COMMUNITY = IMAGE_DEMOS.filter((d) => !d.startsWith('image-choose') && !d.startsWith('image-back'));
 
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
-const radios = () => screen.queryAllByRole('radio').map((r) => r.getAttribute('aria-label'));
+/** Each image's radio, by its name (the card's heading names it). */
+const radios = () => screen.queryAllByRole('radio').map((r) => document.getElementById(r.getAttribute('aria-labelledby')!)?.textContent);
+/** An image's card: its radio covers it, and its project link sits beside the radio, not inside it. */
+const card = (name: string) => screen.getByRole('radio', { name }).parentElement!;
 const rail = () => [...document.querySelectorAll('.steps > li')].map((li) => li.textContent);
 
 /** As the page shows it: the install's screens, or after the first start the standard flow with the image's lines. */
@@ -94,16 +97,18 @@ describe('the choice', () => {
     await show('image-choose');
     expect(screen.getByRole('heading').textContent).toBe('Choose what to install on the Mirror');
     expect(radios()).toEqual(['Glassworks', 'Glassworks on the stock software']);
-    expect(screen.getByRole('radio', { name: 'Glassworks on the stock software' }).querySelector('.pill')).toBeNull();
+    expect(card('Glassworks on the stock software').querySelector('.pill')).toBeNull();
     expect(screen.getByRole('radio', { name: 'Glassworks' }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('radio', { name: 'Glassworks' }).querySelector('.pill')).toBeNull();
+    expect(card('Glassworks').querySelector('.pill')).toBeNull();
+    expect(screen.getByRole('radio', { name: 'Glassworks' }).querySelector('a')).toBeNull(); // no link inside the radio
+    expect(card('Glassworks').querySelector('a')!.textContent).toBe('glassworks.dev');
     expect(rail()).toEqual(['Mirror', 'Choose', 'Download', 'Fastboot', 'Install', 'Set up', 'Done']);
     const more = screen.getByRole('button', { name: 'Show community images (1)' });
     expect(more.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(more);
     expect(radios()).toEqual(['Glassworks', 'Glassworks on the stock software', 'Glass Panes']);
     expect(screen.getByRole('radio', { name: 'Glassworks' }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('radio', { name: 'Glass Panes' }).textContent).toMatch(/Community image.*Its project, on GitHub/);
+    expect(card('Glass Panes').textContent).toMatch(/Community image.*Its project, on GitHub/);
   });
 
   it('hiding the community images again goes back to Glassworks', async () => {

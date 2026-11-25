@@ -2,7 +2,7 @@
 // A device frame's addresses (#621): its install's steps from its installer.json, and the standard flow's after them.
 // A load at a set-up step (a reload, a link) opens the standard flow there, connecting over adb; a load at an app flow's
 // step opens the app alone; the install's tab mark brings a flashed Mirror straight to its first start.
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -56,6 +56,11 @@ describe('a device frame\'s addresses', () => {
     sessionStorage.setItem(`kiln:device:${MIRROR_BASE}:image`, JSON.stringify({ at: 'flashed', image: mirrorFrame.imageFlow.recipes[0]!.id }));
     at(`${MIRROR_BASE}/first-start`);
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
+    // the resume screen first: where it stopped, and Continue to the step the mark resumes on
+    expect(await screen.findByRole('heading', { name: 'Pick up where you left off' })).toBeTruthy();
+    expect(screen.getByText('Only its first start is left.')).toBeTruthy();
+    expect(location.pathname).toBe(`${MIRROR_BASE}/first-start`);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByRole('button', { name: 'Connect' })).toBeTruthy();
     expect(screen.queryByText(/Download the system image/)).toBeNull();
     expect(location.pathname).toBe(`${MIRROR_BASE}/first-start`);
