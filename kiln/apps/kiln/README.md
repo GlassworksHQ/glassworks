@@ -192,6 +192,10 @@ The sheet's demo states work on any screen that has it, in `next dev` or a build
 `&report=form`, `preview`, `sent`, `error` and `off` (no credentials), for example
 `/android?demo=done-untested&report=preview` or `/android/tablet?demo=unknown&report=form` (`src/report/demo.ts`).
 
+The Browser screen, which every install page shows first in a browser without WebUSB (Firefox, Safari), has a demo of
+its own that works the same way on any of them: `&browser=no-usb`, for example `/lululemon-mirror?browser=no-usb` or
+`/android?browser=no-usb` (`useBrowserChip` in `src/components/Shell.tsx`).
+
 ### Credentials
 
 Set one of these in the Vercel project (Production). With neither, `/api/report` answers 503 and the sheet offers
