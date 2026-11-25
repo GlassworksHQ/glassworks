@@ -183,7 +183,7 @@ class Home(unittest.TestCase):
 
     def test_rest_history_as_mini_graph_reads_it(self):
         self.case({"states": {"sensor.t": {"state": "21.5", "last_changed": "-5m", "attributes": {"unit_of_measurement": "°C"}}},
-                   "history": {"sensor.t": {"steps": [["-2d", "20.0"], ["-3h", "21.0"]]}}})
+                   "history": {"sensor.t": {"steps": [["-2d", "20.0"], ["-3h", "21.0"], ["-5m", "21.5"]]}}})
         start = H.iso(H.NOW - 86400).replace("+00:00", "Z")
         code, body, ctype = H.http_get(f"/api/history/period/{start}", {"filter_entity_id": ["sensor.t"], "minimal_response": [""]})
         rows = json.loads(body)[0]
@@ -191,6 +191,30 @@ class Home(unittest.TestCase):
         self.assertEqual(rows[0]["entity_id"], "sensor.t")
         self.assertEqual([r["state"] for r in rows], ["20.0", "21.0", "21.5"])
         self.assertNotIn("entity_id", rows[1])
+
+    def test_a_series_is_the_one_timeline_of_state_history_and_statistics(self):
+        # The fixture's own state and time say otherwise: the series wins, for the live state too.
+        self.case({"states": {"sensor.p": {"state": "999", "last_changed": "-5h", "attributes": {"state_class": "measurement"}},
+                              "climate.c": {"state": "heat", "last_changed": "-1m", "attributes": {"current_temperature": 30}}},
+                   "history": {"sensor.p": {"wave": {"min": 1010, "max": 1020, "period": "12h", "step": "10m", "decimals": 1, "quantum": 1}},
+                               "climate.c": {"points": [["-5h", "heat", {"current_temperature": 20}], ["-2h", "off", {"current_temperature": 19}],
+                                                        ["-1h", "off", {"current_temperature": 18.5}]]}}})
+        sts = H.states()
+        rows = H.history(["sensor.p"], H.iso(H.NOW - 86400), None)["sensor.p"]
+        self.assertEqual((sts["sensor.p"]["state"], sts["sensor.p"]["last_changed"]), (rows[-1]["s"], rows[-1]["lu"]))
+        stats = H.statistics(["sensor.p"], H.iso(H.NOW - 3 * 3600), None, "hour", ["max", "min"])["sensor.p"]
+        last = stats[-1]
+        inside = [float(r["s"]) for r in rows if last["start"] / 1000 <= r["lu"] < last["end"] / 1000]
+        self.assertTrue(all(last["min"] <= v <= last["max"] for v in inside))
+        c = sts["climate.c"]
+        self.assertEqual((c["state"], c["last_changed"], c["last_updated"], c["attributes"]["current_temperature"]),
+                         ("off", H.NOW - 7200, H.NOW - 3600, 18.5))
+        crow = H.history(["climate.c"], H.iso(H.NOW - 6 * 3600), None, no_attributes=False)["climate.c"]
+        self.assertEqual([(r["s"], r["a"]["current_temperature"]) for r in crow], [("heat", 20), ("off", 19), ("off", 18.5)])
+
+    def test_templates_cannot_reach_python(self):
+        with self.assertRaises(Exception):
+            H.render_template("{{ cycler.__init__.__globals__.os.popen('id').read() }}")
 
     def test_fixture_files_stay_in_the_fixtures_folder(self):
         H.HOME["fixtures_dir"] = os.path.join(CORPUS, "fixtures")
@@ -253,6 +277,10 @@ class Corpus(unittest.TestCase):
                 self.assertTrue(H.history([eid], H.iso(H.NOW - 7 * 86400), None).get(eid), f"{cid}: {eid} has no history")
             self.assertEqual(set(sts), set(doc["fixture"].get("states") or {}))
 
+    def test_each_fixture_is_on_one_timeline(self):
+        """A state with a history series says what the series says at now (fakehome.py sync writes it)."""
+        self.assertEqual(H.sync_fixtures(CORPUS, check=True), [], "run: python3 tools/vitro-parity/fakehome.py sync")
+
     def test_each_reference_holds_what_its_fixture_serves(self):
         """A fixture edited without a new capture is caught here, with no browser: each committed reference's states
         and recorded WebSocket answers are what the fake serves for that fixture now."""
@@ -275,16 +303,27 @@ class Corpus(unittest.TestCase):
                 sts = H.states()
                 for eid, st in ref.get("states", {}).items():
                     want = sts.get(eid)
-                    if want is None or (st["s"], st["a"]) != (want["state"], want["attributes"]):
+                    same_time = want is not None and abs(st.get("lc", 0) - want["last_changed"]) < 1e-3 and \
+                        abs(st.get("lu", st.get("lc", 0)) - want["last_updated"]) < 1e-3
+                    if want is None or (st["s"], st["a"]) != (want["state"], want["attributes"]) or not same_time:
                         stale.append(f"{frame}/{cid}: {eid}")
                 for c in ref.get("ws", []):
                     req = c["request"]
                     if req["type"] == "rest/history/period":
+                        query = {"filter_entity_id": [",".join(req["entity_ids"])]}
+                        if req.get("end_time"):
+                            query["end_time"] = [req["end_time"]]
+                        for flag in ("minimal_response", "no_attributes"):
+                            if req.get(flag):
+                                query[flag] = [""]
+                        code, body, _ = H.http_get(f"/api/history/period/{req['start_time']}", query)
+                        if code != 200 or json.loads(body) != c.get("result"):
+                            stale.append(f"{frame}/{cid}: {req['type']}")
                         continue
                     out = call(dict(req))
                     if "error" in c:
                         ok = not out[0]["success"]
-                    elif req["type"] in ("history/history_during_period", "recorder/statistics_during_period", "recorder/get_statistics_metadata"):
+                    elif not c.get("events"):        # a one-shot command: its result
                         ok = out[0].get("result") == c.get("result")
                     else:
                         ok = [m["event"] for m in out[1:]][:len(c["events"])] == c["events"]

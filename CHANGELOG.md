@@ -11,8 +11,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ### Added
 - **Vitro, an experimental native dashboard renderer, in a new Labs section.** Turn on *Vitro renderer* under
   *Settings → Labs*, on the panel or the Manage page, and after the app restarts your Home Assistant dashboard is drawn
-  with the panel's own views instead of a browser. Cards it can't draw yet show in a small browser view. It's off by
-  default, and with it off the panel works exactly as before.
+  with the panel's own views instead of a browser. Custom cards it can't draw yet show in a small browser view, and a
+  view it can't draw, such as one with a map or one Home Assistant generates from a strategy, opens as Home Assistant
+  draws it. It's off by default, and with it off the panel works exactly as before.
 
 ### Fixed
 - **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the

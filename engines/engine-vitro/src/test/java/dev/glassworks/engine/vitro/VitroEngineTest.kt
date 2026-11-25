@@ -423,14 +423,33 @@ class VitroEngineTest {
         var test: String? = "$base/clarity-ref/start"
         val asked = CopyOnWriteArrayList<String>()
         val release = java.util.concurrent.CountDownLatch(1)
+        val answered = java.util.concurrent.atomic.AtomicInteger(0)
+        // The worker's next main-thread step after its second config: the moment to end the hold mid-run.
+        val queued = java.util.concurrent.CountDownLatch(1)
+        val secondConfigBack = java.util.concurrent.atomic.AtomicBoolean(false)
         val holdConfig = java.util.concurrent.atomic.AtomicBoolean(true)
         val engine = vitro(testDashboard = { test }).also {
             it.clarityHttp = ClarityHttp { url, _ ->
                 asked += url
                 if (url.endsWith("/clarity/config.json")) {
-                    // The first: held until the test lets it go. The second: a moment late, so the test stops idling
-                    // the main thread before the harness's next step is queued there.
-                    if (holdConfig.get()) release.await(10, java.util.concurrent.TimeUnit.SECONDS) else Thread.sleep(300)
+                    // The first: held until the test lets it go, even through the stop's interrupt, so its 200 really
+                    // comes after the hold ended. The second: a moment late, so the test stops idling the main thread
+                    // before the harness's next step is queued there.
+                    if (holdConfig.get()) {
+                        var interrupted = false
+                        while (true) {
+                            try {
+                                if (release.await(10, java.util.concurrent.TimeUnit.SECONDS)) break
+                            } catch (_: InterruptedException) {
+                                interrupted = true
+                            }
+                        }
+                        if (interrupted) Thread.currentThread().interrupt()
+                    } else {
+                        Thread.sleep(300)
+                        secondConfigBack.set(true)
+                    }
+                    answered.incrementAndGet()
                     200 to """{"VIEWS":["start","light"],"HEAD_CARDS":10}"""
                 } else {
                     204 to null
@@ -449,6 +468,7 @@ class VitroEngineTest {
         awaitClock("the harness stopped with the hold") { view.clarity == null }
         release.countDown()
         awaitClock("its worker ended after the config came") { !first.workerAlive }
+        assertEquals("the config answered 200 after the hold ended", 1, answered.get())
 
         // 2. A harness mid-run (its config read, its next step queued for the main thread) when the hold ends: the
         // watcher's own check, on the main thread, ends it, and the queued step never runs. (Robolectric's paused looper
@@ -457,10 +477,11 @@ class VitroEngineTest {
         test = "$base/clarity-ref/start"
         page.load("$base/clarity-ref/light")
         val second = view.clarity!!
+        second.onPosted = { if (secondConfigBack.get()) queued.countDown() }
         assertTrue(first !== second)
         // Idled until the second config is asked (its hold check runs on the main thread), then not again.
         awaitMain("the second config asked for") { asked.count { it.endsWith("/clarity/config.json") } >= 2 }
-        Thread.sleep(600)
+        assertTrue("its next step queued for the main thread", queued.await(10, java.util.concurrent.TimeUnit.SECONDS))
         assertTrue("mid-run: waiting on the main thread", second.workerAlive)
         test = null
         assertFalse("the hold's end is seen", second.checkHold())

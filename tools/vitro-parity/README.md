@@ -38,7 +38,7 @@ The committed corpus never depends on anyone's real Home Assistant. `capture.mjs
 - **Templates** (Markdown, Mushroom, conditions) are rendered by the fake with jinja2 and the HA helpers the corpus uses (`states`, `is_state`, `state_attr`, `now`, …). A template that needs a helper the fake lacks fails the case's capture.
 - **Community cards** are Lovelace resources at `/hacsfiles/`, as HACS serves them: Mushroom, card-mod, stack-in-card, layout-card, auto-entities, mini-graph-card, mini-media-player, Bubble Card, vertical-stack-in-card, bar-card, clock-weather-card and modern-circular-gauge. `cards.json` pins each one's release and the SHA-256 of every file it loads, and `cards.py` downloads them into `~/.cache/glassworks-perf/cards` on first use. They're never committed.
 
-The fake logs any WebSocket command it doesn't answer, and the capture lists them at the end: a newer frontend or card that asks for something new can't pass unnoticed.
+Templates render in jinja2's sandbox: the fake listens on 127.0.0.1, but anything that reaches its port may send one. The fake logs any WebSocket command it doesn't answer, and the capture lists them at the end: a newer frontend or card that asks for something new can't pass unnoticed.
 
 ### Fixtures
 
@@ -57,7 +57,7 @@ A fixture uses HA's own shapes, so a new case is mostly copied from another:
 |---|---|
 | `states` | Entity id → `state`, `attributes`, `last_changed` (and `last_updated`), like HA's state objects |
 | `entities`, `devices`, `areas`, `floors`, `users`, `persons` | The registries: `entities` in `list_for_display`'s short form (`ei`, `pl`, `di`, `ai`, `np`, `en`, `ic`, `tk`, `dp`), the rest as HA lists them. `np: "device"` puts the device's name before the entity's own, as HA does for an integration's entities; without it HA shows the entity's own name alone, which Vitro doesn't do yet, so every corpus entry on a device sets it |
-| `history` | Entity id → `wave` (`min`, `max`, `period`, `step`, `decimals`, `quantum`, `phase`), or `points`/`steps` (`[[time, state]]` or `[[time, state, attributes]]`). Statistics are computed from the same series for entities with a state class |
+| `history` | Entity id → `wave` (`min`, `max`, `period`, `step`, `decimals`, `quantum`, `phase`: a value sampled at each step), or `points`/`steps` (`[[time, state]]` or `[[time, state, attributes]]`). One timeline: the entity's live state, last change, last update (and a series' own attributes) come from the series at now, and statistics are computed from the same series for entities with a state class. After editing a series, run `python3 tools/vitro-parity/fakehome.py sync` so the fixture's `states` say the same (a test checks it) |
 | `todo`, `forecast`, `calendar` | Entity id → items; → `{daily: [...]}`; → events (`summary`, `start`, `end`) |
 | `logbook` | Entries as HA's `logbook/event_stream` sends them, with `when` as a time |
 | `user_data` | The signed-in user's frontend profile, by key: `{"language": {"language": "de", "number_format": "decimal_comma", "time_format": "24"}}` (HA's `frontend/get_user_data`, which the page subscribes to). The fake answers translations in that language, with English for every key it lacks, as HA core does (German and French are in `hacore-<version>.json`: `LANGUAGES` in `hacore.py`). The reference records the profile as `locale`, and Vitro draws the case with it. Without it the user has no profile: English and HA's defaults |

@@ -232,6 +232,7 @@ class VitroView(
             val views = dashboard?.views ?: return
             viewCache.keys.filter { views.getOrNull(it)?.subview == true && it != currentViewIndex }.forEach { idx ->
                 viewCache.remove(idx)?.let { contentHost.removeView(it) }
+                clarity?.keepCards(viewCache.keys)
                 overlayFrames.remove(idx)?.let { overlayLayer.removeView(it) }
                 builtScripts.remove(idx)
             }
@@ -247,6 +248,7 @@ class VitroView(
             if (field == v) return
             field = v
             viewCache.clear()
+            clarity?.keepCards(viewCache.keys)
             builtScripts.clear()
             contentHost.removeAllViews()
             clearOverlay()
@@ -282,6 +284,13 @@ class VitroView(
     /** The view whose cards [buildViewTree] is building (Clarity's card registry). */
     private var buildingIndex = -1
     var onViewSelected: ((ViewConfig) -> Unit)? = null
+
+    /**
+     * Shows a view Vitro doesn't draw ([ViewConfig.webFallbackReason]: a strategy, a built-in card or row it has no
+     * renderer for) in Home Assistant's own frontend, with the reason. Such a view is never built: no empty page and
+     * no island for a card the island can't draw. Null builds every view as it is (a view with no page).
+     */
+    var onWebView: ((ViewConfig, String) -> Unit)? = null
 
     /** A tab tap is about to switch views: the page records where it was, in the same history as its loads. */
     var onTabNavigation: (() -> Unit)? = null
@@ -342,6 +351,7 @@ class VitroView(
         val cfg = dashboard ?: return
         if (cfg.views.getOrNull(currentViewIndex) == null) return
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -413,6 +423,7 @@ class VitroView(
         dashboard = null
         viewBackStack.clear()
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -431,6 +442,7 @@ class VitroView(
         if (catalog == themeCatalog) return
         themeCatalog = catalog
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -445,6 +457,7 @@ class VitroView(
         userThemeName = nextTheme
         darkMode = nextDark
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -484,6 +497,7 @@ class VitroView(
         dashboard = config
         viewBackStack.clear()
         viewCache.clear()
+        clarity?.keepCards(viewCache.keys)
         builtScripts.clear()
         contentHost.removeAllViews()
         clearOverlay()
@@ -738,6 +752,7 @@ class VitroView(
                 renderView(index, forceRebuild = true, pushHistory = false)
             } else {
                 viewCache.remove(index)?.let { contentHost.removeView(it) }
+                clarity?.keepCards(viewCache.keys)
                 overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
             }
         }
@@ -754,6 +769,8 @@ class VitroView(
     private fun renderView(index: Int, forceRebuild: Boolean, pushHistory: Boolean = true) {
         val cfg = dashboard ?: return
         val viewCfg = cfg.views.getOrNull(index) ?: return
+        // Before anything is selected or built: the page leaves for HA's frontend, and this view stays as it was.
+        onWebView?.let { show -> viewCfg.webFallbackReason?.let { reason -> show(viewCfg, reason); return } }
         val t0 = SystemClock.elapsedRealtime()
         val prev = currentViewIndex
         if (pushHistory && !forceRebuild && prev != index && cfg.views.getOrNull(prev) != null) {
@@ -862,6 +879,7 @@ class VitroView(
         while (viewCache.size > MAX_CACHED_VIEWS) {
             val oldest = viewCache.keys.firstOrNull { it != keep } ?: return
             viewCache.remove(oldest)?.let { contentHost.removeView(it) }
+            clarity?.keepCards(viewCache.keys)
             overlayFrames.remove(oldest)?.let { overlayLayer.removeView(it) }
             builtScripts.remove(oldest)
         }

@@ -18,7 +18,11 @@ data class CompatEntry(val path: String, val verdict: CardVerdict)
  * or falls back to an island, and the exact reasons. The cards inside a stack are listed on their own; the cards
  * inside a stack that falls back are not, because the island draws them.
  */
-data class CompatReport(val entries: List<CompatEntry>) {
+data class CompatReport(
+    val entries: List<CompatEntry>,
+    /** The dashboard or views Home Assistant's frontend shows instead ([WebFallback]), each with why. */
+    val webPages: List<Pair<String, String>> = emptyList(),
+) {
     val islands: List<CompatEntry> get() = entries.filter { !it.verdict.isNative }
     val natives: List<CompatEntry> get() = entries.filter { it.verdict.isNative }
     val notes: List<Pair<String, String>> get() = entries.flatMap { e -> e.verdict.notes.map { e.path to it } }
@@ -26,8 +30,9 @@ data class CompatReport(val entries: List<CompatEntry>) {
     /** A plain-text report: a summary line, then every fallback with its reasons, then the notes (gaps and warnings). */
     fun format(includeNotes: Boolean = true): String = buildString {
         append("${entries.size} cards: ${natives.size} native, ${islands.size} island")
-        if (islands.isEmpty()) append(" (fully native)")
+        if (islands.isEmpty() && webPages.isEmpty()) append(" (fully native)")
         appendLine()
+        for ((where, why) in webPages) appendLine("HA FRONTEND $where: $why")
         for (e in islands) {
             appendLine("ISLAND ${e.path}")
             e.verdict.reasons.forEach { appendLine("  - $it") }
@@ -45,8 +50,11 @@ data class CompatReport(val entries: List<CompatEntry>) {
 
 /** Builds [CompatReport]s by walking a dashboard the way `VitroView` builds it. */
 object CompatChecker {
-    fun check(dashboard: DashboardConfig, scripts: IslandScripts = IslandScripts.ANY): CompatReport =
-        CompatReport(dashboard.views.flatMap { check(it, scripts).entries })
+    fun check(dashboard: DashboardConfig, scripts: IslandScripts = IslandScripts.ANY): CompatReport {
+        WebFallback.dashboardReason(dashboard)?.let { return CompatReport(emptyList(), listOf("the dashboard" to it)) }
+        val views = dashboard.views.map { check(it, scripts) }
+        return CompatReport(views.flatMap { it.entries }, views.flatMap { it.webPages })
+    }
 
     /**
      * [scripts]: the dashboard's Lovelace resources as an island loads them ([CardVerdict.inIsland]). Without them
@@ -55,6 +63,8 @@ object CompatChecker {
     fun check(view: ViewConfig, scripts: IslandScripts = IslandScripts.ANY): CompatReport {
         val out = ArrayList<CompatEntry>()
         val viewName = view.path ?: view.title
+        // Vitro builds none of such a view: HA's frontend draws it.
+        view.webFallbackReason?.let { return CompatReport(emptyList(), listOf("view $viewName" to it)) }
         for (root in CardRouter.viewRoots(view)) {
             val where = root.section?.let { "$viewName › section ${it + 1} › card ${root.index + 1}" } ?: "$viewName › card ${root.index + 1}"
             walk(root.card, where, scripts, out)

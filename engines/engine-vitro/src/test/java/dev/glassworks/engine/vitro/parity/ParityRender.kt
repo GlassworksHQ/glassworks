@@ -311,7 +311,7 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
                     navigate = {},
                     openMoreInfo = {},
                     // HA's REST history, as mini-graph-card read it in HA's page (`rest/history/period` in the reference).
-                    fetchHistory = { ids, _, done -> ws.restHistory(ids) { main.post { done(it) } } },
+                    fetchHistory = { ids, hours, done -> ws.restHistory(ids, hours, ref?.now ?: System.currentTimeMillis()) { main.post { done(it) } } },
                     callWs = { msg, done -> ws.call(msg) { ok, result, error -> main.post { done(ok, result, error) } } },
                     subscribeWs = { msg, onEvent, onError -> ws.subscribe(msg, { main.post(it) }, onEvent, onError) },
                     // HaDashboardClient's one-shot forecast read, answered from HA's own `weather/subscribe_forecast`.
