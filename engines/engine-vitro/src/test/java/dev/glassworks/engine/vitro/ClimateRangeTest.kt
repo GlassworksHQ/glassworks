@@ -139,6 +139,7 @@ class ClimateRangeTest {
         assertEquals(21.0 to 26.0, ClimateTargets.rangeToSend(ClimateHandle.LOW, 21.0, 24.0, heatCool("target_temp_high" to 26.0)))
         assertEquals(26.0 to 26.0, ClimateTargets.rangeToSend(ClimateHandle.LOW, 27.0, 24.0, heatCool("target_temp_high" to 26.0)))
         assertNull(ClimateTargets.rangeToSend(ClimateHandle.LOW, 21.0, 24.0, heatCool("temperature" to 22.0)))
+        assertNull(ClimateTargets.rangeToSend(ClimateHandle.LOW, 21.0, 24.0, null))
         // °F steps by one when the entity doesn't say.
         assertEquals(1.0, ClimateTargets.stepOf(emptyMap(), "°F"), 0.0)
         assertEquals(0.5, ClimateTargets.stepOf(emptyMap(), "°C"), 0.0)
@@ -353,6 +354,37 @@ class ClimateRangeTest {
         card.byDescription("Decrease upper target temperature").performClick()
         assertRange(calls.last(), 20.5, 23.5)
         assertEquals(View.VISIBLE, (card.byDescription("Increase upper target temperature").parent as View).visibility)
+    }
+
+    @Test
+    fun noWriteForAnEntityTheStoreNoLongerHasOrThatMovedToARange() {
+        val single = EntityState("climate.hall", "heat", mapOf(
+            "friendly_name" to "Hall", "hvac_modes" to listOf("off", "heat"), "supported_features" to 1,
+            "min_temp" to 10.0, "max_temp" to 30.0, "target_temp_step" to 0.5, "temperature" to 21.0,
+        ))
+        val st = store(single)
+        val card = ThermostatCardView(context(st), card("""{"type": "thermostat", "entity": "climate.hall"}"""))
+        ShadowLooper.idleMainLooper()
+        card.byDescription("Increase temperature").performClick()
+        assertEquals(21.5, calls.single().data.getDouble("temperature"), 0.0)
+        // The entity leaves the store while the dial still shows its old target (as before the posted rebind):
+        // a press sends nothing.
+        st.applyCompressedEvent(JSONObject().put("r", org.json.JSONArray().put("climate.hall")))
+        card.dial().bind(10.0, 30.0, 0.5, 22.0, 21.5, "heat", "idle")
+        card.dial().nudge(1)
+        assertEquals(1, calls.size)
+        // Back, but in a range now, with the dial still on the single target: nothing either.
+        st.putLocal(heatCool())
+        card.dial().bind(10.0, 30.0, 0.5, 22.0, 21.5, "heat", "idle")
+        card.dial().nudge(1)
+        assertEquals(1, calls.size)
+        // More Info: an entity with no state at all sends nothing.
+        val orphan = MoreInfoSheet(context(EntityStore())) {}
+        orphan.show("climate.gone")
+        ShadowLooper.idleMainLooper()
+        orphan.dial().bind(10.0, 30.0, 0.5, 22.0, 21.0, "heat", "idle")
+        orphan.dial().nudge(1)
+        assertEquals(1, calls.size)
     }
 
     @Test

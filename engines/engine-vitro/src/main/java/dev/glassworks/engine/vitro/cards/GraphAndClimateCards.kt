@@ -823,8 +823,9 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
             dial.onCommit = commit@{ target ->
                 val domain = if (waterHeater) "water_heater" else "climate"
                 val s = ctx.store[eid]
-                // HA moved to a range since (its state, not the dial's last bind): a single target isn't sent.
-                if (s != null && ClimateTargets.of(s.attributes).value == null) return@commit
+                // Only while the store still holds a single target: not after HA moved to a range (its state, not the
+                // dial's last bind), and not for an entity the store no longer has.
+                if (s == null || ClimateTargets.of(s.attributes).value == null) return@commit
                 ctx.callOptimistic(ClimateTargets.withValue(s, target), domain, "set_temperature",
                     JSONObject().put("entity_id", eid).put("temperature", target))
             }

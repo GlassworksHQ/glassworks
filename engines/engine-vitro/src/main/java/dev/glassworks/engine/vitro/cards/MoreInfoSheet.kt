@@ -896,8 +896,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         val dial = ThermostatDialView(ctx, unit, showCurrentInDial = false).apply {
             onCommit = commit@{ t ->
                 val s = ctx.store[id]
-                // HA moved to a range since (its state, not the dial's last bind): a single target isn't sent.
-                if (s != null && ClimateTargets.of(s.attributes).value == null) return@commit
+                // Only while the store still holds a single target: not after HA moved to a range (its state, not the
+                // dial's last bind), and not for an entity the store no longer has.
+                if (s == null || ClimateTargets.of(s.attributes).value == null) return@commit
                 ctx.callOptimistic(ClimateTargets.withValue(s, t), "climate", "set_temperature", JSONObject().put("entity_id", id).put("temperature", t))
             }
             onRangeCommit = { handle, low, high ->

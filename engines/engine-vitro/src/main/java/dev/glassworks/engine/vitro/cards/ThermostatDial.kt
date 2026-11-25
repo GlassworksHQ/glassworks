@@ -98,11 +98,11 @@ internal data class ClimateTargets(val value: Double?, val low: Double?, val hig
         /**
          * The range to send for an edit of [handle] that proposes [low] / [high]: the edited end, bounded against the
          * other end as the entity reports it now ([s], newer than what a control last showed), so a change HA made to
-         * the other end meanwhile isn't overwritten. Null when [s] no longer has a range (the mode changed). With no
-         * state at all, the proposal as it is.
+         * the other end meanwhile isn't overwritten. Null, so nothing is sent, when [s] no longer has a range (the mode
+         * changed) or there's no state at all (the entity went).
          */
         fun rangeToSend(handle: ClimateHandle, low: Double, high: Double, s: EntityState?): Pair<Double, Double>? {
-            val attrs = s?.attributes ?: return low to high
+            val attrs = s?.attributes ?: return null
             val now = of(attrs)
             val nl = now.low
             val nh = now.high
