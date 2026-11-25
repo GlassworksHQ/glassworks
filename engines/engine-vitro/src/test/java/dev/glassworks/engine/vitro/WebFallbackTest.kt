@@ -139,6 +139,26 @@ class WebFallbackTest {
         assertEquals("no refetch for the dashboard it already has", fetches, server.commands("lovelace/config").size)
     }
 
+    @Test fun aShownDashboardThatBecomesAStrategyIsFetchedAgainNotRestored() {
+        val p = page()
+        p.load("$base/wall-test/living")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+
+        // Edited in HA into a strategy dashboard: the live refresh hands it to HA's frontend.
+        server.dashboardConfig = JSONObject("""{"strategy": {"type": "original-states"}}""")
+        server.pushEvent(server.eventSubscriptionId("lovelace_updated")!!, JSONObject().put("event_type", "lovelace_updated"))
+        awaitMain("fallback") { pageFallback() != null }
+        assertEquals(listOf("$base/wall-test/living"), pageFallback()!!.loads)
+
+        // Back to it (a host navigate): its old native views are stale. It's asked for again and HA's frontend shows it.
+        val fetches = server.commands("lovelace/config").size
+        host.ports.single().post(JSONObject().put("type", "navigate").put("url", "$base/wall-test/living"))
+        awaitMain("fallback again") { pageFallback()!!.loads.size == 2 }
+        assertEquals(fetches + 1, server.commands("lovelace/config").size)
+        assertEquals(View.GONE, vitroView(p).visibility)
+        assertEquals(View.VISIBLE, pageFallback()!!.view.visibility)
+    }
+
     @Test fun aStrategySectionSendsItsViewToTheFallback() {
         server.dashboardConfig = views("""{"title": "Home", "path": "home", "type": "sections", "sections": [
             {"type": "grid", "cards": [{"type": "tile", "entity": "light.lounge_lamp"}]},

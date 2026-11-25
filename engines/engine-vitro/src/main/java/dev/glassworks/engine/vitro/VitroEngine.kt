@@ -641,6 +641,15 @@ class VitroEngine(
             client?.releaseDashboard()
         }
 
+        /**
+         * The dashboard at [urlPath] has no native views any more (a live refresh made it a strategy, or HA has no
+         * config for it): if it's the one on screen, its old views are stale, and a later load fetches it again
+         * instead of switching to them. A view-level handoff ([VitroView.onWebView]) keeps them: the config is current.
+         */
+        private fun forgetDisplayed(urlPath: String?) {
+            if (displayedDashboard == (currentOrigin to urlPath)) displayedDashboard = null
+        }
+
         private fun showVitroLayer() {
             vitroView.visibility = View.VISIBLE
             showIslandSurfaces()
@@ -785,6 +794,7 @@ class VitroEngine(
                         Log.i(logTag, "Vitro doesn't draw $reason; Home Assistant's frontend shows it")
                         val url = currentUrl
                         leaveNativeDashboard()
+                        forgetDisplayed(urlPath)
                         url?.let(::openInFallback)
                         return@post
                     }
@@ -811,6 +821,7 @@ class VitroEngine(
                     // The fallback owns the page now: a reconnect or lovelace_updated doesn't fetch this dashboard again.
                     val url = currentUrl
                     leaveNativeDashboard()
+                    forgetDisplayed(urlPath)
                     url?.let(::openInFallback)
                 }
             }
