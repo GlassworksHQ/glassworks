@@ -68,11 +68,11 @@ The defaults play on any Android from 6.0 on (read from source, not tried on a d
 ## The compact animation
 
 A frame whose install keeps the stock system writes our boot animation over the stock file in its own
-blocks, so it can't be larger. `compact.py` builds one that fits in about 20 KB: the stack and the
-wordmark at rest, cropped to a 300x400 box in the middle of the screen at the screen's own pixels, in
-four glow levels of the top plate. `desc.txt` plays them at 10 fps as a slow breath, 40 times
-(about 2.5 minutes), then holds full glow until Android has booted. One palette serves all four frames,
-with the background color in it exactly, so the edges of the box disappear into the cleared screen.
+blocks, so it can't be larger. `compact.py` builds one that fits in about 10 KB: a single
+full-screen frame, the full animation's resting frame (the stack, the wordmark and the device line)
+without its grain, held until Android has booted. It covers the whole screen like a stock boot
+animation, so there is no box for the player to clear around it, and its palette is as large as the
+budget allows (256 colors fits), with the background color in it exactly.
 
 It is drawn upright, not turned with `rotate`, because the stock player turns the picture itself. The
 build fails if it's over budget, if an entry isn't STORED, or if a frame's corners aren't the
@@ -126,8 +126,8 @@ each new frame's first boot.
   build without a splash removes an earlier build's `bootlogo.bmp` from the output.
 - Every zip entry is STORED, the CRCs check out, `desc.txt` is as built, and the zip is within `zipBudget`.
 - The splash BMP: its size, its header, and that it rotates back to `splash-landscape.png`.
-- The compact zip: within `compactBudget`, every entry STORED, `desc.txt` as built, each frame 300x400
-  with background-color corners.
+- The compact zip: within `compactBudget`, every entry STORED, `desc.txt` as built, one frame at the
+  screen's size with background-color corners.
 
 Inter (SIL OFL 1.1) is fetched from a pinned google/fonts commit, each file checked by SHA-256, and
 the build refuses it unless the licence file is the OFL. pyoxipng is required: every PNG goes through

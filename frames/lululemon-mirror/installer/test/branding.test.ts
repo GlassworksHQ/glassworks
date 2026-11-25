@@ -41,14 +41,12 @@ describe('the Mirror\'s bootanimation-compact.zip (stock-in-place)', () => {
   });
   it('is upright portrait like stock 1.24.0\'s own (1080 1920): stock\'s player turns it, so the frames are not turned', async () => {
     const desc = new TextDecoder().decode(await zipEntry(COMPACT, 'desc.txt'));
-    expect(desc.split('\n')[0]).toBe('300 400 10');
-    expect(desc.trimEnd().split('\n').at(-1)).toBe('p 0 0 g3 #0a0b0f');
-    expect(zipNames(COMPACT).filter((n) => n.endsWith('.png')).sort()).toEqual(['g0/00.png', 'g1/00.png', 'g2/00.png', 'g3/00.png']);
-    for (const n of zipNames(COMPACT).filter((x) => x.endsWith('.png'))) {
-      const png = (await zipEntry(COMPACT, n))!;
-      const ihdr = new DataView(png.buffer, png.byteOffset + 16, 8);
-      expect([ihdr.getUint32(0), ihdr.getUint32(4)], n).toEqual([300, 400]);
-    }
+    // one full-screen frame held until boot completes, the shape of stock's own zip
+    expect(desc).toBe('1080 1920 10\np 0 0 part0\n');
+    expect(zipNames(COMPACT).filter((n) => n.endsWith('.png'))).toEqual(['part0/00.png']);
+    const png = (await zipEntry(COMPACT, 'part0/00.png'))!;
+    const ihdr = new DataView(png.buffer, png.byteOffset + 16, 8);
+    expect([ihdr.getUint32(0), ihdr.getUint32(4)]).toEqual([1080, 1920]);
   });
 });
 
