@@ -1298,6 +1298,7 @@ open class MainActivity : Activity() {
     private fun onPortRequest(m: JSONObject, port: PagePort) {
         if (m.optString("type") == "dashboards") { onDashboards(m, port); return }
         if (m.optString("type") == "haTheme") { onHaTheme(m, port); return }
+        if (m.optString("type") == "pageStorage") { onPageStorage(m, port); return }
         if (m.optString("type") == "ready") { onPageReady(port, m.optString("why")); return }
         if (m.optString("type") == "launch") {
             if (port.topLevel) handler.post { frontendLoading = true; Log.i(TAG, "Home Assistant's launch screen is up: waiting for it to go") }
@@ -1346,6 +1347,19 @@ open class MainActivity : Activity() {
         val list = DashboardOptions.parse(m.optString("json")) ?: return
         Log.d(TAG, "${list.size} dashboard(s) from the frontend")
         Dashboards.report(list)
+    }
+
+    /**
+     * `{type: "pageStorage", json}` from the HA frontend (content.js: the page's `localStorage`, credentials left out),
+     * kept for cards that run outside Home Assistant's origin, Vitro's web islands (#881, [HaPageStorage]). Only the
+     * top-level page on the Home Assistant the panel uses is believed, as with the dashboards.
+     */
+    private fun onPageStorage(m: JSONObject, sender: PagePort) {
+        val url = sender.url
+        if (!sender.topLevel || url == null || !FrontendUrls.sameOrigin(url, prefs.haBase)) return
+        val json = m.optString("json").ifEmpty { return }
+        // Off the main thread: the copy is parsed and cleaned (up to a few hundred KiB from a busy page).
+        Thread({ dev.glassworks.web.HaPageStorage.of(applicationContext).put(url, json) }, "page-storage").start()
     }
 
     /**

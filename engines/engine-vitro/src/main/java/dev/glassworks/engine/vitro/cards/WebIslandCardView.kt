@@ -592,6 +592,53 @@ class WebIslandCardView(
                 .put("is_owner", user.optBoolean("is_owner", false))
         }
 
+        /**
+         * Starts an island's `localStorage` from Home Assistant's (#881). Islands share one loopback origin, which
+         * keeps its storage across app starts; [seed] is what HA's web UI holds on this panel ([VitroCardContext.pageStorage]).
+         * A key HA's copy changed since the island last took it is taken again, and one HA dropped is dropped unless the
+         * island changed it since; whatever else the island holds stays. What the island took last is kept under
+         * [STORAGE_BASE_KEY] with HA's origin: for another Home Assistant, HA's copy wins every key it has.
+         */
+        internal const val ISLAND_STORAGE_JS = """
+function vitroSeedStorage(store, origin, seed) {
+  if (!seed || typeof seed !== 'object') return 0;
+  const BASE = '__vitro_ha_storage';
+  let base = {};
+  try {
+    const b = JSON.parse(store.getItem(BASE) || 'null');
+    if (b && b.origin === origin && b.items && typeof b.items === 'object') base = b.items;
+  } catch (e) {}
+  let changed = 0;
+  const set = (k, v) => { try { store.setItem(k, v); changed++; } catch (e) {} };
+  for (const k of Object.keys(seed)) {
+    const v = seed[k];
+    if (k === BASE || typeof v !== 'string') continue;
+    if (base[k] !== v && store.getItem(k) !== v) set(k, v);
+  }
+  for (const k of Object.keys(base)) {
+    if (k === BASE || Object.prototype.hasOwnProperty.call(seed, k)) continue;
+    if (store.getItem(k) === base[k]) { try { store.removeItem(k); changed++; } catch (e) {} }
+  }
+  try { store.setItem(BASE, JSON.stringify({ origin: origin, items: seed })); } catch (e) {}
+  return changed;
+}
+"""
+
+        /** The `localStorage` key under which an island keeps what it last took from HA's copy ([ISLAND_STORAGE_JS]). */
+        internal const val STORAGE_BASE_KEY = "__vitro_ha_storage"
+
+        /**
+         * The island's first script: [ISLAND_STORAGE_JS] with HA's copy, before any card script runs. Nothing when the
+         * panel has no copy for this Home Assistant (the island's own storage stays as it is).
+         */
+        internal fun storageSeedScript(ctx: VitroCardContext): String {
+            val seed = runCatching { ctx.pageStorage() }.getOrNull() ?: return ""
+            // `<` escaped: a value can't end the script element or open an HTML comment in it.
+            val seedJson = seed.toString().replace("<", "\\u003c")
+            val originJson = JSONObject.quote(ctx.haBase).replace("<", "\\u003c")
+            return "<script>\n$ISLAND_STORAGE_JS\ntry { vitroSeedStorage(window.localStorage, $originJson, $seedJson); } catch (e) {}\n</script>"
+        }
+
         fun buildIslandHtml(
             ctx: VitroCardContext,
             config: CardConfig,
@@ -622,6 +669,7 @@ class WebIslandCardView(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+${storageSeedScript(ctx)}
 <style id="vitro-theme">
 $themeCss</style>
 <style>

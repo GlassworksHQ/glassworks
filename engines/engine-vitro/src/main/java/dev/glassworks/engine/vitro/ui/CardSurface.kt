@@ -117,6 +117,11 @@ class VitroCardContext(
      * the browser on that device. False on a frame without touch (the Mirror): HA there styles for a fine pointer.
      */
     val touch: Boolean = true,
+    /**
+     * What Home Assistant's web UI keeps in `localStorage` on this panel ([dev.glassworks.web.HaPageStorage]), or null
+     * when the panel has no copy for this Home Assistant: a web island starts its card's storage from it (#881).
+     */
+    val pageStorage: () -> JSONObject? = { null },
 ) {
     val dp: Float = context.resources.displayMetrics.density
     /** The main thread, for the card's own updates: one that throws is logged and dropped ([GuardedHandler]). */
@@ -170,6 +175,7 @@ class VitroCardContext(
         watchRegistries = watchRegistries,
         watchToken = watchToken,
         touch = touch,
+        pageStorage = pageStorage,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout

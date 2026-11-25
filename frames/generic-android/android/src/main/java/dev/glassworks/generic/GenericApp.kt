@@ -97,7 +97,7 @@ class GenericApp : Application(), GlassworksApp {
         ): EngineSettings {
             val settings = engineSettings(context, build, applicationId)
             val v = if (legacy(applicationId)) vitro() else null
-            return if (v != null) settings.copy(localOrigin = v.islandOrigin()) else settings
+            return if (v != null) settings.copy(localOrigin = v.islandOrigin(context)) else settings
         }
 
         /**

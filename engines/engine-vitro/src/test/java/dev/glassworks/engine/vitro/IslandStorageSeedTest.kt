@@ -1,0 +1,176 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+package dev.glassworks.engine.vitro
+
+import android.app.Application
+import dev.glassworks.engine.vitro.cards.WebIslandCardView
+import dev.glassworks.engine.vitro.data.EntityStore
+import dev.glassworks.engine.vitro.model.LovelaceParser
+import dev.glassworks.engine.vitro.model.LovelaceResource
+import dev.glassworks.engine.vitro.theme.ThemeCatalog
+import dev.glassworks.engine.vitro.theme.ThemeResolver
+import dev.glassworks.engine.vitro.ui.VitroCardContext
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import org.junit.Assume.assumeTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import java.io.File
+import java.util.concurrent.TimeUnit
+
+/**
+ * An island starts its card's `localStorage` from Home Assistant's on this panel (#881). The page gets HA's copy before
+ * any card script runs ([WebIslandCardView.storageSeedScript]), and the merge ([WebIslandCardView.ISLAND_STORAGE_JS])
+ * runs under node against a Map-backed `Storage`. Without node the merge cases are skipped on a desk and fail on CI
+ * (`CI` set), where pr.yml installs node.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class)
+class IslandStorageSeedTest {
+
+    private fun ctx(seed: JSONObject?, resources: List<LovelaceResource> = emptyList()) = VitroCardContext(
+        context = RuntimeEnvironment.getApplication(),
+        haBase = "http://homeassistant.local:8123",
+        store = EntityStore(),
+        theme = ThemeResolver.resolve(ThemeCatalog(), true),
+        resources = resources,
+        accessToken = { "made-up-token" },
+        callService = { _, _, _, _ -> },
+        navigate = {},
+        openMoreInfo = {},
+        fetchHistory = { _, _, _ -> },
+        subscribeTemplate = { _, _ -> {} },
+        pageStorage = { seed },
+    )
+
+    private val card = LovelaceParser.parseCard(JSONObject("""{"type": "custom:tablet-home-card"}"""))
+
+    @Test
+    fun theSeedRunsBeforeAnyCardScript() {
+        val seed = JSONObject().put("thc_snooze", """{"h_1":99}""")
+        val html = WebIslandCardView.buildIslandHtml(
+            ctx(seed, listOf(LovelaceResource("/local/tablet-home-card.js", "module"))), card,
+        )
+        val at = html.indexOf("vitroSeedStorage(window.localStorage")
+        assertTrue("the seed is in the page", at > 0)
+        assertTrue("before the card's script", at < html.indexOf("/local/tablet-home-card.js"))
+        // A JSON string: `/` comes escaped, the same string in JavaScript.
+        assertTrue("with HA's origin", html.contains("""vitroSeedStorage(window.localStorage, "http:\/\/homeassistant.local:8123", """))
+    }
+
+    @Test
+    fun noCopyMeansNoSeed() {
+        assertFalse(WebIslandCardView.buildIslandHtml(ctx(null), card).contains("vitroSeedStorage(window"))
+    }
+
+    @Test
+    fun aValueCantEndTheScript() {
+        val seed = JSONObject().put("note", "</script><script>alert(1)</script><!--")
+        val script = WebIslandCardView.storageSeedScript(ctx(seed))
+        assertEquals("one script element", 1, Regex("</script", RegexOption.IGNORE_CASE).findAll(script).count())
+        assertFalse(script.contains("<!--"))
+    }
+
+    // ---- The merge, under node ----
+
+    private fun node(): String? = listOf("node", "/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node").firstOrNull { n ->
+        runCatching { ProcessBuilder(n, "--version").redirectErrorStream(true).start().waitFor(10, TimeUnit.SECONDS) }.getOrDefault(false)
+    }
+
+    @Test
+    fun theMergeKeepsWhatTheIslandChangedAndTakesWhatHaChanged() {
+        val node = node()
+        if (node == null) {
+            if (System.getenv("CI") != null) fail("node isn't installed: pr.yml's app job sets it up (actions/setup-node)")
+            assumeTrue("node isn't installed", false)
+        }
+        val harness = File.createTempFile("island-storage", ".mjs")
+        try {
+            harness.writeText(WebIslandCardView.ISLAND_STORAGE_JS + HARNESS)
+            val p = ProcessBuilder(node, "--test", harness.path).redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().readText()
+            if (!p.waitFor(60, TimeUnit.SECONDS)) { p.destroyForcibly(); fail("node --test didn't finish:\n$out") }
+            assertEquals(out, 0, p.exitValue())
+        } finally {
+            harness.delete()
+        }
+    }
+
+    private companion object {
+        /** node:test cases for `vitroSeedStorage`, appended to it. A Map stands for the island's `localStorage`. */
+        const val HARNESS = """
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+class MemStorage {
+  constructor(items) { this.m = new Map(Object.entries(items || {})); }
+  getItem(k) { return this.m.has(k) ? this.m.get(k) : null; }
+  setItem(k, v) { this.m.set(k, String(v)); }
+  removeItem(k) { this.m.delete(k); }
+  own() { const o = Object.fromEntries(this.m); delete o.__vitro_ha_storage; return o; }
+}
+const HA = 'http://homeassistant.local:8123';
+
+test('a first island takes HA copy and keeps its own keys', () => {
+  const s = new MemStorage({ island_only: '1' });
+  vitroSeedStorage(s, HA, { thc_snooze: '{"h_1":99}', dockedSidebar: '"always_hidden"' });
+  assert.deepEqual(s.own(), { island_only: '1', thc_snooze: '{"h_1":99}', dockedSidebar: '"always_hidden"' });
+});
+
+test('an app restart keeps what the island changed since (the storage survives, the same seed comes again)', () => {
+  const s = new MemStorage();
+  vitroSeedStorage(s, HA, { thc_snooze: '{"h_1":99}' });
+  s.setItem('thc_snooze', '{"h_1":99,"h_2":120}'); // snoozed in the island
+  vitroSeedStorage(s, HA, { thc_snooze: '{"h_1":99}' }); // the next start: HA's copy didn't change
+  assert.equal(s.getItem('thc_snooze'), '{"h_1":99,"h_2":120}');
+});
+
+test('a key HA changed since is taken again', () => {
+  const s = new MemStorage();
+  vitroSeedStorage(s, HA, { thc_snooze: 'a' });
+  s.setItem('thc_snooze', 'island');
+  vitroSeedStorage(s, HA, { thc_snooze: 'b' });
+  assert.equal(s.getItem('thc_snooze'), 'b');
+});
+
+test('a key HA dropped goes, unless the island changed it since', () => {
+  const s = new MemStorage();
+  vitroSeedStorage(s, HA, { gone: '1', kept: '1' });
+  s.setItem('kept', '2');
+  vitroSeedStorage(s, HA, {});
+  assert.equal(s.getItem('gone'), null);
+  assert.equal(s.getItem('kept'), '2');
+});
+
+test('another Home Assistant: its copy wins every key it has', () => {
+  const s = new MemStorage();
+  vitroSeedStorage(s, HA, { k: 'same' });
+  vitroSeedStorage(s, 'http://192.0.2.10:8123', { k: 'same' });
+  s.setItem('k', 'island');
+  vitroSeedStorage(s, 'http://192.0.2.20:8123', { k: 'same' });
+  assert.equal(s.getItem('k'), 'same');
+});
+
+test('no copy leaves the island as it is', () => {
+  const s = new MemStorage({ a: '1' });
+  assert.equal(vitroSeedStorage(s, HA, null), 0);
+  assert.deepEqual(Object.fromEntries(s.m), { a: '1' });
+});
+
+test('a full storage drops the keys that do not fit and keeps going', () => {
+  const s = new MemStorage();
+  s.setItem = function (k, v) { if (k === 'big') throw new Error('QuotaExceededError'); this.m.set(k, String(v)); };
+  vitroSeedStorage(s, HA, { big: 'x', small: 'y' });
+  assert.equal(s.getItem('small'), 'y');
+});
+"""
+    }
+}
