@@ -49,6 +49,8 @@ include(":sendspin")
 project(":sendspin").projectDir = file("libs/sendspin")
 include(":voice")
 project(":voice").projectDir = file("libs/voice")
+include(":ha-webrtc")
+project(":ha-webrtc").projectDir = file("libs/ha-webrtc")
 
 // Glassworks modules (#21): the pane API, the core, engines and panes. The S1 app above depends on them.
 include(":glassworks-pane-api")
