@@ -378,6 +378,36 @@ class CardContainmentTest {
         assertEquals(0, open)
     }
 
+    @Test fun aFailedTodoCardReadsNothingMoreWhenItsSubscriptionIsRejected() {
+        store.putLocal(EntityState("todo.shopping", "2", mapOf("friendly_name" to "Shopping", "supported_features" to 15)))
+        var opened = 0
+        val rejects = ArrayList<(JSONObject?) -> Unit>()
+        val ctx = VitroCardContext(
+            context = activity, haBase = FakeHaServer.BASE, store = store,
+            theme = dev.glassworks.engine.vitro.theme.ThemeResolver.resolve(dev.glassworks.engine.vitro.theme.ThemeCatalog(), true),
+            resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            subscribeWs = { _, _, onError ->
+                opened++
+                rejects += onError
+                val unsub: () -> Unit = {}
+                unsub
+            },
+        )
+        val config = JSONObject().put("type", "todo-list").put("entity", "todo.shopping")
+        val card = dev.glassworks.engine.vitro.cards.TodoListCardView(ctx, LovelaceParser.parseCard(config))
+        activity.setContentView(card)
+        ShadowLooper.idleMainLooper()
+        assertEquals("the item subscription", 1, opened)
+        card.fail("draw", IllegalStateException("todo boom"))
+        ShadowLooper.idleMainLooper()
+        // Home Assistant rejects the subscription after the card failed: a healthy card would read the list instead.
+        rejects.toList().forEach { it(null) }
+        ShadowLooper.idleMainLooper()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(10, java.util.concurrent.TimeUnit.MINUTES)
+        assertEquals("no fallback read, no resubscribe", 1, opened)
+    }
+
     @Test fun everyWayTheStoreTellsItsListenersContainsAThrow() {
         val s = EntityStore()
         var heard = 0

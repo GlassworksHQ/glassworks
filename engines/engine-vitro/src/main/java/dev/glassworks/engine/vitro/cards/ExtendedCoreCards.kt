@@ -907,6 +907,8 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         itemsSub?.invoke()
         itemsSub = null
         ctx.main.removeCallbacks(resubscribe)
+        // A read already on its way lands on nothing.
+        fetchGeneration++
     }
 
     /**
@@ -928,7 +930,7 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
         }, { _ ->
             ctx.main.post {
                 itemsSub = null
-                if (!isAttachedToWindow) return@post
+                if (!isAttachedToWindow || failure != null) return@post
                 itemsLive = false
                 fetch(eid)
                 ctx.main.postDelayed(resubscribe, RESUBSCRIBE_MS)
@@ -941,6 +943,8 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
      * subscription is dropped right after (a state change reads it again, as before).
      */
     private fun fetch(eid: String, retry: Boolean = true) {
+        // A failed card reads nothing more; a healthy one whose item subscription was rejected still does.
+        if (failure != null) return
         val gen = ++fetchGeneration
         var unsub: (() -> Unit)? = null
         var done = false

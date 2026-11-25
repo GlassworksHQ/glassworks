@@ -1591,6 +1591,8 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
     override fun onCardFailed() {
         ctx.main.removeCallbacks(refresh)
         generation++
+        // A chart being prepared off the main thread doesn't land on the failed card.
+        prepareGeneration++
     }
 
     private fun fetch() {
@@ -1706,6 +1708,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
      */
     private fun prepare() {
         val input = lastInput ?: return
+        if (failure != null) return
         val w = chartWidthCss() ?: return
         if (w == preparedWidth) return
         preparedWidth = w
