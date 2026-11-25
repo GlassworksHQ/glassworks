@@ -298,7 +298,7 @@ object CardCompat {
                     is String -> k to v
                     else -> {
                         // A nested selector map walks further into shadow roots than Vitro models.
-                        reasons += "card_mod path `$k` nests further into the card's shadow DOM, which Vitro doesn't model"
+                        reasons += "card_mod path `${redactAttributeValues(k)}` nests further into the card's shadow DOM, which Vitro doesn't model"
                         k to ""
                     }
                 }
@@ -309,7 +309,7 @@ object CardCompat {
         val notApplied = VitroSupport.CARD_MOD_NOT_APPLIED[card.type]
         for ((key, css) in sheets) {
             if (key !in allowed) {
-                reasons += "card_mod path `$key` styles the card's inner DOM, which Vitro doesn't model"
+                reasons += "card_mod path `${redactAttributeValues(key)}` styles the card's inner DOM, which Vitro doesn't model"
                 continue
             }
             if (css.isBlank()) continue
@@ -427,8 +427,9 @@ object CardCompat {
                 notes += gap("!important", "card_mod `$key` `!important`")
             }
             // Attribute values left out of what is reported (and logged): one can hold a signed URL or a name.
-            verdicts.filterIsInstance<Sel.Unsupported>().forEach { reasons += "card_mod `$key` selector `${redactAttributeValues(it.selector)}`: ${it.why}" }
-            verdicts.filterIsInstance<Sel.Unchecked>().forEach { notes += gap("templated selector", "card_mod `$key` `${redactAttributeValues(it.selector)}`") }
+            verdicts.filterIsInstance<Sel.Unsupported>().forEach { reasons += "card_mod `${redactAttributeValues(key)}` selector `${redactAttributeValues(it.selector)}`: ${it.why}" }
+            verdicts.filterIsInstance<Sel.Unchecked>().forEach { notes += gap("templated selector", "card_mod `${redactAttributeValues(key)}` `${redactAttributeValues(it.selector)}`") }
+            verdicts.filterIsInstance<Sel.Noted>().forEach { notes += gap(it.gap, "card_mod `${redactAttributeValues(key)}` `${redactAttributeValues(it.selector)}`") }
             val honored = verdicts.filterIsInstance<Sel.Honored>()
             if (honored.isEmpty()) continue
             val host = honored.any { it.host }
@@ -456,6 +457,9 @@ object CardCompat {
         data class Honored(val host: Boolean) : Sel()
         object Benign : Sel()
         data class Unchecked(val selector: String) : Sel()
+
+        /** A rule that applies at rest but that Vitro doesn't apply: a known gap ([gap]), not a fallback. */
+        data class Noted(val selector: String, val gap: String) : Sel()
         data class Unsupported(val selector: String, val why: String) : Sel()
     }
 
@@ -473,6 +477,7 @@ object CardCompat {
             return Sel.Honored(host = true)
         }
         var benign = false
+        var restLink = false
         val stripped = stripAttributeValues(norm)
         val groups = functionalGroups(stripped)
         val interactionMemo = HashMap<String, Boolean>()
@@ -482,6 +487,8 @@ object CardCompat {
             when {
                 element && name in VitroSupport.BENIGN_PSEUDO_ELEMENTS -> benign = true
                 element -> return Sel.Unsupported(sel, "pseudo-element `::$name` isn't drawn natively")
+                // An unvisited link matches with no interaction at all: the rule applies at rest.
+                name == "link" -> restLink = true
                 // An interaction state makes the rule inactive at rest only when it rules out every way to match:
                 // `:not(:hover)` matches at rest, and so does `:is(:hover, ha-card)` through its other alternative.
                 name in VitroSupport.BENIGN_PSEUDO_CLASSES -> if (rulesOutRest(stripped, m.range.first, groups, interactionMemo)) benign = true
@@ -491,6 +498,7 @@ object CardCompat {
             }
         }
         if (benign) return Sel.Benign
+        if (restLink && sheet != Sheet.CARD && sheet != Sheet.STACK) return Sel.Noted(sel, ":link")
         return when (sheet) {
             Sheet.CARD -> Sel.Unsupported(sel, "it reaches inside the card, whose DOM Vitro doesn't model")
             Sheet.STACK -> Sel.Unsupported(sel, "it reaches inside the stack, whose DOM Vitro doesn't model")
@@ -597,6 +605,9 @@ object CardCompat {
     // -------------------------------------------------------------------------------------------------------------
 
     private val SPACE = Regex("""\s+""")
+    /** What places a pinned card: settled across the card's own rules ([hostPlacement]). */
+    private val PLACEMENT: Set<String> by lazy { setOf("position", "width", "transform") + OFFSETS }
+
     private val PINNED_WIDTH = Regex("""^-?[\d.]+(px|dp|%|r?em)?$""")
     private val TRANSLATE = Regex("""^(translate[xy]?)\((.*)\)$""")
     private val CENTER_OR_ZERO = setOf("-50%", "0", "0px", "0%")
@@ -631,6 +642,9 @@ object CardCompat {
             // How the declaration reads in a reason or note: built only when one is written.
             val shown = { "`$name: ${loggable(rawValue)}`" }
             val value = rawValue.trim().lowercase(Locale.ROOT)
+            // On the card itself only the placement that wins the cascade counts (`width: calc(…)` then
+            // `width: 300px !important` is placed at 300px); a winning calc() is still checked below.
+            if (host && name in PLACEMENT && hostPlacement[name] != null && value != hostPlacement[name]) continue
             // A templated or var() value can't be checked here: the property alone decides.
             val checkable = TPL !in value && "var(" !in value
             if (name.startsWith("--")) {
@@ -684,7 +698,12 @@ object CardCompat {
         "width" -> when {
             value in setOf("auto", "100%", "initial", "unset") -> null
             // The overlay reads a pinned width as px, dp, rem/em or %; anything else (`calc()`) would wrap the content.
-            pinned -> if (PINNED_WIDTH.matches(value)) null else "isn't drawn natively (a pinned width is px, rem or %)"
+            pinned -> when {
+                !PINNED_WIDTH.matches(value) -> "isn't drawn natively (a pinned width is px, rem or %)"
+                // The overlay sizes a width of zero or less to the card's content, not to nothing.
+                (value.trimEnd { it.isLetter() || it == '%' }.toDoubleOrNull() ?: 1.0) <= 0.0 -> "isn't drawn natively (a pinned width of zero)"
+                else -> null
+            }
             else -> "only applies to pinned (`position: fixed`) cards"
         }
         "height" -> if (value in setOf("auto", "100%", "initial", "unset", "inherit", "fit-content")) null else "isn't drawn natively (only `auto` and `100%`)"

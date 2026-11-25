@@ -16,10 +16,12 @@ import android.widget.TextView
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
+import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.model.LovelaceResource
+import dev.glassworks.engine.vitro.island.VitroIslandServer
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.VitroCardContext
@@ -41,6 +43,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.util.Base64
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Vitro as a Glassworks [dev.glassworks.engine.Engine]: when it is off it is the fallback engine, and when it is
@@ -251,6 +254,23 @@ class VitroEngineTest {
     }
 
     @Test
+    fun anEntityAnIslandLooksUpAtRuntimeJoinsTheViewsSubscription() {
+        val page = readyPage()
+        awaitMain("view-scoped subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
+        val before = server.commands("subscribe_entities").size
+        val watch = page.javaClass.getDeclaredMethod("watchRuntimeEntity", String::class.java).apply { isAccessible = true }
+        watch.invoke(page, "sensor.outdoor_temp")
+        watch.invoke(page, "sensor.indoor_temp") // batched with the first: one resubscription
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300))
+        awaitMain("resubscribed with the runtime entities") { server.commands("subscribe_entities").size == before + 1 }
+        val ids = server.commands("subscribe_entities").last().getJSONArray("entity_ids")
+        assertEquals(
+            setOf("light.lounge_lamp", "sensor.kitchen_temp", "binary_sensor.front_door", "sensor.outdoor_temp", "sensor.indoor_temp"),
+            (0 until ids.length()).map { ids.getString(it) }.toSet(),
+        )
+    }
+
+    @Test
     fun aViewlessUrlAnnouncesTheFirstViewsAddress() {
         val page = openPage(vitro())
         page.load("$base/wall-test")
@@ -305,6 +325,24 @@ class VitroEngineTest {
     }
 
     // ---- On: pages that are not dashboards ----
+
+    @Test
+    fun aViewStillWaitingForItsStatesSignalsNothingOnceTheFallbackHasThePage() {
+        // No states ever come: the first build waits its whole second.
+        server.initialEntities = JSONObject()
+        val page = openPage(vitro())
+        page.load("$base/wall-test/living")
+        awaitMain("dashboard shown") { vitroView(page).dashboard != null }
+        assertTrue("not ready while the view waits", host.messages("ready").isEmpty())
+        // The fallback takes the page during the wait; the wait's build then happens behind it and says nothing.
+        page.load("$base/auth/authorize?client_id=abc&redirect_uri=def")
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_500))
+        assertTrue("no ready behind the fallback", host.messages("ready").isEmpty())
+        assertTrue(host.pageStops.isEmpty())
+        // Back to the dashboard: its view is built, so it's ready at once.
+        page.load("$base/wall-test/living")
+        assertEquals("view", host.messages("ready").single().getString("why"))
+    }
 
     @Test
     fun onlyANonDashboardUrlOpensTheFallbackAndItIsReusedAfterwards() {
@@ -431,6 +469,37 @@ class VitroEngineTest {
         assertEquals(0, host.firstPaints.get())
     }
 
+    @Test
+    fun aLostConnectionAfterTheFallbackTookOverDoesNotFailItsPage() {
+        // The dashboard's connection fails only after the page moved on to a fallback page: that page isn't failed.
+        val attempts = java.util.concurrent.atomic.AtomicInteger(0)
+        val engine = VitroEngine(
+            fallback = fallback,
+            settings = { settings },
+            enabled = { true },
+            tokenProvider = { _, done -> done(FakeHaServer.TOKEN) },
+            socketFactory = { attempts.incrementAndGet(); throw java.io.IOException("Connection refused") },
+        ).also { engines += it }
+        val page = openPage(engine)
+        page.load("$base/wall-test/living")
+        page.load("$base/config/blueprint/import") // before the main thread hears of the failure
+        awaitMain("the connection was tried") { attempts.get() >= 1 }
+        Thread.sleep(100)
+        idle()
+        assertFalse(host.pageStops.toString(), host.pageStops.contains(false))
+    }
+
+    @Test
+    fun aNavigationQueuedBeforeTheActivityWentAwayStartsNothing() {
+        val page = openPage(vitro())
+        page.javaClass.getDeclaredMethod("dispose").apply { isAccessible = true }.invoke(page)
+        page.load("$base/wall-test/living")
+        idle()
+        assertTrue("no connection for a disposed page", server.connectUrls.isEmpty())
+        val client = page.javaClass.getDeclaredField("client").apply { isAccessible = true }.get(page)
+        assertNull(client)
+    }
+
     // ---- Messages from the host and Page API ----
 
     @Test
@@ -475,7 +544,13 @@ class VitroEngineTest {
 
     @Test
     fun logLinesLeaveOutQueriesAndProxiedPaths() {
-        assertEquals("http://192.0.2.10:8123/auth/…?…", VitroEngine.forLog("http://192.0.2.10:8123/auth/authorize?client_id=a&state=secret"))
+        assertEquals("http://…/auth/…?…", VitroEngine.forLog("http://192.0.2.10:8123/auth/authorize?client_id=a&state=secret"))
+        // No Home Assistant address either: an origin, a host or an IP a connection error names.
+        assertEquals("Unable to resolve host \"…\": No address", VitroEngine.forLog("Unable to resolve host \"homeassistant.local\": No address"))
+        assertEquals("failed to connect to …/… (port 8123)", VitroEngine.forLog("failed to connect to ha.example/192.0.2.10 (port 8123)"))
+        assertEquals("connect to … refused", VitroEngine.forLog("connect to fd00::12:8123 refused"))
+        assertEquals("Closed by Home Assistant", VitroEngine.forLog("Closed by Home Assistant"))
+        assertEquals("Starting Vitro 0.0.1", VitroEngine.forLog("Starting Vitro 0.0.1"))
         assertEquals("[3] GET /api/… -> 200", VitroEngine.forLog("[3] GET /api/states/sensor.private_thing -> 200"))
         assertEquals("GET /__vitro/enter?…", VitroEngine.forLog("GET /__vitro/enter?c=capability&to=%2F"))
         assertEquals("GET /__vitro/island/… -> 200", VitroEngine.forLog("GET /__vitro/island/s0123abcd -> 200"))
@@ -608,7 +683,10 @@ class VitroEngineTest {
         assertTrue(html.contains("--rgb-primary-color: 0, 154, 199;"))
         // hass.callWS goes over the loopback WebSocket bridge, and states are watched through a proxy.
         assertTrue(html.contains("callWS(msg)"))
-        assertTrue(html.contains("sendBridge({ type: 'callWs', id, msg: msg || {} })"))
+        assertTrue(html.contains("sendBridge({ type: 'callWs', id, msg: msg || {} }, id)"))
+        // A call that can't go out soon is rejected and leaves the queue, never sent much later.
+        assertTrue(html.contains("reject(new Error('Not connected'));"))
+        assertTrue(html.contains("const QUEUED_CALL_MS = 5000;"))
         assertTrue(html.contains("const statesProxy = new Proxy(rawStates"))
         assertTrue(html.contains("sendBridge({ type: 'watch', entity_id: prop })"))
         // hass.callService is HA's call_service over the same bridge, so its promise carries HA's answer.
@@ -810,6 +888,42 @@ class VitroEngineTest {
 
     private fun islandWith(store: EntityStore, card: String) =
         WebIslandCardView(cardContext(store = store), LovelaceParser.parseCard(JSONObject(card)))
+
+    @Test
+    fun patchesReachEverySocketStillOpenForAnIslandAndRuntimeLookupsJoinTheSubscription() {
+        val store = storeWith("light.lounge_lamp", "light.kitchen")
+        val server = VitroIslandServer(haBase = { base }, accessToken = { null })
+        try {
+            val watched = CopyOnWriteArrayList<String>()
+            val ctx = VitroCardContext(
+                context = activity, haBase = base, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), true),
+                resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {},
+                openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+                islandServer = server, openIslandPage = { RecordingPage(activity) }, watchEntity = { watched += it },
+            )
+            val island = WebIslandCardView(ctx, LovelaceParser.parseCard(JSONObject("""{"type": "custom:button-card", "entity": "light.lounge_lamp"}""")))
+            @Suppress("UNCHECKED_CAST")
+            val handler = (server.javaClass.getDeclaredField("slots").apply { isAccessible = true }.get(server) as Map<String, VitroIslandServer.SlotHandler>).values.single()
+            val older = CopyOnWriteArrayList<JSONObject>()
+            val newer = CopyOnWriteArrayList<JSONObject>()
+            val sendOlder: (JSONObject) -> Unit = { older += it }
+            val sendNewer: (JSONObject) -> Unit = { newer += it }
+            handler.onConnected(sendOlder)
+            handler.onConnected(sendNewer) // a replacement connects before the old socket closes
+            handler.onDisconnected(sendOlder)
+            older.clear(); newer.clear()
+            store.putLocal(EntityState("light.lounge_lamp", "off", emptyMap()))
+            assertEquals("patch", newer.single().getString("type"))
+            assertTrue("the closed socket gets nothing", older.isEmpty())
+
+            // A lookup beyond the config joins the view's subscription; one the config names doesn't need to.
+            island.handleIslandMessage(JSONObject().put("type", "watch").put("entity_id", "light.kitchen")) {}
+            island.handleIslandMessage(JSONObject().put("type", "watch").put("entity_id", "light.kitchen")) {}
+            assertEquals(listOf("light.kitchen"), watched.toList())
+        } finally {
+            server.stop()
+        }
+    }
 
     @Test
     fun aFilterIslandGetsEveryEntityAndFollowsThemAll() {

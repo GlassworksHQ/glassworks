@@ -30,20 +30,24 @@ object CompatWarmup {
     /** What [start] runs: every card's routing, the view [firstViewPath] opens on first (as the view resolves it). */
     internal fun warm(config: DashboardConfig, firstViewPath: String?, cancelled: () -> Boolean = { false }) {
         val views = config.views
-        val first = views.indexOfFirst { it.path == firstViewPath }.takeIf { it >= 0 }
-            ?: firstViewPath?.toIntOrNull()?.takeIf { it in views.indices } ?: 0
+        // The renderer's own choice: a null or blank path is the first view, never one without a path.
+        val first = config.viewIndex(firstViewPath)
         for (i in listOf(first) + views.indices.filter { it != first }) {
             val view = views.getOrNull(i) ?: continue
             for (root in CardRouter.viewRoots(view)) {
-                if (cancelled()) return
-                warm(root.card)
+                if (!warm(root.card, cancelled)) return
             }
         }
     }
 
-    /** [card] and the cards inside it, as the build routes them ([CardConfig.inIsland]). */
-    private fun warm(card: CardConfig) {
+    /**
+     * [card] and the cards inside it, as the build routes them ([CardConfig.inIsland]), checking [cancelled] before
+     * each one: a new dashboard doesn't wait behind the rest of a large stack. False once cancelled.
+     */
+    private fun warm(card: CardConfig, cancelled: () -> Boolean): Boolean {
+        if (cancelled()) return false
         if (!card.nativeOnly) card.compat
-        card.childCards.forEach(::warm)
+        for (child in card.childCards) if (!warm(child, cancelled)) return false
+        return true
     }
 }

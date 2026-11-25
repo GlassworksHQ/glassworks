@@ -139,7 +139,7 @@ select), `bubble-card`, `mini-graph-card`, `mini-media-player`, `clock-weather-c
 | Distinct island card types | 113 (99 custom, 14 core) |
 | Island types seen in only one dashboard | 81 |
 
-Island card types by how many dashboards use them (the 14 seen in at least three, then the notable ones):
+Island card types by how many dashboards use them (the 16 seen in at least three, then the notable ones):
 
 | Dashboards | Cards | Type | Kind |
 |---|---|---|---|
@@ -219,7 +219,8 @@ a stated goal (Vitro already draws `history-graph`, `statistics-graph` and `mini
 Read-only throughout: the HA websocket helper only calls `lovelace/*` reads, and GitHub is read through the public API.
 
 ```
-export HA_URL=http://homeassistant.local:8123 HA_TOKEN=...                       # a long-lived token; read-only use
+export HA_URL=https://homeassistant.local:8123 HA_TOKEN=...                      # a long-lived token; read-only use
+# Plain http:// to another host sends the token unencrypted: the helper refuses it unless HA_ALLOW_INSECURE=1.
 mkdir -p ours && node tools/vitro-census/ha-dashboards.mjs get <url_path> > ours/<url_path>.json   # one per dashboard
 python3 tools/vitro-census/census.py ours/*.json                                  # native vs island, per card type
 OUT=$(mktemp -d)                                                                   # a new, empty folder

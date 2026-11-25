@@ -174,7 +174,9 @@ class EntityStoreTest {
         assertEquals(0, (lamp.attributes["brightness"] as Number).toInt())
         assertEquals("onoff", lamp.attributes["color_mode"])
         assertFalse("rgb_color was removed", "rgb_color" in lamp.attributes)
-        assertEquals(mapOf("k" to listOf<Any?>(1, 2)).keys, (lamp.attributes["nested"] as Map<*, *>).keys)
+        val nested = lamp.attributes["nested"] as Map<*, *>
+        assertEquals(setOf("k"), nested.keys)
+        assertEquals(listOf(1, 2), (nested["k"] as List<*>).map { (it as Number).toInt() })
         assertEquals(1700000000.5, lamp.lastChanged, 0.0) // lc not in the diff
         assertEquals(1700000005.0, lamp.lastUpdated, 0.0)
     }

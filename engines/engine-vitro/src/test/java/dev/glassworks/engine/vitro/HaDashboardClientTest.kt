@@ -110,9 +110,13 @@ class HaDashboardClientTest {
         return c
     }
 
-    /** A started client with the whole startup sequence done (the first entity subscription is on the wire). */
+    /**
+     * A started client with the whole startup sequence done (the first entity subscription is on the wire). Its view
+     * follows every entity, picked before the start, as a reconnect finds it.
+     */
     private fun connected(dashboardPath: String? = null, connect: (String) -> HaSocket = server::connect): HaDashboardClient {
         val c = newClient(connect = connect)
+        c.subscribeViewEntities(emptySet())
         c.start(dashboardPath)
         awaitCondition("startup sequence") {
             server.commands("subscribe_entities").isNotEmpty() && listener.configs.isNotEmpty() &&
@@ -355,6 +359,19 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun nothingIsSubscribedUntilAViewPicksItsEntities() {
+        // Every entity at once can outgrow the socket's message limit on a large HA: the view's scope comes first.
+        val c = newClient()
+        c.start(null)
+        awaitCondition("startup sequence") { listener.dashboards.isNotEmpty() && listener.themes.isNotEmpty() }
+        readerBarrier(c)
+        assertTrue(server.commands("subscribe_entities").isEmpty())
+        c.subscribeViewEntities(setOf("light.lounge_lamp"))
+        awaitCondition("scoped subscription") { server.commands("subscribe_entities").isNotEmpty() }
+        assertEquals("light.lounge_lamp", server.commands("subscribe_entities").single().getJSONArray("entity_ids").getString(0))
+    }
+
+    @Test
     fun aViewFilterSetBeforeConnectingScopesTheFirstSubscription() {
         val c = newClient()
         c.subscribeViewEntities(setOf("light.lounge_lamp", "sensor.kitchen_temp"))
@@ -406,6 +423,7 @@ class HaDashboardClientTest {
             }
         }
         val c = newClient()
+        c.subscribeViewEntities(emptySet())
         c.start(null)
         assertTrue("snapshot reached the store", inSnapshot.await(10, TimeUnit.SECONDS))
         try {
@@ -432,8 +450,9 @@ class HaDashboardClientTest {
         val sawRemovalFirst = java.util.concurrent.atomic.AtomicBoolean(true)
         store.subscribe("light.lounge_lamp") { s ->
             if (s?.state == "off") {
-                woken.incrementAndGet()
+                // Recorded before the count: a reader that sees the count also sees this.
                 if (store["sensor.unreferenced_power"] != null) sawRemovalFirst.set(false)
+                woken.incrementAndGet()
             }
         }
         val sub = server.commands("subscribe_entities").single().getInt("id")
@@ -769,17 +788,18 @@ class HaDashboardClientTest {
     @Test
     fun aRequestStillWaitingWhenTheConnectionDropsFailsOnce() {
         // `test/hang` reaches the wire but HA never answers it before the connection ends.
+        val withheld = java.util.concurrent.CountDownLatch(1)
         val c = connected(connect = { url ->
             val inner = server.connect(url)
             object : HaSocket by inner {
                 override fun send(text: String) {
-                    if (JSONObject(text).optString("type") != "test/hang") inner.send(text)
+                    if (JSONObject(text).optString("type") != "test/hang") inner.send(text) else withheld.countDown()
                 }
             }
         })
         val results = CopyOnWriteArrayList<Pair<Boolean, JSONObject?>>()
         c.callWs(JSONObject().put("type", "test/hang")) { ok, _, err -> results += ok to err }
-        Thread.sleep(50) // let the writer put it on the wire
+        assertTrue("the writer put it on the wire", withheld.await(10, TimeUnit.SECONDS))
         server.dropConnection()
         awaitCondition("the hanging request failed") { results.isNotEmpty() }
         Thread.sleep(100)
@@ -792,20 +812,23 @@ class HaDashboardClientTest {
     fun aDashboardRequestCutOffByADroppedConnectionIsAskedAgainNotReportedMissing() {
         // The first connection never answers `lovelace/config` for "slow"; it then drops.
         val firstSocket = java.util.concurrent.atomic.AtomicBoolean(true)
+        val withheld = java.util.concurrent.CountDownLatch(1)
         val c = connected(connect = { url ->
             val inner = server.connect(url)
             val swallow = firstSocket.getAndSet(false)
             object : HaSocket by inner {
                 override fun send(text: String) {
                     val m = JSONObject(text)
-                    if (swallow && m.optString("type") == "lovelace/config" && m.optString("url_path") == "slow") return
+                    if (swallow && m.optString("type") == "lovelace/config" && m.optString("url_path") == "slow") {
+                        withheld.countDown()
+                        return
+                    }
                     inner.send(text)
                 }
             }
         })
         c.fetchDashboard("slow")
-        awaitCondition("asked") { server.commands("lovelace/config").isNotEmpty() }
-        Thread.sleep(50) // the writer is past it
+        assertTrue("the request for \"slow\" was withheld", withheld.await(10, TimeUnit.SECONDS))
         server.dropConnection()
         // The reconnect asks for the same dashboard and gets it; nothing reports it as missing.
         awaitCondition("config after reconnect") { listener.configs.any { it.first == "slow" } }
@@ -842,6 +865,9 @@ class HaDashboardClientTest {
         val c = connected()
         c.releaseDashboard()
         server.pushEvent(server.eventSubscriptionId("lovelace_updated")!!, JSONObject().put("event_type", "lovelace_updated"))
+        // The reader has handled the update (and skipped it) before the connection goes.
+        readerBarrier(c)
+        assertEquals(1, server.commands("lovelace/config").size)
         server.dropConnection()
         awaitCondition("reconnected") { server.connectUrls.size == 2 && server.commands("subscribe_entities").size == 2 }
         // Only the first connection's startup request: nothing for the fallback page's "dashboard".
@@ -878,8 +904,9 @@ class HaDashboardClientTest {
                 override fun send(text: String) {
                     val m = JSONObject(text)
                     if (swallow.get() && m.optString("type") == "lovelace/config") {
-                        server.received += m
+                        // The id first: a test that sees the request also sees which id to answer.
                         swallowedId.set(m.getInt("id"))
+                        server.received += m
                         return
                     }
                     inner.send(text)
@@ -892,7 +919,7 @@ class HaDashboardClientTest {
         assertEquals(1, server.commands("lovelace/config").size) // skipped: the fallback shows
         swallow.set(true)
         c.claimDashboard(null) // asks, but the answer never comes
-        awaitCondition("asked on claim") { server.commands("lovelace/config").size == 2 }
+        awaitCondition("asked on claim") { server.commands("lovelace/config").size == 2 && swallowedId.get() >= 0 }
         c.releaseDashboard()
         swallow.set(false)
         // The answer arrives late, after the release: it is dropped, and it doesn't count as the refetch made up.
@@ -941,6 +968,25 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun aServiceCallThatCannotBeQueuedFailsAtOnce() {
+        // No connection: the caller hears `false` now, so an optimistic control rolls back instead of waiting.
+        val c = newClient()
+        val result = CompletableFuture<Boolean>()
+        c.callService("light", "toggle", JSONObject().put("entity_id", "light.lounge_lamp")) { result.complete(it) }
+        assertFalse(result.get(1, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun aCleanCloseByHomeAssistantIsReportedAsADisconnect() {
+        connected()
+        assertTrue(listener.disconnected.isEmpty())
+        server.dropConnection() // EOF, no error
+        awaitCondition("disconnect reported") { listener.disconnected.isNotEmpty() }
+        assertEquals("Closed by Home Assistant", listener.disconnected[0])
+        awaitCondition("reconnected") { server.connectUrls.size == 2 }
+    }
+
+    @Test
     fun aPingThroughCallWsSettlesOnPong() {
         val c = connected()
         val done = CompletableFuture<Boolean>()
@@ -954,15 +1000,19 @@ class HaDashboardClientTest {
         java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { server ->
             val held = CopyOnWriteArrayList<java.net.Socket>()
             val acceptor = Thread { runCatching { while (true) held += server.accept() } }.apply { isDaemon = true; start() }
-            val started = System.nanoTime()
             try {
-                HaDashboardClient.connectLongLived("ws://127.0.0.1:${server.localPort}/api/websocket", upgradeTimeoutMs = 300)
-                org.junit.Assert.fail("the upgrade should time out")
-            } catch (_: IOException) {
+                // Bounded by the test itself: a client that stops enforcing its deadline fails here, not hangs.
+                val call = CompletableFuture.supplyAsync {
+                    runCatching { HaDashboardClient.connectLongLived("ws://127.0.0.1:${server.localPort}/api/websocket", upgradeTimeoutMs = 300) }
+                }
+                val outcome = call.get(5, TimeUnit.SECONDS)
+                val e = outcome.exceptionOrNull()
+                assertTrue("the upgrade timed out: $e", e is java.net.SocketTimeoutException && e.message == "upgrade took too long")
+            } finally {
+                runCatching { server.close() }
+                held.forEach { runCatching { it.close() } }
+                acceptor.interrupt()
             }
-            assertTrue("gave up within the bound", System.nanoTime() - started < 5_000_000_000L)
-            held.forEach { runCatching { it.close() } }
-            acceptor.interrupt()
         }
     }
 

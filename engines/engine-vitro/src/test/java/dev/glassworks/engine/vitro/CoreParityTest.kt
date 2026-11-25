@@ -341,9 +341,18 @@ class CoreParityTest {
             """{"type": "tile", "entity": "light.desk", "features_position": "inline",
                "features": [{"type": "toggle"}, {"type": "light-brightness"}]}""",
         ))
-        // The toggle comes first in the config, so it's the one beside the info (HA draws no others inline).
+        // The toggle comes first in the config, so it's the one beside the info; the brightness goes below it.
         assertNotNull(t.all().firstOrNull { it.contentDescription == "On" })
-        assertTrue(t.all().none { it is dev.glassworks.engine.vitro.cards.HaHorizontalSliderView })
+        assertEquals(1, t.all().count { it is dev.glassworks.engine.vitro.cards.HaHorizontalSliderView })
+        assertEquals(2, dev.glassworks.engine.vitro.ui.HaGridSize.of(card(
+            """{"type": "tile", "entity": "light.desk", "features_position": "inline",
+               "features": [{"type": "toggle"}, {"type": "light-brightness"}]}""",
+        )).rows)
+        // Three below share two rows, two columns each.
+        assertEquals(3, dev.glassworks.engine.vitro.ui.HaGridSize.of(card(
+            """{"type": "tile", "entity": "light.desk", "features_position": "inline",
+               "features": [{"type": "toggle"}, {"type": "light-brightness"}, {"type": "light-color-temp"}, {"type": "toggle"}]}""",
+        )).rows)
     }
 
     @Test

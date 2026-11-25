@@ -331,7 +331,8 @@ const TEXTS_JS = (slot) => {
           if (r.left < er.left + inL - 0.5 || r.right > er.right - inR + 0.5) clipped = true;
           if (e.localName === 'ha-card') break;
         }
-        out.push({ ...(clipped ? { clipped } : {}),
+        // Both values: an explicit false outweighs the bounds the comparison would otherwise guess from.
+        out.push({ clipped,
           text, x: r.x + scrollX - slot.x, y: r.y + scrollY - slot.y, w: r.width, h: r.height,
           size: parseFloat(s.fontSize), weight: +s.fontWeight || 400, color: s.color, transform: s.textTransform,
         });
@@ -399,8 +400,13 @@ function recordImages(page) {
       return;
     }
     if (res.request().resourceType() !== 'image') return;
-    // An image request that got an error, or a 2xx that isn't an image (HA shows nothing there either).
-    if (res.status() >= 400 || (res.status() >= 200 && res.status() < 300)) images.failure(onOrigin(urls));
+    // An image request that got an error, or a 2xx that isn't an image (HA shows nothing there either). A 2xx
+    // image this harness can't keep (an /api/…_proxy picture, say) is not a failure: HA drew it, and Vitro drawing
+    // nothing there is a gap in the input, not excused.
+    const type = String(res.headers()['content-type'] || '').trim().toLowerCase();
+    const ok = res.status() >= 200 && res.status() < 300;
+    if (res.status() >= 400 || (ok && !type.startsWith('image/'))) images.failure(onOrigin(urls));
+    else if (ok) for (const p of onOrigin(urls)) images.failed.delete(p);
   });
   page.on('requestfailed', (req) => {
     if (req.resourceType() !== 'image') return;
@@ -416,7 +422,7 @@ function recordImages(page) {
  * through assetDestination's checks; new or changed ones are logged. Returns the drawn image paths HA asked for
  * and didn't get.
  */
-async function saveDrawnImages(images, drawn) {
+async function saveDrawnImages(loaded, drawn) {
   const paths = new Set();
   for (const url of drawn) {
     try {
@@ -425,8 +431,8 @@ async function saveDrawnImages(images, drawn) {
     } catch {}
   }
   for (const path of [...paths].sort()) {
-    if (!images.loaded.has(path)) continue;
-    const bytes = await images.loaded.get(path);
+    if (!loaded.has(path)) continue;
+    const bytes = await loaded.get(path);
     if (!bytes) throw new Error(`image ${path}: HA loaded it but its body couldn't be read`);
     const out = assetDestination(join(corpusRoot, 'assets'), path, committed);
     const conflict = noteSaved(savedDigests, path, createHash('sha256').update(bytes).digest('hex'));
@@ -439,7 +445,6 @@ async function saveDrawnImages(images, drawn) {
     stage(out, bytes);
     log(`asset ${path} (HA drew it)`);
   }
-  return [...paths].filter((p) => images.failed.has(p)).sort();
 }
 
 async function newPage(browser, frame, dark, now, cardModUrl, tz) {
@@ -711,7 +716,7 @@ async function capture() {
           const config = c.card ?? JSON.parse(readFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), 'utf8'));
           const outDir = join(refs, frame.id);
           mkdirSync(outDir, { recursive: true });
-          let info, stable, clip, slots, png, texts, templates, ids, drawnStates, drawn, display, drawnGraphs;
+          let info, stable, clip, slots, png, texts, templates, ids, drawnStates, drawn, display, drawnGraphs, loadedAtShot;
           // The PNG, its texts and the states saved with them must be one instant: an entity that changes while
           // they're taken makes the pair disagree, so the capture starts over (three tries).
           for (let attempt = 1; ; attempt++) {
@@ -748,6 +753,9 @@ async function capture() {
             // The images the screenshot shows, read just before it and checked again after (bracketed like the
             // states): saved for Vitro's fixture server after the checks.
             drawn = await page.evaluate(DRAWN_IMAGES_JS, slots);
+            // The bodies those images came with, as of the screenshot: a later response for the same URL must not
+            // be saved beside a picture of the earlier one.
+            loadedAtShot = new Map(images.loaded);
             // Kept in memory until every check passes: a failed case leaves no PNG behind.
             await page.evaluate(FREEZE_JS);
             png = await fullShot(page, { clip, animations: 'disabled' });
@@ -765,7 +773,10 @@ async function capture() {
             const sameStates = JSON.stringify(snapshotStates(states, ids)) === JSON.stringify(drawnStates);
             const sameImages = JSON.stringify(await page.evaluate(DRAWN_IMAGES_JS, slots)) === JSON.stringify(drawn);
             const sameGraphs = JSON.stringify(graphs.calls) === JSON.stringify(drawnGraphs);
-            if (sameStates && sameImages && sameGraphs) break;
+            // Only the drawn images' bodies: another card loading a picture meanwhile changes nothing here.
+            const drawnPaths = drawn.drawn.map((url) => { try { const u = new URL(url); return u.origin === creds.origin ? u.pathname : null; } catch { return null; } }).filter(Boolean);
+            const sameBodies = drawnPaths.every((p) => images.loaded.get(p) === loadedAtShot.get(p));
+            if (sameStates && sameImages && sameGraphs && sameBodies) break;
             if (attempt >= 3) throw new Error('entity states, drawn images or graph data kept changing during the capture (3 tries)');
             log(`${frame.id}/${c.id}: ${!sameStates ? 'an entity' : !sameImages ? 'a drawn image' : 'graph data'} changed during the capture: again`);
           }
@@ -824,7 +835,7 @@ async function capture() {
             // (states, texts, templates, display data), not just what the card draws.
             if (hasMacFragment(text)) throw new Error('the reference holds a MAC fragment (a device or entity name?): neither file is written');
           }
-          await saveDrawnImages(images, drawn.drawn.filter((url) => !failedDrawn.includes(onHa(url))));
+          await saveDrawnImages(loadedAtShot, drawn.drawn.filter((url) => !failedDrawn.includes(onHa(url))));
           stage(join(outDir, `${c.id}.png`), png);
           stage(join(outDir, `${c.id}.json`), text + '\n');
           log(`${frame.id}/${c.id}: ${slots.length} card(s), ${texts.length} texts, ${Object.keys(caseStates).length} states, ${Object.keys(templates).length} templates${stable ? '' : ' (still moving)'} in ${Date.now() - t0} ms`);

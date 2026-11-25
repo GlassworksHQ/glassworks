@@ -198,9 +198,41 @@ views:
     expect(r.isFullyNative).toBe(true);
   });
 
-  it("treats a card_mod style map (Shadow-DOM selectors) as complex", () => {
-    const r = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            .: |\n              ha-card { color: red; }\n");
-    expect(r.warnings).toHaveLength(1);
+  it("reads a card_mod style map's own entry as native, and warns on the rest", () => {
+    const own = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            .: |\n              ha-card { opacity: .5; }\n");
+    expect(own.warnings).toHaveLength(0);
+    const deep = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            ha-tile-icon$: |\n              .icon { color: red; }\n");
+    expect(deep.warnings).toHaveLength(1);
+    const pseudo = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            .: |\n              ha-card::before { content: 'x'; }\n");
+    expect(pseudo.warnings).toHaveLength(1);
+    // The single-colon form is a pseudo-element too.
+    const legacy = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            .: |\n              ha-card:before { content: 'x'; }\n");
+    expect(legacy.warnings).toHaveLength(1);
+    // A root key counts only on its own card type: ha-markdown$ on a tile isn't read.
+    const wrongRoot = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            ha-markdown$: |\n              p { color: red; }\n");
+    expect(wrongRoot.warnings).toHaveLength(1);
+    const rightRoot = auditDashboard("views:\n  - cards:\n      - type: markdown\n        content: x\n        card_mod:\n          style:\n            ha-markdown$: |\n              p { color: red; }\n");
+    expect(rightRoot.warnings).toHaveLength(0);
+    // The card's own entry reaching inside the card (its header) isn't applied natively: still a warning.
+    const inside = auditDashboard("views:\n  - cards:\n      - type: entities\n        entities: [light.a]\n        card_mod:\n          style:\n            .: |\n              ha-card .card-header { color: red; }\n");
+    expect(inside.warnings).toHaveLength(1);
+    const hover = auditDashboard("views:\n  - cards:\n      - type: tile\n        card_mod:\n          style:\n            .: |\n              ha-card:hover { opacity: .5; }\n");
+    expect(hover.warnings).toHaveLength(0);
+    // A root compound is the card itself; a descendant of one isn't.
+    const style = (css: string) => auditDashboard(`views:\n  - cards:\n      - type: tile\n        card_mod:\n          style: |\n            ${css}\n`);
+    expect(style("ha-card.compact { opacity: .5; }").warnings).toHaveLength(0);
+    expect(style("ha-card[data-x] { opacity: .5; }").warnings).toHaveLength(0);
+    expect(style("ha-card.compact .card-header { color: red; }").warnings).toHaveLength(1);
+    // Jinja inside a declaration isn't read as a selector.
+    expect(style("ha-card { opacity: {{ 0.5 }}; }").warnings).toHaveLength(0);
+  });
+
+  it("refuses a key: value pair inside a flow list instead of reading it as text", () => {
+    const r = auditDashboard("views:\n  - cards: [type: custom:button-card]\n");
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/key: value pair/);
+    // A quoted string with a colon stays a string; a map in braces is read.
+    expect(auditDashboard('views:\n  - cards: [{type: "custom:button-card"}]\n').triggers).toHaveLength(1);
   });
 
   it("reads the sample, which has one custom card on purpose", () => {
