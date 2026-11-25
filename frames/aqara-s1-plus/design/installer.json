@@ -4,6 +4,7 @@
   "releases": [
     { "line": "aqara-s1-plus", "tag": "^(?:aqara-s1-plus-)?v(\\d+\\.\\d+\\.\\d+)$", "assets": ["s1-kiosk-{version}.apk"], "why": "Glassworks: vX.Y.Z (every release so far) or aqara-s1-plus-vX.Y.Z, and the S1's armeabi-v7a APK" }
   ],
+  "apk": { "line": "aqara-s1-plus", "asset": "kiosk-apk", "why": "The app is the newest S1 release's APK, read when someone installs, so a release reaches Kiln with no deploy. A kiosk-apk staged with Kiln (npm run stage, a local build) still wins, for testing" },
   "legacy": { "hashLinks": true, "why": "s1.edm.sh, the first installer page, was the S1's: its hash links (/#/wifi) lead here" },
   "touch": true,
   "flows": {

@@ -25,11 +25,11 @@ function recipe(over: Partial<Recipe<'blob', undefined, undefined>> = {}): Recip
   };
 }
 
-function run(r: Recipe<'blob', undefined, undefined>, uboot = new FakeUboot()) {
+function run(r: Recipe<'blob', undefined, undefined>, uboot = new FakeUboot(), fetchAhead?: () => Promise<unknown>, progress: FlowUi['progress'] = () => {}) {
   const saved: BackupMeta[] = [];
-  const ui: FlowUi = { log: () => {}, progress: () => {}, partition: () => {}, ask: (_, action) => action() };
+  const ui: FlowUi = { log: () => {}, progress, partition: () => {}, ask: (_, action) => action() };
   const flow = new InstallFlow(r, {
-    asset: async () => new Uint8Array(0), hasAsset: async () => false,
+    asset: async () => new Uint8Array(0), hasAsset: async () => false, ...(fetchAhead ? { fetchAhead } : {}),
     backups: { save: async (m) => { saved.push(m); }, original: async () => undefined },
     key: { publicKey: 'QAAAA test' } as AdbKey, sleep: async () => {},
     devices: { knownFastboot: async () => undefined, requestFastboot: async () => { throw new Error('x'); }, knownAdb: async () => undefined, requestAdb: async () => { throw new Error('x'); } },
@@ -45,6 +45,33 @@ describe('InstallFlow keeps its rules whatever the recipe does', () => {
     expect(t.uboot.flashed).toEqual(['vbmeta', 'boot']);
     expect(t.uboot.data('boot')[0]).toBe(MARK);
     expect(t.uboot.rebooted).toBe(true);
+  });
+
+  it('a download for after the writes (the app): started with the install, finished before the first write', async () => {
+    const uboot = new FakeUboot();
+    let done!: () => void;
+    const started: number[] = [];
+    // the flow says it waits for the download only once the backup is saved
+    let waiting!: () => void;
+    const waits = new Promise<void>((r) => { waiting = r; });
+    const t = run(recipe(), uboot, () => { started.push(uboot.commands.length); return new Promise<void>((r) => { done = r; }); },
+      (p) => { if (p.sub === 'Downloading the app') waiting(); });
+    const install = t.install();
+    await waits;
+    // started before the device was asked anything; the backup ran meanwhile, and nothing is written yet
+    expect(started).toEqual([0]);
+    expect(t.saved).toHaveLength(1);
+    expect(uboot.flashed).toEqual([]);
+    done();
+    await install;
+    expect(uboot.flashed).toEqual(['boot']);
+  });
+
+  it('a download for after the writes that fails stops the install with nothing written', async () => {
+    const t = run(recipe(), new FakeUboot(), async () => { throw new Error('There\'s no Glassworks release to install yet'); });
+    await expect(t.install()).rejects.toThrow('There\'s no Glassworks release to install yet');
+    expect(t.uboot.flashed).toEqual([]);
+    expect(t.uboot.rebooted).toBe(false);
   });
 
   it('refuses a recipe that writes boot before the last step, and writes nothing', async () => {

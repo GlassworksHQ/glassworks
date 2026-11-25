@@ -104,7 +104,11 @@ and the only way Kiln reaches one. `catalog` is each frame's design data (frame.
 its render), light enough for the picker, the routes and the release list (Refract's `releases.json` is written from it). `kiln` loads each engine
 frame's `kilnFrame` and `kilnSim` on demand. One route, `apps/kiln/src/app/[frame]`, serves every frame
 on the shared wizard (the catalog's `ENGINE`), titled from its `words.name`. Release lines come from
-`installer.json` `releases`, and the first installer page's links from `legacy`.
+`installer.json` `releases`, and the first installer page's links from `legacy`. A wizard frame's `apk` names the
+recipe asset that is its app and the release line it comes from (`{ "line", "asset" }`): Kiln downloads that APK from
+the line's newest release when someone installs (`/api/release/<line>/latest`, then Refract, checked against the
+release's `.sha256`), never from the files its deploy staged, so a release reaches Kiln with no deploy. A file staged
+under the same name (a local `npm run stage`) still wins, for testing a build before its release.
 `frame-neutral.test.ts` checks both halves: no frame name in Kiln's sources, and no import of a
 frame's package or a path into `frames/` except through the registry. Its allowlists only shrink.
 **A frame installed by image and adb** (the Mirror) declares a `DeviceFrame` (kiln-core `device.ts`)
