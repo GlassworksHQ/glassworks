@@ -152,14 +152,17 @@ class HaDashboardClientTest {
     fun startupSendsEachRequestInOrderWithIncreasingIds() {
         connected()
         val sent = server.received.toList().drop(1) // after `auth`
+        // First the user's language and formats (HA's translations-mixin subscribes on connect): the translations
+        // asked for later are in that language.
         assertEquals(
             listOf(
-                "get_config", "frontend/get_themes", "subscribe_events", "lovelace/dashboards/list",
+                "frontend/subscribe_user_data", "get_config", "frontend/get_themes", "subscribe_events", "lovelace/dashboards/list",
                 "lovelace/resources", "lovelace/config", "subscribe_events", "subscribe_entities",
             ),
-            sent.take(8).map { it.getString("type") },
+            sent.take(9).map { it.getString("type") },
         )
-        assertEquals((1..8).toList(), sent.take(8).map { it.getInt("id") })
+        assertEquals("language", sent[0].getString("key"))
+        assertEquals((1..9).toList(), sent.take(9).map { it.getInt("id") })
         assertEquals(
             listOf("themes_updated", "lovelace_updated"),
             server.commands("subscribe_events").map { it.getString("event_type") },
@@ -272,9 +275,8 @@ class HaDashboardClientTest {
     fun userDataSubscriptionReportsLaterThemeChanges() {
         connected(connect = userDataConnect(JSONObject(), null))
         awaitCondition("initial") { listener.userThemes.isNotEmpty() }
-        awaitCondition("user data subscribed") { server.commands("frontend/subscribe_user_data").isNotEmpty() }
-        val sub = server.commands("frontend/subscribe_user_data").single()
-        assertEquals("core", sub.getString("key"))
+        awaitCondition("user data subscribed") { server.commands("frontend/subscribe_user_data").any { it.optString("key") == "core" } }
+        val sub = server.commands("frontend/subscribe_user_data").single { it.optString("key") == "core" }
         server.pushEvent(sub.getInt("id"), JSONObject("""{"value": {"selectedTheme": {"theme": "night", "dark": false}}}"""))
         awaitCondition("change") { listener.userThemes.size == 2 }
         assertEquals("night" to false, listener.userThemes[1])
@@ -284,13 +286,13 @@ class HaDashboardClientTest {
     }
 
     @Test
-    fun theUserRequestsComeAfterTheFirstEightStartupRequests() {
+    fun theUserRequestsComeAfterTheFirstNineStartupRequests() {
         connected(connect = userDataConnect(JSONObject(), null))
-        awaitCondition("user data asked") { server.commands("frontend/subscribe_user_data").isNotEmpty() }
+        awaitCondition("user data asked") { server.commands("frontend/subscribe_user_data").any { it.optString("key") == "core" } }
         val types = server.received.toList().drop(1).map { it.getString("type") }
         assertEquals(
             listOf("auth/current_user", "frontend/get_user_data", "frontend/subscribe_user_data"),
-            types.drop(8).take(3),
+            types.drop(9).take(3),
         )
     }
 
@@ -640,7 +642,7 @@ class HaDashboardClientTest {
         val c = connected(connect = { url ->
             SpySocket(server.connect(url), before = { msg -> writers += msg.optString("type") to Thread.currentThread().name })
         })
-        awaitCondition("startup writes") { writers.size >= 12 } // auth + 8 startup requests + 3 user-data requests
+        awaitCondition("startup writes") { writers.size >= 13 } // auth + 9 startup requests + 3 user-data requests
         val caller = Thread.currentThread()
 
         c.callService("light", "turn_on")
@@ -660,7 +662,7 @@ class HaDashboardClientTest {
         assertEquals(ids.sorted(), ids)
         // Display data (registry, icons, translations) can interleave: it isn't what this test orders.
         val display = setOf("config/entity_registry/list_for_display", "config/device_registry/list", "config/area_registry/list", "frontend/get_icons", "frontend/get_translations")
-        val after = server.received.drop(1).filter { it.getInt("id") > 11 && it.getString("type") !in display }.map {
+        val after = server.received.drop(1).filter { it.getInt("id") > 12 && it.getString("type") !in display }.map {
             if (it.getString("type") == "call_service") it.getString("service") else it.getString("type")
         }
         assertEquals(listOf("turn_on", "turn_off", "history/history_during_period", "toggle"), after.take(4))
