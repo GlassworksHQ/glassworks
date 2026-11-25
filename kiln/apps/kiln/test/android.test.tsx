@@ -275,6 +275,27 @@ describe('the session', () => {
     expect(closed.state.connectError).toBe('Nothing was picked. Pick the tablet in the browser\'s list, then tap Allow on it.');
   });
 
+  it('every screen before the install has a way back: named to Find, the steps to where they came from, Allow to the steps once the ask stopped', async () => {
+    const s = new AndroidSession({ ...deps(), connect: vi.fn(() => Promise.reject(new DOMException('No device selected.', 'NotFoundError'))), picked: () => false }, true);
+    await s.pickApk('a.apk', fakeGenericApk());
+    await s.find();
+    expect(s.state.screen).toBe('named');
+    s.toSteps();
+    expect(s.state.screen).toBe('debug');
+    s.backFromSteps();
+    expect(s.state.screen).toBe('named');
+    s.restart();
+    expect(s.state).toMatchObject({ screen: 'find' });
+    expect(s.state.identified).toBeUndefined();
+    await s.find();
+    s.toSteps();
+    await s.connect(); // nothing picked: the ask has stopped
+    expect(s.state).toMatchObject({ screen: 'allow', connecting: false });
+    s.backToSteps();
+    expect(s.state).toMatchObject({ screen: 'debug' });
+    expect(s.state.connectError).toBeUndefined();
+  });
+
   it('a closed list is said plainly, and changes nothing', async () => {
     const s = new AndroidSession({ ...deps(), findUsb: () => Promise.reject(new DOMException('No device selected.', 'NotFoundError')) }, true);
     await s.find();

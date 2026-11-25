@@ -209,7 +209,11 @@ function Named({ s, session }: { s: UsbState; session: UsbSession }) {
       <ApkField s={s} session={session} />
       {blocked && s.apk && <p className="status err" role="alert">{blocked}</p>}
       <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={() => session.brands()}>Not right? Pick your brand</button></span>
+        <span className="links">
+          <button type="button" className="link" onClick={() => session.restart()}>Back</button>
+          <span aria-hidden="true">·</span>
+          <button type="button" className="link" onClick={() => session.brands()}>Not right? Pick your brand</button>
+        </span>
         <button type="button" className="btn ember" disabled={!!blocked} onClick={() => session.toSteps()}>Continue</button>
       </div>
     </section>
@@ -278,6 +282,7 @@ function Debug({ s, session }: { s: UsbState; session: UsbSession }) {
         <span className="small">
           Steps from {st.sources.map((src, i) => <span key={src.href}>{i > 0 && ' and '}<a className="link" href={src.href} target="_blank" rel="noreferrer">{src.title.split(':')[0]}</a></span>)}
           {' · '}<button type="button" className="link" onClick={() => session.brands()}>Different on yours?</button>
+          {' · '}<button type="button" className="link" onClick={() => session.backFromSteps()}>Back</button>
         </span>
         <button type="button" className="btn ember" onClick={() => void session.connect()}>USB debugging is on</button>
       </div>
@@ -313,7 +318,7 @@ function Allow({ s, session }: { s: UsbState; session: UsbSession }) {
         </Collapsible.Content>
         <div className="foot">
           {s.connectError
-            ? <button type="button" className="btn ember" onClick={() => void session.connect()}>Try again</button>
+            ? <span className="links"><button type="button" className="link" onClick={() => session.backToSteps()}>Back to the steps</button><button type="button" className="btn ember" onClick={() => void session.connect()}>Try again</button></span>
             : <span className="chip inline"><span className="pulse" />{`Waiting for ${dev.the}`}</span>}
           <Collapsible.Trigger className="link">Nothing on the screen?</Collapsible.Trigger>
         </div>

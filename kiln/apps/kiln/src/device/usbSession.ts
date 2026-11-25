@@ -225,6 +225,15 @@ export class UsbSession {
   /** Continue on the named screen. */
   toSteps() { if (!this.blocked()) this.set({ screen: 'debug' }); }
 
+  /** Back from the named screen to the first one: the device picked goes, and Find asks the browser's list again. */
+  restart() { if (this.state.finding) return; this.release(); this.set({ screen: 'find', identified: undefined, usbName: undefined, brand: undefined, findError: undefined }); }
+
+  /** Back from the steps, to the screen that led there: the brand list, or the device Kiln named. */
+  backFromSteps() { this.set({ screen: this.state.brandFrom === 'brand' || this.state.identified?.pick ? 'brand' : 'named' }); }
+
+  /** Back from Tap Allow to the steps, once the ask has stopped (a refusal, nothing picked): not while it still waits for the tap. */
+  backToSteps() { if (!this.state.connecting && this.state.screen === 'allow') this.set({ screen: 'debug', connectError: undefined }); }
+
   /** From the first screen: undo an install (or back to installing). Undo needs USB debugging too, so the same steps follow. */
   setFlow(flow: Flow) { this.set({ flow }); }
 

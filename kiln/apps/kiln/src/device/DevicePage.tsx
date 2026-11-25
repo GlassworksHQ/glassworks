@@ -640,7 +640,7 @@ export function ImageFlow({ image, app, toApp, base }: { image: ImageSession; ap
     <Shell steps={imageRail(s, f, image.recipe.community, image.inPlace)} level={imageLevel(s, image.recipe.community)} error={s.screen === 'error' || s.undo?.at === 'error'} chip={chip}>
       {/* no WebUSB: stop on the first screen, before a download and a build that only fail at the first USB call */}
       {chip?.kind === 'bad' ? <Browser /> : <ImageScreens f={image} s={s} m={app} ms={ms} />}
-      {toApp && community && chip?.kind !== 'bad' && s.screen === 'image' && <p className="small">{`Already running the ${community.name} image? `}<button type="button" className="link" onClick={toApp}>Install just the app over USB</button></p>}
+      {toApp && community && chip?.kind !== 'bad' && s.screen === 'image' && !image.inPlace && <p className="small">{`Already running the ${community.name} image? `}<button type="button" className="link" onClick={toApp}>Install just the app over USB</button></p>}
     </Shell>
   );
 }
