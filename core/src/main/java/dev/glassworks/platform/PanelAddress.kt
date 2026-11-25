@@ -22,13 +22,17 @@ import java.net.Inet4Address
 object PanelAddress {
     /**
      * One network Android lists: whether it is the panel on a LAN ([lan]: Wi-Fi or Ethernet, not a VPN or mobile
-     * data), whether it is Android's default network ([active]), and the IPv4 addresses of its link.
+     * data), whether it is Android's default network ([active]), the IPv4 addresses of its link, and whether it is
+     * Wi-Fi ([wifi]; false for Ethernet).
      */
-    data class ClientNetwork(val lan: Boolean, val ipv4: List<String>, val active: Boolean = false)
+    data class ClientNetwork(val lan: Boolean, val ipv4: List<String>, val active: Boolean = false, val wifi: Boolean = false)
 
-    /** The first usable address of the LAN networks in [networks], the default network's first. */
-    fun pick(networks: List<ClientNetwork>): String? = networks
-        .filter { it.lan }
+    /**
+     * The first usable address of the LAN networks in [networks], the default network's first. With [wifiOnly], only a
+     * Wi-Fi network counts: "the panel is on Wi-Fi", which Ethernet alone doesn't make true (Improv's initial state).
+     */
+    fun pick(networks: List<ClientNetwork>, wifiOnly: Boolean = false): String? = networks
+        .filter { it.lan && (!wifiOnly || it.wifi) }
         .sortedByDescending { it.active }
         .flatMap { it.ipv4 }
         .firstOrNull(::usable)
@@ -38,19 +42,21 @@ object PanelAddress {
         ip.isNotEmpty() && !ip.startsWith("127.") && !ip.startsWith("169.254.") && ip != "0.0.0.0"
 
     /** [pick] over the networks [context]'s Android lists now; null if it can't say. API 23 and newer. */
-    fun now(context: Context): String? = runCatching {
+    fun now(context: Context, wifiOnly: Boolean = false): String? = runCatching {
         val cm = context.applicationContext.getSystemService(ConnectivityManager::class.java) ?: return null
         val active = cm.activeNetwork
         @Suppress("DEPRECATION") // allNetworks: Wi-Fi can be up while the default network is another one
         val all = (listOfNotNull(active) + cm.allNetworks).distinct()
         pick(all.map { n ->
             val caps = cm.getNetworkCapabilities(n)
+            val vpn = caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
             ClientNetwork(
-                lan = caps != null && !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
+                lan = caps != null && !vpn &&
                     (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)),
                 ipv4 = cm.getLinkProperties(n)?.linkAddresses.orEmpty().mapNotNull { (it.address as? Inet4Address)?.hostAddress },
                 active = n == active,
+                wifi = caps != null && !vpn && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
             )
-        })
+        }, wifiOnly)
     }.getOrNull()
 }
