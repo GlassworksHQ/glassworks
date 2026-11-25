@@ -2,7 +2,7 @@
  "case": "layout-card-masonry",
  "frame": "mirror",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 720,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Lights",
    "x": 25,
    "y": 29,
@@ -44,10 +45,10 @@
   {
    "slot": 0,
    "clipped": true,
-   "text": "LED Strip Window",
+   "text": "Bedroom Strip Accent",
    "x": 81,
    "y": 85.59,
-   "w": 110.42,
+   "w": 136.17,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -57,10 +58,10 @@
   {
    "slot": 0,
    "clipped": true,
-   "text": "Sunset Lamp Sunset",
+   "text": "Reading Lamp Reading",
    "x": 81,
    "y": 133.59,
-   "w": 128.13,
+   "w": 143.27,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -70,10 +71,10 @@
   {
    "slot": 0,
    "clipped": true,
-   "text": "Entryway Ceiling Light",
+   "text": "Porch Ceiling Light",
    "x": 81,
    "y": 181.59,
-   "w": 136.7,
+   "w": 116.69,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -82,6 +83,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Covers",
    "x": 271,
    "y": 29,
@@ -95,10 +97,10 @@
   {
    "slot": 0,
    "clipped": true,
-   "text": "Kitchen Blind",
+   "text": "Office Blind",
    "x": 327,
    "y": 89.59,
-   "w": 81.53,
+   "w": 70.92,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -107,6 +109,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Air",
    "x": 271,
    "y": 167.8,
@@ -119,10 +122,11 @@
   },
   {
    "slot": 0,
-   "text": "Air purifier",
+   "clipped": false,
+   "text": "Ceiling Fan",
    "x": 327,
    "y": 224.39,
-   "w": 64.36,
+   "w": 68.63,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -132,10 +136,10 @@
   {
    "slot": 0,
    "clipped": true,
-   "text": "LED Strip Window",
+   "text": "Bedroom Strip Accent",
    "x": 327,
    "y": 272.39,
-   "w": 110.42,
+   "w": 136.17,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -144,18 +148,19 @@
   }
  ],
  "states": {
-  "cover.kitchen_blind": {
+  "cover.office_blind": {
    "s": "open",
    "a": {
     "is_closed": false,
     "current_position": 100,
     "assumed_state": true,
-    "friendly_name": "Kitchen Blind",
+    "friendly_name": "Office Blind",
     "supported_features": 11
    },
-   "lc": 1795505391.0030644
+   "lc": 1794491700,
+   "lu": 1794491700
   },
-  "fan.air_purifier": {
+  "fan.ceiling_fan": {
    "s": "on",
    "a": {
     "preset_modes": [
@@ -164,12 +169,33 @@
     "percentage": 20,
     "percentage_step": 10,
     "preset_mode": null,
-    "friendly_name": "Air purifier",
+    "friendly_name": "Ceiling Fan",
     "supported_features": 57
    },
-   "lc": 1795504930.0582252
+   "lc": 1794484020,
+   "lu": 1794484020
   },
-  "light.entryway_ceiling_light": {
+  "light.bedroom_accent": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "xy"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "hs_color": null,
+    "rgb_color": null,
+    "xy_color": null,
+    "off_with_transition": false,
+    "off_brightness": 254,
+    "icon": "mdi:led-strip-variant",
+    "friendly_name": "Bedroom Strip Accent",
+    "supported_features": 40
+   },
+   "lc": 1794496680,
+   "lu": 1794496680
+  },
+  "light.porch_ceiling_light": {
    "s": "off",
    "a": {
     "min_color_temp_kelvin": 2702,
@@ -185,12 +211,13 @@
     "xy_color": null,
     "off_with_transition": true,
     "off_brightness": 153,
-    "friendly_name": "Entryway Ceiling Light",
+    "friendly_name": "Porch Ceiling Light",
     "supported_features": 40
    },
-   "lc": 1795560141.1518812
+   "lc": 1794490860,
+   "lu": 1794490860
   },
-  "light.sunset_lamp": {
+  "light.reading_lamp": {
    "s": "off",
    "a": {
     "supported_color_modes": [
@@ -199,85 +226,67 @@
     "color_mode": null,
     "off_with_transition": false,
     "off_brightness": null,
-    "icon": "mdi:weather-sunset",
-    "friendly_name": "Sunset",
+    "icon": "mdi:floor-lamp",
+    "friendly_name": "Reading Lamp Reading",
     "supported_features": 8
    },
-   "lc": 1795532578.3925707
-  },
-  "light.window_accent": {
-   "s": "off",
-   "a": {
-    "supported_color_modes": [
-     "xy"
-    ],
-    "color_mode": null,
-    "brightness": null,
-    "hs_color": null,
-    "rgb_color": null,
-    "xy_color": null,
-    "off_with_transition": false,
-    "off_brightness": 254,
-    "icon": "mdi:window-open",
-    "friendly_name": "Window",
-    "supported_features": 40
-   },
-   "lc": 1795507611.0189574
+   "lc": 1794488160,
+   "lu": 1794488160
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "cover.kitchen_blind",
+    "ei": "cover.office_blind",
     "pl": "template",
-    "en": "Kitchen Blind"
+    "en": "Office Blind"
    },
    {
-    "ei": "fan.air_purifier",
+    "ei": "fan.ceiling_fan",
     "pl": "zha",
     "tk": "fan",
     "di": "device-1"
    },
    {
-    "ei": "light.entryway_ceiling_light",
+    "ei": "light.bedroom_accent",
     "pl": "zha",
     "tk": "light",
-    "di": "device-2"
+    "ic": "mdi:led-strip-variant",
+    "di": "device-2",
+    "en": "Accent"
    },
    {
-    "ei": "light.sunset_lamp",
+    "ei": "light.porch_ceiling_light",
     "pl": "zha",
     "tk": "light",
-    "ic": "mdi:weather-sunset",
-    "di": "device-3",
-    "en": "Sunset"
+    "di": "device-3"
    },
    {
-    "ei": "light.window_accent",
+    "ei": "light.reading_lamp",
     "pl": "zha",
     "tk": "light",
-    "ic": "mdi:window-open",
+    "ic": "mdi:floor-lamp",
     "di": "device-4",
-    "en": "Window"
+    "en": "Reading"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "Air purifier"
+    "name": "Ceiling Fan"
    },
    {
     "id": "device-2",
-    "name": "Entryway Ceiling Light"
+    "name": "Bedroom Strip"
    },
    {
     "id": "device-3",
-    "name": "Sunset Lamp"
+    "name": "Porch Ceiling Light"
    },
    {
     "id": "device-4",
-    "name": "LED Strip"
+    "name": "Reading Lamp"
    }
   ],
   "requested": {

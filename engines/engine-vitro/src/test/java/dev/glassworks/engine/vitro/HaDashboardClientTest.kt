@@ -443,8 +443,14 @@ class HaDashboardClientTest {
 
     @Test
     fun compressedDiffEventsUpdateTheStoreAndWakeItsSubscribers() {
+        // The display data (the registries, sent after the entity subscription) re-renders every listener once it
+        // settles (renotifyAll): the fake's area registry has data, so it does. Its answers can land after the diff
+        // below, and the lamp's listener would hear "off" twice. Waited for, so the only "off" it hears is the diff's.
+        val displaySettled = java.util.concurrent.atomic.AtomicBoolean(false)
+        store.subscribe(EntityStore.DISPLAY_KEY) { displaySettled.set(true) }
         connected()
         awaitCondition("entities") { store.size() == 4 }
+        awaitCondition("display data settled") { displaySettled.get() }
         // Counted: the notifications that carry the diff. The snapshot's own dispatch can still be running when
         // `size() == 4` holds (states go in before listeners hear), and it may reach this listener with "on".
         val woken = AtomicInteger(0)

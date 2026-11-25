@@ -1,0 +1,12 @@
+{
+ "title": "Bubble Card: a separator",
+ "card": {
+  "type": "custom:bubble-card",
+  "card_type": "separator",
+  "name": "Lights",
+  "icon": "mdi:lightbulb-group"
+ },
+ "fixture": {
+  "states": {}
+ }
+}

@@ -80,7 +80,7 @@ private fun label(ctx: VitroCardContext, sp: Float, color: Int, weight: Int = In
 class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
     private val titleView = label(ctx, 14f, ctx.theme.secondaryTextColor, Inter.MEDIUM)
     private val valueView = label(ctx, 24f, ctx.theme.primaryTextColor, Inter.LIGHT)
-    private val chart = SparklineCanvasView(ctx.context, ctx.theme.primaryColor, ctx.theme.accentColor, ctx.theme.secondaryTextColor)
+    private val chart = SparklineCanvasView(ctx.context, ctx.theme.primaryColor, ctx.theme.accentColor, ctx.theme.secondaryTextColor, ctx.now)
 
     // Declared before `init`, which sets them: an initializer after it would reset them.
     private var historyIds: List<String> = emptyList()
@@ -260,6 +260,8 @@ private class SparklineCanvasView(
     primaryColor: Int,
     secondaryColor: Int,
     private val labelColor: Int,
+    /** The card's clock (VitroCardContext.now): the time axis runs up to it. */
+    private val now: () -> Long = System::currentTimeMillis,
 ) : View(context) {
     private val dp = resources.displayMetrics.density
     private val colors = intArrayOf(primaryColor, secondaryColor, EXTRA_COLORS[0], EXTRA_COLORS[1])
@@ -325,7 +327,7 @@ private class SparklineCanvasView(
             if (p.epochSec < tMin) tMin = p.epochSec
             if (p.epochSec > tMax) tMax = p.epochSec
         }
-        tMax = maxOf(tMax, System.currentTimeMillis() / 1000.0)
+        tMax = maxOf(tMax, now() / 1000.0)
         val tSpan = tMax - tMin
         if (tSpan <= 0.0) timed = false
         series.forEachIndexed { idx, pts ->

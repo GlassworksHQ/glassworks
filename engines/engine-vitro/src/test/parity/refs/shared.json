@@ -2,7 +2,7 @@
  "_comment": "What every reference shares: HA version, the config fields Vitro reads, and the themes (scrubbed). Written by tools/vitro-parity/capture.mjs.",
  "haVersion": "2026.11.0",
  "haConfig": {
-  "time_zone": "America/Los_Angeles",
+  "time_zone": "America/Chicago",
   "unit_system": {
    "length": "km",
    "accumulated_precipitation": "mm",

@@ -2,12 +2,13 @@
  "case": "picture-entity",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
   "height": 800,
-  "density": 2
+  "density": 2,
+  "touch": true
  },
  "clip": {
   "x": 382,
@@ -31,10 +32,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "Window",
+   "clipped": false,
+   "text": "Accent",
    "x": 17,
    "y": 465,
-   "w": 57.08,
+   "w": 49.72,
    "h": 19,
    "size": 16,
    "weight": 400,
@@ -43,6 +45,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Off",
    "x": 460.89,
    "y": 465,
@@ -55,7 +58,7 @@
   }
  ],
  "states": {
-  "light.window_accent": {
+  "light.bedroom_accent": {
    "s": "off",
    "a": {
     "supported_color_modes": [
@@ -68,29 +71,30 @@
     "xy_color": null,
     "off_with_transition": false,
     "off_brightness": 254,
-    "icon": "mdi:window-open",
-    "friendly_name": "Window",
+    "icon": "mdi:led-strip-variant",
+    "friendly_name": "Bedroom Strip Accent",
     "supported_features": 40
    },
-   "lc": 1795507611.0189574
+   "lc": 1794496680,
+   "lu": 1794496680
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "light.window_accent",
+    "ei": "light.bedroom_accent",
     "pl": "zha",
     "tk": "light",
-    "ic": "mdi:window-open",
+    "ic": "mdi:led-strip-variant",
     "di": "device-1",
-    "en": "Window"
+    "en": "Accent"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "LED Strip"
+    "name": "Bedroom Strip"
    }
   ],
   "requested": {

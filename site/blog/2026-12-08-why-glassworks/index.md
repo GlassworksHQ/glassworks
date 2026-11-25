@@ -117,7 +117,7 @@ If you have a locked-down wall panel sitting on your bench, a community ROM look
 
 - Browse the architecture and libraries on [glassworks.dev/developers](https://www.glassworks.dev/developers)
 - Read [Adding a device](../../../frames/README.md), [Pane API](../../../pane-api/src/main/java/dev/glassworks/README.md), and [Glassworks Principles](../../../docs/principles.md)
-- Jump into `#hardware-bringup` on [Discord](https://discord.gg/BTn9NstFM) or start a thread in [GitHub Discussions](https://github.com/GlassworksHQ/glassworks/discussions) ([CONTRIBUTING.md](../../../CONTRIBUTING.md))
+- Jump into `#hardware-bringup` on [Discord](https://discord.gg/hHpf77fBMj) or start a thread in [GitHub Discussions](https://github.com/GlassworksHQ/glassworks/discussions) ([CONTRIBUTING.md](../../../CONTRIBUTING.md))
 
 Let's stop rebuilding the same kiosk plumbing ten times over and put that energy into unlocking more great hardware.
 
