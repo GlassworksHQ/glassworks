@@ -869,7 +869,7 @@ def cmd_coldstart(dev, a):
     lines = queue.Queue()
     threading.Thread(target=lambda: [lines.put(l) for l in lc.stdout], daemon=True).start()
     presents, period = set(), [None]
-    stop, paused = threading.Event(), threading.Event()
+    stop, paused, kick = threading.Event(), threading.Event(), threading.Event()
 
     def poll():
         if SF_POLL_S:
@@ -892,7 +892,17 @@ def cmd_coldstart(dev, a):
                 if p:
                     period[0] = p
                     presents.update(ts)
-            stop.wait(C.real(1.0))
+            # Every second, or at once when a view says it is usable (read_open).
+            kick.wait(C.real(1.0))
+            kick.clear()
+
+    def read_open():
+        """A view's usable line: read SurfaceFlinger now, while the page is still (stillAfterUsableMs). Its open is
+        timed to the frames on screen after it rendered (report.usable_on_screen), and these reads are the only ones
+        that keep them: the view's live updates pause the reads, and after the run's last view there is no read
+        between views. A read that began before the view painted, followed by the next one a second later, could miss
+        the whole still time (the fake's, under load: the last view had no open)."""
+        kick.set()
 
     # keep_awake's look at `held` and its wake key, against hold()'s: one at a time, so no wake key
     # is sent after a hold.
@@ -1225,6 +1235,7 @@ def cmd_coldstart(dev, a):
         st["line_at"], st["last_line"] = C.now(), t
         if t == "refdash":
             entry["page"] = pl
+            read_open()
         elif t == "drawn":
             # Clarity v2: the first screen drawn, before the main thread is free. Kept apart from
             # `page` (usable), which the deadlines go by; the report reads it for a view that never
@@ -1499,6 +1510,7 @@ def cmd_coldstart(dev, a):
     if not ref:
         res["page_start_mono"], res["page_stop_mono"] = res["own_page_start_mono"], res["own_page_stop_mono"]
     stop.set()
+    kick.set()
     poller.join()
     res["sf_period_ms"] = period[0]
     res["presents_mono_ms"] = sorted(t / 1e6 for t in presents)
