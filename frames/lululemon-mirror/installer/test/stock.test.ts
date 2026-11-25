@@ -1,7 +1,7 @@
 // The browser-safe Stock-in-place core (src/stock.ts): the surgical sparse builder, the stock
-// services.jar patch (USB-ADB authorize + the two Device Owner fixes), the Stage 1 bundle, and the
-// stock-bloat `pm hide`/`pm unhide`. The Device Owner patch is checked on a real DEX built with
-// javac + d8 (skipped without an Android SDK) and disassembled with dexdump.
+// services.jar patch (USB-ADB authorize, the two Device Owner fixes, no stock onboarding hotspot),
+// the Stage 1 bundle, and the stock-bloat `pm hide`/`pm unhide`. The services.jar patches are checked
+// on a real DEX built with javac + d8 (skipped without an Android SDK) and disassembled with dexdump.
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -37,6 +37,7 @@ function methodBlock(block: string, name: string): string {
 }
 
 const DPMS_DESC = 'Lcom/android/server/devicepolicy/DevicePolicyManagerService;';
+const MIRROR_AP_DESC = 'Lcom/android/server/MirrorApService;';
 
 // ---------------------------------------------------------------------------
 // buildSurgicalSparseImage
@@ -143,7 +144,7 @@ describe('patchStockServicesJar', () => {
   it.skipIf(!HAS_D8)('keeps the exact byte length, authorizes only our key, and applies both Device Owner fixes', async () => {
     const jar = buildSyntheticStockServicesJar();
     const key = fakeAdbKey(0x51, 'stock@glassworks');
-    const res = await patchStockServicesJar(jar, key); // default enableDeviceOwner: true
+    const res = await patchStockServicesJar(jar, key); // defaults: enableDeviceOwner and disableStockAp true
     expect(res.patched.length).toBe(jar.length);
     expect(res.fingerprint).not.toBe(GLASS_PANES_KEY_FINGERPRINT);
     expect(res.patchedCodeUnits).toBeGreaterThanOrEqual(24);
@@ -180,13 +181,24 @@ describe('patchStockServicesJar', () => {
         expect(sdo).not.toContain('setBackupServiceActive');
         expect(sdo).not.toContain('invoke-interface');
         expect(sdo).toContain('nop');
+
+        // MirrorApService.systemReady: one return-void, nops to the same size, nothing registered.
+        expect(res.stockAp).toBeDefined();
+        const ready = methodBlock(classBlock(dis, MIRROR_AP_DESC), 'systemReady');
+        expect(ready).toContain(`insns size    : ${res.stockAp!.insnsSize} 16-bit code units`);
+        expect(ready).toMatch(/\|0000: return-void/);
+        expect(ready).not.toContain('registerReceiver');
+        expect(ready).not.toContain('Thread;.start');
+        expect(ready).not.toContain('ACTION_START_HOST_APD');
+        // create() and the constructor are untouched: SystemServer still builds the object.
+        expect(methodBlock(classBlock(dis, MIRROR_AP_DESC), 'create')).toContain('invoke-direct');
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
     }
   }, 60_000);
 
-  it.skipIf(!HAS_D8)('with enableDeviceOwner:false patches only startConfirmation (no Device Owner fields)', async () => {
+  it.skipIf(!HAS_D8)('with enableDeviceOwner:false leaves the Device Owner code alone (no Device Owner fields)', async () => {
     const jar = buildSyntheticStockServicesJar();
     const res = await patchStockServicesJar(jar, fakeAdbKey(0x52), { enableDeviceOwner: false });
     expect(res.patched.length).toBe(jar.length);
@@ -204,6 +216,46 @@ describe('patchStockServicesJar', () => {
         rmSync(dir, { recursive: true, force: true });
       }
     }
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('with disableStockAp:false leaves MirrorApService.systemReady as it was', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const res = await patchStockServicesJar(jar, fakeAdbKey(0x53), { disableStockAp: false });
+    expect(res.patched.length).toBe(jar.length);
+    expect(res.stockAp).toBeUndefined();
+    expect(res.deviceOwner).toBeDefined(); // the other default still applies
+    if (DEXDUMP) {
+      const dir = mkdtempSync(join(tmpdir(), 'gw-stock-noAp-'));
+      try {
+        const p = join(dir, 'patched.jar');
+        writeFileSync(p, res.patched);
+        const dis = execFileSync(DEXDUMP, ['-d', p], { encoding: 'utf8', maxBuffer: 1 << 30 });
+        const ready = methodBlock(classBlock(dis, MIRROR_AP_DESC), 'systemReady');
+        expect(ready).toContain('registerReceiver');
+        expect(ready).toContain('com.mirror.framework.ACTION_START_HOST_APD');
+        expect(ready).toContain('Thread;.start');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('refuses a services.jar without MirrorApService unless disableStockAp is false', async () => {
+    const jar = buildSyntheticStockServicesJar({ mirrorAp: 'none' });
+    const key = fakeAdbKey(0x54);
+    // On by default and asked for explicitly: not the stock software it was checked against, so no guess.
+    await expect(patchStockServicesJar(jar, key)).rejects.toThrow(/stock hotspot patch: services\.jar has no Lcom\/android\/server\/MirrorApService;\.systemReady\(\)V/);
+    await expect(patchStockServicesJar(jar, key, { disableStockAp: true })).rejects.toThrow(/disableStockAp: false/);
+    // Off: the rest of the patch goes ahead.
+    const res = await patchStockServicesJar(jar, key, { disableStockAp: false });
+    expect(res.patched.length).toBe(jar.length);
+    expect(res.stockAp).toBeUndefined();
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('refuses a systemReady that does not register ACTION_START_HOST_APD', async () => {
+    // Same class and method, another body: not what was read from stock, so it isn't emptied on a guess.
+    const jar = buildSyntheticStockServicesJar({ mirrorAp: 'unexpected' });
+    await expect(patchStockServicesJar(jar, fakeAdbKey(0x55))).rejects.toThrow(/does not load "com\.mirror\.framework\.ACTION_START_HOST_APD"/);
   }, 60_000);
 });
 

@@ -431,6 +431,8 @@ with a byte-exact rollback using the original blocks read over HTTP beforehand.
     confirms stock `1.24.0` `adbd` rejects `/data/misc/adb/adb_keys` on its own.
   - Contains `com.android.server.MirrorApService`, which drives `/system/bin/mapd` (`running`) and
     `hostapd` to bring up the `mirror-<serial>` SoftAP at `192.168.43.1` (DHCP `192.168.43.2`–`254`).
+    With Glassworks in place this hotspot gets in the way, so the in-place patch empties
+    `MirrorApService.systemReady()`: [stock-softap.md](stock-softap.md).
 - **Init services (`init.svc.*`, 58 entries):** confirms `qcom-post-boot` (`stopped`),
   `flash_recovery` (`stopped`), and Mirror-specific `mapd` (`running`) and `cfgchkup` (`stopped`).
   `file_contexts` under `device/mirror/mirror/sepolicy/file_contexts` labels `/system/bin/mapd`

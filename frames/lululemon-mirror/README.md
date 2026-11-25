@@ -116,9 +116,9 @@ Choose **Glassworks on the stock software** on Kiln's first screen to keep lulul
 3. **Receive:** Click **Connect over Bluetooth** and pick the Mirror. The setup agent sends Kiln the one system file Glassworks changes (`services.jar`) and where it sits, over your network when it can and over Bluetooth when it can't. You can also download it from the agent's own page and pick the file. Kiln checks that it came from this Mirror, during this run, and stops before anything is written if the Mirror's software is a kind it can't change in place.
 4. **Second trip into fastboot:** Hold **VOL−** again while switching the Mirror on. Kiln builds the change in your browser and checks that it touches only that file's blocks.
 5. **Restore point:** Before writing anything to the system, Kiln saves the exact blocks it will change, from your Mirror's own copy, in this browser, reads them back to check them, and offers a copy to download. Continue opens only once that's done. Keep the download somewhere safe.
-6. **Install:** Kiln writes the changed blocks and fresh app storage, restarts the Mirror, installs Glassworks over USB, hides lululemon's apps, and makes Glassworks the Device Owner so its updates install by themselves. Then setup continues as usual.
+6. **Install:** Kiln writes the changed blocks and fresh app storage, restarts the Mirror, installs Glassworks over USB, hides lululemon's apps, and makes Glassworks the Device Owner so its updates install by themselves. The changed file also turns off lululemon's own setup hotspot (`mirror-<serial>`), which would otherwise come back whenever the Mirror is offline and keep Glassworks' setup hotspot from starting. Then setup continues as usual.
 
-To go back, choose **Restore the original system** on Done (or open `kiln.glassworks.dev/lululemon-mirror/undo`). Kiln uses the restore point this browser saved, or the copy you downloaded, and writes it over the blocks it changed. Then it resets the Mirror's app data, as a factory reset would, so Glassworks and its settings go and lululemon's apps come back. Kiln writes a restore point only to the Mirror it was made on. If a write fails partway through the install, the error screen offers the same restore. The Mirror's command-line tool in [`tools/mirror`](../../tools/mirror) can restore from that download too (add `--erase-userdata` to reset the app data as well).
+To go back, choose **Restore the original system** on Done (or open `kiln.glassworks.dev/lululemon-mirror/undo`). Kiln uses the restore point this browser saved, or the copy you downloaded, and writes it over the blocks it changed. Then it resets the Mirror's app data, as a factory reset would, so Glassworks and its settings go and lululemon's apps come back, along with its setup hotspot. Kiln writes a restore point only to the Mirror it was made on. If a write fails partway through the install, the error screen offers the same restore. The Mirror's command-line tool in [`tools/mirror`](../../tools/mirror) can restore from that download too (add `--erase-userdata` to reset the app data as well).
 
 ### Returning to plain Glass Panes
 
@@ -163,6 +163,7 @@ Deep engineering notes from bringing up the Mirror (see [all research notes](../
 - [option-c.md](research/option-c.md) — Notes on building a clean AOSP 6 image from on-device vendor files
 - [community-root-and-network-adb.md](research/community-root-and-network-adb.md) — Review of community root and network-adb methods
 - [stock-firmware-probe.md](research/stock-firmware-probe.md) — Live probe of untouched stock 1.24.0 firmware via userdata-only HTTP app, `FS_IOC_FIEMAP`, and reversible surgical USB ADB
+- [stock-softap.md](research/stock-softap.md) — Why stock software keeps opening its `mirror-<serial>` hotspot, and the `services.jar` edit that turns it off
 
 ## Files
 
