@@ -141,7 +141,7 @@ fetch of its Android jars in the middle of a test run. So every build asks Googl
 
 | Who downloads | Where it's set | When the mirror can't help |
 |---|---|---|
-| Gradle: dependencies and plugins | Every `repositories` block (`settings.gradle.kts`, `build-logic/settings.gradle.kts`, `tools/mirror/probe-app/settings.gradle.kts`): `google()`, then the mirror, then `mavenCentral()` | Gradle asks Central only for a file the mirror doesn't have (a 404, such as a release the mirror hasn't copied yet). Any other error from the mirror fails the build, after the tries above, as it would from Central |
+| Gradle: dependencies and plugins | Every `repositories` block (`settings.gradle.kts`, `build-logic/settings.gradle.kts`, `tools/mirror/probe-app/settings.gradle.kts`): `google()`, then the mirror, then `mavenCentral()` | Gradle chooses a repository per module, not per file: it asks Central only for a module whose metadata (its `.pom` or `.module`) the mirror doesn't have, a 404, such as a release the mirror hasn't copied yet. Once the mirror has served a module's metadata, Gradle takes all of that module's files from the mirror, so a file missing there fails the build without asking Central. Any other error from the mirror fails the build too, after the tries above, as it would from Central |
 | Robolectric: its Android jars | `robolectric.dependency.repo.url` on every `Test` task, in `glassworks.android` | Robolectric 4.17 takes one repository, so it never falls back to Central. The jars are old releases the mirror has, and a job with the `robolectric-…` cache below doesn't fetch them at all |
 
 The mirror serves Central's files byte for byte, with the same checksum files, so Gradle's and Robolectric's
