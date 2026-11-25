@@ -35,6 +35,10 @@ export const MAX_RAW_CHUNK_BLOCKS = 4096; // 16 MiB per RAW chunk
 export const STOCK_SYSTEM_PARTITION_BYTES = 0x4cccd000;
 const CHUNK_RAW = 0xcac1;
 const CHUNK_DONT_CARE = 0xcac3;
+// FIEMAP_EXTENT_{UNKNOWN,DELALLOC,ENCODED,DATA_ENCRYPTED,NOT_ALIGNED,DATA_INLINE,DATA_TAIL,UNWRITTEN}.
+// A RAW write to physical blocks under any of these does not produce the file the workflow expects
+// (e.g. an UNWRITTEN extent still reads as zeros after a raw write). FIEMAP_EXTENT_LAST (0x1) is fine.
+const UNSAFE_FIEMAP_FLAGS = 0x0002 | 0x0004 | 0x0008 | 0x0080 | 0x0100 | 0x0200 | 0x0400 | 0x0800;
 
 /**
  * Single-use 71-byte log string inside stock Android 6.0.1
@@ -499,6 +503,9 @@ export function buildSurgicalSparseImage(
     if (e.logical < 0 || e.physical < 0 || e.length <= 0) {
       throw new Error(`invalid FIEMAP extent: ${JSON.stringify(e)}`);
     }
+    if ((e.flags & UNSAFE_FIEMAP_FLAGS) !== 0) {
+      throw new Error(`FIEMAP extent is not plain, initialized data (flags=0x${e.flags.toString(16)}): ${JSON.stringify(e)}`);
+    }
     if (e.logical % blockSize !== 0 || e.physical % blockSize !== 0 || e.length % blockSize !== 0) {
       throw new Error(`FIEMAP extent is not ${blockSize}-byte aligned: ${JSON.stringify(e)}`);
     }
@@ -724,6 +731,12 @@ export interface BackupManifest {
   createdAt: string;
   systemBytes: number;
   userdataBytes: number;
+  /**
+   * SHA-256 of the device's `androidboot.serialno` (never the raw serial — Hard Rule 2), captured
+   * either from `/proc/cmdline` over the Step 1 SoftAP probe or from `fastboot getvar serialno` at
+   * flash time. Lets `--undo`/`--apply-adb` refuse to restore this backup onto a different Mirror.
+   */
+  deviceIdHash?: string;
   servicesJar: {
     path: string;
     size: number;
@@ -809,6 +822,7 @@ export interface SurgicalAdbReport {
   dpmdChainedVaddr?: number;
   systemPartitionBytes?: number;
   userdataPartitionBytes?: number;
+  bootPartitionBytes?: number;
   adbAuthorized?: boolean;
   adbId?: string;
   adbEnforce?: string;
@@ -832,6 +846,47 @@ function parseHexOrDecSize(v: string | undefined): number | undefined {
   const s = v.trim().toLowerCase();
   const n = s.startsWith('0x') ? Number.parseInt(s.slice(2), 16) : Number.parseInt(s, 10);
   return Number.isSafeInteger(n) && n > 0 ? n : undefined;
+}
+
+/** SHA-256 of a device serial for device-binding checks. Never store or log the raw serial (Hard Rule 2). */
+function deviceIdHashOf(serial: string): string {
+  return sha256Hex(te.encode(serial.trim()));
+}
+
+/** Best-effort: reads the probed device's `androidboot.serialno` out of `/proc/cmdline` over the
+ * already-open SoftAP HTTP session and hashes it, so Step 3's fastboot target can be checked against
+ * the same device that Step 1 actually probed. Degrades silently if `/proc/cmdline` isn't readable. */
+async function probedDeviceIdHash(http: StockHttpSession): Promise<string | undefined> {
+  try {
+    const cmdline = await http.readFile('/proc/cmdline');
+    if (cmdline.status !== 'ok') return undefined;
+    const m = /androidboot\.serialno=([^\s]+)/i.exec(td.decode(cmdline.data));
+    return m ? deviceIdHashOf(m[1]!) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Reads and parses a saved restore sparse image before it is ever flashed, so a corrupt or
+ * mismatched artifact (wrong systemBytes) is caught before the first restore write. */
+async function validateRestoreSparse(
+  d: SurgicalAdbDeps,
+  backupDir: string,
+  relPath: string,
+  label: string,
+  expectedSystemBytes: number,
+): Promise<string | undefined> {
+  try {
+    const bytes = await d.readHostFile(`${backupDir}/${relPath}`);
+    const parsed = parseSparseHeader(bytes);
+    if (!parsed) return `${label} (${relPath}) is not a valid sparse image`;
+    if (parsed.blocks * SPARSE_BLOCK_SIZE !== expectedSystemBytes) {
+      return `${label} (${relPath}) covers ${parsed.blocks * SPARSE_BLOCK_SIZE} B, expected systemBytes=${expectedSystemBytes}`;
+    }
+    return undefined;
+  } catch (err) {
+    return `could not read/validate ${label} (${relPath}): ${err instanceof Error ? err.message : String(err)}`;
+  }
 }
 
 function formatExtents(extents?: readonly FiemapExtent[]): string {
@@ -975,6 +1030,27 @@ export async function runStockSurgicalAdb(
       await saveReport();
       return { report, ok: false };
     }
+    if (manifest.deviceIdHash) {
+      const serial = await fb.getvar('serialno');
+      if (!serial || deviceIdHashOf(serial) !== manifest.deviceIdHash) {
+        report.stopReason = 'refusing --undo: this fastboot device does not match the Mirror this backup was taken from (serial mismatch)';
+        await saveReport();
+        return { report, ok: false };
+      }
+    }
+    for (const [rel, label] of [
+      [manifest.dpmdLib?.restoreSparse, 'restore-dpmd.sparse'],
+      [manifest.postBoot?.restoreSparse, 'restore-post-boot.sparse'],
+      [manifest.servicesJar.restoreSparse, 'restore-services.sparse'],
+    ] as const) {
+      if (!rel) continue;
+      const err = await validateRestoreSparse(d, o.backupDir, rel, label, manifest.systemBytes);
+      if (err) {
+        report.stopReason = `refusing --undo: ${err}`;
+        await saveReport();
+        return { report, ok: false };
+      }
+    }
     const proceed = await d.confirm(
       `Restore original stock system blocks from ${o.backupDir} (and ${o.eraseUserdataOnUndo ? 'erase userdata' : 'keep userdata'})?`,
     );
@@ -1027,6 +1103,14 @@ export async function runStockSurgicalAdb(
       report.stopReason = `fastboot gate failed for --apply-adb (product=${product ?? 'unknown'}, system=${sysBytes ?? 'unknown'} vs manifest ${manifest.systemBytes})`;
       await saveReport();
       return { report, ok: false };
+    }
+    if (manifest.deviceIdHash) {
+      const serial = await fb.getvar('serialno');
+      if (!serial || deviceIdHashOf(serial) !== manifest.deviceIdHash) {
+        report.stopReason = 'refusing --apply-adb: this fastboot device does not match the Mirror this backup was taken from (serial mismatch)';
+        await saveReport();
+        return { report, ok: false };
+      }
     }
     const proceed = await d.confirm(
       `Re-apply surgical USB ADB services.jar hook (${manifest.servicesJar.fingerprint ?? 'saved host key'}) from ${o.backupDir}? (SELinux stays Enforcing; reversible anytime with --undo)`,
@@ -1087,6 +1171,7 @@ export async function runStockSurgicalAdb(
         return { report, ok: false };
       }
     }
+    report.bootPartitionBytes = parseHexOrDecSize(await fb2.getvar('partition-size:boot'));
     if (args.preRestorePostBootPath) {
       d.log('  flashing restore-post-boot.sparse to clear any earlier post_boot patch...');
       await fb2.flashPartition('system', args.preRestorePostBootPath);
@@ -1156,39 +1241,57 @@ export async function runStockSurgicalAdb(
       return { report, ok: false };
     }
 
-    d.log('  streaming raw system (/dev/block/mmcblk0p22, ~1.2 GiB) over USB ADB...');
-    const sysDump = await backupAdb.streamCommandToFile(
-      'dd if=/dev/block/mmcblk0p22 bs=1048576 2>/dev/null',
-      `${o.outDir}/backup/system-stock.raw.img`,
-    );
-    report.backupSystemPath = `${o.outDir}/backup/system-stock.raw.img`;
-    report.backupSystemBytes = sysDump.bytes;
-    report.backupSystemSha256 = sysDump.sha256;
-    if (sysDump.bytes === args.targetSystemBytes && d.restoreExtentsInRawImage) {
-      d.log('  scrubbing temporary services.jar + libdpmframework.so patches out of system-stock.raw.img -> pure untouched stock...');
-      report.backupSystemSha256 = await d.restoreExtentsInRawImage(report.backupSystemPath, [
-        { extents: args.servicesExtents, origData: args.origServices },
-        { extents: args.dpmdExtents, origData: args.origDpmd },
-      ]);
-      report.notes.push('Restored original services.jar and libdpmframework.so blocks inside system-stock.raw.img so the saved image is pure untouched stock.');
+    let sysDump: { bytes: number; sha256: string } | undefined;
+    let bootDump: { bytes: number; sha256: string } | undefined;
+    let dumpError: string | undefined;
+    try {
+      d.log('  streaming raw system (/dev/block/mmcblk0p22, ~1.2 GiB) over USB ADB...');
+      sysDump = await backupAdb.streamCommandToFile(
+        'dd if=/dev/block/mmcblk0p22 bs=1048576 2>/dev/null',
+        `${o.outDir}/backup/system-stock.raw.img`,
+      );
+      report.backupSystemPath = `${o.outDir}/backup/system-stock.raw.img`;
+      report.backupSystemBytes = sysDump.bytes;
+      report.backupSystemSha256 = sysDump.sha256;
+      if (sysDump.bytes === args.targetSystemBytes && d.restoreExtentsInRawImage) {
+        d.log('  scrubbing temporary services.jar + libdpmframework.so patches out of system-stock.raw.img -> pure untouched stock...');
+        report.backupSystemSha256 = await d.restoreExtentsInRawImage(report.backupSystemPath, [
+          { extents: args.servicesExtents, origData: args.origServices },
+          { extents: args.dpmdExtents, origData: args.origDpmd },
+        ]);
+        report.notes.push('Restored original services.jar and libdpmframework.so blocks inside system-stock.raw.img so the saved image is pure untouched stock.');
+      }
+
+      d.log('  streaming raw boot (/dev/block/mmcblk0p19, 32 MiB) over USB ADB...');
+      bootDump = await backupAdb.streamCommandToFile(
+        'dd if=/dev/block/mmcblk0p19 bs=1048576 2>/dev/null',
+        `${o.outDir}/backup/boot-stock.raw.img`,
+      );
+      report.backupBootPath = `${o.outDir}/backup/boot-stock.raw.img`;
+      report.backupBootBytes = bootDump.bytes;
+      report.backupBootSha256 = bootDump.sha256;
+    } catch (err) {
+      dumpError = err instanceof Error ? err.message : String(err);
+      report.notes.push(`raw backup stream failed: ${dumpError}; attempting to remove the temporary backup hook anyway.`);
     }
 
-    d.log('  streaming raw boot (/dev/block/mmcblk0p19, 32 MiB) over USB ADB...');
-    const bootDump = await backupAdb.streamCommandToFile(
-      'dd if=/dev/block/mmcblk0p19 bs=1048576 2>/dev/null',
-      `${o.outDir}/backup/boot-stock.raw.img`,
-    );
-    report.backupBootPath = `${o.outDir}/backup/boot-stock.raw.img`;
-    report.backupBootBytes = bootDump.bytes;
-    report.backupBootSha256 = bootDump.sha256;
-
+    // Always try to leave the device out of the permissive backup hook state, whether or not the
+    // dumps above succeeded — a stalled or errored dump must not strand dpmd's Permissive/readable
+    // backup hook on the device.
     await backupAdb.rebootBootloader();
     const fb3 = await d.waitForFastboot(120_000);
+    let cleanedUp = false;
     if (fb3) {
       d.log('  restoring original libdpmframework.so blocks...');
       await fb3.flashPartition('system', args.restoreDpmdPath);
       report.restoredDpmd = true;
-      if (o.restoreAllAfterBackup) {
+      cleanedUp = true;
+      if (dumpError) {
+        // Leave the device fully stock rather than mid-way through a failed backup attempt.
+        d.log('  backup failed earlier: also restoring original services.jar blocks...');
+        await fb3.flashPartition('system', args.restoreServicesPath);
+        report.restoredServices = true;
+      } else if (o.restoreAllAfterBackup) {
         d.log('  --restore-all: restoring original services.jar blocks...');
         await fb3.flashPartition('system', args.restoreServicesPath);
         report.restoredServices = true;
@@ -1203,8 +1306,23 @@ export async function runStockSurgicalAdb(
       report.notes.push(`Manual restore needed: fastboot flash system ${args.restoreDpmdPath}`);
     }
 
-    if (sysDump.bytes !== args.targetSystemBytes) {
-      report.stopReason = `raw system dump size ${sysDump.bytes} !== expected ${args.targetSystemBytes}`;
+    if (dumpError) {
+      report.stopReason = `raw backup failed: ${dumpError}${cleanedUp ? ' (the temporary backup hook was removed)' : ' — MANUAL RESTORE NEEDED, the backup hook may still be active'}`;
+      await saveReport();
+      return { report, ok: false };
+    }
+    if (!cleanedUp) {
+      report.stopReason = `backup completed but the Mirror did not return to fastboot to remove the temporary hook — MANUAL RESTORE NEEDED: fastboot flash system ${args.restoreDpmdPath}`;
+      await saveReport();
+      return { report, ok: false };
+    }
+    if (!sysDump || sysDump.bytes !== args.targetSystemBytes) {
+      report.stopReason = `raw system dump size ${sysDump?.bytes ?? 'unknown'} !== expected ${args.targetSystemBytes}`;
+      await saveReport();
+      return { report, ok: false };
+    }
+    if (report.bootPartitionBytes !== undefined && (!bootDump || bootDump.bytes !== report.bootPartitionBytes)) {
+      report.stopReason = `raw boot dump size ${bootDump?.bytes ?? 'unknown'} !== expected ${report.bootPartitionBytes}`;
       await saveReport();
       return { report, ok: false };
     }
@@ -1409,17 +1527,37 @@ export async function runStockSurgicalAdb(
     return { report, ok: false };
   }
 
-  report.frameworkListing = await http.list('/system/framework');
+  // A denied listing is NOT proof of an empty (and therefore services.odex-free) directory — only a
+  // successfully read listing is. Stop before any write if /system/framework or an oat dir refuses.
+  const listOrStop = async (dir: string): Promise<string[] | undefined> => {
+    if (!http.listRaw) return http.list(dir); // no raw-status transport (e.g. a test double): best-effort
+    const r = await http.listRaw(dir);
+    if (r.status === 403) return undefined;
+    return r.entries;
+  };
+  const fwListing = await listOrStop('/system/framework');
+  if (fwListing === undefined) {
+    report.stopReason = 'listing /system/framework was denied — cannot rule out services.odex. Nothing was written.';
+    await saveReport();
+    return { report, ok: false };
+  }
+  report.frameworkListing = fwListing;
   const oatDirs = ['/system/framework/oat', '/system/framework/oat/arm64', '/system/framework/arm64'];
   const oatLines: string[] = [];
   for (const dir of oatDirs) {
-    const entries = await http.list(dir);
+    const entries = await listOrStop(dir);
+    if (entries === undefined) {
+      report.stopReason = `listing ${dir} was denied — cannot rule out services.odex. Nothing was written.`;
+      await saveReport();
+      return { report, ok: false };
+    }
     for (const line of entries) oatLines.push(line);
   }
   report.oatListing = oatLines;
   report.servicesOdexFound = detectServicesOdex(report.frameworkListing, oatLines);
   report.appListing = await http.list('/system/app');
   report.privAppListing = await http.list('/system/priv-app');
+  const probedDeviceId = await probedDeviceIdHash(http);
 
   report.servicesFiemap = await http.fiemap(STOCK_SERVICES_JAR_PATH);
   report.postBootFiemap = await http.fiemap(STOCK_POST_BOOT_PATH);
@@ -1513,6 +1651,7 @@ export async function runStockSurgicalAdb(
     createdAt: nowIso(),
     systemBytes: targetSystemBytes,
     userdataBytes: defaultUserdataBytes,
+    ...(probedDeviceId ? { deviceIdHash: probedDeviceId } : {}),
     servicesJar: {
       path: STOCK_SERVICES_JAR_PATH,
       size: origServices.length,
@@ -1620,11 +1759,23 @@ export async function runStockSurgicalAdb(
 
   // Build fresh userdata (retaining the probe APK as a SoftAP safety net while wiping dalvik-cache)
   const probeApp = await d.loadProbeApp();
+  if (!probeApp) {
+    const proceedNoProbe = await d.confirm(
+      'No SoftAP probe APK was found/built — the fresh userdata about to be flashed would have no recovery network if authorized USB ADB never comes up. Continue anyway?',
+    );
+    if (!proceedNoProbe) {
+      report.stopReason = 'build cancelled: no probe APK available as a userdata recovery safety net (and no --yes override)';
+      await saveReport();
+      return { report, ok: false };
+    }
+    report.notes.push('Proceeding without the SoftAP probe APK safety net in userdata (operator confirmed).');
+  }
   const disk = new Disk(new MemoryStore(), SPARSE_BLOCK_SIZE, defaultUserdataBytes / SPARSE_BLOCK_SIZE, { zeroed: true });
   await buildStockProbeUserdata(disk, {
     adbKey: cleanAdbKey!,
     usbConfig: 'adb',
-    tcpPort: 5555,
+    // Surgical flow uses USB ADB only; don't plant a persistent, key-authenticated-but-still-exposed
+    // TCP ADB listener on whatever network the Mirror joins (the stock-probe CLI keeps its own default).
     ...(probeApp ? { probeApp } : {}),
   });
   const userdataChunks: Uint8Array[] = [];
@@ -1669,6 +1820,22 @@ export async function runStockSurgicalAdb(
     await saveReport();
     return { report, ok: false };
   }
+  // Bind this fastboot target to the device Step 1 actually probed over SoftAP HTTP, so a different
+  // (but compatible) Mirror in fastboot cannot receive writes computed from another unit's FIEMAP
+  // offsets. Falls back to recording the fastboot-side hash when /proc/cmdline wasn't readable.
+  {
+    const fbSerial = await fb.getvar('serialno');
+    const fbIdHash = fbSerial ? deviceIdHashOf(fbSerial) : undefined;
+    if (manifest.deviceIdHash && fbIdHash && manifest.deviceIdHash !== fbIdHash) {
+      report.stopReason = 'refusing to flash: this fastboot device does not match the Mirror probed over SoftAP HTTP in Step 1 (serial mismatch)';
+      await saveReport();
+      return { report, ok: false };
+    }
+    if (!manifest.deviceIdHash && fbIdHash) {
+      manifest.deviceIdHash = fbIdHash;
+      await d.writeFile('backup/manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
+    }
+  }
   // If fastboot reports a different valid system partition size than the default 0x4cccd000,
   // rebuild every surgical sparse image to exact `sysBytes` before offering to flash.
   if (sysBytes !== targetSystemBytes) {
@@ -1710,9 +1877,17 @@ export async function runStockSurgicalAdb(
   }
 
   d.log('  flashing surgical patch-services.sparse to system...');
-  await fb.flashPartition('system', patchServicesPath);
-  d.log('  flashing userdata-adb.sparse to userdata...');
-  await fb.flashPartition('userdata', userdataPath);
+  try {
+    await fb.flashPartition('system', patchServicesPath);
+    d.log('  flashing userdata-adb.sparse to userdata...');
+    await fb.flashPartition('userdata', userdataPath);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    report.stopReason = `flash failed: ${msg}. system may now hold the patched services.jar; restore it with: fastboot flash system ${restoreServicesPath} (or run --undo --backup-dir ${o.outDir}/backup).`;
+    d.log(`  ${report.stopReason}`);
+    await saveReport();
+    return { report, ok: false };
+  }
   d.log('  rebooting Mirror (first boot takes ~4-5 min for dex2oat)...');
   await fb.reboot();
 

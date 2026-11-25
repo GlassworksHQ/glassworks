@@ -169,6 +169,11 @@ physical 4 KiB blocks (`DONT_CARE` everywhere else) to authorize your own `--adb
 `UsbDebuggingManager.startConfirmation()`.
 
 - **Hard stop-gate:** aborts before any write if `/system/framework/oat/.../services.odex` exists.
+- **Also replaces `userdata`:** Step 3 flashes a fresh `userdata` alongside the surgical `system`
+  patch (keeping the Phase 1 probe APK as a SoftAP safety net, wiping `dalvik-cache`). `--undo`
+  restores the `system` blocks above; it leaves `userdata` as Step 3 left it unless
+  `--erase-userdata` is passed, which runs `fastboot erase userdata` for a factory reset — neither
+  path brings back whatever was in `userdata` before Step 3 ran.
 - **Exact byte size:** recompresses `classes.dex` with `@glassworks/bootpatch`'s `zlib-rs` level-9
   deflate and pads the ZIP EOCD comment so `patched.length === original.length` (zero ext4 metadata
   edits).

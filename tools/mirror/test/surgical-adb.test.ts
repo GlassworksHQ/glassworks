@@ -33,9 +33,13 @@ function findTool(name: string): string | undefined {
   }
 }
 
-function buildSyntheticStockServicesJar(): Uint8Array | undefined {
+/** True only when an Android SDK build-tools `d8` is on this machine; gates the `it.skipIf()` calls
+ * below so a missing optional prerequisite is reported as an explicit SKIP, not a silent pass. */
+const HAS_D8 = Boolean(findTool('d8'));
+
+function buildSyntheticStockServicesJar(): Uint8Array {
   const d8 = findTool('d8');
-  if (!d8) return undefined;
+  if (!d8) throw new Error('buildSyntheticStockServicesJar requires d8 (guard call sites with `it.skipIf(!HAS_D8)`)');
   const dir = mkdtempSync(join(tmpdir(), 'gw-surgical-dex-'));
   try {
     const srcDir = join(dir, 'src/com/android/server/usb');
@@ -86,8 +90,6 @@ with zipfile.ZipFile(sys.argv[1], 'w', compression=zipfile.ZIP_DEFLATED, compres
     z.comment = b' ' * 512
 `, jarOut, join(dexDir, 'classes.dex')]);
     return new Uint8Array(readFileSync(jarOut));
-  } catch {
-    return undefined;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -288,9 +290,10 @@ function syntheticDpmdSo(): Uint8Array {
 }
 
 describe('patchStockServicesJar + runStockSurgicalAdb', () => {
-  it('patches UsbDebuggingManager.startConfirmation to exact byte length and passes dexdump -c', async () => {
+  // javac + d8 + the python3 zip repack are slow (and the first invocation also pays JVM/toolchain
+  // cold-start); give this real build its own generous timeout instead of vitest's 5s default.
+  it.skipIf(!HAS_D8)('patches UsbDebuggingManager.startConfirmation to exact byte length and passes dexdump -c', async () => {
     const jar = buildSyntheticStockServicesJar();
-    if (!jar) return; // skip cleanly on machines without Android build-tools d8
     const key = fakeAdbKey(0x33, 'unit@glassworks');
     const res = await patchStockServicesJar(jar, key);
     expect(res.patched.length).toBe(jar.length);
@@ -313,7 +316,7 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
         rmSync(dir, { recursive: true, force: true });
       }
     }
-  });
+  }, 30_000);
 
   it('stops cleanly before any write when services.odex is detected', async () => {
     const writes = new Map<string, Uint8Array | string>();
@@ -423,9 +426,8 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
     expect(writes.has('patch-dpmd.sparse')).toBe(false);
   });
 
-  it('runs full Steps 1-3 + Step 4 backup & auto-restore on a fake stock Mirror', async () => {
+  it.skipIf(!HAS_D8)('runs full Steps 1-3 + Step 4 backup & auto-restore on a fake stock Mirror', async () => {
     const jar = buildSyntheticStockServicesJar();
-    if (!jar) return;
     const writes = new Map<string, Uint8Array | string>();
     const flashed: Array<{ part: string; path: string }> = [];
     const postBoot = new TextEncoder().encode(

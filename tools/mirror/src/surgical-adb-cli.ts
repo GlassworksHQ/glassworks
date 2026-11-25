@@ -3,8 +3,8 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
-  closeSync, createReadStream, createWriteStream, existsSync, mkdirSync, openSync, readFileSync,
-  realpathSync, writeFileSync, writeSync,
+  closeSync, createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, openSync,
+  readFileSync, realpathSync, writeFileSync, writeSync,
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -59,7 +59,8 @@ Modes:
   --backup-only --backup-dir <d> --backup-module <ko>
                             USB-only Step 4 backup on a Mirror that already has authorized USB ADB
                             (tunnels probe app via adb forward — no Wi-Fi SoftAP needed)
-  --dry-run                 Run Steps 1-3 on a fake stock Mirror (no device touched)
+  --dry-run                 Simulate Step 1 preflight only, against a fake stock Mirror fixture
+                             (forces --preflight-only; no device touched, Steps 2-4 are not exercised)
 
 Options:
   --probe-host <ip>         Mirror IP for Phase 1 probe app (default: 192.168.43.1)
@@ -93,6 +94,38 @@ function isInsideRepo(candidate: string): boolean {
   const resolved = existsSync(cur) ? resolve(realpathSync(cur), ...tail) : abs;
   const rel = relative(repoReal, resolved);
   return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
+}
+
+/**
+ * Resolves `relPath` under `baseDir`, refusing to escape it via `..` or via a symlink in any
+ * existing path component (so a pre-planted symlink, e.g. `<outDir>/backup -> /elsewhere`, cannot
+ * redirect a backup/restore-image write outside the output folder), and refusing a final path that
+ * is itself a symlink. `baseDir` must already exist.
+ */
+function resolveContainedPath(baseDir: string, relPath: string): string {
+  const baseReal = realpathSync(baseDir);
+  const lexical = resolve(baseDir, relPath);
+  const lexicalRel = relative(baseReal, lexical);
+  if (lexicalRel.startsWith(`..${sep}`) || lexicalRel === '..' || isAbsolute(lexicalRel)) {
+    throw new Error(`unsafe output path: ${relPath}`);
+  }
+  let cur = lexical;
+  const tail: string[] = [];
+  while (!existsSync(cur)) {
+    const parent = dirname(cur);
+    if (parent === cur) break;
+    tail.unshift(cur.slice(parent.length).replace(/^[/\\]+/, ''));
+    cur = parent;
+  }
+  if (tail.length === 0 && lstatSync(cur).isSymbolicLink()) {
+    throw new Error(`refusing to write through a symlink: ${relPath}`);
+  }
+  const resolved = tail.length > 0 ? resolve(realpathSync(cur), ...tail) : realpathSync(cur);
+  const finalRel = relative(baseReal, resolved);
+  if (finalRel.startsWith(`..${sep}`) || finalRel === '..' || isAbsolute(finalRel)) {
+    throw new Error(`refusing to write outside the output folder: ${relPath}`);
+  }
+  return resolved;
 }
 
 function createSurgicalFastboot(serial: string, bin: string): SurgicalFastboot {
@@ -134,7 +167,10 @@ function createSurgicalFastboot(serial: string, bin: string): SurgicalFastboot {
   };
 }
 
-function createSurgicalAdbSession(target: string, bin: string, serialToRedact?: string): SurgicalAdbSession {
+/** No bytes for this long on a raw `dd` stream means the transfer is stalled, not just slow. */
+const RAW_STREAM_INACTIVITY_MS = 120_000;
+
+function createSurgicalAdbSession(target: string, bin: string, serialToRedact?: string, outDir?: string): SurgicalAdbSession {
   const base = createHostAdbSession(target, bin, serialToRedact);
   const tArgs = ['-s', target];
   return {
@@ -152,23 +188,35 @@ function createSurgicalAdbSession(target: string, bin: string, serialToRedact?: 
       await execText(bin, [...tArgs, 'forward', '--remove', `tcp:${localPort}`], 15_000, serialToRedact).catch(() => {});
     },
     async streamCommandToFile(remoteCmd: string, outPath: string) {
-      mkdirSync(dirname(outPath), { recursive: true });
+      const safeOutPath = outDir ? resolveContainedPath(outDir, relative(outDir, resolve(outPath))) : outPath;
+      mkdirSync(dirname(safeOutPath), { recursive: true });
       return new Promise<{ bytes: number; sha256: string }>((res, rej) => {
         const child = spawn(bin, [...tArgs, 'exec-out', remoteCmd], { stdio: ['ignore', 'pipe', 'pipe'] });
-        const ws = createWriteStream(outPath, { mode: 0o600 });
+        const ws = createWriteStream(safeOutPath, { mode: 0o600 });
         const hash = createHash('sha256');
         let bytes = 0;
         let stderr = '';
         let settled = false;
+        let idleTimer: ReturnType<typeof setTimeout>;
         const doneErr = (err: Error) => {
           if (settled) return;
           settled = true;
+          clearTimeout(idleTimer);
           ws.destroy();
           child.kill();
           rej(new Error(redact(err.message, serialToRedact)));
         };
+        const resetIdleTimer = () => {
+          clearTimeout(idleTimer);
+          idleTimer = setTimeout(
+            () => doneErr(new Error(`raw transfer stalled (no data for ${RAW_STREAM_INACTIVITY_MS / 1000}s)`)),
+            RAW_STREAM_INACTIVITY_MS,
+          );
+        };
+        resetIdleTimer();
         child.stderr.on('data', (d: Buffer) => { stderr += d.toString('utf8'); });
         child.stdout.on('data', (chunk: Buffer) => {
+          resetIdleTimer();
           bytes += chunk.length;
           hash.update(chunk);
           if (!ws.write(chunk)) {
@@ -180,6 +228,7 @@ function createSurgicalAdbSession(target: string, bin: string, serialToRedact?: 
         ws.on('error', doneErr);
         child.on('close', (code) => {
           if (settled) return;
+          clearTimeout(idleTimer);
           ws.end(() => {
             if (settled) return;
             if (code !== 0) {
@@ -268,6 +317,16 @@ export async function surgicalAdbCli(argv: string[], log: (l: string) => void = 
   if (isInsideRepo(outDir)) {
     fail(`refusing to write probe/backup files inside the git repository (${outDir}); pass --out outside the repo`);
   }
+  // --undo and --apply-adb only ever READ --backup-dir; every other mode writes a fresh recovery
+  // set into --out. Refuse to reuse an --out that already holds one: a retry against an
+  // already-patched device would otherwise overwrite the original restore-*.sparse images with
+  // patched bytes, and concurrent writers to the same folder could interleave.
+  if (a.undo !== true && a['apply-adb'] !== true && existsSync(join(outDir, 'backup', 'manifest.json'))) {
+    fail(
+      `refusing to reuse ${outDir}: it already holds a recovery set (backup/manifest.json). `
+      + 'Pass a fresh --out so the original undo images are never overwritten.',
+    );
+  }
   mkdirSync(outDir, { recursive: true, mode: 0o700 });
 
   let adbKey: string | undefined;
@@ -296,9 +355,7 @@ export async function surgicalAdbCli(argv: string[], log: (l: string) => void = 
     const aBin = adbPath();
 
     const writeOutFile = async (relPath: string, data: Uint8Array | string): Promise<string> => {
-      const full = resolve(outDir, relPath);
-      const rel = relative(outDir, full);
-      if (rel.startsWith('..') || isAbsolute(rel)) throw new Error(`unsafe output path: ${relPath}`);
+      const full = resolveContainedPath(outDir, relPath);
       mkdirSync(dirname(full), { recursive: true, mode: 0o700 });
       writeFileSync(full, data, { mode: 0o600 });
       return full;
@@ -401,7 +458,7 @@ export async function surgicalAdbCli(argv: string[], log: (l: string) => void = 
         const [id, st] = entry;
         return {
           usb: st,
-          ...(st === 'device' ? { session: createSurgicalAdbSession(id, aBin, pinnedSerial ?? id) } : {}),
+          ...(st === 'device' ? { session: createSurgicalAdbSession(id, aBin, pinnedSerial ?? id, outDir) } : {}),
         };
       },
       loadProbeApp: () => loadOrBuildProbeApp({ confirm, log }),
@@ -421,7 +478,16 @@ export async function surgicalAdbCli(argv: string[], log: (l: string) => void = 
                 const end = Math.min(origData.length, e.logical + useBytes);
                 buf.set(origData.subarray(e.logical, end), 0);
               }
-              writeSync(fd, buf, 0, buf.length, e.physical);
+              // writeSync can write fewer bytes than asked (it's still a syscall under the hood);
+              // loop until the whole extent is written so the backup never keeps stray patch bytes.
+              let off = 0;
+              let pos = e.physical;
+              while (off < buf.length) {
+                const n = writeSync(fd, buf, off, buf.length - off, pos);
+                if (n <= 0) throw new Error(`writeSync made no progress at offset ${pos} (wrote ${off}/${buf.length} B)`);
+                off += n;
+                pos += n;
+              }
             }
           }
         } finally {

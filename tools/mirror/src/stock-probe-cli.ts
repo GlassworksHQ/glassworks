@@ -293,6 +293,14 @@ export function createHostHttpSession(host: string, port: number): StockHttpSess
         return (await r.text()).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
       });
     },
+    async listRaw(path: string) {
+      return withTimeout(`/list?path=${encodeURIComponent(path)}`, 15_000, async (r) => {
+        if (r.status === 404) return { status: 404, entries: [] };
+        if (r.status === 403) return { status: 403, entries: [] };
+        if (!r.ok) throw new Error(`HTTP probe /list(${path}) failed with status ${r.status}`);
+        return { status: 200, entries: (await r.text()).split(/\r?\n/).map((l) => l.trim()).filter(Boolean) };
+      });
+    },
     async readFile(path: string) {
       return withTimeout(`/file?path=${encodeURIComponent(path)}`, 60_000, async (r) => {
         if (r.status === 200) return { status: 'ok' as const, data: new Uint8Array(await r.arrayBuffer()) };

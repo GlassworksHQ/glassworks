@@ -583,3 +583,15 @@ npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-onl
      stock `1.24.0` turns the backlight completely dark on sleep, (c) `/data/local/bootanimation.zip`
      SELinux access vs surgical `/system/media/bootanimation.zip` size, and (d) silent-update
      options (in-place priv-app slot vs device-owner).
+4. **Trust model for binding the SoftAP probe to the fastboot flash target — partially closed
+   (2026-11-25, read):** a compatible but different Mirror in fastboot could otherwise receive
+   writes computed from another unit's FIEMAP offsets (CodeRabbit, #769). `stock-surgical-adb.ts`
+   now hashes `androidboot.serialno` out of `/proc/cmdline` over the Step 1 SoftAP session (never
+   the raw serial, per Hard Rule 2) and checks it against `fastboot getvar serialno` before Step 3
+   flashes, and `--undo`/`--apply-adb` check the same hash against the manifest before the first
+   restore write. This degrades to no check when `/proc/cmdline` isn't readable over HTTP or the
+   bootloader doesn't answer `getvar serialno` — a stronger binding (e.g. a signed probe response)
+   is future work. Separately, Step 3 always flashes a fresh `userdata` over Phase 1's probe
+   `userdata` (#759); there is no "precious" prior userdata to preserve by Phase 2 (Phase 1 already
+   replaced the factory one), so `--undo` intentionally does not restore `userdata` — only `--erase-userdata`
+   touches it, as a factory-reset option, not a restore.
