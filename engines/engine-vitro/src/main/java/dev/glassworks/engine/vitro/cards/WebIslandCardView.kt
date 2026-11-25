@@ -59,6 +59,14 @@ class WebIslandCardView(
         /** The page walked `hass.states` and asked for the registries: it asks once, so the next card keeps them up. */
         internal val walksAllStates: Boolean = false,
         internal val registriesAsked: Boolean = false,
+        /** Whether the page was active when handed off: a paused one (a hidden view's) is shown again when needed. */
+        internal val active: Boolean = true,
+        /**
+         * The island's address, and whether its document ever ran (its bridge connected). One that hadn't may have got
+         * the parked slot's empty page meanwhile: the card that takes it loads [url] again.
+         */
+        internal val url: String = "",
+        internal val loaded: Boolean = true,
     ) {
         fun close() {
             server.unregisterSlot(slotId)
@@ -69,6 +77,10 @@ class WebIslandCardView(
     private val watchedEntities = CopyOnWriteArraySet<String>()
     private var slotId: String? = null
     private var islandPage: Page? = null
+
+    /** The island's address on the island server, and whether its document ever ran there (a bridge connected). */
+    private var islandUrl = ""
+    @Volatile private var documentRan = false
 
     /** True once the island left this card for good ([release]) or for its next build ([handOff]). */
     private var islandGone = false
@@ -128,9 +140,10 @@ class WebIslandCardView(
                     // The snapshot goes first: no patch for this socket can be queued before it (the observer
                     // below takes the same lock). This card's theme before it: a page an earlier build of the card
                     // handed over was drawn in that build's.
+                    documentRan = true
                     synchronized(seedLock) {
                         send(themeMessage())
-                        send(authMessage(currentToken()))
+                        send(authMessage(currentToken(), currentUser()))
                         seedInitialStates(send)
                         registries?.let { send(registriesMessage(it)) }
                         senders += send
@@ -149,17 +162,23 @@ class WebIslandCardView(
             // The earlier build's page, if its slot is still there: the slot now answers to this card.
             val kept = adopted?.takeIf { server.replaceSlot(it.slotId, handler) }
             if (adopted != null && kept == null) adopted.close()
-            val (id, url) = if (kept != null) kept.slotId to "" else server.registerSlot(handler)
+            val (id, url) = if (kept != null) kept.slotId to kept.url else server.registerSlot(handler)
             idRef = id
             slotId = id
+            islandUrl = url
+            // A page whose document ran keeps it; one handed over before that loads the island now (it may hold the
+            // parked slot's empty page).
+            if (kept != null) documentRan = kept.loaded
 
             val page = kept?.page ?: opener(url)
             if (page != null) {
                 islandPage = page
                 val h = if (fillViewport) LayoutParams.MATCH_PARENT else kept?.height ?: ctx.px(160f)
                 addView(page.view, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, h))
-                if (kept == null) page.load(url)
+                if (kept == null || (!kept.loaded && url.isNotEmpty())) page.load(url)
                 if (kept != null) {
+                    // Paused under the card before this one: setShown(true) shows it again.
+                    pageActive = kept.active
                     // The page asked for these once, from the card before this one.
                     if (kept.walksAllStates) {
                         walksAllStates = true
@@ -370,7 +389,10 @@ class WebIslandCardView(
         islandPage = null
         slotId = null
         // What the page asked for once, and won't ask again: the next card keeps it up.
-        return Island(keyOf(config, fillViewport), page, id, height, server, walksAllStates, registriesAsked.get())
+        return Island(
+            keyOf(config, fillViewport), page, id, height, server, walksAllStates, registriesAsked.get(), pageActive,
+            islandUrl, documentRan,
+        )
     }
 
     /** Holds the shared registry feed for the page, once, until the island leaves this card. */
@@ -412,7 +434,11 @@ class WebIslandCardView(
         super.onAttachedToWindow()
         ctx.main.removeCallbacks(releaseIfDetached)
         // Back from a move (the observer was off while detached): the page catches up on what changed meanwhile.
-        if (wasDetached && !islandGone) synchronized(seedLock) { senders.forEach { seedInitialStates(it) } }
+        // The token watcher was off too: a token that arrived meanwhile goes first, then the states.
+        if (wasDetached && !islandGone) synchronized(seedLock) {
+            sendTokenIfChanged()
+            senders.forEach { seedInitialStates(it) }
+        }
     }
 
     /** True once the card was first attached: a later attach is a return. */
@@ -432,25 +458,34 @@ class WebIslandCardView(
         .put("dark", ctx.theme.dark)
         .put("name", ctx.theme.name)
 
-    /** The token sent to the page last (under [seedLock]). */
+    /** The token and the user (`hass.user`, as JSON text) sent to the page last (under [seedLock]). */
     private var sentToken: String? = null
+    private var sentUser: String? = null
 
     private fun currentToken(): String = ctx.accessToken().orEmpty()
 
-    /** Sends the current token to the open bridges if it isn't the one sent last. Under [seedLock]. */
+    /** The signed-in user as the island's `hass.user` has it, or null while Home Assistant hasn't said. */
+    private fun currentUser(): JSONObject? = islandUser(ctx.haUser())
+
+    /**
+     * Sends the current sign-in to the open bridges if its token or its user isn't the one sent last: a page kept
+     * across a reconnect, or a sign-in to another account, follows it. Under [seedLock].
+     */
     private fun sendTokenIfChanged() {
         if (senders.isEmpty()) return
         val token = currentToken()
-        if (token != sentToken) {
-            val msg = authMessage(token)
+        val user = currentUser()
+        if (token != sentToken || user?.toString() != sentUser) {
+            val msg = authMessage(token, user)
             senders.forEach { it(msg) }
         }
     }
 
-    /** The bridge message with the sign-in the page's own requests use. Under [seedLock]. */
-    private fun authMessage(token: String): JSONObject {
+    /** The bridge message with the sign-in the page's own requests use, and its user (null: not known yet). */
+    private fun authMessage(token: String, user: JSONObject?): JSONObject {
         sentToken = token
-        return JSONObject().put("type", "auth").put("token", token)
+        sentUser = user?.toString()
+        return JSONObject().put("type", "auth").put("token", token).put("user", user ?: JSONObject.NULL)
     }
 
     companion object {
@@ -1076,6 +1111,9 @@ async function vitroCallApi(method, path, parameters, headers) {
   return body;
 }
 
+// hass.user until Home Assistant says who signed in, and when it doesn't know.
+const ANON_USER = { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false };
+
 const hassBase = {
   config: haConfig,
   language: haLocale.language,
@@ -1084,7 +1122,7 @@ const hassBase = {
   locale: haLocale,
   themes: { darkMode: ${ctx.theme.dark}, default_theme: ${JSONObject.quote(ctx.theme.name)}, themes: {} },
   selectedTheme: null,
-  user: { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false },
+  user: ANON_USER,
   services: {},
   panels: {},
   resources: {},
@@ -1150,12 +1188,20 @@ function connectBridge() {
       let m;
       try { m = JSON.parse(line); } catch (e) { continue; }
       if (m.type === 'auth' && typeof m.token === 'string') {
-        // The sign-in now: a reconnect may have refreshed it since the page loaded.
+        // The sign-in now: a reconnect may have refreshed it since the page loaded, or another account signed in.
+        let changed = false;
         if (m.token !== accessToken) {
           accessToken = m.token;
           hassBase.auth = { data: { access_token: accessToken, hassUrl: location.origin }, accessToken };
-          if (cardEl) cardEl.hass = makeHass();
+          changed = true;
         }
+        // A user not known (yet) for this sign-in: the anonymous panel, never the previous account.
+        const user = (m.user && typeof m.user === 'object') ? m.user : ANON_USER;
+        if (JSON.stringify(user) !== JSON.stringify(hassBase.user)) {
+          hassBase.user = user;
+          changed = true;
+        }
+        if (changed && cardEl) cardEl.hass = makeHass();
       } else if (m.type === 'theme') {
         // The card's theme now (a theme change kept this page): its variables, and hass.themes for the card.
         const style = document.getElementById('vitro-theme');

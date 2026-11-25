@@ -185,6 +185,9 @@ class VitroView(
     private var moreInfoEntityId: String? = null
     private val viewCache = LinkedHashMap<Int, View>()
 
+    /** Cached views that hold a dead island ([islandPagesGone]): built again, not shown from the cache, next time. */
+    private val staleViews = HashSet<Int>()
+
     /** For each cached view, the scripts its islands could load when it was built ([IslandScripts]). */
     private val builtScripts = HashMap<Int, IslandScripts>()
 
@@ -817,9 +820,10 @@ class VitroView(
         onThemeResolved?.invoke(theme)
         onViewSelected?.invoke(viewCfg)
 
-        val cached = if (!forceRebuild) viewCache[index] else null
+        val cached = if (!forceRebuild && index !in staleViews) viewCache[index] else null
         // A first build waits for the view's states, as HA's frontend renders a view's cards once hass has them.
-        if (cached == null && holdForStates(index, viewCfg)) {
+        // Only a first build waits: a stale view (a dead island, [islandPagesGone]) still has its tree, and builds now.
+        if (cached == null && viewCache[index] == null && holdForStates(index, viewCfg)) {
             // The previous view's cards don't stay on screen (and tappable) under this view's tab while it waits.
             for (i in 0 until contentHost.childCount) contentHost.getChildAt(i).visibility = GONE
             for (i in 0 until overlayLayer.childCount) overlayLayer.getChildAt(i).visibility = GONE
@@ -840,6 +844,7 @@ class VitroView(
             guessedStates.clear()
             // The view's old tree, if it has one, goes first: its islands wait for this build to take them back.
             dropView(index, keepIslands = true)
+            staleViews -= index
             buildingIndex = index
             clarity?.buildStarted(index)
             val built = try {
@@ -971,6 +976,7 @@ class VitroView(
 
     /** Drops built view [index] and its pinned cards. */
     private fun dropView(index: Int, keepIslands: Boolean) {
+        staleViews -= index
         viewCache.remove(index)?.let { retireIslands(it, keepIslands); contentHost.removeView(it) }
         overlayFrames.remove(index)?.let { retireIslands(it, keepIslands); overlayLayer.removeView(it) }
         builtScripts.remove(index)
@@ -979,6 +985,7 @@ class VitroView(
 
     /** Drops every built view and the pinned cards. */
     private fun dropBuiltViews(keepIslands: Boolean) {
+        staleViews.clear()
         viewCache.values.forEach { retireIslands(it, keepIslands) }
         overlayFrames.values.forEach { retireIslands(it, keepIslands) }
         viewCache.clear()
@@ -1023,7 +1030,7 @@ class VitroView(
     /**
      * The content of island [pages] went away (a crashed or killed content process): they draw nothing again. A dead
      * page waiting in the pool closes, so no build takes it. A card that holds one closes it, and its view is built
-     * again: the view on screen now, with its other islands handed over alive; a hidden view when it's shown.
+     * again with its other islands handed over alive: the view on screen now, a hidden view when it's shown.
      */
     fun islandPagesGone(pages: Set<Page>) {
         if (pages.isEmpty()) return
@@ -1042,7 +1049,9 @@ class VitroView(
         }
         for (index in hit) {
             if (index == currentViewIndex) renderView(index, forceRebuild = true, pushHistory = false)
-            else dropView(index, keepIslands = false)
+            // A hidden view keeps its tree, live islands and all, and is built again when it's shown: they're handed
+            // over then, and only the dead card opens a new page.
+            else staleViews += index
         }
     }
 

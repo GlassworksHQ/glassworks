@@ -184,7 +184,7 @@ class VitroEngine(
             override fun onPortMessage(port: PagePort, message: JSONObject) {}
         }
 
-        /** The islands to tell when a new token arrives ([VitroCardContext.watchToken]). Any thread. */
+        /** The islands to tell when a new token or the signed-in user arrives ([VitroCardContext.watchToken]). Any thread. */
         private val tokenWatchers = java.util.concurrent.CopyOnWriteArraySet<() -> Unit>()
 
         /** Island pages whose content went away this turn ([IslandHost]), handled together. Main thread. */
@@ -1025,6 +1025,11 @@ class VitroEngine(
 
             override fun onThemes(catalog: ThemeCatalog) {
                 post { vitroView.setThemes(catalog) }
+            }
+
+            // The islands' hass.user follows it as it arrives, which may be after the token (and after their connect).
+            override fun onCurrentUser(user: JSONObject) {
+                if (generation == clientGeneration) tokenWatchers.forEach { runCatching { it() } }
             }
 
             override fun onUserTheme(themeName: String?, dark: Boolean?) {

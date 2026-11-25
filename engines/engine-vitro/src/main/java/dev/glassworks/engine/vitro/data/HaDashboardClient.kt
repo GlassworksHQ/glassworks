@@ -97,6 +97,8 @@ class HaDashboardClient(
          * HA's frontend applies them: what was drawn with the old ones is drawn again.
          */
         fun onLocaleChanged() {}
+        /** `auth/current_user` answered: [user] is now [currentUser]. */
+        fun onCurrentUser(user: JSONObject) {}
         fun onDisconnected(reason: String) {}
     }
 
@@ -773,7 +775,10 @@ class HaDashboardClient(
         // 6. The signed-in user and the theme they picked in their HA profile (kept after the steps above)
         request(JSONObject().put("type", "auth/current_user")) { res ->
             if (res.optBoolean("success", false)) {
-                res.optJSONObject("result")?.let { currentUser = it }
+                res.optJSONObject("result")?.let {
+                    currentUser = it
+                    listener.onCurrentUser(it)
+                }
             }
         }
         request(JSONObject().put("type", "frontend/get_user_data").put("key", "core")) { res ->
