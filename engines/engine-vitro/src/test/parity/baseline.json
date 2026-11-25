@@ -1,59 +1,59 @@
 {
  "_comment": "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: 2.0% pixels, 1.0 px bounds, 0.5 px font). Regenerate with -PvitroParityUpdateBaseline=true; keep or write each \"reason\". An update records regressions too: read the diff before committing it, and keep the entries of cases with an open regression. #794 empties this file.",
  "mirror/clock-date": {
-  "pixel": 0.0233,
+  "pixel": 0.0257,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
-  "reason": "the date line and layout match HA (its start cut off at the large size, as HA's marquee rests); what is left is glyph antialiasing on the 64 px digits and 24 px date, just over the 2% line"
+  "reason": "the layout follows HA line by line (Blink's line boxes put the AM exactly on HA's; the tablet matches). Left at 1.5x: whole-pixel text boxes. The digits, the AM and the date are TextViews as wide as their text rounded up, so the AM sits 1.5 device px right and the resting date ~1.8 px right; the date is 1 px low because Vitro boxes it at the font's normal height (28.67 px) where ha-marquee-text's middle-aligned inline-block makes 27.84. Boxing it that way was tried (2026-11-24): the column, 1 px shorter, moved the clock's whole-pixel centering a pixel the wrong way, 3.65 %"
  },
  "mirror/history-graph-timeline": {
-  "pixel": 0.0544,
-  "bounds": 0.7,
-  "font": 0,
-  "missingText": 0,
-  "reason": "as on the tablet (the name measured in the capture host's fallback font, bars ~2 px further left), plus at density 1.5 Vitro's card insets its content by a 1 px border truncated to 1 device px (CardSurface), not 1.5: the 20 px bars sit half a device pixel higher, so HA's blended bar edges are hard edges in Vitro (2026-11-24)"
- },
- "mirror/history-graph-two": {
-  "pixel": 0.0334,
-  "bounds": 0.2,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the chart's geometry follows HA (grid, ECharts 6 nice axis, 4 h ticks, step lines, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"1,018.5\": 41 px), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
- },
- "mirror/markdown-cardmod-has": {
-  "pixel": 0.0218,
-  "bounds": 0.5,
-  "font": 0.3,
-  "missingText": 0,
-  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph). Left: Vitro sizes Markdown runs in whole device px (AbsoluteSizeSpan), so the 16.38 px h3 draws at 16.5-16.67 (fractional sizes tried 2026-11-24: font deltas 0 but no pixel gain, markdown-table worse); the 18 px line sits 0.85-1.35 px lower and the card 0.3-0.5 px taller; Android's Roboto against the frontend's web Roboto. The report's +4.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it"
- },
- "s1/clock-date": {
-  "pixel": 0.0233,
+  "pixel": 0.0204,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
-  "reason": "the date line and layout match HA (its start cut off at the large size, as HA's marquee rests); what is left is glyph antialiasing on the 64 px digits and 24 px date, just over the 2% line"
+  "reason": "the bars match HA's half-covered edges (the chart is drawn half a pixel off the grid as HA's canvas is composited; the tablet matches). Left at 1.5x: the name and time labels, ECharts' canvas text, blended across two rows in HA and snapped to whole rows by Skia in Vitro (1 px low or right), as in history-graph-two: 2.04 % against the 2 % line (2026-11-24)"
  },
- "s1/history-graph-timeline": {
-  "pixel": 0.0545,
-  "bounds": 0.7,
-  "font": 0,
-  "missingText": 0,
-  "reason": "as on the tablet (the name measured in the capture host's fallback font, bars ~2 px further left), plus at density 1.5 Vitro's card insets its content by a 1 px border truncated to 1 device px (CardSurface), not 1.5: the 20 px bars sit half a device pixel higher, so HA's blended bar edges are hard edges in Vitro (2026-11-24)"
- },
- "s1/history-graph-two": {
-  "pixel": 0.0334,
+ "mirror/history-graph-two": {
+  "pixel": 0.0228,
   "bounds": 0.2,
   "font": 0,
   "missingText": 0,
-  "reason": "the chart's geometry follows HA (grid, ECharts 6 nice axis, 4 h ticks, step lines, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"1,018.5\": 41 px), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
+  "reason": "the chart's geometry matches HA's at every density (ECharts 6's outer bounds, Blink's header and legend lines; the tablet matches). Left at 1.5x: ECharts' canvas text. HA composites the chart's canvas where its box falls (17, 57.8 CSS px: a fraction of a device pixel off the grid), so its axis labels come out blended across two rows; Vitro draws the chart half a pixel off too (CardSurface.contentSubpixel) but Skia snaps the glyphs to whole rows, and the value and time labels sit 1 px right or low. Placing the canvas at its exact HA origin didn't help, and made the tablet worse (2026-11-24)"
  },
- "s1/markdown-cardmod-has": {
-  "pixel": 0.0218,
+ "mirror/markdown-cardmod-has": {
+  "pixel": 0.0204,
   "bounds": 0.5,
   "font": 0.3,
   "missingText": 0,
-  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph). Left: Vitro sizes Markdown runs in whole device px (AbsoluteSizeSpan), so the 16.38 px h3 draws at 16.5-16.67 (fractional sizes tried 2026-11-24: font deltas 0 but no pixel gain, markdown-table worse); the 18 px line sits 0.85-1.35 px lower and the card 0.3-0.5 px taller; Android's Roboto against the frontend's web Roboto. The report's +4.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it"
+  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph; the tablet matches). Left at 1.5x: whole device px. Each Markdown block is a TextView whose line box rounds on its own (the h3's 28.5 px to 29, the paragraphs' 43.2 to 43 and 33.6 to 34), where Chrome rounds positions, so the card comes out 0.5 CSS px taller and its 2 px bottom border a row lower, and the 16.38 px h3 draws at 16.67 (AbsoluteSizeSpan; fractional sizes tried earlier: no pixel gain). The report's +5.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it (2026-11-24)"
+ },
+ "s1/clock-date": {
+  "pixel": 0.0257,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the layout follows HA line by line (Blink's line boxes put the AM exactly on HA's; the tablet matches). Left at 1.5x: whole-pixel text boxes. The digits, the AM and the date are TextViews as wide as their text rounded up, so the AM sits 1.5 device px right and the resting date ~1.8 px right; the date is 1 px low because Vitro boxes it at the font's normal height (28.67 px) where ha-marquee-text's middle-aligned inline-block makes 27.84. Boxing it that way was tried (2026-11-24): the column, 1 px shorter, moved the clock's whole-pixel centering a pixel the wrong way, 3.65 %"
+ },
+ "s1/history-graph-timeline": {
+  "pixel": 0.0204,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the bars match HA's half-covered edges (the chart is drawn half a pixel off the grid as HA's canvas is composited; the tablet matches). Left at 1.5x: the name and time labels, ECharts' canvas text, blended across two rows in HA and snapped to whole rows by Skia in Vitro (1 px low or right), as in history-graph-two: 2.04 % against the 2 % line (2026-11-24)"
+ },
+ "s1/history-graph-two": {
+  "pixel": 0.0228,
+  "bounds": 0.2,
+  "font": 0,
+  "missingText": 0,
+  "reason": "the chart's geometry matches HA's at every density (ECharts 6's outer bounds, Blink's header and legend lines; the tablet matches). Left at 1.5x: ECharts' canvas text. HA composites the chart's canvas where its box falls (17, 57.8 CSS px: a fraction of a device pixel off the grid), so its axis labels come out blended across two rows; Vitro draws the chart half a pixel off too (CardSurface.contentSubpixel) but Skia snaps the glyphs to whole rows, and the value and time labels sit 1 px right or low. Placing the canvas at its exact HA origin didn't help, and made the tablet worse (2026-11-24)"
+ },
+ "s1/markdown-cardmod-has": {
+  "pixel": 0.0204,
+  "bounds": 0.5,
+  "font": 0.3,
+  "missingText": 0,
+  "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph; the tablet matches). Left at 1.5x: whole device px. Each Markdown block is a TextView whose line box rounds on its own (the h3's 28.5 px to 29, the paragraphs' 43.2 to 43 and 33.6 to 34), where Chrome rounds positions, so the card comes out 0.5 CSS px taller and its 2 px bottom border a row lower, and the 16.38 px h3 draws at 16.67 (AbsoluteSizeSpan; fractional sizes tried earlier: no pixel gain). The report's +5.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it (2026-11-24)"
  }
 }
