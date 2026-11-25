@@ -149,19 +149,22 @@ function vitroWatchFrontend(card, env) {
       stop();
       return;
     }
+    // The budget is hard: tags that come and go (never one past its grace) don't keep the watch going.
+    if (scans >= e.maxScans) {
+      stop();
+      return;
+    }
     if (tags.size) {
       // Decide when the oldest one's grace is over, whatever the observer does meanwhile.
       const oldest = Math.min(...[...tags.keys()].map((tag) => firstSeen.get(tag)));
       schedule(Math.max(0, oldest + e.graceMs - t));
-    } else if (scans >= e.maxScans) {
-      stop();
     } else {
       // The next discovery scan, if any is left.
       const next = e.discoveryMs.find((ms) => started + ms > t);
       if (next !== undefined) schedule(started + next - t);
     }
   };
-  if (MO) observer = new MO(() => { if (scans < e.maxScans || firstSeen.size) schedule(e.debounceMs); });
+  if (MO) observer = new MO(() => { if (scans < e.maxScans) schedule(e.debounceMs); });
   schedule(e.debounceMs);
   return stop;
 }

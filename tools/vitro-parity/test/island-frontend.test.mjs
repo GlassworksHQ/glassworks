@@ -179,6 +179,24 @@ test('with nothing to find, the discovery scans end and the watch goes quiet', (
   assert.equal(c.pending(), 0);
 });
 
+test('tags that come and go never outlast the scan budget, and a stable one still reports', () => {
+  const box = el('div');
+  const card = el('acme-flicker-card', { card: true }).shadow(box);
+  const { c, o, reports } = watch(card);
+  let a = true;
+  const flip = () => { box.children.slice().forEach((n) => box.remove(n)); box.append(el(a ? 'ha-loading-a' : 'ha-loading-b')); a = !a; o.mutate(); };
+  for (let i = 0; i < 120; i++) { flip(); c.advance(1000); }
+  assert.equal(reports.length, 0, 'no tag stayed past its grace');
+  assert.equal(c.pending(), 0, 'the budget ended the watch');
+  assert.ok(o.all.every((x) => !x.on), 'and the observer');
+
+  const box2 = el('div');
+  const card2 = el('acme-flicker-card', { card: true }).shadow(el('ha-big-number'), box2);
+  const w2 = watch(card2);
+  for (let i = 0; i < 10; i++) { box2.children.slice().forEach((n) => box2.remove(n)); box2.append(el(i % 2 ? 'ha-loading-a' : 'ha-loading-b')); w2.o.mutate(); w2.c.advance(1000); }
+  assert.deepEqual(w2.reports.map((r) => r.tags.includes('ha-big-number')), [true]);
+});
+
 test('only tags past their grace are reported, with their own cards', () => {
   // Card A's dial has waited long enough; card B's element appeared later and is still in its grace.
   const late = el('acme-b-card', { card: true }).shadow();
