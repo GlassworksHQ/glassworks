@@ -29,7 +29,8 @@ Three ideas, used the same way on every flow.
 
 Each flow builds its rail as it always has, and now also says, for each step behind you, either how
 to return to it (`go`) or why you can't (`lock`). A done step you can return to looks and acts like a
-link. A step behind a write shows a small lock, and the rail says once, in plain words, what changed.
+link. Behind a write, the rail says once, in one note under it, what changed and that the steps before
+are done for good (round two, [system.md](system.md): no lock on each step).
 
 **Back is the rail's previous step you can return to.** The shell works it out from the rail, so no
 screen decides it alone, and two screens can't disagree. A screen may still give its own Back when
@@ -50,25 +51,28 @@ screen decides it alone, and two screens can't disagree. A screen may still give
 ```
 
 Back sits on the left, the one ember button on the right, and anything else is a ghost button
-between them. No prose links in the foot. When there is no way back, the left of the foot says why,
-with a lock: "Glassworks is written to the Mirror". On a phone the foot sticks to the bottom of the
-screen, Back and the main button side by side, so the main action is always in reach.
+between them. No prose links in the foot. When there is no way back, the rail's note says why; on a
+phone, where the rail is hidden, the left of the foot says it, with a lock: "Glassworks is written to
+the Mirror". On a phone the foot sticks to the bottom of the screen, Back and the main button side by
+side, so the main action is always in reach.
 
 ### 3. Leaving the path is a decision, so it gets a dialog
 
 **Start over** and **Restore the original system** are flow actions, not screen actions. They live
-under the rail on a computer, in the Steps sheet on a phone, and on the resume and error screens.
-Start over opens a dialog (Radix Dialog, as the photo and "Your turn" already use) that says what
-starts again and what stays, with a confirm button in the brand's problem color. It is offered only
-where `canStartOver()` says it's honest, and never while something writes.
+under the rail on a computer; on a phone, in the Steps sheet and as a quiet button under the card;
+and on the resume and error screens. Start over opens a dialog (Radix Dialog, as the photo and "Your
+turn" already use) that says what starts again and what stays, with a confirm button in solid ink
+(round two: not rose, which means a problem, and not ember, which invites). It is offered only where
+`canStartOver()` says it's honest, and never while something writes.
 
 ## Resume
 
 When Kiln opens on a saved mark, it shows a resume screen first instead of dropping you on a step:
 
 - **Pick up where you left off**, with the device's name.
-- What's already done, as the rail's done steps with checks, and one line on what the device has
-  now ("The setup agent is on the Mirror. Its system hasn't changed yet.").
+- What's already done, as the rail's done steps on the same progress list as the working screens, the
+  step you'll continue at marked as your turn, and one note on what the device has now ("The setup
+  helper is on the Mirror. Its system hasn't changed yet.").
 - **Continue** (ember), and the ways out as ghost buttons: Start over when it's still honest, and
   Restore the original system once the system has been written.
 

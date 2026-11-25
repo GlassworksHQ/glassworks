@@ -310,7 +310,8 @@ export function ImageFastboot({ f, s }: P) {
 function Checked({ d, checks }: { d: DeviceFrame; checks: readonly { what: string; found: string }[] }) {
   return (
     <Note tone="ok" title={`Found ${d.the} in fastboot mode`}>
-      {checks.map((c) => `${c.what}: ${c.found}`).join(' · ')}
+      Kiln checked it, and it matches what the install expects. Nothing is written until you continue.
+      <Details label="What Kiln checked"><ul className="checks">{checks.map((c) => <li key={c.what}>{`${c.what}: ${c.found}`}</li>)}</ul></Details>
     </Note>
   );
 }

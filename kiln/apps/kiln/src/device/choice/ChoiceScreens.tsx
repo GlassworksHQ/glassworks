@@ -47,12 +47,13 @@ function Card({ r, picked }: { r: ImageRecipe; picked: boolean }) {
         {r.community && <span className="pill soon">Community image</span>}
       </span>
       <span className={c.summary} id={`${id}-sum`}>{r.summary}</span>
-      <dl className={c.facts}>
-        <dt>By</dt><dd>{r.by.name}</dd>
-        <dt>License</dt><dd>{r.licence}</dd>
-        <dt>Support</dt><dd>{r.community ? 'Its project, on GitHub' : r.support.name}</dd>
-        <dt>Project</dt><dd><a className={`link ${c.above}`} href={r.project.href} target="_blank" rel="noopener">{r.project.name}</a></dd>
-      </dl>
+      {/* who makes it, its licence, where questions go, its project: one quiet line (community-images.md keeps all four) */}
+      <p className={c.facts}>
+        <span>{`By ${r.by.name}`}</span>
+        <span>{r.licence}</span>
+        <span>{`Support: ${r.community ? 'Its project, on GitHub' : r.support.name}`}</span>
+        <span><a className={`link ${c.above}`} href={r.project.href} target="_blank" rel="noopener">{r.project.name}</a></span>
+      </p>
     </div>
   );
 }

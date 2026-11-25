@@ -201,10 +201,10 @@ export function Note({ tone = 'info', title, children, action, icon, role }: {
   return (
     <div className={`note ${tone}`} role={role ?? (tone === 'bad' ? 'alert' : 'note')}>
       <span className="ico">{icon ?? <Icon />}</span>
-      <span className="grow">
+      <div className="grow">
         {title && <b>{title}</b>}
-        {children && <span>{children}</span>}
-      </span>
+        {children && <div>{children}</div>}
+      </div>
       {action && <span className="note-act">{action}</span>}
     </div>
   );

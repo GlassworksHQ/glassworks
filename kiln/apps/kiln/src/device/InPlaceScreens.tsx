@@ -106,7 +106,7 @@ function JoinWifi(p: ReceiveScreenProps & { network: string }) {
     <section className="card" aria-labelledby="h">
       <h2 id="h">{p.joined ? `You’re on ${the}’s Wi-Fi` : `Join ${the}’s Wi-Fi`}</h2>
       <p className="lede">{`${capital(the)} is starting a small setup helper, which opens a Wi-Fi network of its own. Kiln copies what it needs over it in a few seconds.`}</p>
-      {waiting && <Wait what={`Waiting for ${the}’s Wi-Fi to appear`} typical={p.words.agentTime} note="Its screen may stay dark meanwhile. That’s normal." />}
+      {waiting && <Wait what="Waiting for this computer to join it" typical={p.words.agentTime ? `${p.words.agentTime} for it to appear` : undefined} note="Its screen may stay dark meanwhile. That’s normal." />}
       <Instructions label="Join its Wi-Fi" steps={[
         <>Open this computer’s Wi-Fi menu.</>,
         <>Join the network below. It has no password.<NetworkTile name={p.network} on={!!p.joined} /></>,
@@ -117,7 +117,7 @@ function JoinWifi(p: ReceiveScreenProps & { network: string }) {
         ? <p className="status work" role="status">Connecting…</p>
         : p.joined
           ? <p className="live ok" role="status"><span className="tick" aria-hidden="true">✓</span>{`This computer is on ${the}’s Wi-Fi, and its setup helper answered.`}</p>
-          : <p className="live" role="status"><span className="pulse" />Waiting for this computer to join…</p>}
+          : !waiting && <p className="live" role="status"><span className="pulse" />Waiting for this computer to join…</p>}
       {p.words.coverNote && <Note tone="turn" title="Keep the back cover off">{p.words.coverNote}</Note>}
       <Foot>
         <span className="links">

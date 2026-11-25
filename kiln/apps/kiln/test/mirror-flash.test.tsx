@@ -196,7 +196,7 @@ describe('installing Glassworks over fastboot', () => {
     expect(flash.state.firstBoot?.home).toEqual({ result: 'none', left: ['com.android.launcher3'] });
     expect(flash.state.firstBoot?.hidden).toEqual([]);
     expect(screen.getByText('This Glassworks build has no home screen')).toBeTruthy();
-    expect(screen.getByText((_, el) => el?.tagName === 'SPAN' && /^com\.android\.launcher3 stays its home screen\./.test(el.textContent ?? ''))).toBeTruthy();
+    expect(screen.getByText((_, el) => el?.tagName === 'DIV' && /^com\.android\.launcher3 stays its home screen\./.test(el.textContent ?? ''))).toBeTruthy();
     expect(screen.queryByText('Hide the other launcher again')).toBeNull();
     expect(screen.queryByText('Glassworks isn’t the only home screen yet')).toBeNull();
   });
