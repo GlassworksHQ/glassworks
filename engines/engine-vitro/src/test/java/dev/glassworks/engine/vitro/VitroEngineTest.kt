@@ -16,6 +16,7 @@ import android.widget.TextView
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
+import dev.glassworks.engine.vitro.clarity.ClarityHttp
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
@@ -318,7 +319,11 @@ class VitroEngineTest {
     fun clarityMeasuresOnlyTheReferenceDashboardOnTheTestHoldsOrigin() {
         // docs/perf.md "Vitro": the native harness runs only while the test hold shows Clarity's reference dashboard.
         var test: String? = null
-        val page = readyPage(vitro(testDashboard = { test }))
+        // The harness's own requests go nowhere: a fake transport that records them and answers 404 (its worker keeps
+        // asking for the config), so the test touches no network.
+        val asked = CopyOnWriteArrayList<String>()
+        val engine = vitro(testDashboard = { test }).also { it.clarityHttp = ClarityHttp { url, _ -> asked += url; 404 to null } }
+        val page = readyPage(engine)
         val view = vitroView(page)
         assertNull("no test hold: nothing measures", view.clarity)
         page.load("$base/clarity-ref/start")
@@ -346,6 +351,11 @@ class VitroEngineTest {
         assertNotNull(second)
         assertEquals(moved, second!!.fake)
         assertTrue("the old harness was replaced", first !== second)
+        awaitMain("the harness asks its fake for the config") { asked.any { it.startsWith("$moved/clarity/config.json") } }
+        // The hold ends with no page load after it (a panel with no saved dashboard): the harness stops by itself.
+        test = null
+        awaitMain("the harness stopped when the hold ended") { view.clarity == null }
+        assertTrue("only the fakes were asked: $asked", asked.all { it.startsWith("$base/clarity/") || it.startsWith("$moved/clarity/") })
     }
 
     @Test

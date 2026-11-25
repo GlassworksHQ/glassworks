@@ -68,6 +68,13 @@ class VitroClarity internal constructor(
     private val follow: (String) -> Unit = {},
     /** The worker ended by itself (an error it can't go on from), on the main thread: the page lets this harness go. */
     private val onExit: (VitroClarity) -> Unit = {},
+    /**
+     * Whether the test hold still shows this fake's reference dashboard (main thread). Checked before each command, so a
+     * hold that ends stops the harness even when no page load follows it (a panel with no saved dashboard).
+     */
+    private val active: () -> Boolean = { true },
+    /** How it reaches the fake: HTTP on the loopback, no redirects ([ClarityHttp.Loopback]). Tests give their own. */
+    private val transport: ClarityHttp = ClarityHttp.Loopback,
     private val log: (String) -> Unit = { Log.i(TAG, it) },
 ) {
     private val main = Handler(Looper.getMainLooper())
@@ -182,16 +189,7 @@ class VitroClarity internal constructor(
 
     private fun http(path: String, timeoutMs: Int = 10_000): Pair<Int, String?> {
         check()
-        val conn = URL(fake.trimEnd('/') + path).openConnection() as HttpURLConnection
-        return try {
-            conn.connectTimeout = timeoutMs
-            conn.readTimeout = timeoutMs
-            conn.useCaches = false
-            val code = conn.responseCode
-            code to (if (code == 200) conn.inputStream.bufferedReader().readText() else null)
-        } finally {
-            conn.disconnect()
-        }
+        return transport.get(fake.trimEnd('/') + path, timeoutMs)
     }
 
     private var seq = 0
@@ -626,7 +624,12 @@ class VitroClarity internal constructor(
         frame()
         val t1 = t0 + ph.getDouble("updatesWindowMs")
         val raf = framesIn(t0, t0 + pacing)
-        val got = onMain { live.changes.filter { it.slot != null && it.gen == live.gen }.associateBy { it.slot!! } }
+        // Every value of each change read in one look on the main thread, the one that picks them: a tick the next
+        // frame sets later can't land in this record beside ticks of an earlier moment.
+        class Seen(val at: Double, val late: Int, val tick: Double?)
+        val got = onMain {
+            live.changes.filter { it.slot != null && it.gen == live.gen }.associate { it.slot!! to Seen(it.at, it.late, it.tick) }
+        }
         val sched = ArrayList<Triple<String, Double, Int>>()
         var k = 1
         while (live.liveAt + k * every <= t1) sched += Triple("S$k", live.liveAt + k * every, 0).also { k++ }
@@ -726,17 +729,24 @@ class VitroClarity internal constructor(
         val end = now() + max(ph.getDouble("tapWaitMinMs"), v.taps * ph.getDouble("tapEachMs") + 5000)
         while (onMain { taps } < v.taps && now() < end) sleep(100.0)
         sleep(500.0)
-        val (n, values) = onMain {
+        onMain {
             counting = false
             currentTap = null
+        }
+        // Each tap counted is timed to the end of a frame after its handlers: wait for those frames, a while.
+        val done = now() + TAP_FINISH_MS
+        while (onMain { interactions.any { it.pending > 0 } } && now() < done) sleep(50.0)
+        val (n, values) = onMain {
             taps to interactions.filter { it.pending == 0 && (it.down != null || it.up != null) }
                 .map { ClarityStats.eventTimingDuration(max(it.down ?: 0.0, it.up ?: 0.0)) }
         }
-        val all = values.toMutableList()
-        while (all.size < n) all += 16.0
-        all.sort()
+        val all = values.sorted()
+        // A tap still without its frame isn't given a time (the web harness fills only Event Timing's sub-16 ms ones):
+        // the run's tap is then not measured (inp_ms null), never faster than it was.
+        val incomplete = n - all.size
         line(JSONObject().put("t", "input").put("stage", v.tier).put("method", METHOD_TAPS).put("taps", n)
-            .put("values", JSONArray(all.map { it.roundToInt() })).put("inp_ms", all.lastOrNull()?.roundToInt() ?: JSONObject.NULL))
+            .put("values", JSONArray(all.map { it.roundToInt() })).put("incomplete", incomplete)
+            .put("inp_ms", if (incomplete > 0) JSONObject.NULL else all.lastOrNull()?.roundToInt() ?: JSONObject.NULL))
     }
 
     // ---- scroll: the same flick down from the top, during the live updates
@@ -747,7 +757,6 @@ class VitroClarity internal constructor(
         val ph = c.getJSONObject("PHASES")
         onMain { view.currentScroll()?.scrollTo(0, 0) }
         sleep(ph.getDouble("repositionStillMs"))
-        class Geo(val x: Int, val lo: Int, val hi: Int, val max: Int, val y0: Int)
         val g = onMain {
             val vp = viewport()
             val s = view.currentScroll()
@@ -758,6 +767,7 @@ class VitroClarity internal constructor(
         var last: Double? = null
         var appliedAt = 0
         var down: Double? = null
+        var mine: ViewTreeObserver.OnScrollChangedListener? = null
         onMain {
             downAt = null
             val s = view.currentScroll()
@@ -776,21 +786,41 @@ class VitroClarity internal constructor(
                 last = t
             }
             scrollWatch = w
+            mine = w
             view.viewTreeObserver.addOnScrollChangedListener(w)
         }
+        try {
+            swipeWindow(i, g, ph, { first }, { last }, { appliedAt }, { down })
+        } finally {
+            // On every way out (a command that failed or timed out included): this swipe's own listener, never the next.
+            mine?.let { w ->
+                main.post {
+                    view.viewTreeObserver.removeOnScrollChangedListener(w)
+                    if (scrollWatch === w) scrollWatch = null
+                }
+            }
+        }
+    }
+
+    private class Geo(val x: Int, val lo: Int, val hi: Int, val max: Int, val y0: Int)
+
+    private fun swipeWindow(
+        i: Int, g: Geo, ph: JSONObject, first: () -> Double?, last: () -> Double?, appliedAt: () -> Int, down: () -> Double?,
+    ) {
         line(JSONObject().put("t", "swipe-ready").put("n", i).put("x", g.x).put("y1", g.lo).put("y2", g.hi)
             .put("ms", ph.getInt("swipeMs")))
         val cap = ClarityStats.measureMs(v.vsync)
         val end = now() + ph.getDouble("swipeWaitMs")
         while (now() < end) {
             sleep(50.0)
-            val (f0, l0) = onMain { first to last }
+            val (f0, l0) = onMain { first() to last() }
             if (f0 != null && (now() - l0!! > ph.getDouble("scrollQuietMs") || now() - f0 > cap)) break
         }
+        // The window ends here: the listener goes in the same look, so no late first scroll logs a measure line after it.
         val (f0, l0, y, applied) = onMain {
             scrollWatch?.let { view.viewTreeObserver.removeOnScrollChangedListener(it) }
             scrollWatch = null
-            listOf(first, last, view.currentScroll()?.scrollY?.toDouble(), live.applied.toDouble())
+            listOf(first(), last(), view.currentScroll()?.scrollY?.toDouble(), live.applied.toDouble())
         }
         if (f0 == null) {
             line(JSONObject().put("t", "step").put("stage", "scroll").put("n", i).put("window_ms", 0).put("scrolled_px", 0)
@@ -803,8 +833,8 @@ class VitroClarity internal constructor(
         val yNow = y ?: g.y0.toDouble()
         line(JSONObject().put("t", "step").put("stage", "scroll").put("n", i).put("window_ms", windowMs.roundToInt())
             .put("scrolled_px", (abs(yNow - g.y0) / density()).roundToInt()).put("hit_edge", yNow >= g.max - 1)
-            .put("changes_during", applied!!.toInt() - appliedAt)
-            .put("first_scroll_ms", down?.let { (f0 - it).roundToInt() } ?: JSONObject.NULL)
+            .put("changes_during", applied!!.toInt() - appliedAt())
+            .put("first_scroll_ms", down()?.let { (f0 - it).roundToInt() } ?: JSONObject.NULL)
             .put("raf", ClarityStats.frameStats(iv, v.vsync)).put("raf_intervals", JSONArray(iv.map { ClarityStats.round1(it) })))
         sleep(300.0)
     }
@@ -1006,6 +1036,7 @@ class VitroClarity internal constructor(
     private fun script() {
         // The page config (one source with the web harness's: dashboards.page_config), until the fake answers.
         while (true) {
+            if (!onMain { active() }) return
             try {
                 val (code, body) = http("/clarity/config.json")
                 if (code == 200 && body != null) {
@@ -1033,6 +1064,8 @@ class VitroClarity internal constructor(
         var last = ""
         while (true) {
             check()
+            // The test hold gone (or moved to another fake): this harness is done, whether or not a page load follows.
+            if (!onMain { active() }) return
             val cmd = try {
                 val (code, body) = http("/clarity/next?after=${URLEncoder.encode(last, "UTF-8")}", NEXT_TIMEOUT_MS)
                 if (code == 200 && body != null) JSONObject(body) else null
@@ -1041,6 +1074,7 @@ class VitroClarity internal constructor(
                 continue
             }
             if (cmd == null) continue
+            if (!onMain { active() }) return
             last = cmd.getString("nonce")
             try {
                 openView(cmd)
@@ -1083,7 +1117,35 @@ class VitroClarity internal constructor(
         private const val NEXT_TIMEOUT_MS = 30_000
         private const val MAX_ERROR = 600
 
+        /** How long after the taps each one may still take to get its frame (past it, the tap isn't measured). */
+        private const val TAP_FINISH_MS = 2_000.0
+
         /** For the followed entities' states to land (the page batches its resubscription for 150 ms). */
         private const val FOLLOW_MS = 1_000.0
+    }
+}
+
+/** How Clarity's harness reaches the fake Home Assistant: a GET, its status and (on 200) its body. */
+fun interface ClarityHttp {
+    fun get(url: String, timeoutMs: Int): Pair<Int, String?>
+
+    companion object {
+        /**
+         * HTTP to the fake on the loopback. No redirect is followed (CWE-918): whatever else answered on the port can't
+         * send the harness, its nonce or its reads to another host; a 3xx is any other non-200, with no body read.
+         */
+        val Loopback = ClarityHttp { url, timeoutMs ->
+            val conn = URL(url).openConnection() as HttpURLConnection
+            try {
+                conn.connectTimeout = timeoutMs
+                conn.readTimeout = timeoutMs
+                conn.useCaches = false
+                conn.instanceFollowRedirects = false
+                val code = conn.responseCode
+                code to (if (code == 200) conn.inputStream.bufferedReader().readText() else null)
+            } finally {
+                conn.disconnect()
+            }
+        }
     }
 }

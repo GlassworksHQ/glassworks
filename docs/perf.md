@@ -337,7 +337,7 @@ detail, not graded.
 | Blocking after it | Each animation frame's time past 50 ms, from drawn until tasks posted back to back run within 50 ms for 500 ms | The same, with tasks posted to the main thread's looper | Yes |
 | Restart | Process start to the start view usable | The same | Yes |
 | Live updates | From the fake's send (its schedule, tied to the fake's clock) through the main thread reading the change and the card drawing it, to the first SurfaceFlinger present that can show it | The same: the store hands each change to the main thread, the card renders it, and the next frame draws it | Yes |
-| Tap | Event Timing: from the event's timestamp to the next paint after its handlers, worst of 10, rounded to 8 ms, at least 16 ms | From the touch's own timestamp to the end of the first frame drawn after its handlers (the click included), worst of 10, rounded the same way (`method: vitro-frame`) | Yes, by its definition |
+| Tap | Event Timing: from the event's timestamp to the next paint after its handlers, worst of 10, rounded to 8 ms, at least 16 ms | From the touch's own timestamp to the end of the first frame drawn after its handlers (the click included), worst of 10, rounded the same way (`method: vitro-frame`). A tap whose frame hasn't come 2 s after the taps is given no time: the run's tap is then not measured (`incomplete`) | Yes, by its definition |
 | Scroll | Six real swipes during the live updates, SurfaceFlinger and rAF | The same swipes, SurfaceFlinger and `Choreographer` frames, with the same room to flick (the view's content at least 4 screens high) | Yes |
 | More-info dialog | HA's dialog, from the tile's event to its show animation finished and the sensor's graph drawn | Vitro's own sheet, opened as a tile's tap opens it, to its enter animation finished and the sensor's graph drawn with its data (the fake answers Vitro's `history/history_during_period` with the same seeded points as HA's `history/stream`) | Yes; the sheet is Vitro's (its animation is 240 ms, HA's is 300 ms) |
 | Cameras | The WebRTC players' receiver counts | Not measured | No: see below |
@@ -2244,7 +2244,8 @@ load) and `t`:
 
 Vitro's lines (`VitroClarity`, see [Vitro](#vitro)) have the same types and fields, plus `engine: "vitro"`,
 `clock: "monotonic"` and `origin_mono_ms` on `drawn` and `refdash` in place of `origin_epoch_ms` and `epoch_ms`.
-Their `frontend` and `video_caps` are `null`, and they log no `camera` line. They go to logcat with the tag
+Their `frontend` and `video_caps` are `null`, they log no `camera` line, and their `input` line adds `incomplete` (taps
+counted that got no frame in time; then `inp_ms` is `null`). They go to logcat with the tag
 `Glassworks.Clarity`.
 
 The restart page logs with an empty nonce (its parts are numbered `restart:<n>`): only `refdash` and

@@ -27,6 +27,7 @@ import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.PageHost
 import dev.glassworks.engine.PagePort
+import dev.glassworks.engine.vitro.clarity.ClarityHttp
 import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatWarmup
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -81,6 +82,9 @@ class VitroEngine(
      * The legacy engine (a locked-down [fallback]) is held to the dashboard's origin, so [islandOrigin] gives it this
      * one up front as well.
      */
+    /** How Clarity's harness reaches its fake Home Assistant ([VitroClarity]); tests give one that touches no network. */
+    internal var clarityHttp: ClarityHttp = ClarityHttp.Loopback
+
     val islandServer: VitroIslandServer = VitroIslandServer(
         session = { activePage?.islandSession() ?: (null to null) },
         log = { msg -> Log.d(logTag, "island: ${forLog(msg)}") },
@@ -179,6 +183,12 @@ class VitroEngine(
                 origin, vitroView, store, viewPath ?: "start", follow = ::watchRuntimeEntity,
                 // A harness that ended by itself goes, unless another has replaced it meanwhile: the next load starts one.
                 onExit = { done -> if (clarity === done) stopClarity() },
+                // The hold ending (or moving) ends it too, whether or not a page load follows.
+                active = {
+                    runCatching { testDashboard(activity.applicationContext) }.getOrNull()
+                        ?.let { OAuth.origin(it) == origin } == true
+                },
+                transport = clarityHttp,
             ).also {
                 vitroView.attachClarity(it)
                 it.start()
