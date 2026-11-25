@@ -38,6 +38,7 @@ import { buildDisplay, referencedAreas } from './lib/display.mjs';
 import { wsRecorder, snapshotCalls, pendingOneShots, pendingFirstEvents } from './lib/wsdata.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
 import { FIXTURE_PREFIX, fixtureFile, fixtureResources } from './lib/fixtures.mjs';
+import { captureMode, capturedWithTouch } from './lib/pointer.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEFAULT_CORPUS = join(ROOT, 'engines', 'engine-vitro', 'src', 'test', 'parity');
@@ -513,10 +514,10 @@ const cardElement = (card) => (card.type.startsWith('custom:') ? card.type.slice
 const touchPages = new WeakSet();
 
 /**
- * A screenshot of the whole page. Playwright's `fullPage` overrides the device metrics for a page taller than the
- * viewport, and that drops touch emulation: HA's page would be drawn for a fine pointer (the chart legend's 24 px
- * rows). On a touch frame the viewport grows to the page instead, for a plain screenshot, then goes back; resizing
- * keeps the touch emulation. A page that has lost its coarse pointer anyway fails the case rather than be captured.
+ * A screenshot of the whole page, for the settle loop's comparisons. Playwright's `fullPage` draws beyond the window,
+ * and that turns touch emulation off: HA's page would be drawn for a fine pointer (the chart legend's 24 px rows). On
+ * a touch frame the window grows to the page for a plain screenshot instead, then goes back. The reference's own PNG
+ * is taken by [captureShot], in the one layout its slots and texts are measured in.
  */
 async function fullShot(page, opts) {
   if (!touchPages.has(page)) return page.screenshot({ ...opts, fullPage: true });
@@ -525,13 +526,50 @@ async function fullShot(page, opts) {
   const grow = h > vp.height;
   if (grow) await page.setViewportSize({ width: vp.width, height: h });
   try {
-    if (!(await page.evaluate(() => matchMedia('(pointer: coarse)').matches))) {
-      throw new Error('a touch frame\'s page lost its coarse pointer: HA would draw it for a mouse');
-    }
     return await page.screenshot(opts);
   } finally {
     if (grow) await page.setViewportSize(vp);
   }
+}
+
+/** The window each grown page had ([growTo]), to put back. */
+const grownPages = new WeakMap();
+
+/** Grows [page]'s window to [height] CSS px (`grow` capture mode), remembering the panel's own. */
+async function growTo(page, height) {
+  const vp = grownPages.get(page) ?? page.viewportSize();
+  grownPages.set(page, vp);
+  await page.setViewportSize({ width: vp.width, height });
+}
+
+/** Puts a grown page's window back to the panel's size. */
+async function restoreWindow(page) {
+  const vp = grownPages.get(page);
+  if (!vp) return;
+  grownPages.delete(page);
+  await page.setViewportSize(vp);
+}
+
+/**
+ * The reference's PNG, in the layout the case's slots and texts are measured in ([mode], `lib/pointer.mjs`). A touch
+ * capture checks HA's page still has its coarse pointer and fails the case otherwise; a pinned page's full-page shot
+ * turns touch emulation off, so it's turned on again for the cases after it.
+ */
+async function captureShot(page, mode, opts) {
+  if (mode === 'mouse') return page.screenshot({ ...opts, fullPage: true });
+  if (mode === 'pinned') {
+    try {
+      return await page.screenshot({ ...opts, fullPage: true });
+    } finally {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+      await cdp.detach();
+    }
+  }
+  if (!(await page.evaluate(() => matchMedia('(pointer: coarse)').matches))) {
+    throw new Error('a touch frame\'s page lost its coarse pointer: HA would draw it for a mouse');
+  }
+  return page.screenshot(opts);
 }
 
 /** Waits until the slots exist and two screenshots 400 ms apart are the same (animations, images, fonts). */
@@ -716,10 +754,12 @@ async function capture() {
           const config = c.card ?? JSON.parse(readFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), 'utf8'));
           const outDir = join(refs, frame.id);
           mkdirSync(outDir, { recursive: true });
-          let info, stable, clip, slots, png, texts, templates, ids, drawnStates, drawn, display, drawnGraphs, loadedAtShot;
+          let info, stable, clip, slots, png, texts, templates, ids, drawnStates, drawn, display, drawnGraphs, loadedAtShot, mode;
           // The PNG, its texts and the states saved with them must be one instant: an entity that changes while
           // they're taken makes the pair disagree, so the capture starts over (three tries).
           for (let attempt = 1; ; attempt++) {
+            // A window an earlier attempt (or a failed case) grew goes back to the panel's size first.
+            await restoreWindow(page);
             ({ info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000));
             // A graph waits on one-shot answers (the statistics card asks for statistics after its metadata): a call
             // still unanswered means the card isn't drawn yet. Wait for them (10 s at most), then settle again.
@@ -733,6 +773,14 @@ async function capture() {
               log(`${frame.id}/${c.id}: a graph answer arrived after the page settled: again`);
               continue;
             }
+            // On a touch panel, a page taller than the window is measured and shot in a window grown to it: the PNG,
+            // the slots and the texts below all describe that one layout (lib/pointer.mjs).
+            mode = captureMode({ touch: touchPages.has(page), docHeight: info.docH, viewportHeight: page.viewportSize().height, slots: info.slots });
+            if (mode === 'grow') {
+              await growTo(page, Math.ceil(info.docH));
+              ({ info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000));
+            }
+            if (mode === 'pinned') log(`${frame.id}/${c.id}: a pinned card on a page taller than the window: captured with a fine pointer`);
             if (!info.slots.length && c.card) throw new Error('no card on the page');
             if (!info.slots.length) log(`${frame.id}/${c.id}: HA shows no card (all hidden?): comparing the whole page`);
             if (c.card) {
@@ -758,7 +806,7 @@ async function capture() {
             loadedAtShot = new Map(images.loaded);
             // Kept in memory until every check passes: a failed case leaves no PNG behind.
             await page.evaluate(FREEZE_JS);
-            png = await fullShot(page, { clip, animations: 'disabled' });
+            png = await captureShot(page, mode, { clip, animations: 'disabled' });
             await page.evaluate(FREEZE_JS);
             texts = [];
             for (const [i, s] of slots.entries()) for (const t of await page.evaluate(TEXTS_JS, s)) texts.push({ slot: i, ...roundRect(t) });
@@ -780,6 +828,7 @@ async function capture() {
             if (attempt >= 3) throw new Error('entity states, drawn images or graph data kept changing during the capture (3 tries)');
             log(`${frame.id}/${c.id}: ${!sameStates ? 'an entity' : !sameImages ? 'a drawn image' : 'graph data'} changed during the capture: again`);
           }
+          await restoreWindow(page);
           // A case that covers one state (a light on, an alarm disarmed) keeps its reference when HA isn't in it.
           const unmet = unmetExpectations(c.expect, drawnStates);
           if (unmet.length) throw new Error(`not in the state the case expects (${unmet.join('; ')}): neither its PNG nor its JSON is written`);
@@ -811,7 +860,7 @@ async function capture() {
           ])].sort();
           const ref = {
             case: c.id, frame: frame.id, haVersion: haConfig.version, now, stable,
-            viewport: { width: frame.width, height: frame.height, density: frame.density, ...(frame.input === 'touch' ? { touch: true } : {}) },
+            viewport: { width: frame.width, height: frame.height, density: frame.density, ...(capturedWithTouch(mode) ? { touch: true } : {}) },
             clip, docSize: { width: info.docW, height: info.docH }, slots: slots.map(roundRect), texts,
             states: caseStates, templates, display,
             // Image paths HA's page asked for and didn't get: Vitro missing them too is no capture gap. Only
