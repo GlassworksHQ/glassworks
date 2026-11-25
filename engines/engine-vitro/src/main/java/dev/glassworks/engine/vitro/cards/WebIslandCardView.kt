@@ -965,7 +965,7 @@ vitroDefine('ha-svg-icon', class extends HTMLElement {
 // in document.body and call bind(element, options)): a tap, a hold (500 ms) or a double tap (250 ms) fires `action`
 // on the element, and a move, scroll or wheel cancels a press, as in HA. Without it such a card threw on render.
 vitroDefine('action-handler', class extends HTMLElement {
-  constructor() { super(); this.holdTime = 500; this.cancelled = false; }
+  constructor() { super(); this.holdTime = 500; this.cancelled = false; this.scrolled = false; }
   connectedCallback() {
     this.style.display = 'none';
     if (this._wired) return;
@@ -973,6 +973,8 @@ vitroDefine('action-handler', class extends HTMLElement {
     ['touchcancel', 'mouseout', 'mouseup', 'touchmove', 'mousewheel', 'wheel', 'scroll'].forEach((type) => {
       document.addEventListener(type, () => {
         this.cancelled = true;
+        // A scroll or a move, unlike the mouseup every click has: the press was a scroll, never a tap or a hold.
+        if (type !== 'mouseup' && type !== 'mouseout' && type !== 'touchcancel') this.scrolled = true;
         if (this.timer) { clearTimeout(this.timer); this.timer = undefined; }
       }, { passive: true });
     });
@@ -982,6 +984,13 @@ vitroDefine('action-handler', class extends HTMLElement {
     const fire = (target, action) => target.dispatchEvent(new CustomEvent('action', { detail: { action }, bubbles: true, composed: true }));
     const prev = element.actionHandler;
     if (prev && JSON.stringify(prev.options) === JSON.stringify(opts)) return;
+    // A tap the old binding still holds back for a double tap never fires under the new one (disabled, say). Only
+    // this element's: another element's pending tap stays.
+    if (prev && prev.pendingTap !== undefined) {
+      clearTimeout(prev.pendingTap);
+      if (this.dblClickTimeout === prev.pendingTap) { this.dblClickTimeout = undefined; this.dblClickTarget = undefined; }
+      prev.pendingTap = undefined;
+    }
     if (prev && prev.start) {
       element.removeEventListener('touchstart', prev.start);
       element.removeEventListener('touchend', prev.end);
@@ -995,6 +1004,7 @@ vitroDefine('action-handler', class extends HTMLElement {
     if (opts.disabled) return;
     handler.start = () => {
       this.cancelled = false;
+      this.scrolled = false;
       if (opts.hasHold) {
         this.held = false;
         this.timer = setTimeout(() => { this.held = true; }, this.holdTime);
@@ -1002,6 +1012,8 @@ vitroDefine('action-handler', class extends HTMLElement {
     };
     handler.end = (ev) => {
       if (ev.type === 'touchcancel' || (ev.type === 'touchend' && this.cancelled)) return;
+      // A mouse press a wheel or scroll cancelled: its click is no hold (or tap) either.
+      if (ev.type === 'click' && this.scrolled) { this.scrolled = false; return; }
       const target = ev.target;
       if (ev.cancelable) ev.preventDefault();
       if (opts.hasHold) { clearTimeout(this.timer); this.timer = undefined; }
@@ -1010,13 +1022,16 @@ vitroDefine('action-handler', class extends HTMLElement {
       } else if (opts.hasDoubleClick) {
         if ((ev.type === 'click' && ev.detail < 2) || !this.dblClickTimeout || this.dblClickTarget !== target) {
           const id = setTimeout(() => {
+            if (handler.pendingTap === id) handler.pendingTap = undefined;
             if (this.dblClickTimeout === id) { this.dblClickTimeout = undefined; this.dblClickTarget = undefined; }
             if (opts.hasTap !== false) fire(target, 'tap');
           }, 250);
+          handler.pendingTap = id;
           this.dblClickTimeout = id;
           this.dblClickTarget = target;
         } else {
           clearTimeout(this.dblClickTimeout);
+          if (handler.pendingTap === this.dblClickTimeout) handler.pendingTap = undefined;
           this.dblClickTimeout = undefined;
           this.dblClickTarget = undefined;
           fire(target, 'double_tap');

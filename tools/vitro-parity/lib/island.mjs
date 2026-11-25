@@ -23,8 +23,12 @@ const TEST_PREFIX = '/__island-test/';
 /**
  * Probes [caseFile]'s island page. Options: `frame` (frames.json id, default tablet), `waitMs` (how long the page runs
  * before it's read, default 6000: the island waits up to 4 s for the card's element, and its frontend watch decides
- * about 3 s after the card draws), `click` ([x, y]), `shot` (a PNG path), `browser` (one to reuse).
- * Returns { card, before, bridge, tap, errors }: `before` is what the card drew, `bridge` what the page sent.
+ * about 3 s after the card draws), `click` ([x, y]), `shot` (a PNG path), `browser` (one to reuse), `evaluate` (a
+ * function's source, called in the page with the card's element, or null when there is none), `snapshotDelayMs` (hold
+ * the bridge's first snapshot back that long, so the card draws once with no states, as when its script loads before
+ * the bridge connects).
+ * Returns { card, before, bridge, tap, errors, evaluated }: `before` is what the card drew, `bridge` what the page
+ * sent, `evaluated` what `evaluate` returned.
  */
 export async function probeIsland(root, caseFile, opts = {}) {
   const corpus = join(root, 'engines', 'engine-vitro', 'src', 'test', 'parity');
@@ -72,7 +76,8 @@ export async function probeIsland(root, caseFile, opts = {}) {
           if (msg.type === 'callWs') ws.send(JSON.stringify({ type: 'wsReply', id: msg.id, ok: false, error: { code: 'not_supported', message: 'island-probe answers no calls' } }) + '\n');
         }
       });
-      ws.send(JSON.stringify({ type: 'snapshot', states }) + '\n');
+      const snapshot = () => ws.send(JSON.stringify({ type: 'snapshot', states }) + '\n');
+      if (opts.snapshotDelayMs) setTimeout(snapshot, opts.snapshotDelayMs); else snapshot();
     });
     const page = await ctx.newPage();
     const errors = [];
@@ -95,6 +100,13 @@ export async function probeIsland(root, caseFile, opts = {}) {
     }, tag);
     const bridge = (list) => list.filter((m) => !['watch', 'watchAll', 'registries'].includes(m.type));
     const out = { card: c.card.type, before, bridge: bridge(sent), tap: null, errors };
+    if (opts.evaluate) {
+      out.evaluated = await page.evaluate(([src, tag]) => {
+        const mount = document.getElementById('mount');
+        const card = mount && [...mount.children].find((e) => e.localName === tag);
+        return (0, eval)('(' + src + ')')(card || null);
+      }, [opts.evaluate, tag]);
+    }
     if (opts.click) {
       const [x, y] = opts.click;
       const n = sent.length;
