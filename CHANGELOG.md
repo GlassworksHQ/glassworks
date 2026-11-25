@@ -20,6 +20,21 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 - **Kiln installs the newest S1 release.** A fresh install from Kiln's S1 page now downloads the app from the newest
   release at the moment you install, so a panel no longer starts out one version behind and offers an update right
   away.
+- **Only Home Assistant gets the microphone and the camera.** The panel used to hand the microphone, the camera and
+  every other page permission to any page it showed, without asking. Now only pages on your Home Assistant and on the
+  secure hosts in the panel's settings get them. A link that leads off your dashboard, or another site framed inside it,
+  is refused, and the panel's log says so, unless your dashboard explicitly shares a permission with that frame (an
+  `allow` attribute). Permissions an older version saved for other sites are forgotten when the app starts.
+- **Some Home Assistant controls need the encryption key.** Until Home Assistant gives the panel its key, anyone on
+  your network can reach the panel's ESPHome connection. **Dashboard URL**, **Sign out**, **Start Wi-Fi setup
+  (Bluetooth)** and **Open device settings** now work only over the encrypted connection, so once Home Assistant has
+  set the key, no other device can point the panel at its own page. Home Assistant 2026.11 or newer sets the key by
+  itself when you add the panel; do that from a network you trust. On an older Home Assistant, change these on the
+  panel or on the Manage page. The speaker, reload, restart and the other everyday controls work as before.
+  Notifications sent with the `notify` action and every radio control (**Radio mode**, **Radio allowed clients**,
+  **Join** and **Leave Zigbee network**, **Thread dataset**) need the key too, so a stranger on your network can't
+  put an alert on the screen or move the panel's radio to another network. On an older Home Assistant, `notify`
+  calls fail until you update it.
 
 ## [0.9.0] - 2026-11-24
 

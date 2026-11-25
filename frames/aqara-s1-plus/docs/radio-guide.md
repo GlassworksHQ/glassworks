@@ -102,7 +102,7 @@ To grant access to additional hosts (such as Zigbee2MQTT running on a separate s
 
 In Zigbee coordinator mode, the panel's Radio settings page also shows who is currently connected (for example, `Home Assistant · 192.0.2.20 · since 14:32` or `Nobody`), mirrored in Home Assistant via the **Radio connected client** sensor.
 
-If **Radio status** remains stuck on `nobody yet (waiting for Home Assistant to connect over ESPHome)`, Home Assistant is likely connecting without encryption (Home Assistant older than 2026.11). Upgrade Home Assistant or add its IP address manually to **Radio allowed clients**.
+If **Radio status** remains stuck on `nobody yet (waiting for Home Assistant to connect over ESPHome)`, Home Assistant is likely connecting without encryption (Home Assistant older than 2026.11). Upgrade Home Assistant, or add its IP address to **Radio allowed clients** on the panel or on the Manage page.
 
 ## Radio firmware
 
