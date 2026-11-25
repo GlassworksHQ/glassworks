@@ -1296,15 +1296,43 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
             clipToOutline = true
         }
-        // The live players' views, over the still, in its rounded shape. The players pause while the window is hidden
-        // (the screen off, the app in the background) and go on when it shows, as on the picture cards.
+        // The live players' views, over the still, in its rounded shape. The feed starts once the sheet is in a window
+        // that shows, pauses while the window is hidden (the screen off, the app in the background) and goes on when it
+        // shows again, as on the picture cards.
         var feedRef: LiveCameraFeed? = null
-        var windowHidden = false
+        // Posted, so the first state bind lands first; until then the feed waits.
+        var bound = false
+        var open = true
+        var started = false
+        var windowVisible = false
+        fun follow() {
+            val f = feedRef ?: return
+            if (!open || !bound) return
+            runCatching {
+                if (windowVisible) {
+                    if (!started) {
+                        started = true
+                        f.start()
+                    } else {
+                        f.setActive(true)
+                    }
+                } else if (started) {
+                    f.setActive(false)
+                }
+            }
+        }
         val streamHost = object : FrameLayout(ctx.context) {
+            override fun onAttachedToWindow() {
+                super.onAttachedToWindow()
+                // Android calls back on attach only when the window isn't GONE: read it here.
+                windowVisible = windowVisibility == VISIBLE
+                follow()
+            }
+
             override fun onWindowVisibilityChanged(visibility: Int) {
                 super.onWindowVisibilityChanged(visibility)
-                windowHidden = visibility != VISIBLE
-                runCatching { feedRef?.setActive(!windowHidden) }
+                windowVisible = visibility == VISIBLE
+                follow()
             }
         }.apply {
             background = GradientDrawable().apply {
@@ -1325,19 +1353,16 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         body.addView(status, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(12f) })
 
         var picture: String? = ctx.store[id]?.entityPicture
-        // HA's ha-camera-stream (WebRTC, HLS, then MJPEG), snapshots every 1.5 s if none plays; posted so the first
-        // state bind lands first.
+        // HA's ha-camera-stream (WebRTC, HLS, then MJPEG), snapshots every 1.5 s if none plays.
         val feed = LiveCameraFeed(ctx, id, { picture }, host = streamHost, cardType = "more-info") { bmp -> image.setImageBitmap(bmp) }
         feedRef = feed
-        var open = true
         releasers += {
             open = false
             feed.stop()
         }
         ctx.main.post {
-            if (!open) return@post
-            feed.start()
-            if (windowHidden) feed.setActive(false)
+            bound = true
+            follow()
         }
         return { s ->
             picture = s?.entityPicture

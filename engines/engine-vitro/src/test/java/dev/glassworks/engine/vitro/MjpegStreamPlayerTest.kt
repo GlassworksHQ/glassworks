@@ -200,6 +200,7 @@ class MjpegStreamPlayerTest {
 
     private fun attach(view: View) {
         activity.setContentView(FrameLayout(activity).apply { addView(view, FrameLayout.LayoutParams(720, 405)) })
+        showWindow(activity.window.decorView)
         ShadowLooper.idleMainLooper()
     }
 
@@ -244,6 +245,7 @@ class MjpegStreamPlayerTest {
         store.putLocal(EntityState("camera.porch", "streaming", mapOf("entity_picture" to "/api/camera_proxy/camera.porch?token=t1")))
         var pushFrame: ((Bitmap) -> Unit)? = null
         var asked: String? = null
+        var started = 0
         var stopped = 0
         val mjpeg = object : CameraStreamFactory {
             override fun create(entityId: String, kind: CameraStreamKind): CameraStream {
@@ -252,7 +254,7 @@ class MjpegStreamPlayerTest {
                     asked = u
                     pushFrame = onFrame
                     object : MjpegCameraStream.Player {
-                        override fun start() = Unit
+                        override fun start() { started++ }
                         override fun stop() { stopped++ }
                     }
                 }
@@ -265,6 +267,7 @@ class MjpegStreamPlayerTest {
         attach(card)
         // A camera without HA's STREAM feature plays MJPEG straight away, with the entity's signed token.
         assertEquals("$base/api/camera_proxy_stream/camera.porch?token=t1", asked)
+        assertEquals(1, started)
 
         val frame = Bitmap.createBitmap(4, 4, Bitmap.Config.RGB_565)
         pushFrame!!(frame)
@@ -297,5 +300,30 @@ class MjpegStreamPlayerTest {
         attach(card)
         ShadowLooper.idleMainLooper()
         assertEquals(0, streams)
+    }
+
+    @Test
+    fun aResumedMjpegStreamShowsNothingUntilItsFirstNewFrame() {
+        // The CameraStream contract: the view draws nothing until the first frame of each start or resume.
+        val frames = ArrayList<(Bitmap) -> Unit>()
+        val stream = MjpegCameraStream(activity, "$base/api/camera_proxy_stream/camera.porch", { null }) { _, _, onFrame, _ ->
+            frames += onFrame
+            object : MjpegCameraStream.Player {
+                override fun start() = Unit
+                override fun stop() = Unit
+            }
+        }
+        val image = stream.view as ImageView
+        stream.start()
+        frames.last()(Bitmap.createBitmap(4, 4, Bitmap.Config.RGB_565))
+        assertTrue(image.drawable != null)
+        stream.setActive(false)
+        stream.setActive(true)
+        assertNull(image.drawable)
+        val fresh = Bitmap.createBitmap(4, 4, Bitmap.Config.RGB_565)
+        frames.last()(fresh)
+        assertSame(fresh, (image.drawable as android.graphics.drawable.BitmapDrawable).bitmap)
+        assertEquals(2, frames.size)
+        stream.close()
     }
 }
