@@ -207,6 +207,22 @@ class ButtonCardViewTest {
     }
 
     @Test
+    fun paddingFollowsDeclarationOrderAndTheLockStopsEveryAction() {
+        put("switch.coffee_maker", "off", "friendly_name" to "Coffee maker")
+        // A later shorthand resets the side a longhand set before it; a later longhand changes only its side.
+        val later = button("""{"type": "custom:button-card", "entity": "switch.coffee_maker", "styles": {"name": [{"padding-left": "20px"}, {"padding": "4px"}]}}""")
+        assertEquals(4, text(later, "Coffee maker").paddingLeft)
+        val longhand = button("""{"type": "custom:button-card", "entity": "switch.coffee_maker", "styles": {"name": [{"padding": "4px"}, {"padding-left": "20px"}]}}""")
+        assertEquals(20, text(longhand, "Coffee maker").paddingLeft)
+        // Locked, no gesture runs the action, an accessibility click included.
+        val locked = button("""{"type": "custom:button-card", "entity": "switch.coffee_maker", "lock": {"enabled": true},
+            "tap_action": {"action": "call-service", "service": "switch.turn_on"}}""")
+        locked.getChildAt(0).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(calls.toString(), calls.isEmpty())
+    }
+
+    @Test
     fun entityButtonWithoutAnEntityIsHasErrorCard() {
         val err = HaErrorCardView(ctx(), "Entity must be specified")
         layout(err, 300)

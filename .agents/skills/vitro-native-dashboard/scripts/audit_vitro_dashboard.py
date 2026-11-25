@@ -119,35 +119,39 @@ CONTAINER_TYPES = {
 BUTTON_CARD_JS = re.compile(r"^\[\[\[(?!\[).*(?<!\])\]\]\]$", re.S)
 
 
-def button_card_reason(card: dict, templates: dict) -> str | None:
-    def merge(prev, obj):
-        out = dict(prev)
-        for k, o in obj.items():
-            p = out.get(k)
-            if isinstance(p, list) and isinstance(o, list):
-                out[k] = p + [y for x in o for y in (x if isinstance(x, list) else [x])]
-            elif isinstance(p, dict) and isinstance(o, dict):
-                out[k] = merge(p, o)
-            else:
-                out[k] = o
-        return out
+def _merge(prev, obj):
+    """button-card's mergeDeep: lists concatenate, maps merge, anything else replaces."""
+    out = dict(prev)
+    for k, o in obj.items():
+        p = out.get(k)
+        if isinstance(p, list) and isinstance(o, list):
+            out[k] = p + [y for x in o for y in (x if isinstance(x, list) else [x])]
+        elif isinstance(p, dict) and isinstance(o, dict):
+            out[k] = _merge(p, o)
+        else:
+            out[k] = o
+    return out
 
-    def expand(c, depth=0):
-        tpl = c.get("template")
-        if not tpl:
-            return c
-        if depth > 32:
+
+def expand_button_card(card: dict, templates: dict, depth: int = 0):
+    """The card with its `template:` merged in from button_card_templates, or None when one is missing or they loop."""
+    tpl = card.get("template")
+    if not tpl:
+        return card
+    if depth > 32:
+        return None
+    result = {}
+    for name in tpl if isinstance(tpl, list) else [tpl]:
+        t = templates.get(name) if isinstance(name, str) else None
+        res = expand_button_card(t, templates, depth + 1) if isinstance(t, dict) else None
+        if res is None:
             return None
-        result = {}
-        for name in tpl if isinstance(tpl, list) else [tpl]:
-            t = templates.get(name) if isinstance(name, str) else None
-            res = expand(t, depth + 1) if isinstance(t, dict) else None
-            if res is None:
-                return None
-            result = merge(result, res)
-        return merge(result, {k: v for k, v in c.items() if k != "template"})
+        result = _merge(result, res)
+    return _merge(result, {k: v for k, v in card.items() if k != "template"})
 
-    cfg = expand(card)
+
+def button_card_reason(card: dict, templates: dict) -> str | None:
+    cfg = expand_button_card(card, templates)
     if cfg is None:
         return "a template that isn't in button_card_templates"
 
@@ -162,15 +166,27 @@ def button_card_reason(card: dict, templates: dict) -> str | None:
 
     if js(cfg):
         return "JavaScript templates ([[[ ]]])"
+    # button-card evaluates a `force_eval` variable on every render, JavaScript or not (the engine sends it to an island).
+    variables = cfg.get("variables") if isinstance(cfg.get("variables"), dict) else {}
+    if any(isinstance(v, dict) and v.get("force_eval") is True for v in variables.values()):
+        return "variables with force_eval"
     fields = cfg.get("custom_fields") if isinstance(cfg.get("custom_fields"), dict) else {}
     if any(isinstance(v, dict) and "card" in v for v in fields.values()):
         return "a card in custom_fields"
-    if any(isinstance(cfg.get(k), str) and re.search(r"<[a-zA-Z/!]", cfg[k]) for k in ("name", "label", "state_display")):
+    texts = [cfg] + [st for st in (cfg.get("state") or []) if isinstance(st, dict)]
+    if any(isinstance(t.get(k), str) and re.search(r"<[a-zA-Z/!]", t[k]) for t in texts for k in ("name", "label", "state_display")):
         return "HTML in its texts"
     return None
 
 
 TEMPLATES: dict = {}
+
+# Swiper parameters Vitro's native swipe-card reads (VitroSupport.SWIPE_CARD_PARAMETERS, swipeCardParameters in
+# site/public/vitro-compat.json).
+SWIPE_CARD_PARAMETERS = {
+    "pagination", "loop", "slidesPerView", "spaceBetween", "centeredSlides", "initialSlide", "autoplay",
+    "speed", "grabCursor", "keyboard", "mousewheel", "simulateTouch", "observer", "observeParents", "roundLengths",
+}
 
 
 def load_dashboard(path: str):
@@ -286,8 +302,25 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
             counts["tier3"] += 1
             triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='{ctype}' with {reason}")
             return
-        if card.get("styles") or card.get("state"):
+        expanded = expand_button_card(card, TEMPLATES) or card
+        if expanded.get("styles") or expanded.get("state"):
             warnings.append(f"  WARN  {loc}: button-card styles are drawn natively only in Vitro's subset (see the site checker)")
+
+    # weather-card needs an entity (its script shows an error without one), as the engine routes it.
+    if ctype == "custom:weather-card" and not (isinstance(card.get("entity"), str) and card["entity"]):
+        counts["tier3"] += 1
+        triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='{ctype}' without an entity")
+        return
+
+    # swipe-card with Swiper parameters Vitro doesn't run is a web card, unless a built-in card inside keeps it native.
+    if ctype == "custom:swipe-card" and isinstance(card.get("parameters"), dict):
+        unknown = [k for k in card["parameters"] if k not in SWIPE_CARD_PARAMETERS]
+        children = card.get("cards") if isinstance(card.get("cards"), list) else []
+        built_in = any(isinstance(c, dict) and isinstance(c.get("type"), str) and not c["type"].startswith("custom:") for c in children)
+        if unknown and not built_in:
+            counts["tier3"] += 1
+            triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='{ctype}' with parameter {unknown[0]}")
+            return
 
     if ctype == "tile":
         for feat in card.get("features") or []:

@@ -1420,6 +1420,8 @@ class VitroView(
         // child's island, which never receives the conditional's own card_mod.
         val islandStyles = built is WebIslandCardView && built.config === card && IslandScripts.of(ctx.resources).cardMod
         if (!islandStyles) (built as? CardSurface)?.applyCardMod(card)
+        // swipe-card has no card of its own (no background to restyle): its `:host` opacity still applies to the pager.
+        if (built is SwipeCardView) stackMod.opacity?.let { built.alpha = it.coerceIn(0f, 1f) }
         // `margin` on the card insets it inside its slot, as an outer margin does in the browser.
         // Not around an island that applies card-mod: its `margin` is drawn there, and twice would double the inset.
         val margin = stackMod.marginInsets?.takeUnless { islandStyles } ?: return built

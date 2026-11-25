@@ -58,8 +58,9 @@ object ButtonCardCss {
             return declarations(list).orEmpty()
         }
         val out = LinkedHashMap<String, Decl>()
-        for (d in of(config)) out[d.name] = d
-        for (d in of(state)) out[d.name] = d
+        // A later declaration moves to the end, so the map keeps the order the browser applies them in.
+        for (d in of(config)) { out.remove(d.name); out[d.name] = d }
+        for (d in of(state)) { out.remove(d.name); out[d.name] = d }
         return out
     }
 

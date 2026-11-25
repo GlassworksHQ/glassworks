@@ -77,6 +77,9 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
     private var cardPadding: List<ButtonCardCss.Length> = DEFAULT_PADDING
     private var translate: Pair<ButtonCardCss.Length, ButtonCardCss.Length>? = null
     private var pictureUrl: String? = null
+    private var pictureLoading = false
+    private var pictureLoaded = false
+    private var pictureFailures = 0
     private var cardAnimator: ValueAnimator? = null
     private var iconAnimator: ValueAnimator? = null
     private var lastRender: EntityState? = null
@@ -400,9 +403,17 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
     }
 
     private fun sides(base: List<ButtonCardCss.Length>, decls: Map<String, ButtonCardCss.Decl>, prop: String, vars: Map<String, String>, auto: Boolean = false): List<ButtonCardCss.Length> {
-        val out = base.toMutableList()
-        listOf("top", "right", "bottom", "left").forEachIndexed { i, side ->
-            decls["$prop-$side"]?.let { ButtonCardCss.length(ThemeResolver.resolveValue(it.value, vars, 0), auto) }?.let { out[i] = it }
+        // In declaration order, as the browser applies them: a later shorthand resets every side, a later longhand
+        // only its own.
+        var out = base.toMutableList()
+        val sideNames = listOf("top", "right", "bottom", "left").map { "$prop-$it" }
+        for (d in decls.values) {
+            if (d.name == prop) {
+                ButtonCardCss.box(ThemeResolver.resolveValue(d.value, vars, 0), auto)?.let { out = it.toMutableList() }
+                continue
+            }
+            val i = sideNames.indexOf(d.name)
+            if (i >= 0) ButtonCardCss.length(ThemeResolver.resolveValue(d.value, vars, 0), auto)?.let { out[i] = it }
         }
         return out
     }
@@ -457,11 +468,22 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
     }
 
     private fun loadPicture(url: String) {
-        if (url == pictureUrl) return
+        // Once loaded (or loading), the same address isn't fetched again; a failed load may be retried a few times.
+        if (url == pictureUrl && (pictureLoaded || pictureLoading)) return
+        if (url != pictureUrl) pictureFailures = 0
+        if (pictureFailures >= MAX_PICTURE_RETRIES) return
         pictureUrl = url
+        pictureLoading = true
+        pictureLoaded = false
         picture.setImageDrawable(null)
         surface.load(url) { bmp: Bitmap? ->
             if (pictureUrl != url) return@load
+            pictureLoading = false
+            if (bmp == null) {
+                pictureFailures++
+                return@load
+            }
+            pictureLoaded = true
             picture.setImageBitmap(bmp)
             imgCell.pictureAspect = bmp?.let { it.height.toFloat() / it.width.coerceAtLeast(1) }
             requestLayout()
@@ -611,7 +633,15 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
         }
     }
 
-    private fun run(a: Pair<ActionConfig, String?>) = ctx.performAction(a.first, a.second)
+    /**
+     * Every gesture's action goes through here: none while the card is locked, whatever reached the card (a hold or a
+     * double tap on a part a `transform` moved out from under the lock, an accessibility click). The action itself
+     * goes through the same service call HA's frontend makes, so HA's own permissions still apply.
+     */
+    private fun run(a: Pair<ActionConfig, String?>) {
+        if (lockOverlay?.isLocked == true) return
+        ctx.performAction(a.first, a.second)
+    }
 
     /** `_finishSetup`'s default `tap_action`: toggle, press, more-info, or nothing. */
     private fun defaultTap(): JSONObject = when {
@@ -680,7 +710,8 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
         val ty = t?.second?.let { px(it.px(surface.measuredHeight / ctx.dp)) } ?: 0
         surface.translationX = tx.toFloat()
         surface.translationY = ty.toFloat()
-        lockOverlay?.translationX = 0f
+        // The lock stays where HA draws it, over the card's own box (button-card's `#overlay` is the card's sibling,
+        // not moved by its transform); `run` checks the lock for any touch that reaches the moved card.
     }
 
     private fun translateOf(v: String): Pair<ButtonCardCss.Length, ButtonCardCss.Length>? {
@@ -851,7 +882,7 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
         }
 
         private fun iconBoxWidth(cellW: Int): Int {
-            val inner = cellW - padPx(1, cellW) - padPx(3, cellW)
+            val inner = (cellW - padPx(1, cellW) - padPx(3, cellW)).coerceAtLeast(0)
             val l = iconWidth ?: return inner
             if (l.isAuto) return inner
             return px(l.px(inner / ctx.dp, BASE_FONT_PX))
@@ -1063,6 +1094,8 @@ class CustomButtonCardView(private val ctx: VitroCardContext, private val config
             ButtonCardCss.Length(4f, "%"), ButtonCardCss.Length(0f, "px"), ButtonCardCss.Length(4f, "%"), ButtonCardCss.Length(0f, "px"),
         )
         private val ZERO_BOX = List(4) { ButtonCardCss.Length(0f, "px") }
+        /** How often a picture that failed to load is asked for again (at the next renders). */
+        private const val MAX_PICTURE_RETRIES = 3
         private val LOCK_PADDING = listOf(
             ButtonCardCss.Length(8f, "px"), ButtonCardCss.Length(7f, "px"), ButtonCardCss.Length(8f, "px"), ButtonCardCss.Length(7f, "px"),
         )
