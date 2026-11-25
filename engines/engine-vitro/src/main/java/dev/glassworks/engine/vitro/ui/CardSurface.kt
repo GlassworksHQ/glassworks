@@ -124,6 +124,13 @@ class VitroCardContext(
      */
     val touch: Boolean = true,
     /**
+     * A web island found its card drawing with elements of Home Assistant's frontend that an island page doesn't have
+     * ([tags], e.g. `ha-control-circular-slider`), in the custom cards [owners] (`custom:` types; the island's own
+     * card, or one inside it): the card's view goes to HA's frontend
+     * ([dev.glassworks.engine.vitro.compat.IslandFrontend]). Main thread. The default (tests, no engine) does nothing.
+     */
+    val needsFrontend: (card: CardConfig, tags: List<String>, owners: List<String>) -> Unit = { _, _, _ -> },
+    /**
      * What Home Assistant's web UI keeps in `localStorage` on this panel ([dev.glassworks.web.HaPageStorage]), or null
      * when the panel has no copy for this Home Assistant: a web island starts its card's storage from it (#881).
      */
@@ -181,6 +188,7 @@ class VitroCardContext(
         watchRegistries = watchRegistries,
         watchToken = watchToken,
         touch = touch,
+        needsFrontend = needsFrontend,
         pageStorage = pageStorage,
     ).also {
         it.cardVars = cardVars

@@ -1,0 +1,26 @@
+{
+ "_comment": "A made-up card (cards/test-cards.js) for the island's needsFrontend check (island-detect.e2e.test.mjs): hands off: it draws ha-control-circular-slider and ha-big-number.",
+ "card": {
+  "type": "custom:vitro-test-dial-card",
+  "entity": "sensor.study_temperature"
+ },
+ "resources": [
+  "/__island-test/cards/test-cards.js"
+ ],
+ "fixture": {
+  "states": {
+   "sensor.study_temperature": {
+    "state": "21.5",
+    "last_changed": -600,
+    "attributes": {
+     "friendly_name": "Study temperature",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature"
+    }
+   }
+  }
+ },
+ "expect": {
+  "needsFrontend": true
+ }
+}
