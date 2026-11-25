@@ -1944,7 +1944,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             val gapAbove = prevWasRow
             prevWasRow = true
             val idx = rowViews.size
-            val row = LinearLayout(ctx.context).apply {
+            val row = EntityRowLayout(ctx.context, ctx.px(8f)).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 minimumHeight = ctx.px(40f)
@@ -1989,11 +1989,12 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 row.addView(labels, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ctx.px(8f) })
             } else {
                 row.addView(nameView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ctx.px(8f) })
+                row.name = nameView
             }
             when {
                 isSwitchable -> row.addView(switchView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-                // ha-cover-controls: 48 px icon buttons (24 px icons), the group 8 px into the row's end padding, so a
-                // cover row is 48 px tall where a plain one is 40.
+                // ha-cover-controls: 48 px icon buttons (24 px icons) with a space between them (inline buttons), the
+                // group 8 px into the row's end padding, so a cover row is 48 px tall where a plain one is 40.
                 isCover -> COVER_BUTTONS.forEachIndexed { i, (iconName, service) ->
                     val btn = android.widget.FrameLayout(ctx.context).apply {
                         isClickable = true
@@ -2010,6 +2011,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                         }
                     }
                     row.addView(btn, LinearLayout.LayoutParams(ctx.px(48f), ctx.px(48f)).apply {
+                        if (i > 0) marginStart = nameView.paint.measureText(" ").roundToInt()
                         if (i == COVER_BUTTONS.lastIndex) marginEnd = -ctx.px(8f)
                     })
                 }
@@ -2059,6 +2061,29 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         val COVER_BUTTONS = listOf("mdi:arrow-up" to "open_cover", "mdi:stop" to "stop_cover", "mdi:arrow-down" to "close_cover")
 
         fun dividerLine(ctx: VitroCardContext): View = View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) }
+    }
+}
+
+/**
+ * An entities-card row as hui-generic-entity-row lays it out. Its `.info` (`flex: 1 1 30%`) shrinks down to its
+ * padding when the controls need the room, and the controls run on past the row. Chrome still draws the name's first
+ * letter (an ellipsis keeps one character), so it shows in the 8 px end padding, cut, where Vitro's ellipsis would
+ * leave nothing: a squeezed [name] is drawn whole across [endPadPx], clipped.
+ */
+private class EntityRowLayout(context: android.content.Context, private val endPadPx: Int) : LinearLayout(context) {
+    var name: TextView? = null
+
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        super.onLayout(changed, l, t, r, b)
+        val n = name ?: return
+        val squeezed = n.width == 0 && n.text.isNotEmpty()
+        // Each change asks for one more layout; the next pass finds it already set.
+        n.ellipsize = if (squeezed) null else TextUtils.TruncateAt.END
+        n.setHorizontallyScrolling(squeezed)
+        if (squeezed) {
+            n.measure(MeasureSpec.makeMeasureSpec(endPadPx, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(n.height, MeasureSpec.EXACTLY))
+            n.layout(n.left, n.top, n.left + endPadPx, n.bottom)
+        }
     }
 }
 

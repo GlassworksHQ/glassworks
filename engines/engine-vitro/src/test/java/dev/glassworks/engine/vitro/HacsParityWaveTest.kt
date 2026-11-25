@@ -527,6 +527,33 @@ class HacsParityWaveTest {
     }
 
     @Test
+    fun aSqueezedCoverRowKeepsTheNamesFirstLetterAndSpacedButtons() {
+        // HA in a 244 px entities card: the name's box shrinks to its padding, the three buttons (a space apart) run
+        // past the row, and Chrome still draws the first letter in the 8 px end padding.
+        val st = store(entity("cover.kitchen_blind", "open", "friendly_name" to "Kitchen Blind"))
+        val v = dev.glassworks.engine.vitro.cards.EntitiesCardView(context(st), card("""{"type": "entities", "entities": ["cover.kitchen_blind"]}"""))
+        val dp = activity.resources.displayMetrics.density
+        fun lay(w: Int) {
+            v.measure(View.MeasureSpec.makeMeasureSpec((w * dp).toInt(), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+            idle()
+            v.measure(View.MeasureSpec.makeMeasureSpec((w * dp).toInt(), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+        }
+        val name = v.all().filterIsInstance<TextView>().single { it.text == "Kitchen Blind" }
+        lay(208)
+        assertEquals(8f, name.width / dp, 0.5f)
+        assertNull("drawn whole, clipped", name.ellipsize)
+        val buttons = v.all().filter { it.contentDescription in setOf("Open", "Stop", "Close") }
+        assertEquals(3, buttons.size)
+        assertEquals("a space apart", 48f + name.paint.measureText(" ") / dp, (buttons[1].left - buttons[0].left) / dp, 1f)
+        // With room, the usual ellipsis.
+        lay(400)
+        assertTrue(name.width > 8 * dp)
+        assertEquals(android.text.TextUtils.TruncateAt.END, name.ellipsize)
+    }
+
+    @Test
     fun layoutCardLaysOutAGridWithSpans() {
         val st = store()
         val cfg = card(
