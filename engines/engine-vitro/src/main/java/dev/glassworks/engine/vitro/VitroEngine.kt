@@ -201,6 +201,7 @@ class VitroEngine(
             if (disposed) return
             disposed = true
             readyOnBuild = null
+            vitroView.cancelPendingBuilds()
             activity.application.unregisterActivityLifecycleCallbacks(lifecycle)
             clientGeneration++
             client?.close()
@@ -579,7 +580,10 @@ class VitroEngine(
 
         /** Ready now if the view on screen is built, else when it is ([VitroView.holdFirstBuildForStatesMs]). */
         private fun readyWhenBuilt(why: String) {
-            if (vitroView.currentViewBuilt) {
+            // A dashboard with no views has nothing to build: it's ready as it is, its "Connecting…" gone.
+            val empty = vitroView.dashboard?.views?.isEmpty() == true
+            if (empty) vitroView.hideStatus()
+            if (vitroView.currentViewBuilt || empty) {
                 readyOnBuild = null
                 signalReady(why)
             } else {

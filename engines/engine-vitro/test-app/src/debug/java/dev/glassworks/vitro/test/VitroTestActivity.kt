@@ -54,6 +54,7 @@ class VitroTestActivity : Activity() {
     private lateinit var hudText: TextView
     private lateinit var reload: Button
     private var expanded = false
+    private var resumed = false
     private var url: String? = null
     private var status = "starting"
     private var loads = 0
@@ -130,10 +131,12 @@ class VitroTestActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        main.post(tick)
+        resumed = true
+        scheduleHud()
     }
 
     override fun onPause() {
+        resumed = false
         main.removeCallbacks(tick)
         super.onPause()
     }
@@ -215,6 +218,17 @@ class VitroTestActivity : Activity() {
 
     private fun applyHudVisibility(show: Boolean) {
         hud.visibility = if (show) View.VISIBLE else View.GONE
+        scheduleHud()
+    }
+
+    /**
+     * The HUD refreshes only while it shows. Its tick reads this process's PSS (Debug.getMemoryInfo walks
+     * /proc/self/smaps) on the main thread: on the S1 that stalled a frame by about 100 ms every second, so with
+     * `--ez hud false` the test app measured its own HUD (live-update p95, scroll frames, idle CPU).
+     */
+    private fun scheduleHud() {
+        main.removeCallbacks(tick)
+        if (resumed && hud.visibility == View.VISIBLE) main.post(tick)
     }
 
     private fun reloadPage() {

@@ -174,12 +174,5 @@
   "font": 0.1,
   "missingText": 0,
   "reason": "the sheet applies as in HA (:host centering, ha-card:has() tint, green heading, 18 px bold paragraph). Left: Vitro sizes Markdown runs in whole device px (AbsoluteSizeSpan), so the 16.38 px h3 draws at 16.5-16.67 (fractional sizes tried 2026-11-24: font deltas 0 but no pixel gain, markdown-table worse); the 18 px line sits 0.85-1.35 px lower and the card 0.3-0.5 px taller; Android's Roboto against the frontend's web Roboto. The report's +4.5 px on \"text.\" is not Vitro: HA's run box starts at the space before it"
- },
- "tablet/mushroom-entity": {
-  "pixel": 0.0225,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "matches on the 1.5x frames; on the tablet the icon disc and text antialiasing land just over 2% (coverage #794, 2026-11-24)"
  }
 }
