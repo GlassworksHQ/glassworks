@@ -413,3 +413,12 @@ test('a fixture picture is served to the capture with its image type', async () 
   const dir = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', 'engines', 'engine-vitro', 'src', 'test', 'parity', 'fixtures');
   assert.equal(fixtureFile(dir, '/local/vitro-harness-fixtures/images/album.png')?.type, 'image/png');
 });
+
+test('keepCall keeps the user list only from the fake HA and only for a logbook case', async () => {
+  const { keepCall } = await import('../lib/wsdata.mjs');
+  const users = { request: { type: 'config/auth/list' } };
+  assert.equal(keepCall(users, true, { type: 'logbook', entities: [] }), true);
+  assert.equal(keepCall(users, true, { type: 'tile' }), false);
+  assert.equal(keepCall(users, false, { type: 'logbook' }), false);
+  assert.equal(keepCall({ request: { type: 'history/stream' } }, false, { type: 'tile' }), true);
+});

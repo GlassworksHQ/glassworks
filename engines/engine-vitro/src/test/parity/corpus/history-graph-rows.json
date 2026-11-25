@@ -21,8 +21,8 @@
  "fixture": {
   "states": {
    "sensor.bedroom_pressure": {
-    "state": "1016.0",
-    "last_changed": "-250m",
+    "state": "1017.0",
+    "last_changed": -3480,
     "attributes": {
      "state_class": "measurement",
      "unit_of_measurement": "hPa",
@@ -31,8 +31,8 @@
     }
    },
    "sensor.living_room_pressure": {
-    "state": "1016.0",
-    "last_changed": "-73m",
+    "state": "1017.0",
+    "last_changed": -2280,
     "attributes": {
      "state_class": "measurement",
      "unit_of_measurement": "hPa",

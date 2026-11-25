@@ -145,11 +145,21 @@ def set_case(case_id, fx, hub):
 
 
 def states():
+    """The fixture's states. An entity with a history series takes its state, last change and last update (and, for a
+    series with attributes of its own, its attributes) from that series, so its state, history and statistics are one
+    timeline (the corpus test checks the fixture says the same)."""
     out = {}
     for eid, st in (fixture().get("states") or {}).items():
         changed = at(st.get("last_changed", -3600))
-        out[eid] = {"entity_id": eid, "state": str(st["state"]), "attributes": resolve(st.get("attributes") or {}),
-                    "last_changed": changed, "last_updated": at(st["last_updated"]) if "last_updated" in st else changed,
+        state, attrs = str(st["state"]), resolve(st.get("attributes") or {})
+        updated = at(st["last_updated"]) if "last_updated" in st else changed
+        s = _series(eid)
+        if s:
+            state, changed, updated = s.value(NOW), s.last_change(NOW), s.last_update(NOW)
+            own = s.attributes(NOW)
+            if own is not None:
+                attrs = dict(attrs, **own)
+        out[eid] = {"entity_id": eid, "state": state, "attributes": attrs, "last_changed": changed, "last_updated": updated,
                     "context_id": "01JPAR1TY" + hashlib.sha1(eid.encode()).hexdigest()[:17].upper()}
     return out
 
@@ -350,6 +360,8 @@ class Series:
                 if ct <= t:
                     cur = s
             return cur
+        # A sampled sensor: the value read at the start of each step holds until the next.
+        t = math.floor(t / self.step) * self.step
         mid, amp = (self.lo + self.hi) / 2, (self.hi - self.lo) / 2
         v = mid + amp * 0.85 * math.sin(2 * math.pi * (t - NOW) / self.period + self.phase)
         v += amp * 0.15 * (2 * _hash01(self.eid, int(t // self.step)) - 1) + self.noise * (2 * _hash01("n", self.eid, int(t)) - 1)
@@ -357,13 +369,36 @@ class Series:
             v = round(v / self.quantum) * self.quantum
         return f"{round(v, self.decimals):.{self.decimals}f}" if self.decimals > 0 else str(int(round(v)))
 
+    def last_change(self, t):
+        """When the state at t began: the last point (or step) at or before t whose state differs from the one before."""
+        if self.changes is not None:
+            lc, prev = None, object()
+            for ct, s in self.changes:
+                if ct > t:
+                    break
+                if s != prev:
+                    lc, prev = ct, s
+            return lc if lc is not None else t
+        v, k = self.value(t), math.floor(t / self.step) * self.step
+        for _ in range(int(30 * 86400 / self.step)):
+            if self.value(k - self.step) != v:
+                return k
+            k -= self.step
+        return k
+
+    def last_update(self, t):
+        """The last point at or before t (an attribute update counts), or the last change for a sampled series."""
+        if self.changes is not None:
+            return max((ct for ct, _ in self.changes if ct <= t), default=self.last_change(t))
+        return self.last_change(t)
+
     def changes_between(self, t0, t1):
         """[(t, state)]: the state at t0 (at t0), then each change after it up to t1 (a point with attributes of its own
         is a change too, as HA records an attribute change of a climate entity)."""
         if self.changes is not None:
             first = self.value(t0)
             out = [(t0, first)] if first is not None else []
-            out += [(t, s) for t, s in self.changes if t0 < t <= t1]
+            out += [(t, s) for t, s in self.changes if t0 < t <= t1 and (s != self.value(t - 1e-6) or t in self.attrs)]
             return out
         out, last = [], None
         t = t0
@@ -394,15 +429,14 @@ def history(entity_ids, start, end, no_attributes=True, minimal=True):
     for eid in entity_ids or []:
         cur = sts.get(eid)
         s = _series(eid)
-        pts = s.changes_between(t0, t1) if s else []
-        if cur:
-            # The series up to the entity's last change, and after it only rows in its current state (attribute
-            # updates); then the current state itself, if the series doesn't already end in it.
-            lc = max(cur["last_changed"], t0)
-            if lc <= t1:
-                pts = [p for p in pts if p[0] < lc or p[1] == cur["state"]]
-                if not pts or pts[-1][1] != cur["state"]:
-                    pts = [p for p in pts if p[0] < lc] + [(lc, cur["state"])]
+        # One timeline: the live state comes from the series too (states()), so the series is the history as it is.
+        # Without a series, the history is the current state from its last change (or the window's start).
+        if s:
+            pts = s.changes_between(t0, t1)
+        elif cur and cur["last_changed"] <= t1:
+            pts = [(max(cur["last_changed"], t0), cur["state"])]
+        else:
+            pts = []
         if not pts:
             continue
         rows = []
@@ -497,11 +531,19 @@ class _TemplateState:
         return f"<template TemplateState({self.entity_id}={self.state})>"
 
 
+def _template_attr(name):
+    """Whether `states.<name>` / `states.<domain>.<name>` may be an entity: never a dunder or private name, nor the
+    flags jinja's sandbox reads on a callable (it would take an entity object for a yes)."""
+    if name.startswith("_") or name in ("unsafe_callable", "alters_data"):
+        raise AttributeError(name)
+
+
 class _Domain:
     def __init__(self, sts, domain):
         self._sts, self._domain = sts, domain
 
     def __getattr__(self, name):
+        _template_attr(name)
         st = self._sts.get(f"{self._domain}.{name}")
         return _TemplateState(st) if st else None
 
@@ -519,6 +561,7 @@ class _States:
         return st["state"] if st else "unknown"
 
     def __getattr__(self, domain):
+        _template_attr(domain)
         return _Domain(self._sts, domain)
 
     def __iter__(self):
@@ -528,7 +571,9 @@ class _States:
 def render_template(template, variables=None):
     import jinja2
     sts = states()
-    env = jinja2.Environment(undefined=jinja2.ChainableUndefined, extensions=["jinja2.ext.loopcontrols"])
+    from jinja2.sandbox import SandboxedEnvironment
+    # Sandboxed: anything that reaches the fake's port can send a template, and a plain environment would run Python.
+    env = SandboxedEnvironment(undefined=jinja2.ChainableUndefined, extensions=["jinja2.ext.loopcontrols"])
     attr = lambda e, a: (sts.get(e) or {}).get("attributes", {}).get(a)  # noqa: E731
     now = lambda: datetime.datetime.fromtimestamp(NOW, tz())  # noqa: E731
     helpers = {
@@ -787,3 +832,58 @@ def http_post(path, body):
         set_case(doc["id"], doc.get("fixture"), _hub())
         return 200, json.dumps({"case": CASE["id"], "states": len(_hub().states)}).encode(), "application/json"
     return None
+
+
+# ---- keeping the corpus's fixtures on one timeline
+
+def sync_fixtures(corpus_dir, check=False):
+    """Writes into each case's fixture the state, last change and last update (and a series' own attributes) that its
+    entities' history series give at the home's now, as states() serves them, so the JSON says what HA draws. With
+    check, changes nothing and returns the cases whose fixtures disagree."""
+    with open(os.path.join(corpus_dir, "home.json")) as f:
+        set_home(json.load(f))
+    out = []
+    folder = os.path.join(corpus_dir, "corpus")
+    for name in sorted(os.listdir(folder)):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(folder, name)
+        with open(path) as f:
+            doc = json.load(f)
+        fx = doc.get("fixture") or {}
+        CASE.update(id=name[:-5], fixture=fx)
+        changed = False
+        for eid in fx.get("history") or {}:
+            st = (fx.get("states") or {}).get(eid)
+            s = _series(eid)
+            if st is None or s is None:
+                continue
+            want = {"state": s.value(NOW), "last_changed": round(s.last_change(NOW) - NOW)}
+            if s.last_update(NOW) != s.last_change(NOW):
+                want["last_updated"] = round(s.last_update(NOW) - NOW)
+            own = s.attributes(NOW)
+            if own is not None:
+                want["attributes"] = dict(st.get("attributes") or {}, **own)
+            for k, v in want.items():
+                if st.get(k) != v:
+                    st[k] = v
+                    changed = True
+            if "last_updated" in st and "last_updated" not in want:
+                del st["last_updated"]
+                changed = True
+        if changed:
+            out.append(name[:-5])
+            if not check:
+                with open(path, "w") as f:
+                    json.dump(doc, f, indent=1, ensure_ascii=False)
+                    f.write("\n")
+    return out
+
+
+if __name__ == "__main__":
+    # python3 tools/vitro-parity/fakehome.py sync [--check]: the fixtures' states from their own history series.
+    if len(sys.argv) > 1 and sys.argv[1] == "sync":
+        corpus = os.path.join(HERE, "..", "..", "engines", "engine-vitro", "src", "test", "parity")
+        changed = sync_fixtures(corpus, check="--check" in sys.argv)
+        print(("out of step: " if "--check" in sys.argv else "updated: ") + (", ".join(changed) or "none"))
+        sys.exit(1 if changed and "--check" in sys.argv else 0)
