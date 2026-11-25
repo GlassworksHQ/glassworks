@@ -169,15 +169,20 @@ class ClarityStatsTest {
     }
 
     @Test
-    fun theStoreTellsTheHarnessEachChangeAndItsContextBeforeTheCards() {
+    fun theStoreTellsTheHarnessEachChangeBeforeAndAfterTheCards() {
         val store = dev.glassworks.engine.vitro.data.EntityStore()
         val seen = ArrayList<String>()
         store.subscribe("sensor.clarity_1") { seen += "card" }
-        store.contextTap = { id, ctx -> seen += "$id $ctx" }
+        store.contextTap = object : dev.glassworks.engine.vitro.data.EntityStore.ContextTap {
+            override fun read(entityId: String, context: String?) { seen += "read $entityId $context" }
+            override fun delivered(entityId: String, context: String?) { seen += "delivered $entityId $context" }
+        }
         store.applyCompressedEvent(JSONObject("""{"a":{"sensor.clarity_1":{"s":"1.0"}}}"""))
         seen.clear()
         store.applyCompressedEvent(JSONObject("""{"c":{"sensor.clarity_1":{"+":{"s":"1.2","c":"01JC1ARITYS000020000070003"}}}}"""))
-        assertEquals(listOf("sensor.clarity_1 01JC1ARITYS000020000070003", "card"), seen)
+        // Read before the cards hear of it, delivered after: a change's tick can't come before its card has it.
+        assertEquals(listOf("read sensor.clarity_1 01JC1ARITYS000020000070003", "card",
+            "delivered sensor.clarity_1 01JC1ARITYS000020000070003"), seen)
         store.contextTap = null
         seen.clear()
         store.applyCompressedEvent(JSONObject("""{"c":{"sensor.clarity_1":{"+":{"s":"1.3"}}}}"""))

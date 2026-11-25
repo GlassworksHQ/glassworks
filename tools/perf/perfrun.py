@@ -590,9 +590,11 @@ def cmd_hold(dev, a):
         sys.exit(1)
     # The engine the kiosk said it draws with, in the same answer (MainActivity logs it right after the hold): run.sh
     # measures Vitro with its own steps. None from an app that doesn't say (one before Clarity's Vitro check).
+    # With it, the Vitro setting, which a Vitro run puts back however its switch ends.
     found = [m for m in (ENGINE_RE.search(l) for l in dev.log_dump(tail=200).splitlines()) if m]
     engine = None if not found else ("vitro" if found[-1].group(1).startswith("Vitro") else "web")
-    print(json.dumps({"hold_s": TEST_HOLD_S, "said": said, "engine": engine}))
+    setting = None if not found else found[-1].group(2) == "on"
+    print(json.dumps({"hold_s": TEST_HOLD_S, "said": said, "engine": engine, "vitro_setting": setting}))
 
 
 # The kiosk's answer to a test hold (MainActivity): the engine that draws the page (VitroEngine names itself "Vitro …"

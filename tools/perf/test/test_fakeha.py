@@ -176,6 +176,13 @@ class FakeHA(unittest.TestCase):
                          "minimal_response": True, "no_attributes": True})
         self.assertEqual(len(ev[0]["event"]["states"]["sensor.clarity_10"]), 96)
         self.assertNotIn("config/entity_registry/get", fakeha.Handler.hub.unknown)
+        # Vitro's native sheet asks the recorder's way (HaDashboardClient.fetchHistory): the same points, as a result.
+        res, _ = ws.call({"type": "history/history_during_period", "entity_ids": ["sensor.clarity_10"], "start_time": start,
+                          "minimal_response": True, "no_attributes": True, "significant_changes_only": False})
+        pts = res["result"]["sensor.clarity_10"]
+        self.assertEqual(len(pts), 96)
+        self.assertTrue(all(float(p["s"]) and p["lu"] > 0 for p in pts))
+        self.assertNotIn("history/history_during_period", fakeha.Handler.hub.unknown)
 
     def test_the_toggle_flips_the_light(self):
         ws = self.connect()

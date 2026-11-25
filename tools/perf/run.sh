@@ -171,13 +171,15 @@ restore_engine() {
 trap 'restore_engine; release_hold' EXIT
 SAID_ENGINE=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("engine") or "")' "$HOLD_OUT")
 if [ -n "$ENGINE" ] && [ "$ENGINE" != "${SAID_ENGINE:-web}" ]; then
+  # The setting as it was, before anything is sent: a switch that fails after the kiosk saved it is put back too.
+  ENGINE_WAS=$(python3 -c 'import json,sys; v = json.loads(sys.argv[1]).get("vitro_setting"); print("" if v is None else str(v).lower())' "$HOLD_OUT")
   log "switching the kiosk to $ENGINE (Settings → Labs → Vitro; the app restarts)"
   ENG_OUT=$(run engine --want "$ENGINE" --settle "$SWITCH_SETTLE") || {
     echo "$PACKAGE didn't switch to $ENGINE: install an app built after Clarity's Vitro check (docs/perf.md, \"Vitro\")" >&2
     exit 2
   }
-  python3 -c 'import json,sys; sys.exit(0 if json.loads(sys.argv[1])["changed"] else 1)' "$ENG_OUT" \
-    && ENGINE_WAS=$(python3 -c 'import json,sys; print("true" if json.loads(sys.argv[1])["was"] else "false")' "$ENG_OUT")
+  # Nothing to put back when the kiosk already had the setting asked for.
+  python3 -c 'import json,sys; sys.exit(0 if json.loads(sys.argv[1])["changed"] else 1)' "$ENG_OUT" || ENGINE_WAS=""
 fi
 ENGINE="${ENGINE:-${SAID_ENGINE:-web}}"
 export GW_PERF_ENGINE="$ENGINE"

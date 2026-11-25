@@ -255,6 +255,22 @@ class VitroView(
      * engine); null otherwise, and then every hook below is one null check.
      */
     internal var clarity: VitroClarity? = null
+        private set
+
+    /**
+     * Gives the view Clarity's harness ([VitroClarity]), or takes it away (null). A harness learns each view's cards as
+     * the view is built, so the views built before it (cached) are dropped: the load that attaches it renders its view
+     * next (a tab-like switch or a new dashboard), built with the harness there, and none is measured without its cards.
+     * Only when a harness attaches; tab switches within its run keep the cache.
+     */
+    internal fun attachClarity(c: VitroClarity?) {
+        clarity = c
+        if (c == null || viewCache.isEmpty()) return
+        viewCache.clear()
+        builtScripts.clear()
+        contentHost.removeAllViews()
+        clearOverlay()
+    }
 
     /** The view whose cards [buildViewTree] is building (Clarity's card registry). */
     private var buildingIndex = -1

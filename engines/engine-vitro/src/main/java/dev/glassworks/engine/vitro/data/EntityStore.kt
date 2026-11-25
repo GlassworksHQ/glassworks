@@ -184,9 +184,17 @@ class EntityStore {
 
     /**
      * Clarity's harness (VitroClarity) while it measures: each changed entity of a `subscribe_entities` diff and the
-     * change's context id, on the reader thread, before the cards hear of it. Null otherwise.
+     * change's context id, on the reader thread. Null otherwise.
      */
-    @Volatile var contextTap: ((entityId: String, context: String?) -> Unit)? = null
+    interface ContextTap {
+        /** The change was read, before the cards hear of it. */
+        fun read(entityId: String, context: String?)
+
+        /** The cards were told (each has queued its render), after [read]. */
+        fun delivered(entityId: String, context: String?)
+    }
+
+    @Volatile var contextTap: ContextTap? = null
 
     val updatesReceived = AtomicLong(0)
     val notificationsDispatched = AtomicLong(0)
@@ -288,8 +296,9 @@ class EntityStore {
             }
         }
 
+        val tap = contextTap
+        val tapped = if (tap != null) ArrayList<Pair<String, String?>>() else null
         ev.optJSONObject("c")?.let { diffs ->
-            val tap = contextTap
             val keys = diffs.keys()
             while (keys.hasNext()) {
                 val id = keys.next()
@@ -321,7 +330,11 @@ class EntityStore {
 
                 states[id] = EntityState(id, state, attrs, lc, lu)
                 changed += id
-                tap?.invoke(id, diff.optJSONObject("+")?.opt("c") as? String)
+                if (tap != null && tapped != null) {
+                    val ctx = diff.optJSONObject("+")?.opt("c") as? String
+                    tap.read(id, ctx)
+                    tapped += id to ctx
+                }
             }
         }
 
@@ -333,6 +346,7 @@ class EntityStore {
         }
 
         if (changed.isNotEmpty()) dispatch(changed)
+        if (tap != null) tapped?.forEach { (id, ctx) -> tap.delivered(id, ctx) }
         return changed
     }
 

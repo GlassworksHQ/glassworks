@@ -248,6 +248,21 @@ def summarise(rep, report_url="report.json", allow_provisional=False):
     return out
 
 
+# The file a frame's published grade lives in (frames/<id>/clarity/clarity.json), which glassworks.dev shows as the
+# frame's grade.
+PUBLISHED = "clarity.json"
+
+
+def check_publishable(summary, path):
+    """A summary of another engine than the web engine (Vitro, docs/perf.md "Vitro") is never written as a frame's
+    published grade: the site shows clarity.json as the frame's web grade. Refused there; anywhere else it is written,
+    with its `engine`."""
+    engine = summary.get("engine")
+    if engine and engine != "web" and os.path.basename(path) == PUBLISHED:
+        raise Refused(f"this summary is {engine}'s, not the web engine's: a frame's {PUBLISHED} is its web grade, so it "
+                      "isn't written there (write it under another name)")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("report", help="a finished report.json")
@@ -259,6 +274,7 @@ def main():
         rep = json.load(f)
     try:
         out = summarise(rep, a.report_url, a.allow_provisional)
+        check_publishable(out, a.out)
     except Refused as e:
         sys.exit(f"summary not written: {e}")
     with open(a.out, "w") as f:

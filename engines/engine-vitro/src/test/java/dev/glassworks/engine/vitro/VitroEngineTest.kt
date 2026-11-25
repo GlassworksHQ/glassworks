@@ -325,7 +325,9 @@ class VitroEngineTest {
         assertNull("the reference dashboard alone isn't a Clarity run", view.clarity)
         test = "$base/clarity-ref/start"
         page.load("$base/clarity-ref/typical")
-        val harness = assertNotNull(view.clarity).let { view.clarity!! }
+        val harness = view.clarity
+        assertNotNull(harness)
+        assertEquals(base, harness!!.fake)
         page.load("$base/clarity-ref/light")
         assertSame("one harness for the run's views", harness, view.clarity)
         page.load("$base/wall-test/living")
@@ -333,6 +335,17 @@ class VitroEngineTest {
         test = "http://127.0.0.1:8089/clarity-ref/start"
         page.load("$base/clarity-ref/start")
         assertNull("the test hold's dashboard is on another origin", view.clarity)
+        // The test hold moved to another fake (another port): a new harness polls that one, never the old.
+        test = "$base/clarity-ref/start"
+        page.load("$base/clarity-ref/start")
+        val first = view.clarity!!
+        val moved = "http://192.0.2.20:8123"
+        test = "$moved/clarity-ref/start"
+        page.load("$moved/clarity-ref/start")
+        val second = view.clarity
+        assertNotNull(second)
+        assertEquals(moved, second!!.fake)
+        assertTrue("the old harness was replaced", first !== second)
     }
 
     @Test

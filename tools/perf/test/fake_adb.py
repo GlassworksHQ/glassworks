@@ -9,7 +9,8 @@ runner can't read; FAKE_SF_HISTORY: how many frames `--latency` keeps (127, the 
 `--list` takes. FAKE_VITRO=true: the kiosk's Vitro setting (Settings → Labs) starts on, as the S1 kiosk with Vitro
 draws: Vitro's start line instead of GeckoView's pages, the native harness's lines (VitroClarity: CLOCK_MONOTONIC page
 clock, no camera line), the frames on the app's window layer; `--ez vitro` switches it and restarts the app.
-FAKE_NO_ENGINE_LINE: a kiosk that doesn't say its engine with the test hold.
+FAKE_NO_ENGINE_LINE: a kiosk that doesn't say its engine with the test hold. FAKE_VITRO_STUCK: one that saves the
+setting but keeps drawing with GeckoView.
 
 State lives in $FAKE_ADB_STATE (a directory): the nonce of the page the runner opened, the taps it
 sent, and the time ranges in which the fake screen paints. logcat, SurfaceFlinger and the fake page
@@ -131,7 +132,8 @@ def test_hold(cmd):
         said = f"test hold {'renewed' if was else 'on'} for {s} s"
         if not os.environ.get("FAKE_NO_ENGINE_LINE"):
             # MainActivity, right after the hold: the engine that draws and the Vitro setting (Clarity's engine check).
-            name = "Vitro 0.0.1 (experimental)" if vitro() else "GeckoView 159.0"
+            # FAKE_VITRO_STUCK: the setting saves, but the app keeps drawing with GeckoView (a switch that fails).
+            name = "Vitro 0.0.1 (experimental)" if vitro() and not os.environ.get("FAKE_VITRO_STUCK") else "GeckoView 159.0"
             save("hold_log.json", state("hold_log.json", []) + [[now(), said],
                                                                  [now(), f"test hold engine: {name}; vitro setting {'on' if vitro() else 'off'}"]])
             return

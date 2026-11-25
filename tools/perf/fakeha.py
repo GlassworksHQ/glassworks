@@ -357,6 +357,13 @@ def _history_stream(c, m):
                       "start_time": m.get("start_time"), "end_time": m.get("end_time")})
 
 
+def _history_during_period(c, m):
+    """history/history_during_period (HA's recorder API, compressed as with minimal_response: {entity: [{s, lu}]}): the
+    same seeded points as history/stream. Vitro's native more-info graph asks this way (VitroClarity, docs/perf.md
+    "Vitro"); HA's frontend streams."""
+    c.result(m["id"], D.history(m.get("entity_ids") or [], m.get("start_time"), m.get("end_time")))
+
+
 def _camera_stream(c, m):
     """camera/stream: a fresh HLS stream for the camera (homeassistant/components/camera, the stream
     integration's URL shape). Each request is its own stream, started then, as HA starts a stream that
@@ -476,6 +483,7 @@ HANDLERS = {
     "config/label_registry/list": _const([]),
     "call_service": _call_service,
     "history/stream": _history_stream,
+    "history/history_during_period": _history_during_period,
     "recorder/statistics_during_period": lambda c, m: c.result(m["id"], D.statistics(
         m.get("statistic_ids"), m.get("start_time"), m.get("end_time"), m.get("period"))),
     "ping": lambda c, m: c.send({"id": m["id"], "type": "pong"}),

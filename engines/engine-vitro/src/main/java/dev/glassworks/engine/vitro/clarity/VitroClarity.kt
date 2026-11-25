@@ -56,7 +56,7 @@ import kotlin.math.roundToInt
  */
 class VitroClarity internal constructor(
     /** The fake Home Assistant's origin (`http://127.0.0.1:<port>`). */
-    private val fake: String,
+    internal val fake: String,
     private val view: VitroView,
     private val store: EntityStore,
     /** The view the kiosk landed on: the restart's (`start`), or an idle sample's. */
@@ -66,6 +66,8 @@ class VitroClarity internal constructor(
      * frontend holds every state, and a tile's tap opens an entity its card already follows.
      */
     private val follow: (String) -> Unit = {},
+    /** The worker ended by itself (an error it can't go on from), on the main thread: the page lets this harness go. */
+    private val onExit: (VitroClarity) -> Unit = {},
     private val log: (String) -> Unit = { Log.i(TAG, it) },
 ) {
     private val main = Handler(Looper.getMainLooper())
@@ -89,15 +91,28 @@ class VitroClarity internal constructor(
 
     @Volatile private var v = Cmd(tier = landing)
 
+    /** The store's tap: each live change read, then handed to the cards ([onState], [onDelivered]). */
+    private val tap = object : EntityStore.ContextTap {
+        override fun read(entityId: String, context: String?) = onState(entityId, context)
+        override fun delivered(entityId: String, context: String?) = onDelivered(entityId, context)
+    }
+
     fun start() {
         if (thread != null) return
-        store.contextTap = ::onState
+        store.contextTap = tap
         thread = Thread({
             try {
                 script()
             } catch (_: Stopped) {
             } catch (e: Throwable) {
                 if (!stopped) line(JSONObject().put("t", "error").put("message", Log.getStackTraceString(e).take(MAX_ERROR)))
+            } finally {
+                // Ended by itself (bad config, an error out of the command loop): nothing measures any more, so the
+                // store's tap goes and the page may start a new harness on its next load.
+                if (!stopped) {
+                    stop()
+                    main.post { onExit(this) }
+                }
             }
         }, "vitro-clarity").apply {
             isDaemon = true
@@ -109,7 +124,7 @@ class VitroClarity internal constructor(
     fun stop() {
         if (stopped) return
         stopped = true
-        if (store.contextTap == ::onState) store.contextTap = null
+        if (store.contextTap === tap) store.contextTap = null
         thread?.interrupt()
         main.post {
             ticking = false
@@ -148,12 +163,20 @@ class VitroClarity internal constructor(
     private fun <T> onMain(block: () -> T): T {
         check()
         if (Looper.myLooper() == Looper.getMainLooper()) return block()
-        val task = FutureTask(block)
+        // Checked again where it runs: a stop that came while it waited in the queue (the page leaving the reference
+        // dashboard) means it never runs, so nothing opens or switches after the harness stopped.
+        val task = FutureTask { if (stopped) throw Stopped() else block() }
         main.post(task)
         try {
             return task.get(MAIN_WAIT_S, TimeUnit.SECONDS)
         } catch (_: InterruptedException) {
+            task.cancel(false)
             throw Stopped()
+        } catch (e: java.util.concurrent.TimeoutException) {
+            task.cancel(false)
+            throw e
+        } catch (e: java.util.concurrent.ExecutionException) {
+            throw e.cause ?: e
         }
     }
 
@@ -362,10 +385,13 @@ class VitroClarity internal constructor(
         var start: Double? = null
         val done = CountDownLatch(1)
         var result = 0.0
+        // This wait's own end: past its deadline (or interrupted) no probe of it posts again, so none lands in the next
+        // view's measurement.
+        val over = java.util.concurrent.atomic.AtomicBoolean(false)
         lateinit var probe: (Double) -> Unit
         probe = { posted ->
             main.post {
-                if (stopped) return@post
+                if (stopped || over.get()) return@post
                 val ran = now()
                 val k = ((posted - t0) / 1000).toInt()
                 if (k < 600) {
@@ -387,6 +413,8 @@ class VitroClarity internal constructor(
             done.await(VIEW_DEADLINE_MS.toLong(), TimeUnit.MILLISECONDS)
         } catch (_: InterruptedException) {
             throw Stopped()
+        } finally {
+            over.set(true)
         }
         check()
         if (!ok) throw IllegalStateException("the main thread wasn't free within ${VIEW_DEADLINE_MS.toLong() / 1000} s")
@@ -450,6 +478,8 @@ class VitroClarity internal constructor(
     private class Live {
         val watch = HashMap<String, View>()
         val pending = ArrayList<Change>()
+        /** Each change read, by entity and context id, until the cards were told of it ([onDelivered]). */
+        val byKey = HashMap<String, Change>()
         val changes = ArrayList<Change>()
         val seen = HashSet<String>()
         var on = false
@@ -464,9 +494,9 @@ class VitroClarity internal constructor(
     private val live = Live()
 
     /**
-     * The store read a state change for [id] ([EntityStore.contextTap], its reader thread), before it tells the cards.
-     * Arrived is when the main thread gets to it (harness.js: its listener runs on the page's main thread, before
-     * HA's); then the card's own render, queued behind it; then the next frame draws it.
+     * The store read a state change for [id] ([EntityStore.ContextTap.read], its reader thread), before it tells the
+     * cards. Arrived is when the main thread gets to it (harness.js: its listener runs on the page's main thread,
+     * before HA's). The card renders it from a task the store's listeners queue next ([onDelivered]).
      */
     private fun onState(id: String, context: String?) {
         if (stopped) return
@@ -485,10 +515,24 @@ class VitroClarity internal constructor(
                 gen = m?.groupValues?.get(2)?.toInt(),
                 late = m?.groupValues?.get(4)?.toInt() ?: 0,
             )
-            live.pending += ch
+            live.byKey[key] = ch
             if (live.on) live.changes += ch
-            // Queued after the card's own render (the store tells the cards next, and they post to this thread).
-            main.post { if (ch.dom == null) ch.dom = now() }
+        }
+    }
+
+    /**
+     * The store told the cards of the change ([EntityStore.ContextTap.delivered], its reader thread, after each card
+     * queued its render on this looper): this task runs after those renders, so the change's card has it, and the next
+     * frame ([markTicks]) draws it. Its tick can't come before the card got the change.
+     */
+    private fun onDelivered(id: String, context: String?) {
+        if (stopped) return
+        main.post {
+            val ch = live.byKey.remove("$id|$context") ?: return@post
+            if (ch.dom == null) {
+                ch.dom = now()
+                live.pending += ch
+            }
         }
     }
 
@@ -508,6 +552,7 @@ class VitroClarity internal constructor(
     private fun watch(ids: List<String>): Map<String, View> = onMain {
         live.watch.clear()
         live.pending.clear()
+        live.byKey.clear()
         for ((cfg, card) in currentCards().values) for (id in entitiesOf(cfg)) if (id in ids) live.watch[id] = card
         HashMap(live.watch)
     }
@@ -515,6 +560,7 @@ class VitroClarity internal constructor(
     private fun unwatch() = onMain {
         live.watch.clear()
         live.pending.clear()
+        live.byKey.clear()
     }
 
     /** harness.js syncClock: 12 round trips to /clarity/time, the shortest kept (offset = fake - page). */

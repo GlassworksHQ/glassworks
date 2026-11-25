@@ -167,10 +167,16 @@ class VitroEngine(
                 stopClarity()
                 return
             }
-            if (clarity != null) return
+            // One harness per fake: a test hold moved to another loopback port gets a new one, polling that fake.
+            if (clarity?.fake == origin) return
+            stopClarity()
             Log.i(logTag, "Clarity: measuring Vitro on the test dashboard")
-            clarity = VitroClarity(origin, vitroView, store, viewPath ?: "start", follow = ::watchRuntimeEntity).also {
-                vitroView.clarity = it
+            clarity = VitroClarity(
+                origin, vitroView, store, viewPath ?: "start", follow = ::watchRuntimeEntity,
+                // A harness that ended by itself goes, unless another has replaced it meanwhile: the next load starts one.
+                onExit = { done -> if (clarity === done) stopClarity() },
+            ).also {
+                vitroView.attachClarity(it)
                 it.start()
             }
         }
@@ -178,7 +184,7 @@ class VitroEngine(
         private fun stopClarity() {
             val c = clarity ?: return
             clarity = null
-            vitroView.clarity = null
+            vitroView.attachClarity(null)
             c.stop()
         }
 

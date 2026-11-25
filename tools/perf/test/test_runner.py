@@ -2353,9 +2353,14 @@ class Vitro(unittest.TestCase):
         self.assertFalse([f for f in outs if f.startswith(("synthetic-", "coldstart-"))], outs)
         self.assertIn("Vitro: skipping the animation test page", self.proc.stderr)
 
-    def test_the_summary_says_vitro(self):
+    def test_the_summary_says_vitro_and_is_never_a_frames_published_grade(self):
         s_ = summary.measurements(self.rep)
         self.assertEqual(s_["engine"], "vitro")
+        with self.assertRaisesRegex(summary.Refused, "not the web engine's"):
+            summary.check_publishable(s_, os.path.join("frames", "aqara-s1-plus", "clarity", "clarity.json"))
+        summary.check_publishable(s_, os.path.join(self.tmp, "vitro-summary.json"))        # elsewhere: written
+        summary.check_publishable(dict(s_, engine="web"), "clarity.json")
+        summary.check_publishable({k: v for k, v in s_.items() if k != "engine"}, "clarity.json")
 
 
 class VitroAlreadyOn(unittest.TestCase):
@@ -2368,6 +2373,22 @@ class VitroAlreadyOn(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr[-3000:])
         self.assertFalse([c for c in commands if "--ez vitro" in c])
         self.assertEqual(rep["frame"]["device"]["engine"], "vitro")
+
+
+class VitroSwitchFails(unittest.TestCase):
+    """The kiosk saves vitro=true but never says it runs Vitro (FAKE_VITRO_STUCK): the run stops, and the setting is put
+    back all the same, from what the hold said before anything was sent."""
+
+    def test_the_setting_goes_back_after_a_failed_switch(self):
+        tmp = tempfile.mkdtemp()
+        proc, state, out, commands, rep = vitro_run(tmp, "--engine", "vitro", "--skip-synthetic", "--skip-real-use",
+                                                    FAKE_VITRO="false", FAKE_VITRO_STUCK="1")
+        self.assertEqual(proc.returncode, 2, proc.stderr[-3000:])
+        self.assertIn("didn't switch to vitro", proc.stderr)
+        with open(os.path.join(state, "intents.json")) as f:
+            self.assertEqual([i["vitro"] for i in json.load(f) if "vitro" in i], ["true", "false"])
+        with open(os.path.join(state, "settings.json")) as f:
+            self.assertEqual(json.load(f)["vitro"], "false")
 
 
 class EngineNotSaid(unittest.TestCase):

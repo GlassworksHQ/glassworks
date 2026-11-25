@@ -339,7 +339,7 @@ detail, not graded.
 | Live updates | From the fake's send (its schedule, tied to the fake's clock) through the main thread reading the change and the card drawing it, to the first SurfaceFlinger present that can show it | The same: the store hands each change to the main thread, the card renders it, and the next frame draws it | Yes |
 | Tap | Event Timing: from the event's timestamp to the next paint after its handlers, worst of 10, rounded to 8 ms, at least 16 ms | From the touch's own timestamp to the end of the first frame drawn after its handlers (the click included), worst of 10, rounded the same way (`method: vitro-frame`) | Yes, by its definition |
 | Scroll | Six real swipes during the live updates, SurfaceFlinger and rAF | The same swipes, SurfaceFlinger and `Choreographer` frames, with the same room to flick (the view's content at least 4 screens high) | Yes |
-| More-info dialog | HA's dialog, from the tile's event to its show animation finished and the sensor's graph drawn | Vitro's own sheet, opened as a tile's tap opens it, to its enter animation finished and the sensor's graph drawn with its data | Yes; the sheet is Vitro's (its animation is 240 ms, HA's is 300 ms) |
+| More-info dialog | HA's dialog, from the tile's event to its show animation finished and the sensor's graph drawn | Vitro's own sheet, opened as a tile's tap opens it, to its enter animation finished and the sensor's graph drawn with its data (the fake answers Vitro's `history/history_during_period` with the same seeded points as HA's `history/stream`) | Yes; the sheet is Vitro's (its animation is 240 ms, HA's is 300 ms) |
 | Cameras | The WebRTC players' receiver counts | Not measured | No: see below |
 
 **Cameras aren't measured on Vitro.** Vitro plays a camera over MJPEG (`camera_proxy_stream`), and the reference
@@ -359,7 +359,9 @@ exactly, where a web page's lines are tied through `Date.now()` to within a few 
 
 **Records.** `device.json` and the report's `frame.device` carry `engine` (`web` or `vitro`), and report.md says
 "measured on Vitro". A Vitro report's summary carries `engine: "vitro"`, so a Vitro result is never shown as the
-frame's web result. A web summary has no `engine` and stays as it was. Vitro's restart reports engine ready at
+frame's web result. A web summary has no `engine` and stays as it was. `summary.py` and `regrade.py` refuse to write a summary of
+another engine as a frame's published `clarity.json`, which the site shows as the frame's grade; written under any
+other name, it keeps its `engine`. Vitro's restart reports engine ready at
 Vitro's start (`Starting Vitro` in logcat; `engine_uri` `vitro`), as detail.
 
 ## The reference dashboards

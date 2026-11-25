@@ -32,6 +32,9 @@ dependencies {
 // renders are test inputs, and -PvitroParity* options reach the test (tools/vitro-parity/README.md).
 tasks.withType<Test>().configureEach {
     inputs.dir("src/test/parity").withPropertyName("vitroParity").withPathSensitivity(PathSensitivity.RELATIVE)
+    // ClarityStatsTest holds Vitro's Clarity harness to the web harness's cases.
+    inputs.file(rootProject.file("tools/perf/test/stats-cases.json")).withPropertyName("clarityStatsCases")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
     val options = mapOf(
         "vitroParityOut" to "vitro.parity.out",
         "vitroParityLocal" to "vitro.parity.local",
