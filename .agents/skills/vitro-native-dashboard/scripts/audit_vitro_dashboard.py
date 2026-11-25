@@ -142,19 +142,33 @@ def supported_style_key(card_type: str, key: str) -> bool:
 LEGACY_PSEUDO = re.compile(r":(before|after|first-line|first-letter)\b", re.I)
 
 
-# A selector for the card itself (ha-card, :host, :host > ha-card), with interaction states at most.
+# A selector for the card itself (ha-card, :host, :host > ha-card), compounded with classes, ids, attributes
+# (ha-card.compact) and interaction states at most. A structural pseudo-class (:nth-child(1)) isn't applied natively.
 OWN_CARD_SELECTOR = re.compile(
-    r"^(?::host(?:\s*>?\s*ha-card)?|ha-card)(?:\.[\w-]+|#[\w-]+|\[[^\]]*\]|:[a-z-]+(?:\([^)]*\))?)*$", re.I
+    r"^(?::host(?:\s*>?\s*ha-card)?|ha-card)"
+    r"(?:\.[\w-]+|#[\w-]+|\[[^\]]*\]|:(?:hover|active|focus|focus-visible|focus-within)(?![\w-]))*$",
+    re.I,
 )
+# An at-rule the renderer doesn't evaluate (@media, @supports): only keyframes and @charset are harmless.
+UNSUPPORTED_AT_RULE = re.compile(r"@(?!(?:-webkit-)?keyframes(?![\w-])|charset(?![\w-]))[a-z-]+", re.I)
 # Jinja is masked before reading selectors, as the renderer replaces it first.
 JINJA = re.compile(r"\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|\{#[\s\S]*?#\}")
+
+
+# Quoted strings are emptied before looking for at-rules: an @ in one ([data-label="@media"]) isn't one.
+QUOTED = re.compile(r"\"(?:[^\"\\\n]|\\.)*\"|'(?:[^'\\\n]|\\.)*'")
+
+
+def mask_css(css: str) -> str:
+    """The CSS without comments and Jinja: what the renderer reads rules from."""
+    return JINJA.sub(" ", re.sub(r"/\*[\s\S]*?\*/", " ", css))
 
 
 def reaches_inside(card_type: str, css: str) -> bool:
     """A rule in the card's own sheet for something inside it (ha-card .card-header): not applied natively."""
     if card_type in ("markdown", "clock"):
         return False
-    text = JINJA.sub(" ", re.sub(r"/\*[\s\S]*?\*/", " ", css))
+    text = mask_css(css)
     for m in re.finditer(r"([^{}]+)\{", text):
         for sel in m.group(1).split(","):
             t = sel.strip()
@@ -171,7 +185,7 @@ def check_card_mod(card: dict, loc: str, warnings: list[str]):
     card_type = str(card.get("type", "")).strip()
     def complex_css(css) -> bool:
         return (not isinstance(css, str) or "$:" in css or "@keyframes" in css or "::" in css
-                or LEGACY_PSEUDO.search(css) is not None)
+                or LEGACY_PSEUDO.search(css) is not None or UNSUPPORTED_AT_RULE.search(QUOTED.sub('""', mask_css(css))) is not None)
     def own(css) -> bool:
         return complex_css(css) or (isinstance(css, str) and reaches_inside(card_type, css))
     if isinstance(style, dict):
