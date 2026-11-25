@@ -7,12 +7,13 @@ import { Disk, MemoryStore, parseSparseHeader, readSparse } from '@glassworks/ex
 import { GLASS_PANES_KEY_FINGERPRINT, USERDATA_BYTES } from '@glassworks/lululemon-mirror-installer';
 import { fakeAdbKey } from '@glassworks/lululemon-mirror-installer/fakes';
 import {
-  buildSurgicalSparseImage, patchPostBootForBackup, patchStockServicesJar,
-  renderSurgicalReport, runStockSurgicalAdb, START_CONFIRMATION_LOG_STRING,
+  buildSurgicalSparseImage, loadBackupModule, patchPostBootForBackup, patchStockServicesJar,
+  renderSurgicalReport, runStockSurgicalAdb, SELINUX_PERMISSIVE_PIN, START_CONFIRMATION_LOG_STRING,
   STOCK_DPMD_LIB_PATH, STOCK_POST_BOOT_PATH, STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES,
   validateKernelModuleElf,
   type FiemapExtent, type SurgicalAdbDeps,
 } from '../src/surgical-adb';
+import { createHash } from 'node:crypto';
 
 /**
  * Builds a tiny valid real DEX 035 + ZIP fixture containing `UsbDebuggingManager` with
@@ -196,6 +197,60 @@ describe('validateKernelModuleElf', () => {
     dv.setUint16(16, 1, true);
     dv.setUint16(18, 62, true); // x86_64
     expect(() => validateKernelModuleElf(buf)).toThrow(/EM_AARCH64/);
+  });
+});
+
+describe('loadBackupModule', () => {
+  const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
+
+  it('reads a local override from --backup-module, without fetching', async () => {
+    const ko = new Uint8Array([0x7f, 0x45, 0x4c, 0x46]);
+    let fetched = false;
+    const r = await loadBackupModule(
+      { backupModulePath: '/tmp/mine.ko' },
+      { readHostFile: async () => ko, fetchUrl: async () => { fetched = true; return new Uint8Array(); } },
+    );
+    expect(r.bytes).toBe(ko);
+    expect(r.sourceNote).toContain('/tmp/mine.ko');
+    expect(fetched).toBe(false);
+  });
+
+  it('fetches the pinned module from the pin\'s Refract URL when there is no override', async () => {
+    let askedUrl = '';
+    await loadBackupModule({}, {
+      readHostFile: async () => new Uint8Array(),
+      fetchUrl: async (url) => { askedUrl = url; throw new Error('stop'); },
+    }).catch(() => {});
+    expect(askedUrl).toBe(SELINUX_PERMISSIVE_PIN.refractUrl);
+    expect(askedUrl).toContain('refract.glassworks.dev');
+  });
+
+  it('refuses a fetched module whose size does not match the pin', async () => {
+    await expect(loadBackupModule({}, {
+      readHostFile: async () => new Uint8Array(),
+      fetchUrl: async () => new Uint8Array(SELINUX_PERMISSIVE_PIN.size + 1),
+    })).rejects.toThrow(/is \d+ B, the pin says/);
+  });
+
+  it('refuses a fetched module whose SHA-256 does not match the pin', async () => {
+    // Right size, wrong bytes: the pin's hash gate must reject it before anything is built.
+    const wrong = new Uint8Array(SELINUX_PERMISSIVE_PIN.size).fill(0x41);
+    expect(sha(wrong)).not.toBe(SELINUX_PERMISSIVE_PIN.sha256);
+    await expect(loadBackupModule({}, {
+      readHostFile: async () => new Uint8Array(),
+      fetchUrl: async () => wrong,
+    })).rejects.toThrow(/SHA-256 .* != pinned/);
+  });
+
+  it('refuses when there is no override and no fetcher', async () => {
+    await expect(loadBackupModule({}, { readHostFile: async () => new Uint8Array() }))
+      .rejects.toThrow(/no way to fetch the pinned backup module/);
+  });
+
+  it('pins the selinux_permissive artifact as GPL-2.0-only from glassworks-device-bins', () => {
+    expect(SELINUX_PERMISSIVE_PIN.license).toBe('GPL-2.0-only');
+    expect(SELINUX_PERMISSIVE_PIN.allowlistId).toContain('glassworks-device-bins/');
+    expect(SELINUX_PERMISSIVE_PIN.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 });
 

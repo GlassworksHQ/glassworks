@@ -1,0 +1,13 @@
+{
+  "_comment": "Pinned GPL binaries from GlassworksHQ/glassworks-device-bins that tools/mirror consumes by URL + SHA-256. tools/check-device-bins.py holds this to kiln/workers/refract/allowlist.json. See frames/lululemon-mirror/research/stock-firmware-probe.md.",
+  "selinuxPermissive": {
+    "component": "lululemon-mirror-selinux-permissive",
+    "allowlistId": "glassworks-device-bins/lululemon-mirror-selinux-permissive-v1/selinux_permissive.ko",
+    "refractUrl": "https://refract.glassworks.dev/glassworks-device-bins/lululemon-mirror-selinux-permissive-v1/selinux_permissive.ko",
+    "releaseUrl": "https://github.com/GlassworksHQ/glassworks-device-bins/releases/download/lululemon-mirror-selinux-permissive-v1/selinux_permissive.ko",
+    "name": "selinux_permissive.ko",
+    "size": 2512,
+    "sha256": "ee7b39cfa0d6abccc2572035d6305e66369a3bba051b09e3edd8bbd926d79883",
+    "license": "GPL-2.0-only"
+  }
+}

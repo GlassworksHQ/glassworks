@@ -246,11 +246,16 @@ outside the repository.
    constructor (`init_module`, then `fchmodat` mode `0444` on `mmcblk0p22` and `mmcblk0p19`, then a
    tail jump to the constructor it replaced) followed by the caller's `.ko`. There is no code cave
    in the executable LOAD segment, and `.eh_frame` is the RX window that is only read by the
-   unwinder. A module that does not fit is refused before a sparse image is built. The `.ko` stays
-   on the caller's disk; nothing GPL or vendor is committed.
+   unwinder. A module that does not fit is refused before a sparse image is built. The `.ko` is
+   never pushed to the device; nothing GPL is committed to this repo.
 
-   `stock-surgical-adb.ts --backup-module` now builds `patch-dpmd.sparse` and `restore-dpmd.sparse`
-   for that library and does not patch `init.qcom.post_boot.sh`.
+   `stock-surgical-adb.ts --backup` builds `patch-dpmd.sparse` and `restore-dpmd.sparse` for that
+   library and does not patch `init.qcom.post_boot.sh`. The module it embeds is the pinned
+   `selinux_permissive.ko`, fetched by URL + SHA-256 (`tools/mirror/device-bins.json`); see the
+   device-bins note below. That fetch runs before the device steps and has no offline cache, so the
+   default `--backup` needs the host to have internet access — the Phase 2 SoftAP link to the Mirror
+   is not enough on its own. `--backup-module <path>` is the offline path: it overrides the fetch
+   with a local `.ko` the operator already has.
 
    The constructor was executed off-device on 2026-11-24: the patched payload from the pulled
    lib64 file, with a 256-byte stand-in image in place of a `.ko`, was mapped in
@@ -264,9 +269,14 @@ outside the repository.
    (pointing at the zeroed `.eh_frame` terminator at payload offset `0`) passed `""` without
    changing the 35-instruction layout.
 
-   The module that image embeds is not in this repo. A built `.ko` is a GPL payload (Hard Rule 4),
-   and stock `1.24.0` only loads one whose ABI matches its own `pronto_wlan.ko` (**verified**
-   2026-11-24, pulled file, not committed):
+   The module that image embeds is not in this repo. A built `.ko` is a GPL payload (Hard Rule 4), so
+   its source and the build recipe for the hash-pinned binary live in `GlassworksHQ/glassworks-device-bins`
+   (`frames/lululemon-mirror/selinux-permissive/`, GPL-2.0-only). The `v1` release that serves that
+   binary with its Corresponding Source is pending: it is gated on a real-Mirror load test of the
+   CI-built `.ko` and is not published yet. Once it is, this tool consumes it by pinned release URL +
+   SHA-256 (#817); `device-bins.json` already records the canonical CI SHA-256 so the pin resolves
+   the moment the release goes public. Stock `1.24.0` only loads one
+   whose ABI matches its own `pronto_wlan.ko` (**verified** 2026-11-24, pulled file, not committed):
    ```
    vermagic=3.10.49-perf-g4869d64961b SMP preempt mod_unload modversions aarch64
    module_layout=0xa5b7f7dd

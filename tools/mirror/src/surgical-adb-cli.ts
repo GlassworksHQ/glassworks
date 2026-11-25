@@ -35,30 +35,32 @@ Steps:
   1. Preflight (read-only over SoftAP HTTP): checks /system/framework for services.odex, lists
      /system/app and /system/priv-app, pulls services.jar + init.qcom.post_boot.sh + their
      FS_IOC_FIEMAP physical blocks, and immediately writes byte-for-byte undo images under <out>/backup/.
-     With --backup-module, also pulls /system/vendor/lib64/libdpmframework.so (the ELF64 copy dpmd
-     links) and writes restore-dpmd.sparse before anything is offered for flashing.
+     With --backup (or --backup-module), also pulls /system/vendor/lib64/libdpmframework.so (the ELF64
+     copy dpmd links) and writes restore-dpmd.sparse before anything is offered for flashing.
      Hard stop-gate if services.odex is detected, or if that library cannot hold the hook.
   2. Build locally (no writes): patches UsbDebuggingManager.startConfirmation() in services.jar to
      trust ONLY your --adb-key (exact original byte size), builds patch-services.sparse (DONT_CARE
      everywhere except services.jar's blocks) and userdata-adb.sparse (keeps probe APK as safety net).
-     With --backup-module, also builds patch-dpmd.sparse: same file length, one relocation retargeted,
+     With --backup, also builds patch-dpmd.sparse: same file length, one relocation retargeted,
      the .ko embedded in the .eh_frame tail.
   3. Flash & verify USB ADB: prompts [y/N], flashes patch-services.sparse to system + fresh userdata,
      reboots, and verifies authorized USB \`adb shell\`. Reversible anytime via restore-services.sparse.
-  4. Optional raw backup (--backup-module <path-to-ko>): flashes patch-dpmd.sparse so dpmd's constructor
-     loads that module and makes the system and boot block nodes readable for one boot, streams raw
-     system (1.2 GiB) + boot (32 MiB) over USB ADB, scrubs those two files back to stock inside the
-     saved image, then flashes restore-dpmd.sparse. The .ko is never pushed to the device and is never
-     shipped by Glassworks. init.qcom.post_boot.sh is not patched: qti_init_shell cannot load modules.
+  4. Optional raw backup (--backup): flashes patch-dpmd.sparse so dpmd's constructor loads the backup
+     module and makes the system and boot block nodes readable for one boot, streams raw system
+     (1.2 GiB) + boot (32 MiB) over USB ADB, scrubs those two files back to stock inside the saved
+     image, then flashes restore-dpmd.sparse. The module is the pinned, hash-checked GPL-2.0
+     selinux_permissive artifact from glassworks-device-bins (never pushed to the device), or your own
+     .ko with --backup-module. init.qcom.post_boot.sh is not patched: qti_init_shell cannot load modules.
 
 Modes:
   --preflight-only          Run Step 1 only (read-only over SoftAP; saves backup/ + report.md)
   --build-only              Run Steps 1-2 only (build patch-services.sparse locally; no flash)
   --undo --backup-dir <d>   Flash restore-dpmd.sparse (if any) + restore-post-boot.sparse (if any) + restore-services.sparse
   --apply-adb --backup-dir <d>  Re-flash saved patch-services.sparse to re-enable USB ADB (Enforcing)
-  --backup-only --backup-dir <d> --backup-module <ko>
+  --backup-only --backup-dir <d> [--backup-module <ko>]
                             USB-only Step 4 backup on a Mirror that already has authorized USB ADB
-                            (tunnels probe app via adb forward — no Wi-Fi SoftAP needed)
+                            (tunnels probe app via adb forward — no Wi-Fi SoftAP needed); uses the
+                            pinned device-bins module unless --backup-module overrides it
   --dry-run                 Simulate Step 1 preflight only, against a fake stock Mirror fixture
                              (forces --preflight-only; no device touched, Steps 2-4 are not exercised)
 
@@ -67,9 +69,10 @@ Options:
   --probe-http-port <port>  Probe HTTP port (default: ${DEFAULT_PROBE_HTTP_PORT})
   --adb-key <file>          Host ADB public key to authorize (default: ~/.android/adbkey.pub)
   --out <dir>               Output folder outside the repo (default: <tmpdir>/mirror-surgical-adb-<ts>)
-  --backup-module <file>    Optional external AArch64 .ko embedded in libdpmframework.so for Step 4
+  --backup                  Run Step 4's raw backup with the pinned device-bins selinux_permissive module
+  --backup-module <file>    Override the pinned module with a local AArch64 .ko (implies --backup)
   --keep-adb                Keep authorized USB ADB (services.jar) active after Step 4 backup (default)
-  --restore-all             With --backup-module, also restore original services.jar after backup
+  --restore-all             With --backup, also restore original services.jar after backup
   --erase-userdata          With --undo, also run \`fastboot erase userdata\` for factory-reset stock
   --serial <id>             Target a specific fastboot/adb device serial (redacted in logs)
   --serial-file <file>      Read target serial from a file
@@ -272,6 +275,7 @@ export async function surgicalAdbCli(argv: string[], log: (l: string) => void = 
       'probe-http-port': { type: 'string' },
       'adb-key': { type: 'string' },
       out: { type: 'string' },
+      backup: { type: 'boolean' },
       'backup-module': { type: 'string' },
       'backup-dir': { type: 'string' },
       'keep-adb': { type: 'boolean' },
@@ -464,6 +468,11 @@ export async function surgicalAdbCli(argv: string[], log: (l: string) => void = 
       loadProbeApp: () => loadOrBuildProbeApp({ confirm, log }),
       writeFile: writeOutFile,
       readHostFile: async (p) => new Uint8Array(readFileSync(p)),
+      fetchUrl: async (url: string) => {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        return new Uint8Array(await res.arrayBuffer());
+      },
       restoreExtentsInRawImage: async (rawImagePath, patches) => {
         const fd = openSync(rawImagePath, 'r+');
         try {
@@ -508,6 +517,7 @@ export async function surgicalAdbCli(argv: string[], log: (l: string) => void = 
       probeHost,
       probeHttpPort,
       adbKey,
+      wantBackup: Boolean(a.backup || a['backup-module']),
       backupModulePath: a['backup-module'] ? resolve(a['backup-module']) : undefined,
       backupDir: a['backup-dir'] ? resolve(a['backup-dir']) : undefined,
       restoreAllAfterBackup: Boolean(a['restore-all']),
