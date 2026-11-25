@@ -70,4 +70,13 @@ class SignInRestartTest {
         assertNotNull(s.consume(sign.state))
         assertFalse(app.getSharedPreferences("auth", Context.MODE_PRIVATE).contains("pending_signins"))
     }
+
+    @Test fun aFactoryResetForgetsTheSignInsInProgress() {
+        val s = process()
+        val sign = s.create("http://192.0.2.20:8099/", "http://192.0.2.20:8099/callback", "http://192.0.2.10:8123")
+        s.clear() // what HaAuth.forgetPendingSignIns does to the running server's store
+        assertNull("none finishes before the restart", s.consume(sign.state))
+        assertFalse(app.getSharedPreferences("auth", Context.MODE_PRIVATE).contains("pending_signins"))
+        assertNull("nor after it", process().consume(sign.state))
+    }
 }

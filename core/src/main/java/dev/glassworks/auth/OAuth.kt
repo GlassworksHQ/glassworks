@@ -222,6 +222,13 @@ class StateStore(
     @Synchronized
     fun size(): Int { prune(); return pending.size }
 
+    /** Drops every pending sign-in (a factory reset): none of their callbacks finishes now. */
+    @Synchronized
+    fun clear() {
+        pending.clear()
+        save()
+    }
+
     private fun prune() {
         val now = clock()
         pending.entries.removeAll { now - it.value.createdAt >= ttlMs }

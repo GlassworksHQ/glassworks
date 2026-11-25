@@ -43,6 +43,8 @@ object HaAuth {
     private val cache = AccessTokenCache()
     private val listeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
     private var server: HttpServer? = null
+    /** The running sign-in server's pending sign-ins ([signInStates]), so a factory reset can drop them ([forgetPendingSignIns]). */
+    @Volatile private var signInStates: StateStore? = null
     /** The Manage page while the server runs: the settings menu's Overview shows and does what its Overview does. */
     var manage: ManagePage? = null
         private set
@@ -117,7 +119,8 @@ object HaAuth {
     fun startServer(context: Context) {
         init(context)
         if (server != null) return
-        val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, signInStates(prefs), thread = threadJoin)
+        val states = signInStates(prefs).also { signInStates = it }
+        val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, states, thread = threadJoin)
         // A Manage page that can't load (a class Android 6 refuses, #435) leaves the QR pages up, and the app with them.
         val m = manage ?: orWithout("The Manage page", { AuthLog.w(it) }) {
             val page = context.glassworks.managePage(context, signIn, tokens, prefs)
@@ -179,6 +182,16 @@ object HaAuth {
         override fun read() = prefs.pendingSignIns
         override fun write(text: String?) { prefs.pendingSignIns = text }
     })
+
+    /**
+     * Forgets every sign-in in progress (a factory reset): the running server's first, so none finishes before the app
+     * restarts and nothing it saves later brings them back, then the saved copy. False when that couldn't be removed.
+     */
+    fun forgetPendingSignIns(context: Context): Boolean {
+        init(context)
+        signInStates?.clear()
+        return try { prefs.pendingSignIns = null; true } catch (e: SignInNotStored) { AuthLog.w(e.message ?: "pending sign-ins not removed"); false }
+    }
 
     /** The pending retry when the port was busy, until it runs or [stopServer] cancels it. */
     private var bindRetry: Runnable? = null
