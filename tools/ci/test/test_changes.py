@@ -174,6 +174,18 @@ class GradleJobsForgetMisses(unittest.TestCase):
                 body = re.sub(r'(\n *#[^\n]*|\n *)+\Z', '', job)
                 self.assertTrue(body.endswith(last.rstrip('\n')), job[:200])
 
+    def test_gradle_waits_out_a_rate_limit_in_every_workflow_that_restores_its_home(self):
+        """The burst after a forgotten metadata (about 1,200 requests for libs-api23's lint) draws 429s from Maven
+        Central; Gradle's default 3 tries in 3 s then failed the job, and the rerun the same way (docs/ci.md, Caches)."""
+        for path in sorted((ROOT / '.github/workflows').glob('*.yml')):
+            text = path.read_text()
+            if 'gradle/actions/setup-gradle@' not in text:
+                continue
+            head = text.split('\njobs:\n', 1)[0]
+            self.assertIn('\nenv:\n  GRADLE_OPTS: -Dorg.gradle.internal.repository.max.tentatives=7 '
+                          '-Dorg.gradle.internal.repository.initial.backoff=2000\n', head, path.name)
+            self.assertNotIn('GRADLE_OPTS', text.split('\njobs:\n', 1)[1], f'{path.name}: a job sets its own GRADLE_OPTS')
+
 
 class PrYmlSpeedUps(unittest.TestCase):
     """#536: what made jobs faster must not drop a check."""

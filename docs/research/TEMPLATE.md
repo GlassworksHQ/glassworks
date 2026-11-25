@@ -14,6 +14,13 @@ Device: <model>, firmware <version>. Tools: <names and versions>.
 
 What we wanted to know or make work, and why it matters for the project.
 
+## How we got here
+
+Walk through the investigation and thought process:
+- What constraints made the problem hard or looked like a dead end at first.
+- Which hypotheses or approaches we considered, and how we decided to test or rule them out.
+- The key insight(s) or chain of reasoning that led to the solution (or why we stopped).
+
 ## What we tried
 
 For each attempt, in order, including the ones that failed:

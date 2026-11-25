@@ -362,6 +362,10 @@ export interface StockHttpSession {
   props(): Promise<string>;
   dtPanel(): Promise<string>;
   list(path: string): Promise<string[]>;
+  /** Like `list`, but distinguishes a denied listing (HTTP 403) from a missing/absent directory
+   * (HTTP 404) instead of collapsing both to `[]`. Optional: a denied listing must stop a safety
+   * gate (e.g. the services.odex check) before any write, which treating it as "empty" cannot do. */
+  listRaw?(path: string): Promise<{ status: number; entries: string[] }>;
   readFile(path: string): Promise<{ status: 'ok'; data: Uint8Array } | { status: 'missing' | 'denied' }>;
   fiemap(path: string): Promise<FiemapResult>;
 }
