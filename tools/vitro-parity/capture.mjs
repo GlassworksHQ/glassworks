@@ -322,8 +322,13 @@ const TEXTS_JS = (slot) => {
         for (let e = box; e && e.nodeType === 1 && !clipped; e = up(e)) {
           const es = getComputedStyle(e);
           if (es.overflowX === 'visible' && es.textOverflow !== 'ellipsis') continue;
+          // Overflow clips at the padding box; an ellipsis takes the place of what runs past the content box (an
+          // entity row's name has 8 px of right padding, so it is cut 8 px before its edge).
           const er = e.getBoundingClientRect();
-          if (r.left < er.left - 0.5 || r.right > er.right + 0.5) clipped = true;
+          const px = (v) => parseFloat(v) || 0;
+          const inL = px(es.borderLeftWidth) + (es.textOverflow === 'ellipsis' ? px(es.paddingLeft) : 0);
+          const inR = px(es.borderRightWidth) + (es.textOverflow === 'ellipsis' ? px(es.paddingRight) : 0);
+          if (r.left < er.left + inL - 0.5 || r.right > er.right - inR + 0.5) clipped = true;
           if (e.localName === 'ha-card') break;
         }
         out.push({ ...(clipped ? { clipped } : {}),
