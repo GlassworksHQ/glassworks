@@ -33,6 +33,24 @@ export const FRAME_INFO = 0xffffffff;
 export const FRAME_END = 0xfffffffe;
 /** Indexes per 0x02 write: 3 + 100 × 4 = 403 bytes, under the 512-byte attribute limit. */
 export const MAX_RESEND_BATCH = 100;
+/** The most a chunk carries: a DATA value stays within the 512-byte attribute limit, its 4-byte index first. */
+export const MAX_CHUNK_BYTES = 512 - 4;
+/** The least a chunk carries (the agent's floor, at the default 23-byte ATT MTU): with MAX_BUNDLE_BYTES, it bounds the chunk count. */
+export const MIN_CHUNK_BYTES = 16;
+/** The largest bundle Kiln takes over Bluetooth by default (a device's whole file, a few MB, fits many times over). */
+export const MAX_BUNDLE_BYTES = 64 * 2 ** 20;
+/** Chunks held before INFO says how they line up; any past these come again in a resend pass. */
+export const MAX_PENDING_CHUNKS = 1024;
+/** How long a GATT read or write outside a download may take before Kiln gives up on the link. */
+const META_TIMEOUT_MS = 15_000;
+
+class Stalled extends Error {}
+/** `p`, or a Stalled error once `ms` pass first (Web Bluetooth's promises take no signal). */
+function within<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([p, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Stalled(`no answer in ${ms} ms`)), ms); })])
+    .finally(() => clearTimeout(timer));
+}
 
 export class BleTransferError extends Error {
   override name = 'BleTransferError';
@@ -120,8 +138,13 @@ export async function isBluetoothAvailable(bt: BluetoothLike | undefined = globa
 export interface BleDownloadOptions {
   signal?: AbortSignal;
   onProgress?: (p: TransferProgress) => void;
-  /** No frame for this long ends a batch as a stall. Default 15 s. */
+  /**
+   * No frame for this long ends a batch as a stall. A GATT operation (turning notifications on, a command) that takes
+   * longer closes the link and fails the download. Default 15 s.
+   */
   stallTimeoutMs?: number;
+  /** The largest bundle to take in: an INFO that offers more fails the download before anything is allocated. Default 64 MiB. */
+  maxBundleBytes?: number;
   /** Resend passes after the first stream. Default 5. */
   maxResendRounds?: number;
   /** Indexes per 0x02 write, at most 100. */
@@ -161,11 +184,15 @@ export async function connectBleAgent(config: BleChannelConfig, opts: BleConnect
   const device = await bt.requestDevice({ filters: [{ services: [uuid(config.service)] }], optionalServices: [uuid(config.service)] });
   check();
   if (!device.gatt) throw new BleTransferError('This device has no Bluetooth services to connect to');
-  const server = await device.gatt.connect();
+  // each GATT step has the same watchdog as the reads: a device that stops answering fails the connect, it doesn't hang it
+  const step = <T>(p: Promise<T>) => within(p, META_TIMEOUT_MS).catch((e: unknown) => {
+    throw e instanceof Stalled ? new BleTransferError('The device didn\'t answer over Bluetooth. Keep this computer near it and try again.') : e;
+  });
+  const server = await step(device.gatt.connect());
   try {
     check();
-    const service = await server.getPrimaryService(uuid(config.service));
-    const [meta, ctrl, data] = await Promise.all([config.meta, config.ctrl, config.data].map((u) => service.getCharacteristic(uuid(u))));
+    const service = await step(server.getPrimaryService(uuid(config.service)));
+    const [meta, ctrl, data] = await step(Promise.all([config.meta, config.ctrl, config.data].map((u) => service.getCharacteristic(uuid(u)))));
     check();
     return createBleAgentConnection(device, server, { meta: meta!, ctrl: ctrl!, data: data! });
   } catch (e) {
@@ -190,6 +217,7 @@ export function createBleAgentConnection(
     return next;
   };
 
+  /** The download that holds this connection, from its first line until its notifications are off again. */
   let active: { fail(e: Error): void } | null = null;
   let lost = false;
   const onDisconnected = () => {
@@ -197,22 +225,48 @@ export function createBleAgentConnection(
     active?.fail(new BleTransferError('The Bluetooth connection to the device dropped'));
   };
   device.addEventListener?.('gattserverdisconnected', onDisconnected);
+  /** A GATT operation that never settled: the link is given up, so the next try connects afresh. */
+  const close = () => {
+    lost = true;
+    try { server.disconnect(); } catch { /* gone already */ }
+  };
 
   async function downloadBundle(o: BleDownloadOptions = {}): Promise<Uint8Array> {
     if (active) throw new BleTransferError('A transfer is already running on this connection');
     if (o.signal?.aborted) throw abortError();
     const stallMs = o.stallTimeoutMs ?? 15_000;
     const maxRounds = o.maxResendRounds ?? 5;
+    const maxBytes = Math.min(o.maxBundleBytes ?? MAX_BUNDLE_BYTES, 0xffffffff);
     const batchSize = Math.max(1, Math.min(o.resendBatch ?? MAX_RESEND_BATCH, MAX_RESEND_BATCH));
     const progressMs = o.progressIntervalMs ?? 200;
     const now = o.now ?? (() => Date.now());
     const store = o.resumeStore && o.digest ? { s: o.resumeStore, digest: o.digest } : null;
 
-    let prior: { chunkSize: number; bundleSize?: number; received: Map<number, Uint8Array> } | null = null;
-    if (store) prior = await store.s.load(store.digest).catch(() => null);
-    if (!prior && o.initialChunks) prior = { chunkSize: o.initialChunks.chunkSize, bundleSize: o.initialChunks.bundleSize, received: o.initialChunks.chunks };
-    let startChunk = 0;
-    if (prior) while (prior.received.has(startChunk)) startChunk++;
+    let failure: Error | null = null;
+    let wake: (() => void) | null = null;
+    const poke = () => { const w = wake; wake = null; w?.(); };
+    /** GATT waits in flight: a failure or a cancel releases them at once (their promises take no signal). */
+    const waiting = new Set<(e: Error) => void>();
+    const fail = (e: Error) => { failure ??= e; poke(); for (const r of [...waiting]) r(failure); };
+    // the connection is this download's from here, before the first await: a second call is turned away, and a drop or
+    // a cancel reaches this one through every wait below
+    const claim = { fail };
+    active = claim;
+    const onAbort = () => fail(abortError());
+    o.signal?.addEventListener('abort', onAbort, { once: true });
+    if (lost) fail(new BleTransferError('The Bluetooth connection to the device dropped'));
+
+    /** A GATT operation with the stall watchdog: one that doesn't settle in `stallMs` closes the link and fails the download. */
+    const gatt = <T>(what: string, op: () => Promise<T>): Promise<T> => new Promise<T>((resolve, reject) => {
+      if (failure) { reject(failure); return; }
+      const release = (e: Error) => { clearTimeout(timer); waiting.delete(release); reject(e); };
+      const timer = setTimeout(() => {
+        close();
+        fail(new BleTransferError(`The device stopped answering over Bluetooth (${what}). Keep this computer near it and try again.`));
+      }, stallMs);
+      waiting.add(release);
+      op().then((v) => { clearTimeout(timer); waiting.delete(release); resolve(v); }, (e: unknown) => release(e instanceof Error ? e : new BleTransferError(String(e))));
+    });
 
     let chunkSize = 0;
     let bundleSize = 0;
@@ -227,9 +281,7 @@ export function createBleAgentConnection(
     const pending = new Map<number, Uint8Array>();
     let endSeen = false;
     let lastFrameAt = now();
-    let failure: Error | null = null;
-    let wake: (() => void) | null = null;
-    const poke = () => { const w = wake; wake = null; w?.(); };
+    let prior: { chunkSize: number; bundleSize?: number; received: Map<number, Uint8Array> } | null = null;
     const complete = () => buf !== null && receivedCount === total;
 
     const meter = new RateMeter();
@@ -265,9 +317,14 @@ export function createBleAgentConnection(
 
     const applyInfo = (cs: number, bs: number, tc: number) => {
       if (buf && cs === chunkSize && bs === bundleSize && tc === total) return;
-      if (cs <= 0 || tc !== Math.ceil(bs / cs)) {
-        failure ??= new BleTransferError(`The device's agent described a bundle Kiln can't follow (chunk ${cs}, size ${bs}, ${tc} chunks)`);
-        poke();
+      // what INFO says is the device's word, so it is bounded before Kiln allocates for it: a chunk fits one notification,
+      // and the bundle fits what Kiln takes in
+      if (cs < MIN_CHUNK_BYTES || cs > MAX_CHUNK_BYTES || bs <= 0 || tc !== Math.ceil(bs / cs)) {
+        fail(new BleTransferError(`The device's agent described a bundle Kiln can't follow (chunk ${cs}, size ${bs}, ${tc} chunks)`));
+        return;
+      }
+      if (bs > maxBytes) {
+        fail(new BleTransferError(`The device's agent offered a bundle of ${bs} bytes, more than the ${maxBytes} Kiln takes in`));
         return;
       }
       chunkSize = cs; bundleSize = bs; total = tc;
@@ -294,7 +351,8 @@ export function createBleAgentConnection(
       lastFrameAt = now();
       if (f.kind === 'info') applyInfo(f.chunkSize, f.bundleSize, f.totalChunks);
       else if (f.kind === 'end') { endSeen = true; poke(); }
-      else if (!buf) pending.set(f.idx, f.bytes.slice());
+      // before INFO, a bounded few are held (a resend pass fetches any past that); none longer than a notification carries
+      else if (!buf) { if (pending.size < MAX_PENDING_CHUNKS) pending.set(f.idx, f.bytes.slice(0, MAX_CHUNK_BYTES)); }
       else {
         const got = store1(f.idx, f.bytes, true);
         if (got) { sessionBytes += got; report(); }
@@ -321,18 +379,24 @@ export function createBleAgentConnection(
     const send = async (bytes: Uint8Array<ArrayBuffer>) => {
       endSeen = false;
       lastFrameAt = now();
-      await ctrlWrite(bytes);
+      await gatt('a command', () => ctrlWrite(bytes));
       lastFrameAt = now();
     };
 
-    const onAbort = () => { failure ??= abortError(); poke(); };
-    o.signal?.addEventListener('abort', onAbort, { once: true });
-    active = { fail: (e) => { failure ??= e; poke(); } };
-    if (lost) failure = new BleTransferError('The Bluetooth connection to the device dropped');
-    chars.data.addEventListener('characteristicvaluechanged', onFrame);
+    let listening = false;
     try {
       if (failure) throw failure;
-      await chars.data.startNotifications();
+      if (store) prior = await store.s.load(store.digest).catch(() => null);
+      // a cancel (or a drop) while the kept chunks loaded: stop here, before anything is asked of the device
+      if (failure) throw failure;
+      if (o.signal?.aborted) throw abortError();
+      if (!prior && o.initialChunks) prior = { chunkSize: o.initialChunks.chunkSize, bundleSize: o.initialChunks.bundleSize, received: o.initialChunks.chunks };
+      let startChunk = 0;
+      if (prior) while (prior.received.has(startChunk)) startChunk++;
+
+      chars.data.addEventListener('characteristicvaluechanged', onFrame);
+      listening = true;
+      await gatt('turning on its notifications', () => chars.data.startNotifications());
       await send(encodeStart(startChunk, 0));
       let outcome = await waitBatch();
       let rounds = 0;
@@ -367,17 +431,19 @@ export function createBleAgentConnection(
       return buf!;
     } catch (e) {
       if (isAbortError(e) || o.signal?.aborted) {
-        await ctrlWrite(encodeAbort()).catch(() => {});
+        if (!lost) await within(ctrlWrite(encodeAbort()), stallMs).catch((x: unknown) => { if (x instanceof Stalled) close(); });
         throw isAbortError(e) ? e : abortError();
       }
       if (!(e instanceof BleTransferError)) throw new BleTransferError('The Bluetooth transfer failed', e);
       throw e;
     } finally {
-      chars.data.removeEventListener('characteristicvaluechanged', onFrame);
+      if (listening) chars.data.removeEventListener('characteristicvaluechanged', onFrame);
       o.signal?.removeEventListener('abort', onAbort);
-      active = null;
       wake = null;
-      if (!lost) await chars.data.stopNotifications().catch(() => {});
+      // the connection stays this download's until its notifications are off: a new one can't start on a half-stopped stream
+      // (one that never settles gives the link up, so the next try connects afresh)
+      if (listening && !lost) await within(chars.data.stopNotifications(), stallMs).catch((e: unknown) => { if (e instanceof Stalled) close(); });
+      if (active === claim) active = null;
     }
   }
 
@@ -385,13 +451,16 @@ export function createBleAgentConnection(
     device,
     get connected() { return !lost && server.connected; },
     async readMeta() {
-      const v = await chars.meta.readValue();
+      const v = await within(chars.meta.readValue(), META_TIMEOUT_MS).catch((e: unknown) => {
+        if (e instanceof Stalled) close();
+        throw e instanceof Stalled ? new BleTransferError('The device didn\'t answer over Bluetooth. Keep this computer near it and try again.') : e;
+      });
       return parseAgentMeta(new Uint8Array(v.buffer, v.byteOffset, v.byteLength));
     },
     downloadBundle,
     async abort() {
       if (active) active.fail(abortError());
-      else await ctrlWrite(encodeAbort()).catch(() => {});
+      else if (!lost) await within(ctrlWrite(encodeAbort()), META_TIMEOUT_MS).catch((e: unknown) => { if (e instanceof Stalled) close(); });
     },
     disconnect() {
       device.removeEventListener?.('gattserverdisconnected', onDisconnected);

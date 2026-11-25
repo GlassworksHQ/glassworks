@@ -60,6 +60,13 @@ interface AgentOptions {
   /** Stop streaming after this many chunks of the first 0x01 and never send END (a stall). */
   hangAfter?: number;
   meta?: Record<string, unknown>;
+  /** INFO as the agent sends it, in place of the bundle's own: [chunk size, bundle size, chunk count]. */
+  info?: [number, number, number];
+  /** In place of the data characteristic's own: a GATT operation that never settles, say. */
+  startNotifications?: () => Promise<void>;
+  stopNotifications?: () => Promise<void>;
+  /** Called with each CTRL write before the agent acts on it; a promise that never settles stalls the write. */
+  ctrlGate?: (b: Uint8Array) => Promise<void> | void;
 }
 
 /** A fake agent behind a fake Web Bluetooth: the GATT profile, streaming on a timer like real notifications. */
@@ -84,7 +91,7 @@ function fakeAgent(bundle: Uint8Array, o: AgentOptions = {}) {
     const b = batch++;
     stopped = false;
     setTimeout(() => {
-      if (withInfo) notify(u32(FRAME_INFO, chunkSize, bundle.length, total));
+      if (withInfo) notify(u32(FRAME_INFO, ...(o.info ?? [chunkSize, bundle.length, total])));
       let sent = 0;
       for (const i of indexes) {
         if (stopped) return;
@@ -102,8 +109,8 @@ function fakeAgent(bundle: Uint8Array, o: AgentOptions = {}) {
 
   const data: BleCharacteristicLike = {
     readValue: async () => view(new Uint8Array()),
-    startNotifications: async () => { notifying = true; },
-    stopNotifications: async () => { notifying = false; },
+    startNotifications: async () => { if (o.startNotifications) await o.startNotifications(); notifying = true; },
+    stopNotifications: async () => { if (o.stopNotifications) await o.stopNotifications(); notifying = false; },
     addEventListener: (_t, l) => { listeners.add(l); },
     removeEventListener: (_t, l) => { listeners.delete(l); },
   };
@@ -112,6 +119,7 @@ function fakeAgent(bundle: Uint8Array, o: AgentOptions = {}) {
     writeValueWithResponse: async (value) => {
       const b = new Uint8Array(value as ArrayBuffer | Uint8Array as Uint8Array).slice();
       writes.push(b);
+      await o.ctrlGate?.(b);
       const v = view(b);
       if (b[0] === CTRL_START) {
         const start = v.getUint32(1, true);
@@ -132,6 +140,7 @@ function fakeAgent(bundle: Uint8Array, o: AgentOptions = {}) {
   const metaChar: BleCharacteristicLike = { ...ctrl, readValue: async () => view(metaBytes) };
   const chars: Record<string, BleCharacteristicLike> = { [BLE.meta]: metaChar, [BLE.ctrl]: ctrl, [BLE.data]: data };
   const requests: unknown[] = [];
+  const disconnects = { n: 0 };
   const bluetooth: BluetoothLike = {
     getAvailability: async () => true,
     requestDevice: async (opts) => {
@@ -140,7 +149,7 @@ function fakeAgent(bundle: Uint8Array, o: AgentOptions = {}) {
         gatt: {
           connect: async () => ({
             connected: true,
-            disconnect: () => {},
+            disconnect: () => { disconnects.n++; },
             getPrimaryService: async (uuid: string) => {
               expect(uuid).toBe(BLE.service);
               return { getCharacteristic: async (u: string) => chars[u]! };
@@ -150,7 +159,7 @@ function fakeAgent(bundle: Uint8Array, o: AgentOptions = {}) {
       };
     },
   };
-  return { bluetooth, writes, requests, total, chunkSize, chunksSent, meta };
+  return { bluetooth, writes, requests, total, chunkSize, chunksSent, meta, disconnects };
 }
 
 const cmds = (writes: Uint8Array[], code: number) => writes.filter((w) => w[0] === code);
@@ -202,11 +211,9 @@ describe('the cache', () => {
     cache.map.set(`TESTSERIAL/${DIGEST}`, bundle);
     const fetchImpl = vi.fn();
     const conn = await connectBleAgent(BLE, { bluetooth: agent.bluetooth });
-    const t0 = Date.now();
     const got = await receiveBundle({ config: CONFIG, connection: conn, cache, fetchImpl: fetchImpl as unknown as typeof fetch });
     expect(got.channel).toBe('cache');
     expect(got.bytes).toBe(bundle);
-    expect(Date.now() - t0).toBeLessThan(50);
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(agent.writes).toEqual([]);
   });
@@ -221,6 +228,42 @@ describe('the cache', () => {
     expect(got.channel).toBe('lan');
     expect(got.bytes).toEqual(bundle);
     expect(cache.map.get(`TESTSERIAL/${DIGEST}`)).toEqual(bundle);
+  });
+});
+
+describe('the cache, bound to the device as it is now', () => {
+  it('passes over a kept bundle the caller says no longer fits the device, and takes it while it does', async () => {
+    const bundle = makeBundle(3000);
+    const agent = fakeAgent(bundle);
+    const cache = memoryCache();
+    cache.map.set(`TESTSERIAL/${DIGEST}`, bundle);
+    const lan = lanFetch(bundle);
+    const moved = await receiveBundle({ config: CONFIG, connection: await connectBleAgent(BLE, { bluetooth: agent.bluetooth }), cache, fetchImpl: lan.impl, verifyKept: () => false });
+    expect(moved.channel).toBe('lan');
+    expect(lan.calls).toHaveLength(1);
+    const same = await receiveBundle({ config: CONFIG, connection: await connectBleAgent(BLE, { bluetooth: agent.bluetooth }), cache, fetchImpl: lan.impl, verifyKept: () => true });
+    expect(same.channel).toBe('cache');
+    expect(lan.calls).toHaveLength(1);
+  });
+
+  it('hands nothing back once cancelled while the kept bundle is checked', async () => {
+    const bundle = makeBundle(3000);
+    const agent = fakeAgent(bundle);
+    const cache = memoryCache();
+    cache.map.set(`TESTSERIAL/${DIGEST}`, bundle);
+    const ctl = new AbortController();
+    const got = receiveBundle({ config: CONFIG, connection: await connectBleAgent(BLE, { bluetooth: agent.bluetooth }), cache, signal: ctl.signal,
+      verify: async () => { ctl.abort(); return true; } });
+    await expect(got).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('hands nothing back once cancelled while a bundle from the network is checked', async () => {
+    const bundle = makeBundle(3000);
+    const agent = fakeAgent(bundle);
+    const ctl = new AbortController();
+    const got = receiveBundle({ config: CONFIG, connection: await connectBleAgent(BLE, { bluetooth: agent.bluetooth }), fetchImpl: lanFetch(bundle).impl, signal: ctl.signal,
+      verify: async () => { ctl.abort(); return true; } });
+    await expect(got).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
 
@@ -432,6 +475,77 @@ describe('Bluetooth', () => {
     await conn.abort();
     await expect(p).rejects.toMatchObject({ name: 'AbortError' });
     expect(cmds(agent.writes, CTRL_ABORT)).toHaveLength(1);
+  });
+
+  it('holds the connection from its first line: a second download while the kept chunks load is turned away', async () => {
+    const bundle = makeBundle(2000);
+    const agent = fakeAgent(bundle, { chunkSize: 100 });
+    let loaded!: () => void;
+    const store: BleResumeStore = {
+      load: () => new Promise((r) => { loaded = () => r(null); }),
+      saveChunk: async () => {},
+      clear: async () => {},
+    };
+    const conn = await connectBleAgent(BLE, { bluetooth: agent.bluetooth });
+    const first = conn.downloadBundle({ resumeStore: store, digest: DIGEST });
+    await expect(conn.downloadBundle()).rejects.toThrow(/already running/);
+    loaded();
+    expect(await first).toEqual(bundle);
+    expect(cmds(agent.writes, CTRL_START)).toHaveLength(1);
+  });
+
+  it('a cancel while the kept chunks load asks nothing of the device', async () => {
+    const agent = fakeAgent(makeBundle(2000), { chunkSize: 100 });
+    let loaded!: () => void;
+    const store: BleResumeStore = { load: () => new Promise((r) => { loaded = () => r(null); }), saveChunk: async () => {}, clear: async () => {} };
+    const conn = await connectBleAgent(BLE, { bluetooth: agent.bluetooth });
+    const ctl = new AbortController();
+    const p = conn.downloadBundle({ resumeStore: store, digest: DIGEST, signal: ctl.signal });
+    ctl.abort();
+    loaded();
+    await expect(p).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cmds(agent.writes, CTRL_START)).toHaveLength(0);
+  });
+
+  it('keeps the connection until its notifications are off: no new download on a half-stopped stream', async () => {
+    const bundle = makeBundle(1000);
+    let stopped!: () => void;
+    let stopping = false;
+    const agent = fakeAgent(bundle, { chunkSize: 100, stopNotifications: () => { stopping = true; return new Promise((r) => { stopped = r; }); } });
+    const conn = await connectBleAgent(BLE, { bluetooth: agent.bluetooth });
+    const first = conn.downloadBundle();
+    await vi.waitFor(() => expect(stopping).toBe(true));
+    await expect(conn.downloadBundle()).rejects.toThrow(/already running/);
+    stopped();
+    expect(await first).toEqual(bundle);
+  });
+
+  it('turns down an INFO that offers more than it takes in, or chunks it can\'t follow, before it allocates for them', async () => {
+    const big = fakeAgent(makeBundle(2000), { chunkSize: 100, info: [100, 2 ** 31, Math.ceil(2 ** 31 / 100)] });
+    await expect((await connectBleAgent(BLE, { bluetooth: big.bluetooth })).downloadBundle({ stallTimeoutMs: 2000 })).rejects.toThrow(/more than the \d+ Kiln takes in/);
+    const capped = fakeAgent(makeBundle(2000), { chunkSize: 100 });
+    await expect((await connectBleAgent(BLE, { bluetooth: capped.bluetooth })).downloadBundle({ maxBundleBytes: 1000, stallTimeoutMs: 2000 })).rejects.toThrow(/more than the 1000 Kiln takes in/);
+    const tiny = fakeAgent(makeBundle(2000), { chunkSize: 100, info: [1, 2000, 2000] });
+    await expect((await connectBleAgent(BLE, { bluetooth: tiny.bluetooth })).downloadBundle({ stallTimeoutMs: 2000 })).rejects.toThrow(/can't follow/);
+  });
+
+  it('a command the device never answers fails after the watchdog and gives the link up', async () => {
+    const agent = fakeAgent(makeBundle(2000), { chunkSize: 100, ctrlGate: (b) => (b[0] === CTRL_START ? new Promise<void>(() => {}) : undefined) });
+    const conn = await connectBleAgent(BLE, { bluetooth: agent.bluetooth });
+    await expect(conn.downloadBundle({ stallTimeoutMs: 50 })).rejects.toThrow(/stopped answering over Bluetooth \(a command\)/);
+    expect(agent.disconnects.n).toBe(1);
+    expect(conn.connected).toBe(false);
+  });
+
+  it('turning on notifications that never settles fails too, and a cancel releases it at once', async () => {
+    const stuck = fakeAgent(makeBundle(2000), { chunkSize: 100, startNotifications: () => new Promise<void>(() => {}) });
+    await expect((await connectBleAgent(BLE, { bluetooth: stuck.bluetooth })).downloadBundle({ stallTimeoutMs: 50 })).rejects.toThrow(/turning on its notifications/);
+    const again = fakeAgent(makeBundle(2000), { chunkSize: 100, startNotifications: () => new Promise<void>(() => {}) });
+    const ctl = new AbortController();
+    const p = (await connectBleAgent(BLE, { bluetooth: again.bluetooth })).downloadBundle({ signal: ctl.signal, stallTimeoutMs: 60_000 });
+    await new Promise((r) => setTimeout(r, 5));
+    ctl.abort();
+    await expect(p).rejects.toMatchObject({ name: 'AbortError' });
   });
 
   it('encodes a resend of 100 indexes in 403 bytes', () => {

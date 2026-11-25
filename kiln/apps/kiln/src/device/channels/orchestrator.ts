@@ -44,6 +44,11 @@ export interface ReceiveOptions {
   onFallback?: (e: FallbackEvent) => void;
   /** Whether bytes are the bundle the agent describes. Default: a whole bundle of its size and digest. */
   verify?: (bytes: Uint8Array, meta: AgentMeta) => boolean | Promise<boolean>;
+  /**
+   * Whether a bundle the cache kept still describes the device as its agent does now, past `verify` (where the file
+   * sits on the partition, say: the same contents can move). Default: `verify` alone.
+   */
+  verifyKept?: (bytes: Uint8Array, meta: AgentMeta) => boolean | Promise<boolean>;
 }
 
 /** The URL of the bundle on the agent's HTTP server. */
@@ -64,6 +69,8 @@ async function remember(cache: BundleCacheAdapter | undefined, meta: AgentMeta, 
 export async function receiveBundle(opts: ReceiveOptions): Promise<ReceivedBundle> {
   const enabled = new Set(opts.channels ?? ['cache', 'lan', 'ble']);
   const verify = opts.verify ?? ((bytes, meta) => bundleMatches(bytes, meta));
+  const verifyKept = opts.verifyKept ?? (() => true);
+  // every wait below can outlast a cancel: nothing is handed back once the signal is aborted
   const check = () => { if (opts.signal?.aborted) throw abortError(); };
 
   let conn = opts.connection;
@@ -80,7 +87,10 @@ export async function receiveBundle(opts: ReceiveOptions): Promise<ReceivedBundl
   const key = cacheKey(meta);
   if (enabled.has('cache') && opts.cache && key) {
     const hit = await opts.cache.get(key).catch(() => null);
-    if (hit && (await verify(hit, meta))) {
+    check();
+    const fits = !!hit && (await verify(hit, meta)) && (await verifyKept(hit, meta));
+    check();
+    if (hit && fits) {
       opts.onChannel?.('cache');
       opts.onProgress?.({ channel: 'cache', receivedBytes: hit.length, totalBytes: hit.length, bytesPerSecond: 0, etaSeconds: 0 });
       return { bytes: hit, channel: 'cache', meta };
@@ -104,8 +114,11 @@ export async function receiveBundle(opts: ReceiveOptions): Promise<ReceivedBundl
         onProgress: opts.onProgress,
         localNetworkPermission: opts.localNetworkPermission,
       });
-      if (await verify(bytes, meta)) {
+      const ok = await verify(bytes, meta);
+      check();
+      if (ok) {
         await remember(opts.cache, meta, bytes);
+        check();
         return { bytes, channel: 'lan', meta };
       }
       reason = 'invalid-bundle';
@@ -130,8 +143,11 @@ export async function receiveBundle(opts: ReceiveOptions): Promise<ReceivedBundl
     resumeStore: meta.digest ? opts.resumeStore : undefined,
     digest: meta.digest,
   });
-  if (!(await verify(bytes, meta))) throw new BundleFormatError('The bundle that came over Bluetooth isn\'t the one the device described');
+  const ok = await verify(bytes, meta);
+  check();
+  if (!ok) throw new BundleFormatError('The bundle that came over Bluetooth isn\'t the one the device described');
   await remember(opts.cache, meta, bytes);
+  check();
   return { bytes, channel: 'ble', meta };
 }
 
