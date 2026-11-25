@@ -20,9 +20,11 @@ import android.widget.ScrollView
 import android.widget.TextView
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.theme.ThemeResolver
+import dev.glassworks.engine.vitro.ui.A11yRole
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.VitroCardContext
+import dev.glassworks.engine.vitro.ui.VitroAccess
 import dev.glassworks.engine.vitro.ui.VitroFonts
 import dev.glassworks.ui.Inter
 import org.json.JSONArray
@@ -115,6 +117,8 @@ class CalendarCardView(ctx: VitroCardContext, private val config: CardConfig) : 
                     tag = iconLabel.first
                     setOnClickListener { view = v; refresh() }
                 }
+                // HA's view buttons: the one showing stays pressed.
+                VitroAccess.role(b, A11yRole.TOGGLE_BUTTON) { view == v }
                 toggles += v to b
                 group.addView(b, LinearLayout.LayoutParams(ctx.px(46f), ctx.px(32f)).apply { if (i > 0) marginStart = ctx.px(1f) })
             }

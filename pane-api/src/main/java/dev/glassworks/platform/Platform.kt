@@ -118,6 +118,15 @@ open class PlatformApi(
      */
     val hasTypefaceBuilder: Boolean get() = apiLevel >= 26
 
+    /**
+     * A clickable view takes keyboard focus by itself (`View.FOCUSABLE_AUTO`, Android 8), and `View.getFocusable`
+     * exists. Below it, a control must be made focusable for keys to reach it.
+     */
+    val hasFocusableAuto: Boolean get() = apiLevel >= 26
+
+    /** `View.setAccessibilityPaneTitle`, which TalkBack announces a sheet by, exists (Android 9). */
+    val hasAccessibilityPaneTitle: Boolean get() = apiLevel >= 28
+
     /** `WindowInsetsController` and `setDecorFitsSystemWindows` exist (Android 11). */
     val hasWindowInsetsController: Boolean get() = apiLevel >= 30
 
