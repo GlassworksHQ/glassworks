@@ -331,17 +331,18 @@ export function createBleAgentConnection(
       return len;
     };
 
-    const applyInfo = (cs: number, bs: number, tc: number) => {
-      if (buf && cs === chunkSize && bs === bundleSize && tc === total) return;
+    /** Whether this INFO set the transfer up (a repeat of the one in hand changes nothing). */
+    const applyInfo = (cs: number, bs: number, tc: number): boolean => {
+      if (buf && cs === chunkSize && bs === bundleSize && tc === total) return false;
       // what INFO says is the device's word, so it is bounded before Kiln allocates for it: a chunk fits one notification,
       // and the bundle fits what Kiln takes in
       if (cs < MIN_CHUNK_BYTES || cs > MAX_CHUNK_BYTES || bs <= 0 || tc !== Math.ceil(bs / cs)) {
         fail(new BleTransferError(`The device's agent described a bundle Kiln can't follow (chunk ${cs}, size ${bs}, ${tc} chunks)`));
-        return;
+        return false;
       }
       if (bs > maxBytes) {
         fail(new BleTransferError(`The device's agent offered a bundle of ${bs} bytes, more than the ${maxBytes} Kiln takes in`));
-        return;
+        return false;
       }
       chunkSize = cs; bundleSize = bs; total = tc;
       buf = new Uint8Array(bs);
@@ -357,6 +358,7 @@ export function createBleAgentConnection(
       for (const [i, d] of pending) store1(i, d, true);
       pending.clear();
       report(true);
+      return true;
     };
 
     const onFrame = (ev: Event) => {
@@ -364,14 +366,15 @@ export function createBleAgentConnection(
       if (!view) return;
       const f = parseDataFrame(view);
       if (!f) return;
-      lastFrameAt = now();
-      if (f.kind === 'info') applyInfo(f.chunkSize, f.bundleSize, f.totalChunks);
+      // the stall watchdog restarts only on progress: the transfer set up, or a chunk Kiln didn't have. Repeats of
+      // chunks already in hand (or of INFO) don't keep a batch alive; END wakes the wait on its own
+      if (f.kind === 'info') { if (applyInfo(f.chunkSize, f.bundleSize, f.totalChunks)) lastFrameAt = now(); }
       else if (f.kind === 'end') { endSeen = true; poke(); }
       // before INFO, a bounded few are held (a resend pass fetches any past that); none longer than a notification carries
-      else if (!buf) { if (pending.size < MAX_PENDING_CHUNKS) pending.set(f.idx, f.bytes.slice(0, MAX_CHUNK_BYTES)); }
+      else if (!buf) { if (pending.size < MAX_PENDING_CHUNKS && !pending.has(f.idx)) { pending.set(f.idx, f.bytes.slice(0, MAX_CHUNK_BYTES)); lastFrameAt = now(); } }
       else {
         const got = store1(f.idx, f.bytes, true);
-        if (got) { sessionBytes += got; report(); }
+        if (got) { lastFrameAt = now(); sessionBytes += got; report(); }
         if (complete()) poke();
       }
     };
@@ -440,6 +443,9 @@ export function createBleAgentConnection(
         for (let i = 0; i < missing.length && !complete(); i += batchSize) {
           await send(encodeResend(missing.slice(i, i + batchSize)));
           outcome = await waitBatch();
+          // a batch that brought nothing ends this pass: the next one (of maxRounds) asks again, so a device that answers
+          // the commands but sends no data fails after a few stalls, not one per batch of what's missing
+          if (outcome === 'stall') break;
         }
       }
       report(true);

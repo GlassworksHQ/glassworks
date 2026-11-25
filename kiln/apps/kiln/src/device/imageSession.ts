@@ -118,12 +118,16 @@ export interface ImageDeps {
  * in-place recipe's: `staged`, the device restarted into its setup agent (with the run's `secret`, kept in this tab only
  * until the bundle is in, and the device's `serial`); `received`, the bundle is in this browser (`serial`, `digest`),
  * and `wrote`, the files of its second fastboot session already written, so a reload doesn't write them again; `bundle`,
- * the SHA-256 of the whole bundle those writes were built from, so a resume builds the rest from the same blocks.
- * `flashed` keeps the `serial`, so the app installs on the device that was written. `undo`: its way back has started
- * writing (`digest`, the restore image's SHA-256; `wrote`, the partitions written so far), so a reload or a retry goes
- * on with the way back, never with the install it is undoing.
+ * the SHA-256 of the whole bundle those writes were built from, so a resume builds the rest from the same blocks;
+ * `began`, the writes started (finished or not), so a lost bundle after one of them offers the way back. `staged` is set
+ * once the stage's write is done, before its restart. `flashed` keeps the `serial` and the bundle's `digest`, so the app
+ * installs on the device that was written and its way back finds this run's restore point. `undo`: its way back has
+ * started writing (`serial`, the device it writes; `digest`, the restore image's SHA-256; `restore`, where this browser
+ * keeps that restore point; `wrote`, the partitions written so far), so a reload or a retry goes on with the same way
+ * back on the same device, never with the install it is undoing.
  */
-export type ProgressMark = { at: 'written' | 'flashed' | 'staged' | 'received' | 'undo'; image?: string; secret?: string; serial?: string; digest?: string; bundle?: string; wrote?: string[] };
+export type ProgressMark = { at: 'written' | 'flashed' | 'staged' | 'received' | 'undo'; image?: string; secret?: string; serial?: string; digest?: string; bundle?: string;
+  wrote?: string[]; began?: string[]; restore?: { serial: string; digest: string } };
 const MARKS: readonly ProgressMark['at'][] = ['written', 'flashed', 'staged', 'received', 'undo'];
 export interface DeviceProgress { get(): ProgressMark | undefined; set(m: ProgressMark | undefined): void }
 
@@ -328,8 +332,12 @@ export class ImageSession {
   private storeMemo?: InPlaceStore;
   /** The way back's restore point: the restore image, its partition and manifest. */
   private undoFiles?: { files: NamedPart[]; sparse: NamedPart; manifest?: Record<string, unknown> };
-  /** The way back's writes done so far, for the restore image with this SHA-256 (also in the `undo` mark, when there is one). */
-  private undoWrote?: { digest: string; parts: string[] };
+  /** The way back's writes done so far, on the device with this serial, for the restore image with this SHA-256 (also in the `undo` mark). */
+  private undoWrote?: { serial: string; digest: string; parts: string[] };
+  /** Where this browser keeps the way back's restore point (its store key), once it is one this browser kept. */
+  private undoKey?: { serial: string; digest: string };
+  /** An in-place run's second-session writes started so far, finished or not (the `received` mark's `began`). */
+  private began = new Set<string>();
 
   /** The frame this session installs. */
   get frame() { return this.d.frame; }
@@ -359,16 +367,23 @@ export class ImageSession {
       this.serial = mark.serial;
       this.bundle = { digest: mark.digest, ...(mark.bundle ? { sha256: mark.bundle } : {}) };
       this.wrote = new Set(Array.isArray(mark.wrote) ? mark.wrote.filter((x): x is string => typeof x === 'string') : []);
+      this.began = new Set([...this.wrote, ...(Array.isArray(mark.began) ? mark.began.filter((x): x is string => typeof x === 'string') : [])]);
       this.state = { ...this.state, screen: 'fastboot', picked: wrote.id, files: waiting(wrote), changed: true, round: 2 };
       this.cursor = this.indexOf(wrote, 'fastboot');
     } else if (mark?.at === 'flashed' && wrote) {
       this.state = { ...this.state, screen: 'adb', picked: wrote.id, open: wrote.community, files: waiting(wrote), changed: true, ...(inPlace ? { round: 2 as const } : {}) };
-      if (inPlace) { this.cursor = this.indexOf(wrote, 'app-install'); if (mark.serial) this.serial = mark.serial; }
+      if (inPlace) {
+        this.cursor = this.indexOf(wrote, 'app-install');
+        if (mark.serial) this.serial = mark.serial;
+        if (mark.digest) this.bundle = { digest: mark.digest }; // only to find this run's restore point for its way back
+      }
     } else if (inPlace && mark?.at === 'undo') {
       // the way back had started writing: it opens again, on the restore point this browser kept; what it wrote already
       // isn't written again (undoFlash), and the install it was undoing never resumes
       this.state = { ...this.state, screen: 'undo', picked: wrote.id, files: waiting(wrote), changed: true, undo: { at: 'start' } };
-      void this.loadKeptRestore();
+      // that way back's own restore point, never another one this browser kept (another device's, say); gone, the
+      // person picks its download
+      if (mark.restore) void this.loadRestore(mark.restore);
     } else if (mark) this.state = { ...this.state, changed: true };
   }
 
@@ -776,6 +791,7 @@ export class ImageSession {
             this.receiver = undefined;
             this.restore = undefined;
             this.wrote = new Set();
+            this.began = new Set();
             this.secret = (this.d.secret ?? newSecret)();
             const assets = code.assets?.length ? await (this.d.stagedAssets?.(code.assets) ?? Promise.resolve({})) : {};
             this.made[step.makes] = await code.stage({ adbKey, userdataBytes: this.state.fastboot.userdataBytes, secret: this.secret, assets, ...(network ? { wifi: network } : {}) });
@@ -799,11 +815,15 @@ export class ImageSession {
             this.log(`Flashing ${step.partition}${step.partition === this.restore?.partition ? ' (only the blocks the restore point covers)' : ''}`);
             this.set({ flashFailed: true, screen: 'working' });
             work(id, 0);
+            // started, before the first byte: a write that stops partway may have changed the device already
+            if (checkpointed) { this.began.add(step.file); this.markReceived(); }
             await fb.flashBlob(step.partition, blob, (x) => work(id, x));
             this.log('', `${step.partition}: ${(blob.size / 2 ** 20).toFixed(1)} MiB written`);
-            if (checkpointed && this.serial && this.bundle) {
-              this.wrote.add(step.file);
-              this.d.progress?.set({ at: 'received', image: r.id, serial: this.serial, digest: this.bundle.digest, ...(this.bundle.sha256 ? { bundle: this.bundle.sha256 } : {}), wrote: [...this.wrote] });
+            if (checkpointed) { this.wrote.add(step.file); this.markReceived(); }
+            // the stage's write is done: a reload from here on resumes on receive (its agent starts with any restart,
+            // the stage being on userdata), never staging again
+            else if (this.state.round === 1 && this.secret && this.serial && steps[i + 1]?.do === 'restart' && steps[i + 2]?.do === 'receive') {
+              this.d.progress?.set({ at: 'staged', image: r.id, secret: toHexString(this.secret), serial: this.serial });
             }
             break;
           }
@@ -821,8 +841,9 @@ export class ImageSession {
             } else if (next === 'app-install') {
               this.restore = undefined;
               this.wrote = new Set();
+              this.began = new Set();
               this.d.flashedHere?.set(); // this browser's key is in what it wrote: the keep step can read it next time
-              this.d.progress?.set({ at: 'flashed', image: r.id, ...(this.serial ? { serial: this.serial } : {}) });
+              this.d.progress?.set({ at: 'flashed', image: r.id, ...(this.serial ? { serial: this.serial } : {}), ...(this.bundle ? { digest: this.bundle.digest } : {}) });
             }
             break;
           }
@@ -896,10 +917,17 @@ export class ImageSession {
       this.log('Stopped', (e as Error).message);
       // a bundle this browser no longer has can't be built from again: Try again starts the install over while nothing of
       // the second session is written yet, and once something is, the way back opens on the restore point kept before it
-      const lost = e instanceof BundleLost ? (this.wrote.size ? 'restore' as const : 'restart' as const) : undefined;
+      const lost = e instanceof BundleLost ? (this.wrote.size || this.began.size ? 'restore' as const : 'restart' as const) : undefined;
       const why = lost === 'restart' ? `${(e as Error).message} Try again starts the install over from its first screen.` : (e as Error).message;
       this.set({ screen: 'error', error: why, bundleLost: lost, ...(this.state.work ? {} : { work: { step: steps[i]?.do === 'in-place' ? 'in-place' : 'stage', x: 0 } }) });
     }
+  }
+
+  /** The `received` mark, with the second session's writes started and finished so far. */
+  private markReceived() {
+    if (!this.serial || !this.bundle) return;
+    this.d.progress?.set({ at: 'received', image: this.recipe.id, serial: this.serial, digest: this.bundle.digest,
+      ...(this.bundle.sha256 ? { bundle: this.bundle.sha256 } : {}), wrote: [...this.wrote], began: [...this.began] });
   }
 
   /** The bundle, from memory or this browser's storage (a reload after it came). */
@@ -1026,6 +1054,7 @@ export class ImageSession {
     // the secret has done its job: the tab lets go of it, and the mark keeps only where the bundle is
     this.secret = undefined;
     this.wrote = new Set();
+    this.began = new Set();
     const sha256 = await sha256Hex(got.bytes);
     this.bundle = { bytes: got.bytes, digest: got.digest, sha256, extents: got.extents };
     this.log('Bundle received');
@@ -1089,7 +1118,8 @@ export class ImageSession {
     return next?.partition ?? 'system';
   }
 
-  private takeRestore(files: NamedPart[]): UndoView['source'] {
+  /** `key`: where this browser keeps it (none for a zip the person picked, until the way back saves it). */
+  private takeRestore(files: NamedPart[], key?: { serial: string; digest: string }): UndoView['source'] {
     const sparse = files.find((f) => f.filename.endsWith('.sparse'));
     if (!sparse) throw new Error('This restore point has no restore image (.sparse).');
     const m = files.find((f) => f.filename === 'manifest.json');
@@ -1097,6 +1127,7 @@ export class ImageSession {
     if (m) { try { manifest = JSON.parse(new TextDecoder().decode(m.data)) as Record<string, unknown>; } catch { throw new Error('The restore point\'s manifest.json isn\'t JSON.'); } }
     parseSparseWrites(sparse.data); // a whole sparse image, before anything else
     this.undoFiles = { files, sparse, ...(manifest ? { manifest } : {}) };
+    this.undoKey = key;
     return 'browser';
   }
 
@@ -1113,6 +1144,8 @@ export class ImageSession {
     if (this.busy()) return;
     const in_ = this.recipes.find((r) => r.mode === 'in-place');
     if (in_) this.set({ picked: in_.id });
+    this.undoFiles = undefined;
+    this.undoKey = undefined;
     this.set({ screen: 'undo', undo: { at: 'start' }, error: undefined, bundleLost: undefined });
     await this.loadKeptRestore();
   }
@@ -1121,9 +1154,23 @@ export class ImageSession {
   private async loadKeptRestore(): Promise<void> {
     try {
       const kept = await this.store().latestRestore();
-      if (kept) { this.takeRestore(kept.files); this.set({ undo: { at: 'start', source: 'browser' } }); }
+      if (kept) { this.takeRestore(kept.files, { serial: kept.serial, digest: kept.digest }); this.set({ undo: { at: 'start', source: 'browser' } }); }
     } catch (e) {
       this.set({ undo: { at: 'start', error: (e as Error).message } });
+    }
+  }
+
+  /** One restore point this browser kept (by its key), for the way back's first screen; none there, its zip is picked. */
+  private async loadRestore(key: { serial: string; digest: string }): Promise<boolean> {
+    try {
+      const files = await this.store().getRestore(key.serial, key.digest);
+      if (!files) return false;
+      this.takeRestore(files, key);
+      this.set({ undo: { at: 'start', source: 'browser' } });
+      return true;
+    } catch (e) {
+      this.set({ undo: { at: 'start', error: (e as Error).message } });
+      return false;
     }
   }
 
@@ -1136,28 +1183,32 @@ export class ImageSession {
     const rp = this.restore;
     if (rp && this.state.restorePoint?.status === 'ready') {
       try {
-        this.takeRestore(rp.files);
+        this.takeRestore(rp.files, this.serial && this.bundle ? { serial: this.serial, digest: this.bundle.digest } : undefined);
         this.set({ screen: 'undo', undo: { at: 'fastboot', source: 'browser', restarted: false }, error: undefined, connectError: undefined, bundleLost: undefined });
       } catch (e) {
         this.set({ screen: 'undo', undo: { at: 'start', error: (e as Error).message } });
       }
       return;
     }
-    // the run's restore point is no longer in memory (the device restarted and the app's install stopped, or a reload
-    // lost the bundle after a write): the way back opens on the copy this browser saved, or the zip the person kept
-    if (this.state.restorePoint?.status !== 'ready' && this.state.bundleLost !== 'restore') return;
+    // the run's restore point is no longer in memory (the device restarted and the app's install stopped, after a
+    // reload too, or a reload lost the bundle after a write): the way back opens on this run's copy in this browser
+    // (its serial and bundle), never another restore point kept here; gone, the person picks the zip they downloaded
     const step = this.state.work?.step;
+    if (this.state.restorePoint?.status !== 'ready' && this.state.bundleLost !== 'restore' && !(this.state.round === 2 && step === 'app-install')) return;
     const inFastboot = step !== 'app-install' && step !== 'first-boot' && step !== 'hand-back';
-    await this.startUndo();
+    this.undoFiles = undefined;
+    this.undoKey = undefined;
+    this.set({ screen: 'undo', undo: { at: 'start' }, error: undefined, connectError: undefined, bundleLost: undefined });
+    const found = this.serial && this.bundle ? await this.loadRestore({ serial: this.serial, digest: this.bundle.digest }) : false;
     // still in fastboot (a stop before the restart): no restart over adb to ask for
-    if (inFastboot && this.get().screen === 'undo') this.set({ undo: { ...this.state.undo!, at: 'fastboot', restarted: false } });
+    if (found && inFastboot) this.set({ undo: { ...this.state.undo!, at: 'fastboot', restarted: false } });
   }
 
   /** A restore point zip the person picked (the copy they downloaded), checked against its SHA256SUMS. */
   async pickRestoreZip(file: File | Blob, name = (file as File).name ?? 'restore point'): Promise<void> {
     try {
       const { files } = await readNamedBackupZip(file);
-      this.takeRestore(files);
+      this.takeRestore(files); // kept by the way back before its first write
       this.set({ undo: { at: 'start', source: 'file', fileName: name } });
     } catch (e) {
       this.set({ undo: { ...(this.state.undo ?? { at: 'start' }), error: (e as Error).message } });
@@ -1226,14 +1277,22 @@ export class ImageSession {
       }
       // the way back's checkpoint, before its first write: a reload opens the way back again (never the install it undoes),
       // and a retry with this restore point on this device (checked above) writes only what isn't written yet
+      // a retry reuses what was written only on the same device with the same restore point: two devices with the same
+      // stock blocks have the same restore image, so the digest alone doesn't say whose writes they were
       const digest = await sha256Hex(u.sparse.data);
       const mark = this.d.progress?.get();
-      const done = new Set(this.undoWrote?.digest === digest ? this.undoWrote.parts
-        : mark?.at === 'undo' && mark.digest === digest && Array.isArray(mark.wrote) ? mark.wrote : []);
-      this.undoWrote = { digest, parts: [...done] };
+      const done = new Set(this.undoWrote?.digest === digest && this.undoWrote.serial === serial ? this.undoWrote.parts
+        : mark?.at === 'undo' && mark.digest === digest && mark.serial === serial && Array.isArray(mark.wrote) ? mark.wrote : []);
+      // a zip the person picked is kept in this browser first, so a reload goes on with this restore point, not another
+      if (!this.undoKey) {
+        const key = { serial, digest: `restore-${digest}` };
+        await this.store().putRestore(key.serial, key.digest, u.files);
+        this.undoKey = key;
+      }
+      const restore = this.undoKey;
       const checkpoint = () => {
-        this.undoWrote = { digest, parts: [...done] };
-        this.d.progress?.set({ at: 'undo', image: this.recipe.id, digest, wrote: [...done] });
+        this.undoWrote = { serial, digest, parts: [...done] };
+        this.d.progress?.set({ at: 'undo', image: this.recipe.id, serial, digest, restore, wrote: [...done] });
       };
       checkpoint();
       this.set({ connecting: false, undo: { ...this.state.undo!, at: 'working', x: 0 } });

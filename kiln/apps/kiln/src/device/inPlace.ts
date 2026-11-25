@@ -229,10 +229,13 @@ export class InPlaceReceiver {
     check();
     o.onVerifying?.();
     const kept = channel === 'cache';
+    // the agent's description only binds bytes from the same agent's channels: a file is bound by this run's signature
+    // and the serial, never by what another attempt (another device's agent, say) described
+    const described = channel === 'file' ? undefined : this.meta;
     await verifyGwsbBundle(bytes, { ...(kept ? {} : { secret: o.secret }), expectedSerial: o.serial, requireSerial: true, requireHmac: !kept });
     const r = await this.d.code.readBundle(bytes, { secret: o.secret, serial: o.serial, ...(kept ? { kept } : {}) });
     check();
-    if (this.meta?.digest && this.meta.digest.toLowerCase() !== r.digest.toLowerCase()) {
+    if (described?.digest && described.digest.toLowerCase() !== r.digest.toLowerCase()) {
       throw new BundleFormatError('This bundle is from another device or an older run. Get it again from the device.');
     }
     if (!kept) await this.d.store.putBundle(o.serial, r.digest, bytes);
@@ -242,8 +245,12 @@ export class InPlaceReceiver {
 
   /** Stops a transfer in flight. */
   async cancel(): Promise<void> {
-    try { await this.conn?.abort(); } catch { /* nothing running */ }
-    try { this.conn?.disconnect(); } catch { /* gone already */ }
+    // the connection this Cancel stopped: a new attempt that connects while the abort winds down keeps its own
+    const c = this.conn;
+    if (!c) return;
+    if (this.conn === c) this.conn = undefined;
+    try { await c.abort(); } catch { /* nothing running */ }
+    try { c.disconnect(); } catch { /* gone already */ }
   }
 }
 
