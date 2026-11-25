@@ -233,7 +233,7 @@ def button_card_reason(card: dict, templates: dict) -> str | None:
         a = cfg.get(key)
         if not isinstance(a, dict) or a.get("action") in (None, "", "none"):
             continue
-        if a.get("action") not in BUTTON_CARD_ACTIONS:
+        if not isinstance(a.get("action"), str) or a["action"] not in BUTTON_CARD_ACTIONS:
             return f"a {key} type it doesn't run natively"
         if any(a.get(f) for f in ("repeat", "repeat_limit", "sound", "protect")):
             return f"a {key} it doesn't run natively"
@@ -241,7 +241,8 @@ def button_card_reason(card: dict, templates: dict) -> str | None:
             return f"{key} confirmation exemptions"
     if isinstance(cfg.get("confirmation"), dict) and "exemptions" in cfg["confirmation"]:
         return "confirmation exemptions"
-    if cfg.get("layout") is not None and cfg.get("layout") not in BUTTON_CARD_LAYOUTS:
+    layout = cfg.get("layout")
+    if layout is not None and (not isinstance(layout, str) or layout not in BUTTON_CARD_LAYOUTS):
         return "a layout it doesn't draw natively"
     # button-card evaluates a `force_eval` variable on every render, JavaScript or not (the engine sends it to an island).
     variables = cfg.get("variables") if isinstance(cfg.get("variables"), dict) else {}
