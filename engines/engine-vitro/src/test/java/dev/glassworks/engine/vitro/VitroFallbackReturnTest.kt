@@ -449,6 +449,26 @@ class VitroFallbackReturnTest {
         assertEquals("no reconnect", 1, server.connectUrls.size)
     }
 
+    /** Revoked while HA's frontend showed another page: Back to the dashboard from Vitro's cache is refused too. */
+    @Test fun aDashboardRevokedWhileTheFallbackShowedIsRefusedOnTheWayBack() {
+        server.currentUser = wallUser
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        awaitMain("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
+        page.load("$base/energy")
+        idle()
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+        server.panelRequireAdmin["wall-test"] = true
+        server.pushPanelsUpdated()
+        awaitMain("panels asked again") { server.commands("get_panels").size == 2 }
+        // Back: the native view in Vitro's cache, then refused, and HA's frontend takes the URL.
+        page.goBack()
+        awaitMain("handed to HA's frontend") { fp.loads.contains(living) }
+        assertFallback(page, fp)
+        assertEquals(listOf("$base/energy", living), fp.loads.toList())
+    }
+
     @Test fun startedOnAnAdminOnlyDashboardAUserWhoIsntAnAdministratorGetsHomeAssistantsPage() {
         server.currentUser = wallUser
         val fb = RecordingEngine()

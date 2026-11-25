@@ -157,6 +157,8 @@ class HaDashboardClientTest {
     @Test
     fun startupSendsEachRequestInOrderWithIncreasingIds() {
         connected()
+        // The last startup request: the panels' answer may release the rest before it's written.
+        awaitCondition("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
         val sent = server.received.toList().drop(1) // after `auth`
         // First the user's language and formats (HA's translations-mixin subscribes on connect): the translations
         // asked for later are in that language.
@@ -470,6 +472,7 @@ class HaDashboardClientTest {
         // The other way round: an admin-only dashboard opened to everyone.
         listener.refused.clear()
         server.panelRequireAdmin["admin-only"] = false
+        awaitCondition("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
         server.pushPanelsUpdated()
         c.fetchDashboard("admin-only")
         awaitCondition("admin-only, overridden open") { listener.configs.isNotEmpty() }
@@ -494,6 +497,31 @@ class HaDashboardClientTest {
         // The Dashboard select is told too.
         awaitCondition("dashboards again") { listener.dashboards.size == 2 }
         assertEquals(emptyList<String>(), listener.dashboards.last().map { it.urlPath })
+    }
+
+    @Test
+    fun aDashboardRevokedWhileTheFallbackShowedIsRefusedOnItsCachedReturn() {
+        server.currentUser = wallUser
+        val c = started("wall-test")
+        awaitCondition("config") { listener.configs.isNotEmpty() }
+        awaitCondition("panels_updated subscribed") { server.eventSubscriptionId("panels_updated") != null }
+        // The page leaves for HA's frontend; meanwhile wall-test becomes admin only.
+        c.releaseDashboard()
+        server.panelRequireAdmin["wall-test"] = true
+        server.pushPanelsUpdated()
+        awaitCondition("panels asked again") { server.commands("get_panels").size == 2 }
+        awaitCondition("dashboards again") { listener.dashboards.size == 2 }
+        assertTrue("nothing on screen to refuse yet", listener.refused.isEmpty())
+        // Back to it from the page's cache, no fetch: still checked, and refused.
+        c.claimDashboard("wall-test")
+        awaitCondition("refused") { listener.refused.isNotEmpty() }
+        assertEquals(listOf<String?>("wall-test"), listener.refused.toList())
+        assertEquals("no new config asked", 1, server.commands("lovelace/config").size)
+        // A dashboard the user may still open comes back as it was.
+        listener.refused.clear()
+        c.claimDashboard(null)
+        Thread.sleep(200)
+        assertTrue(listener.refused.isEmpty())
     }
 
     @Test

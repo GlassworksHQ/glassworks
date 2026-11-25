@@ -360,12 +360,21 @@ class HaDashboardClient(
      */
     private val pathLock = Any()
 
-    /** The page shows [urlPath] again without asking: an answer still on its way for another path is dropped. */
-    fun claimDashboard(urlPath: String?) = synchronized(pathLock) {
-        requestedDashboardPath = urlPath
-        dashboardActive = true
-        // A lovelace_updated or reconnect skipped while the fallback showed: the dashboard may have changed.
-        if (missedRefetch) fetchDashboard(urlPath)
+    /**
+     * The page shows [urlPath] again without asking: an answer still on its way for another path is dropped. The
+     * config on screen stays, but whether the user may still open it is checked again ([recheckDelivered]): HA's panels
+     * may have changed while the fallback showed, and a check waits for panels being asked for again.
+     */
+    fun claimDashboard(urlPath: String?) {
+        synchronized(pathLock) {
+            requestedDashboardPath = urlPath
+            dashboardActive = true
+            deliveredDashboard = urlPath
+            hasDelivered = true
+            // A lovelace_updated or reconnect skipped while the fallback showed: the dashboard may have changed.
+            if (missedRefetch) fetchDashboard(urlPath)
+        }
+        recheckDelivered()
     }
 
     /**
