@@ -316,3 +316,34 @@ details > summary, .disclose { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---- in place: the device's own Wi-Fi (InPlaceScreens JoinWifi, WifiUnreachable) ---- */
+.net { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; padding: 16px 18px; border-radius: 16px; border: 1px solid var(--edge); background: var(--well); }
+.net .ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--sky) 14%, transparent); color: var(--ink-sky); }
+.net.on .ico { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--ok-ink); }
+.net .grow { display: grid; min-width: 0; }
+.net .lab { font: 500 10.5px/1 var(--f-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+.net .name { font: 500 20px/1.25 var(--f-mono); letter-spacing: -0.01em; margin-top: 5px; overflow-wrap: anywhere; }
+.net .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.live { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--turn-ink); }
+.live.ok { color: var(--ok-ink); }
+.live .tick { width: 18px; height: 18px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: color-mix(in srgb, var(--green) 20%, transparent); }
+.choices { display: grid; gap: 10px; }
+.route { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px 16px; border: 1px solid var(--edge); border-radius: 14px; }
+.route .ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--well); color: var(--muted); }
+.route .grow { display: grid; min-width: 0; }
+.route .t { font-weight: 500; }
+.route .d { font-size: 13px; color: var(--muted); }
+.btn.sm { padding: 7px 14px; font-size: 13.5px; }
+/* the person's own Wi-Fi, before fastboot (ImageScreens InPlaceStart) */
+.wifi { display: grid; gap: 14px; padding: 16px 18px; border-radius: 16px; border: 1px solid var(--edge); background: var(--well); }
+.wifi-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: start; }
+.wifi-head .ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--sky) 14%, transparent); color: var(--ink-sky); }
+.wifi-head .t { font-weight: 500; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.wifi-head .d { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+.opt-tag { font: 500 10.5px/1 var(--f-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); border: 1px solid var(--edge); border-radius: 999px; padding: 3px 7px; }
+.wifi .input { background: var(--glass); }
+.pw { position: relative; display: block; }
+.pw .input { padding-right: 60px; }
+.pw .eye { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 13px; }
+@media (max-width: 760px) { .route { grid-template-columns: auto minmax(0, 1fr); } .route .btn { grid-column: 1 / -1; } }

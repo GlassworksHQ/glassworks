@@ -22,7 +22,7 @@ import { Fastboot } from '@glassworks/fastboot';
 import { APP_DEMOS, appDemo, type AppDemo } from './demo';
 import type { AdbAsk } from './adbAsk';
 import { ImageSession, sessionProgress } from './imageSession';
-import { idbInPlaceStore } from './inPlace';
+import { browserStageSecret, idbInPlaceStore } from './inPlace';
 import { IMAGE_DEMOS, imageDemo, type ImageDemo } from './imageDemo';
 import { KEEP_DEMOS, keepDemo, type KeepDemo } from './keepDemo';
 import { ImageOutcome, ImageScreens, imageLevel, imageRail, imageSteps } from './ImageScreens';
@@ -154,6 +154,8 @@ function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local', 
     apkBlocked: () => app.releaseBlocked(),
     handOver: (p) => { handOver?.(p); },
     progress: sessionProgress(`kiln:device:${base}:image`),
+    // one stage secret per browser: a reload or another tab still checks the agent's signature
+    secret: () => browserStageSecret(),
     // an in-place recipe (the frame's `imageFlow.inPlace`): its bundles and restore points in this browser, its stage's
     // staged files checked by SHA-256, and its agent on the local network
     ...(flow.storage.inPlaceDb ? { inPlaceStore: idbInPlaceStore(flow.storage.inPlaceDb) } : {}),

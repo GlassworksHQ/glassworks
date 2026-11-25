@@ -15,6 +15,8 @@ import {
   unhideStockBloat, type FiemapExtent,
 } from '../src';
 import { GLASS_PANES_KEY_FINGERPRINT, adbFingerprint } from '../src/services';
+import { patchedKeyFingerprint } from '../src/stock';
+import { zipEntry } from '@glassworks/app-adb';
 import { fakeAdbKey } from './fakes';
 
 import { DEXDUMP, HAS_D8, START_CONFIRMATION_LOG_STRING, buildSyntheticStockServicesJar } from './synthetic-services';
@@ -38,6 +40,7 @@ function methodBlock(block: string, name: string): string {
 
 const DPMS_DESC = 'Lcom/android/server/devicepolicy/DevicePolicyManagerService;';
 const MIRROR_AP_DESC = 'Lcom/android/server/MirrorApService;';
+const USB_SERVICE_DESC = 'Lcom/android/server/usb/UsbService;';
 
 // ---------------------------------------------------------------------------
 // buildSurgicalSparseImage
@@ -256,6 +259,75 @@ describe('patchStockServicesJar', () => {
     // Same class and method, another body: not what was read from stock, so it isn't emptied on a guess.
     const jar = buildSyntheticStockServicesJar({ mirrorAp: 'unexpected' });
     await expect(patchStockServicesJar(jar, fakeAdbKey(0x55))).rejects.toThrow(/does not load "com\.mirror\.framework\.ACTION_START_HOST_APD"/);
+  }, 60_000);
+
+  /** dexdump -d of `jar`'s UsbService, written to a scratch file and removed. */
+  function usbService(jar: Uint8Array): string {
+    const dir = mkdtempSync(join(tmpdir(), 'gw-stock-usb-'));
+    try {
+      const p = join(dir, 'patched.jar');
+      writeFileSync(p, jar);
+      expect(execFileSync(DEXDUMP!, ['-c', p], { encoding: 'utf8' })).toContain('Checksum verified');
+      return classBlock(execFileSync(DEXDUMP!, ['-d', p], { encoding: 'utf8', maxBuffer: 1 << 30 }), USB_SERVICE_DESC);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it.skipIf(!HAS_D8)('lets an app holding WRITE_SECURE_SETTINGS answer "Allow USB debugging?", and changes nothing else in UsbService', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const res = await patchStockServicesJar(jar, fakeAdbKey(0x56));
+    expect(res.patched.length).toBe(jar.length);
+    expect(res.usbAllow).toBeDefined();
+    if (DEXDUMP) {
+      const usb = usbService(res.patched);
+      const allow = methodBlock(usb, 'allowUsbDebugging');
+      expect(allow).toContain('"android.permission.WRITE_SECURE_SETTINGS"');
+      expect(allow).not.toContain('MANAGE_USB');
+      expect(allow).toContain('UsbDebuggingManager;.allowUsbDebugging'); // still hands the key on
+      // deny keeps MANAGE_USB: only the app's Allow is opened
+      expect(methodBlock(usb, 'denyUsbDebugging')).toContain('"android.permission.MANAGE_USB"');
+      // the same bytes but that operand: one const-string, nothing moved
+      const before = methodBlock(usbService(jar), 'allowUsbDebugging');
+      expect(allow.split('\n').length).toBe(before.split('\n').length);
+    }
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('with appApprovesUsbDebugging:false leaves UsbService as it was', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const res = await patchStockServicesJar(jar, fakeAdbKey(0x57), { appApprovesUsbDebugging: false });
+    expect(res.usbAllow).toBeUndefined();
+    if (DEXDUMP) expect(methodBlock(usbService(res.patched), 'allowUsbDebugging')).toContain('"android.permission.MANAGE_USB"');
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('refuses a UsbService it did not read: none at all, or an allowUsbDebugging checking two permissions', async () => {
+    const key = fakeAdbKey(0x58);
+    await expect(patchStockServicesJar(buildSyntheticStockServicesJar({ usbService: 'none' }), key))
+      .rejects.toThrow(/USB debugging patch: services\.jar has no Lcom\/android\/server\/usb\/UsbService;\.allowUsbDebugging/);
+    await expect(patchStockServicesJar(buildSyntheticStockServicesJar({ usbService: 'unexpected' }), key))
+      .rejects.toThrow(/USB debugging patch: UsbService\.allowUsbDebugging loads 2 permission strings/);
+    // off: the rest goes ahead
+    const res = await patchStockServicesJar(buildSyntheticStockServicesJar({ usbService: 'none' }), key, { appApprovesUsbDebugging: false });
+    expect(res.usbAllow).toBeUndefined();
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('reinstalling over an earlier install trusts the new key, adds the USB-debugging change if missing, and matches a fresh patch byte for byte', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const a = fakeAdbKey(0x59);
+    const b = fakeAdbKey(0x5a);
+    const fresh = await patchStockServicesJar(jar, b);
+    // an install from before the USB-debugging change, by another computer
+    const old = await patchStockServicesJar(jar, a, { appApprovesUsbDebugging: false });
+    const re = await patchStockServicesJar(old.patched, b);
+    expect(re.repatched).toEqual({ from: old.fingerprint });
+    expect(re.fingerprint).toBe(fresh.fingerprint);
+    expect(re.usbAllow).toBeDefined();
+    expect(Buffer.from(re.patched).equals(Buffer.from(fresh.patched))).toBe(true);
+    // the same computer again, on a jar that has everything: nothing to write
+    const again = await patchStockServicesJar(fresh.patched, b);
+    expect(again.repatched).toEqual({ from: fresh.fingerprint });
+    expect(Buffer.from(again.patched).equals(Buffer.from(fresh.patched))).toBe(true);
+    expect(patchedKeyFingerprint((await zipEntry(re.patched, "classes.dex"))!)).toBe(fresh.fingerprint);
   }, 60_000);
 });
 

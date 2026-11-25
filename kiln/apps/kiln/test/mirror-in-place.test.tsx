@@ -108,9 +108,10 @@ async function toReceive(r: Rig) {
   expect(image.state).toMatchObject({ screen: 'receive', round: 1 });
 }
 
-/** Receive, the second fastboot session, and the restore point saved and checked. */
-async function toRestorePoint(r: Rig) {
-  await r.image.receive();
+/** Receive (over the Mirror's own Wi-Fi, or Bluetooth), the second fastboot session, and the restore point saved and checked. */
+async function toRestorePoint(r: Rig, via: 'wifi' | 'ble' = 'wifi') {
+  if (via === 'wifi') await r.image.receiveWifi();
+  else await r.image.receive();
   expect(r.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
   await r.image.connectFastboot();
   for (let i = 0; i < 200 && r.image.state.restorePoint?.status !== 'ready'; i++) await new Promise((x) => setTimeout(x, 5));
@@ -140,12 +141,27 @@ describe('Glassworks on the stock software', () => {
     expect(log).toContain('Device Owner: set');
   });
 
-  it('carries on over Bluetooth by itself when the local network drops halfway', async () => {
+  it('asks the person to join the Mirror\'s own Wi-Fi, sees when this computer has, and keeps their Wi-Fi out of the stage', async () => {
+    const r = rig({ deps: { hotspotPollMs: 5 } });
+    r.image.setWifi({ ssid: 'HomeNet', password: 'correcthorse' });
+    await toReceive(r);
+    expect(r.image.state.receive).toMatchObject({ network: `mirror-${FAKE_SERIAL}` });
+    for (let i = 0; i < 100 && !r.image.state.receive?.joined; i++) await new Promise((x) => setTimeout(x, 5));
+    expect(r.image.state.receive).toMatchObject({ stage: 'ready', joined: true });
+    expect(r.image.state.log.join('\n')).toContain('the setup agent, this browser\'s adb key and its signing secret, on a fresh userdata');
+    await toRestorePoint(r);
+    expect(r.image.state.leftHotspot).toBe(true);
+  });
+
+  it('a Wi-Fi transfer that drops offers Bluetooth: Kiln doesn\'t switch on its own, and Bluetooth then goes over Bluetooth alone', async () => {
     const r = rig({ lan: 'drop-midway' });
     await toReceive(r);
-    await toRestorePoint(r);
+    await r.image.receiveWifi();
+    expect(r.image.state.receive).toMatchObject({ stage: 'wifi-unreachable', wifiFailed: 'unreachable' });
+    expect(r.image.state.screen).toBe('receive');
+    await toRestorePoint(r, 'ble');
     expect(r.image.state.receive?.channel).toBe('ble');
-    expect(r.image.state.receive?.fallback).toMatch(/switched to Bluetooth/);
+    expect(r.image.state.receive?.fallback).toBeNull();
   });
 
   it('a second run takes the bundle this browser kept only while the frame says it still fits the device', async () => {
@@ -155,7 +171,7 @@ describe('Glassworks on the stock software', () => {
     await toRestorePoint(first);
     const second = rig({ store, code: { keptMatches: () => true } });
     await toReceive(second);
-    await toRestorePoint(second);
+    await toRestorePoint(second, 'ble');
     expect(second.image.state.receive?.channel).toBe('cache');
     expect(second.image.state.log.join('\n')).toContain('this browser\'s saved copy');
   });
@@ -198,15 +214,42 @@ describe('Glassworks on the stock software', () => {
     expect(r.progress.mark).toMatchObject({ at: 'staged' });
   });
 
-  it('refuses a bundle whose signature doesn\'t match: nothing kept, nothing more written', async () => {
+  it('asks before going on with a bundle whose signature doesn\'t match: nothing kept or written until the person says so', async () => {
     const r = rig({ tampered: true });
     await toReceive(r);
     await r.image.receive();
     expect(r.image.state.screen).toBe('receive');
-    expect(r.image.state.receive).toMatchObject({ stage: 'error' });
-    expect(r.image.state.receive?.error).toMatch(/signature/);
+    expect(r.image.state.receive).toMatchObject({ stage: 'unverified' });
     expect(r.flashed).toEqual(['userdata']);
     expect(await r.store.latestRestore()).toBeUndefined();
+    // Back: the warning goes, and nothing moved on
+    r.image.receiveAgain();
+    expect(r.image.state.receive?.stage).toBe('ready');
+    await r.image.receiveUnverified(); // nothing waits on a decision any more
+    expect(r.image.state.screen).toBe('receive');
+    expect(r.flashed).toEqual(['userdata']);
+  });
+
+  it('Continue anyway takes the bundle with every other check, and the log says the signature wasn\'t checked', async () => {
+    const r = rig({ tampered: true });
+    await toReceive(r);
+    await r.image.receive();
+    expect(r.image.state.receive?.stage).toBe('unverified');
+    await r.image.receiveUnverified();
+    expect(r.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
+    const log = r.image.state.log.join('\n');
+    expect(log).toContain('went on without the signature');
+    expect(log).not.toContain('and its signature');
+  });
+
+  it('a wrong serial still stops it: only a signature can be waved through', async () => {
+    const r = rig();
+    await toReceive(r);
+    const other = await buildFakeGwsbBundle({ secret: new Uint8Array(32).fill(9), serialno: 'OTHERSERIAL' });
+    await r.image.receiveFile(new NodeBlob([other.bytes as Uint8Array<ArrayBuffer>]) as unknown as Blob);
+    expect(r.image.state.receive).toMatchObject({ stage: 'error', channel: 'file' });
+    expect(r.image.state.receive?.error).toMatch(/another device/);
+    expect(r.flashed).toEqual(['userdata']);
   });
 
   it('stops on an odexed build before any system write', async () => {
@@ -224,7 +267,7 @@ describe('Glassworks on the stock software', () => {
     // a bundle signed with another run's secret, as from an old download
     const old = await buildFakeGwsbBundle({ secret: new Uint8Array(32).fill(9) });
     await r.image.receiveFile(new NodeBlob([old.bytes as Uint8Array<ArrayBuffer>]) as unknown as Blob);
-    expect(r.image.state.receive).toMatchObject({ stage: 'error', channel: 'file' });
+    expect(r.image.state.receive).toMatchObject({ stage: 'unverified', channel: 'file' });
     expect(r.flashed).toEqual(['userdata']);
   });
 

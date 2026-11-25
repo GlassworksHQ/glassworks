@@ -86,6 +86,38 @@ describe('connecting while the Mirror is still starting', () => {
     expect(f.state.log.filter((l) => l.includes('still starting. Asking again in 5 s.'))).toHaveLength(4);
   });
 
+  it('a USB reset partway through the start (after Kiln is in) connects again on its own, with no Try again', async () => {
+    // Android 6 resets the Mirror's USB while it starts: the poll's next call fails (a real run, 2026-11-25)
+    const LOST = "Failed to execute 'transferOut' on 'USBDevice': A transfer error has occurred.";
+    const dropped = new FirstBootMirror();
+    const closed = vi.fn(async () => {});
+    const first: PanelShell = { run: async () => { throw new Error(LOST); }, push: async () => {}, close: closed };
+    const again = new FirstBootMirror();
+    let refusals = 1; // still coming back from the reset: refused once, then in
+    const reopen = vi.fn(async () => { if (refusals-- > 0) throw new Error(REFUSED); return again; });
+    const { f, mirror } = setup({ request: async () => first, reopen });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(closed).toHaveBeenCalled(); // let go of the dropped connection
+    expect(reopen).toHaveBeenCalledTimes(2);
+    expect(f.state).toMatchObject({ screen: 'choose', firstBoot: expect.anything() });
+    expect(handed).toEqual([again]); // the standard flow gets the connection that works
+    expect(dropped.cmds).toEqual([]);
+    expect(f.state.log.some((l) => l.includes(`dropped the USB connection while it starts (${LOST}). Connecting again.`))).toBe(true);
+  });
+
+  it('a USB reset Kiln can\'t connect back from ends on the error screen, as before', async () => {
+    const LOST = "Failed to execute 'transferOut' on 'USBDevice': A transfer error has occurred.";
+    const first: PanelShell = { run: async () => { throw new Error(LOST); }, push: async () => {} };
+    const reopen = vi.fn(async (): Promise<PanelShell> => { throw new Error(REFUSED); });
+    const { f, mirror } = setup({ request: async () => first, reopen, tries: 2 });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(reopen).toHaveBeenCalledTimes(2);
+    expect(f.state).toMatchObject({ screen: 'error', error: REFUSED });
+    expect(handed).toEqual([]);
+  });
+
   it('a Mirror that never lets in ends with a clear message, and Connect works again', async () => {
     const reopen = vi.fn(async (): Promise<PanelShell> => { throw new Error(REFUSED); });
     const { f, mirror } = setup({ request: async () => { throw new Error(REFUSED); }, reopen, tries: 3 });

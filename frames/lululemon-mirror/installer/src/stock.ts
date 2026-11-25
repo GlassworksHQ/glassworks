@@ -85,7 +85,7 @@ function adler32(b: Uint8Array): number {
   return ((s << 16) | a) >>> 0;
 }
 
-function crc32(b: Uint8Array): number {
+export function crc32(b: Uint8Array): number {
   let c = ~0;
   for (let i = 0; i < b.length; i++) {
     c ^= b[i]!;
@@ -160,52 +160,70 @@ export function buildSurgicalSparseImage(
   fileData: Uint8Array,
   blockSize = SPARSE_BLOCK_SIZE,
 ): Uint8Array {
+  return buildSurgicalSparseImageFiles(partitionBytes, [{ extents, data: fileData }], blockSize);
+}
+
+/** One file a surgical write puts back in its own blocks: where FIEMAP says it sits, and its bytes. */
+export interface SurgicalFile { extents: readonly FiemapExtent[]; data: Uint8Array }
+
+/**
+ * buildSurgicalSparseImage for several files in one sparse image (services.jar and the boot animation): each is
+ * checked as that one is, and no two may share a block. One file gives the same bytes as buildSurgicalSparseImage.
+ */
+export function buildSurgicalSparseImageFiles(
+  partitionBytes: number,
+  files: readonly SurgicalFile[],
+  blockSize = SPARSE_BLOCK_SIZE,
+): Uint8Array {
   if (blockSize !== SPARSE_BLOCK_SIZE) throw new Error(`unsupported sparse block size ${blockSize}`);
   if (!Number.isSafeInteger(partitionBytes) || partitionBytes <= 0 || partitionBytes % blockSize !== 0) {
     throw new Error(`partition size ${partitionBytes} must be a positive multiple of ${blockSize}`);
   }
   const totalBlocks = partitionBytes / blockSize;
   if (totalBlocks > 0xffffffff) throw new Error(`partition exceeds 32-bit sparse block count (${totalBlocks})`);
-  if (extents.length === 0) throw new Error('FIEMAP returned zero extents');
-  if (fileData.length === 0) throw new Error('file data is empty');
-
-  const neededBytes = Math.ceil(fileData.length / blockSize) * blockSize;
-  const byLogical = [...extents].sort((a, b) => a.logical - b.logical);
-  let expectedLogical = 0;
-  for (const e of byLogical) {
-    if (e.logical < 0 || e.physical < 0 || e.length <= 0) {
-      throw new Error(`invalid FIEMAP extent: ${JSON.stringify(e)}`);
-    }
-    if ((e.flags & UNSAFE_FIEMAP_FLAGS) !== 0) {
-      throw new Error(`FIEMAP extent is not plain, initialized data (flags=0x${e.flags.toString(16)}): ${JSON.stringify(e)}`);
-    }
-    if (e.logical % blockSize !== 0 || e.physical % blockSize !== 0 || e.length % blockSize !== 0) {
-      throw new Error(`FIEMAP extent is not ${blockSize}-byte aligned: ${JSON.stringify(e)}`);
-    }
-    if (e.block !== e.physical / blockSize || e.blocks !== e.length / blockSize) {
-      throw new Error(`FIEMAP extent block/length fields are inconsistent: ${JSON.stringify(e)}`);
-    }
-    if (e.block + e.blocks > totalBlocks) {
-      throw new Error(`FIEMAP extent [${e.block}..${e.block + e.blocks}) exceeds partition ${totalBlocks} blocks`);
-    }
-    if (e.logical !== expectedLogical) {
-      throw new Error(`FIEMAP logical gap/overlap at offset ${expectedLogical} (got ${e.logical})`);
-    }
-    expectedLogical += e.length;
-  }
-  if (expectedLogical < neededBytes) {
-    throw new Error(`FIEMAP extents cover only ${expectedLogical} bytes, need ${neededBytes} for ${fileData.length}-byte file`);
-  }
+  if (files.length === 0) throw new Error('no file to write');
 
   // Build physical write segments (splitting at file end if an extent has preallocated trailing blocks)
   // and sort by physical block address so sparse chunks advance monotonically.
-  interface PhysSeg { physBlock: number; blocks: number; logicalStart: number }
+  interface PhysSeg { physBlock: number; blocks: number; logicalStart: number; fileData: Uint8Array }
   const segments: PhysSeg[] = [];
-  for (const e of byLogical) {
-    if (e.logical >= neededBytes) break;
-    const useBytes = Math.min(e.length, neededBytes - e.logical);
-    const useBlocks = useBytes / blockSize;
-    segments.push({ physBlock: e.block, blocks: useBlocks, logicalStart: e.logical });
+  for (const { extents, data: fileData } of files) {
+    if (extents.length === 0) throw new Error('FIEMAP returned zero extents');
+    if (fileData.length === 0) throw new Error('file data is empty');
+
+    const neededBytes = Math.ceil(fileData.length / blockSize) * blockSize;
+    const byLogical = [...extents].sort((a, b) => a.logical - b.logical);
+    let expectedLogical = 0;
+    for (const e of byLogical) {
+      if (e.logical < 0 || e.physical < 0 || e.length <= 0) {
+        throw new Error(`invalid FIEMAP extent: ${JSON.stringify(e)}`);
+      }
+      if ((e.flags & UNSAFE_FIEMAP_FLAGS) !== 0) {
+        throw new Error(`FIEMAP extent is not plain, initialized data (flags=0x${e.flags.toString(16)}): ${JSON.stringify(e)}`);
+      }
+      if (e.logical % blockSize !== 0 || e.physical % blockSize !== 0 || e.length % blockSize !== 0) {
+        throw new Error(`FIEMAP extent is not ${blockSize}-byte aligned: ${JSON.stringify(e)}`);
+      }
+      if (e.block !== e.physical / blockSize || e.blocks !== e.length / blockSize) {
+        throw new Error(`FIEMAP extent block/length fields are inconsistent: ${JSON.stringify(e)}`);
+      }
+      if (e.block + e.blocks > totalBlocks) {
+        throw new Error(`FIEMAP extent [${e.block}..${e.block + e.blocks}) exceeds partition ${totalBlocks} blocks`);
+      }
+      if (e.logical !== expectedLogical) {
+        throw new Error(`FIEMAP logical gap/overlap at offset ${expectedLogical} (got ${e.logical})`);
+      }
+      expectedLogical += e.length;
+    }
+    if (expectedLogical < neededBytes) {
+      throw new Error(`FIEMAP extents cover only ${expectedLogical} bytes, need ${neededBytes} for ${fileData.length}-byte file`);
+    }
+    for (const e of byLogical) {
+      if (e.logical >= neededBytes) break;
+      const useBytes = Math.min(e.length, neededBytes - e.logical);
+      const useBlocks = useBytes / blockSize;
+      segments.push({ physBlock: e.block, blocks: useBlocks, logicalStart: e.logical, fileData });
+    }
   }
   segments.sort((a, b) => a.physBlock - b.physBlock);
   for (let i = 1; i < segments.length; i++) {
@@ -229,6 +247,7 @@ export function buildSurgicalSparseImage(
     }
     let remBlocks = seg.blocks;
     let logicalOff = seg.logicalStart;
+    const fileData = seg.fileData;
     while (remBlocks > 0) {
       const n = Math.min(remBlocks, MAX_RAW_CHUNK_BLOCKS);
       const buf = new Uint8Array(n * blockSize); // tail past fileData.length stays 0x00
@@ -604,6 +623,24 @@ export interface StockApPatch {
   insnsSize: number;
 }
 
+/** `UsbService`, whose `allowUsbDebugging` answers Android's "Allow USB debugging?" for the computer asking. */
+const USB_SERVICE = 'Lcom/android/server/usb/UsbService;';
+const MANAGE_USB = 'android.permission.MANAGE_USB';
+/**
+ * The permission `allowUsbDebugging` checks after the patch. A privileged app holds MANAGE_USB; an app adb installs
+ * can't, but adb's `pm grant` gives it this one (Android 6: signature|privileged|development). An app holding it can
+ * already turn adb on (`Settings.Global.ADB_ENABLED`), so answering for the computer asking adds no power it lacks.
+ */
+export const USB_ALLOW_PERMISSION = 'android.permission.WRITE_SECURE_SETTINGS';
+
+/** What the USB-debugging patch changed: the permission `UsbService.allowUsbDebugging` checks. */
+export interface UsbAllowPatch {
+  /** File offset of `allowUsbDebugging`'s code_item in `classes.dex`. */
+  codeOff: number;
+  /** Code-unit offset (in its insns) of the `const-string` whose string index changed. */
+  pc: number;
+}
+
 export interface PatchedServicesJar {
   patched: Uint8Array;
   fingerprint: string;
@@ -616,6 +653,27 @@ export interface PatchedServicesJar {
   deviceOwner?: DeviceOwnerPatch;
   /** Present only when `disableStockAp` was applied. */
   stockAp?: StockApPatch;
+  /** Present only when `appApprovesUsbDebugging` was applied (or found in place by a repatch). */
+  usbAllow?: UsbAllowPatch;
+  /**
+   * The jar already carried this patch, from an earlier install (Kiln reinstalling over itself): only the key it trusts
+   * changed, from `from` (the earlier computer's fingerprint) to `fingerprint`; the rest was checked to be in place.
+   */
+  repatched?: { from: string };
+}
+
+/** The string this patch leaves in `startConfirmation`: the log line's prefix, a key fingerprint, spaces to its length. */
+const PATCHED_FP_STRING = /^unable to start ((?:[0-9A-F]{2}:){15}[0-9A-F]{2}) *$/;
+
+/**
+ * The key fingerprint a services.jar this patch already changed trusts (an earlier install), or undefined for one it
+ * hasn't: no stock log line left, and exactly one string of the shape the patch writes, at the log line's length.
+ */
+export function patchedKeyFingerprint(dex: Uint8Array): string | undefined {
+  const strings = readDexStrings(dex);
+  if (strings.includes(START_CONFIRMATION_LOG_STRING)) return undefined;
+  const ours = strings.filter((x) => x.length === START_CONFIRMATION_LOG_STRING.length && PATCHED_FP_STRING.test(x));
+  return ours.length === 1 ? PATCHED_FP_STRING.exec(ours[0]!)![1] : undefined;
 }
 
 export interface PatchStockServicesJarOptions {
@@ -636,6 +694,13 @@ export interface PatchStockServicesJarOptions {
    * behavior. Why and how: frames/lululemon-mirror/research/stock-softap.md.
    */
   disableStockAp?: boolean;
+  /**
+   * Also let an app holding `USB_ALLOW_PERMISSION` answer "Allow USB debugging?" (`UsbService.allowUsbDebugging`
+   * checks it in place of MANAGE_USB), so Glassworks, installed over adb, can let in the computers its Manage page
+   * lists, as the privileged app does on the Glass Panes image. Every other UsbService call keeps MANAGE_USB.
+   * Default `true`; the Node surgical-ADB tool passes `false`.
+   */
+  appApprovesUsbDebugging?: boolean;
   /** MD5 fingerprint to refuse (defaults to `GLASS_PANES_KEY_FINGERPRINT`). */
   forbiddenFingerprint?: string;
 }
@@ -672,6 +737,7 @@ export async function patchStockServicesJar(
 ): Promise<PatchedServicesJar> {
   const enableDeviceOwner = options.enableDeviceOwner ?? true;
   const disableStockAp = options.disableStockAp ?? true;
+  const appApprovesUsbDebugging = options.appApprovesUsbDebugging ?? true;
   const fp = stockKeyFingerprint(adbKey, options.forbiddenFingerprint);
 
   const { list } = parseZipEntries(jar);
@@ -696,6 +762,10 @@ export async function patchStockServicesJar(
   if (paddedFp.length !== START_CONFIRMATION_LOG_STRING.length) {
     throw new Error(`internal error: padded fingerprint length ${paddedFp.length} !== ${START_CONFIRMATION_LOG_STRING.length}`);
   }
+
+  // An earlier install already changed this jar: trust this key instead of that one, and check the rest is in place.
+  const earlier = patchedKeyFingerprint(origDex);
+  if (earlier) return repatch(jar, origDex, earlier, fp, paddedFp, disableStockAp, appApprovesUsbDebugging);
 
   // Step 1: swap the single-use 71-byte log string inside startConfirmation with our padded MD5.
   // replaceDexString re-sorts string_ids, renumbers every reference, and validates the whole DEX.
@@ -785,6 +855,12 @@ export async function patchStockServicesJar(
     stockAp = patchStockAp(dex, dv, lookup, strings);
   }
 
+  // Step 4c (optional): the app may answer "Allow USB debugging?".
+  let usbAllow: UsbAllowPatch | undefined;
+  if (appApprovesUsbDebugging) {
+    usbAllow = patchUsbAllow(dex, dv, lookup, strings);
+  }
+
   // Recompute DEX SHA-1 (over bytes 32..end) and Adler-32 (over bytes 12..end), both pure TS.
   dex.set(sha1Bytes(dex.subarray(32)), 12);
   dv.setUint32(8, adler32(dex.subarray(12)), true);
@@ -811,7 +887,113 @@ export async function patchStockServicesJar(
     patchedCodeUnits: units.length,
     ...(deviceOwner ? { deviceOwner } : {}),
     ...(stockAp ? { stockAp } : {}),
+    ...(usbAllow ? { usbAllow } : {}),
   };
+}
+
+/**
+ * patchStockServicesJar over a jar it already changed (`earlier`: the fingerprint it trusts): the padded fingerprint
+ * string is swapped for this key's (same length; replaceDexString renumbers every reference), and nothing else is
+ * written. Before that, every part of the patch is checked to be there: `startConfirmation` loads that string first
+ * (the code this patch writes), and with `disableStockAp`, `MirrorApService.systemReady()` is one `return-void`.
+ * Anything else is a jar Kiln doesn't know, and is refused.
+ */
+async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp: string, paddedFp: string, disableStockAp: boolean, appApprovesUsbDebugging: boolean): Promise<PatchedServicesJar> {
+  const what = 'services.jar already carries Glassworks\' changes, but';
+  const prefix = 'unable to start ';
+  const oldPadded = prefix + earlier + ' '.repeat(START_CONFIRMATION_LOG_STRING.length - prefix.length - earlier.length);
+  const dex = earlier === fp ? origDex.slice() : await replaceDexString(origDex, oldPadded, paddedFp);
+  const strings = readDexStrings(dex);
+  const fpStrIdx = strings.indexOf(paddedFp);
+  if (fpStrIdx < 0) throw new Error(`${what} this key's fingerprint didn't land in its string table`);
+  const lookup = createDexLookup(dex, strings);
+  const codeOff = lookup.findCodeItem('Lcom/android/server/usb/UsbDebuggingManager;',
+    lookup.findMethod('Lcom/android/server/usb/UsbDebuggingManager;', 'startConfirmation', '(Ljava/lang/String;Ljava/lang/String;)V'));
+  const dv = new DataView(dex.buffer, dex.byteOffset, dex.byteLength);
+  const op = dv.getUint16(codeOff + 16, true);
+  const loads = op === 0x001a ? dv.getUint16(codeOff + 18, true) === fpStrIdx
+    : op === 0x001b ? (dv.getUint16(codeOff + 18, true) | (dv.getUint16(codeOff + 20, true) << 16)) === fpStrIdx : false;
+  if (!loads) throw new Error(`${what} its startConfirmation isn't the code Kiln writes. Kiln doesn't know this jar`);
+  let stockAp: StockApPatch | undefined;
+  if (disableStockAp) {
+    const ap = lookup.findCodeItem(MIRROR_AP_SERVICE, lookup.findMethod(MIRROR_AP_SERVICE, 'systemReady', '()V'));
+    if (dv.getUint16(ap + 16, true) !== 0x000e) throw new Error(`${what} its MirrorApService.systemReady() still runs. Kiln doesn't know this jar`);
+    stockAp = { codeOff: ap, insnsSize: dv.getUint32(ap + 12, true) };
+  }
+  // An install from before the USB-debugging patch: add it now (the same bytes a fresh patch writes). One that has it: keep it.
+  let usbAllow: UsbAllowPatch | undefined;
+  let addedUsbAllow = false;
+  if (appApprovesUsbDebugging) {
+    usbAllow = findUsbAllow(dex, dv, lookup, strings, USB_ALLOW_PERMISSION);
+    if (!usbAllow) { usbAllow = patchUsbAllow(dex, dv, lookup, strings); addedUsbAllow = true; }
+  }
+  let out = jar;
+  let padBytes = 0;
+  if (earlier !== fp || addedUsbAllow) {
+    dex.set(sha1Bytes(dex.subarray(32)), 12);
+    dv.setUint32(8, adler32(dex.subarray(12)), true);
+    ({ out, padBytes } = await replaceJarDexExactSize(jar, dex));
+    const back = await zipEntry(out, 'classes.dex');
+    if (!back || back.length !== dex.length || !back.every((x, i) => x === dex[i])) throw new Error('patched services.jar failed round-trip classes.dex read-back check');
+    if (out.length !== jar.length) throw new Error(`patched services.jar length ${out.length} !== original ${jar.length}`);
+  }
+  return {
+    patched: out,
+    fingerprint: fp,
+    originalSha256: await sha256Hex(jar),
+    patchedSha256: await sha256Hex(out),
+    padBytes,
+    startConfirmationCodeOff: codeOff,
+    patchedCodeUnits: 0,
+    ...(stockAp ? { stockAp } : {}),
+    ...(usbAllow ? { usbAllow } : {}),
+    repatched: { from: earlier },
+  };
+}
+
+/**
+ * The `const-string` in `UsbService.allowUsbDebugging(ZLjava/lang/String;)V` that loads `permission`, for the check
+ * `enforceCallingOrSelfPermission(permission, null)`; undefined when it loads another. Exactly one load of a
+ * permission string is the body we read (stock 1.24.0): anything else refuses.
+ */
+function findUsbAllow(dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[], permission: string): UsbAllowPatch | undefined {
+  const what = 'USB debugging patch';
+  let codeOff: number;
+  try {
+    codeOff = lookup.findCodeItem(USB_SERVICE, lookup.findMethod(USB_SERVICE, 'allowUsbDebugging', '(ZLjava/lang/String;)V'));
+  } catch (e) {
+    throw new Error(`${what}: services.jar has no ${USB_SERVICE}.allowUsbDebugging(ZLjava/lang/String;)V (${(e as Error).message})`);
+  }
+  if (codeOff === 0 || codeOff + 16 > dex.length) throw new Error(`${what}: invalid code_item offset 0x${codeOff.toString(16)} for UsbService.allowUsbDebugging`);
+  const perms = new Map([MANAGE_USB, USB_ALLOW_PERMISSION].map((x) => [strings.indexOf(x), x] as const));
+  const insnsOff = codeOff + 16;
+  const loads: { pc: number; name: string }[] = [];
+  for (const insn of walkInsns(dex, codeOff)) {
+    if (insn.op === 0x1b) {
+      const name = perms.get(dv.getUint32(insnsOff + (insn.pc + 1) * 2, true));
+      if (name) throw new Error(`${what}: UsbService.allowUsbDebugging loads ${name} with const-string/jumbo, which Kiln doesn't change`);
+    }
+    if (insn.op !== 0x1a) continue;
+    const name = perms.get(dv.getUint16(insnsOff + (insn.pc + 1) * 2, true));
+    if (name) loads.push({ pc: insn.pc, name });
+  }
+  if (loads.length !== 1) throw new Error(`${what}: UsbService.allowUsbDebugging loads ${loads.length} permission strings, not the one Kiln read`);
+  return loads[0]!.name === permission ? { codeOff, pc: loads[0]!.pc } : undefined;
+}
+
+/**
+ * Makes `UsbService.allowUsbDebugging` check `USB_ALLOW_PERMISSION` in place of MANAGE_USB, in place on `dex`
+ * (SHA-1/Adler recomputed by the caller): one `const-string` operand, the same 2 code units, nothing else moved.
+ */
+function patchUsbAllow(dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[]): UsbAllowPatch {
+  const what = 'USB debugging patch';
+  const to = strings.indexOf(USB_ALLOW_PERMISSION);
+  if (to < 0) throw new Error(`${what}: "${USB_ALLOW_PERMISSION}" string not in classes.dex`);
+  if (to > 0xffff) throw new Error(`${what}: "${USB_ALLOW_PERMISSION}" is string ${to}, past what const-string holds`);
+  const at = findUsbAllow(dex, dv, lookup, strings, MANAGE_USB);
+  if (!at) throw new Error(`${what}: UsbService.allowUsbDebugging doesn't check ${MANAGE_USB} (already patched, or not stock)`);
+  dv.setUint16(at.codeOff + 16 + (at.pc + 1) * 2, to, true);
+  return at;
 }
 
 /**

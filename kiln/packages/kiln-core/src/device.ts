@@ -112,6 +112,8 @@ export interface InPlaceCode {
   stage(o: { adbKey: string; userdataBytes: number; secret: Uint8Array; wifi?: { ssid: string; password: string }; assets: Record<string, Uint8Array> }): Promise<Blob>;
   /** Kiln's staged assets the stage puts on the device, by asset name. */
   assets?: readonly string[];
+  /** Kiln's staged assets the `in-place` build uses (`build`'s `assets`, each checked by its SHA-256), by asset name. */
+  buildAssets?: readonly string[];
   /**
    * The `receive` step's check, after Kiln's own (bundle.ts `verifyGwsbBundle`): the bundle is what the agent read off
    * this device. `digest`: its id in the bundle cache; `extents`: where the file it holds sits on the partition, in
@@ -119,7 +121,8 @@ export interface InPlaceCode {
    * a copy this browser kept from an earlier run, whose signature was checked with that run's secret when it came: its
    * signature isn't checked again (the secret is never kept), everything else is.
    */
-  readBundle(bytes: Uint8Array, o: { secret: Uint8Array; serial: string; kept?: boolean }): Promise<{
+  /** `unsigned`: the person chose to go on with a bundle whose signature didn't match (Kiln warned); no signature check. */
+  readBundle(bytes: Uint8Array, o: { secret: Uint8Array; serial: string; kept?: boolean; unsigned?: boolean }): Promise<{
     digest: string;
     extents: readonly { physical: number; length: number }[];
     info: readonly string[];
@@ -135,9 +138,9 @@ export interface InPlaceCode {
    * The `in-place` step: the write images by name (the step's `makes`), and the restore image for every block the
    * surgical one changes. `manifest`: the restore point's description, kept with it and in its download. `files`: other
    * files the restore point keeps (the original file, say), by file name. `partitionBytes`: each partition's size as
-   * fastboot reports it now.
+   * fastboot reports it now. `assets`: the staged files `buildAssets` names, by name.
    */
-  build(bundle: Uint8Array, o: { adbKey: string; userdataBytes: number; partitionBytes: Record<string, number>; serial: string; wifi?: { ssid: string; password: string } }): Promise<{
+  build(bundle: Uint8Array, o: { adbKey: string; userdataBytes: number; partitionBytes: Record<string, number>; serial: string; wifi?: { ssid: string; password: string }; assets?: Record<string, Uint8Array> }): Promise<{
     writes: Record<string, Blob>;
     restore: Blob;
     manifest?: Record<string, unknown>;
@@ -165,7 +168,18 @@ export interface InPlaceCode {
   };
   /** How the `receive` step reaches the agent: its HTTP port and path on the LAN, its Bluetooth GATT service and characteristics. */
   channels: {
-    lan?: { port: number; path: string; pagePath?: string };
+    lan?: {
+      port: number;
+      path: string;
+      pagePath?: string;
+      /**
+       * The Wi-Fi network the device opens itself while the agent runs, and its address there. `{serial}` in `ssid`
+       * stands for the serial fastboot reported. With it, the receive step asks the person to join that network and
+       * fetches the bundle from `host` directly, with no Bluetooth; and the person's own Wi-Fi goes only into the
+       * final install, never the stage (a device that joins it might not open its own).
+       */
+      hotspot?: { ssid: string; host: string };
+    };
     ble?: { service: string; meta: string; ctrl: string; data: string };
   };
   /** What the in-place screens say (installer.json `device.words`, the `inPlace.*` keys; inPlaceWords() checks them). */

@@ -15,7 +15,7 @@ export {
 } from './images';
 export { checkInPlace, mergeRanges, parseSparseWriteRanges, parseSparseWrites, type ByteRange, type InPlaceCheckInput, type SparseWrites } from './inplace';
 export {
-  IdbBundleCache, hmacSha256Hex, memoryBundleCache, parseGwsbBundle, sha256Hex, verifyGwsbBundle,
+  BundleSignatureError, IdbBundleCache, hmacSha256Hex, memoryBundleCache, parseGwsbBundle, sha256Hex, verifyGwsbBundle,
   type BundleCache, type BundleChannel, type BundleChannelKind, type ParsedGwsbBundle, type VerifyGwsbOptions,
 } from './bundle';
 export {

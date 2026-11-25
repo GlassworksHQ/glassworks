@@ -16,7 +16,7 @@ import {
   type PlannedStep, type PrepareStep,
 } from '@glassworks/kiln-core';
 import type { BluetoothLike } from './channels';
-import { InPlaceReceiver, fallbackWords, fromHexString, memoryInPlaceStore, newSecret, restorePointZip, toHexString, type InPlaceStore, type Received } from './inPlace';
+import { InPlaceReceiver, UnverifiedBundle, fallbackWords, fromHexString, hotspotUrls, memoryInPlaceStore, newSecret, restorePointZip, toHexString, type InPlaceStore, type Received } from './inPlace';
 import type { ReceiveChannel, ReceiveProgress, ReceiveStage } from './InPlaceScreens';
 
 
@@ -105,12 +105,14 @@ export interface ImageDeps {
   localNetworkPermission?: () => Promise<PermissionState | null>;
   /** The staged assets an in-place stage needs (its `inPlace.assets`), each checked by its SHA-256. */
   stagedAssets?(names: readonly string[]): Promise<Record<string, Uint8Array>>;
-  /** A new per-run secret for the stage (crypto.getRandomValues by default). */
+  /** The stage's secret: this browser's in the app (browserStageSecret), a new one each run by default. */
   secret?(): Uint8Array;
   /** Bluetooth's stall watchdog for the receive step (tests shorten it). */
   bleStallMs?: number;
   /** The local network transfer's time limit (tests shorten it). */
   lanTimeoutMs?: number;
+  /** How often the receive screen checks for the device's own Wi-Fi (tests shorten it). */
+  hotspotPollMs?: number;
 }
 
 /**
@@ -154,6 +156,12 @@ export interface ReceiveView {
   fallback: string | null;
   error: string | null;
   bluetooth: boolean;
+  /** The device's own Wi-Fi network, when it opens one (the frame's `hotspot`): the person joins it for the transfer. */
+  network: string | null;
+  /** Whether the agent answers on that network: this computer has joined it. */
+  joined: boolean;
+  /** Why the last try over that network failed: the browser blocked the local network, or nothing answered. */
+  wifiFailed?: 'lna-denied' | 'unreachable';
 }
 
 /** The restore point's screen (InPlaceScreens RestorePointScreen). */
@@ -238,6 +246,8 @@ export interface ImageState {
   /** An in-place recipe's fastboot session: 1 for the stage, 2 for the install after the bundle is in. */
   round?: 1 | 2;
   receive?: ReceiveView;
+  /** The bundle came over the device's own Wi-Fi: the next screen says this computer can go back to its usual network. */
+  leftHotspot?: boolean;
   restorePoint?: RestoreView;
   undo?: UndoView;
   error?: string;
@@ -302,6 +312,8 @@ export class ImageSession {
   private cursor?: number;
   /** The stage's secret: in this tab only, until the bundle is in. Never in the state, the log or an error */
   private secret?: Uint8Array;
+  /** A bundle that failed only its signature, waiting on the person's Continue anyway. */
+  private unverified?: UnverifiedBundle;
   /** The device's fastboot serial: the bundle and the second session must be the same device's. Never in the log */
   private serial?: string;
   private bundle?: { bytes?: Uint8Array; digest: string; extents?: readonly { physical: number; length: number }[] };
@@ -313,6 +325,8 @@ export class ImageSession {
   /** The receive attempt running now: Cancel, or a newer attempt, aborts it, and nothing it finishes counts after that. */
   private receiving?: AbortController;
   private receiver?: InPlaceReceiver;
+  /** The watch for the device's own Wi-Fi on the receive screen (watchHotspot). */
+  private watching?: AbortController;
   private storeMemo?: InPlaceStore;
   /** The way back's restore point: the restore image, its partition and manifest. */
   private undoFiles?: { files: NamedPart[]; sparse: NamedPart; manifest?: Record<string, unknown> };
@@ -341,6 +355,7 @@ export class ImageSession {
       this.serial = mark.serial;
       this.state = { ...this.state, screen: 'receive', picked: wrote.id, files: waiting(wrote), changed: true, round: 1, receive: this.receiveView('ready') };
       this.cursor = this.indexOf(wrote, 'receive');
+      setTimeout(() => this.watchHotspot(), 0);
     } else if (inPlace && mark?.at === 'received' && mark.serial && mark.digest) {
       this.serial = mark.serial;
       this.bundle = { digest: mark.digest };
@@ -720,7 +735,43 @@ export class ImageSession {
   }
 
   private receiveView(stage: ReceiveStage, patch: Partial<ReceiveView> = {}): ReceiveView {
-    return { stage, channel: null, progress: null, pageUrl: this.state?.receive?.pageUrl ?? null, fallback: null, error: null, bluetooth: this.state?.receive?.bluetooth ?? true, ...patch };
+    const h = this.hotspot();
+    return {
+      stage, channel: null, progress: null, pageUrl: this.state?.receive?.pageUrl ?? h?.page ?? null, fallback: null, error: null,
+      bluetooth: this.state?.receive?.bluetooth ?? true, network: h?.ssid ?? null, joined: this.state?.receive?.joined ?? false, ...patch,
+    };
+  }
+
+  /** The device's own Wi-Fi and the agent's addresses on it, when the frame declares one and the serial is known. */
+  private hotspot() {
+    return this.recipe && this.inPlace ? hotspotUrls(this.d.frame.imageFlow.inPlace?.channels.lan, this.serial) : null;
+  }
+
+  /**
+   * While the receive screen waits for the person, checks every few seconds whether the agent answers on the device's
+   * own Wi-Fi, so the screen can say this computer joined it. One watch at a time; it ends when the screen moves on.
+   */
+  private watchHotspot(): void {
+    if (!this.hotspot() || this.watching) return;
+    const watch = (this.watching = new AbortController());
+    const waiting = () => this.state.screen === 'receive' && (this.state.receive?.stage === 'waiting-boot' || this.state.receive?.stage === 'ready');
+    void (async () => {
+      try {
+        while (!watch.signal.aborted && this.state.screen === 'receive') {
+          if (waiting() && this.serial) {
+            const ok = await this.receiverOf(this.receiveStep().channels).hotspotReachable(this.serial, watch.signal);
+            if (watch.signal.aborted) return;
+            if (waiting() && ok !== this.state.receive!.joined) {
+              this.log('', ok ? 'this computer reaches the setup agent on the device\'s own Wi-Fi' : 'the setup agent stopped answering on the device\'s own Wi-Fi');
+              this.set({ receive: { ...this.state.receive!, joined: ok, ...(ok ? { stage: 'ready' as const } : {}) } });
+            }
+          }
+          await new Promise((r) => setTimeout(r, this.d.hotspotPollMs ?? 3000));
+        }
+      } finally {
+        if (this.watching === watch) this.watching = undefined;
+      }
+    })();
   }
 
   /**
@@ -751,17 +802,21 @@ export class ImageSession {
             this.set({ screen: 'working', round: 1 });
             work('stage', 0);
             this.log('Preparing the setup agent');
-            // a new run: a new secret, and a new receiver (what an earlier run's agent said is that run's, not this one's)
+            // a new run: the stage's secret, and a new receiver (what an earlier run's agent said is that run's, not this one's)
             this.receiving?.abort();
             this.receiving = undefined;
             this.receiver = undefined;
             this.restore = undefined;
+            if (this.state.leftHotspot) this.set({ leftHotspot: undefined });
             this.wrote = new Set();
             this.secret = (this.d.secret ?? newSecret)();
             const assets = code.assets?.length ? await (this.d.stagedAssets?.(code.assets) ?? Promise.resolve({})) : {};
-            this.made[step.makes] = await code.stage({ adbKey, userdataBytes: this.state.fastboot.userdataBytes, secret: this.secret, assets, ...(network ? { wifi: network } : {}) });
+            // a device with its own Wi-Fi gets the person's network only in the final install: one that joins it might
+            // not open its own, and the transfer goes over that one
+            const stageNetwork = code.channels.lan?.hotspot ? undefined : network;
+            this.made[step.makes] = await code.stage({ adbKey, userdataBytes: this.state.fastboot.userdataBytes, secret: this.secret, assets, ...(stageNetwork ? { wifi: stageNetwork } : {}) });
             work('stage', 1);
-            this.log('', network ? 'the setup agent, this browser\'s adb key, a new secret for this run and your network, on a fresh userdata' : 'the setup agent, this browser\'s adb key and a new secret for this run, on a fresh userdata');
+            this.log('', stageNetwork ? 'the setup agent, this browser\'s adb key, its signing secret and your network, on a fresh userdata' : 'the setup agent, this browser\'s adb key and its signing secret, on a fresh userdata');
             this.d.progress?.set({ at: 'written', image: r.id });
             break;
           }
@@ -809,7 +864,8 @@ export class ImageSession {
           }
           case 'receive':
             this.cursor = i;
-            this.set({ screen: 'receive', work: undefined, receive: this.receiveView('waiting-boot', { bluetooth: await this.receiverOf(step.channels).bluetoothAvailable().catch(() => false) }) });
+            this.set({ screen: 'receive', work: undefined, receive: this.receiveView('waiting-boot', { joined: false, bluetooth: await this.receiverOf(step.channels).bluetoothAvailable().catch(() => false) }) });
+            this.watchHotspot();
             return;
           case 'fastboot':
             this.cursor = i;
@@ -826,7 +882,9 @@ export class ImageSession {
             const flashes = steps.slice(i + 1).filter((x): x is Extract<PlannedStep, { do: 'flash' }> => x.do === 'flash');
             const partitionBytes: Record<string, number> = {};
             for (const x of flashes) partitionBytes[x.partition] ??= await fb.partitionSize(x.partition);
-            const built = await this.code().build(bundle.bytes, { adbKey, userdataBytes: this.state.fastboot?.userdataBytes ?? partitionBytes.userdata ?? 0, partitionBytes, serial: this.serial, ...(network ? { wifi: network } : {}) });
+            const code = this.code();
+            const assets = code.buildAssets?.length ? await (this.d.stagedAssets?.(code.buildAssets) ?? Promise.resolve({})) : {};
+            const built = await code.build(bundle.bytes, { adbKey, userdataBytes: this.state.fastboot?.userdataBytes ?? partitionBytes.userdata ?? 0, partitionBytes, serial: this.serial, assets, ...(network ? { wifi: network } : {}) });
             for (const m of step.makes) if (!built.writes[m]) throw new Error(`the frame's build made no ${m}`);
             // Kiln's own check before any byte is written: the surgical write (the first one after the restore point) changes
             // only the blocks the bundle names, and the restore puts back exactly those
@@ -915,8 +973,8 @@ export class ImageSession {
    */
   async receive(): Promise<void> {
     if (this.state.screen !== 'receive' || this.state.receive?.stage === 'connecting' || this.state.receive?.stage === 'transferring') return;
-    const secret = this.secret, serial = this.serial;
-    if (!secret || !serial) { this.set({ receive: this.receiveView('error', { error: 'This tab no longer has the setup agent\'s secret. Start the install again from its first screen.' }) }); return; }
+    const secret = this.stageSecret(), serial = this.serial;
+    if (!serial) { this.set({ receive: this.receiveView('error', { error: 'This tab no longer knows which device it is installing on. Start the install again from its first screen.' }) }); return; }
     const step = this.receiveStep();
     const rec = this.receiverOf(step.channels);
     const { signal } = this.newReceive();
@@ -937,9 +995,46 @@ export class ImageSession {
       await this.received(got);
     } catch (e) {
       if (!this.endReceive(signal)) return;
+      if (e instanceof UnverifiedBundle) { this.askUnverified(e); return; }
       const why = (e as Error).message;
       this.log('', `receive: ${why}`);
       this.set({ receive: this.receiveView(lanDenied ? 'lna-denied' : 'error', { error: why, channel: this.state.receive?.channel ?? null }) });
+    }
+  }
+
+  /**
+   * Continue on the join screen: the bundle straight from the agent on the device's own Wi-Fi. When nothing answers
+   * there, the screen offers Bluetooth or another try; nothing switches over on its own.
+   */
+  async receiveWifi(): Promise<void> {
+    if (this.state.screen !== 'receive' || this.state.receive?.stage === 'connecting' || this.state.receive?.stage === 'transferring') return;
+    const secret = this.stageSecret(), serial = this.serial;
+    if (!serial || !this.hotspot()) { this.set({ receive: this.receiveView('error', { error: 'This tab no longer knows which device it is installing on. Start the install again from its first screen.' }) }); return; }
+    const rec = this.receiverOf(this.receiveStep().channels);
+    const { signal } = this.newReceive();
+    const live = () => !signal.aborted;
+    this.set({ receive: this.receiveView('connecting', { channel: 'lan', wifiFailed: undefined }) });
+    try {
+      const got = await rec.receiveHotspot({
+        secret, serial, signal,
+        onChannel: (c) => { if (live()) this.set({ receive: { ...this.state.receive!, stage: 'transferring', channel: c } }); },
+        onProgress: (p) => { if (live()) this.set({ receive: { ...this.state.receive!, progress: this.progressOf(p) } }); },
+        onVerifying: () => { if (live()) this.set({ receive: { ...this.state.receive!, stage: 'verifying' } }); },
+      });
+      if (!this.endReceive(signal)) return;
+      this.set({ leftHotspot: true });
+      await this.received(got);
+    } catch (e) {
+      if (!this.endReceive(signal)) return;
+      if (e instanceof UnverifiedBundle) { this.set({ leftHotspot: true }); this.askUnverified(e); return; }
+      const kind = (e as { kind?: string }).kind;
+      this.log('', `receive over the device's own Wi-Fi: ${(e as Error).message}`);
+      if (kind === 'lna-denied' || kind === 'timeout' || kind === 'network-error') {
+        this.set({ receive: this.receiveView('wifi-unreachable', { joined: false, wifiFailed: kind === 'lna-denied' ? 'lna-denied' : 'unreachable' }) });
+        this.watchHotspot();
+        return;
+      }
+      this.set({ receive: this.receiveView('error', { error: (e as Error).message, channel: 'lan' }) });
     }
   }
 
@@ -960,8 +1055,8 @@ export class ImageSession {
   /** A bundle file the person downloaded from the agent's own page. */
   async receiveFile(file: Blob): Promise<void> {
     if (this.state.screen !== 'receive') return;
-    const secret = this.secret, serial = this.serial;
-    if (!secret || !serial) { this.set({ receive: this.receiveView('error', { error: 'This tab no longer has the setup agent\'s secret. Start the install again from its first screen.' }) }); return; }
+    const secret = this.stageSecret(), serial = this.serial;
+    if (!serial) { this.set({ receive: this.receiveView('error', { error: 'This tab no longer knows which device it is installing on. Start the install again from its first screen.' }) }); return; }
     const rec = this.receiverOf(this.receiveStep().channels);
     // a transfer still running over the network or Bluetooth stops: the file takes its place
     const { signal } = this.newReceive();
@@ -977,7 +1072,39 @@ export class ImageSession {
       await this.received(got);
     } catch (e) {
       if (!this.endReceive(signal)) return;
+      if (e instanceof UnverifiedBundle) { this.askUnverified(e); return; }
       this.set({ receive: this.receiveView('error', { error: (e as Error).message, channel: 'file' }) });
+    }
+  }
+
+  /** The stage's secret: this run's, or (after a reload that lost it) the one the deps give, this browser's in the app. */
+  private stageSecret(): Uint8Array {
+    return this.secret ?? this.d.secret?.() ?? new Uint8Array(32);
+  }
+
+  /** A bundle that failed only its signature: the receive screen asks before Kiln goes on with it. */
+  private askUnverified(u: UnverifiedBundle) {
+    this.unverified = u;
+    this.log('', `receive: ${u.message}; waiting for the person to decide`);
+    this.set({ receive: this.receiveView('unverified', { channel: u.channel }) });
+  }
+
+  /** Continue anyway on the signature warning: every other check runs again, then the install goes on. */
+  async receiveUnverified(): Promise<void> {
+    const u = this.unverified, serial = this.serial;
+    if (this.state.screen !== 'receive' || !u || !serial) return;
+    this.unverified = undefined;
+    const rec = this.receiverOf(this.receiveStep().channels);
+    const { signal } = this.newReceive();
+    this.set({ receive: this.receiveView('verifying', { channel: u.channel }) });
+    try {
+      const got = await rec.acceptUnverified(u, { secret: this.stageSecret(), serial, signal });
+      if (!this.endReceive(signal)) return;
+      this.log('', 'went on without the signature, as asked');
+      await this.received(got, false);
+    } catch (e) {
+      if (!this.endReceive(signal)) return;
+      this.set({ receive: this.receiveView('error', { error: (e as Error).message, channel: u.channel }) });
     }
   }
 
@@ -985,7 +1112,7 @@ export class ImageSession {
   receiveByHand() { if (this.state.screen === 'receive') this.set({ receive: this.receiveView('file-fallback') }); }
 
   /** The receive screen's Try again: back to connecting. */
-  receiveAgain() { if (this.state.screen === 'receive') this.set({ receive: this.receiveView('ready') }); }
+  receiveAgain() { if (this.state.screen === 'receive') { this.unverified = undefined; this.set({ receive: this.receiveView('ready') }); this.watchHotspot(); } }
 
   /** Cancel on the receive screen: stops a transfer in flight; the agent keeps running, so Connect starts it again. */
   async cancelReceive(): Promise<void> {
@@ -993,16 +1120,17 @@ export class ImageSession {
     this.receiving?.abort();
     this.receiving = undefined;
     this.set({ receive: this.receiveView('ready') });
+    this.watchHotspot();
     await this.receiver?.cancel();
   }
 
-  private async received(got: Received): Promise<void> {
+  private async received(got: Received, signed = true): Promise<void> {
     // the secret has done its job: the tab lets go of it, and the mark keeps only where the bundle is
     this.secret = undefined;
     this.wrote = new Set();
     this.bundle = { bytes: got.bytes, digest: got.digest, extents: got.extents };
     this.log('Bundle received');
-    this.log('', `over ${got.channel === 'cache' ? 'this browser\'s saved copy' : got.channel === 'lan' ? 'the local network' : got.channel === 'ble' ? 'Bluetooth' : 'a file'}, checked: its SHA-256, the device's serial and this run's signature`);
+    this.log('', `over ${got.channel === 'cache' ? 'this browser\'s saved copy' : got.channel === 'lan' ? 'the local network' : got.channel === 'ble' ? 'Bluetooth' : 'a file'}, checked: its SHA-256, the device's serial${signed ? ' and its signature' : ''}`);
     for (const line of got.info) this.log('', line);
     this.d.progress?.set({ at: 'received', image: this.recipe.id, serial: this.serial, digest: got.digest });
     await this.runFrom((this.cursor ?? this.indexOf(this.recipe, 'receive')) + 1);
@@ -1461,14 +1589,12 @@ export class ImageSession {
         : retried && !(last instanceof AdbBusy) ? `${cap(this.d.frame.the)} didn't let this browser in through its first start (${why}). It knows only the key of the browser that installed it: use that browser, then Connect again.` : why });
       return;
     }
-    const p = asked.panel;
+    let p = asked.panel;
     this.panel = p;
     this.set({ connecting: false, adbWaiting: false, screen: 'working', work: { step: 'first-boot', x: 0 } });
     try {
-      for (let i = 0; (await p.run('getprop sys.boot_completed')).out.trim() !== '1'; i++) {
-        if (i > 180) throw new Error(`${this.d.frame.the} didn't finish starting in 6 minutes`);
-        await sleep(2000);
-      }
+      p = await this.untilStarted(p, run, sleep);
+      this.panel = p;
       const k = this.state.key;
       // firstBoot hands the key back right after it starts the app (PR 575): the row turns to it there
       const onStep = (step: string, detail?: string) => {
@@ -1497,6 +1623,46 @@ export class ImageSession {
       this.log('Stopped', (e as Error).message);
       this.set({ screen: 'error', error: (e as Error).message });
     }
+  }
+
+  /**
+   * Waits for Android to say it has started (`sys.boot_completed`), at most 6 minutes. A device can reset its USB
+   * partway through its start, after Kiln is in (an Android 6 device did, 2026-11-25: "Failed to execute
+   * 'transferOut' on 'USBDevice'"): the poll's next call fails, so Kiln lets go and connects to the same device again,
+   * with no list, as the first connect asks again. In: the device as connected. Out: the device as connected now.
+   */
+  private async untilStarted(first: PanelShell, run: number, sleep: (ms: number) => Promise<void>): Promise<PanelShell> {
+    let p = first;
+    const { reopenAdb } = this.d;
+    for (let i = 0; ; i++) {
+      if (i > 180) throw new Error(`${this.d.frame.the} didn't finish starting in 6 minutes`);
+      let started: boolean;
+      try {
+        started = (await p.run('getprop sys.boot_completed')).out.trim() === '1';
+      } catch (e) {
+        if (!reopenAdb || run !== this.connects) throw e;
+        const why = (e as Error).message;
+        this.log('', `${cap(this.d.frame.the)} dropped the USB connection while it starts (${why}). Connecting again.`);
+        const stale = p;
+        void stale.close?.().catch(() => {});
+        p = await this.reconnect(reopenAdb, sleep, e);
+        this.panel = p;
+        continue;
+      }
+      if (started) return p;
+      await sleep(2000);
+    }
+  }
+
+  /** The device picked, again with no list, every 5 s until it lets in: as the first connect, at most `adbTries` times. */
+  private async reconnect(reopen: NonNullable<ImageDeps['reopenAdb']>, sleep: (ms: number) => Promise<void>, first: unknown): Promise<PanelShell> {
+    let last = first;
+    for (let i = 0; i < (this.d.adbTries ?? 60); i++) {
+      await sleep(5000);
+      try { return await reopen.call(this.d, { authMs: this.d.frame.timings.authMs }); } catch (e) { last = e; }
+      if (last instanceof AdbBusy) break;
+    }
+    throw last;
   }
 
   private async connectWifiOn(): Promise<void> {

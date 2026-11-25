@@ -1,5 +1,5 @@
 'use client';
-// An in-place install: the device restarts into a small setup agent, Kiln sends it the bundle (from a saved copy, over
+// An in-place install: the device restarts into a small setup agent, Kiln takes the bundle from it (from a saved copy, over
 // the local network, over Bluetooth or as a file the person picks), and before anything is written Kiln keeps a restore
 // point in this browser. Same design as ImageScreens (docs/design/kiln): one idea per screen, one ember button, a way
 // out on every screen. Nothing here names a frame: what the device is called and what only it needs said come in
@@ -22,7 +22,7 @@ export interface InPlaceWords {
   [key: string]: string | undefined;
 }
 
-export type ReceiveStage = 'waiting-boot' | 'ready' | 'connecting' | 'cache-hit' | 'transferring' | 'lna-denied' | 'file-fallback' | 'verifying' | 'error';
+export type ReceiveStage = 'waiting-boot' | 'ready' | 'connecting' | 'cache-hit' | 'transferring' | 'lna-denied' | 'wifi-unreachable' | 'file-fallback' | 'verifying' | 'unverified' | 'error';
 export type ReceiveChannel = 'cache' | 'lan' | 'ble' | 'file';
 
 export interface ReceiveProgress {
@@ -50,6 +50,102 @@ export interface ReceiveScreenProps {
   onPickFile(file: File): void;
   onCancel?: () => void;
   onRetry?: () => void;
+  /** Continue anyway, on the signature warning. */
+  onContinueUnverified?: () => void;
+  /**
+   * The device's own Wi-Fi network, when it opens one: the screen asks the person to join it, and Continue fetches the
+   * bundle over it (`onContinueWifi`). Bluetooth is then the other way, chosen, never switched to on its own.
+   */
+  network?: string | null;
+  /** The agent answers on that network: this computer joined it. */
+  joined?: boolean;
+  /** Why the last try over that network failed. */
+  wifiFailed?: 'lna-denied' | 'unreachable';
+  onContinueWifi?: () => void;
+  /** The by-hand screen (download from the agent's page, then pick the file). */
+  onByHand?: () => void;
+}
+
+const WifiGlyph = ({ size = 22 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+    <path d="M2 8.8a15 15 0 0 1 20 0" /><path d="M5 12.4a10 10 0 0 1 14 0" /><path d="M8.5 15.9a5 5 0 0 1 7 0" /><circle cx="12" cy="19.5" r="1" fill="currentColor" />
+  </svg>
+);
+const BluetoothGlyph = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 7l10 10-5 5V2l5 5L7 17" /></svg>
+);
+
+/** The device's own network, by name: the one thing the person needs to join it. */
+function NetworkTile({ name, on }: { name: string; on: boolean }) {
+  return (
+    <div className={`net${on ? ' on' : ''}`}>
+      <span className="ico"><WifiGlyph /></span>
+      <span className="grow"><span className="lab">Network</span><span className="name">{name}</span><span className="sub">No password</span></span>
+    </div>
+  );
+}
+
+/** Joining the device's own Wi-Fi, then Continue: the transfer's first screen on a device that opens one. */
+function JoinWifi(p: ReceiveScreenProps & { network: string }) {
+  const the = theOf(p.words);
+  const waiting = p.stage === 'waiting-boot' && !p.joined;
+  const connecting = p.stage === 'connecting';
+  return (
+    <section className="card" aria-labelledby="h">
+      {waiting && <span className="turn-label"><span className="pulse" />Restarting into setup</span>}
+      <h2 id="h">{`Join ${the}’s Wi-Fi`}</h2>
+      <p className="lede">{`${capital(the)} is starting its setup agent. In a minute or two it opens a Wi-Fi network of its own. Join it on this computer, and Kiln gets the bundle from it in a few seconds.`}</p>
+      <NetworkTile name={p.network} on={!!p.joined} />
+      {!p.joined && <p className="small">While you’re on it, this computer may say there’s no internet. That’s expected, and Kiln keeps working.</p>}
+      {connecting
+        ? <><p className="status work" role="status">Connecting…</p><div className="bar wait"><i /></div></>
+        : p.joined
+          ? <p className="live ok" role="status"><span className="tick" aria-hidden="true">✓</span>{`This computer is on ${the}’s Wi-Fi, and its setup agent answered.`}</p>
+          : <p className="live" role="status"><span className="pulse" />Waiting for this computer to join…</p>}
+      {p.words.coverNote && <p className="small">{p.words.coverNote}</p>}
+      <div className="foot">
+        <span className="links">
+          {p.onCancel && <><button type="button" className="link" onClick={p.onCancel}>Cancel</button>{p.bluetoothAvailable && <span aria-hidden="true">·</span>}</>}
+          {p.bluetoothAvailable && !connecting && <button type="button" className="link" onClick={() => p.onConnectBluetooth()}>Use Bluetooth instead</button>}
+        </span>
+        {!connecting && <button type="button" className={`btn ${p.joined ? 'ember pulsing' : 'ghost'}`} onClick={() => p.onContinueWifi?.()}>Continue</button>}
+      </div>
+    </section>
+  );
+}
+
+/** Continue found nothing on the device's own Wi-Fi: Bluetooth, or another try once this computer is on it. */
+function WifiUnreachable(p: ReceiveScreenProps & { network: string }) {
+  const the = theOf(p.words);
+  const denied = p.wifiFailed === 'lna-denied';
+  return (
+    <section className="card" aria-labelledby="h">
+      <h2 id="h">{denied ? 'The browser blocked the local network' : `Kiln can’t reach ${the} over Wi-Fi`}</h2>
+      <p className="lede">
+        {denied
+          ? `Chrome asked whether Kiln may reach devices on your local network, and it was blocked. Allow it in this site’s settings and try again, or get the bundle over Bluetooth, which needs no network and takes about 5 minutes.`
+          : <>Check that this computer is on <b>{p.network}</b>, then try again. Or get the bundle over Bluetooth, which needs no network and takes about 5 minutes.</>}
+      </p>
+      <div className="choices">
+        <div className="route">
+          <span className="ico"><BluetoothGlyph /></span>
+          <span className="grow"><span className="t">Bluetooth</span><span className="d">{p.bluetoothAvailable ? `Chrome asks you to pick ${the}` : 'This browser can’t use Bluetooth. Chrome or Edge on a computer can.'}</span></span>
+          <button type="button" className={`btn sm ${p.bluetoothAvailable ? 'ember' : 'ghost'}`} disabled={!p.bluetoothAvailable} onClick={() => p.onConnectBluetooth()}>Use Bluetooth</button>
+        </div>
+        <div className="route">
+          <span className="ico"><WifiGlyph size={18} /></span>
+          <span className="grow"><span className="t">Wi-Fi</span><span className="d">{denied ? 'After you allow the local network' : `After you join ${p.network}`}</span></span>
+          <button type="button" className="btn ghost sm" onClick={() => p.onContinueWifi?.()}>Try again</button>
+        </div>
+      </div>
+      <div className="foot">
+        <span className="links">
+          {p.onCancel && <><button type="button" className="link" onClick={p.onCancel}>Cancel</button><span aria-hidden="true">·</span></>}
+          <button type="button" className="link" onClick={() => p.onByHand?.()}>Download it by hand instead</button>
+        </span>
+      </div>
+    </section>
+  );
 }
 
 /** How each channel reads on its chip, with how long a bundle usually takes on it. */
@@ -113,7 +209,7 @@ function NoBluetooth() {
   return <p className="small" role="note">This browser can’t use Bluetooth. Chrome or Edge on a computer can, or you can download the bundle by hand below.</p>;
 }
 
-/** Sending the bundle to the device's setup agent, from the restart to the integrity check. */
+/** Getting the bundle from the device's setup agent, from the restart to the integrity check. */
 export function ReceiveScreen(p: ReceiveScreenProps) {
   const { stage, words } = p;
   const the = theOf(words);
@@ -128,10 +224,24 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
         <h2 id="h">The transfer didn&apos;t finish</h2>
         <p className="lede">{`Nothing has been written to ${the} yet. Check the details below and try again when you’re ready.`}</p>
         {p.errorMessage && <pre className="raw">{p.errorMessage}</pre>}
-        {p.agentPageUrl && <><p className="small">Or download the bundle by hand:</p><ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} /></>}
+        <p className="small">Or download the bundle by hand:</p><ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} />
         <div className="foot">
           <Cancel onCancel={p.onCancel} />
           {p.onRetry && <button type="button" className="btn ember" onClick={p.onRetry}>Try again</button>}
+        </div>
+      </section>
+    );
+  }
+
+  if (stage === 'unverified') {
+    return (
+      <section className="card" aria-labelledby="h">
+        <h2 id="h">Kiln can’t confirm this bundle</h2>
+        <p className="lede">{`It comes from ${the} and arrived whole, but its signature doesn’t match the setup agent this browser started. That happens when the install began in another browser, or this browser’s data was cleared since.`}</p>
+        <p className="small">{`Go on only if you just took it from ${the} yourself. Nothing has been written yet, and Kiln saves a restore point before it changes anything.`}</p>
+        <div className="foot">
+          <span className="links">{p.onRetry && <button type="button" className="link" onClick={p.onRetry}>Back</button>}</span>
+          {p.onContinueUnverified && <button type="button" className="btn ember" onClick={p.onContinueUnverified}>Continue anyway</button>}
         </div>
       </section>
     );
@@ -181,6 +291,9 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
     );
   }
 
+  if (p.network && stage === 'wifi-unreachable') return <WifiUnreachable {...p} network={p.network} />;
+  if (p.network && (stage === 'waiting-boot' || stage === 'ready' || (stage === 'connecting' && p.channel === 'lan'))) return <JoinWifi {...p} network={p.network} />;
+
   if (stage === 'cache-hit') {
     return (
       <section className="card" aria-labelledby="h">
@@ -195,14 +308,15 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
     const pr = p.progress;
     const frac = pr && pr.totalBytes > 0 ? Math.min(1, pr.receivedBytes / pr.totalBytes) : 0;
     const pct = Math.floor(frac * 100);
-    const ch = p.channel ? CHANNELS[p.channel] : null;
+    // over the device's own network it is Wi-Fi to the person, not "the local network"
+    const ch = p.channel ? (p.channel === 'lan' && p.network ? { ...CHANNELS.lan, label: 'Wi-Fi' } : CHANNELS[p.channel]) : null;
     const eta = fmtEta(pr?.etaSeconds ?? null);
     return (
       <section className="card" aria-labelledby="h">
         {ch && <span className="chip"><span className="dot" />{ch.label}{ch.typical && <span className="small">{` · ${ch.typical}`}</span>}</span>}
-        <h2 id="h">{`Sending the bundle to ${the}`}</h2>
+        <h2 id="h">{`Getting the bundle from ${the}`}</h2>
         {p.fallbackReason && <p className="small" role="note">{p.fallbackReason}</p>}
-        <div className="bar" role="progressbar" aria-label="Sending the bundle" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+        <div className="bar" role="progressbar" aria-label="Getting the bundle" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
           <i style={{ width: `${Math.max(2, frac * 100)}%` }} />
         </div>
         {pr && (
@@ -229,13 +343,18 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
       <h2 id="h">{words.title ?? (waiting ? `Waiting for ${the} to restart` : `Connect to ${the}`)}</h2>
       {waiting
         ? <p className="lede">{words.bootHint ?? `${capital(the)} is restarting into its setup agent. The first start can take a few minutes, so leave it plugged in. When it says it’s ready, connect over Bluetooth.`}</p>
-        : <p className="lede">{`${capital(the)} is ready for the bundle. Kiln sends it over your local network when it can, and over Bluetooth when it can’t.`}</p>}
+        : <p className="lede">{`${capital(the)} is ready to hand over the bundle. Kiln takes it over your local network when it can, and over Bluetooth when it can’t.`}</p>}
       {words.coverNote && <p className="small">{words.coverNote}</p>}
       {waiting && <div className="bar wait"><i /></div>}
       {connecting && <><p className="status work" role="status">Connecting…</p><div className="bar wait"><i /></div></>}
       {!p.bluetoothAvailable && <><NoBluetooth /><ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} /></>}
+      {p.bluetoothAvailable && manual && <ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} />}
       <div className="foot">
-        <Cancel onCancel={p.onCancel} />
+        <span className="links">
+          {p.onCancel && <button type="button" className="link" onClick={p.onCancel}>Cancel</button>}
+          {/* Bluetooth can be there and still find nothing (the device's radio off, the browser not allowed to scan) */}
+          {!waiting && p.bluetoothAvailable && !manual && <>{p.onCancel && <span aria-hidden="true">·</span>}<button type="button" className="link" onClick={() => setManual(true)}>Download it by hand instead</button></>}
+        </span>
         {!connecting && bt(true)}
       </div>
     </section>

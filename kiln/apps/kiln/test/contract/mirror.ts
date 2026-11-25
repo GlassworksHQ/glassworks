@@ -437,6 +437,9 @@ function inPlaceWorld(k: Knobs): World {
           case 'receive': {
             const st = s.receive?.stage;
             if (st === 'error' || st === 'file-fallback') return { end: 'error' };
+            // a device with its own Wi-Fi: Continue on the join screen, and Use Bluetooth when that Wi-Fi didn't bring it
+            if (s.receive?.network && (st === 'waiting-boot' || st === 'ready')) return clicks.act(`receive-wifi-${st}`, () => f.receiveWifi());
+            if (st === 'wifi-unreachable') return clicks.act('receive-bluetooth', () => f.receive());
             if (st === 'waiting-boot' || st === 'ready' || st === 'lna-denied') return clicks.act(`receive-${st}`, () => f.receive());
             return 'wait';
           }

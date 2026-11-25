@@ -13,21 +13,28 @@
 //
 // Browser-safe: no node:* imports. Nothing here logs the secret, the Wi-Fi password or the serial.
 import type { PanelShell } from '@glassworks/adb';
-import { Steps, grantPermissions, kioskVersion, startApp } from '@glassworks/app-adb';
+import { Steps, grantPermissions, kioskVersion, startApp, zipEntry } from '@glassworks/app-adb';
 import { Disk, MemoryStore, mkfs, writeSparse } from '@glassworks/ext4';
 import { inPlaceWords, parseGwsbBundle, sha256Hex, verifyGwsbBundle, type FirstStart, type InPlaceCode } from '@glassworks/kiln-core';
 import { GLASSWORKS, type MirrorApp } from './app';
 import { makeOnlyHome, setPortrait } from './flash';
-import { AID, LABELS, buildUserdata } from './image';
+import { AID, LABELS, buildUserdata, macFromSerial } from './image';
 import { DEFAULT_WIFI_TEMPLATE, STOCK_PROBE_ASSETS, buildStageUserdata } from './stage';
 import {
-  SPARSE_BLOCK_SIZE, STOCK_SERVICES_JAR_PATH, buildSurgicalSparseImage, hideStockBloat, patchStockServicesJar,
+  SPARSE_BLOCK_SIZE, STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES, USB_ALLOW_PERMISSION, buildSurgicalSparseImage, buildSurgicalSparseImageFiles, hideStockBloat, patchStockServicesJar, patchedKeyFingerprint,
   type FiemapExtent,
 } from './stock';
 import { describeMirrorUpdates, readMirrorUpdates } from './updates';
+import { BOOT_STILL_ASSET, BOOT_STILL_BACKGROUND, ORIGINAL_BOOT, STOCK_BOOT_ANIMATION_PATH, bootStillZip } from './bootstill';
 
 /** The probe app's HTTP server (ProbeServerService.PORT) and bundle path. */
-export const STOCK_PROBE_LAN = { port: 18765, path: '/stock-bundle.bin', pagePath: '/' } as const;
+export const STOCK_PROBE_LAN = {
+  port: 18765,
+  path: '/stock-bundle.bin',
+  pagePath: '/',
+  // stock's MirrorApService opens mirror-<serial> (no password) on wlan0_ap, at 192.168.43.1, while nothing is set up
+  hotspot: { ssid: 'mirror-{serial}', host: '192.168.43.1' },
+} as const;
 
 /** The probe app's Bluetooth GATT service and characteristics (BleProbeServer). */
 export const STOCK_PROBE_BLE = {
@@ -59,6 +66,40 @@ interface BundleMeta {
   mirrorVersion?: unknown;
   fingerprint?: unknown;
   fiemap?: { size?: unknown; extents?: unknown } | null;
+  /** Stock's boot animation, when the agent sent it (StockBundle.java `bootAnimation`): its bytes, SHA-256 and FIEMAP. */
+  bootAnimation?: unknown;
+}
+
+/** Stock's boot animation as the bundle carries it, checked; or why Kiln leaves it as it is. */
+type StockBoot = { data: Uint8Array; sha256: string; extents: FiemapExtent[] } | { skip: string };
+
+/**
+ * The bundle's `bootAnimation`, checked: at stock's path, its bytes the size and SHA-256 it says, and a whole file map
+ * of plain blocks. Anything else leaves the boot animation as it is (`skip` says why): an agent from before it was
+ * sent, a Mirror with none, or one Kiln can't read.
+ */
+export async function bundleBoot(meta: BundleMeta): Promise<StockBoot> {
+  const b = meta.bootAnimation as { path?: unknown; size?: unknown; sha256?: unknown; fiemap?: { size?: unknown; extents?: unknown } | null; base64?: unknown } | null | undefined;
+  if (!b || typeof b !== 'object') return { skip: 'the setup agent didn\'t send it' };
+  if (b.path !== STOCK_BOOT_ANIMATION_PATH) return { skip: `the bundle's is ${String(b.path)}, not ${STOCK_BOOT_ANIMATION_PATH}` };
+  if (typeof b.base64 !== 'string' || typeof b.size !== 'number' || typeof b.sha256 !== 'string') return { skip: 'the bundle doesn\'t carry its bytes' };
+  let data: Uint8Array;
+  try { data = Uint8Array.from(atob(b.base64), (c) => c.charCodeAt(0)); } catch { return { skip: 'its bytes aren\'t base64' }; }
+  if (data.length !== b.size) return { skip: 'its bytes aren\'t the size the bundle says' };
+  const sha256 = await sha256Hex(data);
+  if (sha256 !== b.sha256.toLowerCase()) return { skip: 'its bytes don\'t match their SHA-256' };
+  const f = b.fiemap;
+  if (!f || !Array.isArray(f.extents) || !f.extents.length) return { skip: 'the bundle doesn\'t say where it sits' };
+  if (f.size !== undefined && f.size !== data.length) return { skip: 'its file map is for another copy' };
+  const extents = (f.extents as Record<string, unknown>[]).map((e) => {
+    const n = (k: string) => (typeof e[k] === 'number' ? e[k] as number : NaN);
+    const physical = n('physical'), length = n('length');
+    return { logical: n('logical'), physical, length, flags: Number.isFinite(n('flags')) ? n('flags') : 0,
+      block: Number.isFinite(n('block')) ? n('block') : physical / SPARSE_BLOCK_SIZE, blocks: Number.isFinite(n('blocks')) ? n('blocks') : length / SPARSE_BLOCK_SIZE };
+  });
+  // the same checks the write itself makes (alignment, plain blocks, no gaps): one Kiln couldn't write is left alone
+  try { buildSurgicalSparseImageFiles(STOCK_SYSTEM_PARTITION_BYTES, [{ extents, data }]); } catch (e) { return { skip: `its file map isn't one Kiln writes (${(e as Error).message})` }; }
+  return { data, sha256, extents };
 }
 
 /** The bundle's FIEMAP extents, whole (block and blocks filled in from bytes when the agent left them out). */
@@ -108,8 +149,13 @@ function layoutOf(fiemap: unknown): string | undefined {
 export function keptBundleFits(bundle: Uint8Array, agent: Record<string, unknown>): boolean {
   const now = layoutOf(agent.fiemap);
   if (!now) return false;
+  // an agent that sends stock's boot animation (the whole object, or its size where the description is short) over a
+  // copy from an agent that didn't: the fresh one lets Kiln change the boot animation too
+  const agentBoot = (agent.bootAnimation !== null && typeof agent.bootAnimation === 'object') || typeof agent.bootAnimationSize === 'number';
   try {
-    return layoutOf((parseGwsbBundle(bundle).meta as BundleMeta).fiemap) === now;
+    const meta = parseGwsbBundle(bundle).meta as BundleMeta;
+    if (agentBoot && !(meta.bootAnimation !== null && typeof meta.bootAnimation === 'object')) return false;
+    return layoutOf(meta.fiemap) === now;
   } catch {
     return false;
   }
@@ -158,6 +204,17 @@ export async function installInPlace(p: PanelShell, o: { apk: Uint8Array; onStep
   if (!app) throw new Error(`Android says it installed the APK, but ${ours.name} (${ours.package}) isn't there.`);
   r.detail(`${ours.name} ${app.name ?? ''} (${app.code}) installed`);
 
+  // Before the app's first start, which picks its Home Assistant identity and keeps it: the MAC Kiln's image install
+  // writes as ro.glassworks.device.mac (the serial's), as a global setting stock's build.prop can't carry, so a Mirror
+  // keeps one Home Assistant device whichever way Kiln installs it. The log names the setting only: the value is
+  // device-unique.
+  r.step('Keep this Mirror\'s Home Assistant device');
+  const mac = await macFromSerial((await p.run('getprop ro.serialno')).out);
+  if (mac) {
+    const put = await p.run(`settings put global ${INSTALLER_MAC_SETTING} ${mac}`);
+    r.detail(put.code === 0 ? `Home Assistant id: from the serial (${INSTALLER_MAC_SETTING}), the same on every install` : `Home Assistant id: not set (exit ${put.code}), so the app picks its own`);
+  } else r.detail('Home Assistant id: no serial reported, so the app picks its own');
+
   // Device Owner first, before anything else names it an admin: stock lets `dpm` do it once services.jar is patched
   r.step(`Let ${ours.name} install its own updates (Device Owner)`);
   if (ours.admin) {
@@ -171,6 +228,36 @@ export async function installInPlace(p: PanelShell, o: { apk: Uint8Array; onStep
   // install, so its setup hotspot needs the app-op (verified 2026-11-25: refused without it, `appops get` rejectTime).
   const ws = await p.run(`appops set ${ours.package} WRITE_SETTINGS allow`);
   r.detail(ws.code === 0 ? 'Setup Wi-Fi: allowed' : `Setup Wi-Fi: not allowed (${ws.out.trim().split('\n')[0] || `exit ${ws.code}`})`);
+
+  // "Allow a new computer" on the Manage page, as on the Glass Panes image: services.jar now lets an app holding
+  // USB_ALLOW_PERMISSION answer "Allow USB debugging?" (stock.ts), and READ_LOGS shows it which computer asks. Both are
+  // development permissions on Android 6, so adb grants them; the setting tells the app the check moved.
+  r.step(`Let ${ours.name} let in the computers you allow (USB debugging)`);
+  const granted: string[] = [];
+  for (const perm of ['android.permission.READ_LOGS', USB_ALLOW_PERMISSION]) {
+    const g = await p.run(`pm grant ${ours.package} ${perm}`);
+    if (g.code === 0 && !/Exception|Error/i.test(g.out)) granted.push(perm);
+    else r.detail(`${perm.split('.').pop()}: not granted (${g.out.trim().split('\n')[0] || `exit ${g.code}`})`);
+  }
+  if (granted.length === 2) {
+    const put = await p.run(`settings put global ${USB_ALLOW_PERMISSION_SETTING} ${USB_ALLOW_PERMISSION}`);
+    r.detail(put.code === 0 ? 'USB debugging: the Manage page can let in other computers' : `USB debugging: not set up (exit ${put.code})`);
+  } else r.detail('USB debugging: only this browser gets in; the Manage page can\'t add computers');
+
+  // What the Glass Panes image's settings overlay makes the defaults of a fresh userdata (overlay/res/values/defaults.xml),
+  // set over adb here, since stock's own SettingsProvider keeps its own: the display never sleeps by itself (the app
+  // turns the backlight off to sleep, and Android's display off would stop it), and Wi-Fi is on. Auto-rotate goes with
+  // the portrait step below. The lock screen stays as stock has it: Android 6 moves that setting into LockSettings on
+  // the first boot, out of adb's reach, and the Mirror's stock shows none.
+  r.step('Keep the display on and Wi-Fi up, as on the Glassworks image');
+  for (const [cmd, what] of [
+    ['settings put system screen_off_timeout 2147483647', 'screen timeout: never'],
+    ['settings put global stay_on_while_plugged_in 7', 'stay awake while plugged in: on'],
+    ['svc wifi enable', 'Wi-Fi: on'],
+  ] as const) {
+    const out = await p.run(cmd);
+    r.detail(out.code === 0 ? what : `${what.split(':')[0]}: not set (${out.out.trim().split('\n')[0] || `exit ${out.code}`})`);
+  }
 
   r.step('Hide the stock apps');
   const bloat = await hideStockBloat(p);
@@ -188,14 +275,22 @@ export async function installInPlace(p: PanelShell, o: { apk: Uint8Array; onStep
   return { app, hidden: [...bloat.filter((b) => b.ok).map((b) => b.pkg), ...hidden], home, updates: { state: updates.state } };
 }
 
+/** The global setting the app reads its Home Assistant identity from when build.prop can't carry it (PanelDevice). */
+export const INSTALLER_MAC_SETTING = 'glassworks_device_mac';
+/** The global setting that tells the app which permission `allowUsbDebugging` checks now (UsbDebugging). */
+export const USB_ALLOW_PERMISSION_SETTING = 'glassworks_usb_allow_permission';
+
 /** The Mirror's in-place code. `words`: installer.json `device.words` (the `inPlace.*` keys, checked here). */
 export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
   return {
     assets: [STOCK_PROBE_ASSETS.apk, STOCK_PROBE_ASSETS.fiemap, STOCK_PROBE_ASSETS.cert],
+    buildAssets: [BOOT_STILL_ASSET],
     stage: (o) => buildStageUserdata(o),
-    async readBundle(bytes, { secret, serial, kept }) {
-      // the jar against its SHA-256, the serial, and the signature with this run's secret (a kept copy's was checked when it came)
-      const { meta: raw, payload } = await verifyGwsbBundle(bytes, { ...(kept ? {} : { secret }), expectedSerial: serial, requireSerial: true, requireHmac: !kept, requirePayloadHash: true });
+    async readBundle(bytes, { secret, serial, kept, unsigned }) {
+      // the jar against its SHA-256, the serial, and the signature with this run's secret (a kept copy's was checked when it
+      // came; an unsigned one, the person went on past Kiln's warning)
+      const signed = !kept && !unsigned;
+      const { meta: raw, payload } = await verifyGwsbBundle(bytes, { ...(signed ? { secret } : {}), expectedSerial: serial, requireSerial: true, requireHmac: signed, requirePayloadHash: true });
       const meta = raw as BundleMeta;
       if (meta.servicesPath !== undefined && meta.servicesPath !== STOCK_SERVICES_JAR_PATH) throw new BundleRefused(`The bundle holds ${String(meta.servicesPath)}, not services.jar. ${UNCHANGED}`);
       if (meta.servicesSize !== undefined && meta.servicesSize !== payload.length) throw new BundleRefused(`The bundle's services.jar isn't the size it says. ${UNCHANGED}`);
@@ -206,7 +301,20 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
         `services.jar ${payload.length} bytes, SHA-256 ${String(meta.servicesSha256)}, in ${extents.length} extent${extents.length === 1 ? '' : 's'}`,
         'services.odex: none, so services.jar is what Android runs',
       ];
-      return { digest: String(meta.servicesSha256).toLowerCase(), extents: extents.map((e) => ({ physical: e.physical, length: e.length })), info };
+      // a reinstall: an earlier install's changes are already in it, so only the key it trusts changes, and the restore
+      // point keeps the jar as it is now (with those changes); lululemon's own jar is in the first install's restore point
+      const dex = await zipEntry(payload, 'classes.dex').catch(() => undefined);
+      if (dex && patchedKeyFingerprint(dex)) {
+        info.push('services.jar already has Glassworks\' changes from an earlier install: Kiln changes only which computer\'s adb key it trusts');
+        info.push('the restore point keeps services.jar as it is now, with those changes; lululemon\'s own is in the first install\'s restore point');
+      }
+      // stock's boot animation, overwritten with Glassworks' still at its own size (bootstill.ts): its blocks are part of
+      // what the write may change, and the restore point keeps lululemon's
+      const boot = await bundleBoot(meta);
+      if ('skip' in boot) info.push(`boot animation: stays lululemon's (${boot.skip})`);
+      else info.push(`bootanimation.zip ${boot.data.length} bytes, SHA-256 ${boot.sha256}, in ${boot.extents.length} extent${boot.extents.length === 1 ? '' : 's'}: Glassworks' goes in its place`);
+      const all = 'skip' in boot ? extents : [...extents, ...boot.extents];
+      return { digest: String(meta.servicesSha256).toLowerCase(), extents: all.map((e) => ({ physical: e.physical, length: e.length })), info };
     },
     async build(bundle, o) {
       const { meta: raw, payload: jar } = parseGwsbBundle(bundle);
@@ -216,8 +324,19 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
       const systemBytes = o.partitionBytes.system;
       if (!systemBytes) throw new Error('Kiln doesn\'t know the system partition\'s size from fastboot.');
       const patched = await patchStockServicesJar(jar, o.adbKey, { enableDeviceOwner: true });
-      const write = buildSurgicalSparseImage(systemBytes, extents, patched.patched);
-      const restore = buildSurgicalSparseImage(systemBytes, extents, jar);
+      // the boot animation, when the bundle carries stock's and Kiln has the still: Glassworks' at stock's exact size
+      const stock = await bundleBoot(meta);
+      const still = o.assets?.[BOOT_STILL_ASSET];
+      let boot: { data: Uint8Array; sha256: string; extents: FiemapExtent[]; ours: Uint8Array } | undefined;
+      let bootSkipped: string | undefined;
+      if ('skip' in stock) bootSkipped = stock.skip;
+      else if (!still) bootSkipped = 'Kiln doesn\'t have the still to put in its place';
+      else {
+        try { boot = { ...stock, ours: bootStillZip(still, { background: BOOT_STILL_BACKGROUND, size: stock.data.length }) }; } catch (e) { bootSkipped = (e as Error).message; }
+      }
+      const files = [{ extents, data: patched.patched }, ...(boot ? [{ extents: boot.extents, data: boot.ours }] : [])];
+      const write = buildSurgicalSparseImageFiles(systemBytes, files);
+      const restore = buildSurgicalSparseImageFiles(systemBytes, [{ extents, data: jar }, ...(boot ? [{ extents: boot.extents, data: boot.data }] : [])]);
       const userdata = await cleanUserdata(o);
       const originalSha256 = await sha256Hex(jar);
       // the same manifest as tools/mirror's surgical-adb --backup-dir, so its --undo restores from the download too
@@ -237,8 +356,11 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
           origFile: ORIGINAL_JAR,
           restoreSparse: RESTORE_SPARSE,
         },
+        // the restore sparse puts this back too: it covers every block the write changes
+        ...(boot ? { bootAnimation: { path: STOCK_BOOT_ANIMATION_PATH, size: boot.data.length, originalSha256: boot.sha256, patchedSha256: await sha256Hex(boot.ours), extents: boot.extents, origFile: ORIGINAL_BOOT } }
+          : { bootAnimationLeft: bootSkipped }),
       };
-      return { writes: { 'system-in-place': blob(write), userdata }, restore: blob(restore), manifest, files: { [ORIGINAL_JAR]: jar } };
+      return { writes: { 'system-in-place': blob(write), userdata }, restore: blob(restore), manifest, files: { [ORIGINAL_JAR]: jar, ...(boot ? { [ORIGINAL_BOOT]: boot.data } : {}) } };
     },
     keptMatches: keptBundleFits,
     appInstall: (p, o) => installInPlace(p, o),

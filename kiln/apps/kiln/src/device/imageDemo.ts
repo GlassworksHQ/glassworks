@@ -18,7 +18,7 @@ export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downl
   'image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-error', 'image-download-bad',
   'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes',
   'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed',
-  ...['place-choose', 'place-stage', 'place-receive-lan', 'place-receive-ble', 'place-lna-denied', 'place-receive-file', 'place-restore-point',
+  ...['place-choose', 'place-stage', 'place-join-wifi', 'place-joined', 'place-wifi-unreachable', 'place-receive-lan', 'place-receive-ble', 'place-lna-denied', 'place-receive-file', 'place-restore-point',
     'place-fastboot-again', 'place-working', 'place-error-bundle', 'place-undo', 'place-run'] as const] as const;
 export type ImageDemo = (typeof IMAGE_DEMOS)[number];
 
@@ -213,7 +213,7 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
   let standard: StandardSession | undefined;
   const tick = (ms: number) => new Promise<void>((r) => setTimeout(r, fast ? 0 : ms));
   const device = ip.device({
-    lan: name === 'place-lna-denied' ? 'lna-denied' : name === 'place-receive-ble' ? 'offline' : 'ok',
+    lan: name === 'place-lna-denied' ? 'lna-denied' : name === 'place-receive-ble' || name === 'place-join-wifi' || name === 'place-wifi-unreachable' ? 'offline' : 'ok',
     tampered: name === 'place-error-bundle',
     tick: (ms) => tick(ms),
     ...(fast ? {} : { bleFrameDelayMs: 120 }),
@@ -245,6 +245,7 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
     agentFetch: name === 'place-receive-lan' ? heldFetch(device.fetch) : device.fetch,
     localNetworkPermission: async () => (name === 'place-lna-denied' ? 'denied' : 'granted'),
     handOver: (p) => { standard = handOver?.(p); },
+    hotspotPollMs: fast ? 5 : 1500,
     ...deps,
   });
   const done = { image, app, standard: () => standard };
@@ -260,8 +261,12 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
   if (name === 'place-stage') { await new Promise((r) => setTimeout(r, 0)); return done; }
   await staging;
   if (name === 'place-receive-file') { image.receiveByHand(); return done; }
-  const receiving = image.receive();
-  if (name === 'place-receive-lan' || name === 'place-receive-ble' || name === 'place-lna-denied') { void receiving; return done; }
+  // the device's own Wi-Fi: before and after this computer joins it, and a Continue that finds nothing there
+  if (name === 'place-join-wifi') return done;
+  if (name === 'place-joined') { await waitFor(() => !!image.state.receive?.joined); return done; }
+  if (name === 'place-wifi-unreachable' || name === 'place-lna-denied') { await image.receiveWifi(); return done; }
+  const receiving = name === 'place-receive-ble' ? image.receive() : image.receiveWifi();
+  if (name === 'place-receive-lan' || name === 'place-receive-ble') { void receiving; return done; }
   await receiving;
   if (name === 'place-error-bundle' || name === 'place-fastboot-again') return done;
   const second = image.connectFastboot();

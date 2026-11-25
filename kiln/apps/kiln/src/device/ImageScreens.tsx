@@ -111,7 +111,44 @@ function ApkInput({ d, m, ms }: { d: DeviceFrame; m: AppSession; ms: AppState })
   );
 }
 
-/** Glassworks on the device's own software: nothing to download, the APK, and a network for a quick transfer. */
+/** The person's Wi-Fi, before fastboot: Glassworks joins it on its first start. Optional. */
+function YourWifi({ f, s }: Pick<P, 'f' | 's'>) {
+  const d = f.frame;
+  const [show, setShow] = useState(false);
+  const hotspot = !!d.imageFlow.inPlace?.channels.lan?.hotspot;
+  const { ssid, password } = s.wifi;
+  return (
+    <div className="wifi">
+      <div className="wifi-head">
+        <span className="ico" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 8.8a15 15 0 0 1 20 0" /><path d="M5 12.4a10 10 0 0 1 14 0" /><path d="M8.5 15.9a5 5 0 0 1 7 0" /><circle cx="12" cy="19.5" r="1" fill="currentColor" /></svg>
+        </span>
+        <span>
+          <span className="t">Your Wi-Fi <span className="opt-tag">Optional</span></span>
+          <span className="d" style={{ display: 'block' }}>
+            {hotspot
+              ? `Glassworks joins it on its first start, so ${d.the} comes up online and ready for Home Assistant. You can also add it on ${d.the} later.`
+              : `With it, the transfer takes seconds instead of minutes, and Glassworks starts up online. You can also add it on ${d.the} later.`}
+          </span>
+        </span>
+      </div>
+      <div className="fields">
+        <label className="field"><span>Network</span>
+          <input className="input" autoComplete="off" value={ssid} onChange={(e) => f.setWifi({ ssid: e.target.value })} />
+        </label>
+        <label className="field"><span>Password</span>
+          <span className="pw">
+            <input className="input" type={show ? 'text' : 'password'} autoComplete="off" value={password} onChange={(e) => f.setWifi({ password: e.target.value })} />
+            <button type="button" className="link eye" onClick={() => setShow(!show)} aria-pressed={show}>{show ? 'Hide' : 'Show'}</button>
+          </span>
+        </label>
+      </div>
+      {ssid && !f.blocked() && <p className="live ok" role="status"><span className="tick" aria-hidden="true">✓</span>{`${cap(d.the)} will join ${ssid} on its first start`}</p>}
+    </div>
+  );
+}
+
+/** Glassworks on the device's own software: nothing to download, the APK, and the person's Wi-Fi for its first start. */
 export function InPlaceStart({ f, s, m, ms }: P) {
   const d = f.frame;
   const w = d.imageFlow.inPlace?.words;
@@ -123,14 +160,7 @@ export function InPlaceStart({ f, s, m, ms }: P) {
       <p className="lede">{w?.['inPlace.stage.lede']}</p>
       {s.changed && <p className="small">{`An earlier try already changed ${d.the}.`}</p>}
       <InPlaceNotice words={inPlaceWordsOf(d)} />
-      <div className="fields">
-        <label className="field"><span>Wi-Fi network (optional)</span>
-          <input className="input" autoComplete="off" value={s.wifi.ssid} onChange={(e) => f.setWifi({ ssid: e.target.value })} />
-        </label>
-        <label className="field"><span>Wi-Fi password</span>
-          <input className="input" type="password" autoComplete="off" value={s.wifi.password} onChange={(e) => f.setWifi({ password: e.target.value })} />
-        </label>
-      </div>
+      <YourWifi f={f} s={s} />
       <ApkInput d={d} m={m} ms={ms} />
       {blocked && <p className="status err" role="alert">{blocked}</p>}
       <div className="foot">
@@ -187,6 +217,7 @@ export function ImageFastboot({ f, s }: P) {
       {/* by hand first: most people install over the vendor's software, which Kiln can't reach over adb (the maintainer, 2026-11-19) */}
       {f.inPlace && s.round === 2 ? <>
         <p className="lede">{d.imageFlow.inPlace?.words['inPlace.fastboot.again']}</p>
+        {s.leftHotspot && <p className="status ok" role="note">{`✓ The bundle is in. You can switch this computer back to your usual Wi-Fi now.`}</p>}
         <p className="small">{`The bundle is saved in this browser. Click Connect and ${pickInList(d)}.`}</p>
       </> : s.restarted ? <p className="lede">{rich(d.words['fastboot.restarted'])}</p> : <>
         <Recovery data={d.recovery} />
@@ -438,14 +469,15 @@ function saveFile(blob: Blob, name: string) {
 
 /** The receive step: the bundle from the device's setup agent (InPlaceScreens). */
 export function InPlaceReceive({ f, s }: P) {
-  const r = s.receive ?? { stage: 'waiting-boot', channel: null, progress: null, pageUrl: null, fallback: null, error: null, bluetooth: true };
+  const r = s.receive ?? { stage: 'waiting-boot', channel: null, progress: null, pageUrl: null, fallback: null, error: null, bluetooth: true, network: null, joined: false };
   return (
     <>
       <ReceiveScreen stage={r.stage} channel={r.channel} bluetoothAvailable={r.bluetooth} progress={r.progress} agentPageUrl={r.pageUrl}
         fallbackReason={r.fallback} errorMessage={r.error} words={inPlaceWordsOf(f.frame)}
         onConnectBluetooth={() => void f.receive()} onRetryLan={() => void f.receive()} onPickFile={(x) => void f.receiveFile(x)}
         onCancel={r.stage === 'transferring' || r.stage === 'connecting' ? () => void f.cancelReceive() : undefined}
-        onRetry={() => f.receiveAgain()} />
+        onRetry={() => f.receiveAgain()} onContinueUnverified={() => void f.receiveUnverified()}
+        network={r.network} joined={r.joined} wifiFailed={r.wifiFailed} onContinueWifi={() => void f.receiveWifi()} onByHand={() => f.receiveByHand()} />
       <Log s={s} />
     </>
   );

@@ -3,13 +3,18 @@
 // with Device Owner. Every serial, address and key is made up.
 import { Disk, Ext4, MemoryStore, readSparse } from '@glassworks/ext4';
 import { checkInPlace } from '@glassworks/kiln-core';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { BOOT_STILL_BACKGROUND, bootStillZip } from '../src/bootstill';
 import design from '../../design/installer.json';
 import {
   BundleRefused, DEFAULT_PROBE_APP_UID, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildStageUserdata, installInPlace, mirrorInPlace,
 } from '../src';
-import { ADB_KEYS } from '../src/image';
-import { factoryUserdata, keptBundleFits } from '../src/inplace';
+import { ADB_KEYS, macFromSerial } from '../src/image';
+import { INSTALLER_MAC_SETTING, USB_ALLOW_PERMISSION_SETTING, factoryUserdata, keptBundleFits } from '../src/inplace';
+import { USB_ALLOW_PERMISSION } from '../src/stock';
 import { GLASSWORKS } from '../src/app';
 import { simInPlace } from '../src/sim';
 import { SYSTEM_BYTES } from '../src/flash';
@@ -102,6 +107,15 @@ describe('a bundle this browser kept', () => {
     expect(keptBundleFits(b.bytes, { fiemap: moved })).toBe(false);
   });
 
+  it('doesn\'t fit when the agent sends stock\'s boot animation and the kept copy came from an agent that didn\'t', async () => {
+    const old = await buildFakeGwsbBundle({ secret: SECRET });
+    expect(keptBundleFits(old.bytes, { fiemap: fiemapOf(old), bootAnimationSize: 22_901 })).toBe(false); // Bluetooth's short description
+    expect(keptBundleFits(old.bytes, { fiemap: fiemapOf(old), bootAnimation: { size: 22_901 } })).toBe(false);
+    expect(keptBundleFits(old.bytes, { fiemap: fiemapOf(old), bootAnimation: null })).toBe(true); // a Mirror with none
+    const fresh = await buildFakeGwsbBundle({ secret: SECRET, metaPatch: { bootAnimation: { size: 22_901 } } });
+    expect(keptBundleFits(fresh.bytes, { fiemap: fiemapOf(fresh), bootAnimationSize: 22_901 })).toBe(true);
+  });
+
   it('doesn\'t fit when the agent\'s description carries no whole file map (it trims it for Bluetooth)', async () => {
     const b = await buildFakeGwsbBundle({ secret: SECRET });
     expect(keptBundleFits(b.bytes, { fiemap: { truncated: true, extentCount: 1 } })).toBe(false);
@@ -148,6 +162,70 @@ describe('the build', () => {
     expect(built.files?.['services.jar.orig']).toEqual(jar);
   }, 60_000);
 
+  describe('the boot animation', () => {
+    const STOCK_BOOT_SIZE = 22_901; // stock 1.24.0's
+    const stockBoot = Uint8Array.from({ length: STOCK_BOOT_SIZE }, (_, i) => (i * 7 + 3) & 0xff);
+    const bootExtents = [{ logical: 0, physical: 4096 * 6000, block: 6000, length: 4096 * 6, blocks: 6, flags: 1 }];
+    const still = new Uint8Array(readFileSync(join(__dirname, '../../../../branding/lululemon-mirror/bootanimation-still.png')));
+    /** The bundle with stock's boot animation as the agent sends it, signed with the rest. */
+    async function withBoot(patch: Record<string, unknown> = {}) {
+      const jar = buildSyntheticStockServicesJar();
+      const padded = Math.ceil(jar.length / 4096) * 4096;
+      const extents = [{ logical: 0, physical: 4096 * 5000, block: 5000, length: padded, blocks: padded / 4096, flags: 1 }];
+      const bootAnimation = { path: '/system/media/bootanimation.zip', size: STOCK_BOOT_SIZE, sha256: createHash('sha256').update(stockBoot).digest('hex'),
+        fiemap: { size: STOCK_BOOT_SIZE, extents: bootExtents }, base64: Buffer.from(stockBoot).toString('base64'), ...patch };
+      return buildFakeGwsbBundle({ secret: SECRET, jarBytes: jar, extents, metaPatch: { bootAnimation } });
+    }
+    async function blocks(sparse: Blob, at: number, n: number): Promise<Uint8Array> {
+      const { disk } = await readSparse(sparse.stream(), (h) => new Disk(new MemoryStore(), h.blockSize, h.blocks, { zeroed: true }));
+      return disk.read(at, n);
+    }
+
+    it.skipIf(!HAS_D8)('goes in stock\'s blocks at stock\'s size, and the restore point puts lululemon\'s back', async () => {
+      const b = await withBoot();
+      const read = await code.readBundle(b.bytes, { secret: SECRET, serial: FAKE_SERIAL });
+      expect(read.info.join('\n')).toContain(`bootanimation.zip ${STOCK_BOOT_SIZE} bytes`);
+      expect(read.extents).toContainEqual({ physical: 4096 * 6000, length: 4096 * 6 });
+      const built = await code.build(b.bytes, { adbKey: fakeAdbKey(4), userdataBytes: 64 * 2 ** 20, partitionBytes: { system: SYSTEM_BYTES }, serial: FAKE_SERIAL, assets: { 'mirror-bootanimation-still': still } });
+      const write = await bytes(built.writes['system-in-place']!);
+      const restore = await bytes(built.restore);
+      expect(() => checkInPlace({ write, restore, extents: read.extents, partitionBytes: SYSTEM_BYTES })).not.toThrow();
+      const ours = bootStillZip(still, { background: BOOT_STILL_BACKGROUND, size: STOCK_BOOT_SIZE });
+      const written = await blocks(built.writes['system-in-place']!, 6000, 6);
+      expect(Buffer.from(written.subarray(0, STOCK_BOOT_SIZE)).equals(Buffer.from(ours))).toBe(true);
+      expect(written.subarray(STOCK_BOOT_SIZE).every((x) => x === 0)).toBe(true);
+      const back = await blocks(built.restore, 6000, 6);
+      expect(Buffer.from(back.subarray(0, STOCK_BOOT_SIZE)).equals(Buffer.from(stockBoot))).toBe(true);
+      expect(built.files?.['bootanimation.zip.orig']).toEqual(stockBoot);
+      expect((built.manifest as { bootAnimation: { size: number; extents: unknown[] } }).bootAnimation).toMatchObject({ size: STOCK_BOOT_SIZE, extents: bootExtents });
+    }, 60_000);
+
+    it.skipIf(!HAS_D8)('stays lululemon\'s when Kiln has no still, and the write and restore leave its blocks alone', async () => {
+      const b = await withBoot();
+      const read = await code.readBundle(b.bytes, { secret: SECRET, serial: FAKE_SERIAL });
+      const built = await code.build(b.bytes, { adbKey: fakeAdbKey(4), userdataBytes: 64 * 2 ** 20, partitionBytes: { system: SYSTEM_BYTES }, serial: FAKE_SERIAL });
+      const write = await bytes(built.writes['system-in-place']!);
+      const restore = await bytes(built.restore);
+      expect(() => checkInPlace({ write, restore, extents: read.extents, partitionBytes: SYSTEM_BYTES })).not.toThrow();
+      expect((await blocks(built.writes['system-in-place']!, 6000, 6)).every((x) => x === 0)).toBe(true); // untouched (DONT_CARE)
+      expect((built.manifest as { bootAnimationLeft?: string }).bootAnimationLeft).toMatch(/still/);
+      expect(built.files?.['bootanimation.zip.orig']).toBeUndefined();
+    }, 60_000);
+
+    it.skipIf(!HAS_D8)('stays lululemon\'s when the bundle\'s copy doesn\'t check out, and says why', async () => {
+      const b = await withBoot({ sha256: '0'.repeat(64) });
+      const read = await code.readBundle(b.bytes, { secret: SECRET, serial: FAKE_SERIAL });
+      expect(read.info.join('\n')).toContain('boot animation: stays lululemon\'s (its bytes don\'t match their SHA-256)');
+      expect(read.extents).not.toContainEqual({ physical: 4096 * 6000, length: 4096 * 6 });
+    }, 60_000);
+
+    it('an agent from before it sent the boot animation still builds: the boot animation stays lululemon\'s', async () => {
+      const b = await buildFakeGwsbBundle({ secret: SECRET });
+      const read = await code.readBundle(b.bytes, { secret: SECRET, serial: FAKE_SERIAL });
+      expect(read.info.join('\n')).toContain('boot animation: stays lululemon\'s (the setup agent didn\'t send it)');
+    });
+  });
+
   it('refuses an odexed build before it patches anything', async () => {
     const b = await buildFakeGwsbBundle({ secret: SECRET, servicesOdexFound: true });
     await expect(code.build(b.bytes, { adbKey: fakeAdbKey(4), userdataBytes: 64 * 2 ** 20, partitionBytes: { system: SYSTEM_BYTES }, serial: FAKE_SERIAL })).rejects.toThrow(BundleRefused);
@@ -165,6 +243,33 @@ describe('the app\'s install', () => {
     expect(m.cmds.filter((c) => c.startsWith('pm hide co.mirror') || c.startsWith('pm hide com.mirror'))).toHaveLength(8);
     expect(r.updates.state).toBe('on');
     expect(lines.join('\n')).toContain('Device Owner: set');
+  });
+
+  it('hands the app the image install\'s Home Assistant id before its first start, and lets it answer "Allow USB debugging?"', async () => {
+    const m = new FakeMirror({ kiosk: 'none', serialno: FAKE_SERIAL });
+    const lines: string[] = [];
+    await installInPlace(m, { apk: fakeMirrorApk(), onStep: (s, d) => lines.push(s || `  ${d}`), sleep: async () => {} });
+    const mac = await macFromSerial(FAKE_SERIAL);
+    const put = m.cmds.indexOf(`settings put global ${INSTALLER_MAC_SETTING} ${mac}`);
+    expect(put).toBeGreaterThan(-1);
+    // before anything starts the app: its first start picks the id and keeps it
+    expect(put).toBeLessThan(m.cmds.findIndex((c) => c.startsWith('am start') || c.startsWith('monkey')));
+    expect(m.cmds).toContain(`pm grant ${GLASSWORKS.package} android.permission.READ_LOGS`);
+    expect(m.cmds).toContain(`pm grant ${GLASSWORKS.package} ${USB_ALLOW_PERMISSION}`);
+    expect(m.cmds).toContain(`settings put global ${USB_ALLOW_PERMISSION_SETTING} ${USB_ALLOW_PERMISSION}`);
+    const log = lines.join('\n');
+    expect(log).toContain('USB debugging: the Manage page can let in other computers');
+    // the Glass Panes image's overlay defaults, over adb
+    for (const c of ['settings put system screen_off_timeout 2147483647', 'settings put global stay_on_while_plugged_in 7', 'svc wifi enable']) expect(m.cmds).toContain(c);
+    expect(log).not.toContain(mac!); // device-unique: the log names the setting only
+  });
+
+  it('without a serial, writes no id and says the app picks its own', async () => {
+    const m = new FakeMirror({ kiosk: 'none' });
+    const lines: string[] = [];
+    await installInPlace(m, { apk: fakeMirrorApk(), onStep: (s, d) => lines.push(s || `  ${d}`), sleep: async () => {} });
+    expect(m.cmds.some((c) => c.startsWith(`settings put global ${INSTALLER_MAC_SETTING}`))).toBe(false);
+    expect(lines.join('\n')).toContain('Home Assistant id: no serial reported, so the app picks its own');
   });
 });
 
