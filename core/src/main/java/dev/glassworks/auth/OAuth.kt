@@ -1,5 +1,6 @@
 package dev.glassworks.auth
 
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.net.URI
@@ -154,15 +155,40 @@ enum class Then {
 data class NewSignIn(val state: String, val codeChallenge: String, val slot: Int = -1)
 
 /**
+ * Where a [StateStore] keeps its pending sign-ins, so they outlive the app's process: one text, sealed by the caller
+ * (each sign-in holds its PKCE verifier). The panel restarts its process when Home Assistant's address first goes in
+ * (KioskPrefs.engineStart), which Kiln's Home Assistant step does right before it opens the sign-in window: a sign-in
+ * kept only in memory was gone by the time Home Assistant sent the person back, and its first try always ran out.
+ */
+interface SavedSignIns {
+    fun read(): String?
+    /** [text] null: none pending. Throws when it couldn't be stored; the sign-ins then live in memory alone. */
+    fun write(text: String?)
+}
+
+/**
  * OAuth `state` values handed out by /signin. Single use, expire after [ttlMs] (HA's own codes live
- * 10 minutes), at most [max] outstanding (oldest dropped). Thread-safe.
+ * 10 minutes), at most [max] outstanding (oldest dropped). Thread-safe. With [saved], every change is written through
+ * before the caller hands the state out, and a new store (the next process) takes up what the last one left.
  */
 class StateStore(
     private val ttlMs: Long = 10 * 60_000L,
     private val max: Int = 16,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val saved: SavedSignIns? = null,
 ) {
     private val pending = LinkedHashMap<String, PendingSignIn>()
+
+    init {
+        val text = saved?.let { s -> runCatching { s.read() }.onFailure { AuthLog.w("pending sign-ins can't be read", it) }.getOrNull() }
+        if (text != null) {
+            pending.putAll(decode(text))
+            val before = pending.size
+            prune()
+            if (pending.size != before) save()
+            if (pending.isNotEmpty()) AuthLog.i("${pending.size} pending sign-in(s) carried over from before the restart")
+        }
+    }
 
     @Synchronized
     fun create(
@@ -176,6 +202,7 @@ class StateStore(
         // and a browser never holds more than [max] of them. There is always one free: fewer than [max] are pending.
         val slot = if (then == Then.SETUP) (0 until max).first { n -> pending.values.none { it.then == Then.SETUP && it.slot == n } } else -1
         pending[s] = PendingSignIn(clientId, redirectUri, haBase, clock(), purpose, verifier, then, slot)
+        save()
         return NewSignIn(s, OAuth.codeChallenge(verifier), slot)
     }
 
@@ -189,7 +216,7 @@ class StateStore(
         prune()
         val p = pending[state] ?: return null
         if (p.purpose != purpose) return null
-        return pending.remove(state)
+        return pending.remove(state).also { save() }
     }
 
     @Synchronized
@@ -198,6 +225,46 @@ class StateStore(
     private fun prune() {
         val now = clock()
         pending.entries.removeAll { now - it.value.createdAt >= ttlMs }
+    }
+
+    /**
+     * Writes what is pending now. A failure leaves the sign-ins in memory, as before there was a [saved]: they work
+     * unless the process restarts. An old copy left behind can't be used twice: its state is single use at HA too.
+     */
+    private fun save() {
+        val s = saved ?: return
+        try {
+            s.write(if (pending.isEmpty()) null else encode(pending))
+        } catch (t: Throwable) {
+            AuthLog.w("pending sign-ins not saved; they last until the app restarts", t)
+        }
+    }
+
+    private companion object {
+        fun encode(pending: Map<String, PendingSignIn>): String = JSONArray().apply {
+            for ((state, p) in pending) put(JSONObject()
+                .put("state", state).put("client_id", p.clientId).put("redirect_uri", p.redirectUri).put("ha_base", p.haBase)
+                .put("created_at", p.createdAt).put("purpose", p.purpose).put("verifier", p.codeVerifier)
+                .put("then", p.then.name).put("slot", p.slot))
+        }.toString()
+
+        /** What [encode] wrote; anything it can't read is left out (a sign-in it drops just runs out). */
+        fun decode(text: String): Map<String, PendingSignIn> {
+            val a = try { JSONArray(text) } catch (_: JSONException) { return emptyMap() }
+            val out = LinkedHashMap<String, PendingSignIn>()
+            for (i in 0 until a.length()) {
+                val o = a.optJSONObject(i) ?: continue
+                try {
+                    val then = Then.entries.firstOrNull { it.name == o.getString("then") } ?: continue
+                    out[o.getString("state")] = PendingSignIn(
+                        o.getString("client_id"), o.getString("redirect_uri"), o.getString("ha_base"), o.getLong("created_at"),
+                        o.getString("purpose"), o.getString("verifier"), then, o.getInt("slot"),
+                    )
+                } catch (_: JSONException) {
+                }
+            }
+            return out
+        }
     }
 }
 

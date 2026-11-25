@@ -117,7 +117,7 @@ object HaAuth {
     fun startServer(context: Context) {
         init(context)
         if (server != null) return
-        val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, thread = threadJoin)
+        val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, signInStates(prefs), thread = threadJoin)
         // A Manage page that can't load (a class Android 6 refuses, #435) leaves the QR pages up, and the app with them.
         val m = manage ?: orWithout("The Manage page", { AuthLog.w(it) }) {
             val page = context.glassworks.managePage(context, signIn, tokens, prefs)
@@ -169,6 +169,16 @@ object HaAuth {
             main.postDelayed(retry, 10_000)
         }
     }
+
+    /**
+     * The sign-in server's pending sign-ins, saved in [prefs]: the app restarts when Home Assistant's address first goes
+     * in, often while a sign-in is open at Home Assistant (Kiln's Home Assistant step), and it must still be known when
+     * Home Assistant sends the person back to the new process.
+     */
+    internal fun signInStates(prefs: KioskPrefs) = StateStore(saved = object : SavedSignIns {
+        override fun read() = prefs.pendingSignIns
+        override fun write(text: String?) { prefs.pendingSignIns = text }
+    })
 
     /** The pending retry when the port was busy, until it runs or [stopServer] cancels it. */
     private var bindRetry: Runnable? = null

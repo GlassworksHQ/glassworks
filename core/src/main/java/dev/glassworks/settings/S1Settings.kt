@@ -88,7 +88,8 @@ object S1Settings {
         val main = Handler(Looper.getMainLooper())
         return FactoryReset(
             signOut = { done -> HaAuth.init(app); HaAuth.signOut("factory reset", done) },
-            clearSettings = { prefs.resetSettings() && SetupPrefs(app).reset() },
+            // A sign-in started before the reset doesn't finish after it (they are saved across restarts, StateStore).
+            clearSettings = { prefs.resetSettings() && SetupPrefs(app).reset() && runCatching { prefs.pendingSignIns = null }.isSuccess },
             signOutBrowsers = { HaAuth.manage?.signOutAll() },
             // As the Overview's Restart app: after the answer has gone out (AppManage.ACTION_DELAY_MS).
             restart = {

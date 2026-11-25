@@ -9,6 +9,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Fixed
+- **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
+  restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
+  you back, so the panel said "This link has expired" until you signed in again. The panel now remembers a sign-in
+  in progress across the restart.
 - **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the
   dashboard's page to free memory while another app was in front, the page the panel opened in its place kept
   running as if it were on screen until you came back to the panel. It now waits in the background, as the page did
