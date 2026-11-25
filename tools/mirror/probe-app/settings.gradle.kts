@@ -4,6 +4,8 @@
 pluginManagement {
     repositories {
         google()
+        // Google's mirror of Maven Central first, then Central: why in the root settings.gradle.kts.
+        maven("https://maven-central.storage-download.googleapis.com/maven2/")
         mavenCentral()
         gradlePluginPortal()
     }
@@ -11,6 +13,8 @@ pluginManagement {
 dependencyResolutionManagement {
     repositories {
         google()
+        // Google's mirror of Maven Central first, then Central: why in the root settings.gradle.kts.
+        maven("https://maven-central.storage-download.googleapis.com/maven2/")
         mavenCentral()
     }
 }

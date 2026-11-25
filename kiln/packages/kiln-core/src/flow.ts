@@ -51,6 +51,13 @@ export interface FlowDeps<A extends string> {
   sleep?: (ms: number) => Promise<void>;
   /** The frame's branded splash and boot animation; default true. BRANDING=none in the CLI. */
   branding?: boolean;
+  /**
+   * A download the device needs only after the writes (the app, from its newest release), started with the install
+   * so it runs during the backup, and awaited before the first write: a release that can't be had, or that fails its
+   * check, stops the install with nothing written instead of leaving new software without its app. Kept by the caller,
+   * so a later use (the set-up) doesn't download it again.
+   */
+  fetchAhead?: () => Promise<unknown>;
 }
 
 const MiB = 1024 * 1024;
@@ -117,6 +124,9 @@ export class InstallFlow<A extends string, O, R> {
   async install(fb: Fastboot): Promise<{ meta: BackupMeta; files: BackupFile[]; bootSha256: string }> {
     checkBackupPlan(this.recipe.backup);
     fb.log = (l) => this.log(l);
+    // started now, so it downloads while the backup reads; awaited before the first write
+    const ahead = this.d.fetchAhead?.();
+    ahead?.catch(() => {});
     // 3: layout
     this.log(await this.recipe.checkLayout(fb));
 
@@ -182,6 +192,12 @@ export class InstallFlow<A extends string, O, R> {
     if (patchedSha === boot.sha256 && !bootWasPatched) throw new Error('the patch left boot unchanged, so there is nothing to install. Nothing was written.');
     this.log(`patched boot ${short(patchedSha)} (from ${short(boot.sha256)})`);
     ph('patch', 0.6, 1, 'Preparing the new software', 'Done');
+
+    if (ahead) {
+      ph('patch', 0.6, 1, 'Preparing the new software', 'Downloading the app');
+      await ahead;
+      this.log('app downloaded and checked');
+    }
 
     // 6-7: the frame's other writes; 8: boot last, so a failure before it leaves the panel booting
     const before = await this.recipe.writesBeforeBoot(ctx);
