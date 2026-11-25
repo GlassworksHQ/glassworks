@@ -83,28 +83,24 @@
     "ei": "sensor.printer_black_ink",
     "pl": "demo",
     "di": "dev-printer",
-    "hn": true,
     "en": "Black ink"
    },
    {
     "ei": "sensor.printer_cyan_ink",
     "pl": "demo",
     "di": "dev-printer",
-    "hn": true,
     "en": "Cyan ink"
    },
    {
     "ei": "sensor.printer_magenta_ink",
     "pl": "demo",
     "di": "dev-printer",
-    "hn": true,
     "en": "Magenta ink"
    },
    {
     "ei": "sensor.printer_yellow_ink",
     "pl": "demo",
     "di": "dev-printer",
-    "hn": true,
     "en": "Yellow ink"
    }
   ],

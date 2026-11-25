@@ -31,8 +31,7 @@
    {
     "ei": "humidifier.bedroom",
     "pl": "demo",
-    "di": "dev-humidifier",
-    "hn": true
+    "di": "dev-humidifier"
    }
   ],
   "devices": [

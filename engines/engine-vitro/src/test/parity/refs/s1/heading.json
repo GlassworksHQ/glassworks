@@ -2,7 +2,7 @@
  "case": "heading",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Living room",
    "x": 30,
    "y": 3,
@@ -43,7 +44,8 @@
   },
   {
    "slot": 0,
-   "text": "20.4 °C",
+   "clipped": false,
+   "text": "21.4 °C",
    "x": 403.56,
    "y": 4.8,
    "w": 45.78,
@@ -55,6 +57,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Off",
    "x": 476.34,
    "y": 4.8,
@@ -67,39 +70,41 @@
   }
  ],
  "states": {
-  "light.living_room_cactus": {
+  "light.desk_lamp": {
    "s": "off",
    "a": {
     "supported_color_modes": [
      "onoff"
     ],
     "color_mode": null,
-    "friendly_name": "Cactus",
+    "friendly_name": "Desk Lamp",
     "supported_features": 0
    },
-   "lc": 1795508121.7617655
+   "lc": 1794483360,
+   "lu": 1794483360
   },
-  "sensor.living_room_airdot_living_room_temperature": {
-   "s": "20.3549995422363",
+  "sensor.living_room_temperature": {
+   "s": "21.42",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
-    "friendly_name": "AirDot Living Room Temperature"
+    "friendly_name": "Living Room Sensor Temperature"
    },
-   "lc": 1795522954.970371
+   "lc": 1794491820,
+   "lu": 1794491820
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "light.living_room_cactus",
+    "ei": "light.desk_lamp",
     "pl": "switch_as_x",
     "di": "device-1"
    },
    {
-    "ei": "sensor.living_room_airdot_living_room_temperature",
+    "ei": "sensor.living_room_temperature",
     "pl": "esphome",
     "dp": 1,
     "di": "device-2",
@@ -109,11 +114,11 @@
   "devices": [
    {
     "id": "device-1",
-    "name": "Cactus"
+    "name": "Desk Lamp"
    },
    {
     "id": "device-2",
-    "name": "AirDot Living Room"
+    "name": "Living Room Sensor"
    }
   ],
   "requested": {

@@ -2,7 +2,7 @@
  "case": "clock",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "10",
    "x": 39.77,
    "y": 22.41,
@@ -43,6 +44,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "08",
    "x": 133.48,
    "y": 22.41,

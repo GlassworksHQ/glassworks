@@ -62,7 +62,6 @@
     "pl": "demo",
     "dp": 0,
     "di": "dev-fridge",
-    "hn": true,
     "en": "Power"
    },
    {
@@ -70,7 +69,6 @@
     "pl": "demo",
     "dp": 1,
     "di": "dev-fridge",
-    "hn": true,
     "en": "Temperature"
    },
    {
@@ -78,7 +76,6 @@
     "pl": "esphome",
     "dp": 0,
     "di": "dev-living-room-sensor",
-    "hn": true,
     "en": "Humidity"
    },
    {
@@ -86,7 +83,6 @@
     "pl": "esphome",
     "dp": 1,
     "di": "dev-living-room-sensor",
-    "hn": true,
     "en": "Temperature"
    }
   ],

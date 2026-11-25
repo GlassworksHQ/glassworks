@@ -72,7 +72,6 @@
     "pl": "esphome",
     "dp": 0,
     "di": "dev-living-room-sensor",
-    "hn": true,
     "en": "Humidity"
    },
    {
@@ -80,14 +79,12 @@
     "pl": "esphome",
     "dp": 1,
     "di": "dev-living-room-sensor",
-    "hn": true,
     "en": "Temperature"
    },
    {
     "ei": "weather.forecast_home",
     "pl": "met",
-    "di": "dev-forecast-home",
-    "hn": true
+    "di": "dev-forecast-home"
    }
   ],
   "devices": [

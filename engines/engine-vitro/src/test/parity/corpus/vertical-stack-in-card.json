@@ -48,14 +48,12 @@
     "ei": "light.living_room_lamp",
     "pl": "zha",
     "di": "dev-living-room-lamp",
-    "hn": true,
     "tk": "light"
    },
    {
     "ei": "light.hallway_lamp",
     "pl": "zha",
     "di": "dev-hallway-lamp",
-    "hn": true,
     "tk": "light"
    }
   ],

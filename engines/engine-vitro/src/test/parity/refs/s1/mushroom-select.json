@@ -2,7 +2,7 @@
  "case": "mushroom-select",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
@@ -31,10 +31,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "Kitchen Blind Position",
+   "clipped": false,
+   "text": "Blind Position",
    "x": 56,
    "y": 17,
-   "w": 139.92,
+   "w": 88.19,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -43,6 +44,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "open",
    "x": 56,
    "y": 36,
@@ -55,6 +57,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "open",
    "x": 32,
    "y": 79,
@@ -67,7 +70,7 @@
   }
  ],
  "states": {
-  "input_select.kitchen_blind_position": {
+  "input_select.blind_position": {
    "s": "open",
    "a": {
     "options": [
@@ -76,18 +79,19 @@
     ],
     "editable": true,
     "icon": "mdi:blinds",
-    "friendly_name": "Kitchen Blind Position"
+    "friendly_name": "Blind Position"
    },
-   "lc": 1795504897.1554313
+   "lc": 1794485340,
+   "lu": 1794485340
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "input_select.kitchen_blind_position",
+    "ei": "input_select.blind_position",
     "pl": "input_select",
-    "en": "Kitchen Blind Position"
+    "en": "Blind Position"
    }
   ],
   "devices": [],

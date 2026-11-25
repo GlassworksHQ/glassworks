@@ -2,7 +2,7 @@
  "case": "grid",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
@@ -31,10 +31,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "Cactus",
-   "x": 46.42,
+   "clipped": false,
+   "text": "Desk",
+   "x": 53.66,
    "y": 70.95,
-   "w": 49.8,
+   "w": 35.33,
    "h": 19,
    "size": 16,
    "weight": 400,
@@ -43,10 +44,11 @@
   },
   {
    "slot": 0,
-   "text": "Window",
-   "x": 193.45,
+   "clipped": false,
+   "text": "Accent",
+   "x": 197.13,
    "y": 70.97,
-   "w": 57.08,
+   "w": 49.72,
    "h": 19,
    "size": 16,
    "weight": 400,
@@ -55,10 +57,11 @@
   },
   {
    "slot": 0,
-   "text": "Slats",
-   "x": 354.88,
+   "clipped": false,
+   "text": "Shelf",
+   "x": 354.55,
    "y": 70.97,
-   "w": 35.56,
+   "w": 36.22,
    "h": 19,
    "size": 16,
    "weight": 400,
@@ -67,7 +70,7 @@
   }
  ],
  "states": {
-  "light.led_wood_slats": {
+  "light.bedroom_accent": {
    "s": "off",
    "a": {
     "supported_color_modes": [
@@ -80,24 +83,27 @@
     "xy_color": null,
     "off_with_transition": false,
     "off_brightness": 254,
-    "friendly_name": "LED Wood Slats",
+    "icon": "mdi:led-strip-variant",
+    "friendly_name": "Bedroom Strip Accent",
     "supported_features": 40
    },
-   "lc": 1795508121.6301472
+   "lc": 1794496680,
+   "lu": 1794496680
   },
-  "light.living_room_cactus": {
+  "light.desk_lamp": {
    "s": "off",
    "a": {
     "supported_color_modes": [
      "onoff"
     ],
     "color_mode": null,
-    "friendly_name": "Cactus",
+    "friendly_name": "Desk Lamp",
     "supported_features": 0
    },
-   "lc": 1795508121.7617655
+   "lc": 1794483360,
+   "lu": 1794483360
   },
-  "light.window_accent": {
+  "light.shelf_strip": {
    "s": "off",
    "a": {
     "supported_color_modes": [
@@ -110,48 +116,48 @@
     "xy_color": null,
     "off_with_transition": false,
     "off_brightness": 254,
-    "icon": "mdi:window-open",
-    "friendly_name": "Window",
+    "friendly_name": "Shelf Strip",
     "supported_features": 40
    },
-   "lc": 1795507611.0189574
+   "lc": 1794484920,
+   "lu": 1794484920
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "light.led_wood_slats",
+    "ei": "light.bedroom_accent",
     "pl": "zha",
     "tk": "light",
-    "di": "device-1"
+    "ic": "mdi:led-strip-variant",
+    "di": "device-1",
+    "en": "Accent"
    },
    {
-    "ei": "light.living_room_cactus",
+    "ei": "light.desk_lamp",
     "pl": "switch_as_x",
     "di": "device-2"
    },
    {
-    "ei": "light.window_accent",
+    "ei": "light.shelf_strip",
     "pl": "zha",
     "tk": "light",
-    "ic": "mdi:window-open",
-    "di": "device-3",
-    "en": "Window"
+    "di": "device-3"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "LED Wood Slats"
+    "name": "Bedroom Strip"
    },
    {
     "id": "device-2",
-    "name": "Cactus"
+    "name": "Desk Lamp"
    },
    {
     "id": "device-3",
-    "name": "LED Strip"
+    "name": "Shelf Strip"
    }
   ],
   "requested": {

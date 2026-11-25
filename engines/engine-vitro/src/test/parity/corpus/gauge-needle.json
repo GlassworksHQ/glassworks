@@ -33,7 +33,6 @@
     "ei": "sensor.printer_black_ink",
     "pl": "demo",
     "di": "dev-office-printer",
-    "hn": true,
     "en": "Black ink"
    }
   ],

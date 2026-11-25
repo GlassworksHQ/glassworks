@@ -2,7 +2,7 @@
  "case": "picture-glance",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Living room",
    "x": 17,
    "y": 465,
@@ -43,22 +44,7 @@
   }
  ],
  "states": {
-  "light.sunset_lamp": {
-   "s": "off",
-   "a": {
-    "supported_color_modes": [
-     "onoff"
-    ],
-    "color_mode": null,
-    "off_with_transition": false,
-    "off_brightness": null,
-    "icon": "mdi:weather-sunset",
-    "friendly_name": "Sunset",
-    "supported_features": 8
-   },
-   "lc": 1795532578.3925707
-  },
-  "light.window_accent": {
+  "light.bedroom_accent": {
    "s": "off",
    "a": {
     "supported_color_modes": [
@@ -71,41 +57,58 @@
     "xy_color": null,
     "off_with_transition": false,
     "off_brightness": 254,
-    "icon": "mdi:window-open",
-    "friendly_name": "Window",
+    "icon": "mdi:led-strip-variant",
+    "friendly_name": "Bedroom Strip Accent",
     "supported_features": 40
    },
-   "lc": 1795507611.0189574
+   "lc": 1794496680,
+   "lu": 1794496680
+  },
+  "light.reading_lamp": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": null,
+    "off_with_transition": false,
+    "off_brightness": null,
+    "icon": "mdi:floor-lamp",
+    "friendly_name": "Reading Lamp Reading",
+    "supported_features": 8
+   },
+   "lc": 1794488160,
+   "lu": 1794488160
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "light.sunset_lamp",
+    "ei": "light.bedroom_accent",
     "pl": "zha",
     "tk": "light",
-    "ic": "mdi:weather-sunset",
+    "ic": "mdi:led-strip-variant",
     "di": "device-1",
-    "en": "Sunset"
+    "en": "Accent"
    },
    {
-    "ei": "light.window_accent",
+    "ei": "light.reading_lamp",
     "pl": "zha",
     "tk": "light",
-    "ic": "mdi:window-open",
+    "ic": "mdi:floor-lamp",
     "di": "device-2",
-    "en": "Window"
+    "en": "Reading"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "Sunset Lamp"
+    "name": "Bedroom Strip"
    },
    {
     "id": "device-2",
-    "name": "LED Strip"
+    "name": "Reading Lamp"
    }
   ],
   "requested": {

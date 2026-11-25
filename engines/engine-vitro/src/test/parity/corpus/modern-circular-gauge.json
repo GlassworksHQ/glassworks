@@ -25,7 +25,6 @@
     "ei": "sensor.living_room_humidity",
     "pl": "esphome",
     "di": "dev-living-room-sensor",
-    "hn": true,
     "en": "Humidity",
     "dp": 0
    }

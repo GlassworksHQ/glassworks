@@ -33,8 +33,7 @@
    {
     "ei": "water_heater.boiler",
     "pl": "demo",
-    "di": "dev-boiler",
-    "hn": true
+    "di": "dev-boiler"
    }
   ],
   "devices": [

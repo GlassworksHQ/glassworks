@@ -32,6 +32,11 @@ class Conn:
         self.out.append({"id": mid, "type": "event", "event": ev})
 
 
+def load(path):
+    with open(path) as f:
+        return json.load(f)
+
+
 def call(msg):
     c = Conn()
     H.HANDLERS[msg["type"]](c, dict(msg, id=1))
@@ -219,13 +224,52 @@ class Corpus(unittest.TestCase):
         self.assertEqual(missing, [])
 
     def test_the_fixtures_times_and_series_resolve(self):
-        H.set_home(json.load(open(os.path.join(CORPUS, "home.json"))))
+        H.set_home(load(os.path.join(CORPUS, "home.json")))
         for cid, doc in self.cases():
             H.CASE.update(id=cid, fixture=doc["fixture"])
             sts = H.states()
             for eid in (doc["fixture"].get("history") or {}):
                 self.assertTrue(H.history([eid], H.iso(H.NOW - 7 * 86400), None).get(eid), f"{cid}: {eid} has no history")
             self.assertEqual(set(sts), set(doc["fixture"].get("states") or {}))
+
+    def test_each_reference_holds_what_its_fixture_serves(self):
+        """A fixture edited without a new capture is caught here, with no browser: each committed reference's states
+        and recorded WebSocket answers are what the fake serves for that fixture now."""
+        H.set_home(load(os.path.join(CORPUS, "home.json")))
+        cases = dict(self.cases())
+        stale = []
+        refs = os.path.join(CORPUS, "refs")
+        for frame in sorted(os.listdir(refs)):
+            if not os.path.isdir(os.path.join(refs, frame)):
+                continue
+            for f in sorted(os.listdir(os.path.join(refs, frame))):
+                cid = f[:-5]
+                if not f.endswith(".json") or cid not in cases:
+                    continue
+                ref = load(os.path.join(refs, frame, f))
+                H.CASE.update(id=cid, fixture=cases[cid]["fixture"])
+                if ref.get("now") != round(H.NOW * 1000):
+                    stale.append(f"{frame}/{cid}: drawn at {ref.get('now')}, home.json says {round(H.NOW * 1000)}")
+                    continue
+                sts = H.states()
+                for eid, st in ref.get("states", {}).items():
+                    want = sts.get(eid)
+                    if want is None or (st["s"], st["a"]) != (want["state"], want["attributes"]):
+                        stale.append(f"{frame}/{cid}: {eid}")
+                for c in ref.get("ws", []):
+                    req = c["request"]
+                    if req["type"] == "rest/history/period":
+                        continue
+                    out = call(dict(req))
+                    if "error" in c:
+                        ok = not out[0]["success"]
+                    elif req["type"] in ("history/history_during_period", "recorder/statistics_during_period", "recorder/get_statistics_metadata"):
+                        ok = out[0].get("result") == c.get("result")
+                    else:
+                        ok = [m["event"] for m in out[1:]][:len(c["events"])] == c["events"]
+                    if not ok:
+                        stale.append(f"{frame}/{cid}: {req['type']}")
+        self.assertEqual(stale, [], "references out of date with their fixtures: recapture them (tools/vitro-parity/run.sh --refresh --cases ...)")
 
 
 if __name__ == "__main__":

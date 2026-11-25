@@ -127,8 +127,7 @@
     "ei": "fan.ceiling_fan",
     "pl": "zha",
     "tk": "fan",
-    "di": "dev-ceiling-fan",
-    "hn": true
+    "di": "dev-ceiling-fan"
    },
    {
     "ei": "light.bedroom_accent",
@@ -136,15 +135,13 @@
     "tk": "light",
     "ic": "mdi:led-strip-variant",
     "di": "dev-bedroom-strip",
-    "hn": true,
     "en": "Accent"
    },
    {
     "ei": "light.porch_ceiling_light",
     "pl": "zha",
     "tk": "light",
-    "di": "dev-porch-ceiling-light",
-    "hn": true
+    "di": "dev-porch-ceiling-light"
    },
    {
     "ei": "light.reading_lamp",
@@ -152,7 +149,6 @@
     "tk": "light",
     "ic": "mdi:floor-lamp",
     "di": "dev-reading-lamp",
-    "hn": true,
     "en": "Reading"
    }
   ],

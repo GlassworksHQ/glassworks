@@ -2,7 +2,7 @@
  "case": "mushroom-chips-cardmod",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
@@ -31,10 +31,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "CO2 501",
+   "clipped": false,
+   "text": "CO2 512",
    "x": 37.8,
    "y": 15.2,
-   "w": 39.58,
+   "w": 39.14,
    "h": 11,
    "size": 9.6,
    "weight": 700,
@@ -43,26 +44,27 @@
   }
  ],
  "states": {
-  "sensor.living_room_airdot_living_room_co2": {
-   "s": "501.0",
+  "sensor.living_room_co2": {
+   "s": "512",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "ppm",
     "device_class": "carbon_dioxide",
-    "friendly_name": "AirDot Living Room CO2"
+    "friendly_name": "Living Room Sensor CO2"
    },
-   "lc": 1795523024.9886692
+   "lc": 1794494160,
+   "lu": 1794494160
   }
  },
  "templates": {
-  "CO2 {{ states('sensor.living_room_airdot_living_room_co2') | int(0) }}": {
-   "result": "CO2 501"
+  "CO2 {{ states('sensor.living_room_co2') | int(0) }}": {
+   "result": "CO2 512"
   }
  },
  "display": {
   "entities": [
    {
-    "ei": "sensor.living_room_airdot_living_room_co2",
+    "ei": "sensor.living_room_co2",
     "pl": "esphome",
     "dp": 0,
     "di": "device-1",
@@ -72,7 +74,7 @@
   "devices": [
    {
     "id": "device-1",
-    "name": "AirDot Living Room"
+    "name": "Living Room Sensor"
    }
   ],
   "requested": {

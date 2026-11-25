@@ -2,7 +2,7 @@
  "case": "layout-card-vertical",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
@@ -31,10 +31,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "LED Strip Window",
+   "clipped": false,
+   "text": "Accent",
    "x": 64,
    "y": 20.61,
-   "w": 112.66,
+   "w": 44.53,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -43,6 +44,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Off",
    "x": 64,
    "y": 40,
@@ -55,10 +57,11 @@
   },
   {
    "slot": 0,
-   "text": "Sunset Lamp Sunset",
+   "clipped": false,
+   "text": "Reading",
    "x": 64,
    "y": 84.61,
-   "w": 130.81,
+   "w": 51.73,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -67,6 +70,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Off",
    "x": 64,
    "y": 104,
@@ -79,10 +83,11 @@
   },
   {
    "slot": 0,
-   "text": "Kitchen Blind",
+   "clipped": false,
+   "text": "Office Blind",
    "x": 64,
    "y": 148.61,
-   "w": 83.92,
+   "w": 74.38,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -91,6 +96,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Open",
    "x": 64,
    "y": 168,
@@ -103,6 +109,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "·",
    "x": 96.92,
    "y": 168,
@@ -115,6 +122,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "100%",
    "x": 103.84,
    "y": 168,
@@ -127,10 +135,11 @@
   },
   {
    "slot": 0,
-   "text": "Air purifier",
+   "clipped": false,
+   "text": "Ceiling Fan",
    "x": 316,
    "y": 20.61,
-   "w": 67.64,
+   "w": 70.52,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -139,6 +148,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "20%",
    "x": 316,
    "y": 40,
@@ -151,18 +161,19 @@
   }
  ],
  "states": {
-  "cover.kitchen_blind": {
+  "cover.office_blind": {
    "s": "open",
    "a": {
     "is_closed": false,
     "current_position": 100,
     "assumed_state": true,
-    "friendly_name": "Kitchen Blind",
+    "friendly_name": "Office Blind",
     "supported_features": 11
    },
-   "lc": 1795505391.0030644
+   "lc": 1794491700,
+   "lu": 1794491700
   },
-  "fan.air_purifier": {
+  "fan.ceiling_fan": {
    "s": "on",
    "a": {
     "preset_modes": [
@@ -171,27 +182,13 @@
     "percentage": 20,
     "percentage_step": 10,
     "preset_mode": null,
-    "friendly_name": "Air purifier",
+    "friendly_name": "Ceiling Fan",
     "supported_features": 57
    },
-   "lc": 1795504930.0582252
+   "lc": 1794484020,
+   "lu": 1794484020
   },
-  "light.sunset_lamp": {
-   "s": "off",
-   "a": {
-    "supported_color_modes": [
-     "onoff"
-    ],
-    "color_mode": null,
-    "off_with_transition": false,
-    "off_brightness": null,
-    "icon": "mdi:weather-sunset",
-    "friendly_name": "Sunset",
-    "supported_features": 8
-   },
-   "lc": 1795532578.3925707
-  },
-  "light.window_accent": {
+  "light.bedroom_accent": {
    "s": "off",
    "a": {
     "supported_color_modes": [
@@ -204,56 +201,73 @@
     "xy_color": null,
     "off_with_transition": false,
     "off_brightness": 254,
-    "icon": "mdi:window-open",
-    "friendly_name": "Window",
+    "icon": "mdi:led-strip-variant",
+    "friendly_name": "Bedroom Strip Accent",
     "supported_features": 40
    },
-   "lc": 1795507611.0189574
+   "lc": 1794496680,
+   "lu": 1794496680
+  },
+  "light.reading_lamp": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": null,
+    "off_with_transition": false,
+    "off_brightness": null,
+    "icon": "mdi:floor-lamp",
+    "friendly_name": "Reading Lamp Reading",
+    "supported_features": 8
+   },
+   "lc": 1794488160,
+   "lu": 1794488160
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "cover.kitchen_blind",
+    "ei": "cover.office_blind",
     "pl": "template",
-    "en": "Kitchen Blind"
+    "en": "Office Blind"
    },
    {
-    "ei": "fan.air_purifier",
+    "ei": "fan.ceiling_fan",
     "pl": "zha",
     "tk": "fan",
     "di": "device-1"
    },
    {
-    "ei": "light.sunset_lamp",
+    "ei": "light.bedroom_accent",
     "pl": "zha",
     "tk": "light",
-    "ic": "mdi:weather-sunset",
+    "ic": "mdi:led-strip-variant",
     "di": "device-2",
-    "en": "Sunset"
+    "en": "Accent"
    },
    {
-    "ei": "light.window_accent",
+    "ei": "light.reading_lamp",
     "pl": "zha",
     "tk": "light",
-    "ic": "mdi:window-open",
+    "ic": "mdi:floor-lamp",
     "di": "device-3",
-    "en": "Window"
+    "en": "Reading"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "Air purifier"
+    "name": "Ceiling Fan"
    },
    {
     "id": "device-2",
-    "name": "Sunset Lamp"
+    "name": "Bedroom Strip"
    },
    {
     "id": "device-3",
-    "name": "LED Strip"
+    "name": "Reading Lamp"
    }
   ],
   "requested": {

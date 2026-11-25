@@ -32,10 +32,10 @@
   {
    "slot": 0,
    "clipped": false,
-   "text": "Hallway Ceiling",
+   "text": "Hallway Ceiling Ring",
    "x": 56,
    "y": 17.61,
-   "w": 97.45,
+   "w": 129.48,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -57,7 +57,7 @@
   }
  ],
  "states": {
-  "light.hallway_ceiling": {
+  "light.hallway_ceiling_ring": {
    "s": "on",
    "a": {
     "min_color_temp_kelvin": 2702,
@@ -82,27 +82,30 @@
      0.579995,
      0.4
     ],
-    "friendly_name": "Hallway Ceiling",
+    "off_with_transition": false,
+    "off_brightness": null,
+    "friendly_name": "Hallway Ceiling Light Hallway Ceiling Ring",
     "supported_features": 40
    },
-   "lc": 1794492480,
-   "lu": 1794496080
+   "lc": 1794484080,
+   "lu": 1794484080
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "light.hallway_ceiling",
+    "ei": "light.hallway_ceiling_ring",
     "pl": "zha",
     "tk": "light",
-    "di": "device-1"
+    "di": "device-1",
+    "en": "Hallway Ceiling Ring"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "Hallway Ceiling"
+    "name": "Hallway Ceiling Light"
    }
   ],
   "requested": {

@@ -2,7 +2,7 @@
  "case": "mushroom-chips",
  "frame": "mirror",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 720,
@@ -31,7 +31,8 @@
  "texts": [
   {
    "slot": 0,
-   "text": "20.4 °C",
+   "clipped": false,
+   "text": "21.4 °C",
    "x": 33.39,
    "y": 11.59,
    "w": 35.69,
@@ -43,6 +44,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "47%",
    "x": 120.47,
    "y": 11.59,
@@ -55,6 +57,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Fog ⸱ 9.1 °C",
    "x": 192.23,
    "y": 11.59,
@@ -67,25 +70,27 @@
   }
  ],
  "states": {
-  "sensor.living_room_airdot_living_room_humidity": {
-   "s": "47.2299995422363",
+  "sensor.living_room_humidity": {
+   "s": "47.3",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "%",
     "device_class": "humidity",
-    "friendly_name": "AirDot Living Room Humidity"
+    "friendly_name": "Living Room Sensor Humidity"
    },
-   "lc": 1795523054.9726918
+   "lc": 1794490800,
+   "lu": 1794490800
   },
-  "sensor.living_room_airdot_living_room_temperature": {
-   "s": "20.3500003814697",
+  "sensor.living_room_temperature": {
+   "s": "21.42",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
-    "friendly_name": "AirDot Living Room Temperature"
+    "friendly_name": "Living Room Sensor Temperature"
    },
-   "lc": 1795523064.9735603
+   "lc": 1794491820,
+   "lu": 1794491820
   },
   "weather.forecast_home": {
    "s": "fog",
@@ -103,30 +108,30 @@
     "wind_speed_unit": "km/h",
     "visibility_unit": "km",
     "precipitation_unit": "mm",
-    "attribution": "Weather forecast from met.no, delivered by the Norwegian Meteorological Institute.",
     "friendly_name": "Home",
-    "supported_features": 3
+    "supported_features": 3,
+    "attribution": "Weather forecast from met.no, delivered by the Norwegian Meteorological Institute."
    },
-   "lc": 1795504913.209642,
-   "lu": 1795521713.4924083
+   "lc": 1794490140,
+   "lu": 1794490140
   }
  },
  "templates": {
-  "{{ states('sensor.living_room_airdot_living_room_humidity') | float(0) | round(0) | int }}%": {
+  "{{ states('sensor.living_room_humidity') | float(0) | round(0) | int }}%": {
    "result": "47%"
   }
  },
  "display": {
   "entities": [
    {
-    "ei": "sensor.living_room_airdot_living_room_humidity",
+    "ei": "sensor.living_room_humidity",
     "pl": "esphome",
     "dp": 0,
     "di": "device-1",
     "en": "Humidity"
    },
    {
-    "ei": "sensor.living_room_airdot_living_room_temperature",
+    "ei": "sensor.living_room_temperature",
     "pl": "esphome",
     "dp": 1,
     "di": "device-1",
@@ -141,11 +146,11 @@
   "devices": [
    {
     "id": "device-1",
-    "name": "AirDot Living Room"
+    "name": "Living Room Sensor"
    },
    {
     "id": "device-2",
-    "name": "Home"
+    "name": "Forecast Home"
    }
   ],
   "requested": {

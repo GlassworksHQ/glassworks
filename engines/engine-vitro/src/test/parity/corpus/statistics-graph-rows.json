@@ -34,7 +34,6 @@
     "pl": "esphome",
     "dp": 1,
     "di": "dev-living-room-sensor",
-    "hn": true,
     "en": "Temperature"
    }
   ],

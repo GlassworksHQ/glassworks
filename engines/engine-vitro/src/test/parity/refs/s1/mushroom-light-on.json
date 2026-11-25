@@ -2,7 +2,7 @@
  "case": "mushroom-light-on",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
@@ -31,10 +31,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "AP LED",
+   "clipped": false,
+   "text": "Pendant",
    "x": 56,
    "y": 12,
-   "w": 47,
+   "w": 52.78,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -43,6 +44,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "On",
    "x": 56,
    "y": 31,
@@ -55,43 +57,41 @@
   }
  ],
  "states": {
-  "light.u7_pro_xg_wall_led": {
+  "light.kitchen_pendant": {
    "s": "on",
    "a": {
     "supported_color_modes": [
      "onoff"
     ],
     "color_mode": "onoff",
-    "friendly_name": "Bedroom AP LED",
+    "friendly_name": "Kitchen Pendant",
     "supported_features": 0
    },
-   "lc": 1795532357.020664
+   "lc": 1794482580,
+   "lu": 1794482580
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "light.u7_pro_xg_wall_led",
-    "pl": "unifi",
-    "tk": "led_control",
+    "ei": "light.kitchen_pendant",
+    "pl": "demo",
     "di": "device-1",
-    "en": "LED"
+    "en": "Pendant"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "Bedroom AP"
+    "name": "Kitchen"
    }
   ],
   "requested": {
    "domains": [
     "light"
    ],
-   "platforms": [
-    "unifi"
-   ]
+   "platforms": []
   },
   "icons": {
    "entity_component": {

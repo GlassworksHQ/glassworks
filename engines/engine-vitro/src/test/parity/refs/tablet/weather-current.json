@@ -2,7 +2,7 @@
  "case": "weather-current",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Partly cloudy",
    "x": 81,
    "y": 35.59,
@@ -43,10 +44,11 @@
   },
   {
    "slot": 0,
-   "text": "Home",
+   "clipped": false,
+   "text": "Forecast Home",
    "x": 81,
    "y": 64.39,
-   "w": 37.66,
+   "w": 95.47,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -55,6 +57,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "12.2",
    "x": 406.3,
    "y": 35.59,
@@ -80,6 +83,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "76%",
    "x": 457.02,
    "y": 65.09,
@@ -108,12 +112,12 @@
     "wind_speed_unit": "km/h",
     "visibility_unit": "km",
     "precipitation_unit": "mm",
-    "attribution": "Weather forecast from met.no, delivered by the Norwegian Meteorological Institute.",
     "friendly_name": "Home",
-    "supported_features": 3
+    "supported_features": 3,
+    "attribution": "Weather forecast from met.no, delivered by the Norwegian Meteorological Institute."
    },
-   "lc": 1795538513.47353,
-   "lu": 1795541873.4855106
+   "lc": 1794490140,
+   "lu": 1794490140
   }
  },
  "templates": {},
@@ -128,7 +132,7 @@
   "devices": [
    {
     "id": "device-1",
-    "name": "Home"
+    "name": "Forecast Home"
    }
   ],
   "requested": {

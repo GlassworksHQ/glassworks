@@ -2,7 +2,7 @@
  "case": "media-control",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
@@ -31,10 +31,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "Sonos Living Room",
+   "clipped": false,
+   "text": "Living Room Speaker",
    "x": 49,
    "y": 20.95,
-   "w": 119.7,
+   "w": 130.8,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -43,37 +44,35 @@
   }
  ],
  "states": {
-  "media_player.living_room_living_room": {
+  "media_player.living_room_speaker": {
    "s": "idle",
    "a": {
-    "group_members": [
-     "media_player.living_room_living_room"
-    ],
     "volume_level": 0.31,
     "is_volume_muted": false,
     "media_content_type": "music",
     "shuffle": false,
     "repeat": "off",
     "device_class": "speaker",
-    "friendly_name": "Sonos Living Room",
+    "friendly_name": "Living Room Speaker",
     "supported_features": 8321599
    },
-   "lc": 1795504932.6927228
+   "lc": 1794496320,
+   "lu": 1794496320
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "media_player.living_room_living_room",
-    "pl": "sonos",
+    "ei": "media_player.living_room_speaker",
+    "pl": "demo",
     "di": "device-1"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "Sonos Living Room"
+    "name": "Living Room Speaker"
    }
   ],
   "requested": {

@@ -2,7 +2,7 @@
  "case": "gauge",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "74%",
    "x": 205.09,
    "y": 85.38,
@@ -43,6 +44,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Black ink",
    "x": 222.08,
    "y": 162.89,
@@ -55,7 +57,7 @@
   }
  ],
  "states": {
-  "sensor.epson_et_2800_series_black_ink": {
+  "sensor.printer_black_ink": {
    "s": "74",
    "a": {
     "state_class": "measurement",
@@ -63,18 +65,18 @@
     "marker_low_level": 15,
     "marker_type": "ink",
     "unit_of_measurement": "%",
-    "friendly_name": "EPSON ET-2800 Series Black ink"
+    "friendly_name": "Office Printer Black ink"
    },
-   "lc": 1795504913.216327
+   "lc": 1794495540,
+   "lu": 1794495540
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "sensor.epson_et_2800_series_black_ink",
-    "pl": "ipp",
-    "tk": "marker",
+    "ei": "sensor.printer_black_ink",
+    "pl": "demo",
     "di": "device-1",
     "en": "Black ink"
    }
@@ -82,16 +84,14 @@
   "devices": [
    {
     "id": "device-1",
-    "name": "EPSON ET-2800 Series"
+    "name": "Office Printer"
    }
   ],
   "requested": {
    "domains": [
     "sensor"
    ],
-   "platforms": [
-    "ipp"
-   ]
+   "platforms": []
   },
   "icons": {
    "entity_component": {
@@ -101,15 +101,7 @@
      }
     }
    },
-   "entity": {
-    "ipp": {
-     "sensor": {
-      "marker": {
-       "default": "mdi:water"
-      }
-     }
-    }
-   }
+   "entity": {}
   },
   "translations": {
    "entity_component": {

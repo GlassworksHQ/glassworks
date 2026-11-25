@@ -2,7 +2,7 @@
  "case": "markdown-table",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Inside",
    "x": 22,
    "y": 22,
@@ -43,6 +44,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Living Room",
    "x": 54,
    "y": 51.78,
@@ -55,10 +57,11 @@
   },
   {
    "slot": 0,
-   "text": "20.4°",
-   "x": 810.05,
+   "clipped": false,
+   "text": "21.4°",
+   "x": 813.42,
    "y": 51.19,
-   "w": 43.95,
+   "w": 40.58,
    "h": 20,
    "size": 17,
    "weight": 400,
@@ -67,6 +70,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "47%",
    "x": 865.08,
    "y": 51.78,
@@ -79,6 +83,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Fridge",
    "x": 54,
    "y": 87.97,
@@ -91,10 +96,11 @@
   },
   {
    "slot": 0,
-   "text": "1.1°",
-   "x": 828.98,
+   "clipped": false,
+   "text": "3.4°",
+   "x": 820.58,
    "y": 87.38,
-   "w": 25.02,
+   "w": 33.42,
    "h": 20,
    "size": 17,
    "weight": 400,
@@ -103,10 +109,11 @@
   },
   {
    "slot": 0,
-   "text": "50 W",
-   "x": 860.41,
+   "clipped": false,
+   "text": "49 W",
+   "x": 860,
    "y": 87.97,
-   "w": 37.59,
+   "w": 38,
    "h": 19,
    "size": 15,
    "weight": 400,
@@ -115,80 +122,82 @@
   }
  ],
  "states": {
-  "sensor.kitchen_fridge_fridge_temperature": {
-   "s": "1.11111111111111",
-   "a": {
-    "state_class": "measurement",
-    "unit_of_measurement": "°C",
-    "device_class": "temperature",
-    "icon": "mdi:thermometer",
-    "friendly_name": "Fridge Fridge temperature"
-   },
-   "lc": 1795504918.0331674
-  },
-  "sensor.kitchen_fridge_power": {
-   "s": "50.0",
+  "sensor.fridge_power": {
+   "s": "48.6",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "W",
     "device_class": "power",
     "friendly_name": "Fridge Power"
    },
-   "lc": 1795522833.0296257
+   "lc": 1794487740,
+   "lu": 1794487740
   },
-  "sensor.living_room_airdot_living_room_humidity": {
-   "s": "47.2400016784668",
-   "a": {
-    "state_class": "measurement",
-    "unit_of_measurement": "%",
-    "device_class": "humidity",
-    "friendly_name": "AirDot Living Room Humidity"
-   },
-   "lc": 1795522954.9950962
-  },
-  "sensor.living_room_airdot_living_room_temperature": {
-   "s": "20.3549995422363",
+  "sensor.fridge_temperature": {
+   "s": "3.4",
    "a": {
     "state_class": "measurement",
     "unit_of_measurement": "°C",
     "device_class": "temperature",
-    "friendly_name": "AirDot Living Room Temperature"
+    "icon": "mdi:thermometer",
+    "friendly_name": "Fridge Temperature"
    },
-   "lc": 1795522954.970371
+   "lc": 1794494100,
+   "lu": 1794494100
+  },
+  "sensor.living_room_humidity": {
+   "s": "47.3",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "%",
+    "device_class": "humidity",
+    "friendly_name": "Living Room Sensor Humidity"
+   },
+   "lc": 1794490800,
+   "lu": 1794490800
+  },
+  "sensor.living_room_temperature": {
+   "s": "21.42",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "Living Room Sensor Temperature"
+   },
+   "lc": 1794491820,
+   "lu": 1794491820
   }
  },
  "templates": {
-  "###### Inside\n<table role=\"presentation\"><tr><td><ha-icon icon=\"mdi:sofa\"></ha-icon></td><td>Living Room</td><td>{{ '%.1f' | format(states('sensor.living_room_airdot_living_room_temperature') | float(0)) }}°</td><td>{{ states('sensor.living_room_airdot_living_room_humidity') | float(0) | round(0) | int }}%</td></tr><tr><td><ha-icon icon=\"mdi:fridge\"></ha-icon></td><td>Fridge</td><td>{{ '%.1f' | format(states('sensor.kitchen_fridge_fridge_temperature') | float(0)) }}°</td><td>{{ states('sensor.kitchen_fridge_power') | float(0) | round(0) | int }} W</td></tr></table>": {
-   "result": "###### Inside\n<table role=\"presentation\"><tr><td><ha-icon icon=\"mdi:sofa\"></ha-icon></td><td>Living Room</td><td>20.4°</td><td>47%</td></tr><tr><td><ha-icon icon=\"mdi:fridge\"></ha-icon></td><td>Fridge</td><td>1.1°</td><td>50 W</td></tr></table>"
+  "###### Inside\n<table role=\"presentation\"><tr><td><ha-icon icon=\"mdi:sofa\"></ha-icon></td><td>Living Room</td><td>{{ '%.1f' | format(states('sensor.living_room_temperature') | float(0)) }}°</td><td>{{ states('sensor.living_room_humidity') | float(0) | round(0) | int }}%</td></tr><tr><td><ha-icon icon=\"mdi:fridge\"></ha-icon></td><td>Fridge</td><td>{{ '%.1f' | format(states('sensor.fridge_temperature') | float(0)) }}°</td><td>{{ states('sensor.fridge_power') | float(0) | round(0) | int }} W</td></tr></table>": {
+   "result": "###### Inside\n<table role=\"presentation\"><tr><td><ha-icon icon=\"mdi:sofa\"></ha-icon></td><td>Living Room</td><td>21.4°</td><td>47%</td></tr><tr><td><ha-icon icon=\"mdi:fridge\"></ha-icon></td><td>Fridge</td><td>3.4°</td><td>49 W</td></tr></table>"
   }
  },
  "display": {
   "entities": [
    {
-    "ei": "sensor.kitchen_fridge_fridge_temperature",
-    "pl": "localthings",
-    "tk": "instance_temperature",
-    "dp": 1,
-    "di": "device-1",
-    "en": "Fridge temperature"
-   },
-   {
-    "ei": "sensor.kitchen_fridge_power",
-    "pl": "localthings",
-    "tk": "power_watts",
+    "ei": "sensor.fridge_power",
+    "pl": "demo",
     "dp": 0,
     "di": "device-1",
     "en": "Power"
    },
    {
-    "ei": "sensor.living_room_airdot_living_room_humidity",
+    "ei": "sensor.fridge_temperature",
+    "pl": "demo",
+    "dp": 1,
+    "di": "device-1",
+    "en": "Temperature"
+   },
+   {
+    "ei": "sensor.living_room_humidity",
     "pl": "esphome",
     "dp": 0,
     "di": "device-2",
     "en": "Humidity"
    },
    {
-    "ei": "sensor.living_room_airdot_living_room_temperature",
+    "ei": "sensor.living_room_temperature",
     "pl": "esphome",
     "dp": 1,
     "di": "device-2",
@@ -202,16 +211,14 @@
    },
    {
     "id": "device-2",
-    "name": "AirDot Living Room"
+    "name": "Living Room Sensor"
    }
   ],
   "requested": {
    "domains": [
     "sensor"
    ],
-   "platforms": [
-    "localthings"
-   ]
+   "platforms": []
   },
   "icons": {
    "entity_component": {

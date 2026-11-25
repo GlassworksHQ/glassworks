@@ -82,21 +82,18 @@
     "tk": "light",
     "ic": "mdi:led-strip-variant",
     "di": "dev-bedroom-strip",
-    "hn": true,
     "en": "Accent"
    },
    {
     "ei": "light.desk_lamp",
     "pl": "switch_as_x",
-    "di": "dev-desk-lamp",
-    "hn": true
+    "di": "dev-desk-lamp"
    },
    {
     "ei": "light.shelf_strip",
     "pl": "zha",
     "tk": "light",
-    "di": "dev-shelf-strip",
-    "hn": true
+    "di": "dev-shelf-strip"
    }
   ],
   "devices": [

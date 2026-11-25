@@ -2,7 +2,7 @@
  "case": "stack-in-card",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Climate",
    "x": 5,
    "y": 3,
@@ -43,10 +44,11 @@
   },
   {
    "slot": 0,
-   "text": "AC",
+   "clipped": false,
+   "text": "Heat pump",
    "x": 57,
    "y": 35.61,
-   "w": 19.89,
+   "w": 74.31,
    "h": 17,
    "size": 14,
    "weight": 500,
@@ -55,6 +57,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Off",
    "x": 57,
    "y": 55,
@@ -67,10 +70,11 @@
   },
   {
    "slot": 0,
-   "text": "Air purifier",
+   "clipped": false,
+   "text": "Ceiling fan",
    "x": 57,
    "y": 99.61,
-   "w": 72.58,
+   "w": 72.45,
    "h": 17,
    "size": 14,
    "weight": 500,
@@ -79,6 +83,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "On",
    "x": 57,
    "y": 119,
@@ -91,7 +96,7 @@
   }
  ],
  "states": {
-  "climate.ac": {
+  "climate.heat_pump": {
    "s": "off",
    "a": {
     "hvac_modes": [
@@ -112,21 +117,18 @@
      "auto"
     ],
     "current_temperature": 17.5,
-    "temperature_unit": "°C",
     "temperature": null,
     "target_temp_high": null,
     "target_temp_low": null,
     "fan_mode": "auto",
     "hvac_action": "off",
-    "unit_state": "normal",
-    "mode_conflict": false,
-    "friendly_name": "AC",
+    "friendly_name": "Heat Pump",
     "supported_features": 395
    },
-   "lc": 1795504922.749542,
-   "lu": 1795505706.0540895
+   "lc": 1794482160,
+   "lu": 1794482160
   },
-  "fan.air_purifier": {
+  "fan.ceiling_fan": {
    "s": "on",
    "a": {
     "preset_modes": [
@@ -135,30 +137,30 @@
     "percentage": 20,
     "percentage_step": 10,
     "preset_mode": null,
-    "friendly_name": "Air purifier",
+    "friendly_name": "Ceiling Fan",
     "supported_features": 57
    },
-   "lc": 1795504930.0582252
+   "lc": 1794484020,
+   "lu": 1794484020
   }
  },
  "templates": {
-  "{{ states('climate.ac') | title }}": {
+  "{{ states('climate.heat_pump') | title }}": {
    "result": "Off"
   },
-  "{{ states('fan.air_purifier') | title }}": {
+  "{{ states('fan.ceiling_fan') | title }}": {
    "result": "On"
   }
  },
  "display": {
   "entities": [
    {
-    "ei": "climate.ac",
-    "pl": "mitsubishi_matouch",
-    "tk": "matouch",
+    "ei": "climate.heat_pump",
+    "pl": "demo",
     "di": "device-1"
    },
    {
-    "ei": "fan.air_purifier",
+    "ei": "fan.ceiling_fan",
     "pl": "zha",
     "tk": "fan",
     "di": "device-2"
@@ -167,11 +169,11 @@
   "devices": [
    {
     "id": "device-1",
-    "name": "AC"
+    "name": "Heat Pump"
    },
    {
     "id": "device-2",
-    "name": "Air purifier"
+    "name": "Ceiling Fan"
    }
   ],
   "requested": {
@@ -180,7 +182,6 @@
     "fan"
    ],
    "platforms": [
-    "mitsubishi_matouch",
     "zha"
    ]
   },
@@ -271,36 +272,6 @@
     }
    },
    "entity": {
-    "mitsubishi_matouch": {
-     "climate": {
-      "matouch": {
-       "state_attributes": {
-        "swing_mode": {
-         "state": {
-          "auto": "mdi:autorenew",
-          "flat": "mdi:arrow-right",
-          "down_20": "mdi:arrow-bottom-right",
-          "down_60": "mdi:arrow-bottom-right",
-          "down_80": "mdi:arrow-down",
-          "down_100": "mdi:arrow-down-bold",
-          "swing": "mdi:swap-vertical"
-         }
-        },
-        "swing_horizontal_mode": {
-         "state": {
-          "rl_auto": "mdi:autorenew",
-          "rl_left": "mdi:arrow-left",
-          "rl_left_center": "mdi:chevron-left",
-          "rl_center": "mdi:arrow-up",
-          "rl_right_center": "mdi:chevron-right",
-          "rl_right": "mdi:arrow-right",
-          "rl_swing": "mdi:swap-horizontal"
-         }
-        }
-       }
-      }
-     }
-    },
     "zha": {
      "fan": {
       "fan": {

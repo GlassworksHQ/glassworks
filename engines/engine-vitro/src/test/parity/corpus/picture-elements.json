@@ -63,14 +63,12 @@
     "tk": "light",
     "ic": "mdi:led-strip-variant",
     "di": "dev-bedroom-strip",
-    "hn": true,
     "en": "Accent"
    },
    {
     "ei": "sensor.printer_black_ink",
     "pl": "demo",
     "di": "dev-office-printer",
-    "hn": true,
     "en": "Black ink"
    }
   ],

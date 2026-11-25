@@ -80,15 +80,13 @@
    {
     "ei": "climate.heat_pump",
     "pl": "demo",
-    "di": "dev-heat-pump",
-    "hn": true
+    "di": "dev-heat-pump"
    },
    {
     "ei": "fan.ceiling_fan",
     "pl": "zha",
     "tk": "fan",
-    "di": "dev-ceiling-fan",
-    "hn": true
+    "di": "dev-ceiling-fan"
    }
   ],
   "devices": [

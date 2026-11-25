@@ -2,7 +2,7 @@
  "case": "markdown-cardmod-has",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "A heading",
    "x": 213.02,
    "y": 18,
@@ -43,10 +44,11 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "A paragraph with",
    "x": 142.73,
    "y": 58,
-   "w": 139.88,
+   "w": 135.41,
    "h": 21,
    "size": 18,
    "weight": 400,
@@ -55,6 +57,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "bold",
    "x": 282.61,
    "y": 58,
@@ -67,10 +70,11 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "text.",
-   "x": 317.84,
+   "x": 322.3,
    "y": 58,
-   "w": 39.42,
+   "w": 34.97,
    "h": 21,
    "size": 18,
    "weight": 400,
@@ -79,6 +83,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "A plain paragraph.",
    "x": 193.59,
    "y": 104.8,

@@ -44,15 +44,13 @@
    {
     "ei": "light.desk_lamp",
     "pl": "switch_as_x",
-    "di": "dev-desk-lamp",
-    "hn": true
+    "di": "dev-desk-lamp"
    },
    {
     "ei": "sensor.living_room_temperature",
     "pl": "esphome",
     "dp": 1,
     "di": "dev-living-room-sensor",
-    "hn": true,
     "en": "Temperature"
    }
   ],

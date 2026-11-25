@@ -2,7 +2,7 @@
  "case": "tile-number",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
@@ -31,10 +31,11 @@
  "texts": [
   {
    "slot": 0,
-   "text": "Pre-cool target",
+   "clipped": false,
+   "text": "Target temperature",
    "x": 56,
    "y": 17.61,
-   "w": 94.81,
+   "w": 121.89,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -43,6 +44,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "22.0 °C",
    "x": 56,
    "y": 37,
@@ -55,6 +57,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "22",
    "x": 106.06,
    "y": 79,
@@ -67,10 +70,11 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "°C",
-   "x": 121.98,
+   "x": 125.47,
    "y": 79,
-   "w": 17.95,
+   "w": 14.47,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -79,7 +83,7 @@
   }
  ],
  "states": {
-  "input_number.pre_cool_target": {
+  "input_number.target_temperature": {
    "s": "22.0",
    "a": {
     "min": 18,
@@ -90,18 +94,19 @@
     "editable": true,
     "unit_of_measurement": "°C",
     "icon": "mdi:thermometer",
-    "friendly_name": "Pre-cool target"
+    "friendly_name": "Target temperature"
    },
-   "lc": 1795504897.1546495
+   "lc": 1794488280,
+   "lu": 1794488280
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "input_number.pre_cool_target",
+    "ei": "input_number.target_temperature",
     "pl": "input_number",
-    "en": "Pre-cool target"
+    "en": "Target temperature"
    }
   ],
   "devices": [],

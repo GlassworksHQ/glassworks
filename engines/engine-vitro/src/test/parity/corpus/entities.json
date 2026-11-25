@@ -82,7 +82,6 @@
     "ei": "binary_sensor.fridge_door",
     "pl": "demo",
     "di": "dev-fridge",
-    "hn": true,
     "en": "Door"
    },
    {
@@ -96,7 +95,6 @@
     "tk": "light",
     "ic": "mdi:led-strip-variant",
     "di": "dev-bedroom-strip",
-    "hn": true,
     "en": "Accent"
    },
    {
@@ -104,7 +102,6 @@
     "pl": "demo",
     "dp": 0,
     "di": "dev-fridge",
-    "hn": true,
     "en": "Power"
    },
    {
@@ -112,7 +109,6 @@
     "pl": "demo",
     "dp": 1,
     "di": "dev-fridge",
-    "hn": true,
     "en": "Temperature"
    }
   ],

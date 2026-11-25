@@ -2,7 +2,7 @@
  "case": "mushroom-template-cut-in-stack",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795457280000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
@@ -44,6 +44,7 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Recording",
    "x": 56,
    "y": 32,

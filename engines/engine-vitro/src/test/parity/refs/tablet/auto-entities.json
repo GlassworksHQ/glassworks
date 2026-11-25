@@ -2,7 +2,7 @@
  "case": "auto-entities",
  "frame": "tablet",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 1280,
@@ -31,6 +31,7 @@
  "texts": [
   {
    "slot": 0,
+   "clipped": false,
    "text": "Open blinds",
    "x": 17,
    "y": 21,
@@ -43,10 +44,11 @@
   },
   {
    "slot": 0,
-   "text": "Kitchen Blind",
+   "clipped": false,
+   "text": "Office Blind",
    "x": 73,
    "y": 81.59,
-   "w": 81.53,
+   "w": 70.92,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -55,10 +57,11 @@
   },
   {
    "slot": 0,
-   "text": "Side",
+   "clipped": false,
+   "text": "Patio",
    "x": 73,
    "y": 137.59,
-   "w": 27.02,
+   "w": 32.33,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -67,10 +70,11 @@
   },
   {
    "slot": 0,
-   "text": "Side Blinds",
+   "clipped": false,
+   "text": "Patio Blinds",
    "x": 73,
    "y": 193.59,
-   "w": 68.84,
+   "w": 74.16,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -79,56 +83,59 @@
   }
  ],
  "states": {
-  "cover.kitchen_blind": {
+  "cover.office_blind": {
    "s": "open",
    "a": {
     "is_closed": false,
     "current_position": 100,
     "assumed_state": true,
-    "friendly_name": "Kitchen Blind",
+    "friendly_name": "Office Blind",
     "supported_features": 11
    },
-   "lc": 1795505391.0030644
+   "lc": 1794491700,
+   "lu": 1794491700
   },
-  "cover.side": {
+  "cover.patio": {
    "s": "open",
    "a": {
     "is_closed": false,
     "current_position": 100,
     "assumed_state": true,
-    "friendly_name": "Side",
+    "friendly_name": "Patio",
     "supported_features": 11
    },
-   "lc": 1795505391.0048451
+   "lc": 1794498240,
+   "lu": 1794498240
   },
-  "cover.side_blinds": {
+  "cover.patio_blinds": {
    "s": "open",
    "a": {
     "is_closed": false,
     "assumed_state": true,
-    "friendly_name": "Side Blinds",
+    "friendly_name": "Patio Blinds",
     "supported_features": 11
    },
-   "lc": 1795505391.0044737
+   "lc": 1794493740,
+   "lu": 1794493740
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "cover.kitchen_blind",
+    "ei": "cover.office_blind",
     "pl": "template",
-    "en": "Kitchen Blind"
+    "en": "Office Blind"
    },
    {
-    "ei": "cover.side",
+    "ei": "cover.patio",
     "pl": "template",
-    "en": "Side"
+    "en": "Patio"
    },
    {
-    "ei": "cover.side_blinds",
+    "ei": "cover.patio_blinds",
     "pl": "group",
-    "en": "Side Blinds"
+    "en": "Patio Blinds"
    }
   ],
   "devices": [],

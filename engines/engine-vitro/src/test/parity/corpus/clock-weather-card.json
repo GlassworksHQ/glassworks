@@ -1,11 +1,12 @@
 {
- "title": "clock-weather-card: the clock, today's weather and five days",
+ "title": "clock-weather-card: the clock, today's weather and five days (still icons)",
  "card": {
   "type": "custom:clock-weather-card",
   "entity": "weather.forecast_home",
   "forecast_rows": 5,
   "locale": "en-US",
-  "time_format": 24
+  "time_format": 24,
+  "animated_icons": false
  },
  "fixture": {
   "states": {
@@ -36,8 +37,7 @@
    {
     "ei": "weather.forecast_home",
     "pl": "met",
-    "di": "dev-forecast-home",
-    "hn": true
+    "di": "dev-forecast-home"
    }
   ],
   "devices": [

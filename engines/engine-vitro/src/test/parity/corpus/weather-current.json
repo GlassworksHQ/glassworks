@@ -34,8 +34,7 @@
    {
     "ei": "weather.forecast_home",
     "pl": "met",
-    "di": "dev-forecast-home",
-    "hn": true
+    "di": "dev-forecast-home"
    }
   ],
   "devices": [

@@ -26,7 +26,6 @@
     "ei": "sensor.living_room_temperature",
     "pl": "esphome",
     "di": "dev-living-room-sensor",
-    "hn": true,
     "en": "Temperature",
     "dp": 1
    }

@@ -2,7 +2,7 @@
  "case": "logbook",
  "frame": "s1",
  "haVersion": "2026.11.0",
- "now": 1795543680000,
+ "now": 1794499680000,
  "stable": true,
  "viewport": {
   "width": 960,
@@ -31,7 +31,8 @@
  "texts": [
   {
    "slot": 0,
-   "text": "Today · November 24, 2026",
+   "clipped": false,
+   "text": "Today · November 12, 2026",
    "x": 17,
    "y": 28,
    "w": 170.61,
@@ -43,7 +44,8 @@
   },
   {
    "slot": 0,
-   "text": "Today · November 24, 2026",
+   "clipped": false,
+   "text": "Today · November 12, 2026",
    "x": 17,
    "y": 36,
    "w": 170.61,
@@ -55,9 +57,10 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "Off",
    "x": 53,
-   "y": 67.19,
+   "y": 66.69,
    "w": 19.36,
    "h": 16,
    "size": 14,
@@ -67,9 +70,62 @@
   },
   {
    "slot": 0,
-   "text": "12:06:51 AM",
+   "clipped": false,
+   "text": "9:03:00 AM",
+   "x": 390.22,
+   "y": 67.88,
+   "w": 60.78,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "On",
+   "x": 53,
+   "y": 106.69,
+   "w": 17.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "7:27:00 AM",
+   "x": 390.22,
+   "y": 107.88,
+   "w": 60.78,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 53,
+   "y": 147.19,
+   "w": 19.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12:06:00 AM",
    "x": 383.47,
-   "y": 68.38,
+   "y": 148.38,
    "w": 67.53,
    "h": 14,
    "size": 12,
@@ -79,9 +135,10 @@
   },
   {
    "slot": 0,
-   "text": "Yesterday · November 23, 2026",
+   "clipped": false,
+   "text": "Yesterday · November 11, 2026",
    "x": 17,
-   "y": 114.39,
+   "y": 194.39,
    "w": 195.34,
    "h": 16,
    "size": 14,
@@ -91,9 +148,10 @@
   },
   {
    "slot": 0,
+   "clipped": false,
    "text": "On",
    "x": 53,
-   "y": 145.08,
+   "y": 225.58,
    "w": 17.36,
    "h": 16,
    "size": 14,
@@ -103,130 +161,11 @@
   },
   {
    "slot": 0,
-   "text": "11:33:08 PM",
-   "x": 383.73,
-   "y": 146.27,
-   "w": 67.27,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(155, 155, 155)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "text": "Off",
-   "x": 53,
-   "y": 185.08,
-   "w": 19.36,
-   "h": 16,
-   "size": 14,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "text": "11:22:10 PM",
-   "x": 383.73,
-   "y": 186.27,
-   "w": 67.27,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(155, 155, 155)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "text": "Unavailable",
-   "x": 53,
-   "y": 225.08,
-   "w": 71.7,
-   "h": 16,
-   "size": 14,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "text": "11:22:06 PM",
-   "x": 383.73,
-   "y": 226.27,
-   "w": 67.27,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(155, 155, 155)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "text": "Off",
-   "x": 53,
-   "y": 265.08,
-   "w": 19.36,
-   "h": 16,
-   "size": 14,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "text": "11:19:27 PM",
-   "x": 383.73,
-   "y": 266.27,
-   "w": 67.27,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(155, 155, 155)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "text": "On",
-   "x": 53,
-   "y": 305.08,
-   "w": 17.36,
-   "h": 16,
-   "size": 14,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "text": "11:17:53 PM",
-   "x": 383.73,
-   "y": 306.27,
-   "w": 67.27,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(155, 155, 155)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "text": "Off",
-   "x": 53,
-   "y": 345.08,
-   "w": 19.36,
-   "h": 16,
-   "size": 14,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "text": "11:00:20 PM",
-   "x": 383.73,
-   "y": 346.27,
-   "w": 67.27,
+   "clipped": false,
+   "text": "6:48:00 PM",
+   "x": 390.45,
+   "y": 226.77,
+   "w": 60.55,
    "h": 14,
    "size": 12,
    "weight": 400,
@@ -235,7 +174,7 @@
   }
  ],
  "states": {
-  "light.window_accent": {
+  "light.bedroom_accent": {
    "s": "off",
    "a": {
     "supported_color_modes": [
@@ -248,29 +187,30 @@
     "xy_color": null,
     "off_with_transition": false,
     "off_brightness": 254,
-    "icon": "mdi:window-open",
-    "friendly_name": "Window",
+    "icon": "mdi:led-strip-variant",
+    "friendly_name": "Bedroom Strip Accent",
     "supported_features": 40
    },
-   "lc": 1795507611.0189574
+   "lc": 1794495780,
+   "lu": 1794495780
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "light.window_accent",
+    "ei": "light.bedroom_accent",
     "pl": "zha",
     "tk": "light",
-    "ic": "mdi:window-open",
+    "ic": "mdi:led-strip-variant",
     "di": "device-1",
-    "en": "Window"
+    "en": "Accent"
    }
   ],
   "devices": [
    {
     "id": "device-1",
-    "name": "LED Strip"
+    "name": "Bedroom Strip"
    }
   ],
   "requested": {
@@ -328,10 +268,10 @@
   {
    "request": {
     "type": "logbook/event_stream",
-    "start_time": "2026-11-23T18:08:00.000Z",
-    "end_time": "2027-11-24T18:08:00.000Z",
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "end_time": "2027-11-12T16:08:00.000Z",
     "entity_ids": [
-     "light.window_accent"
+     "light.bedroom_accent"
     ]
    },
    "events": [
@@ -339,670 +279,61 @@
      "events": [
       {
        "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795481021.7732692,
+       "entity_id": "light.bedroom_accent",
+       "icon": "mdi:led-strip-variant",
        "context_event_type": "automation_triggered",
        "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by numeric state of sensor.presence_multi_sensor_fp300_illuminance",
-       "context_source": "numeric state of sensor.presence_multi_sensor_fp300_illuminance",
-       "context_entity_id": "automation.bedroom_lights_projector"
+       "context_name": "Evening lights",
+       "context_message": "triggered by state of sun.sun",
+       "context_source": "state of sun.sun",
+       "context_entity_id": "automation.evening_lights",
+       "when": 1794444480
       },
       {
        "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795483378.024718,
+       "entity_id": "light.bedroom_accent",
+       "icon": "mdi:led-strip-variant",
        "context_event_type": "automation_triggered",
        "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
+       "context_name": "Bedtime",
+       "context_message": "triggered by time",
+       "context_source": "time",
+       "context_entity_id": "automation.bedtime",
+       "when": 1794463560
       },
       {
        "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795483387.6389213,
+       "entity_id": "light.bedroom_accent",
+       "icon": "mdi:led-strip-variant",
        "context_event_type": "automation_triggered",
        "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
+       "context_name": "Morning wake-up",
+       "context_message": "triggered by time",
+       "context_source": "time",
+       "context_entity_id": "automation.morning_wake_up",
+       "when": 1794490020
       },
       {
        "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795483479.5527952,
+       "entity_id": "light.bedroom_accent",
+       "icon": "mdi:led-strip-variant",
        "context_event_type": "automation_triggered",
        "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795483494.8985023,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795483566.2087066,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795491317.1542635,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795492190.4871051,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795492236.3881671,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795493063.9815173,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795493129.1335437,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795493207.9213564,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795493355.3979428,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795493426.1740665,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795495143.615614,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795495196.057018,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795495300.6152623,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795495552.5782878,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795495554.3867807,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795495639.7171838,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795495716.6433735,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795496221.9471827,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795497168.6220968,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795497650.0668585,
-       "context_domain": "script",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795498030.89743,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Red Button",
-       "context_message": "triggered by state of event.bedroom_red_button_1",
-       "context_source": "state of event.bedroom_red_button_1",
-       "context_entity_id": "automation.red"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500252.7614276,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Red Button",
-       "context_message": "triggered by state of event.bedroom_red_button_2",
-       "context_source": "state of event.bedroom_red_button_2",
-       "context_entity_id": "automation.red"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500298.308509,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Red Button",
-       "context_message": "triggered by state of event.bedroom_red_button_1",
-       "context_source": "state of event.bedroom_red_button_1",
-       "context_entity_id": "automation.red"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500315.2699664,
-       "context_domain": "homeassistant",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500320.7352233,
-       "context_domain": "homeassistant",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500347.017402,
-       "context_domain": "homeassistant",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500355.8434322,
-       "context_domain": "homeassistant",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500397.5539567,
-       "context_domain": "script",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500423.9712827,
-       "context_domain": "script",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500434.041355,
-       "context_domain": "script",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500467.5490928,
-       "context_domain": "script",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500474.836134,
-       "context_domain": "script",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500596.4447494,
-       "context_domain": "script",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500605.2882547,
-       "context_domain": "script",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500617.083133,
-       "context_domain": "script",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500625.2553189,
-       "context_domain": "script",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500636.0982704,
-       "context_domain": "script",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795500641.4254212,
-       "context_domain": "script",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795501736.640369,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795501819.9981918,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795502011.454544,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795502090.7820997,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795502133.884061,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795502209.2265136,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795502563.8597043,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795502672.7202225,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795502839.8903053,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795502926.625859,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795503491.7675588,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795503620.8329,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795504673.2613316,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795504767.6125839,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "unavailable",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795504926.505869
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795504930.0605671
-      },
-      {
-       "state": "on",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795505588.8164732,
-       "context_event_type": "automation_triggered",
-       "context_domain": "automation",
-       "context_name": "Bedroom lights & projector",
-       "context_message": "triggered by state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_source": "state of binary_sensor.presence_multi_sensor_fp300_occupancy",
-       "context_entity_id": "automation.bedroom_lights_projector"
-      },
-      {
-       "state": "off",
-       "entity_id": "light.window_accent",
-       "icon": "mdi:window-open",
-       "when": 1795507611.0189574,
-       "context_domain": "script",
-       "context_service": "turn_on",
-       "context_event_type": "call_service"
+       "context_name": "Leave home",
+       "context_message": "triggered by state of person.sam",
+       "context_source": "state of person.sam",
+       "context_entity_id": "automation.leave_home",
+       "when": 1794495780
       }
      ],
-     "start_time": 1795457280,
-     "end_time": 1795565057.843051,
+     "start_time": 1794413280,
+     "end_time": 1794499680,
      "partial": true
     },
     {
      "events": [],
-     "start_time": 1795507611.018958,
-     "end_time": 1795565057.843051
+     "start_time": 1794413280,
+     "end_time": 1794499680
     }
    ],
    "result": null
