@@ -222,9 +222,15 @@ class ParityReference(val png: File, val json: JSONObject) {
         return o.keys().asSequence().mapNotNull { k -> o.getJSONObject(k).optString("result", null)?.let { k to it } }.toMap()
     }
 
+    /**
+     * The HA text runs. Read inside the per-case check, and checked like the slots: a run without a finite size or
+     * rectangle fails its case, not the report of every case (NaN can't go into report.json).
+     */
     val texts: List<RefText> get() = json.optJSONArray("texts")?.let { a ->
-        (0 until a.length()).map { a.getJSONObject(it) }.map {
-            RefText(it.optInt("slot"), it.getString("text"), CssRect.of(it), it.optDouble("size"), it.optInt("weight", 400), it.optString("transform", "none"),
+        (0 until a.length()).map { i -> i to a.getJSONObject(i) }.map { (i, it) ->
+            val size = it.optDouble("size")
+            require(size.isFinite()) { "reference text $i has a missing or invalid size" }
+            RefText(it.optInt("slot"), it.getString("text"), CssRect.finite(it, "text $i"), size, it.optInt("weight", 400), it.optString("transform", "none"),
                 if (it.has("clipped")) it.optBoolean("clipped") else null)
         }
     }.orEmpty()

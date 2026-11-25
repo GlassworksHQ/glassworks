@@ -162,8 +162,13 @@ object ParityViews {
         val pins = pinned.iterator()
         for (i in 0 until sectionsGrid.childCount) {
             val section = sectionsGrid.getChildAt(i)
-            if (section.visibility != View.VISIBLE) continue
             val grid = all(section).filterIsInstance<HaGridLayout>().firstOrNull() ?: continue
+            if (section.visibility != View.VISIBLE) {
+                // Hidden: nothing of it is reported, but its pinned cards still take their overlay entries, so a
+                // later section's placeholder pairs with its own pin.
+                for (j in 0 until grid.childCount) if (grid.getChildAt(j).javaClass == View::class.java && pins.hasNext()) pins.next()
+                continue
+            }
             for (j in 0 until grid.childCount) {
                 val c = grid.getChildAt(j)
                 // A pinned card (card-mod `position: fixed`) leaves a bare placeholder here and draws in the overlay,
@@ -196,7 +201,8 @@ class FixtureHttp(
     val missing = CopyOnWriteArrayList<String>()
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { ex ->
-            val path = ex.requestURI.path
+            // As the capture saved it: `%20` stays in the file name (and in imagesHaMissing).
+            val path = ex.requestURI.rawPath
             val fixture = fixtures != null && path.startsWith(ParityCase.FIXTURE_PREFIX)
             val dir = if (fixture) fixtures!! else assets
             val rel = if (fixture) path.removePrefix(ParityCase.FIXTURE_PREFIX) else path.removePrefix("/")

@@ -35,6 +35,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -270,7 +271,7 @@ class VisualParityWave2Test {
             assertTrue("mdi:$n is known", dev.glassworks.engine.vitro.ui.MdiIcons.has("mdi:$n"))
             val bounds = android.graphics.RectF()
             dev.glassworks.engine.vitro.ui.MdiIcons.pathFor("mdi:$n").computeBounds(bounds, true)
-            assertTrue("mdi:$n draws inside 24x24: $bounds", bounds.width() > 1f && bounds.left >= -0.5f && bounds.right <= 24.5f && bounds.bottom <= 24.5f)
+            assertTrue("mdi:$n draws inside 24x24: $bounds", bounds.width() > 1f && bounds.left >= -0.5f && bounds.top >= -0.5f && bounds.right <= 24.5f && bounds.bottom <= 24.5f)
         }
     }
 
@@ -298,5 +299,61 @@ class VisualParityWave2Test {
         store.putLocal(EntityState("todo.shopping", "0", mapOf("supported_features" to 4)))
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         assertFalse(open.addRowVisible)
+    }
+
+    @Test
+    fun aTodoListFollowsItsItemsNotJustTheCount() {
+        // Another client renames an item: the entity's count stays, the item subscription carries the new name.
+        var onItems: ((JSONObject) -> Unit)? = null
+        val subscribed = ArrayList<JSONObject>()
+        val ctx = VitroCardContext(
+            context = activity, haBase = FakeHaServer.BASE, store = EntityStore(), theme = ThemeResolver.resolve(ThemeCatalog(), true),
+            resources = emptyList(), accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {},
+            openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            subscribeWs = { msg, onEvent, _ -> subscribed += msg; onItems = onEvent; { onItems = null } },
+        )
+        val todo = dev.glassworks.engine.vitro.cards.TodoListCardView(ctx, card("""{"type": "todo-list", "entity": "todo.shopping"}"""))
+        val root = android.widget.FrameLayout(activity)
+        activity.setContentView(root)
+        root.addView(todo)
+        assertEquals("todo/item/subscribe", subscribed.single().getString("type"))
+        onItems!!(JSONObject("""{"items": [{"uid": "1", "summary": "Oat milk", "status": "needs_action"}]}"""))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertTrue(todo.all().filterIsInstance<TextView>().any { it.text.toString() == "Oat milk" })
+        // Off screen, the subscription ends.
+        root.removeView(todo)
+        assertNull(onItems)
+    }
+
+    @Test
+    fun aTodoListWhoseSubscriptionFailsStillFollowsItsEntityAndTriesAgain() {
+        // The first item subscription is refused; every later one answers with the list at once.
+        var calls = 0
+        val store = EntityStore().apply { putLocal(dev.glassworks.engine.vitro.data.EntityState("todo.shopping", "1", emptyMap())) }
+        val ctx = VitroCardContext(
+            context = activity, haBase = FakeHaServer.BASE, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), true),
+            resources = emptyList(), accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {},
+            openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            subscribeWs = { _, onEvent, onError ->
+                if (calls++ == 0) onError(null)
+                else onEvent(JSONObject("""{"items": [{"uid": "1", "summary": "Item $calls", "status": "needs_action"}]}"""))
+                ({})
+            },
+        )
+        val todo = dev.glassworks.engine.vitro.cards.TodoListCardView(ctx, card("""{"type": "todo-list", "entity": "todo.shopping"}"""))
+        val root = android.widget.FrameLayout(activity)
+        activity.setContentView(root)
+        root.addView(todo)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val afterFallback = calls
+        assertTrue("refused, then read once: $calls", afterFallback >= 2)
+        // While it's down, an entity change reads the list again.
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("todo.shopping", "2", emptyMap()))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertTrue(calls > afterFallback)
+        // Later the subscription is asked for again.
+        val beforeRetry = calls
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(31, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue(calls > beforeRetry)
     }
 }

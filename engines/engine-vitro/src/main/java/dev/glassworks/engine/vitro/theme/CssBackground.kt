@@ -220,8 +220,11 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
                 "left", "top" -> Length(0f, true)
                 "center" -> Length(50f, true)
                 "right", "bottom" -> Length(100f, true)
-                else -> LEN.find(t)?.let { m -> m.groupValues[1].toFloatOrNull()?.let { Length(it, m.groupValues[2] == "%") } }
+                else -> LEN.matchEntire(t)?.let { m -> m.groupValues[1].toFloatOrNull()?.let { Length(it, m.groupValues[2] == "%") } }
             }
+            // The edge-offset forms (`right 20px bottom 30px`, valid CSS) aren't placed yet: the gradient is rejected,
+            // not misplaced.
+            if (toks.size > 2) return null
             if (toks.size == 1) {
                 val t = toks[0]
                 return when (t) {
@@ -250,8 +253,12 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
                     hints += out.size to (if (m.groupValues[2] == "px") Stop(0, null, v) else Stop(0, v / 100f, null))
                     null
                 } ?: continue
-                val positions = toks.drop(1).mapNotNull { t ->
-                    LEN.find(t)?.let { m -> m.groupValues[1].toFloatOrNull()?.let { v -> if (m.groupValues[2] == "px") Stop(color, null, v) else Stop(color, v / 100f, null) } }
+                // At most two positions, each a length or percentage: anything else (`#fff bogus`) makes the browser
+                // drop the declaration, so an earlier valid background stays.
+                if (toks.size > 3) return null
+                val positions = toks.drop(1).map { t ->
+                    LEN.matchEntire(t)?.let { m -> m.groupValues[1].toFloatOrNull()?.let { v -> if (m.groupValues[2] == "px") Stop(color, null, v) else Stop(color, v / 100f, null) } }
+                        ?: return null
                 }
                 if (positions.isEmpty()) out += Stop(color, null, null) else out += positions
             }

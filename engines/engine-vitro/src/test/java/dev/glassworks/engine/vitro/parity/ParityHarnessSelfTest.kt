@@ -312,6 +312,48 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun theFixtureServerFindsAFileByTheCapturesEncodedName() {
+        val dir = java.nio.file.Files.createTempDirectory("assets").toFile()
+        File(dir, "local").mkdirs()
+        File(dir, "local/floor%20plan.png").writeBytes(byteArrayOf(1, 2))
+        FixtureHttp(dir).use { http ->
+            val code = (java.net.URL(http.base + "/local/floor%20plan.png").openConnection() as java.net.HttpURLConnection).run {
+                try { responseCode } finally { disconnect() }
+            }
+            assertEquals(200, code)
+        }
+    }
+
+    @Test
+    fun aReferenceTextWithoutASizeFailsItsOwnCase() {
+        val ref = ParityReference(File("none.png"), JSONObject().put("texts", org.json.JSONArray()
+            .put(JSONObject().put("slot", 0).put("text", "x").put("x", 1).put("y", 1).put("w", 1).put("h", 1))))
+        try {
+            ref.texts
+            org.junit.Assert.fail("a text without a size is refused")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message.orEmpty(), "size" in e.message.orEmpty())
+        }
+    }
+
+    @Test
+    fun aHiddenSectionsPinnedCardKeepsTheNextSectionsPinPaired() {
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        fun section(visible: Boolean) = android.widget.FrameLayout(activity).apply {
+            addView(dev.glassworks.engine.vitro.ui.HaGridLayout(activity, 12, 8, 8, stretch = false).apply { addView(android.view.View(activity)) })
+            visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
+        }
+        val sections = dev.glassworks.engine.vitro.ui.HaGridLayout(activity, 1, 0, 0, stretch = false).apply {
+            addView(section(visible = false))
+            addView(section(visible = true))
+        }
+        val pinA = android.view.View(activity).apply { layout(0, 0, 10, 10) }
+        val pinB = android.view.View(activity).apply { layout(0, 0, 20, 20) }
+        // Section 1 (hidden) holds pin A; section 2 holds pin B, which is the one reported.
+        assertEquals(listOf(pinB), ParityViews.cardSlots(sections, listOf(pinA, pinB)))
+    }
+
+    @Test
     fun anImageTheCaptureDidntSaveIsAnInputGapUnlessHaMissedItToo() {
         val ref = ParityReference(File("none.png"), JSONObject().put("imagesHaMissing", org.json.JSONArray().put("/None")))
         val (gaps, haToo) = ParityInputs.missingImages(listOf("/static/x.png", "/None", "/static/x.png"), ref)

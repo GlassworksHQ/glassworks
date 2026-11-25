@@ -51,6 +51,16 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
         textAlign = Paint.Align.CENTER
     }
 
+    /** HA's `.info` line (secondary text) for a completed history with nothing to plot. */
+    private val infoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ctx.theme.secondaryTextColor
+        textSize = 14f * dp
+        textAlign = Paint.Align.CENTER
+    }
+
+    /** True when the history arrived and holds nothing plottable (only `unavailable`, say). */
+    private var noHistory = false
+
     /** HA's footer error (`ui.components.history_charts.error`) while the stream is rejected; null otherwise. */
     private var error: String? = null
 
@@ -156,6 +166,7 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
     private fun rebuild() {
         builtFor = width
         line = null
+        noHistory = false
         val states = history ?: return
         val wCss = width / dp.toDouble()
         val hCss = wCss / 5.0
@@ -163,7 +174,13 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
         val maxDetails = maxOf(10.0, if (detail > 1) maxOf(wCss / 5, hoursToShow) else hoursToShow)
         val now = ctx.now().toDouble()
         val coords = HaGraph.footerCoordinates(states, wCss, hCss, maxDetails, now - hoursToShow * HaGraph.HOUR_MS, now, minY, maxY, detail != 2)
-        if (coords.isEmpty()) return
+        if (coords.isEmpty()) {
+            // A completed answer with no numbers in it: HA's "No state history found." (not loading, not an error).
+            noHistory = true
+            contentDescription = NO_HISTORY
+            return
+        }
+        if (contentDescription == NO_HISTORY) contentDescription = null
         val p = HaGraph.smoothPath(coords, dp) ?: return
         line = p
         fill.reset()
@@ -183,12 +200,20 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
             return
         }
         if (builtFor != width) rebuild()
+        if (noHistory) {
+            // `.info { position: absolute; top: calc(50% - 16px) }`, centered.
+            canvas.drawText(NO_HISTORY, width / 2f, height / 2f - 16f * dp - infoPaint.ascent(), infoPaint)
+            return
+        }
         val p = line ?: return
         canvas.drawPath(fill, fillPaint)
         canvas.drawPath(p, linePaint)
     }
 
     companion object {
+        /** `ui.components.history_charts.no_history_found`. */
+        const val NO_HISTORY = "No state history found."
+
         /** States from [cutoff] (seconds) on, the last earlier one moved to [cutoff] so the line starts at the window. */
         fun purge(states: List<HistoryState>, cutoff: Double): List<HistoryState> {
             val kept = states.filter { it.lu >= cutoff }

@@ -370,6 +370,11 @@ class VitroView(
      * rebuilt with the new server's resources before the new dashboard arrives.
      */
     fun resetForServer() {
+        holding?.cancel?.invoke()
+        holding = null
+        waited.clear()
+        stateRebuilds.values.forEach { it() }
+        stateRebuilds.clear()
         closeMoreInfo()
         dashboard = null
         viewBackStack.clear()
@@ -413,6 +418,11 @@ class VitroView(
     }
 
     fun setDashboard(config: DashboardConfig, initialViewPath: String?) {
+        holding?.cancel?.invoke()
+        holding = null
+        waited.clear()
+        stateRebuilds.values.forEach { it() }
+        stateRebuilds.clear()
         dashboard = config
         viewBackStack.clear()
         viewCache.clear()
@@ -467,13 +477,7 @@ class VitroView(
         addView(sheet, LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }
 
-    private fun resolveViewIndex(config: DashboardConfig, path: String?): Int {
-        if (config.views.isEmpty()) return 0
-        if (path.isNullOrBlank()) return 0
-        config.views.indexOfFirst { it.path == path }.takeIf { it >= 0 }?.let { return it }
-        path.toIntOrNull()?.takeIf { it in config.views.indices }?.let { return it }
-        return 0
-    }
+    private fun resolveViewIndex(config: DashboardConfig, path: String?): Int = config.viewIndex(path)
 
     private fun rebuildTabs(config: DashboardConfig) {
         tabBar.removeAllViews()
@@ -525,6 +529,8 @@ class VitroView(
     }
 
     private fun highlightTab(selected: Int, theme: ResolvedTheme) {
+        // The strip itself follows the theme too (a light/dark switch, a cached view's own theme).
+        tabScroll.setBackgroundColor(theme.secondaryBackgroundColor)
         for (t in tabs) {
             val active = t.viewIndex == selected
             val color = if (active) theme.primaryColor else theme.secondaryTextColor
@@ -533,6 +539,110 @@ class VitroView(
             t.indicator.setBackgroundColor(theme.primaryColor)
             t.indicator.visibility = if (active) VISIBLE else INVISIBLE
         }
+    }
+
+    /** Entities a build chose a card's class or size for without their state (it hadn't arrived yet). */
+    private val guessedStates = HashSet<String>()
+
+    /** The build's look at [card]'s state; a missing one is noted, so the view is built again when it lands. */
+    private fun stateForBuild(card: CardConfig): EntityState? {
+        val id = card.entity ?: return null
+        return store[id] ?: run { guessedStates += id; null }
+    }
+
+    /**
+     * How long a view's first build waits for its first states (0: it doesn't). The engine sets it: the view's
+     * entities are subscribed as it opens, and their states usually land within a round trip. Past the wait it builds
+     * anyway, and a card that guessed without state is built again when it lands ([rebuildWhenStatesLand]).
+     */
+    var holdFirstBuildForStatesMs: Long = 0
+
+    /** A view's first build waiting for its states, and what ends the wait (its listener and timer). */
+    private class Wait(val index: Int, val cancel: () -> Unit)
+
+    /** The wait in progress. Each wait is its own object: a late callback of an older wait never ends a newer one. */
+    private var holding: Wait? = null
+
+    /**
+     * The main thread's handler: a view's own post() waits until it's attached to a window, which a page built
+     * before it's shown (or in a test) may not be yet.
+     */
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** True when the view on screen has been built (not waiting for its first states). */
+    val currentViewBuilt: Boolean get() = viewCache[currentViewIndex] != null
+
+    /** Views of this dashboard that have waited once: past the wait (states or not), they build. */
+    private val waited = HashSet<Int>()
+
+    /**
+     * True when the first build of view [index] waits: none of its entities has a state yet. It's built when the
+     * first of them lands, or after [holdFirstBuildForStatesMs].
+     */
+    private fun holdForStates(index: Int, viewCfg: ViewConfig): Boolean {
+        if (holdFirstBuildForStatesMs <= 0 || index in waited) return false
+        holding?.let { if (it.index == index) return true }
+        holding?.cancel?.invoke()
+        holding = null
+        val refs = CardRouter.referencedEntities(viewCfg)
+        if (refs.isEmpty() || refs.any { store[it] != null }) return false
+        val config = dashboard
+        var unsub: (() -> Unit)? = null
+        lateinit var timeout: Runnable
+        lateinit var mine: Wait
+        fun release() {
+            if (holding !== mine) return
+            holding = null
+            mine.cancel()
+            waited += index
+            if (dashboard === config && currentViewIndex == index && viewCache[index] == null) {
+                renderView(index, forceRebuild = false, pushHistory = false)
+            }
+        }
+        timeout = Runnable { release() }
+        unsub = store.subscribeAny { changed -> if (changed.any { it in refs }) mainHandler.post { release() } }
+        mine = Wait(index) { unsub?.invoke(); mainHandler.removeCallbacks(timeout) }
+        holding = mine
+        mainHandler.postDelayed(timeout, holdFirstBuildForStatesMs)
+        // States that landed between the check above and the listener (the store is written on another thread).
+        if (refs.any { store[it] != null }) mainHandler.post { release() }
+        return true
+    }
+
+    /** Per view index: the listener waiting for the states its build guessed at. */
+    private val stateRebuilds = HashMap<Int, () -> Unit>()
+
+    /**
+     * HA re-renders when hass updates; a Mushroom card's class and grid rows follow its entity's features, which a
+     * view's first build can come before (its entities are subscribed as it opens). When any of [ids] lands, the
+     * view [index] is built again, once: now if it's on screen, else its cached tree is dropped for the next visit.
+     */
+    private fun rebuildWhenStatesLand(index: Int, ids: Set<String>) {
+        stateRebuilds.remove(index)?.invoke()
+        if (ids.isEmpty()) return
+        val config = dashboard
+        var unsub: (() -> Unit)? = null
+        fun rebuild() {
+            val mine = unsub ?: return
+            if (stateRebuilds[index] !== mine) return
+            stateRebuilds.remove(index)
+            mine()
+            if (dashboard !== config) return
+            if (currentViewIndex == index) {
+                renderView(index, forceRebuild = true, pushHistory = false)
+            } else {
+                viewCache.remove(index)?.let { contentHost.removeView(it) }
+                overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
+            }
+        }
+        unsub = store.subscribeAny { changed ->
+            if (changed.none { it in ids }) return@subscribeAny
+            mainHandler.post { rebuild() }
+        }
+        stateRebuilds[index] = unsub
+        // A state that landed while the view was being built (the store is written on the reader thread) reached
+        // no listener: it counts as landing now.
+        if (ids.any { store[it] != null }) mainHandler.post { rebuild() }
     }
 
     private fun renderView(index: Int, forceRebuild: Boolean, pushHistory: Boolean = true) {
@@ -555,6 +665,13 @@ class VitroView(
         onViewSelected?.invoke(viewCfg)
 
         val cached = if (!forceRebuild) viewCache[index] else null
+        // A first build waits for the view's states, as HA's frontend renders a view's cards once hass has them.
+        if (cached == null && holdForStates(index, viewCfg)) {
+            // The previous view's cards don't stay on screen (and tappable) under this view's tab while it waits.
+            for (i in 0 until contentHost.childCount) contentHost.getChildAt(i).visibility = GONE
+            for (i in 0 until overlayLayer.childCount) overlayLayer.getChildAt(i).visibility = GONE
+            return
+        }
         val viewRoot = if (cached != null) {
             cached
         } else {
@@ -566,11 +683,13 @@ class VitroView(
             fontsFor = cardCtx.haBase to cardCtx.resources
             val pinned = ArrayList<Pair<View, FrameLayout.LayoutParams>>()
             pendingPinned = pinned
+            guessedStates.clear()
             val built = try {
                 buildViewTree(viewCfg, cardCtx)
             } finally {
                 pendingPinned = null
             }
+            rebuildWhenStatesLand(index, guessedStates.toSet())
             viewCache.remove(index)?.let { contentHost.removeView(it) }
             overlayFrames.remove(index)?.let { overlayLayer.removeView(it) }
             viewCache[index] = built
@@ -883,6 +1002,8 @@ class VitroView(
             nameView.text = name.orEmpty()
             nameView.visibility = if (name != null && state != null) VISIBLE else GONE
             stateView.text = state ?: name.orEmpty()
+            // Neither line asked for: no text slot at all.
+            texts.visibility = if (name == null && state == null) GONE else VISIBLE
             if (showIcon) icon.setIcon(MdiIcons.resolveIconName(badge.icon, s), badgeIconColor(theme, s))
         }
         render(store[eid])
@@ -966,7 +1087,7 @@ class VitroView(
                 grid.addView(wrapVisibility(card, View(context), ctx), HaGridLayout.LayoutParams(columns))
                 continue
             }
-            val size = HaGridSize.of(card, card.entity?.let { store[it] })
+            val size = HaGridSize.of(card, stateForBuild(card))
             val cardView = wrapVisibility(card, buildCard(card, ctx, fillViewport = false, layout = "grid"), ctx)
             cacheCardAsLayer(cardView, ctx)
             val fixed = size.rows?.let { r -> px(r * (rowHeight + rowGap) - rowGap) }
@@ -1234,9 +1355,9 @@ class VitroView(
             "logbook" -> LogbookCardView(ctx, card)
             // Tier 2: Popular HACS Fast-Paths
             // Mushroom's light, fan and cover cards with their controls row; without one, the tile draws them.
-            "custom:mushroom-light-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, card.entity?.let { store[it] })) MushroomLightCardView(ctx, card) else TileCardView(ctx, card)
-            "custom:mushroom-fan-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, card.entity?.let { store[it] })) MushroomFanCardView(ctx, card) else TileCardView(ctx, card)
-            "custom:mushroom-cover-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, card.entity?.let { store[it] })) MushroomCoverCardView(ctx, card) else TileCardView(ctx, card)
+            "custom:mushroom-light-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, stateForBuild(card))) MushroomLightCardView(ctx, card) else TileCardView(ctx, card)
+            "custom:mushroom-fan-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, stateForBuild(card))) MushroomFanCardView(ctx, card) else TileCardView(ctx, card)
+            "custom:mushroom-cover-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, stateForBuild(card))) MushroomCoverCardView(ctx, card) else TileCardView(ctx, card)
             "custom:mushroom-entity-card",
             "custom:mushroom-person-card",
             "custom:mushroom-template-card" -> TileCardView(ctx, card)
@@ -1304,7 +1425,8 @@ class VitroView(
         var shown: Boolean? = null
         val update = {
             val userId = ctx.haUser().optString("id", "").ifEmpty { null }
-            val visible = conds.all { it.evaluate(store::get, widthDp, userId) }
+            val nowMs = ctx.now()
+            val visible = conds.all { VisibilityCondition.evaluateAt(it, nowMs, store::get, widthDp, userId) }
             if (visible != shown) {
                 shown = visible
                 crossfade(view, visible, transitionMs ?: DEFAULT_FADE_MS)
@@ -1486,7 +1608,8 @@ class VitroView(
             val showName = raw.optBoolean("show_name", badge.name != null)
             val showState = raw.optBoolean("show_state", true)
             val name = if (showName) badge.name ?: s?.friendlyName ?: badge.entity.orEmpty() else null
-            val state = if (showState || !showName) s?.formattedState() ?: "…" else null
+            // `show_state: false` hides the state even when no name shows (an icon-only badge).
+            val state = if (showState) s?.formattedState() ?: "…" else null
             return name to state
         }
 

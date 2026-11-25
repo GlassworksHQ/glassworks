@@ -41,7 +41,8 @@ class WebIslandCardView(
     private val watchedEntities = CopyOnWriteArraySet<String>()
     private var slotId: String? = null
     private var islandPage: Page? = null
-    @Volatile private var sendToIsland: ((JSONObject) -> Unit)? = null
+    /** The senders of the bridge sockets open for this island (a replacement can connect before the old one closes). */
+    private val senders = CopyOnWriteArraySet<(JSONObject) -> Unit>()
 
     /**
      * Orders a connection's snapshot before any patch for it. Declared before `init`: the bridge may connect while
@@ -71,19 +72,16 @@ class WebIslandCardView(
         val opener = ctx.openIslandPage
         if (server != null && opener != null) {
             lateinit var idRef: String
-            // Open bridge sockets: a replacement can connect before the old one has finished closing.
-            var connections = 0
             val handler = object : VitroIslandServer.SlotHandler {
                 override val html: String
                     get() = buildIslandHtml(ctx, config, fillViewport, slotId = idRef)
 
                 override fun onConnected(send: (JSONObject) -> Unit) {
-                    synchronized(this) { connections++ }
                     // The snapshot goes first: no patch for this socket can be queued before it (the observer
                     // below takes the same lock).
                     synchronized(seedLock) {
                         seedInitialStates(send)
-                        sendToIsland = send
+                        senders += send
                     }
                 }
 
@@ -91,9 +89,9 @@ class WebIslandCardView(
                     handleIslandMessage(msg, send)
                 }
 
-                override fun onDisconnected() {
-                    // Only the last socket going clears the sender: an old one closing must not cut off its replacement.
-                    synchronized(this) { if (--connections <= 0) sendToIsland = null }
+                override fun onDisconnected(send: (JSONObject) -> Unit) {
+                    // This socket's sender only: the others open for the slot keep getting patches.
+                    synchronized(seedLock) { senders -= send }
                 }
             }
             val (id, url) = server.registerSlot(handler)
@@ -111,8 +109,8 @@ class WebIslandCardView(
                 // thread under the store's write lock, where a write to a browser that stopped reading would block.
                 track(ctx.store.subscribeAny { changed ->
                     synchronized(seedLock) {
-                        val send = sendToIsland ?: return@subscribeAny
-                        patchFor(changed)?.let(send)
+                        if (senders.isEmpty()) return@subscribeAny
+                        patchFor(changed)?.let { patch -> senders.forEach { it(patch) } }
                     }
                 })
             } else {
@@ -201,11 +199,17 @@ class WebIslandCardView(
         when (msg.optString("type")) {
             "watch" -> {
                 val id = msg.optString("entity_id", "")
-                if (id.isNotBlank() && watchedEntities.add(id)) {
+                if (id.isBlank()) return
+                // Under the observer's lock: the value read here goes out before any newer patch for it, never after.
+                val added = synchronized(seedLock) {
+                    if (!watchedEntities.add(id)) return
                     ctx.store[id]?.let { state ->
                         send(JSONObject().put("type", "patch").put("states", JSONObject().put(id, state.toHassJson())))
                     }
+                    true
                 }
+                // Read at runtime, beyond what the config names: the view's subscription takes it in.
+                if (added && !followsAllEntities) ctx.watchEntity(id)
             }
             "resize" -> {
                 if (fillViewport) return
@@ -256,7 +260,7 @@ class WebIslandCardView(
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        sendToIsland = null
+        senders.clear()
         slotId?.let { ctx.islandServer?.unregisterSlot(it) }
         slotId = null
         islandPage = null
@@ -379,7 +383,8 @@ if (!customElements.get('ha-icon')) {
           if (svg) {
             const styled = svg.replace('<svg ', '<svg style="width:100%;height:100%" ');
             iconCache.set(name, styled);
-            this.innerHTML = styled;
+            // Only while this element still asks for that icon: a later one may already be drawn.
+            if ((this.getAttribute('icon') || 'mdi:home').replace(/^mdi:/, '') === name) this.innerHTML = styled;
           }
         })
         .catch(() => {});
@@ -700,14 +705,18 @@ const haConfig = $haCfgJson;
 const haUser = $haUserJson;
 const accessToken = $tokenJson;
 const wsPending = new Map();
+// Lines waiting for the bridge: { line, id } (id: the call's, when it is one).
 const outQueue = [];
+// A call that can't go out within this long is rejected and leaves the queue: never sent much later, when the
+// user may no longer expect it.
+const QUEUED_CALL_MS = 5000;
 let wsId = 1;
 let sock = null;
 
-function sendBridge(obj) {
+function sendBridge(obj, id) {
   const line = JSON.stringify(obj) + '\n';
   if (sock && sock.readyState === WebSocket.OPEN) { sock.send(line); return true; }
-  outQueue.push(line);
+  outQueue.push({ line, id });
   return false;
 }
 
@@ -760,7 +769,16 @@ function vitroCallWS(msg) {
     const id = wsId++;
     const entry = { resolve, reject, sent: false };
     wsPending.set(id, entry);
-    entry.sent = sendBridge({ type: 'callWs', id, msg: msg || {} });
+    entry.sent = sendBridge({ type: 'callWs', id, msg: msg || {} }, id);
+    if (!entry.sent) {
+      setTimeout(() => {
+        if (entry.sent || wsPending.get(id) !== entry) return;
+        wsPending.delete(id);
+        const at = outQueue.findIndex((q) => q.id === id);
+        if (at >= 0) outQueue.splice(at, 1);
+        reject(new Error('Not connected'));
+      }, QUEUED_CALL_MS);
+    }
   });
 }
 
@@ -840,7 +858,7 @@ function connectBridge() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   sock = new WebSocket(proto + '//' + location.host + '/__vitro/ws/' + ${JSONObject.quote(slotId)});
   sock.onopen = () => {
-    while (outQueue.length) sock.send(outQueue.shift());
+    while (outQueue.length) sock.send(outQueue.shift().line);
     for (const entry of wsPending.values()) entry.sent = true;
   };
   sock.onmessage = (ev) => {

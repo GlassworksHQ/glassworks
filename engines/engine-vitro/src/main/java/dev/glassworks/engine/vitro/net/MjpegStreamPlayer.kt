@@ -93,6 +93,9 @@ class MjpegStreamPlayer(
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
                 useCaches = false
+                // HA's stream never redirects: one that does (a proxy sending it elsewhere) ends in the fallback,
+                // and the camera's request never leaves Home Assistant's origin.
+                instanceFollowRedirects = false
                 setRequestProperty("Accept", "multipart/x-mixed-replace, image/jpeg")
                 accessToken?.takeIf { it.isNotEmpty() }?.let { setRequestProperty("Authorization", "Bearer $it") }
             }
