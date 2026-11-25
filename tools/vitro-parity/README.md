@@ -100,13 +100,13 @@ Write `corpus/<case>.json` with its card and its fixture (copy one from a case w
 
 ### Languages and formats
 
-Vitro writes text, numbers, dates and times the way HA's frontend does for the user's profile (language, `number_format`, `time_format`, `date_format`, first weekday, time zone). It has no browser, so what HA's frontend asks the browser's `Intl` for comes from a table, and its UI words from the pinned frontend's translation files:
+Vitro writes text, numbers, dates and times the way HA's frontend does for the user's profile (language, `number_format`, `time_format`, `date_format`, first weekday, time zone). Its UI words come from the signed-in HA at run time, as HA's page loads them. It has no browser, so what HA's frontend asks the browser's `Intl` for comes from a bundled table:
 
 ```sh
 node tools/vitro-parity/locale-data.mjs
 ```
 
-It asks headless Chromium's `Intl` (the browser the references are captured with) about every language the pinned frontend ships, and copies the frontend strings Vitro's code names (any `"ui.…"` or `"state.…"` key), writing `engines/engine-vitro/src/main/resources/dev/glassworks/engine/vitro/locale/`. Rerun it after a frontend or Chromium update, or after adding a key to Vitro's code: it fails on a key the frontend doesn't have, and `HaLocaleTest` fails on one the table lacks. The `locale-*` cases draw German and French profiles.
+It asks headless Chromium's `Intl` (the browser the references are captured with) about every language the pinned frontend ships, writing `engines/engine-vitro/src/main/resources/dev/glassworks/engine/vitro/locale/`. For the tests and this harness only, it also copies HA's English, German and French for the frontend keys Vitro's code names (any `"ui.…"` or `"state.…"` key) into `src/test/resources/…/locale/strings-<lang>.json`. Rerun it after a frontend or Chromium update, or after adding a key to Vitro's code: it fails on a key the frontend doesn't have. The `locale-*` cases draw German and French profiles.
 
 ## Thresholds and the baseline
 
