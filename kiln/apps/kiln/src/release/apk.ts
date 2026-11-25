@@ -69,6 +69,11 @@ export interface ReleaseFetch {
   /** Resumes after a dropped or silent connection; default kiln-core's (5). */
   retries?: number;
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Only GitHub's own SHA-256 (Kiln's route, `digests`), never the `.sha256` Refract serves beside the file: a page that
+   * writes a device's boot first takes nothing whose bytes and checksum came from one place. Every release has one.
+   */
+  requireDigest?: boolean;
 }
 
 export const releasePage = (tag: string) => `https://github.com/GlassworksHQ/glassworks/releases/tag/${encodeURIComponent(tag)}`;
@@ -112,6 +117,7 @@ export async function releaseApk(of: ReleaseLine & { from?: ListedRelease }, get
 
   // GitHub's own SHA-256 of the file, from Kiln's route, so Refract only carries the bytes; else the release's .sha256
   let want = r.digests?.[name] ?? '';
+  if (!want && o.requireDigest) throw new Error(`Couldn't verify the release checksum for ${version} (GitHub's list didn't give one)`);
   if (!want) {
     let sum: Uint8Array;
     try {

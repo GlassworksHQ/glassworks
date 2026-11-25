@@ -141,12 +141,21 @@ describe('the latest release of a line', () => {
     expect(fetch.mock.calls.map(auth)).toEqual(['Bearer token-spent', null, 'Bearer token-spent', null]);
   });
 
-  it('another 403 with the token (calls left) is GitHub\'s answer, not retried without it', async () => {
-    vi.stubEnv('RELEASE_GITHUB_TOKEN', 'token-b');
-    const fetch = vi.fn(async () => new Response('forbidden', { status: 403, headers: { 'x-ratelimit-remaining': '4000' } }));
+  it.each([403, 429])('any other %i with the token (a secondary limit, a permission): asked again without it', async (status) => {
+    vi.stubEnv('RELEASE_GITHUB_TOKEN', `token-${status}`);
+    const fetch = vi.fn(async (_: string, init: RequestInit) =>
+      new Headers(init.headers).has('authorization')
+        ? new Response('forbidden', { status, headers: { 'x-ratelimit-remaining': '4000' } })
+        : Response.json([r('v1.0.0', ['s1-kiosk-1.0.0.apk'])]));
     vi.stubGlobal('fetch', fetch);
+    expect((await (await latest('aqara-s1-plus')).json()).release?.tag).toBe('v1.0.0');
+    expect(fetch.mock.calls.map(auth)).toEqual([`Bearer token-${status}`, null]);
+  });
+
+  it('GitHub turning down the token and the address alike: still a 502', async () => {
+    vi.stubEnv('RELEASE_GITHUB_TOKEN', 'token-c');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('rate limited', { status: 403 })));
     expect((await latest('aqara-s1-plus')).status).toBe(502);
-    expect(fetch).toHaveBeenCalledOnce();
   });
 
   it('GitHub\'s own SHA-256 of each listed file, when it states one', () => {

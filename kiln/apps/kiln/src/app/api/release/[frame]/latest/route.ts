@@ -3,8 +3,8 @@
 // themselves come from Refract (refract.glassworks.dev/glassworks/<tag>/<name>, kiln-core releaseFileUrl).
 // GitHub's REST API allows 60 unauthenticated calls an hour per address, and Vercel's functions share their addresses
 // with other projects, so the route sends RELEASE_GITHUB_TOKEN when the deploy sets one (a read-only token: 5,000 calls an
-// hour of its own, issue 848). Without it, or when GitHub refuses it (expired, revoked), it asks unauthenticated as
-// before. Either way the CDN keeps each answer 10 minutes.
+// hour of its own, issue 848). Without it, or when GitHub turns it down (expired, revoked, out of calls), it asks
+// unauthenticated as before. Either way the CDN keeps each answer 10 minutes.
 import { RELEASES, REPO, type ReleaseLine } from '../../lines';
 
 /**
@@ -49,12 +49,10 @@ export function latestOf(line: ReleaseLine, releases: GitHubRelease[]): LatestRe
 /** The token GitHub refused, so later pages and answers of this instance don't send it again. */
 let refused: string | undefined;
 
-/** The token's own quota ran out: GitHub's 403 or 429 with no calls left. */
-const outOfCalls = (r: Response) => (r.status === 403 || r.status === 429) && r.headers.get('x-ratelimit-remaining') === '0';
-
 /**
- * One page of the repo's releases: with RELEASE_GITHUB_TOKEN if there is one, and again without it if GitHub refuses
- * the token (401, not sent again) or its quota is spent (until the quota resets, the address's own 60 still answer).
+ * One page of the repo's releases: with RELEASE_GITHUB_TOKEN if there is one, and again without it whenever GitHub
+ * turns the token down: 401 (expired or revoked: not sent again by this instance), or 403 and 429 (its quota spent, a
+ * secondary limit, a permission). The address's own 60 calls an hour then still answer, as before the token.
  */
 async function releasesPage(page: number): Promise<Response> {
   const url = `https://api.github.com/repos/${REPO}/releases?per_page=100&page=${page}`;
@@ -62,13 +60,9 @@ async function releasesPage(page: number): Promise<Response> {
   const token = process.env.RELEASE_GITHUB_TOKEN?.trim();
   if (token && token !== refused) {
     const r = await fetch(url, { headers: { ...headers, authorization: `Bearer ${token}` } });
-    if (r.status !== 401 && !outOfCalls(r)) return r;
-    if (r.status === 401) {
-      refused = token;
-      console.warn('/api/release: GitHub refused RELEASE_GITHUB_TOKEN (401), asking without it');
-    } else {
-      console.warn(`/api/release: RELEASE_GITHUB_TOKEN has no calls left (${r.status}), asking without it`);
-    }
+    if (r.status !== 401 && r.status !== 403 && r.status !== 429) return r;
+    if (r.status === 401) refused = token;
+    console.warn(`/api/release: GitHub turned down RELEASE_GITHUB_TOKEN (${r.status}), asking without it`);
     void r.body?.cancel().catch(() => {});
   }
   return fetch(url, { headers });

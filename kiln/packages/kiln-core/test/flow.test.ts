@@ -25,9 +25,9 @@ function recipe(over: Partial<Recipe<'blob', undefined, undefined>> = {}): Recip
   };
 }
 
-function run(r: Recipe<'blob', undefined, undefined>, uboot = new FakeUboot(), fetchAhead?: () => Promise<unknown>) {
+function run(r: Recipe<'blob', undefined, undefined>, uboot = new FakeUboot(), fetchAhead?: () => Promise<unknown>, progress: FlowUi['progress'] = () => {}) {
   const saved: BackupMeta[] = [];
-  const ui: FlowUi = { log: () => {}, progress: () => {}, partition: () => {}, ask: (_, action) => action() };
+  const ui: FlowUi = { log: () => {}, progress, partition: () => {}, ask: (_, action) => action() };
   const flow = new InstallFlow(r, {
     asset: async () => new Uint8Array(0), hasAsset: async () => false, ...(fetchAhead ? { fetchAhead } : {}),
     backups: { save: async (m) => { saved.push(m); }, original: async () => undefined },
@@ -36,8 +36,6 @@ function run(r: Recipe<'blob', undefined, undefined>, uboot = new FakeUboot(), f
   }, ui);
   return { uboot, saved, install: () => flow.install(new Fastboot(uboot)) };
 }
-
-const saved = (t: { saved: BackupMeta[] }) => t.saved.length;
 
 describe('InstallFlow keeps its rules whatever the recipe does', () => {
   it('writes the recipe\'s steps, then boot, once and last', async () => {
@@ -52,13 +50,17 @@ describe('InstallFlow keeps its rules whatever the recipe does', () => {
   it('a download for after the writes (the app): started with the install, finished before the first write', async () => {
     const uboot = new FakeUboot();
     let done!: () => void;
-    const started: string[] = [];
-    const t = run(recipe(), uboot, () => { started.push(`started after ${uboot.commands.length} commands`); return new Promise<void>((r) => { done = r; }); });
+    const started: number[] = [];
+    // the flow says it waits for the download only once the backup is saved
+    let waiting!: () => void;
+    const waits = new Promise<void>((r) => { waiting = r; });
+    const t = run(recipe(), uboot, () => { started.push(uboot.commands.length); return new Promise<void>((r) => { done = r; }); },
+      (p) => { if (p.sub === 'Downloading the app') waiting(); });
     const install = t.install();
-    await new Promise((r) => setTimeout(r, 20));
-    expect(started).toEqual(['started after 0 commands']);
-    // the backup ran meanwhile, and nothing is written while the download goes on
-    expect(saved(t)).toBe(1);
+    await waits;
+    // started before the device was asked anything; the backup ran meanwhile, and nothing is written yet
+    expect(started).toEqual([0]);
+    expect(t.saved).toHaveLength(1);
     expect(uboot.flashed).toEqual([]);
     done();
     await install;

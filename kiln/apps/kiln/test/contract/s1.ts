@@ -132,7 +132,7 @@ function world(k: Knobs): World {
   const apkSum = crypto.subtle.digest('SHA-256', APK as Uint8Array<ArrayBuffer>).then(toHex);
   const fetch = (async (url: string) => {
     if (url.endsWith('manifest.json')) return new Response(JSON.stringify({ generated: '', assets: await manifest }));
-    if (url === `/api/release/${s1PlusUi.apk!.line}/latest`) return Response.json({ release: RELEASE });
+    if (url === `/api/release/${s1PlusUi.apk!.line}/latest`) return Response.json({ release: { ...RELEASE, digests: { [RELEASE.assets[0]!]: await apkSum } } });
     if (url === releaseFileUrl(REFRACT, RELEASE.tag, `${RELEASE.assets[0]}.sha256`)) return new Response(`${await apkSum}  ${RELEASE.assets[0]}\n`);
     const bytes = url === releaseFileUrl(REFRACT, RELEASE.tag, RELEASE.assets[0]!) ? APK : BLOBS[url.replace(/^.*\/(.*)\.bin$/, '$1') as AssetName];
     if (!bytes) return new Response('not found', { status: 404 });
