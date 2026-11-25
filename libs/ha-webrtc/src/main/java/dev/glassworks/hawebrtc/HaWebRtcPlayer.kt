@@ -107,8 +107,15 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
             } catch (e: LinkageError) {
                 return@post report { it.onError(HaError(HaWebRtcStream.START_FAILED, "libwebrtc: ${e.message}")) }
             }
+            // The render thread's EGL context can fail too (no EGL config, a lost display): give the runtime back and
+            // report it, as for the runtime itself, so the caller closes the player.
+            try {
+                video.init(rt.egl)
+            } catch (e: RuntimeException) {
+                WebRtcRuntime.release()
+                return@post report { it.onError(HaError(HaWebRtcStream.START_FAILED, "renderer: ${e.message}")) }
+            }
             runtime = rt
-            video.init(rt.egl)
             val s = HaWebRtcStream(channel, entityId, { config, audio, events ->
                 LibWebRtcPeer(rt.factory, config, audio, video, events)
             }, HandlerScheduler(w), options.stream)

@@ -36,10 +36,13 @@ internal object WebRtcRuntime {
             initialized = true
         }
         if (refs == 0) {
+            // Kept local until all of it is made: a failure part-way (an exception, or a LinkageError from the native
+            // library) releases what was made, and the shared fields stay empty.
             val eglBase = EglBase.create()
+            var adm: JavaAudioDeviceModule? = null
             try {
                 // Playout only (recvonly audio), as media: a camera's sound is not a call.
-                val adm = JavaAudioDeviceModule.builder(app)
+                adm = JavaAudioDeviceModule.builder(app)
                     .setUseHardwareAcousticEchoCanceler(false)
                     .setUseHardwareNoiseSuppressor(false)
                     .setAudioAttributes(
@@ -47,17 +50,17 @@ internal object WebRtcRuntime {
                             .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE).build(),
                     )
                     .createAudioDeviceModule()
-                audio = adm
-                factory = PeerConnectionFactory.builder()
+                val made = PeerConnectionFactory.builder()
                     .setAudioDeviceModule(adm)
                     .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
                     .setVideoEncoderFactory(SoftwareVideoEncoderFactory())
                     .createPeerConnectionFactory()
+                audio = adm
+                factory = made
                 egl = eglBase
-            } catch (e: RuntimeException) {
-                audio?.release()
-                audio = null
-                eglBase.release()
+            } catch (e: Throwable) {
+                adm?.let { runCatching { it.release() } }
+                runCatching { eglBase.release() }
                 throw e
             }
         }

@@ -15,7 +15,9 @@ import org.json.JSONObject
  *
  * One instance is one negotiation: HA makes a new session for every offer, so a new peer connection gets a new
  * [HaWebRtcSignaling]. The methods may be called from any thread. [Listener] calls come on the channel's threads, in
- * the order HA sent them, and stop at [close] or after the first [Listener.onError].
+ * the order HA sent them, one at a time. None starts after [close] returns, and [Listener.onError] is the last one.
+ * To keep that promise a listener call and [close] (or the terminal error) never overlap: a listener may call [close]
+ * or any other method itself, but must not block waiting for another thread that is calling [close].
  */
 public class HaWebRtcSignaling(
     private val channel: HaCommandChannel,
@@ -44,12 +46,21 @@ public class HaWebRtcSignaling(
         public fun onCandidateError(candidate: IceCandidateInit, error: HaError) {}
     }
 
+    /** The negotiation's state. */
     private val lock = Any()
+
+    /** Held while a listener runs, and by [close] and the terminal error, so neither overlaps a listener call. */
+    private val dispatch = Any()
     private var offered = false
-    private var done = false // closed, or failed
+    private var closed = false
+    private var failed = false
     private var subscription: HaCommandChannel.Subscription? = null
     private var session: String? = null
     private val waiting = ArrayList<IceCandidateInit>()
+
+    /** True while [HaCommandChannel.subscribe] runs: an error then waits for its handle to be cancelled first. */
+    private var subscribing = false
+    private var deferredError: HaError? = null
 
     /** HA's session id, once its `session` event came. */
     public val sessionId: String? get() = synchronized(lock) { session }
@@ -74,15 +85,22 @@ public class HaWebRtcSignaling(
         synchronized(lock) {
             check(!offered) { "offer() was already called: a new negotiation needs a new HaWebRtcSignaling" }
             offered = true
-            if (done) return
+            if (closed || failed) return
+            subscribing = true
         }
         val command = JSONObject().put("type", TYPE_OFFER).put("entity_id", entityId).put("offer", sdp)
         val sub = channel.subscribe(command, ::onEvent) { error -> fail(error) }
-        // HA's answer may already have come, or close() may have run meanwhile: then the subscription goes now.
+        // HA may have answered (even with an error), or close() may have run, before subscribe returned: then the
+        // subscription goes now, and an error that came meanwhile is reported after it.
+        var report: HaError? = null
         val cancel = synchronized(lock) {
-            if (done) true else { subscription = sub; false }
+            subscribing = false
+            report = deferredError
+            deferredError = null
+            if (closed || failed) true else { subscription = sub; false }
         }
         if (cancel) sub.unsubscribe()
+        report?.let { error -> synchronized(dispatch) { if (!synchronized(lock) { closed }) listener.onError(error) } }
     }
 
     /**
@@ -92,19 +110,25 @@ public class HaWebRtcSignaling(
     public fun addLocalCandidate(candidate: IceCandidateInit) {
         if (candidate.candidate.isEmpty()) return
         val sid = synchronized(lock) {
-            if (done) return
+            if (closed || failed) return
             session ?: run { waiting += candidate; return }
         }
         send(sid, candidate)
     }
 
-    /** Ends the negotiation: closes the subscription (and so HA's session), drops waiting candidates. Idempotent. */
+    /**
+     * Ends the negotiation: closes the subscription (and so HA's session), drops waiting candidates. Idempotent. No
+     * listener call starts after it returns.
+     */
     public fun close() {
-        val sub = synchronized(lock) {
-            if (done) return
-            done = true
-            waiting.clear()
-            subscription.also { subscription = null }
+        val sub = synchronized(dispatch) {
+            synchronized(lock) {
+                deferredError = null
+                if (closed) return
+                closed = true
+                waiting.clear()
+                subscription.also { subscription = null }
+            }
         }
         sub?.unsubscribe()
     }
@@ -114,21 +138,28 @@ public class HaWebRtcSignaling(
             "session" -> {
                 val sid = event.optStringOrNull("session_id")
                     ?: return fail(HaError(HaError.BAD_ANSWER, "session event without session_id"))
-                val flush = synchronized(lock) {
-                    if (done || session != null) return
-                    session = sid
-                    ArrayList(waiting).also { waiting.clear() }
+                val flush = synchronized(dispatch) {
+                    val held = synchronized(lock) {
+                        if (closed || failed || session != null) return
+                        session = sid
+                        ArrayList(waiting).also { waiting.clear() }
+                    }
+                    listener.onSession(sid)
+                    held
                 }
-                listener.onSession(sid)
-                flush.forEach { send(sid, it) }
+                // The listener may have closed the negotiation: then the held candidates stay unsent.
+                for (c in flush) {
+                    if (!live()) return
+                    send(sid, c)
+                }
             }
             "answer" -> {
                 val sdp = event.optStringOrNull("answer") ?: return fail(HaError(HaError.BAD_ANSWER, "answer event without answer"))
-                if (live()) listener.onAnswer(sdp)
+                deliver { listener.onAnswer(sdp) }
             }
             "candidate" -> {
                 val c = IceCandidateInit.fromJson(event.optJSONObject("candidate")) ?: return
-                if (live()) listener.onRemoteCandidate(c)
+                deliver { listener.onRemoteCandidate(c) }
             }
             "error" -> fail(HaError.fromJson(event, fallbackCode = TYPE_ERROR_FALLBACK))
         }
@@ -137,20 +168,32 @@ public class HaWebRtcSignaling(
     private fun send(sid: String, candidate: IceCandidateInit) {
         val command = JSONObject().put("type", TYPE_CANDIDATE).put("entity_id", entityId).put("session_id", sid)
             .put("candidate", candidate.toJson())
-        channel.call(command, {}) { error -> if (live()) listener.onCandidateError(candidate, error) }
+        channel.call(command, {}) { error -> deliver { listener.onCandidateError(candidate, error) } }
     }
 
-    private fun live(): Boolean = synchronized(lock) { !done }
+    private fun live(): Boolean = synchronized(lock) { !closed && !failed }
+
+    /** Calls the listener unless the negotiation is over, never overlapping [close] or the terminal error. */
+    private inline fun deliver(call: () -> Unit) {
+        synchronized(dispatch) { if (live()) call() }
+    }
 
     private fun fail(error: HaError) {
-        val sub = synchronized(lock) {
-            if (done) return
-            done = true
-            waiting.clear()
-            subscription.also { subscription = null }
+        synchronized(dispatch) {
+            val sub = synchronized(lock) {
+                if (closed || failed) return
+                failed = true
+                waiting.clear()
+                // Still inside subscribe(): offer() cancels the handle it returns, then reports this.
+                if (subscribing) {
+                    deferredError = error
+                    return
+                }
+                subscription.also { subscription = null }
+            }
+            sub?.unsubscribe()
+            listener.onError(error)
         }
-        sub?.unsubscribe()
-        listener.onError(error)
     }
 
     /** HA's WebSocket command types. */

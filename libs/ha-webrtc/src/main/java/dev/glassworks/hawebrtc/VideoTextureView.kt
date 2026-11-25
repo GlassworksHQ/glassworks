@@ -14,6 +14,7 @@ import livekit.org.webrtc.VideoFrame
 import livekit.org.webrtc.VideoSink
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /** How a picture fills its view, as a `<video>`'s `object-fit`. */
 public enum class VideoScaling {
@@ -92,11 +93,9 @@ internal class VideoTextureView(context: Context, scaling: VideoScaling) : Textu
 
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
         attached = false
-        // The render thread lets go of the texture before the view releases it.
-        val done = CountDownLatch(1)
-        renderer.releaseEglSurface(done::countDown)
-        done.await(RELEASE_WAIT_MS, TimeUnit.MILLISECONDS)
-        return true
+        // The render thread lets go of the texture before anyone releases it: the view, if that is done in time,
+        // else the render thread itself once it has.
+        return releaseAfter(renderer::releaseEglSurface, surface::release, RELEASE_WAIT_MS)
     }
 
     override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
@@ -118,6 +117,28 @@ internal class VideoTextureView(context: Context, scaling: VideoScaling) : Textu
     private companion object {
         const val RELEASE_WAIT_MS = 1_000L
     }
+}
+
+/**
+ * Asks the render thread to let go of a surface ([releaseSurface], which calls its argument once it has) and decides
+ * who releases the surface itself, as `onSurfaceTextureDestroyed` must: true when the render thread finished within
+ * [waitMs], so the view releases it; false otherwise, and then [releaseTexture] runs on the render thread as soon as
+ * it has finished, never before. The main thread waits at most [waitMs].
+ */
+internal fun releaseAfter(releaseSurface: (Runnable) -> Unit, releaseTexture: () -> Unit, waitMs: Long): Boolean {
+    val pending = 0
+    val done = 1
+    val ours = 2
+    val state = AtomicInteger(pending)
+    val finished = CountDownLatch(1)
+    releaseSurface(Runnable {
+        // Past the wait, the view has handed the texture to us: release it here, now that nothing draws into it.
+        if (!state.compareAndSet(pending, done)) releaseTexture()
+        finished.countDown()
+    })
+    if (finished.await(waitMs, TimeUnit.MILLISECONDS)) return true
+    // Still drawing: the render thread releases it when it's done, unless it finished just now.
+    return !state.compareAndSet(pending, ours)
 }
 
 /**

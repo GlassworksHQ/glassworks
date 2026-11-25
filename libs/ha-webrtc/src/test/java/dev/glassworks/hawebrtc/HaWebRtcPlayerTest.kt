@@ -89,3 +89,31 @@ class FitScaleTest {
         assertEquals(1f to 1f, fitScale(VideoScaling.FIT, 0, 0, 400, 400))
     }
 }
+
+/** Who releases a TextureView's SurfaceTexture when its renderer is still drawing into it. */
+class ReleaseAfterTest {
+    @Test
+    fun `a render thread that lets go in time leaves the texture to the view`() {
+        var released = 0
+        assertTrue(releaseAfter({ done -> done.run() }, { released++ }, 1_000))
+        assertEquals("the view releases it, not us", 0, released)
+    }
+
+    @Test
+    fun `a slow render thread releases the texture itself, after it let go, and the view keeps its hands off`() {
+        var later: Runnable? = null
+        var released = 0
+        // The render thread hasn't finished when the wait ends.
+        assertFalse(releaseAfter({ done -> later = done }, { released++ }, 10))
+        assertEquals("not while it may still draw", 0, released)
+        later!!.run()
+        assertEquals(1, released)
+    }
+
+    @Test
+    fun `a render thread that finishes on another thread just in time`() {
+        val released = java.util.concurrent.atomic.AtomicInteger()
+        assertTrue(releaseAfter({ done -> Thread { Thread.sleep(5); done.run() }.start() }, { released.incrementAndGet() }, 2_000))
+        assertEquals(0, released.get())
+    }
+}
