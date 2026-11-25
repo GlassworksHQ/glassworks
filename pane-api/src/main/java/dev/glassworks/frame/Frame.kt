@@ -105,6 +105,13 @@ interface Frame {
     val dock: Dock get() = Dock.NO
 
     /**
+     * How the app puts the screen to sleep: [SleepMode.LOCK] by default, Android's own screen off. A frame whose
+     * display breaks when Android turns it off says [SleepMode.BACKLIGHT_OFF] (the lululemon Mirror's LVDS bridge,
+     * frames/lululemon-mirror/research/display-sleep-lines.md).
+     */
+    val sleepMode: SleepMode get() = SleepMode.LOCK
+
+    /**
      * Work the frame runs while the app's service runs, or null for none (the S1's: Wi-Fi scans while the
      * screen is off, #3). [onForegroundOnly] asks the service to take the types it may have now, when the
      * work found it needs one it didn't have (the location type for a scan).
@@ -182,6 +189,22 @@ enum class Dock {
  * auto-rotate back on by itself (the lululemon Mirror's does on every app update, #686).
  */
 enum class Orientation { LANDSCAPE, PORTRAIT, ANY, PORTRAIT_FIXED }
+
+/** How a frame's screen sleeps ([Frame.sleepMode]). */
+enum class SleepMode {
+    /**
+     * Android turns the display off: `DevicePolicyManager.lockNow()` with device admin, else the system's screen-off
+     * timeout. Every frame but one.
+     */
+    LOCK,
+
+    /**
+     * The display stays on in Android's eyes and only goes dark: the backlight at 0 and a black screen over the page,
+     * which a tap, a key or any wake takes away. For hardware that can't come back from Android's display off (the
+     * lululemon Mirror draws lines across the screen after it).
+     */
+    BACKLIGHT_OFF,
+}
 
 /** [manufacturer] ("Aqara"), [model] ("Panel Hub S1 Plus") and [chip] ("Allwinner A133", or the board's name where Android gives no chip). */
 class Hardware(val manufacturer: String, val model: String, val chip: String)
