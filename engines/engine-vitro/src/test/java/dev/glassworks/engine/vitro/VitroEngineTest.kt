@@ -947,7 +947,10 @@ class VitroEngineTest {
         // A call that can't go out soon is rejected and leaves the queue, never sent much later.
         assertTrue(html.contains("reject(new Error('Not connected'));"))
         assertTrue(html.contains("const QUEUED_CALL_MS = 5000;"))
-        assertTrue(html.contains("const statesProxy = new Proxy(rawStates"))
+        // A new states object (a proxy over a copy) after every change, as HA's frontend hands cards (#885).
+        assertTrue(html.contains("if (!statesView) statesView = new Proxy(Object.assign({}, rawStates), statesHandler);"))
+        assertTrue(html.contains("const h = Object.assign({}, hassBase, { states: currentStates() });"))
+        assertEquals("snapshot and patch both start a new states object", 2, Regex("^\\s+statesView = null;", RegexOption.MULTILINE).findAll(html).count())
         assertTrue(html.contains("sendBridge({ type: 'watch', entity_id: prop })"))
         // hass.callService is HA's call_service over the same bridge, so its promise carries HA's answer.
         assertTrue(html.contains("const msg = { type: 'call_service', domain, service, service_data: data || {} };"))
@@ -1128,6 +1131,33 @@ class VitroEngineTest {
         island.handleIslandMessage(JSONObject().put("type", "navigate").put("path", ""), noReply)
         idle()
         assertEquals(listOf("/lovelace/energy"), paths)
+    }
+
+    @Test
+    fun anIslandThatCantMakeItsCardBecomesHasErrorCard() {
+        // #885: a type its script no longer defines (better-thermostat-ui-card's old name) drew an empty page; HA's
+        // createCardElement shows its error card. The page reports it, and the card becomes that error card.
+        val html = WebIslandCardView.buildIslandHtml(cardContext(), islandCard())
+        assertTrue(html.contains("if (!customElements.get(tag)) {"))
+        assertTrue(html.contains("sendBridge({ type: 'cardError', message: \"Custom element doesn't exist: \" + tag + '.' });"))
+        assertTrue("a setConfig that throws is reported too", html.contains("sendBridge({ type: 'cardError', message: String((e && e.message) || e) });"))
+
+        val island = WebIslandCardView(cardContext(), islandCard())
+        activity.setContentView(island)
+        island.handleIslandMessage(
+            JSONObject().put("type", "cardError").put("message", "Custom element doesn't exist: acme-floorplan-card."),
+        ) { throw AssertionError("cardError needs no reply") }
+        idle()
+        val failure = island.failure
+        assertTrue("the card failed with the page's error: $failure", failure is dev.glassworks.engine.vitro.cards.IslandCardError)
+        assertEquals("Custom element doesn't exist: acme-floorplan-card.", failure?.message)
+        val texts = ArrayList<String>()
+        fun walk(v: View) {
+            if (v is TextView) texts += v.text.toString()
+            if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(island)
+        assertTrue("HA's error card is in place: $texts", dev.glassworks.engine.vitro.ui.ErrorCardView.TITLE in texts)
     }
 
     @Test
