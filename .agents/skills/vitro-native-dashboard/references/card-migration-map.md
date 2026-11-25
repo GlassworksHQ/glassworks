@@ -1,6 +1,6 @@
 # Vitro Native Card, Feature, and Theme Migration Reference
 
-Every card below renders 100% natively in Vitro with **zero GeckoView**. The engine's own list is `engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/compat/VitroSupport.kt`; this page follows it.
+Every card below renders 100% natively in Vitro with **zero GeckoView**, except `iframe`: its view stays native, but the frame's own page runs in a GeckoView island, so leave it out of a dashboard that must run with no browser at all. The engine's own list is `engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/compat/VitroSupport.kt`; this page follows it.
 
 Cards marked *(not yet compared with HA)* draw natively but haven't been checked against Home Assistant's own render in the parity harness. Prefer a compared card when either would do.
 

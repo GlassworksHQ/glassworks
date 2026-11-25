@@ -968,8 +968,7 @@ class VitroView(
     }
 
     /** The island an earlier build of [card] gave up, for its new build to take, or null. */
-    private fun adoptIsland(card: CardConfig, fillViewport: Boolean): WebIslandCardView.Island? {
-        val key = WebIslandCardView.keyOf(card, fillViewport)
+    private fun adoptIsland(card: CardConfig, fillViewport: Boolean, key: String = WebIslandCardView.keyOf(card, fillViewport)): WebIslandCardView.Island? {
         val queue = islandPool[key] ?: return null
         val island = queue.removeFirstOrNull()
         if (queue.isEmpty()) islandPool.remove(key)
@@ -1655,7 +1654,7 @@ class VitroView(
             "shopping-list" -> ShoppingListCardView(ctx, card)
             "section" -> HaErrorCardView(ctx, SmallCardConfigs.SECTION_CARD_ERROR)
             "statistic" -> SmallCardConfigs.statisticError(card)?.let { HaErrorCardView(ctx, it) } ?: StatisticCardView(ctx, card)
-            "date" -> DateCardView(ctx, card)
+            "date" -> SmallCardConfigs.dateError(card)?.let { HaErrorCardView(ctx, it) } ?: DateCardView(ctx, card)
             "plant-status" -> if (card.entity?.substringBefore('.') == "plant") PlantStatusCardView(ctx, card)
                 else HaErrorCardView(ctx, "Specify an entity from within the plant domain")
             "toggle-group" -> if ((card.raw.optJSONArray("entities")?.length() ?: 0) > 0) ToggleGroupCardView(ctx, card)
@@ -1663,7 +1662,7 @@ class VitroView(
             "shortcut" -> ShortcutCardView(ctx, card)
             "alert" -> SmallCardConfigs.alertError(card)?.let { HaErrorCardView(ctx, it) } ?: AlertCardView(ctx, card)
             "iframe" -> SmallCardConfigs.iframeError(card)?.let { HaErrorCardView(ctx, it) }
-                ?: IframeCardView(ctx, card, fillViewport, adopted = adoptIsland(card, fillViewport))
+                ?: IframeCardView(ctx, card, fillViewport, adopted = adoptIsland(card, fillViewport, IframeCardView.keyFor(ctx, card, fillViewport)))
             // Tier 2: Popular HACS Fast-Paths
             // Mushroom's light, fan and cover cards with their controls row; without one, the tile draws them.
             "custom:mushroom-light-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, stateForBuild(card))) MushroomLightCardView(ctx, card) else TileCardView(ctx, card)

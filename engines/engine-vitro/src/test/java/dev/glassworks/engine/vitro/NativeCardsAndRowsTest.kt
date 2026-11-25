@@ -233,6 +233,13 @@ class NativeCardsAndRowsTest {
     }
 
     @Test fun aDateCardWritesTodayInTheServersZone() {
+        // The expected text is English: pin the locale, whatever the host's is.
+        val saved = java.util.Locale.getDefault()
+        java.util.Locale.setDefault(java.util.Locale.US)
+        try { dateCardText() } finally { java.util.Locale.setDefault(saved) }
+    }
+
+    private fun dateCardText() {
         val v = DateCardView(ctx(), card("""{"type": "date", "time_zone": "America/Chicago", "title": "Today"}"""))
         assertEquals(TimeZone.getTimeZone("America/Chicago"), v.zone())
         // 2026-11-12 10:08 in Chicago, HA's `weekday: long, day: numeric, month: long`.
@@ -411,6 +418,7 @@ class NativeCardsAndRowsTest {
         put("todo.alpha", "1", "friendly_name" to "Alpha")
         val v = ShoppingListCardView(ctx(), card("""{"type": "shopping-list"}"""))
         fun shownEntity() = (all(v).filterIsInstance<dev.glassworks.engine.vitro.cards.TodoListCardView>().single())
+        assertEquals("before the registry: the first list by name", "todo.alpha", v.shown)
         val first = shownEntity()
         HaDisplay.applyRegistry(JSONObject().put("entities", JSONArray()
             .put(JSONObject().put("ei", "todo.zeta").put("pl", "shopping_list"))
@@ -418,17 +426,19 @@ class NativeCardsAndRowsTest {
         store.renotifyAll()
         idle()
         val second = shownEntity()
-        assertTrue("the card was built again for the Shopping list integration's list", first !== second)
+        assertEquals("the Shopping list integration's list", "todo.zeta", v.shown)
+        assertTrue("the card was built again for it", first !== second)
         // Settled: a later change doesn't build it again.
         put("todo.alpha", "3", "friendly_name" to "Alpha")
         idle()
         assertTrue(second === shownEntity())
     }
 
+    // The picture is on a refused address, so no image load outlives the test (the parity harness waits for none).
     @Test fun aPlantWhosePictureCardIsRebuiltDoesntCrash() {
-        put("plant.fern", "ok", "friendly_name" to "Fern", "moisture" to 40, "problem" to "none", "entity_picture" to "/local/fern.png")
+        put("plant.fern", "ok", "friendly_name" to "Fern", "moisture" to 40, "problem" to "none", "entity_picture" to "http://127.0.0.1:9/fern.png")
         val v = PlantStatusCardView(ctx(), card("""{"type": "plant-status", "entity": "plant.fern"}"""))
-        put("plant.fern", "problem", "friendly_name" to "Fern", "moisture" to 10, "problem" to "moisture low", "entity_picture" to "/local/fern.png")
+        put("plant.fern", "problem", "friendly_name" to "Fern", "moisture" to 10, "problem" to "moisture low", "entity_picture" to "http://127.0.0.1:9/fern.png")
         idle()
         assertTrue(texts(v).contains("10"))
     }

@@ -36,6 +36,13 @@ object SmallCardConfigs {
 
     private val VALID_ENTITY_ID = Regex("""^\w+\.\w+$""")
 
+    /** `hui-date-card`: a `time_zone` must be a zone Intl knows (an IANA name); none is the user's or HA's. */
+    fun dateError(card: CardConfig): String? {
+        val tz = card.raw.optString("time_zone", "")
+        if (tz.isEmpty()) return null
+        return if (tz in java.util.TimeZone.getAvailableIDs()) null else "Invalid time zone: $tz"
+    }
+
     /** `hui-statistic-card`: an entity (or external statistic), a `stat_type` and a `period`. */
     fun statisticError(card: CardConfig): String? {
         val raw = card.raw
@@ -216,7 +223,7 @@ class IframeCardView(
         frame.removeView(p.view)
         page = null
         slotId = null
-        return WebIslandCardView.Island(WebIslandCardView.keyOf(config, fillViewport), p, id, 0, server, active = pageActive)
+        return WebIslandCardView.Island(keyFor(config, fillViewport, url), p, id, 0, server, active = pageActive)
     }
 
     override fun release() {
@@ -254,6 +261,17 @@ class IframeCardView(
     }
 
     companion object {
+        /**
+         * What makes two builds the same iframe island: the card's config and fill, and the address it resolved to (the
+         * same relative `url` on another dashboard is another page). VitroView adopts by it.
+         */
+        fun keyFor(config: CardConfig, fillViewport: Boolean, url: String): String =
+            WebIslandCardView.keyOf(config, fillViewport) + "\n" + url
+
+        /** [keyFor] for a card about to be built in [ctx]. */
+        fun keyFor(ctx: VitroCardContext, config: CardConfig, fillViewport: Boolean): String =
+            keyFor(config, fillViewport, absolute(config.raw.optString("url", ""), ctx.pageUrl() ?: ctx.haBase))
+
         /** HA's `IFRAME_SANDBOX`. */
         const val SANDBOX = "allow-forms allow-popups allow-pointer-lock allow-same-origin allow-scripts allow-modals allow-downloads"
 
@@ -320,6 +338,13 @@ iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:
 class ShoppingListCardView(private val ctx: VitroCardContext, private val config: CardConfig) : FrameLayout(ctx.context) {
     private var unsubscribe: (() -> Unit)? = null
 
+    /** The list the card shows, or null before it has one. Declared before `init`, which may set it. */
+    internal var shown: String? = null
+        private set
+
+    /** True once the pick can't change: the config names the list, or the registry has every list. */
+    private var settled = false
+
     init {
         watch()
     }
@@ -350,19 +375,14 @@ class ShoppingListCardView(private val ctx: VitroCardContext, private val config
         unsubscribe = null
     }
 
-    /** The list the card shows, or null before it has one. */
-    private var shown: String? = null
-
-    /** True once the pick can't change: the config names it, there's one list, or the registry has every list. */
-    private var settled = false
-
     /** Builds (or swaps) the inner card for the list HA would pick now; true once the card shows a list. */
     private fun tryBuild(): Boolean {
         if (settled) return true
         val explicit = config.entity
         val lists = ctx.store.all().values.filter { it.domain == "todo" && it.state != "unavailable" }
         val entity = explicit ?: pick(lists) ?: return false
-        settled = explicit != null || lists.size <= 1 || lists.all { HaDisplay.registry.containsKey(it.entityId) }
+        // A single list settles only with the registry too: a second one may yet turn out to be the Shopping list's.
+        settled = explicit != null || lists.all { HaDisplay.registry.containsKey(it.entityId) }
         if (entity == shown) return true
         shown = entity
         removeAllViews()

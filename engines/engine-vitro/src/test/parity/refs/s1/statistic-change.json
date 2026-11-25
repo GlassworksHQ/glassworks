@@ -46,7 +46,7 @@
   {
    "slot": 0,
    "clipped": false,
-   "text": "4.11",
+   "text": "96.6",
    "x": 17,
    "y": 69.41,
    "w": 54.55,
@@ -72,15 +72,15 @@
  ],
  "states": {
   "sensor.kitchen_energy": {
-   "s": "401.89",
+   "s": "426.00",
    "a": {
     "state_class": "total_increasing",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Kitchen Energy"
    },
-   "lc": 1794499200,
-   "lu": 1794499200
+   "lc": 1794499680,
+   "lu": 1794499680
   }
  },
  "templates": {},
@@ -147,7 +147,7 @@
    },
    "events": [],
    "result": {
-    "change": 4.11
+    "change": 96.6
    }
   }
  ]

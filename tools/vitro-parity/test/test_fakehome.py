@@ -116,6 +116,19 @@ class Home(unittest.TestCase):
         out = H.statistic_during_period({"statistic_id": "sensor.c", "fixed_period": {
             "start_time": H.iso(H.NOW - 2 * 3600 - 8 * 60), "end_time": H.iso(H.NOW)}})
         self.assertEqual(out, {"change": 20.0})
+        # Time-weighted: 0 held from 8:00 to 9:00, 100 only at its end, is a mean of 0.
+        self.case({"states": {"sensor.m": {"state": "100", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}},
+                              "sensor.r": {"state": "10", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}},
+                              "sensor.c": {"state": "20", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}}},
+                   "history": {"sensor.m": {"points": [["-3h", "0"], ["-1h08m", "100"]]},
+                               "sensor.r": {"points": [["-3h", "100"], ["-2h", "110"], ["-1h", "0"], ["-30m", "10"]]},
+                               "sensor.c": {"points": [["-2h08m", "0"], ["-1h08m", "10"], ["-4m", "20"]]}}})
+        weighted = H.statistic_during_period({"statistic_id": "sensor.m", "fixed_period": {
+            "start_time": H.iso(H.NOW - 2 * 3600 - 8 * 60), "end_time": H.iso(H.NOW - 3600 - 8 * 60)}})
+        self.assertEqual(weighted["mean"], 0.0)
+        # A meter that resets keeps what it counted: 100 -> 110, reset, -> 10 is 20.
+        reset = H.statistic_during_period({"statistic_id": "sensor.r", "rolling_window": {"duration": {"hours": 3}}})
+        self.assertEqual(reset, {"change": 20.0})
         # The current hour, not the year to date.
         hour = H.statistic_during_period({"statistic_id": "sensor.c", "calendar": {"period": "hour"}})
         self.assertEqual(hour, {"change": 10.0})

@@ -61,6 +61,12 @@ object WebFallback {
         if (type == "shortcut") shortcutReason(card)?.let { return it }
         // Vitro has no double tap yet: a card it newly draws whose double-tap action does something stays HA's.
         if ((type == "shortcut" || type == "alert") && hasDoubleTap(card.raw)) return "a `$type` card with a double-tap action"
+        // Vitro's actions don't open Assist.
+        if (type == "alert" && listOf("tap_action", "hold_action").any { card.raw.optJSONObject(it)?.optString("action") == "assist" }) {
+            return "an `alert` card that opens Assist"
+        }
+        // A footer (a graph, buttons, a picture) under the statistic isn't drawn natively.
+        if (type == "statistic" && card.raw.has("footer") && !card.raw.isNull("footer")) return "a `statistic` card with a footer"
         // The energy dashboard's date picker drives such a card: it lives in HA's frontend (an energy card).
         if (type == "statistic" && (card.raw.optBoolean("energy_date_selection", false) || card.raw.optString("period") == "energy_date_selection")) {
             return "a `statistic` card that follows the energy date picker"

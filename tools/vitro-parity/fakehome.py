@@ -555,23 +555,35 @@ def statistic_during_period(m):
         start = None
     meta, series = _meta(eid) or {}, _series(eid)
     t0, t1 = (start if start is not None else NOW - 365 * 86400), min(end, NOW)
-    samples = []
+    points = []  # (t, value): the series at the window's start, each 5-minute step, and its end
     if series and t1 > t0:
         t = t0
         while True:
             v = series.value(t)
             if v is not None and _num(v):
-                samples.append(float(v))
+                points.append((t, float(v)))
             if t >= t1:
                 break
             t = min(t1, (math.floor(t / 300) + 1) * 300)
     out = {}
     if meta.get("has_mean"):
-        out["max"] = round(max(samples), 6) if samples else None
-        out["mean"] = round(sum(samples) / len(samples), 6) if samples else None
-        out["min"] = round(min(samples), 6) if samples else None
+        # HA's mean is time-weighted: each value counts for as long as it's held; the end point holds for no time.
+        held = [(v, points[i + 1][0] - t) for i, (t, v) in enumerate(points[:-1]) if points[i + 1][0] > t]
+        span = sum(d for _, d in held)
+        out["max"] = round(max(v for v, _ in held), 6) if held else None
+        out["mean"] = round(sum(v * d for v, d in held) / span, 6) if held else None
+        out["min"] = round(min(v for v, _ in held), 6) if held else None
     elif meta:
-        out["change"] = round(samples[-1] - samples[0], 6) if samples else None
+        if not points:
+            out["change"] = None
+        elif (states().get(eid) or {}).get("attributes", {}).get("state_class") == "total_increasing":
+            # A meter: a drop is a reset, after which the new reading is what it counted since (HA's reset-aware sum).
+            total = 0.0
+            for (_, a), (_, b) in zip(points, points[1:]):
+                total += b - a if b >= a else b
+            out["change"] = round(total, 6)
+        else:
+            out["change"] = round(points[-1][1] - points[0][1], 6)
     types = m.get("types")
     return {k: v for k, v in out.items() if not types or k in types}
 

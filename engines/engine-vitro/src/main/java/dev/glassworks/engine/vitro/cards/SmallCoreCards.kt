@@ -387,10 +387,14 @@ class AlertCardView(ctx: VitroCardContext, private val config: CardConfig) :
     }
 
     private fun render(s: EntityState?) {
-        // HA draws nothing for an entity it doesn't have.
+        // HA draws nothing for an entity it doesn't have (and nothing pulses for one).
         row.visibility = if (s == null) INVISIBLE else VISIBLE
         visibility = if (s == null) GONE else VISIBLE
-        if (s == null) return
+        if (s == null) {
+            pulsing = false
+            updatePulse()
+            return
+        }
         val active = isAlertActive(s)
         val spec = if (active) raw.optString("alert_color", "").ifEmpty { "state" } else raw.optString("clear_color", "").ifEmpty { "none" }
         val color = when (spec) {
@@ -756,9 +760,14 @@ class StatisticCardView(ctx: VitroCardContext, private val config: CardConfig) :
         if (running) ctx.main.postDelayed(refetch, 5 * 60_000L)
     }
 
+    /** Attached before: a later attach (a layout that moved the card) fetches again, as HA does on reconnect. */
+    private var attachedBefore = false
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         running = true
+        if (attachedBefore) fetch()
+        attachedBefore = true
         scheduleRefetch()
     }
 
@@ -795,12 +804,19 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
     /** A rebuild key: what decides the card's layout (readings, picture, name, problems), not the values. */
     private fun key(s: EntityState?): String = if (s == null) "missing" else listOf(
         ATTRIBUTES.filter { it in s.attributes }.joinToString(","), s.entityPicture.orEmpty(), config.name ?: s.displayName,
-        s.attributes["problem"]?.toString().orEmpty(),
+        s.attributes["problem"]?.toString().orEmpty(), s.attributes["unit_of_measurement_dict"]?.toString().orEmpty(),
     ).joinToString("|")
+
+    /** Follows every sensor the plant names now (a sensor it swaps in included); the ones followed already stay. */
+    private fun followSensors(s: EntityState) {
+        (s.attributes["sensors"] as? Map<*, *>)?.values?.mapNotNull { it as? String }?.distinct()?.forEach { id ->
+            if (observedSensors.add(id)) observe(id) { ctx.store[entityId]?.let(::fillValues) }
+        }
+    }
 
     private fun render(s: EntityState?) {
         val k = key(s)
-        if (k == builtFor) { if (s != null) fillValues(s); return }
+        if (k == builtFor) { if (s != null) { followSensors(s); fillValues(s) }; return }
         builtFor = k
         root.removeAllViews()
         values.clear()
@@ -885,12 +901,7 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
         root.addView(content, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         fillValues(s)
         // The sensors' states feed the values.
-        (s.attributes["sensors"] as? Map<*, *>)?.values?.mapNotNull { it as? String }?.distinct()?.forEach { id ->
-            if (id !in observedSensors) {
-                observedSensors += id
-                observe(id) { ctx.store[entityId]?.let(::fillValues) }
-            }
-        }
+        followSensors(s)
     }
 
     private fun errorColor(): Int = ThemeResolver.parseColor(ctx.theme.vars["error-color"]) ?: 0xFFDB4437.toInt()
