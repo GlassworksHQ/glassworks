@@ -54,6 +54,13 @@ class VitroWebRtcTest {
         VitroWebRtc.register()
         val players = CameraPlayers.forHost(host) { null }
         assertTrue(players.supports(CameraStreamKind.WEB_RTC))
+        // Through the engine, Clarity's camera task wraps the WebRTC stream (ClarityCameras.measured), and the card
+        // still reads its picture's size through the wrapper.
+        val measured = players.create("camera.front_door", CameraStreamKind.WEB_RTC)!!
+        assertFalse("wrapped for Clarity", measured is WebRtcCameraStream)
+        assertTrue(measured is CameraStreamVideoSize)
+        assertTrue(measured.view is TextureView)
+        measured.close()
         val factory = CameraStreamFactories.provider(CameraStreamKind.WEB_RTC)!!(host)
         assertNull(factory.create("camera.front_door", CameraStreamKind.HLS))
         val stream = factory.create("camera.front_door", CameraStreamKind.WEB_RTC)!!

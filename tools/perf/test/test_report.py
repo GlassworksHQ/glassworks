@@ -1293,6 +1293,63 @@ class CameraFallback(unittest.TestCase):
         self.assertEqual(R.camera_run(old, "typical")["path"], "hls")
 
 
+def vitro_camera_line(tier, shown="web_rtc"):
+    """VitroClarity's camera line (ClarityCameras.window): each camera played on `shown`; on another kind than the view's
+    WebRTC, its WebRTC stream never showed a picture (a fallback)."""
+    n = {"typical": 1, "heavy": 4}[tier]
+    ok = shown == "web_rtc"
+    return {"t": "camera", "stage": tier, "path": "web_rtc", "window_ms": 30000, "fps": 15, "expected": n, "found": n,
+            "streams": [{"path": "web_rtc", "entity": f"camera.clarity_cam_{i}", "found": True, "w": None, "h": None,
+                         "first_frame_ms": 640.0 if ok else None, "shown_pct": 100.0 if ok else None,
+                         "max_gap_ms": 66.7 if ok else None, "stall_total_ms": 0.0 if ok else None,
+                         "span_ms": 30000.0 if ok else None, "freezes": 0 if ok else None,
+                         "gaps_source": "vitro-frames (freeze rule)" if ok else None, "transport": shown,
+                         "others": [] if ok else [{"path": shown, "first_frame_ms": 400.0, "connected": True}],
+                         "errors": [] if ok else ["web_rtc: ice failed"]} for i in range(n)],
+            "fetches": None}
+
+
+class VitroCameras(unittest.TestCase):
+    """docs/perf.md, "Vitro": Vitro's camera line is read as the web harness's, and says which kind each camera played."""
+
+    def test_cameras_that_played_are_graded_with_nothing_left_out(self):
+        run = R.camera_run(vitro_camera_line("heavy"), "heavy")
+        self.assertEqual(run["transports"], ["web_rtc"] * 4)
+        self.assertNotIn("fell_back", run)
+        self.assertEqual(run["uncovered_ms"], 0.0)
+        self.assertEqual(G.camera_level(run), "good")
+        self.assertEqual(run["detail"][0]["transport"], "web_rtc")
+        self.assertEqual(run["detail"][0]["freezes"], 0)
+
+    def test_a_fallback_to_mjpeg_fails_the_task_and_is_said_plainly(self):
+        run = R.camera_run(vitro_camera_line("typical", shown="mjpeg"), "typical")
+        self.assertEqual(run["fell_back"], ["mjpeg"])
+        self.assertIsNone(run["first_frame_ms"])
+        self.assertEqual(G.camera_level(run), G.BELOW)
+        ref = {"tiers": {"typical": {"camera_runs": [run, R.camera_run(vitro_camera_line("typical"), "typical")]}}}
+        self.assertEqual(R.camera_transports(ref), [
+            "typical cameras on Vitro: played over WebRTC in 1 of 2 run(s); **fell back to MJPEG in 1 of 2 run(s)**, graded "
+            "on WebRTC as on the web engine (web_rtc: ice failed)."])
+        self.assertEqual(R.task_phrase("camera", {"camera_runs": [run]}),
+                         "a camera fell back to MJPEG on Vitro (it never played over WebRTC)")
+        import notes as N
+        self.assertEqual(N._camera_options(run), [(10.0, "has a camera that fell back to MJPEG")])
+
+    def test_a_fallback_that_stopped_before_the_windows_end_is_still_said(self):
+        line = vitro_camera_line("typical", shown="mjpeg")
+        line["streams"][0].update(transport=None, others=[{"path": "mjpeg", "first_frame_ms": 400.0, "connected": False}])
+        run = R.camera_run(line, "typical")
+        self.assertEqual(run["fell_back"], ["mjpeg"])
+        self.assertEqual(R.camera_transports({"tiers": {"typical": {"camera_runs": [run]}}}), [
+            "typical cameras on Vitro: played over WebRTC in 0 of 1 run(s); **fell back to MJPEG in 1 of 1 run(s)**, graded "
+            "on WebRTC as on the web engine (web_rtc: ice failed); a camera showed nothing at the window's end in 1 run(s)."])
+
+    def test_web_lines_say_nothing_about_transports(self):
+        run = R.camera_run(camera_line("typical"), "typical")
+        self.assertNotIn("transports", run)
+        self.assertEqual(R.camera_transports({"tiers": {"typical": {"camera_runs": [run]}}}), [])
+
+
 def camera_line(tier, first_ms=600.0, shown=100.0, max_gap=70.0, stall=0.0, path="web_rtc"):
     """The harness's camera line (#174) for a view with streams: each plays at once and in full, over
     WebRTC (protocol 6) unless `path` says otherwise."""

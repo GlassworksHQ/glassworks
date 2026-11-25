@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.camera
 
+import dev.glassworks.engine.vitro.clarity.ClarityCameras
 import dev.glassworks.engine.vitro.net.MjpegStreamPlayer
 
 /**
@@ -41,11 +42,8 @@ class CameraPlayers(private val factories: Map<CameraStreamKind, CameraStreamFac
             return CameraPlayers(out)
         }
 
-        /**
-         * Where every kind's factory is wrapped for Clarity's camera task (`ClarityCameras.measured`, #888): the
-         * same factory until that lands.
-         */
-        private fun measured(factory: CameraStreamFactory): CameraStreamFactory = factory
+        /** Every kind's factory, registered or built in, reports to Clarity's camera task while a run measures. */
+        private fun measured(factory: CameraStreamFactory): CameraStreamFactory = ClarityCameras.measured(factory)
     }
 }
 
