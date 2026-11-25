@@ -43,7 +43,6 @@ import dev.glassworks.frame.Orientation
 import dev.glassworks.frame.openSystemSettings
 import dev.glassworks.dashboard.DashboardOptions
 import dev.glassworks.dashboard.Dashboards
-import dev.glassworks.discovery.HaUrls
 import dev.glassworks.settings.KioskSettingsOverlay
 import dev.glassworks.settings.PanelBlueprints
 import dev.glassworks.settings.S1Settings
@@ -158,7 +157,7 @@ open class MainActivity : Activity() {
     }
 
     private fun showThreadJoin(s: dev.glassworks.auth.ThreadJoin.State) {
-        val url = dev.glassworks.auth.ThreadJoin.url(HaUrls.localIpv4())
+        val url = dev.glassworks.auth.ThreadJoin.url(dev.glassworks.platform.PanelAddress.now(this))
         when {
             s is dev.glassworks.auth.ThreadJoin.State.NeedsAdmin -> {
                 if (settingsOverlay.isShowing) settingsOverlay.hide()
@@ -544,7 +543,7 @@ open class MainActivity : Activity() {
             wifi = wifiStatus.snapshot(),
             haUrl = prefs.haBase,
             haSource = if (prefs.isAutoUrl) prefs.haUrlSource else "",
-            panelIp = HaUrls.localIpv4(),
+            panelIp = dev.glassworks.platform.PanelAddress.now(this),
             signedIn = HaAuth.signedIn,
             signinMoved = !preview && HaAuth.movedAway,
             preview = preview,

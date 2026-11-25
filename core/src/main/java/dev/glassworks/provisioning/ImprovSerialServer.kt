@@ -3,7 +3,9 @@ package dev.glassworks.provisioning
 import dev.glassworks.frame.Frame
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.improv.*
+import android.content.Context
 import android.util.Log
+import dev.glassworks.platform.PanelAddress
 import dev.glassworks.InstallerGlue
 import dev.glassworks.auth.OAuth
 import java.io.OutputStream
@@ -26,11 +28,14 @@ object ImprovSerialServer {
 
     private var server: ImprovAdbServer? = null
 
-    /** [frame] and [build]: the device and app it speaks for ([ImprovIdentity.serial]). */
-    fun start(frame: Frame, build: AppBuild) {
+    /** [frame] and [build]: the device and app it speaks for ([ImprovIdentity.serial]); [context]: where the panel's address is read. */
+    fun start(context: Context, frame: Frame, build: AppBuild) {
         if (server != null) return
         val info = ImprovIdentity.serial(frame, build)
-        server = ImprovAdbServer(SOCKET, TAG) { output -> Effects(output, info) }.also { it.start() }
+        val app = context.applicationContext
+        server = ImprovAdbServer(SOCKET, TAG) { output ->
+            Effects(output, info, panelIp = { PanelAddress.now(app) }, onWifi = { PanelAddress.now(app, wifiOnly = true) != null })
+        }.also { it.start() }
     }
 
     fun stop() {
@@ -38,12 +43,22 @@ object ImprovSerialServer {
         server = null
     }
 
-    private class Effects(private val out: OutputStream, private val info: List<String>) : ImprovSerialSession.Effects {
+    /**
+     * [panelIp]: the panel's address on the LAN ([PanelAddress]), null while it has none. [onWifi]: whether it has one
+     * on Wi-Fi. A fresh session starts PROVISIONED only on Wi-Fi: Ethernet alone would tell an installer that
+     * reconnects after an error that its Wi-Fi join went through.
+     */
+    private class Effects(
+        private val out: OutputStream,
+        private val info: List<String>,
+        private val panelIp: () -> String?,
+        private val onWifi: () -> Boolean,
+    ) : ImprovSerialSession.Effects {
         override fun send(packet: ByteArray) = synchronized(out) { out.write(packet); out.flush() }
 
-        override fun online(): Boolean = InstallerGlue.wlanIpv4() != null
+        override fun online(): Boolean = onWifi()
 
-        override fun redirectUrl(): String = redirectFor(InstallerGlue.wlanIpv4())
+        override fun redirectUrl(): String = redirectFor(panelIp())
 
         override fun info(): ByteArray = info.let { (firmware, version, chip, name) -> ImprovSerial.info(firmware, version, chip, name) }
 
@@ -62,7 +77,7 @@ object ImprovSerialServer {
             InstallerGlue.post {
                 val ok = ImprovController.connectFromInstaller(ssid, password, ImprovDone.Via.COMPUTER, hidden = null) { o ->
                     when (o) {
-                        is WifiProvisioner.Outcome.Connected -> done(redirectFor(o.ip ?: InstallerGlue.wlanIpv4()))
+                        is WifiProvisioner.Outcome.Connected -> done(redirectFor(o.ip ?: panelIp()))
                         is WifiProvisioner.Outcome.Failed -> done(null)
                     }
                 }
