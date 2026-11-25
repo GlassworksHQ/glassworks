@@ -106,6 +106,9 @@ def owner_of_file(path, parts, lint):
     if path.startswith("lib/"):
         if name in parts["engine"]["native"]:
             return ("engine", None), "native"
+        for k, v in parts.get("engines", {}).items():
+            if not k.startswith("_") and name in v.get("native", []):
+                return ("engine", k), "native"
         for k, v in parts["libraries"].items():
             if name in v.get("native", []):
                 return ("library", k), "native"

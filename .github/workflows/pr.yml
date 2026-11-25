@@ -293,7 +293,7 @@ jobs:
       - name: Android SDK platform
         run: sdkmanager --install "platforms;android-37.2"
       - name: Lint (NewApi at minSdk 23)
-        run: ./gradlew --no-daemon :esphome-api-android:lintDebug :improv:lintDebug :bluetooth-proxy:lintDebug :sendspin:lintDebug :voice:lintDebug
+        run: ./gradlew --no-daemon :esphome-api-android:lintDebug :improv:lintDebug :bluetooth-proxy:lintDebug :sendspin:lintDebug :voice:lintDebug :ha-webrtc:lintDebug
 
       # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
       - name: Forget Gradle's dependency metadata after a failure

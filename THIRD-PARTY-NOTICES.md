@@ -97,6 +97,51 @@ build if one is missing here.
   - `org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.1`
   - `org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1`
 
+### libwebrtc (Vitro's WebRTC camera streams)
+
+With Vitro on, the S1 app and Glassworks for generic Android play Home Assistant cameras over WebRTC with the
+[`ha-webrtc`](libs/ha-webrtc/README.md) library, which runs on libwebrtc. Both APKs carry it.
+
+- **WebRTC Android SDK** 150.7871.04, prefixed: `io.github.webrtc-sdk:android-prefixed:150.7871.04`, the
+  webrtc-sdk project's build of Chromium's WebRTC M150 (branch-heads/7871) with its Java package renamed to
+  `livekit.org.webrtc`. Its Java classes and native library (`liblkjingle_peerconnection_so.so`, one per ABI).
+  Licence: BSD-3-Clause, Copyright (c) 2011, The WebRTC project authors, with WebRTC's additional IP rights grant
+  (`PATENTS`, in `LICENSES/LicenseRef-libwebrtc-notices.txt`).
+  Upstream: https://github.com/webrtc-sdk/android and https://webrtc.googlesource.com/src (branch-heads/7871).
+- **Third-party code inside the native library.** The libraries WebRTC's own licence generator
+  (`tools_webrtc/libs/generate_licenses.py`) lists for its Android build, at the revisions branch-heads/7871's
+  `DEPS` pins:
+  - **BoringSSL** (`f91f1447397c6719f9774dfb8e67329378e1f3d3`): Apache-2.0, The BoringSSL Authors; its fiat-crypto
+    code Apache-2.0 (or MIT), Copyright 2015-2020 the fiat-crypto authors. https://boringssl.googlesource.com/boringssl
+  - **libvpx** (`31af37b1bd2774d11a932c1cd9a3849328375f64`, v1.16.0): BSD-3-Clause, Copyright (c) 2010, The WebM
+    Project authors. https://chromium.googlesource.com/webm/libvpx
+  - **libaom** (`c213343c8d32bcae729fe09fcba16e1f371cb23b`): BSD-2-Clause, Copyright (c) 2016, Alliance for Open
+    Media, with the Alliance for Open Media Patent License 1.0. https://aomedia.googlesource.com/aom
+  - **dav1d** (`1718ff9aded99f0a89f5c7940d6afb8948301e33`): BSD-2-Clause, Copyright © 2018-2025, VideoLAN and dav1d
+    authors. https://code.videolan.org/videolan/dav1d
+  - **libyuv** (`de63bd90f4396313f864ad58b65279e7894451a9`): BSD-3-Clause, Copyright 2011 The LibYuv Project
+    Authors. https://chromium.googlesource.com/libyuv/libyuv
+  - **Opus** (Chromium's `third_party/opus`, `55513e81`): BSD-3-Clause, Copyright 2001-2023 Xiph.Org, Skype Limited,
+    Octasic, Jean-Marc Valin, Timothy B. Terriberry, CSIRO, Gregory Maxwell, Mark Borgerding, Erik de Castro Lopo,
+    Mozilla, Amazon. https://opus-codec.org
+  - **libsrtp** (`cd5d177bf1fde755ddb4c7f0d9ff7693f8b49e5e`): BSD-3-Clause, Copyright (c) 2001-2017 Cisco Systems,
+    Inc. https://chromium.googlesource.com/chromium/deps/libsrtp
+  - **crc32c** (`d3d60ac6e0f16780bcfcc825385e1d338801a558`): BSD-3-Clause, Copyright 2017, The CRC32C Authors.
+    https://github.com/google/crc32c
+  - **Abseil**, **jni_zero**, **rnnoise**, **pffft**, **zlib** and **protobuf** (Chromium's `third_party` at
+    `7c92732938de0ef7e28f5da231994723f938f407`): Abseil Apache-2.0 (The Abseil Authors); jni_zero BSD-3-Clause
+    (Copyright 2023 The Chromium Authors); rnnoise BSD-3-Clause (Copyright (c) 2017, Mozilla; 2007-2017, Jean-Marc
+    Valin; 2005-2017, Xiph.Org Foundation); pffft under its FFTPACK licence (Copyright (c) 2013 Julien Pommier;
+    2004 UCAR), text in `LICENSES/LicenseRef-libwebrtc-notices.txt`; zlib Zlib (Jean-loup Gailly and Mark Adler);
+    protobuf BSD-3-Clause (Copyright 2008 Google Inc.). https://chromium.googlesource.com/chromium/src/third_party
+  - **libc++, libc++abi and libunwind** (LLVM; `5abc7f839700f0f17338434e1c1c6a8c87c00c11`,
+    `8f11bb1d4438d0239d0dfc1bd9456a9f31629dda`, `d6c7a21e978f0adaa43accaad53bc64f0b64f6ec`):
+    Apache-2.0 WITH LLVM-exception (`LICENSES/LLVM-exception.txt`), the LLVM Project contributors.
+    https://github.com/llvm/llvm-project
+  - **WebRTC's own bundled code**: G.711 and G.722 (SpanDSP, Steve Underwood, public domain), fft (Copyright 1995,97
+    Mark Olesen), Ooura FFT (Copyright Takuya Ooura, 1996-2001), spl_sqrt_floor (Wilco Dijkstra, public domain).
+    Their notices, verbatim, are in `LICENSES/LicenseRef-libwebrtc-notices.txt`.
+
 ### Libraries the app uses directly
 
 - **TensorFlow Lite** 2.16.1: `org.tensorflow:tensorflow-lite:2.16.1`, `org.tensorflow:tensorflow-lite-api:2.16.1`.
