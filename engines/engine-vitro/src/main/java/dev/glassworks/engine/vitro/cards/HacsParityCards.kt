@@ -97,6 +97,8 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
     // HA's tile and Mushroom's cards lay their content out from the card's outer edge.
     override val contentInsideBorder: Boolean get() = false
     protected val eid: String? = config.entity
+    /** Mushroom's off color, from the card scope in force while the card is built. */
+    protected val mushroomDisabled = mushroomDisabledColor(ctx)
     protected val shape = FrameLayout(ctx.context)
     protected val shapeIcon = MdiIconView(ctx.context)
     protected val shapePicture = ImageView(ctx.context).apply {
@@ -277,7 +279,7 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
 
     /** Mushroom's `.shape.disabled` (an off light, a closed cover): `--rgb-disabled`, its disc at 20%. */
     protected fun setShapeDisabled(iconName: String) {
-        val c = mushroomDisabledColor(ctx)
+        val c = mushroomDisabled
         shapeIcon.setIcon(config.icon ?: iconName, c)
         val radius = mushIconRadiusPx(ctx)
         shape.background = GradientDrawable().apply {
@@ -295,7 +297,7 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
     internal fun mushroomSlider(color: Int, onCommit: (Float) -> Unit): HaHorizontalSliderView =
         HaHorizontalSliderView(ctx, color, onCommit = onCommit).apply {
             mushroom = true
-            inactiveColor = mushroomDisabledColor(ctx)
+            inactiveColor = mushroomDisabled
         }
 
     /** A new horizontal control row in [controls]. */
@@ -683,7 +685,7 @@ class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
                 setValue(snap(min + frac * (max - min), min, max, stepSize))
             }
             s.mushroom = true
-            s.inactiveColor = mushroomDisabledColor(ctx)
+            s.inactiveColor = mushroomDisabled
             slider = s
             addCell(row, s)
         }
