@@ -365,6 +365,32 @@ export function milestones(s: WizardState, panelName: string): Milestone[] {
   return rows.filter(([, reached]) => reached).map(([text, , done]) => ({ text, done }));
 }
 
+/**
+ * Every step of the firing, the ones still to come too, in plain present-tense words: the install screen's list
+ * (components/Kit Progress). `done` and `reached` as milestones() has them.
+ */
+export function firingSteps(s: WizardState, panelName: string): { text: string; reached: boolean; done: boolean }[] {
+  const { overall, phase } = s.progress;
+  const at = ORDER.indexOf(phase);
+  const restarting = overall >= 0.98;
+  const rows: [string, boolean, boolean][] = s.flow === 'undo'
+    ? [
+        [`Find your ${panelName}`, overall > 0, overall >= 0.01],
+        ['Start the installer in its memory', overall >= 0.01, at >= 3],
+        ['Put your original software back and check it', at >= 3, restarting],
+        ['Restart the panel', restarting, false],
+      ]
+    : [
+        [`Find your ${panelName}`, overall > 0, overall >= 0.01],
+        ['Start the installer in its memory', overall >= 0.01, at >= 1],
+        ['Back up your original software and check the copy', at >= 1, at >= 2],
+        ['Prepare the new software', at >= 2, at >= 3],
+        ['Write the new software and check every write', at >= 3, restarting],
+        ['Restart the panel', restarting, false],
+      ];
+  return rows.map(([text, reached, done]) => ({ text, reached, done }));
+}
+
 /** "68% · ~3 min": the estimate once there is enough to go on. */
 export function eta(s: WizardState, now: number): string {
   const { overall, started } = s.progress;

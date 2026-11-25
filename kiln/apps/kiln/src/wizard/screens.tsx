@@ -17,9 +17,10 @@ import type { StandardFrame } from '../standard/frame';
 import type { StandardSession } from '../standard/session';
 import type { Session } from './session';
 import { HomeAssistant, Panes, Radio, RadioNext, Wifi } from '../setup/steps';
-import { eta, milestones, type Setup, type WizardState } from './state';
+import { eta, firingSteps, type Setup, type WizardState } from './state';
 import x from './screens.module.css';
 import { Foot } from '../components/Nav';
+import { BrowserAsk, Hands, Note, Progress, Wait, type ProgressRow } from '../components/Kit';
 
 type P = { s: WizardState; session: Session; frame: KilnFrame };
 /** The standard flow's screens (every frame's steps after its install): any frame's session, the frame as the flow reads it. */
@@ -35,12 +36,15 @@ export function Connect({ s, session, frame }: P) {
   const driver = useMemo(() => { const o = os(); return o === 'other' ? undefined : frame.drivers[o]; }, [frame]);
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h" className="huge">Enter recovery mode</h2>
+      <h2 id="h">Put the panel in recovery mode</h2>
       <p className="lede">{s.flow === 'undo'
         ? 'Put the panel into recovery mode so Kiln can restore your saved backup.'
         : `Nothing changes on ${frame.the} yet. Kiln backs up your original software first, before writing anything.`}</p>
       <Recovery data={frame.recovery} />
-      <p className="small">Next, click Connect and pick <code>{frame.felPick}</code> in the browser list (that&apos;s your panel in recovery mode).{s.flow === 'undo' ? '' : s.changed === 'unknown' ? ' Kiln can\'t tell whether an earlier attempt in this tab changed the panel.' : s.changed ? ' An earlier attempt already changed the panel.' : ''}</p>
+      {s.flow !== 'undo' && s.changed && <Note tone="info">{s.changed === 'unknown' ? 'Kiln can’t tell whether an earlier attempt in this tab changed the panel.' : 'An earlier attempt already changed the panel.'}</Note>}
+      <BrowserAsk listed={frame.felPick} short={frame.short} the={frame.the ?? `the ${frame.short}`}>
+        It shows a list of devices. Pick <code>{frame.felPick}</code>, which is your panel in recovery mode, then click Connect.
+      </BrowserAsk>
       {driver && <p className="small">{driver} <a className="link" href={frame.help.drivers} target="_blank" rel="noopener">Setup guide</a></p>}
       <LastRun />
       <BuiltOn credits={stepCredits(frame.id, frame.credits, s.flow === 'undo' ? ['boot'] : undefined)} />
@@ -115,28 +119,24 @@ function TechLog({ s }: { s: WizardState }) {
   );
 }
 
-/** 4 · Install: the firing. One line, the bar, a short plain log; the technical log one click away. */
+/** 4 · Install: the firing. Every step with its mark and its word, what the person does (nothing), the log on request. */
 export function Firing({ s, frame }: P) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  const steps = milestones(s, frame.short);
+  const steps = firingSteps(s, frame.short);
+  const at = steps.findIndex((m) => !m.done);
+  const rows: ProgressRow[] = steps.map((m, i) => ({ id: m.text, label: m.text, state: m.done ? 'done' : i === at ? 'now' : 'next' }));
+  const undo = s.flow === 'undo';
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h" className="huge">Keep it plugged in</h2>
-      <div style={{ display: 'grid', gap: 8 }}>
-        <div className="spread"><span>{s.progress.title}</span><span className="small">{eta(s, now)}</span></div>
-        <div className="bar" role="progressbar" aria-label={s.progress.title} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(s.progress.overall * 100)}>
-          <i style={{ width: `${Math.max(2, s.progress.overall * 100)}%` }} />
-        </div>
-      </div>
-      <ul className="plain">
-        {steps.map((m) => <li key={m.text}><span className={m.done ? 'ok' : 'go'}>{m.done ? '✓' : '→'}</span> {m.text}</li>)}
-      </ul>
+      <h2 id="h">{undo ? 'Putting your original software back' : 'Installing Glassworks'}</h2>
+      <Hands the={frame.the ?? `the ${frame.short}`} />
+      <Progress rows={rows} label={s.progress.title} aside={eta(s, now)} />
       {/* what keeps the person safe while it writes (issue 672): the backup comes first, and every write is read back */}
-      <p className="small">{s.flow === 'undo' ? 'Kiln reads every write back to check it.'
+      <Note tone={!undo && (s.progress.phase === 'boot' || s.progress.phase === 'backup') ? 'info' : 'ok'}>{undo ? 'Kiln reads every write back to check it.'
         : s.progress.phase === 'boot' || s.progress.phase === 'backup' ? `Kiln backs up the ${frame.short} before it writes anything.`
-        : 'Your backup is saved in this browser. Kiln reads every write back to check it.'}</p>
-      <BuiltOn credits={stepCredits(frame.id, frame.credits, s.flow === 'undo' ? ['boot'] : undefined)} />
+        : 'Your backup is saved in this browser. Kiln reads every write back to check it.'}</Note>
+      <BuiltOn credits={stepCredits(frame.id, frame.credits, undo ? ['boot'] : undefined)} />
       <TechLog s={s} />
     </section>
   );
@@ -192,17 +192,11 @@ function Installing({ frame, setup }: { frame: Pick<StandardFrame, 'app'>; setup
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{setup.apply ? 'Language and time' : setup.update ? `Updating ${frame.app}` : `Installing ${frame.app}`}</h2>
-      <p className="lede">Keep the panel plugged in while this finishes. It usually takes about a minute.</p>
-      <ol className="join">
-        {rows.map((r, i) => (
-          <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>
-            {r.text(frame.app)}{i === at && sub && <span className="sub-step">{sub}</span>}
-          </li>
-        ))}
-      </ol>
+      <Hands the="the panel">Keep the panel plugged in while this finishes. It usually takes about a minute.</Hands>
+      <Progress live={false} label={setup.apply ? 'Language and time' : `Installing ${frame.app}`}
+        rows={rows.map((r, i): ProgressRow => ({ id: r.id, label: r.text(frame.app), state: i < at ? 'done' : i === at ? 'now' : 'next', ...(i === at && sub ? { note: sub } : {}) }))} />
       {note && <p className="small" aria-hidden="true">{note}</p>}
       <p className="visually-hidden" role="status">{says}</p>
-      <div className="bar wait"><i /></div>
     </section>
   );
 }
@@ -276,8 +270,7 @@ export function Waiting({ setup }: { setup: Extract<Setup, { phase: 'waiting' }>
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{connecting ? 'Connecting to the panel' : 'Starting the panel'}</h2>
-      <p className="lede">{setup.note}</p>
-      <div className="bar wait"><i /></div>
+      <Wait what={setup.note} note="Nothing to do. Kiln goes on by itself when it’s ready." />
     </section>
   );
 }
@@ -397,9 +390,11 @@ export function Failure({ s, session, help }: { s: WizardState; session: Standar
   };
   return (
     <section className="card err" aria-labelledby="h" role="alert">
+      <span className="err-mark" aria-hidden="true">!</span>
       <h2 id="h">{f.title}</h2>
       {f.happened && f.fix ? <>
-        <p className="lede">{f.happened}</p>
+        {/* whether the device is safe, always first (docs/design/kiln/system.md, errors) */}
+        <Note tone={f.wrote ? 'info' : 'ok'} role="status">{f.happened}</Note>
         <div className={x.fix} role="group" aria-labelledby="fix-h">
           <b id="fix-h">How to fix it</b>
           <span>{f.fix}</span>

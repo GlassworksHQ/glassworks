@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import type { Network, RadioStep, Setup } from '../wizard/state';
 import type { SetupSteps, WifiSteps } from './channelSetup';
 import { Foot } from '../components/Nav';
+import { Note, Progress, rowsAt } from '../components/Kit';
 
 /** A step's props: a button's work is running (`busy`), what runs it, and the step's state. */
 export type StepProps<K extends Setup['phase']> = { busy: boolean; steps: SetupSteps; setup: Extract<Setup, { phase: K }> };
@@ -63,12 +64,12 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
     return (
       <section className="card" aria-labelledby="h">
         <h2 id="h">{j.step === 'ok' ? `Connected to ${j.ssid}` : j.step === 'err' ? `Couldn't join ${j.ssid}` : `Joining ${j.ssid}…`}</h2>
-        <ol className="join" aria-live="polite">
-          {[setup.over === 'lan' ? `Sent to ${the}` : `Sent to ${the} over USB`, `${capThe} joins the network`, 'Connected'].map((t, i) => (
-            <li key={t} className={j.step === 'ok' || i < at ? 'done' : i === at ? (j.step === 'err' ? 'fail' : 'cur') : ''}>{t}</li>
-          ))}
-        </ol>
-        {j.error && <p className="status err" role="alert">{j.error}</p>}
+        <Progress label={`Joining ${j.ssid}`} rows={rowsAt([
+          { id: 'sent', label: setup.over === 'lan' ? `Send it to ${the}` : `Send it to ${the} over USB` },
+          { id: 'join', label: `${capThe} joins the network`, note: 'This can take up to a minute.' },
+          { id: 'ok', label: 'Check it’s connected' },
+        ], j.step === 'ok' ? 3 : at, j.step === 'err' ? 'bad' : 'now')} />
+        {j.error && <Note tone="bad">{j.error}</Note>}
         {setup.joinNote && <p className="lede">{setup.joinNote}</p>}
         <Foot>
           {/* without touch the panel can't take Wi-Fi from its own screen: no skip to it */}

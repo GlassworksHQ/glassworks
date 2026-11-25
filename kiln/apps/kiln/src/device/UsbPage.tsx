@@ -6,7 +6,7 @@
 // of the frame's line) or ?apk=local (a file from this computer), or a demo, until its frame.json makes it installable
 // (usbOpen). The frame's words, brands and grants come from its data and its code (kiln-core UsbFrame).
 import { loadOrCreateAdbKey } from '@glassworks/adb';
-import { fmtSize, webUsbDevices, type SilentWords, type UsbApp, type UsbFrame, type UsbGrant, type UsbIdentified, type UsbInstalled, type UsbPhase, type UsbPlace, type UsbSilentUpdates, type UsbSim } from '@glassworks/kiln-core';
+import { cap, fmtSize, webUsbDevices, type SilentWords, type UsbApp, type UsbFrame, type UsbGrant, type UsbIdentified, type UsbInstalled, type UsbPhase, type UsbPlace, type UsbSilentUpdates, type UsbSim } from '@glassworks/kiln-core';
 import { KIND_TEXT, STAGE_TEXT, type FrameDesign } from '@glassworks/frame-card';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import * as RadioGroup from '@radix-ui/react-radio-group';
@@ -24,6 +24,7 @@ import { Browser } from '../wizard/screens';
 import type { Entry } from '../wizard/registry';
 import { Shell, useBrowserChip } from '../components/Shell';
 import { Foot } from '../components/Nav';
+import { Hands, Note, Problem, Progress, type ProgressRow } from '../components/Kit';
 import { SilentUpdates } from '../components/SilentUpdates';
 import { FRAMES, MEASURED, RENDERS } from '../frames/catalog';
 import { adbKeyHolder, webUsbAdb } from './DevicePage';
@@ -290,7 +291,9 @@ function Allow({ s, session }: { s: UsbState; session: UsbSession }) {
   const [help, setHelp] = useState(false);
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h" className="huge">{`Tap Allow on ${dev.the}`}</h2>
+      <span className="turn-label"><span className="pulse" />Your turn</span>
+      <h2 id="h">{`Tap Allow on ${dev.the}`}</h2>
+      <p className="lede">{`${cap(dev.the)} asks whether to trust this computer. Tick “Always allow from this computer”, then tap Allow.`}</p>
       <div className="tab" aria-hidden="true">
         <div className="scr">
           <div className="dlg">
@@ -324,13 +327,14 @@ function Allow({ s, session }: { s: UsbState; session: UsbSession }) {
 }
 
 type RowId = 'read' | 'apk' | 'grant' | 'start' | 'home' | 'handoff';
-const ROWS: { id: RowId; doing: string; done: string }[] = [
-  { id: 'read', doing: 'Reading device info', done: '' },
-  { id: 'apk', doing: 'Installing Glassworks', done: 'Glassworks installed' },
-  { id: 'grant', doing: 'Granting permissions', done: 'Permissions granted' },
-  { id: 'start', doing: 'Starting Glassworks', done: 'Glassworks started' },
-  { id: 'home', doing: 'Setting as home screen', done: 'Set as home screen' },
-  { id: 'handoff', doing: 'Preparing setup', done: 'Ready for setup' },
+/** Each row: as a step still to come (`step`), while it runs (`doing`), and once done (`done`). */
+const ROWS: { id: RowId; step: string; doing: string; done: string }[] = [
+  { id: 'read', step: 'Read the device', doing: 'Reading device info', done: '' },
+  { id: 'apk', step: 'Install Glassworks', doing: 'Installing Glassworks', done: 'Glassworks installed' },
+  { id: 'grant', step: 'Give it its permissions', doing: 'Granting permissions', done: 'Permissions granted' },
+  { id: 'start', step: 'Start Glassworks', doing: 'Starting Glassworks', done: 'Glassworks started' },
+  { id: 'home', step: 'Make it the home screen', doing: 'Setting as home screen', done: 'Set as home screen' },
+  { id: 'handoff', step: 'Get set-up ready', doing: 'Preparing setup', done: 'Ready for setup' },
 ];
 const rowOf = (p: UsbPhase): RowId => (p.step === 'updates' || p.step === 'granted' ? 'grant' : p.step);
 
@@ -379,8 +383,9 @@ function Working({ s }: { s: UsbState }) {
   if (s.flow === 'undo') {
     return (
       <section className="card" aria-labelledby="h">
-        <h2 id="h" className="huge">Keep it plugged in</h2>
+        <h2 id="h">Removing Glassworks</h2>
         <p className="lede">Kiln removes Glassworks&apos; screen-lock permission and uninstalls the app.</p>
+        <Hands the={dev.the} />
         <div className="bar wait"><i /></div>
         <p className="small">{`Nothing else on ${dev.the} changes.`}</p>
         <Log s={s} />
@@ -396,18 +401,17 @@ function Working({ s }: { s: UsbState }) {
   return (
     <section className={`card${pick ? ' turn' : ''}`} aria-labelledby="h">
       {pick ? <>
-        <h2 id="h" className="huge">{`One tap on ${dev.the}`}</h2>
+        <span className="turn-label"><span className="pulse" />Your turn</span>
+        <h2 id="h">{`One tap on ${dev.the}`}</h2>
         <p className="lede">Android asks which app to use as the home screen. Pick <b className="fg">{pick}</b>, then <b className="fg">Always</b>.</p>
       </> : <>
-        <h2 id="h" className="huge">Keep it plugged in</h2>
-        <div className="prog">
-          <div className="spread"><span>{doing}</span><span className="small">{at + 1} of {ROWS.length}</span></div>
-          <div className="bar"><i style={{ width: `${((at + 0.5) / ROWS.length) * 100}%` }} /></div>
-        </div>
-        <ol className="plain" aria-label="Done so far">
-          {ROWS.slice(0, at).map((r) => <li key={r.id}><span className="ok">✓</span> {done(r)}</li>)}
-          <li><span className="go">→</span> {doing}</li>
-        </ol>
+        <h2 id="h">Installing Glassworks</h2>
+        <Hands the={dev.the} />
+        <Progress label="Installing Glassworks" rows={ROWS.map((r, i): ProgressRow => ({
+          id: r.id,
+          label: i < at ? done(r) || r.step : i === at ? doing : r.step,
+          state: i < at ? 'done' : i === at ? 'now' : 'next',
+        }))} />
       </>}
       {grants && <GrantList grants={grants} updates={s.granted?.silentUpdates} />}
       {grants && <Refusals grants={grants} updates={s.granted?.silentUpdates} />}
@@ -500,12 +504,12 @@ function Stopped({ s, session }: { s: UsbState; session: UsbSession }) {
   const blocked = s.flow === 'install' ? session.blocked() : undefined;
   const untouched = /Nothing was changed\.$/.test(s.error ?? '');
   return (
-    <section className="card err" aria-labelledby="h">
-      <h2 id="h">{s.flow === 'undo' ? 'Undo didn\'t finish' : untouched ? `Kiln can't install on this ${dev.short}` : 'The install didn\'t finish'}</h2>
-      {!untouched && <p className="lede">Check the cable and device, then click Try again. Details are below if you need them.</p>}
-      <pre className="raw">{s.error}</pre>
+    <Problem title={s.flow === 'undo' ? 'Undo didn\'t finish' : untouched ? `Kiln can't install on this ${dev.short}` : 'The install stopped'}
+      fix={untouched ? undefined : 'Check the cable and the device, then click Try again.'}
+      details={<><pre className="raw">{s.error}</pre><pre className="rawlog">{[...s.log].reverse().join('\n') || 'Nothing yet.'}</pre></>}>
+      {untouched && <p className="lede">{s.error}</p>}
       {repick && <ApkField s={s} session={session} />}
-      {repick && blocked && s.apk && <p className="status err" role="alert">{blocked}</p>}
+      {repick && blocked && s.apk && <Note tone="bad">{blocked}</Note>}
       <Foot back={null}>
         <span className="links">
           {s.flow === 'install' && <ReportButton prefill={usbPrefill(dev, s, 'stopped')}>Tell us what happened</ReportButton>}
@@ -513,8 +517,7 @@ function Stopped({ s, session }: { s: UsbState; session: UsbSession }) {
         </span>
         <button type="button" className="btn ember" disabled={!!blocked} onClick={() => void session.connect()}>Try again</button>
       </Foot>
-      <Log s={s} />
-    </section>
+    </Problem>
   );
 }
 
