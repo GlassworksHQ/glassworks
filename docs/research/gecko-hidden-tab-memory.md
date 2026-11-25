@@ -1,14 +1,15 @@
 ---
 topic: perf
-evidence: read
+evidence: verified
 ---
 
 # GeckoView's page process behind another app: why it grew to 1.4 GB, and what the kiosk does about it
 
-**Status (2026-11-24): partly working.** One kiosk defect is found and fixed: a page reopened while the kiosk is
-behind another app stayed "shown" for as long as the kiosk stayed there. The growth itself is not explained. The S1's
-own log shows a page growing to 1.27 GB while it was correctly hidden, so the fix is not the whole answer. Telling the
-causes apart needs the panel plan below (#829).
+**Status (2026-11-24): partly working.** One kiosk defect is found, fixed and verified on the S1: a page reopened
+while the kiosk is stopped (behind another app, or with the screen off) stayed "shown" for as long as the kiosk stayed
+stopped. With the fix it is hidden within 3 s (attempt 7). The growth itself is not explained. The S1's own log shows
+a page growing to 1.27 GB while it was correctly hidden, so the fix is not the whole answer. Telling the causes apart
+needs parts A–C and F of the panel plan below (#829).
 
 Device: Aqara S1 Plus, the S1 app 0.9.0 (900), GeckoView 159, Android 10. Read from: GeckoView 159 and 144 AARs
 (`javap`), Home Assistant frontend `src/layouts/home-assistant.ts` and `src/state/connection-mixin.ts` (dev branch,
@@ -95,12 +96,35 @@ flick between apps.
    behind with visits every few minutes, and restarted in the background. The emulator never finished booting: the
    build machine was at a load average of 60, then 700–960, from other work. It was stopped rather than add load.
 
+7. **Parts D and E on the S1** (2026-11-24 21:54–22:11 local, verified)
+   The S1 has no Settings app (`cmd package resolve-activity -a android.settings.SETTINGS`: "No activity found"), so
+   the first try at D woke the screen, `am start` did nothing, and the page was killed with the kiosk in front (it went
+   IDLE when the screen slept again, as it should). The S1's background state is the screen off: the kiosk is stopped
+   and nothing is resumed. D2 and E ran there. `adb shell` is uid 2000 on this panel; the kill is Magisk's
+   `su -c 'kill -9 <pid>'`, which is no force-stop.
+   ```
+   D2, 0.9.0 release (sha256 41e416d3…), screen asleep, nothing resumed
+   21:59:42.536  E Glassworks: Content process killed; restarting session
+   21:59:42.674  tab16 updateBindings: FOREGROUND priority, 2 importance, 23654 pid     (the new page, in Gecko's spare process)
+   22:02:42      still FOREGROUND; the page has loaded the dashboard: 186,738K PSS
+   E, test build of this change (0.9.0 · 55876de, sha256 fe73c094…), same state
+   22:05:23.226  E Glassworks: Content process killed; restarting session
+   22:05:23.336  tab3 updateBindings: FOREGROUND priority, 2 importance, 5625 pid       (the new page)
+   22:05:26.342  tab3 updateBindings: IDLE priority, 6 importance, 5625 pid            (3 s later)
+   22:08:22      still IDLE; the page has loaded the dashboard: 202,608K PSS
+   ```
+   `dumpsys activity processes | grep 'Process LRU list'` (the #248 detector) read non-svc at 4–8 of 24–25 throughout;
+   the two page kills didn't move it, and each install's two force-stops (`installPackageLI`, `pkg removed`) didn't
+   walk it down either. Restored to the 0.9.0 release: same hash and radio mode as before, screen asleep, dashboard
+   loaded again.
+
 ## Result
 
 | Claim | Evidence | How sure |
 |---|---|---|
 | GeckoView hides the page when the kiosk goes behind another app | `GeckoView$Display.onSurfaceDestroyed`; the S1's FOREGROUND → IDLE ~3 s after each `onPause` | read, and seen in the S1's log |
-| A page reopened while the kiosk is in the background stays shown until the kiosk returns | `acquire` without a surface; tab18 FOREGROUND for 80 min behind the other app | read, and seen in the S1's log |
+| A page reopened while the kiosk is in the background stays shown until the kiosk returns | `acquire` without a surface; tab18 FOREGROUND for 80 min behind the other app; part D2 | verified on the S1 (0.9.0) |
+| With this change it is hidden at once | part E: IDLE 3 s after the restart, and stays IDLE | verified on the S1 (test build) |
 | The page grows while correctly hidden | tab33 IDLE for 74 min with no visit, then 1.27 GB freed | seen in the S1's log; when in those 74 min it grew is unknown |
 | Brief visits every few minutes stop Home Assistant from closing its connection | `_onVisible` clears the 5-min timer | read |
 | The kiosk's own script and pushes don't hold memory | `content.js`, `MainActivity.stateJson` | read |
@@ -126,10 +150,10 @@ nothing else drives the panel. The kiosk stays on its own dashboard throughout: 
 | Part | Build | What | Answers |
 |---|---|---|---|
 | A | 0.9.0 | Kiosk in front, screen held on (`am start -n sh.edm.s1kiosk/.MainActivity --ez test_hold true --ei test_hold_s 1800`), `ADB="$ADB" tools/perf/debug/tab-memory.sh a.txt 30` | Does the page grow in normal use? |
-| B | 0.9.0 | `$ADB shell am start -a android.settings.SETTINGS`, then `tab-memory.sh b.txt 30` | Does a hidden page grow once Home Assistant has closed its connection (after 5 min)? |
-| C | 0.9.0 | As B, with visits: `tab-memory.sh c.txt 30 4` | The 2026-11-24 condition: does growth need the open connection? |
-| D | 0.9.0 | As B, then kill the page: find its pid (the biggest `sandboxed_tab` in `$ADB shell dumpsys meminfo`) and `$ADB shell kill <pid>` (the dev panel has adb root). Then `$ADB logcat -d -s ServiceAllocator Glassworks` and `tab-memory.sh d.txt 20` | The reopened page's priority: FOREGROUND until a visit (0.9.0) |
-| E | test build | D again | IDLE within a few seconds of the restart (this fix) |
+| B | 0.9.0 | Let the screen sleep (the S1 has no Settings app to put in front; with the screen off the kiosk is stopped), then `tab-memory.sh b.txt 30` | Does a hidden page grow once Home Assistant has closed its connection (after 5 min)? |
+| C | 0.9.0 | As B, with visits: `tab-memory.sh c.txt 30 4` (on the S1, set `BEHIND` to another app's `am start` arguments, as Settings isn't there) | The 2026-11-24 condition: does growth need the open connection? |
+| D | 0.9.0 | As B, then kill the page: find its pid (the biggest `sandboxed_tab` in `$ADB shell dumpsys meminfo`) and `$ADB shell "su -c 'kill -9 <pid>'"`. Then `$ADB logcat -d -s ServiceAllocator Glassworks` | The reopened page's priority: FOREGROUND until a visit (0.9.0). **Done, attempt 7** |
+| E | test build | D again | IDLE within a few seconds of the restart (this fix). **Done, attempt 7** |
 | F | 0.9.0 | If A or B grows: turn on remote debugging (`am start -n sh.edm.s1kiosk/.MainActivity --ez remote_debug true`, which restarts the app), connect desktop Firefox's `about:debugging` over USB, and save a heap snapshot in the Memory tool at minute 5 and minute 20 of a growing part | Which objects grow: DOM from the card's 20 s rebuild, Home Assistant's state, or Gecko itself |
 
 The test build: push the PR's head to `test-build/s1-tab-memory` with the workflow's `version` input `0.9.0`, so its
