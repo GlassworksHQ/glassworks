@@ -31,6 +31,8 @@ describe('Try again after a failed write', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText(/An earlier attempt already changed the panel\./)).toBeTruthy(); // not "Nothing is written yet."
     expect(screen.queryByText(/Nothing is written yet/)).toBeNull();
+    // the way back is right there too, not only after another failed Connect
+    expect(screen.getByRole('button', { name: 'Undo with your backup' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 
     expect(await screen.findByRole('heading', { name: 'No panel in recovery mode' })).toBeTruthy();

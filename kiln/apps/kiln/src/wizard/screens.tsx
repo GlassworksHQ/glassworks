@@ -58,6 +58,8 @@ export function Connect({ s, session, frame }: P) {
             </Dialog.Portal>
           </Dialog.Root>
           {s.flow === 'undo' && <><span aria-hidden="true">·</span><button type="button" className="link" disabled={!!s.busy} onClick={() => void session.click('undo', () => session.openUndo())}>Back</button></>}
+          {/* an earlier attempt changed the panel (a reload mid-write): going back is as near as installing again */}
+          {s.flow === 'install' && s.changed && s.changed !== 'unknown' && <><span aria-hidden="true">·</span><button type="button" className="link" disabled={!!s.busy} onClick={() => void session.click('undo', () => session.openUndo())}>Undo with your backup</button></>}
         </span>
         <button type="button" className="btn ember" disabled={!!s.busy} onClick={() => void session.click('connect', () => session.connectFel())}>Connect</button>
       </div>
@@ -374,6 +376,8 @@ export function Undo({ s, session, frame }: P) {
       <input ref={file} type="file" accept=".zip" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.undoFromFile(f); }} />
       <div className="foot">
         <span className="links">
+          <Link className="link" href="/">Back</Link>
+          <span aria-hidden="true">·</span>
           {u.source !== 'browser' && <><span>{u.file ?? 'No backup saved in this browser — choose a backup .zip file to continue.'}</span><span aria-hidden="true">·</span></>}
           {u.source === 'file' && u.inBrowser && <><button type="button" className="link" disabled={u.checking || u.locked || !!s.busy} onClick={() => void session.undoFromBrowser()}>Use saved backup</button><span aria-hidden="true">·</span></>}
           <button type="button" className="link" disabled={u.checking || u.locked || !!s.busy} onClick={() => file.current?.click()}>{u.source === 'file' ? 'Choose a different file' : 'Use a backup file'}</button>
