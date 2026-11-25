@@ -425,8 +425,10 @@ class CardModAndOverlayTest {
         store: EntityStore,
         dashboard: String,
         resources: List<dev.glassworks.engine.vitro.model.LovelaceResource> = emptyList(),
+        holdMs: Long = 0,
     ): VitroView {
         val vv = VitroView(activity, store, 0xFF000000.toInt())
+        vv.holdFirstBuildForStatesMs = holdMs
         vv.resourcesList = resources
         vv.contextFactory = { theme ->
             VitroCardContext(
@@ -691,9 +693,8 @@ class CardModAndOverlayTest {
         // The view opens before its entities' states arrive: the build guesses (controls assumed). When the states
         // land, the view is built again from them, as HA re-renders on a hass update.
         val store = EntityStore()
-        val vv = vitroView(store, """{"views": [{"title": "Home", "type": "sections", "sections": [{"type": "grid", "cards": [
-            {"type": "custom:mushroom-light-card", "entity": "light.switch_only", "show_brightness_control": true},
-            {"type": "custom:mushroom-light-card", "entity": "light.dimmer", "show_brightness_control": true}]}]}]}""")
+        // The engine's wait for the first states is off here: the build guesses at once (as after the wait runs out).
+        val vv = vitroView(store, MUSHROOM_LIGHTS)
         activity.setContentView(vv)
         fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
         fun mushrooms() = all(vv).count { it is dev.glassworks.engine.vitro.cards.MushroomLightCardView && it.isShown }
@@ -708,5 +709,55 @@ class CardModAndOverlayTest {
             as dev.glassworks.engine.vitro.ui.HaGridLayout.LayoutParams)
         val oneRow = lp.fixedHeight!!
         assertTrue("two rows: $oneRow", oneRow > (100 * activity.resources.displayMetrics.density).toInt())
+    }
+
+    @Test
+    fun aViewWaitsForItsFirstStatesAndIsBuiltOnce() {
+        // With the engine's wait: nothing is built until the view's states land, then once, from them.
+        val store = EntityStore()
+        val builds = ArrayList<Boolean>()
+        val vv = VitroView(activity, store, 0xFF000000.toInt())
+        vv.holdFirstBuildForStatesMs = 1_000
+        vv.onMetrics = { m -> builds += m.cacheHit }
+        vv.contextFactory = { theme ->
+            VitroCardContext(
+                context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = emptyList(),
+                accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+                fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            )
+        }
+        vv.setDashboard(LovelaceParser.parseDashboard(JSONObject(MUSHROOM_LIGHTS)), null)
+        activity.setContentView(vv)
+        ShadowLooper.idleMainLooper()
+        assertTrue("nothing built before the states", builds.isEmpty())
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("light.switch_only", "on", mapOf("supported_color_modes" to listOf("onoff"))))
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("light.dimmer", "on", mapOf("supported_color_modes" to listOf("brightness"))))
+        ShadowLooper.idleMainLooper()
+        ShadowLooper.idleMainLooper(2, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals("built once, not built again", listOf(false), builds)
+        fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+        assertEquals(1, all(vv).count { it is dev.glassworks.engine.vitro.cards.MushroomLightCardView && it.isShown })
+    }
+
+    @Test
+    fun aViewWhoseStatesDontComeIsBuiltAfterTheWait() {
+        val store = EntityStore()
+        val vv = vitroView(store, MUSHROOM_LIGHTS, holdMs = 1_000)
+        activity.setContentView(vv)
+        fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+        ShadowLooper.idleMainLooper()
+        assertEquals(0, all(vv).count { it is dev.glassworks.engine.vitro.cards.MushroomLightCardView })
+        ShadowLooper.idleMainLooper(1_100, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals("built after the wait, guessing", 2, all(vv).count { it is dev.glassworks.engine.vitro.cards.MushroomLightCardView && it.isShown })
+        // The states land late: the guessed cards are built again from them.
+        store.putLocal(dev.glassworks.engine.vitro.data.EntityState("light.switch_only", "on", mapOf("supported_color_modes" to listOf("onoff"))))
+        ShadowLooper.idleMainLooper()
+        assertEquals(1, all(vv).count { it is dev.glassworks.engine.vitro.cards.MushroomLightCardView && it.isShown })
+    }
+
+    private companion object {
+        const val MUSHROOM_LIGHTS = """{"views": [{"title": "Home", "type": "sections", "sections": [{"type": "grid", "cards": [
+            {"type": "custom:mushroom-light-card", "entity": "light.switch_only", "show_brightness_control": true},
+            {"type": "custom:mushroom-light-card", "entity": "light.dimmer", "show_brightness_control": true}]}]}]}"""
     }
 }

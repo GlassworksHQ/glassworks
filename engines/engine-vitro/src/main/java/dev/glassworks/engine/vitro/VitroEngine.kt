@@ -235,7 +235,14 @@ class VitroEngine(
         init {
             activity.application.registerActivityLifecycleCallbacks(lifecycle)
             container.addView(vitroView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-            vitroView.onMetrics = { m -> lastMetrics = m }
+            vitroView.onMetrics = { m ->
+                lastMetrics = m
+                // The view waited for its states: it's on screen now.
+                readyOnBuild?.let { why -> readyOnBuild = null; signalReady(why) }
+            }
+            // A view's first build waits (up to a second) for its states, as HA's frontend does: no wrong layout first,
+            // and no second build once they land.
+            vitroView.holdFirstBuildForStatesMs = FIRST_STATES_WAIT_MS
             vitroView.onViewSelected = { v ->
                 // An empty filter subscribes to every entity, which auto-entities' runtime filters need.
                 selectedFollowsAll = CardRouter.followsAllEntities(v)
@@ -353,7 +360,7 @@ class VitroEngine(
                 currentDashboardPath = dashPath
                 client?.claimDashboard(dashPath)
                 vitroView.navigateToView(viewPath)
-                signalReady("view")
+                readyWhenBuilt("view")
                 return
             }
 
@@ -551,6 +558,19 @@ class VitroEngine(
             return islandServer.entryUrl(if (rest.startsWith("/")) rest else "/$rest")
         }
 
+        /** Why the page signals ready once the current view is built (it waits for its first states), or null. */
+        private var readyOnBuild: String? = null
+
+        /** Ready now if the view on screen is built, else when it is ([VitroView.holdFirstBuildForStatesMs]). */
+        private fun readyWhenBuilt(why: String) {
+            if (vitroView.currentViewBuilt) {
+                readyOnBuild = null
+                signalReady(why)
+            } else {
+                readyOnBuild = why
+            }
+        }
+
         private fun signalReady(why: String) {
             if (!firstPaintReported) {
                 firstPaintReported = true
@@ -630,7 +650,7 @@ class VitroEngine(
                     vitroView.setConnectionBanner(null)
                     vitroView.setDashboard(config, pendingViewPath)
                     client?.dashboardShown()
-                    signalReady("vitro")
+                    readyWhenBuilt("vitro")
                 }
             }
 
@@ -665,6 +685,9 @@ class VitroEngine(
 
     companion object {
         const val VERSION_NAME = "Vitro 0.0.1 (experimental)"
+
+        /** How long a view's first build waits for its first states. */
+        private const val FIRST_STATES_WAIT_MS = 1_000L
 
         /** Entities islands may add to a view's subscription at runtime, and how long their lookups are batched. */
         private const val MAX_RUNTIME_ENTITIES = 256

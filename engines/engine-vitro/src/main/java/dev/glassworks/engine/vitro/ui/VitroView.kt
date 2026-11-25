@@ -368,6 +368,9 @@ class VitroView(
      * rebuilt with the new server's resources before the new dashboard arrives.
      */
     fun resetForServer() {
+        holding?.second?.invoke()
+        holding = null
+        waited.clear()
         stateRebuilds.values.forEach { it() }
         stateRebuilds.clear()
         closeMoreInfo()
@@ -413,6 +416,9 @@ class VitroView(
     }
 
     fun setDashboard(config: DashboardConfig, initialViewPath: String?) {
+        holding?.second?.invoke()
+        holding = null
+        waited.clear()
         stateRebuilds.values.forEach { it() }
         stateRebuilds.clear()
         dashboard = config
@@ -531,6 +537,61 @@ class VitroView(
         return store[id] ?: run { guessedStates += id; null }
     }
 
+    /**
+     * How long a view's first build waits for its first states (0: it doesn't). The engine sets it: the view's
+     * entities are subscribed as it opens, and their states usually land within a round trip. Past the wait it builds
+     * anyway, and a card that guessed without state is built again when it lands ([rebuildWhenStatesLand]).
+     */
+    var holdFirstBuildForStatesMs: Long = 0
+
+    /** The view whose first build waits for its states, and what ends the wait (its listener and timer). */
+    private var holding: Pair<Int, () -> Unit>? = null
+
+    /**
+     * The main thread's handler: a view's own post() waits until it's attached to a window, which a page built
+     * before it's shown (or in a test) may not be yet.
+     */
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** True when the view on screen has been built (not waiting for its first states). */
+    val currentViewBuilt: Boolean get() = viewCache[currentViewIndex] != null
+
+    /** Views of this dashboard that have waited once: past the wait (states or not), they build. */
+    private val waited = HashSet<Int>()
+
+    /**
+     * True when the first build of view [index] waits: none of its entities has a state yet. It's built when the
+     * first of them lands, or after [holdFirstBuildForStatesMs].
+     */
+    private fun holdForStates(index: Int, viewCfg: ViewConfig): Boolean {
+        if (holdFirstBuildForStatesMs <= 0 || index in waited) return false
+        holding?.let { (i, _) -> if (i == index) return true }
+        holding?.second?.invoke()
+        holding = null
+        val refs = CardRouter.referencedEntities(viewCfg)
+        if (refs.isEmpty() || refs.any { store[it] != null }) return false
+        val config = dashboard
+        var unsub: (() -> Unit)? = null
+        lateinit var timeout: Runnable
+        fun release() {
+            val h = holding ?: return
+            if (h.first != index) return
+            holding = null
+            h.second()
+            waited += index
+            if (dashboard === config && currentViewIndex == index && viewCache[index] == null) {
+                renderView(index, forceRebuild = false, pushHistory = false)
+            }
+        }
+        timeout = Runnable { release() }
+        unsub = store.subscribeAny { changed -> if (changed.any { it in refs }) mainHandler.post { release() } }
+        holding = index to { unsub?.invoke(); mainHandler.removeCallbacks(timeout) }
+        mainHandler.postDelayed(timeout, holdFirstBuildForStatesMs)
+        // States that landed between the check above and the listener (the store is written on another thread).
+        if (refs.any { store[it] != null }) mainHandler.post { release() }
+        return true
+    }
+
     /** Per view index: the listener waiting for the states its build guessed at. */
     private val stateRebuilds = HashMap<Int, () -> Unit>()
 
@@ -546,7 +607,7 @@ class VitroView(
         var unsub: (() -> Unit)? = null
         unsub = store.subscribeAny { changed ->
             if (changed.none { it in ids }) return@subscribeAny
-            post {
+            mainHandler.post {
                 val mine = unsub ?: return@post
                 if (stateRebuilds[index] !== mine) return@post
                 stateRebuilds.remove(index)
@@ -583,6 +644,8 @@ class VitroView(
         onViewSelected?.invoke(viewCfg)
 
         val cached = if (!forceRebuild) viewCache[index] else null
+        // A first build waits for the view's states, as HA's frontend renders a view's cards once hass has them.
+        if (cached == null && holdForStates(index, viewCfg)) return
         val viewRoot = if (cached != null) {
             cached
         } else {
