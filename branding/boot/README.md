@@ -42,6 +42,7 @@ The output, in `<dir>`:
 |---|---|
 | `bootanimation.zip` | Android's boot animation: the screen's size, 30 fps, every entry STORED |
 | `splash-landscape.png` | Frame 0, which is also the splash |
+| `bootanimation-compact.zip` | Only with a `compactBudget` (below): a small boot animation that replaces a stock one in place |
 | `bootlogo.bmp` | Only with a `splash` format (below). The build adds its SHA-256 to [`branding/bootlogos.json`](../bootlogos.json), so undo knows it as ours (#106): commit the list with the BMP |
 | `preview.webp` | For docs: half size, at most 720 px on the longest side |
 | `outputs.json` | What the build used and wrote: the target, and the SHA-256 of the generator, the font and each file above |
@@ -62,6 +63,20 @@ The defaults play on any Android from 6.0 on (read from source, not tried on a d
 | `splash` | none | `allwinner-boot-resource`: the Allwinner bootloader's `BOOTLOGO.BMP`, the landscape picture rotated 90° clockwise, 24-bit, swapped into the stock file's place. Needs a height that is a multiple of 4 |
 | `zipBudget` | no limit | The build fails when the zip is bigger, e.g. when it rides in a boot image |
 | `rotate` | none | `90` or `270`: the boot animation plays in the panel's own framebuffer, not in the turned screen Android's UI uses. `display` stays the screen as people see it; each frame is drawn upright, then turned this many degrees counter-clockwise, and `desc.txt` gets the panel's size. The preview and `splash-landscape.png` stay upright. The Mirror needs it (below) |
+| `compactBudget` | none | Also build `bootanimation-compact.zip` within this many bytes: the size of the stock `bootanimation.zip` an install writes over in place. See [The compact animation](#the-compact-animation) |
+
+## The compact animation
+
+A frame whose install keeps the stock system writes our boot animation over the stock file in its own
+blocks, so it can't be larger. `compact.py` builds one that fits in about 20 KB: the stack and the
+wordmark at rest, cropped to a 300x400 box in the middle of the screen at the screen's own pixels, in
+four glow levels of the top plate. `desc.txt` plays them at 10 fps as a slow breath, 40 times
+(about 2.5 minutes), then holds full glow until Android has booted. One palette serves all four frames,
+with the background color in it exactly, so the edges of the box disappear into the cleared screen.
+
+It is drawn upright, not turned with `rotate`, because the stock player turns the picture itself. The
+build fails if it's over budget, if an entry isn't STORED, or if a frame's corners aren't the
+background color.
 
 ## Layout
 
@@ -111,6 +126,8 @@ each new frame's first boot.
   build without a splash removes an earlier build's `bootlogo.bmp` from the output.
 - Every zip entry is STORED, the CRCs check out, `desc.txt` is as built, and the zip is within `zipBudget`.
 - The splash BMP: its size, its header, and that it rotates back to `splash-landscape.png`.
+- The compact zip: within `compactBudget`, every entry STORED, `desc.txt` as built, each frame 300x400
+  with background-color corners.
 
 Inter (SIL OFL 1.1) is fetched from a pinned google/fonts commit, each file checked by SHA-256, and
 the build refuses it unless the licence file is the OFL. pyoxipng is required: every PNG goes through

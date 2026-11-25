@@ -8,6 +8,7 @@ Android 6, no splash). Kiln's Mirror recipe writes it into the Glass Panes syste
 | File | What |
 |---|---|
 | `bootanimation.zip` | 1920x1080 @ 30 fps (the panel's own framebuffer; the portrait art turned 90° counter-clockwise, `boot.rotate`), STORED, full frames (Android 6 doesn't read `trim.txt`), 11.44 MB |
+| `bootanimation-compact.zip` | The boot animation for Glassworks on stock firmware (stock-in-place): 300x400 @ 10 fps, upright, STORED, four frames, within the 22,901 bytes of stock's own `bootanimation.zip` ([below](#on-stock-firmware)) |
 | `splash-landscape.png`, `preview.webp` | Previews only. The Mirror has no splash Kiln can change |
 | `outputs.json` | What the build used and wrote. A test and CI check the files against it |
 | `bootanimation-still.png`, `still.json` | The animation's last frame, cropped to a box centered on the screen, turned back upright for stock's own display (`--turn-back 90`) and quantized (13 KB), by [`branding/boot/still.py`](../boot/still.py) from `bootanimation.zip`. Kiln's in-place install wraps it in a one-frame animation the size of stock's own (22,901 bytes) and writes it over stock's in its blocks ([stock-inplace-parity.md](../../frames/lululemon-mirror/research/stock-inplace-parity.md)). Rebuild it whenever `bootanimation.zip` changes; `still.json` records the source's SHA-256 and a test checks it |
@@ -31,6 +32,23 @@ ROTATION_270 means the graphics are drawn turned 270° clockwise.
 **Verified on the unit** (2026-11-16, the root's run; the maintainer's photo): the turned animation
 runs upright on the portrait glass. If a later unit shows it upside down, its glass is mounted the
 other way: set `rotate` to 270 and rebuild.
+
+## On stock firmware
+
+Glassworks can also install on the Mirror's stock firmware without replacing the system image. That
+install writes the boot animation over stock's `/system/media/bootanimation.zip` in the blocks the
+file already has, so ours can't be any larger. On stock 1.24.0 that file is 22,901 bytes:
+`desc.txt` reads `1080 1920 10`, and its one frame is the lululemon Studio logo, upright on a
+1080x1920 portrait canvas (read from the stock system image, 2026-11-24). Stock also sets
+`persist.panel.orientation=270`, which its boot animation player reads, so the player turns the
+picture itself.
+
+`bootanimation-compact.zip` is built for that player: upright like stock's own, the Glassworks stack
+and wordmark in a 300x400 box centered on the screen, breathing through four glow levels, then
+holding full glow until Android has booted. It's about 19 KB. The generator builds it because the
+Mirror's `frame.json` sets `"compactBudget": 22901`. The stock install doesn't write it yet: when it
+does, `padZipToExactLength` in the installer's `stock.ts` pads it to stock's exact size with an
+empty zip comment, which every zip reader skips.
 
 ## Not changeable: the boot logo
 
