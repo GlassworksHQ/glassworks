@@ -347,18 +347,19 @@ def camera_run(line, tier):
     whole = len(played) == len(streams) and len(streams) >= (line.get("expected") or 0)
     path = line.get("path") or "hls"
     # Vitro (VitroClarity): the kind each camera showed at the window's end (web_rtc, hls or mjpeg; null: nothing). The
-    # web harness's lines don't say: its streams are the view's path's by definition. A camera that showed another kind
-    # fell back (an MJPEG fallback): its stream on the view's path is missing or stopped, and the report says so. So did
-    # one whose other kind showed a picture in the window but stopped before its end (transport null): `others` keeps it.
+    # web harness's lines don't say: its streams are the view's path's by definition. A camera fell back when another
+    # kind was what it showed while the view's path wasn't: the kind showing at the window's end, or, for a camera that
+    # never played on its path, any other kind that showed a picture (an MJPEG fallback that stopped before the end).
+    # Not the hidden player HA's side-by-side start runs beside it (HLS until WebRTC has video): once the path played,
+    # that one was replaced, not fallen back to. One entry per camera (`fallbacks`, beside `transports`).
     shown_on = [s.get("transport") for s in streams] if any("transport" in s for s in streams) else None
-    other_kinds = {o.get("path") for s in streams for o in s.get("others") or [] if o.get("first_frame_ms") is not None} \
-        if shown_on is not None else set()
-    fell_back = sorted({t for t in (shown_on or []) + list(other_kinds) if t and t != path})
+    fallbacks = [camera_fallback(s, path) for s in streams] if shown_on is not None else None
+    fell_back = sorted({k for k in fallbacks or [] if k})
     return {
         # The path the frontend played the graded streams on: web_rtc since protocol 6, hls before
         # (protocol 5's lines don't say; HLS was the only path then).
         "path": path,
-        **({"transports": shown_on} if shown_on is not None else {}),
+        **({"transports": shown_on, "fallbacks": fallbacks} if shown_on is not None else {}),
         **({"fell_back": fell_back} if fell_back else {}),
         "first_frame_ms": max(s["first_frame_ms"] for s in played) if whole and played else None,
         "shown_pct": min(s["shown_pct"] for s in played) if whole and played else None,
@@ -379,6 +380,19 @@ def camera_run(line, tier):
         # decoders the view got (reference_run adds `media`, from logcat).
         "fetches": line.get("fetches"),
     }
+
+
+def camera_fallback(stream, path):
+    """The kind a Vitro camera fell back to (camera_run's `fallbacks`), or None: the kind it showed at the window's end
+    when that isn't its view's path; else, when it never played on its path, the other kind that showed a picture."""
+    showing = stream.get("transport")
+    if showing and showing != path:
+        return showing
+    if stream.get("first_frame_ms") is None:
+        other = sorted(o["path"] for o in stream.get("others") or []
+                       if o.get("path") and o["path"] != path and o.get("first_frame_ms") is not None)
+        return " and ".join(other) or None
+    return None
 
 
 def camera_fallback_runs(c):
@@ -1947,26 +1961,42 @@ def path_word(runs):
     return " and ".join(KIND_WORDS.get(p, p) for p in paths) or "its path"
 
 
+def per_camera(counts, totals):
+    """How many cameras of each run, in words: "3 of 4 cameras in each of 3 runs", or run by run when they differ
+    ("3 of 4, 4 of 4 and 3 of 4 cameras in runs 1 to 3")."""
+    n = len(counts)
+    noun = "camera" if max(totals) == 1 else "cameras"
+    if len(set(zip(counts, totals))) == 1:
+        return f"{counts[0]} of {totals[0]} {noun} in {'each of ' if n > 1 else ''}{n} run{'s' if n > 1 else ''}"
+    parts = [f"{c} of {t}" for c, t in zip(counts, totals)]
+    return f"{', '.join(parts[:-1])} and {parts[-1]} {noun} in runs 1 to {n}"
+
+
 def camera_transports(ref):
-    """report.md (Vitro): what each camera page's cameras played over, and plainly when they fell back to another kind
-    (an MJPEG fallback): a camera graded on WebRTC that played MJPEG instead fails the task, as on the web engine a
-    camera that doesn't play over WebRTC does. Web runs don't say (their streams are the path's): nothing."""
+    """report.md (Vitro): what each camera page's cameras played over, camera by camera, and plainly when they fell back
+    to another kind (an MJPEG fallback): a camera graded on WebRTC that showed something else instead fails the task, as
+    on the web engine a camera that doesn't play over WebRTC does. Web runs don't say (their streams are the path's):
+    nothing."""
     out = []
     for t, s_ in ref["tiers"].items():
         runs = [r for r in s_.get("camera_runs") or [] if r.get("transports") is not None]
         if not runs:
             continue
         path = path_word(runs)
-        on_path = sum(1 for r in runs if r["transports"] and all(x == r.get("path") for x in r["transports"]))
-        fb = [r for r in runs if r.get("fell_back")]
-        blank = sum(1 for r in runs if any(x is None for x in r["transports"]))
-        errors = sorted({e for r in fb for s in r.get("detail") or [] for e in s.get("errors") or []})
-        line = f"{t} cameras on Vitro: played over {path} in {on_path} of {len(runs)} run(s)"
-        if fb:
-            line += (f"; **fell back to {fell_back_words(fb)} in {len(fb)} of {len(runs)} run(s)**, graded on {path} as on "
-                     f"the web engine" + (f" ({'; '.join(errors[:3])})" if errors else ""))
-        if blank:
-            line += f"; a camera showed nothing at the window's end in {blank} run(s)"
+        totals = [len(r["transports"]) for r in runs]
+        fbs = [r.get("fallbacks") or [None] * len(r["transports"]) for r in runs]
+        on = [sum(1 for x in r["transports"] if x == r.get("path")) for r in runs]
+        fell = [sum(1 for k in f if k) for f in fbs]
+        blank = [sum(1 for x, k in zip(r["transports"], f) if x is None and not k) for r, f in zip(runs, fbs)]
+        errors = sorted({e for r, f in zip(runs, fbs) for s, k in zip(r.get("detail") or [], f) if k
+                         for e in s.get("errors") or []})
+        line = f"{t} cameras on Vitro: over {path}, {per_camera(on, totals)}"
+        if any(fell):
+            kinds = " and ".join(KIND_WORDS.get(k, k) for k in sorted({k for f in fbs for k in f if k}))
+            line += (f"; **fell back to {kinds}, {per_camera(fell, totals)}**, graded on {path} as on the web engine"
+                     + (f" ({'; '.join(errors[:3])})" if errors else ""))
+        if any(blank):
+            line += f"; showing nothing at the window's end, {per_camera(blank, totals)}"
         out.append(line + ".")
     return out
 

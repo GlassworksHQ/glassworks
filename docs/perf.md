@@ -339,7 +339,7 @@ detail, not graded.
 | Live updates | From the fake's send (its schedule, tied to the fake's clock) through the main thread reading the change and the card drawing it, to the first SurfaceFlinger present that can show it | The same: the store hands each change to the main thread, the card renders it, and the next frame draws it | Yes |
 | Tap | Event Timing: from the event's timestamp to the next paint after its handlers, worst of 10, rounded to 8 ms, at least 16 ms | From the touch's own timestamp to the end of the first frame drawn after its handlers (the click included), worst of 10, rounded the same way (`method: vitro-frame`). A tap counts with both its down and its up timed; one whose up or frame hasn't come 2 s after the taps is given no time, and the run's tap is then not measured (`incomplete`) | Yes, by its definition |
 | Scroll | Six real swipes during the live updates, SurfaceFlinger and rAF | The same swipes, SurfaceFlinger and `Choreographer` frames, with the same room to flick (the view's content at least 4 screens high) | Yes |
-| More-info dialog | HA's dialog, from the tile's event to its show animation finished and the sensor's graph drawn | Vitro's own sheet, opened as a tile's tap opens it, to its enter animation finished and the sensor's graph drawn with its data (the fake answers Vitro's `history/history_during_period` with the same seeded points as HA's `history/stream`) | Yes; the sheet is Vitro's (its animation is 240 ms, HA's is 300 ms) |
+| More-info dialog | HA's dialog, from the tile's event to its show animation finished and the sensor's graph drawn | Vitro's own sheet, opened as a tile's tap opens it, to its enter animation finished and the sensor's graph drawn with its data (the fake answers Vitro's `history/history_during_period` with the same seeded points as HA's `history/stream`). Like HA's dialog, the sheet draws a sensor's statistics only when HA's config lists `recorder`; the fake's doesn't, so both draw its state history | Yes; the sheet is Vitro's (its animation is 240 ms, HA's is 300 ms) |
 | Cameras | From the navigation to each stream's first frame; over a fixed 30 s window from the view going live, beside the updates and the taps, the frames shown and the stalls (the WebRTC receiver's counts) | The same window, from each stream's own reports: its first picture on screen, and every picture it drew | Yes, by its definition: see below |
 
 **Cameras on Vitro.** Vitro plays a camera the way HA's frontend does: WebRTC first, then HLS, then MJPEG, each
@@ -363,11 +363,14 @@ The rubric's bars and levels are the same, and so is the rule for a missing meas
 
 What each camera played is recorded: each stream's `transport` (`web_rtc`, `hls` or `mjpeg`, the kind it
 showed at the window's end), its other kinds in `others` (with their first frame), and the errors its streams
-reported (`errors`). The run's file keeps each run's `transports` and, when a camera showed another kind than
-its view's path, `fell_back`. report.md says it plainly, page by page: "typical cameras on Vitro: played over
-WebRTC in 3 of 3 run(s)", or "**fell back to MJPEG in 1 of 3 run(s)**". A camera that fell back to MJPEG on a
-graded view never played over WebRTC, so it fails the camera task, as a camera that doesn't play over WebRTC does
-on the web engine, and the page's limit says "a camera fell back to MJPEG on Vitro".
+reported (`errors`). The run's file keeps each run's `transports` and `fallbacks`, one per camera, and the kinds
+fallen back to in `fell_back`. A camera fell back when another kind was what it showed while its view's path
+wasn't: the kind showing at the window's end, or, for a camera that never played on its path, another kind that
+showed a picture. The hidden player of HA's side-by-side start (HLS shows until WebRTC has video) isn't a
+fallback once WebRTC played. report.md says it plainly, page by page and camera by camera: "heavy cameras on
+Vitro: over WebRTC, 3 of 4 cameras in each of 3 runs; **fell back to HLS, 1 of 4 cameras in each of 3 runs**". A
+camera that fell back on a graded view never played over WebRTC, so it fails the camera task, as a camera that
+doesn't play over WebRTC does on the web engine, and the page's limit says "a camera fell back to … on Vitro".
 
 Two differences, and what they mean:
 - **The pictures are timed on the main thread.** A stream reports each picture through its listener on the main

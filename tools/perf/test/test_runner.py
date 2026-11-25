@@ -2400,8 +2400,8 @@ class VitroCameras(unittest.TestCase):
         self.assertEqual(tiers["typical"]["camera_fallback"]["runs"][0]["transports"], ["hls"])
         with open(os.path.join(self.out, "report.md")) as f:
             md = f.read()
-        self.assertIn("typical cameras on Vitro: played over WebRTC in 1 of 1 run(s).", md)
-        self.assertIn("heavy cameras on Vitro: played over WebRTC in 1 of 1 run(s).", md)
+        self.assertIn("typical cameras on Vitro: over WebRTC, 1 of 1 camera in 1 run.", md)
+        self.assertIn("heavy cameras on Vitro: over WebRTC, 4 of 4 cameras in 1 run.", md)
         self.assertNotIn("fell back", md)
 
 
@@ -2425,8 +2425,8 @@ class VitroCamerasFellBack(unittest.TestCase):
         self.assertEqual(g["grade"], "C")
         with open(os.path.join(out, "report.md")) as f:
             md = f.read()
-        self.assertIn("typical cameras on Vitro: played over WebRTC in 0 of 1 run(s); **fell back to MJPEG in 1 of 1 "
-                      "run(s)**, graded on WebRTC as on the web engine (web_rtc: no answer to the offer).", md)
+        self.assertIn("typical cameras on Vitro: over WebRTC, 0 of 1 camera in 1 run; **fell back to MJPEG, 1 of 1 camera "
+                      "in 1 run**, graded on WebRTC as on the web engine (web_rtc: no answer to the offer).", md)
         self.assertIn("a camera fell back to MJPEG on Vitro (it never played over WebRTC)", md)
 
 

@@ -1328,8 +1328,8 @@ class VitroCameras(unittest.TestCase):
         self.assertEqual(G.camera_level(run), G.BELOW)
         ref = {"tiers": {"typical": {"camera_runs": [run, R.camera_run(vitro_camera_line("typical"), "typical")]}}}
         self.assertEqual(R.camera_transports(ref), [
-            "typical cameras on Vitro: played over WebRTC in 1 of 2 run(s); **fell back to MJPEG in 1 of 2 run(s)**, graded "
-            "on WebRTC as on the web engine (web_rtc: ice failed)."])
+            "typical cameras on Vitro: over WebRTC, 0 of 1 and 1 of 1 camera in runs 1 to 2; **fell back to MJPEG, 1 of 1 "
+            "and 0 of 1 camera in runs 1 to 2**, graded on WebRTC as on the web engine (web_rtc: ice failed)."])
         self.assertEqual(R.task_phrase("camera", {"camera_runs": [run]}),
                          "a camera fell back to MJPEG on Vitro (it never played over WebRTC)")
         import notes as N
@@ -1341,8 +1341,44 @@ class VitroCameras(unittest.TestCase):
         run = R.camera_run(line, "typical")
         self.assertEqual(run["fell_back"], ["mjpeg"])
         self.assertEqual(R.camera_transports({"tiers": {"typical": {"camera_runs": [run]}}}), [
-            "typical cameras on Vitro: played over WebRTC in 0 of 1 run(s); **fell back to MJPEG in 1 of 1 run(s)**, graded "
-            "on WebRTC as on the web engine (web_rtc: ice failed); a camera showed nothing at the window's end in 1 run(s)."])
+            "typical cameras on Vitro: over WebRTC, 0 of 1 camera in 1 run; **fell back to MJPEG, 1 of 1 camera in 1 run**, "
+            "graded on WebRTC as on the web engine (web_rtc: ice failed)."])
+
+    def test_the_hidden_player_webrtc_replaced_is_no_fallback(self):
+        # The graded S1 Vitro run 2: HA's side-by-side start shows HLS until WebRTC has video, so a camera that played
+        # WebRTC the whole window has an HLS player with a first frame among its others. That isn't a fallback.
+        line = vitro_camera_line("typical")
+        line["streams"][0]["others"] = [{"path": "hls", "first_frame_ms": 2900.0, "connected": False}]
+        run = R.camera_run(line, "typical")
+        self.assertNotIn("fell_back", run)
+        self.assertEqual(run["fallbacks"], [None])
+        self.assertEqual(R.camera_transports({"tiers": {"typical": {"camera_runs": [run] * 3}}}),
+                         ["typical cameras on Vitro: over WebRTC, 1 of 1 camera in each of 3 runs."])
+
+    def test_heavy_reads_camera_by_camera(self):
+        # Run 2's heavy: cam_0 to cam_2 on WebRTC (with HLS beside them while they started), cam_3 on HLS only.
+        line = vitro_camera_line("heavy")
+        for st in line["streams"][:3]:
+            st["others"] = [{"path": "hls", "first_frame_ms": 1500.0, "connected": False}]
+        line["streams"][3].update(first_frame_ms=None, shown_pct=None, max_gap_ms=None, stall_total_ms=None, transport="hls",
+                                  others=[{"path": "hls", "first_frame_ms": 8600.0, "connected": True},
+                                          {"path": "mjpeg", "first_frame_ms": None, "connected": False}],
+                                  errors=["mjpeg: the stream failed or dropped"])
+        run = R.camera_run(line, "heavy")
+        self.assertEqual(run["fallbacks"], [None, None, None, "hls"])
+        self.assertEqual(run["fell_back"], ["hls"])
+        self.assertEqual(R.camera_transports({"tiers": {"heavy": {"camera_runs": [run] * 3}}}), [
+            "heavy cameras on Vitro: over WebRTC, 3 of 4 cameras in each of 3 runs; **fell back to HLS, 1 of 4 cameras in "
+            "each of 3 runs**, graded on WebRTC as on the web engine (mjpeg: the stream failed or dropped)."])
+
+    def test_a_camera_that_showed_nothing_is_said(self):
+        line = vitro_camera_line("typical", shown="mjpeg")
+        line["streams"][0].update(transport=None, others=[])
+        run = R.camera_run(line, "typical")
+        self.assertNotIn("fell_back", run)
+        self.assertEqual(R.camera_transports({"tiers": {"typical": {"camera_runs": [run]}}}), [
+            "typical cameras on Vitro: over WebRTC, 0 of 1 camera in 1 run; showing nothing at the window's end, 1 of 1 "
+            "camera in 1 run."])
 
     def test_web_lines_say_nothing_about_transports(self):
         run = R.camera_run(camera_line("typical"), "typical")

@@ -98,6 +98,26 @@ class MoreInfoSensorTest {
     }
 
     @Test
+    fun withoutTheRecorderASensorWithAStateClassFollowsItsStateHistoryAsHasDialogDoes() {
+        // HA's _getStateHistory asks for statistics only when the recorder is loaded: Clarity's fake HA lists history but
+        // not the recorder, so HA's dialog never asks it for statistics metadata, and neither does Vitro's sheet.
+        val store = sensor(mapOf("state_class" to "measurement"))
+        val ctx = VitroCardContext(
+            context = activity, haBase = FakeHaServer.BASE, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
+            accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            haConfig = { JSONObject().put("components", JSONArray(listOf("sensor", "history"))) },
+            callWs = { msg, done -> calls += msg; answers += msg to done }, subscribeWs = { msg, _, _ -> subscriptions += msg; {} }, now = { now },
+        )
+        val sheet = MoreInfoSheet(ctx) {}
+        activity.setContentView(sheet)
+        sheet.show(SENSOR)
+        idle()
+        assertTrue("no statistics asked for: ${calls.map { it.optString("type") }}", calls.isEmpty())
+        assertEquals(listOf("history/stream"), subscriptions.map { it.getString("type") })
+    }
+
+    @Test
     fun noStatisticsMetadataFallsBackToTheStateHistory() {
         open(sensor(mapOf("state_class" to "measurement")))
         answers[0].second(true, JSONArray(), null)
