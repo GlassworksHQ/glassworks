@@ -1,0 +1,108 @@
+{
+ "title": "Sidebar view: main cards and a sidebar",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "view_config": {
+  "type": "sidebar",
+  "cards": [
+   {
+    "type": "entities",
+    "title": "Lights",
+    "entities": [
+     "light.hall_lamp",
+     "light.porch_lamp",
+     "light.stair_lamp"
+    ]
+   },
+   {
+    "type": "markdown",
+    "content": "Good morning. The porch light is off and the stairs are lit.",
+    "view_layout": {
+     "position": "sidebar"
+    }
+   },
+   {
+    "type": "tile",
+    "entity": "light.desk_lamp"
+   },
+   {
+    "type": "tile",
+    "entity": "light.reading_lamp",
+    "view_layout": {
+     "position": "sidebar"
+    }
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.hall_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "friendly_name": "Hall Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.porch_lamp": {
+    "state": "off",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "friendly_name": "Porch Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.stair_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "friendly_name": "Stair Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.desk_lamp": {
+    "state": "off",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "friendly_name": "Desk Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.reading_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "friendly_name": "Reading Lamp",
+     "supported_features": 40
+    }
+   }
+  }
+ }
+}

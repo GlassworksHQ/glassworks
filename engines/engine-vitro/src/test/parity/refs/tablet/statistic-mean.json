@@ -1,0 +1,164 @@
+{
+ "case": "statistic-mean",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "hui-statistic-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Average today",
+   "x": 17,
+   "y": 19,
+   "w": 101.91,
+   "h": 19,
+   "size": 16,
+   "weight": 500,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "21.5",
+   "x": 17,
+   "y": 69.41,
+   "w": 54.55,
+   "h": 33,
+   "size": 28,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°C",
+   "x": 75.55,
+   "y": 80.41,
+   "w": 16.39,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.living_room_temperature": {
+   "s": "19.72",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "Living Room Temperature"
+   },
+   "lc": 1794499200,
+   "lu": 1794499200
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.living_room_temperature",
+    "pl": "esphome",
+    "dp": 1
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "recorder/get_statistics_metadata",
+    "statistic_ids": [
+     "sensor.living_room_temperature"
+    ]
+   },
+   "events": [],
+   "result": [
+    {
+     "statistic_id": "sensor.living_room_temperature",
+     "display_unit_of_measurement": "°C",
+     "has_mean": true,
+     "mean_type": 1,
+     "has_sum": false,
+     "name": null,
+     "source": "recorder",
+     "statistics_unit_of_measurement": "°C",
+     "unit_class": "temperature"
+    }
+   ]
+  },
+  {
+   "request": {
+    "type": "recorder/statistic_during_period",
+    "statistic_id": "sensor.living_room_temperature",
+    "rolling_window": {
+     "duration": {
+      "hours": 24
+     }
+    }
+   },
+   "events": [],
+   "result": {
+    "max": 23.36,
+    "mean": 21.494903,
+    "min": 19.61
+   }
+  }
+ ]
+}

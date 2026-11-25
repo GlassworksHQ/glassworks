@@ -32,7 +32,16 @@
     "humidifier",
     "calendar",
     "logbook",
-    "entity-button"
+    "entity-button",
+    "shopping-list",
+    "section",
+    "statistic",
+    "date",
+    "plant-status",
+    "toggle-group",
+    "shortcut",
+    "alert",
+    "iframe"
   ],
   "nativeHacsTypes": [
     "custom:mushroom-entity-card",
@@ -120,7 +129,14 @@
   ],
   "entitiesRowTypes": [
     "divider",
-    "section"
+    "section",
+    "button",
+    "call-service",
+    "perform-action",
+    "text",
+    "weblink",
+    "buttons",
+    "conditional"
   ],
   "pictureElementTypes": [
     "state-icon",

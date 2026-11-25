@@ -1,0 +1,253 @@
+{
+ "case": "plant-status",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 202
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 185.47,
+   "type": "hui-plant-status-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Window Fern",
+   "x": 17,
+   "y": 26,
+   "w": 138.66,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12",
+   "x": 36.95,
+   "y": 118.69,
+   "w": 16.08,
+   "h": 16,
+   "size": 14,
+   "weight": 700,
+   "color": "rgb(219, 68, 55)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "%",
+   "x": 39.86,
+   "y": 141.08,
+   "w": 10.27,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "21.5",
+   "x": 159.3,
+   "y": 118.69,
+   "w": 27.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°C",
+   "x": 165.77,
+   "y": 141.08,
+   "w": 14.34,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "1,830",
+   "x": 288.88,
+   "y": 118.69,
+   "w": 34.2,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "lx",
+   "x": 300.8,
+   "y": 141.08,
+   "w": 10.34,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "410",
+   "x": 434.38,
+   "y": 118.69,
+   "w": 23.59,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "µS/cm",
+   "x": 425.38,
+   "y": 141.08,
+   "w": 41.61,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "plant.window_fern": {
+   "s": "problem",
+   "a": {
+    "problem": "moisture low",
+    "sensors": {
+     "moisture": "sensor.fern_moisture",
+     "temperature": "sensor.fern_temperature",
+     "brightness": "sensor.fern_light",
+     "conductivity": "sensor.fern_conductivity"
+    },
+    "unit_of_measurement_dict": {
+     "moisture": "%",
+     "temperature": "°C",
+     "brightness": "lx",
+     "conductivity": "µS/cm"
+    },
+    "moisture": 12,
+    "temperature": 21.5,
+    "brightness": 1830,
+    "conductivity": 410,
+    "friendly_name": "Window Fern"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "sensor.fern_conductivity": {
+   "s": "410",
+   "a": {
+    "unit_of_measurement": "µS/cm",
+    "friendly_name": "Fern Conductivity"
+   },
+   "lc": 1794498480,
+   "lu": 1794498480
+  },
+  "sensor.fern_light": {
+   "s": "1830",
+   "a": {
+    "unit_of_measurement": "lx",
+    "device_class": "illuminance",
+    "friendly_name": "Fern Light"
+   },
+   "lc": 1794498480,
+   "lu": 1794498480
+  },
+  "sensor.fern_moisture": {
+   "s": "12",
+   "a": {
+    "unit_of_measurement": "%",
+    "friendly_name": "Fern Moisture"
+   },
+   "lc": 1794498480,
+   "lu": 1794498480
+  },
+  "sensor.fern_temperature": {
+   "s": "21.5",
+   "a": {
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "Fern Temperature"
+   },
+   "lc": 1794498480,
+   "lu": 1794498480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "plant",
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "illuminance": {
+      "default": "mdi:brightness-5"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.plant.entity_component._.state.ok": "OK",
+    "component.plant.entity_component._.state.problem": "Problem",
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

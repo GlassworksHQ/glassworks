@@ -563,6 +563,7 @@ class VitroEngine(
                     resources = vitroView.resourcesList,
                     accessToken = { tokenFor(haBase) },
                     haConfig = { client?.haConfig ?: JSONObject() },
+                    pageUrl = { lastNativeUrl ?: currentUrl },
                     haUser = { client?.currentUser ?: JSONObject() },
                     callService = { domain, service, data, target ->
                         client?.callService(domain, service, data, target)

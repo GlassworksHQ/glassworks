@@ -2083,7 +2083,9 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         val title = config.title
         val rows = config.entities()
         // HA's header toggle: shown when the card has a title and holds toggleable entities, on while any is on.
-        val toggleIds = rows.filter { it.isEntity }.map { it.entity }.filter { it.substringBefore('.') in SWITCH_DOMAINS }.distinct()
+        // Every row whose config names an entity (`"entity" in conf`), a button row's included.
+        val toggleIds = rows.filter { it.isEntity || it.rowType == "button" }.map { it.entity }
+            .filter { it.substringBefore('.') in SWITCH_DOMAINS }.distinct()
         val masterSwitch: HaSwitchView? =
             if (title != null && config.raw.optBoolean("show_header_toggle", true) && toggleIds.isNotEmpty()) HaSwitchView(ctx) else null
         if (title != null) {
@@ -2120,6 +2122,8 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         fun refreshMaster() {
             masterSwitch?.setOn(toggleIds.any { ctx.store[it]?.isActive == true })
         }
+        // Every toggle entity keeps the header switch current, a button row's included (its own row doesn't).
+        if (masterSwitch != null) toggleIds.forEach { id -> observe(id) { refreshMaster() } }
 
         // `entity-filter` support: when `state_filter` is present, rows whose state isn't listed are hidden.
         val filterArr = config.raw.optJSONArray("state_filter")
@@ -2133,46 +2137,31 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             }.toSet()
         }
         val rowViews = ArrayList<LinearLayout>()
+        // The rows (entity or special) that take the 8 px gap after another row.
+        val gapRows = HashSet<View>()
         val rowVisible = ArrayList<Boolean>()
+        // HA's `#states` is a flex column with an 8 px gap: between two rows that show, none around a hidden one.
+        fun fixGaps() {
+            var prevRow = false
+            for (i in 0 until col.childCount) {
+                val child = col.getChildAt(i)
+                if (child.visibility == GONE) continue
+                if (child in gapRows) {
+                    val lp = child.layoutParams as LinearLayout.LayoutParams
+                    val want = if (prevRow) ctx.px(8f) else 0
+                    if (lp.topMargin != want) { lp.topMargin = want; child.layoutParams = lp }
+                    prevRow = true
+                } else {
+                    prevRow = false
+                }
+            }
+        }
         fun refreshFilter() {
             rowViews.forEachIndexed { i, row -> row.visibility = if (rowVisible[i]) VISIBLE else GONE }
+            fixGaps()
         }
 
-        var prevWasDivider = false
-        var prevWasRow = false
-        for (rowCfg in rows) {
-            if (rowCfg.rowType == "divider") {
-                col.addView(dividerLine(ctx), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)).apply {
-                    marginStart = ctx.px(16f); marginEnd = ctx.px(16f)
-                    topMargin = ctx.px(8f); bottomMargin = ctx.px(8f)
-                })
-                prevWasDivider = true
-                prevWasRow = false
-                continue
-            }
-            if (rowCfg.rowType == "section") {
-                if (!prevWasDivider) {
-                    col.addView(dividerLine(ctx), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)).apply {
-                        marginStart = ctx.px(16f); marginEnd = ctx.px(16f)
-                        topMargin = ctx.px(8f)
-                    })
-                }
-                rowCfg.name?.let { label ->
-                    col.addView(textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
-                        text = label
-                        maxLines = 1
-                        ellipsize = TextUtils.TruncateAt.END
-                        setPadding(ctx.px(16f), ctx.px(14f), ctx.px(16f), ctx.px(6f))
-                    }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-                }
-                prevWasDivider = false
-                prevWasRow = false
-                continue
-            }
-            if (!rowCfg.isEntity) continue
-            prevWasDivider = false
-            val gapAbove = prevWasRow
-            prevWasRow = true
+        fun entityRow(rowCfg: EntityRowConfig): View {
             val idx = rowViews.size
             val row = EntityRowLayout(ctx.context, ctx.px(8f)).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -2284,7 +2273,110 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                     else -> valueView.text = s?.formattedState() ?: "…"
                 }
             }
-            col.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (gapAbove) topMargin = ctx.px(8f) })
+            gapRows += row
+            return row
+        }
+
+        /** A special row ([SpecialRows]), or a conditional row around one (or around an entity row). */
+        fun specialRow(rowCfg: EntityRowConfig): View? {
+            if (rowCfg.rowType != "conditional") return SpecialRows.build(ctx, rowCfg) { id, cb -> observe(id, cb) }
+            val inner = rowCfg.inner ?: return null
+            val built = when {
+                inner.isEntity -> entityRow(inner)
+                inner.rowType == "conditional" -> specialRow(inner)
+                // A divider or a section heading, as the row loop draws them.
+                inner.rowType == "divider" || inner.rowType == "section" -> LinearLayout(ctx.context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(dividerLine(ctx), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)).apply {
+                        marginStart = ctx.px(16f); marginEnd = ctx.px(16f)
+                        topMargin = ctx.px(8f); if (inner.rowType == "divider") bottomMargin = ctx.px(8f)
+                    })
+                    if (inner.rowType == "section") inner.name?.let { label ->
+                        addView(textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+                            text = label
+                            maxLines = 1
+                            ellipsize = TextUtils.TruncateAt.END
+                            setPadding(ctx.px(16f), ctx.px(14f), ctx.px(16f), ctx.px(6f))
+                        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                    }
+                }
+                else -> SpecialRows.build(ctx, inner) { id, cb -> observe(id, cb) }
+            } ?: return null
+            gapRows -= built
+            // hui-conditional-row: HA's visibility conditions, checked again as their entities change.
+            val holder = FrameLayout(ctx.context).apply { addView(built, LayoutParams(MATCH_PARENT, WRAP_CONTENT)) }
+            val widthDp = (ctx.context.resources.displayMetrics.widthPixels / ctx.dp).toInt()
+            val update = {
+                val userId = ctx.haUser().optString("id", "").ifEmpty { null }
+                val shown = rowCfg.conditions.all { VisibilityCondition.evaluateAt(it, ctx.now(), ctx.store::get, widthDp, userId) }
+                val want = if (shown) VISIBLE else GONE
+                if (holder.visibility != want) {
+                    holder.visibility = want
+                    fixGaps()
+                }
+            }
+            val refs = LinkedHashSet<String>()
+            rowCfg.conditions.forEach { it.referencedEntities(refs) }
+            refs.forEach { id -> observe(id) { update() } }
+            if (rowCfg.conditions.any { it.dependsOnTime() || it.dependsOnUser() }) {
+                renewing {
+                    val tick = object : Runnable {
+                        override fun run() { update(); ctx.main.postDelayed(this, 1_000L) }
+                    }
+                    ctx.main.post(tick)
+                    ({ ctx.main.removeCallbacks(tick) })
+                }
+            }
+            update()
+            return holder
+        }
+
+        var prevWasDivider = false
+        var prevWasRow = false
+        for (rowCfg in rows) {
+            if (rowCfg.rowType == "divider") {
+                col.addView(dividerLine(ctx), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)).apply {
+                    marginStart = ctx.px(16f); marginEnd = ctx.px(16f)
+                    topMargin = ctx.px(8f); bottomMargin = ctx.px(8f)
+                })
+                prevWasDivider = true
+                prevWasRow = false
+                continue
+            }
+            if (rowCfg.rowType == "section") {
+                if (!prevWasDivider) {
+                    col.addView(dividerLine(ctx), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)).apply {
+                        marginStart = ctx.px(16f); marginEnd = ctx.px(16f)
+                        topMargin = ctx.px(8f)
+                    })
+                }
+                rowCfg.name?.let { label ->
+                    col.addView(textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+                        text = label
+                        maxLines = 1
+                        ellipsize = TextUtils.TruncateAt.END
+                        setPadding(ctx.px(16f), ctx.px(14f), ctx.px(16f), ctx.px(6f))
+                    }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                }
+                prevWasDivider = false
+                prevWasRow = false
+                continue
+            }
+            if (!rowCfg.isEntity) {
+                val built = specialRow(rowCfg) ?: continue
+                // A conditional divider or section brings its own margins, as the plain ones do.
+                val structural = rowCfg.inner?.rowType in setOf("divider", "section")
+                prevWasDivider = false
+                val gapAbove = prevWasRow && !structural
+                prevWasRow = !structural
+                if (!structural) gapRows += built
+                col.addView(built, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (gapAbove) topMargin = ctx.px(8f) })
+                continue
+            }
+            prevWasDivider = false
+            val gapAbove = prevWasRow
+            prevWasRow = true
+            col.addView(entityRow(rowCfg), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (gapAbove) topMargin = ctx.px(8f) })
         }
         refreshFilter()
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -2449,7 +2541,8 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
         if (eid != null) {
             observe(eid) { s ->
                 val active = s?.isActive == true
-                icon.setIcon(MdiIcons.resolveIconName(config.icon, s), if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor)
+                val color = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
+                icon.setIcon(MdiIcons.resolveIconName(config.icon, s), stateColorBrightness(s, color))
                 label.text = config.name ?: s?.displayName ?: eid
                 state.text = s?.plainState().orEmpty()
             }
@@ -2474,6 +2567,18 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
         }
         super.measureCard(widthMeasureSpec, heightMeasureSpec)
     }
+}
+
+/**
+ * HA's `stateColorBrightness` on the button card's icon: `filter: brightness((brightness + 245) / 5 %)` for an entity
+ * with a `brightness` attribute (not a plant), which scales the icon's color channels.
+ */
+internal fun stateColorBrightness(s: EntityState?, color: Int): Int {
+    val b = (s?.attributes?.get("brightness") as? Number)?.toDouble()?.takeIf { it != 0.0 } ?: return color
+    if (s.domain == "plant") return color
+    val f = ((b + 245) / 500).toFloat()
+    fun ch(c: Int) = (c * f).roundToInt().coerceIn(0, 255)
+    return Color.argb(Color.alpha(color), ch(Color.red(color)), ch(Color.green(color)), ch(Color.blue(color)))
 }
 
 /** Native HA `heading` card (`custom:mushroom-title-card` is [MushroomTitleCardView]). */

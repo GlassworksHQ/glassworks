@@ -79,6 +79,8 @@ class HaErrorCardView(ctx: VitroCardContext, message: String) : CardSurface(ctx)
             cornerRadius = ctx.theme.cardBorderRadiusDp * ctx.dp
             setColor(blend(bg, error, 0.12f))
         }
+        // TalkBack reads what HA shows: the message to an admin, HA's generic title to anyone else.
+        contentDescription = if (ctx.haUser().optBoolean("is_admin", false)) message else "Configuration error"
     }
 
     private fun blend(under: Int, over: Int, a: Float): Int = Color.argb(

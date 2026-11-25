@@ -639,6 +639,28 @@ class IslandSessionsTest {
         assertTrue(slots(islands).isEmpty())
     }
 
+    @Test fun anIframesPageHandedOffPausedResumesWhenItsNextCardShows() {
+        val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
+        val pages = ArrayList<RecordingPage>()
+        val store = EntityStore()
+        val config = LovelaceParser.parseCard(JSONObject("""{"type": "iframe", "url": "https://example.com/"}"""))
+        val old = dev.glassworks.engine.vitro.cards.IframeCardView(context(store, islands, dark = true, pages), config)
+        val page = pages.single()
+        old.setShown(false)
+        assertFalse(page.active)
+        val handed = old.handOff()!!
+
+        val next = dev.glassworks.engine.vitro.cards.IframeCardView(context(store, islands, dark = true, pages), config, adopted = handed)
+        assertEquals("no new page", 1, pages.size)
+        assertEquals("loaded once", 1, page.loads.size)
+        assertFalse("still paused until its view shows", page.active)
+        next.setShown(true)
+        assertTrue("shown: the adopted page runs again", page.active)
+        next.release()
+        assertTrue(page.closed)
+        assertTrue(slots(islands).isEmpty())
+    }
+
     @Test fun aPageHandedOffBeforeItsDocumentRanLoadsTheIslandAgain() {
         val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
         val pages = ArrayList<RecordingPage>()
@@ -763,4 +785,69 @@ class IslandSessionsTest {
         assertTrue(html.contains("if (r.status !== 404) connectBridge();"))
         assertTrue(html.contains("<style id=\"vitro-theme\">"))
     }
+
+    // ---- The iframe card's page lives as an island's does ----
+
+    /** The texts the native views of [page] show (a rebuild with an edited name shows the new one). */
+    private fun vitroTexts(page: Page): Set<String> {
+        val out = HashSet<String>()
+        fun walk(v: View) {
+            if (v is android.widget.TextView && v.isShown) out += v.text.toString()
+            if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(vitroView(page))
+        return out
+    }
+
+    private val iframeViews = """{"views": [
+        {"path": "a", "title": "A", "cards": [{"type": "iframe", "url": "https://example.com/"}, {"type": "tile", "entity": "light.lounge_lamp", "name": "Lounge"}]},
+        {"path": "b", "title": "B", "cards": [{"type": "tile", "entity": "light.lounge_lamp"}]}]}"""
+
+    @Test fun anIframesPageIsKeptAcrossARebuildPausedWhileHiddenAndClosedWithItsCard() {
+        server.dashboardConfig = JSONObject(iframeViews)
+        val p = page()
+        p.load("$base/wall-test/a")
+        awaitMain("ready") { readyCount() == 1 && islandPages().size == 1 }
+        val frame = islandPages().single()
+        assertTrue(frame.loads.single().contains("/__vitro/island/"))
+
+        // Another card changes: the iframe's own build takes its page, with no new load.
+        var fetches = server.commands("lovelace/config").size
+        server.dashboardConfig = JSONObject(iframeViews.replace("\"Lounge\"", "\"Living room\""))
+        lovelaceUpdated()
+        awaitMain("the edit is fetched") { server.commands("lovelace/config").size > fetches }
+        awaitMain("the edit is built") { vitroTexts(p).contains("Living room") }
+        assertEquals(1, islandPages().size)
+        assertFalse(frame.closed)
+        assertEquals(1, frame.loads.size)
+
+        // Its view hidden: the page pauses; shown again: it runs.
+        p.load("$base/wall-test/b")
+        awaitMain("hidden: paused") { !frame.active }
+        p.load("$base/wall-test/a")
+        awaitMain("shown: running") { frame.active }
+
+        // An edit while its view is hidden: only the view on screen is built again, so the hidden view's island
+        // closes (#866), and the view opens a new page when it shows again.
+        p.load("$base/wall-test/b")
+        awaitMain("hidden again: paused") { !frame.active }
+        server.dashboardConfig = JSONObject(iframeViews.replace("\"Lounge\"", "\"Den\""))
+        lovelaceUpdated()
+        awaitMain("the hidden view's island closed") { frame.closed }
+        p.load("$base/wall-test/a")
+        awaitMain("view a is built with the edit") { vitroTexts(p).contains("Den") }
+        val reopened = openIslandPages().single()
+        assertTrue(reopened.active)
+        assertEquals(1, reopened.loads.size)
+        val frame2 = reopened
+
+        // The card goes: its page closes and its slot with it.
+        server.dashboardConfig = JSONObject(iframeViews.replace("""{"type": "iframe", "url": "https://example.com/"}, """, ""))
+        lovelaceUpdated()
+        awaitMain("the removal is built and the iframe's page closed") { frame2.closed }
+        idle()
+        assertTrue(openIslandPages().isEmpty())
+        assertTrue(slots(engines.single().islandServer).isEmpty())
+    }
+
 }

@@ -44,6 +44,12 @@ object VitroSupport {
         "todo-list", "statistics-graph", "area", "picture-elements", "humidifier", "calendar", "logbook",
         // HA's legacy name for `button` (`hui-entity-button-card` extends `hui-button-card`, entity required).
         "entity-button",
+        // HA's other legacy names: `shopping-list` is the to-do list card on the shopping list, and `section` (an
+        // always-loaded type with no element) HA's error card.
+        "shopping-list", "section",
+        "statistic", "date", "plant-status", "toggle-group", "shortcut", "alert",
+        // Its page in a browser island of its own, the way HA's iframe shows it.
+        "iframe",
     )
 
     /** HACS cards with a native fast path (Tier 2). */
@@ -87,8 +93,13 @@ object VitroSupport {
         "media-player-playback", "light-color-favorites", "numeric-input", "vacuum-commands",
     )
 
-    /** `entities` rows with a `type:`. A row without one is a plain entity row, which Vitro draws. */
-    val ENTITIES_ROW_TYPES: Set<String> = setOf("divider", "section")
+    /**
+     * `entities` rows with a `type:` Vitro draws (`EntityRowConfig.parse`). A row without one is a plain entity row,
+     * which Vitro draws; `attribute` and `cast` send their view to HA's frontend ([WebFallback.UNDRAWN_ROW_TYPES]).
+     */
+    val ENTITIES_ROW_TYPES: Set<String> = setOf(
+        "divider", "section", "button", "call-service", "perform-action", "text", "weblink", "buttons", "conditional",
+    )
 
     /** `picture-elements` element types Vitro draws (`conditional` and `image` elements are not). */
     val PICTURE_ELEMENT_TYPES: Set<String> = setOf("state-icon", "state-label", "state-badge", "icon", "service-button")

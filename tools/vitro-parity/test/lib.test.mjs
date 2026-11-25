@@ -188,7 +188,8 @@ test('buildDisplay keeps only what Vitro reads, with synthetic device ids', asyn
   const d = buildDisplay(new Set(['sensor.fridge', 'light.lamp']), registry, devices, icons, translations, { 'sensor.fridge': 'temperature' });
   assert.deepEqual(d.entities, [
     { ei: 'light.lamp', pl: 'zha', di: 'device-1' },
-    { ei: 'sensor.fridge', pl: 'localthings', tk: 'instance_temperature', dp: 1, di: 'device-1', en: 'Fridge temperature' },
+    // `ai`: an alert card names its entity's area.
+    { ei: 'sensor.fridge', pl: 'localthings', tk: 'instance_temperature', dp: 1, di: 'device-1', en: 'Fridge temperature', ai: 'kitchen' },
   ]);
   // The name HA shows only: the default one ("AirDot 4c83f8", a MAC fragment) stays out.
   assert.deepEqual(d.devices, [{ id: 'device-1', name: 'Fridge' }]);

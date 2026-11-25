@@ -23,7 +23,7 @@ describe("the published compatibility manifest", () => {
   it("lists the card types the Vitro engine draws natively, verbatim", () => {
     expect(published.nativeCoreTypes).toEqual(kotlinSet("CORE_CARD_TYPES"));
     expect(published.nativeHacsTypes).toEqual(kotlinSet("HACS_CARD_TYPES"));
-    expect(published.nativeCoreTypes).toHaveLength(32);
+    expect(published.nativeCoreTypes).toHaveLength(41);
     expect(published.nativeHacsTypes).toHaveLength(30);
   });
 
@@ -165,6 +165,13 @@ describe("auditDashboard with JSON", () => {
     expect(r.isFullyNative).toBe(true);
     expect(r.totals).toEqual({ tier1: 1, tier2: 1, tier3: 0 });
     expect(r.views[0]).toMatchObject({ name: "Home", type: "masonry", native: true });
+  });
+
+  it("counts an iframe card as a GeckoView page: its view stays native, but the frame is a browser page", () => {
+    const r = auditDashboard(JSON.stringify({ views: [{ path: "a", cards: [{ type: "iframe", url: "https://example.com/" }] }] }));
+    expect(r.isFullyNative).toBe(false);
+    expect(r.totals.tier3).toBe(1);
+    expect(r.triggers[0].reasons).toEqual(["its page runs in a GeckoView island (the view stays native)"]);
   });
 
   it("flags unknown cards with their path and reason, and reads a card with no type as entities, as the engine does", () => {
@@ -608,7 +615,7 @@ describe("auditDashboard routes cards as the engine's CompatCheckerTest does", (
     noted({ type: "tile", entity: "light.a", card_mod: { style: { "ha-tile-icon$": ".container { border-radius: 4px }" } } }, "card_mod path `ha-tile-icon$`");
     noted({ type: "tile", entity: "climate.a", features: [{ type: "climate-preset-modes" }] }, "tile feature `climate-preset-modes`");
     noted({ type: "entities", entities: [{ type: "custom:slider-entity-row", entity: "light.a" }] }, "custom:slider-entity-row");
-    noted({ type: "entities", entities: [{ type: "buttons", entities: ["light.a"] }] }, "row type `buttons`");
+    noted({ type: "entities", entities: [{ type: "cast", dashboard: "lovelace" }] }, "row type `cast`");
     noted({ type: "entities", entities: ["light.a"], footer: { type: "graph", entity: "sensor.a" } }, "`footer:`");
     noted({ type: "picture-elements", image: "/local/p.png", elements: [{ type: "conditional", conditions: [], elements: [] }] }, "element `conditional`");
     noted({ type: "markdown", content: '<ha-alert alert-type="warning">Door open</ha-alert>' }, "`<ha-alert>`");

@@ -1,0 +1,154 @@
+{
+ "case": "statistic-change",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "hui-statistic-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Kitchen Energy",
+   "x": 17,
+   "y": 19,
+   "w": 107.09,
+   "h": 19,
+   "size": 16,
+   "weight": 500,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "96.6",
+   "x": 17,
+   "y": 69.41,
+   "w": 54.55,
+   "h": 33,
+   "size": 28,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "kWh",
+   "x": 75.55,
+   "y": 80.41,
+   "w": 31.13,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.kitchen_energy": {
+   "s": "426.00",
+   "a": {
+    "state_class": "total_increasing",
+    "unit_of_measurement": "kWh",
+    "device_class": "energy",
+    "friendly_name": "Kitchen Energy"
+   },
+   "lc": 1794499680,
+   "lu": 1794499680
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "energy": {
+      "default": "mdi:lightning-bolt"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "recorder/get_statistics_metadata",
+    "statistic_ids": [
+     "sensor.kitchen_energy"
+    ]
+   },
+   "events": [],
+   "result": [
+    {
+     "statistic_id": "sensor.kitchen_energy",
+     "display_unit_of_measurement": "kWh",
+     "has_mean": false,
+     "mean_type": 0,
+     "has_sum": true,
+     "name": null,
+     "source": "recorder",
+     "statistics_unit_of_measurement": "kWh",
+     "unit_class": "energy"
+    }
+   ]
+  },
+  {
+   "request": {
+    "type": "recorder/statistic_during_period",
+    "statistic_id": "sensor.kitchen_energy",
+    "calendar": {
+     "period": "month"
+    }
+   },
+   "events": [],
+   "result": {
+    "change": 96.6
+   }
+  }
+ ]
+}

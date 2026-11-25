@@ -128,6 +128,8 @@ data class ParityCase(
      * fixture server.
      */
     val resources: List<LovelaceResource> = emptyList(),
+    /** A whole view (`view_config`), for the view layouts: drawn as written, and compared slot by slot and as a page. */
+    val viewConfig: JSONObject? = null,
 ) {
     fun runsOn(frame: ParityFrame) = frames == null || frame.id in frames
 
@@ -137,6 +139,10 @@ data class ParityCase(
     /** The Lovelace dashboard Vitro renders: the same one-card view capture.mjs saves to `vitro-harness`. */
     fun dashboardJson(root: File): JSONObject {
         if (dashboard != null) return JSONObject(File(root, "dashboards/$dashboard.json").readText())
+        if (viewConfig != null) {
+            val view = JSONObject(viewConfig.toString()).put("title", id).put("path", id)
+            return JSONObject().put("title", "Vitro harness").put("views", JSONArray().put(view))
+        }
         val section = JSONObject().put("type", "grid").put("cards", JSONArray().put(JSONObject(card!!.toString())))
         if (span > 1) section.put("column_span", span)
         val view = JSONObject().put("title", id).put("path", id).put("type", "sections").put("max_columns", span)
@@ -162,6 +168,7 @@ data class ParityCase(
                 title = o.optString("title", id),
                 card = o.optJSONObject("card"),
                 dashboard = o.optString("dashboard").ifBlank { null },
+                viewConfig = o.optJSONObject("view_config"),
                 view = o.optString("view").ifBlank { null },
                 frames = frames,
                 dark = o.optBoolean("dark", true),

@@ -537,6 +537,93 @@ def statistics(ids, start, end, period, types):
     return out
 
 
+def statistic_during_period(m):
+    """recorder/statistic_during_period: one entity's max, mean and min (a measurement) or change (a total) over a
+    `calendar` (hour, day, week, month, year, with `offset`), `fixed_period` or `rolling_window` window. Read from the
+    entity's series at HA's short-term granularity (5 minutes) across the window's own bounds, as HA joins its
+    short-term statistics at a partial hour: a total's change is its value at the end less its value at the start
+    (HA's newest less oldest sum). Null for a value the window holds no data for."""
+    eid = m.get("statistic_id")
+    now = datetime.datetime.fromtimestamp(NOW, tz())
+    end = NOW
+    if m.get("fixed_period"):
+        fp = m["fixed_period"]
+        start = parse_time(fp.get("start_time")) if fp.get("start_time") else None
+        end = parse_time(fp.get("end_time")) if fp.get("end_time") else NOW
+    elif m.get("rolling_window"):
+        rw = m["rolling_window"]
+        def dur(d):
+            d = d or {}
+            return d.get("days", 0) * 86400 + d.get("hours", 0) * 3600 + d.get("minutes", 0) * 60 + d.get("seconds", 0)
+        end = NOW + dur(rw.get("offset"))
+        start = end - dur(rw.get("duration"))
+    elif m.get("calendar"):
+        cal = m["calendar"]
+        unit, off = cal.get("period", "day"), int(cal.get("offset", 0) or 0)
+        day0 = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        if unit == "hour":
+            s0 = now.replace(minute=0, second=0, microsecond=0) + datetime.timedelta(hours=off)
+            e0 = s0 + datetime.timedelta(hours=1)
+        elif unit == "day":
+            s0 = day0 + datetime.timedelta(days=off)
+            e0 = s0 + datetime.timedelta(days=1)
+        elif unit == "week":
+            first = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].index(cal.get("first_weekday", "mon"))
+            s0 = day0 - datetime.timedelta(days=(day0.weekday() - first) % 7) + datetime.timedelta(weeks=off)
+            e0 = s0 + datetime.timedelta(weeks=1)
+        elif unit == "month":
+            y, mo = now.year, now.month + off
+            y, mo = y + (mo - 1) // 12, (mo - 1) % 12 + 1
+            s0 = day0.replace(year=y, month=mo, day=1)
+            e0 = s0.replace(year=y + (mo // 12), month=mo % 12 + 1)
+        else:
+            s0 = day0.replace(year=now.year + off, month=1, day=1)
+            e0 = s0.replace(year=s0.year + 1)
+        start, end = s0.timestamp(), e0.timestamp()
+    else:
+        start = None
+    meta, series = _meta(eid) or {}, _series(eid)
+    t0, t1 = (start if start is not None else NOW - 365 * 86400), min(end, NOW)
+    # (t, value or None): the window's start, every change of the series inside it (a step series' own points, a
+    # wave's steps), and its end. A value that isn't a number (unavailable) is None: a boundary, held for no mean.
+    points = []
+    if series and t1 > t0:
+        if series.changes is not None:
+            times = [t0] + [t for t, _ in series.changes if t0 < t < t1] + [t1]
+        else:
+            times = [t0]
+            t = (math.floor(t0 / series.step) + 1) * series.step
+            while t < t1:
+                times.append(t)
+                t += series.step
+            times.append(t1)
+        for t in times:
+            v = series.value(t)
+            points.append((t, float(v) if v is not None and _num(v) else None))
+    out = {}
+    if meta.get("has_mean"):
+        # HA's mean is time-weighted: each value counts for as long as it's held; the end point holds for no time.
+        held = [(v, points[i + 1][0] - t) for i, (t, v) in enumerate(points[:-1]) if points[i + 1][0] > t and v is not None]
+        span = sum(d for _, d in held)
+        out["max"] = round(max(v for v, _ in held), 6) if held else None
+        out["mean"] = round(sum(v * d for v, d in held) / span, 6) if held else None
+        out["min"] = round(min(v for v, _ in held), 6) if held else None
+    elif meta:
+        readings = [v for _, v in points if v is not None]
+        if not readings:
+            out["change"] = None
+        elif (states().get(eid) or {}).get("attributes", {}).get("state_class") == "total_increasing":
+            # A meter: a drop is a reset, after which the new reading is what it counted since (HA's reset-aware sum).
+            total = 0.0
+            for a, b in zip(readings, readings[1:]):
+                total += b - a if b >= a else b
+            out["change"] = round(total, 6)
+        else:
+            out["change"] = round(readings[-1] - readings[0], 6)
+    types = m.get("types")
+    return {k: v for k, v in out.items() if not types or k in types}
+
+
 def _num(v):
     try:
         float(v)
@@ -784,6 +871,7 @@ HANDLERS = {
     "history/stream": _history_stream,
     "history/history_during_period": _history_period,
     "recorder/get_statistics_metadata": lambda c, m: c.result(m["id"], statistics_metadata(m.get("statistic_ids"))),
+    "recorder/statistic_during_period": lambda c, m: c.result(m["id"], statistic_during_period(m)),
     "recorder/statistics_during_period": lambda c, m: c.result(m["id"], statistics(
         m.get("statistic_ids"), m.get("start_time"), m.get("end_time"), m.get("period"), m.get("types"))),
     "logbook/event_stream": _logbook,

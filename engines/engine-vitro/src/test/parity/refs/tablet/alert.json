@@ -1,0 +1,174 @@
+{
+ "case": "alert",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 72
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 56,
+   "type": "hui-alert-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Back Door",
+   "x": 56,
+   "y": 12.61,
+   "w": 65.45,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Open",
+   "x": 56,
+   "y": 32,
+   "w": 29.56,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "·",
+   "x": 88.92,
+   "y": 32,
+   "w": 3.55,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "5 min. ago",
+   "x": 95.84,
+   "y": 32,
+   "w": 60,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "·",
+   "x": 159.22,
+   "y": 32,
+   "w": 3.53,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Hallway",
+   "x": 166.13,
+   "y": 32,
+   "w": 44.84,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "binary_sensor.back_door": {
+   "s": "on",
+   "a": {
+    "device_class": "door",
+    "friendly_name": "Back Door"
+   },
+   "lc": 1794499380,
+   "lu": 1794499380
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "binary_sensor.back_door",
+    "pl": "zha",
+    "ai": "hallway"
+   }
+  ],
+  "devices": [],
+  "areas": [
+   {
+    "area_id": "hallway",
+    "name": "Hallway"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "binary_sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "binary_sensor": {
+     "_": {
+      "default": "mdi:radiobox-blank",
+      "state": {
+       "on": "mdi:checkbox-marked-circle"
+      }
+     },
+     "door": {
+      "default": "mdi:door-closed",
+      "state": {
+       "on": "mdi:door-open"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.binary_sensor.entity_component._.state.off": "Off",
+    "component.binary_sensor.entity_component._.state.on": "On",
+    "component.binary_sensor.entity_component.door.state.off": "Closed",
+    "component.binary_sensor.entity_component.door.state.on": "Open"
+   },
+   "entity": {}
+  }
+ }
+}

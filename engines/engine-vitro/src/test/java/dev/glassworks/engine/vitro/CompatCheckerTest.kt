@@ -395,7 +395,7 @@ class CompatCheckerTest {
     fun cardOptionsVitroCannotDrawFallBack() {
         assertIsland("""{"type": "tile", "entity": "climate.a", "features": [{"type": "climate-preset-modes"}]}""", "tile feature `climate-preset-modes`")
         assertIsland("""{"type": "entities", "entities": [{"type": "custom:slider-entity-row", "entity": "light.a"}]}""", "custom:slider-entity-row")
-        assertIsland("""{"type": "entities", "entities": [{"type": "buttons", "entities": ["light.a"]}]}""", "row type `buttons`")
+        assertIsland("""{"type": "entities", "entities": [{"type": "cast", "dashboard": "lovelace"}]}""", "row type `cast`")
         assertIsland("""{"type": "entities", "entities": ["light.a"], "footer": {"type": "graph", "entity": "sensor.a"}}""", "`footer:`")
         assertIsland("""{"type": "picture-elements", "image": "/local/p.png", "elements": [{"type": "conditional", "conditions": [], "elements": []}]}""", "element `conditional`")
         assertIsland("""{"type": "custom:mushroom-chips-card", "chips": [{"type": "alarm-control-panel", "entity": "alarm_control_panel.a"}]}""", "chip `alarm-control-panel`")

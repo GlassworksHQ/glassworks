@@ -48,6 +48,15 @@ NATIVE_CORE_TYPES = {
     "calendar",
     "logbook",
     "entity-button",
+    "shopping-list",
+    "section",
+    "statistic",
+    "date",
+    "plant-status",
+    "toggle-group",
+    "shortcut",
+    "alert",
+    "iframe",
 }
 
 NATIVE_HACS_TYPES = {
@@ -109,7 +118,7 @@ CONFIG_DEPENDENT_TYPES = {
 }
 
 # `entities` rows with a `type:` Vitro draws; a row without one is a plain entity row.
-ENTITIES_ROW_TYPES = {"divider", "section"}
+ENTITIES_ROW_TYPES = {"divider", "section", "button", "call-service", "perform-action", "text", "weblink", "buttons", "conditional"}
 
 # Options of an `entities` card Vitro doesn't draw.
 ENTITIES_UNSUPPORTED_OPTIONS = {"header", "footer"}
@@ -528,6 +537,12 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
         reasons = ["a custom card with no native renderer"]
     else:
         reasons = ["not a card type Vitro draws"]
+
+    if ctype == "iframe" and not reasons:
+        # The view stays native, but the frame's own page runs in a GeckoView island.
+        counts["tier3"] += 1
+        triggers.append(f"  TIER 3 [GECKOVIEW]  {loc}: type='iframe': its page runs in a GeckoView island (the view stays native)")
+        return
 
     if reasons and (ctype in NATIVE_CORE_TYPES or (ctype in NATIVE_HACS_TYPES and needs_ha_frontend(card))):
         # A built-in card stays native (the island can't draw built-in cards), and so does a custom card Vitro

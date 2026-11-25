@@ -113,12 +113,16 @@ function loadCases() {
   return cases.filter((c) => ids.has(c.id));
 }
 
-/** The harness dashboard: one sections view per card case, one section holding the one card. */
+/**
+ * The harness dashboard: one sections view per card case, one section holding the one card; a view case
+ * (`view_config`: a whole view, for the view layouts) is its own view as written.
+ */
 function harnessConfig(cases) {
   return {
     title: HARNESS_META.title,
     [MARKER_KEY]: MARKER_VALUE,
-    views: cases.filter((c) => c.card).map((c) => {
+    views: cases.filter((c) => c.card || c.view_config).map((c) => {
+      if (c.view_config) return { ...c.view_config, title: c.id, path: c.id };
       const span = c.span || 1;
       return {
         title: c.id,
@@ -205,11 +209,12 @@ async function prepare() {
   }
   const ha = await connect(creds);
   const cases = loadCases();
-  const cardCases = cases.filter((c) => c.card);
+  const cardCases = cases.filter((c) => c.card || c.view_config);
   if (cardCases.length) {
     const all = loadCasesAll();
-    await saveHarness(ha, harnessConfig(all), all.filter((c) => c.card).map((c) => c.id));
-    log(`saved ${HARNESS}: ${all.filter((c) => c.card).length} card views (every corpus case)`);
+    const harnessIds = all.filter((c) => c.card || c.view_config).map((c) => c.id);
+    await saveHarness(ha, harnessConfig(all), harnessIds);
+    log(`saved ${HARNESS}: ${harnessIds.length} views (every corpus case)`);
   }
   for (const c of cases.filter((c) => c.dashboard)) {
     if (committed) fail(`${c.id}: real dashboards belong in a local corpus (--root), never in the committed one`);
@@ -263,6 +268,28 @@ const SLOTS_JS = () => {
       }
       if (r.width < 1 || r.height < 1) continue;
       slots.push({ x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height, type: inner ? inner.localName : null, ...(fixed ? { fixed } : {}) });
+    }
+  }
+  // The other view layouts (masonry, sidebar, layout-card's): every top-level card, in document order.
+  if (!all.some((e) => e.localName === 'hui-grid-section')) {
+    const views = all.filter((e) => ['hui-masonry-view', 'hui-sidebar-view', 'masonry-layout', 'grid-layout', 'horizontal-layout', 'vertical-layout'].includes(e.localName));
+    const seen = new Set();
+    for (const v of views) {
+      const inView = [];
+      const collect = (r) => r.querySelectorAll('*').forEach((e) => {
+        if (e.localName === 'hui-card') { inView.push(e); return; }
+        if (e.shadowRoot && !views.includes(e)) collect(e.shadowRoot);
+      });
+      collect(v.shadowRoot || v);
+      collect(v);
+      for (const card of inView) {
+        if (seen.has(card)) continue;
+        seen.add(card);
+        const inner = [...card.children].find((c) => c.localName !== 'style');
+        const r = card.getBoundingClientRect();
+        if (r.width < 1 || r.height < 1) continue;
+        slots.push({ x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height, type: inner ? inner.localName : null });
+      }
     }
   }
   return { slots, docW: document.documentElement.scrollWidth, docH: document.documentElement.scrollHeight };
@@ -589,7 +616,13 @@ function snapshotStates(states, ids) {
 }
 
 /** The element HA renders a card type as: hui-tile-card, or the custom element's own name. */
-const cardElement = (card) => (card.type.startsWith('custom:') ? card.type.slice(7) : `hui-${card.type}-card`);
+/**
+ * The element HA's page shows for a card: its `hui-<type>-card`, a custom card's own tag, or HA's error card for a type
+ * HA always loads but has no element for (`section`: `setConfig` on a plain element throws).
+ */
+const ERROR_CARD_TYPES = new Set(['section']);
+const cardElement = (card) => (card.type.startsWith('custom:') ? card.type.slice(7)
+  : ERROR_CARD_TYPES.has(card.type) ? 'hui-error-card' : `hui-${card.type}-card`);
 
 /** The pages of touch frames (`hasTouch`), whose screenshots must keep HA's coarse-pointer styling. */
 const touchPages = new WeakSet();
@@ -896,7 +929,7 @@ async function capture() {
         // The history and statistics this case's cards ask for, from its navigation on.
         graphs.reset();
         try {
-          const path = c.card ? `/${HARNESS}/${c.id}` : `/${c.dashboard}/${c.view}`;
+          const path = c.card || c.view_config ? `/${HARNESS}/${c.id}` : `/${c.dashboard}/${c.view}`;
           const resources = fixtureResources(c);
           // The fake HA serves this case's fixture from now on; its page loads afresh (new states, new registries).
           if (fakeMode) {
@@ -928,7 +961,7 @@ async function capture() {
               })));
             }, resources.map((r) => new URL(r.url, creds.origin).toString()));
           }
-          const config = c.card ?? JSON.parse(readFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), 'utf8'));
+          const config = c.card ?? c.view_config ?? JSON.parse(readFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), 'utf8'));
           const outDir = join(refs, frame.id);
           mkdirSync(outDir, { recursive: true });
           let info, stable, clip, slots, png, texts, templates, ids, drawnStates, drawn, display, drawnGraphs, loadedAtShot, mode;

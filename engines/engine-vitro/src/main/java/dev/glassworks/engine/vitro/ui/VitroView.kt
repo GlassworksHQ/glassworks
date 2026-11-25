@@ -32,6 +32,15 @@ import dev.glassworks.engine.vitro.cards.AreaCardView
 import dev.glassworks.engine.vitro.cards.AutoEntitiesCardView
 import dev.glassworks.engine.vitro.cards.CardBuilder
 import dev.glassworks.engine.vitro.cards.LayoutCardView
+import dev.glassworks.engine.vitro.cards.AlertCardView
+import dev.glassworks.engine.vitro.cards.DateCardView
+import dev.glassworks.engine.vitro.cards.IframeCardView
+import dev.glassworks.engine.vitro.cards.PlantStatusCardView
+import dev.glassworks.engine.vitro.cards.ShoppingListCardView
+import dev.glassworks.engine.vitro.cards.ShortcutCardView
+import dev.glassworks.engine.vitro.cards.SmallCardConfigs
+import dev.glassworks.engine.vitro.cards.StatisticCardView
+import dev.glassworks.engine.vitro.cards.ToggleGroupCardView
 import dev.glassworks.engine.vitro.cards.MiniMediaPlayerCardView
 import dev.glassworks.engine.vitro.cards.MushroomAlarmControlPanelCardView
 import dev.glassworks.engine.vitro.cards.MushroomHumidifierCardView
@@ -76,6 +85,7 @@ import dev.glassworks.engine.vitro.cards.TodoListCardView
 import dev.glassworks.engine.vitro.cards.WeatherCardView
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
+import dev.glassworks.engine.vitro.cards.IslandCard
 import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HistoryPoint
@@ -103,6 +113,7 @@ import dev.glassworks.engine.vitro.theme.ThemeBackground
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.ui.Inter
+import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.hypot
 
@@ -953,9 +964,19 @@ class VitroView(
             updateIslandsShown()
         }
 
-    /** The island cards in [root]'s tree. */
-    private fun islandsIn(root: View, into: MutableList<WebIslandCardView> = ArrayList()): MutableList<WebIslandCardView> {
-        if (root is WebIslandCardView) {
+    /** Whether [v] and every view above it up to [root] are VISIBLE. */
+    private fun visibleWithin(v: View, root: View): Boolean {
+        var cur: View? = v
+        while (cur != null && cur !== root) {
+            if (cur.visibility != VISIBLE) return false
+            cur = cur.parent as? View
+        }
+        return true
+    }
+
+    /** The island cards in [root]'s tree: web islands and iframe cards. */
+    private fun islandsIn(root: View, into: MutableList<IslandCard> = ArrayList()): MutableList<IslandCard> {
+        if (root is IslandCard) {
             into += root
         } else if (root is android.view.ViewGroup) {
             for (i in 0 until root.childCount) islandsIn(root.getChildAt(i), into)
@@ -996,8 +1017,7 @@ class VitroView(
     }
 
     /** The island an earlier build of [card] gave up, for its new build to take, or null. */
-    private fun adoptIsland(card: CardConfig, fillViewport: Boolean): WebIslandCardView.Island? {
-        val key = WebIslandCardView.keyOf(card, fillViewport)
+    private fun adoptIsland(card: CardConfig, fillViewport: Boolean, key: String = WebIslandCardView.keyOf(card, fillViewport)): WebIslandCardView.Island? {
         val queue = islandPool[key] ?: return null
         val island = queue.removeFirstOrNull()
         if (queue.isEmpty()) islandPool.remove(key)
@@ -1019,7 +1039,8 @@ class VitroView(
         val onScreen = dashboardShown && activityShown
         for ((index, root) in viewCache) {
             val shown = onScreen && index == currentViewIndex && root.visibility == VISIBLE
-            islandsIn(root).forEach { it.setShown(shown) }
+            // A card its visibility conditions hide (GONE inside the view) pauses too.
+            islandsIn(root).forEach { it.setShown(shown && visibleWithin(it as View, root)) }
         }
         for ((index, frame) in overlayFrames) {
             val shown = onScreen && index == currentViewIndex && frame.visibility == VISIBLE
@@ -1204,15 +1225,23 @@ class VitroView(
             isVerticalScrollBarEnabled = false
         }
         val widthDp = (resources.displayMetrics.widthPixels / dp).toInt()
-        val gap = px(ctx.theme.cardGapDp)
         val outerPad = px(ctx.theme.viewPaddingDp)
 
-        val container: View = if (view.type == "sections" && view.sections.isNotEmpty()) {
-            buildSectionsLayout(view, ctx, widthDp)
-        } else {
-            buildMasonryLayout(view.cards, ctx, widthDp, outerPad, gap)
+        val layoutCard = view.layoutCardType
+        val container: View = when {
+            view.type == "sections" && view.sections.isNotEmpty() -> buildSectionsLayout(view, ctx, widthDp)
+            view.type == "sidebar" -> buildSidebarLayout(view.cards, ctx, widthDp)
+            // layout-card as the view's own layout: the same layouts as the card, with the view's `layout:`.
+            layoutCard != null -> LayoutCardView(ctx, layoutViewCard(view), { child ->
+                wrapVisibility(child, buildCard(child, ctx, false), ctx).also { v ->
+                    // Clarity sees each card by its index in the view's config (a layout-break builds nothing).
+                    clarity?.cardBuilt(buildingIndex, view.cards.indexOfFirst { it === child }, child, v)
+                }
+            }, widthDp)
+            else -> buildMasonryLayout(view.cards, ctx, widthDp)
         }
-        val withBadges = if (view.badges.isNotEmpty()) {
+        // layout-card's views draw no badges.
+        val withBadges = if (view.badges.isNotEmpty() && layoutCard == null) {
             LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(buildBadgeBar(view.badges, ctx), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
@@ -1412,57 +1441,88 @@ class VitroView(
         return grid
     }
 
-    private fun buildMasonryLayout(
-        cards: List<CardConfig>,
-        ctx: VitroCardContext,
-        widthDp: Int,
-        outerPad: Int,
-        gap: Int,
-    ): View {
-        val cols = when {
-            widthDp < 540 -> 1
-            widthDp < 880 -> 2
-            widthDp < 1240 -> 3
-            else -> 4
-        }
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(outerPad, outerPad, outerPad, outerPad)
-        }
-        val columns = (0 until cols).map { i ->
-            LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                row.addView(this, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
-                    if (i > 0) marginStart = gap
-                })
-            }
-        }
-        val weights = IntArray(cols)
-        for ((cardIndex, card) in cards.withIndex()) {
-            if (pinIfFixed(card, ctx)) continue
-            // Place each card into the lightest column for a balanced masonry flow.
-            var best = 0
-            for (i in 1 until cols) if (weights[i] < weights[best]) best = i
+    /**
+     * HA's masonry view: the cards dealt into columns by [HaMasonry], the columns at most 500 px wide and centered
+     * ([MasonryColumnsLayout]), `#columns { margin: 0 4px }` under the view's 4 px top padding, and each card in
+     * `--masonry-view-card-margin` (4px 4px 8px; no side margins at 500 px and narrower). A theme's
+     * `--masonry-view-padding` (Vitro's own) replaces the view's padding.
+     */
+    private fun buildMasonryLayout(cards: List<CardConfig>, ctx: VitroCardContext, widthDp: Int): View {
+        // A pinned card (card-mod `position: fixed`) goes to the overlay first: it takes no column and no weight.
+        val placed = cards.withIndex().filter { (_, card) -> !pinIfFixed(card, ctx) }
+        val (placement, count) = HaMasonry.place(placed.map { it.value }, widthDp)
+        val row = MasonryColumnsLayout(context, px(if (widthDp < 600) 600f else 500f)).apply { applyViewPadding(this, ctx) }
+        val columns = (0 until count).map { cardColumn(ctx) }
+        columns.forEach { row.addView(it, LinearLayout.LayoutParams(0, WRAP_CONTENT)) }
+        placed.forEachIndexed { k, (configIndex, card) ->
+            val column = columns[placement[k]]
             val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
-            clarity?.cardBuilt(buildingIndex, cardIndex, card, v)
-            columns[best].addView(v, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-                bottomMargin = gap
-            })
-            weights[best] += estimateWeight(card)
+            clarity?.cardBuilt(buildingIndex, configIndex, card, v)
+            column.addView(v, cardMarginParams(ctx, widthDp))
         }
         return row
     }
 
-    private fun estimateWeight(card: CardConfig): Int = when (card.type) {
-        "entities" -> (card.entities().size * 2).coerceAtLeast(3)
-        "history-graph", "thermostat", "picture", "picture-entity" -> 6
-        "clock", "sensor", "gauge", "weather-forecast", "entity", "area" -> 4
-        "light", "statistics-graph", "todo-list", "picture-elements", "calendar", "logbook" -> 6
-        "humidifier" -> 7
-        "alarm-panel" -> 8
-        "grid", "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card" -> card.childCards.size * 2
-        "custom:mini-media-player", "custom:mushroom-media-player-card", "custom:auto-entities" -> 4
-        else -> 2
+    /**
+     * HA's sidebar view ([SidebarColumnsLayout]): from 760 px up, the cards with `view_layout.position: sidebar` in the
+     * side column and the rest in the main one; narrower, all of them in one column in config order. Margins as in
+     * the masonry view.
+     */
+    private fun buildSidebarLayout(cards: List<CardConfig>, ctx: VitroCardContext, widthDp: Int): View {
+        val main = cardColumn(ctx)
+        val split = widthDp >= 760
+        val side = if (split) cardColumn(ctx) else main
+        for ((cardIndex, card) in cards.withIndex()) {
+            if (pinIfFixed(card, ctx)) continue
+            val inSidebar = card.raw.optJSONObject("view_layout")?.optString("position") == "sidebar"
+            val column = if (inSidebar) side else main
+            val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
+            clarity?.cardBuilt(buildingIndex, cardIndex, card, v)
+            column.addView(v, cardMarginParams(ctx, widthDp))
+        }
+        if (!split) {
+            return SidebarStackLayout(context).apply {
+                applyViewPadding(this, ctx)
+                addView(main, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            }
+        }
+        return SidebarColumnsLayout(context, main, side).apply { applyViewPadding(this, ctx) }
+    }
+
+    /** `:host { padding-top: 4px }` and `margin: 0 4px` round the columns, or the theme's `--masonry-view-padding`. */
+    private fun applyViewPadding(v: View, ctx: VitroCardContext) {
+        val own = (ctx.theme.vars["masonry-view-padding"] ?: ctx.theme.vars["vitro-view-padding"])?.let { px(ctx.theme.viewPaddingDp) }
+        if (own != null) v.setPadding(own, own, own, own) else v.setPadding(px(4f), px(4f), px(4f), 0)
+    }
+
+    /** The view's `--masonry-view-card-margin` (4px 4px 8px), top, right, bottom, left in dp. */
+    private fun cardMargin(ctx: VitroCardContext): FloatArray =
+        MushroomTitleCardView.paddingDp(ctx.theme.vars["masonry-view-card-margin"]) ?: floatArrayOf(4f, 4f, 8f, 4f)
+
+    /**
+     * A masonry or sidebar column ([CardColumn]): the first card it shows has the top margin, the ones after it the
+     * collapsed gap (the larger of the bottom and top margins).
+     */
+    private fun cardColumn(ctx: VitroCardContext): CardColumn {
+        val m = cardMargin(ctx)
+        return CardColumn(context, px(m[0]), px(maxOf(0f, m[0] - m[2])))
+    }
+
+    /** `margin: var(--masonry-view-card-margin, 4px 4px 8px)`, the side margins dropped at 500 px and narrower. */
+    private fun cardMarginParams(ctx: VitroCardContext, widthDp: Int): LinearLayout.LayoutParams {
+        val m = cardMargin(ctx)
+        val narrow = widthDp <= 500
+        return LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+            setMargins(if (narrow) 0 else px(m[3]), px(m[0]), if (narrow) 0 else px(m[1]), px(m[2]))
+        }
+    }
+
+    /** A layout-card view as the card [LayoutCardView] draws: its `type` as `layout_type`, its `layout` and cards. */
+    private fun layoutViewCard(view: ViewConfig): CardConfig {
+        val raw = JSONObject().put("type", "custom:layout-card").put("layout_type", view.type)
+        view.raw.optJSONObject("layout")?.let { raw.put("layout", it) }
+        raw.put("cards", view.raw.optJSONArray("cards") ?: JSONArray())
+        return CardConfig(type = "custom:layout-card", raw = raw, childCards = view.cards)
     }
 
     /**
@@ -1688,6 +1748,18 @@ class VitroView(
             "humidifier" -> HumidifierCardView(ctx, card)
             "calendar" -> CalendarCardView(ctx, card)
             "logbook" -> LogbookCardView(ctx, card)
+            "shopping-list" -> ShoppingListCardView(ctx, card)
+            "section" -> HaErrorCardView(ctx, SmallCardConfigs.SECTION_CARD_ERROR)
+            "statistic" -> SmallCardConfigs.statisticError(card)?.let { HaErrorCardView(ctx, it) } ?: StatisticCardView(ctx, card)
+            "date" -> SmallCardConfigs.dateError(card)?.let { HaErrorCardView(ctx, it) } ?: DateCardView(ctx, card)
+            "plant-status" -> if (card.entity?.substringBefore('.') == "plant") PlantStatusCardView(ctx, card)
+                else HaErrorCardView(ctx, "Specify an entity from within the plant domain")
+            "toggle-group" -> if ((card.raw.optJSONArray("entities")?.length() ?: 0) > 0) ToggleGroupCardView(ctx, card)
+                else HaErrorCardView(ctx, "Entities are required")
+            "shortcut" -> ShortcutCardView(ctx, card)
+            "alert" -> SmallCardConfigs.alertError(card)?.let { HaErrorCardView(ctx, it) } ?: AlertCardView(ctx, card)
+            "iframe" -> SmallCardConfigs.iframeError(card)?.let { HaErrorCardView(ctx, it) }
+                ?: IframeCardView(ctx, card, fillViewport, adopted = adoptIsland(card, fillViewport, IframeCardView.keyFor(ctx, card, fillViewport)))
             // Tier 2: Popular HACS Fast-Paths
             // Mushroom's light, fan and cover cards with their controls row; without one, the tile draws them.
             "custom:mushroom-light-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, stateForBuild(card))) MushroomLightCardView(ctx, card) else TileCardView(ctx, card)
@@ -1777,7 +1849,12 @@ class VitroView(
             val visible = conds.all { VisibilityCondition.evaluateAt(it, nowMs, store::get, widthDp, userId) }
             if (visible != shown) {
                 shown = visible
-                crossfade(view, visible, transitionMs ?: DEFAULT_FADE_MS)
+                val fadeMs = transitionMs ?: DEFAULT_FADE_MS
+                crossfade(view, visible, fadeMs)
+                // An island inside pauses once the card is hidden (the fade's end), and runs again when it's shown.
+                if (islandsIn(view).isNotEmpty()) {
+                    if (visible) updateIslandsShown() else view.postDelayed({ updateIslandsShown() }, fadeMs + 16)
+                }
             }
         }
         update()

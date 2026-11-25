@@ -1,0 +1,126 @@
+{
+ "title": "Entities: button, call-service, text, weblink, conditional and buttons rows",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "entities",
+  "title": "Rows",
+  "entities": [
+   {
+    "type": "button",
+    "entity": "light.hall_lamp"
+   },
+   {
+    "type": "call-service",
+    "name": "Bed time",
+    "icon": "mdi:bed",
+    "action": "script.bed_time",
+    "action_name": "Go"
+   },
+   {
+    "type": "text",
+    "name": "Guest Wi-Fi",
+    "text": "Garden",
+    "icon": "mdi:wifi"
+   },
+   {
+    "type": "weblink",
+    "name": "Help",
+    "url": "/config/integrations"
+   },
+   {
+    "type": "conditional",
+    "conditions": [
+     {
+      "condition": "state",
+      "entity": "light.hall_lamp",
+      "state": "on"
+     }
+    ],
+    "row": {
+     "entity": "light.porch_lamp"
+    }
+   },
+   {
+    "type": "conditional",
+    "conditions": [
+     {
+      "condition": "state",
+      "entity": "light.hall_lamp",
+      "state": "off"
+     }
+    ],
+    "row": {
+     "entity": "light.stair_lamp"
+    }
+   },
+   {
+    "type": "buttons",
+    "entities": [
+     "light.hall_lamp",
+     {
+      "entity": "light.porch_lamp",
+      "name": "Porch"
+     },
+     {
+      "entity": "light.stair_lamp",
+      "show_name": true
+     }
+    ]
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.hall_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "friendly_name": "Hall Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.porch_lamp": {
+    "state": "off",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "friendly_name": "Porch Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.stair_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "friendly_name": "Stair Lamp",
+     "supported_features": 40
+    }
+   },
+   "script.bed_time": {
+    "state": "off",
+    "last_changed": "-6h",
+    "attributes": {
+     "friendly_name": "Bed time",
+     "mode": "single"
+    }
+   }
+  }
+ }
+}

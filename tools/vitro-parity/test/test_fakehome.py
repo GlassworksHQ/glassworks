@@ -104,6 +104,51 @@ class Home(unittest.TestCase):
         self.assertGreaterEqual(len(out), 5)
         self.assertTrue(all(r["min"] <= r["mean"] <= r["max"] and r["end"] - r["start"] == 3600000 for r in out))
 
+    def test_statistic_during_period_reads_the_window_itself(self):
+        # A measurement that drops from 100 to 20 at 9:30 (local): a rolling 30 minutes back from 10:08 holds 20 only.
+        self.case({"states": {"sensor.m": {"state": "20", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}},
+                              "sensor.c": {"state": "20", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}}},
+                   "history": {"sensor.m": {"points": [["-3h", "100"], ["-38m", "20"]]},
+                               "sensor.c": {"points": [["-2h08m", "0"], ["-1h08m", "10"], ["-4m", "20"]]}}})
+        win = H.statistic_during_period({"statistic_id": "sensor.m", "rolling_window": {"duration": {"minutes": 30}}})
+        self.assertEqual((win["mean"], win["max"], win["min"]), (20.0, 20.0, 20.0))
+        # A counter's change is its value at the end less at the start: both steps inside the window count.
+        out = H.statistic_during_period({"statistic_id": "sensor.c", "fixed_period": {
+            "start_time": H.iso(H.NOW - 2 * 3600 - 8 * 60), "end_time": H.iso(H.NOW)}})
+        self.assertEqual(out, {"change": 20.0})
+        # Time-weighted: 0 held from 8:00 to 9:00, 100 only at its end, is a mean of 0.
+        self.case({"states": {"sensor.m": {"state": "100", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}},
+                              "sensor.r": {"state": "10", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}},
+                              "sensor.c": {"state": "20", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}}},
+                   "history": {"sensor.m": {"points": [["-3h", "0"], ["-1h08m", "100"]]},
+                               "sensor.r": {"points": [["-3h", "100"], ["-2h", "110"], ["-1h", "0"], ["-30m", "10"]]},
+                               "sensor.c": {"points": [["-2h08m", "0"], ["-1h08m", "10"], ["-4m", "20"]]}}})
+        weighted = H.statistic_during_period({"statistic_id": "sensor.m", "fixed_period": {
+            "start_time": H.iso(H.NOW - 2 * 3600 - 8 * 60), "end_time": H.iso(H.NOW - 3600 - 8 * 60)}})
+        self.assertEqual(weighted["mean"], 0.0)
+        # Between steps: 0 until 10:01, then 100, over 10:00-10:08 is 87.5 (the series' own change, not a 5-minute grid).
+        self.case({"states": {"sensor.m": {"state": "100", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}}},
+                   "history": {"sensor.m": {"points": [["-3h", "0"], ["-7m", "100"]]}}})
+        between = H.statistic_during_period({"statistic_id": "sensor.m", "fixed_period": {
+            "start_time": H.iso(H.NOW - 8 * 60), "end_time": H.iso(H.NOW)}})
+        self.assertEqual(between["mean"], 87.5)
+        # Unavailable is a boundary held for no mean: 0 for 5 min, unavailable 10 min, 100 for 5 min is 50.
+        self.case({"states": {"sensor.m": {"state": "100", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}}},
+                   "history": {"sensor.m": {"points": [["-28m", "0"], ["-23m", "unavailable"], ["-13m", "100"], ["-8m", "100"]]}}})
+        gap = H.statistic_during_period({"statistic_id": "sensor.m", "fixed_period": {
+            "start_time": H.iso(H.NOW - 28 * 60), "end_time": H.iso(H.NOW - 8 * 60)}})
+        self.assertEqual(gap["mean"], 50.0)
+        self.case({"states": {"sensor.r": {"state": "10", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}},
+                              "sensor.c": {"state": "20", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}}},
+                   "history": {"sensor.r": {"points": [["-3h", "100"], ["-2h", "110"], ["-1h", "0"], ["-30m", "10"]]},
+                               "sensor.c": {"points": [["-2h08m", "0"], ["-1h08m", "10"], ["-4m", "20"]]}}})
+        # A meter that resets keeps what it counted: 100 -> 110, reset, -> 10 is 20.
+        reset = H.statistic_during_period({"statistic_id": "sensor.r", "rolling_window": {"duration": {"hours": 3}}})
+        self.assertEqual(reset, {"change": 20.0})
+        # The current hour, not the year to date.
+        hour = H.statistic_during_period({"statistic_id": "sensor.c", "calendar": {"period": "hour"}})
+        self.assertEqual(hour, {"change": 10.0})
+
     def test_templates_render_as_ha_does(self):
         self.case({"states": {"sensor.h": {"state": "47.3", "attributes": {"unit_of_measurement": "%"}},
                               "climate.c": {"state": "heat_cool", "attributes": {}}}})
@@ -256,7 +301,7 @@ class Corpus(unittest.TestCase):
             if not isinstance(fx, dict):
                 missing.append(f"{cid}: no fixture")
                 continue
-            named = {m for m in ID.findall(json.dumps(doc["card"])) if m.split(".")[0] in DOMAINS and not m.startswith(("sun.", "sensor.missing"))}
+            named = {m for m in ID.findall(json.dumps(doc.get("card") or doc.get("view_config"))) if m.split(".")[0] in DOMAINS and not m.startswith(("sun.", "sensor.missing"))}
             named = {m for m in named if not re.match(r"^(todo|calendar|person)\.(item|event)", m)}
             for e in sorted(named - set(fx.get("states") or {})):
                 missing.append(f"{cid}: {e} has no state")

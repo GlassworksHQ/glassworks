@@ -1988,6 +1988,8 @@ class LayoutCardView(
                 columnWidthDp = layout.optDouble("width", Double.NaN).takeIf { !it.isNaN() && it > 0 }?.toFloat() ?: 300f
                 columnMaxDp = layout.optDouble("max_width", Double.NaN).takeIf { !it.isNaN() && it > 0 }?.toFloat()
                     ?: if (layout.has("width")) kotlin.math.ceil(1.5f * columnWidthDp) else 500f
+                // An inverted pair (`width: 400, max_width: 350`): CSS's minmax() takes the larger as the max too.
+                if (columnMaxDp < columnWidthDp) columnMaxDp = columnWidthDp
                 maxCols = layout.optInt("max_cols", 4).coerceIn(1, 12)
                 minHeight = layout.optInt("min_height", 5)
                 for (c in config.childCards) columnCards += c to (if (isBreak(c)) null else build(c))
@@ -2050,12 +2052,12 @@ class LayoutCardView(
                 }
             }
             else -> {
-                val length = IntArray(n)
+                val length = DoubleArray(n)
                 for ((c, v) in columnCards) {
                     if (v == null) continue
                     var pick = 0
                     for (k in 0 until n) {
-                        if (length[k] in 1 until minHeight) { pick = k; break }
+                        if (length[k] > 0 && length[k] < minHeight) { pick = k; break }
                         if (length[k] < length[pick]) pick = k
                     }
                     cols[pick] += v

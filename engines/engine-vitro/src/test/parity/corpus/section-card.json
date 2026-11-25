@@ -1,0 +1,14 @@
+{
+ "title": "section card: HA's error card for the legacy type",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "section",
+  "label": "Lights"
+ },
+ "fixture": {
+  "states": {}
+ }
+}
