@@ -526,6 +526,47 @@ class HacsParityWaveTest {
         assertEquals(12f, (grid.tracks[1].getChildAt(0).top + grid.tracks[1].top - (a.bottom + grid.tracks[0].top)) / dp, 1f)
     }
 
+    /** The cards' names (their configs' `title`) column by column, after a measure at [widthDp]. */
+    private fun columns(json: String, widthDp: Int): List<List<String?>> {
+        val st = store()
+        val v = LayoutCardView(context(st), card(json), builder(st), widthDp = widthDp)
+        val dp = activity.resources.displayMetrics.density
+        v.measure(View.MeasureSpec.makeMeasureSpec((widthDp * dp).toInt(), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+        return v.tracks.map { col -> (0 until col.childCount).map { (col.getChildAt(it).tag as CardConfig).title } }
+    }
+
+    @Test
+    fun layoutCardsColumnLayoutsPlaceCardsAsLayoutCardDoes() {
+        fun e(title: String, n: Int) = """{"type": "entities", "title": "$title", "entities": [${List(n) { "\"light.l$it\"" }.joinToString()}]}"""
+        val brk = """{"type": "custom:layout-break"}"""
+        fun layout(type: String, vararg cards: String) =
+            """{"type": "custom:layout-card", "layout_type": "custom:$type-layout", "layout": {"width": 200}, "cards": [${cards.joinToString()}]}"""
+        // Masonry at 512: two columns. A (5 units) fills the first; B (3) goes to the shorter one, and C joins B because
+        // that column is still under min_height (5).
+        assertEquals(listOf(listOf("A"), listOf("B", "C")), columns(layout("masonry", e("A", 3), e("B", 1), e("C", 2)), 512))
+        // Horizontal deals round robin; a break starts over at the first column.
+        assertEquals(listOf(listOf("A", "C"), listOf("B")), columns(layout("horizontal", e("A", 1), e("B", 1), e("C", 1)), 512))
+        assertEquals(listOf(listOf("A", "B"), listOf("C")), columns(layout("horizontal", e("A", 1), brk, e("B", 1), e("C", 1)), 512))
+        // Vertical keeps one column until a break; the empty columns are dropped.
+        assertEquals(listOf(listOf("A", "B"), listOf("C")), columns(layout("vertical", e("A", 1), e("B", 1), brk, e("C", 1)), 512))
+        assertEquals(listOf(listOf("A", "B", "C")), columns(layout("vertical", e("A", 1), e("B", 1), e("C", 1)), 512))
+        // Under one column width: one column.
+        assertEquals(listOf(listOf("A", "B", "C")), columns(layout("masonry", e("A", 3), e("B", 1), e("C", 2)), 190))
+
+        // HA at 512: margin 0 4 and padding 4 0 leave 504, two 252 px columns; in a column the cards' 4 4 8 margins
+        // collapse to 8 between two cards.
+        val st = store()
+        val v = LayoutCardView(context(st), card(layout("masonry", e("A", 3), e("B", 1), e("C", 2))), builder(st), widthDp = 512)
+        val dp = activity.resources.displayMetrics.density
+        v.measure(View.MeasureSpec.makeMeasureSpec((512 * dp).toInt(), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        v.layout(0, 0, v.measuredWidth, v.measuredHeight)
+        assertEquals(listOf(252f, 252f), v.tracks.map { it.width / dp })
+        val (b, c) = v.tracks[1].getChildAt(0) to v.tracks[1].getChildAt(1)
+        assertEquals(8f, (c.top - b.bottom) / dp, 0.5f)
+        assertEquals(244f, b.width / dp, 0.5f)
+    }
+
     @Test
     fun aSqueezedCoverRowKeepsTheNamesFirstLetterAndSpacedButtons() {
         // HA in a 244 px entities card: the name's box shrinks to its padding, the three buttons (a space apart) run
@@ -551,6 +592,20 @@ class HacsParityWaveTest {
         lay(400)
         assertTrue(name.width > 8 * dp)
         assertEquals(android.text.TextUtils.TruncateAt.END, name.ellipsize)
+    }
+
+    @Test
+    fun cardSizesFollowHasGetCardSize() {
+        fun size(json: String) = dev.glassworks.engine.vitro.model.HaCardSize.of(card(json))
+        assertEquals(5, size("""{"type": "entities", "title": "T", "entities": ["a.a", "a.b", "a.c"]}"""))
+        assertEquals(1, size("""{"type": "entities", "entities": []}"""))
+        assertEquals(3, size("""{"type": "tile", "entity": "a.a", "features": [{"type": "x"}, {"type": "y"}]}"""))
+        assertEquals(2, size("""{"type": "tile", "entity": "a.a", "vertical": true, "features": [{"type": "x"}], "features_position": "inline"}"""))
+        // 7 entities in 5 columns: 2 rows of 3 lines, and the title's 2.
+        assertEquals(8, size("""{"type": "glance", "title": "G", "entities": ["a.a", "a.b", "a.c", "a.d", "a.e", "a.f", "a.g"]}"""))
+        assertEquals(5, size("""{"type": "button", "entity": "a.a"}"""))
+        assertEquals(2, size("""{"type": "markdown", "content": "1\n2\n3\n4"}"""))
+        assertEquals(1, size("""{"type": "custom:anything"}"""))
     }
 
     @Test
@@ -597,6 +652,8 @@ class HacsParityWaveTest {
             builder(st),
             widthDp = 1280,
         )
+        // The columns are placed once the card knows its width.
+        horizontal.measure(View.MeasureSpec.makeMeasureSpec(px(1280), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
         assertEquals(listOf(2, 1), horizontal.tracks.map { it.childCount })
     }
 

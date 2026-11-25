@@ -913,3 +913,30 @@ object EntityFilterConfig {
         return LovelaceParser.parseCard(inner)
     }
 }
+
+/**
+ * A card's size in HA's `getCardSize` units (about 50 px each), as layout-card's masonry columns weigh them: the
+ * core cards' own rules, else 1 (layout-card's answer for a card that has none or doesn't answer in time).
+ */
+object HaCardSize {
+    fun of(card: CardConfig): Int {
+        val raw = card.raw
+        return when (card.type) {
+            "entities" -> (if (card.title != null) 2 else 0) + card.entities().size.coerceAtLeast(1)
+            "tile" -> {
+                val features = raw.optJSONArray("features")?.length() ?: 0
+                val inline = features > 0 && raw.optString("features_position") == "inline"
+                1 + (if (raw.optBoolean("vertical", false)) 1 else 0) + (if (inline) 0 else features)
+            }
+            "glance" -> {
+                val lines = listOf("show_icon", "show_name", "show_state").count { raw.optBoolean(it, true) }
+                val rows = Math.ceil(card.entities().size / raw.optInt("columns", 5).coerceAtLeast(1).toDouble()).toInt()
+                (if (card.title != null) 2 else 0) + lines * rows
+            }
+            "button" -> (if (raw.optBoolean("show_icon", true)) 4 else 0) + (if (raw.optBoolean("show_name", true)) 1 else 0)
+            "markdown" -> if (raw.has("card_size")) raw.optInt("card_size", 1)
+                else Math.round(raw.optString("content", "").split("\n").size / 2.0).toInt() + (if (card.title != null) 1 else 0)
+            else -> 1
+        }
+    }
+}
