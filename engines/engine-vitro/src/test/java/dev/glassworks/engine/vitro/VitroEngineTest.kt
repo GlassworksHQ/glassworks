@@ -368,6 +368,35 @@ class VitroEngineTest {
     }
 
     @Test
+    fun aDisposedPageBuildsNothingWhenItsWaitEnds() {
+        server.initialEntities = JSONObject()
+        val engine = vitro()
+        val page = openPage(engine)
+        page.load("$base/wall-test/living")
+        awaitMain("dashboard shown") { vitroView(page).dashboard != null }
+        assertFalse(vitroView(page).currentViewBuilt)
+        // A new page replaces it (the old one is disposed) while its view waits for states.
+        openPage(engine)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_500))
+        assertFalse("the wait was cancelled: nothing built for a page that's gone", vitroView(page).currentViewBuilt)
+    }
+
+    @Test
+    fun aDashboardWithNoViewsIsReady() {
+        server.dashboardConfig = JSONObject("""{"views": []}""")
+        val page = openPage(vitro())
+        page.load("$base/wall-test/living")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        assertEquals("vitro", host.messages("ready").single().getString("why"))
+        assertEquals(listOf(true), host.pageStops.toList())
+        fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+        assertFalse(
+            "no \"Connecting…\" left on a ready page",
+            all(vitroView(page)).any { it is TextView && it.isShown && it.text.startsWith("Connecting") },
+        )
+    }
+
+    @Test
     fun onlyANonDashboardUrlOpensTheFallbackAndItIsReusedAfterwards() {
         val page = readyPage()
         assertTrue("a dashboard alone never opens the fallback", fallback.opens.isEmpty())
