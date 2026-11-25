@@ -54,6 +54,8 @@ tasks.withType<Test>().configureEach {
         "vitroParityFrames" to "vitro.parity.frames",
         // The *Mockups renders for a PR's screenshots (ClimateRangeMockups): PNGs into this directory.
         "vitroMockupDir" to "vitro.mockupDir",
+        // An island page for tools/vitro-parity/island-probe.mjs (IslandPageDumpTest): the case file it draws.
+        "vitroIslandCase" to "vitro.islandCase",
     )
     for ((prop, sys) in options) {
         (project.findProperty(prop) as String?)?.let {
