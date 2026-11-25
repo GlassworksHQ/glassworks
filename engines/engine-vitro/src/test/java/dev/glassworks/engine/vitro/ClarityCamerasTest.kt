@@ -10,6 +10,7 @@ import android.widget.FrameLayout
 import dev.glassworks.engine.vitro.camera.CameraStream
 import dev.glassworks.engine.vitro.camera.CameraStreamFactory
 import dev.glassworks.engine.vitro.camera.CameraStreamKind
+import dev.glassworks.engine.vitro.camera.CameraStreamVideoSize
 import dev.glassworks.engine.vitro.camera.CameraStreamKind.HLS
 import dev.glassworks.engine.vitro.camera.CameraStreamKind.MJPEG
 import dev.glassworks.engine.vitro.camera.CameraStreamKind.WEB_RTC
@@ -173,6 +174,34 @@ class ClarityCamerasTest {
         assertNull(ClarityCameras.measured(object : CameraStreamFactory {
             override fun create(entityId: String, kind: CameraStreamKind): CameraStream? = null
         }).create("camera.x", MJPEG))
+    }
+
+    @Test
+    fun theWrapperGivesTheVideosSizeAsItsStreamKnowsIt() {
+        class Sized(ctx: android.content.Context) : CameraStream, CameraStreamVideoSize {
+            override val view: View = View(ctx)
+            override var listener: CameraStream.Listener? = null
+            override var videoWidth = 0
+            override var videoHeight = 0
+            override fun start() {}
+            override fun setActive(active: Boolean) {}
+            override fun close() {}
+        }
+        val inner = Sized(ctx)
+        val s = ClarityCameras.measured(object : CameraStreamFactory {
+            override fun create(entityId: String, kind: CameraStreamKind): CameraStream = inner
+        }).create("camera.clarity_cam_0", WEB_RTC)!!
+        val sized = s as CameraStreamVideoSize
+        assertEquals(0, sized.videoWidth)
+        inner.videoWidth = 1280
+        inner.videoHeight = 720
+        // Read through, each time: a player learns its size once the first frame is decoded.
+        assertEquals(1280, sized.videoWidth)
+        assertEquals(720, sized.videoHeight)
+        // A stream that doesn't know its size: 0 both ways (unknown, so the video fills its card).
+        val plain = factory.create("camera.clarity_cam_1", MJPEG) as CameraStreamVideoSize
+        assertEquals(0, plain.videoWidth)
+        assertEquals(0, plain.videoHeight)
     }
 
     @Test

@@ -8,6 +8,7 @@ import android.view.View
 import dev.glassworks.engine.vitro.camera.CameraStream
 import dev.glassworks.engine.vitro.camera.CameraStreamFactory
 import dev.glassworks.engine.vitro.camera.CameraStreamKind
+import dev.glassworks.engine.vitro.camera.CameraStreamVideoSize
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.IdentityHashMap
@@ -256,13 +257,19 @@ internal class ClarityCameras(private val now: () -> Double) {
 /**
  * A [CameraStream] that tells Clarity what it does ([ClarityCameras.current]) and then does what [inner] does. The
  * stream choice sets [listener] on this one; [inner] reports to this one's own listener, which passes each call on.
+ * The video's size is [inner]'s, when it knows it ([CameraStreamVideoSize]; 0, unknown, otherwise), so wrapping a
+ * stream never changes how its card fits the video.
  */
 internal class MeasuredCameraStream(
     private val inner: CameraStream,
     val entityId: String,
     val kind: CameraStreamKind,
-) : CameraStream {
+) : CameraStream, CameraStreamVideoSize {
     override val view: View get() = inner.view
+
+    override val videoWidth: Int get() = (inner as? CameraStreamVideoSize)?.videoWidth ?: 0
+
+    override val videoHeight: Int get() = (inner as? CameraStreamVideoSize)?.videoHeight ?: 0
 
     override var listener: CameraStream.Listener? = null
 
