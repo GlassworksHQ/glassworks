@@ -635,8 +635,11 @@ class StatisticCardView(ctx: VitroCardContext, private val config: CardConfig) :
         }
         lineBox(valueView, 28f)
         lineBox(unitView, 16f)
+        // `ha-card { height: 100%; flex-direction: column; justify-content: space-between }`: in a taller slot (a
+        // sections grid's two rows) the value sits at the bottom.
+        body.addView(View(ctx.context), LinearLayout.LayoutParams(0, 0, 1f))
         body.addView(info, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = -ctx.px(4f) })
-        addView(body, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        addView(body, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         addView(error, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         if (!external) {
             isClickable = true
