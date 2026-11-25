@@ -5,6 +5,15 @@ import { SAMPLE_DASHBOARD, auditDashboard } from "@/lib/vitroCompat";
 import { manage as m } from "./Manage";
 import s from "./VitroAudit.module.css";
 
+/** The checker's reasons and notes, with their `code` spans shown as code. */
+function Ticked({ text }: { text: string }) {
+  return (
+    <>
+      {text.split("`").map((part, i) => (i % 2 === 1 ? <code key={i}>{part}</code> : part))}
+    </>
+  );
+}
+
 export function VitroAudit() {
   const [text, setText] = useState("");
   const deferred = useDeferredValue(text);
@@ -112,7 +121,11 @@ export function VitroAudit() {
                       <li key={`${t.path}-${i}`}>
                         <code>{t.type}</code>
                         <span>{t.path}</span>
-                        {t.reasons.length > 0 && <span className={s.why}>{t.reasons.join("; ")}</span>}
+                        {t.reasons.length > 0 && (
+                          <span className={s.why}>
+                            <Ticked text={t.reasons.join("; ")} />
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -125,7 +138,9 @@ export function VitroAudit() {
                   <ul className={s.list}>
                     {result.warnings.map((w, i) => (
                       <li key={`${w}-${i}`}>
-                        <span>{w}</span>
+                        <span>
+                          <Ticked text={w} />
+                        </span>
                       </li>
                     ))}
                   </ul>
