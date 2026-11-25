@@ -5,7 +5,7 @@
 // until then ?apk=release (its newest release) and ?apk=local (a file from this computer) are test links, or a demo.
 // The screens follow Kiln's (docs/design/kiln): one idea each, one ember button, the log one click away.
 import { Panel, adbKeyFromPkcs8, loadOrCreateAdbKey, type AdbKey, type PanelShell } from '@glassworks/adb';
-import { Assets, cap, fmtSize, pickInList, webUsbDevices, type DeviceEntry, type DeviceFrame, type DevicePhase } from '@glassworks/kiln-core';
+import { Assets, cap, fmtSize, pickInList, webUsbDevices, type DeviceEntry, type DeviceFrame, type DevicePhase, type StepCredits } from '@glassworks/kiln-core';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -106,7 +106,11 @@ export function webUsbAdb(keys: ReturnType<typeof adbKeyHolder>, authMs: number)
 }
 
 /** The install's end: the device, handed to the standard flow (its session, when there is one to take it). */
-export type HandOver = (panel: PanelShell) => StandardSession | undefined;
+/**
+ * `o.credits`: the credits the install stood on, by step (an in-place install wrote no one's image: none); without it,
+ * the frame's. Other fields (an app install's result) are ignored.
+ */
+export type HandOver = (panel: PanelShell, o?: { readonly credits?: StepCredits; readonly [k: string]: unknown }) => StandardSession | undefined;
 
 /** The page's two paths on one adb key: the app over adb (AppSession), or the image over fastboot (ImageSession). */
 function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local', handOver?: HandOver, base = ''): { app: AppSession; image: ImageSession } {
@@ -152,7 +156,8 @@ function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local', 
     holdingKey: leaveWarning(),
     apk: () => app.apkBytes(),
     apkBlocked: () => app.releaseBlocked(),
-    handOver: (p) => { handOver?.(p); },
+    // an in-place install wrote no one's image: its Done credits none
+    handOver: (p) => { handOver?.(p, image.inPlace ? { credits: {} } : undefined); },
     progress: sessionProgress(`kiln:device:${base}:image`),
     // one stage secret per browser: a reload or another tab still checks the agent's signature
     secret: () => browserStageSecret(),
@@ -171,8 +176,9 @@ function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local', 
  */
 function standardEntry(frame: DeviceFrame, base: string, o: { demo?: string; device?: PanelShell; wayBack?: () => void } = {}): Entry {
   const device = o.device;
+  const used = usedCredits(base);
   const session = new StandardSession({
-    standard: standardOfDevice(frame),
+    standard: { ...standardOfDevice(frame), ...(used ? { credits: used } : {}) },
     devices: device ? { knownAdb: async () => device, requestAdb: async () => device } : webUsbDevices,
     loadKey: device ? async () => ({ publicKey: 'QAAAAdemo kiln@demo' }) as unknown as AdbKey : loadOrCreateAdbKey,
     ...(device ? { simulated: true, sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, Math.min(ms, 800))) } : {}),
@@ -266,9 +272,10 @@ const PENDING = new Map<string, PanelShell>();
  * The hand-over a frame's sessions are made with: whichever page of the frame is up when their install ends, or, with
  * none up, the frame's pending hand-over, which its page takes when it opens.
  */
-export const pageHandOver = (base: string): HandOver => (p) => {
+export const pageHandOver = (base: string): HandOver => (p, o) => {
+  setUsedCredits(base, o?.credits);
   const page = HANDS.get(base);
-  if (page) return page(p);
+  if (page) return page(p, o);
   PENDING.set(base, p);
   setUpPending(base, true); // a reload before the page opens still knows set-up is next (the device itself stays here)
   return undefined;
@@ -281,6 +288,15 @@ function setUpPending(base: string, on: boolean): void {
 }
 function isSetUpPending(base: string): boolean {
   try { return sessionStorage.getItem(pendingKey(base)) === '1'; } catch { return false; }
+}
+
+/** The tab's mark of the credits the last install stood on, when they aren't the frame's: set-up's Done after a reload. */
+const usedKey = (base: string) => `kiln:standard:${base}:credits`;
+function setUsedCredits(base: string, used?: StepCredits): void {
+  try { if (used) sessionStorage.setItem(usedKey(base), JSON.stringify(used)); else sessionStorage.removeItem(usedKey(base)); } catch { /* storage off */ }
+}
+function usedCredits(base: string): StepCredits | undefined {
+  try { const v = sessionStorage.getItem(usedKey(base)); return v ? JSON.parse(v) as StepCredits : undefined; } catch { return undefined; }
 }
 
 /** The standard flow's routes, after any frame's install. */
