@@ -153,6 +153,8 @@ class VitroParityHarnessTest {
             }
             val (m, side) = ParityCompare.measure(case, frame, ref, render)
             if (m.slotsHa != m.slotsVitro) notes += "HA shows ${m.slotsHa} card slot(s), Vitro ${m.slotsVitro}"
+            // A view with no Sections grid (masonry, panel) has no slots to compare: only its pixels were checked.
+            if (m.slotsHa == 0 && m.slotsVitro == 0) notes += "pixels only: no card slots to compare (not a Sections view), so bounds and texts weren't checked"
             val img = "img/$label/${frame.id}/${case.id}.png"
             File(outDir, img).apply { parentFile.mkdirs() }.outputStream().use { side.compress(Bitmap.CompressFormat.PNG, 100, it) }
             val over = m.over(case.threshold)

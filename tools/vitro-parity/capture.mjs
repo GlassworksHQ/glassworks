@@ -326,7 +326,8 @@ const TEXTS_JS = (slot) => {
           if (r.left < er.left - 0.5 || r.right > er.right + 0.5) clipped = true;
           if (e.localName === 'ha-card') break;
         }
-        out.push({ ...(clipped ? { clipped } : {}),
+        // Both values: an explicit false outweighs the bounds the comparison would otherwise guess from.
+        out.push({ clipped,
           text, x: r.x + scrollX - slot.x, y: r.y + scrollY - slot.y, w: r.width, h: r.height,
           size: parseFloat(s.fontSize), weight: +s.fontWeight || 400, color: s.color, transform: s.textTransform,
         });
