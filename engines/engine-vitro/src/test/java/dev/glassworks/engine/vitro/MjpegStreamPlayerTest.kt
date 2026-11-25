@@ -298,4 +298,29 @@ class MjpegStreamPlayerTest {
         ShadowLooper.idleMainLooper()
         assertEquals(0, streams)
     }
+
+    @Test
+    fun aResumedMjpegStreamShowsNothingUntilItsFirstNewFrame() {
+        // The CameraStream contract: the view draws nothing until the first frame of each start or resume.
+        val frames = ArrayList<(Bitmap) -> Unit>()
+        val stream = MjpegCameraStream(activity, "$base/api/camera_proxy_stream/camera.porch", { null }) { _, _, onFrame, _ ->
+            frames += onFrame
+            object : MjpegCameraStream.Player {
+                override fun start() = Unit
+                override fun stop() = Unit
+            }
+        }
+        val image = stream.view as ImageView
+        stream.start()
+        frames.last()(Bitmap.createBitmap(4, 4, Bitmap.Config.RGB_565))
+        assertTrue(image.drawable != null)
+        stream.setActive(false)
+        stream.setActive(true)
+        assertNull(image.drawable)
+        val fresh = Bitmap.createBitmap(4, 4, Bitmap.Config.RGB_565)
+        frames.last()(fresh)
+        assertSame(fresh, (image.drawable as android.graphics.drawable.BitmapDrawable).bitmap)
+        assertEquals(2, frames.size)
+        stream.close()
+    }
 }

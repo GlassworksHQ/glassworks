@@ -161,8 +161,12 @@ class HlsCameraStreamTest {
         RobolectricUtil.runMainLooperUntil { events.log.isNotEmpty() }
         s.setActive(false)
         assertTrue(players.single().isReleased)
+        assertEquals(1f, s.view.alpha)
         s.setActive(true)
+        // Clear again until the resumed stream's first frame: the frame from before the pause isn't live.
+        assertEquals(0f, s.view.alpha)
         RobolectricUtil.runMainLooperUntil { events.log.size == 2 }
+        assertEquals(1f, s.view.alpha)
         assertEquals(listOf("first", "first"), events.log)
         assertEquals(2, wsCalls.size)
         assertEquals(2, players.size)

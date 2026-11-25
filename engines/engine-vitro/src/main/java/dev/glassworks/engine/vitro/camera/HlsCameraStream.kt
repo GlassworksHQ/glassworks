@@ -109,6 +109,8 @@ class HlsCameraStream internal constructor(
         val gen = generation
         startedAt = SystemClock.elapsedRealtime()
         firstFrameSeen = false
+        // Clear again until this start's (or resume's) first frame: the last frame of before never shows as live.
+        texture.alpha = 0f
         callWs(JSONObject().put("type", "camera/stream").put("entity_id", entityId)) { ok, result, error ->
             main.post {
                 if (closed || gen != generation) return@post

@@ -339,6 +339,25 @@ class LiveCameraFeedTest {
     }
 
     @Test
+    fun aFreedSlotReachesTheNextWaiterWhenTheOneToldFirstStops() {
+        CameraVideoBudget.max = 1
+        val ctx = context(store(), kinds = setOf(HLS, MJPEG))
+        val holder = feed(ctx)
+        val first = feed(ctx)
+        val second = feed(ctx)
+        holder.start()
+        first.start()
+        second.start()
+        idle()
+        // The slot frees, and the longest waiter goes away (its card closes) before it takes the slot up.
+        holder.stop()
+        first.stop()
+        idle()
+        assertEquals(listOf(HLS), second.runningKinds)
+        assertEquals(1, CameraVideoBudget.inUse)
+    }
+
+    @Test
     fun aFreedSlotReachesEveryWaitingCameraNotOnlyTheFirst() {
         CameraVideoBudget.max = 1
         val ctx = context(store(), kinds = setOf(HLS, MJPEG))
