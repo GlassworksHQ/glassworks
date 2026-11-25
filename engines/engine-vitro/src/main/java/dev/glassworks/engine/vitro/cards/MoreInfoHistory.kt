@@ -228,6 +228,8 @@ internal class MoreInfoHistoryView(
                 if (stream !== s) return@post
                 stream = null
                 unsubscribe = null
+                // The error stays until a new subscription delivers: the minute tick mustn't redraw the old history.
+                stateHistory = null
                 // HA's alert: "Unable to load history: <message>".
                 val why = error?.optString("message")?.takeIf { it.isNotEmpty() } ?: error?.optString("code").orEmpty()
                 charts.removeAllViews()

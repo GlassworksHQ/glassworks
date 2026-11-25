@@ -214,6 +214,34 @@ class MoreInfoSensorTest {
     }
 
     @Test
+    fun aFailedRenewalKeepsItsErrorOverTheMinuteTick() {
+        // History arrives, the connection comes back, and the new subscription is refused: the old chart doesn't return.
+        val events = ArrayList<(JSONObject) -> Unit>()
+        val errors = ArrayList<(JSONObject?) -> Unit>()
+        val store = sensor(emptyMap())
+        val ctx = VitroCardContext(
+            context = activity, haBase = FakeHaServer.BASE, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
+            accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            subscribeWs = { msg, onEvent, onError -> subscriptions += msg; events += onEvent; errors += onError; {} }, now = { now },
+        )
+        val sheet = MoreInfoSheet(ctx) {}
+        activity.setContentView(sheet)
+        sheet.show(SENSOR)
+        idle()
+        val t = (now / 1000.0) - 3600
+        val rows = JSONArray().put(JSONObject().put("s", "700").put("lu", t)).put(JSONObject().put("s", "792").put("lu", t + 1800))
+        events[0](JSONObject().put("states", JSONObject().put(SENSOR, rows)))
+        idle()
+        sheet.reconnected()
+        idle()
+        errors[1](JSONObject().put("code", "unknown_error").put("message", "refused"))
+        idle()
+        ShadowLooper.idleMainLooper(MoreInfoHistoryView.MINUTE_MS + 1, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertTrue(texts(sheet).toString(), texts(sheet).any { it.endsWith(": refused") })
+    }
+
+    @Test
     fun aReconnectRenewsTheStateHistoryStream() {
         val sheet = open(sensor(emptyMap()))
         assertEquals(1, subscriptions.size)
