@@ -29,23 +29,29 @@ class HaPageStorage(private val prefs: SharedPreferences) {
     fun put(url: String, json: String): Boolean {
         val origin = OAuth.origin(url) ?: return false
         val items = clean(json) ?: return false
-        val text = items.toString()
-        if (prefs.getString(KEY_ORIGIN, null) == origin && prefs.getString(KEY_ITEMS, null) == text) return true
-        prefs.edit().putString(KEY_ORIGIN, origin).putString(KEY_ITEMS, text).apply()
+        // The origin and its items in one record: a read never pairs one origin with another's items.
+        val text = JSONObject().put("origin", origin).put("items", items).toString()
+        if (prefs.getString(KEY_COPY, null) == text) return true
+        prefs.edit().putString(KEY_COPY, text).apply()
         return true
     }
 
     /** The copy for [url]'s origin, or null when the panel has none for it (it never ran HA's web UI there). */
     fun items(url: String?): JSONObject? {
         val origin = url?.let(OAuth::origin) ?: return null
-        if (prefs.getString(KEY_ORIGIN, null) != origin) return null
-        return prefs.getString(KEY_ITEMS, null)?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val copy = prefs.getString(KEY_COPY, null)?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return null
+        if (copy.optString("origin") != origin) return null
+        return copy.optJSONObject("items")
     }
 
     companion object {
         private const val PREFS = "ha_page_storage"
-        private const val KEY_ORIGIN = "origin"
-        private const val KEY_ITEMS = "items"
+        private const val KEY_COPY = "copy"
+
+        /** One writer for every report, so copies are kept in the order the page sent them. */
+        private val writes = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread(r, "ha-page-storage").apply { isDaemon = true }
+        }
 
         /** The longest value kept, in chars. */
         internal const val MAX_VALUE = 16 * 1024
@@ -61,6 +67,15 @@ class HaPageStorage(private val prefs: SharedPreferences) {
 
         fun of(context: Context): HaPageStorage =
             HaPageStorage(context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE))
+
+        /**
+         * [put] off the caller's thread (a copy is parsed and cleaned, up to a few hundred KiB), on one writer for the
+         * whole app: a later report is never overtaken by an earlier one.
+         */
+        fun putLater(context: Context, url: String, json: String) {
+            val app = context.applicationContext
+            writes.execute { runCatching { of(app).put(url, json) } }
+        }
 
         /** True for a key that is never kept ([SECRET]). */
         fun secret(key: String): Boolean = SECRET.containsMatchIn(key)

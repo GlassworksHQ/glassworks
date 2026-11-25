@@ -36,6 +36,17 @@ class HaPageStorageTest {
     }
 
     @Test
+    fun reportsAreKeptInTheOrderTheyCame() {
+        repeat(50) { HaPageStorage.putLater(app, ha, """{"n":"$it"}""") }
+        HaPageStorage.putLater(app, ha, """{"n":"last"}""")
+        val deadline = System.currentTimeMillis() + 5_000
+        while (HaPageStorage.of(app).items(ha)?.optString("n") != "last" && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        // An earlier report never lands after the last one.
+        Thread.sleep(200)
+        assertEquals("last", HaPageStorage.of(app).items(ha)!!.getString("n"))
+    }
+
+    @Test
     fun anotherOriginReplacesTheCopy() {
         val s = HaPageStorage.of(app)
         s.put(ha, """{"a":"1"}""")
@@ -66,6 +77,7 @@ class HaPageStorageTest {
         val kept = HaPageStorage.clean(heavy.toString())!!
         assertTrue(kept.keys().asSequence().sumOf { it.length + kept.getString(it).length } <= HaPageStorage.MAX_TOTAL)
         assertNull(HaPageStorage.clean("[1,2]"))
+        assertTrue(HaPageStorage.secret("hassTokens"))
         assertFalse(HaPageStorage.of(app).put(ha, "not json"))
     }
 }

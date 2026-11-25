@@ -1358,8 +1358,7 @@ open class MainActivity : Activity() {
         val url = sender.url
         if (!sender.topLevel || url == null || !FrontendUrls.sameOrigin(url, prefs.haBase)) return
         val json = m.optString("json").ifEmpty { return }
-        // Off the main thread: the copy is parsed and cleaned (up to a few hundred KiB from a busy page).
-        Thread({ dev.glassworks.web.HaPageStorage.of(applicationContext).put(url, json) }, "page-storage").start()
+        dev.glassworks.web.HaPageStorage.putLater(applicationContext, url, json)
     }
 
     /**

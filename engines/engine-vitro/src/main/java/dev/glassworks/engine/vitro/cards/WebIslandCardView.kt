@@ -609,7 +609,9 @@ function vitroSeedStorage(store, origin, seed) {
     if (b && b.origin === origin && b.items && typeof b.items === 'object') base = b.items;
   } catch (e) {}
   let changed = 0;
-  const set = (k, v) => { try { store.setItem(k, v); changed++; } catch (e) {} };
+  // A key the island couldn't store (a full storage) stays out of what it took, so the next start tries it again.
+  const failed = new Set();
+  const set = (k, v) => { try { store.setItem(k, v); changed++; } catch (e) { failed.add(k); } };
   for (const k of Object.keys(seed)) {
     const v = seed[k];
     if (k === BASE || typeof v !== 'string') continue;
@@ -619,7 +621,9 @@ function vitroSeedStorage(store, origin, seed) {
     if (k === BASE || Object.prototype.hasOwnProperty.call(seed, k)) continue;
     if (store.getItem(k) === base[k]) { try { store.removeItem(k); changed++; } catch (e) {} }
   }
-  try { store.setItem(BASE, JSON.stringify({ origin: origin, items: seed })); } catch (e) {}
+  const took = {};
+  for (const k of Object.keys(seed)) if (!failed.has(k)) took[k] = seed[k];
+  try { store.setItem(BASE, JSON.stringify({ origin: origin, items: took })); } catch (e) {}
   return changed;
 }
 """

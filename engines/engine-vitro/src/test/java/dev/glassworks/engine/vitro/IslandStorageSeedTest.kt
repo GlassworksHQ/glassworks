@@ -170,6 +170,10 @@ test('a full storage drops the keys that do not fit and keeps going', () => {
   s.setItem = function (k, v) { if (k === 'big') throw new Error('QuotaExceededError'); this.m.set(k, String(v)); };
   vitroSeedStorage(s, HA, { big: 'x', small: 'y' });
   assert.equal(s.getItem('small'), 'y');
+  // Room again at the next start: the key it couldn't store is taken then, though HA's copy didn't change.
+  s.setItem = function (k, v) { this.m.set(k, String(v)); };
+  vitroSeedStorage(s, HA, { big: 'x', small: 'y' });
+  assert.equal(s.getItem('big'), 'x');
 });
 """
     }
