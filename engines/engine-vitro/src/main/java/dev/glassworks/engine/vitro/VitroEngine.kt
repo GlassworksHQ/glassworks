@@ -30,6 +30,8 @@ import dev.glassworks.engine.PagePort
 import dev.glassworks.engine.vitro.clarity.ClarityHttp
 import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatWarmup
+import dev.glassworks.engine.vitro.data.HaFrontend
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
 import dev.glassworks.engine.vitro.data.HaLocale
@@ -119,6 +121,8 @@ class VitroEngine(
         val cfg = settings(activity.applicationContext)
         startedSettings = cfg
         MdiIcons.init(activity.applicationContext)
+        // HA's frontend strings, kept per frontend version and language for a start without HA (HaFrontend).
+        HaFrontend.cacheDir = java.io.File(activity.applicationContext.cacheDir, "vitro-frontend")
         Log.i(logTag, "Starting $VERSION_NAME (native Lovelace renderer; fallback=${fallback.name.ifEmpty { "lazy" }})")
         // A recreated activity opens a new page: the old one's socket and reader thread go with it.
         activePage?.dispose()
@@ -942,7 +946,7 @@ class VitroEngine(
             }
 
             override fun onLocaleChanged() {
-                post { vitroView.setLocale(HaLocale.current, HaLocale.timeZone().id) }
+                post { vitroView.setLocale(HaLocale.current, HaLocale.timeZone().id, HaText.version) }
             }
 
             override fun onDashboardConfig(urlPath: String?, config: DashboardConfig) {

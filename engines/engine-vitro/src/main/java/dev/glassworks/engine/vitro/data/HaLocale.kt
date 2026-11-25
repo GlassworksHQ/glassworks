@@ -80,6 +80,20 @@ object HaLocale {
     fun reset() {
         set(FrontendLocale(language = deviceLanguage()), notify = false)
         serverTimeZone = null
+        languageFromProfile = false
+    }
+
+    /** True once the profile has set the language; until then it is the browser's. */
+    @Volatile private var languageFromProfile = false
+
+    /**
+     * HA's frontend told which languages it has ([HaFrontend.languages]): a language still the browser's is matched
+     * against them again, as `getLocalLanguage` would have on HA's page. Tells the listeners when it changes.
+     */
+    fun languagesKnown() {
+        if (languageFromProfile) return
+        val lang = deviceLanguage()
+        if (lang != current.language) set(current.copy(language = lang), notify = true)
     }
 
     /**
@@ -99,6 +113,7 @@ object HaLocale {
             firstWeekday = str("first_weekday") ?: cur.firstWeekday,
             timeZone = str("time_zone") ?: cur.timeZone,
         )
+        if (str("language")?.let { findAvailableLanguage(it) } != null) languageFromProfile = true
         if (next == cur) return false
         set(next, notify = true)
         return true
@@ -150,7 +165,8 @@ object HaLocale {
      * match, then the tag's first subtag; null when none of those is a frontend language.
      */
     fun findAvailableLanguage(tag: String): String? {
-        val languages = HaIntl.languages
+        // HA's own list once its frontend has answered, else the one the bundled locale tables were captured for.
+        val languages = HaFrontend.languages.ifEmpty { TableIntlSource.languages }
         if (tag in languages) return tag
         val lower = tag.lowercase(Locale.ROOT)
         CHINESE[lower]?.let { return it }

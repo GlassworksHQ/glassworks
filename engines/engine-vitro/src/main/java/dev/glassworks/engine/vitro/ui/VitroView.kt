@@ -449,14 +449,14 @@ class VitroView(
     }
 
     /** The language, formats and time zone the built views were drawn with. */
-    private var drawnLocale: Pair<FrontendLocale, String?>? = null
+    private var drawnLocale: Triple<FrontendLocale, String, Long>? = null
 
     /**
      * The user's language or formats changed ([HaLocale]): every text, number, date and time was written with the
      * old ones, so the view is built again, as a theme change does.
      */
-    fun setLocale(locale: FrontendLocale, timeZone: String) {
-        val next = locale to timeZone
+    fun setLocale(locale: FrontendLocale, timeZone: String, strings: Long) {
+        val next = Triple(locale, timeZone, strings)
         if (next == drawnLocale) return
         drawnLocale = next
         if (dashboard == null) return
@@ -468,7 +468,7 @@ class VitroView(
     }
 
     fun setDashboard(config: DashboardConfig, initialViewPath: String?) {
-        drawnLocale = HaLocale.current to HaLocale.timeZone().id
+        drawnLocale = Triple(HaLocale.current, HaLocale.timeZone().id, HaText.version)
         holding?.cancel?.invoke()
         holding = null
         waited.clear()

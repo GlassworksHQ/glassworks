@@ -12,6 +12,7 @@ import dev.glassworks.engine.vitro.data.HaFormat.NumberOptions
 import dev.glassworks.engine.vitro.data.HaIntl
 import dev.glassworks.engine.vitro.data.HaLocale
 import dev.glassworks.engine.vitro.data.HaText
+import dev.glassworks.engine.vitro.data.TableIntlSource
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -43,7 +44,16 @@ class HaLocaleTest {
         HaDisplay.reset()
     }
 
+    /** HA's strings for [language] (the tests' copy of the pinned frontend's), as HaFrontend installs them. */
+    private fun strings(language: String): Map<String, String> {
+        val o = JSONObject(javaClass.getResourceAsStream("/dev/glassworks/engine/vitro/locale/strings-$language.json")!!.readBytes().toString(Charsets.UTF_8))
+        return o.keys().asSequence().associateWith { o.getString(it) }
+    }
+
+    private fun installStrings(language: String) = HaText.install(language, strings(language))
+
     @After fun tearDown() {
+        HaText.reset()
         HaLocale.deviceLocale = savedDevice
         HaLocale.deviceTimeZone = savedZone
         HaLocale.reset()
@@ -226,11 +236,14 @@ class HaLocaleTest {
     // ---- the frontend's own words
 
     @Test
-    fun uiStringsAreTheLanguagesWithEnglishForTheRest() {
-        assertEquals("Unavailable", HaText.ui("state.default.unavailable", language = "en"))
-        assertEquals("Nicht verfügbar", HaText.ui("state.default.unavailable", language = "de"))
-        assertEquals("Indisponible", HaText.ui("state.default.unavailable", language = "fr"))
-        assertEquals("not.a.key", HaText.ui("not.a.key"))
+    fun uiStringsAreHasInTheUsersLanguage() {
+        assertEquals("Unavailable", HaText.ui("state.default.unavailable"))
+        installStrings("de")
+        assertEquals("Nicht verfügbar", HaText.ui("state.default.unavailable"))
+        installStrings("fr")
+        assertEquals("Indisponible", HaText.ui("state.default.unavailable"))
+        // A key HA doesn't have is empty, as HA's localize writes it.
+        assertEquals("", HaText.ui("not.a.key"))
         assertEquals("1 item", HaText.format("{count, plural, one {# item} other {# items}}", mapOf("count" to 1), "en"))
         assertEquals("1.234 items", HaText.format("{count, plural, one {# item} other {# items}}", mapOf("count" to 1234), "de"))
         assertEquals("Lamp on", HaText.format("{name} on", mapOf("name" to "Lamp"), "en"))
@@ -242,15 +255,16 @@ class HaLocaleTest {
         val key = Regex("\"((?:state|state_badge|ui)\\.[A-Za-z0-9_\\-]+(?:\\.[A-Za-z0-9_\\-]+)+)\"")
         val used = src.walkTopDown().filter { it.extension == "kt" }.flatMap { f -> key.findAll(f.readText()).map { it.groupValues[1] } }.toSet()
         assertTrue("the scan found keys", used.size > 20)
-        val missing = used.filterNot(HaText::has)
-        assertTrue("keys missing from locale/en.json (rerun tools/vitro-parity/locale-data.mjs): $missing", missing.isEmpty())
+        val english = strings("en")
+        val missing = used.filterNot(english::containsKey)
+        assertTrue("keys missing from strings-en.json (rerun tools/vitro-parity/locale-data.mjs): $missing", missing.isEmpty())
     }
 
     @Test
     fun everyFrontendLanguageHasItsTable() {
-        assertTrue(HaIntl.languages.size > 50)
-        for (l in HaIntl.languages) {
-            assertEquals(l, HaIntl.resolve(l))
+        assertTrue(TableIntlSource.languages.size > 50)
+        for (l in TableIntlSource.languages) {
+            assertEquals(l, TableIntlSource.resolve(l))
             assertTrue("$l has a time format", HaIntl.of(l).dateFormat("time.h23") != null)
         }
     }
@@ -260,6 +274,7 @@ class HaLocaleTest {
     @Test
     fun aStateIsWrittenInTheUsersLanguageAndFormat() {
         HaLocale.set(locale("de", number = "decimal_comma"), notify = false)
+        installStrings("de")
         val temp = EntityState("sensor.t", "21.5", mapOf("unit_of_measurement" to "°C", "state_class" to "measurement"))
         assertEquals("21,5 °C", temp.formattedState())
         val hum = EntityState("sensor.h", "45", mapOf("unit_of_measurement" to "%"))

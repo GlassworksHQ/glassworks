@@ -1,27 +1,29 @@
 #!/usr/bin/env node
-// Vitro's locale data (claim 4d of the exp/vitro review): what HA's frontend needs from the browser to show text,
+// Vitro's locale tables (claim 4d of the exp/vitro review): what HA's frontend gets from the browser to show
 // numbers, dates and times in the signed-in user's language and formats, captured once from the browser the parity
-// harness renders HA with, and HA's own UI strings from the frontend build Clarity pins.
+// harness renders HA with.
 //
 // HA's frontend formats everything with the browser's `Intl` (formatNumber, formatDateTime, relativeTime, useAmPm,
-// firstWeekday) and its words come from the frontend's translation files. Vitro draws natively, so it gets the same
-// answers from a table: for every language the pinned frontend ships (plus the number locales HA's number_format
-// picks, "en-US" and "de-CH"), this script asks Chromium's Intl for
+// firstWeekday). Vitro draws natively, so it gets the same answers from a table (TableIntlSource, the maintainer's
+// choice over the panel's own ICU, 2026-11-25): for every language the pinned frontend ships (plus the number locales
+// HA's number_format picks, "en-US" and "de-CH"), this script asks Chromium's Intl for
 //   - numbers: decimal and group marks, grouping sizes, minimum grouping digits, digits, minus sign;
 //   - plural categories of the integers 0-199 (Intl.PluralRules), for relative times;
-//   - relative times (Intl.RelativeTimeFormat, numeric "auto", long, short and narrow) and unit durations;
+//   - relative times (Intl.RelativeTimeFormat, numeric "auto", HA's default "long" style) and unit amounts;
 //   - every Intl.DateTimeFormat option set HA's common/datetime functions use, as a template of fields and
-//     literals, with the month, weekday and day-period names each format uses;
+//     literals, with the month, weekday and day-period names each format uses (shared in one list per locale);
 //   - useAmPm's test and the first day of the week (Intl.Locale weekInfo).
-// It also copies the UI strings Vitro uses (every frontend key Vitro's code names) from the frontend's
-// translation files (core, then the fragments), per language. The frontend's build already fills a language's
-// missing keys with English.
+//
+// HA's UI words aren't bundled: Vitro reads them from the signed-in HA (HaFrontend). For the tests only, this script
+// also copies HA's English, German and French for every frontend key Vitro's code names from the pinned frontend
+// (core, then the fragments) into engines/engine-vitro/src/test/resources/…/locale/strings-<lang>.json, and fails on
+// a key the frontend doesn't have.
 //
 // Touches: reads the pinned frontend (tools/perf/hafrontend.py fetches it into ~/.cache/glassworks-perf on first
 // use), reads engines/engine-vitro's Kotlin sources, launches headless Chromium (playwright-core; CHROME=<path>, or
 // Google Chrome) on about:blank with no network, and writes
-// engines/engine-vitro/src/main/resources/dev/glassworks/engine/vitro/locale/ (one <tag>.json per locale, its strings
-// included, and languages.json). No Home Assistant, no device.
+// engines/engine-vitro/src/main/resources/dev/glassworks/engine/vitro/locale/ (<tag>.json per locale and
+// languages.json) and the three test string files. No Home Assistant, no device.
 //
 //   node tools/vitro-parity/locale-data.mjs
 import { chromium } from 'playwright-core';
@@ -34,6 +36,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..', '..');
 const OUT = join(ROOT, 'engines/engine-vitro/src/main/resources/dev/glassworks/engine/vitro/locale');
 const SRC = join(ROOT, 'engines/engine-vitro/src/main/java');
+const TEST_OUT = join(ROOT, 'engines/engine-vitro/src/test/resources/dev/glassworks/engine/vitro/locale');
+// The languages the tests and the parity corpus read in.
+const TEST_LANGUAGES = ['en', 'de', 'fr'];
 const FRONTEND = process.env.GW_PERF_FRONTEND
   || execFileSync('python3', [join(ROOT, 'tools/perf/hafrontend.py')], { encoding: 'utf8' }).trim();
 const FRONTEND_VERSION = (readFileSync(join(ROOT, 'tools/perf/hafrontend.py'), 'utf8').match(/VERSION = "([^"]+)"/) || [])[1];
@@ -120,7 +125,7 @@ function capture(tag) {
   // Relative times: numeric "auto" phrases for -2..2 and the past/future pattern per plural category.
   const units = ['second', 'minute', 'hour', 'day', 'week', 'month', 'quarter', 'year'];
   out.relative = {};
-  for (const style of ['long', 'short', 'narrow']) {
+  for (const style of ['long']) {
     const auto = new Intl.RelativeTimeFormat(tag, { numeric: 'auto', style });
     const always = new Intl.RelativeTimeFormat(tag, { numeric: 'always', style });
     const byUnit = {};
@@ -139,11 +144,11 @@ function capture(tag) {
       }
       byUnit[unit] = { special, past, future };
     }
-    out.relative[style] = byUnit;
+    out.relative = byUnit;
   }
   // Durations without tense (relativeTime's includeTense false): Intl.NumberFormat style "unit".
   out.unit = {};
-  for (const style of ['long', 'short', 'narrow']) {
+  for (const style of ['long']) {
     const byUnit = {};
     for (const unit of ['second', 'minute', 'hour', 'day', 'week', 'month', 'year']) {
       const f = new Intl.NumberFormat(tag, { style: 'unit', unit, unitDisplay: style });
@@ -151,7 +156,7 @@ function capture(tag) {
       for (const c of cats) byCat[letter[c]] = pattern(f.formatToParts(sample(c)));
       byUnit[unit] = byCat;
     }
-    out.unit[style] = byUnit;
+    out.unit = byUnit;
   }
   // useAmPm's test (time_format "language") and the first weekday (first_weekday "language").
   out.amPm = new Date('January 1, 2023 22:00:00').toLocaleString(tag).includes('10');
@@ -259,11 +264,24 @@ mkdirSync(OUT, { recursive: true });
 
 const tables = {};
 for (const tag of tags) tables[tag] = await page.evaluate(capture, tag);
+// One list of month, weekday and day-period names per locale: a format points into it.
+for (const t of Object.values(tables)) {
+  const names = [];
+  for (const f of Object.values(t.date)) {
+    for (const k of ['months', 'weekdays', 'dayPeriods']) {
+      if (!f[k]) continue;
+      let i = names.findIndex((n) => JSON.stringify(n) === JSON.stringify(f[k]));
+      if (i < 0) { names.push(f[k]); i = names.length - 1; }
+      f[k] = i;
+    }
+  }
+  t.names = names;
+}
 
 const keys = usedKeys();
 const missing = new Set(keys);
-const english = {};
-for (const lang of languages) {
+mkdirSync(TEST_OUT, { recursive: true });
+for (const lang of TEST_LANGUAGES) {
   const flat = flatten(JSON.parse(readFileSync(core[lang], 'utf8')));
   for (const frag of fragments) {
     const file = translationFiles(join(FRONTEND, 'static/translations', frag))[lang];
@@ -271,10 +289,7 @@ for (const lang of languages) {
   }
   const strings = {};
   for (const k of keys) if (typeof flat[k] === 'string') { strings[k] = flat[k]; if (lang === 'en') missing.delete(k); }
-  if (lang === 'en') Object.assign(english, strings);
-  // Only what differs from English: the runtime falls back to English per key, as the frontend's build did.
-  const own = lang === 'en' ? strings : Object.fromEntries(Object.entries(strings).filter(([k, v]) => english[k] !== v));
-  tables[lang].strings = Object.fromEntries(Object.keys(own).sort().map((k) => [k, own[k]]));
+  writeFileSync(join(TEST_OUT, `strings-${lang}.json`), JSON.stringify(strings, Object.keys(strings).sort(), 1) + '\n');
 }
 for (const tag of tags) writeFileSync(join(OUT, `${tag}.json`), JSON.stringify(tables[tag]) + '\n');
 if (missing.size) {

@@ -7,22 +7,67 @@ package dev.glassworks.engine.vitro.data
 
 /**
  * HA's frontend UI strings (`hass.localize` for `ui.*`, `state.default.*`, `state_badge.*`), in the user's language
- * ([HaLocale]), from the pinned frontend's own translation files. `tools/vitro-parity/locale-data.mjs` copies every
- * key Vitro's code names into each language's `resources/dev/glassworks/engine/vitro/locale/<language>.json`
- * (`strings`, only where it differs from English); a key a language lacks is English's, as the frontend's build fills it.
+ * ([HaLocale]), from the signed-in Home Assistant's own translation files ([HaFrontend] fetches and caches them). The
+ * frontend's build fills a language's missing keys with English, so one language's file is all there is to read.
+ *
+ * Until HA's files have been read once (a first start with no cache), a key HA's page would show is empty, as
+ * `localize` is before its resources load, except [BUILT_IN].
  *
  * Placeholders are HA's message-format arguments: `{name}` is replaced with [ui]'s argument of that name, and a
  * `{count, plural, one {…} other {…}}` block picks its branch by the language's plural rules, with `#` the count.
  */
 object HaText {
-    private fun table(language: String): Map<String, String> = HaIntl.of(language).strings
+    /**
+     * The only English Vitro carries itself: what it must be able to show on a very first start, before any of HA's
+     * translation files has been fetched or cached (a state it can't read, a connection it lost). Everything else
+     * comes from HA.
+     */
+    private val BUILT_IN = mapOf(
+        "state.default.unavailable" to "Unavailable",
+        "state.default.unknown" to "Unknown",
+        "ui.notification_toast.connection_lost" to "Connection lost. Reconnecting…",
+    )
 
-    /** True when English has [key]: every key Vitro uses does (a test checks it). */
-    fun has(key: String): Boolean = key in table("en")
+    /**
+     * English on the classpath, when there is one: the unit tests put HA's own English for the keys Vitro names
+     * there (`src/test/resources`), so a card reads in them as on a panel that has read HA once. The APK has none.
+     */
+    private val classpathEnglish: Map<String, String> by lazy {
+        runCatching {
+            HaText::class.java.getResourceAsStream("/dev/glassworks/engine/vitro/locale/strings-en.json")?.use { s ->
+                val o = org.json.JSONObject(s.readBytes().toString(Charsets.UTF_8))
+                HashMap<String, String>(o.length() * 2).apply { for (k in o.keys()) put(k, o.optString(k)) }
+            }
+        }.getOrNull().orEmpty()
+    }
 
-    /** The string for [key] in [language] (the user's by default), with [args] filled in; the key itself if unknown. */
+    @Volatile private var strings: Map<String, String> = emptyMap()
+
+    /** The language [strings] are in; null before any are installed. */
+    @Volatile var language: String? = null
+        private set
+
+    /** Counts installs: a view drawn with an older version draws again. */
+    @Volatile var version: Long = 0
+        private set
+
+    /** HA's strings for [language] ([HaFrontend], or a test's). */
+    fun install(language: String, strings: Map<String, String>) {
+        this.strings = strings
+        this.language = language
+        version++
+    }
+
+    /** Forgets the installed strings (a new server, or tests). */
+    fun reset() {
+        strings = emptyMap()
+        language = null
+        version++
+    }
+
+    /** The string for [key] with [args] filled in: HA's installed strings, else [BUILT_IN], else empty. */
     fun ui(key: String, vararg args: Pair<String, Any?>, language: String = HaLocale.current.language): String {
-        val raw = table(language)[key] ?: table("en")[key] ?: return key
+        val raw = strings[key] ?: classpathEnglish[key] ?: BUILT_IN[key] ?: return ""
         return if (args.isEmpty() && '{' !in raw) raw else format(raw, args.toMap(), language)
     }
 

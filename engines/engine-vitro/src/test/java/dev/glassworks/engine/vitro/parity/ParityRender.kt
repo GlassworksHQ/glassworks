@@ -22,6 +22,7 @@ import dev.glassworks.engine.vitro.cards.GraphWork
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.data.HaLocale
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.fonts.WebFonts
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
@@ -246,11 +247,20 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
             // Inside the try: a setup that fails halfway (a bad `requested.domains`) is cleared too.
             shared?.haConfig?.let(HaLocale::applyConfig)
             ref?.json?.optJSONObject("locale")?.let(HaLocale::applyUserData)
+            // HA's frontend strings in the case's language, as HaFrontend installs them from HA (the tests' copy of
+            // the pinned frontend's; English is the classpath's).
+            HaLocale.current.language.takeIf { it != "en" }?.let { lang ->
+                javaClass.getResourceAsStream("/dev/glassworks/engine/vitro/locale/strings-$lang.json")?.use { s ->
+                    val o = JSONObject(s.readBytes().toString(Charsets.UTF_8))
+                    HaText.install(lang, o.keys().asSequence().associateWith { o.getString(it) })
+                }
+            }
             ref?.display?.let(::applyDisplay)
             return renderWithDisplay(case, ref)
         } finally {
             HaDisplay.reset()
             HaLocale.reset()
+            HaText.reset()
         }
     }
 
