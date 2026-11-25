@@ -228,6 +228,9 @@ class MdImageSpan(
     /** `visibility: hidden`: its room, nothing drawn. */
     var hidden: Boolean = false
 
+    /** The combined `opacity` of the image and the inline elements around it: its picture drawn at that alpha. */
+    var opacity: Float = 1f
+
     /** A natural image with one CSS dimension set (`<img width="100">`): the other follows the picture's shape. */
     var fixedWidthCss: Float? = null
     var fixedHeightCss: Float? = null
@@ -277,7 +280,13 @@ class MdImageSpan(
     override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: Paint) {
         if (hidden) return
         val t = if (alignTop) top.toFloat() else (y - h).toFloat()
-        picture.draw(canvas, context, x, t, w.toFloat(), h.toFloat(), radiusPx)
+        if (opacity < 1f) {
+            val saved = canvas.saveLayerAlpha(x, t, x + w, t + h, (opacity.coerceIn(0f, 1f) * 255f).roundToInt())
+            picture.draw(canvas, context, x, t, w.toFloat(), h.toFloat(), radiusPx)
+            canvas.restoreToCount(saved)
+        } else {
+            picture.draw(canvas, context, x, t, w.toFloat(), h.toFloat(), radiusPx)
+        }
     }
 }
 
@@ -505,6 +514,25 @@ class MdTableView(
             }
         }
         for (c in 0 until ncol) px[c]?.let { maxC[c] = max(maxC[c], it) }
+        // A cell spanning columns needs its content's width across them (less the spacing between): what the columns
+        // lack goes to them evenly, as the browser's auto layout spreads a spanning cell's minimum.
+        if (!firstRowOnly) rows.forEach { r ->
+            var c = 0
+            for (cell in r) {
+                if (cell.colspan > 1 && c < ncol) {
+                    val last = minOf(ncol, c + cell.colspan)
+                    cell.view.measure(unspecified, unspecified)
+                    val need = cell.view.measuredWidth - sH * (last - c - 1)
+                    val have = (c until last).sumOf { maxC[it] }
+                    if (need > have) {
+                        val extra = need - have
+                        val n = last - c
+                        for (k in c until last) maxC[k] += extra / n + if (k - c < extra % n) 1 else 0
+                    }
+                }
+                c += cell.colspan
+            }
+        }
 
         val tableW = style.width?.let { w ->
             if (w.percent && mode == MeasureSpec.UNSPECIFIED) null else (w.resolve(avail / dp) * dp).roundToInt()
@@ -996,6 +1024,17 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
             }
         }
         if (images.isNotEmpty()) tv.tag = IMAGE_TAG
+        if (images.any { it.natural }) {
+            // A natural-size picture follows the text's width: capped when the text gets narrower (or first gets a
+            // width after the picture decoded), and back to its own size when there's room again.
+            tv.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or, _ ->
+                if (r - l == or - ol) return@addOnLayoutChangeListener
+                val w = (r - l) - tv.paddingLeft - tv.paddingRight
+                var changed = false
+                for (span in images) if (span.natural && span.picture.ready && span.applyNaturalSize(dp, w)) changed = true
+                if (changed) tv.post { tv.text = tv.text }
+            }
+        }
         // On every inline text view: an in-place update can give one its first link later (it only swaps the text).
         tv.setOnTouchListener(MdLinkSpan.Touch())
         return tv
@@ -1071,6 +1110,8 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
                     val top = s.verticalAlign == "top"
                     val span = MdImageSpan(src, wpx, hpx, s.borderRadius * dp, top, picture, ctx.context)
                     span.hidden = s.hidden
+                    // The inline ancestors' opacity reaches the picture, as it reaches the text around it.
+                    span.opacity = alphaMul * s.opacity
                     val start = sb.length
                     sb.append('\uFFFC')
                     sb.setSpan(span, start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -1405,7 +1446,19 @@ internal class MdLinkSpan(val href: String, private val navigate: (String) -> Un
                 val line = layout.getLineForVertical(ly.toInt())
                 if (lx < layout.getLineLeft(line) || lx > layout.getLineRight(line)) return null
                 val off = layout.getOffsetForHorizontal(line, lx)
-                return text.getSpans(off, off, MdLinkSpan::class.java).firstOrNull()
+                val lineStart = layout.getLineStart(line)
+                val lineEnd = layout.getLineEnd(line)
+                // The nearest caret can sit at a link's end while the finger is on the next (plain) glyph: a link
+                // counts only where it is drawn on this line.
+                return text.getSpans((off - 1).coerceAtLeast(lineStart), (off + 1).coerceAtMost(lineEnd), MdLinkSpan::class.java)
+                    .firstOrNull { span ->
+                        val s = maxOf(text.getSpanStart(span), lineStart)
+                        val e = minOf(text.getSpanEnd(span), lineEnd)
+                        if (s >= e) return@firstOrNull false
+                        val a = layout.getPrimaryHorizontal(s)
+                        val b = if (e == lineEnd) layout.getLineRight(line) else layout.getPrimaryHorizontal(e)
+                        lx >= minOf(a, b) && lx <= maxOf(a, b)
+                    }
             }
             return when (ev.actionMasked) {
                 android.view.MotionEvent.ACTION_DOWN -> {

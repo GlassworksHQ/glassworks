@@ -325,6 +325,37 @@ class MarkdownEngineTest {
     }
 
     @Test
+    fun aSpanningCellGetsItsWidthAcrossItsColumns() {
+        // One cell over two empty-width columns: its text needs room, which the two columns now give it.
+        val into = LinearLayout(activity)
+        MarkdownRenderer(context()).render(
+            "<table><tr><td colspan=\"2\">A fairly long label</td></tr><tr><td></td><td></td></tr></table>",
+            into,
+            MarkdownRenderer(context()).defaultRootStyle(),
+            MdSheet.parse(""),
+        )
+        measure(into, 1000)
+        val table = into.getChildAt(0) as MdTableView
+        val spanning = table.getChildAt(0)
+        spanning.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        assertTrue("${spanning.width} < ${spanning.measuredWidth}", spanning.width >= spanning.measuredWidth - 2)
+    }
+
+    @Test
+    fun anInlineImageTakesTheOpacityAroundIt() {
+        val into = LinearLayout(activity)
+        MarkdownRenderer(context()).render(
+            "<span>x <img src=\"/local/a.png\" width=\"10\" height=\"10\"></span>",
+            into,
+            MarkdownRenderer(context()).defaultRootStyle(),
+            MdSheet.parse("ha-markdown-element span { opacity: 0.5 }"),
+        )
+        fun all(v: View): List<View> = listOf(v) + ((v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+        val span = all(into).filterIsInstance<TextView>().mapNotNull { tv -> (tv.text as? android.text.Spanned)?.let { it.getSpans(0, it.length, dev.glassworks.engine.vitro.cards.MdImageSpan::class.java).singleOrNull() } }.single()
+        assertEquals(0.5f, span.opacity, 0.01f)
+    }
+
+    @Test
     fun autoTableLayoutGivesFixedColumnsTheirWidthAndAlignsCells() {
         val into = LinearLayout(activity)
         MarkdownRenderer(context()).render(
