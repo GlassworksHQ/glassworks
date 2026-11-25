@@ -98,6 +98,36 @@ export interface AppOverAdb {
   undo(p: PanelShell, o: { onStep: Step; onPhase: (p: DevicePhase) => void; sleep?: Sleep }): Promise<Removed>;
 }
 
+/**
+ * The frame's code for an in-place recipe (images.ts `mode: 'in-place'`): the stock software stays, and only the
+ * blocks the device's own agent reads back are written. Kiln runs the steps and checks every image this builds
+ * (inplace.ts `checkInPlace`) before it is written.
+ */
+export interface InPlaceCode {
+  /**
+   * The `stage` step: a small userdata image, sized for the partition, that starts the frame's agent on the stock
+   * software, trusts `adbKey`, signs what it sends with `secret`, and joins `wifi` when given.
+   */
+  stage(o: { adbKey: string; userdataBytes: number; secret: Uint8Array; wifi?: { ssid: string; password: string } }): Promise<Blob>;
+  /**
+   * The `receive` step's check, after Kiln's own (bundle.ts `verifyGwsbBundle`): the bundle is what the agent read off
+   * this device. `digest`: its id in the bundle cache; `extents`: where the file it holds sits on the partition, in
+   * bytes; `info`: lines for the log.
+   */
+  readBundle(bytes: Uint8Array, o: { secret: Uint8Array; serial: string }): Promise<{
+    digest: string;
+    extents: readonly { physical: number; length: number }[];
+    info: readonly string[];
+  }>;
+  /** The `in-place` step: the write images by name (the step's `makes`), and the restore image for every block they change. */
+  build(bundle: Uint8Array, o: { adbKey: string; userdataBytes: number }): Promise<{ writes: Record<string, Blob>; restore: Blob; manifest?: Record<string, unknown> }>;
+  /** How the `receive` step reaches the agent: its HTTP port and path on the LAN, its Bluetooth GATT service and characteristics. */
+  channels: {
+    lan?: { port: number; path: string; pagePath?: string };
+    ble?: { service: string; meta: string; ctrl: string; data: string };
+  };
+}
+
 /** An image over fastboot, then Glassworks' first start over adb. */
 export interface ImageOverFastboot {
   /** What this page can install, Glassworks first. */
@@ -120,8 +150,13 @@ export interface ImageOverFastboot {
   proxy: string;
   /** Kiln's staged assets the build adds, by asset name. */
   assets?: { bootAnimation?: string; settings?: string };
-  /** The browser storage this flow keeps across visits. Never rename either: browsers hold them. */
-  storage: { flashedFlag: string };
+  /** An in-place recipe's code, for a frame that offers one. */
+  inPlace?: InPlaceCode;
+  /**
+   * The browser storage this flow keeps across visits. Never rename any: browsers hold them. `inPlaceDb`: the
+   * IndexedDB that keeps received bundles and restore images (with `inPlace`).
+   */
+  storage: { flashedFlag: string; inPlaceDb?: string };
 }
 
 /** A frame installed on an Android device by image and adb. */
@@ -178,6 +213,19 @@ export function deviceWords(w: Record<string, unknown>): Record<DeviceWord, stri
   return w as Record<DeviceWord, string>;
 }
 
+/** Every word a frame with an in-place recipe gives (`imageFlow.inPlace`); inPlaceWords() checks each is there. */
+export const IN_PLACE_WORDS = [
+  'inPlace.stage.lede', 'inPlace.receive.lede', 'inPlace.receive.waiting', 'inPlace.receive.lan', 'inPlace.receive.ble',
+  'inPlace.receive.file', 'inPlace.restorePoint.lede', 'inPlace.confirm.lede', 'inPlace.appInstall.lede', 'inPlace.wayBack',
+] as const;
+export type InPlaceWord = (typeof IN_PLACE_WORDS)[number];
+
+/** An in-place frame's words, checked where they come in. Only for a frame with `imageFlow.inPlace`: others need none. */
+export function inPlaceWords(w: Record<string, unknown>): Record<InPlaceWord, string> {
+  for (const k of IN_PLACE_WORDS) if (typeof w[k] !== 'string' || !w[k]) throw new Error(`installer.json words.${k}: missing`);
+  return w as Record<InPlaceWord, string>;
+}
+
 /**
  * "pick the hub, listed as “Android”, in the browser's list": the device as the browser's list shows it, when its
  * data says (`listed`). Without, "pick the <short> in the browser's list".
@@ -208,6 +256,16 @@ export interface DeviceSim {
   firstStart(o: { hideFails?: boolean; noHome?: boolean; socket?: boolean; key?: string }): PanelShell;
   /** The device before the flash, running Glassworks: with its key socket holding `key`, or none (an older app). */
   running(o: { socket: boolean; key?: string }): PanelShell;
+  /**
+   * Its agent after the restart into an in-place stage. `bundle`: what it sends, signed with `secret`; `tampered`: a
+   * bundle whose signature doesn't match, `otherDevice`: one read from another serial.
+   */
+  inPlace?: {
+    serial: string;
+    bundle(o: { secret: Uint8Array; tampered?: boolean; otherDevice?: boolean }): Promise<Uint8Array>;
+    /** The userdata partition's size, as its fastboot reports it. */
+    userdataBytes: number;
+  };
 }
 
 export type DeviceEntry = { kind: 'device'; frame: DeviceFrame; sim: DeviceSim };

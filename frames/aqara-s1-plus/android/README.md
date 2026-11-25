@@ -162,7 +162,7 @@ $A --ez show_setup true    # preview the setup screen at its live step (changes 
 $A --ez show_setup true --es setup_step wifi   # ... or a given step: wifi|ha|signin|panes|radio|silent_updates|done
 $A --ez show_setup false   # close the preview
 $A --ez show_signin true   # preview the QR sign-in step (doesn't touch the session)
-$A --es open http://192.168.1.100:8123/profile/general      # navigate once (not persisted)
+$A --es open http://homeassistant.local:8123/history         # navigate once (not persisted)
 $A --ef zoom 1.25          # CSS px ratio; 0 = auto (device density 1.5). Restarts the app.
 $A --es secure_hosts a.lan,b.lan   # extra secure-context hosts. Restarts the app.
 $A --ez remote_debug true  # Gecko remote debugging. Restarts the app.
