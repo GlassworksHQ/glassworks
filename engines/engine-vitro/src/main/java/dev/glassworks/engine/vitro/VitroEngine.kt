@@ -13,7 +13,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.SurfaceView
 import android.view.View
+import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.widget.FrameLayout
 import dev.glassworks.auth.HaSocket
@@ -66,19 +68,21 @@ class VitroEngine(
 
     /**
      * The loopback server for Tier 3 islands, one per process and started on first use ([ensureStarted] picks the
-     * port once). It reads the active page's Home Assistant origin and token on every request. The legacy engine
-     * (a locked-down [fallback]) is held to one origin, so [fallbackDashboardOrigin] gives it this one up front.
+     * port once). It reads the active page's Home Assistant origin, token and Lovelace resources on every request.
+     * The legacy engine (a locked-down [fallback]) is held to the dashboard's origin, so [islandOrigin] gives it this
+     * one up front as well.
      */
     val islandServer: VitroIslandServer = VitroIslandServer(
         session = { activePage?.islandSession() ?: (null to null) },
         log = { msg -> Log.d(logTag, "island: ${forLog(msg)}") },
+        resources = { activePage?.resourceUrls().orEmpty() },
     )
 
     /**
-     * The origin a locked-down [fallback] is told its dashboard is (`EngineSettings.dashboard`): the island server's
-     * loopback origin, started now. Pages the fallback shows come through it and are proxied to Home Assistant.
+     * The island server's loopback origin, started now: the second origin a locked-down [fallback] lets pages load
+     * (`EngineSettings.localOrigin`), for the islands alone. Home Assistant's own pages load from Home Assistant.
      */
-    fun fallbackDashboardOrigin(): String = islandServer.ensureStarted()
+    fun islandOrigin(): String = islandServer.ensureStarted()
     @Volatile private var startedSettings: EngineSettings? = null
     @Volatile var lastMetrics: VitroMetrics = VitroMetrics()
         private set
@@ -213,6 +217,9 @@ class VitroEngine(
 
         /** The token with the origin it was issued for, published as one value. */
         @Volatile private var cachedSession: Pair<String, String>? = null
+
+        /** The URLs of the Lovelace resources the dashboard on screen loaded: the island proxy forwards their folders. */
+        fun resourceUrls(): List<String> = vitroView.resourcesList.map { it.url }
 
         /** The island proxy's origin and its token: the token only when it was issued for that very origin. */
         fun islandSession(): Pair<String?, String?> {
@@ -472,7 +479,7 @@ class VitroEngine(
 
         override fun restart() {
             fallbackPage?.restart()
-            // The island server stays up: its port is the locked-down fallback's one allowed origin for the process.
+            // The island server stays up: a locked-down fallback allows its port, and only it, for the process.
             clientGeneration++
             client?.close()
             client = null
@@ -546,33 +553,49 @@ class VitroEngine(
 
         private fun showVitroLayer() {
             vitroView.visibility = View.VISIBLE
+            showIslandSurfaces()
             fallbackPage?.view?.visibility = View.GONE
         }
 
+        /** The islands' surfaces [hideIslandSurfaces] hid, to show again with the dashboard. */
+        private val hiddenSurfaces = ArrayList<SurfaceView>()
+
+        /**
+         * Hides the surfaces under [vitroView] (the islands' GeckoViews) while the fallback shows a page. Android 6 hides
+         * a SurfaceView only when it, or its window, goes invisible, not an ancestor (API 24's onVisibilityAggregated
+         * does): on the legacy engine an island's card stayed drawn over Home Assistant's pages.
+         */
+        private fun hideIslandSurfaces() {
+            fun walk(v: View) {
+                if (v is SurfaceView) {
+                    if (v.visibility == View.VISIBLE) { v.visibility = View.INVISIBLE; hiddenSurfaces += v }
+                } else if (v is ViewGroup) {
+                    for (i in 0 until v.childCount) walk(v.getChildAt(i))
+                }
+            }
+            walk(vitroView)
+        }
+
+        private fun showIslandSurfaces() {
+            for (v in hiddenSurfaces) if (v.visibility == View.INVISIBLE) v.visibility = View.VISIBLE
+            hiddenSurfaces.clear()
+        }
+
+        /**
+         * Shows [url] in the fallback engine, as it is: a Home Assistant page loads from Home Assistant, the legacy
+         * engine's too (its lockdown allows the dashboard's origin), so the page's WebSocket and its external auth are
+         * Home Assistant's own, and its frontend extras (an integration's panel or script) load where HA serves them.
+         */
         private fun openInFallback(url: String) {
-            val target = loopbackUrl(url)
-            // The URL asked for, not [target]: an entry URL carries the proxy's capability.
             Log.i(logTag, "Routing non-dashboard URL to fallback engine: ${forLog(url)}")
             val fp = fallbackPage ?: fallback.open(activity, host, backgroundColor).also { created ->
                 fallbackPage = created
                 container.addView(created.view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             }
             vitroView.visibility = View.GONE
+            hideIslandSurfaces()
             fp.view.visibility = View.VISIBLE
-            fp.load(target)
-        }
-
-        /**
-         * A locked-down fallback loads only one origin, the island server's. A Home Assistant URL (`/auth/authorize`)
-         * moves to it, so the server proxies it to [currentOrigin], and to nothing else. It goes in through the
-         * server's entry route, which gives the browser the proxy's capability cookie and redirects to the path.
-         */
-        private fun loopbackUrl(url: String): String {
-            val ha = proxyOrigin ?: return url
-            if (!fallback.lockedDown || OAuth.origin(url) != ha) return url
-            val afterScheme = url.trim().substringAfter("://")
-            val rest = afterScheme.indexOfFirst { it == '/' || it == '?' || it == '#' }.let { if (it < 0) "" else afterScheme.substring(it) }
-            return islandServer.entryUrl(if (rest.startsWith("/")) rest else "/$rest")
+            fp.load(url)
         }
 
         /** Why the page signals ready once the current view is built (it waits for its first states), or null. */
@@ -717,7 +740,7 @@ class VitroEngine(
         private const val NO_DASHBOARD = "\u0000fallback"
 
         private val LOG_QUERY = Regex("""[?#][^\s"'<>]*""")
-        private val LOG_PROXIED = Regex("""/(api|local|hacsfiles|static|auth|__vitro/island|__vitro/ws|__vitro/enter)/[^\s?#"'<>]*""")
+        private val LOG_PROXIED = Regex("""/(api|local|hacsfiles|static|auth|__vitro/island|__vitro/ws)/[^\s?#"'<>]*""")
 
         private val LOG_AUTHORITY = Regex("""\b([a-z][a-z0-9+.-]*://)[^/\s?#"'<>]+""", RegexOption.IGNORE_CASE)
         private val LOG_IPV4 = Regex("""(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?(?![\d.])""")

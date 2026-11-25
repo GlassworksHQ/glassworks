@@ -20,24 +20,34 @@ import dev.glassworks.engine.gecko.PageGuard.Load
  * - A new window loads in place, as in the current engine, if it is Home Assistant's; any other is refused.
  * - Downloads are always refused.
  *
+ * - The app's own loopback server ([local]: Vitro's island server, `http://127.0.0.1:<port>`) is the one other origin a
+ *   page or frame may come from, set with the dashboard's and as fixed. Nothing else on loopback: another port is
+ *   another app's. A new window still goes only to Home Assistant.
+ *
  * Without a dashboard (Home Assistant not found yet), nothing from the network loads. Subresources (images, map tiles,
- * fetches, WebSockets) don't pass through here: the lockdown extension blocks them (assets/lockdown).
+ * fetches, WebSockets) don't pass through here: the lockdown extension blocks them (assets/lockdown), and holds each
+ * page to its own origin, so Home Assistant's page never reaches the loopback server, nor its page Home Assistant.
  */
 internal class LockdownPolicy {
     /** The origin pages may use: the configured dashboard's, from [start]. */
     @Volatile var origin: String? = null
         private set
 
+    /** The app's own loopback server's origin, from [start]: `http://127.0.0.1:<port>`, or null. */
+    @Volatile var local: String? = null
+        private set
+
     private var started = false
 
     /**
-     * The engine starts with the configured [dashboard] URL (null: none yet). Only the first call counts: returns
-     * false, and changes nothing, after that.
+     * The engine starts with the configured [dashboard] URL (null: none yet) and the app's loopback server, [localUrl]
+     * (null: none). Only the first call counts: returns false, and changes nothing, after that.
      */
-    fun start(dashboard: String?): Boolean {
+    fun start(dashboard: String?, localUrl: String? = null): Boolean {
         if (started) return false
         started = true
         origin = Origin.of(dashboard)
+        local = loopback(localUrl)?.takeIf { it != origin }
         return true
     }
 
@@ -46,10 +56,19 @@ internal class LockdownPolicy {
         return when (kind) {
             Load.DOWNLOAD -> false
             Load.WINDOW -> sameOrigin(u)
-            Load.PAGE -> u == "about:blank" || sameOrigin(u)
-            Load.FRAME -> u == "about:blank" || u == "about:srcdoc" || u.startsWith("moz-extension://") || sameOrigin(u)
+            Load.PAGE -> u == "about:blank" || sameOrigin(u) || isLocal(u)
+            Load.FRAME -> u == "about:blank" || u == "about:srcdoc" || u.startsWith("moz-extension://") || sameOrigin(u) || isLocal(u)
         }
     }
 
     private fun sameOrigin(url: String) = origin.let { it != null && Origin.of(url) == it }
+
+    private fun isLocal(url: String) = local.let { it != null && Origin.of(url) == it }
+
+    companion object {
+        private val LOOPBACK = Regex("^http://127\\.0\\.0\\.1:\\d+$")
+
+        /** [url]'s origin when it is exactly `http://127.0.0.1:<port>` with a port of its own; else null (fails closed). */
+        internal fun loopback(url: String?): String? = Origin.of(url)?.takeIf { LOOPBACK.matches(it) }
+    }
 }
