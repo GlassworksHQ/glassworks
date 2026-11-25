@@ -442,15 +442,30 @@ class ChartScene {
  * when the data or the size changes, and drawing only replays the paths. [heightCss] is the chart's own height.
  */
 class ChartView(context: Context, private val density: Float) : View(context) {
-    var heightCss: Float = 200f
-        set(v) { if (field != v) { field = v; requestLayout() } }
-    private var build: ((Float) -> ChartScene)? = null
+    private var hCss = 200f
+
+    /** The chart's height (CSS px). The scene is built again when it changes, like when the width does. */
+    var heightCss: Float
+        get() = hCss
+        set(v) { if (hCss != v) { hCss = v; requestLayout() } }
+
+    /**
+     * Sets [heightCss] from a parent's measure pass (a graph card in a fixed `grid_options.rows` slot, which shrinks
+     * the chart so the chart and its legend fill the slot): the parent measures this view next, so no layout request.
+     */
+    fun sizeInMeasure(heightCss: Float) { hCss = heightCss }
+
+    private var build: ((Float, Float) -> ChartScene)? = null
     private var scene: ChartScene? = null
     private var builtWidth = -1
+    private var builtHeight = Float.NaN
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    fun setScene(builder: (widthCss: Float) -> ChartScene) {
+    fun setScene(builder: (widthCss: Float) -> ChartScene) = setSizedScene { w, _ -> builder(w) }
+
+    /** A scene drawn for the chart's width and height (CSS px). */
+    fun setSizedScene(builder: (widthCss: Float, heightCss: Float) -> ChartScene) {
         build = builder
         builtWidth = -1
         ensureScene()
@@ -469,15 +484,16 @@ class ChartView(context: Context, private val density: Float) : View(context) {
      */
     private fun ensureScene() {
         val b = build ?: return
-        if (width <= 0 || builtWidth == width) return
-        val sc = b(width / density)
+        if (width <= 0 || (builtWidth == width && builtHeight == hCss)) return
+        val sc = b(width / density, hCss)
         scene = sc
         builtWidth = width
+        builtHeight = hCss
         contentDescription = sc.texts.joinToString(", ") { it.text }.takeIf { it.isNotEmpty() }
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), Math.round(heightCss * density))
+        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), Math.round(hCss * density))
     }
 
     override fun onDraw(canvas: Canvas) {
