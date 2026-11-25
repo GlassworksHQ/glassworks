@@ -325,6 +325,7 @@ into API 24 at start (step 9); since Phase B (#412) it runs. On the Mirror it st
 | Hiding HA's header and sidebar, the external-auth bridge (`window.externalApp`) | Same `content.js`; needs the app's MainActivity to answer it | The bridge: inferred to work on the Mirror (2026-11-17, #459): after a sign-in from a phone the dashboard loaded signed in, which it can only do through the bridge. No log shows `getExternalAuth`. Hiding the header and sidebar: untested |
 | Camera cards | HLS only: WebRTC is off | Read (HA's frontend falls back when `RTCPeerConnection` is missing); untested |
 | Map cards, iframe and webpage cards, brand icons, anything from another origin | Blocked, with the note | Verified for the kinds of request (steps 4, 12); not with a real map card |
+| Home Assistant's other pages: history, logbook, settings, the profile (`/profile/dashboard`) | Work | Verified on API 23, Vitro off: history, logbook and settings in #823's run, the profile (2026-11-24, [below](#a-blank-profilegeneral-is-home-assistants-not-the-engines-2026-11-24)). `/profile/general` is blank in every browser: HA 2026.11 has no such route |
 | Downloads (backups, logs) | Refused | Verified (step 12) |
 | `window.open` to HA (e.g. "open in a new tab") | Loads in place | Verified (step 12) |
 
@@ -635,12 +636,25 @@ Number 4 was the cheapest and turned out to be it. HA's profile panel is one sma
    an empty page with no console error; `/profile/dashboard` shows the profile (user card, theme, Appearance,
    Localization, This browser, Security). So hypotheses 1–3 are out: no lockdown, no GeckoView 144, no app bridge
    in that run. (Playwright's Firefox didn't start on this Mac; not needed.)
-3. The legacy APK (`./gradlew :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a`) on an API 23
-   arm64 emulator, signed in through the panel's own QR sign-in server (`/signin/continue` through
-   `adb forward tcp:18099 tcp:8099`, then HA's `/auth/login_flow` API with the S256 `code_challenge` from the
-   authorize URL: HA 2026.11 refuses the code exchange with `invalid_request` without it), then
-   `am start -n dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity --es open http://10.0.2.2:8133/profile/general`.
-   No `lockdown: blocked` line in logcat. RESULT_LEGACY
+3. The legacy APK built from main (`./gradlew :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a`,
+   zipaligned and signed with the debug key) on an API 23 arm64 emulator (`system-images;android-23;default;arm64-v8a`,
+   `wm size 1280x800`), the app set to `--es url http://10.0.2.2:8133` and signed in with
+   `tools/legacy/emulator-signin.sh` (the panel's own QR sign-in server through `adb forward tcp:18099 tcp:8099`,
+   then HA's `/auth/login_flow` API with the S256 `code_challenge` from the authorize URL: HA 2026.11 refuses the
+   code exchange with `invalid_request` without it). Then, 30 s apart:
+   `am start -n dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity --es open http://10.0.2.2:8133/profile/<route>`.
+   - `general`: the page background, nothing else, as in Chromium (the kiosk hides HA's header and sidebar).
+   - `dashboard`: the full profile, including **This mobile app**, the section HA shows only to an external app, so
+     the external-auth bridge answered `config/get` on GeckoView 144.
+   - Logcat over both: no `lockdown: blocked`, no `Loading failed for the module`, no `Script terminated by timeout`.
+
+**A dead end worth knowing.** The first emulator run, at the AVD's own 2560×1800 with SwiftShader, while the Mac ran
+other builds (load average 600–850), looked like a real engine bug: 87 `Loading failed for the module` warnings for
+HA's chunks, a `Script terminated by timeout` inside them, and the app's connecting screen that never left, for
+`/profile/dashboard` too. HA served
+every one of those chunks (200 to `curl`). It was the host, not GeckoView: at 1280×800 with the load down, the same
+APK loaded the dashboard in 8 s and the profile with no warning. Before blaming the legacy engine for chunks that
+don't load on an emulator, check `uptime` on the host.
 
 Lesson for the next blank HA page on the legacy engine: open the same URL in a desktop browser before suspecting
 GeckoView 144. HA renames and removes frontend routes between releases.
