@@ -50,11 +50,17 @@ object Sfnt {
             val p = WOFF_HEADER + i * WOFF_ENTRY
             val e = Entry(src.getInt(p), src.getInt(p + 4), src.getInt(p + 8), src.getInt(p + 12), src.getInt(p + 16))
             require(e.offset >= 0 && e.compLength >= 0 && e.origLength >= 0) { "bad table entry" }
+            // Table data follows the directory (WOFF 1.0 §5): never inside the header or the directory.
+            require(e.offset >= WOFF_HEADER + numTables * WOFF_ENTRY) { "table inside the directory" }
             require(e.offset.toLong() + e.compLength <= woff.size) { "table past the end" }
             require(e.compLength <= e.origLength) { "table grows when stored" }
             e
         }
-        // sfnt header + directory, then each table padded to four bytes, in the directory's order.
+        // Tables may not share bytes: each starts at or after the end of the one before it in the file.
+        val inFileOrder = entries.sortedBy { it.offset }
+        inFileOrder.zipWithNext().forEach { (a, b) -> require(b.offset.toLong() >= a.offset.toLong() + a.compLength) { "overlapping tables" } }
+        // sfnt header + directory (in tag order, as the WOFF directory is), then each table padded to four bytes, in
+        // the WOFF file's data order: the font's original layout, which its head.checkSumAdjustment was made for.
         var size = 12L + 16L * numTables
         for (e in entries) size += (e.origLength + 3L) and 3L.inv()
         require(size <= maxBytes) { "sfnt too large" }
@@ -68,17 +74,21 @@ object Sfnt {
         out.putShort(entrySelector.toShort())
         out.putShort((numTables * 16 - searchRange).toShort())
         var dataOffset = 12 + 16 * numTables
-        for ((i, e) in entries.withIndex()) {
-            val dir = 12 + 16 * i
-            out.putInt(dir, e.tag)
-            out.putInt(dir + 4, e.checksum)
-            out.putInt(dir + 8, dataOffset)
-            out.putInt(dir + 12, e.origLength)
+        val placedAt = HashMap<Entry, Int>()
+        for (e in inFileOrder) {
+            placedAt[e] = dataOffset
             val table = if (e.compLength < e.origLength) inflate(woff, e.offset, e.compLength, e.origLength)
             else woff.copyOfRange(e.offset, e.offset + e.origLength)
             out.position(dataOffset)
             out.put(table)
             dataOffset += (e.origLength + 3) and 3.inv()
+        }
+        for ((i, e) in entries.withIndex()) {
+            val dir = 12 + 16 * i
+            out.putInt(dir, e.tag)
+            out.putInt(dir + 4, e.checksum)
+            out.putInt(dir + 8, placedAt.getValue(e))
+            out.putInt(dir + 12, e.origLength)
         }
         return out.array()
     }
@@ -99,6 +109,11 @@ object Sfnt {
                 n += r
             }
             require(n == origLength) { "table inflates to ${n}, not $origLength" }
+            // A full buffer isn't the stream's end: it must finish here, with no more output behind it.
+            if (!inflater.finished()) {
+                val extra = try { inflater.inflate(ByteArray(1)) } catch (e: DataFormatException) { throw IllegalArgumentException("bad zlib data", e) }
+                require(extra == 0 && inflater.finished()) { "table inflates past $origLength or doesn't end" }
+            }
             return out
         } finally {
             inflater.end()

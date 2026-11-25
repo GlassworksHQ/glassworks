@@ -179,6 +179,22 @@ class CssFontFacesTest {
         val greek = FontFace("f", 400, 400, false, listOf(FontSource("https://x/greek.ttf", null)), listOf(0x370..0x3FF))
         val latin = FontFace("f", 400, 400, false, listOf(FontSource("https://x/latin.ttf", null)), listOf(0x0..0xFF))
         assertEquals(latin, WebFonts.match(listOf(greek, latin), 400, false))
+        // Not just the later rule: Latin wins when it comes first too.
+        assertEquals(latin, WebFonts.match(listOf(latin, greek), 400, false))
+    }
+
+    @Test
+    fun importsAfterARuleAreIgnoredAndUrlEscapesDecoded() {
+        val css = "@import url(\"first.css\");\n.tile { color: red }\n@import url(\"late.css\");\n" +
+            "@font-face { font-family: Brand   Sans; src: url(\"my\\20 font.ttf\") format(\"truetype\"), url(a%20b.ttf); }"
+        val parsed = CssFontFaces.parse(css, sheet)
+        assertEquals(listOf("http://homeassistant.local:8123/local/fonts/first.css"), parsed.imports)
+        val face = parsed.faces.single()
+        assertEquals(listOf("http://homeassistant.local:8123/local/fonts/my%20font.ttf", "http://homeassistant.local:8123/local/fonts/a%20b.ttf"), face.supportedUrls)
+        // Unquoted identifiers join with one space, as the usage side reads them.
+        assertEquals("brand sans", face.family)
+        assertEquals(listOf("Brand Sans", "serif"), CssFontFaces.families("Brand   Sans, serif"))
+        assertEquals(listOf("Brand   Sans"), CssFontFaces.families("\"Brand   Sans\""))
     }
 
     @Test

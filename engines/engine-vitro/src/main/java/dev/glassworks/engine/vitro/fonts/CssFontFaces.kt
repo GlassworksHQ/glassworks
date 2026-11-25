@@ -74,11 +74,14 @@ object CssFontFaces {
         val faces = ArrayList<FontFace>()
         val importAt = IMPORT.toPattern().matcher(text)
         val faceAt = FONT_FACE.toPattern().matcher(text)
+        // `@import` counts only before the sheet's first block: after a rule the browser ignores it.
+        val firstBlock = text.indexOf('{').let { if (it < 0) Int.MAX_VALUE else it }
         for (at in atRules) {
             // Anchored at the `@`: a rule that doesn't start right there is no match, with no search ahead.
             if (importAt.region(at, text.length).lookingAt()) {
+                if (at > firstBlock) continue
                 val raw = (importAt.group(2)?.takeIf { it.isNotEmpty() } ?: importAt.group(4)).orEmpty().trim()
-                resolve(sheetUrl, raw)?.let(imports::add)
+                resolve(sheetUrl, decodeEscapes(raw))?.let(imports::add)
             } else if (faceAt.region(at, text.length).lookingAt()) {
                 val start = faceAt.end()
                 val end = blockEnd(text, start) ?: continue
@@ -150,7 +153,8 @@ object CssFontFaces {
             // A local() entry names an installed font (never one on a panel), even if its name holds "url(".
             if (entry.trimStart().startsWith("local(", ignoreCase = true)) return@mapNotNull null
             val m = SRC_URL.find(entry) ?: return@mapNotNull null
-            val abs = resolve(sheetUrl, m.groupValues[2].trim()) ?: return@mapNotNull null
+            // CSS escapes decoded first (`my\20 font.ttf` is "my font.ttf"); percent-encoded bytes stay as they are.
+            val abs = resolve(sheetUrl, decodeEscapes(m.groupValues[2].trim())) ?: return@mapNotNull null
             // The hint follows the url(): "format(" inside the URL itself is part of its path.
             val format = SRC_FORMAT.find(entry, m.range.last + 1)?.groupValues?.get(2)?.trim()?.lowercase(Locale.ROOT)
             FontSource(abs, format)
@@ -217,16 +221,26 @@ object CssFontFaces {
         Family(name, generic = !quoted && name.lowercase(Locale.ROOT) in GENERIC)
     }
 
-    /** A family name as CSS reads it: quotes off, escapes decoded (`"Pilot\" Sans"`, `\26` for `&`). */
+    /**
+     * A family name as CSS reads it: quotes off, escapes decoded (`"Pilot\" Sans"`, `\26` for `&`). Unquoted, its
+     * identifiers are joined by one space (`Brand   Sans` is "Brand Sans"); an escaped space stays.
+     */
     private fun unquote(v: String): String {
         val t = v.trim()
-        val inner = if (t.length >= 2 && (t[0] == '"' || t[0] == '\'') && t.last() == t[0]) t.substring(1, t.length - 1) else t
-        return HEX_ESCAPE.replace(inner) { m ->
+        val quoted = t.length >= 2 && (t[0] == '"' || t[0] == '\'') && t.last() == t[0]
+        val inner = if (quoted) t.substring(1, t.length - 1) else UNESCAPED_SPACES.replace(t, " ")
+        return decodeEscapes(inner).trim()
+    }
+
+    private val UNESCAPED_SPACES = Regex("""(?<!\\)\s+""")
+
+    /** CSS escapes decoded (`\20 ` a space, `\"` a quote); everything else, percent-encoding included, as it is. */
+    private fun decodeEscapes(inner: String): String =
+        HEX_ESCAPE.replace(inner) { m ->
             m.groupValues[1].takeIf { it.isNotEmpty() }?.toIntOrNull(16)
                 ?.let { cp -> if (cp in 1..0x10FFFF) String(Character.toChars(cp)) else "\uFFFD" }
                 ?: m.groupValues[2]
-        }.trim()
-    }
+        }
 
     /** [s] split on [sep] outside quotes and parentheses (a `data:` URI holds `;` and `,`). */
     fun splitTopLevel(s: String, sep: Char): List<String> {

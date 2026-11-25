@@ -19,6 +19,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -455,8 +456,21 @@ class WebFontsTest {
         configure("fonts.css")
         VitroFonts.typeface(activity, 400, 14f, fontFamily = "Pacifico")
         drain()
+        val first = VitroFonts.typeface(activity, 400, 14f, fontFamily = "Pacifico, sans-serif")
+        assertNotSame(VitroFonts.system(400), first)
         WebFonts.configure("http://192.0.2.20:8123", emptyList(), cache)
         assertSame(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f, fontFamily = "Pacifico, sans-serif"))
+        // A server whose sheet names Pacifico too, from its own file: its face loads, never the first server's.
+        val other = "http://192.0.2.21:8123"
+        served["$other/local/fonts.css"] = "@font-face { font-family: Pacifico; src: url(p.ttf) }".toByteArray()
+        served["$other/local/p.ttf"] = File(fonts, "comic-neue-400.ttf").readBytes()
+        WebFonts.configure(other, listOf(LovelaceResource("/local/fonts.css", "css")), cache)
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "Pacifico, sans-serif")
+        drain()
+        val second = VitroFonts.typeface(activity, 400, 14f, fontFamily = "Pacifico, sans-serif")
+        assertTrue("$other/local/p.ttf" in fetched)
+        assertNotSame(first, second)
+        assertNotSame(VitroFonts.system(400), second)
     }
 
     @Test
@@ -519,6 +533,37 @@ class WebFontsTest {
         // Android loads it.
         val file = File(cache, "bitter.ttf").apply { writeBytes(sfnt) }
         assertNotEquals(width(Typeface.DEFAULT), width(Typeface.createFromFile(file)), 0.5f)
+    }
+
+    /** A WOFF 1.0 with [tables] (tag, data placed at its own offset, the length the sfnt table has). */
+    private fun woffOf(tables: List<Triple<String, Int, ByteArray>>, origLengths: List<Int>? = null): ByteArray {
+        val end = tables.maxOf { it.second + it.third.size }
+        val b = ByteBuffer.allocate(end)
+        b.putInt(0, 0x774F4646); b.putInt(4, 0x00010000); b.putInt(8, end); b.putShort(12, tables.size.toShort())
+        b.putInt(16, 12 + 16 * tables.size + tables.sumOf { (it.third.size + 3) and 3.inv() } + 64)
+        tables.forEachIndexed { i, (tag, offset, data) ->
+            val e = 44 + 20 * i
+            b.putInt(e, ByteBuffer.wrap(tag.toByteArray()).int); b.putInt(e + 4, offset); b.putInt(e + 8, data.size)
+            b.putInt(e + 12, origLengths?.get(i) ?: data.size); b.putInt(e + 16, 0)
+            b.position(offset); b.put(data)
+        }
+        return b.array()
+    }
+
+    @Test
+    fun aWoffIsRebuiltInItsOwnDataOrderAndAMalformedOneRefused() {
+        val dir = 44 + 20 * 2
+        // The directory is in tag order; the data puts "bbbb" first: the sfnt keeps that layout.
+        val ordered = Sfnt.unwrapWoff(woffOf(listOf(Triple("aaaa", dir + 8, ByteArray(8) { 1 }), Triple("bbbb", dir, ByteArray(8) { 2 }))))
+        val ob = ByteBuffer.wrap(ordered)
+        assertTrue(ob.getInt(12 + 16 + 8) < ob.getInt(12 + 8))
+        // A table inside the directory, and two tables sharing bytes.
+        assertNull(Sfnt.toSfnt(woffOf(listOf(Triple("aaaa", 0, ByteArray(8)), Triple("bbbb", dir, ByteArray(8))))))
+        assertNull(Sfnt.toSfnt(woffOf(listOf(Triple("aaaa", dir, ByteArray(8)), Triple("bbbb", dir + 4, ByteArray(8))))))
+        // A compressed table whose stream goes on past its declared length.
+        val deflated = java.io.ByteArrayOutputStream().also { o -> java.util.zip.DeflaterOutputStream(o).use { it.write(ByteArray(200)) } }.toByteArray()
+        assertNull(Sfnt.toSfnt(woffOf(listOf(Triple("aaaa", 44 + 20, deflated)), origLengths = listOf(100))))
+        assertNotNull(Sfnt.toSfnt(woffOf(listOf(Triple("aaaa", 44 + 20, deflated)), origLengths = listOf(200))))
     }
 
     @Test

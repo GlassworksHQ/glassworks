@@ -328,7 +328,12 @@ object WebFonts {
                         faces = parsed.orEmpty()
                         if (changed) {
                             // Different sheets: faces may now point elsewhere. Drawn text picks them up on the redraw.
-                            loads.keys.retainAll(faces.values.flatten().mapNotNull(::faceKey).toSet())
+                            val keep = faces.values.flatten().mapNotNull(::faceKey).toSet()
+                            val dropped = loads.filterKeys { it !in keep }.values.filterIsInstance<Face.Ready>().map { it.file }
+                            loads.keys.retainAll(keep)
+                            // Their files may be evicted now, unless a face still loaded uses one.
+                            val used = loads.values.filterIsInstance<Face.Ready>().map { it.file }.toSet()
+                            synchronized(pinned) { dropped.filter { it !in used }.forEach { pinned -= it } }
                             variants.clear()
                             notifyChanged()
                         }
@@ -636,8 +641,10 @@ object WebFonts {
             setRequestProperty("User-Agent", USER_AGENT)
         }
         // The timeouts bound each wait; this bounds the whole request, so a slow trickle can't hold the one loader
-        // thread for minutes.
+        // thread for minutes. Checked between reads, and enforced while one blocks (connecting, the headers, a body
+        // read): at the deadline the connection is closed under it, and the request fails.
         val deadline = System.nanoTime() + REQUEST_DEADLINE_MS * 1_000_000L
+        val cutOff = DEADLINES.schedule({ runCatching { conn.disconnect() } }, REQUEST_DEADLINE_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
         try {
             if (conn.responseCode != 200) null
             else if (conn.contentLength > maxBytes) null
@@ -654,6 +661,7 @@ object WebFonts {
                 Fetched(out.toByteArray(), conn.url.toString())
             }
         } finally {
+            cutOff.cancel(false)
             conn.disconnect()
         }
     } catch (_: Exception) {
@@ -667,4 +675,9 @@ object WebFonts {
 
     /** The longest a stylesheet or font request may take in all. */
     private const val REQUEST_DEADLINE_MS = 30_000L
+
+    /** Closes a request still running at its deadline ([httpFetch]). */
+    private val DEADLINES = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "vitro-font-deadline").apply { isDaemon = true }
+    }
 }
