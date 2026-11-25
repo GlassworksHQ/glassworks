@@ -260,7 +260,7 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         // The more-info button: a 48 px ⋮ in the secondary text color, top right.
         addView(FrameLayout(ctx.context).apply {
             isClickable = true
-            contentDescription = "More info"
+            contentDescription = HaText.ui("ui.panel.lovelace.editor.action-editor.actions.more-info")
             addView(MdiIconView(ctx.context).apply { setIcon("mdi:dots-vertical", ctx.theme.secondaryTextColor) },
                 FrameLayout.LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
             setOnClickListener { eid?.let(ctx.openMoreInfo) }
@@ -1499,7 +1499,7 @@ private fun dialHeader(ctx: VitroCardContext, title: TextView, onMore: () -> Uni
     })
     val dots = FrameLayout(ctx.context).apply {
         isClickable = true
-        contentDescription = "More info"
+        contentDescription = HaText.ui("ui.panel.lovelace.editor.action-editor.actions.more-info")
         addView(MdiIconView(ctx.context).apply { setIcon("mdi:dots-vertical", ctx.theme.primaryTextColor) },
             FrameLayout.LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
         setOnClickListener { onMore() }

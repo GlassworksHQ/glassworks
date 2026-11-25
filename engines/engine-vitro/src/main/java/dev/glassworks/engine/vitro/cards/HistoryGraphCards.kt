@@ -1218,7 +1218,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
             orientation = LinearLayout.VERTICAL
             setPadding(ctx.px(16f), 0, ctx.px(16f), ctx.px(8f))
         }
-        info.text = "Loading state history…"
+        info.text = HaText.ui("ui.components.history_charts.loading_history")
         info.minHeight = Math.round(60f * ctx.dp)
         content.addView(info, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(60f * ctx.dp)))
         content.addView(charts, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -1272,7 +1272,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
                 stream = null
                 unsubscribe = null
                 val why = error?.optString("message")?.takeIf { it.isNotEmpty() } ?: error?.optString("code").orEmpty()
-                streamError = if (why.isEmpty()) "Unable to load history" else "Unable to load history: $why"
+                streamError = HaText.ui("ui.components.history_charts.error").let { if (why.isEmpty()) it else "$it: $why" }
                 render()
             }
         })
@@ -1324,7 +1324,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         charts.removeAllViews()
         slotCharts.clear()
         if (history.line.isEmpty() && history.timeline.isEmpty()) {
-            info.text = "No state history found."
+            info.text = HaText.ui("ui.components.history_charts.no_history_found")
             info.visibility = VISIBLE
             return
         }
@@ -1710,7 +1710,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
             legend.setItems(emptyList())
             chart.setScene { ChartScene() }
             chart.visibility = GONE
-            info.text = "No statistics found."
+            info.text = HaText.ui("ui.components.statistics_charts.no_statistics_found")
             info.visibility = VISIBLE
             return
         }

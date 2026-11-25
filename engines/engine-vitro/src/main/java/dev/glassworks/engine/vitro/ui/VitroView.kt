@@ -69,6 +69,7 @@ import dev.glassworks.engine.vitro.cards.TileCardView
 import dev.glassworks.engine.vitro.cards.TodoListCardView
 import dev.glassworks.engine.vitro.cards.WeatherCardView
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.data.EntityState
@@ -180,7 +181,7 @@ class VitroView(
     private val viewBackStack = ArrayDeque<Int>()
 
     private val bannerText = TextView(context).apply {
-        text = "Connection lost. Reconnecting…"
+        text = HaText.ui("ui.notification_toast.connection_lost")
         textSize = 13f
         setTextColor(0xFFFFFFFF.toInt())
         typeface = VitroFonts.typeface(context, Inter.MEDIUM, 13f)

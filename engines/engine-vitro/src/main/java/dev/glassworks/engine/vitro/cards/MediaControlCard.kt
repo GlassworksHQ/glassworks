@@ -58,7 +58,7 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
     private val stateIcon = MdiIconView(ctx.context)
     private val nameView = label(14f, Inter.REGULAR)
     private val moreIcon = MdiIconView(ctx.context)
-    private val more = button(moreIcon, 48f, 24f).apply { contentDescription = "More info" }
+    private val more = button(moreIcon, 48f, 24f).apply { contentDescription = HaText.ui("ui.panel.lovelace.editor.action-editor.actions.more-info") }
     private val titleView = label(16.8f, Inter.REGULAR)
     private val descriptionView = label(14f, Inter.REGULAR)
     private val mediaInfo = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }

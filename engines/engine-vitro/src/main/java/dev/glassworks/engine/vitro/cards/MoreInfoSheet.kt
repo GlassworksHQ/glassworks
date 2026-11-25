@@ -158,7 +158,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         }
         val closeIcon = MdiIconView(ctx.context)
         val closeButton = iconButton(closeIcon, "mdi:close").apply {
-            contentDescription = "Close"
+            contentDescription = HaText.ui("ui.common.close")
             setOnClickListener { dismiss() }
         }
         this.closeButton = closeButton

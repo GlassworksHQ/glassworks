@@ -156,8 +156,13 @@ object HaIntl {
             return pattern.replace("{0}", formatInteger(n))
         }
 
-        /** The template HA's option set [name] gets (`time.h12`, `date`, …), or null when the table has none. */
-        fun dateFormat(name: String): DateTemplate? = date.optJSONObject(name)?.let { DateTemplate(it, dateZero, buddhist) }
+        private val templates = ConcurrentHashMap<String, Any>()
+
+        /** The template HA's option set [name] gets (`time.h12`, `date`, …), or null when the table has none. Parsed once. */
+        fun dateFormat(name: String): DateTemplate? {
+            val t = templates.getOrPut(name) { date.optJSONObject(name)?.let { DateTemplate(it, dateZero, buddhist) } ?: NONE }
+            return t as? DateTemplate
+        }
     }
 
     /**
@@ -176,23 +181,33 @@ object HaIntl {
         }
 
         /** The date at [ms] in [zone], as `format(date)`. */
-        fun format(ms: Long, zone: TimeZone): String = tokens.joinToString("") { t ->
-            when (t) {
-                is Token.Literal -> t.text
-                is Token.Field -> field(t.name, ms, zone)
+        fun format(ms: Long, zone: TimeZone): String {
+            val c = calendar(ms, zone)
+            val sb = StringBuilder()
+            for (t in tokens) when (t) {
+                is Token.Literal -> sb.append(t.text)
+                is Token.Field -> sb.append(field(t.name, c))
             }
+            return sb.toString()
         }
 
         /** Each field's text, in order: `formatToParts` with the field names of the template. */
-        fun parts(ms: Long, zone: TimeZone): List<Pair<String, String>> = tokens.map { t ->
-            when (t) {
-                is Token.Literal -> "literal" to t.text
-                is Token.Field -> t.name to field(t.name, ms, zone)
+        fun parts(ms: Long, zone: TimeZone): List<Pair<String, String>> {
+            val c = calendar(ms, zone)
+            return tokens.map { t ->
+                when (t) {
+                    is Token.Literal -> "literal" to t.text
+                    is Token.Field -> t.name to field(t.name, c)
+                }
             }
         }
 
-        fun field(name: String, ms: Long, zone: TimeZone): String {
-            val c = Calendar.getInstance(zone).apply { timeInMillis = ms }
+        /** One field ([name] as in the template: `HH`, `mm`, `a`, …) of the date at [ms] in [zone]. */
+        fun field(name: String, ms: Long, zone: TimeZone): String = field(name, calendar(ms, zone))
+
+        private fun calendar(ms: Long, zone: TimeZone): Calendar = Calendar.getInstance(zone).apply { timeInMillis = ms }
+
+        private fun field(name: String, c: Calendar): String {
             val hour = c.get(Calendar.HOUR_OF_DAY)
             return when (name) {
                 "y" -> num(c.get(Calendar.YEAR) + if (buddhist) 543 else 0, 1)
@@ -249,6 +264,8 @@ object HaIntl {
             }
         }
     }
+
+    private val NONE = Any()
 
     /** Stands for a group mark between digit groups until [Data.digits] writes the locale's. */
     private const val GROUP_MARK = "\u0001"

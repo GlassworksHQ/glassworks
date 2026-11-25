@@ -59,6 +59,8 @@ class HaDashboardClientTest {
         override fun onDashboardConfigFailed(urlPath: String?, code: String) { failedConfigs += urlPath to code }
         override fun onDisconnected(reason: String) { disconnected += reason }
         override fun onUserTheme(themeName: String?, dark: Boolean?) { userThemes += themeName to dark }
+        val localeChanges = AtomicInteger(0)
+        override fun onLocaleChanged() { localeChanges.incrementAndGet() }
     }
 
     private val server = FakeHaServer()
@@ -283,6 +285,28 @@ class HaDashboardClientTest {
         server.pushEvent(sub.getInt("id"), JSONObject("""{"value": {}}"""))
         awaitCondition("cleared") { listener.userThemes.size == 3 }
         assertEquals(null to null, listener.userThemes[2])
+    }
+
+    @Test
+    fun aProfileChangeRedrawsAndAsksForTheWordsInTheNewLanguage() {
+        try {
+            connected(connect = userDataConnect(JSONObject(), null))
+            awaitCondition("language subscribed") { server.commands("frontend/subscribe_user_data").any { it.optString("key") == "language" } }
+            val sub = server.commands("frontend/subscribe_user_data").first { it.optString("key") == "language" }
+            // HA's frontend applies the profile live (translations-mixin's user-data subscription): so does Vitro.
+            server.pushEvent(sub.getInt("id"), JSONObject("""{"value": {"language": "de", "number_format": "decimal_comma", "time_format": "24"}}"""))
+            awaitCondition("locale changed") { listener.localeChanges.get() == 1 }
+            assertEquals(dev.glassworks.engine.vitro.data.FrontendLocale(language = "de", numberFormat = "decimal_comma", timeFormat = "24"),
+                dev.glassworks.engine.vitro.data.HaLocale.current)
+            // The entities' words again, in German.
+            awaitCondition("German translations") { server.commands("frontend/get_translations").any { it.optString("language") == "de" } }
+            // A format alone redraws too.
+            server.pushEvent(sub.getInt("id"), JSONObject("""{"value": {"language": "de", "number_format": "comma_decimal"}}"""))
+            awaitCondition("format changed") { listener.localeChanges.get() == 2 }
+            assertEquals("comma_decimal", dev.glassworks.engine.vitro.data.HaLocale.current.numberFormat)
+        } finally {
+            dev.glassworks.engine.vitro.data.HaLocale.reset()
+        }
     }
 
     @Test

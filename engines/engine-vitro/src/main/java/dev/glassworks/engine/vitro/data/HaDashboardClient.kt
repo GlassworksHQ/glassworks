@@ -626,11 +626,14 @@ class HaDashboardClient(
         fun ask(type: String, category: String, names: List<String>, apply: (JSONObject) -> Unit) {
             if (names.isEmpty()) return
             val msg = JSONObject().put("type", type).put("category", category).put("integration", JSONArray(names))
-            if (type == "frontend/get_translations") msg.put("language", HaLocale.current.language)
+            val language = HaLocale.current.language
+            if (type == "frontend/get_translations") msg.put("language", language)
             displayPending.incrementAndGet()
             val gen = connectionGen.get()
             request(msg) { res ->
                 if (gen != connectionGen.get()) return@request
+                // Words in a language the user has left since: the request in the new one is on its way.
+                if (type == "frontend/get_translations" && language != HaLocale.current.language) { settleDisplay(); return@request }
                 if (res.optBoolean("success", false)) res.optJSONObject("result")?.let { r -> applyDisplay { apply(r) } }
                 settleDisplay()
             }

@@ -30,6 +30,7 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.HaFormat
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.ForecastDay
@@ -777,7 +778,7 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
         val dots = FrameLayout(ctx.context).apply {
             isClickable = true
             applyHaRipple(this, 999f, ctx.theme.dark)
-            contentDescription = "More info"
+            contentDescription = HaText.ui("ui.panel.lovelace.editor.action-editor.actions.more-info")
             addView(MdiIconView(ctx.context).apply { setIcon("mdi:dots-vertical", ctx.theme.primaryTextColor) },
                 LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
             setOnClickListener { eid?.let { ctx.performAction(ActionConfig("more-info"), it) } }
