@@ -607,6 +607,13 @@ renders above:
   MIT, Copyright Bas Milius) and modern-circular-gauge v0.15.0 (MIT, Copyright Stanisław Krzeptowski).
 - **Jinja2** (BSD-3-Clause, Copyright Pallets, host only): the parity harness's fake HA renders templates with
   the jinja2 already installed on the computer that captures the references. Nothing of it is in the repo.
+- **Home Assistant core's icon data** (the `icons.json` of the integrations Clarity's fake Home
+  Assistant loads, from `home-assistant/core` 2026.11.0, commit `74cf5a49…`): Apache-2.0
+  ([`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt)), Copyright Home Assistant contributors,
+  https://github.com/home-assistant/core. Kept as data in `tools/perf/haicons.json`, with each file's
+  SHA-256, written and checked against that commit by `tools/perf/haicons.py`. The fake serves it to
+  the panel under test as HA core's `frontend/get_icons` answer. It names icons only; no code, and
+  nothing from anyone's install. Nothing from it ships in an app.
 - **FFmpeg with libx264** (GPL-2.0-or-later as built with libx264). Clarity's camera streams
   (`tools/perf/camera.py`) run the ffmpeg already on the computer that runs the test, to encode its
   built-in test pattern into the test's HLS segments. Those segments are test data, served to the panel

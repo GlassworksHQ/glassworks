@@ -91,6 +91,12 @@ export interface KilnFrame extends FrameWords, FrameCode {
   photo: { src: string; width: number; height: number };
   /** The outside work each install phase uses (ids from frame.json `credits`). */
   credits: StepCredits;
+  /**
+   * installer.json `apk`: the recipe asset that is the app, taken at run time from the newest release of `line` (one of
+   * the frame's `releases`), never from the files staged with Kiln's deploy. A file staged under that name (a local
+   * `npm run stage`) still wins, for testing a build before its release.
+   */
+  apk?: { line: string; asset: string };
 }
 
 const TONES = new Set(['y', 'n', 'w']);

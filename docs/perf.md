@@ -381,6 +381,17 @@ pictures come from `tools/perf/dashboards.py`, seeded, from the counts in `tools
 (pinned by `test/page.test.mjs` and `test/test_pages.py`). The counts are **project choices**, fixed
 before any frame was graded under protocol 4.
 
+**HA's icons.** Home Assistant core sends the frontend the icons of each integration it has loaded
+(`frontend/get_icons`), and the frontend draws an entity's default icon from them on every card that
+names none: a bulb for a light, a bulb with a slash when it's off, a thermometer for a temperature
+sensor. The fake answers it the same way, from `tools/perf/haicons.json`: the `icons.json` of each
+integration it loads, taken from Home Assistant core's source at the release it reports (2026.11.0,
+pinned by commit, Apache-2.0) by `tools/perf/haicons.py`, which also checks the kept files against
+that source. Its answers match what HA core 2026.11.0 itself builds for the same integrations, for every
+category the command takes. The frontend draws each of these icons through `ha-icon`, which fetches
+the Material Design Icons it needs from the frontend's own `/static/mdi/` files and caches them in the
+browser, as it does on a real HA.
+
 **One dashboard, four views.** `clarity-ref` is one Lovelace dashboard, as a real panel's is. Its
 views are the **start** view (`/clarity-ref/start`), where the kiosk comes back to after a restart,
 and the three **reference views** (`/clarity-ref/light`, `typical`, `heavy`), which the grade is
@@ -1283,7 +1294,8 @@ same GeckoView, with its loading cover, zoom and hidden header. The differences:
 | Server | Your Home Assistant, over Wi-Fi | The fake, on your computer over `adb reverse` (USB) |
 | Sign-in | HA's login page once, or the kiosk's phone sign-in (`external_auth=1`) | HA's own sign-in flow; the fake answers `/auth/authorize` at once with a code, and the frontend keeps its tokens as it does with HA |
 | Scripts | HA's | HA's, after the harness (one script) and one `min-height` style |
-| Translations, icons | HA sends them | None: words HA would translate show HA's fallback, and icons come from the frontend's own set |
+| Translations | HA sends them | None: words HA would translate show HA's fallback |
+| Icons | HA sends them | HA core's own, for the integrations the fake loads ([HA's icons](#the-reference-dashboards)) |
 | Registries, areas, services | Yours | Empty or minimal: enough for the cards on the page |
 | History, pictures | Yours | Seeded history and statistics over the window each card asks for, and generated pictures |
 | Opening a view | Your tap on a view tab or a navigate action | The same `navigate()`, called by the harness: no touch, so the tap's own cost isn't in it (tap is graded on its own) |
@@ -1597,7 +1609,7 @@ had results under the new definition:
 
 Rubric 2's rule for a frame without touch (its scroll is `n/a`) is the same kind of choice: it holds for every frame
 that has no touchscreen, it changes nothing for a frame that has one, and it came before any such frame had a result
-(the Mirror has none published).
+(the Mirror had none published then).
 
 The S1 is just the first frame graded under it. Its result goes in this document whatever letter it
 gets. The thresholds, the pages and the tables must not be moved to change a particular frame's
