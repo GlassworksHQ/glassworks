@@ -42,6 +42,7 @@ class PlatformTest {
         Triple("hasFontBuilder", 29) { it.hasFontBuilder },
         Triple("hasTypefaceBuilder", 26) { it.hasTypefaceBuilder },
         Triple("hasFocusableAuto", 26) { it.hasFocusableAuto },
+        Triple("hasDescendantInvalidated", 26) { it.hasDescendantInvalidated },
         Triple("hasAccessibilityPaneTitle", 28) { it.hasAccessibilityPaneTitle },
         Triple("hasWindowInsetsController", 30) { it.hasWindowInsetsController },
         Triple("hasSystemCameraIndicator", 31) { it.hasSystemCameraIndicator },
