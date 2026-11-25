@@ -183,12 +183,12 @@ internal class LiveCameraFeed(
         starved = false
         val video = slots.keys.filter { it != CameraStreamKind.MJPEG }
         if (video.isNotEmpty()) {
-            val granted = video.filter { acquireSlot(it) }
-            if (granted.isEmpty()) {
+            val main = mainOf(video)
+            if (!acquireSlot(main, extra = false)) {
                 capped = true
             } else {
-                // A player whose slot went meanwhile is closed; it comes back when a slot frees (recompute).
-                for (kind in video) if (kind !in granted) {
+                // An extra whose slot went meanwhile is closed; it comes back when a slot is spare (recompute).
+                for (kind in video) if (kind != main && !acquireSlot(kind, extra = true)) {
                     closeSlot(kind)
                     starved = true
                 }
@@ -277,20 +277,25 @@ internal class LiveCameraFeed(
         var plan = CameraStreamChoice.streams(supported, hlsVideo, webRtcVideo)
         val video = plan.filter { it.kind != CameraStreamKind.MJPEG }
         if (video.isNotEmpty()) {
-            // A slot per video player, in the plan's order: the second protocol runs only with a slot of its own.
-            val granted = if (capped) emptyList() else video.filter { acquireSlot(it.kind) }
-            if (granted.isEmpty()) {
+            // A player the plan dropped gives its slot back first, so the camera's next kind (HLS after WebRTC failed)
+            // can take it.
+            for (kind in held.toList()) if (video.none { it.kind == kind }) {
+                closeSlot(kind)
+                releaseSlot(kind)
+            }
+            // The main player (the kind HA settles on) takes its slot first; the one HA loads beside it is an extra.
+            val main = mainOf(video.map { it.kind })
+            val extra = video.firstOrNull { it.kind != main }?.kind
+            if (capped || !acquireSlot(main, extra = false)) {
                 capped = true
                 releaseHeld()
                 plan = listOf(PlannedStream(CameraStreamKind.MJPEG, true))
             } else {
-                starved = granted.size < video.size
+                starved = extra != null && !acquireSlot(extra, extra = true)
                 if (starved) {
-                    val keep = granted.mapTo(HashSet()) { it.kind }
-                    plan = plan.filter { it.kind == CameraStreamKind.MJPEG || it.kind in keep }
-                    if (plan.none { it.visible }) plan = plan.mapIndexed { i, p -> if (i == 0) p.copy(visible = true) else p }
+                    // No spare slot: the main player alone, shown (clear until its first frame, over the still).
+                    plan = plan.filter { it.kind != extra }.map { if (it.kind == main) it.copy(visible = true) else it }
                 }
-                for (kind in held.toList()) if (plan.none { it.kind == kind }) releaseSlot(kind)
             }
         } else {
             releaseSlots()
@@ -402,11 +407,21 @@ internal class LiveCameraFeed(
         runCatching { (slot.frame.parent as? ViewGroup)?.removeView(slot.frame) }
     }
 
-    /** A [CameraVideoBudget] slot for this camera's [kind] player (one per video player). */
-    private fun acquireSlot(kind: CameraStreamKind): Boolean {
+    /**
+     * A [CameraVideoBudget] slot for this camera's [kind] player (one per video player). An [extra] (the player HA
+     * loads beside the main one) gives its slot up to a camera that needs one for its main player: it's closed at
+     * once, and the main player goes on alone.
+     */
+    private fun acquireSlot(kind: CameraStreamKind, extra: Boolean): Boolean {
         if (kind in held) return true
-        val ok = CameraVideoBudget.acquire(this to kind) {
-            // A slot freed: a camera that played MJPEG, or one protocol, for want of one takes up video again.
+        val onYield = if (!extra) null else ({
+            held -= kind
+            closeSlot(kind)
+            starved = true
+            scheduleRecompute()
+        })
+        val ok = CameraVideoBudget.acquire(this to kind, extra, onYield) {
+            // A slot freed: a camera that played MJPEG, or its main player alone, for want of one takes up video again.
             ctx.main.post {
                 if (running && active && (capped || starved)) {
                     capped = false
@@ -423,6 +438,13 @@ internal class LiveCameraFeed(
         held -= kind
         CameraVideoBudget.release(this to kind)
     }
+
+    /**
+     * The camera's main player among [kinds]: WebRTC when it's there, the kind HA's `ha-camera-stream` settles on once
+     * both have loaded (`_streams`, frontend 20261028.8); else the one video kind.
+     */
+    private fun mainOf(kinds: List<CameraStreamKind>): CameraStreamKind =
+        if (CameraStreamKind.WEB_RTC in kinds) CameraStreamKind.WEB_RTC else kinds.first()
 
     /** Gives back the slots held, keeping this camera's place among the waiters. */
     private fun releaseHeld() {
