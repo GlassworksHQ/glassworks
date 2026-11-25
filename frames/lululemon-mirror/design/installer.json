@@ -69,6 +69,8 @@
     "words": {
       "firstStart.note": "The screen stays dark until it’s ready. That’s normal.",
       "time.total.glassworks-in-place": "20–30 minutes",
+      "time.total.glassworks": "about 10 minutes",
+      "time.total.glass-panes": "about 10 minutes",
       "time.flash-userdata": "1–2 minutes",
       "time.agent": "1–2 minutes",
       "time.fastboot": "about 10 minutes",
