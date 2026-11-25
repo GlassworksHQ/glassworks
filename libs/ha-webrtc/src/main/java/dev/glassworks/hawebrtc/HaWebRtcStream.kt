@@ -96,6 +96,12 @@ public class HaWebRtcStream(
     private var reconnects = 0
     private var runStartMs = 0L
     private var runReported = false
+
+    /**
+     * The viewing run: bumped by each resume. A frame carries the run it was decoded in from the peer's thread, so one
+     * still queued from before a pause can't count as the first of the next run (and cancel its timeout).
+     */
+    @Volatile private var run = 0
     private var idle: StreamScheduler.Cancellable? = null
     private var reconnect: StreamScheduler.Cancellable? = null
 
@@ -130,6 +136,7 @@ public class HaWebRtcStream(
             idle = null
             runStartMs = scheduler.nowMs()
             runReported = false
+            run++
             val a = attempt
             if (a == null) {
                 reconnects = 0
@@ -195,8 +202,8 @@ public class HaWebRtcStream(
         }
     }
 
-    private fun onFrame(a: Attempt, width: Int, height: Int) {
-        if (attempt !== a || !active) return
+    private fun onFrame(a: Attempt, frameRun: Int, width: Int, height: Int) {
+        if (attempt !== a || !active || frameRun != run) return
         if (a.awaitingFrame) {
             a.awaitingFrame = false
             a.timeout?.cancel()
@@ -307,7 +314,8 @@ public class HaWebRtcStream(
         }
 
         override fun onFrame(width: Int, height: Int) {
-            scheduler.post { onFrame(a, width, height) }
+            val frameRun = run
+            scheduler.post { onFrame(a, frameRun, width, height) }
         }
     }
 

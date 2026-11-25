@@ -100,6 +100,9 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
         worker = w
         val startActive = active
         w.post {
+            WebRtcRuntime.rendererUnavailable?.let { why ->
+                return@post report { it.onError(HaError(HaWebRtcStream.START_FAILED, "renderer: $why")) }
+            }
             val rt = try {
                 WebRtcRuntime.acquire(appContext)
             } catch (e: RuntimeException) {
@@ -112,6 +115,7 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
             try {
                 video.init(rt.egl)
             } catch (e: RuntimeException) {
+                WebRtcRuntime.rendererUnavailable = e.message ?: e.javaClass.simpleName
                 WebRtcRuntime.release()
                 return@post report { it.onError(HaError(HaWebRtcStream.START_FAILED, "renderer: ${e.message}")) }
             }

@@ -117,3 +117,66 @@ class ReleaseAfterTest {
         assertEquals(0, released.get())
     }
 }
+
+/** A surface given back while the renderer runs, or while it shuts down (the player closing as the view goes). */
+class SurfaceHandoffTest {
+    @Test
+    fun `while the renderer runs, the render thread's release says when`() {
+        var queued: Runnable? = null
+        val handoff = SurfaceHandoff { done -> queued = done }
+        var released = 0
+        handoff.whenReleased { released++ }
+        assertEquals(0, released)
+        queued!!.run()
+        assertEquals(1, released)
+        handoff.beginShutdown()
+        handoff.endShutdown()
+        assertEquals("once", 1, released)
+    }
+
+    @Test
+    fun `during a shutdown, an answer at once from libwebrtc doesn't count, the shutdown's end does`() {
+        // EglRenderer.release() has forgotten its thread, so releaseEglSurface would answer at once.
+        val handoff = SurfaceHandoff { done -> done.run() }
+        handoff.beginShutdown()
+        var released = 0
+        handoff.whenReleased { released++ }
+        assertEquals("EGL may still be tearing down", 0, released)
+        handoff.endShutdown()
+        assertEquals(1, released)
+    }
+
+    @Test
+    fun `a shutdown that overtakes a queued surface release ends it`() {
+        var queued: Runnable? = null
+        val handoff = SurfaceHandoff { done -> queued = done }
+        var released = 0
+        handoff.whenReleased { released++ }
+        handoff.beginShutdown()
+        handoff.endShutdown()
+        assertEquals(1, released)
+        queued!!.run()
+        assertEquals("not twice", 1, released)
+    }
+
+    @Test
+    fun `after the shutdown, at once`() {
+        val handoff = SurfaceHandoff { throw AssertionError("no renderer to ask") }
+        handoff.beginShutdown()
+        handoff.endShutdown()
+        var released = 0
+        handoff.whenReleased { released++ }
+        assertEquals(1, released)
+    }
+
+    @Test
+    fun `the view's texture during a shutdown is released by the shutdown, never twice`() {
+        val handoff = SurfaceHandoff { done -> done.run() }
+        handoff.beginShutdown()
+        var texture = 0
+        assertFalse("the view mustn't release it", releaseAfter(handoff::whenReleased, { texture++ }, 10))
+        assertEquals(0, texture)
+        handoff.endShutdown()
+        assertEquals(1, texture)
+    }
+}
