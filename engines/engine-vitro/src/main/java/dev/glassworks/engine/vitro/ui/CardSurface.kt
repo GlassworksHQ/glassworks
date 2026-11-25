@@ -84,6 +84,8 @@ class VitroCardContext(
     val subscribeWs: (msg: JSONObject, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit) -> () -> Unit = { _, _, _ -> {} },
     /** The wall clock, ms since the epoch: what HA's frontend reads as `new Date()` for its time windows. */
     val now: () -> Long = System::currentTimeMillis,
+    /** The dashboard's own URL (HA's page `location`), which relative links resolve against; null when unknown. */
+    val pageUrl: () -> String? = { null },
     /**
      * A web island looked up [entityId] at runtime: the view's subscription takes it in, so its changes reach the
      * island. Any thread. The default (tests, no engine) does nothing.
@@ -156,6 +158,7 @@ class VitroCardContext(
         cameraStream = cameraStream,
         subscribeWs = subscribeWs,
         now = now,
+        pageUrl = pageUrl,
         watchEntity = watchEntity,
         watchAllEntities = watchAllEntities,
         watchRegistries = watchRegistries,

@@ -203,6 +203,10 @@ private fun otherViewSlots(viewRoot: View): List<View>? {
     views.filterIsInstance<dev.glassworks.engine.vitro.ui.SidebarColumnsLayout>().firstOrNull()?.let { row ->
         return kids(row).flatMap { col -> kids(col as android.view.ViewGroup) }.filter(::shown)
     }
+    // Under 760 px: one column, the cards in config order.
+    views.filterIsInstance<dev.glassworks.engine.vitro.ui.SidebarStackLayout>().firstOrNull()?.let { stack ->
+        return kids(stack).flatMap { col -> kids(col as android.view.ViewGroup) }.filter(::shown)
+    }
     views.filterIsInstance<dev.glassworks.engine.vitro.cards.LayoutCardView>().firstOrNull()
         ?.takeIf { it.parent is android.widget.ScrollView }
         ?.let { grid -> return grid.tracks.flatMap { kids(it) }.filter(::shown) }

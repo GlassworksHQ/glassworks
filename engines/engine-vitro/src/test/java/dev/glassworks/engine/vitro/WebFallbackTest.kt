@@ -340,6 +340,11 @@ class WebFallbackTest {
         )) {
             assertNull(row, reason(row))
         }
+        // A button row, or a buttons row's chip, with a double-tap action: Vitro has no double tap yet.
+        assertEquals("a `button` row with a double-tap action",
+            reason("""{"type": "button", "name": "Go", "double_tap_action": {"action": "toggle"}}"""))
+        assertEquals("a `buttons` row with a double-tap action",
+            reason("""{"type": "buttons", "entities": [{"entity": "light.a", "double_tap_action": {"action": "more-info"}}]}"""))
         // In the cards an entity-filter builds too.
         assertNotNull(WebFallback.viewReason(LovelaceParser.parseView(0, JSONObject(
             """{"cards": [{"type": "entity-filter", "entities": ["light.a"], "card": {"type": "map"}}]}""",
@@ -381,10 +386,15 @@ class WebFallbackTest {
             """{"type": "shortcut", "tap_action": {"action": "navigate", "navigation_path": "/config/areas/area/kitchen"}}""",
             """{"type": "shortcut", "tap_action": {"action": "navigate", "navigation_path": "/config/automation"}}""",
             """{"type": "shortcut", "tap_action": {"action": "url", "url_path": "https://example.com/"}}""",
-            """{"type": "shortcut", "tap_action": {"action": "assist"}}""",
         )) {
             assertNull(card, reason(card))
         }
+        // Vitro's actions don't open Assist, and it has no double tap yet.
+        assertEquals("a `shortcut` card that opens Assist", reason("""{"type": "shortcut", "label": "Ask", "icon": "mdi:microphone", "tap_action": {"action": "assist"}}"""))
+        assertEquals("a `shortcut` card with a double-tap action",
+            reason("""{"type": "shortcut", "label": "Go", "icon": "mdi:home", "double_tap_action": {"action": "navigate", "navigation_path": "/x"}}"""))
+        assertEquals("a `alert` card with a double-tap action",
+            reason("""{"type": "alert", "entity": "binary_sensor.d", "double_tap_action": {"action": "more-info"}}"""))
     }
 
     // ---- The compatibility checker says so ----

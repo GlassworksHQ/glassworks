@@ -435,14 +435,25 @@ class AlertCardView(ctx: VitroCardContext, private val config: CardConfig) :
         }
     }
 
+    /** "5 min. ago" moves on with the clock while the entity stays as it is: redrawn each minute while attached. */
+    private val tick = object : Runnable {
+        override fun run() {
+            render(ctx.store[entityId])
+            ctx.main.postDelayed(this, 60_000L)
+        }
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         updatePulse()
+        ctx.main.removeCallbacks(tick)
+        ctx.main.postDelayed(tick, 60_000L)
     }
 
     override fun onDetachedFromWindow() {
         pulse?.cancel()
         pulse = null
+        ctx.main.removeCallbacks(tick)
         super.onDetachedFromWindow()
     }
 
@@ -773,7 +784,6 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
     private val entityId = config.entity.orEmpty()
     private val root = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
     private var builtFor: String? = null
-    private val picture = android.widget.ImageView(ctx.context).apply { scaleType = android.widget.ImageView.ScaleType.CENTER_CROP }
     private val observedSensors = HashSet<String>()
     private val values = ArrayList<Triple<String, MdiIconView, TextView>>()
 
@@ -826,6 +836,8 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
                     super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY))
                 }
             }
+            // A new picture view per build: the last one stays in the band that was just dropped.
+            val picture = android.widget.ImageView(ctx.context).apply { scaleType = android.widget.ImageView.ScaleType.CENTER_CROP }
             band.addView(picture, LayoutParams(MATCH_PARENT, MATCH_PARENT))
             band.addView(header, LayoutParams(MATCH_PARENT, (16f * ctx.dp).roundToInt() + ctx.px(32f), Gravity.BOTTOM))
             banner.addView(band, LayoutParams(MATCH_PARENT, WRAP_CONTENT))

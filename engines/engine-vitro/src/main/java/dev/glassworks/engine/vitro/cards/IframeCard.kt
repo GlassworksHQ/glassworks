@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.data.EntityState
+import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.island.VitroIslandServer
 import dev.glassworks.engine.vitro.model.CardConfig
@@ -86,7 +87,8 @@ class IframeCardView(
     private val adopted: WebIslandCardView.Island? = null,
 ) : CardSurface(ctx), IslandCard {
     private val raw = config.raw
-    internal val url: String = absolute(raw.optString("url", ""), ctx.haBase)
+    /** The frame's address, resolved as HA's page resolves it: against the dashboard's own URL (else HA's origin). */
+    internal val url: String = absolute(raw.optString("url", ""), ctx.pageUrl() ?: ctx.haBase)
 
     /** CSS `padding-top` of the frame as a share of its width, or null when it fills the card. */
     internal val ratio: Float? = if (fillViewport || ctx.cardLayout == "grid") null else aspect(raw.optString("aspect_ratio", "").ifEmpty { null })
@@ -183,6 +185,8 @@ class IframeCardView(
             return
         }
         page = p
+        // A page handed over paused stays paused until this card is shown ([setShown] compares with it).
+        if (kept != null) pageActive = kept.active
         frame.addView(p.view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         if (kept == null) p.load(slotUrl)
     }
@@ -205,7 +209,7 @@ class IframeCardView(
         frame.removeView(p.view)
         page = null
         slotId = null
-        return WebIslandCardView.Island(WebIslandCardView.keyOf(config, fillViewport), p, id, 0, server)
+        return WebIslandCardView.Island(WebIslandCardView.keyOf(config, fillViewport), p, id, 0, server, active = pageActive)
     }
 
     override fun release() {
@@ -264,14 +268,20 @@ class IframeCardView(
                 if (parts.size == 1) (parts[0].toDoubleOrNull() ?: return null) to 1.0
                 else (parts[0].toDoubleOrNull() ?: return null) to (parts[1].toDoubleOrNull() ?: return null)
             }
-            // A ratio HA can't use leaves the padding off: the frame keeps no height of its own.
-            if (w <= 0 || h <= 0) return 0f
-            return (h / w).toFloat()
+            // A ratio HA can't use (`NaN`, `Infinity`, zero or less) leaves the padding off: no height of its own.
+            if (!w.isFinite() || !h.isFinite() || w <= 0 || h <= 0) return 0f
+            val r = (h / w).toFloat()
+            return if (r.isFinite()) r else 0f
         }
 
         /** [url] resolved as the browser does against HA's page (`new URL(url, location)`). */
-        fun absolute(url: String, haBase: String): String =
-            runCatching { URI(haBase.trimEnd('/') + "/").resolve(url.trim()).toString() }.getOrDefault(url)
+        fun absolute(url: String, base: String): String = runCatching {
+            // An origin alone (`http://ha:8123`) is its root; a page's URL (`.../wall-test/living`) is resolved
+            // against as the browser does (`new URL(url, location)`).
+            val b = URI(base)
+            val root = if (b.path.isNullOrEmpty()) URI(base.trimEnd('/') + "/") else b
+            root.resolve(url.trim()).toString()
+        }.getOrDefault(url)
 
         /** The island page: the frame, filling the page, and nothing else. */
         fun islandHtml(url: String, sandbox: String?, allow: String): String {
@@ -301,17 +311,26 @@ iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:
  * the card finds one, as HA picks it on its first update.
  */
 class ShoppingListCardView(private val ctx: VitroCardContext, private val config: CardConfig) : FrameLayout(ctx.context) {
-    private var built = false
     private var unsubscribe: (() -> Unit)? = null
 
     init {
         watch()
     }
 
-    /** Until a list turns up: every state change looks again. */
+    /**
+     * Until the pick is settled: every state change looks again. A list taken before the entity registry says which
+     * one is the Shopping list integration's is swapped for it once the registry knows ([settled]).
+     */
     private fun watch() {
-        if (tryBuild() || unsubscribe != null) return
-        unsubscribe = ctx.store.subscribeAny { ctx.main.post { if (!built && tryBuild()) stopWatching() } }
+        if (unsubscribe != null) return
+        if (tryBuild() && settled) return
+        val look = { ctx.main.post { if (tryBuild() && settled) stopWatching() }; Unit }
+        // States as they change, and HA's display data (the entity registry) when it lands.
+        val any = ctx.store.subscribeAny { look() }
+        val display = ctx.store.subscribe(EntityStore.DISPLAY_KEY) { look() }
+        unsubscribe = { any(); display() }
+        // A list that arrived between the first look and the listener reached no listener: look again.
+        if (tryBuild() && settled) stopWatching()
     }
 
     override fun onAttachedToWindow() {
@@ -324,10 +343,22 @@ class ShoppingListCardView(private val ctx: VitroCardContext, private val config
         unsubscribe = null
     }
 
+    /** The list the card shows, or null before it has one. */
+    private var shown: String? = null
+
+    /** True once the pick can't change: the config names it, there's one list, or the registry has every list. */
+    private var settled = false
+
+    /** Builds (or swaps) the inner card for the list HA would pick now; true once the card shows a list. */
     private fun tryBuild(): Boolean {
-        if (built) return true
-        val entity = config.entity ?: pick(ctx.store.all().values) ?: return false
-        built = true
+        if (settled) return true
+        val explicit = config.entity
+        val lists = ctx.store.all().values.filter { it.domain == "todo" && it.state != "unavailable" }
+        val entity = explicit ?: pick(lists) ?: return false
+        settled = explicit != null || lists.size <= 1 || lists.all { HaDisplay.registry.containsKey(it.entityId) }
+        if (entity == shown) return true
+        shown = entity
+        removeAllViews()
         val raw = JSONObject(config.raw.toString()).put("type", "todo-list").put("entity", entity)
         val inner = TodoListCardView(ctx, CardConfig(type = "todo-list", raw = raw))
         (inner as? CardSurface)?.applyCardMod(config)

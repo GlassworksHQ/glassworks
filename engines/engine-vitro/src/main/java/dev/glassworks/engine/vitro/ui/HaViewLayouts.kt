@@ -60,11 +60,18 @@ internal class MasonryColumnsLayout(context: Context, private val maxColumnPx: I
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED && childCount > 0) {
+            // `.column:not(:has(> *:not([hidden]))) { flex-grow: 0 }`: a column whose cards are all hidden takes no
+            // room, and the others share it; a card shown again (a visibility change lays this out again) brings its
+            // column back.
+            fun hasShown(c: View) = c is ViewGroup && (0 until c.childCount).any { c.getChildAt(it).visibility != GONE }
+            val shown = (0 until childCount).count { hasShown(getChildAt(it)) }
             val inner = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
-            val w = min(maxColumnPx, inner / childCount).coerceAtLeast(0)
+            val w = if (shown == 0) 0 else min(maxColumnPx, inner / shown).coerceAtLeast(0)
             for (i in 0 until childCount) {
-                val lp = getChildAt(i).layoutParams as LayoutParams
-                if (lp.width != w || lp.weight != 0f) { lp.width = w; lp.weight = 0f }
+                val c = getChildAt(i)
+                val lp = c.layoutParams as LayoutParams
+                val want = if (hasShown(c)) w else 0
+                if (lp.width != want || lp.weight != 0f) { lp.width = want; lp.weight = 0f }
             }
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
@@ -141,5 +148,12 @@ internal class SidebarColumnsLayout(context: Context, private val main: View, pr
             }
             return m.roundToInt() to s.roundToInt()
         }
+    }
+}
+
+/** HA's sidebar view under 760 px: one column, every card in config order (the parity harness finds it by class). */
+internal class SidebarStackLayout(context: Context) : LinearLayout(context) {
+    init {
+        orientation = VERTICAL
     }
 }

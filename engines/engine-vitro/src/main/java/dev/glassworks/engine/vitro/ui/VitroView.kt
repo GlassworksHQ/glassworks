@@ -1374,15 +1374,16 @@ class VitroView(
      * `--masonry-view-padding` (Vitro's own) replaces the view's padding.
      */
     private fun buildMasonryLayout(cards: List<CardConfig>, ctx: VitroCardContext, widthDp: Int): View {
-        val (placement, count) = HaMasonry.place(cards, widthDp)
+        // A pinned card (card-mod `position: fixed`) goes to the overlay first: it takes no column and no weight.
+        val placed = cards.withIndex().filter { (_, card) -> !pinIfFixed(card, ctx) }
+        val (placement, count) = HaMasonry.place(placed.map { it.value }, widthDp)
         val row = MasonryColumnsLayout(context, px(if (widthDp < 600) 600f else 500f)).apply { applyViewPadding(this, ctx) }
         val columns = (0 until count).map { LinearLayout(context).apply { orientation = LinearLayout.VERTICAL } }
         columns.forEach { row.addView(it, LinearLayout.LayoutParams(0, WRAP_CONTENT)) }
-        cards.forEachIndexed { i, card ->
-            if (pinIfFixed(card, ctx)) return@forEachIndexed
-            val column = columns[placement[i]]
+        placed.forEachIndexed { k, (configIndex, card) ->
+            val column = columns[placement[k]]
             val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
-            clarity?.cardBuilt(buildingIndex, i, card, v)
+            clarity?.cardBuilt(buildingIndex, configIndex, card, v)
             column.addView(v, cardMarginParams(ctx, widthDp, first = column.childCount == 0))
         }
         return row
@@ -1406,8 +1407,7 @@ class VitroView(
             column.addView(v, cardMarginParams(ctx, widthDp, first = column.childCount == 0))
         }
         if (!split) {
-            return LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
+            return SidebarStackLayout(context).apply {
                 applyViewPadding(this, ctx)
                 addView(main, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             }

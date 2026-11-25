@@ -2121,6 +2121,8 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         fun refreshMaster() {
             masterSwitch?.setOn(toggleIds.any { ctx.store[it]?.isActive == true })
         }
+        // Every toggle entity keeps the header switch current, a button row's included (its own row doesn't).
+        if (masterSwitch != null) toggleIds.forEach { id -> observe(id) { refreshMaster() } }
 
         // `entity-filter` support: when `state_filter` is present, rows whose state isn't listed are hidden.
         val filterArr = config.raw.optJSONArray("state_filter")
@@ -2279,6 +2281,22 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             val built = when {
                 inner.isEntity -> entityRow(inner)
                 inner.rowType == "conditional" -> specialRow(inner)
+                // A divider or a section heading, as the row loop draws them.
+                inner.rowType == "divider" || inner.rowType == "section" -> LinearLayout(ctx.context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(dividerLine(ctx), LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(1f).coerceAtLeast(1)).apply {
+                        marginStart = ctx.px(16f); marginEnd = ctx.px(16f)
+                        topMargin = ctx.px(8f); if (inner.rowType == "divider") bottomMargin = ctx.px(8f)
+                    })
+                    if (inner.rowType == "section") inner.name?.let { label ->
+                        addView(textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
+                            text = label
+                            maxLines = 1
+                            ellipsize = TextUtils.TruncateAt.END
+                            setPadding(ctx.px(16f), ctx.px(14f), ctx.px(16f), ctx.px(6f))
+                        }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                    }
+                }
                 else -> SpecialRows.build(ctx, inner) { id, cb -> observe(id, cb) }
             } ?: return null
             gapRows -= built
@@ -2343,10 +2361,12 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             }
             if (!rowCfg.isEntity) {
                 val built = specialRow(rowCfg) ?: continue
+                // A conditional divider or section brings its own margins, as the plain ones do.
+                val structural = rowCfg.inner?.rowType in setOf("divider", "section")
                 prevWasDivider = false
-                val gapAbove = prevWasRow
-                prevWasRow = true
-                gapRows += built
+                val gapAbove = prevWasRow && !structural
+                prevWasRow = !structural
+                if (!structural) gapRows += built
                 col.addView(built, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (gapAbove) topMargin = ctx.px(8f) })
                 continue
             }

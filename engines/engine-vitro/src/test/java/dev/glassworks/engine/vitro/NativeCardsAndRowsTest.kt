@@ -80,7 +80,10 @@ class NativeCardsAndRowsTest {
         fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
         haUser = { user },
         now = { NOW },
+        pageUrl = { pageUrl },
     )
+
+    private var pageUrl: String? = null
 
     private fun card(json: String) = LovelaceParser.parseCard(JSONObject(json))
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
@@ -383,6 +386,86 @@ class NativeCardsAndRowsTest {
         assertEquals("two rows: two cards, then one spanning both columns", 2, grid.tracks.size)
         assertEquals(listOf(2, 1), grid.tracks.map { r -> (0 until r.childCount).count { r.getChildAt(it) !is android.widget.Space } })
         assertTrue("layout-card views draw no badges: the layout is the scroller's only content", grid.parent is android.widget.ScrollView)
+    }
+
+    // ---- CodeRabbit's findings on #876 ----
+
+    @Test fun anIframeRatioHaCantUseLeavesTheFrameWithNoHeightOfItsOwn() {
+        for (bad in listOf("NaN", "Infinity", "0:9", "-1", "x")) {
+            val r = IframeCardView.aspect(bad)
+            assertTrue(bad, r == null || (r.isFinite() && r == 0f))
+        }
+        val v = IframeCardView(ctx(), card("""{"type": "iframe", "url": "/x", "aspect_ratio": "NaN"}"""))
+        layout(v, 400) // measuring doesn't throw
+    }
+
+    @Test fun anIframeLinkResolvesAgainstTheDashboardsUrl() {
+        pageUrl = "${FakeHaServer.BASE}/wall-test/living"
+        assertEquals("${FakeHaServer.BASE}/wall-test/camera.html", IframeCardView(ctx(), card("""{"type": "iframe", "url": "camera.html"}""")).url)
+        assertEquals("${FakeHaServer.BASE}/local/cam.html", IframeCardView(ctx(), card("""{"type": "iframe", "url": "/local/cam.html"}""")).url)
+        assertEquals("https://example.com/", IframeCardView(ctx(), card("""{"type": "iframe", "url": "https://example.com/"}""")).url)
+    }
+
+    @Test fun aShoppingListPickedBeforeTheRegistryMovesToTheShoppingListIntegrationsOnceItLoads() {
+        put("todo.zeta", "2", "friendly_name" to "Zeta")
+        put("todo.alpha", "1", "friendly_name" to "Alpha")
+        val v = ShoppingListCardView(ctx(), card("""{"type": "shopping-list"}"""))
+        fun shownEntity() = (all(v).filterIsInstance<dev.glassworks.engine.vitro.cards.TodoListCardView>().single())
+        val first = shownEntity()
+        HaDisplay.applyRegistry(JSONObject().put("entities", JSONArray()
+            .put(JSONObject().put("ei", "todo.zeta").put("pl", "shopping_list"))
+            .put(JSONObject().put("ei", "todo.alpha").put("pl", "local_todo"))))
+        store.renotifyAll()
+        idle()
+        val second = shownEntity()
+        assertTrue("the card was built again for the Shopping list integration's list", first !== second)
+        // Settled: a later change doesn't build it again.
+        put("todo.alpha", "3", "friendly_name" to "Alpha")
+        idle()
+        assertTrue(second === shownEntity())
+    }
+
+    @Test fun aPlantWhosePictureCardIsRebuiltDoesntCrash() {
+        put("plant.fern", "ok", "friendly_name" to "Fern", "moisture" to 40, "problem" to "none", "entity_picture" to "/local/fern.png")
+        val v = PlantStatusCardView(ctx(), card("""{"type": "plant-status", "entity": "plant.fern"}"""))
+        put("plant.fern", "problem", "friendly_name" to "Fern", "moisture" to 10, "problem" to "moisture low", "entity_picture" to "/local/fern.png")
+        idle()
+        assertTrue(texts(v).contains("10"))
+    }
+
+    @Test fun anInvertedLayoutCardWidthPairStillLaysOut() {
+        val cfg = card("""{"type": "custom:layout-card", "layout_type": "custom:vertical-layout", "layout": {"width": 400, "max_width": 350},
+            "cards": [{"type": "markdown", "content": "a"}]}""")
+        val v = LayoutCardView(ctx(), cfg, { c -> dev.glassworks.engine.vitro.cards.MarkdownCardView(ctx(), c) }, 960)
+        layout(v, 960)
+    }
+
+    @Test fun aMasonryColumnWithNoShownCardTakesNoRoom() {
+        val row = dev.glassworks.engine.vitro.ui.MasonryColumnsLayout(activity, 10_000)
+        val cols = List(2) { android.widget.LinearLayout(activity).apply { orientation = android.widget.LinearLayout.VERTICAL } }
+        cols.forEach { row.addView(it, android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT)) }
+        val a = View(activity).also { cols[0].addView(it, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 10)) }
+        View(activity).also { cols[1].addView(it, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 10)) }
+        layout(row, 800)
+        assertEquals(cols[0].width, cols[1].width)
+        a.visibility = View.GONE
+        layout(row, 800)
+        assertEquals(0, cols[0].width)
+        assertEquals(Math.round(800 * activity.resources.displayMetrics.density), cols[1].width)
+    }
+
+    @Test fun theHeaderSwitchFollowsAButtonRowsLight() {
+        put("light.a", "on", "friendly_name" to "A")
+        put("light.b", "on", "friendly_name" to "B")
+        val c = EntitiesCardView(ctx(), card("""{"type": "entities", "title": "T", "entities": [{"type": "button", "entity": "light.a"}, {"type": "button", "entity": "light.b"}]}"""))
+        val sw = all(c).filterIsInstance<dev.glassworks.engine.vitro.cards.HaSwitchView>().single()
+        assertTrue("lights on: the header switch is on", sw.isOn)
+    }
+
+    @Test fun aConditionalRowCanHoldASectionHeading() {
+        put("light.a", "on")
+        val c = entities("""{"type": "conditional", "conditions": [{"condition": "state", "entity": "light.a", "state": "on"}], "row": {"type": "section", "label": "Lights"}}""")
+        assertEquals(listOf("Lights"), texts(c))
     }
 
     private companion object {

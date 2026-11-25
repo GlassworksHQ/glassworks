@@ -57,8 +57,10 @@ object WebFallback {
     fun cardReason(card: CardConfig): String? {
         val type = card.type
         if (!type.startsWith("custom:") && type !in VitroSupport.CORE_CARD_TYPES) return "the built-in `$type` card"
-        if (type == "entities") undrawnRow(card)?.let { return "an `$it` row in an entities card" }
+        if (type == "entities") undrawnRow(card)?.let { return it }
         if (type == "shortcut") shortcutReason(card)?.let { return it }
+        // Vitro has no double tap yet: a card it newly draws whose double-tap action does something stays HA's.
+        if ((type == "shortcut" || type == "alert") && hasDoubleTap(card.raw)) return "a `$type` card with a double-tap action"
         // The energy dashboard's date picker drives such a card: it lives in HA's frontend (an energy card).
         if (type == "statistic" && (card.raw.optBoolean("energy_date_selection", false) || card.raw.optString("period") == "energy_date_selection")) {
             return "a `statistic` card that follows the energy date picker"
@@ -69,13 +71,28 @@ object WebFallback {
         return null
     }
 
-    /** The first row type in [card]'s `entities` Vitro doesn't draw, a conditional row's row included, or null. */
+    /** A `double_tap_action` that does something (Vitro binds tap and hold, not double tap). */
+    private fun hasDoubleTap(o: org.json.JSONObject): Boolean =
+        o.optJSONObject("double_tap_action")?.optString("action", "none").let { it != null && it != "none" }
+
+    /**
+     * Why a row in [card]'s `entities` needs HA's frontend, a conditional row's row included, or null: a row type
+     * Vitro doesn't draw, or a button row (or a chip of a buttons row) with a double-tap action, which Vitro has no
+     * gesture for yet.
+     */
     private fun undrawnRow(card: CardConfig): String? {
         val rows = card.raw.optJSONArray("entities") ?: return null
         fun walk(row: Any?): String? {
             val o = row as? org.json.JSONObject ?: return null
             val t = o.optString("type", "")
-            if (t in UNDRAWN_ROW_TYPES) return t
+            if (t in UNDRAWN_ROW_TYPES) return "an `$t` row in an entities card"
+            if (t in setOf("button", "call-service", "perform-action") && hasDoubleTap(o)) return "a `$t` row with a double-tap action"
+            if (t == "buttons") {
+                val chips = o.optJSONArray("entities")
+                if (chips != null && (0 until chips.length()).any { chips.optJSONObject(it)?.let(::hasDoubleTap) == true }) {
+                    return "a `buttons` row with a double-tap action"
+                }
+            }
             return if (t == "conditional") walk(o.opt("row")) else null
         }
         for (i in 0 until rows.length()) walk(rows.opt(i))?.let { return it }
@@ -92,6 +109,10 @@ object WebFallback {
         val raw = card.raw
         val tap = raw.optJSONObject("tap_action")
         val action = tap?.optString("action", "none") ?: "none"
+        // Vitro's actions don't open Assist: HA's page does.
+        if (listOf("tap_action", "hold_action").any { raw.optJSONObject(it)?.optString("action") == "assist" }) {
+            return "a `shortcut` card that opens Assist"
+        }
         val needsLabel = raw.optString("label", "").isEmpty()
         val needsIcon = raw.optString("icon", "").isEmpty()
         if (!needsLabel && !needsIcon) return null

@@ -510,8 +510,10 @@ def statistics(ids, start, end, period, types):
 
 def statistic_during_period(m):
     """recorder/statistic_during_period: one entity's max, mean and min (a measurement) or change (a total) over a
-    `calendar` (day, week, month, year, with `offset`), `fixed_period` or `rolling_window` window, from the same
-    hourly buckets statistics_during_period gives; null for a value with no bucket."""
+    `calendar` (hour, day, week, month, year, with `offset`), `fixed_period` or `rolling_window` window. Read from the
+    entity's series at HA's short-term granularity (5 minutes) across the window's own bounds, as HA joins its
+    short-term statistics at a partial hour: a total's change is its value at the end less its value at the start
+    (HA's newest less oldest sum). Null for a value the window holds no data for."""
     eid = m.get("statistic_id")
     now = datetime.datetime.fromtimestamp(NOW, tz())
     end = NOW
@@ -530,7 +532,10 @@ def statistic_during_period(m):
         cal = m["calendar"]
         unit, off = cal.get("period", "day"), int(cal.get("offset", 0) or 0)
         day0 = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        if unit == "day":
+        if unit == "hour":
+            s0 = now.replace(minute=0, second=0, microsecond=0) + datetime.timedelta(hours=off)
+            e0 = s0 + datetime.timedelta(hours=1)
+        elif unit == "day":
             s0 = day0 + datetime.timedelta(days=off)
             e0 = s0 + datetime.timedelta(days=1)
         elif unit == "week":
@@ -548,16 +553,25 @@ def statistic_during_period(m):
         start, end = s0.timestamp(), e0.timestamp()
     else:
         start = None
-    rows = statistics([eid], start or NOW - 365 * 86400, end, "hour", None).get(eid) or []
-    meta = _meta(eid) or {}
+    meta, series = _meta(eid) or {}, _series(eid)
+    t0, t1 = (start if start is not None else NOW - 365 * 86400), min(end, NOW)
+    samples = []
+    if series and t1 > t0:
+        t = t0
+        while True:
+            v = series.value(t)
+            if v is not None and _num(v):
+                samples.append(float(v))
+            if t >= t1:
+                break
+            t = min(t1, (math.floor(t / 300) + 1) * 300)
     out = {}
     if meta.get("has_mean"):
-        means = [r["mean"] for r in rows if "mean" in r]
-        out["max"] = max((r["max"] for r in rows), default=None)
-        out["mean"] = round(sum(means) / len(means), 6) if means else None
-        out["min"] = min((r["min"] for r in rows), default=None)
+        out["max"] = round(max(samples), 6) if samples else None
+        out["mean"] = round(sum(samples) / len(samples), 6) if samples else None
+        out["min"] = round(min(samples), 6) if samples else None
     elif meta:
-        out["change"] = round(sum(r["change"] for r in rows), 6) if rows else None
+        out["change"] = round(samples[-1] - samples[0], 6) if samples else None
     types = m.get("types")
     return {k: v for k, v in out.items() if not types or k in types}
 

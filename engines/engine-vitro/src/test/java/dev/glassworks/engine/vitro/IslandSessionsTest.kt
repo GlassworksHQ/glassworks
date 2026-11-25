@@ -620,6 +620,19 @@ class IslandSessionsTest {
         idle()
         assertTrue(frame.active)
 
+        // Handed over while paused (an edit rebuilds its hidden view): shown again, it runs again.
+        p.load("$base/wall-test/b")
+        idle()
+        assertFalse(frame.active)
+        server.dashboardConfig = JSONObject(iframeViews.replace("\"Lounge\"", "\"Den\""))
+        lovelaceUpdated()
+        awaitMain("the hidden view's edit is built") { server.commands("lovelace/config").size >= 3 }
+        idle()
+        p.load("$base/wall-test/a")
+        idle()
+        assertFalse(frame.closed)
+        assertTrue("the adopted page is active once its view shows", frame.active)
+
         // The card goes: its page closes and its slot with it.
         server.dashboardConfig = JSONObject(iframeViews.replace("""{"type": "iframe", "url": "https://example.com/"}, """, ""))
         lovelaceUpdated()

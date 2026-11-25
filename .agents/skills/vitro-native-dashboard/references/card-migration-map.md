@@ -4,13 +4,13 @@ Every card below renders 100% natively in Vitro with **zero GeckoView**. The eng
 
 Cards marked *(not yet compared with HA)* draw natively but haven't been checked against Home Assistant's own render in the parity harness. Prefer a compared card when either would do.
 
-## Tier 1: Native Core Lovelace Cards (31)
+## Tier 1: Native Core Lovelace Cards (41)
 
 - **Controls & summaries:** `tile`, `entities` (plain rows and the `divider`, `section`, `button`, `call-service`, `text`, `weblink`, `buttons` and `conditional` rows; no header or footer), `glance`, `button` (also as `entity-button`), `toggle-group`, `shortcut`, `alert`, `entity`, `light`, `thermostat` (a heat/cool range shows both targets, as in HA), `humidifier` *(not yet compared with HA)*, `alarm-panel`, `media-control`, `todo-list` (also as `shopping-list`), `area`, `plant-status`
 - **Information & media:** `heading`, `clock`, `date`, `statistic`, `sensor`, `gauge` (severity, `segments`, `needle`), `weather-forecast` (daily, hourly and twice-daily), `history-graph`, `statistics-graph`, `calendar` (month grid and list views), `logbook`, `markdown` (rendered natively: headings, tables, lists, quotes, rules, `<font color>`, `<center>` and inline `<ha-icon>`, with HA server-side Jinja2 templates via `render_template`; `<ha-alert>`, `<ha-qr-code>`, `<details>`, `<audio>`, `<video>` and checkboxes draw nothing)
 - **Images & floorplans:** `iframe` (its page in a browser island of its own), `picture`, `picture-entity`, `picture-glance`, `picture-elements` (`state-icon`, `state-label`, `state-badge`, `icon`, `service-button`; `conditional` and `image` elements are left out)
 - **Layout & filtering:** `grid`, `horizontal-stack`, `vertical-stack`, `conditional`, `entity-filter` (plus the Tier 2 containers `custom:stack-in-card`, `custom:vertical-stack-in-card` and `custom:layout-card`, whose children are audited like any stack's)
-- **Not native:** any other built-in card (`map`, `energy-*`, ...). It goes to an island, which can't run HA's own cards and shows only a plain summary of its title and entities. Replace it. `attribute` and `cast` rows aren't drawn either.
+- **Not native:** any other built-in card (`map`, `energy-*`, ...). Its whole view opens in Home Assistant's frontend instead of drawing natively. Replace it to keep the view native. `attribute` and `cast` rows aren't drawn either.
 
 ### Supported Inline `tile` Features (14)
 
@@ -31,7 +31,7 @@ Cards marked *(not yet compared with HA)* draw natively but haven't been checked
 
 ### Supported Views & Conditions
 
-- View types: `sections` (recommended), `masonry`, `panel` (only if its card is Tier 1 or Tier 2!)
+- View types: `sections` (recommended), `masonry` (Home Assistant's columns and card placement), `sidebar`, `panel` (only if its card is Tier 1 or Tier 2!), and layout-card's `custom:masonry-layout`, `custom:grid-layout`, `custom:horizontal-layout` and `custom:vertical-layout`. Any other view type opens in Home Assistant's frontend
 - View `badges` (rendered as compact top status pills) and `subview: true` (back-arrow navigation)
 - `visibility:` on sections and cards (`state`, `numeric_state`, `and`, `or`, `not`, `screen`)
 
@@ -72,7 +72,7 @@ Cards marked *(not yet compared with HA)* draw natively but haven't been checked
 | `custom:button-card` | `tile`, `button`, `custom:mushroom-entity-card`, `custom:mushroom-template-card`, or `custom:bubble-card` | Use `custom:mushroom-template-card` or `markdown` for Jinja2 labels/icons |
 | `custom:apexcharts-card` | `custom:mini-graph-card`, `history-graph`, or `statistics-graph` | All three render natively on Android Canvas |
 | `custom:mod-card` / Shadow-DOM `card-mod` | HA YAML theme + card-level `card-mod` | Vitro natively applies backgrounds (colors, linear gradients), solid borders, `border-radius`, `box-shadow`, `opacity`, `padding`, `margin`, `font-family` and a pinned `position: fixed` on `ha-card`; `font-size` on tile and Mushroom cards |
-| `map`, `energy-*` and other built-in cards Vitro doesn't draw | `picture-elements`, `picture-entity`, `tile`, `history-graph` or `statistics-graph` | The island shows only a summary of a built-in card, so replace it rather than keep it |
+| `map`, `energy-*` and other built-in cards Vitro doesn't draw | `picture-elements`, `picture-entity`, `tile`, `history-graph` or `statistics-graph` | The view holding one opens in Home Assistant's frontend, so replace it to keep the view native |
 | `custom:ha-floorplan` | `picture-elements` | Supports `state-icon`, `state-label`, `state-badge`, `icon`, and `service-button` overlays |
 
 ## Supported Theme Variables (Native)

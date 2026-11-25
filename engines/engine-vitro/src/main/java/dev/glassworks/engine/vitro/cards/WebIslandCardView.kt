@@ -76,6 +76,8 @@ class WebIslandCardView(
         /** The page walked `hass.states` and asked for the registries: it asks once, so the next card keeps them up. */
         internal val walksAllStates: Boolean = false,
         internal val registriesAsked: Boolean = false,
+        /** Whether the page was active ([Page.setActive]) when it was handed off: its next card starts from that. */
+        internal val active: Boolean = true,
     ) {
         fun close() {
             server.unregisterSlot(slotId)
@@ -173,6 +175,8 @@ class WebIslandCardView(
             val page = kept?.page ?: opener(url)
             if (page != null) {
                 islandPage = page
+                // A page handed over paused stays paused until this card is shown ([setShown] compares with it).
+                if (kept != null) pageActive = kept.active
                 val h = if (fillViewport) LayoutParams.MATCH_PARENT else kept?.height ?: ctx.px(160f)
                 addView(page.view, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, h))
                 if (kept == null) page.load(url)
@@ -387,7 +391,7 @@ class WebIslandCardView(
         islandPage = null
         slotId = null
         // What the page asked for once, and won't ask again: the next card keeps it up.
-        return Island(keyOf(config, fillViewport), page, id, height, server, walksAllStates, registriesAsked.get())
+        return Island(keyOf(config, fillViewport), page, id, height, server, walksAllStates, registriesAsked.get(), pageActive)
     }
 
     /** Holds the shared registry feed for the page, once, until the island leaves this card. */
