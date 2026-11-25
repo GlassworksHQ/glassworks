@@ -53,12 +53,13 @@ object Subjects {
     /** A page no dashboard engine draws: Home Assistant's sign-in, where a panel goes first. */
     fun signIn(ha: FakeHomeAssistant) = "${ha.origin}/auth/authorize?response_type=code&client_id=http%3A%2F%2F127.0.0.1%2F"
 
-    private fun settings(dashboard: String) =
-        EngineSettings(secureHosts = listOf("127.0.0.1"), zoom = 0f, remoteDebugging = false, dashboard = dashboard)
+    private fun settings(dashboard: String, localOrigin: String? = null) = EngineSettings(
+        secureHosts = listOf("127.0.0.1"), zoom = 0f, remoteDebugging = false, dashboard = dashboard, localOrigin = localOrigin,
+    )
 
     /** The Gecko engine of this run, with the kiosk's helper extension, as the apps build it. */
-    private fun gecko(dashboard: () -> String) = GeckoEngine(
-        settings = { settings(dashboard()) },
+    private fun gecko(settings: () -> EngineSettings) = GeckoEngine(
+        settings = { settings() },
         extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "glassworks"),
         logTag = "EngineContract",
         generatedBy = "the engine contract test",
@@ -67,16 +68,18 @@ object Subjects {
     private val geckoCapabilities get() = Capabilities(lockedDown = legacyGecko, contentProcesses = true, fallback = false)
 
     /** GeckoView alone: what the apps run with Vitro off. */
-    fun gecko(ha: FakeHomeAssistant) = Subject(gecko { dashboard(ha) }, geckoCapabilities, fallback = null)
+    fun gecko(ha: FakeHomeAssistant) = Subject(gecko { settings(dashboard(ha)) }, geckoCapabilities, fallback = null)
 
     /**
-     * Vitro over this run's Gecko engine, as the apps build it with Vitro on (GenericApp.engine): Vitro keeps the real
-     * Home Assistant, and a locked-down Gecko is told the island server's loopback origin is its dashboard. [enabled]
-     * false is Vitro off at start, where the Gecko engine keeps the real dashboard.
+     * Vitro over this run's Gecko engine, as the apps build it with Vitro on (GenericApp.geckoSettings): both keep the
+     * real Home Assistant, and a locked-down Gecko also gets the island server's loopback origin as its one more
+     * ([EngineSettings.localOrigin]). [enabled] false is Vitro off at start: the plain Gecko engine's settings.
      */
     fun vitro(ha: FakeHomeAssistant, enabled: Boolean = true): Subject {
         var vitro: VitroEngine? = null
-        val gecko = CountingEngine(gecko { if (legacyGecko && enabled) vitro!!.fallbackDashboardOrigin() else dashboard(ha) })
+        val gecko = CountingEngine(gecko {
+            settings(dashboard(ha), localOrigin = if (legacyGecko && enabled) vitro!!.islandOrigin() else null)
+        })
         vitro = VitroEngine(
             fallback = gecko,
             settings = { settings(dashboard(ha)) },
