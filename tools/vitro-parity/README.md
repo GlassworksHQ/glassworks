@@ -137,12 +137,12 @@ Some checks stay manual, because no tool reads pixels or image metadata:
 
 - **Look at every new or changed PNG** in `refs/` before you commit it: a picture, a camera still or a chart can show what no text check sees.
 - **Inspect every image added to `assets/`**, its pixels and its metadata (`exiftool <file>`), even one from HA's `/static`.
-- Keep the committed corpus to synthetic or harmless entities, and leave cameras and personal media out of it.
+- Keep the committed corpus to synthetic or harmless entities, and leave real cameras and personal media out of it. A camera case uses one of the fake HA's own `clarity_*` cameras, and its still is a picture `fixture_images.py` draws.
 
 ## Limits
 
 - Robolectric draws with the host's Skia, not the panel's GPU, so a device can still differ by a few pixels. The 1 px shift tolerance and the baseline slack absorb most of it. Rendering on macOS and on CI's Linux may also differ slightly.
-- Cameras get no stream, so none is in the committed corpus.
+- A live camera's video isn't compared. In the capture HA shows the camera's still (its poster), because headless Chromium doesn't play the fake HA's H.264, and Vitro under Robolectric shows the same still with no player. The case's still is its `entity_picture` from `fixtures/images/`, which the fake also serves as the camera's `/api/camera_proxy` picture, so both draw one image. The video's area is masked anyway, so a capture that does play video can't fail on its frames. What's compared is the card's frame: its size, its bar, its title and its icons. The page's `camera/capabilities` answer is recorded, so Vitro picks its stream from what HA offered.
 - A reference records whether its page had a touch screen (`viewport.touch`), and Vitro draws that case with the same pointer, so a reference taken before touch capture still compares like for like until it is refreshed. Only HA's chart legend looks different with a coarse pointer (40 px rows) at rest. Playwright's full-page screenshot turns touch emulation off for a page taller than the window, so on a touch panel the capture makes the window as tall as the page instead, lets the page settle again, and takes the screenshot, the card bounds and the texts in that one layout before it puts the window back. A case whose page has lost its coarse pointer stops. A page with a pinned card (`position: fixed`) that is taller than the window is the exception: growing the window would move the card, so it is captured with a fine pointer and its reference says so.
 - Chart labels (ECharts draws them on a canvas) aren't text runs, so the text check doesn't see them; the pixel diff does.
 - The pixel diff only sees the card's crop in HA's position. A card that renders taller or lower in Vitro shows up in the bounds check.

@@ -132,18 +132,24 @@ class ContainedCard(
     }
 
     /**
-     * A view inside the card changed (Android 8 and later, hardware drawing): the guard records itself again too.
-     * Otherwise Android rebuilds only that view's display list, straight from the guard's own (never through
-     * [drawChild]), and a throw there would reach the app. Recording the guard again draws the card through
-     * [drawChild]; the card's views that didn't change keep their display lists, so it costs one small list.
+     * A view inside the card changed (Android 8 and later, hardware drawing): the guard records itself again too,
+     * when it's the nearest guard to the change ([isNearestGuard]). Otherwise Android rebuilds only that view's display
+     * list, straight from the guard's own (never through [drawChild]), and a throw there would reach the app.
+     * Recording the guard again draws the card through [drawChild]; the card's views that didn't change keep their
+     * display lists, so it costs one small list. A guard waiting for its error card records itself again too: its
+     * [drawChild] then skips the card, so nothing of the failed card is drawn outside a catch, and the guards above
+     * can keep leaving it to this one.
      */
     @TargetApi(Build.VERSION_CODES.O)
     override fun onDescendantInvalidated(child: View, target: View) {
         super.onDescendantInvalidated(child, target)
-        redrawThroughGuard()
+        if (isNearestGuard(this, target)) redrawThroughGuard()
     }
 
-    /** As [onDescendantInvalidated], on Android 6 and 7, where hardware drawing finds the changed view this way. */
+    /**
+     * As [onDescendantInvalidated], on Android 6 and 7, where hardware drawing finds the changed view this way. It
+     * doesn't say which view changed, so every guard above it records itself again.
+     */
     @Deprecated("ViewGroup's, deprecated in API 26, where onDescendantInvalidated takes over")
     override fun invalidateChildInParent(location: IntArray, dirty: Rect): ViewParent? {
         if (!Platform.hasDescendantInvalidated && isHardwareAccelerated) redrawThroughGuard()
@@ -151,9 +157,7 @@ class ContainedCard(
         return super.invalidateChildInParent(location, dirty)
     }
 
-    private fun redrawThroughGuard() {
-        if (!waiting) invalidate()
-    }
+    private fun redrawThroughGuard() = invalidate()
 
     override fun drawChild(canvas: Canvas, child: View, drawingTime: Long): Boolean {
         if (waiting) return false
