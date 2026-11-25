@@ -4,10 +4,14 @@
 
 package dev.glassworks.engine.vitro.ui
 
+import android.annotation.TargetApi
 import android.graphics.Canvas
+import android.graphics.Rect
+import android.os.Build
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewParent
 import android.widget.FrameLayout
 import dev.glassworks.engine.vitro.VitroFailures
 import dev.glassworks.engine.vitro.cards.IslandCard
@@ -126,6 +130,30 @@ class ContainedCard(
         }
     }
 
+    /**
+     * A view inside the card changed (Android 8 and later, hardware drawing): the guard records itself again too.
+     * Otherwise Android rebuilds only that view's display list, straight from the guard's own (never through
+     * [drawChild]), and a throw there would reach the app. Recording the guard again draws the card through
+     * [drawChild]; the card's views that didn't change keep their display lists, so it costs one small list.
+     */
+    @TargetApi(Build.VERSION_CODES.O)
+    override fun onDescendantInvalidated(child: View, target: View) {
+        super.onDescendantInvalidated(child, target)
+        redrawThroughGuard()
+    }
+
+    /** As [onDescendantInvalidated], on Android 6 and 7, where hardware drawing finds the changed view this way. */
+    @Deprecated("ViewGroup's, deprecated in API 26, where onDescendantInvalidated takes over")
+    override fun invalidateChildInParent(location: IntArray, dirty: Rect): ViewParent? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O && isHardwareAccelerated) redrawThroughGuard()
+        @Suppress("DEPRECATION")
+        return super.invalidateChildInParent(location, dirty)
+    }
+
+    private fun redrawThroughGuard() {
+        if (!waiting) invalidate()
+    }
+
     override fun drawChild(canvas: Canvas, child: View, drawingTime: Long): Boolean {
         if (waiting) return false
         val saved = canvas.saveCount
@@ -182,10 +210,11 @@ class ContainedCard(
     }
 
     /**
-     * Never "already asked" while the guard is hidden for its card: a GONE view keeps its pending layout, and the card
-     * coming back would then never reach [requestLayout].
+     * Never "already asked" while the guard's visibility is behind its card's: the card that just went GONE or came
+     * back (its own flag is set before it asks) then always reaches [requestLayout], even with a layout pending here
+     * (a card that emptied itself before hiding) or kept while GONE.
      */
-    override fun isLayoutRequested(): Boolean = super.isLayoutRequested() && !contentGone
+    override fun isLayoutRequested(): Boolean = super.isLayoutRequested() && contentGone == (content?.visibility == GONE)
 
     private fun applyVisibility() {
         super.setVisibility(if (contentGone) GONE else requestedVisibility)

@@ -442,7 +442,7 @@ class CardContainmentTest {
     @Test fun aCardThatHidesItselfHidesItsGuardToo() {
         // auto-entities with nothing to show and `show_empty: false` takes no space, and no gap in its stack.
         val auto = JSONObject().put("type", "custom:auto-entities").put("show_empty", false)
-            .put("filter", JSONObject().put("include", JSONArray().put(JSONObject().put("entity_id", "switch.none*"))))
+            .put("filter", JSONObject().put("include", JSONArray().put(JSONObject().put("entity_id", "switch.none*").put("state", "on"))))
         val stack = JSONObject().put("type", "vertical-stack").put("cards", JSONArray().put(auto).put(tile()))
         val vv = dashboard(JSONArray().put(stack)) { _, _ -> null }
         val autoView = all(vv).filterIsInstance<dev.glassworks.engine.vitro.cards.AutoEntitiesCardView>().single()
@@ -450,14 +450,37 @@ class CardContainmentTest {
         assertEquals(View.GONE, autoView.visibility)
         assertEquals(View.GONE, guard.visibility)
         // Something to show: both come back.
-        store.putLocal(EntityState("switch.none_kettle", "off", mapOf("friendly_name" to "Kettle")))
+        store.putLocal(EntityState("switch.none_kettle", "on", mapOf("friendly_name" to "Kettle")))
         drawAll(vv)
         assertEquals(View.VISIBLE, autoView.visibility)
         assertEquals(View.VISIBLE, guard.visibility)
+        assertTrue(guard.height > 0)
+        // Nothing again, once laid out: it empties itself (a layout request) before it hides, and the guard still follows.
+        store.putLocal(EntityState("switch.none_kettle", "off", mapOf("friendly_name" to "Kettle")))
+        drawAll(vv)
+        assertEquals(View.GONE, autoView.visibility)
+        assertEquals(View.GONE, guard.visibility)
         // The guard's own visibility (the card's conditions) still holds while the card shows.
+        store.putLocal(EntityState("switch.none_kettle", "on", mapOf("friendly_name" to "Kettle")))
+        drawAll(vv)
+        assertEquals(View.VISIBLE, guard.visibility)
         guard.visibility = View.GONE
         assertEquals(View.GONE, guard.visibility)
         assertTrue(contained.isEmpty())
+    }
+
+    @Test fun aChangeInsideAGuardedCardRecordsTheGuardAgain() {
+        // With hardware drawing, Android rebuilds only the changed view's display list, from its parent's, unless the
+        // parent is re-recorded: the guard asks to be, so the card's draw runs inside its drawChild and stays contained.
+        val vv = dashboard(JSONArray().put(JSONObject().put("type", "heading").put("heading", "Living room")).put(tile())) { _, _ -> null }
+        val heading = all(vv).filterIsInstance<HeadingCardView>().single()
+        val guard = heading.parent as ContainedCard
+        val flags = View::class.java.getDeclaredField("mPrivateFlags").apply { isAccessible = true }
+        val invalidated = View::class.java.getDeclaredField("PFLAG_INVALIDATED").apply { isAccessible = true }.getInt(null)
+        // What a hardware frame leaves behind (a software draw, as here, never clears it): the guard's list recorded.
+        flags.setInt(guard, flags.getInt(guard) and invalidated.inv())
+        guard.onDescendantInvalidated(heading, heading)
+        assertEquals("the guard records itself again", invalidated, flags.getInt(guard) and invalidated)
     }
 
     @Test fun anUpdateOnTheCardsHandlerThatThrowsIsDroppedAndLogged() {
