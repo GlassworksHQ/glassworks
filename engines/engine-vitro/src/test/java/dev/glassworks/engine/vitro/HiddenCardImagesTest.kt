@@ -47,13 +47,22 @@ class HiddenCardImagesTest {
     @After
     fun stop() = server.stop(0)
 
-    private fun settle(times: Int = 10) = repeat(times) {
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(50))
-        Thread.sleep(20)
+    /**
+     * Drains the main looper until [requested] are the requests made and no image load is left in flight (the loads
+     * run on their own threads), or a deadline passes; the exact lists are asserted after, so an extra load still fails.
+     */
+    private fun settle(requested: List<String>) {
+        val deadline = System.nanoTime() + 10_000_000_000L
+        while (System.nanoTime() < deadline) {
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(50))
+            if (requests.size >= requested.size && VitroCardContext.pendingImageLoads.get() == 0) break
+            Thread.sleep(10)
+        }
+        shadowOf(Looper.getMainLooper()).idle()
     }
 
     @Test
-    fun aHiddenCardsPictureLoadsOnlyOnceItShows() {
+    fun aHiddenCardsPictureIsRequestedOnlyOnceItShows() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val store = EntityStore()
         store.putLocal(EntityState("binary_sensor.presence", "off", emptyMap()))
@@ -73,13 +82,14 @@ class HiddenCardImagesTest {
                "visibility": [{"condition": "state", "entity": "binary_sensor.presence", "state": "on"}]}
             ]}]}]}""")), null)
         activity.setContentView(vv)
-        settle()
+        settle(listOf("/local/shown.png"))
         assertEquals("only the card on screen asks for its picture", listOf("/local/shown.png"), requests.toList())
 
         store.putLocal(EntityState("binary_sensor.presence", "on", emptyMap()))
-        settle()
+        settle(listOf("/local/shown.png", "/local/hidden.png"))
         assertEquals("the card that turned visible gets its picture", listOf("/local/shown.png", "/local/hidden.png"), requests.toList())
-        // The picture reached the card: nothing is left waiting.
+        // Its request was answered and handed back: nothing is left waiting. (This checks the scheduling of loads,
+        // not the decoded pixels, which the Markdown image tests cover.)
         assertEquals(0, VitroCardContext.pendingImageLoads.get())
         assertEquals(View.VISIBLE, vv.visibility)
     }

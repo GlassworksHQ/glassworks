@@ -258,13 +258,13 @@ class HacsParityWaveTest {
         assertTrue("10" in card.texts())
         card.click("Increase")
         assertEquals("input_number.set_value", calls.last().service)
-        assertEquals(11L, calls.last().data.getLong("value"))
+        assertEquals(11.0, calls.last().data.getDouble("value"), 0.0)
         st.putLocal(entity("input_number.volume", "11", "min" to 0, "max" to 11, "step" to 1))
         idle()
         card.click("Increase")
-        assertEquals(11L, calls.last().data.getLong("value")) // clamped at max
+        assertEquals(11.0, calls.last().data.getDouble("value"), 0.0) // clamped at max
         card.click("Decrease")
-        assertEquals(10L, calls.last().data.getLong("value"))
+        assertEquals(10.0, calls.last().data.getDouble("value"), 0.0)
 
         val num = store(entity("number.fan_speed", "2.5", "min" to 0, "max" to 5, "step" to 0.5))
         val n = MushroomNumberCardView(context(num), card("""{"type": "custom:mushroom-number-card", "entity": "number.fan_speed", "display_mode": "buttons"}"""))

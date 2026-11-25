@@ -67,7 +67,8 @@ class HttpServerTest {
         val running = CountDownLatch(1)
         val server = HttpServer(0, { req ->
             if (req.path == "/ws") {
-                HttpResponse.webSocket(req.headers["sec-websocket-key"]!!, 5_000) { running.countDown(); release.await(5, TimeUnit.SECONDS) }
+                // Held until the test releases it (the finally does too): a slow runner can't free the slot early.
+                HttpResponse.webSocket(req.headers["sec-websocket-key"]!!, 5_000) { running.countDown(); release.await() }
             } else {
                 HttpResponse.text(200, "ok")
             }
