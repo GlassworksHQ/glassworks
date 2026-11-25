@@ -34,6 +34,8 @@ public final class GeckoShadows {
     public static final List<GeckoSession.PermissionDelegate.ContentPermission> savedPermissions = new ArrayList<>();
     /** What the app set them to: "uri permission value". */
     public static final List<String> permissionsSet = new ArrayList<>();
+    /** Reads of {@link #savedPermissions} fail while this is above 0, one read each. */
+    public static int permissionReadsFailing;
 
     private static GeckoRuntime runtime;
 
@@ -44,6 +46,7 @@ public final class GeckoShadows {
         messageDelegate = null;
         savedPermissions.clear();
         permissionsSet.clear();
+        permissionReadsFailing = 0;
         runtime = null;
         setStatic(GeckoRuntime.class, "sRuntime", null);
     }
@@ -104,6 +107,12 @@ public final class GeckoShadows {
     public static class ShadowStorageController {
         @Implementation
         protected GeckoResult<List<GeckoSession.PermissionDelegate.ContentPermission>> getAllPermissions() {
+            if (permissionReadsFailing > 0) {
+                permissionReadsFailing--;
+                events.add("permissions.read failed");
+                return GeckoResult.fromException(new IllegalStateException("no profile yet"));
+            }
+            events.add("permissions.read");
             return GeckoResult.fromValue(new ArrayList<>(savedPermissions));
         }
 

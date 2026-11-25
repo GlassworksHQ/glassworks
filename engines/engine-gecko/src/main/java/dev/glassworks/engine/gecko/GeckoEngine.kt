@@ -14,6 +14,7 @@ import android.view.Gravity
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.widget.FrameLayout
 import android.widget.TextView
+import dev.glassworks.auth.OAuth
 import dev.glassworks.engine.Engine
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
@@ -94,11 +95,18 @@ class GeckoEngine(
         val storage = try { rt.storageController } catch (e: Exception) { Log.w(logTag, "No saved content permissions to check", e); return }
         storage.allPermissions.accept({ saved ->
             saved.orEmpty().filter { it.value == ContentPermission.VALUE_ALLOW && !host.trusts(it.uri) }.forEach {
-                Log.i(logTag, "Forgetting content permission ${it.permission} for ${it.uri}: not Home Assistant or a secure host")
+                Log.i(logTag, "Forgetting content permission ${it.permission} for ${forLog(it.uri)}: not Home Assistant or a secure host")
                 storage.setPermission(it, ContentPermission.VALUE_PROMPT)
             }
-        }, { e -> Log.w(logTag, "Couldn't read saved content permissions", e) })
+        }, { e ->
+            Log.w(logTag, "Couldn't read saved content permissions; trying again with the next page", e)
+            grantsChecked = false
+        })
     }
+
+    /** A page in the log: its origin only, so a query or a path with a secret in it stays out (#847). */
+    private fun forLog(url: String?): String =
+        url?.let { OAuth.origin(it) ?: (it.substringBefore(':', "").ifEmpty { "a page" } + ":") } ?: "no page"
 
     private fun helper(context: Context): GeckoResult<WebExtension> {
         helper?.let { return it }
@@ -283,18 +291,23 @@ class GeckoEngine(
                 host.onAndroidPermissions(permissions.orEmpty().toList()) { ok -> if (ok) callback.grant() else callback.reject() }
             }
 
+            // Gecko sends the top-level page as uri (the frame that asks, for storage access) and the frame that asks as
+            // thirdPartyOrigin, and saves the answer for the top-level page. A refusal is PROMPT, not DENY: nothing is
+            // granted, and a frame of another site doesn't leave a saved no on Home Assistant's own page (#847).
             override fun onContentPermissionRequest(
                 session: GeckoSession,
                 perm: ContentPermission
             ): GeckoResult<Int> {
-                if (!trusted(perm.uri)) {
-                    Log.w(logTag, "Refusing content permission ${perm.permission} for ${perm.uri} on $shown: not Home Assistant or a secure host")
-                    return GeckoResult.fromValue(ContentPermission.VALUE_DENY)
+                val frame = perm.thirdPartyOrigin?.substringBefore('^')?.takeIf { it.isNotBlank() } // an origin can carry Gecko's ^attributes
+                if (!trusted(perm.uri) || (frame != null && !host.trusts(frame))) {
+                    Log.w(logTag, "Refusing content permission ${perm.permission} for ${forLog(frame ?: perm.uri)} on ${forLog(shown)}: not Home Assistant or a secure host")
+                    return GeckoResult.fromValue(ContentPermission.VALUE_PROMPT)
                 }
-                Log.i(logTag, "Granting content permission ${perm.permission} for ${perm.uri}")
+                Log.i(logTag, "Granting content permission ${perm.permission} for ${forLog(perm.uri)}")
                 return GeckoResult.fromValue(ContentPermission.VALUE_ALLOW)
             }
 
+            // uri is the document that asks (a frame's own, in a frame).
             override fun onMediaPermissionRequest(
                 session: GeckoSession,
                 uri: String,
@@ -303,13 +316,13 @@ class GeckoEngine(
                 callback: PermissionDelegate.MediaCallback
             ) {
                 if (!trusted(uri)) {
-                    Log.w(logTag, "Refusing media for $uri on $shown: not Home Assistant or a secure host")
+                    Log.w(logTag, "Refusing media for ${forLog(uri)} on ${forLog(shown)}: not Home Assistant or a secure host")
                     callback.reject()
                     return
                 }
                 val mic = audio?.firstOrNull { it.source == MediaSource.SOURCE_MICROPHONE } ?: audio?.firstOrNull()
                 val cam = video?.firstOrNull { it.source == MediaSource.SOURCE_CAMERA } ?: video?.firstOrNull()
-                Log.i(logTag, "Granting media for $uri: audio=${mic?.name} video=${cam?.name}")
+                Log.i(logTag, "Granting media for ${forLog(uri)}: audio=${mic?.name} video=${cam?.name}")
                 callback.grant(cam, mic)
             }
 

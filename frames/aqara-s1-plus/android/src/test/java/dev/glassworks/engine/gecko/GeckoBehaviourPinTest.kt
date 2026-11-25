@@ -56,6 +56,7 @@ class GeckoBehaviourPinTest {
             listOf(
                 "runtime.create",
                 "s1.open",
+                "permissions.read", // saved grants for pages it doesn't trust go, before the first load (#847)
                 "extension resource://android/assets/extension/ helper@s1kiosk.edm.sh",
                 "s1.active false",
                 "view.setSession s1",
@@ -404,26 +405,51 @@ class GeckoBehaviourPinTest {
     fun `every content permission Home Assistant asks for is allowed`() = harness().use { h ->
         h.at(dash)
         assertEquals(ContentPermission.VALUE_ALLOW, h.content(dash))
-        assertTrue(h.logs("Glassworks").contains("Granting content permission ${PermissionDelegate.PERMISSION_PERSISTENT_STORAGE} for $dash"))
+        // The log names the origin only, never a path or a query (#847).
+        assertTrue(h.logs("Glassworks").contains("Granting content permission ${PermissionDelegate.PERMISSION_PERSISTENT_STORAGE} for $base"))
     }
 
     @Test
     fun `a page off Home Assistant gets no content permission`() = harness().use { h ->
-        val away = "http://192.0.2.66/page"
+        val away = "http://192.0.2.66/page?token=not-for-the-log"
         h.at(away)
-        assertEquals(ContentPermission.VALUE_DENY, h.content(away))
+        // PROMPT, not DENY: nothing is granted, and nothing is saved that would answer for the page later.
+        assertEquals(ContentPermission.VALUE_PROMPT, h.content(away))
         assertTrue(h.logs("Glassworks").contains(
-            "Refusing content permission ${PermissionDelegate.PERMISSION_PERSISTENT_STORAGE} for $away on $away: not Home Assistant or a secure host",
+            "Refusing content permission ${PermissionDelegate.PERMISSION_PERSISTENT_STORAGE} for http://192.0.2.66 on http://192.0.2.66: not Home Assistant or a secure host",
         ))
+        assertFalse(h.logs("Glassworks").any { "not-for-the-log" in it })
+    }
+
+    /** Gecko sends the top-level page as uri and the frame that asks as thirdPartyOrigin (GeckoViewPermission.sys.mjs). */
+    private fun GeckoPinHarness.contentFrom(frame: String?): Int? {
+        val p = contentPermission(dash, PermissionDelegate.PERMISSION_GEOLOCATION)
+        GeckoShadows.setField(p, ContentPermission::class.java, "thirdPartyOrigin", frame)
+        return value(permission.onContentPermissionRequest(session, p))
+    }
+
+    @Test
+    fun `a frame of another site inside the dashboard gets no content permission`() = harness().use { h ->
+        h.at(dash)
+        assertEquals(ContentPermission.VALUE_PROMPT, h.contentFrom("http://192.0.2.66"))
+        assertTrue(h.logs("Glassworks").contains(
+            "Refusing content permission ${PermissionDelegate.PERMISSION_GEOLOCATION} for http://192.0.2.66 on $base: not Home Assistant or a secure host",
+        ))
+        // Home Assistant's own document asks: its origin, with or without Gecko's ^attributes, or none sent.
+        assertEquals(ContentPermission.VALUE_ALLOW, h.contentFrom(base))
+        assertEquals(ContentPermission.VALUE_ALLOW, h.contentFrom("$base^geckoViewSessionContextId=x"))
+        assertEquals(ContentPermission.VALUE_ALLOW, h.contentFrom(null))
+        assertEquals(ContentPermission.VALUE_ALLOW, h.contentFrom(""))
+        assertEquals(ContentPermission.VALUE_PROMPT, h.contentFrom("moz-nullprincipal:{00000000-0000-0000-0000-000000000000}"))
     }
 
     @Test
     fun `before a page is shown nothing gets a permission`() = harness().use { h ->
-        assertEquals(ContentPermission.VALUE_DENY, h.content(dash))
+        assertEquals(ContentPermission.VALUE_PROMPT, h.content(dash))
         // A new session after a crash starts with no page again.
         h.at(dash)
         h.eventsDuring { h.content.onCrash(h.session) }
-        assertEquals(ContentPermission.VALUE_DENY, h.content(dash))
+        assertEquals(ContentPermission.VALUE_PROMPT, h.content(dash))
     }
 
     @Test
@@ -433,7 +459,7 @@ class GeckoBehaviourPinTest {
             GeckoShadows.setField(it, ContentPermission::class.java, "permission", permission)
             GeckoShadows.setField(it, ContentPermission::class.java, "value", value)
         }
-        val away = "http://192.0.2.66/"
+        val away = "http://192.0.2.66/?token=not-for-the-log"
         harness(prefs = { p ->
             configured(p)
             GeckoShadows.savedPermissions += listOf(
@@ -447,12 +473,34 @@ class GeckoBehaviourPinTest {
                 GeckoShadows.permissionsSet,
             )
             assertTrue(h.logs("Glassworks").contains(
-                "Forgetting content permission ${PermissionDelegate.PERMISSION_GEOLOCATION} for $away: not Home Assistant or a secure host",
+                "Forgetting content permission ${PermissionDelegate.PERMISSION_GEOLOCATION} for http://192.0.2.66: not Home Assistant or a secure host",
             ))
+            assertFalse(h.logs("Glassworks").any { "not-for-the-log" in it })
             // Once per process: a new session after a crash doesn't read them again.
             GeckoShadows.permissionsSet.clear()
             h.eventsDuring { h.content.onCrash(h.session) }
             assertEquals(emptyList<String>(), GeckoShadows.permissionsSet)
+        }
+    }
+
+    @Test
+    fun `a failed read of the saved permissions is tried again with the next page`() {
+        val away = "http://192.0.2.66/"
+        harness(prefs = { p ->
+            configured(p)
+            GeckoShadows.permissionReadsFailing = 1
+            GeckoShadows.savedPermissions += GeckoShadows.allocate(ContentPermission::class.java).also {
+                GeckoShadows.setField(it, ContentPermission::class.java, "uri", away)
+                GeckoShadows.setField(it, ContentPermission::class.java, "permission", PermissionDelegate.PERMISSION_GEOLOCATION)
+                GeckoShadows.setField(it, ContentPermission::class.java, "value", ContentPermission.VALUE_ALLOW)
+            }
+        }).use { h ->
+            h.idle()
+            assertTrue(h.events.contains("permissions.read failed"))
+            assertEquals(emptyList<String>(), GeckoShadows.permissionsSet)
+            assertTrue(h.logs("Glassworks").contains("Couldn't read saved content permissions; trying again with the next page"))
+            h.eventsDuring { h.content.onCrash(h.session) }
+            assertEquals(listOf("$away ${PermissionDelegate.PERMISSION_GEOLOCATION} ${ContentPermission.VALUE_PROMPT}"), GeckoShadows.permissionsSet)
         }
     }
 
@@ -478,7 +526,7 @@ class GeckoBehaviourPinTest {
             listOf("grant video=Back camera audio=Mic", "grant video=Screen audio=Line in", "grant video=null audio=null"),
             m.calls,
         )
-        assertTrue(h.logs("Glassworks").contains("Granting media for $dash: audio=Mic video=Back camera"))
+        assertTrue(h.logs("Glassworks").contains("Granting media for $base: audio=Mic video=Back camera"))
     }
 
     @Test
@@ -494,8 +542,8 @@ class GeckoBehaviourPinTest {
         h.at(away) // a Home Assistant frame inside another site
         h.permission.onMediaPermissionRequest(h.session, dash, arrayOf(camera), arrayOf(mic), m)
         assertEquals(listOf("reject", "reject", "reject"), m.calls)
-        assertTrue(h.logs("Glassworks").contains("Refusing media for $away on $away: not Home Assistant or a secure host"))
-        assertTrue(h.logs("Glassworks").contains("Refusing media for $away on $dash: not Home Assistant or a secure host"))
+        assertTrue(h.logs("Glassworks").contains("Refusing media for http://192.0.2.66 on http://192.0.2.66: not Home Assistant or a secure host"))
+        assertTrue(h.logs("Glassworks").contains("Refusing media for http://192.0.2.66 on $base: not Home Assistant or a secure host"))
         assertFalse(h.logs("Glassworks").any { it.startsWith("Granting media") })
     }
 
