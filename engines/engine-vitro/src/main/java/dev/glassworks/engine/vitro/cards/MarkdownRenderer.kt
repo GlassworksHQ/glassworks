@@ -52,7 +52,8 @@ object MarkdownInline {
     fun parseOpacity(value: String): Float? {
         val v = value.trim()
         val n = if (v.endsWith("%")) v.dropLast(1).trim().toFloatOrNull()?.div(100f) else v.toFloatOrNull()
-        return n?.coerceIn(0f, 1f)
+        // `NaN` and `Infinity` parse as floats but aren't CSS numbers: the caller's default applies.
+        return n?.takeIf { it.isFinite() }?.coerceIn(0f, 1f)
     }
 
     fun scaleAlpha(color: Int, mul: Float): Int {

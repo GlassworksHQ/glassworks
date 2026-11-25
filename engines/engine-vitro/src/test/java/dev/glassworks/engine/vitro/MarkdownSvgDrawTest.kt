@@ -12,6 +12,7 @@ import android.graphics.Color
 import dev.glassworks.engine.vitro.cards.MdSvg
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -62,6 +63,15 @@ class MarkdownSvgDrawTest {
     }
 
     @Test
+    fun aNonFiniteOpacityIsIgnoredNotThrown() {
+        // `opacity="NaN"` parses as a float; drawn, it would throw. It takes the default (opaque) instead.
+        val bmp = draw("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='#000' opacity='NaN'/>" +
+            "<rect x='50' width='50' height='100' fill='#000' fill-opacity='Infinity'/></svg>")
+        assertTrue(Color.red(bmp.getPixel(20, 50)) < 10)
+        assertNull(dev.glassworks.engine.vitro.cards.MarkdownInline.parseOpacity("NaN"))
+    }
+
+    @Test
     fun compactArcFlagsLeaveTheCoordinate() {
         // `A5 5 0 011.5 1`: flags 0 and 1, then the end point (1.5, 1); the image is drawn, not dropped.
         assertNotNull(MdSvg.parse("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M0 0A5 5 0 011.5 1Z' fill='#000'/></svg>"))
@@ -70,6 +80,13 @@ class MarkdownSvgDrawTest {
         val a = android.graphics.RectF().also { compact.computeBounds(it, true) }
         val b = android.graphics.RectF().also { spaced.computeBounds(it, true) }
         assertEquals(b, a)
+        // On its own too: the arc is drawn (it has a length) and ends at (1.5, 1).
+        val measure = android.graphics.PathMeasure(compact, false)
+        assertTrue(measure.length > 0f)
+        val end = FloatArray(2)
+        measure.getPosTan(measure.length, end, null)
+        assertEquals(1.5f, end[0], 0.01f)
+        assertEquals(1f, end[1], 0.01f)
     }
 
     @Test
