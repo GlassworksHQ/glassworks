@@ -14,6 +14,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   running as if it were on screen until you came back to the panel. It now waits in the background, as the page did
   before Android closed it.
 - **The panel's address never comes from a hotspot.** The address the panel shows and hands to Home Assistant (setup page, sign-in code, Thread join, the radio's ZHA and Thread addresses, *IP address*) now comes only from the Wi-Fi network Android is connected to. While the setup Wi-Fi or Android's tethering was up, it could show the hotspot's own address instead.
+- **Kiln installs the newest S1 release.** A fresh install from Kiln's S1 page now downloads the app from the newest
+  release at the moment you install, so a panel no longer starts out one version behind and offers an update right
+  away.
 
 ## [0.9.0] - 2026-11-24
 

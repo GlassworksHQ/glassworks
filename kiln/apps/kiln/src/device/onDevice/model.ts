@@ -48,11 +48,13 @@ export const RELEASE_FILES = process.env.NEXT_PUBLIC_KILN_PROXY || REFRACT;
 
 /**
  * The download link for `abi` from a line's latest release, through Refract (it admits the line's files by
- * kiln/workers/refract/releases.json); undefined before a release.
+ * kiln/workers/refract/releases.json); undefined before a release. No `abi`: a line with one APK per release, its name
+ * without one, and only while the release has exactly that one.
  */
-export function download(r: Release, abi: Abi): { href: string; name: string; version: string } | undefined {
+export function download(r: Release, abi?: Abi): { href: string; name: string; version: string } | undefined {
   if (r.state !== 'out') return undefined;
-  const name = r.assets.find((n) => n.endsWith(`-${abi}-${r.version}.apk`));
+  const apks = r.assets.filter((n) => n.endsWith(`-${r.version}.apk`));
+  const name = abi ? apks.find((n) => n.endsWith(`-${abi}-${r.version}.apk`)) : apks.length === 1 ? apks[0] : undefined;
   if (!name) return undefined;
   return { href: releaseFileUrl(RELEASE_FILES, r.tag, name), name, version: r.version };
 }
