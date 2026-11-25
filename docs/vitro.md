@@ -21,11 +21,6 @@ A card Vitro can't draw yet still shows. A custom card opens in a small browser 
 
 To see how your own dashboard will do, paste it into the [Vitro compatibility check](https://www.glassworks.dev/blueprints#vitro-check). It runs in your browser and lists every card that won't be drawn natively, and why. The full list of cards, and what each one leaves out, is in [Vitro's README](../engines/engine-vitro/README.md#what-works).
 
-A few things to know before you try it:
-
-- **Screen readers:** TalkBack support is partial, so leave Vitro off on a panel someone uses with a screen reader.
-- **Android 6 panels:** On the legacy build, Home Assistant's own pages, such as history and settings, don't load while Vitro is on. Dashboards work.
-
 ## Report a card that looks wrong
 
 Home Assistant's own look is the goal, so any difference is worth a report. [Open a bug report](https://github.com/GlassworksHQ/glassworks/issues/new?template=bug.yml) with:

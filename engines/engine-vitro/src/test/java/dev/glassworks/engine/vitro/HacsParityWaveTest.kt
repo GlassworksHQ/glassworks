@@ -62,11 +62,11 @@ class HacsParityWaveTest {
     private val calls = ArrayList<Call>()
     private val actions = ArrayList<String>()
 
-    private fun context(store: EntityStore) = VitroCardContext(
+    private fun context(store: EntityStore, theme: dev.glassworks.engine.vitro.theme.ResolvedTheme = ThemeResolver.resolve(ThemeCatalog(), true)) = VitroCardContext(
         context = activity,
         haBase = FakeHaServer.BASE,
         store = store,
-        theme = ThemeResolver.resolve(ThemeCatalog(), true),
+        theme = theme,
         resources = emptyList(),
         accessToken = { FakeHaServer.TOKEN },
         callService = { domain, service, data, _ -> calls += Call("$domain.$service", data ?: JSONObject()) },
@@ -466,6 +466,26 @@ class HacsParityWaveTest {
         assertEquals("grid", inner.type)
         assertEquals(listOf("tile", "tile"), inner.childCards.map { it.type })
         assertEquals(listOf("sensor.b_temp", "sensor.c_temp"), inner.childCards.map { it.entity })
+    }
+
+    @Test
+    fun mushroomsDisabledColorIsItsOwnNotHasInactiveColor() {
+        // Mushroom 5.3: --rgb-disabled is var(--mush-rgb-disabled), else 111, 111, 111 dark and 189, 189, 189 light.
+        val dark = context(store())
+        assertEquals(android.graphics.Color.rgb(111, 111, 111), dev.glassworks.engine.vitro.cards.mushroomDisabledColor(dark))
+        val light = context(store(), ThemeResolver.resolve(ThemeCatalog(), false))
+        assertEquals(android.graphics.Color.rgb(189, 189, 189), dev.glassworks.engine.vitro.cards.mushroomDisabledColor(light))
+        val themed = context(store(), ThemeResolver.resolve(ThemeCatalog(defaultTheme = "t",
+            themes = mapOf("t" to ThemeCatalog.ThemeDefinition(base = mapOf("mush-rgb-disabled" to "10, 20, 30")))), true))
+        assertEquals(android.graphics.Color.rgb(10, 20, 30), dev.glassworks.engine.vitro.cards.mushroomDisabledColor(themed))
+        // A card's own card_mod (or an enclosing card's) outranks the theme while the card is built.
+        themed.cardVars = mapOf("mush-rgb-disabled" to "40, 50, 60")
+        assertEquals(android.graphics.Color.rgb(40, 50, 60), dev.glassworks.engine.vitro.cards.mushroomDisabledColor(themed))
+        // A value with a bad channel is dropped whole (the theme's applies), not read from its other three numbers.
+        themed.cardVars = mapOf("mush-rgb-disabled" to "10, invalid, 20, 30")
+        assertEquals(android.graphics.Color.rgb(10, 20, 30), dev.glassworks.engine.vitro.cards.mushroomDisabledColor(themed))
+        themed.cardVars = mapOf("mush-rgb-disabled" to "1, x, 2")
+        assertEquals(android.graphics.Color.rgb(10, 20, 30), dev.glassworks.engine.vitro.cards.mushroomDisabledColor(themed))
     }
 
     // ---- stack-in-card / vertical-stack-in-card / layout-card ----

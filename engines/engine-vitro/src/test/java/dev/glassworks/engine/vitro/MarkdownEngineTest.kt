@@ -536,6 +536,48 @@ class MarkdownEngineTest {
     }
 
     @Test
+    fun lineBoxesSplitTheirLeadingAsBlinkDoes() {
+        // HA's large clock in Chrome, Roboto (ascent 0.928 em, descent 0.244), at density 1.5 and 2: the 64 px digits'
+        // 51.2 px line puts its text 12 px above the line (half of -23.8, floored) with the ascent rounded to 59; the
+        // 24 px AM's 21.6 px line 4 px above (-3.2 floored), ascent 22.
+        val span = dev.glassworks.engine.vitro.cards.CssLineBoxSpan
+        for (dp in listOf(1.5f, 2f)) {
+            assertEquals(47f * dp, span.above(59.375f * dp, 15.625f * dp, 51.2f * dp, dp), 1e-3f)
+            assertEquals(18f * dp, span.above(22.27f * dp, 5.86f * dp, 21.6f * dp, dp), 1e-3f)
+            // `normal` is the rounded ascent and descent: 28 px for 24 px Roboto, so no leading at all.
+            assertEquals(28f * dp, span.normalLineHeight(22.27f * dp, 5.86f * dp, 0f, dp), 1e-3f)
+        }
+    }
+
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE) // real font metrics
+    fun normalLineHeightIsTheFontsOwn() {
+        // `line-height: normal` (HA's headings) is the drawn font's ascent + descent: Inter's 1.21 em, not Roboto's 1.17.
+        val ctx = context()
+        val cfg = card(
+            """{"type": "markdown", "content": "# Hi\nplain",
+               "card_mod": {"style": {"ha-markdown$": "ha-markdown-element h1 { font-family: Inter; font-size: 40px; }"}}}""",
+        )
+        val md = MarkdownCardView(ctx, cfg).also { it.applyCardMod(cfg) }
+        val host = android.widget.FrameLayout(activity)
+        host.addView(md, android.widget.FrameLayout.LayoutParams(600, ViewGroup.LayoutParams.WRAP_CONTENT))
+        activity.setContentView(host)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val h1 = md.body.all().filterIsInstance<TextView>().first { it.text.toString() == "Hi" }
+        // The h1's font as Markdown draws it (bold, from the card's sheet), at its size.
+        val paint = android.text.TextPaint().apply {
+            typeface = dev.glassworks.engine.vitro.cards.MdFonts.typeface(activity, 700, false, "Inter", 40f)
+            textSize = 40f * ctx.dp
+        }
+        val fm = paint.fontMetrics
+        val own = fm.descent - fm.ascent + fm.leading
+        assertTrue("Inter's normal line is taller than Roboto's: $own", own > 40f * ctx.dp * 1.19f)
+        // Its ascent and descent each rounded to whole CSS px, as Blink takes them.
+        val dp = ctx.dp
+        assertEquals(Math.round((Math.round(-fm.ascent / dp) + Math.round(fm.descent / dp) + Math.round(fm.leading / dp)) * dp), h1.height)
+    }
+
+    @Test
     fun relativePositionNudgesWithoutMovingTheLine() {
         val icon = styled("##### <ha-icon icon=\"mdi:weather-fog\"></ha-icon> 9°", "ha-markdown-element h5 ha-icon { position: relative; top: -2px; }")
             .find("ha-icon")!!.style!!

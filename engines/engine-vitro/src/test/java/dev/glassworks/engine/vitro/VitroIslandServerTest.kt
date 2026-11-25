@@ -102,6 +102,9 @@ class VitroIslandServerTest {
                 HttpResponse(200, mapOf("Content-Type" to "application/json", "Cache-Control" to "private, max-age=60"), "{}".toByteArray())
             // A redirect to a path the proxy would refuse on a direct request.
             req.path == "/local/away" -> HttpResponse(302, mapOf("Location" to "/some/other/thing"), ByteArray(0))
+            req.path == "/local/to-resource" -> HttpResponse(302, mapOf("Location" to "/my_integration_card/chunk.js"), ByteArray(0))
+            req.path == "/my_integration_card/chunk.js" ->
+                HttpResponse(200, mapOf("Content-Type" to "application/javascript"), "export {};".toByteArray())
             // A public path that redirects to a token-bearing one.
             req.path == "/local/to-api" -> HttpResponse(302, mapOf("Location" to "/api/private"), ByteArray(0))
             req.path == "/api/camera_proxy/cam" ->
@@ -125,12 +128,12 @@ class VitroIslandServerTest {
         val text get() = String(body, Charsets.UTF_8)
     }
 
-    /** The proxy's capability cookie (`vitro_cap=…`), as the entry route hands it to a browser. */
+    /** The proxy's capability cookie (`vitro_cap=…`), as an island page hands it to a browser. */
     private val capability: String by lazy {
-        get(island.entryUrl("/"), capability = false).setCookie!!.substringBefore(';')
+        get(island.registerSlot(RecordingSlot()).second, capability = false).setCookie!!.substringBefore(';')
     }
 
-    /** [capability]: send the proxy's cookie, as the island page or the legacy engine's browser has it. */
+    /** [capability]: send the proxy's cookie, as the island page's browser has it. */
     private fun get(
         url: String,
         method: String = "GET",
@@ -367,7 +370,7 @@ class VitroIslandServerTest {
     }
 
     @Test
-    fun theIslandPageAndTheEntryRouteHandOutTheCapability() {
+    fun onlyTheIslandPageHandsOutTheCapability() {
         val (_, url) = island.registerSlot(RecordingSlot())
         val page = get(url, capability = false)
         assertEquals(200, page.code)
@@ -375,19 +378,12 @@ class VitroIslandServerTest {
         assertTrue(page.setCookie.contains("HttpOnly"))
         assertTrue(page.setCookie.contains("SameSite=Strict"))
 
-        val entry = get(island.entryUrl("/config?tab=1"), capability = false)
-        assertEquals(302, entry.code)
-        assertEquals("/config?tab=1", entry.location)
-        assertTrue(entry.setCookie!!.startsWith(capability + ";"))
-
+        // The old entry route for Home Assistant's pages is gone: those load from Home Assistant itself.
         val base = island.ensureStarted()
-        assertEquals(403, get("$base/__vitro/enter?c=guess&to=%2Fconfig", capability = false).code)
-        fun code() = island.entryUrl("/").substringAfter("c=").substringBefore('&')
-        // The code opens the path it was issued for: a `to` swapped into the URL goes nowhere else.
-        assertEquals("/", get("$base/__vitro/enter?c=${code()}&to=%2F%2Fexample.com", capability = false).location)
-        assertEquals("/", get("$base/__vitro/enter?c=${code()}&to=https%3A%2F%2Fexample.com", capability = false).location)
-        // The URL carries a one-time code, never the capability itself.
-        assertFalse(island.entryUrl("/config").contains(capability.substringAfter('=')))
+        val entry = get("$base/__vitro/enter?c=guess&to=%2Fconfig", capability = false)
+        assertEquals(403, entry.code)
+        assertNull(entry.setCookie)
+        assertTrue("Home Assistant heard nothing", haSeen.isEmpty())
     }
 
     // ---- Loopback hardening ----
@@ -415,32 +411,39 @@ class VitroIslandServerTest {
     }
 
     @Test
-    fun theProxyForwardsOnlyThePathsHaAndTheIslandsUse() {
+    fun theProxyForwardsOnlyThePathsTheIslandsUse() {
         val base = island.ensureStarted()
         assertEquals(404, get("$base/some/other/thing").code)
         assertEquals(404, get("$base/.well-known/x").code)
         assertTrue("Home Assistant heard nothing", haSeen.isEmpty())
-        for (p in listOf("/", "/api/states", "/auth/authorize", "/auth/token", "/local/x.js", "/hacsfiles/a/b.js", "/static/icons/x.png",
-            "/frontend_latest/app.js", "/frontend_es5/app.js", "/media/local/x.jpg", "/manifest.json", "/sw-modern.js",
-            "/config/dashboard", "/history", "/developer-tools/state", "/mirror-home/wall", "/profile")) {
+        for (p in listOf("/api/states", "/local/x.js", "/hacsfiles/a/b.js", "/static/icons/x.png", "/frontend_latest/app.js",
+            "/frontend_es5/app.js", "/media/local/x.jpg")) {
             assertTrue(p, VitroIslandServer.proxied(p))
         }
-        for (p in listOf("/x", "/some/thing", "/robots.txt.bak", "/a.b-c")) assertFalse(p, VitroIslandServer.proxied(p))
-        // HACS opens in the fallback: through the entry route, then its page reaches Home Assistant.
-        val entry = get(island.entryUrl("/hacs/dashboard"), capability = false)
-        assertEquals(302, entry.code)
-        get("$base/hacs/dashboard", headers = mapOf("Cookie" to entry.setCookie!!.substringBefore(';')), capability = false)
-        assertEquals(listOf("/hacs/dashboard"), haSeen.map { it.target })
+        // Home Assistant's pages, sign-in and root files load from Home Assistant itself, never with the panel's token.
+        for (p in listOf("/", "/auth/authorize", "/auth/token", "/manifest.json", "/sw-modern.js", "/config/dashboard",
+            "/history", "/developer-tools/state", "/mirror-home/wall", "/profile", "/hacs/dashboard", "/x", "/some/thing",
+            "/robots.txt.bak", "/a.b-c")) {
+            assertFalse(p, VitroIslandServer.proxied(p))
+        }
+        for (p in listOf("/config/dashboard", "/auth/token", "/history", "/")) assertEquals(p, 404, get("$base$p").code)
+        assertTrue("Home Assistant heard nothing", haSeen.isEmpty())
     }
 
     @Test
-    fun anEntryPathStaysOnThisOriginAndOutOfOtherHeaders() {
-        assertEquals("/example.com", VitroIslandServer.entryPath("//example.com"))
-        assertEquals("/example.com", VitroIslandServer.entryPath("/\\example.com"))
-        assertEquals("/config", VitroIslandServer.entryPath("config"))
-        val entry = get(island.entryUrl("/config\r\nX-Evil: 1"), capability = false)
-        assertEquals(302, entry.code)
-        assertEquals("/config%0D%0AX-Evil: 1", entry.location)
+    fun aRedirectIntoTheDashboardsResourceFolderIsFollowed() {
+        val withResources = VitroIslandServer(session = { haBase to token }, resources = { listOf("/my_integration_card/card.js") })
+        try {
+            val b = withResources.ensureStarted()
+            val cookie = get(withResources.registerSlot(RecordingSlot()).second, capability = false).setCookie!!.substringBefore(';')
+            // The same hop the plain proxy refuses (aRedirectToAPathTheProxyRefusesIsNotFollowed) is followed into a
+            // resource folder, and only there.
+            val reply = get("$b/local/to-resource", headers = mapOf("Cookie" to cookie), capability = false)
+            assertEquals(200, reply.code)
+            assertEquals(listOf("/local/to-resource", "/my_integration_card/chunk.js"), haSeen.map { it.target })
+        } finally {
+            withResources.stop()
+        }
     }
 
     @Test
@@ -494,16 +497,64 @@ class VitroIslandServerTest {
     }
 
     @Test
-    fun anEntryCodeWorksOnceAndNotAfterItExpires() {
+    fun aPathThatLeavesItsPrefixIsNeverForwarded() {
         val base = island.ensureStarted()
-        val url = island.entryUrl("/config")
-        assertEquals(302, get(url, capability = false).code)
-        assertEquals("used once only", 403, get(url, capability = false).code)
-        island.entryCodeTtlNs = 1_000_000L // 1 ms
-        val late = island.entryUrl("/config")
-        Thread.sleep(20)
-        assertEquals("expired", 403, get(late, capability = false).code)
-        assertEquals(403, get("$base/__vitro/enter?c=&to=%2Fconfig", capability = false).code)
+        for (p in listOf("/local/../auth/token", "/local/%2e%2e/auth/token", "/local/%2E./auth/token", "/api/./states",
+            "/local/a%2fb.js", "/local/a%5Cb.js", "/hacsfiles/x/../../auth/token")) {
+            assertFalse(p, VitroIslandServer.proxied(p))
+        }
+        assertEquals(404, get("$base/local/%2e%2e/auth/token").code)
+        assertTrue("Home Assistant heard nothing", haSeen.isEmpty())
+    }
+
+    /** An integration serves its card at a folder of its own (`/<integration>/card.js`), listed as a Lovelace resource. */
+    @Test
+    fun theDashboardsOwnResourceFoldersAreForwarded() {
+        assertEquals(
+            setOf("/my_integration_card/", "/root-card.js", "/other_frontend/"),
+            VitroIslandServer.resourcePaths(
+                listOf(
+                    "/my_integration_card/card.js?v=3", "/root-card.js", "$haOrigin/other_frontend/x/y.js",
+                    "/local/z.js", // under /local/ already, and listed as its folder like any other
+                    "https://cdn.example.com/card.js", "//cdn.example.com/card.js", "http://192.0.2.99:8123/elsewhere/a.js",
+                    "/auth/x.js", "/__vitro/island/x.js", "/my_integration_card/../auth/token", "data:text/javascript,1",
+                ),
+                haOrigin,
+            ) - "/local/",
+        )
+
+        // The same origin with its default port written, or left out, on either side (RFC 5737 / example names).
+        assertEquals(setOf("/a_card/", "/b_card/"), VitroIslandServer.resourcePaths(
+            listOf("https://ha.example:443/a_card/x.js", "HTTPS://HA.example/b_card/y.js", "https://ha.example:8443/c_card/z.js",
+                "http://ha.example/d_card/w.js"),
+            "https://ha.example",
+        ))
+        assertEquals(setOf("/a_card/", "/b_card/"), VitroIslandServer.resourcePaths(
+            listOf("http://192.0.2.10/a_card/x.js", "http://192.0.2.10:80/b_card/y.js", "http://192.0.2.10:8123/c_card/z.js"),
+            "http://192.0.2.10:80/",
+        ))
+        assertEquals(setOf("/c_card/"), VitroIslandServer.resourcePaths(
+            listOf("http://192.0.2.10:8123/c_card/z.js", "http://192.0.2.10/a_card/x.js"), "http://192.0.2.10:8123",
+        ))
+
+        val resources = listOf("/my_integration_card/card.js?v=3")
+        val withResources = VitroIslandServer(session = { haBase to token }, resources = { resources })
+        try {
+            val b = withResources.ensureStarted()
+            val cookie = get(withResources.registerSlot(RecordingSlot()).second, capability = false).setCookie!!.substringBefore(';')
+            fun status(path: String) = get("$b$path", headers = mapOf("Cookie" to cookie), capability = false).code
+            assertEquals("forwarded (the fake HA has no such file)", 404, status("/my_integration_card/chunk-1.js"))
+            assertEquals(listOf("/my_integration_card/chunk-1.js"), haSeen.map { it.target })
+            assertEquals("fake-token-0001".let { "Bearer $it" }, haSeen.single().authorization)
+            haSeen.clear()
+            for (p in listOf("/my_integration_card", "/other_frontend/a.js", "/my_integration_card/../auth/token",
+                "/my_integration_card/%2e%2e/auth/token")) {
+                assertEquals(p, 404, status(p))
+            }
+            assertTrue("Home Assistant heard none of those", haSeen.isEmpty())
+        } finally {
+            withResources.stop()
+        }
     }
 
     @Test

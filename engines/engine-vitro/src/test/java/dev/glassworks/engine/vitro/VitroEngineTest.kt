@@ -406,29 +406,58 @@ class VitroEngineTest {
         assertEquals(1, fallback.opens.size)
     }
 
+    /**
+     * The Mirror's legacy engine under Vitro (2026-11-25): HA's pages sat on "Connecting" through the loopback proxy (no
+     * WebSocket, no external auth, integrations' paths refused). They load from Home Assistant itself now, as with Vitro
+     * off; the loopback origin is only the islands' ([VitroEngine.islandOrigin]).
+     */
     @Test
-    fun aLockedDownFallbackGetsSameOriginHaUrlsOnTheLoopbackIslandServer() {
+    fun aLockedDownFallbackLoadsHomeAssistantsPagesFromHomeAssistant() {
         val legacy = RecordingEngine(name = "Legacy Gecko 1.0", lockedDown = true)
         val engine = vitro(fb = legacy)
         try {
             val page = readyPage(engine)
-            val loopback = engine.fallbackDashboardOrigin()
+            val loopback = engine.islandOrigin()
             assertTrue(loopback, loopback.startsWith("http://127.0.0.1:"))
 
-            page.load("$base/auth/authorize?client_id=abc&redirect_uri=def")
-            page.load("$base/config")
-            page.load("https://example.com/config/blueprint/import")
-            // Through the server's entry route, with a one-time code it trades for the proxy's capability and redirects.
-            val loads = legacy.pages.single().loads.toList()
-            assertEquals(3, loads.size)
-            fun to(path: String) = "&to=" + java.net.URLEncoder.encode(path, "UTF-8")
-            assertTrue(loads[0], loads[0].startsWith("$loopback/__vitro/enter?c=") && loads[0].endsWith(to("/auth/authorize?client_id=abc&redirect_uri=def")))
-            assertTrue(loads[1], loads[1].startsWith("$loopback/__vitro/enter?c=") && loads[1].endsWith(to("/config")))
-            assertEquals("https://example.com/config/blueprint/import", loads[2])
-            assertTrue("each load has its own code", loads[0].substringBefore("&to=") != loads[1].substringBefore("&to="))
+            val pages = listOf(
+                "$base/auth/authorize?client_id=abc&redirect_uri=def", "$base/history", "$base/logbook",
+                "$base/profile/general", "$base/config/dashboard", "https://example.com/config/blueprint/import",
+            )
+            pages.forEach(page::load)
+            assertEquals("as asked, never through the loopback server", pages, legacy.pages.single().loads.toList())
+            assertTrue(legacy.pages.single().loads.none { it.startsWith(loopback) })
         } finally {
             engine.islandServer.stop()
         }
+    }
+
+    /**
+     * The Mirror's Android 6 doesn't hide a SurfaceView when an ancestor goes GONE: an island's GeckoView drew over the
+     * fallback page. Its surfaces go while the fallback shows a page, and come back with the dashboard.
+     */
+    @Test
+    fun theIslandsSurfacesHideWhileTheFallbackShowsAPage() {
+        val page = readyPage()
+        val vv = vitroView(page)
+        val island = android.widget.FrameLayout(vv.context)
+        val surface = android.view.SurfaceView(vv.context)
+        val alreadyGone = android.view.SurfaceView(vv.context).apply { visibility = View.GONE }
+        island.addView(surface)
+        island.addView(alreadyGone)
+        vv.addView(island)
+
+        page.load("$base/history")
+        assertEquals(View.INVISIBLE, surface.visibility)
+        assertEquals("one hidden by its own card stays as it was", View.GONE, alreadyGone.visibility)
+        page.load("$base/logbook")
+        assertEquals(View.INVISIBLE, surface.visibility)
+
+        page.load("$base/wall-test/living")
+        assertEquals(View.VISIBLE, vv.visibility)
+        assertEquals(View.VISIBLE, surface.visibility)
+        assertEquals(View.GONE, alreadyGone.visibility)
+        vv.removeView(island)
     }
 
     @Test
@@ -581,7 +610,6 @@ class VitroEngineTest {
         assertEquals("Closed by Home Assistant", VitroEngine.forLog("Closed by Home Assistant"))
         assertEquals("Starting Vitro 0.0.1", VitroEngine.forLog("Starting Vitro 0.0.1"))
         assertEquals("[3] GET /api/… -> 200", VitroEngine.forLog("[3] GET /api/states/sensor.private_thing -> 200"))
-        assertEquals("GET /__vitro/enter?…", VitroEngine.forLog("GET /__vitro/enter?c=capability&to=%2F"))
         assertEquals("GET /__vitro/island/… -> 200", VitroEngine.forLog("GET /__vitro/island/s0123abcd -> 200"))
         assertEquals("Connection reset", VitroEngine.forLog("Connection reset"))
     }

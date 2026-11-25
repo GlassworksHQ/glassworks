@@ -6,7 +6,7 @@ Cards marked *(not yet compared with HA)* draw natively but haven't been checked
 
 ## Tier 1: Native Core Lovelace Cards (31)
 
-- **Controls & summaries:** `tile`, `entities` (plain rows, `divider` and `section` rows; no header or footer), `glance`, `button`, `entity`, `light`, `thermostat` (one target: a heat/cool range isn't shown yet), `humidifier` *(not yet compared with HA)*, `alarm-panel`, `media-control`, `todo-list`, `area`
+- **Controls & summaries:** `tile`, `entities` (plain rows, `divider` and `section` rows; no header or footer), `glance`, `button`, `entity`, `light`, `thermostat` (a heat/cool range shows both targets, as in HA), `humidifier` *(not yet compared with HA)*, `alarm-panel`, `media-control`, `todo-list`, `area`
 - **Information & media:** `heading`, `clock`, `sensor`, `gauge` (severity, `segments`, `needle`), `weather-forecast` (daily, hourly and twice-daily), `history-graph`, `statistics-graph`, `calendar` (month grid and list views), `logbook`, `markdown` (rendered natively: headings, tables, lists, quotes, rules, `<font color>`, `<center>` and inline `<ha-icon>`, with HA server-side Jinja2 templates via `render_template`; `<ha-alert>`, `<ha-qr-code>`, `<details>`, `<audio>`, `<video>` and checkboxes draw nothing)
 - **Images & floorplans:** `picture`, `picture-entity`, `picture-glance`, `picture-elements` (`state-icon`, `state-label`, `state-badge`, `icon`, `service-button`; `conditional` and `image` elements are left out)
 - **Layout & filtering:** `grid`, `horizontal-stack`, `vertical-stack`, `conditional`, `entity-filter` (plus the Tier 2 containers `custom:stack-in-card`, `custom:vertical-stack-in-card` and `custom:layout-card`, whose children are audited like any stack's)

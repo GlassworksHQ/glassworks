@@ -67,7 +67,9 @@ Vitro moves the Home Assistant data plane out of the browser into Kotlin (`HaDas
 
 Tier 3 never uses `android.webkit.WebView`. Each island is served from `VitroIslandServer`, a tiny HTTP server bound to IPv4 loopback (`127.0.0.1`), and loaded into GeckoView, so the Android system WebView, which is missing or too old on some of these panels, is not a dependency. A dashboard that stays in Tier 1 and Tier 2 never starts GeckoView at all.
 
-Non-dashboard pages, such as `/auth/authorize` for panel sign-in or the Blueprint import dialog, are handed to the wrapped fallback `Engine`. On the legacy build for Android 6, those pages don't work yet while Vitro is on (see [The legacy build](#the-legacy-build-android-6)).
+Non-dashboard pages, such as `/auth/authorize` for panel sign-in, history, settings or the Blueprint import dialog, are handed to the wrapped fallback `Engine`, which loads them from Home Assistant itself. Their WebSocket and sign-in work as they do with Vitro off.
+
+The island server only serves islands. Its proxy forwards what a card loads (`/api/`, `/local/`, `/hacsfiles/`, Home Assistant's static files and media, and the folders of the dashboard's own Lovelace resources), and only to a page that holds the cookie its island page sets, so other apps on the device can't use it. On the legacy engine, which loads only the dashboard's origin, the island server's loopback address is the one other origin it allows, and each page stays on its own origin: Home Assistant's pages never reach the island server, and islands never reach Home Assistant except through it.
 
 ## What works
 
@@ -80,7 +82,7 @@ Non-dashboard pages, such as `/auth/authorize` for panel sign-in or the Blueprin
 | `tile` | Yes | 14 tile features draw natively (listed under [What Vitro draws natively](#what-vitro-draws-natively)). Any other feature is left out of the tile. With `features_position: inline`, the features sit under the tile instead of beside it |
 | `entities`, `entity-filter` | Yes | Plain entity rows, `divider` and `section` rows. Other row types (`buttons`, `attribute`, custom rows) and the card's header and footer are left out |
 | `button`, `entity`, `glance`, `heading`, `light`, `area`, `alarm-panel` | Yes | |
-| `thermostat` | Yes | A thermostat with a heat/cool range shows one target for now |
+| `thermostat` | Yes | A heat/cool range shows both targets, as Home Assistant does |
 | `humidifier` | Not yet | The reference Home Assistant has no humidifier to compare against |
 | `gauge` | Yes | Severity colors, `segments` and `needle: true` |
 | `sensor`, `history-graph`, `statistics-graph` | Yes | See [Graphs](#rendering-like-home-assistant-does) |
@@ -116,7 +118,7 @@ Tapping or holding a tile opens a native More-Info dialog styled after Home Assi
 | Entity | Dialog |
 |---|---|
 | Light | Brightness dimmer, an HSV color wheel, a Kelvin color-temperature picker, and color swatches |
-| Climate | A circular thermostat dial with mode buttons |
+| Climate | A circular thermostat dial with mode buttons, and two thumbs for a heat/cool range |
 | Cover | A top-down position slider |
 | Sensor | A 24-hour stepped history graph |
 | Camera | A live stream |
@@ -125,13 +127,27 @@ Tapping or holding a tile opens a native More-Info dialog styled after Home Assi
 
 Tiles can also carry the inline features Home Assistant adds under the card: `climate-hvac-modes`, `target-temperature`, `fan-speed`, `cover-position`, `light-color-temp`, `media-player-volume-slider`, `toggle`, `media-player-playback`, `light-color-favorites`, `numeric-input` and `vacuum-commands`, next to the brightness, select and open/close controls.
 
+A thermostat in `heat_cool` or `auto` with a low and a high target shows both, as Home Assistant does: on the
+thermostat card and in More-Info, the dial gets two thumbs, and the − and + move whichever target you pick in the
+middle of the dial. As in Home Assistant, that takes an entity that supports a target range (its
+`TARGET_TEMPERATURE_RANGE` feature) and reports no single `temperature`; one that reports a single target too gets the
+single control. The tile's `target-temperature` feature and Mushroom's climate card show a pair of steppers
+instead. The low target can't go above the high one.
+
 ## Accessibility
 
-Vitro's support for TalkBack and keyboards is partial for now:
+Vitro's controls work with TalkBack and with a keyboard or D-pad, the way Home Assistant's page works with a screen
+reader:
 
-- Buttons that show only an icon, such as play, pause, mute, More info and the thermostat's + and −, have spoken labels.
-- The sliders under a tile (brightness, fan speed, position, volume, numbers), its color temperature bar and Mushroom's sliders read as sliders with their value. TalkBack's swipes, the arrow keys and the page keys change them.
-- Roles for the other controls, More-Info's sliders, the thermostat dial, and moving between controls with a keyboard or D-pad aren't finished yet. Until they are, Home Assistant's own page in GeckoView works better with a screen reader, so leave Vitro off on a panel someone uses that way.
+- Controls are named after what they act on, and have the role Home Assistant gives them: a button, a switch (entity
+  toggles), a check box (to-do items), a choice (HVAC modes, the tile's toggle), or a pressed button (the light's
+  modes, the calendar's views).
+- The thermostat dial and More-Info's brightness, speed, color temperature and position sliders read their value, and
+  TalkBack's swipe up and down change it.
+- With a keyboard or D-pad, Tab and the arrows move between controls and Enter presses them. On those dials and
+  sliders, the left and right arrows change the value instead (page keys by a tenth, Home and End to the ends), and
+  Enter switches between the two ends of a heat/cool range. Back or Escape closes More-Info, and focus stays in it
+  while it's open.
 
 ## Themes
 
@@ -242,7 +258,7 @@ The report covers the cards in the dashboard config, auto-entities' own `card:` 
 
 The legacy build runs on Android 6 panels such as the lululemon Studio Mirror, with an older GeckoView that is locked to the dashboard's Home Assistant. Vitro draws dashboards there the same way, and islands load in that GeckoView.
 
-Home Assistant's own pages are the exception. With Vitro on, the pages Vitro doesn't draw, such as history, the logbook, your profile and settings, stay on "Connecting to Home Assistant" on the legacy build. Dashboards are fine. If you need those pages on an Android 6 panel, turn Vitro off for now.
+With Vitro on, that GeckoView allows exactly two origins: your Home Assistant, and the app's own island server on `127.0.0.1`. Each page stays on its own origin. Home Assistant's pages, such as sign-in, history, the logbook and settings, load straight from Home Assistant, as they do with Vitro off, and never reach the island server. Islands reach Home Assistant only through the island server.
 
 ## Security: the island server
 
@@ -250,7 +266,8 @@ Islands load from a small web server inside the app, `VitroIslandServer`. It is 
 
 - **It never listens on the network.** The server is bound to `127.0.0.1`, so only apps on the panel itself can reach it, never another device on your network.
 - **Other apps on the panel can't use it.** Every app on a device can reach `127.0.0.1`, so the server answers only a page that holds a random key, which the island page sets for itself as a cookie. Each island's address is random as well. A request also has to name the server itself as its host, which stops a web page from reaching it through a look-alike address (DNS rebinding).
-- **Your token goes only to your Home Assistant.** The server forwards an island's requests to the one Home Assistant the panel is signed in to and adds the panel's token there. It forwards only the paths cards load (the API, `/local`, `/hacsfiles`, Home Assistant's static files and media, plus Home Assistant's own pages for the legacy build), and follows redirects only within Home Assistant.
+- **It only serves islands.** Home Assistant's own pages, such as sign-in and settings, load from Home Assistant itself, so their WebSocket and sign-in never pass through it.
+- **Your token goes only to your Home Assistant.** The server forwards an island's requests to the one Home Assistant the panel is signed in to and adds the panel's token there. It forwards only the paths cards load (the API, `/local`, `/hacsfiles`, Home Assistant's static files and media, and the folders of the dashboard's own Lovelace resources), refuses paths that try to climb out of those folders, and follows redirects only within Home Assistant.
 - **Answers made with the token aren't cached,** so they can't be served again after a sign-in change, and the memory proxied answers can use is capped.
 - **Its logs leave out tokens and queries,** and the compatibility checker's reasons leave out addresses.
 
@@ -261,8 +278,6 @@ Islands load from a small web server inside the app, `VitroIslandServer`. It is 
 - **A built-in card Vitro draws can't fall back to an island.** When it has something Vitro doesn't draw, Vitro draws the rest of the card and leaves that part out, since the island would only show a summary. The compatibility checker lists each one as a note.
 - **Cards not yet compared with Home Assistant** (listed under [What works](#what-works)) may differ from Home Assistant's look.
 - **Small differences remain on 1.5x screens,** such as the S1 and the Mirror: some text and chart labels sit a fraction of a pixel off.
-- **The legacy build's Home Assistant pages** don't load with Vitro on yet (see [The legacy build](#the-legacy-build-android-6)).
-- **Accessibility is partial** (see [Accessibility](#accessibility)).
 
 ## The `Engine` seam
 
