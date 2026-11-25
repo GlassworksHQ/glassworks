@@ -322,6 +322,8 @@ describe('the way back (restore-blocks)', () => {
 
   it('writes this browser\'s restore point over the blocks it changed, then a fresh userdata, so nothing the app set stays', async () => {
     const { r } = await installed();
+    const device = () => r.dev.adb() as unknown as { installed?: number; owner?: string };
+    expect(device().owner).toBeTruthy(); // the install made Glassworks the Device Owner
     await r.image.startUndo();
     expect(r.image.state).toMatchObject({ screen: 'undo', undo: { at: 'start', source: 'browser' } });
     await r.image.undoRestart();
@@ -331,6 +333,50 @@ describe('the way back (restore-blocks)', () => {
     expect(r.image.state.undo?.at).toBe('done');
     expect(r.flashed.slice(before)).toEqual(['system', 'userdata']);
     expect(r.image.state.log.join('\n')).toContain('as after a factory reset');
+    expect(device()).toMatchObject({ installed: undefined, owner: undefined }); // the fresh userdata took the app and its owner
+  });
+
+  it('a stop after its system write: a reload opens the way back again, never the install, and writes only what is left', async () => {
+    const dev = sim.device({});
+    const store = memoryInPlaceStore();
+    const progress = tab();
+    // the stage's userdata is n 0, the install's n 1, the way back's n 2
+    const a = rig({ dev, store, progress, fail: (what, n) => what === 'flash userdata' && n === 1 });
+    await toReceive(a);
+    await toRestorePoint(a);
+    await a.image.continueInstall();
+    expect(progress.mark).toMatchObject({ at: 'received', wrote: ['system-in-place'] });
+    const b = rig({ dev, store, progress, fail: (what) => what === 'flash userdata' });
+    await b.image.startUndo();
+    b.image.undoByHand();
+    await b.image.undoFlash();
+    expect(b.flashed).toEqual(['system']);
+    expect(b.image.state.undo?.at).toBe('error');
+    expect(progress.mark).toMatchObject({ at: 'undo', wrote: ['system'] });
+    // the page reloads: the way back, on the restore point kept here, with its system write done
+    const c = rig({ dev, store, progress });
+    expect(c.image.state).toMatchObject({ screen: 'undo', changed: true });
+    await vi.waitFor(() => expect(c.image.state.undo?.source).toBe('browser'));
+    c.image.undoByHand();
+    await c.image.undoFlash();
+    expect(c.image.state.undo?.at).toBe('done');
+    expect(c.flashed).toEqual(['userdata']);
+    expect(c.image.state.log.join('\n')).toContain('already written by an earlier try');
+    expect(progress.mark).toBeUndefined();
+  });
+
+  it('Try again after a restart that failed writes nothing again', async () => {
+    const { r } = await installed();
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress, fail: (what, n) => what === 'reboot' && n === 0 });
+    await b.image.startUndo();
+    b.image.undoByHand();
+    await b.image.undoFlash();
+    expect(b.image.state.undo?.at).toBe('error');
+    expect(b.flashed).toEqual(['system', 'userdata']);
+    b.image.undoByHand();
+    await b.image.undoFlash();
+    expect(b.image.state.undo?.at).toBe('done');
+    expect(b.flashed).toEqual(['system', 'userdata']);
   });
 
   it('runs the frame\'s undo over adb only on the device the restore point was made on', async () => {
@@ -468,6 +514,77 @@ describe('a stop in the second fastboot session', () => {
   });
 });
 
+describe('the app\'s install on the device it wrote', () => {
+  it('turns away another device that trusts this browser, and stays on the step to connect the right one', async () => {
+    const r = rig();
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    expect(r.progress.mark).toMatchObject({ at: 'flashed', serial: FAKE_SERIAL });
+    const other = () => { const a = r.adb(); const run = a.run.bind(a); return Object.assign(a, { run: async (c: string) => (c === 'getprop ro.serialno' ? { out: '0000fake02\n', code: 0 } : run(c)) }); };
+    // after a reload, on the mark
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress, deps: { requestAdb: async () => other() } });
+    expect(b.image.state.screen).toBe('adb');
+    await b.image.connectAdb();
+    expect(b.image.state).toMatchObject({ screen: 'adb', connectError: expect.stringMatching(/another device/) });
+    expect((r.dev.adb() as unknown as { installed?: number }).installed).toBeUndefined();
+    await r.image.connectAdb();
+    expect(r.image.state.firstBoot).toBeTruthy();
+  });
+
+  it('a stop in the app\'s install still opens the way back, on the restore point this browser saved', async () => {
+    const r = rig({ code: { appInstall: async () => { throw new Error('pm install failed'); } } });
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    await r.image.connectAdb();
+    expect(r.image.state).toMatchObject({ screen: 'error', work: { step: 'app-install' } });
+    render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Restore the original system' })); });
+    await vi.waitFor(() => expect(r.image.state).toMatchObject({ screen: 'undo', undo: { at: 'start', source: 'browser' } }));
+  });
+});
+
+describe('a bundle this browser no longer has', () => {
+  it('with nothing of the second session written: Try again starts the install over from its first screen', async () => {
+    const dev = sim.device({});
+    const progress = tab();
+    const a = rig({ dev, progress });
+    await toReceive(a);
+    await a.image.receive();
+    // the page reloads in a browser that dropped the bundle
+    const b = rig({ dev, progress, store: memoryInPlaceStore() });
+    await b.image.connectFastboot();
+    await vi.waitFor(() => expect(b.image.state.screen).toBe('error'));
+    expect(b.image.state).toMatchObject({ bundleLost: 'restart', error: expect.stringMatching(/no longer has the bundle/) });
+    expect(b.image.tryAgainLands()).toBe('image');
+    b.image.tryAgain();
+    expect(b.image.state).toMatchObject({ screen: 'image', bundleLost: undefined });
+    expect(b.flashed).toEqual([]);
+  });
+
+  it('after a write, or a kept copy that isn\'t the one the writes came from: the way back, never staging again', async () => {
+    const dev = sim.device({});
+    const store = memoryInPlaceStore();
+    const progress = tab();
+    const a = rig({ dev, store, progress, fail: (what, n) => what === 'flash userdata' && n === 1 });
+    await toReceive(a);
+    await toRestorePoint(a);
+    await a.image.continueInstall();
+    expect(progress.mark).toMatchObject({ at: 'received', wrote: ['system-in-place'], bundle: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    progress.mark = { ...progress.mark!, bundle: '0'.repeat(64) }; // the same file's digest, another whole bundle
+    const b = rig({ dev, store, progress });
+    await b.image.connectFastboot();
+    await vi.waitFor(() => expect(b.image.state.screen).toBe('error'));
+    expect(b.image.state).toMatchObject({ bundleLost: 'restore', error: expect.stringMatching(/isn't the one this install wrote from/) });
+    expect(b.flashed).toEqual([]);
+    render(<ImageFlow image={b.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Restore the original system' })); });
+    await vi.waitFor(() => expect(b.image.state).toMatchObject({ screen: 'undo', undo: { at: 'fastboot', source: 'browser' } }));
+  });
+});
+
 describe('routes and screens', () => {
   it('each screen is on its step\'s route, and undo has its own', () => {
     const routes = installRoutes(mirrorFrame.id);
@@ -481,6 +598,8 @@ describe('routes and screens', () => {
     expect(at({ screen: 'receive', round: 1 })).toBe('receive');
     expect(at({ screen: 'restore-point', round: 2 })).toBe('install');
     expect(at({ screen: 'adb', round: 2 })).toBe('first-start');
+    // a kept session back on the choice after the app's install connected: the choice's route, not the install's
+    expect(at({ screen: 'choose', round: 2, work: { step: 'app-install', x: 1 } })).toBe('stock');
     expect(Object.keys(routesOf(mirrorFrame.id))).toEqual(expect.arrayContaining(['undo', 'undo/connect', 'undo/restore', 'undo/done']));
   });
 

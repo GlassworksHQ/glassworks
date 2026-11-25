@@ -216,7 +216,7 @@ export class InPlaceReceiver {
   /** A bundle file the person picked (downloaded from the agent's own page), checked the same way. */
   async receiveFile(file: Blob, o: { secret: Uint8Array; serial: string; signal?: AbortSignal } & ReceiveEvents): Promise<Received> {
     o.onChannel?.('file');
-    const bytes = await readBundleFromFile(file, (p) => { if (!o.signal?.aborted) o.onProgress?.(p); });
+    const bytes = await readBundleFromFile(file, (p) => { if (!o.signal?.aborted) o.onProgress?.(p); }, o.signal);
     return this.accept(bytes, 'file', o);
   }
 

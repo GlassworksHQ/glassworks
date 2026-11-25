@@ -110,7 +110,8 @@ export interface BleServerLike {
 export interface BleDeviceLike {
   readonly id?: string;
   readonly name?: string;
-  readonly gatt?: { connect(): Promise<BleServerLike> } | null;
+  /** `disconnect()` here (BluetoothRemoteGATTServer's) also aborts a `connect()` still pending. */
+  readonly gatt?: { connect(): Promise<BleServerLike>; disconnect?(): void } | null;
   addEventListener?(type: 'gattserverdisconnected', listener: () => void): void;
   removeEventListener?(type: 'gattserverdisconnected', listener: () => void): void;
 }

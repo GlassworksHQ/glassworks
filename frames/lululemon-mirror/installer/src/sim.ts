@@ -85,8 +85,11 @@ export const simInPlace: InPlaceSim = {
     let agent: FakeStockAgent | undefined;
     let installed = false;
     const tick = o.tick ?? (async () => {});
-    // after the install, adb with this browser's key; it can restart into fastboot (the way back's restart)
-    const mirror = Object.assign(new FakeMirror({ kiosk: 'none', serialno: FAKE_SERIAL }), { rebootToBootloader: async () => { installed = false; } });
+    // after the install, adb with this browser's key; it can restart into fastboot (the way back's restart). A fresh
+    // userdata written in the second session or later (the install's, or the way back's) is a device with no app data:
+    // no app, no Device Owner, nothing hidden, as after a factory reset
+    const fresh = () => Object.assign(new FakeMirror({ kiosk: 'none', serialno: FAKE_SERIAL }), { rebootToBootloader: async () => { installed = false; } });
+    let mirror = fresh();
     const lanMode = o.lan ?? 'ok';
     const fastboot = (): FastbootLike => {
       if (!fb.connected) fb.nextSession();
@@ -98,6 +101,7 @@ export const simInPlace: InPlaceSim = {
           await tick(150);
           await fb.flashBlob(partition, blob, onProgress);
           if (partition === 'userdata' && session === 1) secret = await stageSecret(blob);
+          if (partition === 'userdata' && session >= 2) mirror = fresh();
           if (session >= 2 && partition === 'system') installed = true;
         },
         async reboot() {
