@@ -98,12 +98,14 @@ class VitroEngineTest {
         fb: RecordingEngine = fallback,
         enabled: (Context) -> Boolean = { true },
         onSettings: () -> Unit = {},
+        testDashboard: (Context) -> String? = { null },
     ) = VitroEngine(
         fallback = fb,
         settings = { onSettings(); settings },
         enabled = enabled,
         tokenProvider = { _, done -> done(FakeHaServer.TOKEN) },
         socketFactory = server::connect,
+        testDashboard = testDashboard,
     ).also { engines += it }
 
     private fun openPage(engine: VitroEngine): Page =
@@ -310,6 +312,27 @@ class VitroEngineTest {
         assertEquals("clarity-ref", server.commands("lovelace/config")[1].getString("url_path"))
         assertEquals(1, server.connectUrls.size)
         assertTrue(fallback.opens.isEmpty())
+    }
+
+    @Test
+    fun clarityMeasuresOnlyTheReferenceDashboardOnTheTestHoldsOrigin() {
+        // docs/perf.md "Vitro": the native harness runs only while the test hold shows Clarity's reference dashboard.
+        var test: String? = null
+        val page = readyPage(vitro(testDashboard = { test }))
+        val view = vitroView(page)
+        assertNull("no test hold: nothing measures", view.clarity)
+        page.load("$base/clarity-ref/start")
+        assertNull("the reference dashboard alone isn't a Clarity run", view.clarity)
+        test = "$base/clarity-ref/start"
+        page.load("$base/clarity-ref/typical")
+        val harness = assertNotNull(view.clarity).let { view.clarity!! }
+        page.load("$base/clarity-ref/light")
+        assertSame("one harness for the run's views", harness, view.clarity)
+        page.load("$base/wall-test/living")
+        assertNull("another dashboard: the harness stops", view.clarity)
+        test = "http://127.0.0.1:8089/clarity-ref/start"
+        page.load("$base/clarity-ref/start")
+        assertNull("the test hold's dashboard is on another origin", view.clarity)
     }
 
     @Test

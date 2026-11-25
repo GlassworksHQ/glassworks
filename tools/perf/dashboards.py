@@ -389,12 +389,20 @@ def asset(name):
         def read(n):
             with open(os.path.join(HERE, "page", n), "rb") as f:
                 return f.read()
-        import hafrontend
-        cfg = dict(TIERS, FRONTEND=hafrontend.VERSION, HEAD_ENTITIES=head(), VIEWS=VIEWS, HEAD_CARDS=head_cards(),
-                   CARDS={v: len(view_cards(v)) for v in VIEWS})
-        body = read("stats.js") + b"\nwindow.GW_CLARITY = " + json.dumps(cfg).encode() + b";\n" + read("harness.js")
+        body = read("stats.js") + b"\nwindow.GW_CLARITY = " + json.dumps(page_config()).encode() + b";\n" + read("harness.js")
         return ("application/javascript", body)
+    if name == "config.json":
+        # The same config for Vitro's native harness (VitroClarity), which runs no page to put it in.
+        return ("application/json", json.dumps(page_config()).encode())
     return None
+
+
+def page_config():
+    """What a harness measures with: tiers.json, the frontend's release, the head's entities and cards, the views and
+    their card counts. The web harness gets it in its script (window.GW_CLARITY), Vitro's at /clarity/config.json."""
+    import hafrontend
+    return dict(TIERS, FRONTEND=hafrontend.VERSION, HEAD_ENTITIES=head(), VIEWS=VIEWS, HEAD_CARDS=head_cards(),
+                CARDS={v: len(view_cards(v)) for v in VIEWS})
 
 
 class Stream:

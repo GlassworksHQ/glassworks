@@ -55,6 +55,7 @@ tools/perf/run.sh --frame aqara-s1-plus --name "Aqara S1 Plus" --runs 3 --out pe
 | `--max-start-temp` | `50` | Wait up to 10 minutes for CPU temperature to cool below this threshold (°C) |
 | `--sf-poll` | `auto` | SurfaceFlinger sampling strategy: `auto` runs the preflight check, `0` reads once per window (S1 default), or pass seconds to poll during windows |
 | `--sf-check-only` | Off | Run preflight SurfaceFlinger (`sfcheck.json`) and network (`netcheck.json`) checks (~40 s) and exit |
+| `--engine` | The engine the app runs | `vitro` or `web`: grade that engine. The run turns **Settings → Labs → Vitro** on or off for itself and puts it back afterward (see [Vitro](#vitro)) |
 
 On its first run, Clarity caches Home Assistant's frontend (~117 MB) in `~/.cache/glassworks-perf` and verifies its SHA-256 hash (`tools/perf/hafrontend.py`). A full 3-run benchmark takes roughly 40 minutes (`--pane-ram` adds ~10 minutes). Each graded run restarts to the start view and then navigates through all four reference views (*light*, *typical without camera*, *typical with camera*, and *heavy*) inside the loaded frontend with 10 taps, 6 swipes, and 3 more-info dialogs per view, followed by an idle sample.
 
@@ -154,6 +155,10 @@ Because `fakeha.py` runs on your computer, connect your test machine over wired 
   the system at once (0.2 s on the S1). Otherwise the runner starts it with `am start -W` after 3 s.
   If the run stops early, or the last restart doesn't reach the dashboard, the exit trap restarts
   the app. While the app restarts, Home Assistant sees the panel go offline for a few seconds.
+- **Vitro, with `--engine`.** When the engine asked for isn't the one the app runs, the runner switches
+  **Settings → Labs → Vitro** with the app's own `--ez vitro true|false` (the app restarts for it), checks the
+  app's answer, and on exit switches it back the same way, after the test dashboard has ended and before the
+  hold does. If that fails, it logs the command to send yourself. See [Vitro](#vitro).
 - **On Android 6 only, five lines in the device's log** per runner step, ten in the steps that record the
   clock's drift (`ClarityClock: <nonce> <n>`):
   how the runner ties logcat's wall clock to the monotonic one (see
@@ -302,6 +307,60 @@ tablet), within its protocol, for the same reason. A bump here would send the S1
 The runner checks each request against the screen's current size, turned as it is shown (`cur=` in
 `dumpsys window displays`), which is what `input tap` takes. `wm size` gives the panel's own size, unturned: the
 Pixel Tablet's `1600x2560` while it shows 2560 × 1600, against which a tap right of x 1600 would be refused.
+
+### Vitro
+
+Vitro, the experimental native renderer (**Settings → Labs → Vitro**), draws Home Assistant's dashboards with
+Android views and runs no web page, so the harness can't run inside it. Vitro carries its own copy of the
+harness instead: `VitroClarity` (`engines/engine-vitro`, `clarity/`). It speaks the same protocol with the
+fake Home Assistant (`/clarity/next`, `/clarity/live`, `/clarity/time`, `/clarity/still`), reads the same
+page config (`/clarity/config.json`, the one the web harness gets in its script), runs the same phases and
+writes the same `GWPERF` lines, with every timing rule ported from `stats.js` (`ClarityStats`, held to the
+same test cases). `perfrun.py`, `report.py` and the grade read a Vitro run as they read a web one. The rubric,
+the bands and the letters are the same.
+
+It runs only while the app's test hold shows the reference dashboard (`/clarity-ref/…`) on the test
+dashboard's loopback address. At any other time it doesn't exist, and each hook in Vitro is a single check
+for it.
+
+**Running it.** `tools/perf/run.sh --frame aqara-s1-plus --engine vitro …`. Without `--engine`, the runner
+grades the engine the app says it runs. The app says that in its answer to the test hold (`test hold engine:
+<name>; vitro setting on|off`), and an app that doesn't say is graded as the web engine, as before. On Vitro the
+animation test page and your own dashboard's restarts are skipped: both time GeckoView's page loads, and both are
+detail, not graded.
+
+**What each task measures on Vitro.** Each task starts and ends where it does on the web engine:
+
+| Task | Web engine (the harness in HA's frontend) | Vitro (`VitroClarity`) | Same? |
+|---|---|---|---|
+| Open the view | HA's `navigate()`, to the first screen drawn: two animation frames with the head's 10 cards and every card on screen laid out, the layout still | The view tab's own switch, to the same first screen by the same rule (`usableStep`), on `Choreographer` frames | Yes |
+| Blocking after it | Each animation frame's time past 50 ms, from drawn until tasks posted back to back run within 50 ms for 500 ms | The same, with tasks posted to the main thread's looper | Yes |
+| Restart | Process start to the start view usable | The same | Yes |
+| Live updates | From the fake's send (its schedule, tied to the fake's clock) through the main thread reading the change and the card drawing it, to the first SurfaceFlinger present that can show it | The same: the store hands each change to the main thread, the card renders it, and the next frame draws it | Yes |
+| Tap | Event Timing: from the event's timestamp to the next paint after its handlers, worst of 10, rounded to 8 ms, at least 16 ms | From the touch's own timestamp to the end of the first frame drawn after its handlers (the click included), worst of 10, rounded the same way (`method: vitro-frame`) | Yes, by its definition |
+| Scroll | Six real swipes during the live updates, SurfaceFlinger and rAF | The same swipes, SurfaceFlinger and `Choreographer` frames, with the same room to flick (the view's content at least 4 screens high) | Yes |
+| More-info dialog | HA's dialog, from the tile's event to its show animation finished and the sensor's graph drawn | Vitro's own sheet, opened as a tile's tap opens it, to its enter animation finished and the sensor's graph drawn with its data | Yes; the sheet is Vitro's (its animation is 240 ms, HA's is 300 ms) |
+| Cameras | The WebRTC players' receiver counts | Not measured | No: see below |
+
+**Cameras aren't measured on Vitro.** Vitro plays a camera over MJPEG (`camera_proxy_stream`), and the reference
+views' cameras are WebRTC. They can't be measured the same way, so the camera task is missing, under the same
+rules as any missing measurement: it fails whatever needs it, and the grade is provisional when the camera could
+change the letter. The report says why (`typical, heavy: cameras not measured on Vitro …`). No new scale or bar
+is involved.
+
+**Frames on screen.** Vitro draws into the app's own window, not into a SurfaceView, so on Vitro the runner reads
+that window's layer (`perflib.window_layers`: `<package>/<activity>#0` on Android 10). The SurfaceFlinger check
+before the run still opens its page, which Vitro shows in its GeckoView fallback, so the check reads the
+SurfaceView. A layer's history length is SurfaceFlinger's own, the same for both layers on the same Android.
+
+**The clock.** Vitro's lines are timed on the device's monotonic clock (`clock: "monotonic"`, ms after
+`origin_mono_ms`). That's the same clock logcat and SurfaceFlinger use, so `perflib.page_to_mono_ms` ties them
+exactly, where a web page's lines are tied through `Date.now()` to within a few ms.
+
+**Records.** `device.json` and the report's `frame.device` carry `engine` (`web` or `vitro`), and report.md says
+"measured on Vitro". A Vitro report's summary carries `engine: "vitro"`, so a Vitro result is never shown as the
+frame's web result. A web summary has no `engine` and stays as it was. Vitro's restart reports engine ready at
+Vitro's start (`Starting Vitro` in logcat; `engine_uri` `vitro`), as detail.
 
 ## The reference dashboards
 
@@ -2179,6 +2238,11 @@ load) and `t`:
 | `hello`, `js` | Animation test page: `ua`, `dpr`, `css`, `cores`, `load`; the JS workload's `runs`, `median_ms`, `p95_ms`, `checksum`, `expected` |
 | `settle` | #410: a view whose dialogs HA still held after `DIALOG.settleMs` on it, logged before the move to the start view: `stage`, `ms`, `clean` (`false`), `closed` (dialogs found open and closed), `pending` (the entities HA hadn't shown), `open`, `history` (a dialog's history entry still current). After a restart's warm-up (`stage` `warmup`, no nonce) it is logged again if HA still held one after the move too. The runner keeps those in `refstart-<k>.json` under `warmup_settle`: a `settle` line with no nonce is always the restart's, even when it comes after the runner has opened the first view, as a held warm-up dialog's does (`perfrun.py` `handle`; `test_runner` `FAKE_SETTLE_VIA=warmup`) |
 | `done`, `error` | `message` on error. At `done` the page has stopped its updates. A view's `done` has `settle` (#410, detail, untimed): how HA got done with its dialogs (`ms`, `clean`, `closed`, `pending`, `open`, `history`; with `via: "start"`, `first` (the view's own wait) and `at` (the view HA was on at the end), when it was left for the start view); `null` on a view asked for none |
+
+Vitro's lines (`VitroClarity`, see [Vitro](#vitro)) have the same types and fields, plus `engine: "vitro"`,
+`clock: "monotonic"` and `origin_mono_ms` on `drawn` and `refdash` in place of `origin_epoch_ms` and `epoch_ms`.
+Their `frontend` and `video_caps` are `null`, and they log no `camera` line. They go to logcat with the tag
+`Glassworks.Clarity`.
 
 The restart page logs with an empty nonce (its parts are numbered `restart:<n>`): only `refdash` and
 `done`, kept in `refstart-<k>.json` under `restart_page`. A warm-up view (`--warmup-tier`, none by

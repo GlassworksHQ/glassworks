@@ -182,6 +182,12 @@ class EntityStore {
     private val listeners = ConcurrentHashMap<String, CopyOnWriteArrayList<(EntityState?) -> Unit>>()
     private val anyListeners = CopyOnWriteArrayList<(Set<String>) -> Unit>()
 
+    /**
+     * Clarity's harness (VitroClarity) while it measures: each changed entity of a `subscribe_entities` diff and the
+     * change's context id, on the reader thread, before the cards hear of it. Null otherwise.
+     */
+    @Volatile var contextTap: ((entityId: String, context: String?) -> Unit)? = null
+
     val updatesReceived = AtomicLong(0)
     val notificationsDispatched = AtomicLong(0)
 
@@ -283,6 +289,7 @@ class EntityStore {
         }
 
         ev.optJSONObject("c")?.let { diffs ->
+            val tap = contextTap
             val keys = diffs.keys()
             while (keys.hasNext()) {
                 val id = keys.next()
@@ -314,6 +321,7 @@ class EntityStore {
 
                 states[id] = EntityState(id, state, attrs, lc, lu)
                 changed += id
+                tap?.invoke(id, diff.optJSONObject("+")?.opt("c") as? String)
             }
         }
 

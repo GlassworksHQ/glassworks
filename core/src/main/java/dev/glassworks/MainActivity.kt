@@ -940,6 +940,10 @@ open class MainActivity : Activity() {
             "on" -> glassworks.screen.wake("intent")
         }
         glassworks.screen.applyTestHoldExtra(this, intent)
+        if (intent.getBooleanExtra(dev.glassworks.screen.ScreenPolicy.TEST_HOLD_EXTRA, false)) {
+            // Clarity reads which engine draws the page and the Labs setting it puts back after a Vitro run (perfrun.py).
+            Log.i(TAG, "test hold engine: ${runtime.engine.name.ifEmpty { "unknown" }}; vitro setting ${if (prefs.vitroEnabled) "on" else "off"}")
+        }
         if (intent.getBooleanExtra("remove_admin", false)) glassworks.screen.removeAdmin()
         // The kiosk settings menu: the notification, or `--ez kiosk_settings true` (also from a cold start).
         if (SettingsMenu.requested { k -> if (intent.hasExtra(k)) intent.getBooleanExtra(k, false) else null }) {

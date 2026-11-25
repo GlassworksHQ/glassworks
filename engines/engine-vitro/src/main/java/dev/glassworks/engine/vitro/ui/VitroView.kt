@@ -13,6 +13,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -76,6 +77,7 @@ import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.EntityFilterConfig
 import dev.glassworks.engine.vitro.fonts.WebFonts
+import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatChecker
 import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.model.CardRouter
@@ -247,6 +249,15 @@ class VitroView(
         private set
 
     var onMetrics: ((VitroMetrics) -> Unit)? = null
+
+    /**
+     * Clarity's native harness while a Clarity run shows its reference dashboard ([VitroClarity], started by the
+     * engine); null otherwise, and then every hook below is one null check.
+     */
+    internal var clarity: VitroClarity? = null
+
+    /** The view whose cards [buildViewTree] is building (Clarity's card registry). */
+    private var buildingIndex = -1
     var onViewSelected: ((ViewConfig) -> Unit)? = null
 
     /** A tab tap is about to switch views: the page records where it was, in the same history as its loads. */
@@ -439,6 +450,32 @@ class VitroView(
         return true
     }
 
+    /** A more-info sheet is open, or still closing. */
+    internal val moreInfoOpen: Boolean
+        get() = moreInfo != null || (0 until childCount).any { getChildAt(it) is MoreInfoSheet }
+
+    /** The loading or connecting status covers the view. */
+    internal val statusShowing: Boolean get() = statusLabel.visibility == VISIBLE
+
+    /** The view on screen's scrolling container, if it scrolls (a panel view doesn't). */
+    internal fun currentScroll(): ScrollView? = viewCache[currentViewIndex] as? ScrollView
+
+    /** Opens the view at [path] as its tab does (the page's history and location follow). False with no dashboard. */
+    internal fun openViewAsTab(path: String): Boolean {
+        val cfg = dashboard ?: return false
+        val idx = resolveViewIndex(cfg, path)
+        if (idx != currentViewIndex) onTabNavigation?.invoke()
+        renderView(idx, forceRebuild = false)
+        return true
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        val c = clarity ?: return super.dispatchTouchEvent(ev)
+        val handled = super.dispatchTouchEvent(ev)
+        c.touched(ev)
+        return handled
+    }
+
     fun closeMoreInfo(): Boolean {
         val sheet = moreInfo ?: return false
         moreInfo = null
@@ -446,7 +483,10 @@ class VitroView(
         return true
     }
 
-    fun openMoreInfo(entityId: String) {
+    fun openMoreInfo(entityId: String) = openMoreInfo(entityId, null)
+
+    /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
+    internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
         closeMoreInfo()
         val cfg = dashboard?.views?.getOrNull(currentViewIndex)
         val theme = ThemeResolver.resolve(themeCatalog, darkMode, cfg?.theme ?: userThemeName, cfg?.background)
@@ -459,6 +499,7 @@ class VitroView(
             }
         }
         sheetRef = sheet
+        sheet.trace = trace
         sheet.show(entityId)
         moreInfo = sheet
         addView(sheet, LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -671,10 +712,13 @@ class VitroView(
             val pinned = ArrayList<Pair<View, FrameLayout.LayoutParams>>()
             pendingPinned = pinned
             guessedStates.clear()
+            buildingIndex = index
+            clarity?.buildStarted(index)
             val built = try {
                 buildViewTree(viewCfg, cardCtx)
             } finally {
                 pendingPinned = null
+                buildingIndex = -1
             }
             rebuildWhenStatesLand(index, guessedStates.toSet())
             viewCache.remove(index)?.let { contentHost.removeView(it) }
@@ -1109,12 +1153,13 @@ class VitroView(
             }
         }
         val weights = IntArray(cols)
-        for (card in cards) {
+        for ((cardIndex, card) in cards.withIndex()) {
             if (pinIfFixed(card, ctx)) continue
             // Place each card into the lightest column for a balanced masonry flow.
             var best = 0
             for (i in 1 until cols) if (weights[i] < weights[best]) best = i
             val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
+            clarity?.cardBuilt(buildingIndex, cardIndex, card, v)
             columns[best].addView(v, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
                 bottomMargin = gap
             })
