@@ -127,6 +127,13 @@ The way back writes the restore point over the blocks it covers, then whatever e
 says it must write to put the device back (its `wayBack`). On the Mirror that is a fresh userdata,
 so the app, its Device Owner record and the hidden lululemon apps all go, as after a factory reset.
 
+Both directions pick up where they stopped. The install remembers which of its second-session writes
+are done, and which bundle they were built from, so a reload writes only what's left, from that same
+bundle. If the browser has lost the bundle, Kiln starts the install over while nothing of the second
+session is written yet, and offers the way back once something is. The app installs only on the
+device Kiln wrote. The way back marks its progress before its first write, so a reload or a retry
+goes on with the way back and writes only what's left, never resuming the install it is undoing.
+
 A new kind of step is a change to Kiln's code, with its own review and tests, not part of adding an
 image.
 
