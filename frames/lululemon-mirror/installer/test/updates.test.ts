@@ -1,11 +1,16 @@
 import type { PanelShell } from '@glassworks/adb';
 import { describe, expect, it } from 'vitest';
-import { firstBoot, installMirror, parseMirrorUpdates, readMirrorUpdates } from '../src';
+import { describeMirrorUpdates, firstBoot, installMirror, isDeviceOwner, parseMirrorUpdates, readMirrorUpdates } from '../src';
 import { GLASSWORKS } from '../src/app';
 import { FakeMirror, FirstBootMirror, fakeMirrorApk, packageDump } from './fakes';
 
 const PKG = GLASSWORKS.package;
 const noSleep = async () => {};
+
+/** Android 6's `dumpsys device_policy` with `pkg` as the Device Owner (stock has no such block). */
+function deviceOwnerDump(pkg: string): string {
+  return `Current Device Policy Manager state:\n  Device Owner: \n    admin=ComponentInfo{${pkg}/dev.glassworks.AdminReceiver}\n    name=\n    package=${pkg}\n  mUserData:\n`;
+}
 
 describe('silent updates on the Mirror, read back (#422)', () => {
   it('on for the image\'s privileged copy, which Android grants INSTALL_PACKAGES', () => {
@@ -55,6 +60,44 @@ describe('silent updates on the Mirror, read back (#422)', () => {
     expect(first.updates).toEqual({ state: 'normal-app', privileged: false });
     const over = await installMirror(new FakeMirror({ installed: 500, privileged: true }), { apk: fakeMirrorApk(), sleep: noSleep });
     expect(over.updates).toEqual({ state: 'on', privileged: true });
+  });
+
+  it('recognizes a Device Owner as silent (the Stock-in-place path), even a normal /data app without INSTALL_PACKAGES', () => {
+    // a plain app in /data (no priv-app, no INSTALL_PACKAGES) that is the Device Owner: updates are silent
+    expect(parseMirrorUpdates(packageDump(PKG, 600), PKG, deviceOwnerDump(PKG)))
+      .toEqual({ state: 'on', privileged: false, deviceOwner: true });
+    // privileged AND Device Owner: still on, deviceOwner noted
+    expect(parseMirrorUpdates(packageDump(PKG, 600, { privileged: true, granted: false }), PKG, deviceOwnerDump(PKG)))
+      .toEqual({ state: 'on', privileged: true, deviceOwner: true });
+    // a Device Owner block naming a different package does not count
+    expect(parseMirrorUpdates(packageDump(PKG, 600), PKG, deviceOwnerDump('com.other.app')))
+      .toEqual({ state: 'normal-app', privileged: false });
+  });
+
+  it('isDeviceOwner reads the Device Owner block from dumpsys device_policy', () => {
+    expect(isDeviceOwner(deviceOwnerDump(PKG), PKG)).toBe(true);
+    expect(isDeviceOwner(deviceOwnerDump('com.other.app'), PKG)).toBe(false);
+    expect(isDeviceOwner('Current Device Policy Manager state:\n  Enabled Device Admins (User 0):\n', PKG)).toBe(false);
+    expect(isDeviceOwner('', PKG)).toBe(false);
+  });
+
+  it('describeMirrorUpdates names the Device Owner path', () => {
+    const u = parseMirrorUpdates(packageDump(PKG, 600), PKG, deviceOwnerDump(PKG));
+    expect(describeMirrorUpdates(u)).toBe('silent updates: on (Device Owner, Device Owner)');
+  });
+
+  it('readMirrorUpdates reads dumpsys device_policy and reports a Device Owner as on', async () => {
+    const shell = (pkgDump: string, policy: string): PanelShell => ({
+      push: async () => {},
+      run: async (cmd) => (cmd.startsWith('dumpsys device_policy')
+        ? { out: policy, code: 0 }
+        : { out: pkgDump, code: 0 }),
+    });
+    expect(await readMirrorUpdates(shell(packageDump(PKG, 600), deviceOwnerDump(PKG))))
+      .toEqual({ state: 'on', privileged: false, deviceOwner: true });
+    // device_policy read failing is best-effort: fall back to the package dump's answer
+    const noPolicy: PanelShell = { push: async () => {}, run: async (cmd) => (cmd.startsWith('dumpsys device_policy') ? { out: '', code: 1 } : { out: packageDump(PKG, 600), code: 0 }) };
+    expect(await readMirrorUpdates(noPolicy)).toEqual({ state: 'normal-app', privileged: false });
   });
 
   it('the first boot after the fastboot install reads it back, and logs what it read', async () => {
