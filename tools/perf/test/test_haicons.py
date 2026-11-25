@@ -104,6 +104,25 @@ class Resources(unittest.TestCase):
         self.assertEqual(D.icons("services", "hue"), {})
         self.assertEqual(D.icons("entity_component", "frontend"), {})
 
+    def test_concurrent_first_loads_each_see_every_component(self):
+        """The fake answers each connection on its own thread: a request during the first load gets
+        all of it or waits for none of it, never a part."""
+        import threading
+        from unittest import mock
+        whole = {c for c, e in json.load(open(haicons.DATA, encoding="utf-8"))["components"].items() if e}
+        seen, real = [], haicons._service_icon
+
+        def slow(value):
+            threading.Event().wait(0.01)        # widen the window, between components, a partial cache shows in
+            return real(value)
+        with mock.patch.object(haicons, "_loaded", None), mock.patch.object(haicons, "_service_icon", slow):
+            threads = [threading.Thread(target=lambda: seen.append(set(haicons.load()))) for _ in range(8)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+        self.assertEqual(seen, [whole] * 8)
+
     def test_the_other_categories(self):
         # No loaded integration has platform entity icons (`entity`), as on a HA with only these.
         self.assertEqual(D.icons("entity"), {})

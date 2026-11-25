@@ -80,22 +80,27 @@ def _service_icon(value):
     return {"service": value} if isinstance(value, str) else value
 
 
-_loaded = {}
+_loaded = None
 
 
 def load():
     """{component: its icons.json as HA reads it}, with HA's shorthand service icons expanded
-    (helpers/icon.py _load_icons_file). Components without a file aren't in it."""
-    if not _loaded:
+    (helpers/icon.py _load_icons_file). Components without a file aren't in it. Built whole, then
+    kept in one assignment: the fake answers each connection on its own thread, and a request that
+    came in meanwhile must never see some components and not others."""
+    global _loaded
+    if _loaded is None:
         with open(DATA, encoding="utf-8") as f:
             data = json.load(f)
+        built = {}
         for c, entry in data["components"].items():
             if entry is None:
                 continue
             icons = dict(entry["icons"])
             if "services" in icons:
                 icons["services"] = {s: _service_icon(v) for s, v in icons["services"].items()}
-            _loaded[c] = icons
+            built[c] = icons
+        _loaded = built
     return _loaded
 
 
