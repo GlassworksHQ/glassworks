@@ -47,6 +47,7 @@ NATIVE_CORE_TYPES = {
     "humidifier",
     "calendar",
     "logbook",
+    "entity-button",
 }
 
 NATIVE_HACS_TYPES = {
@@ -76,6 +77,10 @@ NATIVE_HACS_TYPES = {
     "custom:stack-in-card",
     "custom:vertical-stack-in-card",
     "custom:layout-card",
+    "custom:button-card",
+    "custom:mushroom-empty-card",
+    "custom:swipe-card",
+    "custom:weather-card",
 }
 
 SUPPORTED_TILE_FEATURES = {
@@ -138,7 +143,164 @@ CONTAINER_TYPES = {
     "custom:stack-in-card",
     "custom:vertical-stack-in-card",
     "custom:layout-card",
+    "custom:swipe-card",
 }
+
+
+# checker (site/src/lib/vitroButtonCard.ts) also check its styles; this script only reports those as a warning.
+BUTTON_CARD_JS = re.compile(r"^\[\[\[(?!\[).*(?<!\])\]\]\]$", re.S)
+
+
+def _merge(prev, obj):
+    """button-card's mergeDeep: lists concatenate, maps merge, anything else replaces."""
+    out = dict(prev)
+    for k, o in obj.items():
+        p = out.get(k)
+        if isinstance(p, list) and isinstance(o, list):
+            out[k] = p + [y for x in o for y in (x if isinstance(x, list) else [x])]
+        elif isinstance(p, dict) and isinstance(o, dict):
+            out[k] = _merge(p, o)
+        else:
+            out[k] = o
+    return out
+
+
+def _merge_states(into, frm):
+    """button-card's mergeStatesById: entries with the same truthy id merge, the others follow."""
+    out = []
+    for s in into or []:
+        local = s
+        for f in frm or []:
+            if isinstance(f, dict) and isinstance(s, dict) and f.get("id") and s.get("id") and f["id"] == s["id"] and isinstance(local, dict):
+                local = _merge(local, f)
+        out.append(local)
+    for f in frm or []:
+        fid = f.get("id") if isinstance(f, dict) else None
+        if not into or not fid or not any(isinstance(s, dict) and s.get("id") and s["id"] == fid for s in into):
+            out.append(f)
+    return out
+
+
+def expand_button_card(card: dict, templates: dict, depth: int = 0):
+    """The card with its `template:` merged in from button_card_templates, or None when one is missing or they loop."""
+    tpl = card.get("template")
+    if not tpl:
+        return card
+    if depth > 32:
+        return None
+    result, states = {}, None
+    for name in tpl if isinstance(tpl, list) else [tpl]:
+        t = templates.get(name) if isinstance(name, str) else None
+        res = expand_button_card(t, templates, depth + 1) if isinstance(t, dict) else None
+        if res is None:
+            return None
+        result = _merge(result, res)
+        if isinstance(res.get("state"), list):
+            states = _merge_states(states, res["state"])
+    result = _merge(result, {k: v for k, v in card.items() if k != "template"})
+    # `state` entries merge by id, not by concatenation (non-list states are left for the caller to report).
+    if states is not None or isinstance(card.get("state"), list):
+        result["state"] = _merge_states(states, card.get("state") if isinstance(card.get("state"), list) else None)
+    return result
+
+
+def button_card_reason(card: dict, templates: dict) -> str | None:
+    cfg = expand_button_card(card, templates)
+    if cfg is None:
+        return "a template that isn't in button_card_templates"
+
+    def js(v, top=True):
+        if isinstance(v, str):
+            return bool(BUTTON_CARD_JS.match(v.strip()))
+        if isinstance(v, dict):
+            return any(js(x, False) for k, x in v.items() if not (top and k == "variables"))
+        if isinstance(v, list):
+            return any(js(x, False) for x in v)
+        return False
+
+    if js(cfg):
+        return "JavaScript templates ([[[ ]]])"
+    # Options and actions the engine's ButtonCardCompat doesn't run natively (VitroSupport's button-card lists).
+    for key in BUTTON_CARD_UNSUPPORTED_OPTIONS:
+        if key not in cfg:
+            continue
+        v = cfg[key]
+        on = (isinstance(v, dict) and v.get("action") not in (None, "", "none")) or (isinstance(v, str) and v != "") \
+            if key.endswith("_action") else bool(v)
+        if on:
+            return f"{key}:"
+    for key in ("tap_action", "hold_action", "double_tap_action"):
+        a = cfg.get(key)
+        if not isinstance(a, dict) or a.get("action") in (None, "", "none"):
+            continue
+        if not isinstance(a.get("action"), str) or a["action"] not in BUTTON_CARD_ACTIONS:
+            return f"a {key} type it doesn't run natively"
+        if any(a.get(f) for f in ("repeat", "repeat_limit", "sound", "protect")):
+            return f"a {key} it doesn't run natively"
+        if isinstance(a.get("confirmation"), dict) and "exemptions" in a["confirmation"]:
+            return f"{key} confirmation exemptions"
+    if isinstance(cfg.get("confirmation"), dict) and "exemptions" in cfg["confirmation"]:
+        return "confirmation exemptions"
+    layout = cfg.get("layout")
+    if layout is not None and (not isinstance(layout, str) or layout not in BUTTON_CARD_LAYOUTS):
+        return "a layout it doesn't draw natively"
+    # button-card evaluates a `force_eval` variable on every render, JavaScript or not (the engine sends it to an island).
+    variables = cfg.get("variables") if isinstance(cfg.get("variables"), dict) else {}
+    if any(isinstance(v, dict) and v.get("force_eval") is True for v in variables.values()):
+        return "variables with force_eval"
+    fields = cfg.get("custom_fields") if isinstance(cfg.get("custom_fields"), dict) else {}
+    if any(isinstance(v, dict) and "card" in v for v in fields.values()):
+        return "a card in custom_fields"
+    if cfg.get("state") is not None and not isinstance(cfg.get("state"), list):
+        return "a state: that isn't a list"
+    texts = [cfg] + [st for st in (cfg.get("state") or []) if isinstance(st, dict)]
+    if any(isinstance(t.get(k), str) and re.search(r"<[a-zA-Z/!]", t[k]) for t in texts for k in ("name", "label", "state_display")):
+        return "HTML in its texts"
+    return None
+
+
+TEMPLATES: dict = {}
+
+# VitroSupport.BUTTON_CARD_UNSUPPORTED_OPTIONS, BUTTON_CARD_ACTIONS and BUTTON_CARD_LAYOUTS (buttonCard in
+# site/public/vitro-compat.json).
+BUTTON_CARD_UNSUPPORTED_OPTIONS = {
+    "show_live_stream", "spinner", "protect", "extra_styles", "press_action", "release_action", "icon_tap_action",
+    "icon_hold_action", "icon_double_tap_action", "icon_press_action", "icon_release_action",
+}
+BUTTON_CARD_ACTIONS = {"none", "toggle", "more-info", "navigate", "url", "call-service", "perform-action"}
+BUTTON_CARD_LAYOUTS = {
+    "vertical", "icon_name_state", "name_state", "icon_name", "icon_state", "icon_name_state2nd",
+    "icon_state_name2nd", "icon_label",
+}
+
+# Swiper parameters Vitro's native swipe-card reads (VitroSupport.SWIPE_CARD_PARAMETERS, swipeCardParameters in
+# site/public/vitro-compat.json).
+SWIPE_CARD_PARAMETERS = {
+    "pagination", "loop", "slidesPerView", "spaceBetween", "centeredSlides", "initialSlide", "autoplay",
+    "speed", "grabCursor", "keyboard", "mousewheel", "simulateTouch", "observer", "observeParents", "roundLengths",
+}
+
+
+def swipe_card_reason(card: dict) -> str | None:
+    """What the engine's CardCompat doesn't run natively on a swipe-card: unknown parameters and the values it reads."""
+    params = card.get("parameters") if isinstance(card.get("parameters"), dict) else {}
+    for k in params:
+        if k not in SWIPE_CARD_PARAMETERS:
+            return f"parameter {k}"
+    if "pagination" in params:
+        p = params["pagination"]
+        ptype = (p.get("type") or "bullets") if isinstance(p, dict) else "bullets"
+        if ptype not in ("bullets", "fraction"):
+            return f"pagination type {ptype}"
+        if isinstance(p, dict) and p.get("dynamicBullets") is True:
+            return "dynamicBullets"
+    if "slidesPerView" in params:
+        v = params["slidesPerView"]
+        if v != "auto" and not (isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0):
+            return f"slidesPerView {v}"
+    if "card_width" in card:
+        return "card_width"
+    return None
 
 
 def load_dashboard(path: str):
@@ -243,6 +405,16 @@ def card_type_of(card: dict) -> str:
 def option_reasons(card: dict, ctype: str) -> list[str]:
     """Options Vitro doesn't draw (CardCompat.checkOptions)."""
     out = []
+    if ctype == "custom:button-card":
+        reason = button_card_reason(card, TEMPLATES)
+        if reason:
+            out.append(f"button-card with {reason}")
+    if ctype == "custom:swipe-card":
+        reason = swipe_card_reason(card)
+        if reason:
+            out.append(f"swipe-card with {reason}")
+    if ctype == "custom:weather-card" and not (isinstance(card.get("entity"), str) and card["entity"]):
+        out.append("weather-card without an entity")
     objs = lambda v: [x for x in v if isinstance(x, dict)] if isinstance(v, list) else []
     rule = CONFIG_DEPENDENT_TYPES.get(ctype)
     if rule:
@@ -374,6 +546,10 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
             if i < explicit:
                 walk_card(child, f"{loc}.entities[{i}]", counts, triggers, warnings)
         return
+    if ctype == "custom:button-card":
+        expanded = expand_button_card(card, TEMPLATES) or card
+        if expanded.get("styles") or expanded.get("state"):
+            warnings.append(f"  WARN  {loc}: button-card styles are drawn natively only in Vitro's subset (see the site checker)")
     if not (ctype in CONTAINER_TYPES and children):
         counts["tier1" if ctype in NATIVE_CORE_TYPES else "tier2"] += 1
     # Under `card_param: cards`, the inner card's first cards are the explicit `entities:` entries (none without a list).
@@ -404,6 +580,8 @@ def view_roots(view: dict, vname: str) -> list[tuple[str, dict]]:
 
 
 def audit(data: dict) -> int:
+    global TEMPLATES
+    TEMPLATES = data.get("button_card_templates") if isinstance(data, dict) and isinstance(data.get("button_card_templates"), dict) else {}
     views = data.get("views") if isinstance(data, dict) else None
     if not isinstance(views, list):
         sys.stderr.write("error: expected a Lovelace dashboard with a top-level 'views' list\n")

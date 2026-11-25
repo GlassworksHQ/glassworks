@@ -23,6 +23,10 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.AlarmPanelCardView
+import dev.glassworks.engine.vitro.cards.CustomButtonCardView
+import dev.glassworks.engine.vitro.cards.HaErrorCardView
+import dev.glassworks.engine.vitro.cards.LegacyWeatherCardView
+import dev.glassworks.engine.vitro.cards.SwipeCardView
 import dev.glassworks.engine.vitro.cards.AreaCardView
 import dev.glassworks.engine.vitro.cards.AutoEntitiesCardView
 import dev.glassworks.engine.vitro.cards.CardBuilder
@@ -1590,6 +1594,8 @@ class VitroView(
             "entity-filter" -> EntitiesCardView(ctx, EntityFilterConfig.innerCard(card))
             "glance" -> GlanceCardView(ctx, card)
             "button" -> ButtonCardView(ctx, card)
+            // HA's legacy alias: `hui-entity-button-card` is the button card, and without an entity HA shows its error.
+            "entity-button" -> if (card.entity != null) ButtonCardView(ctx, card) else HaErrorCardView(ctx, "Entity must be specified")
             "heading" -> HeadingCardView(ctx, card)
             "clock" -> ClockCardView(ctx, card)
             "sensor" -> EntityCardView(ctx, card)
@@ -1638,6 +1644,11 @@ class VitroView(
             "custom:stack-in-card" -> StackInCardView(ctx, card, childBuilder)
             "custom:vertical-stack-in-card" -> VerticalStackInCardView(ctx, card, childBuilder)
             "custom:layout-card" -> LayoutCardView(ctx, card, childBuilder)
+            "custom:button-card" -> CustomButtonCardView(ctx, card)
+            // Mushroom's empty card draws nothing outside the editor; it only holds its grid slot.
+            "custom:mushroom-empty-card" -> View(context)
+            "custom:swipe-card" -> SwipeCardView(ctx, card, childBuilder)
+            "custom:weather-card" -> LegacyWeatherCardView(ctx, card)
             // Tier 3: Arbitrary unrecognized custom cards -> stripped Micro-Web Island
             else -> WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(card, fillViewport))
         }
@@ -1646,6 +1657,8 @@ class VitroView(
         // child's island, which never receives the conditional's own card_mod.
         val islandStyles = built is WebIslandCardView && built.config === card && IslandScripts.of(ctx.resources).cardMod
         if (!islandStyles) (built as? CardSurface)?.applyCardMod(card)
+        // swipe-card has no card of its own (no background to restyle): its `:host` opacity still applies to the pager.
+        if (built is SwipeCardView) stackMod.opacity?.let { built.restingAlpha = it.coerceIn(0f, 1f); built.alpha = built.restingAlpha }
         // `margin` on the card insets it inside its slot, as an outer margin does in the browser.
         // Not around an island that applies card-mod: its `margin` is drawn there, and twice would double the inset.
         val margin = stackMod.marginInsets?.takeUnless { islandStyles } ?: return built
@@ -1754,7 +1767,10 @@ class VitroView(
     }
 
     /** A shown card's opacity: its `card_mod` `opacity` when it sets one, else fully opaque. */
-    private fun restingAlpha(view: View): Float = (view as? CardSurface)?.activeCardMod?.opacity?.coerceIn(0f, 1f) ?: 1f
+    private fun restingAlpha(view: View): Float = when (view) {
+        is SwipeCardView -> view.restingAlpha
+        else -> (view as? CardSurface)?.activeCardMod?.opacity?.coerceIn(0f, 1f) ?: 1f
+    }
 
     // ---- Periodic visibility re-checks (`time` and `user` conditions) ----
 

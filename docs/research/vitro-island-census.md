@@ -5,7 +5,8 @@ evidence: verified
 
 # Vitro: which dashboard cards still need a web island?
 
-**Status (2026-11-24): measured, recommendation below.** After the native fast paths on `exp/vitro`, about a
+**Status (2026-11-24): measured, recommendation below; the first fast paths are in (see "After the first fast paths"
+below): island cards in the sample went from 22.9% to 14.9%.** After the native fast paths on `exp/vitro`, about a
 quarter of the cards in typical community dashboards still go to a web island, and one card type, `custom:button-card`, is
 nearly half of those. The rest is a long tail. Our own dashboards, once written as native cards, use no card type that
 is routed to an island. This counts card types only: a native-routed card can still fall back for an option Vitro
@@ -232,8 +233,16 @@ Because an `http://` `HA_URL` means `ws://`, which is unencrypted, anyone observ
 token: use it only on a trusted local network, or connect over `https://` (`wss://`) if Home Assistant serves HTTPS.
 The helper prints a warning when the WebSocket URL it builds isn't `wss://`.
 
-`census.py` reads the native set out of `ui/VitroView.kt`, so it follows the code: rerun it after a new fast path to
-see the island share drop. `sample.py search` and `draw` make a fresh sample (code search results change over time).
+`census.py` reads the native set out of `compat/VitroSupport.kt`, so it follows the code: rerun it after a new fast
+path to see the island share drop. For the card types whose route depends on the config (`custom:button-card`,
+`custom:swipe-card`, `custom:weather-card`), it asks the engine card by card:
+
+```
+python3 tools/vitro-census/census.py --per-dir --min-cards 5 --dump-cards cards.jsonl "$OUT"/comm/*/*.yaml
+VITRO_CENSUS_CARDS=$PWD/cards.jsonl VITRO_CENSUS_OUT=$PWD/verdicts.jsonl \
+  ./gradlew --max-workers=2 :engine-vitro:testDebugUnitTest --tests '*CensusLocal*'      # CardCompat's verdicts
+python3 tools/vitro-census/census.py --per-dir --min-cards 5 --verdicts verdicts.jsonl "$OUT"/comm/*/*.yaml
+``` `sample.py search` and `draw` make a fresh sample (code search results change over time).
 
 ## Open questions
 
@@ -245,5 +254,70 @@ see the island share drop. `sample.py search` and `draw` make a fresh sample (co
   CSS, JS templates in Markdown). The census counts routing, not fidelity, so the real island share is higher.
 - **Custom entity rows** inside `entities` cards (`multiple-entity-row`, `slider-entity-row`, `fold-entity-row`) are
   not counted here, and may be a larger gap than any card on this list (untested).
-- **`button-card` subset.** Which options the 18 dashboards use (`styles`, `state:` rules, `[[[ ]]]` templates) decides how
-  much of it a native path can cover. Count them from the same files before writing it (untested).
+- **`button-card` subset.** Answered below: 7% of the sample's button-cards use JavaScript; most of what keeps the rest
+  in an island is background images and templates the sample doesn't have.
+- **Background images on button-card** (`styles.card: background: url(…)`, 35 cards in one dashboard) are the largest
+  native gap left in it. Vitro's card surface draws colors and gradients, not images (untested).
+
+## After the first fast paths
+
+**2026-11-24, verified.** The recommendation's first step: `entity-button`, the `custom:button-card` subset without
+JavaScript, `custom:mushroom-empty-card`, `custom:weather-card` (bramkragten's) and `custom:swipe-card`.
+
+### How we got here
+
+The census counted card types, but button-card's type says little: it is a template engine, and a config with
+JavaScript (`[[[ … ]]]`) can't be drawn without running it. So the first question was what the 18 dashboards' button-cards
+actually hold. A scratch walk over the sample (merging each repository's `button_card_templates` the way button-card
+merges them) found far less JavaScript than expected: most configs are `styles` lists, `state:` rules and `color_type`.
+That made a native subset worth it, with the JavaScript sent to an island on purpose.
+
+The other question was geometry. button-card lays itself out with a CSS grid per `layout` (its `src/styles.ts`), with
+`fr` rows that size to their content, a 4% padding and a `1.2rem` font, and HA's own measurements beat reading CSS. A
+scratch fake Home Assistant (`tools/vitro/showcase_ha.py`'s made-up home, plus an in-memory dashboard store) served HA's
+pinned frontend with the release bundles, pinned by version and SHA-256 (button-card v7.0.1 `5d6e9c6a…`, swipe-card
+v5.0.0 `c13f4620…`, weather-card v1.5.0 `2405a3c5…`, Mushroom v5.3.0 `d2faf441…`), and a Playwright script read every
+element's box in the card's shadow root. What it showed (verified, 2026-11-24, Chromium, 200 and 300 CSS px wide):
+
+- HA's root font is 14 px, so `1.2rem` is 16.8 px, and a line is 20 px.
+- The icon is `size` (40%) of its cell's width and square while the row sizes to its content; with a fixed card height it
+  takes the cell's height, and its glyph is the smaller side.
+- Rows of `1fr` with an open height all grow to the largest share any item needs, a spanning icon included
+  (`icon_state_name2nd` without a label: two rows of 23.83 px for a 47.67 px icon).
+- A value lit's `styleMap` can't parse (`padding: 0;`, `1px solid …; /*GRAY*/`) is dropped by the browser: the sample has
+  dozens, and Vitro drops them too.
+- button-card's `:host` sets `--state-inactive-color` to `--state-icon-color`: an off light is steel blue, not grey; a
+  sensor (a domain HA doesn't color) is the text color.
+- swipe-card's pages keep their own heights (not stretched), the pager is as tall as the tallest, and the bullets float
+  10 px over its bottom.
+
+The geometry is checked against those numbers in `ButtonCardViewTest`.
+
+### Result
+
+The pinned sample has lost one repository since the census (`Shah-Home/automation` is gone: 404), so both counts below
+are on the 59 dashboards and 3,772 cards that remain. "Before" is `exp/vitro` before this change, by card type; "after"
+takes the engine's verdict for each card of a config-dependent type (`census.py --verdicts`).
+
+| | Before | After |
+|---|---|---|
+| Island cards | 865 (22.9%) | 563 (14.9%) |
+| `custom:button-card` (372 cards) | 372 island | 230 native, 142 island |
+| `entity-button` | 45 island | 45 native |
+| `custom:weather-card` | 14 island | 14 native |
+| `custom:mushroom-empty-card` | 7 island | 7 native |
+| `custom:swipe-card` | 6 island | 6 native |
+
+So 302 of the 865 island cards now go native. Why the other 142 button-cards still go to an island:
+
+| Cards | Why |
+|---|---|
+| 76 | A `template:` the sample doesn't have (the repositories `!include` their `button_card_templates` from files the code search didn't match). In their real dashboards they merge, so these are unknown, not island |
+| 35 | `styles.card: background: url(…)`, card background images (one dashboard) |
+| 26 | JavaScript templates |
+| 3 | `font-familly`, a typo: the browser drops it, Vitro can't tell a typo from a property it doesn't draw |
+| 1 | `styles.icon: size`, not a CSS property (the same) |
+| 1 | A card in `custom_fields` |
+
+Counting the 76 unknowns out, 230 of 296 button-cards (78%) are drawn natively, and JavaScript is 9% of them.
+
