@@ -35,6 +35,8 @@ class LicencesTest {
             "OFL-1.1" to "OFL-1.1",
             // desugar_jdk_libs, in the generic app's legacy APK (#198).
             "GPL-2.0-only WITH Classpath-exception-2.0" to "GPL-2.0", "Classpath-exception-2.0" to "Classpath-exception-2.0",
+            // libwebrtc's bundled libc++ and its smaller notices (libs/ha-webrtc, in the generic app).
+            "Apache-2.0 WITH LLVM-exception" to "LLVM-exception", "LicenseRef-libwebrtc-notices" to "LicenseRef-libwebrtc-notices",
         )
         for ((id, file) in needed) {
             assertTrue("notices should name $id", id in notices)

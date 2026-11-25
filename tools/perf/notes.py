@@ -84,7 +84,11 @@ def _camera_options(r):
     """One run's camera numbers that fail the fluid bar, as (how far past it, phrase), with
     grade.camera_level's own tests: a stall at exactly its bar fails (>=), the others past it."""
     if r.get("first_frame_ms") is None:
-        # No frame at all ranks above any measured miss; 10x is past every bar's worst real ratio.
+        # No frame at all ranks above any measured miss; 10x is past every bar's worst real ratio. On Vitro, a camera
+        # that played another kind instead (camera_run `fell_back`: MJPEG) says so.
+        words = {"web_rtc": "WebRTC", "hls": "HLS", "mjpeg": "MJPEG"}
+        if r.get("fell_back"):
+            return [(10.0, f"has a camera that fell back to {' and '.join(words.get(k, k) for k in r['fell_back'])}")]
         return [(10.0, "has a camera stream that shows no frame")]
     out = []
     if r["first_frame_ms"] > CAM_FIRST_MS:
