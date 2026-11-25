@@ -118,10 +118,10 @@ class HaFrontendTest {
         val release = java.util.concurrent.CountDownLatch(1)
         val done = java.util.concurrent.CountDownLatch(1)
         HaFrontend.fetch = { url -> release.await(); asked += url; served[url]?.toByteArray() }
-        HaFrontend.claim(retired)
+        HaFrontend.claim(retired, origin)
         HaFrontend.ensure(retired, origin, "de") { done.countDown() }
         // A new client takes over while the old one's download is still on its way.
-        HaFrontend.claim(current)
+        HaFrontend.claim(current, origin)
         release.countDown()
         HaFrontend.ensure(current, origin, "xx") {}
         assertFalse("the retired client's strings are never installed", done.await(2, java.util.concurrent.TimeUnit.SECONDS))
@@ -132,6 +132,87 @@ class HaFrontendTest {
         HaFrontend.ensure(stranger, origin, "de") { done.countDown() }
         Thread.sleep(200)
         assertTrue(asked.none { it.endsWith("de-d1.json") })
+    }
+
+    private fun await(latch: java.util.concurrent.CountDownLatch) =
+        assertTrue("in time", latch.await(5, java.util.concurrent.TimeUnit.SECONDS))
+
+    @Test
+    fun aLanguageTheUserHasLeftIsNotInstalled() {
+        val client = Any()
+        HaFrontend.claim(client, origin)
+        val german = java.util.concurrent.CountDownLatch(1)
+        val gate = java.util.concurrent.CountDownLatch(1)
+        HaFrontend.fetch = { url -> if (url.endsWith("de-d1.json")) gate.await(); served[url]?.toByteArray() }
+        HaFrontend.ensure(client, origin, "de") { german.countDown() }
+        // French is picked while German is still coming (this frontend has no French: English serves it).
+        val french = java.util.concurrent.CountDownLatch(1)
+        HaFrontend.ensure(client, origin, "fr") { french.countDown() }
+        gate.countDown()
+        assertFalse(german.await(1, java.util.concurrent.TimeUnit.SECONDS))
+        assertFalse(HaText.ui("state.default.unavailable") == "Nicht verfügbar")
+    }
+
+    @Test
+    fun aReconnectReadsHasIndexAgainAndFindsAnUpgradedFrontend() {
+        val client = Any()
+        HaFrontend.claim(client, origin)
+        val first = java.util.concurrent.CountDownLatch(1)
+        HaFrontend.ensure(client, origin, "de") { first.countDown() }
+        await(first)
+        assertEquals("Nicht verfügbar", HaText.ui("state.default.unavailable"))
+        // HA is upgraded: a new app bundle and a new German file.
+        served["$origin/"] = """<script type="module" src="/frontend_latest/app.def456.js"></script>"""
+        served["$origin/frontend_latest/app.def456.js"] = """JSON.parse('{"fragments":[],"translations":{"en":{"nativeName":"English","hash":"e2"},"de":{"nativeName":"Deutsch","hash":"d2"}}}')"""
+        served["$origin/static/translations/de-d2.json"] = """{"state":{"default":{"unavailable":"Nicht erreichbar"}}}"""
+        served["$origin/static/translations/lovelace/de-d2.json"] = "{}"
+        // The same request again changes nothing; a reconnect's revalidation does.
+        HaFrontend.ensure(client, origin, "de") {}
+        val second = java.util.concurrent.CountDownLatch(1)
+        HaFrontend.ensure(client, origin, "de", revalidate = true) { second.countDown() }
+        await(second)
+        assertEquals("Nicht erreichbar", HaText.ui("state.default.unavailable"))
+    }
+
+    @Test
+    fun anotherHasStringsAreDroppedWhenANewClientClaims() {
+        val first = Any()
+        HaFrontend.claim(first, origin)
+        val done = java.util.concurrent.CountDownLatch(1)
+        HaFrontend.ensure(first, origin, "de") { done.countDown() }
+        await(done)
+        assertEquals("de", HaText.language)
+        // The same HA again keeps them until its own arrive; another HA starts from the built-in words.
+        HaFrontend.claim(Any(), origin)
+        assertEquals("de", HaText.language)
+        HaFrontend.claim(Any(), "http://192.0.2.20:8123")
+        assertEquals(null, HaText.language)
+    }
+
+    @Test
+    fun aClaimCantComeBetweenAnInstallsCheckAndItsStrings() {
+        val old = Any()
+        HaFrontend.claim(old, origin)
+        val inside = java.util.concurrent.CountDownLatch(1)
+        val claimed = java.util.concurrent.atomic.AtomicBoolean(false)
+        var claimer: Thread? = null
+        HaFrontend.beforeInstall = {
+            // A new client claims while the old one's install is between its check and its strings.
+            claimer = Thread { HaFrontend.claim(Any(), origin); claimed.set(true) }.apply { start() }
+            Thread.sleep(200)
+            assertFalse("the claim waits for the install", claimed.get())
+            inside.countDown()
+        }
+        try {
+            val done = java.util.concurrent.CountDownLatch(1)
+            HaFrontend.ensure(old, origin, "de") { done.countDown() }
+            await(done)
+            await(inside)
+            claimer!!.join(5_000)
+            assertTrue(claimed.get())
+        } finally {
+            HaFrontend.beforeInstall = null
+        }
     }
 
     @Test

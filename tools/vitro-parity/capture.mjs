@@ -774,6 +774,7 @@ srv.serve_forever()`;
   const homeFile = join(corpusRoot, 'home.json');
   if (!existsSync(homeFile)) fail(`no ${homeFile}: the fake HA's shared inputs (now, config, themes, user)`);
   const home = JSON.parse(readFileSync(homeFile, 'utf8'));
+  fakeHomeProfile = home.user_data?.language ?? null;
   const res = await fakePost('/vitro-parity/home', { ...home, fixtures_dir: join(corpusRoot, 'fixtures'), dashboard: harnessConfig(cases) });
   log(`fake HA on 127.0.0.1, frontend pinned (tools/perf/hafrontend.py), now ${new Date(res.now * 1000).toISOString()}`);
   return Math.round(res.now * 1000);
@@ -787,12 +788,15 @@ async function fakePost(path, body) {
 
 /**
  * The `language` user data HA's page draws a case with (language, number_format, time_format, …), or null for a
- * user with no profile: the case fixture's `user_data.language` on the fake, the signed-in account's own on a real HA
- * (read once, `realProfile`).
+ * user with no profile. On the fake, as fakehome.user_data answers it: the case fixture's `user_data.language` when
+ * the case sets that key (null included), else home.json's. On a real HA, the signed-in account's own (read once).
  */
 let realProfile = null;
+let fakeHomeProfile = null;
 function profileLocale(c) {
-  const v = fakeMode ? c.fixture?.user_data?.language : realProfile;
+  const own = c.fixture?.user_data;
+  const v = !fakeMode ? realProfile
+    : (own && typeof own === 'object' && Object.prototype.hasOwnProperty.call(own, 'language') ? own.language : fakeHomeProfile);
   return v && typeof v === 'object' ? v : null;
 }
 

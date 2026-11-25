@@ -186,7 +186,7 @@ object HaLocale {
         return if (locale.country.isEmpty()) language else "$language-${locale.country}"
     }
 
-    private val CHINESE = mapOf(
+    internal val CHINESE = mapOf(
         "zh-cn" to "zh-Hans", "zh-sg" to "zh-Hans", "zh-my" to "zh-Hans",
         "zh-tw" to "zh-Hant", "zh-hk" to "zh-Hant", "zh-mo" to "zh-Hant", "zh" to "zh-Hant",
     )

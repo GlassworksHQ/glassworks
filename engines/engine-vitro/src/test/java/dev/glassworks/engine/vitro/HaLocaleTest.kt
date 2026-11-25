@@ -227,6 +227,15 @@ class HaLocaleTest {
     }
 
     @Test
+    fun aChineseSystemLocaleIsItsScriptsTable() {
+        HaLocale.deviceLocale = { Locale.SIMPLIFIED_CHINESE }
+        assertEquals("2023/1/5", HaFormat.formatDateNumeric(evening, locale(date = "system")))
+        assertEquals("zh-Hans", TableIntlSource.resolve("zh-CN"))
+        assertEquals("zh-Hant", TableIntlSource.resolve("zh-TW"))
+        assertEquals("en", TableIntlSource.resolve("xx-YY"))
+    }
+
+    @Test
     fun dateFormatOrdersTheNumericDate() {
         assertEquals("1/5/2023", HaFormat.formatDateNumeric(evening, locale()))
         assertEquals("5.1.2023", HaFormat.formatDateNumeric(evening, locale("de")))

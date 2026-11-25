@@ -943,7 +943,7 @@ class VitroEngineTest {
         assertTrue(html.contains("const cfg = {"))
         assertTrue(html.contains("\"rooms\""))
         assertTrue(html.contains("const haConfig = {\"location_name\":\"Test Home\"};"))
-        assertTrue(html.contains("const accessToken = \"test-token\";"))
+        assertTrue(html.contains("let accessToken = \"test-token\";"))
         assertTrue(html.contains("themes: { darkMode: true, default_theme: "))
         // The HA shims, instead of HA's frontend.
         assertTrue(html.contains("customElements.define('ha-card'"))
@@ -961,7 +961,7 @@ class VitroEngineTest {
     @Test
     fun islandHtmlWithoutATokenHasAnEmptyOne() {
         val html = WebIslandCardView.buildIslandHtml(cardContext(token = null), islandCard())
-        assertTrue(html.contains("const accessToken = \"\";"))
+        assertTrue(html.contains("let accessToken = \"\";"))
     }
 
     @Test
@@ -1030,14 +1030,15 @@ class VitroEngineTest {
             assertTrue(root > html.indexOf("--primary-background-color: #111111;"))
         }
         val full = WebIslandCardView.buildIslandHtml(cardContext(), islandCard(), fillViewport = true)
-        val bg = full.indexOf("html { background-color: #111111; }")
+        // In the theme's block, so a theme change restyles it; `html:root` outranks the page's later
+        // `html, body { background: transparent }`, which it would otherwise lose to.
+        val bg = full.indexOf("html:root { background-color: #111111; }")
         assertTrue(bg > 0)
-        // After the page's `background: transparent`, which it would otherwise lose to.
-        assertTrue(bg > full.indexOf("html, body { margin: 0; padding: 0; background: transparent;"))
+        assertTrue(bg < full.indexOf("html, body { margin: 0; padding: 0; background: transparent;"))
         assertTrue(WebIslandCardView.buildIslandHtml(cardContext(dark = false), islandCard(), fillViewport = true)
-            .contains("html { background-color: #fafafa; }"))
+            .contains("html:root { background-color: #fafafa; }"))
         val inline = WebIslandCardView.buildIslandHtml(cardContext(), islandCard(), fillViewport = false)
-        assertFalse("an inline island sits in a card", inline.contains("html { background-color"))
+        assertFalse("an inline island sits in a card", inline.contains("html:root { background-color"))
     }
 
     @Test
@@ -1311,13 +1312,15 @@ class VitroEngineTest {
             // A socket that connects later (a reconnect) gets them right after its snapshot.
             val later = CopyOnWriteArrayList<JSONObject>()
             handler.onConnected { later += it }
-            assertEquals(listOf("snapshot", "registries"), later.map { it.getString("type") })
+            assertEquals(listOf("theme", "auth", "snapshot", "registries"), later.map { it.getString("type") })
 
             // Gone with the island.
             val parent = FrameLayout(activity)
             activity.setContentView(parent)
             parent.addView(island)
             parent.removeView(island)
+            // Released on the next turn of the main loop, once it's clear the card isn't coming back.
+            idle()
             assertEquals(1, released)
         } finally {
             server.stop()

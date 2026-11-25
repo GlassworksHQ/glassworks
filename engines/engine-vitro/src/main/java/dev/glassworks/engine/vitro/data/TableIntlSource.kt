@@ -38,6 +38,8 @@ object TableIntlSource : HaIntl.Source {
     /** The table [tag] uses: the tag itself, then shorter tags, then English (`Intl`'s lookup). */
     fun resolve(tag: String?): String {
         var t = tag?.takeIf { it.isNotEmpty() } ?: return "en"
+        // A regional Chinese tag (a system locale's zh-CN, zh-TW) is a script table: zh-Hans or zh-Hant.
+        HaLocale.CHINESE[t.lowercase(java.util.Locale.ROOT)]?.let { if (it in tags) return it }
         while (true) {
             if (t in tags) return t
             tags.firstOrNull { it.equals(t, ignoreCase = true) }?.let { return it }

@@ -133,6 +133,20 @@ class VitroIslandServer(
         return id to "$base/__vitro/island/$id"
     }
 
+    /**
+     * Hands slot [id] to [handler]: a rebuilt card that kept the island's page (a theme change, the same config). Its
+     * open bridges close, so the page connects again, to [handler], and gets its snapshot. False when the slot is gone.
+     */
+    fun replaceSlot(id: String, handler: SlotHandler): Boolean {
+        val sockets = synchronized(slotLock) {
+            if (slots[id] == null) return false
+            slots[id] = handler
+            activeSockets.remove(id)
+        }
+        sockets?.forEach { runCatching { it.abort() } }
+        return true
+    }
+
     fun unregisterSlot(id: String) {
         val sockets = synchronized(slotLock) {
             slots.remove(id)

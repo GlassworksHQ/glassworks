@@ -267,29 +267,39 @@ const fragments = readdirSync(join(FRONTEND, 'static/translations'), { withFileT
 const languages = Object.keys(core).sort();
 const tags = [...new Set([...languages, ...NUMBER_TAGS])].sort();
 
-rmSync(OUT, { recursive: true, force: true });
-mkdirSync(OUT, { recursive: true });
 
 const tables = {};
 // A table stored under a tag holds that tag's own answers. Chromium's ICU leaves some languages out (it resolves
 // them to en-US, or gives root data such as "M01" months); those come from Node's full ICU instead, the same
 // capture, and the table says so. A language neither has fails the run.
-const wrong = (t, tag) => t.locale.split('-')[0].toLowerCase() !== tag.split('-')[0].toLowerCase()
+// The whole tag must resolve to itself (canonical forms compared, and their likely-subtag expansions, so an alias such
+// as "iw" for "he" still matches): an en-US capture is no en-GB table. Root data ("M01" months) is no table either.
+const same = (a, b) => {
+  const [ca, cb] = [Intl.getCanonicalLocales(a)[0], Intl.getCanonicalLocales(b)[0]];
+  if (ca === cb) return true;
+  try { return new Intl.Locale(ca).maximize().toString() === new Intl.Locale(cb).maximize().toString(); } catch { return false; }
+};
+const wrong = (t, tag) => !same(t.locale, tag)
   || Object.values(t.date).some((f) => (f.months || []).some((m) => /^M\d\d$/.test(m)));
 const fromNode = [];
+const rejected = [];
 for (const tag of tags) {
   let t = await page.evaluate(capture, tag);
   if (wrong(t, tag)) {
     t = capture(tag);
     t.source = 'node';
     fromNode.push(tag);
-    if (wrong(t, tag)) {
-      console.error(`${tag}: neither Chromium nor Node has this language's Intl data (resolved to ${t.locale})`);
-      process.exitCode = 1;
-    }
+    if (wrong(t, tag)) rejected.push(`${tag} (resolved to ${t.locale})`);
   }
   tables[tag] = t;
 }
+// Nothing is written when a table would hold another locale's data.
+if (rejected.length) {
+  console.error(`neither Chromium nor Node has these locales' Intl data; no table written:\n  ${rejected.join('\n  ')}`);
+  process.exit(1);
+}
+rmSync(OUT, { recursive: true, force: true });
+mkdirSync(OUT, { recursive: true });
 if (fromNode.length) console.log(`from Node's ICU ${process.versions.icu} (Chromium lacks them): ${fromNode.join(', ')}`);
 // One list of month, weekday and day-period names per locale: a format points into it.
 for (const t of Object.values(tables)) {

@@ -37,21 +37,38 @@ object HaFrontend {
 
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "vitro-frontend").apply { isDaemon = true } }
 
-    /** The (origin, language) last installed into [HaText] and the one being fetched. */
-    @Volatile private var installed: Pair<String, String>? = null
-    @Volatile private var wanted: Pair<String, String>? = null
+    /**
+     * One lock for who owns the requests, what is installed, wanted and asked for last, and the install itself: a
+     * new client claiming the requests can't come between an old one's check and its install.
+     */
+    private val lock = Any()
+
+    /** The (origin, language) last installed into [HaText], the one being fetched, and the one asked for last. */
+    private var installed: Pair<String, String>? = null
+    private var wanted: Pair<String, String>? = null
+    private var latest: Pair<String, String>? = null
 
     /**
      * The client whose requests may install strings ([claim]): a retired client's download, finishing late, leaves
      * [HaText] alone.
      */
-    @Volatile private var owner: Any? = null
+    private var owner: Any? = null
 
-    /** [requester] is the client now: only its requests install strings from here on. */
-    fun claim(requester: Any) {
-        owner = requester
-        installed = null
-        wanted = null
+    /** Test hook: runs inside the install lock, after the ownership check and before the strings go in. */
+    @Volatile internal var beforeInstall: (() -> Unit)? = null
+
+    /**
+     * [requester] is the client now, for HA at [origin]: only its requests install strings from here on. Strings
+     * another HA served are dropped (the built-in words serve until this one's are read or found in the cache).
+     */
+    fun claim(requester: Any, origin: String) {
+        synchronized(lock) {
+            owner = requester
+            if (installed?.first != origin) HaText.reset()
+            installed = null
+            wanted = null
+            latest = null
+        }
     }
 
     /** One language's strings as read, with the frontend's metadata, before they are installed. */
@@ -61,40 +78,58 @@ object HaFrontend {
 
     /**
      * The strings for [language] from HA at [origin] (`http(s)://host:port`), fetched off the caller's thread;
-     * [done] runs after they are installed. Asking again for what is installed or on its way does nothing.
+     * [done] runs after they are installed. Asking again for what is installed or on its way does nothing, unless
+     * [revalidate] (a reconnect: HA may have been upgraded) has HA's index read again; an unchanged frontend reuses
+     * its cached files.
      */
-    fun ensure(requester: Any, origin: String, language: String, done: () -> Unit) {
+    fun ensure(requester: Any, origin: String, language: String, revalidate: Boolean = false, done: () -> Unit) {
         val key = origin to language
-        if (owner !== requester || installed == key || wanted == key) return
-        wanted = key
+        synchronized(lock) {
+            if (owner !== requester) return
+            latest = key
+            if (!revalidate && (installed == key || wanted == key)) return
+            wanted = key
+        }
         executor.execute {
             val r = runCatching { read(origin, language) }.getOrNull() ?: runCatching { readCached(origin, language) }.getOrNull()
-            if (wanted == key) wanted = null
-            if (r != null && install(requester, language, r)) { installed = key; done() }
+            synchronized(lock) { if (wanted == key) wanted = null }
+            if (r != null && install(requester, key, r)) done()
         }
     }
 
     /** The cached strings for [language] from the last frontend [origin] served, without the network. */
     fun ensureCached(requester: Any, origin: String, language: String, done: () -> Unit) {
+        val key = origin to language
+        synchronized(lock) {
+            if (owner !== requester) return
+            if (latest == null) latest = key
+        }
         executor.execute {
             val r = runCatching { readCached(origin, language) }.getOrNull()
-            if (r != null && install(requester, language, r)) done()
+            if (r != null && install(requester, key, r)) done()
         }
     }
 
-    /** Installs [r] into [HaText] if [requester] still owns the requests; true when it did. */
-    @Synchronized
-    private fun install(requester: Any, language: String, r: Loaded): Boolean {
-        if (owner !== requester) return false
-        apply(r.meta, language, r.strings)
-        return true
+    /**
+     * Installs [r] into [HaText] if [requester] still owns the requests and [key] is still what it asked for last (a
+     * language the user has left since isn't installed); true when it did.
+     */
+    private fun install(requester: Any, key: Pair<String, String>, r: Loaded): Boolean = synchronized(lock) {
+        if (owner !== requester || latest != key) return false
+        beforeInstall?.invoke()
+        apply(r.meta, key.second, r.strings)
+        installed = key
+        true
     }
 
     /** Forgets what is installed (a new server, or tests). */
     fun reset() {
-        installed = null
-        wanted = null
-        owner = null
+        synchronized(lock) {
+            installed = null
+            wanted = null
+            latest = null
+            owner = null
+        }
         languages = emptyList()
     }
 
