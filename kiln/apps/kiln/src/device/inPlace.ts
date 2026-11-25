@@ -23,11 +23,18 @@ export interface InPlaceStore {
   getRestore(serial: string, digest: string): Promise<NamedPart[] | undefined>;
   /** The newest restore point kept, for the way back. */
   latestRestore(): Promise<{ serial: string; digest: string; files: NamedPart[] } | undefined>;
+  /**
+   * Records that a copy of this restore point went to the computer: `sum`, its restore image's SHA-256. Continue waits
+   * for that copy, and a reload that saves the same restore point again doesn't ask for it twice.
+   */
+  markCopied(serial: string, digest: string, sum: string): Promise<void>;
+  /** Whether this browser recorded a downloaded copy of the restore point whose restore image is `sum`. */
+  copied(serial: string, digest: string, sum: string): Promise<boolean>;
   /** Asks the browser to keep this site's storage (navigator.storage.persist): whether it will. */
   persist(): Promise<boolean>;
 }
 
-interface Kept { serial: string; digest: string; bundle?: Uint8Array; restore?: NamedPart[]; at: number }
+interface Kept { serial: string; digest: string; bundle?: Uint8Array; restore?: NamedPart[]; copied?: string; at: number }
 
 /** An InPlaceStore in memory: demos and tests (one per simulated browser). */
 export function memoryInPlaceStore(): InPlaceStore {
@@ -43,11 +50,15 @@ export function memoryInPlaceStore(): InPlaceStore {
       const k = [...kept.values()].filter((x) => x.restore).sort((a, b) => b.at - a.at)[0];
       return k && { serial: k.serial, digest: k.digest, files: k.restore! };
     },
+    async markCopied(s, d, sum) { at(s, d).copied = sum; },
+    async copied(s, d, sum) { return kept.get(`${s}\n${d}`)?.copied === sum; },
     async persist() { return true; },
   };
 }
 
 const BUNDLE = 'bundle';
+/** The part that records a downloaded copy of the restore point: its restore image's SHA-256. Not under `restore/`. */
+const COPIED = 'restore-copied';
 
 /**
  * An InPlaceStore in this browser's IndexedDB (`db`: the frame's `storage.inPlaceDb`; never rename it), as kiln-core's
@@ -83,6 +94,11 @@ export function idbInPlaceStore(db: string): InPlaceStore {
         return { serial, digest, files };
       }
       return undefined;
+    },
+    markCopied: (s, d, sum) => save(s, d, [{ part: COPIED, data: new TextEncoder().encode(sum) }]),
+    async copied(s, d, sum) {
+      const got = (await filesOf(await find(s, d))).find((f) => f.part === COPIED);
+      return !!got && new TextDecoder().decode(got.data) === sum;
     },
     async persist() { try { return (await navigator.storage?.persist?.()) ?? false; } catch { return false; } },
   };
@@ -149,7 +165,7 @@ export function fallbackWords(e: FallbackEvent): string {
     case 'lna-denied': return 'The browser blocked the local network, so Kiln switched to Bluetooth.';
     case 'no-address': return 'The device isn\'t on your network, so Kiln is using Bluetooth.';
     case 'timeout': return 'The local network stopped answering, so Kiln switched to Bluetooth.';
-    case 'invalid-bundle': return 'What came over the local network wasn\'t the whole bundle, so Kiln switched to Bluetooth.';
+    case 'invalid-bundle': return 'What came over the local network wasn\'t complete, so Kiln switched to Bluetooth.';
     default: return 'The local network transfer dropped, so Kiln switched to Bluetooth.';
   }
 }

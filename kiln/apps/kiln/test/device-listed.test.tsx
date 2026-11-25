@@ -43,12 +43,14 @@ describe('the name in the browser\'s list', () => {
 
   it('the fastboot screen asks for the Mirror by it', async () => {
     await fastbootScreen(mirrorEntry);
-    expect(screen.getByText('Then click Connect and pick the Mirror, listed as “Android”, in the browser\'s list.')).toBeTruthy();
+    // the heads-up before the browser's list: the line to pick, as the list shows it
+    expect(document.querySelector('.ask')!.textContent).toContain('Pick Android, which is the Mirror, then click Connect.');
+    expect(document.querySelector('.ask-row')!.textContent).toContain('Android');
   });
 
   it('a frame that declares none keeps the plain words', async () => {
     await fastbootScreen({ ...mirrorEntry, frame: { ...mirrorFrame, listed: undefined } });
-    expect(screen.getByText('Then click Connect and pick the Mirror in the browser\'s list.')).toBeTruthy();
-    expect(screen.queryByText(/listed as/)).toBeNull();
+    expect(document.querySelector('.ask')!.textContent).toContain('Pick the Mirror, then click Connect.');
+    expect(document.querySelector('.ask')!.textContent).not.toMatch(/Android/);
   });
 });

@@ -109,12 +109,21 @@ async function toReceive(r: Rig) {
   expect(image.state).toMatchObject({ screen: 'receive', round: 1 });
 }
 
-/** Receive (over the Mirror's own Wi-Fi, or Bluetooth), the second fastboot session, and the restore point saved and checked. */
-async function toRestorePoint(r: Rig, via: 'wifi' | 'ble' = 'wifi') {
+/**
+ * Receive (over the Mirror's own Wi-Fi, or Bluetooth), the second fastboot session, and the restore point saved and
+ * checked. `copy`: the person downloads its copy too, which Continue waits for.
+ */
+async function toRestorePoint(r: Rig, via: 'wifi' | 'ble' = 'wifi', copy = true) {
   if (via === 'wifi') await r.image.receiveWifi();
   else await r.image.receive();
   expect(r.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
   await r.image.connectFastboot();
+  await readyRestorePoint(r);
+  if (copy) await r.image.restoreZip();
+}
+
+/** Waits for the restore point to be saved and checked. */
+async function readyRestorePoint(r: Rig) {
   for (let i = 0; i < 200 && r.image.state.restorePoint?.status !== 'ready'; i++) await new Promise((x) => setTimeout(x, 5));
   expect(r.image.state.screen).toBe('restore-point');
   expect(r.image.state.restorePoint?.status).toBe('ready');
@@ -285,6 +294,21 @@ describe('Glassworks on the stock software', () => {
     expect(r.flashed).toEqual(['userdata']);
   });
 
+  it('Continue waits for a copy of the restore point on the computer before anything is written to the system', async () => {
+    const r = rig();
+    await toReceive(r);
+    await toRestorePoint(r, 'wifi', false);
+    expect(r.image.state.restorePoint?.downloaded).toBe(false);
+    await r.image.continueInstall();
+    expect(r.image.state.screen).toBe('restore-point');
+    expect(r.flashed).toEqual(['userdata']); // the stage alone
+    await r.image.restoreZip();
+    expect(r.image.state.restorePoint?.downloaded).toBe(true);
+    expect(await r.store.copied(FAKE_SERIAL, r.progress.mark!.digest as string, r.image.state.restorePoint!.digest!)).toBe(true);
+    await r.image.continueInstall();
+    expect(r.flashed).toEqual(['userdata', 'system', 'userdata']);
+  });
+
   it('offers the restore point as a zip the CLI\'s undo reads: the restore image, its manifest, SHA256SUMS', async () => {
     const r = rig();
     await toReceive(r);
@@ -356,7 +380,10 @@ describe('Start over', () => {
     expect(r.image.canStartOver()).toBe(false);
     render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
     expect(screen.queryByRole('button', { name: 'Start over' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Restore the original system instead' })).toBeTruthy();
+    // the way out is the rail's: the restore point, never a silent Back
+    expect(screen.getByRole('button', { name: 'Restore the original system' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    expect(document.querySelector('.foot-lock')!.textContent).toBe('The Mirror’s system is changed');
   });
 
   it('the second fastboot screen has no silent Back: Start over says what it resets before it does', async () => {
@@ -393,6 +420,32 @@ describe('a reload', () => {
     expect(c.image.state.restorePoint?.status).toBe('ready');
   });
 
+  it('on the restore point, a reload asks for the copy again only if this browser has no record of one', async () => {
+    const dev = sim.device({});
+    const store = memoryInPlaceStore();
+    const progress = tab();
+    // no copy before the reload: the restore point, saved again, still waits for it
+    const a = rig({ dev, store, progress });
+    await toReceive(a);
+    await toRestorePoint(a, 'wifi', false);
+    const b = rig({ dev, store, progress });
+    expect(b.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
+    await b.image.connectFastboot();
+    await readyRestorePoint(b);
+    expect(b.image.state.restorePoint?.downloaded).toBe(false);
+    await b.image.continueInstall();
+    expect(b.flashed).toEqual([]);
+    // a copy, then a reload: the same restore point saved again goes on without asking twice
+    await b.image.restoreZip();
+    const c = rig({ dev, store, progress });
+    await c.image.connectFastboot();
+    await readyRestorePoint(c);
+    expect(c.image.state.restorePoint?.downloaded).toBe(true);
+    expect(c.image.state.log.join('\n')).toMatch(/a copy of it was downloaded from this browser before/);
+    await c.image.continueInstall();
+    expect(c.flashed).toEqual(['system', 'userdata']);
+  });
+
   it('after the system write, a reload doesn\'t write the system again: it goes on from the write that didn\'t finish', async () => {
     const dev = sim.device({});
     const store = memoryInPlaceStore();
@@ -407,7 +460,9 @@ describe('a reload', () => {
     const b = rig({ dev, store, progress });
     expect(b.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
     await b.image.connectFastboot();
-    for (let i = 0; i < 200 && b.image.state.restorePoint?.status !== 'ready'; i++) await new Promise((x) => setTimeout(x, 5));
+    await readyRestorePoint(b);
+    // the copy was downloaded before the reload: Continue doesn't wait for it again
+    expect(b.image.state.restorePoint?.downloaded).toBe(true);
     await b.image.continueInstall();
     expect(b.flashed).toEqual(['userdata']);
     expect(b.image.state.screen).toBe('adb');
@@ -507,7 +562,8 @@ describe('the way back (restore-blocks)', () => {
     await r.image.receive();
     const slow = rig({ dev: { ...r.dev, fastboot: () => { const f = r.dev.fastboot(); return { ...f, flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { await new Promise<void>((x) => { release = x; }); await f.flashBlob(p, b, on); } }; } }, store: r.store, progress: r.progress });
     await slow.image.connectFastboot();
-    for (let i = 0; i < 200 && slow.image.state.restorePoint?.status !== 'ready'; i++) await new Promise((x) => setTimeout(x, 5));
+    await readyRestorePoint(slow);
+    await slow.image.restoreZip();
     const writing = slow.image.continueInstall();
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     await slow.image.startUndo();
@@ -546,6 +602,10 @@ describe('the app\'s install after a reload', () => {
     await app.pickApk('not-an-apk.apk', new Uint8Array([1, 2, 3]));
     expect(app.state.apk?.error).toBeTruthy();
     render(<ImageFlow image={r.image} app={app} />);
+    // the resume screen first, with the restore point beside Continue
+    expect(screen.getByRole('heading', { name: 'Pick up where you left off' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Restore the original system' }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     const picker = () => document.querySelector('input[type=file][accept*=".apk"]');
     expect(picker()).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Connect' }).hasAttribute('disabled')).toBe(true);
@@ -613,7 +673,8 @@ describe('routes and screens', () => {
     expect(Object.keys(routesOf(mirrorFrame.id))).toEqual(expect.arrayContaining(['undo', 'undo/connect', 'undo/restore', 'undo/done']));
   });
 
-  it.each(['place-receive-file', 'place-restore-point', 'place-fastboot-again', 'place-undo', 'place-error-bundle'] as const)('%s renders, with one ember button at most', async (d) => {
+  it.each(['place-start', 'place-fastboot', 'place-confirm', 'place-receive-file', 'place-restore-point', 'place-restore-copied', 'place-fastboot-again', 'place-connect', 'place-first-start', 'place-installing',
+    'place-error-write', 'place-undo', 'place-undo-fastboot', 'place-undo-working', 'place-undo-error', 'place-undo-done', 'place-error-bundle'] as const)('%s renders, with one ember button at most', async (d) => {
     const h = handTo();
     const { image, app } = await imageDemo(mirrorEntry, d, true, {}, h.handOver);
     render(<ImageFlow image={image} app={app} />);
@@ -622,17 +683,57 @@ describe('routes and screens', () => {
     expect(document.body.textContent).not.toContain(FAKE_SERIAL);
   }, 20_000);
 
-  it('the wait for the first start stays on the restart row, not back on the first one', async () => {
+  it('the first screen says the whole road up front: every part, in order, the person\'s marked, with how long', async () => {
+    const { image, app } = await imageDemo(mirrorEntry, 'place-start', true);
+    render(<ImageFlow image={image} app={app} />);
+    const road = [...document.querySelectorAll('.road-list li')].map((li) => `${li.classList.contains('you') ? 'You: ' : ''}${li.querySelector('.road-t')!.textContent}${li.querySelector('.road-m')!.textContent && !li.classList.contains('you') ? ` (${li.querySelector('.road-m')!.textContent})` : ''}`);
+    expect(road).toEqual([
+      'You: Put the Mirror in fastboot mode',
+      'Kiln adds a small setup helper. The original system isn’t touched',
+      'You: Join the Mirror’s own Wi-Fi, so Kiln can copy the parts of its system it will change',
+      'You: Fastboot mode once more',
+      'Kiln prepares the changes and checks them',
+      'You: Kiln saves a restore point, and you download a copy',
+      'Kiln writes the changes',
+      'It starts for the first time, and Kiln installs Glassworks (4–5 minutes)',
+      'You: Set it up: Wi-Fi, Home Assistant and panes',
+    ]);
+    expect(document.querySelector('.road-h')!.textContent).toBe('What happens · 20–30 minutes');
+  });
+
+  it('the in-place screens say no plumbing: no bundle, no agent, no SHA-256, no sparse', async () => {
+    for (const d of ['place-start', 'place-fastboot', 'place-confirm', 'place-join-wifi', 'place-joined', 'place-receive-ble', 'place-receive-lan', 'place-wifi-unreachable', 'place-lna-denied',
+      'place-receive-file', 'place-error-bundle', 'place-fastboot-again', 'place-restore-point', 'place-working', 'place-connect', 'place-first-start', 'place-resume', 'place-resume-staged',
+      'place-undo', 'place-undo-fastboot'] as const) {
+      const { image, app } = await imageDemo(mirrorEntry, d, true);
+      render(<ImageFlow image={image} app={app} />);
+      await act(async () => {});
+      // what a person reads: the page without its technical log, which is for help
+      const main = document.querySelector('main')!.cloneNode(true) as HTMLElement;
+      main.querySelectorAll('.details').forEach((x) => x.remove());
+      const rail = document.querySelector('.rail')!.textContent ?? '';
+      expect(`${main.textContent} ${rail}`, d).not.toMatch(/bundle|agent|SHA-256|sparse|Refract/i);
+      cleanup();
+    }
+  }, 60_000);
+
+  it('the wait for the first start has its own row after the restart, and the list never goes back', async () => {
     const h = handTo();
     const { image, app } = await imageDemo(mirrorEntry, 'place-working', true, {}, h.handOver);
     render(<ImageFlow image={image} app={app} />);
-    const cur = () => document.querySelector('.join li.cur')?.textContent;
+    const cur = () => document.querySelector('.prow.now .plabel')?.textContent;
+    const done = () => [...document.querySelectorAll('.prow.done .plabel')].map((x) => x.textContent);
     await act(async () => { (image as unknown as { set(p: object): void }).set({ screen: 'working', round: 2, work: { step: 'restart', x: 0 } }); });
     expect(cur()).toBe('Restart the Mirror');
     await act(async () => { (image as unknown as { set(p: object): void }).set({ work: { step: 'first-boot', x: 0 } }); });
-    expect(cur()).toBe('Restart the Mirror');
+    expect(cur()).toBe('Let it finish its first start');
+    expect(done()).toEqual(['Prepare the changes and check them', 'Write the new system', 'Start its app storage fresh', 'Restart the Mirror', 'Connect to the Mirror']);
+    expect(screen.getByText('Usually 4–5 minutes')).toBeTruthy();
     await act(async () => { (image as unknown as { set(p: object): void }).set({ work: { step: 'app-install', x: 0 } }); });
-    expect(cur()).toBe('Install Glassworks and hide the stock apps');
+    expect(cur()).toBe('Install Glassworks and hide the original apps');
+    // a step reported late never pulls the list back
+    await act(async () => { (image as unknown as { set(p: object): void }).set({ work: { step: 'in-place', x: 0 } }); });
+    expect(cur()).toBe('Install Glassworks and hide the original apps');
   }, 20_000);
 
   it('the way back has its own rail, not the install\'s', () => {
@@ -644,13 +745,21 @@ describe('routes and screens', () => {
     expect(at({ at: 'done' }).every((x) => x.mark === 'done')).toBe(true);
   });
 
-  it('the restore point\'s Continue opens only once it is saved and checked', async () => {
+  it('the restore point\'s Continue opens once it is saved and checked, and a copy is on the computer', async () => {
     const h = handTo();
     const { image, app } = await imageDemo(mirrorEntry, 'place-restore-point', true, {}, h.handOver);
     render(<ImageFlow image={image} app={app} />);
-    expect(screen.getByRole('button', { name: 'Continue' }).hasAttribute('disabled')).toBe(false);
     expect(screen.getByText(/Saved in this browser/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Download a copy' }));
+    const go = () => screen.getByRole('button', { name: 'Continue' });
+    expect(go().hasAttribute('disabled')).toBe(true);
+    // why, in one line beside it
+    expect(go().getAttribute('aria-describedby')).toBe('continue-why');
+    expect(document.getElementById('continue-why')!.textContent).toBe('Continue opens once a copy is on this computer.');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Download a copy' })); });
+    await vi.waitFor(() => expect(go().hasAttribute('disabled')).toBe(false));
+    expect(go().className).toContain('ember');
+    expect(document.getElementById('continue-why')).toBeNull();
+    expect(screen.getByText('A copy is on this computer')).toBeTruthy();
   });
 });
 

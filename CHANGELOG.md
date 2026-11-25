@@ -8,6 +8,13 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 
 ## [Unreleased]
 
+### Changed
+- **Kiln is easier to move around in.** Every installer screen has a Back button in the same place when going back is
+  safe, and says why when it isn't. Done steps on the side rail are links back to them. Reopening Kiln partway through
+  an install shows where you stopped and what's already on the device, with Continue and a way out. Start over asks
+  first, in a dialog that says what starts again and what stays. On a phone, a slim step bar opens the full list of
+  steps, and the main button stays at the bottom of the screen.
+
 ### Fixed
 - **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
   restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent

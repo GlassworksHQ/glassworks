@@ -6,6 +6,8 @@ import * as RadioGroup from '@radix-ui/react-radio-group';
 import { useEffect, useState } from 'react';
 import type { Network, RadioStep, Setup } from '../wizard/state';
 import type { SetupSteps, WifiSteps } from './channelSetup';
+import { Foot } from '../components/Nav';
+import { Note, Progress, rowsAt } from '../components/Kit';
 
 /** A step's props: a button's work is running (`busy`), what runs it, and the step's state. */
 export type StepProps<K extends Setup['phase']> = { busy: boolean; steps: SetupSteps; setup: Extract<Setup, { phase: K }> };
@@ -62,19 +64,19 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
     return (
       <section className="card" aria-labelledby="h">
         <h2 id="h">{j.step === 'ok' ? `Connected to ${j.ssid}` : j.step === 'err' ? `Couldn't join ${j.ssid}` : `Joining ${j.ssid}…`}</h2>
-        <ol className="join" aria-live="polite">
-          {[setup.over === 'lan' ? `Sent to ${the}` : `Sent to ${the} over USB`, `${capThe} joins the network`, 'Connected'].map((t, i) => (
-            <li key={t} className={j.step === 'ok' || i < at ? 'done' : i === at ? (j.step === 'err' ? 'fail' : 'cur') : ''}>{t}</li>
-          ))}
-        </ol>
-        {j.error && <p className="status err" role="alert">{j.error}</p>}
+        <Progress label={`Joining ${j.ssid}`} rows={rowsAt([
+          { id: 'sent', label: setup.over === 'lan' ? `Send it to ${the}` : `Send it to ${the} over USB` },
+          { id: 'join', label: `${capThe} joins the network`, note: 'This can take up to a minute.' },
+          { id: 'ok', label: 'Check it’s connected' },
+        ], j.step === 'ok' ? 3 : at, j.step === 'err' ? 'bad' : 'now')} />
+        {j.error && <Note tone="bad">{j.error}</Note>}
         {setup.joinNote && <p className="lede">{setup.joinNote}</p>}
-        <div className="foot">
+        <Foot>
           {/* without touch the panel can't take Wi-Fi from its own screen: no skip to it */}
-          {j.step === 'err' && steps.touch !== false ? <button type="button" className="link" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>{`Skip, do it on ${the}`}</button> : <span />}
+          {j.step === 'err' && steps.touch !== false ? <button type="button" className="btn ghost" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>{`Skip, do it on ${the}`}</button> : <span />}
           {j.step === 'ok' && <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>Continue</button>}
           {j.step === 'err' && <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('wifi', () => steps.wifi())}>Try again</button>}
-        </div>
+        </Foot>
       </section>
     );
   }
@@ -84,10 +86,10 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
       <section className="card" aria-labelledby="h">
         <h2 id="h">{ssid ? `Connected to ${ssid}` : 'Connected to Wi-Fi'}</h2>
         <p className="lede">{capThe} is on this network already, at {ip}. Keep it, or use another network.</p>
-        <div className="foot">
-          <button type="button" className="link" disabled={busy} onClick={() => void steps.click('wifi-scan', () => steps.scanWifi())}>Use another network</button>
+        <Foot>
+          <button type="button" className="btn ghost" disabled={busy} onClick={() => void steps.click('wifi-scan', () => steps.scanWifi())}>Use another network</button>
           <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>Continue</button>
-        </div>
+        </Foot>
       </section>
     );
   }
@@ -114,16 +116,16 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
           {secure && <label className="field"><span>Password</span><input className="input" type="password" value={psk} onChange={(e) => setPsk(e.target.value)} autoComplete="off" /></label>}
         </>
       )}
-      <div className="foot">
+      <Foot>
         {setup.on || steps.touch !== false ? (
-          <button type="button" className="link" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>
+          <button type="button" className="btn ghost" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>
             {setup.on ? `Keep ${setup.on.ssid ?? 'its Wi-Fi'}` : `Skip, do it on ${the}`}
           </button>
         ) : <span />}
         {setup.unreachable
           ? <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('wifi', () => steps.wifi())}>Try again</button>
           : <button type="button" className="btn ember" disabled={!setup.networks || busy} onClick={() => void steps.click('join', () => steps.joinWifi(isOther ? other : pick, secure ? psk : ''))}>Connect</button>}
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -146,15 +148,15 @@ export function HomeAssistant({ busy, steps, setup }: StepProps<'ha'>) {
       {setup.error && <p className="status err" role="alert">{setup.error}</p>}
       {/* One way on: Sign in until the panel is signed in (the step then moves on by itself), Continue after. */}
       {setup.ha.signedIn ? (
-        <div className="foot">
+        <Foot>
           <span />
           <button type="button" className="btn ember" disabled={setup.busy || busy} onClick={() => void steps.click('save-ha', () => steps.saveHa(url.trim()))}>Continue</button>
-        </div>
+        </Foot>
       ) : (
-        <div className="foot">
-          <button type="button" className="link" disabled={setup.busy || busy} onClick={() => void steps.click('skip-ha', () => steps.skipHa(url.trim()))}>{steps.touch !== false ? `Skip, sign in on ${the}` : 'Skip, sign in later'}</button>
+        <Foot>
+          <button type="button" className="btn ghost" disabled={setup.busy || busy} onClick={() => void steps.click('skip-ha', () => steps.skipHa(url.trim()))}>{steps.touch !== false ? `Skip, sign in on ${the}` : 'Skip, sign in later'}</button>
           <button type="button" className="btn ember" disabled={setup.busy || setup.signingIn || busy} onClick={() => void steps.click('sign-in', () => steps.signIn(url.trim()))}>Sign in</button>
-        </div>
+        </Foot>
       )}
     </section>
   );
@@ -197,11 +199,11 @@ export function Panes({ busy, steps, setup, icons }: StepProps<'panes'> & { icon
       </ul>
       {setup.error && <p className="status err" role="alert">{setup.error}</p>}
       {setup.busy && <p className="status work" role="status">Saving your choices…</p>}
-      <div className="foot">
+      <Foot>
         <span />
         <button type="button" className="btn ember" disabled={setup.busy || busy}
           onClick={() => void steps.click('panes', () => steps.applyPanes(setup.panes.filter((p) => on[p.id]).map((p) => p.id)))}>Continue</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -222,10 +224,10 @@ export function Radio({ busy, steps, setup }: StepProps<'radio'>) {
         ))}
       </RadioGroup.Root>
       <p className={setup.error ? 'status err' : 'status'} role="status">{setup.error ?? setup.note}</p>
-      <div className="foot">
-        <button type="button" className="link" disabled={setup.busy || busy} onClick={() => void steps.click('finish', () => steps.finish())}>Skip, leave it as it is</button>
+      <Foot>
+        <button type="button" className="btn ghost" disabled={setup.busy || busy} onClick={() => void steps.click('finish', () => steps.finish())}>Skip, leave it as it is</button>
         <button type="button" className="btn ember" disabled={setup.busy || busy} onClick={() => void steps.click('radio', () => steps.applyRadio(mode))}>Finish</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -292,7 +294,7 @@ export function RadioNext({ busy, steps, setup }: StepProps<'radio-next'>) {
           <Collapsible.Content><ol className="next" style={list}>{plan.more.map((st) => <PlanStep key={st.title} st={st} />)}</ol></Collapsible.Content>
         </Collapsible.Root>
       )}
-      <div className="foot"><span /><button type="button" className={`btn ${led ? 'ghost' : 'ember'}`} disabled={busy} onClick={() => steps.finish()}>Finish</button></div>
+      <Foot><span /><button type="button" className={`btn ${led ? 'ghost' : 'ember'}`} disabled={busy} onClick={() => steps.finish()}>Finish</button></Foot>
     </section>
   );
 }

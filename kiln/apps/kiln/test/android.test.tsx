@@ -95,8 +95,8 @@ describe('the screens', () => {
 
   it('4: the install line, 5 of 6 at the home screen, and each grant read back', async () => {
     await show('installing', /5 of 6/);
-    expect(heading()).toBe('Keep it plugged in');
-    expect(document.querySelector('.plain')?.textContent).toContain('Pixel Tablet, Android 14, 64-bit');
+    expect(heading()).toBe('Installing Glassworks');
+    expect(document.querySelector('.plist')?.textContent).toContain('Pixel Tablet, Android 14, 64-bit');
     const grants = [...document.querySelectorAll('.grants > div')].map((g) => g.textContent);
     expect(grants).toEqual(['MicrophoneOn', 'CameraNot requested', 'Automatic locationOn', 'Show over other appsOn', 'Turn the screen offOn', 'Updates without a tapOn']);
     expect(document.querySelector('.warnbox')).toBeNull();
@@ -168,7 +168,7 @@ describe('the screens', () => {
 
   it('a refused install: nothing changed, said so, with Try again', async () => {
     await show('error', 'Kiln can\'t install on this tablet');
-    expect(document.querySelector('.raw')?.textContent).toMatch(/Install via USB/);
+    expect(document.querySelector('.lede')?.textContent).toMatch(/Install via USB/); // the refusal says why itself, in the lede
     expect(rail()).toContain('Install:bad');
     expect(embers()).toEqual(['Try again']);
   });

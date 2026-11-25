@@ -193,7 +193,7 @@ describe('connecting while the Mirror is still starting', () => {
     const { f, mirror } = setup({ request: async () => new FirstBootMirror() });
     await flashed(f, mirror);
     render(<ImageFlow image={f} app={mirror} />);
-    expect(screen.getByText(/The screen stays dark for a few minutes on first boot/)).toBeTruthy();
+    expect(screen.getByText(/Its first start takes a few minutes, and the screen stays dark until it’s ready/)).toBeTruthy();
   });
 
   it('says it waits for the Mirror from the moment it is picked, before the Mirror answers or refuses', async () => {
@@ -202,8 +202,16 @@ describe('connecting while the Mirror is still starting', () => {
     await flashed(f, mirror);
     render(<ImageFlow image={f} app={mirror} />);
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
-    expect(await screen.findByText('Waiting for the Mirror to finish starting…')).toBeTruthy();
+    // the wait is said up front: how long it usually takes, how long so far, and that it's normal
+    expect(await screen.findByText('Waiting for it to finish starting')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'The Mirror is starting for the first time' })).toBeTruthy();
+    expect(screen.getByText('Usually 4–5 minutes')).toBeTruthy();
+    expect(screen.getByText('0:00 so far')).toBeTruthy();
     expect(screen.queryByText('Pick the Mirror, listed as “Android”, in the browser\'s list…')).toBeNull();
+    // the list stays: the click is done, the first start runs now
+    expect(document.querySelector('.prow.now .plabel')!.textContent).toBe('Let it finish its first start');
+    expect(document.querySelector('.prow.done:nth-last-child(2) .plabel, .prow.done .plabel')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull(); // nothing to click while it waits
     expect(f.state).toMatchObject({ screen: 'adb', connecting: true, adbWaiting: true });
     answer(withAppStreams(new FirstBootMirror(), { online: true, radio: false }));
     await vi.waitFor(() => expect(handed).toHaveLength(1)); // the first start, then the standard flow has the Mirror

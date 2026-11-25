@@ -38,7 +38,7 @@ export const GLASS_PANES_IMAGE: ImageRecipe = {
   by: { name: 'git-nimrod', href: 'https://github.com/git-nimrod' },
   project: { name: 'git-nimrod/glass-panes', href: 'https://github.com/git-nimrod/glass-panes' },
   licence: 'MIT; the image’s parts keep their own',
-  summary: 'Android 6.0.1 for the Mirror as its release has it, with its own Mirror Kiosk app.',
+  summary: 'Replaces everything on the Mirror with Android 6.0.1 as its release has it, with its own Mirror Kiosk app.',
   support: { name: 'Glass Panes on GitHub', href: 'https://github.com/git-nimrod/glass-panes/issues' },
   release: { name: 'mirror-android-3', href: 'https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-3' },
   next: { name: 'its README', href: 'https://github.com/git-nimrod/glass-panes#readme' },
@@ -67,7 +67,7 @@ export const GLASS_PANES_IMAGE: ImageRecipe = {
 |---|---|
 | `id` | The image's id in Kiln's link. `glassworks` is taken |
 | `name`, `by`, `project` | Shown on the card, and on every screen of the install: "Glass Panes is made by git-nimrod. Questions about it go to its project." They must match the frame's `credits` entry for the image (`frames/<id>/design/frame.json`) |
-| `licence`, `summary` | The card's licence row and its one line |
+| `licence`, `summary` | The card's licence row and its one line, which opens with what happens to the device (replaced, or kept with a way back) |
 | `support` | Where questions go. The card says "Its project, on GitHub" |
 | `release` | The release the files come from, named on the download screen |
 | `next` | Where the person carries on after Done, e.g. your install guide |

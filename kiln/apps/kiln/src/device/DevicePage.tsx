@@ -25,7 +25,8 @@ import { ImageSession, sessionProgress } from './imageSession';
 import { browserStageSecret, idbInPlaceStore } from './inPlace';
 import { IMAGE_DEMOS, imageDemo, type ImageDemo } from './imageDemo';
 import { KEEP_DEMOS, keepDemo, type KeepDemo } from './keepDemo';
-import { ImageOutcome, ImageScreens, imageLevel, imageRail, imageSteps } from './ImageScreens';
+import { ImageOutcome, imageActions, ImageScreens, ImageStartOver, imageLevel, imageLock, imageNav, imageSteps } from './ImageScreens';
+import { Foot } from '../components/Nav';
 import { registry, type Entry } from '../wizard/registry';
 import { keptDevice } from './activity';
 import { ReleaseApk, TestOnly } from './ReleaseApk';
@@ -315,6 +316,15 @@ export function appRail(s: AppState, f: DeviceFrame): RailStep[] {
   });
 }
 
+/** The app alone's rail with its way back: from its first screen to the picker, from Checks to Connect. */
+function appNavOf(session: AppSession) {
+  return (s: AppState): RailStep[] => appRail(s, session.frame).map((x, i) => {
+    if (x.mark !== 'done' || s.connecting) return x;
+    if (i === 0 && (s.screen === 'pick' || s.screen === 'off')) return { ...x, go: { href: '/' } };
+    return x;
+  });
+}
+
 function level(s: AppState, f: DeviceFrame): number {
   if (s.screen === 'done') return 4;
   if (s.screen === 'working') return s.phases.some((p) => f.appRows.level3.includes(p.step)) ? 3 : 2;
@@ -338,10 +348,10 @@ function Off({ f }: { f: DeviceFrame }) {
     <section className="card" aria-labelledby="h">
       <h2 id="h">{`${cap(f.the)} doesn't install from Kiln yet`}</h2>
       <p className="lede">Its installer is still being tested.</p>
-      <div className="foot">
-        <a className="link" href={`https://github.com/GlassworksHQ/glassworks/tree/main/frames/${f.id}`}>{`${cap(f.the)} on GitHub`}</a>
+      <Foot back={null}>
+        <a className="btn ghost" href={`https://github.com/GlassworksHQ/glassworks/tree/main/frames/${f.id}`}>{`${cap(f.the)} on GitHub`}</a>
         <Link className="btn ghost" href="/">Pick a panel</Link>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -389,10 +399,9 @@ function Pick({ s, session }: { s: AppState; session: AppSession }) {
       <p className="small">{rich(f.words['app.connectHelp'])}{s.changed ? ` An earlier try already changed ${f.the}.` : ''}</p>
       {s.connecting && <p className="status work" role="status">{`${cap(pickInList(f))}, then choose Allow on ${f.the}'s screen…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
-      <div className="foot">
-        <span />
+      <Foot busy={s.connecting}>
         <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void session.connect()}>Connect</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -419,13 +428,12 @@ function Checks({ s, session }: { s: AppState; session: AppSession }) {
       </p>
       {r.ok && <Inputs s={s} session={session} />}
       {r.ok && blocked && <p className="status err" role="alert">{blocked}</p>}
-      <div className="foot">
-        <span className="links">
-          {r.app && <button type="button" className="link" onClick={() => void session.undo()}>Undo: remove Glassworks</button>}
-          {!r.app && r.pendingHome && <button type="button" className="link" onClick={() => void session.undo()}>Undo: give the home screen back</button>}
-        </span>
+      <Foot>
+        {r.app ? <button type="button" className="btn ghost" onClick={() => void session.undo()}>Remove Glassworks</button>
+          : r.pendingHome ? <button type="button" className="btn ghost" onClick={() => void session.undo()}>Give the home screen back</button>
+          : <span />}
         <button type="button" className="btn ember" disabled={!!blocked} onClick={() => void session.install()}>{r.app ? 'Update' : 'Install'}</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -465,10 +473,10 @@ function Done({ s, session }: { s: AppState; session: AppSession }) {
       <h2 id="h">{title}</h2>
       <p className="lede">{body}</p>
       <BuiltOn credits={stepCredits(f.id, f.credits)} />
-      <div className="foot">
-        <Log s={s} />
+      <Foot back={null}>
         <button type="button" className="btn ghost" onClick={() => void session.again()}>{`Read ${f.the} again`}</button>
-      </div>
+      </Foot>
+      <Log s={s} />
     </section>
   );
 }
@@ -491,10 +499,8 @@ function Failed({ s, session }: { s: AppState; session: AppSession }) {
       <h2 id="h">{s.flow === 'undo' ? 'Undo didn\'t finish' : 'The install didn\'t finish'}</h2>
       <p className="lede">You can check your device and try again, or review the technical details below.</p>
       <pre className="raw">{s.error}</pre>
-      <div className="foot">
-        <Log s={s} />
-        <button type="button" className="btn ghost" onClick={() => void session.again()}>Back to device checks</button>
-      </div>
+      <Foot back={{ run: () => void session.again() }} backLabel="Back to device checks" />
+      <Log s={s} />
     </section>
   );
 }
@@ -653,10 +659,11 @@ export function ImageFlow({ image, app, toApp, base }: { image: ImageSession; ap
   useEffect(() => { document.title = s.screen === 'adb' || s.screen === 'receive' ? `Your turn · ${f.name} · Kiln` : `${f.name} · Kiln`; }, [s.screen, f]);
   const community = image.recipes.find((x) => x.community);
   return (
-    <Shell steps={imageRail(s, f, image.recipe.community, image.inPlace)} level={imageLevel(s, image.recipe.community)} error={s.screen === 'error' || s.undo?.at === 'error'} chip={chip}>
+    <Shell steps={imageNav(image, s)} lock={imageLock(image)} actions={imageActions({ f: image, s })} level={imageLevel(s, image.recipe.community)} error={s.screen === 'error' || s.undo?.at === 'error'} chip={chip}>
       {/* no WebUSB: stop on the first screen, before a download and a build that only fail at the first USB call */}
       {chip?.kind === 'bad' ? <Browser /> : <ImageScreens f={image} s={s} m={app} ms={ms} />}
       {toApp && community && chip?.kind !== 'bad' && s.screen === 'image' && !image.inPlace && <p className="small">{`Already running the ${community.name} image? `}<button type="button" className="link" onClick={toApp}>Install just the app over USB</button></p>}
+      <ImageStartOver f={image} s={s} />
     </Shell>
   );
 }
@@ -670,8 +677,9 @@ export function AppFlow({ session, toImage, base }: { session: AppSession; toIma
     document.title = `${f.name} · Kiln`;
   }, [s, f]);
   const p = { s, session };
+  const appNav = appNavOf(session);
   return (
-    <Shell steps={appRail(s, f)} level={level(s, f)} error={s.screen === 'error'} chip={chip}>
+    <Shell steps={appNav(s)} level={level(s, f)} error={s.screen === 'error'} chip={chip}>
       {chip?.kind === 'bad' ? <Browser />
         : s.screen === 'off' ? <Off f={f} />
         : s.screen === 'pick' ? <Pick {...p} />
