@@ -47,8 +47,10 @@ fun stillRotation(sensorDegrees: Int, displayDegrees: Int, front: Boolean): Int 
  * Y mean of 4 to 5 and no row all zero) and chroma near 128, so it is never blank.
  *
  * Samples [BLANK_ROWS] rows of Y and half as many of each chroma plane, [BLANK_COLUMNS] points a row: blank when at
- * least [BLANK_SHARE] of the sampled rows are all zero in Y and in both chroma planes, so a noisy strip of a few rows
- * doesn't save a bad frame. A few thousand reads a frame. Absolute reads: the buffers' positions don't move.
+ * least [BLANK_SHARE] of the sampled rows are all zero in Y and in both chroma planes. No picture has such a row (black
+ * still has chroma near 128), so a quarter of them is already a session gone wrong, however much streaky picture the
+ * rest holds: on the Mirror (2026-11-25) a bad session's frames were two thirds zero under a streaky third, in the
+ * stream and in stills alike. A few thousand reads a frame. Absolute reads: the buffers' positions don't move.
  */
 fun blankYuv(
     width: Int, height: Int,
@@ -87,5 +89,8 @@ internal const val BLANK_ROWS = 24
 /** Points [blankYuv] samples in each row. */
 internal const val BLANK_COLUMNS = 64
 
-/** The share of sampled rows that must be all zero for a plane to count as blank. */
-internal const val BLANK_SHARE = 0.9
+/**
+ * The share of sampled rows that must be all zero for a plane to count as blank. A quarter: the Mirror's bad sessions
+ * had two thirds of their rows zero, which the first threshold (90%) let through.
+ */
+internal const val BLANK_SHARE = 0.25

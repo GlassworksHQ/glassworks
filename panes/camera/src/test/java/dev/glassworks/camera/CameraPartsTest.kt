@@ -88,6 +88,21 @@ class CameraPartsTest {
         assertTrue(Yuv(yAt = { _, r -> if (r in strip) noise.nextInt(8) else 0 }, uvAt = { _, r -> if (r * 2 in strip) noise.nextInt(4) else 0 }).blank())
     }
 
+    /**
+     * What the Mirror's stream and stills showed on the test build (2026-11-25): a streaky third of picture on top,
+     * two thirds all zero below. The streaks don't save the frame.
+     */
+    @Test fun twoThirdsZeroUnderAStreakyThirdIsBlank() {
+        val noise = java.util.Random(3)
+        assertTrue(Yuv(yAt = { _, r -> if (r < 240) 20 + noise.nextInt(200) else 0 }, uvAt = { _, r -> if (r < 120) 100 + noise.nextInt(60) else 0 }).blank())
+    }
+
+    /** A fifth of zero rows (under the threshold) with a real picture above: not blank. */
+    @Test fun aFewZeroRowsUnderAPictureAreNotBlank() {
+        val noise = java.util.Random(4)
+        assertFalse(Yuv(yAt = { _, r -> if (r < 600) 20 + noise.nextInt(200) else 0 }, uvAt = { _, r -> if (r < 300) 100 + noise.nextInt(60) else 0 }).blank())
+    }
+
     /** The spike's dark room: Y around 4 with noise, chroma near 128. Dark is not blank. */
     @Test fun aDarkRoomIsNotBlank() {
         val noise = java.util.Random(2)

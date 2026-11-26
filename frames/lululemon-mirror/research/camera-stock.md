@@ -111,6 +111,17 @@ series of connects from another crashed `mediaserver`.
    failed open retried after 5 s, but every other request for the camera in between (a still from Home Assistant,
    the end of a still's linger, presence starting again) tried at once.
 
+4. **The pane's first fix on the Mirror** (2026-11-25, verified, test build `test-build/mirror-wifi-902-923` at
+   `2ff391706`). With Home Assistant streaming over RTSP, the session that started after an app restart was bad, and
+   stayed bad: Home Assistant's still was about two thirds solid green beside a streaky band, and frames pulled from
+   the RTSP stream with `ffmpeg` (`select='not(mod(n\,30))'`) were the same, landscape: a streaky third on top, green
+   below. So the stream's session was bad too, not only the reader's frames. The blank check didn't catch it: it
+   asked for 90% of the sampled rows to be zero, and these frames had about two thirds. Since no picture has a row
+   that is zero in Y and in both chroma planes, the threshold is now a quarter of the rows.
+
+   The same run measured the stream's rate with the reader in one request of five: `ffprobe -count_packets
+   -read_intervals %+5` read 103 packets in 5 s, against 6.9 fps with the reader in every request (attempt 2).
+
 ## Result
 
 | Problem | Cause | What the camera pane does now |
