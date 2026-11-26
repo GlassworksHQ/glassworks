@@ -166,11 +166,7 @@ function homeAssistantMembers() {
  * HA members an island's hass doesn't have yet, each with why. A member here that the island gains fails the test
  * too, so the list never goes stale.
  */
-const KNOWN_GAPS = {
-  // HA names an entity from its registries (entity, device, area). Every card that calls it feature-tests it and falls
-  // back to friendly_name; a port that names differently would draw wrong, so it waits for a real port.
-  formatEntityName: 'cards fall back to friendly_name without it',
-};
+const KNOWN_GAPS = {};
 
 function kindMatches(value, kind) {
   switch (kind.replace('?', '')) {
@@ -527,6 +523,51 @@ test('Gecko\'s and Chromium\'s messages name the member', async () => {
     await tick(1600);
     assert.deepEqual(page.sent('cardBroken').map((m) => m.member), [member], message);
   }
+});
+
+// ---- Entity names (HA's formatEntityName) ----
+
+test('formatEntityName is HA\'s: the friendly name until the registries are in, then the composed name', async () => {
+  const page = await openPage({ card: plainCard });
+  const accent = { entity_id: 'light.bedroom_accent', state: 'off', attributes: { friendly_name: 'Bedroom Strip Accent' } };
+  const h = page.hass();
+  assert.equal(h.formatEntityName(accent), 'Bedroom Strip Accent', 'no registries yet: the friendly name');
+  assert.equal(h.formatEntityName(accent, 'My lamp'), 'My lamp');
+  assert.equal(h.formatEntityName(accent, [{ type: 'text', text: 'A' }, { type: 'text', text: 'B' }], { separator: ' - ' }), 'A - B');
+  assert.ok(page.sent('registries').length >= 1, 'the registries are asked for');
+  page.ws().push({ type: 'registries', registries: {
+    entities: {
+      'light.bedroom_accent': { entity_id: 'light.bedroom_accent', device_id: 'strip', name: 'Accent', next_name_part: 'device' },
+      'sensor.hall_temp': { entity_id: 'sensor.hall_temp', device_id: 'hall', name: 'Temperature' },
+      'switch.plug': { entity_id: 'switch.plug', device_id: 'plug' },
+    },
+    devices: { strip: { id: 'strip', name: 'Bedroom Strip', area_id: 'bed' }, hall: { id: 'hall', name: 'Hall Sensor', name_by_user: 'Hall ' }, plug: { id: 'plug', name: 'Plug' } },
+    areas: { bed: { area_id: 'bed', name: 'Bedroom', floor_id: 'up' } },
+    floors: { up: { floor_id: 'up', name: 'Upstairs' } },
+  } });
+  const h2 = page.card().hass;
+  assert.equal(h2.formatEntityName(accent), 'Bedroom Strip Accent', 'device then entity (next_name_part: device)');
+  assert.equal(h2.formatEntityName({ entity_id: 'sensor.hall_temp', attributes: {} }), 'Temperature', 'the name stops at the entity');
+  assert.equal(h2.formatEntityName({ entity_id: 'switch.plug', attributes: {} }), 'Plug', 'no name of its own: its device\'s');
+  assert.equal(h2.formatEntityName(accent, [{ type: 'floor' }, { type: 'area' }, { type: 'entity' }]), 'Upstairs Bedroom Accent');
+  assert.equal(h2.formatEntityName({ entity_id: 'switch.plug', attributes: {} }, [{ type: 'entity' }]), 'Plug', 'the entity item is the device\'s name');
+  assert.equal(h2.formatEntityName({ entity_id: 'sensor.other', attributes: { friendly_name: 'Other' } }), 'Other', 'no registry entry: the friendly name');
+});
+
+test('attribute values and names are HA\'s: units by domain, its formatters, the config\'s temperature unit', async () => {
+  const page = await openPage({ card: plainCard });
+  const h = page.hass();
+  const fan = { entity_id: 'fan.ceiling', state: 'on', attributes: { percentage: 20, preset_mode: 'eco', device_id: 'x' } };
+  assert.equal(h.formatEntityAttributeValue(fan, 'percentage'), '20%', "Mushroom's fan shows HA's 20%");
+  assert.equal(h.formatEntityAttributeValueToParts(fan, 'percentage').map((p) => p.type).join(','), 'value,unit');
+  const light = { entity_id: 'light.lamp', state: 'on', attributes: { brightness: 166, color_temp_kelvin: 2700 } };
+  assert.equal(h.formatEntityAttributeValue(light, 'brightness'), '65%');
+  assert.equal(h.formatEntityAttributeValue(light, 'color_temp_kelvin'), '2,700 K');
+  const climate = { entity_id: 'climate.study', state: 'heat', attributes: { current_temperature: 19.5 } };
+  assert.equal(h.formatEntityAttributeValue(climate, 'current_temperature'), '19.5 °C', 'the config\'s unit');
+  assert.equal(h.formatEntityAttributeValue(fan, 'preset_mode'), 'eco', 'no translation: the value, as HA');
+  assert.equal(h.formatEntityAttributeValue(fan, 'missing'), 'Unknown');
+  assert.equal(h.formatEntityAttributeName(fan, 'device_id'), 'Device ID');
 });
 
 // ---- What the card is made with (the panel's states and config first) ----

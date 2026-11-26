@@ -36,7 +36,10 @@ import java.io.File
 @Config(sdk = [34], application = Application::class)
 class IslandHassContractTest {
 
-    private fun page(config: JSONObject = JSONObject().put("version", "2026.11.0").put("components", org.json.JSONArray())): String {
+    private fun page(
+        config: JSONObject = JSONObject().put("version", "2026.11.0").put("components", org.json.JSONArray())
+            .put("unit_system", JSONObject().put("temperature", "°C").put("length", "km")),
+    ): String {
         val ctx = VitroCardContext(
             context = RuntimeEnvironment.getApplication(),
             haBase = "http://homeassistant.local:8123",
