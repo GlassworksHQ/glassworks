@@ -824,8 +824,10 @@ class VitroView(
     private val waited = HashSet<Int>()
 
     /**
-     * True when the first build of view [index] waits: none of its entities has a state yet. It's built when the
-     * first of them lands, or after [holdFirstBuildForStatesMs].
+     * True when the first build of view [index] waits: one of its entities isn't known yet (no state, and HA hasn't
+     * said it doesn't exist). Views share entities (a dashboard's header cards), so one known entity says little: a
+     * view built with most of its states missing renders, and lays out, every card again as they land. It's built
+     * once every entity is known (HA's first event for the view's subscription), or after [holdFirstBuildForStatesMs].
      */
     private fun holdForStates(index: Int, viewCfg: ViewConfig): Boolean {
         if (holdFirstBuildForStatesMs <= 0 || index in waited) return false
@@ -833,9 +835,9 @@ class VitroView(
         holding?.cancel?.invoke()
         holding = null
         val refs = CardRouter.referencedEntities(viewCfg)
-        if (refs.isEmpty() || refs.any { store[it] != null }) return false
+        fun known() = refs.all { store[it] != null || store.isMissing(it) }
+        if (refs.isEmpty() || known()) return false
         val config = dashboard
-        var unsub: (() -> Unit)? = null
         lateinit var timeout: Runnable
         lateinit var mine: Wait
         fun release() {
@@ -848,12 +850,26 @@ class VitroView(
             }
         }
         timeout = Runnable { release() }
-        unsub = store.subscribeAny { changed -> if (changed.any { it in refs }) mainHandler.post { release() } }
-        mine = Wait(index) { unsub?.invoke(); mainHandler.removeCallbacks(timeout) }
+        // One check queued at a time: a snapshot tells hundreds of entities at once, on the socket's thread.
+        val checkQueued = java.util.concurrent.atomic.AtomicBoolean(false)
+        val check = Runnable {
+            checkQueued.set(false)
+            if (known()) release()
+        }
+        fun queueCheck() {
+            if (checkQueued.compareAndSet(false, true)) mainHandler.post(check)
+        }
+        // Each unknown entity's listener hears its state land, and HA's answer that it doesn't exist (markSnapshot).
+        val unsubs = refs.filter { store[it] == null }.map { id -> store.subscribe(id) { queueCheck() } }
+        mine = Wait(index) {
+            unsubs.forEach { it() }
+            mainHandler.removeCallbacks(timeout)
+            mainHandler.removeCallbacks(check)
+        }
         holding = mine
         mainHandler.postDelayed(timeout, holdFirstBuildForStatesMs)
-        // States that landed between the check above and the listener (the store is written on another thread).
-        if (refs.any { store[it] != null }) mainHandler.post { release() }
+        // States that landed between the check above and the listeners (the store is written on another thread).
+        queueCheck()
         return true
     }
 
@@ -929,6 +945,7 @@ class VitroView(
             for (i in 0 until contentHost.childCount) contentHost.getChildAt(i).visibility = GONE
             for (i in 0 until overlayLayer.childCount) overlayLayer.getChildAt(i).visibility = GONE
             updateIslandsShown()
+            updateCardsHidden()
             return
         }
         val viewRoot = if (cached != null) {
@@ -984,6 +1001,7 @@ class VitroView(
         // Islands the build didn't take back (their card is gone or changed) close; only this view's islands run.
         closePooledIslands()
         updateIslandsShown()
+        updateCardsHidden()
 
         val elapsed = SystemClock.elapsedRealtime() - t0
         // The report follows the tree on screen: a cached tree keeps the card-mod state it was built with.
@@ -1136,6 +1154,40 @@ class VitroView(
             val shown = onScreen && index == currentViewIndex && frame.visibility == VISIBLE
             islandsIn(frame).forEach { it.setShown(shown) }
         }
+    }
+
+    /** Each cached tree's hidden state as its cards last heard it ([updateCardsHidden]); a new tree's are shown. */
+    private val cardsHidden = java.util.WeakHashMap<View, Boolean>()
+
+    /**
+     * The cards of a cached view that isn't shown stop rendering live changes, as HA renders only the view on screen,
+     * and catch up as it shows again, before it draws ([CardSurface.setViewHidden]). Its pinned cards follow it.
+     * Only a tree whose state changed is walked.
+     */
+    private fun updateCardsHidden() {
+        fun follow(root: View) {
+            val hidden = root.visibility != VISIBLE
+            if ((cardsHidden[root] ?: false) == hidden) return
+            cardsHidden[root] = hidden
+            forEachCard(root) { it.setViewHidden(hidden) }
+        }
+        viewCache.values.forEach(::follow)
+        overlayFrames.values.forEach(::follow)
+    }
+
+    /**
+     * The live cameras of a card just built ([card], with its visibility conditions) start now, while the rest of the
+     * view builds, if the connection knows their capabilities ([PictureCardView.startEarly]). Only those the build
+     * shows, while the dashboard is on screen: a hidden card opens no stream, as in HA.
+     */
+    private fun startCamerasEarly(card: View) {
+        if (!dashboardShown || !activityShown || card.visibility != VISIBLE) return
+        forEachCard(card) { c -> if (c is PictureCardView && visibleWithin(c, card)) c.startEarly() }
+    }
+
+    private fun forEachCard(v: View, action: (CardSurface) -> Unit) {
+        if (v is CardSurface) action(v)
+        if (v is android.view.ViewGroup) for (i in 0 until v.childCount) forEachCard(v.getChildAt(i), action)
     }
 
     /**
@@ -1332,6 +1384,7 @@ class VitroView(
                     wrapVisibility(child, buildCard(child, ctx, false), ctx).also { v ->
                         // Clarity sees each card by its index in the view's config (a layout-break builds nothing).
                         clarity?.cardBuilt(buildingIndex, view.cards.indexOfFirst { it === child }, child, v)
+                        startCamerasEarly(v)
                     }
                 }
             }, widthDp)
@@ -1533,7 +1586,8 @@ class VitroView(
             val size = HaGridSize.of(if (built is ErrorCardView) card.copy(type = ErrorCardView.TYPE) else card, stateForBuild(card))
             val cardView = wrapVisibility(card, built, ctx)
             slotCards[cardView] = card
-            cacheCardAsLayer(cardView, ctx)
+            cacheCardAsLayer(cardView, card, ctx)
+            startCamerasEarly(cardView)
             val fixed = size.rows?.let { r -> px(r * (rowHeight + rowGap) - rowGap) }
             grid.addView(cardView, HaGridLayout.LayoutParams(size.columns?.coerceAtMost(columns) ?: columns, fixed))
         }
@@ -1557,6 +1611,8 @@ class VitroView(
             val column = columns[placement[k]]
             val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
             clarity?.cardBuilt(buildingIndex, configIndex, card, v)
+            cacheCardAsLayer(v, card, ctx)
+            startCamerasEarly(v)
             column.addView(v, cardMarginParams(ctx, widthDp))
         }
         return row
@@ -1577,6 +1633,8 @@ class VitroView(
             val column = if (inSidebar) side else main
             val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
             clarity?.cardBuilt(buildingIndex, cardIndex, card, v)
+            cacheCardAsLayer(v, card, ctx)
+            startCamerasEarly(v)
             column.addView(v, cardMarginParams(ctx, widthDp))
         }
         if (!split) {
@@ -1636,10 +1694,11 @@ class VitroView(
      * one (about 11 MB more PSS than no layers on a 2 GB panel, the S1); with [CardLayers.BIG] only a big card (at least
      * [BIG_CARD_SHARE] of the dashboard's area), which holds most of what a frame draws, decided once the card has a
      * size and again when it changes. Never for a card that casts a shadow ([cardLayerWanted]), which the layer's
-     * bounds would clip.
+     * bounds would clip, nor for one that plays a live camera ([playsLiveVideo]): each video frame would draw its whole
+     * layer again. Sections, masonry and sidebar views alike.
      */
-    private fun cacheCardAsLayer(cardView: View, ctx: VitroCardContext) {
-        if (!cardLayerWanted(ctx.theme.cardElevationDp, cardView.elevation)) return
+    private fun cacheCardAsLayer(cardView: View, card: CardConfig, ctx: VitroCardContext) {
+        if (!cardLayerWanted(ctx.theme.cardElevationDp, cardView.elevation) || playsLiveVideo(card)) return
         if (cardLayers == CardLayers.ALL) {
             cardView.setLayerType(LAYER_TYPE_HARDWARE, null)
             return
@@ -2168,6 +2227,10 @@ class VitroView(
         /** Whether a card is drawn through a hardware layer: never when it casts a shadow, which the layer's bounds would clip. */
         internal fun cardLayerWanted(themeElevationDp: Float, viewElevation: Float): Boolean =
             themeElevationDp == 0f && viewElevation == 0f
+
+        /** [card] or a card inside it (a stack, a grid) plays a camera live (`camera_view: live`). */
+        internal fun playsLiveVideo(card: CardConfig): Boolean =
+            card.raw.optString("camera_view") == "live" || card.childCards.any(::playsLiveVideo)
 
         /** The share of the dashboard's area from which a card gets its own layer. */
         internal const val BIG_CARD_SHARE = 0.07f

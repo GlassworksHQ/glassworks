@@ -124,6 +124,14 @@ internal fun applyHaRipple(view: View, cornerRadiusPx: Float, isDark: Boolean) {
 private fun holdActionFor(raw: JSONObject, entityId: String?): ActionConfig =
     ActionConfig.parse(raw.optJSONObject("hold_action"), if (entityId != null) "more-info" else "none")
 
+/**
+ * Sets [text] only when it differs from what [this] shows: [TextView.setText] lays the text out again, and asks for a
+ * layout up to the root, even when the words are the same.
+ */
+internal fun TextView.setTextIfChanged(text: CharSequence) {
+    if (!TextUtils.equals(this.text, text)) this.text = text
+}
+
 private fun textView(ctx: VitroCardContext, sp: Float, color: Int, weight: Int = Inter.REGULAR): TextView =
     TextView(ctx.context).apply {
         val scaled = ctx.scaledSp(sp)
@@ -2593,13 +2601,14 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                     else -> ctx.theme.stateIconColor
                 }
                 iconView.setIcon(MdiIcons.resolveIconName(rowCfg.icon, s), tint)
-                nameView.text = rowCfg.nameFor(s) ?: s?.displayName ?: rowCfg.entity
+                // Only a text that changed is set: setText lays the row out again even for the same words.
+                nameView.setTextIfChanged(rowCfg.nameFor(s) ?: s?.displayName ?: rowCfg.entity)
                 // ha-entity-toggle's label: "Toggle Desk lamp".
                 if (isSwitchable) switchView.contentDescription = "Toggle ${nameView.text}"
                 // A dropdown row shows its name in the field (HA's `hide-name`): the row, which opens More Info,
                 // is named by it for TalkBack.
                 if (control?.hideName == true) row.contentDescription = nameView.text
-                secondaryView?.text = EntityRowControls.secondaryText(s, rowCfg.secondaryInfo, ctx.now()).orEmpty()
+                secondaryView?.setTextIfChanged(EntityRowControls.secondaryText(s, rowCfg.secondaryInfo, ctx.now()).orEmpty())
                 when {
                     control != null -> control.update(s)
                     isSwitchable -> {
@@ -3657,6 +3666,19 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 f.setActive(false)
             }
         }
+    }
+
+    /**
+     * Starts a live camera as its view builds, before the view is attached ([VitroView] calls it for a card its build
+     * shows), when the connection knows the camera's capabilities: its players open and connect while the rest of the
+     * view builds, rather than once it's on screen. Attached, it plays or pauses as usual ([followShown]); one the
+     * build never attached (a card replaced or dropped) closes what it opened on the next turn of the main loop.
+     */
+    internal fun startEarly() {
+        val f = feed ?: return
+        if (isAttachedToWindow || !f.capabilitiesKnown) return
+        guarded("camera") { f.start() }
+        ctx.main.post { if (!isAttachedToWindow) guarded("camera") { f.stop() } }
     }
 
     override fun onCardFailed() {

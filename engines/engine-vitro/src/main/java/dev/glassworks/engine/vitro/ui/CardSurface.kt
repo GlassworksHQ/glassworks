@@ -679,9 +679,35 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
      */
     private class Subscription(val subscribe: () -> (() -> Unit), val renewable: Boolean, val catchUp: (() -> Unit)?) {
         var handle: (() -> Unit)? = null
+
+        /** A render is queued for it ([requestRender]). Guarded by [renderLock]. */
+        var queued = false
+
+        /** It changed while its view was hidden ([setViewHidden]): it renders when the view shows. Guarded by [renderLock]. */
+        var stale = false
     }
 
     private val subscriptions = ArrayList<Subscription>()
+
+    /**
+     * The store's changes waiting for one render pass ([renderQueued]): a snapshot or a burst of changes renders each
+     * changed [observe] once, in one main-thread task per card rather than one per change. Guarded by [renderLock],
+     * since the store tells its listeners on the socket's thread.
+     */
+    private val renderLock = Any()
+    private val renderQueue = ArrayList<Subscription>()
+    private var renderPosted = false
+    private val renderQueued = Runnable { renderQueued() }
+
+    /**
+     * True while the card sits in a cached view that isn't shown ([setViewHidden]): its [observe] renders wait, and the
+     * view shows the current state again as it's shown. Written on the main thread, read on the socket's.
+     */
+    @Volatile private var viewHidden = false
+
+    /** Renders run so far (tests): one per changed [observe] and pass, and one per catch-up. */
+    internal var rendersRun = 0
+        private set
 
     /** Detached since its subscriptions were last made: the next attach makes the renewable ones again. */
     private var subscriptionsDropped = false
@@ -1189,12 +1215,64 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     protected fun observe(entityId: String, onState: (EntityState?) -> Unit) {
         // Subscribed before the first read, so a change between the two isn't missed; each render reads the store
         // then, not the value a dispatch carried, so dispatches posted out of order never leave an older one on screen.
-        add(Subscription(
-            subscribe = { ctx.store.subscribe(entityId) { _ -> ctx.main.post { guarded("update") { onState(ctx.store[entityId]) } } } },
+        // A change queues the card's render pass ([requestRender]): every change before it runs renders once.
+        lateinit var sub: Subscription
+        sub = Subscription(
+            subscribe = { ctx.store.subscribe(entityId) { _ -> requestRender(sub) } },
             renewable = !isAttachedToWindow,
-            catchUp = { guarded("update") { onState(ctx.store[entityId]) } },
-        ))
+            catchUp = { rendersRun++; guarded("update") { onState(ctx.store[entityId]) } },
+        )
+        add(sub)
         guarded("update") { onState(ctx.store[entityId]) }
+    }
+
+    /**
+     * [s]'s entity changed (any thread): its render is queued, and the card posts one pass for everything queued
+     * before it runs. Hidden in a cached view, nothing is posted: the render waits for the view to show.
+     */
+    private fun requestRender(s: Subscription) {
+        synchronized(renderLock) {
+            if (viewHidden) {
+                s.stale = true
+                return
+            }
+            if (!s.queued) {
+                s.queued = true
+                renderQueue += s
+            }
+            if (renderPosted) return
+            renderPosted = true
+        }
+        ctx.main.post(renderQueued)
+    }
+
+    private fun renderQueued() {
+        val batch = synchronized(renderLock) {
+            renderPosted = false
+            val out = renderQueue.toList()
+            renderQueue.clear()
+            out.forEach { it.queued = false }
+            // Hidden since they were queued: they render when the view shows.
+            if (viewHidden) out.forEach { it.stale = true }
+            if (viewHidden) emptyList() else out
+        }
+        // One that ended since (the card left the window) catches up when it comes back, not now.
+        for (s in batch) if (s.handle != null) s.catchUp?.invoke()
+    }
+
+    /**
+     * The cached view this card sits in was hidden (true) or shown again (false), by [VitroView]: HA renders only the
+     * view on screen, so a hidden view's cards stop rendering live changes, and catch up with the current state as the
+     * view shows, before it draws. The subscriptions stay, so nothing is asked of HA again. Main thread.
+     */
+    internal fun setViewHidden(hidden: Boolean) {
+        if (viewHidden == hidden) return
+        val due = synchronized(renderLock) {
+            viewHidden = hidden
+            if (hidden) return
+            subscriptions.filter { it.stale }.onEach { it.stale = false }
+        }
+        for (s in due) if (s.handle != null) s.catchUp?.invoke()
     }
 
     /**
@@ -1234,6 +1312,8 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         subscriptions.forEach { s -> s.handle?.let { runCatching { it() } }; s.handle = null }
         subscriptions.removeAll { !it.renewable }
         subscriptionsDropped = true
+        // The next attach catches every one of them up.
+        synchronized(renderLock) { subscriptions.forEach { it.stale = false } }
     }
 
     companion object {

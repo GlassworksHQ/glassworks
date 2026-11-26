@@ -205,6 +205,13 @@ class FakeHaServer {
     /** `auth/current_user` goes unanswered, for a test to answer it later (on [sockets]). */
     @Volatile var holdCurrentUser: Boolean = false
 
+    /**
+     * `subscribe_entities` is acknowledged but its first event (the snapshot) never comes, as from a Home Assistant
+     * still gathering it: a view's first build keeps waiting for its states. (An empty snapshot ends that wait at once:
+     * every entity is then known not to exist.)
+     */
+    @Volatile var holdEntitySnapshot: Boolean = false
+
     /** `config/entity_registry/list_for_display`'s answer; null refuses it (`unknown_command`). */
     @Volatile var entityRegistryDisplay: JSONObject? = null
 
@@ -320,6 +327,7 @@ class FakeHaServer {
             }
             "subscribe_entities" -> {
                 ok(sock, id, JSONObject.NULL)
+                if (holdEntitySnapshot) return
                 val wanted = m.optJSONArray("entity_ids")?.let { arr -> (0 until arr.length()).map { arr.getString(it) }.toSet() }
                 val initial = JSONObject()
                 val keys = initialEntities.keys()
