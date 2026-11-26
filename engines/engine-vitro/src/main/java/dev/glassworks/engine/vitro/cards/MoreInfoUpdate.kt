@@ -286,7 +286,7 @@ internal class MoreInfoUpdateView(
 
     /** HA's `_isShown()`: this view is in the sheet, and the sheet is open (not closing). */
     private fun shownInSheet(): Boolean {
-        if (detached || !isAttachedToWindow) return false
+        if (detached) return false
         var p = parent
         while (p != null) {
             if (p is MoreInfoSheet) return !p.isDismissed
