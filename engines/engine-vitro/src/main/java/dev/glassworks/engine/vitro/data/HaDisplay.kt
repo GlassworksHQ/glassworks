@@ -76,6 +76,7 @@ object HaDisplay {
         deviceAreas = emptyMap()
         areas = emptyMap()
         componentIcons.clear(); platformIcons.clear(); stateLabels.clear()
+        labelRevision++
         translatedDomains.clear(); translatedPlatforms.clear(); iconDomains.clear(); iconPlatforms.clear()
     }
 
@@ -224,7 +225,7 @@ object HaDisplay {
         val keys = res.keys()
         while (keys.hasNext()) {
             val k = keys.next()
-            if (".state." in k) res.optString(k).takeIf { it.isNotEmpty() }?.let { stateLabels[k] = it }
+            if (".state." in k) res.optString(k).takeIf { it.isNotEmpty() }?.let { if (stateLabels.put(k, it) != it) labelRevision++ }
         }
         if (component) translatedDomains += requested else translatedPlatforms += requested
     }
@@ -306,8 +307,9 @@ object HaDisplay {
      */
     fun stateLabels(): Map<String, String> = HashMap(stateLabels)
 
-    /** How many state labels are known: changes when more are read ([stateLabels]). */
-    val stateLabelCount: Int get() = stateLabels.size
+    /** Counts changes to the state labels (one added or replaced, or all forgotten): [stateLabels] differ after one. */
+    @Volatile var labelRevision: Long = 0
+        private set
 
     fun domainStateLabel(domain: String, state: String): String? = stateLabels["component.$domain.entity_component._.state.$state"]
 

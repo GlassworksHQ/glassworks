@@ -30,14 +30,15 @@ async function settle() { for (let i = 0; i < 5; i++) await tick(); }
  * One island page: the module run in its own context, with [card] as the custom element (a class-like factory:
  * (el) => void sets up el). Returns the bridge and the page's globals.
  */
-async function openPage({ card, strings = STRINGS, height = 40 } = {}) {
+async function openPage({ card, strings = STRINGS, height = 40, mountHeight } = {}) {
   const listeners = {};
   const sockets = [];
   let cardEl = null;
   const mount = {
     children: [],
     appendChild(c) { this.children.push(c); c.isConnected = true; if (c.connectedCallback) c.connectedCallback(); },
-    getBoundingClientRect() { return { height: cardEl && cardEl.drawn ? height : 0 }; },
+    // A full-viewport island holds #mount at 100vh whether the card drew or not.
+    getBoundingClientRect() { return { height: mountHeight !== undefined ? mountHeight : (cardEl && cardEl.drawn ? height : 0) }; },
   };
   class FakeSocket {
     static OPEN = 1;
@@ -71,6 +72,7 @@ async function openPage({ card, strings = STRINGS, height = 40 } = {}) {
       getElementById: (id) => (id === 'mount' ? mount : null),
       createElement: (t) => {
         const el = { localName: t, isConnected: false, drawn: false };
+        el.getBoundingClientRect = () => ({ height: el.drawn ? height : 0 });
         if (t === TAG) { cardEl = el; card(el); }
         return el;
       },
@@ -116,9 +118,13 @@ function members(src, name) {
   }
   const out = [];
   for (const line of src.slice(open + 1, end).split('\n')) {
+    // A member starts at two spaces; deeper lines continue a signature, `//` lines are comments, `)` closes one.
+    if (!/^ {2}\S/.test(line) || /^ {2}(\/\/|\)|\})/.test(line)) continue;
     let m;
-    if ((m = line.match(/^ {2}(?:get )?(\w+)(\?)?\s*(?:<[^>]*>)?\(/))) out.push({ name: m[1], optional: !!m[2], kind: line.includes('get ') ? 'getter' : 'function' });
-    else if ((m = line.match(/^ {2}(\w+)(\?)?:\s*(.+?);?\s*$/))) out.push({ name: m[1], optional: !!m[2], kind: kindOf(m[3]) });
+    if ((m = line.match(/^ {2}(?:readonly )?(?:get )?(\w+)(\?)?\s*(?:<[^>]*>)?\(/))) out.push({ name: m[1], optional: !!m[2], kind: line.includes('get ') ? 'getter' : 'function' });
+    else if ((m = line.match(/^ {2}(?:readonly )?(\w+)(\?)?:\s*(.+?);?\s*$/))) out.push({ name: m[1], optional: !!m[2], kind: kindOf(m[3]) });
+    // A declaration this can't read fails the test, so a new kind of member is never skipped.
+    else assert.fail(`${name}: can't read the member declaration ${JSON.stringify(line)}`);
   }
   return out;
 }
@@ -221,6 +227,7 @@ test('formatEntityState takes HA\'s translated state labels', async () => {
 test('loadBackendTranslation asks HA once, merges what it gives and resolves with a new localize', async () => {
   const page = await openPage({ card: plainCard });
   const before = page.hass().localize;
+  const oldResources = page.hass().resources.en;
   const pending = page.hass().loadBackendTranslation('services', ['scheduler']);
   await settle();
   const asks = page.sent('callWs').filter((m) => m.msg.type === 'frontend/get_translations');
@@ -231,6 +238,8 @@ test('loadBackendTranslation asks HA once, merges what it gives and resolves wit
   assert.equal(localize('component.scheduler.services.add.name'), 'Add schedule');
   assert.notEqual(localize, before, 'a new localize, as HA\'s');
   assert.equal(page.card().hass.localize, localize, 'the card got a hass with it');
+  assert.equal(page.card().hass.resources.en['component.scheduler.services.add.name'], 'Add schedule');
+  assert.equal(oldResources['component.scheduler.services.add.name'], undefined, 'an earlier hass keeps the strings it had');
   // The same request again (scheduler-card asks on every update): no second ask, no new hass.
   const count = page.card().got.length;
   await page.hass().loadBackendTranslation('services', 'scheduler');
@@ -311,6 +320,21 @@ test('connection events and hass.connected follow the panel\'s connection', asyn
   assert.deepEqual(heard, [['disconnected'], ['ready', true], ['disconnected']]);
 });
 
+test('a subscription whose preCheck says no after a reconnect ends, as HA\'s client does', async () => {
+  const page = await openPage({ card: plainCard });
+  let allowed = true;
+  const pending = page.hass().connection.subscribeMessage(() => {}, { type: 'scheduler' }, { preCheck: () => allowed });
+  await settle();
+  const sub = page.sent('subscribe').at(-1);
+  page.ws().push({ type: 'subAck', sid: sub.sid });
+  await pending;
+  page.ws().push({ type: 'conn', connected: false });
+  allowed = false;
+  page.ws().push({ type: 'conn', connected: true });
+  await settle();
+  assert.deepEqual(page.sent('unsubscribe'), [{ type: 'unsubscribe', sid: sub.sid }]);
+});
+
 test('hass.services is read when a card reads it, and again when HA registers a service', async () => {
   const page = await openPage({ card: plainCard });
   assert.equal(Object.keys(page.hass().services).length, 0, 'nothing until HA answers');
@@ -382,6 +406,14 @@ test('a card that throws on a member the island lacks and draws nothing goes to 
   page.rejectInPage(page.card().error);
   await tick(1700);
   assert.deepEqual(page.sent('cardBroken'), [{ type: 'cardBroken', member: 'someNewMember' }]);
+});
+
+test('a full-viewport island whose card drew nothing goes too (its mount is 100vh anyway)', async () => {
+  const card = (el) => { el.setConfig = () => {}; };
+  const page = await openPage({ card, mountHeight: 720 });
+  page.throwInPage(new TypeError('e.hass.someNewMember is not a function'));
+  await tick(1700);
+  assert.deepEqual(page.sent('cardBroken').map((m) => m.member), ['someNewMember']);
 });
 
 test('an error the card survives, or one that isn\'t a missing member, leaves it in the island', async () => {

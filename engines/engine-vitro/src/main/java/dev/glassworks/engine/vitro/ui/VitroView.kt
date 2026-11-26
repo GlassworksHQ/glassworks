@@ -315,6 +315,15 @@ class VitroView(
     private val gaveUpIslands = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /**
+     * The views a given-up island card was in ([viewKey]) and why: they go to HA's frontend whatever the card's config
+     * held when it ran (an auto-entities child carries the entity it matched, which the view's own config doesn't).
+     */
+    private val gaveUpViews = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** A view of this dashboard, as [gaveUpViews] keys it: its place and its config. */
+    private fun viewKey(view: ViewConfig): String = "${view.index}:${view.raw}"
+
+    /**
      * Shows a view Vitro doesn't draw ([fallbackReason]: a strategy, a built-in card or row it has no renderer for, a
      * custom card an island found drawing with HA's own elements) in Home Assistant's own frontend, with the reason.
      * Such a view is never built: no empty page and no island for a card the island can't draw. Null builds every view
@@ -327,7 +336,8 @@ class VitroView(
      * island found drawing with Home Assistant's own elements this session ([IslandFrontend]). Null: Vitro draws it.
      */
     fun fallbackReason(view: ViewConfig): String? =
-        view.webFallbackReason ?: if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resourcesList) }
+        view.webFallbackReason ?: (if (gaveUpViews.isEmpty()) null else gaveUpViews[viewKey(view)])
+            ?: if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resourcesList) }
 
     /**
      * What this session learned about [card] with [resources]: its island page kept dying ([islandPagesGone]), or,
@@ -515,6 +525,7 @@ class VitroView(
         closePooledIslands()
         islandLosses.clear()
         gaveUpIslands.clear()
+        gaveUpViews.clear()
         resourcesList = emptyList()
         // Nothing of the old server stays on screen while the new one connects: not its tabs, not its backdrop, and
         // a backdrop image still loading from it doesn't land afterwards.
@@ -1148,9 +1159,18 @@ class VitroView(
         // Each card whose page died counts a loss: one that keeps dying is given up for, and goes to HA's frontend.
         var gaveUp = false
         val now = SystemClock.elapsedRealtime()
-        val lost = viewCache.values.flatMap { islandsIn(it) } + overlayFrames.values.flatMap { islandsIn(it) }
-        for (card in lost.filter { it.holds(pages) }.map { it.islandConfig }.distinctBy { it.raw.toString() }) {
-            if (countIslandLoss(card, now)) gaveUp = true
+        // Each dead card once, with the views it was in.
+        val lost = LinkedHashMap<String, Pair<CardConfig, MutableSet<Int>>>()
+        for ((index, root) in viewCache) {
+            val dead = islandsIn(root) + (overlayFrames[index]?.let { islandsIn(it) } ?: emptyList())
+            for (card in dead.filter { it.holds(pages) }.map { it.islandConfig }) {
+                lost.getOrPut(card.raw.toString()) { card to HashSet() }.second += index
+            }
+        }
+        for ((card, views) in lost.values) {
+            val reason = countIslandLoss(card, now) ?: continue
+            gaveUp = true
+            for (index in views) dashboard?.views?.getOrNull(index)?.let { gaveUpViews[viewKey(it)] = reason }
         }
         val pooled = islandPool.values.flatten().filter { it.page in pages }
         for (island in pooled) {
@@ -1181,20 +1201,21 @@ class VitroView(
         }
     }
 
-    /** Counts a loss of [card]'s page at [now]; true when that gives the card up ([gaveUpIslands]). */
-    private fun countIslandLoss(card: CardConfig, now: Long): Boolean {
+    /** Counts a loss of [card]'s page at [now]; the reason when that gives the card up ([gaveUpIslands]), else null. */
+    private fun countIslandLoss(card: CardConfig, now: Long): String? {
         val key = card.raw.toString()
-        if (gaveUpIslands.containsKey(key)) return false
+        // Given up already, yet built again (its view's key changed): its view goes now.
+        gaveUpIslands[key]?.let { return it }
         val times = islandLosses.getOrPut(key) { ArrayDeque() }
         times.addLast(now)
         while (times.isNotEmpty() && now - times.first() > ISLAND_LOSS_WINDOW_MS) times.removeFirst()
         while (times.size > MAX_ISLAND_LOSSES) times.removeFirst()
-        if (times.size < MAX_ISLAND_LOSSES) return false
+        if (times.size < MAX_ISLAND_LOSSES) return null
         islandLosses.remove(key)
         val reason = "a `${card.type}` card whose island page stopped $MAX_ISLAND_LOSSES times in a row"
         gaveUpIslands[key] = reason
         Log.w(TAG, "Island ${card.type}: its page stopped $MAX_ISLAND_LOSSES times within ${ISLAND_LOSS_WINDOW_MS / 60_000} min; handing it to HA's frontend")
-        return true
+        return reason
     }
 
     /** The page is gone: every island closes, and nothing is built again. */

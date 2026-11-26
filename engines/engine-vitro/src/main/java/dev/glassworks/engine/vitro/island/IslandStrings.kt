@@ -19,32 +19,53 @@ object IslandStrings {
     /** One set: the versions it was made from, its content hash, and its JSON. */
     class Snapshot internal constructor(
         internal val textVersion: Long,
-        internal val labelCount: Int,
+        internal val labelRevision: Long,
         val hash: String,
         val body: ByteArray,
     )
 
     @Volatile private var last: Snapshot? = null
 
+    /**
+     * The last few sets, by hash: a page made just before the strings changed (another language, more labels) still
+     * gets the set it asked for, never another language's.
+     */
+    private val recent = object : LinkedHashMap<String, Snapshot>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Snapshot>?) = size > KEPT
+    }
+
     /** The strings now; made again only when HA's strings or the labels changed. Any thread (not the main one: it hashes). */
     fun current(): Snapshot {
         val version = HaText.version
-        val labels = HaDisplay.stateLabelCount
-        last?.let { if (it.textVersion == version && it.labelCount == labels) return it }
+        val labels = HaDisplay.labelRevision
+        last?.let { if (it.textVersion == version && it.labelRevision == labels) return it }
         synchronized(this) {
-            last?.let { if (it.textVersion == version && it.labelCount == labels) return it }
+            last?.let { if (it.textVersion == version && it.labelRevision == labels) return it }
             val all = JSONObject()
             for ((k, v) in HaText.installed()) all.put(k, v)
             // HA's UI strings win a key both have (there are none: the backend's are all `component.*`).
             for ((k, v) in HaDisplay.stateLabels()) if (!all.has(k)) all.put(k, v)
             val body = all.toString().toByteArray(Charsets.UTF_8)
             val hash = MessageDigest.getInstance("SHA-256").digest(body).take(12).joinToString("") { "%02x".format(it) }
-            return Snapshot(version, labels, hash, body).also { last = it }
+            return Snapshot(version, labels, hash, body).also {
+                last = it
+                recent[hash] = it
+            }
         }
+    }
+
+    /** The set whose content hash is [hash]: the current one, or one of the last few; null for any other. */
+    fun byHash(hash: String): Snapshot? {
+        val now = current()
+        if (now.hash == hash) return now
+        return synchronized(this) { recent[hash] }
     }
 
     /** The address of the strings now, on the island server: `/__vitro/strings/<hash>.json`. */
     fun path(): String = "$PREFIX${current().hash}.json"
 
     internal const val PREFIX = "/__vitro/strings/"
+
+    /** How many sets [byHash] keeps besides the current one: a language change or two while pages load. */
+    private const val KEPT = 4
 }

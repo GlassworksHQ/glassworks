@@ -37,6 +37,21 @@ internal object IslandNode {
     }
 
     /**
+     * Kills [p]'s descendants. Through `ProcessHandle` by reflection: android.jar, which the unit tests compile
+     * against, has no `Process.toHandle()`, while the JDK they run on (17) does.
+     */
+    private fun killDescendants(p: Process) {
+        runCatching {
+            val handleType = Class.forName("java.lang.ProcessHandle")
+            val handle = Process::class.java.getMethod("toHandle").invoke(p)
+            @Suppress("UNCHECKED_CAST")
+            val all = (handleType.getMethod("descendants").invoke(handle) as java.util.stream.Stream<Any>)
+                .collect(java.util.stream.Collectors.toList())
+            all.forEach { child -> runCatching { handleType.getMethod("destroyForcibly").invoke(child) } }
+        }
+    }
+
+    /**
      * Runs node with [args] (and [env] added to its environment) and gives its exit code and output (stdout and stderr). The output goes to a file, so a
      * node that stalls can't block the read: after [timeoutSeconds] it is killed and the test fails.
      */
@@ -47,6 +62,9 @@ internal object IslandNode {
             pb.environment().putAll(env)
             val p = pb.start()
             if (!p.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                // `node --test` runs each file in a child: those go first (taken before the runner dies and they're
+                // reparented), then the runner.
+                killDescendants(p)
                 p.destroyForcibly()
                 p.waitFor(5, TimeUnit.SECONDS)
                 fail("node ${args.joinToString(" ")} didn't finish in $timeoutSeconds s:\n${log.readText()}")

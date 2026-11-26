@@ -170,7 +170,7 @@ class IslandSessionsTest {
         assertEquals("theme", sent.first().getString("type"))
         assertTrue(sent.first().getBoolean("dark"))
         assertTrue("night's primary color", sent.first().getString("css").contains("#123456"))
-        assertEquals(listOf("theme", "auth", "snapshot"), sent.take(3).map { it.getString("type") })
+        assertEquals(listOf("theme", "auth", "conn", "snapshot"), sent.take(4).map { it.getString("type") })
         assertOnePagePerIsland(p)
     }
 
@@ -747,7 +747,7 @@ class IslandSessionsTest {
         WebIslandCardView(context(store, islands, dark = true, ArrayList(), token = { token }, tokenWatchers = watchers), LovelaceParser.parseCard(JSONObject(cardJson)))
         val sent = ArrayList<JSONObject>()
         slots(islands).values.single().onConnected { sent += it }
-        assertEquals(listOf("theme", "auth", "snapshot"), sent.map { it.getString("type") })
+        assertEquals(listOf("theme", "auth", "conn", "snapshot"), sent.map { it.getString("type") })
         assertEquals("first-token", sent[1].getString("token"))
         assertTrue("no user known yet", sent[1].isNull("user"))
         sent.clear()

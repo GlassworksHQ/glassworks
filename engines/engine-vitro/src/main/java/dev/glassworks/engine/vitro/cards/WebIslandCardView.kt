@@ -178,10 +178,10 @@ class WebIslandCardView(
                     synchronized(seedLock) {
                         send(themeMessage())
                         send(authMessage(currentToken(), currentUser()))
-                        // The page starts connected: it hears only of a connection that is down now.
+                        // Where the connection is now: a page kept across a hand-over may still think it's down.
                         val up = ctx.haConnected()
                         sentConnected = up
-                        if (!up) send(connMessage(false))
+                        send(connMessage(up))
                         seedInitialStates(send)
                         registries?.let { send(registriesMessage(it)) }
                         senders += send
@@ -408,7 +408,8 @@ class WebIslandCardView(
                 synchronized(seedLock) {
                     val mine = pageSubs.getOrPut(send) { HashMap() }
                     if (sid in mine) return
-                    if (mine.size >= MAX_PAGE_SUBSCRIPTIONS) {
+                    // One budget for the island, whatever number of bridges its page opens.
+                    if (pageSubs.values.sumOf { it.size } >= MAX_PAGE_SUBSCRIPTIONS) {
                         send(subError(sid, JSONObject().put("code", "too_many_subscriptions").put("message", "Too many subscriptions")))
                         return
                     }
@@ -580,7 +581,7 @@ class WebIslandCardView(
         var handle: (() -> Unit)? = null
         /** Bumped by every start, so an event or error of an earlier one is dropped. Under [seedLock]. */
         var generation = 0
-        /** True once the page was told it started (`subAck`), which happens once. */
+        /** True once HA accepted it and the page was told (`subAck`), which happens once. */
         var acked = false
 
         /** Whether [generation] is this subscription's latest start and the page still has it. Under [seedLock]. */
@@ -597,16 +598,25 @@ class WebIslandCardView(
     private val pageSubs = HashMap<(JSONObject) -> Unit, HashMap<Int, PageSub>>()
 
     /**
-     * Starts [sub] on HA's connection. Its events go to its page as `subEvent`; the page hears `subAck` once it
-     * started, or `subError` when HA refused it. One that can't start now (no connection, or it dropped before HA
-     * answered) waits for the connection to come back ([connectionChanged]). Under [seedLock].
+     * Starts [sub] on HA's connection. Its events go to its page as `subEvent`; the page hears `subAck` once HA
+     * accepted it, or `subError` when HA refused it. One that can't start now (no connection, a failed write, or a
+     * connection that dropped before HA answered) waits for the connection to come back ([connectionChanged]). Under
+     * [seedLock].
      */
     private fun startSub(sub: PageSub) {
         val gen = ++sub.generation
         var waits = false
         var refused = false
-        val handle = ctx.subscribeWs(
+        val handle = ctx.subscribeWsStarted(
             sub.msg,
+            {
+                synchronized(seedLock) {
+                    if (sub.current(gen) && !sub.acked) {
+                        sub.acked = true
+                        sub.send(JSONObject().put("type", "subAck").put("sid", sub.sid))
+                    }
+                }
+            },
             { ev ->
                 synchronized(seedLock) {
                     if (sub.current(gen)) sub.send(JSONObject().put("type", "subEvent").put("sid", sub.sid).put("event", ev))
@@ -615,7 +625,8 @@ class WebIslandCardView(
             { err ->
                 synchronized(seedLock) {
                     if (!sub.current(gen)) return@synchronized
-                    if (err == null || err.optString("code") == HaDashboardClient.DISCONNECTED) {
+                    val code = err?.optString("code")
+                    if (err == null || code == HaDashboardClient.DISCONNECTED || code == HaDashboardClient.SEND_FAILED) {
                         // HA never had it, or lost it with the connection: it starts when the connection is back.
                         sub.handle = null
                         waits = true
@@ -630,11 +641,8 @@ class WebIslandCardView(
         )
         if (refused || !sub.current(gen)) return
         if (waits) return
+        // Kept while HA hasn't answered too: the page can still end it.
         sub.handle = handle
-        if (!sub.acked) {
-            sub.acked = true
-            sub.send(JSONObject().put("type", "subAck").put("sid", sub.sid))
-        }
     }
 
     /**
@@ -1765,7 +1773,10 @@ function subscribeLine(sid, entry) { return { type: 'subscribe', sid, msg: entry
 async function vitroSubscribeMessage(callback, message, options) {
   if (options && typeof options.preCheck === 'function' && !(await options.preCheck())) throw new Error('Pre-check failed');
   const sid = nextSid++;
-  const entry = { callback, msg: Object.assign({}, message || {}), resubscribe: !options || options.resubscribe !== false, acked: false };
+  const entry = {
+    callback, msg: Object.assign({}, message || {}), resubscribe: !options || options.resubscribe !== false, acked: false,
+    preCheck: options && typeof options.preCheck === 'function' ? options.preCheck : null,
+  };
   await new Promise((resolve, reject) => {
     entry.resolve = resolve;
     entry.reject = reject;
@@ -1833,11 +1844,13 @@ function vitroLoadBackendTranslation(category, integrations, configFlow) {
     p = vitroCallWS(msg).then((r) => {
       const res = r && r.resources;
       if (!res || typeof res !== 'object') return;
-      let changed = false;
-      for (const k of Object.keys(res)) {
-        if (typeof res[k] === 'string' && haStrings[k] !== res[k]) { haStrings[k] = res[k]; changed = true; }
-      }
-      if (changed) stringsChanged();
+      // A new map when anything changed: a hass handed out earlier keeps the strings it had (hass.resources).
+      const changes = Object.keys(res).filter((k) => typeof res[k] === 'string' && haStrings[k] !== res[k]);
+      if (!changes.length) return;
+      const next = Object.assign({}, haStrings);
+      for (const k of changes) next[k] = res[k];
+      haStrings = next;
+      stringsChanged();
     }, () => { backendAsked.delete(key); });
     backendAsked.set(key, p);
   }
@@ -2003,6 +2016,13 @@ function connectBridge() {
         const up = !!m.connected;
         if (up !== haConnected) {
           haConnected = up;
+          // HA's client asks a subscription's preCheck again before it resubscribes: one that says no now ends.
+          if (up) for (const [sid, entry] of Array.from(pageSubs)) {
+            if (!entry.preCheck) continue;
+            Promise.resolve().then(() => entry.preCheck()).then((ok) => {
+              if (!ok && pageSubs.get(sid) === entry) { pageSubs.delete(sid); sendIfOpen({ type: 'unsubscribe', sid }); }
+            }, () => {});
+          }
           fireConn(up ? 'ready' : 'disconnected');
           if (up && servicesAsked) loadServices();
           if (cardEl) cardEl.hass = makeHass();
@@ -2091,9 +2111,11 @@ function vitroMissingMember(err) {
   const parts = m[1].split('.');
   return parts[parts.length - 1];
 }
+// The card drew nothing: it isn't in the page, or it takes no room. The card, not #mount, which a full-viewport
+// island holds at the screen's height even when it's empty.
 function vitroCardBlank() {
-  const mount = document.getElementById('mount');
-  return !mount || Math.ceil(mount.getBoundingClientRect().height || 0) <= 0;
+  if (!cardEl || !cardEl.isConnected) return true;
+  return Math.ceil(cardEl.getBoundingClientRect().height || 0) <= 0;
 }
 function vitroOnCardThrow(err) {
   if (brokenSent || brokenTimer || !cardEl) return;

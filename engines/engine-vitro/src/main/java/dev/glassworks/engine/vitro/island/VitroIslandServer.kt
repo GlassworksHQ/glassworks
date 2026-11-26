@@ -234,10 +234,15 @@ class VitroIslandServer(
         }
         if (path.startsWith(IslandStrings.PREFIX)) {
             // HA's strings for the islands' `hass.localize` (nothing secret: HA serves them to anyone). The address
-            // names their content, so the browser keeps them; a page made before they changed gets the new ones.
-            val strings = IslandStrings.current()
-            val cache = if (path == IslandStrings.PREFIX + strings.hash + ".json") "public, max-age=31536000, immutable" else "no-store"
-            return HttpResponse(200, mapOf("Content-Type" to "application/json; charset=utf-8", "Cache-Control" to cache), strings.body)
+            // names their content, so the browser keeps them.
+            // A set it no longer has is a 404: the page's localize then misses (""), never reads another language's.
+            val hash = path.removePrefix(IslandStrings.PREFIX).removeSuffix(".json")
+            val strings = IslandStrings.byHash(hash) ?: return HttpResponse.text(404, "Not found")
+            return HttpResponse(
+                200,
+                mapOf("Content-Type" to "application/json; charset=utf-8", "Cache-Control" to "public, max-age=31536000, immutable"),
+                strings.body,
+            )
         }
         if (path.startsWith("/__vitro/ws/")) {
             val id = path.removePrefix("/__vitro/ws/")

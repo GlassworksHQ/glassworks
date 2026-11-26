@@ -92,6 +92,19 @@ class VitroCardContext(
      * current one before using an event. The default (tests, no engine) never delivers anything.
      */
     val subscribeWs: (msg: JSONObject, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit) -> () -> Unit = { _, _, _ -> {} },
+    /**
+     * [subscribeWs] that also says when Home Assistant accepted the subscription (`onStarted`, on any thread): what a
+     * web island's `subscribeMessage` resolves on. The default (tests, no engine) says so as soon as it's asked.
+     */
+    val subscribeWsStarted: (
+        msg: JSONObject,
+        onStarted: () -> Unit,
+        onEvent: (JSONObject) -> Unit,
+        onError: (JSONObject?) -> Unit,
+    ) -> () -> Unit = { msg, onStarted, onEvent, onError ->
+        var failed = false
+        subscribeWs(msg, onEvent) { e -> failed = true; onError(e) }.also { if (!failed) onStarted() }
+    },
     /** The wall clock, ms since the epoch: what HA's frontend reads as `new Date()` for its time windows. */
     val now: () -> Long = System::currentTimeMillis,
     /** The dashboard's own URL (HA's page `location`), which relative links resolve against; null when unknown. */
@@ -198,6 +211,7 @@ class VitroCardContext(
         haUser = haUser,
         cameraPlayers = cameraPlayers,
         subscribeWs = subscribeWs,
+        subscribeWsStarted = subscribeWsStarted,
         now = now,
         pageUrl = pageUrl,
         watchEntity = watchEntity,

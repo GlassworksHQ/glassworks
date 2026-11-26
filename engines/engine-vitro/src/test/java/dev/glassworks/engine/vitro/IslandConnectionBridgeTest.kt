@@ -41,12 +41,20 @@ class IslandConnectionBridgeTest {
     private val islands = VitroIslandServer(haBase = { "http://192.0.2.10:8123" }, accessToken = { null })
 
     /** One subscription the card asked HA for. */
-    private class Sub(val msg: JSONObject, val onEvent: (JSONObject) -> Unit, val onError: (JSONObject?) -> Unit) {
+    private class Sub(
+        val msg: JSONObject,
+        val onStarted: () -> Unit,
+        val onEvent: (JSONObject) -> Unit,
+        val onError: (JSONObject?) -> Unit,
+    ) {
         var cancelled = false
     }
 
     private val subs = ArrayList<Sub>()
     private var connected = true
+
+    /** HA accepts each subscription as soon as it's asked (false: the test answers with [Sub.onStarted]). */
+    private var acceptAtOnce = true
     private var connectionWatcher: ((Boolean) -> Unit)? = null
     private val failed = ArrayList<Pair<String, String>>()
     private var token = "first-token"
@@ -67,11 +75,13 @@ class IslandConnectionBridgeTest {
         callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {}, fetchHistory = { _, _, _ -> },
         subscribeTemplate = { _, _ -> {} },
         islandServer = islands, openIslandPage = { RecordingPage(activity) },
-        subscribeWs = { msg, onEvent, onError ->
-            val sub = Sub(msg, onEvent, onError)
+        subscribeWsStarted = { msg, onStarted, onEvent, onError ->
+            val sub = Sub(msg, onStarted, onEvent, onError)
             subs += sub
             // The client: a command it can't send fails at once, with no error from HA.
-            if (!connected) { onError(null); {} } else { { sub.cancelled = true } }
+            val cancel: () -> Unit = { sub.cancelled = true }
+            if (!connected) onError(null) else if (acceptAtOnce) onStarted()
+            if (connected) cancel else ({})
         },
         haConnected = { connected },
         watchConnection = { onChange -> connectionWatcher = onChange; { connectionWatcher = null } },
@@ -102,7 +112,7 @@ class IslandConnectionBridgeTest {
 
     @Test fun aPageSubscriptionRunsOnThePanelsConnectionAndEndsWithIt() {
         val (island, send, sent) = island()
-        assertTrue("a page starts connected: nothing to say", sent.ofType("conn").isEmpty())
+        assertEquals("every bridge hears where the connection is", listOf(true), sent.ofType("conn").map { it.getBoolean("connected") })
 
         island.handleIslandMessage(subscribe(1, "scheduler/subscribe"), send)
         assertEquals("scheduler/subscribe", subs.single().msg.getString("type"))
@@ -129,7 +139,7 @@ class IslandConnectionBridgeTest {
         // The connection drops: HA dropped its subscriptions with it.
         connected = false
         connectionWatcher!!(false)
-        assertEquals(listOf(false), sent.ofType("conn").map { it.getBoolean("connected") })
+        assertEquals(listOf(true, false), sent.ofType("conn").map { it.getBoolean("connected") })
         // One the page asks for meanwhile waits for the connection.
         island.handleIslandMessage(subscribe(3, "calendar/event/subscribe"), send)
         assertTrue("no ack while it waits", sent.ofType("subAck").none { it.getInt("sid") == 3 })
@@ -141,7 +151,7 @@ class IslandConnectionBridgeTest {
         assertEquals("one that doesn't resubscribe ends", listOf(2), sent.ofType("subEnd").map { it.getInt("sid") })
         assertEquals("the waiting one is acked once it started", 1, sent.ofType("subAck").count { it.getInt("sid") == 3 })
         assertEquals("the others aren't acked twice", 1, sent.ofType("subAck").count { it.getInt("sid") == 1 })
-        assertEquals(listOf(false, true), sent.ofType("conn").map { it.getBoolean("connected") })
+        assertEquals(listOf(true, false, true), sent.ofType("conn").map { it.getBoolean("connected") })
 
         // Events of the old subscription never reach the page.
         subs[0].onEvent(JSONObject().put("old", true))
@@ -157,6 +167,48 @@ class IslandConnectionBridgeTest {
         connected = true
         connectionWatcher!!(true)
         assertEquals(listOf(false, true), sent.ofType("conn").map { it.getBoolean("connected") })
+    }
+
+    @Test fun aSubscriptionIsAckedOnlyOnceHaAcceptedIt() {
+        acceptAtOnce = false
+        val (island, send, sent) = island()
+        island.handleIslandMessage(subscribe(1, "admin/only"), send)
+        assertTrue("queued is not accepted", sent.ofType("subAck").isEmpty())
+        subs.single().onError(JSONObject().put("code", "unauthorized").put("message", "Unauthorized"))
+        assertEquals("the refusal can still reject the card's promise", 1, sent.ofType("subError").size)
+        assertTrue(sent.ofType("subAck").isEmpty())
+
+        // Not accepted when the connection drops: it starts again, even one that doesn't resubscribe.
+        island.handleIslandMessage(subscribe(2, "render_template", resubscribe = false), send)
+        connectionWatcher!!(false)
+        connectionWatcher!!(true)
+        assertEquals(3, subs.size)
+        assertTrue(sent.ofType("subEnd").isEmpty())
+        subs.last().onStarted()
+        subs.last().onStarted()
+        assertEquals(listOf(2), sent.ofType("subAck").map { it.getInt("sid") })
+    }
+
+    @Test fun aWriteThatFailedWaitsForTheConnectionLikeALostOne() {
+        val (island, send, sent) = island()
+        island.handleIslandMessage(subscribe(1, "scheduler/subscribe"), send)
+        subs.single().onError(JSONObject().put("code", HaDashboardClient.SEND_FAILED))
+        assertTrue(sent.ofType("subError").isEmpty())
+        connectionWatcher!!(false)
+        connectionWatcher!!(true)
+        assertEquals(2, subs.size)
+    }
+
+    @Test fun oneBudgetForTheIslandWhateverItsBridges() {
+        val (island, send, sent) = island()
+        val sent2 = ArrayList<JSONObject>()
+        val send2: (JSONObject) -> Unit = { sent2 += it }
+        slot().onConnected(send2)
+        for (sid in 1..WebIslandCardView.MAX_PAGE_SUBSCRIPTIONS) island.handleIslandMessage(subscribe(sid, "x/subscribe"), send)
+        island.handleIslandMessage(subscribe(1, "x/subscribe"), send2)
+        assertEquals("too_many_subscriptions", sent2.ofType("subError").single().getJSONObject("error").getString("code"))
+        assertEquals(WebIslandCardView.MAX_PAGE_SUBSCRIPTIONS, subs.size)
+        assertTrue(sent.ofType("subError").isEmpty())
     }
 
     @Test fun aRefusedSubscriptionIsTheCardsErrorAndALostOneWaits() {

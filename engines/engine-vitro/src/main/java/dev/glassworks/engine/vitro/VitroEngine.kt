@@ -227,8 +227,10 @@ class VitroEngine(
 
         /**
          * Tells the islands the connection of the client of [generation] is [up] (or down), once per change. A new
-         * client's first connection is a change too, so the islands' subscriptions start on it.
+         * client's first connection is a change too, so the islands' subscriptions start on it. One at a time: a client
+         * being replaced can't write its state after the new one's, and watchers hear each change once, in order.
          */
+        @Synchronized
         private fun connectionIs(up: Boolean, generation: Int) {
             if (generation != clientGeneration) return
             val now = if (up) generation else -1
@@ -670,6 +672,10 @@ class VitroEngine(
                     },
                     subscribeTemplate = { tpl, onRendered ->
                         client?.subscribeTemplate(tpl, onRendered) ?: {}
+                    },
+                    subscribeWsStarted = { msg, onStarted, onEvent, onError ->
+                        val c = client
+                        if (c != null) c.subscribeWs(msg, onEvent, onError, onStarted) else { onError(null); {} }
                     },
                     cameraPlayers = cameraPlayersFor(haBase),
                     islandServer = islandServer,

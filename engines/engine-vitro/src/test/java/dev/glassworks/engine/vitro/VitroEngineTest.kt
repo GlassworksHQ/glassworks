@@ -1422,7 +1422,7 @@ class VitroEngineTest {
             // A socket that connects later (a reconnect) gets them right after its snapshot.
             val later = CopyOnWriteArrayList<JSONObject>()
             handler.onConnected { later += it }
-            assertEquals(listOf("theme", "auth", "snapshot", "registries"), later.map { it.getString("type") })
+            assertEquals(listOf("theme", "auth", "conn", "snapshot", "registries"), later.map { it.getString("type") })
 
             // Gone with the island.
             val parent = FrameLayout(activity)

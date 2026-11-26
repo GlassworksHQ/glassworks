@@ -13,7 +13,10 @@ import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.testing.RepoFiles
 import org.json.JSONObject
+import dev.glassworks.engine.vitro.island.IslandStrings
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -87,6 +90,24 @@ class IslandHassContractTest {
         assertTrue(WebIslandCardView.languageMeta("fa").getBoolean("isRTL"))
         assertEquals("Español", WebIslandCardView.languageMeta("es").getString("nativeName"))
         assertTrue("the page says so", page().contains("""<html lang="en" dir="ltr">"""))
+    }
+
+    @Test
+    fun aPageGetsTheStringsItAskedForOrNone() {
+        try {
+            dev.glassworks.engine.vitro.data.HaText.install("en", mapOf("ui.common.save" to "Save"))
+            val english = IslandStrings.current()
+            assertTrue(String(english.body).contains("\"Save\""))
+            dev.glassworks.engine.vitro.data.HaText.install("de", mapOf("ui.common.save" to "Speichern"))
+            val german = IslandStrings.current()
+            assertNotEquals(english.hash, german.hash)
+            assertEquals("a page made before the change still gets its own", english.hash, IslandStrings.byHash(english.hash)?.hash)
+            assertEquals(german.hash, IslandStrings.byHash(german.hash)?.hash)
+            assertNull("never another set's strings", IslandStrings.byHash("0123456789abcdef01234567"))
+            assertEquals("${IslandStrings.PREFIX}${german.hash}.json", IslandStrings.path())
+        } finally {
+            dev.glassworks.engine.vitro.data.HaText.reset()
+        }
     }
 
     @Test

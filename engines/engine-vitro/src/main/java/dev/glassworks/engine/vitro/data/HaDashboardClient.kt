@@ -537,10 +537,16 @@ class HaDashboardClient(
     /**
      * Subscribes [msg] (any subscription command, e.g. `history/stream`) and hands each of its events to [onEvent], on
      * the socket's thread. [onError] runs once if Home Assistant rejects the command (with its `error`), or with null
-     * when it can't be sent; cancelling with the returned handle never calls it.
+     * when it can't be sent; cancelling with the returned handle never calls it. [onStarted] runs once Home Assistant
+     * accepted it (its `result`), unless it was cancelled first.
      */
-    fun subscribeWs(msg: JSONObject, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit): () -> Unit {
-        val subId = subscribeWithId(JSONObject(msg.toString()), onError) { _, ev -> onEvent(ev) }
+    fun subscribeWs(
+        msg: JSONObject,
+        onEvent: (JSONObject) -> Unit,
+        onError: (JSONObject?) -> Unit,
+        onStarted: () -> Unit = {},
+    ): () -> Unit {
+        val subId = subscribeWithId(JSONObject(msg.toString()), onError, onStarted) { _, ev -> onEvent(ev) }
         if (subId <= 0) onError(null)
         return { if (subId > 0) unsubscribe(subId) }
     }
@@ -1082,6 +1088,7 @@ class HaDashboardClient(
     private fun subscribeWithId(
         msg: JSONObject,
         onError: ((JSONObject?) -> Unit)? = null,
+        onStarted: (() -> Unit)? = null,
         onEvent: (id: Int, event: JSONObject) -> Unit,
     ): Int = synchronized(queueLock) {
         val id = nextId.getAndIncrement()
@@ -1091,10 +1098,12 @@ class HaDashboardClient(
         subscriptionStates[id] = state
         pending[id] = { res ->
             // The result and a cancel decide under the subscription's own lock, so neither can slip past the other.
+            var started = false
             val report = synchronized(state) {
                 state.settled = true
                 subscriptionStates.remove(id)
                 if (res.optBoolean("success", false)) {
+                    started = !state.cancelled
                     false
                 } else {
                     subscriptions.remove(id)
@@ -1104,6 +1113,7 @@ class HaDashboardClient(
                 }
             }
             if (report) onError?.invoke(res.optJSONObject("error"))
+            if (started) onStarted?.invoke()
         }
         if (!send(msg)) {
             subscriptions.remove(id)
