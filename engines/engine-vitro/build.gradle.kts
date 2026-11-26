@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import java.net.URI
+
 // Vitro: experimental native Android Lovelace rendering engine for Glassworks.
 // Runs directly on Android 6+ (minSdk 23, including the lululemon Studio Mirror) with zero GeckoView
 // dependency of its own; an optional fallback Engine handles non-dashboard pages and unknown custom cards.
@@ -41,6 +43,16 @@ tasks.withType<Test>().configureEach {
     // the same on every machine, so a test's English is English.
     systemProperty("user.language", "en")
     systemProperty("user.country", "US")
+    // A unit test never reaches the network: HTTP and HTTPS to any host but this computer go to a closed port on
+    // loopback and fail at once. FakeHaServer.BASE (192.0.2.10, a documentation address) or a card's CDN would
+    // otherwise hold an image-pool thread for its whole timeout, and the load would land in a later test (D28).
+    // Robolectric's own jar download (build-logic's robolectric.dependency.repo.url) stays direct.
+    val robolectricRepo = (systemProperties["robolectric.dependency.repo.url"] as String?)?.let { URI(it).host }
+    systemProperty("http.proxyHost", "127.0.0.1")
+    systemProperty("http.proxyPort", "9")
+    systemProperty("https.proxyHost", "127.0.0.1")
+    systemProperty("https.proxyPort", "9")
+    systemProperty("http.nonProxyHosts", listOfNotNull("localhost", "127.*", "[::1]", robolectricRepo, "repo1.maven.org").joinToString("|"))
     inputs.dir("src/test/parity").withPropertyName("vitroParity").withPathSensitivity(PathSensitivity.RELATIVE)
     // ClarityStatsTest holds Vitro's Clarity harness to the web harness's cases.
     inputs.file(rootProject.file("tools/perf/test/stats-cases.json")).withPropertyName("clarityStatsCases")

@@ -36,7 +36,6 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.net.InetSocketAddress
-import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.abs
 
@@ -68,20 +67,6 @@ class ButtonCardViewTest {
 
     @After
     fun stopIcons() = icons.stop(0)
-
-    /**
-     * Runs the main looper until the picture loads this test started are back on it ([pendingBefore] left), or a
-     * deadline passes: a load still in flight when the test ends would land in a later test's looper.
-     */
-    private fun awaitImages(pendingBefore: Int) {
-        val deadline = System.nanoTime() + 10_000_000_000L
-        while (VitroCardContext.pendingImageLoads.get() != pendingBefore && System.nanoTime() < deadline) {
-            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(20))
-            Thread.sleep(5)
-        }
-        shadowOf(Looper.getMainLooper()).idle()
-        assertEquals("every picture load this test started has finished", pendingBefore, VitroCardContext.pendingImageLoads.get())
-    }
 
     private fun ctx(admin: Boolean = false) = VitroCardContext(
         context = activity, haBase = FakeHaServer.BASE, store = store,
@@ -327,7 +312,7 @@ class ButtonCardViewTest {
         val card = LegacyWeatherCardView(ctx(), LovelaceParser.parseCard(JSONObject("""{"type": "custom:weather-card", "entity": "weather.studio_forecast", "name": "Studio", "icons": "$folder"}""")))
         activity.setContentView(card, ViewGroup.LayoutParams(460, ViewGroup.LayoutParams.WRAP_CONTENT))
         layout(card, 460)
-        awaitImages(pendingBefore)
+        awaitImageLoads(pendingBefore)
         assertEquals("the condition's icon, from the card's own folder", listOf("/icons/cloudy-day-3.svg"), iconRequests.toList())
         val icon = all(card).single { it.javaClass.simpleName == "SvgView" }
         assertNotNull("the icon is drawn", icon.javaClass.getDeclaredMethod("getSvg").apply { isAccessible = true }.invoke(icon))
