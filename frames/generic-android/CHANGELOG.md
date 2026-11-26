@@ -12,16 +12,16 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Fixed
-- **Camera stills are never solid green, and the camera's stream keeps its pictures.** On some panels, the
-  Mirror among them, the camera sometimes starts sending empty frames, which Home Assistant showed as a solid green
-  picture and the video stream as nothing at all. The panel now spots those frames, never sends them, and restarts
-  the camera until real pictures come.
+- **The Mirror's camera shows a real picture.** Home Assistant used to show the Mirror's camera as mostly solid
+  green with a streaky band, in stills and in the video stream alike. The panel asked the camera for a slower frame
+  rate than it runs well at; it now asks every camera for its normal rate. If a camera still sends empty frames, the
+  panel never passes them on and restarts the camera.
 - **The panel waits its turn when another app has the camera.** It used to try for the camera every few seconds,
   several times at once, which on Android 6 could crash the system's camera and audio service. It now waits a
   little longer after each try, up to a minute, and takes the camera as soon as the other app lets it go.
 - **The Mirror's camera stream runs at full speed.** With the video stream on, the Mirror's camera slowed to about
   7 frames a second, because it copied every frame for motion detection too. Motion detection now looks at a few
-  frames a second while the stream gets all of them. In the legacy build.
+  frames a second while the stream gets all of them.
 - **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it avoids Android's display-off path and sleeps the way lululemon's own software did — dropping the backlight to zero under a black screen so waking brings the picture straight back (physical `screen_brightness=0` verified on stock firmware; live check of the app's window-brightness override pending before release). In the legacy build.
 - **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
   restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent

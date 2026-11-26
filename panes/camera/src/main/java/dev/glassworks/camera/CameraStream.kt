@@ -56,7 +56,7 @@ class CameraStream(
     private val snapshot: () -> ByteArray?,
     private val log: (String) -> Unit = { Log.i(TAG, it) },
     private val encoders: EncoderFactory = EncoderFactory { size, au, failed ->
-        H264Encoder(size.width, size.height, onAccessUnit = au, onFailure = failed)
+        H264Encoder(size.width, size.height, fps = hub.streamFps.takeIf { it > 0 } ?: H264Encoder.FPS, onAccessUnit = au, onFailure = failed)
     },
     /** Tests use free ports and no WS-Discovery. */
     private val rtspPort: Int = RTSP_PORT,

@@ -374,19 +374,18 @@ class CameraHubTest {
         assertEquals(null, got)
     }
 
-    // ------------------------------------------------------------ the reader on a streaming LEGACY camera
+    // ------------------------------------------------------------ the reader on a streaming camera
 
-    @Test fun theReaderIsInEveryRequestUnlessALegacyCameraStreams() {
-        assertEquals("presence alone", 1, readerEvery(legacy = true, streaming = false, minFps = 15))
-        assertEquals("not LEGACY: as before", 1, readerEvery(legacy = false, streaming = true, minFps = 15))
-        assertEquals("not LEGACY, presence alone", 1, readerEvery(legacy = false, streaming = false, minFps = 0))
+    @Test fun theReaderIsInEveryRequestUnlessTheCameraStreams() {
+        assertEquals("presence alone", 1, readerEvery(streaming = false, minFps = 30))
     }
 
-    /** The Mirror streams at a steady 15 fps: the reader gets 1 frame in 5 (3 fps), the encoder all 15. */
-    @Test fun aStreamingLegacyCameraGivesTheReaderAFewFrames() {
-        assertEquals(5, readerEvery(legacy = true, streaming = true, minFps = 15))
-        assertEquals("a camera that may drop to 7 fps: 1 in 2, still 3.5 fps at its slowest", 2, readerEvery(legacy = true, streaming = true, minFps = 7))
-        assertEquals("a fast one is capped at 1 in 30", 30, readerEvery(legacy = true, streaming = true, minFps = 120))
+    /** The Mirror streams at a steady 30 fps: the reader gets 1 frame in 10 (3 fps), the encoder all 30. */
+    @Test fun aStreamingCameraGivesTheReaderAFewFrames() {
+        assertEquals(10, readerEvery(streaming = true, minFps = 30))
+        assertEquals(5, readerEvery(streaming = true, minFps = 15))
+        assertEquals("a camera that may drop to 7 fps: 1 in 2, still 3.5 fps at its slowest", 2, readerEvery(streaming = true, minFps = 7))
+        assertEquals("a fast one is capped at 1 in 30", 30, readerEvery(streaming = true, minFps = 120))
     }
 
     /**
@@ -394,9 +393,9 @@ class CameraHubTest {
      * comes from its slowest rate, never an assumed one. Too slow for the reader to keep 3 fps, or unknown: every request.
      */
     @Test fun aSlowOrUnknownFloorKeepsTheReaderInEveryRequest() {
-        assertEquals("floor 5: 1 in 2 would be 2.5 fps", 1, readerEvery(legacy = true, streaming = true, minFps = 5))
-        assertEquals("floor 1", 1, readerEvery(legacy = true, streaming = true, minFps = 1))
-        assertEquals("unknown", 1, readerEvery(legacy = true, streaming = true, minFps = 0))
+        assertEquals("floor 5: 1 in 2 would be 2.5 fps", 1, readerEvery(streaming = true, minFps = 5))
+        assertEquals("floor 1", 1, readerEvery(streaming = true, minFps = 1))
+        assertEquals("unknown", 1, readerEvery(streaming = true, minFps = 0))
     }
 
     // ------------------------------------------------------------ a camera that won't open is tried at a pace

@@ -166,11 +166,12 @@ class CameraPartsTest {
         assertNotEquals(mac, onvifMac("02:00:00:00:00:02"))
     }
 
-    @Test fun theStreamAsksForARangeThatTopsAtTheEncodersRate() {
-        assertEquals("the steadiest one", 15..15, fpsRangeFor(listOf(7..15, 15..15, 15..30, 30..30), 15))
-        assertEquals(7..15, fpsRangeFor(listOf(7..15, 7..30), 15))
-        assertEquals("none tops at 15: the camera keeps its own rate", null, fpsRangeFor(listOf(15..30, 30..30), 15))
-        assertEquals(null, fpsRangeFor(null, 15))
+    /** Every camera runs at its top rate: on the Mirror, 15–15 (from its own list) broke every frame (2026-11-25). */
+    @Test fun aCameraIsAskedForItsSteadiestRangeAtItsTopRate() {
+        assertEquals("the Mirror: steady 30, never 15–15", 30..30, cameraRangeFor(listOf(15..15, 24..24, 7..30, 30..30)))
+        assertEquals("the steadiest at the top", 15..30, cameraRangeFor(listOf(7..30, 15..30, 7..15)))
+        assertEquals(null, cameraRangeFor(null))
+        assertEquals(null, cameraRangeFor(emptyList()))
     }
 
     @Test fun theSdpAnnouncesOnlyARateTheCameraIsAskedFor() {
@@ -246,11 +247,4 @@ class CameraPartsTest {
             CameraPlan.of(snapshots, true, ownSensor = false, signedIn = true, streams = false))
     }
 
-    /** A LEGACY camera runs at its top rate: on the Mirror, 15–15 (from its own list) broke every frame (2026-11-25). */
-    @Test fun aLegacyCameraIsAskedForItsTopRate() {
-        assertEquals("the Mirror: steady 30", 30..30, legacyRangeFor(listOf(15..15, 24..24, 7..30, 30..30)))
-        assertEquals("the steadiest at the top", 15..30, legacyRangeFor(listOf(7..30, 15..30)))
-        assertEquals(null, legacyRangeFor(null))
-        assertEquals("the stream's reader gets 1 in 10 at 30 fps", 10, readerEvery(legacy = true, streaming = true, minFps = 30))
-    }
 }
