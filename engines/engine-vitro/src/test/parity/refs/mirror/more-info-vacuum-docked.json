@@ -1,0 +1,233 @@
+{
+ "case": "more-info-vacuum-docked",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 0,
+  "y": 40,
+  "width": 720,
+  "height": 1240
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 0,
+   "y": 48,
+   "w": 720,
+   "h": 1232,
+   "type": "ha-more-info-dialog",
+   "mode": "bottom-sheet"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Robot",
+   "x": 60,
+   "y": 22,
+   "w": 53.17,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Docked",
+   "x": 299.86,
+   "y": 92,
+   "w": 120.27,
+   "h": 42,
+   "size": 36,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "45 minutes ago",
+   "x": 303.81,
+   "y": 142.19,
+   "w": 112.36,
+   "h": 19,
+   "size": 16,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "87",
+   "x": 648,
+   "y": 143.98,
+   "w": 15.73,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "%",
+   "x": 663.73,
+   "y": 143.98,
+   "w": 10.27,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Fan speed",
+   "x": 340,
+   "y": 1169,
+   "w": 58.56,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "standard",
+   "x": 340,
+   "y": 1183,
+   "w": 57.16,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.robot_battery": {
+   "s": "87",
+   "a": {
+    "device_class": "battery",
+    "unit_of_measurement": "%",
+    "state_class": "measurement",
+    "friendly_name": "Robot Battery"
+   },
+   "lc": 1794499080,
+   "lu": 1794499080
+  },
+  "vacuum.robot": {
+   "s": "docked",
+   "a": {
+    "supported_features": 13884,
+    "fan_speed": "standard",
+    "fan_speed_list": [
+     "quiet",
+     "standard",
+     "max"
+    ],
+    "friendly_name": "Robot"
+   },
+   "lc": 1794496980,
+   "lu": 1794496980
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.robot_battery",
+    "pl": "roborock",
+    "di": "device-1",
+    "en": "Battery",
+    "np": "device"
+   },
+   {
+    "ei": "vacuum.robot",
+    "pl": "roborock",
+    "di": "device-1",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Robot"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor",
+    "vacuum"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "battery": {
+      "default": "mdi:battery-unknown",
+      "range": {
+       "0": "mdi:battery-alert",
+       "10": "mdi:battery-10",
+       "20": "mdi:battery-20",
+       "30": "mdi:battery-30",
+       "40": "mdi:battery-40",
+       "50": "mdi:battery-50",
+       "60": "mdi:battery-60",
+       "70": "mdi:battery-70",
+       "80": "mdi:battery-80",
+       "90": "mdi:battery-90",
+       "100": "mdi:battery"
+      }
+     }
+    },
+    "vacuum": {
+     "_": {
+      "default": "mdi:robot-vacuum"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On",
+    "component.vacuum.entity_component._.state.cleaning": "Cleaning",
+    "component.vacuum.entity_component._.state.docked": "Docked",
+    "component.vacuum.entity_component._.state.error": "Error",
+    "component.vacuum.entity_component._.state.idle": "Idle",
+    "component.vacuum.entity_component._.state.off": "Off",
+    "component.vacuum.entity_component._.state.on": "On",
+    "component.vacuum.entity_component._.state.paused": "Paused",
+    "component.vacuum.entity_component._.state.returning": "Returning to dock"
+   },
+   "entity": {}
+  }
+ },
+ "user": {
+  "is_admin": false
+ }
+}

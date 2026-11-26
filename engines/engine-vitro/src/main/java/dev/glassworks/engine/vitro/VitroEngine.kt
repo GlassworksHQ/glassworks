@@ -295,7 +295,7 @@ class VitroEngine(
         private var pendingHandBack: String? = null
 
         /**
-         * The native view HA's More Info dialog was opened over ([VitroView.onWebMoreInfo]), while HA's page shows it:
+         * The native view HA's More Info dialog was opened over ([VitroView.onMoreInfoInFrontend]), while HA's page shows it:
          * the dialog closing goes back there in place, without a step in the history.
          */
         private var moreInfoReturn: String? = null
@@ -317,8 +317,8 @@ class VitroEngine(
             if (!VitroCardContext.sameOrigin(origin, proxyOrigin)) return false
             if (!LovelaceParser.isDashboardUrl(url)) return false
             val query = runCatching { java.net.URI(url).rawQuery }.getOrNull().orEmpty()
-            // HA's More Info dialog open over the view ([VitroView.onWebMoreInfo]) stays HA's until it closes.
-            if ("auth_callback" in query || "edit=" in query || "$MORE_INFO_PARAM=" in query) return false
+            // HA's own More Info dialog over the view (a script's fields): it stays HA's until the dialog closes.
+            if ("auth_callback" in query || "edit=" in query || "more-info-entity-id=" in query) return false
             return !isWebDashboard(url)
         }
 
@@ -647,20 +647,21 @@ class VitroEngine(
                     }
                 }
             }
-            vitroView.onWebMoreInfo = { entityId, reason ->
-                // As onWebView: only the dashboard that owns the route, on a page still in use.
-                val view = lastNativeUrl
-                if (!disposed && nativeActive && view != null && displayedDashboard != null &&
-                    displayedDashboard == (currentOrigin to currentDashboardPath)
-                ) {
-                    val url = moreInfoUrl(view, entityId)
-                    Log.i(logTag, "Vitro doesn't draw $reason; Home Assistant's frontend shows its More Info")
-                    leaveNativeDashboard()
-                    // Back from HA's dialog comes back to this view; closing it does too ([moreInfoReturn]).
-                    currentUrl?.let(::remember)
-                    currentUrl = url
-                    moreInfoReturn = view
-                    openInFallback(url)
+            vitroView.onMoreInfoInFrontend = { v, entityId, reason ->
+                // As onWebView, with HA's own More Info dialog open over the view (its `more-info-entity-id`). When the
+                // dialog closes, HA drops the parameter, and the plain view hands the page back (handsBack).
+                if (!disposed && nativeActive && displayedDashboard != null && displayedDashboard == (currentOrigin to currentDashboardPath)) {
+                    val url = buildViewUrl(currentOrigin, currentDashboardPath, v.path ?: v.index.toString())
+                    if (url != null) {
+                        val withDialog = "$url?more-info-entity-id=${java.net.URLEncoder.encode(entityId, "UTF-8")}"
+                        Log.i(logTag, "Vitro doesn't draw $reason; Home Assistant's frontend shows ${forLog(url)} with its dialog")
+                        leaveNativeDashboard()
+                        // Back from HA's dialog comes back to this view; closing it does too, in place ([moreInfoReturn]).
+                        currentUrl?.let(::remember)
+                        moreInfoReturn = url
+                        currentUrl = withDialog
+                        openInFallback(withDialog)
+                    }
                 }
             }
             // One chronological history for back: a tab tap goes in it like a load does.
@@ -1296,16 +1297,6 @@ class VitroEngine(
 
         /** Back steps a page keeps. */
         private const val MAX_HISTORY = 50
-
-        /** HA's query parameter that opens its More Info dialog over a page (`more-info-query-params.ts`). */
-        private const val MORE_INFO_PARAM = "more-info-entity-id"
-
-        /** [viewUrl] with HA's More Info dialog for [entityId] open over it, as HA's frontend writes it. */
-        internal fun moreInfoUrl(viewUrl: String, entityId: String): String {
-            val base = viewUrl.substringBefore('#')
-            val sep = if ('?' in base) '&' else '?'
-            return "$base$sep$MORE_INFO_PARAM=${java.net.URLEncoder.encode(entityId, "UTF-8")}"
-        }
 
         /** [a] and [b] are the same page (scheme, host, port and path), whatever their queries. */
         internal fun samePage(a: String, b: String): Boolean {

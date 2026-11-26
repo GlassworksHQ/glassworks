@@ -218,13 +218,18 @@ object HaDisplay {
         if (component) iconDomains += requested else iconPlatforms += requested
     }
 
-    /** `frontend/get_translations` for `entity_component` or `entity`: only the `.state.` labels are kept. */
+    /**
+     * `frontend/get_translations` for `entity_component` or `entity`: only the `.state.` labels and the attributes'
+     * names (`.state_attributes.<name>.name`) are kept.
+     */
     fun applyTranslations(result: JSONObject, component: Boolean, requested: Collection<String>) {
         val res = result.optJSONObject("resources") ?: JSONObject()
         val keys = res.keys()
         while (keys.hasNext()) {
             val k = keys.next()
-            if (".state." in k) res.optString(k).takeIf { it.isNotEmpty() }?.let { stateLabels[k] = it }
+            if (".state." in k || (".state_attributes." in k && k.endsWith(".name"))) {
+                res.optString(k).takeIf { it.isNotEmpty() }?.let { stateLabels[k] = it }
+            }
         }
         if (component) translatedDomains += requested else translatedPlatforms += requested
     }
@@ -300,6 +305,23 @@ object HaDisplay {
     }
 
     /** The domain's own word for [state] (`component.<domain>.entity_component._.state.<state>`), when loaded. */
+    /**
+     * HA's `formatEntityAttributeName` ([attribute] `fan_speed` = "Fan speed"): the integration's name for it, the
+     * device class's, the domain's, else the attribute's own words, capitalized, as `computeAttributeNameDisplay`.
+     */
+    fun attributeName(s: EntityState, attribute: String): String {
+        val entry = registry[s.entityId]
+        val domain = s.domain
+        if (entry?.translationKey != null && entry.platform != null) {
+            stateLabels["component.${entry.platform}.entity.$domain.${entry.translationKey}.state_attributes.$attribute.name"]?.let { return it }
+        }
+        s.deviceClass?.let { dc -> stateLabels["component.$domain.entity_component.$dc.state_attributes.$attribute.name"]?.let { return it } }
+        stateLabels["component.$domain.entity_component._.state_attributes.$attribute.name"]?.let { return it }
+        return attribute.replace('_', ' ').replace(Regex("""\bid\b"""), "ID").replace(Regex("""\bip\b"""), "IP")
+            .replace(Regex("""\bmac\b"""), "MAC").replace(Regex("""\bgps\b"""), "GPS")
+            .replaceFirstChar { it.titlecase(java.util.Locale.ROOT) }
+    }
+
     fun domainStateLabel(domain: String, state: String): String? = stateLabels["component.$domain.entity_component._.state.$state"]
 
     fun displayPrecision(entityId: String): Int? = registry[entityId]?.displayPrecision

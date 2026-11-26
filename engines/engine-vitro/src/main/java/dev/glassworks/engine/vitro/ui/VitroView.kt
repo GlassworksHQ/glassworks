@@ -665,23 +665,29 @@ class VitroView(
     fun openMoreInfo(entityId: String) = openMoreInfo(entityId, null)
 
     /**
-     * Opens Home Assistant's own More Info dialog for an entity whose dialog the sheet doesn't draw as HA does
-     * ([MoreInfoRoute]), with the reason: its frontend shows the view with the dialog over it. Null (no page): the
-     * sheet opens for every entity.
+     * Opens More Info for an entity in Home Assistant's own frontend, over the view on screen (its URL's
+     * `more-info-entity-id`), with the reason Vitro's sheet can't show it as HA does ([MoreInfoRoute]). Null (a view
+     * with no page): Vitro's sheet, for every entity.
      */
-    var onWebMoreInfo: ((entityId: String, reason: String) -> Unit)? = null
+    var onMoreInfoInFrontend: ((ViewConfig, String, String) -> Unit)? = null
 
     /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
     internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
-        closeMoreInfo()
+        val inFrontend = onMoreInfoInFrontend
+        val view = dashboard?.views?.getOrNull(currentViewIndex)
         // Clarity times the sheet itself; everyone else gets HA's dialog where the sheet would draw a different one.
-        val web = onWebMoreInfo
-        if (web != null && trace == null) {
+        if (inFrontend != null && trace == null && view != null) {
             MoreInfoRoute.handOff(entityId, store[entityId])?.let { reason ->
-                web(entityId, reason)
+                closeMoreInfo()
+                inFrontend(view, entityId, "More Info: $reason")
                 return
             }
         }
+        showMoreInfo(entityId, trace)
+    }
+
+    private fun showMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
+        closeMoreInfo()
         moreInfoEntityId = entityId
         // HA's dialogs live outside the view: a view's `theme` never reaches them, the user's theme does (#885).
         val theme = ThemeResolver.resolve(themeCatalog, darkMode, userThemeName)

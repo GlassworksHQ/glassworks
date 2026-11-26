@@ -398,7 +398,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         // The sensor's content (`.content`, 24 px all round) and the history tab's (8 px over, 24 under) have their
         // own sides; every other domain keeps its control layout's.
         val custom = showingHistory || domain !in CONTROL_DOMAINS
-        if (custom) body.setPadding(0, ctx.px(if (showingHistory) 8f else 24f), 0, ctx.px(24f))
+        // HA's `.content` (24 px all round) around the controls drawn as HA's newer dialogs are.
+        if (!showingHistory && domain in CONTENT_DOMAINS) body.setPadding(ctx.px(24f), ctx.px(24f), ctx.px(24f), ctx.px(24f))
+        else if (custom) body.setPadding(0, ctx.px(if (showingHistory) 8f else 24f), 0, ctx.px(24f))
         else body.setPadding(ctx.px(24f), ctx.px(if (compact) 4f else 8f), ctx.px(24f), ctx.px(if (compact) 12f else 24f))
         val update: (EntityState?) -> Unit = if (showingHistory) {
             buildSensor(id, stateRow = false)
@@ -414,6 +416,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             "media_player" -> buildMedia(id)
             "alarm_control_panel" -> buildAlarm(id, s)
             "button", "input_button", "script", "scene" -> buildAction(id, domain)
+            "vacuum" -> MoreInfoVacuumView(ctx, id).also { body.addView(it, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)) }::update
             else -> buildSensor(id, stateRow = true)
         }
         updater = { st ->
@@ -1743,6 +1746,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             "select", "input_select", "lock", "media_player", "alarm_control_panel", "button", "input_button", "script", "scene",
         )
 
+        /** The domains drawn from HA's own parts ([MoreInfoVacuumView]), inside its 24 px `.content`. */
+        val CONTENT_DOMAINS = setOf("vacuum")
+
         /** Below this viewport height (dp) the sheet uses its compact landscape sizes. */
         const val COMPACT_HEIGHT_DP = 580
         const val SCRIM = 0x40000000
@@ -1758,9 +1764,13 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         const val EXIT_MIN_DP = 180f
         const val TIME_REFRESH_MS = 30_000L
 
-        /** Domains whose More-Info has a control view and a History tab. */
+        /**
+         * Domains whose More-Info has a control view and a History tab: HA's `_shouldShowHistory`, the sheet's domains in
+         * `DOMAINS_WITH_MORE_INFO` (a camera has no history).
+         */
         val HISTORY_TOGGLE_DOMAINS = setOf(
-            "light", "switch", "fan", "input_boolean", "climate", "cover", "lock", "automation", "humidifier", "siren",
+            "light", "switch", "fan", "input_boolean", "climate", "cover", "lock", "siren", "alarm_control_panel",
+            "media_player", "script", "scene", "vacuum",
         )
 
         const val DOCK_LIGHT = 0xFFF2F2F2.toInt()
