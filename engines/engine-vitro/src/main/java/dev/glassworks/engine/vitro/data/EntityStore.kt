@@ -181,7 +181,7 @@ data class EntityState(
             "datetime" -> HaFormat.formatDateTime(ts)
             "date" -> HaFormat.formatDate(ts)
             "time" -> HaFormat.formatTime(ts)
-            else -> return HaText.ui("ui.panel.lovelace.components.timestamp-display.invalid_format").ifEmpty { "Invalid format" }
+            else -> return HaText.ui("ui.panel.lovelace.components.timestamp-display.invalid_format").ifEmpty { "Invalid display format" }
         }
         // `capitalize` applies to the relative and total forms only (the formatters' own text is left alone).
         return if (format == null || format == "relative" || format == "total") HaFormat.capitalize(text) else text
