@@ -2,27 +2,23 @@
  "_comment": "Cases Vitro draws wrong today, each with the PR that owns its fix (#799: filed on the exp/vitro list, no fixer yet) and what's wrong. Not drift: the harness reports them as open and fails once one matches, so the fix drops its entry (ParityOpen in ParityReport.kt).",
  "mirror/d-masonry-home": {
   "owner": "#799",
-  "reason": "Masonry dashboard: Vitro stretches the media-control card to the column's height and pushes the gauge out; also the light card, thermostat and header-toggle differences"
+  "reason": "Masonry dashboard: the cards' places and heights match, weather high/low and the wrapped button names too. HA's capture counts the vertical stack's three rows as slots of their own (13 slots to Vitro's 10), which throws the bounds and text checks off; the weather forecast fits five days where HA's clips the fifth, and the media art differs (see m-media-control-*)"
  },
  "mirror/d-sections-home": {
   "owner": "#799",
-  "reason": "Sections dashboard: placement matches; the thermostat colors, weather high/low, glance lock color and Plugs header toggle differ (each listed on its own case)"
+  "reason": "Sections dashboard: placement matches; the tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
  },
  "mirror/entities-secondary-info": {
   "owner": "#799",
   "reason": "Entities rows: an active automation's icon is drawn in Vitro's blue active color where HA's state-badge uses --state-active-color (amber); predates the batch (ThemeResolver.activeColor), found by the region check on #926's new case"
  },
  "mirror/entity": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's (listed in #928)"
  },
  "mirror/entity-light-on": {
   "owner": "#799",
   "reason": "Entity card: the value line sits about 12 px higher than HA's, as in the `entity` case (listed in #928, not fixed there); name, state, icon color and dimming match"
- },
- "mirror/markdown-cardmod": {
-  "owner": "#799",
-  "reason": "Markdown with card-mod: the thin 21.4° is drawn larger and heavier than HA's (found by the region check)"
  },
  "mirror/more-info-vacuum-cleaning": {
   "owner": "#799",
@@ -36,32 +32,28 @@
   "owner": "#799",
   "reason": "Mushroom light card, horizontal: the brightness slider is a few px narrower than Mushroom's and its fill ends about 2 px early (found by the region check; #928 fixed the square slider)"
  },
- "mirror/todo-list": {
-  "owner": "#799",
-  "reason": "To-do list: a completed item's due date is orange in Vitro and grey in HA (found by the region check)"
- },
  "mirror/view-string-badges": {
   "owner": "#799",
   "reason": "Sections view: the badge row and the section under it sit about 5 px higher than HA's (hui-view-header's layout, listed in #928, not fixed there); the badges' names, states and icons match"
  },
  "s1/d-masonry-home": {
   "owner": "#799",
-  "reason": "Masonry dashboard: Vitro stretches the media-control card to the column's height and pushes the gauge out; also the light card, thermostat and header-toggle differences"
+  "reason": "Masonry dashboard: the cards' places and heights match, weather high/low and the wrapped button names too. HA's capture counts the vertical stack's three rows as slots of their own (13 slots to Vitro's 10), which throws the bounds and text checks off; the weather forecast fits five days where HA's clips the fifth, and the media art differs (see m-media-control-*)"
  },
  "s1/d-sections-home": {
   "owner": "#799",
-  "reason": "Sections dashboard: placement matches; the thermostat colors, weather high/low, glance lock color and Plugs header toggle differ (each listed on its own case)"
+  "reason": "Sections dashboard: placement matches; the tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
  },
  "s1/entities-secondary-info": {
   "owner": "#799",
   "reason": "Entities rows: an active automation's icon is drawn in Vitro's blue active color where HA's state-badge uses --state-active-color (amber); predates the batch (ThemeResolver.activeColor), found by the region check on #926's new case"
  },
  "s1/entities-special-rows": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Header toggle shown where HA shows none (#928's _showHeaderToggle fix)"
  },
  "s1/entity": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's (listed in #928)"
  },
  "s1/entity-light-on": {
@@ -72,325 +64,189 @@
   "owner": "#799",
   "reason": "Alarm panel, unavailable: Disarm matches HA now; the 'Unavailable' chip is a lighter grey than HA's"
  },
- "s1/m-button-light-unavailable": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
- },
- "s1/m-button-lock-locked": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
- },
- "s1/m-button-lock-unlocked": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
- },
- "s1/m-button-state-light-unavailable": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
- },
  "s1/m-entities-alarm": {
-  "owner": "#926",
+  "owner": "#799",
   "reason": "Entities rows: a dimmed light's icon keeps full color where HA dims it (stateColorBrightness), an unavailable row's icon is blue and its toggle enabled where HA's are grey and disabled, and alarm rows are colored as other domains"
  },
  "s1/m-entities-fan": {
-  "owner": "#926",
+  "owner": "#799",
   "reason": "Entities rows: a dimmed light's icon keeps full color where HA dims it (stateColorBrightness), an unavailable row's icon is blue and its toggle enabled where HA's are grey and disabled, and alarm rows are colored as other domains"
  },
  "s1/m-entities-light": {
-  "owner": "#926",
+  "owner": "#799",
   "reason": "Entities rows: a dimmed light's icon keeps full color where HA dims it (stateColorBrightness), an unavailable row's icon is blue and its toggle enabled where HA's are grey and disabled, and alarm rows are colored as other domains"
  },
  "s1/m-entities-sensor": {
-  "owner": "#926",
+  "owner": "#799",
   "reason": "Entities rows: a dimmed light's icon keeps full color where HA dims it (stateColorBrightness), an unavailable row's icon is blue and its toggle enabled where HA's are grey and disabled, and alarm rows are colored as other domains"
  },
  "s1/m-entities-switch": {
-  "owner": "#926",
+  "owner": "#799",
   "reason": "Entities rows: a dimmed light's icon keeps full color where HA dims it (stateColorBrightness), an unavailable row's icon is blue and its toggle enabled where HA's are grey and disabled, and alarm rows are colored as other domains"
  },
  "s1/m-entity-binary-sensor-door-open": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-binary-sensor-unavailable": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-climate-heat": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-cover-open-position": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-light-off": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-light-on-color": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-light-unavailable": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-person-home": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-person-zone": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-sensor-battery-low": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-sensor-long-name": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-sensor-no-unit": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-sensor-power": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-sensor-temperature": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-sensor-unavailable": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-sensor-unknown": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
  "s1/m-entity-weather-sunny": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
- "s1/m-gauge-sensor-power": {
-  "owner": "#799",
-  "reason": "Gauge: the value ('1,235 W', '21.4 °C') is drawn ~10 % larger and wider than HA's, which sizes it to the arc (canvas text, so only the region check sees it)"
- },
- "s1/m-gauge-sensor-temperature": {
-  "owner": "#799",
-  "reason": "Gauge: the value ('1,235 W', '21.4 °C') is drawn ~10 % larger and wider than HA's, which sizes it to the arc (canvas text, so only the region check sees it)"
- },
- "s1/m-gauge-sensor-unknown": {
-  "owner": "#799",
-  "reason": "Gauge on an unknown state: HA replaces it with the 'Entity is non-numeric' warning; Vitro draws an empty gauge (as the baselined gauge-non-numeric)"
- },
- "s1/m-glance-light": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
- },
- "s1/m-glance-lock": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
- },
- "s1/m-glance-sensor": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
- },
- "s1/m-humidifier-humidifier-off": {
-  "owner": "#799",
-  "reason": "Humidifier card: HA shows no mode bar without features, 'Humidifying' in blue and a '💧41%' line; Vitro adds a power/mode bar and 'Currently 41%', so the card is 20 px taller"
- },
- "s1/m-humidifier-humidifier-on": {
-  "owner": "#799",
-  "reason": "Humidifier card: HA shows no mode bar without features, 'Humidifying' in blue and a '💧41%' line; Vitro adds a power/mode bar and 'Currently 41%', so the card is 20 px taller"
- },
- "s1/m-light-light-long-name": {
-  "owner": "#799",
-  "reason": "Light card: HA's ring takes the light's color (blue for a white light) and the bulb dims with brightness, with no '65%' under it; Vitro draws a yellow ring, a full bulb and '65%'. Unavailable: HA greys the bulb and writes 'Unavailable' with no knob; Vitro draws a blue bulb and a knob"
- },
- "s1/m-light-light-on-color": {
-  "owner": "#799",
-  "reason": "Light card: HA's ring takes the light's color (blue for a white light) and the bulb dims with brightness, with no '65%' under it; Vitro draws a yellow ring, a full bulb and '65%'. Unavailable: HA greys the bulb and writes 'Unavailable' with no knob; Vitro draws a blue bulb and a knob"
- },
- "s1/m-light-light-on-ct": {
-  "owner": "#799",
-  "reason": "Light card: HA's ring takes the light's color (blue for a white light) and the bulb dims with brightness, with no '65%' under it; Vitro draws a yellow ring, a full bulb and '65%'. Unavailable: HA greys the bulb and writes 'Unavailable' with no knob; Vitro draws a blue bulb and a knob"
- },
- "s1/m-light-light-on-dimmed": {
-  "owner": "#799",
-  "reason": "Light card: HA's ring takes the light's color (blue for a white light) and the bulb dims with brightness, with no '65%' under it; Vitro draws a yellow ring, a full bulb and '65%'. Unavailable: HA greys the bulb and writes 'Unavailable' with no knob; Vitro draws a blue bulb and a knob"
- },
- "s1/m-light-light-on-full": {
-  "owner": "#799",
-  "reason": "Light card: HA's ring takes the light's color (blue for a white light) and the bulb dims with brightness, with no '65%' under it; Vitro draws a yellow ring, a full bulb and '65%'. Unavailable: HA greys the bulb and writes 'Unavailable' with no knob; Vitro draws a blue bulb and a knob"
- },
- "s1/m-light-light-on-low": {
-  "owner": "#799",
-  "reason": "Light card: HA's ring takes the light's color (blue for a white light) and the bulb dims with brightness, with no '65%' under it; Vitro draws a yellow ring, a full bulb and '65%'. Unavailable: HA greys the bulb and writes 'Unavailable' with no knob; Vitro draws a blue bulb and a knob"
- },
- "s1/m-light-light-unavailable": {
-  "owner": "#799",
-  "reason": "Light card: HA's ring takes the light's color (blue for a white light) and the bulb dims with brightness, with no '65%' under it; Vitro draws a yellow ring, a full bulb and '65%'. Unavailable: HA greys the bulb and writes 'Unavailable' with no knob; Vitro draws a blue bulb and a knob"
- },
- "s1/m-media-control-media-player-paused": {
-  "owner": "#799",
-  "reason": "Media control: the cover art sits further left and the progress bar ends ~2 % later than HA's"
- },
- "s1/m-media-control-media-player-playing": {
-  "owner": "#799",
-  "reason": "Media control: the cover art sits further left and the progress bar ends ~2 % later than HA's"
- },
  "s1/m-mushroom-alarm-alarm-control-panel-unavailable": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
  },
  "s1/m-mushroom-chip-weather-unavailable": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom weather chip, unavailable: HA shows 'Unavailable ⸱ Unknown' with no icon; Vitro shows 'Unavailable' with a cloud icon"
  },
  "s1/m-mushroom-climate-climate-unavailable": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
  },
  "s1/m-mushroom-cover-cover-open-no-position": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom cover with show_buttons_control on a cover without stop or position (supported_features 3): Mushroom shows open and close only; Vitro shows all four buttons"
  },
  "s1/m-mushroom-cover-cover-unavailable": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
  },
  "s1/m-mushroom-cover-cover-unknown": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom cover with show_buttons_control on a cover without stop or position (supported_features 3): Mushroom shows open and close only; Vitro shows all four buttons"
  },
  "s1/m-mushroom-entity-sensor-temperature": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom icon colors and state line: Vitro uses HA's tile colors and extras ('80%') where Mushroom uses its own renderIcon colors (blue while active, orange light, green fan) and the plain state"
  },
  "s1/m-mushroom-entity-sensor-unavailable": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
  },
  "s1/m-mushroom-fan-fan-on-no-speed": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom fan with show_percentage_control on a fan without speeds: HA keeps the card's two-row height with the info centred; Vitro collapses it to one row"
  },
  "s1/m-mushroom-fan-fan-unavailable": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
  },
  "s1/m-mushroom-light-collapsible-light-on-dimmed": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom light with collapsible_controls, on: Vitro's info and bar sit ~8 px higher and the card ~10 px shorter than Mushroom's"
  },
  "s1/m-mushroom-light-horizontal-light-on-color": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom layout: horizontal: the slider is a 36 px square at the card's end where Mushroom fills the free width (fixed in #928's mushroom-light-horizontal)"
  },
  "s1/m-mushroom-light-horizontal-light-on-dimmed": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom layout: horizontal: the slider is a 36 px square at the card's end where Mushroom fills the free width (fixed in #928's mushroom-light-horizontal)"
  },
  "s1/m-mushroom-light-light-unavailable": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
  },
  "s1/m-mushroom-number-number-unavailable": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
  },
  "s1/m-mushroom-select-select-unavailable": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
  },
- "s1/m-thermostat-climate-heat": {
-  "owner": "#799",
-  "reason": "Thermostat: HA's arcs are the dark heat/cool colors while idle and its numbers larger and higher; Vitro draws pastel arcs and smaller numbers, and its buttons sit lower (unavailable: HA greys the dial)"
- },
- "s1/m-thermostat-climate-heat-cool": {
-  "owner": "#799",
-  "reason": "Thermostat: HA's arcs are the dark heat/cool colors while idle and its numbers larger and higher; Vitro draws pastel arcs and smaller numbers, and its buttons sit lower (unavailable: HA greys the dial)"
- },
- "s1/m-thermostat-climate-unavailable": {
-  "owner": "#799",
-  "reason": "Thermostat: HA's arcs are the dark heat/cool colors while idle and its numbers larger and higher; Vitro draws pastel arcs and smaller numbers, and its buttons sit lower (unavailable: HA greys the dial)"
- },
  "s1/m-tile-sensor-battery-low": {
-  "owner": "#927",
+  "owner": "#799",
   "reason": "Tile icon color: HA's stateColorCss (an unlocked or jammed lock red, a triggered alarm and a vacuum in error red, sunny weather yellow, a low battery red, an unknown or unavailable sensor grey); Vitro draws the domain's default color"
  },
  "s1/m-tile-sensor-unavailable": {
-  "owner": "#927",
+  "owner": "#799",
   "reason": "Tile icon color: HA's stateColorCss (an unlocked or jammed lock red, a triggered alarm and a vacuum in error red, sunny weather yellow, a low battery red, an unknown or unavailable sensor grey); Vitro draws the domain's default color"
  },
  "s1/m-tile-sensor-unknown": {
-  "owner": "#927",
+  "owner": "#799",
   "reason": "Tile icon color: HA's stateColorCss (an unlocked or jammed lock red, a triggered alarm and a vacuum in error red, sunny weather yellow, a low battery red, an unknown or unavailable sensor grey); Vitro draws the domain's default color"
  },
  "s1/m-tile-vertical-cover-open-position": {
-  "owner": "#927",
+  "owner": "#799",
   "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
  },
  "s1/m-tile-vertical-light-long-name": {
-  "owner": "#927",
+  "owner": "#799",
   "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
  },
  "s1/m-tile-vertical-light-on-dimmed": {
-  "owner": "#927",
+  "owner": "#799",
   "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
  },
  "s1/m-tile-vertical-sensor-temperature": {
-  "owner": "#927",
+  "owner": "#799",
   "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
- },
- "s1/m-weather-current-weather-unavailable": {
-  "owner": "#799",
-  "reason": "Weather forecast, unavailable: HA replaces the card with the 'Entity is currently unavailable' warning; Vitro draws an empty forecast"
- },
- "s1/m-weather-forecast-weather-clear-night": {
-  "owner": "#799",
-  "reason": "Weather forecast: HA shows today's high/low under the temperature; Vitro shows the precipitation (as the baselined weather-forecast)"
- },
- "s1/m-weather-forecast-weather-rainy": {
-  "owner": "#799",
-  "reason": "Weather forecast: HA shows today's high/low under the temperature; Vitro shows the precipitation (as the baselined weather-forecast)"
- },
- "s1/m-weather-forecast-weather-sunny": {
-  "owner": "#799",
-  "reason": "Weather forecast: HA shows today's high/low under the temperature; Vitro shows the precipitation (as the baselined weather-forecast)"
- },
- "s1/m-weather-forecast-weather-unavailable": {
-  "owner": "#799",
-  "reason": "Weather forecast, unavailable: HA replaces the card with the 'Entity is currently unavailable' warning; Vitro draws an empty forecast"
- },
- "s1/markdown-cardmod": {
-  "owner": "#799",
-  "reason": "Markdown with card-mod: the thin 21.4° is drawn larger and heavier than HA's (found by the region check)"
  },
  "s1/mushroom-light-horizontal": {
   "owner": "#799",
   "reason": "Mushroom light card, horizontal: the brightness slider is a few px narrower than Mushroom's and its fill ends about 2 px early (found by the region check; #928 fixed the square slider)"
- },
- "s1/todo-list": {
-  "owner": "#799",
-  "reason": "To-do list: a completed item's due date is orange in Vitro and grey in HA (found by the region check)"
- },
- "s1/view-layout-fixed": {
-  "owner": "#799",
-  "reason": "card-mod position: fixed in a layout-card view: HA pins the card mid-right in a tall slot; Vitro pins it at the bottom-right (found by the region check)"
- },
- "s1/view-layout-fixed-first": {
-  "owner": "#799",
-  "reason": "card-mod position: fixed in a layout-card view: HA pins the card mid-right in a tall slot; Vitro pins it at the bottom-right (found by the region check)"
- },
- "s1/view-layout-fixed-grid": {
-  "owner": "#799",
-  "reason": "card-mod position: fixed in a layout-card view: HA pins the card mid-right in a tall slot; Vitro pins it at the bottom-right (found by the region check)"
  },
  "s1/view-string-badges": {
   "owner": "#799",
@@ -398,55 +254,35 @@
  },
  "tablet/d-masonry-home": {
   "owner": "#799",
-  "reason": "Masonry dashboard: Vitro stretches the media-control card to the column's height and pushes the gauge out; also the light card, thermostat and header-toggle differences"
+  "reason": "Masonry dashboard: the cards' places and heights match, weather high/low and the wrapped button names too. HA's capture counts the vertical stack's three rows as slots of their own (13 slots to Vitro's 10), which throws the bounds and text checks off; the weather forecast fits five days where HA's clips the fifth, and the media art differs (see m-media-control-*)"
  },
  "tablet/d-mushroom-dense": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Dense Mushroom dashboard: placement matches; Mushroom icon colors, chip icons, state lines and the fan bar color differ (each listed on its own case)"
  },
  "tablet/d-sections-home": {
   "owner": "#799",
-  "reason": "Sections dashboard: placement matches; the thermostat colors, weather high/low, glance lock color and Plugs header toggle differ (each listed on its own case)"
+  "reason": "Sections dashboard: placement matches; the tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
  },
  "tablet/entities-secondary-info": {
   "owner": "#799",
   "reason": "Entities rows: an active automation's icon is drawn in Vitro's blue active color where HA's state-badge uses --state-active-color (amber); predates the batch (ThemeResolver.activeColor), found by the region check on #926's new case"
  },
  "tablet/entities-special-rows": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Header toggle shown where HA shows none (#928's _showHeaderToggle fix)"
  },
  "tablet/entity": {
-  "owner": "#928",
+  "owner": "#799",
   "reason": "Entity card: the value line sits ~12 px higher than HA's (listed in #928)"
  },
  "tablet/entity-light-on": {
   "owner": "#799",
   "reason": "Entity card: the value line sits about 12 px higher than HA's, as in the `entity` case (listed in #928, not fixed there); name, state, icon color and dimming match"
  },
- "tablet/markdown-cardmod": {
-  "owner": "#799",
-  "reason": "Markdown with card-mod: the thin 21.4° is drawn larger and heavier than HA's (found by the region check)"
- },
  "tablet/mushroom-light-horizontal": {
   "owner": "#799",
   "reason": "Mushroom light card, horizontal: the brightness slider is a few px narrower than Mushroom's and its fill ends about 2 px early (found by the region check; #928 fixed the square slider)"
- },
- "tablet/todo-list": {
-  "owner": "#799",
-  "reason": "To-do list: a completed item's due date is orange in Vitro and grey in HA (found by the region check)"
- },
- "tablet/view-layout-fixed": {
-  "owner": "#799",
-  "reason": "card-mod position: fixed in a layout-card view: HA pins the card mid-right in a tall slot; Vitro pins it at the bottom-right (found by the region check)"
- },
- "tablet/view-layout-fixed-first": {
-  "owner": "#799",
-  "reason": "card-mod position: fixed in a layout-card view: HA pins the card mid-right in a tall slot; Vitro pins it at the bottom-right (found by the region check)"
- },
- "tablet/view-layout-fixed-grid": {
-  "owner": "#799",
-  "reason": "card-mod position: fixed in a layout-card view: HA pins the card mid-right in a tall slot; Vitro pins it at the bottom-right (found by the region check)"
  },
  "tablet/view-string-badges": {
   "owner": "#799",

@@ -128,7 +128,7 @@ class VitroCardContext(
     /** The dashboard's own URL (HA's page `location`), which relative links resolve against; null when unknown. */
     val pageUrl: () -> String? = { null },
     /**
-     * A web island looked up [entityId] at runtime: the view's subscription takes it in, so its changes reach the
+     * A web island looked up [entityId] at runtime: the entity subscription takes it in, so its changes reach the
      * island. Any thread. The default (tests, no engine) does nothing.
      */
     val watchEntity: (entityId: String) -> Unit = {},
@@ -172,12 +172,24 @@ class VitroCardContext(
      */
     val haConnected: () -> Boolean = { true },
     /**
+     * Counts the connections to Home Assistant that came up: a web island page whose bridge was down learns from it
+     * whether HA's connection changed meanwhile (its `resubscribe: false` subscriptions then ended). The default
+     * (tests, no engine) never changes.
+     */
+    val haConnectionEpoch: () -> Long = { 0L },
+    /**
      * [onChange] runs (on any thread) each time the connection to Home Assistant goes down (false) or is up again
      * (true), until the returned handle is called: a web island's `hass.connection` fires `disconnected` and `ready`,
      * and its subscriptions start again. HA drops a connection's subscriptions with it. The default (tests, no engine)
      * never calls it.
      */
     val watchConnection: (onChange: (connected: Boolean) -> Unit) -> () -> Unit = { { } },
+    /**
+     * [onChange] gets Home Assistant's config ([haConfig], `get_config`) each time a connection reads it, on any
+     * thread, until the returned handle is called: a web island's `hass.config` follows it (a page made before it
+     * arrived has none, and HA's cards read its `version`). The default (tests, no engine) never calls it.
+     */
+    val watchConfig: (onChange: (JSONObject) -> Unit) -> () -> Unit = { { } },
     /**
      * What Home Assistant's web UI keeps in `localStorage` on this panel ([dev.glassworks.web.HaPageStorage]), or null
      * when the panel has no copy for this Home Assistant: a web island starts its card's storage from it (#881).
@@ -241,7 +253,9 @@ class VitroCardContext(
         needsFrontend = needsFrontend,
         islandFailed = islandFailed,
         haConnected = haConnected,
+        haConnectionEpoch = haConnectionEpoch,
         watchConnection = watchConnection,
+        watchConfig = watchConfig,
         pageStorage = pageStorage,
     ).also {
         it.cardVars = cardVars
@@ -361,7 +375,8 @@ class VitroCardContext(
         val cur = store[entityId]
         val (targetDomain, service) = when (domain) {
             "lock" -> "lock" to if (cur?.state == "locked") "unlock" else "lock"
-            "script" -> "script" to "turn_on"
+            // HA's toggleEntity: a script that is off starts; one that's running (or in any other state) stops.
+            "script" -> "script" to if (cur == null || cur.state == "off") "turn_on" else "turn_off"
             // HA's toggle on things that can only fire: press the button, activate the scene.
             "button", "input_button" -> domain to "press"
             "scene" -> "scene" to "turn_on"

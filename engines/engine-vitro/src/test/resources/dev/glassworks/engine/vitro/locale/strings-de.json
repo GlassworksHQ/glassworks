@@ -46,6 +46,8 @@
  "ui.card.update.installing": "Wird installiert",
  "ui.card.update.installing_with_progress": "Wird installiert ({progress} %)",
  "ui.card.update.preparing": "Wird vorbereitet",
+ "ui.card.water_heater.currently": "Aktuell",
+ "ui.card.water_heater.target": "Ziel",
  "ui.common.cancel": "Abbrechen",
  "ui.common.close": "Schließen",
  "ui.common.none": "Kein",
@@ -88,5 +90,8 @@
  "ui.panel.lovelace.cards.todo-list.unchecked_items": "Aktiv",
  "ui.panel.lovelace.components.timestamp-display.invalid": "Ungültiger Zeitstempel",
  "ui.panel.lovelace.components.timestamp-display.invalid_format": "Ungültiges Anzeigeformat",
- "ui.panel.lovelace.editor.action-editor.actions.more-info": "Detailansicht"
+ "ui.panel.lovelace.editor.action-editor.actions.more-info": "Detailansicht",
+ "ui.panel.lovelace.warning.attribute_not_numeric": "Attribut {attribute} ist nicht numerisch",
+ "ui.panel.lovelace.warning.entity_non_numeric": "Entität ist nicht-numerisch: {entity}",
+ "ui.panel.lovelace.warning.entity_unavailable": "Entität ist derzeit nicht verfügbar: {entity}"
 }

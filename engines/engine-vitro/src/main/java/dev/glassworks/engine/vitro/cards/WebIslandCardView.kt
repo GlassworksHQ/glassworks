@@ -20,6 +20,7 @@ import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.ViewConfig
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.VitroCardContext
+import dev.glassworks.engine.vitro.ui.errorCardContent
 import org.json.JSONObject
 import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.math.abs
@@ -121,6 +122,20 @@ class WebIslandCardView(
 
     /** A release queued by a detach, which an attach before it runs takes back (a layout that moves its cards). */
     private val releaseIfDetached = Runnable { if (!isAttachedToWindow) release() }
+
+    /**
+     * HA's error card, shown over the page while the card's script is late ([showWaitingError]); null otherwise. Main
+     * thread.
+     */
+    private var waitingError: android.view.View? = null
+    /** What the page said is missing while it waits, for the error it becomes if the script never comes. */
+    private var waitingMessage = ""
+    /** The wait for a late script ends: the card is HA's error card for good and its page closes. */
+    private val giveUpWaiting = Runnable {
+        if (waitingError == null || islandGone) return@Runnable
+        waitingError = null
+        fail("island", IslandCardError(waitingMessage))
+    }
     /** The senders of the bridge sockets open for this island (a replacement can connect before the old one closes). */
     private val senders = CopyOnWriteArraySet<(JSONObject) -> Unit>()
 
@@ -140,6 +155,13 @@ class WebIslandCardView(
 
     /** The connection watcher's handle: on for as long as the island is this card's, a move in the layout included. */
     @Volatile private var connectionWatch: (() -> Unit)? = null
+
+    /** The config watcher's handle ([VitroCardContext.watchConfig]), with the same lifetime. */
+    @Volatile private var configWatch: (() -> Unit)? = null
+
+    /** Under [seedLock]: sockets seeded with no config before [configWatch] was on, and whether it has sent one since. */
+    private val seededWithoutConfig = HashSet<(JSONObject) -> Unit>()
+    private var configSent = false
 
     /**
      * Whether the card picks its entities at runtime (`auto-entities` filters, `button-card` JS templates, a card
@@ -192,7 +214,10 @@ class WebIslandCardView(
                         // Where the connection is now: a page kept across a hand-over may still think it's down.
                         val up = ctx.haConnected()
                         sentConnected[send] = up
-                        send(connMessage(up))
+                        send(connMessage(up, ctx.haConnectionEpoch()))
+                        // HA's config as the panel has it now: a page made before it arrived has none.
+                        val config = ctx.haConfig().takeIf { it.length() > 0 }
+                        if (config != null) send(configMessage(config)) else if (configWatch == null) seededWithoutConfig += send
                         seedInitialStates(send)
                         registries?.let { send(registriesMessage(it)) }
                         senders += send
@@ -212,6 +237,7 @@ class WebIslandCardView(
                         pageSubs.remove(send)?.values?.toList().orEmpty()
                     }
                     ended.forEach { it.cancel() }
+                    synchronized(seedLock) { incompleteSeeds -= send }
                 }
             }
             // The earlier build's page, if its slot is still there: the slot now answers to this card.
@@ -259,6 +285,8 @@ class WebIslandCardView(
                 // A new token (a reconnect refreshed it) goes to the page as it arrives, with no state change needed: a
                 // reconnect that changed no state sends no patch.
                 renewing { ctx.watchToken { synchronized(seedLock) { sendTokenIfChanged() } } }
+                // HA's answer for more entities landed: a page seeded before it gets the whole store, complete.
+                renewing { ctx.store.subscribeSnapshot { synchronized(seedLock) { completeSeeds() } } }
                 // The connection to HA went down or is back: the page's `hass.connection` hears of it, and its
                 // subscriptions start again on the new connection (HA dropped them with the old one). On while the
                 // card is detached too (a move in the layout): a drop then is never missed, and live ones stay live.
@@ -266,6 +294,22 @@ class WebIslandCardView(
                 // A change between the bridge's seed and the watcher above went unheard: where it is now. Idempotent:
                 // live subscriptions stay, waiting ones start, and a bridge told this already hears nothing.
                 synchronized(seedLock) { connectionChanged(ctx.haConnected()) }
+                configWatch = ctx.watchConfig { config ->
+                    synchronized(seedLock) {
+                        val msg = configMessage(config)
+                        senders.forEach { it(msg) }
+                        configSent = true
+                    }
+                }
+                // HA's config that arrived between a bridge's seed (which had none) and the watcher above went unheard:
+                // it goes now. A page told it already gets nothing more.
+                synchronized(seedLock) {
+                    if (!configSent) ctx.haConfig().takeIf { it.length() > 0 }?.let { config ->
+                        val msg = configMessage(config)
+                        senders.filter { it in seededWithoutConfig }.forEach { it(msg) }
+                    }
+                    seededWithoutConfig.clear()
+                }
             } else {
                 server.unregisterSlot(id)
                 slotId = null
@@ -300,7 +344,32 @@ class WebIslandCardView(
         watchedEntities.addAll(referencedEntities())
         val seed = JSONObject()
         for ((id, state) in ctx.store.all()) seed.put(id, state.toHassJson())
-        send(JSONObject().put("type", "snapshot").put("states", seed))
+        val complete = statesComplete()
+        // Not HA's answer yet (the store fills as HA's snapshot lands): the page waits to make its card, and this
+        // socket gets the whole store again once it is ([completeSeeds]).
+        if (!complete) incompleteSeeds += send
+        send(JSONObject().put("type", "snapshot").put("states", seed).put("complete", complete))
+    }
+
+    /** Sockets seeded before HA had answered for this card's entities: they're seeded again once it has. */
+    private val incompleteSeeds = LinkedHashSet<(JSONObject) -> Unit>()
+
+    /**
+     * True when HA has answered for every entity the card names (a state, or HA's word that it has none); for a card
+     * that names none (a filter, a clock), once HA's answer is in at all. The snapshot the card may be made with, as HA's
+     * frontend makes cards once `hass.states` is in.
+     */
+    internal fun statesComplete(): Boolean {
+        val refs = referencedEntities()
+        return if (refs.isEmpty()) ctx.store.anyAnswered else refs.all(ctx.store::isAnswered)
+    }
+
+    /** Under [seedLock]: the sockets still waiting for HA's answer get it once it's in. */
+    private fun completeSeeds() {
+        if (incompleteSeeds.isEmpty() || !statesComplete()) return
+        val waiting = incompleteSeeds.filter { it in senders }
+        incompleteSeeds.clear()
+        waiting.forEach { seedInitialStates(it) }
     }
 
     /**
@@ -361,11 +430,11 @@ class WebIslandCardView(
                     }
                     true
                 }
-                // Read at runtime, beyond what the config names: the view's subscription takes it in.
+                // Read at runtime, beyond what the config names: the entity subscription takes it in.
                 if (added && !followsAllEntities) ctx.watchEntity(id)
             }
             "watchAll" -> {
-                // Every change reaches the card now, and the view's subscription takes in every entity, so the
+                // Every change reaches the card now, and its view follows every entity while it shows, so the
                 // states it walks are all of HA's, as in HA's frontend.
                 walksAllStates = true
                 ctx.watchAllEntities()
@@ -375,8 +444,13 @@ class WebIslandCardView(
             // error card from now on, natively.
             "cardError" -> {
                 val message = msg.optString("message").take(MAX_ERROR_CHARS).ifBlank { "Configuration error" }
-                ctx.main.post { fail("island", IslandCardError(message)) }
+                // A script that hasn't defined the card yet may still: HA's error card shows meanwhile, and the page
+                // stays for it. Anything else (a setConfig that threw) is that error card for good.
+                if (msg.optBoolean("waiting", false)) ctx.main.post { showWaitingError(message) }
+                else ctx.main.post { fail("island", IslandCardError(message)) }
             }
+            // The late script arrived: the page makes the card, which takes the error card's place.
+            "cardDefined" -> ctx.main.post { scriptArrived() }
             // The card draws with elements of HA's frontend this page doesn't have (frontend-watch.js): its view
             // goes to HA's frontend, as a view with a built-in card Vitro doesn't draw does ([VitroCardContext.needsFrontend]).
             "needsFrontend" -> {
@@ -391,8 +465,7 @@ class WebIslandCardView(
             }
             "resize" -> {
                 if (fillViewport) return
-                val cssH = msg.optInt("height", 160).coerceIn(48, 1200)
-                val pxH = ctx.px(cssH.toFloat())
+                val pxH = islandHeightPx(msg.optInt("height", 160))
                 ctx.main.post {
                     val v = islandPage?.view ?: return@post
                     if (v.layoutParams?.height != pxH) {
@@ -456,7 +529,11 @@ class WebIslandCardView(
             // renews the token (a reconnect, [VitroCardContext.watchToken]); a card can't make it renew one sooner.
             "refreshToken" -> synchronized(seedLock) {
                 sendTokenIfChanged()
-                send(JSONObject().put("type", "auth").put("token", currentToken()).put("user", currentUser() ?: JSONObject.NULL))
+                // The reply names the request: an `auth` the page gets otherwise (a seed, a new token) settles nothing.
+                send(
+                    JSONObject().put("type", "auth").put("token", currentToken()).put("user", currentUser() ?: JSONObject.NULL)
+                        .put("rid", msg.optInt("rid", 0)),
+                )
             }
             "moreInfo" -> {
                 val id = msg.optString("entity_id", "")
@@ -497,6 +574,12 @@ class WebIslandCardView(
      */
     override fun handOff(): Island? {
         if (islandGone) return null
+        // A page still waiting for its card's script already told this card so, and won't tell the next build: it
+        // closes, and the next build's page waits on its own (its own error card, its own time limit).
+        if (waitingError != null) {
+            release()
+            return null
+        }
         val page = islandPage ?: return null
         val id = slotId ?: return null
         val server = ctx.islandServer ?: return null
@@ -539,6 +622,7 @@ class WebIslandCardView(
     /** Closes the island for good: its slot goes and its page ([Page.close]) stops. Main thread; once. */
     override fun release() {
         ctx.main.removeCallbacks(releaseIfDetached)
+        ctx.main.removeCallbacks(giveUpWaiting)
         if (islandGone) return
         islandGone = true
         detached = true
@@ -556,6 +640,39 @@ class WebIslandCardView(
      * when the card leaves the view.
      */
     override fun onCardFailed() = release()
+
+    /**
+     * The card's script didn't define it in time ([message]: HA's "Custom element doesn't exist"): HA's error card in
+     * its place, as HA's createCardElement shows one, while the page keeps waiting. A script that comes within
+     * [SCRIPT_WAIT_MS] gives the card back ([scriptArrived]); after that the card is that error card for good and its
+     * page closes, so a card whose script never comes (a typo, a resource that failed to load) holds no browser page.
+     * Main thread.
+     */
+    internal fun showWaitingError(message: String) {
+        if (failure != null || islandGone || waitingError != null) return
+        android.util.Log.i(TAG, "Island ${config.type}: its script hasn't defined it yet; waiting up to ${SCRIPT_WAIT_MS / 1000} s")
+        waitingMessage = message
+        val error = errorCardContent(ctx)
+        waitingError = error
+        // The page draws nothing yet: the card's height is the error card's.
+        if (!fillViewport) islandPage?.view?.let { it.layoutParams = FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, 1) }
+        addView(error, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        ctx.main.postDelayed(giveUpWaiting, SCRIPT_WAIT_MS)
+    }
+
+    /** The late script defined the card: the error card goes, and the page's card takes its place. Main thread. */
+    internal fun scriptArrived() {
+        val error = waitingError ?: return
+        ctx.main.removeCallbacks(giveUpWaiting)
+        waitingError = null
+        // Until the card reports its size, the page holds the error card's: no jump in the column.
+        val h = error.height.takeIf { it > 0 }
+        removeView(error)
+        if (!fillViewport && h != null) islandPage?.view?.let { it.layoutParams = FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, h) }
+    }
+
+    /** Whether HA's error card stands in for the card while its script is late ([showWaitingError]). */
+    internal val waitingForScript: Boolean get() = waitingError != null
 
     override fun onAttachedToWindow() {
         val wasDetached = attachedOnce
@@ -683,7 +800,7 @@ class WebIslandCardView(
             }
         }
         ended.forEach { s -> s.handle?.let { runCatching { it() } }; s.handle = null }
-        val msg = connMessage(up)
+        val msg = connMessage(up, ctx.haConnectionEpoch())
         for (send in senders) {
             if (sentConnected[send] == up) continue
             sentConnected[send] = up
@@ -696,6 +813,8 @@ class WebIslandCardView(
     private fun endPageSubs() {
         connectionWatch?.invoke()
         connectionWatch = null
+        configWatch?.invoke()
+        configWatch = null
         val all = synchronized(seedLock) {
             sentConnected.clear()
             pageSubs.values.flatMap { it.values }.also { pageSubs.clear() }
@@ -740,9 +859,36 @@ class WebIslandCardView(
         return JSONObject().put("type", "auth").put("token", token).put("user", user ?: JSONObject.NULL)
     }
 
+    /**
+     * The island's height in pixels for a card [cssHeight] CSS px tall. A card that draws nothing (0) collapses to
+     * one pixel, where HA gives it no height: its page stays on screen, so it reports again when it draws (a page
+     * with no surface might not). A long card (a calendar, a table) grows to [MAX_SCREENS] screens, at least
+     * [MIN_CAP_CSS] CSS px: the island is one browser surface, and its memory grows with its height.
+     */
+    internal fun islandHeightPx(cssHeight: Int): Int {
+        if (cssHeight <= 0) return 1
+        val screenCss = context.resources.displayMetrics.heightPixels / ctx.dp
+        val cap = maxOf(MIN_CAP_CSS.toFloat(), screenCss * MAX_SCREENS).toInt()
+        return maxOf(1, ctx.px(cssHeight.coerceAtMost(cap).toFloat()))
+    }
+
     companion object {
         /** The most `hass.connection` subscriptions one page holds on HA's connection at once. */
         const val MAX_PAGE_SUBSCRIPTIONS = 64
+
+        /**
+         * How long an island page waits for a card's late script once HA's error card shows ([showWaitingError]): a
+         * cold cache on a slow panel takes seconds, not minutes.
+         */
+        internal const val SCRIPT_WAIT_MS = 120_000L
+
+        private const val TAG = "VitroIsland"
+
+        /** An island grows to this many screens at most ([islandHeightPx]). */
+        internal const val MAX_SCREENS = 3
+
+        /** The least an island may grow to, in CSS px, on a short screen ([islandHeightPx]). */
+        internal const val MIN_CAP_CSS = 1200
 
         /** A member name a `cardBroken` report may name in the log: a JavaScript identifier, nothing more. */
         private val MEMBER_NAME = Regex("""^[A-Za-z_$][A-Za-z0-9_$]{0,63}$""")
@@ -768,8 +914,12 @@ class WebIslandCardView(
             pageUrl?.let { runCatching { java.net.URI(it).path }.getOrNull() }
                 ?.trim('/')?.substringBefore('/')?.takeIf { it.isNotEmpty() } ?: "lovelace"
 
+        /** The bridge message with Home Assistant's config (`hass.config`). */
+        internal fun configMessage(config: JSONObject): JSONObject = JSONObject().put("type", "config").put("config", config)
+
         /** The bridge message that says whether the connection to Home Assistant is up (`hass.connected`). */
-        internal fun connMessage(up: Boolean): JSONObject = JSONObject().put("type", "conn").put("connected", up)
+        internal fun connMessage(up: Boolean, epoch: Long = 0L): JSONObject =
+            JSONObject().put("type", "conn").put("connected", up).put("epoch", epoch)
 
         /** The bridge message that tells the page HA refused subscription [sid] (with HA's [error]). */
         internal fun subError(sid: Int, error: JSONObject): JSONObject =
@@ -818,6 +968,13 @@ class WebIslandCardView(
                 ?: error("frontend-watch.js is missing from the engine's resources")
         }
 
+        /** HA's formatDuration for the island page's state text (`format-duration.js`, next to `frontend-watch.js`), read once. */
+        internal val FORMAT_DURATION_JS: String by lazy {
+            WebIslandCardView::class.java.getResourceAsStream("/dev/glassworks/engine/vitro/island/format-duration.js")
+                ?.use { it.readBytes().toString(Charsets.UTF_8) }
+                ?: error("format-duration.js is missing from the engine's resources")
+        }
+
         /**
          * What makes two builds of a card the same island: its whole config and whether it fills the view. A
          * rebuild that only changed the theme, or other cards, hands the island over ([handOff]) instead of opening
@@ -841,7 +998,13 @@ class WebIslandCardView(
          */
         internal fun themeCss(ctx: VitroCardContext, fillViewport: Boolean): String {
             val vars = ctx.theme.toCssRootBlock()
-            return if (fillViewport) vars + "html:root { background-color: ${ctx.theme.hex(ctx.theme.backgroundColor)}; }\n" else vars
+            if (fillViewport) return vars + "html:root { background-color: ${ctx.theme.hex(ctx.theme.backgroundColor)}; }\n"
+            // An inline island on a view of one opaque color paints that color itself: what it shows at its edges
+            // (a card's rounded corners and ends) is then drawn by the page, never left half transparent for the
+            // panel to blend. Translucent edges came out light on the panel (Bubble Card's slider ends). On a picture
+            // or a gradient it stays transparent, so the view's background shows through.
+            val solid = (ctx.theme.background as? dev.glassworks.engine.vitro.theme.ThemeBackground.Solid)?.color
+            return if (solid != null && (solid ushr 24) == 0xFF) vars + "html:root { background-color: ${ctx.theme.hex(solid)}; }\n" else vars
         }
 
         /** The bridge message that replaces an island's `hass.entities`, `devices`, `areas` and `floors`. */
@@ -1490,13 +1653,16 @@ window.loadCardHelpers = () => Promise.resolve({
 <script>
 ${FRONTEND_WATCH_JS.replace(SCRIPT_END, "<\\\\/$1")}
 </script>
+<script>
+${FORMAT_DURATION_JS.replace(SCRIPT_END, "<\\\\/$1")}
+</script>
 $resourceScripts
 </head>
 <body>
 <div id="mount"></div>
 <script type="module">
 const rawStates = {};
-const haConfig = $haCfgJson;
+let haConfig = $haCfgJson;
 const haUser = $haUserJson;
 const haLocale = $haLocaleJson;
 let accessToken = $tokenJson;
@@ -1554,6 +1720,61 @@ function askRegistries() {
   if (registriesAsked) return;
   registriesAsked = true;
   sendBridge({ type: 'registries' });
+}
+// True once the registries came: before that, names are HA's own "without context" ones (the friendly name).
+let registriesIn = false;
+
+// HA's formatEntityName (common/entity/compute_entity_name_display.ts, frontend 20261028.5): an entity's name made of
+// its own name, its device's, its parent device's, its area's and its floor's, from the registries, as a card's `name`
+// config asks (a string, one item or a list of { type } / { type: 'text', text } items). Mushroom 5.3 names every
+// entity with it on HA 2026.4 and later.
+const VITRO_DEFAULT_NAME = ['parent_device', 'device', 'entity'];
+function vitroStateName(s) {
+  const a = (s && s.attributes) || {};
+  const id = String((s && s.entity_id) || '');
+  return a.friendly_name === undefined ? id.slice(id.indexOf('.') + 1).replace(/_/g, ' ') : String(a.friendly_name == null ? '' : a.friendly_name);
+}
+function vitroTrimmed(v) { return v == null ? undefined : String(v).trim(); }
+function vitroNameParts(stateObj, followContext) {
+  const entry = registries.entities[stateObj.entity_id];
+  if (!entry) return { entity: vitroStateName(stateObj) };
+  const devices = registries.devices;
+  const device = entry.device_id ? devices[entry.device_id] : undefined;
+  const parent = device && device.parent_device_id ? devices[device.parent_device_id] : undefined;
+  // A child device without an area of its own is in its parent's.
+  const deviceArea = device ? (device.area_id || (parent ? parent.area_id : undefined)) : undefined;
+  const area = (entry.area_id || deviceArea) ? registries.areas[entry.area_id || deviceArea] : undefined;
+  const floor = area && area.floor_id ? registries.floors[area.floor_id] : undefined;
+  const entityName = (entry.name != null ? entry.name : (entry.original_name != null ? String(entry.original_name) : undefined)) || undefined;
+  const deviceName = (d) => vitroTrimmed(d.name_by_user || d.name);
+  // As HA's backend: an owner adds its name only while the next_name_part links reach it; an entity with no name of
+  // its own is named after its device.
+  const nameDevice = !followContext || entry.next_name_part === 'device' || !entityName ? device : null;
+  const nameParent = !followContext || (entry.next_name_part === 'device' && device && device.next_name_part === 'parent_device') ? parent : null;
+  return {
+    entity: entityName,
+    device: nameDevice ? deviceName(nameDevice) : undefined,
+    parent_device: nameParent ? deviceName(nameParent) : undefined,
+    area: area ? vitroTrimmed(area.name) : undefined,
+    floor: floor ? vitroTrimmed(floor.name) : undefined,
+  };
+}
+function vitroFormatEntityName(stateObj, name, options) {
+  if (typeof name === 'string') return name;
+  const separator = options && options.separator != null ? options.separator : ' ';
+  const items = name == null ? null : (Array.isArray(name) ? name : [name]);
+  if (items && items.every((n) => n && n.type === 'text')) return items.map((n) => n.text).join(separator);
+  // HA's formatter before its registry-aware one is in (computeEntityNameDisplayWithoutContext): the friendly name.
+  askRegistries();
+  if (!registriesIn || !stateObj) return stateObj ? vitroStateName(stateObj) : '';
+  if (!items) {
+    const parts = vitroNameParts(stateObj, true);
+    return VITRO_DEFAULT_NAME.map((t) => parts[t]).filter((n) => n).join(separator) || vitroStateName(stateObj);
+  }
+  const parts = vitroNameParts(stateObj, false);
+  const useDevice = !parts.entity && !items.some((i) => i && i.type === 'device');
+  return items.map((i) => (i && i.type === 'text' ? i.text : parts[i && i.type === 'entity' && useDevice ? 'device' : (i && i.type)]))
+    .filter((n) => n).join(separator);
 }
 
 function vitroTitle(s) {
@@ -1754,21 +1975,247 @@ function vitroStateLabel(stateObj, state) {
     vitroLocalize('component.' + domain + '.entity_component._.state.' + state);
 }
 
-function vitroFormatState(stateObj, state) {
-  const s = state !== undefined && state !== null ? state : (stateObj ? stateObj.state : '');
-  const str = String(s == null ? '' : s);
-  const unit = stateObj && stateObj.attributes ? stateObj.attributes.unit_of_measurement : undefined;
-  if (unit && str !== 'unavailable' && str !== 'unknown') return vitroFormatNumber(str) + vitroBlankBeforeUnit(unit) + unit;
-  return vitroStateLabel(stateObj, str) || vitroTitle(str);
+// HA's computeStateDisplay and computeStateToParts (common/entity/compute_state_display.ts, frontend 20261028.5):
+// numbers in the user's format with the registry's display precision and the translated unit, money in its
+// currency, dates, times and timestamps in the user's language and time zone, then HA's translated state, then the
+// state as it is. A duration in minutes, hours or days reads as one ("1h 30m"), through format-duration.js.
+const VITRO_NUMBER_DOMAINS = ['counter', 'input_number', 'number'];
+const VITRO_DATE_TIME_DOMAINS = new Set(['date', 'input_datetime', 'time']);
+const VITRO_TIMESTAMP_DOMAINS = new Set(['ai_task', 'button', 'conversation', 'event', 'image', 'infrared', 'input_button',
+  'notify', 'radio_frequency', 'scene', 'stt', 'tag', 'tts', 'wake_word', 'datetime']);
+const VITRO_TIMESTAMP_CLASSES = ['timestamp', 'uptime'];
+// data/sensor_entity_constants.ts: SensorDeviceClass less its non-numeric classes.
+const VITRO_NUMERIC_SENSOR_CLASSES = new Set(['absolute_humidity', 'apparent_power', 'aqi', 'area', 'atmospheric_pressure',
+  'battery', 'blood_glucose_concentration', 'carbon_dioxide', 'carbon_monoxide', 'conductivity', 'current', 'data_rate',
+  'data_size', 'distance', 'duration', 'energy', 'energy_distance', 'energy_storage', 'frequency', 'gas', 'humidity',
+  'illuminance', 'irradiance', 'moisture', 'monetary', 'nitrogen_dioxide', 'nitrogen_monoxide', 'nitrous_oxide', 'ozone',
+  'ph', 'pm1', 'pm10', 'pm25', 'pm4', 'power', 'power_factor', 'precipitation', 'precipitation_intensity', 'pressure',
+  'radon', 'reactive_energy', 'reactive_power', 'signal_strength', 'sound_pressure', 'speed', 'sulphur_dioxide',
+  'temperature', 'temperature_delta', 'volatile_organic_compounds', 'volatile_organic_compounds_parts', 'voltage',
+  'volume', 'volume_flow_rate', 'volume_storage', 'water', 'weight', 'wind_direction', 'wind_speed']);
+const VITRO_MONETARY_PARTS = { integer: 'value', group: 'value', decimal: 'value', fraction: 'value', minusSign: 'value',
+  plusSign: 'value', literal: 'literal', currency: 'unit' };
+
+// HA's getNumberFormatOptions: the registry's display precision, or no decimals for a whole state with a whole step.
+function vitroNumberOptions(state, attributes, entry) {
+  const precision = entry ? entry.display_precision : undefined;
+  if (precision !== undefined && precision !== null) return { maximumFractionDigits: precision, minimumFractionDigits: precision };
+  if (Number.isInteger(Number(attributes && attributes.step)) && Number.isInteger(Number(state))) return { maximumFractionDigits: 0 };
+  return undefined;
+}
+// HA's formatNumberToParts (common/number/format_number.ts).
+function vitroNumberParts(num, options) {
+  const l = haLocale;
+  const o = Object.assign({ maximumFractionDigits: 2 }, options || {});
+  if (typeof num === 'string' && (!options || (options.minimumFractionDigits === undefined && options.maximumFractionDigits === undefined))) {
+    const digits = num.indexOf('.') > -1 ? num.split('.')[1].length : 0;
+    o.minimumFractionDigits = digits;
+    o.maximumFractionDigits = digits;
+  }
+  if (l.number_format !== 'none' && !Number.isNaN(Number(num))) return new Intl.NumberFormat(vitroNumberLocale(l), o).formatToParts(Number(num));
+  if (!Number.isNaN(Number(num)) && num !== '' && l.number_format === 'none') {
+    return new Intl.NumberFormat('en-US', Object.assign(o, { useGrouping: false })).formatToParts(Number(num));
+  }
+  return [{ type: 'literal', value: num }];
+}
+// HA's useAmPm and resolveTimeZone (common/datetime), and its formatDateTime, formatDate and formatTime.
+function vitroAmPm(l) {
+  if (l.time_format === 'language' || l.time_format === 'system') {
+    const test = new Date('January 1, 2023 22:00:00').toLocaleString(l.time_format === 'language' ? l.language : undefined);
+    return test.includes('10');
+  }
+  return l.time_format === '12';
+}
+function vitroTimeZone(l) {
+  let local;
+  try { local = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) {}
+  return l.time_zone === 'local' && local ? local : ((haConfig && haConfig.time_zone) || local || 'UTC');
+}
+function vitroDateFormat(l, kind) {
+  const amPm = vitroAmPm(l);
+  const date = { year: 'numeric', month: 'long', day: 'numeric' };
+  const time = { hour: kind === 'time' ? 'numeric' : (amPm ? 'numeric' : '2-digit'), minute: '2-digit', hourCycle: amPm ? 'h12' : 'h23' };
+  const o = kind === 'date' ? date : kind === 'time' ? time : Object.assign({}, date, time);
+  return new Intl.DateTimeFormat(l.language, Object.assign(o, { timeZone: vitroTimeZone(l) }));
 }
 
-function vitroFormatAttribute(stateObj, attr, value) {
+function vitroStateParts(stateObj, state) {
+  const s = state !== undefined && state !== null ? state : (stateObj ? stateObj.state : '');
+  const str = String(s == null ? '' : s);
+  // HA's words for it, or the state in words when the page has no strings for it (never an empty state).
+  if (str === 'unknown' || str === 'unavailable') return [{ type: 'value', value: vitroLocalize('state.default.' + str) || vitroTitle(str) }];
+  const id = String((stateObj && stateObj.entity_id) || '');
+  const domain = id.split('.')[0];
+  const attributes = (stateObj && stateObj.attributes) || {};
+  // The registry's display precision and translated unit: asked for once, as for the state's label.
+  askRegistries();
+  const entry = registries.entities[id];
+  if (attributes.unit_of_measurement || attributes.state_class || VITRO_NUMBER_DOMAINS.includes(domain) ||
+      (domain === 'sensor' && VITRO_NUMERIC_SENSOR_CLASSES.has(attributes.device_class))) {
+    // A duration in minutes, hours or days at the entity's display precision; one DurationFormat refuses falls
+    // through to the number with its unit (format-duration.js).
+    if (attributes.device_class === 'duration' && attributes.unit_of_measurement && VITRO_DURATION_UNITS.includes(attributes.unit_of_measurement)) {
+      try {
+        return [{ type: 'value', value: vitroFormatDuration(haLocale, str, attributes.unit_of_measurement, entry ? entry.display_precision : undefined) }];
+      } catch (e) {}
+    }
+    const options = vitroNumberOptions(str, attributes, entry);
+    if (attributes.device_class === 'monetary') {
+      let parts = [];
+      try {
+        parts = vitroNumberParts(str, Object.assign({ style: 'currency', currency: attributes.unit_of_measurement, minimumFractionDigits: 2 }, options || {}));
+      } catch (e) {}
+      if (parts.length) {
+        const out = [];
+        for (const part of parts) {
+          const type = VITRO_MONETARY_PARTS[part.type];
+          if (!type) continue;
+          const last = out[out.length - 1];
+          if (type === 'value' && last && last.type === 'value') last.value += part.value;
+          else out.push({ type, value: part.value });
+        }
+        return out;
+      }
+    }
+    const value = vitroNumberParts(str, options).map((p) => p.value).join('');
+    const unit = (entry && entry.translation_key &&
+      vitroLocalize('component.' + entry.platform + '.entity.' + domain + '.' + entry.translation_key + '.unit_of_measurement')) ||
+      attributes.unit_of_measurement;
+    if (unit) return [{ type: 'value', value }, { type: 'literal', value: vitroBlankBeforeUnit(unit) }, { type: 'unit', value: unit }];
+    return [{ type: 'value', value }];
+  }
+  if (VITRO_DATE_TIME_DOMAINS.has(domain)) {
+    // Time-zone agnostic: in the browser's own zone, as HA has them.
+    const l = Object.assign({}, haLocale, { time_zone: 'local' });
+    try {
+      const c = str.split(' ');
+      if (c.length === 2) return [{ type: 'value', value: vitroDateFormat(l, 'dateTime').format(new Date(c.join('T'))) }];
+      if (c.length === 1 && str.includes('-')) return [{ type: 'value', value: vitroDateFormat(l, 'date').format(new Date(str + 'T00:00')) }];
+      if (c.length === 1 && str.includes(':')) {
+        const today = new Date().toISOString().split('T')[0];
+        return [{ type: 'value', value: vitroDateFormat(l, 'time').format(new Date(today + 'T' + str)) }];
+      }
+      return [{ type: 'value', value: str }];
+    } catch (e) {
+      return [{ type: 'value', value: str }];
+    }
+  }
+  if (VITRO_TIMESTAMP_DOMAINS.has(domain) || (domain === 'sensor' && VITRO_TIMESTAMP_CLASSES.includes(attributes.device_class))) {
+    try {
+      return [{ type: 'value', value: vitroDateFormat(haLocale, 'dateTime').format(new Date(str)) }];
+    } catch (e) {
+      return [{ type: 'value', value: str }];
+    }
+  }
+  // HA's last resort is the state as it is: for a domain whose labels HA's frontend has and this one has too (a state
+  // they don't name). The page has only the domains the panel read; for another, HA would have its label, which is
+  // most often the state in words ("Not home" for not_home).
+  return [{ type: 'value', value: vitroStateLabel(stateObj, str) || (vitroHasDomainLabels(domain) ? str : vitroTitle(str)) }];
+}
+
+// The domains whose state labels (component.<domain>.entity_component.…) the page's strings hold, made again when they
+// change.
+let vitroLabelDomains = null;
+let vitroLabelDomainsOf = null;
+function vitroHasDomainLabels(domain) {
+  if (vitroLabelDomainsOf !== haStrings) {
+    vitroLabelDomainsOf = haStrings;
+    vitroLabelDomains = new Set();
+    for (const k of Object.keys(haStrings)) {
+      const m = /^component\.([a-z0-9_]+)\.entity_component\./.exec(k);
+      if (m) vitroLabelDomains.add(m[1]);
+    }
+  }
+  return vitroLabelDomains.has(domain);
+}
+
+function vitroFormatState(stateObj, state) {
+  return vitroStateParts(stateObj, state).map((p) => p.value).join('');
+}
+
+// HA's attribute formatters (common/entity/compute_attribute_display.ts and data/entity/entity_attributes.ts,
+// frontend 20261028.5): numbers with HA's per-domain units and formatters, temperatures in the config's unit, and
+// values and names in HA's translations. Dates are left as HA's translations or the value (a later port).
+const VITRO_ATTRIBUTE_UNITS = {
+  climate: { humidity: '%', current_humidity: '%', target_humidity_low: '%', target_humidity_high: '%', target_humidity_step: '%', min_humidity: '%', max_humidity: '%' },
+  cover: { current_position: '%', current_tilt_position: '%' },
+  fan: { percentage: '%' },
+  humidifier: { humidity: '%', current_humidity: '%', min_humidity: '%', max_humidity: '%', target_humidity_step: '%' },
+  light: { color_temp: 'mired', max_mireds: 'mired', min_mireds: 'mired', color_temp_kelvin: 'K', min_color_temp_kelvin: 'K', max_color_temp_kelvin: 'K', brightness: '%' },
+  sun: { azimuth: '°', elevation: '°' },
+  valve: { current_position: '%' },
+  sensor: { battery_level: '%' },
+  media_player: { volume_level: '%' },
+};
+const VITRO_ATTRIBUTE_FORMATTERS = {
+  light: { brightness: (v) => Math.round((v / 255) * 100).toString() },
+  media_player: { volume_level: (v) => Math.round(v * 100).toString() },
+  input_datetime: { year: (v) => v.toString() },
+};
+const VITRO_TEMPERATURE_ATTRIBUTES = new Set(['temperature', 'current_temperature', 'target_temperature', 'target_temp_temp',
+  'target_temp_high', 'target_temp_low', 'target_temp_step', 'min_temp', 'max_temp']);
+function vitroWeatherUnit(stateObj, attr) {
+  const a = stateObj.attributes || {};
+  const units = (haConfig && haConfig.unit_system) || {};
+  const length = units.length || '';
+  switch (attr) {
+    case 'visibility': return a.visibility_unit || length;
+    case 'precipitation': return a.precipitation_unit || (length === 'km' ? 'mm' : 'in');
+    case 'pressure': return a.pressure_unit || (length === 'km' ? 'hPa' : 'inHg');
+    case 'apparent_temperature': case 'dew_point': case 'temperature': case 'templow': return a.temperature_unit || units.temperature;
+    case 'wind_gust_speed': case 'wind_speed': return a.wind_speed_unit || length + '/h';
+    case 'cloud_coverage': case 'humidity': case 'precipitation_probability': return '%';
+    default: return a[attr + '_unit'] || '';
+  }
+}
+function vitroAttributeParts(stateObj, attr, value) {
   const v = value !== undefined ? value : (stateObj && stateObj.attributes ? stateObj.attributes[attr] : undefined);
-  if (v === undefined || v === null) return '';
-  if (Array.isArray(v)) return v.map((x) => (typeof x === 'string' ? vitroTitle(x) : String(x))).join(', ');
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-  if (typeof v === 'object') return JSON.stringify(v);
-  return vitroTitle(v);
+  if (v === null || v === undefined) return [{ type: 'value', value: vitroLocalize('state.default.unknown') || 'Unknown' }];
+  const id = String((stateObj && stateObj.entity_id) || '');
+  const domain = id.split('.')[0];
+  if (attr === 'device_class' && typeof v === 'string') {
+    const name = vitroLocalize('component.' + domain + '.entity_component.' + v + '.name');
+    if (name) return [{ type: 'value', value: name }];
+  }
+  if (typeof v === 'number') {
+    const formatter = VITRO_ATTRIBUTE_FORMATTERS[domain] && VITRO_ATTRIBUTE_FORMATTERS[domain][attr];
+    const shown = formatter ? formatter(v) : vitroFormatNumber(v);
+    let unit = VITRO_ATTRIBUTE_UNITS[domain] && VITRO_ATTRIBUTE_UNITS[domain][attr];
+    if (domain === 'weather') unit = vitroWeatherUnit(stateObj, attr);
+    else if (VITRO_TEMPERATURE_ATTRIBUTES.has(attr)) unit = haConfig && haConfig.unit_system ? haConfig.unit_system.temperature : undefined;
+    const parts = [{ type: 'value', value: shown }];
+    if (unit) {
+      const blank = vitroBlankBeforeUnit(unit);
+      if (blank) parts.push({ type: 'literal', value: blank });
+      parts.push({ type: 'unit', value: unit });
+    }
+    return parts;
+  }
+  if ((Array.isArray(v) && v.some((x) => x instanceof Object)) || (!Array.isArray(v) && v instanceof Object)) {
+    return [{ type: 'value', value: JSON.stringify(v) }];
+  }
+  if (Array.isArray(v)) return [{ type: 'value', value: v.map((x) => vitroFormatAttribute(stateObj, attr, x)).join(', ') }];
+  const entry = registries.entities[id];
+  const dc = stateObj && stateObj.attributes ? stateObj.attributes.device_class : undefined;
+  const shown = (entry && entry.translation_key && vitroLocalize('component.' + entry.platform + '.entity.' + domain + '.' + entry.translation_key + '.state_attributes.' + attr + '.state.' + v)) ||
+    (dc && vitroLocalize('component.' + domain + '.entity_component.' + dc + '.state_attributes.' + attr + '.state.' + v)) ||
+    vitroLocalize('component.' + domain + '.entity_component._.state_attributes.' + attr + '.state.' + v) ||
+    v;
+  return [{ type: 'value', value: String(shown) }];
+}
+function vitroFormatAttribute(stateObj, attr, value) {
+  return vitroAttributeParts(stateObj, attr, value).map((p) => p.value).join('');
+}
+function vitroAttributeName(stateObj, attr) {
+  const id = String((stateObj && stateObj.entity_id) || '');
+  const domain = id.split('.')[0];
+  const entry = registries.entities[id];
+  const dc = stateObj && stateObj.attributes ? stateObj.attributes.device_class : undefined;
+  return (entry && entry.translation_key && vitroLocalize('component.' + entry.platform + '.entity.' + domain + '.' + entry.translation_key + '.state_attributes.' + attr + '.name')) ||
+    (dc && vitroLocalize('component.' + domain + '.entity_component.' + dc + '.state_attributes.' + attr + '.name')) ||
+    vitroLocalize('component.' + domain + '.entity_component._.state_attributes.' + attr + '.name') ||
+    vitroLocalize('ui.components.attributes.names.' + attr) ||
+    vitroTitle(String(attr).replace(/_/g, ' ').replace(/\bid\b/g, 'ID').replace(/\bip\b/g, 'IP').replace(/\bmac\b/g, 'MAC').replace(/\bgps\b/g, 'GPS'));
 }
 
 function vitroCallWS(msg) {
@@ -1816,6 +2263,10 @@ async function vitroCallApi(method, path, parameters, headers) {
 // subscriptions go over the bridge to the panel's one connection. A subscription the panel starts on HA's connection
 // is followed by its id (sid); the bridge sends its events, and the page asks for each again on a new bridge.
 let haConnected = true;
+// The panel's HA connection the page last heard of (`conn`'s epoch), and whether a new bridge still has to ask for the
+// page's subscriptions (it does at its first `conn`).
+let connEpoch = null;
+let replayOnConn = false;
 // Counts the connection's changes: a reconnect's preCheck answers for that reconnect only.
 let connGeneration = 0;
 const connListeners = new Map();
@@ -1916,7 +2367,7 @@ function vitroLoadBackendTranslation(category, integrations, configFlow) {
 }
 function stringsChanged() {
   hassBase.localize = makeLocalize();
-  if (cardEl) cardEl.hass = makeHass();
+  if (cardEl) feedCard();
 }
 
 // hass.services, as HA's frontend has them: read (once) when a card first reads them, then again when an integration
@@ -1928,7 +2379,7 @@ function loadServices() {
   vitroCallWS({ type: 'get_services' }).then((r) => {
     if (!r || typeof r !== 'object') return;
     haServices = r;
-    if (cardEl) cardEl.hass = makeHass();
+    if (cardEl) feedCard();
   }, () => {});
 }
 function askServices() {
@@ -1942,14 +2393,17 @@ function askServices() {
 }
 
 // hass.auth's refreshAccessToken: the page asks for the token the panel holds now (the panel renews its own).
-const tokenWaiters = [];
+// Each request has its id, and only the reply that names it settles it: an `auth` the page gets for another reason (a
+// seed queued before the request, a new token) doesn't.
+const tokenWaiters = new Map();
+let refreshIds = 0;
 function vitroRefreshToken() {
   return new Promise((resolve) => {
-    tokenWaiters.push(resolve);
-    sendBridge({ type: 'refreshToken' });
+    const rid = ++refreshIds;
+    tokenWaiters.set(rid, resolve);
+    sendBridge({ type: 'refreshToken', rid });
     setTimeout(() => {
-      const at = tokenWaiters.indexOf(resolve);
-      if (at >= 0) { tokenWaiters.splice(at, 1); resolve(); }
+      if (tokenWaiters.delete(rid)) resolve();
     }, QUEUED_CALL_MS);
   });
 }
@@ -2004,10 +2458,11 @@ const hassBase = {
   fetchWithAuth(path, init) { return fetch(path, init || {}); },
   localize: makeLocalize(),
   formatEntityState: vitroFormatState,
-  formatEntityStateToParts(stateObj, state) { return [{ type: 'value', value: vitroFormatState(stateObj, state) }]; },
+  formatEntityStateToParts: vitroStateParts,
   formatEntityAttributeValue: vitroFormatAttribute,
-  formatEntityAttributeValueToParts(stateObj, attr, value) { return [{ type: 'value', value: vitroFormatAttribute(stateObj, attr, value) }]; },
-  formatEntityAttributeName(stateObj, attr) { return vitroTitle(attr); },
+  formatEntityAttributeValueToParts: vitroAttributeParts,
+  formatEntityAttributeName: vitroAttributeName,
+  formatEntityName: vitroFormatEntityName,
   connection: vitroConnection,
 };
 if (haUser) hassBase.user = haUser;
@@ -2047,8 +2502,9 @@ function connectBridge() {
     bridgeOpened = true;
     while (outQueue.length) sock.send(outQueue.shift().line);
     for (const entry of wsPending.values()) entry.sent = true;
-    // Every subscription the page holds, on this bridge: a new one, or the one after a hand-over.
-    for (const [sid, entry] of pageSubs) sendIfOpen(subscribeLine(sid, entry));
+    // Every subscription the page holds, on this bridge (a new one, or the one after a hand-over), once the bridge
+    // says where HA's connection is (its first `conn`).
+    replayOnConn = true;
   };
   sock.onmessage = (ev) => {
     const lines = String(ev.data || '').split('\n').filter(Boolean);
@@ -2069,11 +2525,24 @@ function connectBridge() {
           hassBase.user = user;
           changed = true;
         }
-        if (changed && cardEl) cardEl.hass = makeHass();
-        tokenWaiters.splice(0).forEach((done) => done());
+        if (changed && cardEl) feedCard();
+        const waiter = typeof m.rid === 'number' ? tokenWaiters.get(m.rid) : undefined;
+        if (waiter) { tokenWaiters.delete(m.rid); waiter(); }
       } else if (m.type === 'conn') {
         // The panel's connection to HA went down or is back (its subscriptions start again on the panel's side).
         const up = !!m.connected;
+        const epoch = typeof m.epoch === 'number' ? m.epoch : connEpoch;
+        if (replayOnConn) {
+          replayOnConn = false;
+          // HA's connection changed while this page had no bridge: as HA's client, a subscription that started and
+          // doesn't resubscribe ended with it (the panel ended its side then). The others are asked for again.
+          const changedMeanwhile = connEpoch !== null && epoch !== connEpoch;
+          for (const [sid, entry] of Array.from(pageSubs)) {
+            if ((changedMeanwhile || !up) && entry.acked && !entry.resubscribe) { pageSubs.delete(sid); continue; }
+            sendIfOpen(subscribeLine(sid, entry));
+          }
+        }
+        connEpoch = epoch;
         if (up !== haConnected) {
           haConnected = up;
           // HA's client asks a subscription's preCheck again before it resubscribes: one that says no now ends.
@@ -2092,7 +2561,7 @@ function connectBridge() {
           }
           fireConn(up ? 'ready' : 'disconnected');
           if (up && servicesAsked) loadServices();
-          if (cardEl) cardEl.hass = makeHass();
+          if (cardEl) feedCard();
         }
       } else if (m.type === 'subAck') {
         const entry = pageSubs.get(m.sid);
@@ -2115,24 +2584,34 @@ function connectBridge() {
         const style = document.getElementById('vitro-theme');
         if (style && typeof m.css === 'string') style.textContent = m.css;
         hassBase.themes = Object.assign({}, hassBase.themes, { darkMode: !!m.dark, default_theme: String(m.name || '') });
-        if (cardEl) cardEl.hass = makeHass();
+        if (cardEl) feedCard();
+      } else if (m.type === 'config' && m.config && typeof m.config === 'object') {
+        // HA's config as the panel has it now (a page made before it arrived had none): hass.config follows it.
+        haConfig = m.config;
+        hassBase.config = haConfig;
+        if (Object.keys(haConfig).length) configArrived();
+        if (cardEl) feedCard();
       } else if (m.type === 'snapshot' && m.states) {
-        // A (re)connect: the whole store, replacing what the island had.
+        // A (re)connect: the whole store, replacing what the island had. Not `complete` while HA hasn't answered for
+        // the card's entities yet: the card isn't made with states the store doesn't have yet, and the panel sends
+        // the whole store again once HA's answer is in.
         for (const id of Object.keys(rawStates)) delete rawStates[id];
         Object.assign(rawStates, m.states);
         statesView = null;
-        if (cardEl) cardEl.hass = makeHass();
+        if (m.complete !== false) statesArrived();
+        if (cardEl) feedCard();
       } else if (m.type === 'patch' && m.states) {
         for (const id of Object.keys(m.states)) {
           if (m.states[id] === null) delete rawStates[id];
           else rawStates[id] = m.states[id];
         }
         statesView = null;
-        if (cardEl) cardEl.hass = makeHass();
+        if (cardEl) feedCard();
       } else if (m.type === 'registries' && m.registries) {
         // New objects every time: Lit cards compare them by reference.
         for (const key of Object.keys(registries)) registries[key] = m.registries[key] || {};
-        if (cardEl) cardEl.hass = makeHass();
+        registriesIn = true;
+        if (cardEl) feedCard();
       } else if (m.type === 'wsReply') {
         const entry = wsPending.get(m.id);
         if (!entry) continue;
@@ -2180,14 +2659,50 @@ function vitroMissingMember(err) {
 }
 // The card drew nothing: it isn't in the page, or it takes no room. The card, not #mount, which a full-viewport
 // island holds at the screen's height even when it's empty.
+// What the card drew: its own box, or its content's (a custom element is inline unless it says otherwise, and an
+// inline host around a block card measures nothing).
+// What the card drew, never its host's own box: a host can have a height of its own (`:host { height }`) before its
+// content exists. Drawn means an element inside it takes room, or it shows text (the host then holds it).
 function vitroCardBlank() {
   if (!cardEl || !cardEl.isConnected) return true;
-  return Math.ceil(cardEl.getBoundingClientRect().height || 0) <= 0;
+  const content = (cardEl.shadowRoot ? Array.from(cardEl.shadowRoot.children || []) : []).concat(Array.from(cardEl.children || []));
+  const room = (el) => el && el.localName !== 'style' && el.getBoundingClientRect && Math.ceil(el.getBoundingClientRect().height || 0) > 0;
+  if (content.some(room)) return false;
+  const text = ((cardEl.shadowRoot && cardEl.shadowRoot.textContent) || '') + (cardEl.textContent || '');
+  return !(text.trim() && room(cardEl));
+}
+// Every update failing on the same missing member: the card shows what it drew before (HA's "Entity not found" from
+// a first render, say), never what it should. Handed over too, drawn or not. Counted per update the page gives the
+// card (feedCard): the same named member failing in BROKEN_REPEATS updates in a row. Other errors, or an update with
+// none, start the count again; an unnamed TypeError only counts for the blank-card grace above.
+const BROKEN_REPEATS = 3;
+let cardUpdate = 0;
+let streakMember = null;
+let streakUpdates = new Set();
+let threwThisUpdate = false;
+function feedCard() {
+  // The update before this one ran without failing: the card works, whatever it threw earlier.
+  if (cardUpdate > 0 && !threwThisUpdate) { streakMember = null; streakUpdates = new Set(); }
+  cardUpdate += 1;
+  threwThisUpdate = false;
+  cardEl.hass = makeHass();
 }
 function vitroOnCardThrow(err) {
-  if (brokenSent || brokenTimer || !cardEl) return;
+  if (brokenSent || !cardEl) return;
   const member = vitroMissingMember(err);
   if (member === null) return;
+  if (member) {
+    threwThisUpdate = true;
+    if (member !== streakMember) { streakMember = member; streakUpdates = new Set(); }
+    streakUpdates.add(cardUpdate);
+    if (streakUpdates.size >= BROKEN_REPEATS) {
+      brokenSent = true;
+      if (brokenTimer) { clearTimeout(brokenTimer); brokenTimer = null; }
+      sendBridge({ type: 'cardBroken', member });
+      return;
+    }
+  }
+  if (brokenTimer) return;
   brokenTimer = setTimeout(() => {
     brokenTimer = null;
     if (brokenSent || !vitroCardBlank()) return;
@@ -2198,6 +2713,32 @@ function vitroOnCardThrow(err) {
 window.addEventListener('error', (ev) => vitroOnCardThrow(ev && ev.error));
 window.addEventListener('unhandledrejection', (ev) => vitroOnCardThrow(ev && ev.reason));
 
+// The first states and config from the panel: the card is made once they're here, as HA's frontend draws a card
+// once hass has them. A card that drew first with no states would show HA's "Entity not found" for every entity.
+let statesIn = false;
+let statesWaiters = [];
+function statesArrived() { statesIn = true; statesWaiters.splice(0).forEach((done) => done()); }
+let configIn = Object.keys(haConfig || {}).length > 0;
+let configWaiters = [];
+function configArrived() { configIn = true; configWaiters.splice(0).forEach((done) => done()); }
+const untilStates = () => (statesIn ? Promise.resolve() : new Promise((done) => statesWaiters.push(done)));
+const untilConfig = () => (configIn ? Promise.resolve() : new Promise((done) => configWaiters.push(done)));
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+// How long the page waits for its states before it says so (it keeps waiting), and for HA's config.
+const STATES_NOTICE_MS = 8000;
+const CONFIG_WAIT_MS = 3000;
+
+// An honest notice in the card's place while the panel's states don't reach it: never a blank card, never a card
+// drawn with no states. HA's own words for it when the page has them.
+function showWaiting() {
+  const note = document.createElement('ha-card');
+  note.className = 'vitro-fallback';
+  note.id = 'vitro-waiting';
+  note.setAttribute('role', 'status');
+  note.textContent = vitroLocalize('ui.notification_toast.connection_lost') || 'Connection lost. Reconnecting…';
+  document.getElementById('mount').appendChild(note);
+}
+
 async function boot() {
   connectBridge();
   // The card's script, and HA's strings for its localize (a card reads them on its first render).
@@ -2205,10 +2746,25 @@ async function boot() {
   // HA's createCardElement: a custom element that isn't defined in time, or a setConfig that throws, is HA's error
   // card ("Custom element doesn't exist: <tag>.", or what setConfig threw). The island says so, and its card becomes
   // that error card natively, instead of an empty page (#885: a card type its script no longer defines).
+  // A script that is only slow (a cold cache, a big bundle) still defines it: as HA's createCardElement, the page
+  // keeps waiting, and the card is made when it arrives (HA's ll-rebuild). The panel shows HA's error card meanwhile
+  // (`waiting`) and decides how long it keeps the page for it.
   if (!customElements.get(tag)) {
-    sendBridge({ type: 'cardError', message: "Custom element doesn't exist: " + tag + '.' });
-    return;
+    sendBridge({ type: 'cardError', message: "Custom element doesn't exist: " + tag + '.', waiting: true });
+    await customElements.whenDefined(tag);
+    sendBridge({ type: 'cardDefined' });
   }
+  if (!statesIn) {
+    const shown = await Promise.race([untilStates().then(() => true), sleep(STATES_NOTICE_MS).then(() => false)]);
+    if (!shown) {
+      showWaiting();
+      wireResize();
+      await untilStates();
+      const note = document.getElementById('vitro-waiting');
+      if (note) note.remove();
+    }
+  }
+  await Promise.race([untilConfig(), sleep(CONFIG_WAIT_MS)]);
   const el = document.createElement(tag);
   try {
     if (typeof el.setConfig === 'function') el.setConfig(cfg);
@@ -2217,10 +2773,11 @@ async function boot() {
     return;
   }
   cardEl = el;
-  cardEl.hass = makeHass();
+  feedCard();
   document.getElementById('mount').appendChild(cardEl);
   wireEvents();
-  wireResize();
+  if (!resizeWired) wireResize();
+  settleCard(cardEl);
   // HA's own elements the card draws with that this page lacks (frontend-watch.js): its view goes to HA's frontend.
   vitroWatchFrontend(cardEl, { report: (tags, cards) => sendBridge({ type: 'needsFrontend', tags, cards }) });
 }
@@ -2230,8 +2787,25 @@ function moreInfo(id) {
 }
 
 function navigateTo(path) {
-  // Never the island's own address: only a dashboard path a card navigated to.
+  // Never the island's own address: only a dashboard path a card navigated to, or an outside page's full URL, which
+  // Vitro opens as a page (never in this island's own window).
   if (path && typeof path === 'string' && !path.startsWith('/__vitro/')) sendBridge({ type: 'navigate', path });
+}
+
+// A link the card's user tapped: the island's window never leaves the card for it. One to another site goes to
+// Vitro whole (it shows the page as it is); one on this page's origin is a path on Home Assistant, as on HA's page.
+function linkTarget(ev) {
+  const path = ev && typeof ev.composedPath === 'function' ? ev.composedPath() : [];
+  for (const el of path) {
+    if (!el || String(el.localName || '').toLowerCase() !== 'a' || !el.href) continue;
+    let u;
+    try { u = new URL(String(el.href), location.href); } catch (e) { return null; }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    // A fragment of this very document (a card's own table of contents): the browser scrolls to it, as on HA's page.
+    if (u.origin === location.origin && u.pathname === location.pathname && u.search === location.search && u.hash) return null;
+    return u.origin === location.origin ? u.pathname + u.search + u.hash : u.href;
+  }
+  return null;
 }
 
 // HA's handleAction for a `hass-action` event: the card says which gesture, its config says what it does.
@@ -2256,7 +2830,8 @@ function runAction(config, gesture) {
       if (dot > 0) hassBase.callService(svc.slice(0, dot), svc.slice(dot + 1), action.data || action.service_data, action.target);
       break;
     }
-    case 'url': if (action.url_path) window.open(action.url_path, '_blank'); break;
+    // Opened as a native card's `url` action opens it (the panel's page, with back), never in this card's own page.
+    case 'url': if (action.url_path) sendBridge({ type: 'action', action, entity: entity || '' }); break;
     default: break;
   }
 }
@@ -2280,17 +2855,28 @@ function wireEvents() {
     const p = ev && ev.detail && ev.detail.path;
     navigateTo(p);
   });
+  // After the card's own handlers: a link the card handles itself (preventDefault) stays the card's.
+  window.addEventListener('click', (ev) => {
+    if (!ev || ev.defaultPrevented || ev.button > 0) return;
+    const target = linkTarget(ev);
+    if (!target) return;
+    ev.preventDefault();
+    navigateTo(target);
+  });
 }
 
+let resizeWired = false;
 function wireResize() {
+  resizeWired = true;
   const mount = document.getElementById('mount');
   let timer = null;
   let lastH = -1;
   const reportSize = () => {
     timer = null;
-    const h = Math.ceil(mount.getBoundingClientRect().height || 0);
-    // 0 px is a card that has not rendered yet: reporting it would collapse the island and flash.
-    if (h <= 0 || h === lastH) return;
+    const h = Math.max(0, Math.ceil(mount.getBoundingClientRect().height || 0));
+    // 0 px before the card's first render is a card that hasn't drawn yet: reporting it would collapse the island
+    // and flash. After it, 0 px is a card that draws nothing (a wrapper with no match), which HA gives no height.
+    if ((h === 0 && !cardSettled) || h === lastH) return;
     lastH = h;
     sendBridge({ type: 'resize', height: h });
   };
@@ -2299,7 +2885,20 @@ function wireResize() {
     timer = setTimeout(reportSize, 50);
   };
   if (window.ResizeObserver) new ResizeObserver(scheduleResize).observe(mount);
+  resizeNow = scheduleResize;
   scheduleResize();
+}
+// Set once the card had its first render (its updateComplete, or a second after it was made): a 0 px card from then
+// on draws nothing, and its island collapses.
+let cardSettled = false;
+let resizeNow = null;
+const CARD_SETTLE_MS = 1000;
+function settleCard(el) {
+  const first = el && el.updateComplete && typeof el.updateComplete.then === 'function' ? el.updateComplete : sleep(CARD_SETTLE_MS);
+  Promise.race([Promise.resolve(first).catch(() => {}), sleep(CARD_SETTLE_MS)]).then(() => {
+    cardSettled = true;
+    if (resizeNow) resizeNow();
+  });
 }
 boot();
 </script>

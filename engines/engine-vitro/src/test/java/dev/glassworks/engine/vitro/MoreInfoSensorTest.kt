@@ -301,6 +301,14 @@ class MoreInfoSensorTest {
         assertEquals("a slow answer still draws when nothing newer has", 4.0, mean(), 0.0)
         answer(8, 5.0)
         assertEquals(5.0, mean(), 0.0)
+        // A newer refresh that fails draws nothing, so it doesn't block a slower, earlier one that succeeds.
+        ShadowLooper.idleMainLooper(MoreInfoHistoryView.MINUTE_MS + 1, java.util.concurrent.TimeUnit.MILLISECONDS)
+        ShadowLooper.idleMainLooper(MoreInfoHistoryView.MINUTE_MS + 1, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(14, answers.size)
+        answers.subList(12, 14).forEach { (_, done) -> done(false, null, null) }
+        idle()
+        answer(10, 6.0)
+        assertEquals("an earlier refresh's data draws when the newer one failed", 6.0, mean(), 0.0)
     }
 
     @Test

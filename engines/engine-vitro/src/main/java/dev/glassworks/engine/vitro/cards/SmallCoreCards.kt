@@ -157,7 +157,8 @@ internal object HaStateColor {
      * `--state-inactive-color`, as under a heading badge's `--state-inactive-color: initial`.
      */
     fun of(ctx: VitroCardContext, s: EntityState, state: String = s.state, inactiveDefault: Boolean = true): Int? {
-        if (state == "unavailable") return ctx.theme.disabledTextColor
+        // HA's iconColorCSS reads --state-unavailable-color (a theme may set it); HA's default is the disabled text color.
+        if (state == "unavailable") return property(ctx, "state-unavailable-color") ?: ctx.theme.disabledTextColor
         val domain = s.domain
         val dc = s.deviceClass
         if (domain == "sensor" && dc == "battery") {
@@ -182,6 +183,34 @@ internal object HaStateColor {
         }
         for (p in props) property(ctx, p)?.let { return it }
         return null
+    }
+
+    /** HA's `CLIMATE_HVAC_ACTION_TO_MODE` (`data/climate.ts`). */
+    private val HVAC_ACTION_TO_MODE = mapOf(
+        "cooling" to "cool", "defrosting" to "heat", "drying" to "dry", "fan" to "fan_only", "heating" to "heat",
+        "idle" to "off", "off" to "off", "preheating" to "heat",
+    )
+
+    /**
+     * The color HA draws a state icon in when it follows the state: `<state-badge>` with `color: "state"` (the glance
+     * card's default) and the button card's `_computeColor` (no `color` set). Both set `--state-inactive-color` to the
+     * icon color (`initial` under the badge, `--state-icon-color` on the button), so an inactive state with no color of
+     * its own draws in `--state-icon-color`; `rgb_color` wins over the state's color, and `hvac_action` takes its mode's
+     * color (or none for an action HA doesn't map). The badge applies `hvac_action` after `rgb_color`, the button
+     * before ([hvacOverRgb]). An unavailable icon is `--state-unavailable-color` either way (`iconColorCSS`). The
+     * brightness filter ([stateColorBrightness]) comes on top.
+     */
+    fun icon(ctx: VitroCardContext, s: EntityState?, hvacOverRgb: Boolean): Int {
+        val iconColor = ctx.theme.stateIconColor
+        if (s == null) return iconColor
+        if (s.state == "unavailable") return of(ctx, s) ?: iconColor
+        val rgb = (s.attributes["rgb_color"] as? List<*>)?.takeIf { it.size >= 3 }?.map { (it as? Number)?.toInt() }
+            ?.takeIf { c -> c.all { it != null } }?.let { Color.rgb(it[0]!!.coerceIn(0, 255), it[1]!!.coerceIn(0, 255), it[2]!!.coerceIn(0, 255)) }
+        val hvac = (s.attributes["hvac_action"] as? String)?.takeIf { it.isNotEmpty() }
+        fun hvacColor(): Int = HVAC_ACTION_TO_MODE[hvac]?.let { of(ctx, s, it, inactiveDefault = false) } ?: iconColor
+        if (hvac != null && (hvacOverRgb || rgb == null)) return hvacColor()
+        if (rgb != null) return rgb
+        return of(ctx, s, inactiveDefault = false) ?: iconColor
     }
 }
 
@@ -859,7 +888,7 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
 
     /**
      * Follows every sensor the plant names now (one it swaps in included), keeping the handles it has; a sensor it
-     * no longer names is dropped. The view's subscription names only the plant (its config does), so each sensor joins
+     * no longer names is dropped. The entity subscription names only the plant (its config does), so each sensor joins
      * it too ([VitroCardContext.watchEntity]), as HA's card reads them from `hass.states`.
      */
     private fun followSensors(s: EntityState) {

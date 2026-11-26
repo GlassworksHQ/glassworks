@@ -404,6 +404,37 @@ class CardModAndOverlayTest {
     }
 
     @Test
+    fun aFixedCardWhoseHaCardIsFullHeightIsAsTallAsTheViewport() {
+        // HA's tile (like most of its cards) is `ha-card { height: 100% }`. With `position: fixed` the viewport is its
+        // containing block, so a tile pinned with `bottom: 24px` is as tall as the screen, its top 24 px above it.
+        val vv = VitroView(activity, EntityStore(), 0xFF000000.toInt())
+        val dp = activity.resources.displayMetrics.density
+        val screenH = activity.resources.displayMetrics.heightPixels
+        val css = "ha-card { position: fixed; right: 24px; bottom: 24px; width: 160px; }"
+        assertTrue("tile" in dev.glassworks.engine.vitro.ui.HA_CARD_FULL_HEIGHT)
+        val tile = vv.pinnedLayoutParams(ThemeResolver.parseCardMod(css), fillsHeight = true)
+        assertEquals(screenH, tile.height)
+        assertEquals(Gravity.END or Gravity.BOTTOM, tile.gravity)
+        assertEquals((24 * dp).toInt(), tile.bottomMargin)
+        assertEquals((160 * dp).toInt(), tile.width)
+        // A card whose own height isn't 100% (a custom card's is unknown) keeps its own.
+        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, vv.pinnedLayoutParams(ThemeResolver.parseCardMod(css)).height)
+        // `position: absolute` isn't placed against the viewport.
+        val absolute = ThemeResolver.parseCardMod("ha-card { position: absolute; right: 24px; bottom: 24px; }")
+        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, vv.pinnedLayoutParams(absolute, fillsHeight = true).height)
+        // The card-mod height wins over the card's own 100%.
+        val sized = ThemeResolver.parseCardMod("ha-card { position: fixed; right: 24px; bottom: 24px; height: 120px; }")
+        assertEquals((120 * dp).toInt(), vv.pinnedLayoutParams(sized, fillsHeight = true).height)
+        val half = ThemeResolver.parseCardMod("ha-card { position: fixed; top: 0; height: 50%; }")
+        assertEquals(screenH / 2, vv.pinnedLayoutParams(half, fillsHeight = true).height)
+        // An explicit `height: auto` is the content's height, not the 100% card's viewport.
+        val auto = ThemeResolver.parseCardMod("ha-card { position: fixed; top: 0; height: auto; }")
+        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, vv.pinnedLayoutParams(auto, fillsHeight = true).height)
+        // `entity-button` is the button card's other name: the same 100%.
+        assertTrue("button" in dev.glassworks.engine.vitro.ui.HA_CARD_FULL_HEIGHT && "entity-button" in dev.glassworks.engine.vitro.ui.HA_CARD_FULL_HEIGHT)
+    }
+
+    @Test
     fun theCenteringIdiomIsPlacedAtTheViewportCenter() {
         // `left: 50%; top: 50%; transform: translate(-50%, -50%)` centers the card in HA, and the overlay centers it too.
         val vv = VitroView(activity, EntityStore(), 0xFF000000.toInt())

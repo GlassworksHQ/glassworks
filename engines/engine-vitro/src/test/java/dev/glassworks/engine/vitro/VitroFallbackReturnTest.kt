@@ -244,6 +244,20 @@ class VitroFallbackReturnTest {
         assertEquals(wall, host.locations.last())
     }
 
+    @Test fun aDisposedPageClosesItsSheet() {
+        // The activity goes: the sheet is dismissed, and a script-fields lookup still out answers into nothing
+        // (closeMoreInfo moves its request on; EntityRowControlsTest covers that half).
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        val vv = vitroView(page)
+        vv.openMoreInfo("sensor.outdoor_temperature")
+        idle()
+        assertNotNull(vv.openSheet)
+        page.javaClass.getDeclaredMethod("dispose").apply { isAccessible = true }.invoke(page)
+        idle()
+        assertEquals("no sheet left on a disposed page", null, vv.openSheet)
+    }
+
     @Test fun aDialogTheSheetDrawsStaysNative() {
         val fb = RecordingEngine()
         val page = readyPage(fb)
@@ -661,6 +675,27 @@ class VitroFallbackReturnTest {
         repeat(10) { Thread.sleep(20); idle() }
         assertFallback(page, fp)
         assertTrue("no ready: the energy page stays", host.messages("ready").isEmpty())
+    }
+
+    @Test fun aFailedDashboardOpenInHomeAssistantsEditorIsntReloadedOnReconnect() {
+        server.configError = "error"
+        val fb = RecordingEngine()
+        val e = engine(fb).also { it.configRetryMs = longArrayOf(20, 20) }
+        val page = page(e)
+        page.load(living)
+        awaitMain("fallback") { fb.opens.isNotEmpty() && fb.fallbackPage().view.visibility == View.VISIBLE }
+        val fp = fb.fallbackPage()
+        // In HA's page, the user opens the failed dashboard's editor: a reload would drop their unsaved edits.
+        fb.fallbackOpen().host.onLocationChange("$living?edit=1")
+        val loads = fp.loads.size
+        server.configError = null
+        val connections = server.connectUrls.size
+        server.dropConnection()
+        awaitMain("reconnected") { server.connectUrls.size > connections && server.received.count { it.optString("type") == "auth" } > connections }
+        repeat(10) { Thread.sleep(20); idle() }
+        assertFallback(page, fp)
+        assertEquals("the editor's page isn't loaded again", loads, fp.loads.size)
+        assertTrue("no ready: the editor stays", host.messages("ready").isEmpty())
     }
 
     @Test fun backFromADialogThenASidebarTapToItsViewKeepsTheWayBack() {

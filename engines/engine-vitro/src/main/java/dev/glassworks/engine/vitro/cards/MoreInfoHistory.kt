@@ -197,11 +197,12 @@ internal class MoreInfoHistoryView(
         val done = {
             if (++answers == 2 && gen == generation && attempt > statsApplied && !settled) {
                 settled = true
-                statsApplied = attempt
                 ctx.main.removeCallbacks(deadline)
                 val m = (meta as? JSONArray)?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) } }.orEmpty()
                 val s = stats
                 if (m.isNotEmpty() && s != null) {
+                    // Only statistics drawn count as the newest: a failed refresh leaves an earlier one free to draw.
+                    statsApplied = attempt
                     metadata = m.firstOrNull { it.optString("statistic_id") == entityId } ?: m.first()
                     statistics = s
                     aggregate.visibility = VISIBLE

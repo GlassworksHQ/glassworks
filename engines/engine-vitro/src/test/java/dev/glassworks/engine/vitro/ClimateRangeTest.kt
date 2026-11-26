@@ -301,6 +301,35 @@ class ClimateRangeTest {
     }
 
     @Test
+    fun theDevicesExactMinimumIsReachableByTouch() {
+        // A 7.3 minimum on a 0.5 step: the ring's start is 7.3, not the 7.5 a zero-based step would make it.
+        val sent = ArrayList<Double>()
+        val dial = ThermostatDialView(context(), "°C").apply { onCommit = { sent += it } }
+        dial.bind(7.3, 35.0, 0.5, 22.0, 21.0, "heat", "idle")
+        dial.measure(View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY))
+        dial.layout(0, 0, 320, 320)
+        touch(dial, MotionEvent.ACTION_DOWN, 10.0) // the helper's 10 is the ring's start
+        touch(dial, MotionEvent.ACTION_UP, 10.0)
+        assertEquals(listOf(7.3), sent)
+    }
+
+    @Test
+    fun aKeyReleaseThatSendsNothingStillSettlesThePreview() {
+        // 59 held up to 61; HA then reports a 60 maximum and a 60 target. The release sends nothing (HA has 60), and
+        // the dial reads 60, not the 61 it previewed.
+        val sent = ArrayList<Double>()
+        val dial = ThermostatDialView(context(), "°C").apply { onCommit = { sent += it } }
+        dial.bind(10.0, 70.0, 1.0, null, 59.0, "heat", "idle")
+        dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
+        dial.dispatchKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT, 1))
+        assertTrue(dial.contentDescription.toString(), "61" in dial.contentDescription.toString())
+        dial.bind(10.0, 60.0, 1.0, null, 60.0, "heat", "idle")
+        dial.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT))
+        assertTrue(sent.toString(), sent.isEmpty())
+        assertTrue(dial.contentDescription.toString(), "60" in dial.contentDescription.toString() && "61" !in dial.contentDescription.toString())
+    }
+
+    @Test
     fun aCancelledSingleDragShowsTheRangeHaMovedTo() {
         val sent = ArrayList<Double>()
         val dial = ThermostatDialView(context(), "°C").apply { onCommit = { sent += it } }

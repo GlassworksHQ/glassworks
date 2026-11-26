@@ -165,6 +165,39 @@ class VitroPerfLeversTest {
         assertEquals(secondRenders, second.rendersRun)
     }
 
+    /**
+     * L3 fix B: the whole dashboard's entities are subscribed, so changes to another view's entities arrive too. On a
+     * hidden cached view they cost the parse alone: no card anywhere renders.
+     */
+    @Test
+    fun aChangeToAnEntityOfAHiddenViewRendersNothing() {
+        val store = EntityStore()
+        put(store, "sensor.kitchen", "20.0")
+        put(store, "sensor.hall", "15.0")
+        val vv = vitroView(store, """{"views": [
+            {"title": "One", "path": "one", "cards": [{"type": "entities", "entities": ["sensor.kitchen"]}]},
+            {"title": "Two", "path": "two", "cards": [{"type": "entities", "entities": ["sensor.hall"]}]}]}""")
+        activity.setContentView(vv)
+        idle()
+        val hidden = all(vv).filterIsInstance<EntitiesCardView>().single()
+        vv.navigateToView("two")
+        idle()
+        val shown = all(vv).filterIsInstance<EntitiesCardView>().single { it !== hidden }
+        val hiddenRenders = hidden.rendersRun
+        val shownRenders = shown.rendersRun
+        val sets = countTextSets(vv)
+        for (v in listOf("20.1", "20.2", "20.3")) {
+            put(store, "sensor.kitchen", v)
+            idle()
+        }
+        assertEquals("the hidden view renders nothing", hiddenRenders, hidden.rendersRun)
+        assertEquals("the view on screen doesn't name it", shownRenders, shown.rendersRun)
+        assertEquals("no text set anywhere", 0, sets[0])
+        // Shown again, it has the newest state at once.
+        vv.navigateToView("one")
+        assertTrue(texts(hidden).toString(), "20.3" in texts(hidden))
+    }
+
     @Test
     fun aHiddenViewsCardThatLeftTheWindowCatchesUpOnAttachAsBefore() {
         val store = EntityStore()

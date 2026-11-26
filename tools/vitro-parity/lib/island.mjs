@@ -80,6 +80,8 @@ export async function probeIsland(root, caseFile, opts = {}) {
           if (msg.type === 'subscribe') ws.send(JSON.stringify({ type: 'subError', sid: msg.sid, error: { code: 'not_supported', message: 'island-probe answers no subscriptions' } }) + '\n');
         }
       });
+      // As the panel's seed: where HA's connection is (a page asks for its subscriptions once it hears), then states.
+      ws.send(JSON.stringify({ type: 'conn', connected: true, epoch: 1 }) + '\n');
       const snapshot = () => ws.send(JSON.stringify({ type: 'snapshot', states }) + '\n');
       if (opts.snapshotDelayMs) setTimeout(snapshot, opts.snapshotDelayMs); else snapshot();
     });
@@ -122,7 +124,8 @@ export async function probeIsland(root, caseFile, opts = {}) {
       await page.waitForTimeout(600);
       out.tap = bridge(sent.slice(n));
     }
-    if (opts.shot) writeFileSync(opts.shot, await page.screenshot());
+    // shotTransparent: the page's own transparency kept (an island is a transparent page over Vitro's view).
+    if (opts.shot) writeFileSync(opts.shot, await page.screenshot({ omitBackground: !!opts.shotTransparent }));
     return out;
   } finally {
     await ctx.close();

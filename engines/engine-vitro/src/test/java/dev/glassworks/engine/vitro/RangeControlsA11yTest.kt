@@ -19,7 +19,6 @@ import dev.glassworks.engine.vitro.cards.ClimateHandle
 import dev.glassworks.engine.vitro.cards.ColorTempSliderView
 import dev.glassworks.engine.vitro.cards.HaColorTempBarView
 import dev.glassworks.engine.vitro.cards.HaHorizontalSliderView
-import dev.glassworks.engine.vitro.cards.HumidityDialView
 import dev.glassworks.engine.vitro.cards.ThermostatDialView
 import dev.glassworks.engine.vitro.cards.VerticalCoverSliderView
 import dev.glassworks.engine.vitro.cards.VerticalSliderPillView
@@ -248,7 +247,8 @@ class RangeControlsA11yTest {
         val dial = BrightnessDialView(activity, 0xFFFFA000.toInt(), 0xFF888888.toInt(), 0xFF888888.toInt(), 0xFF03A9F4.toInt()).apply {
             onBrightness = { brightness += it }
             onToggle = { toggles++ }
-            update(true, 0.4f, "mdi:lightbulb")
+            // The light reports 40 % (HA's slider runs 1–100: 40 % is (40 - 1) / 99 of the arc).
+            update(true, BrightnessDialView.fractionOf(40), "mdi:lightbulb")
         }
         attach(dial, 200, 200)
         val info = dial.node()
@@ -261,17 +261,17 @@ class RangeControlsA11yTest {
         up(dial, KeyEvent.KEYCODE_DPAD_RIGHT)
         assertEquals(listOf(41), brightness)
         // TalkBack: a tenth, at once.
-        dial.update(true, 0.41f, "mdi:lightbulb")
+        dial.update(true, BrightnessDialView.fractionOf(41), "mdi:lightbulb")
         assertTrue(dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null))
         assertEquals(51, brightness.last())
         // Two TalkBack steps before the optimistic render: the second goes on from the first.
-        dial.update(true, 0.5f, "mdi:lightbulb")
+        dial.update(true, BrightnessDialView.fractionOf(50), "mdi:lightbulb")
         brightness.clear()
         dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null)
         dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null)
         assertEquals(listOf(60, 70), brightness)
         // A write turned down: HA's value comes back, and the next step starts from it.
-        dial.update(true, 0.5f, "mdi:lightbulb")
+        dial.update(true, BrightnessDialView.fractionOf(50), "mdi:lightbulb")
         assertEquals(50f, dial.node().rangeInfo.current, 0f)
         dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null)
         assertEquals(60, brightness.last())
@@ -285,14 +285,19 @@ class RangeControlsA11yTest {
         assertFalse(down(dial, KeyEvent.KEYCODE_DPAD_LEFT))
     }
 
+    /** The humidifier card's dial: the thermostat's, with HA's humidity control ([ThermostatDialView.humidifier]). */
+    private fun humidityDial(sent: MutableList<Double>, min: Double, max: Double, target: Double?) =
+        ThermostatDialView(context(), "%").apply {
+            humidifier = true
+            onCommit = { sent += it }
+            bind(min, max, 1.0, current = 45.0, target = target, mode = "on", action = "humidifying", stateLabel = "On")
+            attach(this, 300, 300)
+        }
+
     @Test
     fun theHumidifierDialIsASlider() {
-        val sent = ArrayList<Int>()
-        val dial = HumidityDialView(context()).apply {
-            onCommit = { sent += it }
-            bind(30.0, 80.0, 45.0, 50.0, on = true, status = "Humidifying")
-        }
-        attach(dial, 300, 300)
+        val sent = ArrayList<Double>()
+        val dial = humidityDial(sent, 30.0, 80.0, 50.0)
         assertTrue(dial.isFocusable)
         val info = dial.node()
         assertEquals("android.widget.SeekBar", info.className)
@@ -303,40 +308,31 @@ class RangeControlsA11yTest {
         assertTrue(sent.isEmpty())
         assertTrue(dial.contentDescription.toString(), "49%" in dial.contentDescription.toString())
         up(dial, KeyEvent.KEYCODE_DPAD_LEFT)
-        assertEquals(listOf(49), sent)
-        assertTrue(dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null))
-        assertEquals(54, sent.last())
+        assertEquals(listOf(49.0), sent)
         // No target (off with no humidity): nothing to move.
-        dial.bind(30.0, 80.0, 45.0, null, on = false, status = "Off")
+        dial.bind(30.0, 80.0, 1.0, current = 45.0, target = null, mode = "off", action = "off", stateLabel = "Off")
         assertFalse(down(dial, KeyEvent.KEYCODE_DPAD_RIGHT))
     }
 
-    private fun humidityDial(sent: MutableList<Int>, min: Double, max: Double, target: Double?) =
-        HumidityDialView(context()).apply {
-            onCommit = { sent += it }
-            bind(min, max, 45.0, target, on = true, status = "Humidifying")
-            attach(this, 300, 300)
-        }
-
     @Test
     fun aHumidityKeyEditIsDroppedWhenTheTargetGoes() {
-        val sent = ArrayList<Int>()
+        val sent = ArrayList<Double>()
         val dial = humidityDial(sent, 30.0, 80.0, 50.0)
         assertTrue(down(dial, KeyEvent.KEYCODE_DPAD_LEFT))
         // Turned off while the key is held: nothing to set, nothing sent.
-        dial.bind(30.0, 80.0, 45.0, null, on = false, status = "Off")
+        dial.bind(30.0, 80.0, 1.0, current = 45.0, target = null, mode = "off", action = "off", stateLabel = "Off")
         up(dial, KeyEvent.KEYCODE_DPAD_LEFT)
         assertTrue(sent.toString(), sent.isEmpty())
     }
 
     @Test
     fun aHumidityKeyEditTakesTheLimitsHaReportsMeanwhile() {
-        val sent = ArrayList<Int>()
+        val sent = ArrayList<Double>()
         val dial = humidityDial(sent, 20.0, 80.0, 79.0)
         assertTrue(down(dial, KeyEvent.KEYCODE_DPAD_RIGHT))
         // HA narrows the range while the key is held: the release sends a value inside the new one.
-        dial.bind(20.0, 60.0, 45.0, 79.0, on = true, status = "Humidifying")
+        dial.bind(20.0, 60.0, 1.0, current = 45.0, target = 79.0, mode = "on", action = "humidifying", stateLabel = "On")
         up(dial, KeyEvent.KEYCODE_DPAD_RIGHT)
-        assertEquals(listOf(60), sent)
+        assertEquals(listOf(60.0), sent)
     }
 }

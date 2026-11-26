@@ -208,7 +208,17 @@ internal class AdjustableAccess(
     /** A key edit is showing: a value bound from HA waits until its key comes up. */
     val editing: Boolean get() = pending
 
-    private val tenth: Int get() = maxOf(step(), (max() - min()) / 10)
+    /**
+     * HA's `_tenPercentStep` (`ha-control-slider`, `ha-control-circular-slider`): a tenth of the range, never under a
+     * step, not cut to a whole number. A 1–100 slider's tenth is 9.9, so 41 goes to 51, not 50. Snapped to the step from
+     * the minimum: where a control's step is coarser than HA's (a color temperature's), a tenth still lands where HA's
+     * does (4250 K back a tenth of 2000–6500 is 3800 K).
+     */
+    private fun byTenth(v: Int, sign: Int): Int {
+        val s = step().coerceAtLeast(1)
+        val raw = v + sign * maxOf(s.toDouble(), (max() - min()) / 10.0)
+        return (min() + Math.round((raw - min()) / s) * s).toInt()
+    }
 
     fun onInitialize(info: AccessibilityNodeInfo) {
         val v = value()
@@ -228,8 +238,8 @@ internal class AdjustableAccess(
      */
     fun perform(action: Int, arguments: Bundle? = null): Boolean? {
         val next = when (action) {
-            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD -> value() + tenth
-            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> value() - tenth
+            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD -> byTenth(value(), 1)
+            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> byTenth(value(), -1)
             android.R.id.accessibilityActionSetProgress -> {
                 if (!Platform.hasSetProgressAction) return null
                 val p = arguments?.getFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, Float.NaN) ?: Float.NaN
@@ -252,8 +262,8 @@ internal class AdjustableAccess(
         val next = when (keyCode) {
             KeyEvent.KEYCODE_DPAD_RIGHT -> v + step()
             KeyEvent.KEYCODE_DPAD_LEFT -> v - step()
-            KeyEvent.KEYCODE_PAGE_UP -> v + tenth
-            KeyEvent.KEYCODE_PAGE_DOWN -> v - tenth
+            KeyEvent.KEYCODE_PAGE_UP -> byTenth(v, 1)
+            KeyEvent.KEYCODE_PAGE_DOWN -> byTenth(v, -1)
             KeyEvent.KEYCODE_MOVE_HOME -> min()
             KeyEvent.KEYCODE_MOVE_END -> max()
             else -> return false

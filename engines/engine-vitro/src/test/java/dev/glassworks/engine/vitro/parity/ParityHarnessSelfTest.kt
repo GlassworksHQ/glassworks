@@ -170,6 +170,12 @@ class ParityHarnessSelfTest {
         assertEquals(ParityStatus.ERROR, open.judge("s1/c", emptyList(), false)!!.first)
         // An open bug is never drift as well.
         assertEquals(ParityStatus.ERROR, open.judge("s1/c", listOf("pixels 30% > 2%"), true)!!.first)
+        // On a case HA's frontend draws, nothing checks the bug: an error, never an ordinary match.
+        assertEquals(null, open.judgeFrontend("s1/other"))
+        val (frontend, frontendWhy) = open.judgeFrontend("s1/c")!!
+        assertEquals(ParityStatus.ERROR, frontend)
+        assertTrue(frontendWhy.toString(), frontendWhy.any { "frontend" in it && "#928" in it })
+        assertEquals(listOf("c"), fatalResults(listOf(result(frontend, null)), acceptDrift = true).map { it.case.id })
     }
 
     @Test

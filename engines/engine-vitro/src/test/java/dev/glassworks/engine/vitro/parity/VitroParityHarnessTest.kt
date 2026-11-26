@@ -143,6 +143,10 @@ class VitroParityHarnessTest {
                         listOf("Vitro routes it `$route`" + (why?.let { " ($it)" } ?: "") + ", the case says `${case.route}`"), emptyList(), null)
                 }
                 if (route == ParityRoute.FRONTEND) {
+                    // An open entry here names a bug nothing checks: never reported as an ordinary match.
+                    open.judgeFrontend("${frame.id}/${case.id}")?.let { (status, reasons) ->
+                        return ParityResult(label, frame, case, status, null, reasons, listOf("HA's frontend draws its view: $why"), null)
+                    }
                     return ParityResult(label, frame, case, ParityStatus.MATCH, null, emptyList(), listOf("HA's frontend draws its view: $why"), null)
                 }
             }

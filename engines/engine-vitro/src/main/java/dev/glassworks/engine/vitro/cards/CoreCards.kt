@@ -2065,6 +2065,20 @@ internal class HaHorizontalSliderView(
         if (!gainFocus) access.cancel()
     }
 
+    /**
+     * Disabled mid-drag (the entity went unavailable): the drag ends as a cancel does, sending nothing, so the value
+     * Home Assistant reports later is shown again. Android keeps a custom view's drag state when it's disabled.
+     */
+    override fun setEnabled(enabled: Boolean) {
+        super.setEnabled(enabled)
+        if (!enabled && dragging) {
+            dragging = false
+            parent?.requestDisallowInterceptTouchEvent(false)
+            setValue(boundFraction, boundActive)
+            invalidate()
+        }
+    }
+
     @android.annotation.SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         // Disabled (an unavailable entity): no drag and nothing sent.
@@ -2077,11 +2091,15 @@ internal class HaHorizontalSliderView(
                 dragTo(event.x, w)
                 return true
             }
+            // Only a live drag moves or sends: one cancelled meanwhile (the entity went unavailable, then came back
+            // while the finger stayed down) ignores the rest of its touch stream until a fresh press.
             MotionEvent.ACTION_MOVE -> {
+                if (!dragging) return false
                 dragTo(event.x, w)
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                if (!dragging) return false
                 dragTo(event.x, w)
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
@@ -2943,9 +2961,8 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                 }
                 cell.bindHoldAction(ctx, e.holdAction ?: ActionConfig("more-info"), e.entity)
                 observe(e.entity) { s ->
-                    val active = s?.isActive == true
-                    val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
-                    icon.setIcon(MdiIcons.resolveIconName(e.icon, s), tint)
+                    // HA's <state-badge> with the glance card's `color: "state"`.
+                    icon.setIcon(MdiIcons.resolveIconName(e.icon, s), stateColorBrightness(s, HaStateColor.icon(ctx, s, hvacOverRgb = true)))
                     name.text = e.nameFor(s) ?: s?.displayName ?: e.entity
                     // hui-glance-card: a timestamp state through hui-timestamp-display ("In 3 hours").
                     ctx.showTimestampOr(state, s, s?.plainState() ?: "…")
@@ -2982,22 +2999,20 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
         val showName = config.raw.optBoolean("show_name", true)
         val showState = config.raw.optBoolean("show_state", false)
         val showIcon = config.raw.optBoolean("show_icon", true)
-        val label = textView(ctx, 16f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
-            gravity = Gravity.CENTER
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-        }
-        val state = textView(ctx, 12.6f, ctx.theme.secondaryTextColor, Inter.REGULAR).apply {
-            gravity = Gravity.CENTER
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-        }
+        // The name and the state are spans in HA's column: a long one wraps onto more lines ("Kitchen / Pendant"),
+        // each a 1.2 line box, and the card grows with them where its height isn't fixed (masonry).
+        val label = textView(ctx, 16f, ctx.theme.primaryTextColor, Inter.REGULAR).apply { gravity = Gravity.CENTER }
+        val state = textView(ctx, 12.6f, ctx.theme.secondaryTextColor, Inter.REGULAR).apply { gravity = Gravity.CENTER }
         if (showIcon) col.addView(icon, iconLp)
-        if (showName) col.addView(label, LinearLayout.LayoutParams(MATCH_PARENT, (19.2f * ctx.dp).roundToInt()).apply {
+        if (showName) col.addView(label, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
             if (showIcon) topMargin = ctx.px(8f)
         })
-        if (showState) col.addView(state, LinearLayout.LayoutParams(MATCH_PARENT, (15.12f * ctx.dp).roundToInt()))
+        if (showState) col.addView(state, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER))
+        fun TextView.line(text: String, size: Float) {
+            this.text = text
+            lineBox(ctx, this, size, 1.2f)
+        }
 
         val eid = config.entity
         // hui-button-card: `tap_action` defaults to toggle for HA's DOMAINS_TOGGLE, else more-info (a lock, a cover,
@@ -3009,15 +3024,14 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
         applyHaRipple(this, ctx.theme.cardBorderRadiusDp * ctx.dp, ctx.theme.dark)
         if (eid != null) {
             observe(eid) { s ->
-                val active = s?.isActive == true
-                val color = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
-                icon.setIcon(MdiIcons.resolveIconName(config.icon, s), stateColorBrightness(s, color))
-                label.text = config.name(s) ?: s?.displayName ?: eid
-                state.text = s?.plainState().orEmpty()
+                // HA's `_computeColor` with no `color` (the compat rule claims none) and `state_color` on.
+                icon.setIcon(MdiIcons.resolveIconName(config.icon, s), stateColorBrightness(s, HaStateColor.icon(ctx, s, hvacOverRgb = false)))
+                label.line(config.name(s) ?: s?.displayName ?: eid, 16f)
+                state.line(s?.plainState().orEmpty(), 12.6f)
             }
         } else {
             icon.setIcon(config.icon ?: "mdi:home", ctx.theme.stateIconColor)
-            label.text = config.name(null).orEmpty()
+            label.line(config.name(null).orEmpty(), 16f)
         }
     }
 

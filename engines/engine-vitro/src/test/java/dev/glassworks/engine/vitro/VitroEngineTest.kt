@@ -58,7 +58,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 class VitroEngineTest {
 
     private val base = FakeHaServer.BASE
-    private val settings = EngineSettings(
+    /** What the panel is set to: a test that moves it to another Home Assistant replaces it. */
+    private var settings = EngineSettings(
         secureHosts = listOf("192.0.2.10"),
         zoom = 1f,
         remoteDebugging = false,
@@ -248,10 +249,11 @@ class VitroEngineTest {
         assertEquals(3, m.subscribedEntities)
     }
 
+    /** The dashboard's entities (both views'), and nothing else HA has. */
     @Test
-    fun theViewsEntitiesAreSubscribedToAlone() {
+    fun theDashboardsEntitiesAreSubscribedToAlone() {
         readyPage()
-        awaitMain("view-scoped subscription") {
+        awaitMain("dashboard-scoped subscription") {
             server.commands("subscribe_entities").any { it.has("entity_ids") }
         }
         val scoped = server.commands("subscribe_entities").last { it.has("entity_ids") }.getJSONArray("entity_ids")
@@ -264,18 +266,18 @@ class VitroEngineTest {
     @Test
     fun anEntityAnIslandLooksUpAtRuntimeJoinsTheViewsSubscription() {
         val page = readyPage()
-        awaitMain("view-scoped subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
+        awaitMain("entity subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
         val before = server.commands("subscribe_entities").size
         val watch = page.javaClass.getDeclaredMethod("watchRuntimeEntity", String::class.java).apply { isAccessible = true }
         watch.invoke(page, "sensor.outdoor_temp")
-        watch.invoke(page, "sensor.indoor_temp") // batched with the first: one resubscription
+        watch.invoke(page, "sensor.indoor_temp") // batched with the first: one more subscription
+        watch.invoke(page, "light.lounge_lamp") // the dashboard's own: followed already
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300))
-        awaitMain("resubscribed with the runtime entities") { server.commands("subscribe_entities").size == before + 1 }
+        awaitMain("subscribed to the runtime entities") { server.commands("subscribe_entities").size == before + 1 }
+        // Only the new ids: what's followed already stays subscribed.
         val ids = server.commands("subscribe_entities").last().getJSONArray("entity_ids")
-        assertEquals(
-            setOf("light.lounge_lamp", "sensor.kitchen_temp", "binary_sensor.front_door", "sensor.outdoor_temp", "sensor.indoor_temp"),
-            (0 until ids.length()).map { ids.getString(it) }.toSet(),
-        )
+        assertEquals(setOf("sensor.outdoor_temp", "sensor.indoor_temp"), (0 until ids.length()).map { ids.getString(it) }.toSet())
+        assertTrue(server.commands("unsubscribe_events").none { it.optInt("subscription") in server.commands("subscribe_entities").map { s -> s.getInt("id") } })
     }
 
     /** A plant card's sensors join its view's subscription: the view names only the plant. */
@@ -289,22 +291,23 @@ class VitroEngineTest {
             .put("sensor.fern_moisture", JSONObject("""{"s": "35", "a": {"friendly_name": "Fern moisture", "unit_of_measurement": "%"},
                 "lc": 1700000000.0, "lu": 1700000000.0}"""))
         readyPage()
-        awaitMain("view-scoped subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
+        awaitMain("entity subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300))
-        awaitMain("resubscribed with the plant's sensor") {
+        awaitMain("subscribed to the plant's sensor") {
             server.commands("subscribe_entities").last().let { m ->
                 m.optJSONArray("entity_ids")?.let { arr -> (0 until arr.length()).any { arr.getString(it) == "sensor.fern_moisture" } } == true
             }
         }
+        // The plant was followed already: only its sensor is asked for.
         val ids = server.commands("subscribe_entities").last().getJSONArray("entity_ids")
-        assertEquals(setOf("plant.fern", "sensor.fern_moisture"), (0 until ids.length()).map { ids.getString(it) }.toSet())
+        assertEquals(setOf("sensor.fern_moisture"), (0 until ids.length()).map { ids.getString(it) }.toSet())
     }
 
     /** #838: an island that walked `hass.states` makes its view follow every entity, when shown again from the cache too. */
     @Test
     fun aViewWhoseIslandWalksTheStatesFollowsEveryEntity() {
         val page = readyPage()
-        awaitMain("view-scoped subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
+        awaitMain("entity subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
         val followAll = page.javaClass.getDeclaredMethod("followAllForIsland", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
             .apply { isAccessible = true }
         val gen = page.javaClass.getDeclaredField("walkGeneration").apply { isAccessible = true }.getInt(page)
@@ -522,6 +525,8 @@ class VitroEngineTest {
     @Test
     fun aNewOriginStartsANewConnection() {
         val page = readyPage()
+        // The panel was moved to another Home Assistant: its dashboard loads there.
+        settings = settings.copy(dashboard = "http://192.0.2.20:8123/wall-test/living")
         page.load("http://192.0.2.20:8123/wall-test/living")
         awaitMain("second connection") { server.connectUrls.size == 2 }
         assertEquals(
@@ -669,6 +674,50 @@ class VitroEngineTest {
         assertEquals(View.VISIBLE, surface.visibility)
         assertEquals(View.GONE, alreadyGone.visibility)
         vv.removeView(island)
+    }
+
+    @Test
+    fun onlyThePanelsHomeAssistantHasDashboardsAnyOtherAddressOpensAsAPage() {
+        // A card's link to a web page whose path looks like a view's (`url_path: https://example.com/events/1`) isn't
+        // a dashboard of that host: HA's frontend opens it as a page, so the fallback shows it as it is.
+        val page = readyPage()
+        val vv = vitroView(page)
+        // The fallback's own page, not an island's (the view's custom cards each have one).
+        fun shown() = fallback.pages.filter { p -> p.loads.none { "/__vitro/" in it } }.single().loads
+        for (u in listOf(
+            "https://example.com/events/1",
+            "http://192.0.2.20:8123/wall-test/living",
+            // The same host on another port is another origin.
+            "http://192.0.2.10:8124/wall-test/living",
+        )) {
+            page.load(u)
+            assertEquals(u, shown().last())
+            assertEquals("$u: the fallback is in front", View.GONE, vv.visibility)
+        }
+        Thread.sleep(150)
+        idle()
+        assertEquals("no connection to an outside host", listOf("ws://192.0.2.10:8123/api/websocket"), server.connectUrls.toList())
+        // The panel's own Home Assistant still draws natively, on its one connection.
+        page.load("$base/wall-test/wall")
+        assertEquals(View.VISIBLE, vv.visibility)
+        assertEquals(3, shown().size)
+        assertEquals(1, server.connectUrls.size)
+    }
+
+    @Test
+    fun aCardsUrlActionToAnOutsidePageOpensItInTheFallback() {
+        // The native card's `url` action goes through the page's navigation (VitroCardContext.navigate).
+        val page = readyPage()
+        val vv = vitroView(page)
+        val ctx = vv.contextFactory!!(ThemeResolver.resolve(ThemeCatalog(), true))
+        ctx.navigate("https://example.com/events/1")
+        idle()
+        assertEquals(listOf("https://example.com/events/1"), fallback.pages.filter { p -> p.loads.none { "/__vitro/" in it } }.single().loads.toList())
+        assertEquals(View.GONE, vv.visibility)
+        // A path stays on the panel's Home Assistant, drawn natively.
+        ctx.navigate("/wall-test/wall")
+        idle()
+        assertEquals(View.VISIBLE, vv.visibility)
     }
 
     @Test
@@ -885,7 +934,8 @@ class VitroEngineTest {
         assertTrue("up before the restart", ctx.haConnected())
         page.restart()
         // The old client's own disconnect is dropped as stale: the restart itself says the connection went.
-        assertEquals(listOf(false), heard.toList())
+        // The new client may already be up by now (the fake answers at once): the first edge is the down one.
+        assertEquals(false, heard.first())
         awaitMain("second connection") { server.commands("auth").size == 2 && heard.size == 2 }
         assertEquals("then up on the new client, where the islands start their subscriptions again", listOf(false, true), heard.toList())
         assertTrue(ctx.haConnected())
@@ -996,7 +1046,7 @@ class VitroEngineTest {
         assertTrue(html.contains("const tag = \"acme-floorplan-card\";"))
         assertTrue(html.contains("const cfg = {"))
         assertTrue(html.contains("\"rooms\""))
-        assertTrue(html.contains("const haConfig = {\"location_name\":\"Test Home\"};"))
+        assertTrue(html.contains("let haConfig = {\"location_name\":\"Test Home\"};"))
         assertTrue(html.contains("let accessToken = \"test-token\";"))
         assertTrue(html.contains("themes: { darkMode: true, default_theme: "))
         // The HA shims, instead of HA's frontend.
@@ -1092,7 +1142,11 @@ class VitroEngineTest {
         assertTrue(WebIslandCardView.buildIslandHtml(cardContext(dark = false), islandCard(), fillViewport = true)
             .contains("html:root { background-color: #fafafa; }"))
         val inline = WebIslandCardView.buildIslandHtml(cardContext(), islandCard(), fillViewport = false)
-        assertFalse("an inline island sits in a card", inline.contains("html:root { background-color"))
+        // An inline one on a plain view paints the view's color (never half-transparent edges), before the page's own
+        // transparent rule, which it outranks.
+        val inlineBg = inline.indexOf("html:root { background-color: #111111; }")
+        assertTrue("an inline island on a plain view paints its color", inlineBg > 0)
+        assertTrue(inlineBg < inline.indexOf("html, body { margin: 0; padding: 0; background: transparent;"))
     }
 
     @Test
@@ -1144,9 +1198,9 @@ class VitroEngineTest {
         assertTrue(html.contains("window.addEventListener('hass-navigate'"))
         assertTrue(html.contains("window.addEventListener('hass-action'"))
         assertTrue(html.contains("sendBridge({ type: 'navigate', path })"))
-        // Resizes are debounced, and a 0 px first measurement is never sent.
+        // Resizes are debounced, and a 0 px measurement is sent only once the card rendered (island-hass.test.mjs).
         assertTrue(html.contains("timer = setTimeout(reportSize, 50);"))
-        assertTrue(html.contains("if (h <= 0 || h === lastH) return;"))
+        assertTrue(html.contains("if ((h === 0 && !cardSettled) || h === lastH) return;"))
     }
 
     @Test
@@ -1168,7 +1222,7 @@ class VitroEngineTest {
         // createCardElement shows its error card. The page reports it, and the card becomes that error card.
         val html = WebIslandCardView.buildIslandHtml(cardContext(), islandCard())
         assertTrue(html.contains("if (!customElements.get(tag)) {"))
-        assertTrue(html.contains("sendBridge({ type: 'cardError', message: \"Custom element doesn't exist: \" + tag + '.' });"))
+        assertTrue(html.contains("sendBridge({ type: 'cardError', message: \"Custom element doesn't exist: \" + tag + '.', waiting: true });"))
         assertTrue("a setConfig that throws is reported too", html.contains("sendBridge({ type: 'cardError', message: String((e && e.message) || e) });"))
 
         // An administrator: HA's error card is titled for one.
@@ -1188,6 +1242,81 @@ class VitroEngineTest {
         }
         walk(island)
         assertTrue("HA's error card is in place: $texts", dev.glassworks.engine.vitro.ui.ErrorCardView.TITLE in texts)
+    }
+
+    @Test
+    fun anIslandWhoseScriptIsLateIsHasErrorCardUntilItComesAndTheCardAfter() {
+        // #799 D6: HA's createCardElement shows its error card and rebuilds the card when the script defines it. The
+        // island used to close its page at the first 4 s, so a slow first load stayed an error card.
+        val island = WebIslandCardView(cardContext(user = JSONObject().put("id", "u1").put("is_admin", true)), islandCard())
+        activity.setContentView(island)
+        val noReply: (JSONObject) -> Unit = { throw AssertionError("no reply") }
+        island.handleIslandMessage(
+            JSONObject().put("type", "cardError").put("message", "Custom element doesn't exist: acme-floorplan-card.").put("waiting", true), noReply,
+        )
+        idle()
+        assertNull("not failed: the page waits for the script", island.failure)
+        assertTrue(island.waitingForScript)
+        assertTrue("HA's error card shows meanwhile", dev.glassworks.engine.vitro.ui.ErrorCardView.TITLE in texts(island))
+
+        island.handleIslandMessage(JSONObject().put("type", "cardDefined"), noReply)
+        idle()
+        assertFalse(island.waitingForScript)
+        assertFalse("the error card went", dev.glassworks.engine.vitro.ui.ErrorCardView.TITLE in texts(island))
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(WebIslandCardView.SCRIPT_WAIT_MS + 1000))
+        assertNull("the card it became stays", island.failure)
+    }
+
+    @Test
+    fun anIslandWhoseScriptNeverComesIsHasErrorCardForGood() {
+        val island = WebIslandCardView(cardContext(), islandCard())
+        activity.setContentView(island)
+        island.handleIslandMessage(
+            JSONObject().put("type", "cardError").put("message", "Custom element doesn't exist: acme-floorplan-card.").put("waiting", true),
+        ) { throw AssertionError("no reply") }
+        idle()
+        assertNull(island.failure)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(WebIslandCardView.SCRIPT_WAIT_MS + 1000))
+        val failure = island.failure
+        assertTrue("given up: $failure", failure is dev.glassworks.engine.vitro.cards.IslandCardError)
+        assertEquals("Custom element doesn't exist: acme-floorplan-card.", failure?.message)
+    }
+
+    @Test
+    fun anEmptyIslandCardHasNoHeightAndALongOneGrowsToThreeScreens() {
+        // #799 D8: a card that drew nothing kept 48 px (160 before it reported), and a long one was cut at 1200 CSS px.
+        val ctx = cardContext()
+        val island = WebIslandCardView(ctx, islandCard())
+        assertEquals("nothing drawn: one pixel, so the page still reports", 1, island.islandHeightPx(0))
+        assertEquals(ctx.px(10f), island.islandHeightPx(10))
+        val screenCss = activity.resources.displayMetrics.heightPixels / ctx.dp
+        val cap = maxOf(WebIslandCardView.MIN_CAP_CSS.toFloat(), screenCss * WebIslandCardView.MAX_SCREENS).toInt()
+        assertEquals(ctx.px(cap.toFloat()), island.islandHeightPx(100_000))
+        assertTrue("past the old 1200 px cap where the screen allows", island.islandHeightPx(cap) >= ctx.px(1200f))
+    }
+
+    private fun texts(root: View): List<String> {
+        val out = ArrayList<String>()
+        fun walk(v: View) {
+            if (v is TextView) out += v.text.toString()
+            if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(root)
+        return out
+    }
+
+    @Test
+    fun anInlineIslandOnAPlainViewPaintsTheViewsColorAndOnAPictureStaysTransparent() {
+        // A transparent island's half-transparent edges came out light on the panel (Bubble Card's slider ends).
+        val plain = WebIslandCardView.themeCss(cardContext(), fillViewport = false)
+        assertTrue(plain, plain.contains("html:root { background-color: #111111; }"))
+        val picture = VitroCardContext(
+            context = activity, haBase = base, store = EntityStore(),
+            theme = ThemeResolver.resolve(ThemeCatalog(), true, viewBackground = "center / cover no-repeat url('/local/wall.jpg') fixed"),
+            resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+        )
+        assertFalse(WebIslandCardView.themeCss(picture, fillViewport = false).contains("html:root { background-color"))
     }
 
     @Test
@@ -1352,6 +1481,43 @@ class VitroEngineTest {
         val patch = island.patchFor(setOf("light.porch", "light.gone"))!!.getJSONObject("states")
         assertEquals("on", patch.getJSONObject("light.porch").getString("state"))
         assertTrue(patch.isNull("light.gone"))
+    }
+
+    @Test
+    fun anIslandSeededBeforeHasAnswerWaitsAndGetsTheStoreAgainOnceItIs() {
+        // HA's snapshot slower than the view's first build: the island's page is seeded from a store without its entity.
+        val store = EntityStore()
+        val server = VitroIslandServer(haBase = { base }, accessToken = { null })
+        try {
+            val ctx = VitroCardContext(
+                context = activity, haBase = base, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), true),
+                resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {},
+                openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+                islandServer = server, openIslandPage = { RecordingPage(activity) },
+            )
+            WebIslandCardView(ctx, LovelaceParser.parseCard(JSONObject("""{"type": "custom:button-card", "entity": "light.lounge_lamp"}""")))
+            @Suppress("UNCHECKED_CAST")
+            val handler = (server.javaClass.getDeclaredField("slots").apply { isAccessible = true }.get(server) as Map<String, VitroIslandServer.SlotHandler>).values.single()
+            val sent = CopyOnWriteArrayList<JSONObject>()
+            handler.onConnected { sent += it }
+            val first = sent.last { it.getString("type") == "snapshot" }
+            assertFalse("not HA's answer yet: the page doesn't make its card", first.getBoolean("complete"))
+            sent.clear()
+            // HA's answer lands: its state, then the mark that the part is answered.
+            val owner = Any()
+            store.resetSnapshot(owner)
+            store.applyCompressedEvent(JSONObject("""{"a": {"light.lounge_lamp": {"s": "on", "a": {}}}}"""), snapshotScope = setOf("light.lounge_lamp"))
+            store.markSnapshot(setOf("light.lounge_lamp"), owner)
+            val again = sent.last { it.getString("type") == "snapshot" }
+            assertTrue(again.getBoolean("complete"))
+            assertEquals("on", again.getJSONObject("states").getJSONObject("light.lounge_lamp").getString("state"))
+            // A card whose entity HA says doesn't exist is complete too: HA's card draws its warning.
+            val missing = islandWith(store, """{"type": "custom:button-card", "entity": "light.gone"}""")
+            store.markSnapshot(setOf("light.gone"), owner)
+            assertTrue(missing.statesComplete())
+        } finally {
+            server.stop()
+        }
     }
 
     @Test

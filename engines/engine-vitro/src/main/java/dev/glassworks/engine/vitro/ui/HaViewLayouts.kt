@@ -49,6 +49,19 @@ object HaMasonry {
 }
 
 /**
+ * HA's cards whose own `ha-card` style is `height: 100%` (frontend 20261028.5: each card module's styles, the tile's in
+ * `tile-card-style.ts`; the sensor card extends the entity card's). Area, heading and the sankey cards aren't; a custom
+ * card's is its own and unknown, so it keeps its height. A card pinned with card-mod's `position: fixed` resolves that
+ * 100% against the viewport ([VitroView.pinnedLayoutParams]).
+ */
+internal val HA_CARD_FULL_HEIGHT = setOf(
+    "alarm-panel", "button", "entity-button", "calendar", "clock", "entities", "entity", "gauge", "glance", "history-graph",
+    "humidifier", "iframe", "light", "logbook", "map", "markdown", "media-control", "picture", "picture-elements",
+    "picture-entity", "picture-glance", "plant-status", "sensor", "statistic", "statistics-graph", "thermostat",
+    "tile", "todo-list", "weather-forecast",
+)
+
+/**
  * The masonry view's `#columns`: a row of `flex: 1 0 0` columns, each at most [maxColumnPx] wide (500 px, 600 under a
  * 600 px screen), centered.
  */
@@ -162,6 +175,12 @@ internal class SidebarStackLayout(context: Context) : LinearLayout(context) {
  * A masonry or sidebar column: the cards in order, their block margins collapsing as CSS collapses them. The first card
  * it shows gets [firstTopPx] above it, every later shown one [restTopPx] (the bottom margin above already spaces it);
  * a hidden card (GONE) takes no margin, so the card after it can be the first.
+ *
+ * A column never limits its cards' heights: in HA each card is a block as tall as its content, and the column as tall
+ * as its cards. The view's scroller fills the screen (`fillViewport`), so a short view hands the row an exact height,
+ * and a column measured within it would hand each card the room left (`AT_MOST`): a card whose background matches its
+ * parent (media control's) would stretch to the bottom of the screen and push the cards under it out. The column
+ * measures its cards unbounded instead.
  */
 internal class CardColumn(context: Context, private val firstTopPx: Int, private val restTopPx: Int) : LinearLayout(context) {
     init {
@@ -169,6 +188,7 @@ internal class CardColumn(context: Context, private val firstTopPx: Int, private
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val unbounded = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
         var first = true
         for (i in 0 until childCount) {
             val c = getChildAt(i)
@@ -178,6 +198,6 @@ internal class CardColumn(context: Context, private val firstTopPx: Int, private
             if (lp.topMargin != want) lp.topMargin = want
             first = false
         }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.onMeasure(widthMeasureSpec, unbounded)
     }
 }

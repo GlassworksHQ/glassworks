@@ -379,6 +379,15 @@ test('unmetExpectations names the entities not in the state a case expects', asy
   // A time marker is never a served state: refused, whatever the state.
   assert.deepEqual(unmetExpectations({ 'light.a': '@+3h' }, { 'light.a': { s: '@+3h', a: {} } }),
     ['light.a: expects the time marker @+3h, not a state HA serves']);
+  // A literal state that starts with "@" is served as written: it matches when it's the state, and says what it got
+  // when it isn't.
+  assert.deepEqual(unmetExpectations({ 'select.mode': '@standby' }, { 'select.mode': { s: '@standby', a: {} } }), []);
+  assert.deepEqual(unmetExpectations({ 'select.mode': '@standby' }, { 'select.mode': { s: 'eco', a: {} } }),
+    ['select.mode: expected @standby, got eco']);
+  for (const marker of ['@D+1', '@D-2 14:30', '@-2h', '@+1d12h', '@90']) {
+    assert.deepEqual(unmetExpectations({ 'sensor.t': marker }, { 'sensor.t': { s: marker, a: {} } }),
+      [`sensor.t: expects the time marker ${marker}, not a state HA serves`], marker);
+  }
 });
 
 test('pendingOneShots lists the one-shot graph calls still unanswered, never a stream', async () => {

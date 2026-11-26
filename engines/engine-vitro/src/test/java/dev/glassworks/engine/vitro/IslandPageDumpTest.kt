@@ -56,6 +56,8 @@ class IslandPageDumpTest {
         // HA's config as get_config gives it, with the components the fixture's entities come from.
         val domains = case.optJSONObject("fixture")?.optJSONObject("states")?.keys()?.asSequence()?.map { it.substringBefore('.') }?.toSortedSet().orEmpty()
         val config = home.getJSONObject("config").put("components", JSONArray(domains.toList()))
+            // HA's config always has its version (Mushroom 5.3 reads it on every render).
+            .put("version", "2026.11.0")
         val resources = case.optJSONArray("resources")?.let { a -> (0 until a.length()).map { LovelaceResource(a.getString(it), "module") } }.orEmpty()
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val ctx = VitroCardContext(

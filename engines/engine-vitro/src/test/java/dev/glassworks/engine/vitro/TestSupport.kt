@@ -221,6 +221,9 @@ class FakeHaServer {
      */
     @Volatile var holdEntitySnapshot: Boolean = false
 
+    /** `subscribe_entities` asking for any of these ids is refused (`home_assistant_error`), as by an HA in trouble. */
+    @Volatile var refuseEntityIds: Set<String> = emptySet()
+
     /** `config/entity_registry/list_for_display`'s answer; null refuses it (`unknown_command`). */
     @Volatile var entityRegistryDisplay: JSONObject? = null
 
@@ -343,9 +346,12 @@ class FakeHaServer {
                 }
             }
             "subscribe_entities" -> {
+                val wanted = m.optJSONArray("entity_ids")?.let { arr -> (0 until arr.length()).map { arr.getString(it) }.toSet() }
+                // As HA's schema (`cv.entity_ids`): one malformed id fails the whole command.
+                if (wanted?.any { !dev.glassworks.engine.vitro.data.HaDashboardClient.isValidEntityId(it) } == true) return fail(sock, id, "invalid_format")
+                if (wanted?.any { it in refuseEntityIds } == true) return fail(sock, id, "home_assistant_error")
                 ok(sock, id, JSONObject.NULL)
                 if (holdEntitySnapshot) return
-                val wanted = m.optJSONArray("entity_ids")?.let { arr -> (0 until arr.length()).map { arr.getString(it) }.toSet() }
                 val initial = JSONObject()
                 val keys = initialEntities.keys()
                 while (keys.hasNext()) {

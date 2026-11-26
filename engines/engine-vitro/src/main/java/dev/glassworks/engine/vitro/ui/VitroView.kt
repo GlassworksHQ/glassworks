@@ -102,6 +102,7 @@ import dev.glassworks.engine.vitro.model.EntityFilterConfig
 import dev.glassworks.engine.vitro.fonts.WebFonts
 import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatChecker
+import dev.glassworks.engine.vitro.compat.IslandBudget
 import dev.glassworks.engine.vitro.compat.IslandFrontend
 import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.compat.WebFallback
@@ -336,12 +337,20 @@ class VitroView(
     var onWebView: ((ViewConfig, String) -> Unit)? = null
 
     /**
-     * Why [view] goes to HA's frontend now: its own reason ([ViewConfig.webFallbackReason]), or a card in it that an
-     * island found drawing with Home Assistant's own elements this session ([IslandFrontend]). Null: Vitro draws it.
+     * Why [view] goes to HA's frontend now: its own reason ([ViewConfig.webFallbackReason]), a card in it that an
+     * island found drawing with Home Assistant's own elements this session ([IslandFrontend]), or more island pages
+     * than this device runs in one view ([islandBudget]). Null: Vitro draws it.
      */
     fun fallbackReason(view: ViewConfig): String? =
         view.webFallbackReason ?: (if (gaveUpViews.isEmpty()) null else gaveUpViews[viewKey(view)])
-            ?: if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resourcesList) }
+            ?: (if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resourcesList) })
+            ?: IslandBudget.reason(view, IslandScripts.of(resourcesList), islandBudget)
+
+    /**
+     * The most island pages one view opens on this device ([IslandBudget]): a view with more goes to HA's frontend.
+     * Tests set it.
+     */
+    internal var islandBudget: Int = IslandBudget.forDevice(context)
 
     /**
      * What this session learned about [card] with [resources]: its island page kept dying ([islandPagesGone]), or,
@@ -859,8 +868,10 @@ class VitroView(
     }
 
     /**
-     * How long a view's first build waits for its first states (0: it doesn't). The engine sets it: the view's
-     * entities are subscribed as it opens, and their states usually land within a round trip. Past the wait it builds
+     * How long a view's first build waits for its first states (0: it doesn't). The engine sets it: the dashboard's
+     * entities are subscribed once per connection, the view on screen's first, so this waits only for the first view
+     * after a connection (later views find their states in the store), and its states usually land within a round
+     * trip. Past the wait it builds
      * anyway, and a card that guessed without state is built again when it lands ([rebuildWhenStatesLand]).
      */
     var holdFirstBuildForStatesMs: Long = 0
@@ -898,7 +909,8 @@ class VitroView(
      * True when the first build of view [index] waits: one of its entities isn't known yet (no state, and HA hasn't
      * said it doesn't exist). Views share entities (a dashboard's header cards), so one known entity says little: a
      * view built with most of its states missing renders, and lays out, every card again as they land. It's built
-     * once every entity is known (HA's first event for the view's subscription), or after [holdFirstBuildForStatesMs].
+     * once every entity is known (HA's first event for the subscription that asked for them), or after
+     * [holdFirstBuildForStatesMs].
      */
     private fun holdForStates(index: Int, viewCfg: ViewConfig): Boolean {
         if (holdFirstBuildForStatesMs <= 0 || index in waited) return false
@@ -949,7 +961,7 @@ class VitroView(
 
     /**
      * HA re-renders when hass updates; a Mushroom card's class and grid rows follow its entity's features, which a
-     * view's first build can come before (its entities are subscribed as it opens). When any of [ids] lands, the
+     * view's first build can come before (its states hadn't landed, or the wait ran out). When any of [ids] lands, the
      * view [index] is built again, once: now if it's on screen, else its cached tree is dropped for the next visit.
      */
     private fun rebuildWhenStatesLand(index: Int, ids: Set<String>) {
@@ -1352,12 +1364,18 @@ class VitroView(
         if (!mod.positionFixed) return false
         // A fixed card still lives in its section: when the section hides, so does the card.
         val view = wrapVisibility(card, buildCard(card, ctx, fillViewport = false, layout = layout), ctx, sectionVisibility)
-        sink += view to pinnedLayoutParams(mod)
+        sink += view to pinnedLayoutParams(mod, fillsHeight = card.type in HA_CARD_FULL_HEIGHT)
         return true
     }
 
-    /** Overlay [FrameLayout.LayoutParams] for a pinned card: gravity from its offsets/transform, margins in dp. */
-    internal fun pinnedLayoutParams(mod: CardModStyle): FrameLayout.LayoutParams {
+    /**
+     * Overlay [FrameLayout.LayoutParams] for a pinned card: gravity from its offsets/transform, margins in dp. Its
+     * height is the card-mod `height`, else, for `position: fixed` on a card whose own `ha-card` is `height: 100%`
+     * ([fillsHeight]), the viewport's: the viewport is a fixed box's containing block, so HA draws such a card as tall
+     * as the screen (a tile pinned with `bottom: 24px` runs from 24 px above the top to 24 px above the bottom, its
+     * content centered). Otherwise the card's own height.
+     */
+    internal fun pinnedLayoutParams(mod: CardModStyle, fillsHeight: Boolean = false): FrameLayout.LayoutParams {
         val viewportW = if (width > 0) width else resources.displayMetrics.widthPixels
         val viewportH = if (height > 0) height else resources.displayMetrics.heightPixels
         fun length(raw: String?, extent: Int): Int? {
@@ -1385,7 +1403,9 @@ class VitroView(
             else -> Gravity.TOP
         }
         val w = length(mod.fixedWidth, viewportW)?.takeIf { it > 0 } ?: WRAP_CONTENT
-        return FrameLayout.LayoutParams(w, WRAP_CONTENT, horizontal or vertical).apply {
+        val h = length(mod.fixedHeight, viewportH)?.takeIf { it > 0 }
+            ?: if (fillsHeight && mod.fixedToViewport && mod.fixedHeight?.trim()?.lowercase() != "auto") viewportH else WRAP_CONTENT
+        return FrameLayout.LayoutParams(w, h, horizontal or vertical).apply {
             if (!mod.fixedCenterY) {
                 topMargin = length(mod.fixedTop, viewportH) ?: 0
                 bottomMargin = length(mod.fixedBottom, viewportH) ?: 0

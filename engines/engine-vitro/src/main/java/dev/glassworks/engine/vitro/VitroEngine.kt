@@ -209,6 +209,25 @@ class VitroEngine(
             override fun onFirstPaint() {}
             override fun onLocationChange(url: String?) {}
             override fun redirect(url: String): String? = null
+            // The island's page stays the island's: a card's link or `window.open` (a calendar event's link, an `<a
+            // href>`) would load that site at card size with no way back. It opens as a native card's `url` action
+            // does instead ([navigateInPlace]: the panel's page, with back).
+            override fun allowsLoad(url: String): Boolean {
+                if (url == "about:blank" || islandPageUrl(url)) return true
+                val origin = islandServer.origin
+                when {
+                    // Another document the island server proxies from HA (a `/local/help.html`): HA's own page for it,
+                    // with back, never in the card's window.
+                    origin != null && url.startsWith("$origin/") -> main.post { if (!disposed) navigateInPlace(url.removePrefix(origin)) }
+                    url.startsWith("http://") || url.startsWith("https://") -> main.post { if (!disposed) navigateInPlace(url) }
+                }
+                return false
+            }
+            /** An island document of the island server (`/__vitro/island/<id>`), never another of its paths or hosts. */
+            private fun islandPageUrl(url: String): Boolean {
+                val origin = islandServer.origin ?: return false
+                return url.startsWith("$origin/__vitro/island/")
+            }
             // The activity's host decides, as for every page (#847). An island's own page is on loopback, not Home
             // Assistant, so its card gets no microphone or camera without a prompt.
             override fun trusts(url: String): Boolean = host.trusts(url)
@@ -244,6 +263,12 @@ class VitroEngine(
         private val haConnected: Boolean get() = connectedGeneration == clientGeneration
         private val connectionWatchers = java.util.concurrent.CopyOnWriteArraySet<(Boolean) -> Unit>()
 
+        /** The islands to tell when Home Assistant's config arrives ([VitroCardContext.watchConfig]). Any thread. */
+        private val configWatchers = java.util.concurrent.CopyOnWriteArraySet<(JSONObject) -> Unit>()
+
+        /** Counts the connections that came up ([VitroCardContext.haConnectionEpoch]). */
+        @Volatile private var connectionEpoch = 0L
+
         /** The client ([clientGeneration]) whose connection is up, -1 when none is: a new client starts down. */
         @Volatile private var connectedGeneration = -1
 
@@ -258,6 +283,7 @@ class VitroEngine(
             val now = if (up) generation else -1
             if (connectedGeneration == now) return
             connectedGeneration = now
+            if (up) connectionEpoch++
             connectionWatchers.forEach { runCatching { it(up) } }
         }
 
@@ -392,9 +418,16 @@ class VitroEngine(
             if (!LovelaceParser.isDashboardUrl(url)) return false
             val query = runCatching { java.net.URI(url).rawQuery }.getOrNull().orEmpty()
             // HA's own More Info dialog over the view (a script's fields): it stays HA's until the dialog closes.
-            if ("auth_callback" in query || "edit=" in query || "more-info-entity-id=" in query) return false
+            if (inFrontendWorkflow(query)) return false
             return !isWebDashboard(url)
         }
+
+        /**
+         * A sign-in callback, HA's dashboard editor or its More Info dialog (a script's fields) on the page: the user is
+         * in the middle of something there, which neither a hand-back nor a reconnect's retry may reload.
+         */
+        private fun inFrontendWorkflow(query: String): Boolean =
+            "auth_callback" in query || "edit=" in query || "more-info-entity-id=" in query
 
         /** True when [url] is a dashboard HA had no config for: its frontend draws it, so it's no way back to Vitro. */
         private fun isWebDashboard(url: String): Boolean =
@@ -476,6 +509,15 @@ class VitroEngine(
         private var selectedFollowsAll = false
 
         /**
+         * Every entity the shown dashboard references, in all its views and subviews ([dashboardEntitiesOf]): what the
+         * client follows, once per connection, so a view switch asks HA for nothing. Null above
+         * [MAX_DASHBOARD_ENTITIES]: then each view follows its own, as it is selected. Computed for
+         * [dashboardEntitiesFor], the config on screen.
+         */
+        private var dashboardEntities: Set<String>? = null
+        private var dashboardEntitiesFor: DashboardConfig? = null
+
+        /**
          * Entities a web island of the shown dashboard looked up at runtime (`hass.states[id]`), beyond what its
          * config names: subscribed with the selected view, so their changes reach the island. Bounded; cleared with
          * the dashboard.
@@ -549,23 +591,66 @@ class VitroEngine(
             registriesNow = null
         }
 
-        private fun subscribeSelectedView() {
-            client?.subscribeViewEntities(if (selectedFollowsAll) emptySet() else selectedRefs + runtimeEntities)
+        /**
+         * The entities the page follows now, on the current client.
+         *
+         * Every entity of the dashboard, as HA's frontend subscribes once at startup: a view switch sends nothing and
+         * waits for no snapshot, and a config change or an island's runtime read adds only the new ids
+         * ([HaDashboardClient.followEntities], additive). The selected view's own come first in a new subscription,
+         * so its first build waits for its snapshot alone. A view that follows every entity (auto-entities, an island
+         * that walks `hass.states`) follows them while it is selected, and the dashboard's again after it.
+         *
+         * Above [MAX_DASHBOARD_ENTITIES] each view follows only its own: a view switch replaces the subscription
+         * ([additive] only for an island's runtime read, which adds to the view's).
+         */
+        private fun subscribeSelectedView(additive: Boolean = false) {
+            val c = client ?: return
+            val all = dashboardEntities
+            when {
+                selectedFollowsAll -> c.followEntities(emptySet())
+                all != null -> c.followEntities(all + runtimeEntities, first = selectedRefs, additive = true)
+                else -> c.followEntities(selectedRefs + runtimeEntities, additive = additive)
+            }
+        }
+
+        /** [config]'s entities ([dashboardEntities]), or null when there are more than [MAX_DASHBOARD_ENTITIES]. */
+        private fun dashboardEntitiesOf(config: DashboardConfig): Set<String>? {
+            val out = LinkedHashSet<String>()
+            for (v in config.views) {
+                out += CardRouter.referencedEntities(v)
+                if (out.size > MAX_DASHBOARD_ENTITIES) return null
+            }
+            return out
         }
 
         private fun watchRuntimeEntity(id: String) {
-            if (disposed || selectedFollowsAll || id in selectedRefs || runtimeEntities.size >= MAX_RUNTIME_ENTITIES) return
+            if (disposed || selectedFollowsAll || id in selectedRefs || dashboardEntities?.contains(id) == true ||
+                runtimeEntities.size >= MAX_RUNTIME_ENTITIES
+            ) return
             if (!runtimeEntities.add(id) || runtimeResubscribe) return
-            // A card reading several at once costs one resubscription.
+            // A card reading several at once costs one more subscription.
             runtimeResubscribe = true
             main.postDelayed({
                 runtimeResubscribe = false
-                if (!disposed) subscribeSelectedView()
+                if (!disposed) subscribeSelectedView(additive = true)
             }, RUNTIME_RESUBSCRIBE_MS)
         }
 
         /** The Home Assistant origin the app is set to (the settings' dashboard), the only one its token is for. */
         private fun configuredOrigin(): String? = settings(activity.applicationContext).dashboard?.let(OAuth::origin)
+
+        /**
+         * True when [url] is on the panel's own Home Assistant: the one it is set to, or the test hold's fake while a
+         * test holds the screen (Clarity's reference dashboards). A panel set to no Home Assistant yet has no outside
+         * to tell apart: any origin may be its dashboard, as before it had one.
+         */
+        private fun onPanelsHa(url: String): Boolean {
+            val own = listOfNotNull(
+                configuredOrigin(),
+                runCatching { testDashboard(activity.applicationContext) }.getOrNull()?.let(OAuth::origin),
+            )
+            return own.isEmpty() || own.any { VitroCardContext.sameOrigin(url, it) }
+        }
 
         /** Where the island server proxies to: the loaded origin, or before any load the configured one (sign-in first). */
         val proxyOrigin: String? get() = currentOrigin ?: configuredOrigin()
@@ -587,7 +672,9 @@ class VitroEngine(
             readyOnBuild = null
             stopClarity()
             // The islands' pages and the fallback's go with the activity: nothing of this page keeps running.
-            // closeIslands() cancels the pending builds too.
+            // closeIslands() cancels the pending builds too; closeMoreInfo() dismisses the sheet and makes a script-fields
+            // lookup still out answer into nothing, so a disposed page opens no sheet.
+            vitroView.closeMoreInfo()
             vitroView.closeIslands()
             fallbackPage?.close()
             fallbackPage = null
@@ -691,6 +778,12 @@ class VitroEngine(
                 // An empty filter subscribes to every entity, which auto-entities' runtime filters need.
                 selectedFollowsAll = CardRouter.followsAllEntities(v) || v.index in walkedViews
                 selectedRefs = if (selectedFollowsAll) emptySet() else CardRouter.referencedEntities(v)
+                // A new config (another dashboard, a lovelace_updated): its entities, once.
+                val shown = vitroView.dashboard
+                if (shown !== dashboardEntitiesFor) {
+                    dashboardEntitiesFor = shown
+                    dashboardEntities = shown?.let(::dashboardEntitiesOf)
+                }
                 subscribeSelectedView()
                 // Only the dashboard that owns the route reports a location: one still on screen while another loads
                 // (a theme rebuild) would pair its view with the other's path.
@@ -813,9 +906,14 @@ class VitroEngine(
                     needsFrontend = { card, tags, owners -> vitroView.cardNeedsFrontend(card, tags, owners, resources) },
                     islandFailed = { card, reason -> vitroView.cardFailedInIsland(card, reason, resources) },
                     haConnected = { haConnected },
+                    haConnectionEpoch = { connectionEpoch },
                     watchConnection = { onChange ->
                         connectionWatchers += onChange
                         ({ connectionWatchers -= onChange })
+                    },
+                    watchConfig = { onChange ->
+                        configWatchers += onChange
+                        ({ configWatchers -= onChange })
                     },
                     pageStorage = { HaPageStorage.of(activity).items(haBase.ifEmpty { null }) },
                 )
@@ -835,7 +933,9 @@ class VitroEngine(
             currentUrl?.let { if (it != url) remember(it) }
             currentUrl = url
 
-            if (!LovelaceParser.isDashboardUrl(url)) {
+            // Only the panel's own Home Assistant has dashboards. Any other address (a card's link to a web page, an
+            // island's) is a page, shown as it is, as HA's frontend opens an outside URL.
+            if (!LovelaceParser.isDashboardUrl(url) || !onPanelsHa(url)) {
                 leaveNativeDashboard()
                 openInFallback(url)
                 return
@@ -895,13 +995,17 @@ class VitroEngine(
             vitroView.showStatus("Connecting to Home Assistant…")
             client?.close()
             val generation = retireClient()
+            // Said once per client: the client asks for its token again every 30 s.
+            val withheldLogged = java.util.concurrent.atomic.AtomicBoolean(false)
             val wsClient = HaDashboardClient(
                 haBase = origin,
                 tokenProvider = { force, done ->
                     // The panel's token is for the Home Assistant it is set to: never hand it to another origin.
                     val allowed = configuredOrigin()
                     if (allowed != null && !VitroCardContext.sameOrigin(allowed, origin)) {
-                        Log.w(logTag, "Not sending the Home Assistant token to a dashboard on another origin than the panel's")
+                        if (withheldLogged.compareAndSet(false, true)) {
+                            Log.w(logTag, "Not sending the Home Assistant token to a dashboard on another origin than the panel's")
+                        }
                         done(null)
                     } else {
                         tokenProvider(force) { tok ->
@@ -1210,8 +1314,10 @@ class VitroEngine(
                     // A new connection tries again the dashboards whose config failed to read on the last one. The one
                     // HA's frontend shows for that reason now goes back to the native view; other fallback pages stay.
                     // Where HA's page is now: the user may have moved on from the failed dashboard inside it.
+                    // Not while HA's editor or a dialog is open in it: a reload would lose what the user was doing.
                     val retry = (fallbackLocation ?: currentUrl)?.takeIf { url ->
-                        fallbackInFront() && (OAuth.origin(url) to LovelaceParser.parseRoute(url).first) in failedDashboards
+                        fallbackInFront() && (OAuth.origin(url) to LovelaceParser.parseRoute(url).first) in failedDashboards &&
+                            !inFrontendWorkflow(runCatching { java.net.URI(url).rawQuery }.getOrNull().orEmpty())
                     }
                     failedDashboards.clear()
                     retry?.let(::load)
@@ -1257,6 +1363,11 @@ class VitroEngine(
             // The islands' hass.user follows it as it arrives, which may be after the token (and after their connect).
             override fun onCurrentUser(user: JSONObject) {
                 if (generation == clientGeneration) tokenWatchers.forEach { runCatching { it() } }
+            }
+
+            // The islands' hass.config follows it: a page made before it arrived has none.
+            override fun onConfig(config: JSONObject) {
+                if (generation == clientGeneration) configWatchers.forEach { runCatching { it(config) } }
             }
 
             override fun onUserTheme(themeName: String?, dark: Boolean?) {
@@ -1380,8 +1491,18 @@ class VitroEngine(
         /** How long a view's first build waits for its first states. */
         private const val FIRST_STATES_WAIT_MS = 1_000L
 
-        /** Entities islands may add to a view's subscription at runtime, and how long their lookups are batched. */
+        /** Entities islands may add to the entity subscription at runtime, and how long their lookups are batched. */
         private const val MAX_RUNTIME_ENTITIES = 256
+
+        /**
+         * Above this many entities, a dashboard's views each follow their own ([dashboardEntities]). Measured on the
+         * JVM (DashboardStoreMeasure): 0.8 to 1 KB of heap per entity in the store, and 0.15 to 0.45 KB per entity in
+         * HA's snapshot, so 2,000 entities hold about 2 MB and parse a snapshot of up to about 0.9 MB, once per
+         * connection. Clarity's heavy dashboard references 363 (all seven views), its heavy view alone 359. Past a
+         * few thousand, a dashboard lists a whole house (an auto-generated Overview, entity lists), and one view's own
+         * snapshot at each switch costs a panel with little RAM less than holding every state.
+         */
+        internal const val MAX_DASHBOARD_ENTITIES = 2_000
         private const val RUNTIME_RESUBSCRIBE_MS = 150L
 
         /** The dashboard path while the fallback shows a non-dashboard page: no real path equals it. */

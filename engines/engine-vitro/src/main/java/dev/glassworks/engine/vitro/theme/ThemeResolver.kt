@@ -76,6 +76,13 @@ data class CardModStyle(
     val fixedBottom: String? = null,
     val fixedLeft: String? = null,
     val fixedWidth: String? = null,
+    /** `height:` on a pinned card, raw CSS (`120px`, `50%`), or null for the card's own. */
+    val fixedHeight: String? = null,
+    /**
+     * `position: fixed` itself (not `absolute`): the viewport is the containing block, so a card whose own `ha-card`
+     * is `height: 100%` is as tall as the screen.
+     */
+    val fixedToViewport: Boolean = false,
     /** `transform: translateY(-50%)` / `translate(x, -50%)`: center vertically. */
     val fixedCenterY: Boolean = false,
     /** `transform: translateX(-50%)` / `translate(-50%, y)`: center horizontally. */
@@ -1085,6 +1092,9 @@ object ThemeResolver {
             fixedBottom = prop("bottom")?.let(::inset),
             fixedLeft = prop("left")?.let(::inset),
             fixedWidth = prop("width")?.let(::inset),
+            // An explicit `height: auto` is kept: the card's content height, unlike no height (a 100% card's viewport).
+            fixedHeight = prop("height")?.let { if (it.trim().lowercase(Locale.ROOT) == "auto") "auto" else inset(it) },
+            fixedToViewport = position == "fixed",
             fixedCenterY = centerY,
             fixedCenterX = centerX,
             textColor = prop("color")?.let(::parseColor),

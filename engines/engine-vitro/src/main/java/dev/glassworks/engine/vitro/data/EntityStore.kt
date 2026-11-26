@@ -288,6 +288,9 @@ class EntityStore {
     private val listeners = ConcurrentHashMap<String, CopyOnWriteArrayList<(EntityState?) -> Unit>>()
     private val anyListeners = CopyOnWriteArrayList<(Set<String>) -> Unit>()
 
+    /** Told after every [markSnapshot] that lands: HA has answered for more entities ([isAnswered]). */
+    private val snapshotListeners = CopyOnWriteArrayList<() -> Unit>()
+
     /**
      * Clarity's harness (VitroClarity) while it measures: each changed entity of a `subscribe_entities` diff and the
      * change's context id, on the reader thread. Null otherwise.
@@ -318,13 +321,25 @@ class EntityStore {
     }
 
     /**
-     * The entity ids the current `subscribe_entities` asked for (empty means every entity), once its first event
-     * has arrived; null before that. An id it covers that has no state then doesn't exist in HA.
+     * The entity ids the current entity subscriptions asked for (empty means every entity), once their first events
+     * have arrived; null before the first. An id it covers that has no state then doesn't exist in HA.
      */
     private val snapshot = AtomicReference(Snapshot(null, null))
 
     /** The subscription expected to answer next ([owner], any token) and, once it has, its [filter]. */
     private class Snapshot(val owner: Any?, val filter: Set<String>?)
+
+    /** True when HA's answer has covered [entityId]: it has a state, or HA said it has no such entity ([isMissing]). */
+    fun isAnswered(entityId: String): Boolean = states[entityId] != null || isMissing(entityId)
+
+    /** True once the current subscription's answer has landed, for some entities or every one. */
+    val anyAnswered: Boolean get() = snapshot.get().filter != null
+
+    /** Calls [listener] after each part of HA's answer lands ([markSnapshot]); returns its unsubscribe. */
+    fun subscribeSnapshot(listener: () -> Unit): () -> Unit {
+        snapshotListeners += listener
+        return { snapshotListeners -= listener }
+    }
 
     /** True when HA has answered for [entityId] and has no such entity: HA's cards show "Entity not found". */
     fun isMissing(entityId: String): Boolean {
@@ -344,12 +359,28 @@ class EntityStore {
     /**
      * The first event of [owner]'s subscription for [filter] has been applied: tells the missing ids' listeners.
      * False, and nothing changes, when another subscription has been asked for since ([resetSnapshot]).
+     *
+     * One owner may answer in several parts (the dashboard's entities in more than one `subscribe_entities`: the view
+     * on screen first, the rest after it, and ids a config change adds): what HA has answered for is their union.
      */
     fun markSnapshot(filter: Set<String>, owner: Any? = null): Boolean {
-        val current = snapshot.get()
-        if (current.owner !== owner || !snapshot.compareAndSet(current, Snapshot(owner, filter))) return false
+        var current: Snapshot
+        do {
+            current = snapshot.get()
+            if (current.owner !== owner) return false
+            val known = current.filter
+            val answered = when {
+                known == null -> filter
+                // Empty is every entity: nothing widens it, and it covers any part.
+                known.isEmpty() || filter.isEmpty() -> emptySet()
+                else -> known + filter
+            }
+        } while (!snapshot.compareAndSet(current, Snapshot(owner, answered)))
         for ((id, list) in listeners) {
             if (states[id] == null && (filter.isEmpty() || id in filter)) list.forEach { notify(it, null) }
+        }
+        for (fn in snapshotListeners) {
+            try { fn() } catch (e: Exception) { /* one listener's throw doesn't stop the others */ }
         }
         return true
     }

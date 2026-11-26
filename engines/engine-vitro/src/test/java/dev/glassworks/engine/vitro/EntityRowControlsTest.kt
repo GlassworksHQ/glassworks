@@ -337,6 +337,20 @@ class EntityRowControlsTest {
         assertNotNull("goodnight's sheet", vv.openSheet)
     }
 
+    @Test fun aScriptLookupAnsweredAfterTheSheetClosedOpensNothing() {
+        // VitroEngine's dispose() closes More Info: a lookup still out then answers into nothing, so no sheet is
+        // built on a disposed page.
+        put("script.goodnight", "off", "mode" to "single", "current" to 0, "friendly_name" to "Goodnight")
+        services = JSONObject("""{"script": {"goodnight": {}}}""")
+        val handedOff = ArrayList<String>()
+        val vv = dashboardView { handedOff += it }
+        vv.openMoreInfo("script.goodnight")
+        vv.closeMoreInfo()
+        idle()
+        assertNull("no sheet after the close", vv.openSheet)
+        assertTrue(handedOff.isEmpty())
+    }
+
     @Test fun moreInfoForAScriptWithFieldsIsHasOwnDialog() {
         put("script.greet", "off", "mode" to "single", "current" to 0, "friendly_name" to "Greet")
         put("script.goodnight", "off", "mode" to "single", "current" to 0, "friendly_name" to "Goodnight")

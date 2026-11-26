@@ -757,6 +757,131 @@ class HaDashboardClientTest {
         awaitCondition("missing entity reported by the third subscription") { store.isMissing("sensor.not_in_ha") }
     }
 
+    // ---- The dashboard's entities, once per connection (G-performance L3, fix B) ----
+
+    private fun ids(m: JSONObject): Set<String> = m.optJSONArray("entity_ids")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }.orEmpty()
+
+    @Test
+    fun theViewsOwnEntitiesAreAskedForFirstAndEachEntityOnce() {
+        val c = newClient()
+        c.followEntities(setOf("light.lounge_lamp", "sensor.kitchen_temp", "binary_sensor.front_door"), first = setOf("sensor.kitchen_temp"), additive = true)
+        c.start(null)
+        awaitCondition("both parts") { server.commands("subscribe_entities").size == 2 }
+        val subs = server.commands("subscribe_entities")
+        assertEquals(setOf("sensor.kitchen_temp"), ids(subs[0]))
+        assertEquals(setOf("light.lounge_lamp", "binary_sensor.front_door"), ids(subs[1]))
+        awaitCondition("every state") { store.size() == 3 }
+        // Diffs of either part reach the store.
+        server.pushEvent(subs[0].getInt("id"), JSONObject("""{"c": {"sensor.kitchen_temp": {"+": {"s": "22.0"}}}}"""))
+        server.pushEvent(subs[1].getInt("id"), JSONObject("""{"c": {"binary_sensor.front_door": {"+": {"s": "on"}}}}"""))
+        awaitCondition("both diffs") { store["sensor.kitchen_temp"]!!.state == "22.0" && store["binary_sensor.front_door"]!!.state == "on" }
+    }
+
+    @Test
+    fun aDashboardThatGrowsSubscribesOnlyTheNewIds() {
+        val c = newClient()
+        val first = setOf("light.lounge_lamp", "sensor.kitchen_temp", "sensor.gone_early")
+        c.followEntities(first, additive = true)
+        c.start(null)
+        awaitCondition("first subscription") { server.commands("subscribe_entities").size == 1 && store.isMissing("sensor.gone_early") }
+        // A view switch on the same dashboard, with another view's entities first: nothing on the wire.
+        c.followEntities(first, first = setOf("sensor.kitchen_temp"), additive = true)
+        // A config change that adds a card: only its entity, and one HA doesn't have.
+        val grown = first + setOf("binary_sensor.front_door", "sensor.not_in_ha")
+        c.followEntities(grown, additive = true)
+        awaitCondition("the new ids") { server.commands("subscribe_entities").size == 2 }
+        assertEquals(setOf("binary_sensor.front_door", "sensor.not_in_ha"), ids(server.commands("subscribe_entities")[1]))
+        assertTrue("nothing dropped", server.commands("unsubscribe_events").isEmpty())
+        awaitCondition("the new part's answer") { store["binary_sensor.front_door"] != null && store.isMissing("sensor.not_in_ha") }
+        // The first part's answer still counts: what it said doesn't exist still doesn't.
+        assertTrue(store.isMissing("sensor.gone_early"))
+        // Never asked for: unknown, not missing.
+        assertFalse(store.isMissing("sensor.unreferenced_power"))
+        // A card removed: it stays subscribed, as long as most of what's followed is still wanted.
+        c.followEntities(grown - "sensor.not_in_ha", additive = true)
+        readerBarrier(c)
+        assertEquals(2, server.commands("subscribe_entities").size)
+        assertTrue(server.commands("unsubscribe_events").isEmpty())
+    }
+
+    @Test
+    fun aReconnectSubscribesTheWholeSetOnce() {
+        val c = newClient()
+        c.followEntities(setOf("light.lounge_lamp", "sensor.kitchen_temp"), first = setOf("light.lounge_lamp"), additive = true)
+        c.start(null)
+        awaitCondition("first connection's parts") { server.commands("subscribe_entities").size == 2 }
+        c.followEntities(setOf("light.lounge_lamp", "sensor.kitchen_temp", "binary_sensor.front_door"), first = setOf("sensor.kitchen_temp"), additive = true)
+        awaitCondition("the added id") { server.commands("subscribe_entities").size == 3 }
+        server.dropConnection()
+        awaitCondition("reconnected", timeoutMs = 15_000) { server.sockets.size == 2 && server.sockets[1].received.count { it.optString("type") == "subscribe_entities" } == 2 }
+        readerBarrier(c)
+        val again = server.sockets[1].received.filter { it.optString("type") == "subscribe_entities" }
+        assertEquals("the view on screen first", setOf("sensor.kitchen_temp"), ids(again[0]))
+        assertEquals(setOf("light.lounge_lamp", "binary_sensor.front_door"), ids(again[1]))
+        // A view switch on the new connection asks for nothing.
+        c.followEntities(setOf("light.lounge_lamp", "sensor.kitchen_temp", "binary_sensor.front_door"), first = setOf("light.lounge_lamp"), additive = true)
+        readerBarrier(c)
+        assertEquals(2, server.sockets[1].received.count { it.optString("type") == "subscribe_entities" })
+    }
+
+    @Test
+    fun aMalformedIdIsNeverSentAndIsMissingAtOnce() {
+        // HA's cv.entity_ids refuses the whole subscribe_entities for one malformed id: it's left out, and its card
+        // shows it as not found, as HA's frontend does.
+        assertTrue(HaDashboardClient.isValidEntityId("sensor.office_2"))
+        for (bad in listOf("not-an-id", "Light.Lounge", "sensor.", ".x", "_sensor.x", "sensor.x_", "sensor.a__b", "sensor.x.y")) {
+            assertFalse(bad, HaDashboardClient.isValidEntityId(bad))
+        }
+        val c = newClient()
+        c.followEntities(setOf("light.lounge_lamp", "not-an-id", "sensor.kitchen_temp"), first = setOf("light.lounge_lamp"), additive = true)
+        c.start(null)
+        awaitCondition("both valid states") { store["light.lounge_lamp"] != null && store["sensor.kitchen_temp"] != null }
+        assertTrue(server.commands("subscribe_entities").none { "not-an-id" in ids(it) })
+        assertTrue(store.isMissing("not-an-id"))
+        // Nothing but malformed ids follows nothing: never every entity.
+        c.followEntities(setOf("not-an-id"))
+        readerBarrier(c)
+        assertTrue("every entity never asked for", server.commands("subscribe_entities").all { it.has("entity_ids") })
+        assertTrue(store.isMissing("not-an-id"))
+    }
+
+    @Test
+    fun aRefusedPartIsAskedForAgainOnTheNextFollow() {
+        val c = newClient()
+        server.refuseEntityIds = setOf("binary_sensor.front_door")
+        c.followEntities(setOf("light.lounge_lamp", "binary_sensor.front_door"), first = setOf("light.lounge_lamp"), additive = true)
+        c.start(null)
+        awaitCondition("the view's part answered") { server.commands("subscribe_entities").size == 2 && store["light.lounge_lamp"] != null }
+        readerBarrier(c)
+        // HA is fine again: the next follow (a view switch) asks for the refused id, and only it.
+        server.refuseEntityIds = emptySet()
+        c.followEntities(setOf("light.lounge_lamp", "binary_sensor.front_door"), first = setOf("binary_sensor.front_door"), additive = true)
+        awaitCondition("asked again") { server.commands("subscribe_entities").size == 3 }
+        assertEquals(setOf("binary_sensor.front_door"), ids(server.commands("subscribe_entities")[2]))
+        awaitCondition("its state") { store["binary_sensor.front_door"] != null }
+    }
+
+    @Test
+    fun anotherDashboardOrEveryEntityReplacesTheSubscription() {
+        val c = newClient()
+        c.followEntities(setOf("light.lounge_lamp", "sensor.kitchen_temp"), first = setOf("light.lounge_lamp"), additive = true)
+        c.start(null)
+        awaitCondition("two parts") { server.commands("subscribe_entities").size == 2 }
+        val firstIds = server.commands("subscribe_entities").map { it.getInt("id") }
+        // Another dashboard: most of what's followed isn't wanted any more, so both parts go.
+        c.followEntities(setOf("binary_sensor.front_door"), additive = true)
+        awaitCondition("replaced") { server.commands("subscribe_entities").size == 3 && server.commands("unsubscribe_events").size == 2 }
+        assertEquals(firstIds.toSet(), server.commands("unsubscribe_events").map { it.getInt("subscription") }.toSet())
+        assertEquals(setOf("binary_sensor.front_door"), ids(server.commands("subscribe_entities")[2]))
+        // A view that follows every entity, and back: each a replacement.
+        c.followEntities(emptySet())
+        awaitCondition("every entity") { server.commands("subscribe_entities").size == 4 }
+        assertFalse(server.commands("subscribe_entities")[3].has("entity_ids"))
+        c.followEntities(setOf("binary_sensor.front_door"), additive = true)
+        awaitCondition("scoped again") { server.commands("subscribe_entities").size == 5 }
+        assertEquals(setOf("binary_sensor.front_door"), ids(server.commands("subscribe_entities")[4]))
+    }
+
     @Test
     fun compressedDiffEventsUpdateTheStoreAndWakeItsSubscribers() {
         // The display data (the registries, sent after the entity subscription) re-renders every listener once it

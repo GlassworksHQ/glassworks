@@ -189,8 +189,32 @@ jobs:
           key: robolectric-${{ steps.robolectric.outputs.version }}-${{ github.run_id }}
           restore-keys: robolectric-${{ steps.robolectric.outputs.version }}-
 
+      # The island end to end (IslandEndToEndTest): community cards drawn in island pages by headless Chromium, from
+      # Vitro's own store and bridge. Playwright's headless shell (by the parity tools' pinned playwright-core) and the
+      # parity harness's pinned cards (checked by SHA-256), both cached.
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        id: vitro-islands
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/.cache/glassworks-perf/cards
+          key: vitro-islands-${{ hashFiles('tools/vitro-parity/package-lock.json', 'tools/vitro-parity/cards.json') }}
+      # The headless shell's one library the runner image lacks (Playwright's --with-deps also pulled fonts and Mesa
+      # through a fresh apt-get, about 97 s a run; the cards draw Latin text in the runner's own fonts).
+      - name: libgbm1
+        uses: ./.github/actions/apt-install
+        with:
+          packages: libgbm1
+      - name: The island end to end's browser and cards
+        run: |
+          npm ci --prefix tools/vitro-parity
+          node tools/vitro-parity/node_modules/playwright-core/cli.js install --only-shell chromium
+          python3 tools/vitro-parity/cards.py fetch
+
       # --parallel: the modules' test tasks side by side on the runner's 4 cores (no test shares a port or a file).
       - name: Unit tests
+        env:
+          GW_VITRO_ISLAND_E2E: '1'
         run: ./gradlew --no-daemon --parallel test
 
       # When the Vitro parity harness fails, its report says which card drifted and how (HA, Vitro and the diff side
@@ -222,6 +246,13 @@ jobs:
         with:
           path: ~/.m2/repository/org/robolectric
           key: ${{ steps.robolectric-new.outputs.key }}
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        if: steps.vitro-islands.outputs.cache-hit != 'true' && github.event_name != 'pull_request'
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/.cache/glassworks-perf/cards
+          key: vitro-islands-${{ hashFiles('tools/vitro-parity/package-lock.json', 'tools/vitro-parity/cards.json') }}
 
       - name: Release build (unsigned)
         if: needs.changes.result != 'success' || needs.changes.outputs.app_apk != 'false'

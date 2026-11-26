@@ -112,6 +112,27 @@ class EntityStoreTest {
     }
 
     @Test
+    fun oneOwnersPartsAddUpToWhatHaAnsweredFor() {
+        val store = storeWithLamp()
+        val owner = Any()
+        store.resetSnapshot(owner)
+        // The view's own entities first, then the rest of the dashboard, then one a config change added.
+        assertTrue(store.markSnapshot(setOf("sensor.gone_a"), owner))
+        assertTrue(store.isMissing("sensor.gone_a"))
+        assertFalse(store.isMissing("sensor.gone_b"))
+        assertTrue(store.markSnapshot(setOf("sensor.gone_b"), owner))
+        assertTrue("the first part still counts", store.isMissing("sensor.gone_a"))
+        assertTrue(store.isMissing("sensor.gone_b"))
+        // Every entity covers every part, and a later part doesn't narrow it.
+        assertTrue(store.markSnapshot(emptySet(), owner))
+        assertTrue(store.markSnapshot(setOf("sensor.gone_c"), owner))
+        assertTrue(store.isMissing("sensor.anything"))
+        // A replacement starts over.
+        store.resetSnapshot(Any())
+        assertFalse(store.isMissing("sensor.gone_a"))
+    }
+
+    @Test
     fun clearForgetsTheOldServersSnapshotToo() {
         val store = storeWithLamp()
         store.markSnapshot(emptySet())

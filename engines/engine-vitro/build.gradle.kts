@@ -54,6 +54,17 @@ tasks.withType<Test>().configureEach {
     systemProperty("https.proxyPort", "9")
     systemProperty("http.nonProxyHosts", listOfNotNull("localhost", "127.*", "[::1]", robolectricRepo, "repo1.maven.org").joinToString("|"))
     inputs.dir("src/test/parity").withPropertyName("vitroParity").withPathSensitivity(PathSensitivity.RELATIVE)
+    // The island page's scripts under node (IslandHassContractTest, island-hass.test.mjs), HA's types it's held to, and
+    // the island end to end (IslandEndToEndTest, island-e2e.mjs): the pinned cards and the browser it drives.
+    inputs.dir("src/test/js").withPropertyName("vitroIslandJs").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir("src/test/ha-frontend").withPropertyName("vitroHaTypes").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(rootProject.file("tools/vitro-parity/cards.json"), rootProject.file("tools/vitro-parity/lib/browser.mjs"))
+        .withPropertyName("vitroIslandE2eTools").withPathSensitivity(PathSensitivity.RELATIVE)
+    // The Playwright pin the end to end drives Chromium with (npm ci builds node_modules from these).
+    inputs.files(rootProject.file("tools/vitro-parity/package.json"), rootProject.file("tools/vitro-parity/package-lock.json"))
+        .withPropertyName("vitroIslandE2ePackages").withPathSensitivity(PathSensitivity.RELATIVE)
+    // The end to end runs only with GW_VITRO_ISLAND_E2E=1 (CI's app job): a run with it is never one without it.
+    inputs.property("vitroIslandE2e", System.getenv("GW_VITRO_ISLAND_E2E") ?: "")
     // ClarityStatsTest holds Vitro's Clarity harness to the web harness's cases.
     inputs.file(rootProject.file("tools/perf/test/stats-cases.json")).withPropertyName("clarityStatsCases")
         .withPathSensitivity(PathSensitivity.RELATIVE)
@@ -68,6 +79,8 @@ tasks.withType<Test>().configureEach {
         "vitroMockupDir" to "vitro.mockupDir",
         // An island page for tools/vitro-parity/island-probe.mjs (IslandPageDumpTest): the case file it draws.
         "vitroIslandCase" to "vitro.islandCase",
+        // The entity store's size for a whole dashboard (DashboardStoreMeasure): its input files and report directory.
+        "vitroStoreMeasure" to "vitro.storeMeasure",
     )
     for ((prop, sys) in options) {
         (project.findProperty(prop) as String?)?.let {
