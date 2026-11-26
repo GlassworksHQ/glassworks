@@ -659,9 +659,22 @@ class SurfaceFlingerNames(unittest.TestCase):
         self.assertFalse(any("SurfaceView" in c for c in latency), latency)    # never GeckoView's, on Vitro
         run = self.build(tmp)["graded"]["reference"]["per_run"][0]
         self.assertIsNone(run["start_error"])
+        # Every graded view is there (Sourcery on #949: an empty `tiers` would pass the checks below), each measured.
+        with open(os.path.join(os.path.dirname(HERE), "page", "tiers.json")) as f:
+            self.assertEqual(sorted(run["tiers"]), sorted(json.load(f)["ORDER"]))
         for t, r in run["tiers"].items():
             self.assertIsNotNone(r.get("load_ms"), (t, r.get("load_error")))
             self.assertIs(r["sf_valid"], True, t)
+
+    def test_vitro_on_android_15_and_later_checks_its_fallbacks_surfaceview(self):
+        # Greptile on #949: sfcheck's page is a web page, which Vitro shows in its GeckoView fallback, so the check reads
+        # the SurfaceView's BLAST layer (`<hash> SurfaceView[…](BLAST)#n`), not the VRI layer Vitro's own frames are on.
+        # With Vitro on, the Android 17 fake answered only the VRI layer, and the check read no frames.
+        p, out = sfcheck(tempfile.mkdtemp(), FAKE_SF_WRAPPED="1", FAKE_VITRO="true", GW_PERF_ENGINE="vitro")
+        self.assertEqual(p.returncode, 0, p.stderr[-800:])
+        self.assertIsNone(out["why"])
+        self.assertGreater(out["frames"], 0)
+        self.assertGreaterEqual(out["reach_ms"], P.SF_ONE_READ_MS)
 
     def test_a_listing_it_cant_read_is_said_once(self):
         tmp = tempfile.mkdtemp()

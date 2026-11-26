@@ -350,7 +350,9 @@ def shell(cmd):
         name = re.search(r"--latency '(.*)'", cmd).group(1)
         if name in (f"{SF_HASH} SurfaceView[{SF_ACT}]#162", f"{SF_WIN_HASH} {SF_ACT}#155"):
             return f"{PERIOD_NS}\n0\t0\t0\n"          # a parent: no buffers of its own
-        if name != (SF_VRI if vitro() else SF_BLAST):
+        # The SurfaceView's BLAST layer holds GeckoView's frames (the web engine's, and with Vitro on, its fallback's:
+        # sfcheck's page), the VRI layer Vitro's own (Greptile on #949: with Vitro on, the check read nothing).
+        if name not in ((SF_VRI, SF_BLAST) if vitro() else (SF_BLAST,)):
             return f"{PERIOD_NS}\n"                   # any other form of the name: the period alone
     if cmd.startswith("dumpsys SurfaceFlinger --latency"):
         t, frames = int(now() * 1e9), []
@@ -358,7 +360,8 @@ def shell(cmd):
         if vitro():
             # The window has Vitro's frames, the SurfaceView the check page's (GeckoView's fallback): never both.
             name = re.search(r"--latency '(.*)'", cmd).group(1)
-            ranges = ([state("sfcheck_paint.json")] if state("sfcheck_paint.json") else []) if name.startswith("SurfaceView") \
+            surface = re.sub(r"^[0-9a-f]+ (?=SurfaceView)", "", name).startswith("SurfaceView")  # Android 17's hash
+            ranges = ([state("sfcheck_paint.json")] if state("sfcheck_paint.json") else []) if surface \
                 else state("paint.json", [])
         for a, b in ranges:
             x = int(a * 1e9)
