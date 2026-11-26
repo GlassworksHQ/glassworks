@@ -218,7 +218,8 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
                 }
                 return (number ?: s.state) to unit
             }
-            return s.formattedState() to ""
+            // formatEntityStateToParts: HA's formatEntityState, without the tile's extras ("On", not "65%").
+            return s.plainState() to ""
         }
     }
 }

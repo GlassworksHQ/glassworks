@@ -194,6 +194,39 @@ class PlainConfigParityTest {
         assertTrue("20%" in texts(fan))
     }
 
+    @Test fun cardsThatWriteFormatEntityStateLeaveOutTheTilesExtras() {
+        // hui-picture-entity-card, hui-entity-card and Mushroom's entity chip write HA's formatEntityState: a lit
+        // light is "On" there (only the tile, badges and Mushroom's light card show its brightness).
+        put("light.lamp", "on", "brightness" to 166, "friendly_name" to "Lamp")
+        val picture = dev.glassworks.engine.vitro.cards.PictureCardView(ctx(), card("""{"type": "picture-entity", "entity": "light.lamp", "image": "/local/x.png"}"""))
+        idle()
+        assertTrue("picture-entity " + texts(picture), "On" in texts(picture) && "65%" !in texts(picture))
+        val entity = dev.glassworks.engine.vitro.cards.EntityCardView(ctx(), card("""{"type": "entity", "entity": "light.lamp"}"""))
+        idle()
+        assertTrue("entity " + texts(entity), "On" in texts(entity))
+        val chips = dev.glassworks.engine.vitro.cards.MushroomChipsCardView(ctx(), card("""{"type": "custom:mushroom-chips-card", "chips": [{"type": "entity", "entity": "light.lamp"}]}"""))
+        idle()
+        assertTrue("chip " + texts(chips), "On" in texts(chips))
+    }
+
+    @Test fun stateDisplayAddsAnAttributeThatIsSetAndNotZeroInAnyState() {
+        // HA's state-display (the tile, view badges): `cover: [state, current_position]`, `fan: percentage`,
+        // `light: brightness`, each attribute left out when it is null or 0.
+        assertEquals("Closing · 30%", EntityState("cover.g", "closing", mapOf("current_position" to 30)).formattedState())
+        assertEquals("Closed", EntityState("cover.g", "closed", mapOf("current_position" to 0)).formattedState())
+        assertEquals("Off", EntityState("fan.f", "off", mapOf("percentage" to 0)).formattedState())
+        assertEquals("On", EntityState("fan.f", "on", mapOf("percentage" to null)).formattedState())
+        assertEquals("Off", EntityState("light.l", "off", mapOf("brightness" to null)).formattedState())
+    }
+
+    @Test fun aHeadingEntityDrawsADashWhenUnavailable() {
+        // hui-heading-entity: state-display with dash-unavailable.
+        store.putLocal(EntityState("sensor.door", "unavailable", emptyMap()))
+        val c = dev.glassworks.engine.vitro.cards.HeadingCardView(ctx(), card("""{"type": "heading", "heading": "Hall", "badges": ["sensor.door"]}"""))
+        idle()
+        assertTrue(texts(c).toString(), "—" in texts(c))
+    }
+
     // ---- 4. Mushroom's alarm card ----
 
     @Test fun mushroomsAlarmCardHasNoButtonsWithoutStates() {
@@ -297,10 +330,15 @@ class PlainConfigParityTest {
         val tile = TileCardView(ctx(), card("""{"type": "tile", "entity": "sensor.next_alarm"}"""))
         idle()
         assertTrue("tile " + texts(tile), "In 2 minutes" in texts(tile))
-        // Mushroom writes formatEntityState: the date and time.
+        // Mushroom's `state` info: ha-relative-time for a timestamp sensor (HA's reference: mushroom-entity-timestamp).
         val mushroom = TileCardView(ctx(), card("""{"type": "custom:mushroom-entity-card", "entity": "sensor.next_alarm"}"""))
         idle()
-        assertTrue(texts(mushroom).toString(), "November 12, 2026 at 10:09\u202FAM" in texts(mushroom))
+        assertTrue("mushroom " + texts(mushroom), "In 2 minutes" in texts(mushroom))
+        // An uptime isn't one of Mushroom's: it writes formatEntityState, the date and time.
+        put("sensor.up", iso(NOW - 3 * 86_400_000L), "device_class" to "uptime")
+        val up = TileCardView(ctx(), card("""{"type": "custom:mushroom-entity-card", "entity": "sensor.up"}"""))
+        idle()
+        assertTrue("uptime " + texts(up), "November 9, 2026 at 10:08\u202FAM" in texts(up))
 
         // On screen, the relative time moves on each second, as hui-timestamp-display redraws it.
         val parent = android.widget.FrameLayout(activity)

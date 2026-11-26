@@ -43,6 +43,8 @@ import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.HaErrorSeverity
 import dev.glassworks.engine.vitro.ui.errorCardContent
+import dev.glassworks.engine.vitro.ui.TimestampText
+import dev.glassworks.engine.vitro.ui.showRelativeOr
 import dev.glassworks.engine.vitro.ui.showTimestampOr
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
@@ -1355,10 +1357,12 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val hideState = config.raw.optBoolean("hide_state", false)
         stateView.visibility = if (hideState) GONE else VISIBLE
         // HA's tile shows its state with state-display, which draws a timestamp relative ("In 3 hours"). Mushroom's
-        // cards write HA's formatEntityState ("On", "November 25, 2026 at 7:14 AM"), with their own percentages.
+        // cards write HA's formatEntityState ("On") with their own percentages, and a timestamp sensor's, a scene's or
+        // a button's state relative too.
         when {
             config.type == "tile" -> ctx.showTimestampOr(stateView, s, s?.formattedState() ?: "…", anyDomain = true)
-            config.type.startsWith("custom:mushroom-") -> stateView.text = s?.let { mushroomStateLine(config.type, it) } ?: "…"
+            config.type.startsWith("custom:mushroom-") ->
+                ctx.showRelativeOr(stateView, s, s?.let { mushroomStateLine(config.type, it) } ?: "…", TimestampText.MUSHROOM)
             else -> stateView.text = s?.formattedState() ?: "…"
         }
         updateBadge(s, active = s?.isActive == true)
@@ -2716,8 +2720,9 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
         }
         val render = { s: EntityState? ->
             icon.setIcon(MdiIcons.resolveIconName(explicitIcon, s), ctx.theme.secondaryTextColor)
-            // hui-heading-entity: state-display, which draws a timestamp relative ("In 3 hours").
-            ctx.showTimestampOr(state, s, s?.plainState() ?: "…", anyDomain = true)
+            // hui-heading-entity: state-display with `dash-unavailable` ("—" for an unavailable or unknown state), which
+            // draws a timestamp relative ("In 3 hours").
+            ctx.showTimestampOr(state, s, if (s?.isUnavailable == true) "—" else s?.plainState() ?: "…", anyDomain = true)
         }
         bind {
             render(ctx.store[eid])
@@ -3072,13 +3077,14 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             bindHoldAction(holdActionFor(config.raw, eid), eid)
             observe(eid) { s ->
                 applyStateFilter(s)
+                // hui-picture-entity-card: HA's formatEntityState, without the tile's extras ("On", not "65%").
                 if (config.type == "picture-entity" && showName && showState) {
                     caption.text = label ?: s?.displayName ?: eid
-                    stateCaption.text = s?.formattedState().orEmpty()
+                    stateCaption.text = s?.plainState().orEmpty()
                 } else {
                     val parts = buildList {
                         if (showName) add(label ?: s?.displayName ?: eid)
-                        if (showState && s != null && glanceEntities.isEmpty()) add(s.formattedState())
+                        if (showState && s != null && glanceEntities.isEmpty()) add(s.plainState())
                     }
                     caption.text = parts.joinToString(" · ")
                 }
@@ -3479,11 +3485,18 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
                         setLabel(
                             when (c.optString("content_info", "state")) {
                                 "name" -> c.optString("name", "").ifEmpty { s?.friendlyName ?: eid }
-                                "last-changed", "last-updated" -> s?.relativeLastChanged(ctx.now() / 1000.0).orEmpty()
+                                "last-changed" -> s?.relativeLastChanged(ctx.now() / 1000.0).orEmpty()
+                                "last-updated" -> s?.let { it.copy(lastChanged = it.lastUpdated.takeIf { u -> u > 0.0 } ?: it.lastChanged) }
+                                    ?.relativeLastChanged(ctx.now() / 1000.0).orEmpty()
                                 "none" -> ""
-                                else -> s?.formattedState() ?: "…"
+                                // Mushroom's entity chip: HA's formatEntityState, without the tile's extras.
+                                else -> s?.plainState() ?: "…"
                             },
                         )
+                        // Its `state` info draws a timestamp sensor's, a scene's or a button's state relative.
+                        if (c.optString("content_info", "state") !in setOf("name", "last-changed", "last-updated", "none")) {
+                            ctx.showRelativeOr(label, s, label.text.toString(), TimestampText.MUSHROOM)
+                        }
                     }
                 }
                 bind {

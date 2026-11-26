@@ -21,8 +21,9 @@ What it answers, all from that fixture and the pinned data next to this file:
   - the community cards as Lovelace resources at /hacsfiles/ (cards.json, pinned by SHA-256: cards.py).
 
 Times in a fixture are relative to the home's fixed "now" (home.json), so a capture never depends on the day it
-runs: a number is seconds from now (`-3600`), a string "@<spec>" is resolved to an ISO time ("@-2h", "@+30m",
-"@-1d"), a local date ("@D+1"), or a local date and time ("@D+1 14:30"). See tools/vitro-parity/README.md.
+runs: a number is seconds from now (`-3600`), a string "@<spec>" (in an attribute or a state) is resolved to an ISO
+time ("@-2h", "@+30m", "@-1d"), a local date ("@D+1"), or a local date and time ("@D+1 14:30"). See
+tools/vitro-parity/README.md.
 """
 import datetime
 import hashlib
@@ -152,7 +153,8 @@ def states():
     out = {}
     for eid, st in (fixture().get("states") or {}).items():
         changed = at(st.get("last_changed", -3600))
-        state, attrs = str(st["state"]), resolve(st.get("attributes") or {})
+        # A timestamp sensor's state may be an "@" time too ("@+3h"), resolved as attributes are.
+        state, attrs = str(resolve(st["state"])), resolve(st.get("attributes") or {})
         updated = at(st["last_updated"]) if "last_updated" in st else changed
         s = _series(eid)
         if s:

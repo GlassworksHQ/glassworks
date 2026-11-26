@@ -344,6 +344,17 @@
       ],
       "why": "HA's badge shows more than the state for this domain (a light's brightness, a fan's speed, a cover's position, a timer's countdown)"
     },
+    "viewBadgeEntity": {
+      "entity": [
+        "alarm_control_panel", "alert", "automation", "binary_sensor", "button", "calendar", "counter", "cover", "date",
+        "datetime", "device_tracker", "event", "fan", "group", "image", "input_boolean", "input_button", "input_datetime",
+        "input_number", "input_select", "input_text", "lawn_mower", "light", "lock", "media_player", "number", "person",
+        "plant", "remote", "scene", "schedule", "script", "select", "sensor", "siren", "sun", "switch", "text", "time",
+        "todo", "vacuum", "water_heater", "weather", "zone"
+      ],
+      "why": "HA's badge shows more than the state for this domain (a climate's temperature, a humidifier's humidity, a timer's countdown, an update's progress, a valve's position)",
+      "note": "state-display's default content (frontend 20261028.5): climate, humidifier and valve add an attribute, timer and update a countdown or install status that Vitro's badge doesn't draw; a light's brightness, a fan's speed and a cover's position it does"
+    },
     "headingBadge": {
       "by": "type",
       "default": "entity",
@@ -543,7 +554,7 @@
           "keys": {
             "type": "any",
             "show_name": "any",
-            "entity": {"entity": ["*"]},
+            "entity": "@viewBadgeEntity",
             "name": "@name",
             "icon": "any",
             "show_state": "@bool",
@@ -561,7 +572,7 @@
           "keys": {
             "type": "any",
             "show_name": {"values": [false]},
-            "entity": {"entity": ["*"]},
+            "entity": "@viewBadgeEntity",
             "name": "@name",
             "icon": "any",
             "show_state": "@bool",
@@ -579,7 +590,7 @@
           "why": "without show_name HA hides the name; Vitro shows a set name",
           "keys": {
             "type": "any",
-            "entity": {"entity": ["*"]},
+            "entity": "@viewBadgeEntity",
             "icon": "any",
             "show_state": "@bool",
             "show_icon": "@bool",
@@ -596,7 +607,7 @@
     },
     "badge": {
       "anyOf": [
-        {"entity": ["*"], "note": "a bare entity id: HA's ensureBadgeConfig makes it an entity badge with show_name: true, as Vitro's badge parser does"},
+        {"anyOf": ["@viewBadgeEntity"], "note": "a bare entity id: HA's ensureBadgeConfig makes it an entity badge with show_name: true, as Vitro's badge parser does"},
         {"by": "type", "default": "entity", "cases": {"entity": "@entityBadge"}}
       ]
     },

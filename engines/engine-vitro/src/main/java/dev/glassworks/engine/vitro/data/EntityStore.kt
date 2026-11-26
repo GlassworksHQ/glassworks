@@ -94,12 +94,13 @@ data class EntityState(
         // Options and text are the user's own strings: HA shows them as they are, never capitalized.
         if (domain in VERBATIM_DOMAINS) return state
         return when (domain) {
+            // HA's state-display (the tile, badges): a light's brightness, a fan's speed, a cover's position, each
+            // only when the attribute is set and not 0, else the state.
             "light" -> {
-                val pct = brightnessPct
-                if (state == "on" && pct != null) percent(pct) else HaDisplay.stateLabel(this) ?: state.replaceFirstChar { it.titlecase(Locale.ROOT) }
+                val pct = brightnessPct?.takeIf { (attributes["brightness"] as? Number)?.toDouble() != 0.0 }
+                if (pct != null) percent(pct) else HaDisplay.stateLabel(this) ?: state.replaceFirstChar { it.titlecase(Locale.ROOT) }
             }
-            // HA's tile shows a running fan's speed instead of "On".
-            "fan" -> (attributes["percentage"] as? Number)?.toInt()?.takeIf { state == "on" }?.let { percent(it) }
+            "fan" -> (attributes["percentage"] as? Number)?.toInt()?.takeIf { it != 0 }?.let { percent(it) }
                 ?: HaDisplay.stateLabel(this) ?: state.replaceFirstChar { it.titlecase(Locale.ROOT) }
             "binary_sensor" -> HaDisplay.stateLabel(this) ?: when (deviceClass) {
                 "door", "window", "garage_door", "opening" -> if (state == "on") "Open" else "Closed"
@@ -112,7 +113,7 @@ data class EntityState(
             "cover" -> {
                 val pos = (attributes["current_position"] as? Number)?.toInt()
                 val label = HaDisplay.stateLabel(this) ?: state.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
-                if (state == "open" && pos != null) "$label · ${percent(pos)}" else label
+                if (pos != null && pos != 0) "$label · ${percent(pos)}" else label
             }
             "climate" -> {
                 val cur = attributes["current_temperature"]
