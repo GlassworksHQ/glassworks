@@ -119,7 +119,7 @@ class UpdateRouteTest {
         shadowOf(app.packageManager).setCanRequestPackageInstalls(false)
         val root = FakeRoot(present = false)
         val m = started(frame(root))
-        assertEquals("Install of 1.2.3 failed: ${UpdateManager.UNKNOWN_APPS_S1}", installVerified(m))
+        assertEquals("Install of 1.2.3 failed: ${UpdateManager.unknownAppsWithRootBackend(app.packageName)}", installVerified(m))
         assertEquals("no PackageInstaller session", 0, sessions())
     }
 
@@ -131,7 +131,7 @@ class UpdateRouteTest {
         val a = m.model.beginInstall(0)!!
         UpdateManager::class.java.getDeclaredMethod("installAttempt", UpdateModel.Attempt::class.java)
             .apply { isAccessible = true }.invoke(m, a)
-        assertEquals("Install of 1.2.3 failed: ${UpdateManager.UNKNOWN_APPS_S1}", m.model.statusText())
+        assertEquals("Install of 1.2.3 failed: ${UpdateManager.unknownAppsWithRootBackend(app.packageName)}", m.model.statusText())
         assertEquals("no PackageInstaller session", 0, sessions())
     }
 

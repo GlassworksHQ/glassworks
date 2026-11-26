@@ -135,7 +135,10 @@ class SilentUpdatesTest {
         val api29 = PlatformApi(29)
         shadowOf(app.packageManager).setCanRequestPackageInstalls(false)
         assertFalse(SilentUpdates.canInstallPackages(app, api29))
-        assertEquals(UpdateManager.UNKNOWN_APPS_S1, UpdateManager.packageInstallerBlocker(app, hasRootBackend = true, platform = api29))
+        assertEquals(
+            UpdateManager.unknownAppsWithRootBackend(app.packageName),
+            UpdateManager.packageInstallerBlocker(app, hasRootBackend = true, platform = api29),
+        )
         assertEquals(UpdateManager.UNKNOWN_APPS_GENERIC, UpdateManager.packageInstallerBlocker(app, hasRootBackend = false, platform = api29))
 
         shadowOf(app.packageManager).setCanRequestPackageInstalls(true)

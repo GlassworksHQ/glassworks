@@ -721,8 +721,8 @@ class UpdateManager(
         const val FRAME_BUSY = "Not installed: a frame update is installing. Try again once the panel has restarted."
         /** PackageInstaller where Android lets the app install without a tap, unless it asks after all. */
         const val NO_TAP_NOTE = "Installs without a tap, unless Android asks for one on the screen."
-        const val UNKNOWN_APPS_S1 =
-            "Install unknown apps is not allowed for this app (update once with Kiln or adb install -r)"
+        fun unknownAppsWithRootBackend(packageName: String) =
+            "Install unknown apps is not allowed for this app (reinstall with Kiln, or run: adb shell appops set $packageName REQUEST_INSTALL_PACKAGES allow)"
         const val UNKNOWN_APPS_GENERIC =
             "Install unknown apps is not allowed for this app (allow it in Android's settings, under Apps)"
 
@@ -737,7 +737,7 @@ class UpdateManager(
             platform: PlatformApi = Platform,
         ): String? =
             if (SilentUpdates.canInstallPackages(context, platform)) null
-            else if (hasRootBackend) UNKNOWN_APPS_S1 else UNKNOWN_APPS_GENERIC
+            else if (hasRootBackend) unknownAppsWithRootBackend(context.packageName) else UNKNOWN_APPS_GENERIC
         private const val FIRST_CHECK_DELAY_S = 30L
         private const val TICK_S = 15 * 60L
         private const val NETWORK_SETTLE_S = 10L
