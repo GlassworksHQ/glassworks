@@ -30,6 +30,8 @@ class WifiDriverRecovery(
     /** Runs the block after the delay, on the main thread; the returned function cancels it. */
     private val schedule: (Long, () -> Unit) -> () -> Unit,
     private val log: (String) -> Unit,
+    /** The time since boot ([android.os.SystemClock.elapsedRealtime]). */
+    private val now: () -> Long = android.os.SystemClock::elapsedRealtime,
 ) {
     companion object {
         /**
@@ -37,6 +39,12 @@ class WifiDriverRecovery(
          * a switch-on before it changes nothing (the switch still reads on), and the switch-off would undo it.
          */
         val DELAYS_MS = longArrayOf(5_000, 10_000, 15_000, 30_000, 45_000, 45_000)
+
+        /**
+         * After a recovery used up its tries, a failure this soon after its last switch-on is that switch-on's own
+         * answer, not a new failure: it doesn't start another recovery. One later on does.
+         */
+        const val OWN_ANSWER_MS = 60_000L
 
         /**
          * The driver didn't load: [WifiManager.WIFI_STATE_UNKNOWN], or the switch-off Android makes right after it (a
@@ -62,6 +70,10 @@ class WifiDriverRecovery(
     /** The next try's cancel, while a recovery runs. */
     private var pending: (() -> Unit)? = null
     private var attempt = 0
+    /** When the last switch-on was asked; -1 before any. */
+    private var askedAt = -1L
+    /** The last recovery used up its tries: its own final answer mustn't start another. */
+    private var exhausted = false
 
     /** A recovery is running. */
     val running: Boolean get() = pending != null
@@ -79,6 +91,8 @@ class WifiDriverRecovery(
 
     private fun start() {
         if (running) return
+        if (exhausted && askedAt >= 0 && now() - askedAt < OWN_ANSWER_MS) return
+        exhausted = false
         if (!mayEnable()) {
             log("Wi-Fi driver failed to load; this app can't switch Wi-Fi on, so it stays off")
             return
@@ -90,7 +104,8 @@ class WifiDriverRecovery(
 
     private fun next() {
         if (attempt >= DELAYS_MS.size) {
-            finish("Wi-Fi didn't come back after $attempt tries: giving up until the next failure")
+            exhausted = true
+            finish("Wi-Fi didn't come back after $attempt tries: giving up until a failure that isn't an answer to these")
             return
         }
         pending = schedule(DELAYS_MS[attempt]) { tryOnce() }
@@ -111,6 +126,7 @@ class WifiDriverRecovery(
         if (now == WifiManager.WIFI_STATE_ENABLING) {
             log("Wi-Fi is coming on (try $attempt): waiting")
         } else {
+            askedAt = now()
             val ok = runCatching(enable).getOrDefault(false)
             log("switching Wi-Fi on (try $attempt of ${DELAYS_MS.size}): ${if (ok) "asked" else "refused"}")
         }

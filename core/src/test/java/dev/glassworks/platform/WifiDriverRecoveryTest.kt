@@ -34,6 +34,7 @@ class WifiDriverRecoveryTest {
         enable = { enables++; if (driverLoads) state = WIFI_STATE_ENABLING; true },
         schedule = { d, r -> val w = (now + d) to r; wakes += w; { wakes.remove(w) } },
         log = { logs += it },
+        now = { now },
     )
 
     /** Runs what is due up to [ms] from now. */
@@ -172,5 +173,21 @@ class WifiDriverRecoveryTest {
         assertTrue(WifiDriverRecovery.isSwitchOff(WIFI_STATE_DISABLING, WIFI_STATE_ENABLED))
         assertTrue(WifiDriverRecovery.isSwitchOff(WIFI_STATE_DISABLED, WIFI_STATE_ENABLING))
         assertFalse(WifiDriverRecovery.isSwitchOff(WIFI_STATE_DISABLED, WIFI_STATE_UNKNOWN))
+    }
+
+    @Test fun `the answer to an exhausted recovery's last switch-on doesn't start another, a later failure does`() {
+        driverFails()
+        advance(WifiDriverRecovery.DELAYS_MS.sum())
+        assertEquals(WifiDriverRecovery.DELAYS_MS.size, enables)
+        assertFalse(recovery.running)
+        // the driver fails again in answer to the last switch-on
+        driverFails()
+        assertFalse(recovery.running)
+        advance(WifiDriverRecovery.DELAYS_MS.sum())
+        assertEquals(WifiDriverRecovery.DELAYS_MS.size, enables)
+        // much later, a failure of its own: a new recovery
+        advance(WifiDriverRecovery.OWN_ANSWER_MS)
+        driverFails()
+        assertTrue(recovery.running)
     }
 }
