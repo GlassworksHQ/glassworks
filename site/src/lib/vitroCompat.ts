@@ -617,6 +617,9 @@ function verdict(card: Obj): Verdict {
   // A built-in card Vitro has no renderer for (`map`, the energy cards): the island can't draw it, so its view opens in
   // HA's frontend (WebFallback). A custom card goes to its island.
   if (!type.startsWith("custom:") && !CORE.has(type)) return { native: false, frontend: true, reasons: [`the built-in \`${type}\` card`], notes: [] };
+  // A shortcut whose default label or icon only HA's frontend knows, and an iframe of HA's own pages (WebFallback).
+  const own = type === "shortcut" ? shortcutReason(card) : type === "iframe" && sameOriginIframe(optString(card, "url", "")) ? "an `iframe` card of a Home Assistant page" : null;
+  if (own) return { native: false, frontend: true, reasons: [own], notes: [] };
   if (!CORE.has(type) && !HACS.has(type)) {
     reasons.add(`\`${type}\` is a custom card with no native renderer`);
     return { native: false, reasons: [...reasons], notes: [...notes] };
@@ -642,6 +645,44 @@ function verdict(card: Obj): Verdict {
     return { native: true, reasons: [], notes: [...notes] };
   }
   return { native: reasons.size === 0, reasons: [...reasons], notes: [...notes] };
+}
+
+/**
+ * Why a `shortcut` card needs HA's frontend (WebFallback.shortcutReason): with no `label` (or no `icon`), HA shows its
+ * action's own, which for a dashboard, view or panel path is that page's title and icon, and for an action the
+ * service's name. Vitro draws the defaults it knows: none, `url`, and area, device and settings paths. It doesn't open
+ * Assist.
+ */
+function shortcutReason(card: Obj): string | null {
+  const assist = (k: string) => isObj(card[k]) && (card[k] as Obj).action === "assist";
+  if (assist("tap_action") || assist("hold_action")) return "a `shortcut` card that opens Assist";
+  if (optString(card, "label", "") !== "" && optString(card, "icon", "") !== "") return null;
+  const tap = isObj(card.tap_action) ? card.tap_action : null;
+  const action = tap ? optString(tap, "action", "none") : "none";
+  if (action === "perform-action" || action === "call-service") return "a `shortcut` card that shows its action's name or icon";
+  if (action === "navigate" && !knownNavigation(optString(tap ?? {}, "navigation_path", ""))) {
+    return "a `shortcut` card that shows the page it opens by its title or icon";
+  }
+  return null;
+}
+
+const CONFIG_ROUTES = new Set(["automation", "scene", "script", "tools", "integrations", "devices", "entities"]);
+
+/** ShortcutDefaults.navigation: a path whose default label and icon Vitro knows without HA's frontend. */
+function knownNavigation(path: string): boolean {
+  if (!path) return true;
+  const segments = path.replace(/^\//, "").split(/[/?]/);
+  const panel = segments[0] ?? "";
+  const sub = segments[1];
+  if (panel === "config" && sub === "areas" && segments[2] === "area" && segments[3]) return true;
+  if (panel === "config" && sub === "devices" && segments[2] === "device" && segments[3]) return true;
+  if (panel === "config" && sub !== undefined && CONFIG_ROUTES.has(sub)) return true;
+  return sub !== undefined && sub.startsWith("areas-");
+}
+
+/** WebFallback.sameOriginIframe: an iframe `url` HA resolves on its own origin, which a loopback island can't frame. */
+function sameOriginIframe(url: string): boolean {
+  return !/^[A-Za-z][A-Za-z0-9+.\-]*:\/\//.test(url.trim());
 }
 
 function checkOptions(card: Obj, type: string, reasons: Set<string>) {

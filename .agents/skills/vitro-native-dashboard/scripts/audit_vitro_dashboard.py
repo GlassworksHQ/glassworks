@@ -757,6 +757,55 @@ def needs_ha_frontend(card: dict) -> bool:
             or any(needs_ha_frontend(c) for _, _, c in produced_cards(card, ctype, True)))
 
 
+CONFIG_ROUTES = {"automation", "scene", "script", "tools", "integrations", "devices", "entities"}
+
+
+def _opt_string(o, key: str, fallback: str = "") -> str:
+    """A field as the engine reads it (optString): missing or null is the fallback, anything else as text."""
+    v = o.get(key) if isinstance(o, dict) else None
+    if v is None:
+        return fallback
+    return v if isinstance(v, str) else json.dumps(v)
+
+
+def known_navigation(path: str) -> bool:
+    """ShortcutDefaults.navigation: a path whose default label and icon Vitro knows without HA's frontend."""
+    if not path:
+        return True
+    segments = re.split(r"[/?]", path.removeprefix("/"))
+    panel = segments[0]
+    sub = segments[1] if len(segments) > 1 else None
+    at = lambda i: segments[i] if len(segments) > i else None  # noqa: E731
+    if panel == "config" and sub == "areas" and at(2) == "area" and at(3):
+        return True
+    if panel == "config" and sub == "devices" and at(2) == "device" and at(3):
+        return True
+    if panel == "config" and sub in CONFIG_ROUTES:
+        return True
+    return sub is not None and sub.startswith("areas-")
+
+
+def own_frontend_reasons(card: dict, ctype: str) -> list[str]:
+    """WebFallback's own card rules: a `shortcut` whose default label or icon only HA's frontend knows (a page's title,
+    an action's name, Assist), and an `iframe` of HA's own pages, which a loopback island page can't frame."""
+    if ctype == "iframe":
+        url = _opt_string(card, "url").strip()
+        return [] if re.match(r"[A-Za-z][A-Za-z0-9+.\-]*://", url) else ["an `iframe` card of a Home Assistant page"]
+    if ctype != "shortcut":
+        return []
+    if any(isinstance(card.get(k), dict) and card[k].get("action") == "assist" for k in ("tap_action", "hold_action")):
+        return ["a `shortcut` card that opens Assist"]
+    if _opt_string(card, "label") and _opt_string(card, "icon"):
+        return []
+    tap = card.get("tap_action") if isinstance(card.get("tap_action"), dict) else None
+    action = _opt_string(tap, "action", "none") if tap is not None else "none"
+    if action in ("perform-action", "call-service"):
+        return ["a `shortcut` card that shows its action's name or icon"]
+    if action == "navigate" and not known_navigation(_opt_string(tap, "navigation_path")):
+        return ["a `shortcut` card that shows the page it opens by its title or icon"]
+    return []
+
+
 def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str], warnings: list[str], explicit: int = -1):
     if not isinstance(card, dict):
         return
@@ -766,7 +815,7 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
 
     if ctype in NATIVE_CORE_TYPES or (ctype in NATIVE_HACS_TYPES and needs_ha_frontend(card)):
         # The island can't draw it: what its native card doesn't draw as HA does sends the view to HA's frontend.
-        frontend = native_option_reasons(card, ctype)
+        frontend = own_frontend_reasons(card, ctype) + native_option_reasons(card, ctype)
         if ctype == "markdown":
             frontend += [f"Markdown <{t.lower()}> isn't drawn natively"
                          for t in re.findall(r"<([a-zA-Z][a-zA-Z0-9-]*)", str(card.get("content") or ""))
