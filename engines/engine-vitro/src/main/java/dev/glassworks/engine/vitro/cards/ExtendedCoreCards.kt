@@ -181,7 +181,7 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
     }
 
     private fun render(s: EntityState?) {
-        nameView.text = config.name ?: s?.displayName ?: config.entity.orEmpty()
+        nameView.text = config.name(s) ?: s?.displayName ?: config.entity.orEmpty()
         val color = if (colored(s)) stateColor(s) else null
         iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color ?: ctx.theme.stateIconColor)
         val (value, unit) = valueAndUnit(config.raw, s)
@@ -267,11 +267,11 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
             applyHaRipple(this, ctx.px(24f).toFloat(), ctx.theme.dark)
         }, LayoutParams(ctx.px(48f), ctx.px(48f), Gravity.TOP or Gravity.END))
 
-        labels.isClickable = true
-        labels.setOnClickListener { ctx.performAction(ActionConfig.parse(config.raw.optJSONObject("tap_action"), "more-info"), eid) }
-        labels.bindHoldAction(ctx, ActionConfig.parse(config.raw.optJSONObject("hold_action"), "more-info"), eid)
+        // hui-light-card: the center button runs `tap_action` (toggle unless configured); the name and brightness
+        // under it take no taps (the ⋮ button opens More Info).
+        val tap = ActionConfig.parse(config.raw.optJSONObject("tap_action"), "toggle")
         if (eid != null) {
-            dial.onToggle = { ctx.toggleEntity(eid) }
+            dial.onToggle = { ctx.performAction(tap, eid) }
             dial.onBrightness = { pct -> setBrightness(eid, pct) }
             observe(eid, ::render)
         } else {
@@ -290,7 +290,7 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     }
 
     private fun render(s: EntityState?) {
-        nameView.text = config.name ?: s?.displayName ?: config.entity.orEmpty()
+        nameView.text = config.name(s) ?: s?.displayName ?: config.entity.orEmpty()
         val on = s?.state == "on"
         val pct = s?.brightnessPct
         // HA's brightness line: the percentage while on, hidden (its place kept) otherwise.
@@ -601,7 +601,7 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
     }
 
     private fun render(s: EntityState?) {
-        titleView.text = config.name ?: s?.friendlyName ?: "Alarm"
+        titleView.text = config.name(s) ?: s?.friendlyName ?: "Alarm"
         val state = s?.state ?: "unknown"
         chipLabel.text = s?.let { HaDisplay.stateLabel(it) }?.takeIf { it != state } ?: stateLabel(state)
         chipIcon.setIcon(stateIcon(state), 0xFFFFFFFF.toInt())
@@ -1347,7 +1347,7 @@ class AreaCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     private fun render() {
         val area = HaDisplay.areas[areaId]
-        nameView.text = config.name ?: area?.name ?: areaName(config)
+        nameView.text = config.name(null) ?: area?.name ?: areaName(config)
         val icon = area?.icon
         tileIcon.setIcon(icon ?: "mdi:texture-box", tileColor)
         headerIcon.visibility = if (icon != null) VISIBLE else GONE
@@ -1479,7 +1479,7 @@ class AreaCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
         /** The card's `name`, else the area id in words (`living_room` → `Living room`), until HA's registry is in. */
         fun areaName(config: CardConfig): String =
-            config.name ?: config.raw.optString("area", "").ifEmpty { "Area" }
+            config.name(null) ?: config.raw.optString("area", "").ifEmpty { "Area" }
                 .replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
 
         internal fun median(values: List<Double>): Double {
@@ -1626,7 +1626,8 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
             addView(icon, LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
         }
         halo.layoutParams = LayoutParams(ctx.px(40f), ctx.px(40f))
-        bindActions(halo, el, if (VitroCardContext.isToggleable(el.entity)) "toggle" else "more-info")
+        // hui-state-icon-element: more-info on a tap, whatever the domain (it never toggles by default).
+        bindActions(halo, el, "more-info")
         val eid = el.entity
         if (eid != null) {
             observe(eid) { s -> icon.setIcon(MdiIcons.resolveIconName(el.icon, s), tintFor(s)) }
@@ -1930,7 +1931,7 @@ class HumidifierCardView(ctx: VitroCardContext, private val config: CardConfig) 
     }
 
     private fun render(s: EntityState?) {
-        titleView.text = config.name ?: s?.friendlyName ?: config.entity.orEmpty()
+        titleView.text = config.name(s) ?: s?.friendlyName ?: config.entity.orEmpty()
         val attrs = s?.attributes.orEmpty()
         val on = s?.state == "on"
         dial.bind(

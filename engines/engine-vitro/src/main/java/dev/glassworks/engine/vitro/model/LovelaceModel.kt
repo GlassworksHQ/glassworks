@@ -11,6 +11,7 @@ import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.compat.VitroSupport
 import dev.glassworks.engine.vitro.compat.WebFallback
 import dev.glassworks.engine.vitro.data.EntityState
+import dev.glassworks.engine.vitro.data.HaEntityName
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
@@ -117,6 +118,20 @@ data class ActionConfig(
     companion object {
         private const val DEFAULT_CONFIRMATION = "Are you sure?"
 
+        /**
+         * HA's `DOMAINS_TOGGLE` (`common/const.ts`): the domains a card's default tap toggles. Every other domain opens
+         * More Info, a lock, a cover, a script or a siren included: HA never actuates them on a tap nobody configured.
+         * (Which service a `toggle` calls is [dev.glassworks.engine.vitro.ui.CardSurface.toggleEntity]'s business.)
+         */
+        val DOMAINS_TOGGLE: Set<String> = setOf("fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve")
+
+        /**
+         * The default `tap_action` of HA's button card, button row and picture-glance toggle icons: `toggle` for an
+         * entity in [DOMAINS_TOGGLE], `more-info` otherwise (and with no entity).
+         */
+        fun defaultTap(entityId: String?): String =
+            if (entityId != null && entityId.substringBefore('.') in DOMAINS_TOGGLE) "toggle" else "more-info"
+
         /** Reads HA's `confirmation`: `true`, `false`, or `{ text: "..." }`. */
         fun parseConfirmation(raw: JSONObject): String? {
             val c = raw.opt("confirmation")
@@ -167,8 +182,20 @@ data class EntityRowConfig(
     val inner: EntityRowConfig? = null,
     /** A `buttons` row's entities, as `processConfigEntities` reads them. */
     val buttons: List<JSONObject> = emptyList(),
+    /**
+     * `name` in HA's name-picker form (a part or a list of parts), resolved when drawn ([nameFor]); [name] then holds
+     * its text parts alone.
+     */
+    val nameSpec: Any? = null,
 ) {
     val isEntity: Boolean get() = rowType == "entity"
+
+    /**
+     * The row's name for its [entity], whose state is [s]: [name], or [nameSpec] as HA's `formatEntityName` joins it.
+     * Null when the row sets none.
+     */
+    fun nameFor(s: EntityState?): String? =
+        if (nameSpec != null) HaEntityName.format(nameSpec, entity.ifEmpty { null }, s?.friendlyName) else name
 
     /** Every entity this row reads: its own, a conditional's conditions and row, a buttons row's buttons. */
     fun referencedEntities(out: MutableSet<String>) {
@@ -179,9 +206,6 @@ data class EntityRowConfig(
     }
 
     companion object {
-        /** HA's `DOMAINS_TOGGLE` (`common/const.ts`): the domains a button row or button toggles by default. */
-        val HA_DOMAINS_TOGGLE: Set<String> = setOf("fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve")
-
         /** The special row types Vitro draws ([parse]); `attribute` and `cast` go to HA's frontend ([WebFallback]). */
         val SPECIAL_TYPES: Set<String> get() = VitroSupport.ENTITIES_ROW_TYPES
 
@@ -199,7 +223,13 @@ data class EntityRowConfig(
         private fun JSONObject.str(key: String): String? = if (isNull(key)) null else optString(key, "").ifEmpty { null }
 
         private fun parseObject(item: JSONObject): EntityRowConfig? {
-            val name = item.str("name")
+            val spec = item.opt("name").takeIf(HaEntityName::isStructured) ?: return parseRow(item, item.str("name"))
+            // HA's name-picker form: its text parts stand in for the name until the row draws it with its entity.
+            val text = HaEntityName.format(spec, null, null)?.ifEmpty { null }
+            return parseRow(item, text)?.let { if (it.isEntity || it.rowType == "button") it.copy(nameSpec = spec) else it }
+        }
+
+        private fun parseRow(item: JSONObject, name: String?): EntityRowConfig? {
             val icon = item.str("icon")
             return when (val type = item.optString("type", "")) {
                 "divider" -> EntityRowConfig(entity = "", rowType = "divider", raw = item)
@@ -214,15 +244,14 @@ data class EntityRowConfig(
                         if (!has("tap_action")) put("tap_action", tap)
                         put("type", "button")
                     }
-                    parseObject(merged)
+                    parseRow(merged, name)
                 }
                 "button" -> {
                     val entity = item.str("entity")
                     if (name == null && entity == null) return null
-                    val defaultTap = if (entity != null && entity.substringBefore('.') in HA_DOMAINS_TOGGLE) "toggle" else "more-info"
                     EntityRowConfig(
                         entity = entity.orEmpty(), name = name, icon = icon, rowType = "button", raw = item,
-                        tapAction = ActionConfig.parse(item.optJSONObject("tap_action"), defaultTap),
+                        tapAction = ActionConfig.parse(item.optJSONObject("tap_action"), ActionConfig.defaultTap(entity)),
                         holdAction = ActionConfig.parse(item.optJSONObject("hold_action"), "more-info"),
                     )
                 }
@@ -702,8 +731,21 @@ data class CardConfig(
 ) {
     val entity: String? get() = raw.optString("entity", "").ifEmpty { null }
     val title: String? get() = raw.optString("title", "").ifEmpty { null }
-    val name: String? get() = raw.optString("name", "").ifEmpty { null }
     val icon: String? get() = raw.optString("icon", "").ifEmpty { null }
+
+    /**
+     * The card's `name` for its [entity], whose state is [s]: text as it is (an empty one counts as none), HA's
+     * name-picker form (`{type: device}`, `[{type: area}, {type: entity}]`) as HA joins it ([HaEntityName]). Null when
+     * the card sets no name, so the card draws its default. Read it when drawing: the registries it names may land
+     * after the dashboard does.
+     */
+    fun name(s: EntityState?): String? = nameFor(entity, s)
+
+    /** [name] for [entityId] (a card whose name isn't about its `entity`, or one that names another), state [s]. */
+    fun nameFor(entityId: String?, s: EntityState?): String? = when (val v = raw.opt("name")) {
+        is String -> v.ifEmpty { null }
+        else -> HaEntityName.format(v, entityId, s?.friendlyName)
+    }
 
     private val compatHolder = lazy { CardCompat.check(this) }
 

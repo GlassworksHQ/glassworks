@@ -513,13 +513,14 @@ class VitroCardContext(
          */
         internal val pendingImageLoads = java.util.concurrent.atomic.AtomicInteger()
 
-        /** Domains HA's `toggle` action (and a tile's icon) can switch. */
+        /**
+         * The domains [toggleEntity] switches with their own `toggle` service once a `toggle` action runs. Only which
+         * service a toggle calls: whether a tap toggles by default is HA's [ActionConfig.DOMAINS_TOGGLE].
+         */
         val TOGGLE_DOMAINS = setOf(
             "light", "switch", "fan", "input_boolean", "cover", "lock",
             "automation", "script", "humidifier", "siren", "valve",
         )
-
-        fun isToggleable(entityId: String?): Boolean = entityId != null && entityId.substringBefore('.') in TOGGLE_DOMAINS
 
         /** SVGs [loadSvg] parsed, by address (a few weather icons). */
         private val SVG_CACHE = object : LinkedHashMap<String, dev.glassworks.engine.vitro.cards.MdSvg>(16, 0.75f, true) {

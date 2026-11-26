@@ -193,13 +193,13 @@ class LovelaceModelTest {
     fun cardAccessorsReadTheCommonKeys() {
         val c = card("""{"type": "tile", "entity": "light.lounge_lamp", "name": "Lamp", "title": "T", "icon": "mdi:lamp", "theme": "glass_night"}""")
         assertEquals("light.lounge_lamp", c.entity)
-        assertEquals("Lamp", c.name)
+        assertEquals("Lamp", c.name(null))
         assertEquals("T", c.title)
         assertEquals("mdi:lamp", c.icon)
         assertEquals("glass_night", c.theme)
         val bare = card("""{"type": "tile"}""")
         assertNull(bare.entity)
-        assertNull(bare.name)
+        assertNull(bare.name(null))
         assertNull(bare.theme)
     }
 

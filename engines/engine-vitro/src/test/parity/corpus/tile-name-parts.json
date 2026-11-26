@@ -1,0 +1,57 @@
+{
+ "title": "Tile: a name from HA's name picker (area, then the entity's own name)",
+ "card": {
+  "type": "tile",
+  "entity": "light.kitchen_pendant_ceiling",
+  "name": [
+   {
+    "type": "area"
+   },
+   {
+    "type": "entity"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.kitchen_pendant_ceiling": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "off_with_transition": false,
+     "off_brightness": null,
+     "friendly_name": "Kitchen Pendant Ceiling",
+     "supported_features": 40
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.kitchen_pendant_ceiling",
+    "pl": "zha",
+    "tk": "light",
+    "di": "dev-kitchen-pendant",
+    "en": "Ceiling",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen-pendant",
+    "name": "Kitchen Pendant",
+    "area_id": "kitchen"
+   }
+  ],
+  "areas": [
+   {
+    "area_id": "kitchen",
+    "name": "Kitchen"
+   }
+  ]
+ }
+}

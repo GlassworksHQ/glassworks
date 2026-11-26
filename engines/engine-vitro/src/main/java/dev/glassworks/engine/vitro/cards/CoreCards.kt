@@ -528,9 +528,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 featureBinders.forEach { it(s) }
             }
         } else {
-            titleView.text = config.name ?: config.title ?: "Tile"
+            titleView.text = config.name(null) ?: config.title ?: "Tile"
             // No entity: the icon's action still needs a name, the tile's own or what it does.
-            if (iconInteractive) iconWrap.contentDescription = config.name ?: config.title
+            if (iconInteractive) iconWrap.contentDescription = config.name(null) ?: config.title
                 ?: ActionConfig.parse(config.raw.optJSONObject("icon_tap_action"), "none").action.replace('-', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
             stateView.visibility = GONE
             updateBadge(null, active = false)
@@ -1310,7 +1310,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             text = sb
             visibility = if (v.isEmpty()) GONE else VISIBLE
         }
-        bindTpl("primary", config.name.orEmpty()) { v -> primary.setLine(v) }
+        bindTpl("primary", config.name(null).orEmpty()) { v -> primary.setLine(v) }
         bindTpl("secondary", "") { v -> secondary.setLine(v) }
         bindTpl("icon", config.icon ?: "") { v -> iconName = v; refreshAvatar() }
         bindTpl("icon_color", "") { v -> iconColor = MushroomColors.parse(v, ctx.theme); refreshAvatar() }
@@ -1350,7 +1350,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     private fun renderState(s: EntityState?) {
         // HA's tile names an entity on a device "<device> <entity>" (the device alone for its main entity).
-        titleView.text = config.name ?: config.entity?.let(HaDisplay::deviceEntityName) ?: s?.friendlyName ?: config.entity.orEmpty()
+        titleView.text = config.name(s) ?: config.entity?.let(HaDisplay::deviceEntityName) ?: s?.friendlyName ?: config.entity.orEmpty()
         val hideState = config.raw.optBoolean("hide_state", false)
         stateView.visibility = if (hideState) GONE else VISIBLE
         stateView.text = s?.formattedState() ?: "…"
@@ -1506,7 +1506,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         private const val FEATURE_TAG = "tile-feature:"
 
         /** HA's `DOMAINS_TOGGLE`: the domains whose tile icon toggles by default (not covers or locks). */
-        private val ICON_TOGGLE_DOMAINS = setOf("fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve")
+        private val ICON_TOGGLE_DOMAINS = ActionConfig.DOMAINS_TOGGLE
 
         /** Domains whose tile icon presses by default (`toggle` on them presses / activates). */
         private val PRESS_DOMAINS = setOf("button", "input_button", "scene")
@@ -2244,7 +2244,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 val active = s?.isActive == true
                 val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                 iconView.setIcon(MdiIcons.resolveIconName(rowCfg.icon, s), tint)
-                nameView.text = rowCfg.name ?: s?.displayName ?: rowCfg.entity
+                nameView.text = rowCfg.nameFor(s) ?: s?.displayName ?: rowCfg.entity
                 // ha-entity-toggle's label: "Toggle Desk lamp".
                 if (isSwitchable) switchView.contentDescription = "Toggle ${nameView.text}"
                 secondaryView?.text = if (rowCfg.secondaryInfo == "last-updated") {
@@ -2467,7 +2467,7 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                     val active = s?.isActive == true
                     val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                     icon.setIcon(MdiIcons.resolveIconName(e.icon, s), tint)
-                    name.text = e.name ?: s?.displayName ?: e.entity
+                    name.text = e.nameFor(s) ?: s?.displayName ?: e.entity
                     state.text = s?.plainState() ?: "…"
                 }
                 row.addView(cell, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { bottomMargin = ctx.px(12f) })
@@ -2520,10 +2520,9 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER))
 
         val eid = config.entity
-        val tap = ActionConfig.parse(
-            config.raw.optJSONObject("tap_action"),
-            if (VitroCardContext.isToggleable(eid)) "toggle" else "more-info",
-        )
+        // hui-button-card: `tap_action` defaults to toggle for HA's DOMAINS_TOGGLE, else more-info (a lock, a cover,
+        // a script or a siren opens More Info and never runs on a tap nobody configured).
+        val tap = ActionConfig.parse(config.raw.optJSONObject("tap_action"), ActionConfig.defaultTap(eid))
         isClickable = true
         setOnClickListener { ctx.performAction(tap, eid) }
         bindHoldAction(holdActionFor(config.raw, eid), eid)
@@ -2533,12 +2532,12 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                 val active = s?.isActive == true
                 val color = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                 icon.setIcon(MdiIcons.resolveIconName(config.icon, s), stateColorBrightness(s, color))
-                label.text = config.name ?: s?.displayName ?: eid
+                label.text = config.name(s) ?: s?.displayName ?: eid
                 state.text = s?.plainState().orEmpty()
             }
         } else {
             icon.setIcon(config.icon ?: "mdi:home", ctx.theme.stateIconColor)
-            label.text = config.name.orEmpty()
+            label.text = config.name(null).orEmpty()
         }
     }
 
@@ -2585,7 +2584,7 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
 
     init {
         orientation = VERTICAL
-        val heading = config.raw.optString("heading", config.raw.optString("title", "")).ifEmpty { config.name.orEmpty() }
+        val heading = config.raw.optString("heading", config.raw.optString("title", "")).ifEmpty { config.name(null).orEmpty() }
         val subtitle = config.raw.optString("subtitle", "")
         val isSubtitle = config.raw.optString("heading_style", "title") == "subtitle"
         // hui-heading-card: `0 4px` around a row with 8 px gaps and an 18 px icon; the title is 16 px / 400 on a
@@ -2954,19 +2953,19 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             addView(bar, LayoutParams(MATCH_PARENT, ctx.px(48f), Gravity.BOTTOM))
         } else if (config.type != "picture" && (showName || showState || glanceEntities.isNotEmpty())) {
             // hui-picture-glance-card's .box: rgba(0,0,0,.3), 4 px 8 px padding, 48 px tall; the title 16 px / 500 on
-            // a 32 px line 8 px in; the entities' 40 px icon buttons side by side at the end.
+            // a 32 px line 8 px in; then the entities' 40 px icon buttons in two rows, the ones that open More Info and
+            // the ones that toggle, spread out as the box's `justify-content: space-between` does.
             caption.textSize = ctx.scaledSp(16f)
             caption.typeface = VitroFonts.typeface(ctx.context, Inter.MEDIUM, ctx.scaledSp(16f))
-            val bar = LinearLayout(ctx.context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+            val forceDialog = config.raw.optBoolean("force_dialog", false)
+            val (toggles, dialogs) = glanceEntities.partition { !forceDialog && it.entity.substringBefore('.') in ActionConfig.DOMAINS_TOGGLE }
+            val bar = GlanceBar(ctx.context).apply {
                 setBackgroundColor(0x4D000000)
                 setPadding(ctx.px(16f), ctx.px(4f), ctx.px(8f), ctx.px(4f))
                 minimumHeight = ctx.px(48f)
-                addView(caption, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            }
-            if (glanceEntities.isNotEmpty()) {
-                bar.addView(buildGlanceIcons(glanceEntities), LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+                addView(caption, ViewGroup.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+                addView(buildGlanceIcons(dialogs, dialog = true), ViewGroup.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+                addView(buildGlanceIcons(toggles, dialog = false), ViewGroup.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
             }
             addView(bar, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
         }
@@ -2976,8 +2975,8 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             ctx.loadImage(staticImage, this) { bmp -> if (bmp != null) showBitmap(bmp) }
         }
         // HA's picture-glance labels its bar with `title`; the other picture cards use `name`.
-        val label = if (config.type == "picture-glance") config.title ?: config.name else config.name
-        if (label != null) caption.text = label
+        fun label(s: EntityState?): String? = if (config.type == "picture-glance") config.title ?: config.name(s) else config.name(s)
+        label(null)?.let { caption.text = it }
         val eid = config.entity ?: config.raw.optString("camera_image", "").ifEmpty { null }
         // Bumped by every picture change: only the newest request lands, even when the URL came back to an older one.
         var pictureGeneration = 0
@@ -3003,11 +3002,11 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             observe(eid) { s ->
                 applyStateFilter(s)
                 if (config.type == "picture-entity" && showName && showState) {
-                    caption.text = label ?: s?.displayName ?: eid
+                    caption.text = label(s) ?: s?.displayName ?: eid
                     stateCaption.text = s?.formattedState().orEmpty()
                 } else {
                     val parts = buildList {
-                        if (showName) add(label ?: s?.displayName ?: eid)
+                        if (showName) add(label(s) ?: s?.displayName ?: eid)
                         if (showState && s != null && glanceEntities.isEmpty()) add(s.formattedState())
                     }
                     caption.text = parts.joinToString(" · ")
@@ -3017,8 +3016,11 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         }
     }
 
-    /** HA picture-glance's entity icons: 24 dp icons in 36 dp touch targets, 4 dp apart, each with its own actions. */
-    private fun buildGlanceIcons(entries: List<EntityRowConfig>): LinearLayout = LinearLayout(ctx.context).apply {
+    /**
+     * One of HA picture-glance's two icon rows: 24 dp icons in 40 dp touch targets, each with its own actions. A
+     * [dialog] row's icons open More Info by default, the other row's toggle.
+     */
+    private fun buildGlanceIcons(entries: List<EntityRowConfig>, dialog: Boolean): LinearLayout = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL or Gravity.END
         entries.forEach { entry ->
@@ -3028,13 +3030,13 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 isFocusable = true
                 applyHaRipple(this, 999f, true)
                 addView(icon, LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
-                setOnClickListener { ctx.performAction(glanceTapAction(entry), entry.entity) }
+                setOnClickListener { ctx.performAction(glanceTapAction(entry, dialog), entry.entity) }
                 bindHoldAction(ctx, entry.holdAction ?: ActionConfig("more-info"), entry.entity)
             }
             addView(target, LinearLayout.LayoutParams(ctx.px(40f), ctx.px(40f)))
             observe(entry.entity) { s ->
                 val name = s?.friendlyName ?: entry.entity
-                target.contentDescription = entry.name ?: name
+                target.contentDescription = entry.nameFor(s) ?: name
                 // hui-picture-glance-card: `--ha-picture-icon-button-color` (#a9a9a9), white when the entity is on.
                 val tint = if (s != null && s.isActive) GLANCE_ACTIVE else GLANCE_INACTIVE
                 icon.setIcon(MdiIcons.resolveIconName(entry.icon, s), tint)
@@ -3107,11 +3109,13 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     internal companion object {
         private const val GLANCE_INACTIVE = 0xFFA9A9A9.toInt()
         private const val GLANCE_ACTIVE = Color.WHITE
-        private val GLANCE_TOGGLE_DOMAINS = setOf("light", "switch", "fan", "cover", "lock", "input_boolean", "media_player")
 
-        /** picture-glance's per-icon `tap_action`: the configured one, else `toggle` for switchable domains. */
-        fun glanceTapAction(entry: EntityRowConfig): ActionConfig = entry.tapAction
-            ?: ActionConfig(if (entry.entity.substringBefore('.') in GLANCE_TOGGLE_DOMAINS) "toggle" else "more-info")
+        /**
+         * picture-glance's per-icon `tap_action`: the configured one, else what its row does, `more-info` in the
+         * [dialog] row (every domain outside HA's DOMAINS_TOGGLE, or all of them with `force_dialog`), `toggle` in the other.
+         */
+        fun glanceTapAction(entry: EntityRowConfig, dialog: Boolean): ActionConfig =
+            entry.tapAction ?: ActionConfig(if (dialog) "more-info" else "toggle")
 
         const val DEFAULT_ASPECT = 16f / 9f
         /** hui-image's STATES_OFF: the states its default grey filter applies to. */
@@ -3511,7 +3515,7 @@ class BubbleCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                 setPadding(ctx.px(4f), ctx.px(10f), ctx.px(4f), ctx.px(6f))
             }
             val icon = MdiIconView(ctx.context).apply { setIcon(config.icon ?: "mdi:home", ctx.theme.secondaryTextColor) }
-            val title = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply { text = config.name.orEmpty() }
+            val title = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply { text = config.name(null).orEmpty() }
             val line = View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) }
             row.addView(icon, LinearLayout.LayoutParams(ctx.px(18f), ctx.px(18f)).apply { marginEnd = ctx.px(8f) })
             row.addView(title, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = ctx.px(12f) })
@@ -3563,12 +3567,12 @@ class BubbleCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                         shape = GradientDrawable.OVAL
                         setColor(withAlpha(tint, if (active) 0.24f else 0.12f))
                     }
-                    name.text = config.name ?: s?.friendlyName ?: eid
+                    name.text = config.name(s) ?: s?.friendlyName ?: eid
                     sub.text = s?.formattedState() ?: "…"
                 }
             } else {
                 icon.setIcon(config.icon ?: "mdi:home", ctx.theme.primaryColor)
-                name.text = config.name ?: "Bubble"
+                name.text = config.name(null) ?: "Bubble"
                 sub.visibility = GONE
             }
         }
@@ -3694,3 +3698,50 @@ internal class CircleCropDrawable(private val bitmap: android.graphics.Bitmap) :
     @Deprecated("Drawable API") override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
 }
 
+/**
+ * hui-picture-glance-card's `.box`: a flex row with `justify-content: space-between` holding the title (when it has
+ * one) and the two icon rows. The icon rows take their width first and the title what is left (it ellipsizes); the
+ * free space goes evenly between the items, each centered vertically. An empty title takes no slot, as HA renders no
+ * title element then; an empty icon row keeps its (zero-width) slot, as HA's empty `.row` does.
+ */
+internal class GlanceBar(context: android.content.Context) : ViewGroup(context) {
+    private fun present(v: View): Boolean = v.visibility != GONE && !(v is TextView && v.text.isNullOrEmpty())
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val width = MeasureSpec.getSize(widthMeasureSpec)
+        val avail = (width - paddingLeft - paddingRight).coerceAtLeast(0)
+        val unbounded = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+        var used = 0
+        var tallest = 0
+        val texts = ArrayList<View>()
+        for (i in 0 until childCount) {
+            val c = getChildAt(i)
+            if (c.visibility == GONE) continue
+            if (c is TextView) { texts += c; continue }
+            c.measure(unbounded, unbounded)
+            used += c.measuredWidth
+            tallest = maxOf(tallest, c.measuredHeight)
+        }
+        for (c in texts) {
+            c.measure(MeasureSpec.makeMeasureSpec((avail - used).coerceAtLeast(0), MeasureSpec.AT_MOST), unbounded)
+            if (present(c)) tallest = maxOf(tallest, c.measuredHeight)
+        }
+        val height = maxOf(tallest + paddingTop + paddingBottom, minimumHeight)
+        setMeasuredDimension(width, resolveSize(height, heightMeasureSpec))
+    }
+
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        val items = (0 until childCount).map(::getChildAt).filter(::present).ifEmpty { return }
+        val avail = (r - l - paddingLeft - paddingRight).coerceAtLeast(0)
+        val free = (avail - items.sumOf { it.measuredWidth }).coerceAtLeast(0)
+        val gaps = items.size - 1
+        val inner = b - t - paddingTop - paddingBottom
+        var x = paddingLeft.toFloat()
+        items.forEachIndexed { i, c ->
+            val top = paddingTop + (inner - c.measuredHeight) / 2
+            val left = Math.round(x)
+            c.layout(left, top, left + c.measuredWidth, top + c.measuredHeight)
+            x += c.measuredWidth + if (gaps > 0 && i < gaps) free.toFloat() / gaps else 0f
+        }
+    }
+}

@@ -18,6 +18,7 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import dev.glassworks.engine.vitro.data.EntityState
+import dev.glassworks.engine.vitro.data.HaEntityName
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.EntityRowConfig
 import dev.glassworks.engine.vitro.theme.ThemeResolver
@@ -114,7 +115,7 @@ internal object SpecialRows {
         button.bindHoldAction(ctx, row.holdAction ?: ActionConfig("more-info"), entity)
         fun render(s: EntityState?) {
             // hui-button-row names an entity-less row by its `name`; with an entity, HA's entity name.
-            name.text = row.name ?: s?.displayName ?: entity.orEmpty()
+            name.text = row.nameFor(s) ?: s?.displayName ?: entity.orEmpty()
             val iconName = row.icon ?: s?.let { MdiIcons.resolveIconName(null, it) }
             icon.visibility = if (iconName != null) View.VISIBLE else View.INVISIBLE
             iconName?.let { icon.setIcon(it, ctx.theme.stateIconColor) }
@@ -211,15 +212,16 @@ internal object SpecialRows {
         // `.label`: 0.875rem (HA's root font is 14 px: 12.25 px) on a 1.25rem line.
         val label = text(ctx, 12.25f, ctx.theme.primaryTextColor).apply { setLineSpacing(0f, 1f) }
         chip.addView(label, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { if (showIcon) marginStart = ctx.px(8f) })
-        val defaultTap = if (entity != null && entity.substringBefore('.') in EntityRowConfig.HA_DOMAINS_TOGGLE) "toggle" else "more-info"
-        val tap = ActionConfig.parse(conf.optJSONObject("tap_action"), defaultTap)
+        val tap = ActionConfig.parse(conf.optJSONObject("tap_action"), ActionConfig.defaultTap(entity))
         val hold = ActionConfig.parse(conf.optJSONObject("hold_action"), "more-info")
         chip.setOnClickListener { ctx.performAction(tap, entity) }
         chip.bindHoldAction(ctx, hold, entity)
         VitroAccess.role(chip, A11yRole.BUTTON)
-        val configName = conf.optString("name", "").ifEmpty { null }
+        val nameSpec = conf.opt("name")
         val showName = conf.opt("show_name")
         fun render(s: EntityState?) {
+            val configName = if (HaEntityName.isStructured(nameSpec)) HaEntityName.format(nameSpec, entity, s?.friendlyName)
+                else conf.optString("name", "").ifEmpty { null }
             // `(show_name && stateObj) || (name && show_name !== false)`: HA's entity name, else the configured name.
             val named = (showName == true && s != null) || (configName != null && showName != false)
             val text = if (!named) "" else s?.let { configName ?: it.displayName } ?: configName.orEmpty()

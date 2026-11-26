@@ -415,7 +415,7 @@ class AlertCardView(ctx: VitroCardContext, private val config: CardConfig) :
         pulsing = active && raw.optBoolean("pulse", false) && color != null
         if (color != null) wash.setColor(color) else wash.setColor(Color.TRANSPARENT)
         updatePulse()
-        val name = config.name ?: s.displayName
+        val name = config.name(s) ?: s.displayName
         val area = HaDisplay.areaOf(entityId)?.let { HaDisplay.areaName(it) }
         val second = if (raw.optBoolean("hide_state", false)) null else buildString {
             append(s.formattedState())
@@ -767,7 +767,7 @@ class StatisticCardView(ctx: VitroCardContext, private val config: CardConfig) :
 
     private fun render() {
         val s = if (external) null else ctx.store[statisticId]
-        nameView.text = config.name
+        nameView.text = config.nameFor(statisticId, s)
             ?: s?.displayName
             ?: metadata?.optString("name", "")?.takeIf { it.isNotEmpty() && metadata?.isNull("name") == false }
             ?: statisticId
@@ -844,7 +844,7 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
 
     /** A rebuild key: what decides the card's layout (readings, picture, name, problems), not the values. */
     private fun key(s: EntityState?): String = if (s == null) "missing" else listOf(
-        ATTRIBUTES.filter { it in s.attributes }.joinToString(","), s.entityPicture.orEmpty(), config.name ?: s.displayName,
+        ATTRIBUTES.filter { it in s.attributes }.joinToString(","), s.entityPicture.orEmpty(), config.name(s) ?: s.displayName,
         s.attributes["problem"]?.toString().orEmpty(), s.attributes["unit_of_measurement_dict"]?.toString().orEmpty(),
     ).joinToString("|")
 
@@ -909,7 +909,7 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
         val banner = FrameLayout(ctx.context)
         val header = smallText(ctx, if (hasPicture) 16f else 24f, if (hasPicture) Color.WHITE else ctx.theme.primaryTextColor,
             if (hasPicture) Inter.MEDIUM else Inter.REGULAR).apply {
-            text = config.name ?: s.displayName
+            text = config.name(s) ?: s.displayName
             gravity = Gravity.CENTER_VERTICAL
             if (hasPicture) {
                 val p = ctx.px(16f)

@@ -1004,6 +1004,17 @@ class HaDashboardClient(
         request(JSONObject().put("type", "config/area_registry/list")) { res ->
             if (gen != connectionGen.get()) return@request
             if (res.optBoolean("success", false)) res.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyAreas(r) } }
+            // Floor names, for a card `name` that names its entity's floor (HA's name picker), when an area is on one.
+            if (HaDisplay.areas.values.any { it.floorId != null }) {
+                displayPending.incrementAndGet()
+                request(JSONObject().put("type", "config/floor_registry/list")) { floors ->
+                    if (gen != connectionGen.get()) return@request
+                    if (floors.optBoolean("success", false)) {
+                        floors.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyFloors(r) } }
+                    }
+                    settleDisplay()
+                }
+            }
             settleDisplay()
         }
         // 8. The registries web islands read, when one does (they ask on first read): again on every connection.

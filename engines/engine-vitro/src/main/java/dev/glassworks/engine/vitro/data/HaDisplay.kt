@@ -43,6 +43,7 @@ object HaDisplay {
         val picture: String?,
         val temperatureEntityId: String?,
         val humidityEntityId: String?,
+        val floorId: String? = null,
     )
 
     /** Device id to its name (`name_by_user`, else `name`), from `config/device_registry/list`. */
@@ -53,8 +54,16 @@ object HaDisplay {
     @Volatile var deviceAreas: Map<String, String> = emptyMap()
         private set
 
+    /** Device id to its parent device's id (`parent_device_id`), from `config/device_registry/list`. */
+    @Volatile var deviceParents: Map<String, String> = emptyMap()
+        private set
+
     /** Area id to the area, from `config/area_registry/list`. */
     @Volatile var areas: Map<String, Area> = emptyMap()
+        private set
+
+    /** Floor id to its name, from `config/floor_registry/list`. */
+    @Volatile var floors: Map<String, String> = emptyMap()
         private set
 
     /** The registry in HA's order (an area card's sensors and camera follow it). */
@@ -74,7 +83,9 @@ object HaDisplay {
         registry = emptyMap()
         devices = emptyMap()
         deviceAreas = emptyMap()
+        deviceParents = emptyMap()
         areas = emptyMap()
+        floors = emptyMap()
         componentIcons.clear(); platformIcons.clear(); stateLabels.clear()
         translatedDomains.clear(); translatedPlatforms.clear(); iconDomains.clear(); iconPlatforms.clear()
     }
@@ -116,15 +127,20 @@ object HaDisplay {
     fun applyDevices(result: org.json.JSONArray) {
         val out = HashMap<String, String>(result.length() * 2)
         val inArea = HashMap<String, String>()
+        val parents = HashMap<String, String>()
         for (i in 0 until result.length()) {
             val d = result.optJSONObject(i) ?: continue
             if (!d.isNull("area_id")) d.optString("area_id").takeIf { it.isNotEmpty() }?.let { inArea[d.optString("id")] = it }
+            if (d.has("parent_device_id") && !d.isNull("parent_device_id")) {
+                d.optString("parent_device_id").takeIf { it.isNotEmpty() }?.let { parents[d.optString("id")] = it }
+            }
             val name = d.optString("name_by_user").takeIf { it.isNotEmpty() && !d.isNull("name_by_user") }
                 ?: d.optString("name").takeIf { it.isNotEmpty() && !d.isNull("name") } ?: continue
             out[d.optString("id")] = name
         }
         devices = out
         deviceAreas = inArea
+        deviceParents = parents
     }
 
     /** Reads `config/area_registry/list`'s result. */
@@ -134,9 +150,24 @@ object HaDisplay {
         for (i in 0 until result.length()) {
             val a = result.optJSONObject(i) ?: continue
             val id = a.str("area_id") ?: continue
-            out[id] = Area(a.str("name") ?: id, a.str("icon"), a.str("picture"), a.str("temperature_entity_id"), a.str("humidity_entity_id"))
+            out[id] = Area(
+                a.str("name") ?: id, a.str("icon"), a.str("picture"), a.str("temperature_entity_id"), a.str("humidity_entity_id"),
+                a.str("floor_id"),
+            )
         }
         areas = out
+    }
+
+    /** Reads `config/floor_registry/list`'s result, keeping each floor's name. */
+    fun applyFloors(result: org.json.JSONArray) {
+        val out = HashMap<String, String>(result.length() * 2)
+        for (i in 0 until result.length()) {
+            val f = result.optJSONObject(i) ?: continue
+            val id = f.optString("floor_id").ifEmpty { continue }
+            if (f.isNull("name")) continue
+            f.optString("name").takeIf { it.isNotEmpty() }?.let { out[id] = it }
+        }
+        floors = out
     }
 
     /** [areaId]'s name, or null before the area registry is in (or for an unknown area). */

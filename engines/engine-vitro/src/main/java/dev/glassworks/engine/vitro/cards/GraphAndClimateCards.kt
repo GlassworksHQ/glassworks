@@ -134,7 +134,7 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
 
         if (primaryId != null) {
             observe(primaryId) { s ->
-                titleView.text = config.name ?: config.title ?: s?.friendlyName ?: primaryId
+                titleView.text = config.name(null) ?: config.title ?: s?.friendlyName ?: primaryId
                 valueView.text = s?.formattedState() ?: "…"
                 icon.setIcon(MdiIcons.resolveIconName(config.icon, s), ctx.theme.primaryColor)
             }
@@ -457,7 +457,7 @@ class GaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     }
 
     private fun render(s: EntityState?) {
-        nameView.text = config.name ?: s?.displayName ?: config.entity
+        nameView.text = config.name(s) ?: s?.displayName ?: config.entity
         val attribute = raw.optString("attribute", "").ifEmpty { null }
         val rawValue = if (attribute != null) s?.attributes?.get(attribute) else s?.state
         val value = (rawValue as? Number)?.toDouble() ?: rawValue?.toString()?.toDoubleOrNull()
@@ -841,7 +841,7 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
             }
             dial.onSelect = { styleSteppers() }
             observe(eid) { s ->
-                titleView.text = config.name ?: s?.displayName ?: eid
+                titleView.text = config.name(s) ?: s?.displayName ?: eid
                 val attrs = s?.attributes.orEmpty()
                 val mode = s?.state ?: "off"
                 val action = attrs["hvac_action"] as? String
@@ -1052,7 +1052,7 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 icon.setCondition(state)
                 // HA's formatEntityState: the weather domain's own words, in the user's language.
                 condition.text = s?.let { HaDisplay.stateLabel(it) }?.takeIf { it.isNotEmpty() && it != state } ?: conditionLabel(state)
-                name.text = config.name ?: s?.friendlyName ?: eid
+                name.text = config.name(s) ?: s?.friendlyName ?: eid
                 val t = s?.attributes?.get("temperature")
                 val u = (s?.attributes?.get("temperature_unit") as? String) ?: "°C"
                 temp.text = if (t != null) "${(t as? Number)?.let { HaDisplay.formatValue(it.toDouble(), 1) } ?: t} " else "–"
@@ -1395,7 +1395,7 @@ class ModernCircularGaugeCardView(ctx: VitroCardContext, private val config: Car
         }
         val icon = if (showIcon && (config.icon != null || s != null)) MdiIcons.resolveIconName(config.icon, s) else null
         ring.update(from, to, color, valueText, if (v != null && showState) unit else "", icon)
-        nameView.text = config.name ?: s?.friendlyName ?: eid
+        nameView.text = config.name(s) ?: s?.friendlyName ?: eid
     }
 
     companion object {
