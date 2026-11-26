@@ -5,10 +5,10 @@ evidence: read
 
 # Stock Mirror hotspot: why stock 1.24.0 keeps opening `mirror-<serial>`, and how the in-place patch turns it off
 
-**Status (2026-11-25): untested on a Mirror.** The patch is written and checked off-device against the
-real stock 1.24.0 `services.jar`: `MirrorApService.systemReady()` decompiles to an empty method, the jar
-keeps its exact length, and the other three edits are still there. Whether the hotspot stays off after a
-reboot, and whether Glassworks' own setup hotspot then opens, needs a run on a real Mirror.
+**Status (2026-11-25): verified on a Mirror.** The patch was checked off-device against the real stock 1.24.0
+`services.jar` (`MirrorApService.systemReady()` decompiles to an empty method, the jar keeps its exact length,
+the other edits are still there), then run on a Mirror on stock with Glassworks in place: after a reboot with
+no network at all, stock's hotspot never came up, and Glassworks' own setup hotspot did (attempt 6).
 
 Device: lululemon Studio Mirror (MSM8916), stock software 1.24.0, with Glassworks installed in place
 (Stock-in-place: the stock system kept, `services.jar` patched). Tools: jadx (Homebrew), Android SDK
@@ -170,7 +170,13 @@ it `MirrorApService` and the stock hotspot.
      const jar = new Uint8Array(readFileSync(process.env.STOCK_JAR!));
      const r = await patchStockServicesJar(jar, fakeAdbKey(1));
      writeFileSync('/tmp/services.patched.jar', r.patched);
-     console.log(JSON.stringify(r, (k, v) => (v instanceof Uint8Array ? undefined : v)));
+     const hex = (n: number) => `0x${n.toString(16)}`;
+     console.log(JSON.stringify({
+       inLen: jar.length, outLen: r.patched.length, padBytes: r.padBytes,
+       startConfirmationCodeOff: hex(r.startConfirmationCodeOff), patchedCodeUnits: r.patchedCodeUnits,
+       deviceOwner: r.deviceOwner,
+       stockAp: r.stockAp && { codeOff: hex(r.stockAp.codeOff), insnsSize: r.stockAp.insnsSize },
+     }));
    });
    ```
    ```
@@ -183,18 +189,18 @@ it `MirrorApService` and the stock hotspot.
     "startConfirmationCodeOff":"0x2d8b08","patchedCodeUnits":25,
     "deviceOwner":{"hasFeatureMoveResultPc":51,"hasFeatureReg":0,"setBackupServiceActivePc":71},
     "stockAp":{"codeOff":"0xf54dc","insnsSize":95}}
-   $ dexdump -c services.patched.jar
+   $ dexdump -c /tmp/services.patched.jar
    Checksum verified
    ```
    Same length in and out, and the patcher found `systemReady()` at the offset dexdump shows.
 
 4. **Decompile the patched jar** (2026-11-25, verified off-device)
    ```
-   $ jadx -d out --single-class com.android.server.MirrorApService services.patched.jar
+   $ jadx -d out --single-class com.android.server.MirrorApService /tmp/services.patched.jar
    $ grep -n 'void systemReady' -A1 out/sources/com/android/server/MirrorApService.java
    60:    void systemReady() {
    61-    }
-   $ jadx -d out-usb --single-class com.android.server.usb.UsbDebuggingManager services.patched.jar
+   $ jadx -d out-usb --single-class com.android.server.usb.UsbDebuggingManager /tmp/services.patched.jar
        public void startConfirmation(String str, String str2) {
            if ("unable to start <FP>        ".substring(16, 63).equals(str2)) {
                allowUsbDebugging(true, str);
@@ -202,7 +208,7 @@ it `MirrorApService` and the stock hotspot.
                denyUsbDebugging();
            }
        }
-   $ jadx -d out-dpms --single-class com.android.server.devicepolicy.DevicePolicyManagerService services.patched.jar
+   $ jadx -d out-dpms --single-class com.android.server.devicepolicy.DevicePolicyManagerService /tmp/services.patched.jar
    $ grep -n 'this.mHasFeature = ' .../DevicePolicyManagerService.java
    898:        this.mHasFeature = true;
    $ grep -c setBackupServiceActive .../DevicePolicyManagerService.java
@@ -233,7 +239,7 @@ it `MirrorApService` and the stock hotspot.
    repo; read-only:
    ```
    $ dexdump -d "$STOCK_JAR" > orig.dump
-   $ dexdump -d services.patched.jar > patched.dump
+   $ dexdump -d /tmp/services.patched.jar > patched.dump
    $ norm() { tail -n +3 "$1" | sed -E \
        -e 's/^[0-9a-f]{6}: ([0-9a-f]{4} )+ *\|/|/' -e 's/^[0-9a-f]{6}: *\|/|/' \
        -e 's/(string|method|field|type)@[0-9a-f]+//g' -e 's/\[[0-9a-f]{6}\]//'; }
@@ -247,6 +253,33 @@ it `MirrorApService` and the stock hotspot.
    com.android.server.devicepolicy.DevicePolicyManagerService.setDeviceOwner:(Ljava/lang/String;Ljava/lang/String;)Z
    com.android.server.usb.UsbDebuggingManager.startConfirmation:(Ljava/lang/String;Ljava/lang/String;)V
    ```
+
+6. **A reboot with no network, on a Mirror** (2026-11-25, verified). The Mirror ran stock 1.24.0 with this
+   patch in its `services.jar` and Glassworks in place. Ethernet was unplugged, then the Mirror was restarted.
+   On this boot Android's first try at the Wi-Fi driver failed (the firmware isn't up yet;
+   `hdd_driver_init: WCNSS driver not ready` at 20 s, `wcnss_wlan triggered by userspace` at 27 s), so the Mirror
+   had no network at all for almost six minutes, the condition stock's hotspot came up in about a minute after.
+   During that time no `mirror-<serial>` network showed on a phone nearby, and Glassworks' setup screen waited for
+   Wi-Fi over Bluetooth. Then a phone sent Wi-Fi over Glassworks' setup, and adb came back over Wi-Fi. Read at
+   523 s of that boot, still running `mapd` (redacted):
+   ```
+   $ adb shell getprop init.svc.mapd
+   running
+   $ adb shell ls /sys/class/net/
+   dummy0 eth0 lo p2p0 sit0 wlan0                 # no wlan0_ap
+   $ adb shell 'ps | grep -E "hostapd|dnsmasq" | grep -v grep | wc -l'
+   0
+   $ adb shell dumpsys connectivity | grep -A2 "Tether state:"
+     Tether state:
+       wlan0 - InitialState - Available - lastError =0
+   $ adb shell dmesg | grep -iE "wlan0_ap|hostapd|softap"
+   [  364.885010] ... wlan: [E :HDD] hdd_softap_stop_bss:Loading_unloading in Progress. Ignore!!!
+   [  365.288449] wlan: [E :SDP] hdd_softap_flush_tx_queues: 235: psapCtx is NULL
+   ```
+   `mapd` runs, but nothing asked it for the hotspot: no `wlan0_ap`, no `hostapd` or `dnsmasq` under it, nothing
+   tethered. The two `softap` lines at 365 s are Glassworks' own setup hotspot on `wlan0` stopping as the phone's
+   Wi-Fi arrived (an `AP(1)` line at 355 s, then the client link at 368 to 387 s), which is the hotspot this patch
+   is there to let through.
 
 ## Result
 
@@ -271,7 +304,7 @@ transport rely on the stock hotspot.
 | `systemReady()` starts the state machine, receivers and connector thread | jadx, attempt 1 (read) |
 | The patched jar keeps its length and passes dexdump's checksum | Attempt 3 (verified off-device) |
 | Only four methods change, `systemReady()` is empty | Attempts 4 and 5 (verified off-device) |
-| No hotspot after a reboot on a real Mirror | **untested** |
+| No hotspot after a reboot on a real Mirror, and Glassworks' own setup hotspot opens | Attempt 6 (verified 2026-11-25) |
 
 ## How to reproduce
 
