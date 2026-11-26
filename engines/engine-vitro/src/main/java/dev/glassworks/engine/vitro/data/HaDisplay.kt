@@ -269,10 +269,62 @@ object HaDisplay {
             platformIcons[entry.platform]?.optJSONObject(domain)?.optJSONObject(entry.translationKey)
                 ?.let { fromTranslations(it, s) }?.let { return it }
         }
+        stateIcon(s)?.let { return it }
         val comp = componentIcons[domain] ?: return null
         val byClass = s.deviceClass?.let { comp.optJSONObject(it) } ?: comp.optJSONObject("_") ?: return null
         return fromTranslations(byClass, s)
     }
+
+    /**
+     * HA's `stateIcon` (`common/entity/state_icon.ts`), between the integration's icons and the domain's: an update
+     * installing, a device tracker by how it's tracked, the sun, a date-only or time-only input_datetime.
+     */
+    internal fun stateIcon(s: EntityState): String? {
+        val a = s.attributes
+        return when (s.domain) {
+            "update" -> when {
+                a["in_progress"].let { it != null && it != false && it != 0 && it != "" } -> "mdi:package-down"
+                s.state == "on" -> "mdi:package-up"
+                else -> "mdi:package"
+            }
+            "device_tracker" -> when (a["source_type"]) {
+                "router" -> if (s.state == "home") "mdi:lan-connect" else "mdi:lan-disconnect"
+                "bluetooth", "bluetooth_le" -> if (s.state == "home") "mdi:bluetooth-connect" else "mdi:bluetooth"
+                else -> if (s.state == "not_home") "mdi:account-arrow-right" else "mdi:account"
+            }
+            "sun" -> if (s.state == "above_horizon") "mdi:white-balance-sunny" else "mdi:weather-night"
+            "input_datetime" -> when {
+                a["has_date"].let { it == null || it == false } -> "mdi:clock"
+                a["has_time"].let { it == null || it == false } -> "mdi:calendar"
+                else -> null
+            }
+            else -> null
+        }
+    }
+
+    /**
+     * HA's `attributeIcon` (`data/icons.ts`): the icon of [attribute]'s [value] (a climate's `hvac_action`), from the
+     * integration's icons for the entity's translation key, else the domain's for its device class or its default.
+     * Null until HA's icons are loaded, or when none is set.
+     */
+    fun attributeIcon(s: EntityState, attribute: String, value: String): String? {
+        val entry = registry[s.entityId]
+        val domain = s.domain
+        if (entry?.translationKey != null && entry.platform != null) {
+            platformIcons[entry.platform]?.optJSONObject(domain)?.optJSONObject(entry.translationKey)
+                ?.optJSONObject("state_attributes")?.optJSONObject(attribute)
+                ?.let { fromAttributeTranslations(it, value) }?.let { return it }
+        }
+        val comp = componentIcons[domain] ?: return null
+        val t = s.deviceClass?.let { comp.optJSONObject(it)?.optJSONObject("state_attributes")?.optJSONObject(attribute) }
+            ?: comp.optJSONObject("_")?.optJSONObject("state_attributes")?.optJSONObject(attribute)
+            ?: return null
+        return fromAttributeTranslations(t, value)
+    }
+
+    /** HA's `getIconFromTranslations` for an attribute value: its `state` match, else `default`. */
+    private fun fromAttributeTranslations(t: JSONObject, value: String): String? =
+        t.optJSONObject("state")?.optString(value)?.takeIf { it.isNotEmpty() } ?: t.optString("default").takeIf { it.isNotEmpty() }
 
     /** The domain's own icon for [s]'s state and device class, skipping the entity's and its integration's. */
     fun domainIcon(s: EntityState): String? {

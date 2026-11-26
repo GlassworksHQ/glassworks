@@ -1,6 +1,6 @@
 {
  "title": "Tile: a cover with open/close buttons",
- "route": "frontend",
+ 
  "card": {
   "type": "tile",
   "entity": "cover.office_blind",

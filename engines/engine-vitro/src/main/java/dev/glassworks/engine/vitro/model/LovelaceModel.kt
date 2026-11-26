@@ -932,12 +932,17 @@ object CardRouter {
     fun followsAllEntities(view: ViewConfig): Boolean {
         // An area card's sensors, alerts and camera are its area's entities, known only from HA's registries.
         // A shopping list card without an entity shows the first to-do list it finds.
+        // A tile's person or device tracker in a zone shows the zone's icon, found among every zone (HA's `getZone`).
         fun walk(c: CardConfig): Boolean = c.type in FOLLOWS_ALL_TYPES || c.childCards.any(::walk) ||
+            (c.type == "tile" && c.entity?.substringBefore('.') in ZONE_BADGE_DOMAINS) ||
             (c.type == "shopping-list" && c.entity == null) ||
             (c.type == "area" && AreaCardConfig.readsAreaEntities(c.raw)) ||
             (c.type.startsWith("custom:") && c.raw.optJSONObject("card")?.optString("type") in FOLLOWS_ALL_TYPES)
         return view.sections.any { s -> s.cards.any(::walk) } || view.cards.any(::walk)
     }
+
+    /** The domains whose tile badge shows the zone they're in. */
+    private val ZONE_BADGE_DOMAINS = setOf("person", "device_tracker")
 
     /**
      * `^[a-z][a-z0-9_]*\.[a-z0-9_]+$`, checked by hand: the deep scan below tests every string of a custom card's

@@ -1,0 +1,119 @@
+{
+ "title": "Heading with a light, a fan and a cover badge (their brightness, speed and position)",
+ "expect": {
+  "light.hallway_ceiling_ring": "on",
+  "fan.ceiling_fan": "on",
+  "cover.office_blind": "open"
+ },
+ "card": {
+  "type": "heading",
+  "heading": "Office",
+  "badges": [
+   {
+    "type": "entity",
+    "entity": "light.hallway_ceiling_ring"
+   },
+   {
+    "type": "entity",
+    "entity": "fan.ceiling_fan"
+   },
+   {
+    "type": "entity",
+    "entity": "cover.office_blind"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.hallway_ceiling_ring": {
+    "state": "on",
+    "last_changed": "-260m",
+    "attributes": {
+     "min_color_temp_kelvin": 2702,
+     "max_color_temp_kelvin": 6535,
+     "supported_color_modes": [
+      "color_temp",
+      "xy"
+     ],
+     "color_mode": "xy",
+     "brightness": 13,
+     "color_temp_kelvin": null,
+     "hs_color": [
+      34.878,
+      96.471
+     ],
+     "rgb_color": [
+      255,
+      152,
+      9
+     ],
+     "xy_color": [
+      0.579995,
+      0.4
+     ],
+     "off_with_transition": false,
+     "off_brightness": null,
+     "friendly_name": "Hallway Ceiling Light Hallway Ceiling Ring",
+     "supported_features": 40
+    }
+   },
+   "fan.ceiling_fan": {
+    "state": "on",
+    "last_changed": "-261m",
+    "attributes": {
+     "preset_modes": [
+      "auto"
+     ],
+     "percentage": 20,
+     "percentage_step": 10,
+     "preset_mode": null,
+     "friendly_name": "Ceiling Fan",
+     "supported_features": 57
+    }
+   },
+   "cover.office_blind": {
+    "state": "open",
+    "last_changed": "-133m",
+    "attributes": {
+     "is_closed": false,
+     "current_position": 100,
+     "assumed_state": true,
+     "friendly_name": "Office Blind",
+     "supported_features": 11
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.hallway_ceiling_ring",
+    "pl": "zha",
+    "tk": "light",
+    "di": "dev-hallway-ceiling-light",
+    "en": "Hallway Ceiling Ring",
+    "np": "device"
+   },
+   {
+    "ei": "fan.ceiling_fan",
+    "pl": "zha",
+    "tk": "fan",
+    "di": "dev-ceiling-fan",
+    "np": "device"
+   },
+   {
+    "ei": "cover.office_blind",
+    "pl": "template",
+    "en": "Office Blind"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-hallway-ceiling-light",
+    "name": "Hallway Ceiling Light"
+   },
+   {
+    "id": "dev-ceiling-fan",
+    "name": "Ceiling Fan"
+   }
+  ]
+ }
+}

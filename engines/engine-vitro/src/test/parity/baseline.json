@@ -441,6 +441,13 @@
   "missingText": 1,
   "reason": "HA replaces the gauge with a one-line warning card ('Entity is currently unavailable: ...'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
  },
+ "tablet/heading-badges": {
+  "pixel": 0.023,
+  "bounds": 0.1,
+  "font": 0,
+  "missingText": 0,
+  "reason": "tablet only (s1 and Mirror match): each badge's text run is about one device px wider than HA's and the 8 px gaps round up, so the three badges drift up to 3 px left of HA's; icons, colors, texts and the row's height match (2026-11-26, fake HA)"
+ },
  "tablet/humidifier": {
   "pixel": 0.1114,
   "bounds": 20,

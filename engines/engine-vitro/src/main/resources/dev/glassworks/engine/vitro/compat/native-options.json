@@ -59,6 +59,18 @@
         "floor": {"keys": {"type": "any"}}
       }
     },
+    "entitylessAction": {
+      "by": "action",
+      "default": "none",
+      "why": "a card without an entity has nothing to toggle or show More-Info for",
+      "cases": {
+        "none": {"keys": {"action": "any"}},
+        "navigate": {"keys": {"action": "any", "navigation_path": {"pattern": "^/", "why": "a path that isn't absolute resolves against the current page in HA"}, "navigation_replace": "any", "confirmation": "@confirmation"}},
+        "url": {"keys": {"action": "any", "url_path": "any", "confirmation": "@confirmation"}},
+        "perform-action": {"keys": {"action": "any", "perform_action": "any", "service": "any", "data": "any", "service_data": "any", "target": "any", "confirmation": "@confirmation"}},
+        "call-service": {"keys": {"action": "any", "perform_action": "any", "service": "any", "data": "any", "service_data": "any", "target": "any", "confirmation": "@confirmation"}}
+      }
+    },
     "noAction": {
       "by": "action",
       "default": "none",
@@ -300,12 +312,19 @@
         }
       }
     },
+    "stateContent": {
+      "pattern": "^(?!(device_name|parent_device_name|area_name|floor_name|device_class)$)[\\s\\S]+$",
+      "why": "Vitro doesn't show a name or a device class as a state",
+      "note": "HA's state-display (frontend 20261028.5): state, entity-id, last_changed/last-changed, last_updated/last-updated, last_triggered, remaining_time (timer), install_status (update), a domain's timestamp attributes as a relative time, or any attribute formatted by formatEntityAttributeValue. The name contents and device_class (a translated class name) aren't drawn"
+    },
     "tileFeature": {
       "by": "type",
       "why": "a tile feature Vitro doesn't draw as HA does",
       "cases": {
         "light-brightness": {"keys": {"type": "any"}},
         "toggle": {"keys": {"type": "any"}},
+        "cover-open-close": {"keys": {"type": "any"}},
+        "fan-speed": {"keys": {"type": "any"}},
         "select-options": {"keys": {"type": "any", "style": {"values": ["dropdown"], "why": "Vitro draws the dropdown only"}}},
         "numeric-input": {
           "by": "style",
@@ -355,12 +374,13 @@
     },
     "badgeEntity": {
       "entity": [
-        "alarm_control_panel", "alert", "automation", "binary_sensor", "calendar", "counter", "device_tracker",
-        "group", "input_boolean", "input_number", "input_select", "input_text", "lawn_mower", "lock", "media_player",
-        "number", "person", "plant", "remote", "schedule", "script", "select", "sensor", "siren", "sun", "switch",
-        "text", "todo", "vacuum", "water_heater", "weather", "zone"
+        "alarm_control_panel", "alert", "automation", "binary_sensor", "calendar", "climate", "counter", "cover",
+        "device_tracker", "fan", "group", "input_boolean", "input_number", "input_select", "input_text", "lawn_mower",
+        "light", "lock", "media_player", "number", "person", "plant", "remote", "schedule", "script", "select", "sensor",
+        "siren", "sun", "switch", "text", "timer", "todo", "update", "vacuum", "water_heater", "weather", "zone"
       ],
-      "why": "HA's badge shows more than the state for this domain (a light's brightness, a fan's speed, a cover's position, a timer's countdown)"
+      "why": "HA's badge shows its state differently for this domain (a relative time)",
+      "note": "HA's state-display defaults (a light's brightness, a fan's speed, a cover's state and position, a climate's state and temperature, a timer's countdown, an update's status) compared in heading-badges and heading-badges-options. Left out: humidifier and valve (not compared yet) and the timestamp domains"
     },
     "headingBadge": {
       "by": "type",
@@ -373,15 +393,12 @@
             "entity": "@badgeEntity",
             "name": "@name",
             "icon": "@icon",
-            "show_state": {"values": [true], "why": "Vitro always shows the state"},
-            "show_icon": {"values": [true], "why": "Vitro always shows the icon"},
-            "color": {"values": ["none"], "why": "Vitro doesn't color a badge's icon"},
-            "tap_action": {
-              "by": "action",
-              "why": "a heading badge's tap always opens More-Info in Vitro",
-              "cases": {"more-info": {"keys": {"action": "any"}}}
-            },
-            "hold_action": "@noAction",
+            "show_state": "@bool",
+            "show_icon": "@bool",
+            "color": {"anyOf": [{"values": ["none", "state"]}, "@cssColor"]},
+            "state_content": {"list": "@stateContent"},
+            "tap_action": "@action",
+            "hold_action": "@action",
             "double_tap_action": "@doubleTap"
           }
         }
@@ -1075,19 +1092,21 @@
       "keys": {
         "entity": {
           "entity": [
-            "alarm_control_panel", "alert", "automation", "binary_sensor", "calendar", "counter", "cover", "fan",
-            "group", "input_boolean", "input_number", "input_select", "input_text", "lawn_mower", "light", "lock",
-            "media_player", "number", "plant", "remote", "schedule", "script", "select", "sensor", "siren", "sun",
-            "switch", "text", "todo", "vacuum", "water_heater", "weather", "zone"
+            "alarm_control_panel", "alert", "automation", "binary_sensor", "calendar", "climate", "counter", "cover",
+            "fan", "group", "input_boolean", "input_number", "input_select", "input_text", "lawn_mower", "light", "lock",
+            "media_player", "number", "person", "plant", "remote", "schedule", "script", "select", "sensor", "siren",
+            "sun", "switch", "text", "timer", "todo", "update", "vacuum", "water_heater", "weather", "zone"
           ],
           "why": "HA's tile adds a badge, a countdown, a position or a date Vitro doesn't draw for this domain",
-          "note": "HA's tile adds a badge (person, device tracker, climate, humidifier) or shows a countdown, install status, position or relative time Vitro doesn't draw"
+          "note": "Compared with HA: climate (its action badge), person (its zone badge), timer (the live countdown) and update (its install status) in tile-climate, tile-person*, tile-timer* and tile-update*. Still left out: device_tracker and humidifier (badges not compared yet), valve, and the timestamp domains (button, scene, event, image, ...), whose state HA shows as a relative time"
         },
+        "color": "@cssColor",
+        "state_content": {"list": "@stateContent"},
         "name": "@name",
         "icon": "@icon",
         "vertical": {"values": [true, false]},
         "hide_state": {"values": [true, false]},
-        "show_entity_picture": {"values": [false], "why": "Vitro draws the icon, not the entity picture"},
+        "show_entity_picture": {"values": [true, false]},
         "features": {"list": "@tileFeature"},
         "features_position": {"values": ["bottom"], "why": "inline features aren't compared with HA yet"},
         "tap_action": "@action",
@@ -1137,7 +1156,7 @@
         },
         "heading_style": {"values": ["title", "subtitle"]},
         "icon": "@icon",
-        "tap_action": "@noAction",
+        "tap_action": "@entitylessAction",
         "badges": {"list": "@headingBadge"}
       }
     },
