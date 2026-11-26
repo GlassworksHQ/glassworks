@@ -226,10 +226,11 @@ class SurfaceViewLayers(unittest.TestCase):
         self.assertEqual(P.layer_number(f"f5fea55 SurfaceView[{act}](BLAST)#163"), 163)
 
     def test_vitro_window_on_android_15_and_later_is_its_vri_layer(self):
-        # Vitro draws into the app's own window. On the Pixel Tablet's Android 17 (2026-11-26) the frames are on the
-        # ViewRootImpl's BLAST layer, `VRI-<pkg>/<activity>#n` (WindowManager logs `setClientSurface
+        # Vitro draws into the app's own window. Verified 2026-11-26 on the Pixel Tablet, Android 17 (API 37): the
+        # frames are on the ViewRootImpl's BLAST layer, `VRI-<pkg>/<activity>#n` (WindowManager logs `setClientSurface
         # Surface(name=VRI-…)`); the window's container, `<hash> <pkg>/<activity>#n`, has none. Before the fix the
-        # runner took only the container: open, live updates and restart were "not measured" on every page.
+        # runner took only the container: open, live updates and restart were "not measured" on every page
+        # (frames/google-pixel-tablet/research/window-layers.md).
         pkg = "dev.glassworks.generic_android"
         act = f"{pkg}/dev.glassworks.generic.Launcher"
         api37 = (

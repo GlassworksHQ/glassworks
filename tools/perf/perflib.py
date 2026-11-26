@@ -108,9 +108,10 @@ def parse_sf_latency(text):
 REQUESTED_LAYER_RE = re.compile(r"^RequestedLayerState\{(.*?)(?: (?:parentId|relativeParentId|z|layerStack)=-?\d+| !handle)*\}$")
 # The view's hash in front of a SurfaceView's name (Android 17).
 VIEW_HASH_RE = re.compile(r"^[0-9a-f]+ (?=SurfaceView)")
-# What can come before a window layer's `<pkg>/<activity>`: the window's hash (its container, Android 17), or `VRI-`,
-# the ViewRootImpl's BLAST layer, which holds the window's frames on Android 15 and later (the Pixel Tablet's
-# Android 17, 2026-11-26: `--latency` gave 63 frames on `VRI-<pkg>/<activity>#n` and none on the container).
+# What can come before a window layer's `<pkg>/<activity>`: the window's hash (its container), or `VRI-`, the
+# ViewRootImpl's BLAST layer, which holds the window's frames. Verified 2026-11-26 on the Pixel Tablet, Android 17
+# (API 37): `--latency` gave 63 frames on `VRI-<pkg>/<activity>#n` and none on the container; untested on 15 and 16
+# (frames/google-pixel-tablet/research/window-layers.md).
 WINDOW_PREFIX_RE = re.compile(r"^(?:[0-9a-f]+ |VRI-)(?=[\w.]+/)")
 
 

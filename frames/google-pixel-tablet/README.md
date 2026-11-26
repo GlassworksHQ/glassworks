@@ -49,3 +49,9 @@ Hardware specifications based on published device details (some specs such as th
 ## Preview render
 
 The preview image in `design/render.webp` renders the showcase dashboard at full 2560 × 1600 resolution (3 rows of 4 sections). On the actual tablet, Android displays web content at 1280 × 800 CSS pixels (2× display scaling), so dashboards appear larger with fewer cards per row than in the full-pixel render.
+
+## Research notes
+
+Engineering notes from running Glassworks on the Pixel Tablet (see [all research notes](../../docs/research/README.md#the-research-notes)):
+
+- [window-layers.md](research/window-layers.md) — Which layer holds an app window's frames on Android 17, and how Clarity finds Vitro's there
